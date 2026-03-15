@@ -5,27 +5,6 @@ description: "Frequently asked questions and common troubleshooting tips for dry
 
 import { Callout } from 'fumadocs-ui/components/callout';
 
-## Core dumped on Raspberry PI
-
-If at startup you face an issue looking like
-
-```text
-#
-# Fatal error in , line 0
-# unreachable code
-#
-#
-#
-#FailureMessage Object: 0x7eace25c
-```
-
-Add the `--security-opt seccomp=unconfined` option to your docker command
-Example
-
-```bash
-docker run ... --security-opt seccomp=unconfined codeswhat/drydock
-```
-
 ## Socket permission errors (EACCES)
 
 Drydock runs as a non-root user by default. The entrypoint automatically detects the Docker socket GID and adds the `node` user to the matching group. If the socket is owned by GID 0 (root), the entrypoint refuses to start implicitly as root.
@@ -67,6 +46,59 @@ services:
 ```
 
 Drydock automatically retries with exponential backoff (1s → 30s max) and will recover once the proxy becomes available, but the health check prevents unnecessary retries during startup.
+
+## CSRF validation failed (403) behind a reverse proxy
+
+If you see `403 {"error":"CSRF validation failed"}` when clicking buttons like **Recheck for updates**, **Scan**, or any action that sends a POST/PUT/DELETE request, your reverse proxy setup is missing the `DD_SERVER_TRUSTPROXY` configuration.
+
+**Why this happens:** Drydock validates that the `Origin` header sent by your browser matches the server's own origin. Behind a TLS-terminating reverse proxy (Traefik, Nginx, Caddy, HAProxy, etc.), the internal connection to drydock uses plain HTTP. Without trust-proxy enabled, drydock thinks it is running on `http://` while your browser sends `Origin: https://...` — the mismatch triggers CSRF protection.
+
+**Fix:** Add `DD_SERVER_TRUSTPROXY` to your drydock environment:
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    environment:
+      - DD_SERVER_TRUSTPROXY=1  # Trust one proxy hop (Traefik, Nginx, etc.)
+```
+
+This tells drydock to read the `X-Forwarded-Proto` header from your proxy, so it correctly sees `https` as the protocol.
+
+<Callout type="info">
+Most reverse proxies (Traefik, Nginx, Caddy) set `X-Forwarded-Proto` automatically. If yours does not, add the header explicitly in your proxy configuration — for example, in Nginx: `proxy_set_header X-Forwarded-Proto $scheme;`
+</Callout>
+
+**Traefik example (complete):**
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    environment:
+      - DD_SERVER_TRUSTPROXY=1
+      # ... other DD_ variables ...
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.drydock.rule=Host(`drydock.example.com`)
+      - traefik.http.routers.drydock.entrypoints=websecure
+      - traefik.http.services.drydock.loadbalancer.server.port=3000
+```
+
+**Nginx example (proxy block):**
+
+```nginx
+location / {
+    proxy_pass http://drydock:3000;
+    proxy_set_header Host $http_host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-Host $http_host;
+}
+```
+
+See [Server configuration](/docs/configuration/server#reverse-proxy-trust-proxy) for additional trust-proxy options.
 
 ## OIDC callback fails or session lost after login
 

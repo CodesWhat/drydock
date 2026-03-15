@@ -71,6 +71,8 @@ const colWidths = reactive<Record<string, number>>({});
 const resizing = ref(false);
 const virtualScrollTop = ref(0);
 const virtualViewportHeight = ref(0);
+const BODY_RESIZE_CLASS = 'dd-col-resizing';
+let activeResizeCleanup: (() => void) | null = null;
 const lastResizableColumnKey = computed(() => {
   for (let i = props.columns.length - 1; i >= 0; i -= 1) {
     if (!props.columns[i].icon) {
@@ -178,6 +180,12 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  if (activeResizeCleanup) {
+    activeResizeCleanup();
+    activeResizeCleanup = null;
+  }
+  document.body.classList.remove(BODY_RESIZE_CLASS);
+  resizing.value = false;
   globalThis.removeEventListener('resize', syncViewportHeight);
 });
 
@@ -238,13 +246,16 @@ function rowAbsoluteIndex(localIndex: number): number {
 function applyLiveWidth(colKey: string, width: number) {
   const header = getHeaderEl(colKey);
   if (!header) return;
-  header.style.width = `${width}px`;
-  header.style.minWidth = `${Math.min(width, 40)}px`;
+  header.setAttribute('width', String(Math.round(width)));
 }
 
 function onResizeStart(colKey: string, event: MouseEvent) {
   event.preventDefault();
   event.stopPropagation();
+  if (activeResizeCleanup) {
+    activeResizeCleanup();
+    activeResizeCleanup = null;
+  }
   resizing.value = true;
 
   // Initialize widths from DOM if not yet done
@@ -262,21 +273,23 @@ function onResizeStart(colKey: string, event: MouseEvent) {
   }
 
   function onUp() {
-    document.removeEventListener('mousemove', onMove);
-    document.removeEventListener('mouseup', onUp);
+    activeResizeCleanup?.();
+    activeResizeCleanup = null;
     colWidths[colKey] = liveWidth;
-    document.body.style.cursor = '';
-    document.body.style.userSelect = '';
     // Delay clearing resizing flag to prevent click-through to sort
     setTimeout(() => {
       resizing.value = false;
     }, 50);
   }
 
-  document.body.style.cursor = 'col-resize';
-  document.body.style.userSelect = 'none';
+  document.body.classList.add(BODY_RESIZE_CLASS);
   document.addEventListener('mousemove', onMove);
   document.addEventListener('mouseup', onUp);
+  activeResizeCleanup = () => {
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+    document.body.classList.remove(BODY_RESIZE_CLASS);
+  };
 }
 
 function colStyle(col: DataTableColumn): Record<string, string> {

@@ -1,5 +1,6 @@
 import type { Container, ContainerSecuritySummary } from '@/types/container';
 import { buildDashboardContainerMetrics } from '@/utils/dashboard-container-metrics';
+import { daysToMs } from '@/utils/maturity-policy';
 
 function makeContainer(
   overrides: Partial<Container> = {},
@@ -55,6 +56,7 @@ describe('buildDashboardContainerMetrics', () => {
     expect(metrics.totalContainers).toBe(4);
     expect(metrics.runningContainers).toBe(2);
     expect(metrics.updatesAvailable).toBe(2);
+    expect(metrics.freshUpdates).toBe(0);
     expect(metrics.securityIssueImageCount).toBe(2);
     expect(metrics.securityByImage).toHaveLength(3);
   });
@@ -150,6 +152,21 @@ describe('buildDashboardContainerMetrics', () => {
     );
     expect(byKey.nginx?.hasIssue).toBe(true);
     expect(byKey.redis?.hasIssue).toBe(true);
+  });
+
+  it('counts fresh updates from containers with recent updateDetectedAt', () => {
+    const now = Date.now();
+    const twoHoursAgo = new Date(now - 2 * 60 * 60 * 1000).toISOString();
+    const tenDaysAgo = new Date(now - daysToMs(10)).toISOString();
+    const metrics = buildDashboardContainerMetrics([
+      makeContainer({ id: 'c1', updateKind: 'minor', updateDetectedAt: twoHoursAgo }),
+      makeContainer({ id: 'c2', updateKind: 'patch', updateDetectedAt: tenDaysAgo }),
+      makeContainer({ id: 'c3', updateKind: 'digest' }),
+      makeContainer({ id: 'c4' }),
+    ]);
+
+    expect(metrics.updatesAvailable).toBe(3);
+    expect(metrics.freshUpdates).toBe(1);
   });
 
   it('keeps hasIssue false for scanned summaries with zero counts and safe bouncer', () => {

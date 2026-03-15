@@ -5,10 +5,74 @@ import {
   errorResponse,
   jsonResponse,
   noContentResponse,
+  paginationQueryParams,
   triggerAgentPathParam,
   triggerNamePathParam,
   triggerTypePathParam,
 } from '../common.js';
+
+type ErrorResponses = Record<number, ReturnType<typeof errorResponse>>;
+
+const CONTAINER_ACTION_TAGS = ['Containers', 'Actions'];
+const CONTAINER_ID_ACTION_PARAMETERS = [containerIdPathParam];
+const CONTAINER_ACTION_RESPONSE_SCHEMA = '#/components/schemas/ContainerActionResponse';
+
+function createContainerIdActionPost({
+  summary,
+  operationId,
+  successDescription,
+  successSchemaRef,
+  errorResponses,
+}: {
+  summary: string;
+  operationId: string;
+  successDescription: string;
+  successSchemaRef: string;
+  errorResponses: ErrorResponses;
+}) {
+  return {
+    post: {
+      tags: CONTAINER_ACTION_TAGS,
+      summary,
+      operationId,
+      parameters: CONTAINER_ID_ACTION_PARAMETERS,
+      responses: {
+        200: jsonResponse(successDescription, {
+          $ref: successSchemaRef,
+        }),
+        ...errorResponses,
+      },
+    },
+  };
+}
+
+function createRuntimeContainerActionPath({
+  summary,
+  operationId,
+  successDescription,
+  failureDescription,
+  additionalErrorResponses = {},
+}: {
+  summary: string;
+  operationId: string;
+  successDescription: string;
+  failureDescription: string;
+  additionalErrorResponses?: ErrorResponses;
+}) {
+  return createContainerIdActionPost({
+    summary,
+    operationId,
+    successDescription,
+    successSchemaRef: CONTAINER_ACTION_RESPONSE_SCHEMA,
+    errorResponses: {
+      ...additionalErrorResponses,
+      401: errorResponse('Authentication required'),
+      403: errorResponse('Container actions feature disabled'),
+      404: errorResponse('Container or docker trigger not found'),
+      500: errorResponse(failureDescription),
+    },
+  });
+}
 
 export const containerPaths = {
   '/api/containers/groups': {
@@ -183,7 +247,7 @@ export const containerPaths = {
       tags: ['Containers'],
       summary: 'Get persisted update-operation history for a container',
       operationId: 'getContainerUpdateOperations',
-      parameters: [containerIdPathParam],
+      parameters: [containerIdPathParam, ...paginationQueryParams],
       responses: {
         200: jsonResponse('Update operations', { $ref: '#/components/schemas/CollectionResult' }),
         401: errorResponse('Authentication required'),
@@ -261,6 +325,8 @@ export const containerPaths = {
                     'clear-skips',
                     'snooze',
                     'unsnooze',
+                    'set-maturity-policy',
+                    'clear-maturity-policy',
                     'clear',
                   ],
                 },
@@ -268,6 +334,8 @@ export const containerPaths = {
                 value: { type: 'string' },
                 days: { type: 'number' },
                 snoozeUntil: { type: 'string', format: 'date-time' },
+                mode: { type: 'string', enum: ['all', 'mature'] },
+                minAgeDays: { type: 'number' },
               },
               additionalProperties: true,
             },
@@ -344,41 +412,31 @@ export const containerPaths = {
       },
     },
   },
-  '/api/containers/{id}/env/reveal': {
-    post: {
-      tags: ['Containers', 'Actions'],
-      summary: 'Reveal unredacted environment variables for a container',
-      operationId: 'revealContainerEnv',
-      parameters: [containerIdPathParam],
-      responses: {
-        200: jsonResponse('Container environment variables', {
-          $ref: '#/components/schemas/ContainerEnvResponse',
-        }),
-        401: errorResponse('Authentication required'),
-        404: errorResponse('Container not found'),
-        429: errorResponse('Too many requests'),
-        501: errorResponse('Endpoint unavailable'),
-      },
+  '/api/containers/{id}/env/reveal': createContainerIdActionPost({
+    summary: 'Reveal unredacted environment variables for a container',
+    operationId: 'revealContainerEnv',
+    successDescription: 'Container environment variables',
+    successSchemaRef: '#/components/schemas/ContainerEnvResponse',
+    errorResponses: {
+      401: errorResponse('Authentication required'),
+      404: errorResponse('Container not found'),
+      429: errorResponse('Too many requests'),
+      501: errorResponse('Endpoint unavailable'),
     },
-  },
-  '/api/containers/{id}/scan': {
-    post: {
-      tags: ['Containers', 'Actions'],
-      summary: 'Run on-demand security scan for a container image',
-      operationId: 'scanContainer',
-      parameters: [containerIdPathParam],
-      responses: {
-        200: jsonResponse('Updated container with security state', {
-          $ref: '#/components/schemas/ContainerResource',
-        }),
-        400: errorResponse('Security scanner is not configured'),
-        401: errorResponse('Authentication required'),
-        404: errorResponse('Container not found'),
-        429: errorResponse('Too many concurrent scans'),
-        500: errorResponse('Security scan failed'),
-      },
+  }),
+  '/api/containers/{id}/scan': createContainerIdActionPost({
+    summary: 'Run on-demand security scan for a container image',
+    operationId: 'scanContainer',
+    successDescription: 'Updated container with security state',
+    successSchemaRef: '#/components/schemas/ContainerResource',
+    errorResponses: {
+      400: errorResponse('Security scanner is not configured'),
+      401: errorResponse('Authentication required'),
+      404: errorResponse('Container not found'),
+      429: errorResponse('Too many concurrent scans'),
+      500: errorResponse('Security scan failed'),
     },
-  },
+  }),
   '/api/containers/{id}/logs': {
     get: {
       tags: ['Logs'],
@@ -477,73 +535,31 @@ export const containerPaths = {
       },
     },
   },
-  '/api/containers/{id}/start': {
-    post: {
-      tags: ['Containers', 'Actions'],
-      summary: 'Start container',
-      operationId: 'startContainer',
-      parameters: [containerIdPathParam],
-      responses: {
-        200: jsonResponse('Container started', {
-          $ref: '#/components/schemas/ContainerActionResponse',
-        }),
-        401: errorResponse('Authentication required'),
-        403: errorResponse('Container actions feature disabled'),
-        404: errorResponse('Container or docker trigger not found'),
-        500: errorResponse('Container start failed'),
-      },
+  '/api/containers/{id}/start': createRuntimeContainerActionPath({
+    summary: 'Start container',
+    operationId: 'startContainer',
+    successDescription: 'Container started',
+    failureDescription: 'Container start failed',
+  }),
+  '/api/containers/{id}/stop': createRuntimeContainerActionPath({
+    summary: 'Stop container',
+    operationId: 'stopContainer',
+    successDescription: 'Container stopped',
+    failureDescription: 'Container stop failed',
+  }),
+  '/api/containers/{id}/restart': createRuntimeContainerActionPath({
+    summary: 'Restart container',
+    operationId: 'restartContainer',
+    successDescription: 'Container restarted',
+    failureDescription: 'Container restart failed',
+  }),
+  '/api/containers/{id}/update': createRuntimeContainerActionPath({
+    summary: 'Update container to latest available image',
+    operationId: 'updateContainer',
+    successDescription: 'Container updated',
+    failureDescription: 'Container update failed',
+    additionalErrorResponses: {
+      400: errorResponse('No update available for container'),
     },
-  },
-  '/api/containers/{id}/stop': {
-    post: {
-      tags: ['Containers', 'Actions'],
-      summary: 'Stop container',
-      operationId: 'stopContainer',
-      parameters: [containerIdPathParam],
-      responses: {
-        200: jsonResponse('Container stopped', {
-          $ref: '#/components/schemas/ContainerActionResponse',
-        }),
-        401: errorResponse('Authentication required'),
-        403: errorResponse('Container actions feature disabled'),
-        404: errorResponse('Container or docker trigger not found'),
-        500: errorResponse('Container stop failed'),
-      },
-    },
-  },
-  '/api/containers/{id}/restart': {
-    post: {
-      tags: ['Containers', 'Actions'],
-      summary: 'Restart container',
-      operationId: 'restartContainer',
-      parameters: [containerIdPathParam],
-      responses: {
-        200: jsonResponse('Container restarted', {
-          $ref: '#/components/schemas/ContainerActionResponse',
-        }),
-        401: errorResponse('Authentication required'),
-        403: errorResponse('Container actions feature disabled'),
-        404: errorResponse('Container or docker trigger not found'),
-        500: errorResponse('Container restart failed'),
-      },
-    },
-  },
-  '/api/containers/{id}/update': {
-    post: {
-      tags: ['Containers', 'Actions'],
-      summary: 'Update container to latest available image',
-      operationId: 'updateContainer',
-      parameters: [containerIdPathParam],
-      responses: {
-        200: jsonResponse('Container updated', {
-          $ref: '#/components/schemas/ContainerActionResponse',
-        }),
-        400: errorResponse('No update available for container'),
-        401: errorResponse('Authentication required'),
-        403: errorResponse('Container actions feature disabled'),
-        404: errorResponse('Container or docker trigger not found'),
-        500: errorResponse('Container update failed'),
-      },
-    },
-  },
+  }),
 } as const;

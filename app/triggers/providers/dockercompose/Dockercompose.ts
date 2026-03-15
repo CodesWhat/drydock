@@ -1,7 +1,7 @@
 import { constants as fsConstants } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import yaml, { type Pair, type ParsedNode } from 'yaml';
+import yaml from 'yaml';
 import type { ContainerImage } from '../../../model/container.js';
 import type Registry from '../../../registries/Registry.js';
 import { getState } from '../../../registry/index.js';
@@ -9,8 +9,17 @@ import { resolveConfiguredPath, resolveConfiguredPathWithinBase } from '../../..
 import { sleep } from '../../../util/sleep.js';
 import Docker from '../docker/Docker.js';
 import ComposeFileLockManager from './ComposeFileLockManager.js';
+import ComposeFileParser, {
+  COMPOSE_CACHE_MAX_ENTRIES,
+  updateComposeServiceImageInText,
+  updateComposeServiceImagesInText,
+  YAML_MAX_ALIAS_COUNT,
+} from './ComposeFileParser.js';
+import PostStartExecutor, {
+  normalizePostStartEnvironmentValue,
+  normalizePostStartHooks,
+} from './PostStartExecutor.js';
 
-const YAML_MAX_ALIAS_COUNT = 10_000;
 const COMPOSE_RENAME_MAX_RETRIES = 5;
 const COMPOSE_RENAME_RETRY_MS = 200;
 const COMPOSE_PROJECT_LABEL = 'com.docker.compose.project';
@@ -22,8 +31,6 @@ const COMPOSE_DIRECTORY_FILE_CANDIDATES = [
   'docker-compose.yaml',
   'docker-compose.yml',
 ];
-const COMPOSE_CACHE_MAX_ENTRIES = 256;
-const POST_START_ENVIRONMENT_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const SELF_CONTAINER_IDENTIFIER_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/;
 const ROOT_MODE_BREAK_GLASS_HINT =
   'use socket proxy or adjust file permissions/group_add; break-glass root mode requires DD_RUN_AS_ROOT=true + DD_ALLOW_INSECURE_ROOT=true';
@@ -235,60 +242,8 @@ function preserveExplicitDockerIoPrefix(
   return `docker.io/${targetImageReference}`;
 }
 
-function normalizePostStartHooks(postStart) {
-  if (!postStart) {
-    return [];
-  }
-  if (Array.isArray(postStart)) {
-    return postStart;
-  }
-  return [postStart];
-}
-
-function normalizePostStartCommand(command) {
-  if (Array.isArray(command)) {
-    return command.map((value) => `${value}`);
-  }
-  return ['sh', '-c', `${command}`];
-}
-
-function normalizePostStartEnvironmentValue(value) {
-  if (value === undefined || value === null) {
-    return '';
-  }
-  if (typeof value === 'object') {
-    try {
-      return JSON.stringify(value);
-    } catch {
-      return '';
-    }
-  }
-  return `${value}`;
-}
-
-function validatePostStartEnvironmentKey(key) {
-  if (!POST_START_ENVIRONMENT_KEY_PATTERN.test(key)) {
-    throw new Error(`Invalid compose post_start environment variable key "${key}"`);
-  }
-}
-
-function normalizePostStartEnvironment(environment) {
-  if (!environment) {
-    return undefined;
-  }
-  if (Array.isArray(environment)) {
-    return environment.map((value) => {
-      const normalized = `${value}`;
-      const separatorIndex = normalized.indexOf('=');
-      const key = separatorIndex >= 0 ? normalized.slice(0, separatorIndex) : normalized;
-      validatePostStartEnvironmentKey(key);
-      return normalized;
-    });
-  }
-  return Object.entries(environment).map(([key, value]) => {
-    validatePostStartEnvironmentKey(key);
-    return `${key}=${normalizePostStartEnvironmentValue(value)}`;
-  });
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
 /**
@@ -304,164 +259,6 @@ function doesContainerBelongToCompose(compose, container) {
   // Rebuild image definition string
   const currentImage = registry.getImageFullName(container.image, container.image.tag.value);
   return Boolean(getServiceKey(compose, container, currentImage));
-}
-
-function getLineStartOffset(text, offset) {
-  const beforeOffset = Math.max(0, offset - 1);
-  return text.lastIndexOf('\n', beforeOffset) + 1;
-}
-
-function getLineIndentationAtOffset(text, offset) {
-  const lineStart = getLineStartOffset(text, offset);
-  return text.slice(lineStart, offset);
-}
-
-function getPreferredChildIndentation(parentIndentation) {
-  return `${parentIndentation}  `;
-}
-
-function getMapPairByKey(
-  mapNode: unknown,
-  keyName: string,
-): Pair<ParsedNode | null, ParsedNode | null> | undefined {
-  return (mapNode as { items: Pair<ParsedNode | null, ParsedNode | null>[] }).items.find(
-    (pair): pair is Pair<ParsedNode | null, ParsedNode | null> => {
-      const pairKeyValue = (pair?.key as { value?: unknown })?.value;
-      return `${pairKeyValue}` === keyName;
-    },
-  );
-}
-
-function formatReplacementImageValue(currentImageValueText, newImage) {
-  if (currentImageValueText.startsWith("'") && currentImageValueText.endsWith("'")) {
-    return `'${newImage.replace(/'/g, "''")}'`;
-  }
-  if (currentImageValueText.startsWith('"') && currentImageValueText.endsWith('"')) {
-    return JSON.stringify(newImage);
-  }
-  return newImage;
-}
-
-function parseComposeDocument(composeFileText) {
-  const parseDocumentOptions = {
-    keepSourceTokens: true,
-    maxAliasCount: YAML_MAX_ALIAS_COUNT,
-  };
-  const composeDoc = yaml.parseDocument(composeFileText, {
-    ...(parseDocumentOptions as unknown as { keepSourceTokens: true }),
-  });
-  if (composeDoc.errors?.length > 0) {
-    throw composeDoc.errors[0];
-  }
-  return composeDoc;
-}
-
-function buildComposeServiceImageTextEdit(composeFileText, composeDoc, serviceName, newImage) {
-  const newline = composeFileText.includes('\r\n') ? '\r\n' : '\n';
-  const servicesNode = composeDoc.get('services', true);
-  if (!yaml.isMap(servicesNode)) {
-    throw new Error('Unable to locate services section in compose file');
-  }
-
-  const servicePair = getMapPairByKey(servicesNode, serviceName);
-  if (!servicePair) {
-    throw new Error(`Unable to locate compose service ${serviceName}`);
-  }
-
-  const serviceValueNode = servicePair.value;
-  if (yaml.isMap(serviceValueNode)) {
-    const imagePair = getMapPairByKey(serviceValueNode, 'image');
-    if (imagePair) {
-      const imageValueRange = imagePair.value!.range!;
-      const imageValueStart = imageValueRange[0];
-      const imageValueEnd = imageValueRange[1];
-      const currentImageValueText = composeFileText.slice(imageValueStart, imageValueEnd);
-      const formattedImage = formatReplacementImageValue(currentImageValueText, newImage);
-      return {
-        start: imageValueStart,
-        end: imageValueEnd,
-        text: formattedImage,
-      };
-    }
-
-    if (serviceValueNode?.srcToken?.type === 'flow-collection') {
-      throw new Error(
-        `Unable to insert compose image for flow-style service ${serviceName} without image key`,
-      );
-    }
-  } else if (!(yaml.isScalar(serviceValueNode) && serviceValueNode.value === null)) {
-    throw new Error(`Unable to patch compose service ${serviceName} because it is not a map`);
-  }
-
-  const serviceKeyOffset = servicePair.key!.range![0];
-  const serviceIndentation = getLineIndentationAtOffset(composeFileText, serviceKeyOffset);
-  const imageIndentation = getPreferredChildIndentation(serviceIndentation);
-  const lineBreakOffset = composeFileText.indexOf('\n', serviceKeyOffset);
-
-  if (lineBreakOffset >= 0) {
-    const insertionOffset = lineBreakOffset + 1;
-    return {
-      start: insertionOffset,
-      end: insertionOffset,
-      text: `${imageIndentation}image: ${newImage}${newline}`,
-    };
-  }
-
-  return {
-    start: composeFileText.length,
-    end: composeFileText.length,
-    text: `${newline}${imageIndentation}image: ${newImage}`,
-  };
-}
-
-function applyComposeTextEdits(composeFileText, composeTextEdits) {
-  const sortedEdits = [...composeTextEdits].sort(
-    (left, right) => right.start - left.start || right.end - left.end,
-  );
-  let lastAppliedStart = composeFileText.length;
-  let updatedComposeText = composeFileText;
-  for (const composeTextEdit of sortedEdits) {
-    if (composeTextEdit.end > lastAppliedStart) {
-      throw new Error('Unable to apply overlapping compose edits');
-    }
-    updatedComposeText = `${updatedComposeText.slice(0, composeTextEdit.start)}${composeTextEdit.text}${updatedComposeText.slice(composeTextEdit.end)}`;
-    lastAppliedStart = composeTextEdit.start;
-  }
-  return updatedComposeText;
-}
-
-/**
- * Update only one compose service image line while preserving original
- * formatting, comments, and key ordering elsewhere in the file.
- */
-function updateComposeServiceImageInText(
-  composeFileText,
-  serviceName,
-  newImage,
-  composeDoc = null,
-) {
-  const doc = composeDoc || parseComposeDocument(composeFileText);
-  const composeTextEdit = buildComposeServiceImageTextEdit(
-    composeFileText,
-    doc,
-    serviceName,
-    newImage,
-  );
-  return applyComposeTextEdits(composeFileText, [composeTextEdit]);
-}
-
-function updateComposeServiceImagesInText(composeFileText, serviceImageUpdates, composeDoc = null) {
-  if (serviceImageUpdates.size === 0) {
-    return composeFileText;
-  }
-  const doc = composeDoc || parseComposeDocument(composeFileText);
-  const composeTextEdits = [];
-  for (const [serviceName, newImage] of serviceImageUpdates.entries()) {
-    composeTextEdits.push(
-      buildComposeServiceImageTextEdit(composeFileText, doc, serviceName, newImage),
-    );
-  }
-  return applyComposeTextEdits(composeFileText, composeTextEdits);
 }
 
 function buildComposePatchPreview(composeFile, service, currentImage, updateImage) {
@@ -485,15 +282,40 @@ class Dockercompose extends Docker {
   _composeFileLockManager = new ComposeFileLockManager({
     getLog: () => this.log,
   });
-  _composeCacheMaxEntries = COMPOSE_CACHE_MAX_ENTRIES;
-  _composeObjectCache = new Map<string, { mtimeMs: number; compose: unknown }>();
-  _composeDocumentCache = new Map<string, { mtimeMs: number; composeDoc: unknown }>();
+  _composeFileParser = new ComposeFileParser({
+    resolveComposeFilePath: (file) => this.resolveComposeFilePath(file),
+    getDefaultComposeFilePath: () => this.configuration?.file,
+    getLog: () => this.log,
+    composeCacheMaxEntries: COMPOSE_CACHE_MAX_ENTRIES,
+  });
+  _postStartExecutor = new PostStartExecutor({
+    getLog: () => this.log,
+    getWatcher: (container) => this.getWatcher(container as ComposeContainerReference),
+    isDryRun: () => this.configuration?.dryrun === true,
+    getDockerApiFromWatcher,
+  });
   _hostToContainerBindMountsLoaded = false;
   _hostToContainerBindMountsLoadPromise: Promise<void> | null = null;
   _hostToContainerBindMounts: HostToContainerBindMount[] = [];
 
   get _composeFileLocksHeld() {
     return this._composeFileLockManager._composeFileLocksHeld;
+  }
+
+  get _composeCacheMaxEntries() {
+    return this._composeFileParser._composeCacheMaxEntries;
+  }
+
+  set _composeCacheMaxEntries(maxEntries: number) {
+    this._composeFileParser.setComposeCacheMaxEntries(maxEntries);
+  }
+
+  get _composeObjectCache() {
+    return this._composeFileParser._composeObjectCache;
+  }
+
+  get _composeDocumentCache() {
+    return this._composeFileParser._composeDocumentCache;
   }
 
   /**
@@ -1029,31 +851,20 @@ class Dockercompose extends Docker {
   }
 
   buildUpdatedComposeFileObjectForValidation(composeFileObject, serviceImageUpdates) {
-    if (
-      !composeFileObject ||
-      typeof composeFileObject !== 'object' ||
-      Array.isArray(composeFileObject)
-    ) {
+    if (!isPlainObject(composeFileObject)) {
       return undefined;
     }
 
-    const composeFileRecord = composeFileObject as Record<string, unknown>;
+    const composeFileRecord = composeFileObject;
     const existingServices = composeFileRecord.services;
-    const servicesRecord =
-      existingServices && typeof existingServices === 'object' && !Array.isArray(existingServices)
-        ? (existingServices as Record<string, unknown>)
-        : {};
+    const servicesRecord = isPlainObject(existingServices) ? existingServices : {};
     const updatedServices = { ...servicesRecord };
 
     for (const [serviceName, newImage] of serviceImageUpdates.entries()) {
       const serviceDefinition = updatedServices[serviceName];
-      if (
-        serviceDefinition &&
-        typeof serviceDefinition === 'object' &&
-        !Array.isArray(serviceDefinition)
-      ) {
+      if (isPlainObject(serviceDefinition)) {
         updatedServices[serviceName] = {
-          ...(serviceDefinition as Record<string, unknown>),
+          ...serviceDefinition,
           image: newImage,
         };
         continue;
@@ -1084,14 +895,7 @@ class Dockercompose extends Docker {
       }
       Object.entries(compose.services).forEach(([serviceName, serviceDefinition]) => {
         const existingServiceDefinition = mergedCompose.services[serviceName];
-        if (
-          existingServiceDefinition &&
-          typeof existingServiceDefinition === 'object' &&
-          !Array.isArray(existingServiceDefinition) &&
-          serviceDefinition &&
-          typeof serviceDefinition === 'object' &&
-          !Array.isArray(serviceDefinition)
-        ) {
+        if (isPlainObject(existingServiceDefinition) && isPlainObject(serviceDefinition)) {
           mergedCompose.services[serviceName] = {
             ...existingServiceDefinition,
             ...serviceDefinition,
@@ -1357,28 +1161,37 @@ class Dockercompose extends Docker {
    * Override: apply compose-specific hooks while performing runtime refresh
    * through the Docker Engine API.
    */
-  async performContainerUpdate(
-    context,
-    container,
-    _logContainer,
+  requireComposeUpdateContext(
+    container: { name?: string },
     composeCtx?: ComposeUpdateLifecycleContext,
-  ) {
-    if (!composeCtx) {
-      throw new Error(`Missing compose context for container ${container.name}`);
+  ): ComposeUpdateLifecycleContext {
+    if (composeCtx) {
+      return composeCtx;
     }
-    const composeRuntimeContext = composeCtx.runtimeContext;
-    const runtimeContext = {
+    throw new Error(`Missing compose context for container ${container.name}`);
+  }
+
+  buildComposeRuntimeContext(
+    context: ComposeRuntimeContext | undefined,
+    composeCtx: ComposeUpdateLifecycleContext,
+  ): ComposeRuntimeContext {
+    return {
       dockerApi: context?.dockerApi,
       auth: context?.auth,
       newImage: context?.newImage,
       registry: context?.registry,
-      ...(composeRuntimeContext || {}),
+      ...(composeCtx.runtimeContext || {}),
     };
-    const composeUpdateOptions = this.buildPerformContainerUpdateOptions(
-      composeCtx,
-      runtimeContext,
-    );
+  }
 
+  async maybeRunPerServiceComposeRefresh(
+    composeCtx: ComposeUpdateLifecycleContext,
+    container,
+    composeUpdateOptions: Pick<
+      ComposeRuntimeRefreshOptions,
+      'composeFiles' | 'skipPull' | 'runtimeContext'
+    >,
+  ): Promise<void> {
     if (composeCtx.composeFileOnceApplied === true) {
       const logContainer = this.log.child({
         container: container.name,
@@ -1386,18 +1199,39 @@ class Dockercompose extends Docker {
       logContainer.info(
         `Skip per-service compose refresh for ${composeCtx.service} because compose-file-once mode already refreshed ${composeCtx.composeFile}`,
       );
-    } else {
-      await this.updateContainerWithCompose(
-        composeCtx.composeFile,
-        composeCtx.service,
-        container,
-        composeUpdateOptions,
-      );
+      return;
     }
+
+    await this.updateContainerWithCompose(
+      composeCtx.composeFile,
+      composeCtx.service,
+      container,
+      composeUpdateOptions,
+    );
+  }
+
+  async performContainerUpdate(
+    context,
+    container,
+    _logContainer,
+    composeCtx?: ComposeUpdateLifecycleContext,
+  ) {
+    const requiredComposeCtx = this.requireComposeUpdateContext(container, composeCtx);
+    const runtimeContext = this.buildComposeRuntimeContext(context, requiredComposeCtx);
+    const composeUpdateOptions = this.buildPerformContainerUpdateOptions(
+      requiredComposeCtx,
+      runtimeContext,
+    );
+
+    await this.maybeRunPerServiceComposeRefresh(
+      requiredComposeCtx,
+      container,
+      composeUpdateOptions,
+    );
     await this.runServicePostStartHooks(
       container,
-      composeCtx.service,
-      composeCtx.serviceDefinition,
+      requiredComposeCtx.service,
+      requiredComposeCtx.serviceDefinition,
     );
 
     return !this.configuration.dryrun;
@@ -1490,6 +1324,100 @@ class Dockercompose extends Docker {
     }
   }
 
+  isContainerEligibleForComposeFileGrouping(container: ComposeContainerReference): boolean {
+    const watcher = this.getWatcher(container);
+    const dockerApi = getDockerApiFromWatcher(watcher);
+    if (dockerApi && dockerApi.modem.socketPath !== '') {
+      return true;
+    }
+
+    this.log.warn(`Cannot update container ${container.name} because not running on local host`);
+    return false;
+  }
+
+  async resolveComposeFilesForGrouping(
+    container: ComposeContainerReference,
+    configuredComposeFilePath: string | null,
+  ): Promise<string[] | null> {
+    const composeFiles = await this.resolveComposeFilesForContainer(container);
+    if (composeFiles.length === 0) {
+      this.log.warn(
+        `No compose file found for container ${container.name} (no label '${this.configuration.composeFileLabel}' or '${COMPOSE_PROJECT_CONFIG_FILES_LABEL}' and no default file configured)`,
+      );
+      return null;
+    }
+
+    if (configuredComposeFilePath && !composeFiles.includes(configuredComposeFilePath)) {
+      this.log.warn(
+        `Skip container ${container.name} because compose files ${composeFiles.join(', ')} do not match configured file ${configuredComposeFilePath}`,
+      );
+      return null;
+    }
+
+    return composeFiles;
+  }
+
+  async getComposeFileAccessError(
+    composeFile: string,
+    composeFileAccessErrorByPath: Map<string, string | null>,
+  ): Promise<string | null> {
+    if (composeFileAccessErrorByPath.has(composeFile)) {
+      return composeFileAccessErrorByPath.get(composeFile) ?? null;
+    }
+
+    try {
+      await fs.access(composeFile);
+      composeFileAccessErrorByPath.set(composeFile, null);
+      return null;
+    } catch (e) {
+      const reason =
+        e.code === 'EACCES'
+          ? `permission denied (${ROOT_MODE_BREAK_GLASS_HINT})`
+          : 'does not exist';
+      composeFileAccessErrorByPath.set(composeFile, reason);
+      return reason;
+    }
+  }
+
+  async findMissingComposeFileForContainer(
+    composeFiles: string[],
+    composeFileAccessErrorByPath: Map<string, string | null>,
+  ): Promise<{ file: string; reason: string } | null> {
+    for (const composeFile of composeFiles) {
+      const composeFileAccessError = await this.getComposeFileAccessError(
+        composeFile,
+        composeFileAccessErrorByPath,
+      );
+      if (composeFileAccessError) {
+        return {
+          file: composeFile,
+          reason: composeFileAccessError,
+        };
+      }
+    }
+    return null;
+  }
+
+  addContainerToComposeFileGroup(
+    containersByComposeFile: Map<string, ContainersByComposeFileEntry>,
+    composeFiles: string[],
+    container: ComposeContainerReference,
+  ): void {
+    const composeFile = composeFiles[0];
+    const composeFileKey = composeFiles.join('\n');
+    const existingEntry = containersByComposeFile.get(composeFileKey);
+    if (existingEntry) {
+      existingEntry.containers.push(container);
+      return;
+    }
+
+    containersByComposeFile.set(composeFileKey, {
+      composeFile,
+      composeFiles,
+      containers: [container],
+    });
+  }
+
   async resolveAndGroupContainersByComposeFile(
     containers: ComposeContainerReference[],
     configuredComposeFilePath: string | null,
@@ -1497,79 +1425,31 @@ class Dockercompose extends Docker {
     const containersByComposeFile = new Map<string, ContainersByComposeFileEntry>();
     const composeFileAccessErrorByPath = new Map<string, string | null>();
 
-    const getComposeFileAccessError = async (composeFile: string): Promise<string | null> => {
-      if (composeFileAccessErrorByPath.has(composeFile)) {
-        return composeFileAccessErrorByPath.get(composeFile) ?? null;
-      }
-      try {
-        await fs.access(composeFile);
-        composeFileAccessErrorByPath.set(composeFile, null);
-        return null;
-      } catch (e) {
-        const reason =
-          e.code === 'EACCES'
-            ? `permission denied (${ROOT_MODE_BREAK_GLASS_HINT})`
-            : 'does not exist';
-        composeFileAccessErrorByPath.set(composeFile, reason);
-        return reason;
-      }
-    };
-
     for (const container of containers) {
-      // Filter on containers running on local host
-      const watcher = this.getWatcher(container);
-      const dockerApi = getDockerApiFromWatcher(watcher);
-      if (!dockerApi || dockerApi.modem.socketPath === '') {
-        this.log.warn(
-          `Cannot update container ${container.name} because not running on local host`,
-        );
+      if (!this.isContainerEligibleForComposeFileGrouping(container)) {
         continue;
       }
 
-      const composeFiles = await this.resolveComposeFilesForContainer(container);
-      if (composeFiles.length === 0) {
-        this.log.warn(
-          `No compose file found for container ${container.name} (no label '${this.configuration.composeFileLabel}' or '${COMPOSE_PROJECT_CONFIG_FILES_LABEL}' and no default file configured)`,
-        );
-        continue;
-      }
-      if (configuredComposeFilePath && !composeFiles.includes(configuredComposeFilePath)) {
-        this.log.warn(
-          `Skip container ${container.name} because compose files ${composeFiles.join(', ')} do not match configured file ${configuredComposeFilePath}`,
-        );
+      const composeFiles = await this.resolveComposeFilesForGrouping(
+        container,
+        configuredComposeFilePath,
+      );
+      if (!composeFiles) {
         continue;
       }
 
-      let missingComposeFile = null as string | null;
-      let missingComposeFileReason = null as string | null;
-      for (const composeFile of composeFiles) {
-        const composeFileAccessError = await getComposeFileAccessError(composeFile);
-        if (composeFileAccessError) {
-          missingComposeFile = composeFile;
-          missingComposeFileReason = composeFileAccessError;
-          break;
-        }
-      }
+      const missingComposeFile = await this.findMissingComposeFileForContainer(
+        composeFiles,
+        composeFileAccessErrorByPath,
+      );
       if (missingComposeFile) {
         this.log.warn(
-          `Compose file ${missingComposeFile} for container ${container.name} ${missingComposeFileReason}`,
+          `Compose file ${missingComposeFile.file} for container ${container.name} ${missingComposeFile.reason}`,
         );
         continue;
       }
 
-      const composeFile = composeFiles[0];
-      const composeFileKey = composeFiles.join('\n');
-      const existingEntry = containersByComposeFile.get(composeFileKey);
-      if (existingEntry) {
-        existingEntry.containers.push(container);
-        continue;
-      }
-
-      containersByComposeFile.set(composeFileKey, {
-        composeFile,
-        composeFiles,
-        containers: [container],
-      });
+      this.addContainerToComposeFileGroup(containersByComposeFile, composeFiles, container);
     }
 
     return containersByComposeFile;
@@ -1647,17 +1527,7 @@ class Dockercompose extends Docker {
     return composeFileOnceRuntimeContextByService;
   }
 
-  /**
-   * Process a specific compose file with its associated containers.
-   * @param composeFile
-   * @param containers
-   * @returns {Promise<boolean>} true if runtime updates were applied, false otherwise
-   */
-  async processComposeFile(
-    composeFile,
-    containers,
-    composeFiles = [composeFile],
-  ): Promise<boolean> {
+  async loadComposeProcessingContext(composeFile, composeFiles = [composeFile]) {
     const composeFileChain = this.normalizeComposeFileChain(composeFile, composeFiles);
     const composeFileChainSummary = composeFileChain.join(', ');
     this.log.info(`Processing compose file: ${composeFileChainSummary}`);
@@ -1666,9 +1536,16 @@ class Dockercompose extends Docker {
       composeByFile.set(composeFilePath, await this.getComposeFileAsObject(composeFilePath));
     }
     const compose = await this.getComposeFileChainAsObject(composeFileChain, composeByFile);
+    return {
+      composeFileChain,
+      composeFileChainSummary,
+      composeByFile,
+      compose,
+    };
+  }
 
-    // Filter containers that belong to this compose file
-    const containersFiltered = containers.filter((container) => {
+  filterContainersBelongingToCompose(compose, containers, composeFileChainSummary) {
+    return containers.filter((container) => {
       const belongs = doesContainerBelongToCompose(compose, container);
       if (!belongs) {
         this.log.warn(
@@ -1677,14 +1554,10 @@ class Dockercompose extends Docker {
       }
       return belongs;
     });
+  }
 
-    if (containersFiltered.length === 0) {
-      this.log.warn(`No containers found in compose file ${composeFileChainSummary}`);
-      return false;
-    }
-
-    // [{ container, current: '1.0.0', update: '2.0.0' }, {...}]
-    const versionMappings = containersFiltered
+  buildVersionMappingsForCompose(containersFiltered, compose) {
+    return containersFiltered
       .map((container) => {
         const map = this.mapCurrentVersionToUpdateVersion(compose, container);
         if (!map) {
@@ -1706,11 +1579,9 @@ class Dockercompose extends Docker {
         };
       })
       .filter((entry) => entry !== undefined);
+  }
 
-    this.reconcileComposeMappings(composeFileChainSummary, versionMappings);
-
-    // Compose mutations are needed when the declared compose image differs from
-    // the computed target (tag updates and optional digest pinning paths).
+  splitComposeAndRuntimeMappings(versionMappings) {
     const mappingsNeedingComposeUpdate = versionMappings.filter(
       ({ currentNormalized, composeUpdateNormalized }) =>
         currentNormalized !== composeUpdateNormalized,
@@ -1721,61 +1592,94 @@ class Dockercompose extends Docker {
         container.updateKind?.kind === 'digest' ||
         currentNormalized !== updateNormalized,
     );
+    return {
+      mappingsNeedingComposeUpdate,
+      mappingsNeedingRuntimeUpdate,
+    };
+  }
 
-    if (mappingsNeedingRuntimeUpdate.length === 0) {
-      this.log.info(
-        `All containers in ${composeFileChainSummary} are already up to date (checked: ${versionMappings.map((m) => m.container.name).join(', ') || 'none'})`,
-      );
-      return false;
+  logAllComposeContainersUpToDate(composeFileChainSummary, versionMappings): void {
+    this.log.info(
+      `All containers in ${composeFileChainSummary} are already up to date (checked: ${versionMappings.map((m) => m.container.name).join(', ') || 'none'})`,
+    );
+  }
+
+  async applyComposeFileMutationsByWritableFile(
+    writableComposeFile,
+    composeUpdates,
+    composeFileChain,
+    composeByFile,
+  ) {
+    // Backup docker-compose file
+    if (this.configuration.backup) {
+      const backupFile = `${writableComposeFile}.back`;
+      await this.backup(writableComposeFile, backupFile);
     }
 
-    // Dry-run?
+    // Replace only the targeted compose service image values.
+    const serviceImageUpdates = this.buildComposeServiceImageUpdates(composeUpdates);
+    const parsedComposeFileObject = this.buildUpdatedComposeFileObjectForValidation(
+      composeByFile.get(writableComposeFile),
+      serviceImageUpdates,
+    );
+    await this.mutateComposeFile(
+      writableComposeFile,
+      (composeFileText, composeFileMetadata) =>
+        updateComposeServiceImagesInText(
+          composeFileText,
+          serviceImageUpdates,
+          this.getCachedComposeDocument(
+            composeFileMetadata.filePath,
+            composeFileMetadata.mtimeMs,
+            composeFileText,
+          ),
+        ),
+      {
+        composeFiles: composeFileChain,
+        parsedComposeFileObject,
+      },
+    );
+  }
+
+  async maybeApplyComposeFileMutations(
+    composeFileChain,
+    composeByFile,
+    composeFileChainSummary,
+    mappingsNeedingComposeUpdate,
+  ): Promise<void> {
+    if (mappingsNeedingComposeUpdate.length === 0) {
+      return;
+    }
+
     if (this.configuration.dryrun) {
-      if (mappingsNeedingComposeUpdate.length > 0) {
-        this.log.info(
-          `Do not replace existing docker-compose file ${composeFileChainSummary} (dry-run mode enabled)`,
-        );
-      }
-    } else if (mappingsNeedingComposeUpdate.length > 0) {
-      const composeUpdatesByWritableFile = await this.groupComposeUpdatesByWritableFile(
+      this.log.info(
+        `Do not replace existing docker-compose file ${composeFileChainSummary} (dry-run mode enabled)`,
+      );
+      return;
+    }
+
+    const composeUpdatesByWritableFile = await this.groupComposeUpdatesByWritableFile(
+      composeFileChain,
+      mappingsNeedingComposeUpdate,
+      composeByFile,
+    );
+
+    for (const [writableComposeFile, composeUpdates] of composeUpdatesByWritableFile.entries()) {
+      await this.applyComposeFileMutationsByWritableFile(
+        writableComposeFile,
+        composeUpdates,
         composeFileChain,
-        mappingsNeedingComposeUpdate,
         composeByFile,
       );
-
-      for (const [writableComposeFile, composeUpdates] of composeUpdatesByWritableFile.entries()) {
-        // Backup docker-compose file
-        if (this.configuration.backup) {
-          const backupFile = `${writableComposeFile}.back`;
-          await this.backup(writableComposeFile, backupFile);
-        }
-
-        // Replace only the targeted compose service image values.
-        const serviceImageUpdates = this.buildComposeServiceImageUpdates(composeUpdates);
-        const parsedComposeFileObject = this.buildUpdatedComposeFileObjectForValidation(
-          composeByFile.get(writableComposeFile),
-          serviceImageUpdates,
-        );
-        await this.mutateComposeFile(
-          writableComposeFile,
-          (composeFileText, composeFileMetadata) =>
-            updateComposeServiceImagesInText(
-              composeFileText,
-              serviceImageUpdates,
-              this.getCachedComposeDocument(
-                composeFileMetadata.filePath,
-                composeFileMetadata.mtimeMs,
-                composeFileText,
-              ),
-            ),
-          {
-            composeFiles: composeFileChain,
-            parsedComposeFileObject,
-          },
-        );
-      }
     }
+  }
 
+  async runRuntimeUpdatesForComposeMappings(
+    composeFile,
+    composeFileChain,
+    compose,
+    mappingsNeedingRuntimeUpdate,
+  ): Promise<void> {
     const composeFileOnceHandledServices = new Set<string>();
     const composeFileOnceEnabled =
       this.configuration.composeFileOnce === true && this.configuration.dryrun !== true;
@@ -1806,6 +1710,54 @@ class Dockercompose extends Docker {
         composeFileOnceHandledServices.add(service);
       }
     }
+  }
+
+  /**
+   * Process a specific compose file with its associated containers.
+   * @param composeFile
+   * @param containers
+   * @returns {Promise<boolean>} true if runtime updates were applied, false otherwise
+   */
+  async processComposeFile(
+    composeFile,
+    containers,
+    composeFiles = [composeFile],
+  ): Promise<boolean> {
+    const { composeFileChain, composeFileChainSummary, composeByFile, compose } =
+      await this.loadComposeProcessingContext(composeFile, composeFiles);
+    const containersFiltered = this.filterContainersBelongingToCompose(
+      compose,
+      containers,
+      composeFileChainSummary,
+    );
+
+    if (containersFiltered.length === 0) {
+      this.log.warn(`No containers found in compose file ${composeFileChainSummary}`);
+      return false;
+    }
+
+    const versionMappings = this.buildVersionMappingsForCompose(containersFiltered, compose);
+    this.reconcileComposeMappings(composeFileChainSummary, versionMappings);
+    const { mappingsNeedingComposeUpdate, mappingsNeedingRuntimeUpdate } =
+      this.splitComposeAndRuntimeMappings(versionMappings);
+
+    if (mappingsNeedingRuntimeUpdate.length === 0) {
+      this.logAllComposeContainersUpToDate(composeFileChainSummary, versionMappings);
+      return false;
+    }
+
+    await this.maybeApplyComposeFileMutations(
+      composeFileChain,
+      composeByFile,
+      composeFileChainSummary,
+      mappingsNeedingComposeUpdate,
+    );
+    await this.runRuntimeUpdatesForComposeMappings(
+      composeFile,
+      composeFileChain,
+      compose,
+      mappingsNeedingRuntimeUpdate,
+    );
     return true;
   }
 
@@ -2061,92 +2013,7 @@ class Dockercompose extends Docker {
   }
 
   async runServicePostStartHooks(container, serviceKey, service) {
-    if (this.configuration.dryrun || !service?.post_start) {
-      return;
-    }
-
-    const hooks = normalizePostStartHooks(service.post_start);
-    if (hooks.length === 0) {
-      return;
-    }
-
-    const watcher = this.getWatcher(container);
-    const dockerApi = getDockerApiFromWatcher(watcher);
-    if (!dockerApi) {
-      this.log.warn(
-        `Skip compose post_start hooks for ${container.name} (${serviceKey}) because watcher Docker API is unavailable`,
-      );
-      return;
-    }
-    const containerToUpdate = dockerApi.getContainer(container.name);
-    const containerState = await containerToUpdate.inspect();
-
-    if (!containerState?.State?.Running) {
-      this.log.info(
-        `Skip compose post_start hooks for ${container.name} (${serviceKey}) because container is not running`,
-      );
-      return;
-    }
-
-    for (const hook of hooks) {
-      const hookConfiguration = typeof hook === 'string' ? { command: hook } : hook;
-      if (!hookConfiguration?.command) {
-        this.log.warn(
-          `Skip invalid compose post_start hook for ${container.name} (${serviceKey}) because command is missing`,
-        );
-        // eslint-disable-next-line no-continue
-        continue;
-      }
-
-      const execOptions = {
-        AttachStdout: true,
-        AttachStderr: true,
-        Cmd: normalizePostStartCommand(hookConfiguration.command),
-        User: hookConfiguration.user,
-        WorkingDir: hookConfiguration.working_dir,
-        Privileged: hookConfiguration.privileged,
-        Env: normalizePostStartEnvironment(hookConfiguration.environment),
-      };
-
-      this.log.info(`Run compose post_start hook for ${container.name} (${serviceKey})`);
-
-      const exec = await containerToUpdate.exec(execOptions);
-      const execStream = await exec.start({
-        Detach: false,
-        Tty: false,
-      });
-      if (execStream?.resume) {
-        execStream.resume();
-      }
-
-      await new Promise((resolve, reject) => {
-        if (!execStream?.once) {
-          resolve(undefined);
-          return;
-        }
-        const onError = (e) => {
-          execStream.removeListener('end', onDone);
-          execStream.removeListener('close', onDone);
-          reject(e);
-        };
-        const onDone = () => {
-          execStream.removeListener('end', onDone);
-          execStream.removeListener('close', onDone);
-          execStream.removeListener('error', onError);
-          resolve(undefined);
-        };
-        execStream.once('end', onDone);
-        execStream.once('close', onDone);
-        execStream.once('error', onError);
-      });
-
-      const execResult = await exec.inspect();
-      if (execResult.ExitCode !== 0) {
-        throw new Error(
-          `Compose post_start hook failed for ${container.name} (${serviceKey}) with exit code ${execResult.ExitCode}`,
-        );
-      }
-    }
+    return this._postStartExecutor.runServicePostStartHooks(container, serviceKey, service);
   }
 
   /**
@@ -2229,37 +2096,15 @@ class Dockercompose extends Docker {
   }
 
   invalidateComposeCaches(filePath) {
-    this._composeObjectCache.delete(filePath);
-    this._composeDocumentCache.delete(filePath);
+    this._composeFileParser.invalidateComposeCaches(filePath);
   }
 
   setComposeCacheEntry(cache, filePath, value) {
-    if (this._composeCacheMaxEntries < 1) {
-      cache.clear();
-      return;
-    }
-    if (cache.has(filePath)) {
-      cache.delete(filePath);
-    }
-    cache.set(filePath, value);
-    while (cache.size > this._composeCacheMaxEntries) {
-      const oldestCacheKey = cache.keys().next().value;
-      cache.delete(oldestCacheKey);
-    }
+    this._composeFileParser.setComposeCacheEntry(cache, filePath, value);
   }
 
   getCachedComposeDocument(filePath, mtimeMs, composeFileText) {
-    const cachedComposeDocument = this._composeDocumentCache.get(filePath);
-    if (cachedComposeDocument && cachedComposeDocument.mtimeMs === mtimeMs) {
-      this.setComposeCacheEntry(this._composeDocumentCache, filePath, cachedComposeDocument);
-      return cachedComposeDocument.composeDoc;
-    }
-    const composeDoc = parseComposeDocument(composeFileText);
-    this.setComposeCacheEntry(this._composeDocumentCache, filePath, {
-      mtimeMs,
-      composeDoc,
-    });
-    return composeDoc;
+    return this._composeFileParser.getCachedComposeDocument(filePath, mtimeMs, composeFileText);
   }
 
   /**
@@ -2268,13 +2113,7 @@ class Dockercompose extends Docker {
    * @returns {Promise<Buffer>}
    */
   getComposeFile(file = null) {
-    const filePath = this.resolveComposeFilePath(file || this.configuration.file);
-    try {
-      return fs.readFile(filePath);
-    } catch (e) {
-      this.log.error(`Error when reading the docker-compose yaml file ${filePath} (${e.message})`);
-      throw e;
-    }
+    return this._composeFileParser.getComposeFile(file);
   }
 
   /**

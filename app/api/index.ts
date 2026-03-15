@@ -85,8 +85,9 @@ function configureSecurityHeaders(app) {
         directives: {
           'default-src': ["'self'"],
           'script-src': ["'self'"],
-          // Keep inline styles limited to element attributes to reduce CSP exposure.
-          'style-src': ["'self'"],
+          // unsafe-inline required for vendor libraries (iconify-icon, Vue
+          // Transition) that set element.style programmatically.
+          'style-src': ["'self'", "'unsafe-inline'"],
           'style-src-attr': ["'unsafe-inline'"],
           'img-src': ["'self'", 'data:'],
           'font-src': ["'self'", 'data:'],
@@ -120,7 +121,11 @@ function registerRoutes(app) {
   );
   app.use('/api', apiRouter.init());
   app.use('/metrics', prometheusRouter.init());
-  app.use('/', uiRouter.init());
+  if (configuration.ui?.enabled !== false) {
+    app.use('/', uiRouter.init());
+    return;
+  }
+  log.info('UI router disabled by DD_SERVER_UI_ENABLED=false');
 }
 
 function registerErrorHandler(app) {

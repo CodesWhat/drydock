@@ -205,117 +205,190 @@ class SecurityGate {
     }
   }
 
+  shouldRunSecurityGate(securityConfiguration: SecurityConfiguration): boolean {
+    return securityConfiguration.enabled && securityConfiguration.scanner === 'trivy';
+  }
+
+  async maybeVerifyImageSignatureForUpdate(
+    context: SecurityGateUpdateContext,
+    container: SecurityContainer,
+    logContainer: SecurityGateLogger,
+    securityConfiguration: SecurityConfiguration,
+  ): Promise<void> {
+    if (!securityConfiguration.signature.verify) {
+      return;
+    }
+
+    logContainer.info(`Verifying image signature for candidate image ${context.newImage}`);
+    const signatureResult = await this.scanners.verifyImageSignature({
+      image: context.newImage,
+      auth: context.auth,
+    });
+    await this.persistSecurityState(
+      container,
+      { signature: signatureResult },
+      logContainer,
+      'update',
+    );
+
+    if (signatureResult.status === 'verified') {
+      this.telemetry.recordSecurityAudit(
+        'security-signature-verified',
+        container,
+        'success',
+        `Image signature verified (${signatureResult.signatures} signatures)`,
+      );
+      return;
+    }
+
+    const details = `Image signature verification failed: ${
+      signatureResult.error || 'no valid signatures found'
+    }`;
+    throw this.createSecurityFailure(
+      signatureResult.status === 'unverified'
+        ? 'security-signature-blocked'
+        : 'security-signature-failed',
+      details,
+    );
+  }
+
+  async scanImageForUpdate(
+    context: SecurityGateUpdateContext,
+    container: SecurityContainer,
+    logContainer: SecurityGateLogger,
+  ): Promise<VulnerabilityScanResult> {
+    logContainer.info(`Running security scan for candidate image ${context.newImage}`);
+    const scanResult = await this.scanners.scanImageForVulnerabilities({
+      image: context.newImage,
+      auth: context.auth,
+    });
+    await this.persistSecurityState(container, { scan: scanResult }, logContainer, 'update');
+    return scanResult;
+  }
+
+  async maybeGenerateSbomForUpdate(
+    context: SecurityGateUpdateContext,
+    container: SecurityContainer,
+    logContainer: SecurityGateLogger,
+    securityConfiguration: SecurityConfiguration,
+  ): Promise<void> {
+    if (!securityConfiguration.sbom.enabled) {
+      return;
+    }
+
+    logContainer.info(`Generating SBOM for candidate image ${context.newImage}`);
+    const sbomResult = await this.scanners.generateImageSbom({
+      image: context.newImage,
+      auth: context.auth,
+      formats: securityConfiguration.sbom.formats,
+    });
+    await this.persistSecurityState(container, { sbom: sbomResult }, logContainer, 'update');
+
+    if (sbomResult.status === 'error') {
+      this.telemetry.recordSecurityAudit(
+        'security-sbom-failed',
+        container,
+        'error',
+        `SBOM generation failed: ${sbomResult.error || 'unknown SBOM error'}`,
+      );
+      return;
+    }
+
+    this.telemetry.recordSecurityAudit(
+      'security-sbom-generated',
+      container,
+      'success',
+      `SBOM generated (${sbomResult.formats.join(', ')})`,
+    );
+  }
+
+  formatScanSummary(summary: VulnerabilitySummary): string {
+    return `critical=${summary.critical}, high=${summary.high}, medium=${summary.medium}, low=${summary.low}, unknown=${summary.unknown}`;
+  }
+
+  async maybeEmitHighSeverityAlert(
+    container: SecurityContainer,
+    scanResult: VulnerabilityScanResult,
+    details: string,
+  ): Promise<void> {
+    const summary = scanResult.summary;
+    if (summary.critical === 0 && summary.high === 0) {
+      return;
+    }
+
+    await this.telemetry.emitSecurityAlert({
+      containerName: this.telemetry.fullName(container),
+      details,
+      status: scanResult.status,
+      summary,
+      blockingCount: scanResult.blockingCount,
+      container,
+    });
+  }
+
+  throwIfScanFailed(scanResult: VulnerabilityScanResult): void {
+    if (scanResult.status !== 'error') {
+      return;
+    }
+
+    throw this.createSecurityFailure(
+      'security-scan-failed',
+      `Security scan failed: ${scanResult.error || 'unknown scanner error'}`,
+    );
+  }
+
+  throwIfScanBlocked(scanResult: VulnerabilityScanResult, details: string): void {
+    if (scanResult.status !== 'blocked') {
+      return;
+    }
+
+    throw this.createSecurityFailure(
+      'security-scan-blocked',
+      `Security scan blocked update (${scanResult.blockingCount} vulnerabilities matched block severities: ${scanResult.blockSeverities.join(', ')}). Summary: ${details}`,
+    );
+  }
+
+  async evaluateScanOutcome(
+    container: SecurityContainer,
+    scanResult: VulnerabilityScanResult,
+  ): Promise<void> {
+    this.throwIfScanFailed(scanResult);
+    const details = this.formatScanSummary(scanResult.summary);
+    await this.maybeEmitHighSeverityAlert(container, scanResult, details);
+    this.throwIfScanBlocked(scanResult, details);
+    this.telemetry.recordSecurityAudit(
+      'security-scan-passed',
+      container,
+      'success',
+      `Security scan passed. Summary: ${details}`,
+    );
+  }
+
   async maybeScanAndGateUpdate(
     context: SecurityGateUpdateContext,
     container: SecurityContainer,
     logContainer: SecurityGateLogger,
   ): Promise<void> {
     const securityConfiguration = this.securityConfig.getSecurityConfiguration();
-    if (!securityConfiguration.enabled || securityConfiguration.scanner !== 'trivy') {
+    if (!this.shouldRunSecurityGate(securityConfiguration)) {
       return;
     }
 
     try {
-      if (securityConfiguration.signature.verify) {
-        logContainer.info(`Verifying image signature for candidate image ${context.newImage}`);
-        const signatureResult = await this.scanners.verifyImageSignature({
-          image: context.newImage,
-          auth: context.auth,
-        });
-        await this.persistSecurityState(
-          container,
-          { signature: signatureResult },
-          logContainer,
-          'update',
-        );
-
-        if (signatureResult.status !== 'verified') {
-          const details = `Image signature verification failed: ${
-            signatureResult.error || 'no valid signatures found'
-          }`;
-          throw this.createSecurityFailure(
-            signatureResult.status === 'unverified'
-              ? 'security-signature-blocked'
-              : 'security-signature-failed',
-            details,
-          );
-        }
-
-        this.telemetry.recordSecurityAudit(
-          'security-signature-verified',
-          container,
-          'success',
-          `Image signature verified (${signatureResult.signatures} signatures)`,
-        );
-      }
-
-      logContainer.info(`Running security scan for candidate image ${context.newImage}`);
-      const scanResult = await this.scanners.scanImageForVulnerabilities({
-        image: context.newImage,
-        auth: context.auth,
-      });
-      await this.persistSecurityState(container, { scan: scanResult }, logContainer, 'update');
-
-      if (securityConfiguration.sbom.enabled) {
-        logContainer.info(`Generating SBOM for candidate image ${context.newImage}`);
-        const sbomResult = await this.scanners.generateImageSbom({
-          image: context.newImage,
-          auth: context.auth,
-          formats: securityConfiguration.sbom.formats,
-        });
-        await this.persistSecurityState(container, { sbom: sbomResult }, logContainer, 'update');
-
-        if (sbomResult.status === 'error') {
-          this.telemetry.recordSecurityAudit(
-            'security-sbom-failed',
-            container,
-            'error',
-            `SBOM generation failed: ${sbomResult.error || 'unknown SBOM error'}`,
-          );
-        } else {
-          this.telemetry.recordSecurityAudit(
-            'security-sbom-generated',
-            container,
-            'success',
-            `SBOM generated (${sbomResult.formats.join(', ')})`,
-          );
-        }
-      }
-
-      if (scanResult.status === 'error') {
-        throw this.createSecurityFailure(
-          'security-scan-failed',
-          `Security scan failed: ${scanResult.error || 'unknown scanner error'}`,
-        );
-      }
-
-      const summary = scanResult.summary;
-      const details = `critical=${summary.critical}, high=${summary.high}, medium=${summary.medium}, low=${summary.low}, unknown=${summary.unknown}`;
-
-      if (summary.critical > 0 || summary.high > 0) {
-        await this.telemetry.emitSecurityAlert({
-          containerName: this.telemetry.fullName(container),
-          details,
-          status: scanResult.status,
-          summary,
-          blockingCount: scanResult.blockingCount,
-          container,
-        });
-      }
-
-      if (scanResult.status === 'blocked') {
-        throw this.createSecurityFailure(
-          'security-scan-blocked',
-          `Security scan blocked update (${scanResult.blockingCount} vulnerabilities matched block severities: ${scanResult.blockSeverities.join(', ')}). Summary: ${details}`,
-        );
-      }
-
-      this.telemetry.recordSecurityAudit(
-        'security-scan-passed',
+      await this.maybeVerifyImageSignatureForUpdate(
+        context,
         container,
-        'success',
-        `Security scan passed. Summary: ${details}`,
+        logContainer,
+        securityConfiguration,
       );
+      const scanResult = await this.scanImageForUpdate(context, container, logContainer);
+      await this.maybeGenerateSbomForUpdate(
+        context,
+        container,
+        logContainer,
+        securityConfiguration,
+      );
+      await this.evaluateScanOutcome(container, scanResult);
     } catch (error: unknown) {
       if (TriggerPipelineError.isTriggerPipelineError(error)) {
         this.recordSecurityFailure(container, error as { code: string; message: string });

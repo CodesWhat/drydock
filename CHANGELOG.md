@@ -10,6 +10,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Update-operations pagination** — `GET /api/containers/:id/update-operations` now supports `limit` and `offset` query parameters with `_links` navigation, matching the existing container list pagination pattern.
+- **Periodic audit log pruning** — Audit store now runs a background timer (hourly, unref'd) to prune stale entries even with low insert volume, in addition to the existing insert-count-based pruning.
+
+### Changed
+
+- **Extract maturity-policy module** — Consolidated scattered day-to-millisecond conversions and maturity policy constants into `app/model/maturity-policy.ts`, shared by backend, UI, and demo app.
+- **Extract security-overview module** — Moved security vulnerability aggregation and pagination logic from `crud.ts` into dedicated `app/api/container/security-overview.ts` for improved readability and testability.
+- **Refactor Docker Compose trigger** — Extracted YAML parsing/editing into `ComposeFileParser` and post-start hook execution into `PostStartExecutor`, reducing the monolithic `Dockercompose.ts` by ~400 lines.
+- **Decompose useContainerActions** — Split the 1200-line composable into focused modules: `useContainerBackups`, `useContainerPolicy`, `useContainerPreview`, and `useContainerTriggers`.
+- **Registry error handling** — Replaced `catch (e: any)` with `catch (e: unknown)` and `getErrorMessage(e)` in component registration and trigger/watcher startup.
+- **E2E test resilience** — Container row count assertions now use `toBeGreaterThan(0)` instead of hardcoded counts, preventing false failures when the QA environment has a different number of containers.
+
+### Fixed
+
+- **CSRF validation behind reverse proxies** — Same-origin mutation checks now honor `X-Forwarded-Proto` and `X-Forwarded-Host` when present before falling back to direct request protocol/host, preventing false `403 CSRF validation failed` responses in TLS-terminating proxy setups. ([#146](https://github.com/CodesWhat/drydock/issues/146))
+- **Hosts page missing env-var-configured watchers** — The Hosts page hardcoded a single "Local" entry and only added agent-based hosts. Watchers configured via `DD_WATCHER_*` environment variables (e.g. remote Docker hosts) were never displayed, even though their containers appeared correctly on the Containers page. The page now fetches all watchers from the API and displays each local watcher with its actual name and connection address. ([#151](https://github.com/CodesWhat/drydock/issues/151))
+- **Docker events reconnect with malformed errors** — Reconnect failure logging no longer crashes when the error object has no `message` property.
+- **Security overview container count** — The security vulnerability overview now uses the lightweight store count instead of loading all container objects just to count them.
+- **Compose path deduplication** — Replaced `indexOf`-based dedup with `Set` for compose file path detection in container security view.
+- **Build provenance attestation** — CI attestation step now runs with `if: always()` so provenance is attested even when prior optional steps are skipped.
+
+### Security
+
+- **Agent secret over plaintext HTTP warning** — Agent clients now log a warning when a shared secret is configured over unencrypted HTTP, advising HTTPS configuration.
+- **Auth audit log injection** — Login identity values are now sanitized with `sanitizeLogParam()` before inclusion in audit log details, preventing log injection via crafted usernames.
+- **SSE self-update ack hardening** — Added validation for empty `clientId`/`clientToken`, non-ack broadcast mode, and client-not-bound-to-operation rejection.
+- **FAQ: removed insecure seccomp advice** — Removed the "Core dumped on Raspberry PI" FAQ entry that recommended `--security-opt seccomp=unconfined`, which completely disables the kernel's syscall sandbox. The underlying libseccomp2 bug was fixed in all supported OS versions since 2021.
+
+## [1.4.1]
+
+### Added
+
+- **Headless mode (`DD_SERVER_UI_ENABLED`)** — Run drydock as an API-only service by setting `DD_SERVER_UI_ENABLED=false`. The REST API, SSE, and healthcheck endpoints remain fully functional while the UI is not served. Useful for controller nodes that only manage agents.
+- **Maturity-based update policy** — Per-container update maturity policy via `dd.updatePolicy.maturityMode` (`all` or `mature`) and `dd.updatePolicy.maturityMinAgeDays` (default 7). When set to `mature`, containers with updates detected less than the configured age threshold are blocked from triggering until the update has settled. UI shows NEW/MATURE badges with flame/clock icons on containers with available updates. ([#120](https://github.com/CodesWhat/drydock/discussions/120))
+- **`?groupByStack=true` URL parameter** — Bookmarkable URL parameter to enable stack grouping on the containers page. Also accepts `?groupByStack=1`. ([#145](https://github.com/CodesWhat/drydock/issues/145))
+
+### Changed
+
+- **Connection-lost overlay animation** — The connection-lost and reconnecting overlays now use a bounce animation for improved visual feedback.
+- **Watch target resolution refactored to discriminated union** — Internal refactor of the watch target resolution logic for improved type safety and maintainability.
+
+### Fixed
+
+- **Agent handshake and SSE validation failure** — Fixed agent API returning redacted container data (with `sensitive` field on env entries) instead of raw data, causing controller-side Joi validation to reject the handshake and crash on real-time SSE container events. SSE payloads now prefer canonical raw store data with sanitization fallback. ([#141](https://github.com/CodesWhat/drydock/issues/141))
+- **Mangled argon2 hash detection** — Docker Compose `$` interpolation can strip `$` delimiters from argon2 PHC hashes, producing an invalid hash that silently failed registration. Drydock now detects mangled hashes at startup and surfaces an actionable error message. ([#147](https://github.com/CodesWhat/drydock/issues/147))
+- **Anonymous auth fallback** — When all configured auth providers fail to register (e.g. due to a mangled hash), Drydock now falls back to anonymous mode if `DD_ANONYMOUS_AUTH_CONFIRM=true` is set, instead of leaving the user with no way to log in. ([#147](https://github.com/CodesWhat/drydock/issues/147))
+- **Auth registration errors on login page** — Registration warnings (e.g. invalid hash format) are now surfaced on the login page so users can see exactly what went wrong instead of a generic "No authentication methods configured" message. ([#147](https://github.com/CodesWhat/drydock/issues/147))
+- **CSP inline style violations** — Replaced runtime `element.style` mutations (DataTable column resize, tooltip directive, theme transitions, preference restore) with CSS custom properties and class-based styling. Relaxed `style-src` to include `'unsafe-inline'` for vendor libraries (iconify-icon, Vue Transition) that set `element.style` programmatically.
+- **Compose trigger affinity across remapped roots** — Compose trigger file-path matching now uses suffix-based comparison as a fallback when the container's compose label path (host mount) differs from the trigger's configured path (container-internal), preventing missed trigger associations in bind-mount setups.
+- **Compose trigger association** — Enforce compose-file affinity when associating triggers with containers, preventing incorrect trigger-container matching. ([#139](https://github.com/CodesWhat/drydock/issues/139))
+- **Update All button icon centering** — Fixed icon-text alignment in the Update All group header button to match the split button pattern used elsewhere.
+- **Selected card border clipping** — Fixed card border clipping on the first grid column in card view.
+
+### Security
+
+- **Username enumeration timing side-channel** — Eliminated timing difference between valid and invalid usernames during authentication.
+- **LokiJS metadata exposure** — Stripped internal LokiJS fields (`$loki`, `meta`) from settings API responses, agent API container responses, and `/app` endpoint.
+- **Permissions-Policy header** — Added `Permissions-Policy` header to restrict browser feature access (camera, microphone, geolocation, etc.).
+- **CSP and Cross-Origin-Embedder-Policy** — Tightened Content Security Policy and added COEP header.
+- **Production image hardening** — Removed `wget`, `nc`, and `npm` from the production Docker image; upgraded zlib.
+
+### Dependencies
+
+- **undici** — Bumped to 7.24.1 (fixes 12 CVEs including WebSocket memory consumption, CRLF injection, and request smuggling).
+
 ## [1.4.0] — 2026-02-28
 
 ### Breaking Changes
@@ -740,7 +807,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.4.1...HEAD
+[1.4.1]: https://github.com/CodesWhat/drydock/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/CodesWhat/drydock/compare/v1.3.9...v1.4.0
 [1.3.9]: https://github.com/CodesWhat/drydock/compare/v1.3.8...v1.3.9
 [1.3.8]: https://github.com/CodesWhat/drydock/compare/v1.3.7...v1.3.8

@@ -44,199 +44,260 @@ interface SelfUpdateAckProtocol {
 
 const DUMMY_CLIENT_TOKEN_HASH = hashToken('drydock-sse-dummy-client-token');
 
+interface SelfUpdateAckProtocolContext {
+  clients: Set<FlushableResponse>;
+  activeClientRegistry: ActiveSseClientRegistry;
+  defaultAckTimeoutMs: number;
+  pendingSelfUpdateAcks: Map<string, PendingSelfUpdateAck>;
+}
+
+interface ParsedAckRequest {
+  operationId: string;
+  clientId: string;
+  clientToken: string;
+}
+
+function parseAckTimeoutMs(value: unknown, defaultAckTimeoutMs: number): number {
+  const parsed = Number.parseInt(String(value ?? ''), 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return defaultAckTimeoutMs;
+  }
+  return parsed;
+}
+
+function parseAckRequest(req: Request): ParsedAckRequest {
+  return {
+    operationId: String(req.params.operationId || '').trim(),
+    clientId: String(req.body?.clientId || '').trim(),
+    clientToken: String(req.body?.clientToken || '').trim(),
+  };
+}
+
+function validateAckRequestFields(res: Response, fields: ParsedAckRequest): boolean {
+  if (!fields.operationId) {
+    sendErrorResponse(res, 400, 'operationId is required');
+    return false;
+  }
+  if (!fields.clientId) {
+    sendErrorResponse(res, 400, 'clientId is required');
+    return false;
+  }
+  if (!fields.clientToken) {
+    sendErrorResponse(res, 400, 'clientToken is required');
+    return false;
+  }
+  return true;
+}
+
+function finalizePendingAck(context: SelfUpdateAckProtocolContext, operationId: string): void {
+  const pending = context.pendingSelfUpdateAcks.get(operationId);
+  if (!pending) {
+    return;
+  }
+  if (pending.resolved) {
+    context.pendingSelfUpdateAcks.delete(operationId);
+    return;
+  }
+  pending.resolved = true;
+  if (pending.timeoutHandle) {
+    globalThis.clearTimeout(pending.timeoutHandle);
+    pending.timeoutHandle = undefined;
+  }
+  context.pendingSelfUpdateAcks.delete(operationId);
+  if (pending.resolveWaiter) {
+    pending.resolveWaiter();
+    pending.resolveWaiter = undefined;
+  }
+}
+
+function findActiveClientByTokenConstantTime(
+  activeClientRegistry: ActiveSseClientRegistry,
+  clientToken: string,
+): ActiveSseClient | undefined {
+  const providedTokenHash = hashToken(clientToken);
+  const activeClient = activeClientRegistry.getByTokenHashHex(providedTokenHash.toString('hex'));
+  const comparisonHash = activeClient?.clientTokenHash ?? DUMMY_CLIENT_TOKEN_HASH;
+  const hashMatches = timingSafeEqual(providedTokenHash, comparisonHash);
+  return hashMatches && activeClient ? activeClient : undefined;
+}
+
+function hasEligibleClientTokenConstantTime(
+  eligibleClientTokens: readonly Buffer[],
+  clientToken: string,
+): boolean {
+  const providedTokenHash = hashToken(clientToken);
+  let hasMatch = false;
+  for (const candidateTokenHash of eligibleClientTokens) {
+    hasMatch = timingSafeEqual(providedTokenHash, candidateTokenHash) || hasMatch;
+  }
+  return hasMatch;
+}
+
+function writeSelfUpdateEventToAllClients(
+  clients: ReadonlySet<FlushableResponse>,
+  serializedPayload: string,
+): void {
+  for (const client of clients) {
+    client.write(`event: dd:self-update\ndata: ${serializedPayload}\n\n`);
+    client.flush?.();
+  }
+}
+
+function waitForSelfUpdateAckOrTimeout(
+  context: SelfUpdateAckProtocolContext,
+  operationId: string,
+  ackTimeoutMs: number,
+  eligibleClientTokenHashes: readonly Buffer[],
+): Promise<void> {
+  return new Promise<void>((resolve) => {
+    const pending: PendingSelfUpdateAck = {
+      operationId,
+      requiresAck: true,
+      ackTimeoutMs,
+      createdAtMs: Date.now(),
+      clientsAtEmit: eligibleClientTokenHashes.length,
+      eligibleClientTokens: [...eligibleClientTokenHashes],
+      ackedClientIds: new Set<string>(),
+      resolved: false,
+      resolveWaiter: resolve,
+      timeoutHandle: globalThis.setTimeout(() => {
+        finalizePendingAck(context, operationId);
+      }, ackTimeoutMs),
+    };
+    context.pendingSelfUpdateAcks.set(operationId, pending);
+  });
+}
+
+async function broadcastSelfUpdate(
+  context: SelfUpdateAckProtocolContext,
+  payload: SelfUpdateStartingEventPayload,
+): Promise<void> {
+  const operationId = String(payload?.opId || '').trim();
+  if (!operationId) {
+    return;
+  }
+  const requiresAck = payload?.requiresAck === true;
+  const ackTimeoutMs = parseAckTimeoutMs(payload?.ackTimeoutMs, context.defaultAckTimeoutMs);
+  const startedAt = payload?.startedAt || new Date().toISOString();
+  const eventPayload = {
+    opId: operationId,
+    requiresAck,
+    ackTimeoutMs,
+    startedAt,
+  };
+  const serializedPayload = JSON.stringify(eventPayload);
+  const eligibleClientTokenHashes = Array.from(
+    context.activeClientRegistry.listClientTokens(),
+    (token) => hashToken(token),
+  );
+
+  writeSelfUpdateEventToAllClients(context.clients, serializedPayload);
+
+  if (!requiresAck || eligibleClientTokenHashes.length === 0) {
+    return;
+  }
+
+  await waitForSelfUpdateAckOrTimeout(
+    context,
+    operationId,
+    ackTimeoutMs,
+    eligibleClientTokenHashes,
+  );
+}
+
+function acknowledgeSelfUpdate(
+  context: SelfUpdateAckProtocolContext,
+  req: Request,
+  res: Response,
+): void {
+  const fields = parseAckRequest(req);
+  if (!validateAckRequestFields(res, fields)) {
+    return;
+  }
+
+  const pending = context.pendingSelfUpdateAcks.get(fields.operationId);
+  if (!pending) {
+    res.status(202).json({
+      status: 'ignored',
+      operationId: fields.operationId,
+      reason: 'no-pending-ack',
+    });
+    return;
+  }
+
+  const activeClient = findActiveClientByTokenConstantTime(
+    context.activeClientRegistry,
+    fields.clientToken,
+  );
+  if (!activeClient) {
+    res.status(403).json({
+      status: 'rejected',
+      operationId: fields.operationId,
+      reason: 'invalid-or-expired-client-token',
+    });
+    return;
+  }
+  if (activeClient.clientId !== fields.clientId) {
+    res.status(403).json({
+      status: 'rejected',
+      operationId: fields.operationId,
+      reason: 'client-token-mismatch',
+    });
+    return;
+  }
+  if (!hasEligibleClientTokenConstantTime(pending.eligibleClientTokens, fields.clientToken)) {
+    res.status(403).json({
+      status: 'rejected',
+      operationId: fields.operationId,
+      reason: 'client-not-bound-to-operation',
+    });
+    return;
+  }
+
+  pending.ackedClientIds.add(activeClient.clientId);
+  finalizePendingAck(context, fields.operationId);
+
+  res.status(202).json({
+    status: 'accepted',
+    operationId: fields.operationId,
+    ackedClients: pending.ackedClientIds.size,
+    clientsAtEmit: pending.clientsAtEmit,
+  });
+}
+
+function clearPendingSelfUpdateAcks(context: SelfUpdateAckProtocolContext): void {
+  for (const operationId of context.pendingSelfUpdateAcks.keys()) {
+    finalizePendingAck(context, operationId);
+  }
+}
+
+function sweepStalePendingSelfUpdateAcks(
+  context: SelfUpdateAckProtocolContext,
+  { nowMs, staleSweepIntervalMs, staleEntryTtlMs }: SelfUpdateAckSweepOptions,
+): void {
+  for (const [operationId, pending] of context.pendingSelfUpdateAcks) {
+    const ageMs = nowMs - pending.createdAtMs;
+    const staleThresholdMs = Math.max(pending.ackTimeoutMs + staleSweepIntervalMs, staleEntryTtlMs);
+    if (pending.resolved || ageMs >= staleThresholdMs) {
+      finalizePendingAck(context, operationId);
+    }
+  }
+}
+
 export function createSelfUpdateAckProtocol(
   dependencies: SelfUpdateAckProtocolDependencies,
 ): SelfUpdateAckProtocol {
-  const { clients, activeClientRegistry, defaultAckTimeoutMs } = dependencies;
   const pendingSelfUpdateAcks = new Map<string, PendingSelfUpdateAck>();
-
-  function parseAckTimeoutMs(value: unknown): number {
-    const parsed = Number.parseInt(String(value ?? ''), 10);
-    if (!Number.isFinite(parsed) || parsed <= 0) {
-      return defaultAckTimeoutMs;
-    }
-    return parsed;
-  }
-
-  function finalizePendingAck(operationId: string): void {
-    const pending = pendingSelfUpdateAcks.get(operationId);
-    if (!pending) {
-      return;
-    }
-    if (pending.resolved) {
-      pendingSelfUpdateAcks.delete(operationId);
-      return;
-    }
-    pending.resolved = true;
-    if (pending.timeoutHandle) {
-      globalThis.clearTimeout(pending.timeoutHandle);
-      pending.timeoutHandle = undefined;
-    }
-    pendingSelfUpdateAcks.delete(operationId);
-    if (pending.resolveWaiter) {
-      pending.resolveWaiter();
-      pending.resolveWaiter = undefined;
-    }
-  }
-
-  function findActiveClientByTokenConstantTime(clientToken: string): ActiveSseClient | undefined {
-    const providedTokenHash = hashToken(clientToken);
-    const activeClient = activeClientRegistry.getByTokenHashHex(providedTokenHash.toString('hex'));
-    const comparisonHash = activeClient?.clientTokenHash ?? DUMMY_CLIENT_TOKEN_HASH;
-    const hashMatches = timingSafeEqual(providedTokenHash, comparisonHash);
-    return hashMatches && activeClient ? activeClient : undefined;
-  }
-
-  function hasEligibleClientTokenConstantTime(
-    eligibleClientTokens: readonly Buffer[],
-    clientToken: string,
-  ): boolean {
-    const providedTokenHash = hashToken(clientToken);
-    let hasMatch = false;
-    for (const candidateTokenHash of eligibleClientTokens) {
-      hasMatch = timingSafeEqual(providedTokenHash, candidateTokenHash) || hasMatch;
-    }
-    return hasMatch;
-  }
-
-  async function broadcastSelfUpdate(payload: SelfUpdateStartingEventPayload): Promise<void> {
-    const operationId = String(payload?.opId || '').trim();
-    if (!operationId) {
-      return;
-    }
-    const requiresAck = payload?.requiresAck === true;
-    const ackTimeoutMs = parseAckTimeoutMs(payload?.ackTimeoutMs);
-    const startedAt = payload?.startedAt || new Date().toISOString();
-    const eventPayload = {
-      opId: operationId,
-      requiresAck,
-      ackTimeoutMs,
-      startedAt,
-    };
-    const serializedPayload = JSON.stringify(eventPayload);
-    const eligibleClientTokens = activeClientRegistry.listClientTokens();
-    const eligibleClientTokenHashes = Array.from(eligibleClientTokens, (token) => hashToken(token));
-
-    for (const client of clients) {
-      client.write(`event: dd:self-update\ndata: ${serializedPayload}\n\n`);
-      client.flush?.();
-    }
-
-    if (!requiresAck || eligibleClientTokenHashes.length === 0) {
-      return;
-    }
-
-    await new Promise<void>((resolve) => {
-      const pending: PendingSelfUpdateAck = {
-        operationId,
-        requiresAck,
-        ackTimeoutMs,
-        createdAtMs: Date.now(),
-        clientsAtEmit: eligibleClientTokenHashes.length,
-        eligibleClientTokens: eligibleClientTokenHashes,
-        ackedClientIds: new Set<string>(),
-        resolved: false,
-        resolveWaiter: resolve,
-        timeoutHandle: globalThis.setTimeout(() => {
-          finalizePendingAck(operationId);
-        }, ackTimeoutMs),
-      };
-      pendingSelfUpdateAcks.set(operationId, pending);
-    });
-  }
-
-  function acknowledgeSelfUpdate(req: Request, res: Response): void {
-    const operationId = String(req.params.operationId || '').trim();
-    const clientId = String(req.body?.clientId || '').trim();
-    const clientToken = String(req.body?.clientToken || '').trim();
-    if (!operationId) {
-      sendErrorResponse(res, 400, 'operationId is required');
-      return;
-    }
-    if (!clientId) {
-      sendErrorResponse(res, 400, 'clientId is required');
-      return;
-    }
-    if (!clientToken) {
-      sendErrorResponse(res, 400, 'clientToken is required');
-      return;
-    }
-
-    const pending = pendingSelfUpdateAcks.get(operationId);
-    if (!pending) {
-      res.status(202).json({
-        status: 'ignored',
-        operationId,
-        reason: 'no-pending-ack',
-      });
-      return;
-    }
-
-    const activeClient = findActiveClientByTokenConstantTime(clientToken);
-    if (!activeClient) {
-      res.status(403).json({
-        status: 'rejected',
-        operationId,
-        reason: 'invalid-or-expired-client-token',
-      });
-      return;
-    }
-    if (activeClient.clientId !== clientId) {
-      res.status(403).json({
-        status: 'rejected',
-        operationId,
-        reason: 'client-token-mismatch',
-      });
-      return;
-    }
-    if (!hasEligibleClientTokenConstantTime(pending.eligibleClientTokens, clientToken)) {
-      res.status(403).json({
-        status: 'rejected',
-        operationId,
-        reason: 'client-not-bound-to-operation',
-      });
-      return;
-    }
-
-    pending.ackedClientIds.add(activeClient.clientId);
-    finalizePendingAck(operationId);
-
-    res.status(202).json({
-      status: 'accepted',
-      operationId,
-      ackedClients: pending.ackedClientIds.size,
-      clientsAtEmit: pending.clientsAtEmit,
-    });
-  }
-
-  function clearPendingSelfUpdateAcks(): void {
-    for (const operationId of pendingSelfUpdateAcks.keys()) {
-      finalizePendingAck(operationId);
-    }
-  }
-
-  function sweepStalePendingSelfUpdateAcks({
-    nowMs,
-    staleSweepIntervalMs,
-    staleEntryTtlMs,
-  }: SelfUpdateAckSweepOptions): void {
-    for (const [operationId, pending] of pendingSelfUpdateAcks) {
-      const ageMs = nowMs - pending.createdAtMs;
-      const staleThresholdMs = Math.max(
-        pending.ackTimeoutMs + staleSweepIntervalMs,
-        staleEntryTtlMs,
-      );
-      if (pending.resolved || ageMs >= staleThresholdMs) {
-        finalizePendingAck(operationId);
-      }
-    }
-  }
+  const context: SelfUpdateAckProtocolContext = {
+    ...dependencies,
+    pendingSelfUpdateAcks,
+  };
 
   return {
     pendingSelfUpdateAcks,
-    broadcastSelfUpdate,
-    acknowledgeSelfUpdate,
-    clearPendingSelfUpdateAcks,
-    sweepStalePendingSelfUpdateAcks,
+    broadcastSelfUpdate: (payload) => broadcastSelfUpdate(context, payload),
+    acknowledgeSelfUpdate: (req, res) => acknowledgeSelfUpdate(context, req, res),
+    clearPendingSelfUpdateAcks: () => clearPendingSelfUpdateAcks(context),
+    sweepStalePendingSelfUpdateAcks: (options) => sweepStalePendingSelfUpdateAcks(context, options),
   };
 }

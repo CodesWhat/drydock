@@ -2,7 +2,12 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { computed, defineComponent, h, nextTick, type Ref, ref } from 'vue';
 import type { ApiContainerTrigger } from '@/types/api';
 import type { Container } from '@/types/container';
-import { useContainerActions } from '@/views/containers/useContainerActions';
+import { daysToMs } from '@/utils/maturity-policy';
+import {
+  ACTION_TAB_DETAIL_REFRESH_DEBOUNCE_MS,
+  PENDING_ACTIONS_POLL_INTERVAL_MS,
+  useContainerActions,
+} from '@/views/containers/useContainerActions';
 
 const mocks = vi.hoisted(() => ({
   confirmRequire: vi.fn(),
@@ -300,6 +305,28 @@ describe('useContainerActions', () => {
     expect(mocks.getContainerUpdateOperations).toHaveBeenCalledTimes(1);
   });
 
+  it('runs direct update/scan actions and guards unmapped containers', async () => {
+    const container = makeContainer({ id: 'container-1', name: 'web' });
+    const { composable } = await mountActionsHarness({
+      selectedContainer: container,
+      selectedContainerId: container.id,
+      containerIdMap: { web: 'container-1' },
+    });
+
+    await composable.updateContainer('web');
+    await composable.scanContainer('web');
+
+    expect(mocks.updateContainer).toHaveBeenCalledWith('container-1');
+    expect(mocks.scanContainer).toHaveBeenCalledWith('container-1');
+
+    mocks.updateContainer.mockClear();
+    mocks.scanContainer.mockClear();
+    await composable.updateContainer('api');
+    await composable.scanContainer('api');
+    expect(mocks.updateContainer).not.toHaveBeenCalled();
+    expect(mocks.scanContainer).not.toHaveBeenCalled();
+  });
+
   it('validates snooze-until input before policy updates', async () => {
     const container = makeContainer({ id: 'container-1', name: 'web' });
     const { composable } = await mountActionsHarness({
@@ -313,6 +340,81 @@ describe('useContainerActions', () => {
 
     expect(composable.policyError.value).toBe('Select a valid snooze date');
     expect(mocks.updateContainerPolicy).not.toHaveBeenCalled();
+  });
+
+  it('applies snooze-until policy when date input is valid', async () => {
+    const container = makeContainer({ id: 'container-1', name: 'web' });
+    const { composable } = await mountActionsHarness({
+      selectedContainer: container,
+      selectedContainerId: container.id,
+      containerIdMap: { web: 'container-1' },
+    });
+
+    composable.snoozeDateInput.value = '2026-03-15';
+    await composable.snoozeSelectedUntilDate();
+
+    expect(mocks.updateContainerPolicy).toHaveBeenCalledWith(
+      'container-1',
+      'snooze',
+      expect.objectContaining({ snoozeUntil: expect.any(String) }),
+    );
+  });
+
+  it('applies and clears maturity policy actions with defaults and validation', async () => {
+    const container = makeContainer({ id: 'container-1', name: 'web' });
+    const { composable } = await mountActionsHarness({
+      selectedContainer: container,
+      selectedContainerId: container.id,
+      containerIdMap: { web: 'container-1' },
+    });
+
+    await composable.setMaturityPolicySelected('mature');
+    expect(mocks.updateContainerPolicy).toHaveBeenNthCalledWith(
+      1,
+      'container-1',
+      'set-maturity-policy',
+      {
+        mode: 'mature',
+        minAgeDays: 7,
+      },
+    );
+
+    composable.maturityMinAgeDaysInput.value = 21;
+    await composable.setMaturityPolicySelected('all');
+    expect(mocks.updateContainerPolicy).toHaveBeenNthCalledWith(
+      2,
+      'container-1',
+      'set-maturity-policy',
+      {
+        mode: 'all',
+        minAgeDays: 21,
+      },
+    );
+
+    await composable.clearMaturityPolicySelected();
+    expect(mocks.updateContainerPolicy).toHaveBeenNthCalledWith(
+      3,
+      'container-1',
+      'clear-maturity-policy',
+      {},
+    );
+
+    composable.maturityMinAgeDaysInput.value = 1;
+    await composable.setMaturityPolicySelected('mature');
+    expect(mocks.updateContainerPolicy).toHaveBeenNthCalledWith(
+      4,
+      'container-1',
+      'set-maturity-policy',
+      {
+        mode: 'mature',
+        minAgeDays: 1,
+      },
+    );
+
+    composable.maturityMinAgeDaysInput.value = 0;
+    await composable.setMaturityPolicySelected('mature');
+    expect(composable.policyError.value).toBe('Enter a maturity age between 1 and 365 days');
+    expect(mocks.updateContainerPolicy).toHaveBeenCalledTimes(4);
   });
 
   it('deletes selected container and closes detail views', async () => {
@@ -340,32 +442,70 @@ describe('useContainerActions', () => {
     expect(loadContainers).toHaveBeenCalledTimes(1);
   });
 
-  it('updates all eligible containers in a group', async () => {
+  it('updates all eligible containers in a group and reloads once after the batch', async () => {
     const c1 = makeContainer({ id: 'container-1', name: 'web', newTag: '1.1.0', bouncer: 'safe' });
     const c2 = makeContainer({
       id: 'container-2',
       name: 'api',
       newTag: '2.0.0',
+      bouncer: 'safe',
+    });
+    const c3 = makeContainer({
+      id: 'container-3',
+      name: 'worker',
+      newTag: '2.0.0',
       bouncer: 'blocked',
     });
-    const c3 = makeContainer({ id: 'container-3', name: 'worker', newTag: null, bouncer: 'safe' });
+    const c4 = makeContainer({ id: 'container-4', name: 'cron', newTag: null, bouncer: 'safe' });
 
-    const { composable } = await mountActionsHarness({
-      containers: [c1, c2, c3],
+    const { composable, loadContainers } = await mountActionsHarness({
+      containers: [c1, c2, c3, c4],
       containerIdMap: {
         web: 'container-1',
         api: 'container-2',
         worker: 'container-3',
+        cron: 'container-4',
       },
     });
+    loadContainers.mockClear();
 
     await composable.updateAllInGroup({
       key: 'group-1',
-      containers: [c1, c2, c3],
+      containers: [c1, c2, c3, c4],
     });
 
-    expect(mocks.updateContainer).toHaveBeenCalledTimes(1);
-    expect(mocks.updateContainer).toHaveBeenCalledWith('container-1');
+    expect(mocks.updateContainer).toHaveBeenCalledTimes(2);
+    expect(mocks.updateContainer).toHaveBeenNthCalledWith(1, 'container-1');
+    expect(mocks.updateContainer).toHaveBeenNthCalledWith(2, 'container-2');
+    expect(loadContainers).toHaveBeenCalledTimes(1);
+    expect(composable.groupUpdateInProgress.value.has('group-1')).toBe(false);
+  });
+
+  it('does not reload grouped containers when every update action fails', async () => {
+    const c1 = makeContainer({ id: 'container-1', name: 'web', newTag: '1.1.0', bouncer: 'safe' });
+    const c2 = makeContainer({
+      id: 'container-2',
+      name: 'api',
+      newTag: '2.0.0',
+      bouncer: 'safe',
+    });
+    const { composable, loadContainers } = await mountActionsHarness({
+      containers: [c1, c2],
+      containerIdMap: {
+        web: 'container-1',
+        api: 'container-2',
+      },
+    });
+    mocks.updateContainer.mockRejectedValue(new Error('update failed'));
+    loadContainers.mockClear();
+
+    await composable.updateAllInGroup({
+      key: 'group-1',
+      containers: [c1, c2],
+    });
+
+    expect(mocks.updateContainer).toHaveBeenCalledTimes(2);
+    expect(loadContainers).not.toHaveBeenCalled();
     expect(composable.groupUpdateInProgress.value.has('group-1')).toBe(false);
   });
 
@@ -385,13 +525,13 @@ describe('useContainerActions', () => {
     await composable.startContainer('web');
     expect(composable.actionPending.value.has('web')).toBe(true);
 
-    vi.advanceTimersByTime(2000);
+    vi.advanceTimersByTime(PENDING_ACTIONS_POLL_INTERVAL_MS);
     await flushPromises();
 
     expect(loadContainers).toHaveBeenCalledTimes(2);
     expect(composable.actionPending.value.has('web')).toBe(false);
 
-    vi.advanceTimersByTime(4000);
+    vi.advanceTimersByTime(PENDING_ACTIONS_POLL_INTERVAL_MS * 2);
     await flushPromises();
     expect(loadContainers).toHaveBeenCalledTimes(2);
   });
@@ -468,6 +608,257 @@ describe('useContainerActions', () => {
       'Skipped updates policy active',
     );
     expect(composable.containerPolicyTooltip('api', 'snoozed')).toContain('Updates snoozed until');
+  });
+
+  it('derives maturity list-policy state and tooltip', async () => {
+    const now = Date.now();
+    const { composable } = await mountActionsHarness({
+      containerMetaMap: {
+        web: {
+          updateAvailable: false,
+          updateDetectedAt: new Date(now - daysToMs(2)).toISOString(),
+          updateKind: {
+            kind: 'tag',
+            remoteValue: '2.0.0',
+          },
+          updatePolicy: {
+            maturityMode: 'mature',
+            maturityMinAgeDays: 7,
+          },
+        },
+        api: {
+          updateAvailable: false,
+          updateDetectedAt: new Date(now - daysToMs(10)).toISOString(),
+          updateKind: {
+            kind: 'tag',
+            remoteValue: '5.0.0',
+          },
+          updatePolicy: {
+            maturityMode: 'mature',
+            maturityMinAgeDays: 7,
+          },
+        },
+      },
+    });
+
+    expect(composable.getContainerListPolicyState('web')).toMatchObject({
+      maturityMode: 'mature',
+      maturityMinAgeDays: 7,
+      maturityBlocked: true,
+    });
+    expect(composable.getContainerListPolicyState('api')).toMatchObject({
+      maturityMode: 'mature',
+      maturityMinAgeDays: 7,
+      maturityBlocked: false,
+    });
+    expect(composable.containerPolicyTooltip('web', 'maturity')).toContain('Mature-only policy');
+    expect(composable.containerPolicyTooltip('api', 'maturity')).toBe(
+      'Mature-only policy active (7 days minimum age)',
+    );
+  });
+
+  it('normalizes unknown maturity mode strings and falls back to generic maturity tooltip text', async () => {
+    const container = makeContainer({ id: 'container-1', name: 'web' });
+    const { composable } = await mountActionsHarness({
+      selectedContainer: container,
+      selectedContainerId: container.id,
+      containerMetaMap: {
+        web: {
+          updatePolicy: {
+            maturityMode: '  experimental  ',
+            skipTags: [],
+            skipDigests: [],
+          },
+        },
+      },
+    });
+
+    expect(composable.selectedMaturityMode.value).toBeUndefined();
+    expect(composable.selectedHasMaturityPolicy.value).toBe(false);
+    expect(composable.getContainerListPolicyState('web')).toEqual({
+      snoozed: false,
+      skipped: false,
+      skipCount: 0,
+      maturityBlocked: false,
+    });
+    expect(composable.containerPolicyTooltip('web', 'maturity')).toBe('Maturity policy active');
+  });
+
+  it('memoizes list policy state for repeated row reads', async () => {
+    const dateNowSpy = vi
+      .spyOn(Date, 'now')
+      .mockReturnValue(Date.parse('2026-03-15T12:00:00.000Z'));
+    try {
+      const { composable } = await mountActionsHarness({
+        containerMetaMap: {
+          web: {
+            updateAvailable: false,
+            updateDetectedAt: '2026-03-14T12:00:00.000Z',
+            updateKind: {
+              kind: 'tag',
+              remoteValue: '2.0.0',
+            },
+            updatePolicy: {
+              maturityMode: 'mature',
+              maturityMinAgeDays: 7,
+              snoozeUntil: '2026-03-16T00:00:00.000Z',
+            },
+          },
+        },
+      });
+
+      dateNowSpy.mockClear();
+
+      const firstState = composable.getContainerListPolicyState('web');
+      const secondState = composable.getContainerListPolicyState('web');
+      const maturityTooltip = composable.containerPolicyTooltip('web', 'maturity');
+      const snoozeTooltip = composable.containerPolicyTooltip('web', 'snoozed');
+
+      expect(firstState).toBe(secondState);
+      expect(maturityTooltip).toContain('Mature-only policy');
+      expect(snoozeTooltip).toContain('Updates snoozed until');
+      expect(dateNowSpy).toHaveBeenCalledTimes(2);
+    } finally {
+      dateNowSpy.mockRestore();
+    }
+  });
+
+  it('guards selected skip policy arrays and returns values when arrays are present', async () => {
+    const container = makeContainer({ id: 'container-1', name: 'web' });
+    const { composable, containerMetaMap } = await mountActionsHarness({
+      selectedContainer: container,
+      selectedContainerId: container.id,
+      containerMetaMap: {
+        web: {
+          updatePolicy: {
+            skipTags: 'stable',
+            skipDigests: null,
+          },
+        },
+      },
+    });
+
+    expect(composable.selectedSkipTags.value).toEqual([]);
+    expect(composable.selectedSkipDigests.value).toEqual([]);
+
+    containerMetaMap.value = {
+      web: {
+        updatePolicy: {
+          skipTags: ['stable'],
+          skipDigests: ['sha256:1'],
+        },
+      },
+    };
+    await nextTick();
+
+    expect(composable.selectedSkipTags.value).toEqual(['stable']);
+    expect(composable.selectedSkipDigests.value).toEqual(['sha256:1']);
+  });
+
+  it('handles invalid detected-at timestamps and the allow-all maturity tooltip branch', async () => {
+    const { composable } = await mountActionsHarness({
+      containerMetaMap: {
+        web: {
+          updateAvailable: false,
+          updateDetectedAt: 'not-a-date',
+          updateKind: {
+            kind: 'tag',
+            remoteValue: '2.0.0',
+          },
+          updatePolicy: {
+            maturityMode: 'mature',
+            maturityMinAgeDays: 7,
+          },
+        },
+        api: {
+          updatePolicy: {
+            maturityMode: 'all',
+            maturityMinAgeDays: 14,
+          },
+        },
+      },
+    });
+
+    expect(composable.getContainerListPolicyState('web')).toMatchObject({
+      maturityMode: 'mature',
+      maturityMinAgeDays: 7,
+      maturityBlocked: true,
+    });
+    expect(composable.getContainerListPolicyState('web')).not.toHaveProperty('updateDetectedAt');
+    expect(composable.containerPolicyTooltip('api', 'maturity')).toBe(
+      'Maturity policy allows all updates',
+    );
+  });
+
+  it('preserves detected-at metadata when list policy has skips but no maturity mode', async () => {
+    const detectedAt = '2026-03-14T12:00:00.000Z';
+    const { composable } = await mountActionsHarness({
+      containerMetaMap: {
+        web: {
+          updateAvailable: false,
+          updateDetectedAt: detectedAt,
+          updateKind: {
+            kind: 'tag',
+            remoteValue: '2.0.0',
+          },
+          updatePolicy: {
+            skipTags: ['stable'],
+          },
+        },
+      },
+    });
+
+    expect(composable.getContainerListPolicyState('web')).toMatchObject({
+      skipped: true,
+      skipCount: 1,
+      updateDetectedAt: detectedAt,
+      maturityBlocked: false,
+    });
+    expect(composable.getContainerListPolicyState('web')).not.toHaveProperty('maturityMode');
+  });
+
+  it('uses singular maturity and skipped tooltip wording when min age and skip count are one', async () => {
+    const now = Date.now();
+    const { composable } = await mountActionsHarness({
+      containerMetaMap: {
+        web: {
+          updateAvailable: false,
+          updateDetectedAt: new Date(now - 12 * 60 * 60 * 1000).toISOString(),
+          updateKind: {
+            kind: 'digest',
+            remoteValue: 'sha256:new',
+          },
+          updatePolicy: {
+            maturityMode: 'mature',
+            maturityMinAgeDays: 1,
+            skipTags: [],
+            skipDigests: ['sha256:old'],
+          },
+        },
+        api: {
+          updateAvailable: false,
+          updateDetectedAt: new Date(now - daysToMs(2)).toISOString(),
+          updateKind: {
+            kind: 'digest',
+            remoteValue: 'sha256:newer',
+          },
+          updatePolicy: {
+            maturityMode: 'mature',
+            maturityMinAgeDays: 1,
+          },
+        },
+      },
+    });
+
+    expect(composable.containerPolicyTooltip('web', 'maturity')).toBe(
+      'Mature-only policy blocks updates younger than 1 day',
+    );
+    expect(composable.containerPolicyTooltip('api', 'maturity')).toBe(
+      'Mature-only policy active (1 day minimum age)',
+    );
+    expect(composable.containerPolicyTooltip('web', 'skipped')).toBe(
+      'Skipped updates policy active (1 entry)',
+    );
   });
 
   it('wires confirm stop/restart/force-update dialogs to their accept handlers', async () => {
@@ -638,7 +1029,7 @@ describe('useContainerActions', () => {
     await nextTick();
     activeDetailTab.value = 'actions';
     await nextTick();
-    vi.advanceTimersByTime(250);
+    vi.advanceTimersByTime(ACTION_TAB_DETAIL_REFRESH_DEBOUNCE_MS);
     await flushPromises();
 
     expect(composable.triggerError.value).toBe('trigger load failed');
@@ -665,7 +1056,7 @@ describe('useContainerActions', () => {
     selectedContainerId.value = '';
     activeDetailTab.value = 'actions';
     await nextTick();
-    vi.advanceTimersByTime(250);
+    vi.advanceTimersByTime(ACTION_TAB_DETAIL_REFRESH_DEBOUNCE_MS);
     await flushPromises();
 
     expect(mocks.getContainerTriggers).not.toHaveBeenCalled();
@@ -703,7 +1094,7 @@ describe('useContainerActions', () => {
     expect(mocks.getBackups).not.toHaveBeenCalled();
     expect(mocks.getContainerUpdateOperations).not.toHaveBeenCalled();
 
-    vi.advanceTimersByTime(250);
+    vi.advanceTimersByTime(ACTION_TAB_DETAIL_REFRESH_DEBOUNCE_MS);
     await flushPromises();
 
     expect(mocks.getContainerTriggers).toHaveBeenCalledTimes(1);
@@ -913,7 +1304,99 @@ describe('useContainerActions', () => {
       snoozed: false,
       skipped: false,
       skipCount: 0,
+      maturityBlocked: false,
     });
+  });
+
+  it('returns empty policy state when metadata has no update-policy object', async () => {
+    const { composable } = await mountActionsHarness({
+      containerMetaMap: {
+        web: {},
+      },
+    });
+
+    expect(composable.getContainerListPolicyState('web')).toEqual({
+      snoozed: false,
+      skipped: false,
+      skipCount: 0,
+      maturityBlocked: false,
+    });
+  });
+
+  it('exposes selected skip arrays and supports direct update/scan action handlers', async () => {
+    const container = makeContainer({ id: 'container-1', name: 'web' });
+    const { composable, containerMetaMap } = await mountActionsHarness({
+      selectedContainer: container,
+      selectedContainerId: container.id,
+      containers: [container],
+      containerIdMap: { web: 'container-1' },
+      containerMetaMap: {
+        web: {
+          updatePolicy: {
+            skipTags: ['v1', 'v2'],
+            skipDigests: ['sha256:abc'],
+          },
+        },
+      },
+    });
+
+    expect(composable.selectedSkipTags.value).toEqual(['v1', 'v2']);
+    expect(composable.selectedSkipDigests.value).toEqual(['sha256:abc']);
+
+    containerMetaMap.value = {
+      web: {
+        updatePolicy: {
+          skipTags: { invalid: true },
+          skipDigests: null,
+        },
+      },
+    };
+    await nextTick();
+
+    expect(composable.selectedSkipTags.value).toEqual([]);
+    expect(composable.selectedSkipDigests.value).toEqual([]);
+
+    mocks.updateContainer.mockClear();
+    mocks.scanContainer.mockClear();
+    await composable.updateContainer('web');
+    await composable.scanContainer('web');
+    expect(mocks.updateContainer).toHaveBeenCalledWith('container-1');
+    expect(mocks.scanContainer).toHaveBeenCalledWith('container-1');
+  });
+
+  it('falls back for non-object selected policies and skips action-tab refresh when not on actions tab', async () => {
+    const container = makeContainer({ id: 'container-1', name: 'web' });
+    const { composable } = await mountActionsHarness({
+      activeDetailTab: 'overview',
+      selectedContainer: container,
+      selectedContainerId: container.id,
+      containers: [container],
+      containerIdMap: { web: 'container-1' },
+      containerMetaMap: {
+        web: {
+          updatePolicy: 'invalid',
+        },
+      },
+    });
+
+    expect(composable.selectedUpdatePolicy.value).toEqual({});
+    expect(composable.selectedSkipTags.value).toEqual([]);
+    expect(composable.selectedSkipDigests.value).toEqual([]);
+    expect(composable.getContainerListPolicyState('missing')).toEqual({
+      snoozed: false,
+      skipped: false,
+      skipCount: 0,
+      maturityBlocked: false,
+    });
+
+    mocks.getContainerTriggers.mockClear();
+    mocks.getBackups.mockClear();
+    mocks.getContainerUpdateOperations.mockClear();
+    await composable.skipUpdate('web');
+    expect(mocks.updateContainerPolicy).toHaveBeenCalledWith('container-1', 'skip-current', {});
+    expect(mocks.getContainerTriggers).not.toHaveBeenCalled();
+    expect(mocks.getBackups).not.toHaveBeenCalled();
+    expect(mocks.getContainerUpdateOperations).not.toHaveBeenCalled();
   });
 
   it('refreshes actions-tab detail data after action execution and skip updates', async () => {
@@ -1062,11 +1545,11 @@ describe('useContainerActions', () => {
     await composable.startContainer('web');
     expect(composable.actionPending.value.has('web')).toBe(true);
 
-    vi.advanceTimersByTime(2000);
+    vi.advanceTimersByTime(PENDING_ACTIONS_POLL_INTERVAL_MS);
     await flushPromises();
     expect(loadCallCount).toBe(2);
 
-    vi.advanceTimersByTime(2000);
+    vi.advanceTimersByTime(PENDING_ACTIONS_POLL_INTERVAL_MS);
     await flushPromises();
     expect(loadCallCount).toBe(2);
 
@@ -1092,7 +1575,7 @@ describe('useContainerActions', () => {
     wrapper.unmount();
 
     loadContainers.mockClear();
-    vi.advanceTimersByTime(6000);
+    vi.advanceTimersByTime(PENDING_ACTIONS_POLL_INTERVAL_MS * 3);
     await flushPromises();
 
     expect(loadContainers).not.toHaveBeenCalled();

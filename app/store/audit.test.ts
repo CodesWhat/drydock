@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { daysToMs } from '../model/maturity-policy.js';
 
 vi.mock('../log/index.js', () => ({
   default: { child: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }) },
@@ -276,7 +277,7 @@ describe('Audit Store', () => {
   });
 
   test('insertAudit should prune entries older than the retention window', () => {
-    var oldDate = new Date(Date.now() - 100 * 24 * 60 * 60 * 1000).toISOString();
+    var oldDate = new Date(Date.now() - daysToMs(100)).toISOString();
 
     audit.insertAudit({
       action: 'update-available',
@@ -295,6 +296,48 @@ describe('Audit Store', () => {
 
     var oldEntries = audit.getAuditEntries({ container: 'old' });
     expect(oldEntries.total).toBe(0);
+  });
+
+  test('insertAudit should periodically prune stale entries even with low insert volume', () => {
+    vi.useFakeTimers();
+    try {
+      audit.createCollections(db);
+      const oldDate = new Date(Date.now() - daysToMs(100)).toISOString();
+
+      audit.insertAudit({
+        action: 'update-available',
+        containerName: 'old',
+        status: 'info',
+        timestamp: oldDate,
+      });
+      audit.insertAudit({
+        action: 'update-applied',
+        containerName: 'recent',
+        status: 'success',
+      });
+
+      expect(audit.getAuditEntries({ container: 'old' }).total).toBe(1);
+
+      vi.advanceTimersByTime(daysToMs(1));
+
+      expect(audit.getAuditEntries({ container: 'old' }).total).toBe(0);
+      expect(audit.getAuditEntries({ container: 'recent' }).total).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('createCollections should tolerate timer handles without unref support', () => {
+    const setIntervalSpy = vi
+      .spyOn(globalThis, 'setInterval')
+      .mockReturnValue(0 as unknown as NodeJS.Timeout);
+
+    try {
+      expect(() => audit.createCollections(db)).not.toThrow();
+      expect(setIntervalSpy).toHaveBeenCalled();
+    } finally {
+      setIntervalSpy.mockRestore();
+    }
   });
 
   test('getAuditEntries should return all entries', () => {
@@ -363,6 +406,28 @@ describe('Audit Store', () => {
     });
     expect(result.total).toBe(1);
     expect(result.entries[0].containerName).toBe('new');
+  });
+
+  test('getAuditEntries should exclude fallback entries newer than the upper date bound', () => {
+    audit.insertAudit({
+      action: 'update-available',
+      containerName: 'old',
+      status: 'info',
+      timestamp: '2024-01-01T00:00:00.000Z',
+    });
+    audit.insertAudit({
+      action: 'update-available',
+      containerName: 'new',
+      status: 'info',
+      timestamp: '2024-06-15T00:00:00.000Z',
+    });
+
+    const result = audit.getAuditEntries({
+      to: '2024-03-01T00:00:00.000Z',
+    });
+
+    expect(result.total).toBe(1);
+    expect(result.entries[0].containerName).toBe('old');
   });
 
   test('getAuditEntries should return empty when from/to timestamps are invalid', () => {
@@ -538,6 +603,21 @@ describe('Audit Store', () => {
     expect(result.total).toBe(0);
   });
 
+  test('insertAudit should return normalized entry when collection is not initialized', async () => {
+    vi.resetModules();
+    const freshAudit = await import('./audit.js');
+
+    const result = freshAudit.insertAudit({
+      action: 'update-applied',
+      containerName: 'standalone',
+      status: 'success',
+    });
+
+    expect(result.id).toBeDefined();
+    expect(result.timestamp).toBeDefined();
+    expect(result.containerName).toBe('standalone');
+  });
+
   test('getAuditEntries should return empty when collection not initialized', async () => {
     vi.resetModules();
     var freshAudit = await import('./audit.js');
@@ -565,7 +645,7 @@ describe('Audit Store', () => {
   });
 
   test('pruneOldEntries should remove entries older than N days', () => {
-    var oldDate = new Date(Date.now() - 100 * 24 * 60 * 60 * 1000).toISOString();
+    var oldDate = new Date(Date.now() - daysToMs(100)).toISOString();
     var recentDate = new Date().toISOString();
 
     audit.insertAudit({
@@ -590,7 +670,7 @@ describe('Audit Store', () => {
   });
 
   test('pruneOldEntries should use indexed chain removal when available', () => {
-    const oldTimestamp = Date.now() - 100 * 24 * 60 * 60 * 1000;
+    const oldTimestamp = Date.now() - daysToMs(100);
     const recentTimestamp = Date.now();
     const dbWithChainPrune = createPruneChainDb();
     audit.createCollections(dbWithChainPrune as any);

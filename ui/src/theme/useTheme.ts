@@ -93,17 +93,13 @@ interface ViewTransitionDocument extends Document {
   startViewTransition?: (callback: () => void) => { finished: Promise<void> };
 }
 
-async function transitionTheme(change: () => void, e?: MouseEvent) {
+async function transitionTheme(change: () => void, _e?: MouseEvent) {
   const vtDoc = document as ViewTransitionDocument;
   if (!vtDoc.startViewTransition) {
     change();
     return;
   }
 
-  const x = e?.clientX ?? window.innerWidth / 2;
-  const y = e?.clientY ?? window.innerHeight / 2;
-  document.documentElement.style.setProperty('--x', `${x}px`);
-  document.documentElement.style.setProperty('--y', `${y}px`);
   document.documentElement.classList.add('dd-transitioning');
 
   isTransitioning = true;

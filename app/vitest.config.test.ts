@@ -12,6 +12,7 @@ describe('vitest coverage configuration', () => {
       '**/*.d.ts',
       '**/*.typecheck.ts',
       'vitest.config.ts',
+      'vitest.coverage-provider.ts',
     ]);
   });
 });

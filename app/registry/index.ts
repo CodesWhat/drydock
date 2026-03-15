@@ -88,8 +88,14 @@ const state: RegistryState = {
   agent: {},
 };
 
+const registrationWarnings: string[] = [];
+
 export function getState() {
   return state;
+}
+
+export function getRegistrationWarnings(): string[] {
+  return [...registrationWarnings];
 }
 
 /**
@@ -135,14 +141,14 @@ export async function registerComponent(options: RegisterComponentOptions): Prom
     // if the file structure and inheritance are correct
     (state[kind] as any)[component.getId()] = component;
     return componentRegistered;
-  } catch (e: any) {
+  } catch (e: unknown) {
     const availableProviders = getAvailableProviders(componentPath, (message) =>
       log.debug(message),
     );
     const helpfulMessage = getHelpfulErrorMessage(
       kind,
       providerLowercase,
-      e.message,
+      getErrorMessage(e),
       availableProviders,
     );
     throw new Error(helpfulMessage);
@@ -216,6 +222,8 @@ function mergeProviderConfigurations(
 
 const LEGACY_PUBLIC_TOKEN_AUTH_PROVIDERS = ['hub', 'dhi'] as const;
 const TOKEN_AUTH_CREDENTIAL_KEYS = ['login', 'password', 'token', 'auth'] as const;
+type TokenAuthCredentialKey = (typeof TOKEN_AUTH_CREDENTIAL_KEYS)[number];
+type CredentialKeyPresence = Record<TokenAuthCredentialKey, boolean>;
 
 function isObjectRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
@@ -230,6 +238,14 @@ function hasNonEmptyString(value: Record<string, unknown>, key: string): boolean
   return typeof candidate === 'string' && candidate.trim().length > 0;
 }
 
+function hasExactlyCredentialKeys(
+  keyPresence: CredentialKeyPresence,
+  expectedKeys: readonly TokenAuthCredentialKey[],
+): boolean {
+  const expectedKeySet = new Set(expectedKeys);
+  return TOKEN_AUTH_CREDENTIAL_KEYS.every((key) => keyPresence[key] === expectedKeySet.has(key));
+}
+
 function shouldFallbackLegacyPublicTokenAuthConfiguration(configuration: unknown): boolean {
   if (!isObjectRecord(configuration)) {
     return false;
@@ -242,33 +258,25 @@ function shouldFallbackLegacyPublicTokenAuthConfiguration(configuration: unknown
     return false;
   }
 
-  const hasLoginKey = hasOwnKey(configuration, 'login');
-  const hasPasswordKey = hasOwnKey(configuration, 'password');
-  const hasTokenKey = hasOwnKey(configuration, 'token');
-  const hasAuthKey = hasOwnKey(configuration, 'auth');
+  const keyPresence: CredentialKeyPresence = {
+    login: hasOwnKey(configuration, 'login'),
+    password: hasOwnKey(configuration, 'password'),
+    token: hasOwnKey(configuration, 'token'),
+    auth: hasOwnKey(configuration, 'auth'),
+  };
 
   const validLoginPasswordConfiguration =
-    hasLoginKey &&
-    hasPasswordKey &&
-    !hasTokenKey &&
-    !hasAuthKey &&
+    hasExactlyCredentialKeys(keyPresence, ['login', 'password']) &&
     hasNonEmptyString(configuration, 'login') &&
     hasNonEmptyString(configuration, 'password');
 
   const validLoginTokenConfiguration =
-    hasLoginKey &&
-    hasTokenKey &&
-    !hasPasswordKey &&
-    !hasAuthKey &&
+    hasExactlyCredentialKeys(keyPresence, ['login', 'token']) &&
     hasNonEmptyString(configuration, 'login') &&
     hasNonEmptyString(configuration, 'token');
 
   const validAuthConfiguration =
-    hasAuthKey &&
-    !hasLoginKey &&
-    !hasPasswordKey &&
-    !hasTokenKey &&
-    hasNonEmptyString(configuration, 'auth');
+    hasExactlyCredentialKeys(keyPresence, ['auth']) && hasNonEmptyString(configuration, 'auth');
 
   return !(
     validLoginPasswordConfiguration ||
@@ -392,8 +400,8 @@ async function registerWatchers(options: RegistrationOptions = {}) {
       );
     }
     await Promise.all(watchersToRegister);
-  } catch (e: any) {
-    log.warn(`Some watchers failed to register (${e.message})`);
+  } catch (e: unknown) {
+    log.warn(`Some watchers failed to register (${getErrorMessage(e)})`);
     log.debug(e);
   }
 }
@@ -425,8 +433,8 @@ async function registerTriggers(options: RegistrationOptions = {}) {
     });
     try {
       await registerComponents('trigger', filteredConfigurations, 'triggers/providers');
-    } catch (e: any) {
-      log.warn(`Some triggers failed to register (${e.message})`);
+    } catch (e: unknown) {
+      log.warn(`Some triggers failed to register (${getErrorMessage(e)})`);
       log.debug(e);
     }
     return;
@@ -501,9 +509,10 @@ async function registerAuthentications() {
     | ProviderConfigurationsByProvider
     | null
     | undefined;
-  try {
-    if (!configurations || Object.keys(configurations).length === 0) {
-      log.info('No authentication configured => Allow anonymous access');
+
+  if (!configurations || Object.keys(configurations).length === 0) {
+    log.info('No authentication configured => Allow anonymous access');
+    try {
       await registerComponent({
         kind: 'authentication',
         provider: 'anonymous',
@@ -511,11 +520,44 @@ async function registerAuthentications() {
         configuration: {},
         componentPath: 'authentications/providers',
       });
+    } catch (e: any) {
+      log.warn(`Some authentications failed to register (${e.message})`);
+      log.debug(e);
     }
+    return;
+  }
+
+  try {
     await registerComponents('authentication', configurations, 'authentications/providers');
   } catch (e: any) {
-    log.warn(`Some authentications failed to register (${e.message})`);
+    const message = `Some authentications failed to register (${e.message})`;
+    log.warn(message);
     log.debug(e);
+    registrationWarnings.push(message);
+  }
+
+  // If all configured auth providers failed, attempt anonymous fallback.
+  // The Anonymous provider itself enforces fail-closed on fresh installs
+  // without DD_ANONYMOUS_AUTH_CONFIRM=true — the security boundary is
+  // inside Anonymous, not here.
+  if (Object.keys(state.authentication).length === 0) {
+    log.warn(
+      'All configured authentication providers failed to register — attempting anonymous fallback',
+    );
+    try {
+      await registerComponent({
+        kind: 'authentication',
+        provider: 'anonymous',
+        name: 'anonymous',
+        configuration: {},
+        componentPath: 'authentications/providers',
+      });
+    } catch (e: any) {
+      const fallbackMessage = `Anonymous authentication fallback also failed (${e.message}). Check your DD_AUTH_BASIC_* environment variables. Set DD_ANONYMOUS_AUTH_CONFIRM=true to allow anonymous access as a fallback.`;
+      log.error(fallbackMessage);
+      log.debug(e);
+      registrationWarnings.push(fallbackMessage);
+    }
   }
 }
 
@@ -691,4 +733,5 @@ export {
   getKnownProviderSet as testable_getKnownProviderSet,
   applySharedTriggerConfigurationByName as testable_applySharedTriggerConfigurationByName,
   log as testable_log,
+  registrationWarnings as testable_registrationWarnings,
 };

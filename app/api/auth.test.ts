@@ -77,6 +77,7 @@ vi.mock('../registry', () => ({
   getState: vi.fn(() => ({
     authentication: {},
   })),
+  getRegistrationWarnings: vi.fn(() => []),
 }));
 
 vi.mock('../log', () => ({ default: { error: vi.fn(), warn: vi.fn(), info: vi.fn() } }));
@@ -1607,11 +1608,14 @@ describe('Auth Router', () => {
       const res = createResponse();
       handler({}, res);
 
-      // Should be sorted by name and deduplicated
-      expect(res.json).toHaveBeenCalledWith([
-        { type: 'oauth', name: 'a' },
-        { type: 'basic', name: 'b' },
-      ]);
+      // Should be sorted by name and deduplicated, wrapped in { strategies, warnings }
+      expect(res.json).toHaveBeenCalledWith({
+        strategies: [
+          { type: 'oauth', name: 'a' },
+          { type: 'basic', name: 'b' },
+        ],
+        warnings: [],
+      });
     });
 
     test('getStrategies should deduplicate with near-linear type lookups', () => {
@@ -2220,6 +2224,32 @@ describe('Auth Router', () => {
       );
     });
 
+    test('login should record failed login audit when session regeneration throws synchronously', async () => {
+      const handler = getRouteHandler('post', '/login');
+      const req = {
+        user: { username: 'john' },
+        session: {
+          cookie: {},
+          regenerate: vi.fn(() => {
+            throw new Error('regenerate threw');
+          }),
+        },
+      };
+      const res = createResponse();
+
+      await expect(handler(req, res)).resolves.toBeUndefined();
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Unable to establish session' });
+      expect(mockRecordAuditEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'auth-login',
+          status: 'error',
+          details: expect.stringContaining('regenerate threw'),
+        }),
+      );
+    });
+
     test('login should resolve when session regenerate callback is invoked more than once', async () => {
       const handler = getRouteHandler('post', '/login');
       const req = {
@@ -2323,6 +2353,27 @@ describe('Auth Router', () => {
           details: expect.stringContaining('persist threw'),
         }),
       );
+    });
+
+    test('login should resolve when req.login callback fails and then throws', async () => {
+      const handler = getRouteHandler('post', '/login');
+      const req = {
+        user: { username: 'john' },
+        session: {
+          cookie: {},
+          regenerate: vi.fn((done) => done()),
+        },
+        login: vi.fn((_user, done) => {
+          done(new Error('persist failed'));
+          throw new Error('persist threw after callback');
+        }),
+      };
+      const res = createResponse();
+
+      await expect(handler(req, res)).resolves.toBeUndefined();
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Unable to establish session' });
     });
 
     test('logout should regenerate session after req.logout and return logoutUrl', () => {

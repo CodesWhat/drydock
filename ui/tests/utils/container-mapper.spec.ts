@@ -3,6 +3,7 @@ vi.mock('@/services/image-icon', () => ({
 }));
 
 import { computeSecurityDelta, mapApiContainer, mapApiContainers } from '@/utils/container-mapper';
+import { daysToMs } from '@/utils/maturity-policy';
 
 function makeApiContainer(overrides: Record<string, any> = {}) {
   return {
@@ -569,6 +570,94 @@ describe('container-mapper', () => {
       expect((c as any).suppressedUpdateTag).toBeUndefined();
     });
 
+    it('marks updates as maturity-blocked when mature-only policy hides a fresh update', () => {
+      const freshDate = new Date(Date.now() - daysToMs(2)).toISOString();
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateAvailable: false,
+          updateKind: {
+            kind: 'tag',
+            semverDiff: 'minor',
+            remoteValue: '1.26',
+          },
+          result: { tag: '1.26' },
+          updateDetectedAt: freshDate,
+          updatePolicy: {
+            maturityMode: 'mature',
+          },
+        }),
+      );
+
+      expect((c as any).updatePolicyState).toBe('maturity-blocked');
+      expect((c as any).suppressedUpdateTag).toBe('1.26');
+    });
+
+    it('marks maturity-blocked when updateDetectedAt is missing', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateAvailable: false,
+          updateKind: {
+            kind: 'tag',
+            semverDiff: 'minor',
+            remoteValue: '1.26',
+          },
+          result: { tag: '1.26' },
+          updatePolicy: {
+            maturityMode: 'mature',
+          },
+        }),
+      );
+
+      expect((c as any).updatePolicyState).toBe('maturity-blocked');
+      expect((c as any).suppressedUpdateTag).toBe('1.26');
+    });
+
+    it('does not mark maturity-blocked when mature-only policy threshold is met', () => {
+      const oldDate = new Date(Date.now() - daysToMs(10)).toISOString();
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateAvailable: false,
+          updateKind: {
+            kind: 'tag',
+            semverDiff: 'minor',
+            remoteValue: '1.26',
+          },
+          result: { tag: '1.26' },
+          updateDetectedAt: oldDate,
+          updatePolicy: {
+            maturityMode: 'mature',
+            maturityMinAgeDays: 7,
+          },
+        }),
+      );
+
+      expect((c as any).updatePolicyState).toBeUndefined();
+      expect((c as any).suppressedUpdateTag).toBeUndefined();
+    });
+
+    it('falls back to default maturity min age when configured threshold is out of bounds', () => {
+      const oldDate = new Date(Date.now() - daysToMs(10)).toISOString();
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateAvailable: false,
+          updateKind: {
+            kind: 'tag',
+            semverDiff: 'minor',
+            remoteValue: '1.26',
+          },
+          result: { tag: '1.26' },
+          updateDetectedAt: oldDate,
+          updatePolicy: {
+            maturityMode: 'mature',
+            maturityMinAgeDays: 366,
+          },
+        }),
+      );
+
+      expect((c as any).updatePolicyState).toBeUndefined();
+      expect((c as any).suppressedUpdateTag).toBeUndefined();
+    });
+
     it('falls back to result.digest for suppressed digest updates when remote digest is missing', () => {
       const c = mapApiContainer(
         makeApiContainer({
@@ -663,6 +752,40 @@ describe('container-mapper', () => {
       expect(c.updateDetectedAt).toBeUndefined();
     });
 
+    it('sets updateMaturity to fresh when update is recent', () => {
+      const recentDate = new Date(Date.now() - 2 * 86_400_000).toISOString();
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateAvailable: true,
+          updateKind: { kind: 'tag', semverDiff: 'minor' },
+          result: { tag: '2.0.0' },
+          updateDetectedAt: recentDate,
+        }),
+      );
+      expect(c.updateMaturity).toBe('fresh');
+      expect(c.updateMaturityTooltip).toMatch(/^Available for 2 days?$/);
+    });
+
+    it('sets updateMaturity to settled when update is old', () => {
+      const oldDate = new Date(Date.now() - 14 * 86_400_000).toISOString();
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateAvailable: true,
+          updateKind: { kind: 'tag', semverDiff: 'minor' },
+          result: { tag: '2.0.0' },
+          updateDetectedAt: oldDate,
+        }),
+      );
+      expect(c.updateMaturity).toBe('settled');
+      expect(c.updateMaturityTooltip).toMatch(/^Available for 14 days$/);
+    });
+
+    it('sets updateMaturity to null when no update available', () => {
+      const c = mapApiContainer(makeApiContainer());
+      expect(c.updateMaturity).toBeNull();
+      expect(c.updateMaturityTooltip).toBeUndefined();
+    });
+
     it('extracts labels from object', () => {
       const c = mapApiContainer(
         makeApiContainer({
@@ -728,6 +851,13 @@ describe('container-mapper', () => {
     it('returns empty labels when labels is null', () => {
       const c = mapApiContainer(makeApiContainer({ labels: null }));
       expect(c.details.labels).toEqual([]);
+    });
+
+    it('renders label key alone when value is null or undefined', () => {
+      const c = mapApiContainer(
+        makeApiContainer({ labels: { 'flag-a': null, 'flag-b': undefined, normal: 'val' } }),
+      );
+      expect(c.details.labels).toEqual(['flag-a', 'flag-b', 'normal=val']);
     });
 
     it('maps runtime details from api payload', () => {

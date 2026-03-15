@@ -74,6 +74,13 @@ type OidcCallbackRequest = Request & {
   login: (user: OidcAuthenticatedUser, done: (error?: unknown) => void) => void;
 };
 
+interface OidcCallbackValidationResult {
+  callbackUrl: URL;
+  callbackState: string;
+  pendingChecks: OidcPendingChecks;
+  oidcCheck: OidcPendingCheck;
+}
+
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0;
 }
@@ -565,87 +572,31 @@ class Oidc extends Authentication {
       const openidClient = await this.getOpenIdClient();
       const sessionKey = this.getSessionKey();
       await reloadSessionIfPossible(req.session);
-      const oidcChecks = req.session?.oidc?.[sessionKey];
-
-      if (!oidcChecks) {
-        this.log.warn(
-          `OIDC checks are missing from session for strategy ${sessionKey}; ask user to restart authentication`,
-        );
-        res
-          .status(401)
-          .json({ error: 'OIDC session is missing or expired. Please retry authentication.' });
+      const callbackData = this.validateCallbackData(req, res, sessionKey);
+      if (!callbackData) {
         return;
       }
 
-      const callbackUrl = new URL(req.originalUrl || req.url, `${getPublicUrl(req)}/`);
-      const callbackState = callbackUrl.searchParams.get('state');
-      if (!isValidStateToken(callbackState)) {
-        this.log.warn(`OIDC callback is missing state parameter for strategy ${sessionKey}`);
-        res
-          .status(401)
-          .json({ error: 'OIDC callback is missing state. Please retry authentication.' });
-        return;
-      }
-
-      const pendingChecks = normalizePendingChecks(oidcChecks);
-      if (!Object.hasOwn(pendingChecks, callbackState)) {
-        this.log.warn(`OIDC callback state not found in pending checks for strategy ${sessionKey}`);
-        res
-          .status(401)
-          .json({ error: 'OIDC session state mismatch or expired. Please retry authentication.' });
-        return;
-      }
-      const oidcCheck = pendingChecks[callbackState];
-      if (!oidcCheck?.codeVerifier || oidcCheck.state !== callbackState) {
-        this.log.warn(
-          `OIDC callback state does not match active session checks for strategy ${sessionKey} (pending=${Object.keys(pendingChecks).length})`,
-        );
-        res
-          .status(401)
-          .json({ error: 'OIDC session state mismatch or expired. Please retry authentication.' });
-        return;
-      }
-
-      const tokenSet = await openidClient.authorizationCodeGrant(this.client, callbackUrl, {
-        pkceCodeVerifier: oidcCheck.codeVerifier,
-        expectedState: oidcCheck.state,
-      });
+      const tokenSet = await openidClient.authorizationCodeGrant(
+        this.client,
+        callbackData.callbackUrl,
+        {
+          pkceCodeVerifier: callbackData.oidcCheck.codeVerifier,
+          expectedState: callbackData.oidcCheck.state,
+        },
+      );
       if (!tokenSet.access_token) {
         throw new Error('Access token is missing from OIDC authorization response');
       }
 
       const rememberMePreference = req.session?.rememberMe;
-      const nextOidcChecks =
-        req.session?.oidc && typeof req.session.oidc === 'object' ? { ...req.session.oidc } : {};
-      if (Object.keys(nextOidcChecks).length > 0) {
-        const remainingChecks = createPendingChecksRecord();
-        Object.entries(pendingChecks).forEach(([state, check]) => {
-          if (state !== callbackState) {
-            remainingChecks[state] = check;
-          }
-        });
-        if (Object.keys(remainingChecks).length > 0) {
-          nextOidcChecks[sessionKey] = {
-            pending: remainingChecks,
-          };
-        } else if (Object.hasOwn(nextOidcChecks, sessionKey)) {
-          delete nextOidcChecks[sessionKey];
-        }
-      }
-
-      await regenerateSessionIfPossible(req.session);
-
-      if (req.session) {
-        if (Object.keys(nextOidcChecks).length > 0) {
-          req.session.oidc = nextOidcChecks;
-        } else if (req.session.oidc && Object.hasOwn(req.session.oidc, sessionKey)) {
-          delete req.session.oidc[sessionKey];
-        }
-        if (typeof rememberMePreference === 'boolean') {
-          req.session.rememberMe = rememberMePreference;
-        }
-        await saveSessionIfPossible(req.session);
-      }
+      await this.persistCallbackSession(
+        req,
+        sessionKey,
+        callbackData.pendingChecks,
+        callbackData.callbackState,
+        rememberMePreference,
+      );
       this.log.debug('Get user info');
       const user = await this.getUserFromAccessToken(tokenSet.access_token);
 
@@ -656,29 +607,170 @@ class Oidc extends Authentication {
         currentSessionId: req.sessionID,
       });
 
-      this.log.debug('Perform passport login');
-      req.login(user, (err) => {
-        if (err) {
-          this.log.warn(`Error when logging the user [${getErrorMessage(err)}]`);
-          res.status(401).json({ error: 'Authentication failed' });
-        } else {
-          // Apply remember-me preference stored before OIDC redirect
-          if (req.session?.cookie) {
-            if (req.session.rememberMe) {
-              req.session.cookie.maxAge = 3600 * 1000 * 24 * 30;
-            } else {
-              req.session.cookie.expires = false as unknown as Date;
-              req.session.cookie.maxAge = null;
-            }
-          }
-          this.log.debug('User authenticated => redirect to app');
-          res.redirect(getPublicUrl(req) || '/');
-        }
-      });
+      this.completePassportLogin(req, res, user);
     } catch (err) {
       this.log.warn(`Error when logging the user [${getErrorMessage(err)}]`);
       res.status(401).json({ error: 'Authentication failed' });
     }
+  }
+
+  respondAuthenticationError(res: Response, message: string): void {
+    res.status(401).json({ error: message });
+  }
+
+  validateCallbackData(
+    req: OidcCallbackRequest,
+    res: Response,
+    sessionKey: string,
+  ): OidcCallbackValidationResult | undefined {
+    const oidcChecks = req.session?.oidc?.[sessionKey];
+    if (!oidcChecks) {
+      this.log.warn(
+        `OIDC checks are missing from session for strategy ${sessionKey}; ask user to restart authentication`,
+      );
+      this.respondAuthenticationError(
+        res,
+        'OIDC session is missing or expired. Please retry authentication.',
+      );
+      return undefined;
+    }
+
+    const callbackUrl = new URL(req.originalUrl || req.url, `${getPublicUrl(req)}/`);
+    const callbackState = callbackUrl.searchParams.get('state');
+    if (!isValidStateToken(callbackState)) {
+      this.log.warn(`OIDC callback is missing state parameter for strategy ${sessionKey}`);
+      this.respondAuthenticationError(
+        res,
+        'OIDC callback is missing state. Please retry authentication.',
+      );
+      return undefined;
+    }
+
+    const pendingChecks = normalizePendingChecks(oidcChecks);
+    if (!Object.hasOwn(pendingChecks, callbackState)) {
+      this.log.warn(`OIDC callback state not found in pending checks for strategy ${sessionKey}`);
+      this.respondAuthenticationError(
+        res,
+        'OIDC session state mismatch or expired. Please retry authentication.',
+      );
+      return undefined;
+    }
+
+    const oidcCheck = pendingChecks[callbackState];
+    if (!oidcCheck?.codeVerifier || oidcCheck.state !== callbackState) {
+      this.log.warn(
+        `OIDC callback state does not match active session checks for strategy ${sessionKey} (pending=${Object.keys(pendingChecks).length})`,
+      );
+      this.respondAuthenticationError(
+        res,
+        'OIDC session state mismatch or expired. Please retry authentication.',
+      );
+      return undefined;
+    }
+
+    return {
+      callbackUrl,
+      callbackState,
+      pendingChecks,
+      oidcCheck,
+    };
+  }
+
+  buildNextOidcChecks(
+    session: OidcSessionLike | undefined,
+    sessionKey: string,
+    pendingChecks: OidcPendingChecks,
+    callbackState: string,
+  ): Record<string, OidcSessionEntry> {
+    const nextOidcChecks =
+      session?.oidc && typeof session.oidc === 'object' ? { ...session.oidc } : {};
+    if (Object.keys(nextOidcChecks).length === 0) {
+      return nextOidcChecks;
+    }
+
+    const remainingChecks = createPendingChecksRecord();
+    Object.entries(pendingChecks).forEach(([state, check]) => {
+      if (state !== callbackState) {
+        remainingChecks[state] = check;
+      }
+    });
+
+    if (Object.keys(remainingChecks).length > 0) {
+      nextOidcChecks[sessionKey] = {
+        pending: remainingChecks,
+      };
+    } else if (Object.hasOwn(nextOidcChecks, sessionKey)) {
+      delete nextOidcChecks[sessionKey];
+    }
+
+    return nextOidcChecks;
+  }
+
+  async persistCallbackSession(
+    req: OidcCallbackRequest,
+    sessionKey: string,
+    pendingChecks: OidcPendingChecks,
+    callbackState: string,
+    rememberMePreference: boolean | undefined,
+  ): Promise<void> {
+    const nextOidcChecks = this.buildNextOidcChecks(
+      req.session,
+      sessionKey,
+      pendingChecks,
+      callbackState,
+    );
+
+    await regenerateSessionIfPossible(req.session);
+
+    if (!req.session) {
+      return;
+    }
+
+    if (Object.keys(nextOidcChecks).length > 0) {
+      req.session.oidc = nextOidcChecks;
+    } else if (req.session.oidc && Object.hasOwn(req.session.oidc, sessionKey)) {
+      delete req.session.oidc[sessionKey];
+    }
+
+    if (typeof rememberMePreference === 'boolean') {
+      req.session.rememberMe = rememberMePreference;
+    }
+
+    await saveSessionIfPossible(req.session);
+  }
+
+  applyRememberMePreference(session: OidcSessionLike | undefined): void {
+    if (!session?.cookie) {
+      return;
+    }
+
+    if (session.rememberMe) {
+      session.cookie.maxAge = 3600 * 1000 * 24 * 30;
+      return;
+    }
+
+    session.cookie.expires = false as unknown as Date;
+    session.cookie.maxAge = null;
+  }
+
+  completePassportLogin(
+    req: OidcCallbackRequest,
+    res: Response,
+    user: OidcAuthenticatedUser,
+  ): void {
+    this.log.debug('Perform passport login');
+    req.login(user, (err) => {
+      if (err) {
+        this.log.warn(`Error when logging the user [${getErrorMessage(err)}]`);
+        this.respondAuthenticationError(res, 'Authentication failed');
+        return;
+      }
+
+      // Apply remember-me preference stored before OIDC redirect
+      this.applyRememberMePreference(req.session);
+      this.log.debug('User authenticated => redirect to app');
+      res.redirect(getPublicUrl(req) || '/');
+    });
   }
 
   async verify(accessToken: string, done: OidcVerifyDone): Promise<void> {

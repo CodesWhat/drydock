@@ -92,6 +92,16 @@ const {
 
   const mockActiveFont = { value: 'ibm-plex-mono', __v_isRef: true as const };
   const mockFontLoading = { value: false, __v_isRef: true as const };
+  const fontClassPrefix = 'dd-font-';
+  const fontClassNames = mockFontOptions.map((font) => `${fontClassPrefix}${font.id}`);
+
+  const applyMockFontClass = (fontId: string) => {
+    for (const className of fontClassNames) {
+      document.documentElement.classList.remove(className);
+    }
+    document.documentElement.classList.add(`${fontClassPrefix}${fontId}`);
+  };
+
   const mockSetFont = vi.fn(async (id: string) => {
     const selected = mockFontOptions.find((font) => font.id === id);
     if (!selected) {
@@ -99,8 +109,7 @@ const {
     }
     mockActiveFont.value = selected.id;
     localStorage.setItem('drydock-font-family-v1', selected.id);
-    document.documentElement.style.setProperty('--drydock-font', selected.family);
-    document.documentElement.style.setProperty('--font-mono', selected.family);
+    applyMockFontClass(selected.id);
   });
   const mockIsFontLoaded = vi.fn(() => true);
 
@@ -110,8 +119,7 @@ const {
     mockSetFont.mockClear();
     mockIsFontLoaded.mockClear();
     localStorage.removeItem('drydock-font-family-v1');
-    document.documentElement.style.setProperty('--drydock-font', '"IBM Plex Mono", monospace');
-    document.documentElement.style.setProperty('--font-mono', '"IBM Plex Mono", monospace');
+    applyMockFontClass('ibm-plex-mono');
   };
 
   return {
@@ -558,35 +566,23 @@ describe('ConfigView', () => {
       expect(w.text()).toContain('JetBrains Mono');
     });
 
-    it('updates global app shell font tokens when each font is selected', async () => {
+    it('updates root font classes when each font is selected', async () => {
       const w = await mountAppearanceTab();
-      const appShellProbe = document.createElement('div');
-      appShellProbe.className = 'font-mono';
-      appShellProbe.style.fontFamily = 'var(--font-mono)';
-      document.body.appendChild(appShellProbe);
 
-      try {
-        for (const font of mockFontOptions) {
-          const fontButton = w.findAll('button').find((btn) => btn.text().includes(font.label));
-          expect(fontButton).toBeDefined();
+      for (const font of mockFontOptions) {
+        const fontButton = w.findAll('button').find((btn) => btn.text().includes(font.label));
+        expect(fontButton).toBeDefined();
 
-          await fontButton?.trigger('click');
-          await nextTick();
+        await fontButton?.trigger('click');
+        await nextTick();
 
-          await vi.waitFor(() => {
-            expect(mockSetFont).toHaveBeenCalledWith(font.id);
-            expect(mockActiveFont.value).toBe(font.id);
-          });
+        await vi.waitFor(() => {
+          expect(mockSetFont).toHaveBeenCalledWith(font.id);
+          expect(mockActiveFont.value).toBe(font.id);
+        });
 
-          const rootStyles = getComputedStyle(document.documentElement);
-          expect(rootStyles.getPropertyValue('--drydock-font').trim()).toBe(font.family);
-          expect(rootStyles.getPropertyValue('--font-mono').trim()).toBe(font.family);
-          expect(localStorage.getItem('drydock-font-family-v1')).toBe(font.id);
-          // App shell text uses Tailwind's `font-mono`, which resolves from --font-mono.
-          expect(appShellProbe.style.fontFamily).toBe('var(--font-mono)');
-        }
-      } finally {
-        appShellProbe.remove();
+        expect(document.documentElement.classList.contains(`dd-font-${font.id}`)).toBe(true);
+        expect(localStorage.getItem('drydock-font-family-v1')).toBe(font.id);
       }
     });
 

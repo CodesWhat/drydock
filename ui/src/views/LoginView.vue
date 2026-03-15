@@ -27,6 +27,7 @@ const rememberMe = ref(false);
 const hasBasic = ref(false);
 const oidcStrategies = ref<Strategy[]>([]);
 const connectionLost = ref(false);
+const warnings = ref<string[]>([]);
 
 const INITIAL_RETRY_DELAY_MS = 5_000;
 const MAX_RETRY_DELAY_MS = 30_000;
@@ -116,10 +117,12 @@ function oidcIcon(name: string): string {
 }
 
 async function loadStrategies() {
-  const data = await getStrategies();
+  const response = await getStrategies();
+  const data = response.strategies as Strategy[];
   strategies.value = data;
   hasBasic.value = data.some((s: Strategy) => s.type === 'basic');
   oidcStrategies.value = data.filter((s: Strategy) => s.type === 'oidc');
+  warnings.value = response.warnings ?? [];
   error.value = '';
   connectionLost.value = false;
   retryDelayMs = INITIAL_RETRY_DELAY_MS;
@@ -272,8 +275,17 @@ onUnmounted(() => {
         </label>
 
         <!-- No strategies available -->
-        <div v-if="!hasBasic && oidcStrategies.length === 0" class="text-center dd-text-muted text-sm">
-          No authentication methods configured.
+        <div v-if="!hasBasic && oidcStrategies.length === 0" class="text-center text-sm">
+          <p class="dd-text-muted">No authentication methods configured.</p>
+          <div v-if="warnings.length > 0" class="mt-3 text-left space-y-2">
+            <div
+              v-for="(warning, index) in warnings"
+              :key="index"
+              class="px-3 py-2 text-xs dd-rounded dd-bg-danger-muted dd-text-danger"
+            >
+              {{ warning }}
+            </div>
+          </div>
         </div>
       </div>
       </div>
@@ -286,8 +298,10 @@ onUnmounted(() => {
         <div class="w-full max-w-[320px] mx-4 dd-rounded-lg overflow-hidden shadow-2xl text-center"
              :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }">
           <div class="flex flex-col items-center px-6 py-8 gap-3">
-            <img :src="whaleLogo" alt="" class="h-10 w-auto mb-1"
-                 :style="[{ transform: 'rotate(180deg) scaleX(-1)' }, isDark ? { filter: 'invert(1)' } : {}]" />
+            <div class="disconnect-bounce h-10 mb-1">
+              <img :src="whaleLogo" alt="" class="h-10 w-auto"
+                   :style="[{ transform: 'rotate(180deg) scaleX(-1)' }, isDark ? { filter: 'invert(1)' } : {}]" />
+            </div>
             <h2 class="text-sm font-bold dd-text">Connection Lost</h2>
             <p class="text-[0.6875rem] dd-text-muted leading-relaxed">
               The server is unreachable. Waiting for it to come back online...
@@ -323,5 +337,8 @@ onUnmounted(() => {
 }
 .fade-enter-from, .fade-leave-to {
   opacity: 0;
+}
+.disconnect-bounce {
+  animation: bounce 2s ease-in-out infinite;
 }
 </style>

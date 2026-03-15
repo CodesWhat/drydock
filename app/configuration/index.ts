@@ -280,6 +280,11 @@ export function getServerConfiguration() {
         threshold: joi.number().integer().min(0).default(1024),
       })
       .default({}),
+    ui: joi
+      .object({
+        enabled: joi.boolean().default(true),
+      })
+      .default({}),
     feature: joi
       .object({
         delete: joi.boolean().default(true),

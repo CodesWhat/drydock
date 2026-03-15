@@ -88,6 +88,68 @@ describe('CSRF middleware', () => {
     expect(res.status).not.toHaveBeenCalled();
   });
 
+  test('should allow unsafe methods when forwarded proto indicates https behind reverse proxy', () => {
+    const req = createReq({
+      method: 'POST',
+      protocol: 'http',
+      headers: {
+        cookie: 'connect.sid=s%3Atest',
+        host: 'drydock.example.com',
+        origin: 'https://drydock.example.com',
+        'x-forwarded-proto': 'https',
+      },
+    });
+    const res = createRes();
+    const next = vi.fn();
+
+    requireSameOriginForMutations(req, res, next);
+
+    expect(next).toHaveBeenCalled();
+    expect(res.status).not.toHaveBeenCalled();
+  });
+
+  test('should allow unsafe methods when forwarded host/proto match browser origin', () => {
+    const req = createReq({
+      method: 'POST',
+      protocol: 'http',
+      headers: {
+        cookie: 'connect.sid=s%3Atest',
+        host: 'drydock:3000',
+        origin: 'https://drydock.example.com',
+        'x-forwarded-host': 'drydock.example.com',
+        'x-forwarded-proto': 'https',
+      },
+    });
+    const res = createRes();
+    const next = vi.fn();
+
+    requireSameOriginForMutations(req, res, next);
+
+    expect(next).toHaveBeenCalled();
+    expect(res.status).not.toHaveBeenCalled();
+  });
+
+  test('should ignore empty forwarded values and fall back to request protocol and host', () => {
+    const req = createReq({
+      method: 'POST',
+      protocol: 'https',
+      headers: {
+        cookie: 'connect.sid=s%3Atest',
+        host: 'drydock.example.com',
+        origin: 'https://drydock.example.com',
+        'x-forwarded-host': ' , , ',
+        'x-forwarded-proto': ' , ',
+      },
+    });
+    const res = createRes();
+    const next = vi.fn();
+
+    requireSameOriginForMutations(req, res, next);
+
+    expect(next).toHaveBeenCalled();
+    expect(res.status).not.toHaveBeenCalled();
+  });
+
   test('should allow unsafe methods when referer matches request host', () => {
     const req = createReq({
       method: 'PATCH',
@@ -173,6 +235,26 @@ describe('CSRF middleware', () => {
         cookie: 'connect.sid=s%3Atest',
         host: 'drydock.example.com',
         origin: 'not-a-valid-origin',
+      },
+    });
+    const res = createRes();
+    const next = vi.fn();
+
+    requireSameOriginForMutations(req, res, next);
+
+    expect(next).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(res.json).toHaveBeenCalledWith({ error: 'CSRF validation failed' });
+  });
+
+  test('should reject unsafe methods when protocol is not http or https', () => {
+    const req = createReq({
+      method: 'POST',
+      protocol: 'ftp',
+      headers: {
+        cookie: 'connect.sid=s%3Atest',
+        host: 'drydock.example.com',
+        origin: 'ftp://drydock.example.com',
       },
     });
     const res = createRes();

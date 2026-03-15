@@ -43,7 +43,9 @@ export interface Container {
   registryUrl?: string;
   updateKind: 'major' | 'minor' | 'patch' | 'digest' | null;
   updateDetectedAt?: string;
-  updatePolicyState?: 'snoozed' | 'skipped';
+  updateMaturity: 'fresh' | 'settled' | null;
+  updateMaturityTooltip?: string;
+  updatePolicyState?: 'snoozed' | 'skipped' | 'maturity-blocked';
   suppressedUpdateTag?: string;
   registryError?: string;
   noUpdateReason?: string;

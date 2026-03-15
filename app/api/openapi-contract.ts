@@ -102,77 +102,148 @@ function missingRefFromError(error: unknown): string | undefined {
   return undefined;
 }
 
+interface FormattedTypeExpectation {
+  label: string;
+  multiple: boolean;
+}
+
+interface ValidationErrorFormatterContext {
+  error: ErrorObject;
+  payload: unknown;
+  payloadPath: string;
+  path: string;
+}
+
+type ValidationErrorFormatter = (context: ValidationErrorFormatterContext) => string | undefined;
+
+function withChildPayloadPath(parentPath: string, property: string): string {
+  const escapedProperty = escapeJsonPointerToken(property);
+  return parentPath ? `${parentPath}/${escapedProperty}` : `/${escapedProperty}`;
+}
+
+function parseTypeExpectation(typeParam: unknown): FormattedTypeExpectation | undefined {
+  if (typeof typeParam === 'string') {
+    if (typeParam.includes(',')) {
+      return {
+        label: typeParam
+          .split(',')
+          .map((entry) => entry.trim())
+          .join(', '),
+        multiple: true,
+      };
+    }
+    return { label: typeParam, multiple: false };
+  }
+
+  if (Array.isArray(typeParam)) {
+    const label = typeParam
+      .filter((entry): entry is string => typeof entry === 'string')
+      .join(', ');
+    if (label.length > 0) {
+      return { label, multiple: true };
+    }
+  }
+
+  return undefined;
+}
+
+function formatRequiredValidationError({
+  error,
+  payloadPath,
+}: ValidationErrorFormatterContext): string | undefined {
+  const missingProperty = (error.params as { missingProperty?: unknown }).missingProperty;
+  if (typeof missingProperty !== 'string') {
+    return undefined;
+  }
+
+  const missingPropertyPath = withChildPayloadPath(payloadPath, missingProperty);
+  return `${toContractPath(missingPropertyPath)}: is required`;
+}
+
+function formatAdditionalPropertiesValidationError({
+  error,
+  payloadPath,
+}: ValidationErrorFormatterContext): string | undefined {
+  const additionalProperty = (error.params as { additionalProperty?: unknown }).additionalProperty;
+  if (typeof additionalProperty !== 'string') {
+    return undefined;
+  }
+
+  const additionalPropertyPath = withChildPayloadPath(payloadPath, additionalProperty);
+  return `${toContractPath(additionalPropertyPath)}: is not allowed by schema`;
+}
+
+function formatTypeValidationError({
+  error,
+  payload,
+  payloadPath,
+  path,
+}: ValidationErrorFormatterContext): string | undefined {
+  const expectation = parseTypeExpectation((error.params as { type?: unknown }).type);
+  if (!expectation) {
+    return undefined;
+  }
+
+  const expected = expectation.multiple ? `one of ${expectation.label}` : expectation.label;
+  const actualType = describeType(getValueAtPointer(payload, payloadPath));
+  return `${path}: expected ${expected}, got ${actualType}`;
+}
+
+function formatEnumValidationError({
+  error,
+  path,
+}: ValidationErrorFormatterContext): string | undefined {
+  const allowedValues = (error.params as { allowedValues?: unknown }).allowedValues;
+  if (!Array.isArray(allowedValues)) {
+    return undefined;
+  }
+  return `${path}: expected one of ${JSON.stringify(allowedValues)}`;
+}
+
+function formatPatternValidationError({
+  error,
+  path,
+}: ValidationErrorFormatterContext): string | undefined {
+  const pattern = (error.params as { pattern?: unknown }).pattern;
+  if (typeof pattern !== 'string') {
+    return undefined;
+  }
+  return `${path}: must match pattern ${JSON.stringify(pattern)}`;
+}
+
+function formatFormatValidationError({
+  error,
+  path,
+}: ValidationErrorFormatterContext): string | undefined {
+  const format = (error.params as { format?: unknown }).format;
+  if (typeof format !== 'string') {
+    return undefined;
+  }
+  return `${path}: must match format ${JSON.stringify(format)}`;
+}
+
+function formatCompositeValidationError({ error, path }: ValidationErrorFormatterContext): string {
+  return `${path}: failed ${error.keyword}`;
+}
+
+const validationErrorFormatters: Readonly<Record<string, ValidationErrorFormatter>> = {
+  required: formatRequiredValidationError,
+  additionalProperties: formatAdditionalPropertiesValidationError,
+  type: formatTypeValidationError,
+  enum: formatEnumValidationError,
+  oneOf: formatCompositeValidationError,
+  anyOf: formatCompositeValidationError,
+  pattern: formatPatternValidationError,
+  format: formatFormatValidationError,
+};
+
 function formatValidationError(error: ErrorObject, payload: unknown): string {
   const payloadPath = stripPayloadPrefix(error.instancePath);
   const path = toContractPath(payloadPath);
-
-  if (error.keyword === 'required') {
-    const missingProperty = (error.params as { missingProperty?: unknown }).missingProperty;
-    if (typeof missingProperty === 'string') {
-      const missingPropertyPath = payloadPath
-        ? `${payloadPath}/${escapeJsonPointerToken(missingProperty)}`
-        : `/${escapeJsonPointerToken(missingProperty)}`;
-      return `${toContractPath(missingPropertyPath)}: is required`;
-    }
-  }
-
-  if (error.keyword === 'additionalProperties') {
-    const additionalProperty = (error.params as { additionalProperty?: unknown })
-      .additionalProperty;
-    if (typeof additionalProperty === 'string') {
-      const additionalPropertyPath = payloadPath
-        ? `${payloadPath}/${escapeJsonPointerToken(additionalProperty)}`
-        : `/${escapeJsonPointerToken(additionalProperty)}`;
-      return `${toContractPath(additionalPropertyPath)}: is not allowed by schema`;
-    }
-  }
-
-  if (error.keyword === 'type') {
-    const expectedType = (error.params as { type?: unknown }).type;
-    const actualType = describeType(getValueAtPointer(payload, payloadPath));
-    if (typeof expectedType === 'string') {
-      if (expectedType.includes(',')) {
-        const expectedTypes = expectedType
-          .split(',')
-          .map((entry) => entry.trim())
-          .join(', ');
-        return `${path}: expected one of ${expectedTypes}, got ${actualType}`;
-      }
-      return `${path}: expected ${expectedType}, got ${actualType}`;
-    }
-    if (Array.isArray(expectedType)) {
-      const expectedTypes = expectedType
-        .filter((entry): entry is string => typeof entry === 'string')
-        .join(', ');
-      if (expectedTypes.length > 0) {
-        return `${path}: expected one of ${expectedTypes}, got ${actualType}`;
-      }
-    }
-  }
-
-  if (error.keyword === 'enum') {
-    const allowedValues = (error.params as { allowedValues?: unknown }).allowedValues;
-    if (Array.isArray(allowedValues)) {
-      return `${path}: expected one of ${JSON.stringify(allowedValues)}`;
-    }
-  }
-
-  if (error.keyword === 'oneOf' || error.keyword === 'anyOf') {
-    return `${path}: failed ${error.keyword}`;
-  }
-
-  if (error.keyword === 'pattern') {
-    const pattern = (error.params as { pattern?: unknown }).pattern;
-    if (typeof pattern === 'string') {
-      return `${path}: must match pattern ${JSON.stringify(pattern)}`;
-    }
-  }
-
-  if (error.keyword === 'format') {
-    const format = (error.params as { format?: unknown }).format;
-    if (typeof format === 'string') {
-      return `${path}: must match format ${JSON.stringify(format)}`;
-    }
+  const formatter = validationErrorFormatters[error.keyword];
+  const formatted = formatter?.({ error, payload, payloadPath, path });
+  if (formatted) {
+    return formatted;
   }
 
   const message = error.message ?? 'schema validation failed';

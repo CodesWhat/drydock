@@ -101,30 +101,39 @@ function formatContainerPortsFromInspect(networkPorts: unknown): string[] {
   if (!networkPorts || typeof networkPorts !== 'object') {
     return [];
   }
+  const formattedPorts = Object.entries(networkPorts as Record<string, unknown>).flatMap(
+    ([containerPort, bindings]) => formatInspectContainerPortBindings(containerPort, bindings),
+  );
+  return normalizeRuntimeStringList(formattedPorts);
+}
+
+function formatInspectContainerPortBindings(containerPort: string, bindings: unknown): string[] {
+  if (!Array.isArray(bindings) || bindings.length === 0) {
+    return [containerPort];
+  }
   const formattedPorts: string[] = [];
-  for (const [containerPort, bindings] of Object.entries(networkPorts as Record<string, unknown>)) {
-    if (!Array.isArray(bindings) || bindings.length === 0) {
-      formattedPorts.push(containerPort);
+  for (const binding of bindings) {
+    const formattedPort = formatInspectPortBinding(containerPort, binding);
+    if (!formattedPort) {
       continue;
     }
-    for (const binding of bindings) {
-      if (!binding || typeof binding !== 'object') {
-        continue;
-      }
-      const hostIp = typeof (binding as any).HostIp === 'string' ? (binding as any).HostIp : '';
-      const hostPort =
-        (binding as any).HostPort !== undefined && (binding as any).HostPort !== null
-          ? `${(binding as any).HostPort}`
-          : '';
-      if (hostPort === '') {
-        formattedPorts.push(containerPort);
-        continue;
-      }
-      const hostBinding = hostIp !== '' ? `${hostIp}:${hostPort}` : hostPort;
-      formattedPorts.push(`${hostBinding}->${containerPort}`);
-    }
+    formattedPorts.push(formattedPort);
   }
-  return normalizeRuntimeStringList(formattedPorts);
+  return formattedPorts;
+}
+
+function formatInspectPortBinding(containerPort: string, binding: unknown): string | null {
+  if (!binding || typeof binding !== 'object') {
+    return null;
+  }
+  const hostIp = typeof (binding as any).HostIp === 'string' ? (binding as any).HostIp : '';
+  const hostPortRaw = (binding as any).HostPort;
+  const hostPort = hostPortRaw !== undefined && hostPortRaw !== null ? `${hostPortRaw}` : '';
+  if (hostPort === '') {
+    return containerPort;
+  }
+  const hostBinding = hostIp !== '' ? `${hostIp}:${hostPort}` : hostPort;
+  return `${hostBinding}->${containerPort}`;
 }
 
 function formatContainerPortsFromSummary(containerPorts: unknown): string[] {
@@ -157,30 +166,48 @@ function formatContainerVolumes(mounts: unknown): string[] {
   if (!Array.isArray(mounts)) {
     return [];
   }
-  const formattedVolumes: string[] = [];
-  for (const mount of mounts) {
-    if (!mount || typeof mount !== 'object') {
-      continue;
-    }
-    const source = isNonEmptyString((mount as any).Name)
-      ? (mount as any).Name.trim()
-      : isNonEmptyString((mount as any).Source)
-        ? (mount as any).Source.trim()
-        : '';
-    const destination = isNonEmptyString((mount as any).Destination)
-      ? (mount as any).Destination.trim()
-      : '';
-    if (source === '' && destination === '') {
-      continue;
-    }
-    let volume =
-      source !== '' && destination !== '' ? `${source}:${destination}` : source || destination;
-    if ((mount as any).RW === false) {
-      volume = `${volume}:ro`;
-    }
-    formattedVolumes.push(volume);
-  }
+  const formattedVolumes = mounts.flatMap((mount) => {
+    const formattedVolume = formatContainerMountVolume(mount);
+    return formattedVolume ? [formattedVolume] : [];
+  });
   return normalizeRuntimeStringList(formattedVolumes);
+}
+
+function formatContainerMountVolume(mount: unknown): string | null {
+  if (!mount || typeof mount !== 'object') {
+    return null;
+  }
+  const source = getContainerMountSource(mount);
+  const destination = getContainerMountDestination(mount);
+  const baseVolume = formatVolumeBinding(source, destination);
+  if (baseVolume === '') {
+    return null;
+  }
+  return (mount as any).RW === false ? `${baseVolume}:ro` : baseVolume;
+}
+
+function getContainerMountSource(mount: unknown): string {
+  if (isNonEmptyString((mount as any).Name)) {
+    return (mount as any).Name.trim();
+  }
+  if (isNonEmptyString((mount as any).Source)) {
+    return (mount as any).Source.trim();
+  }
+  return '';
+}
+
+function getContainerMountDestination(mount: unknown): string {
+  return isNonEmptyString((mount as any).Destination) ? (mount as any).Destination.trim() : '';
+}
+
+function formatVolumeBinding(source: string, destination: string): string {
+  if (source === '' && destination === '') {
+    return '';
+  }
+  if (source !== '' && destination !== '') {
+    return `${source}:${destination}`;
+  }
+  return source || destination;
 }
 
 function formatContainerEnv(envVars: unknown): ContainerRuntimeDetails['env'] {

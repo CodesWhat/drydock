@@ -94,6 +94,26 @@ describe('useSbomDetail', () => {
     expect(state.detailSbomComponentCount.value).toBe(3);
   });
 
+  it('returns an undefined component count when sbom document is not an object', async () => {
+    mockGetContainerSbom.mockResolvedValue({
+      generatedAt: '2026-03-01T00:00:00.000Z',
+      document: 'not-an-object',
+    });
+
+    const state = useSbomDetail({
+      containerIdsByImage: ref({ nginx: ['container-1'] }),
+    });
+
+    state.openDetail(makeSummary());
+
+    await vi.waitFor(() => {
+      expect(mockGetContainerSbom).toHaveBeenCalledWith('container-1', 'spdx-json');
+    });
+
+    expect(state.detailSbomDocument.value).toBe('not-an-object');
+    expect(state.detailSbomComponentCount.value).toBeUndefined();
+  });
+
   it('sets a helpful error when no container id can be resolved', async () => {
     const state = useSbomDetail({
       containerIdsByImage: ref({}),

@@ -106,6 +106,29 @@ describe('sse-self-update-ack-protocol', () => {
     expect(protocol.pendingSelfUpdateAcks.size).toBe(0);
   });
 
+  test('broadcasts update without pending ack when requiresAck is false', async () => {
+    const response = createResponse();
+    const client = createClient(response, 'token-1');
+    const registry = new ActiveSseClientRegistry();
+    registry.add(client);
+    const protocol = createSelfUpdateAckProtocol({
+      clients: new Set<FlushableResponse>([response]),
+      activeClientRegistry: registry,
+      defaultAckTimeoutMs: 3000,
+    });
+
+    await protocol.broadcastSelfUpdate({
+      opId: 'op-no-ack',
+      requiresAck: false,
+      ackTimeoutMs: 1000,
+    });
+
+    expect(response.write).toHaveBeenCalledWith(
+      expect.stringContaining('event: dd:self-update\ndata: {"opId":"op-no-ack"'),
+    );
+    expect(protocol.pendingSelfUpdateAcks.has('op-no-ack')).toBe(false);
+  });
+
   test('validates missing operationId', () => {
     const protocol = createSelfUpdateAckProtocol({
       clients: new Set<FlushableResponse>(),
@@ -123,6 +146,44 @@ describe('sse-self-update-ack-protocol', () => {
 
     expect(res.status).toHaveBeenCalledWith(400);
     expect(res.json).toHaveBeenCalledWith({ error: 'operationId is required' });
+  });
+
+  test('validates empty clientId', () => {
+    const protocol = createSelfUpdateAckProtocol({
+      clients: new Set<FlushableResponse>(),
+      activeClientRegistry: new ActiveSseClientRegistry(),
+      defaultAckTimeoutMs: 3000,
+    });
+
+    const req = {
+      params: { operationId: 'op-1' },
+      body: { clientId: '   ', clientToken: 'token-1' },
+    } as Request;
+    const res = createJsonResponse();
+
+    protocol.acknowledgeSelfUpdate(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({ error: 'clientId is required' });
+  });
+
+  test('validates empty clientToken', () => {
+    const protocol = createSelfUpdateAckProtocol({
+      clients: new Set<FlushableResponse>(),
+      activeClientRegistry: new ActiveSseClientRegistry(),
+      defaultAckTimeoutMs: 3000,
+    });
+
+    const req = {
+      params: { operationId: 'op-1' },
+      body: { clientId: 'client-1', clientToken: '   ' },
+    } as Request;
+    const res = createJsonResponse();
+
+    protocol.acknowledgeSelfUpdate(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({ error: 'clientToken is required' });
   });
 
   test('ignores stale timeout callback after pending map is cleared', () => {
@@ -188,6 +249,45 @@ describe('sse-self-update-ack-protocol', () => {
 
     protocol.clearPendingSelfUpdateAcks();
     await broadcastPromise;
+  });
+
+  test('rejects client token not bound to operation', () => {
+    const response = createResponse();
+    const client = createClient(response, 'token-1', 'client-1');
+    const registry = new ActiveSseClientRegistry();
+    registry.add(client);
+    const protocol = createSelfUpdateAckProtocol({
+      clients: new Set<FlushableResponse>([response]),
+      activeClientRegistry: registry,
+      defaultAckTimeoutMs: 3000,
+    });
+    protocol.pendingSelfUpdateAcks.set('op-unbound-client', {
+      operationId: 'op-unbound-client',
+      requiresAck: true,
+      ackTimeoutMs: 1000,
+      createdAtMs: Date.now(),
+      clientsAtEmit: 1,
+      eligibleClientTokens: [createHash('sha256').update('different-token', 'utf8').digest()],
+      ackedClientIds: new Set<string>(),
+      resolved: false,
+    });
+
+    const req = {
+      params: { operationId: 'op-unbound-client' },
+      body: { clientId: client.clientId, clientToken: client.clientToken },
+    } as Request;
+    const res = createJsonResponse();
+
+    protocol.acknowledgeSelfUpdate(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'rejected',
+        operationId: 'op-unbound-client',
+        reason: 'client-not-bound-to-operation',
+      }),
+    );
   });
 
   test('sweep removes already-resolved pending acknowledgements', () => {

@@ -303,6 +303,26 @@ describe('API Index', () => {
     expect(mockApp.use).toHaveBeenCalledWith('/', 'ui-router');
   });
 
+  test('should skip mounting UI router when DD_SERVER_UI_ENABLED=false', async () => {
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {},
+      tls: {},
+      ui: { enabled: false },
+    });
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    await indexRouter.init();
+
+    expect(mockApp.use).toHaveBeenCalledWith('/health', 'health-router');
+    expect(mockApp.use).toHaveBeenCalledWith('/api/v1', 'api-router');
+    expect(mockApp.use).toHaveBeenCalledWith('/api', 'api-router');
+    expect(mockApp.use).toHaveBeenCalledWith('/metrics', 'prometheus-router');
+    expect(mockApp.use).not.toHaveBeenCalledWith('/', 'ui-router');
+  });
+
   test('should not mount legacy error-response normalization middleware', async () => {
     mockGetServerConfiguration.mockReturnValue({
       enabled: true,
@@ -340,7 +360,7 @@ describe('API Index', () => {
         directives: {
           'default-src': ["'self'"],
           'script-src': ["'self'"],
-          'style-src': ["'self'"],
+          'style-src': ["'self'", "'unsafe-inline'"],
           'style-src-attr': ["'unsafe-inline'"],
           'img-src': ["'self'", 'data:'],
           'font-src': ["'self'", 'data:'],
@@ -377,7 +397,7 @@ describe('API Index', () => {
         directives: {
           'default-src': ["'self'"],
           'script-src': ["'self'"],
-          'style-src': ["'self'"],
+          'style-src': ["'self'", "'unsafe-inline'"],
           'style-src-attr': ["'unsafe-inline'"],
           'img-src': ["'self'", 'data:'],
           'font-src': ["'self'", 'data:'],
@@ -408,7 +428,7 @@ describe('API Index', () => {
         directives: {
           'default-src': ["'self'"],
           'script-src': ["'self'"],
-          'style-src': ["'self'"],
+          'style-src': ["'self'", "'unsafe-inline'"],
           'style-src-attr': ["'unsafe-inline'"],
           'img-src': ["'self'", 'data:'],
           'font-src': ["'self'", 'data:'],

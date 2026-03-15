@@ -16,6 +16,7 @@ import ToggleSwitch from './components/ToggleSwitch.vue';
 import { loadServerFeatures } from './composables/useServerFeatures';
 import { tooltip as Tooltip } from './directives/tooltip';
 import AppLayout from './layouts/AppLayout.vue';
+import { applyFontSize } from './preferences/font-size';
 import { applyRadius } from './preferences/radius';
 import { preferences } from './preferences/store';
 import { isValidFontSize } from './preferences/validators';
@@ -28,11 +29,8 @@ import './style.css';
 registerIcons();
 
 // Restore persisted appearance settings on boot so they apply before first paint
-if (isValidFontSize(preferences.appearance.fontSize) && preferences.appearance.fontSize !== 1) {
-  document.documentElement.style.setProperty(
-    '--dd-font-size',
-    String(preferences.appearance.fontSize),
-  );
+if (isValidFontSize(preferences.appearance.fontSize)) {
+  applyFontSize(preferences.appearance.fontSize);
 }
 if (preferences.appearance.radius && preferences.appearance.radius !== 'sharp') {
   applyRadius(preferences.appearance.radius);

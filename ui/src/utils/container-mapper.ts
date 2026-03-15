@@ -21,6 +21,12 @@ import type {
   ContainerSecuritySummary,
 } from '../types/container';
 import { normalizeSeverityCount } from '../views/security/securityViewUtils';
+import {
+  maturityMinAgeDaysToMilliseconds,
+  normalizeMaturityMode,
+  resolveMaturityMinAgeDays,
+} from './maturity-policy';
+import { formatUpdateAge, getUpdateMaturity } from './update-maturity';
 
 interface ApiContainerImage {
   name?: unknown;
@@ -55,6 +61,8 @@ interface ApiContainerUpdatePolicy {
   snoozeUntil?: unknown;
   skipTags?: unknown;
   skipDigests?: unknown;
+  maturityMode?: unknown;
+  maturityMinAgeDays?: unknown;
 }
 
 interface ApiContainerDetails {
@@ -75,6 +83,18 @@ interface ApiContainerSecurityScan {
   status?: unknown;
   summary?: ApiContainerSecuritySummary | null;
 }
+
+type SecurityScanType = 'scan' | 'updateScan';
+
+/**
+ * Domain term used by UI templates.
+ *
+ * "bouncer" is the security gate verdict for a container image:
+ * - `safe`: no high/critical vulnerabilities were found.
+ * - `unsafe`: one or more high/critical vulnerabilities were found.
+ * - `blocked`: update or deployment is blocked by policy.
+ */
+type BouncerStatus = 'safe' | 'unsafe' | 'blocked';
 
 interface ApiContainerInput {
   id?: unknown;
@@ -179,9 +199,14 @@ function isKnownRegistryHost(host: string | undefined, knownHosts: ReadonlySet<s
   return host !== undefined && knownHosts.has(host);
 }
 
-/** Derive bouncer status from security scan data. */
-function deriveBouncer(apiContainer: ApiContainerInput): 'safe' | 'unsafe' | 'blocked' {
-  const scan = apiContainer.security?.scan;
+function getSecurityScan(
+  apiContainer: ApiContainerInput,
+  scanType: SecurityScanType,
+): ApiContainerSecurityScan | undefined {
+  return apiContainer.security?.[scanType] ?? undefined;
+}
+
+function deriveBouncerFromScan(scan: ApiContainerSecurityScan | undefined): BouncerStatus {
   if (!scan) return 'safe';
   if (scan.status === 'blocked') return 'blocked';
   const summary = scan.summary;
@@ -194,17 +219,16 @@ function deriveBouncer(apiContainer: ApiContainerInput): 'safe' | 'unsafe' | 'bl
   return 'safe';
 }
 
-/** Derive whether a container has any persisted security scan result. */
-function deriveSecurityScanState(apiContainer: ApiContainerInput): 'scanned' | 'not-scanned' {
-  const scan = apiContainer.security?.scan;
+function deriveSecurityScanStateFromScan(
+  scan: ApiContainerSecurityScan | undefined,
+): 'scanned' | 'not-scanned' {
   if (!scan || scan.status === 'not-scanned') return 'not-scanned';
   return 'scanned';
 }
 
-function deriveSecuritySummary(
-  apiContainer: ApiContainerInput,
+function normalizeSecuritySummary(
+  summary: ApiContainerSecuritySummary | null | undefined,
 ): ContainerSecuritySummary | undefined {
-  const summary = apiContainer.security?.scan?.summary;
   if (!summary || typeof summary !== 'object') {
     return undefined;
   }
@@ -217,47 +241,48 @@ function deriveSecuritySummary(
   };
 }
 
-/** Derive bouncer status from update scan data. */
-function deriveUpdateBouncer(
+function deriveSecuritySummaryFromScan(
+  scan: ApiContainerSecurityScan | undefined,
+): ContainerSecuritySummary | undefined {
+  return normalizeSecuritySummary(scan?.summary);
+}
+
+/** Derive `bouncer` (security gate verdict) from current-image scan data. */
+function deriveBouncer(apiContainer: ApiContainerInput): BouncerStatus {
+  return deriveBouncerFromScan(getSecurityScan(apiContainer, 'scan'));
+}
+
+/** Derive whether a container has any persisted security scan result. */
+function deriveSecurityScanState(apiContainer: ApiContainerInput): 'scanned' | 'not-scanned' {
+  return deriveSecurityScanStateFromScan(getSecurityScan(apiContainer, 'scan'));
+}
+
+function deriveSecuritySummary(
   apiContainer: ApiContainerInput,
-): 'safe' | 'unsafe' | 'blocked' | undefined {
-  const scan = apiContainer.security?.updateScan;
-  if (!scan) return undefined;
-  if (scan.status === 'blocked') return 'blocked';
-  const summary = scan.summary;
-  if (
-    summary &&
-    (normalizeSeverityCount(summary.critical) > 0 || normalizeSeverityCount(summary.high) > 0)
-  ) {
-    return 'unsafe';
-  }
-  return 'safe';
+): ContainerSecuritySummary | undefined {
+  return deriveSecuritySummaryFromScan(getSecurityScan(apiContainer, 'scan'));
+}
+
+/** Derive `updateBouncer` (security gate verdict) from candidate-update scan data. */
+function deriveUpdateBouncer(apiContainer: ApiContainerInput): BouncerStatus | undefined {
+  const updateScan = getSecurityScan(apiContainer, 'updateScan');
+  if (!updateScan) return undefined;
+  return deriveBouncerFromScan(updateScan);
 }
 
 /** Derive whether a container has any persisted update security scan result. */
 function deriveUpdateSecurityScanState(
   apiContainer: ApiContainerInput,
 ): 'scanned' | 'not-scanned' | undefined {
-  const scan = apiContainer.security?.updateScan;
-  if (!scan) return undefined;
-  if (scan.status === 'not-scanned') return 'not-scanned';
-  return 'scanned';
+  const updateScan = getSecurityScan(apiContainer, 'updateScan');
+  if (!updateScan) return undefined;
+  return deriveSecurityScanStateFromScan(updateScan);
 }
 
 function deriveUpdateSecuritySummary(
   apiContainer: ApiContainerInput,
 ): ContainerSecuritySummary | undefined {
-  const summary = apiContainer.security?.updateScan?.summary;
-  if (!summary || typeof summary !== 'object') {
-    return undefined;
-  }
-  return {
-    unknown: normalizeSeverityCount(summary.unknown),
-    low: normalizeSeverityCount(summary.low),
-    medium: normalizeSeverityCount(summary.medium),
-    high: normalizeSeverityCount(summary.high),
-    critical: normalizeSeverityCount(summary.critical),
-  };
+  return deriveSecuritySummaryFromScan(getSecurityScan(apiContainer, 'updateScan'));
 }
 
 /** Compute the delta between current and update security summaries. */
@@ -369,6 +394,17 @@ function deriveUpdatePolicyState(apiContainer: ApiContainerInput): Container['up
     return 'skipped';
   }
 
+  const maturityMode = normalizeMaturityMode(updatePolicy.maturityMode);
+  if (maturityMode === 'mature') {
+    const minAgeDays = resolveMaturityMinAgeDays(updatePolicy.maturityMinAgeDays);
+    const updateDetectedAt = deriveUpdateDetectedAt(apiContainer);
+    const detectedAtMs = Date.parse(updateDetectedAt || '');
+    const minAgeMs = maturityMinAgeDaysToMilliseconds(minAgeDays);
+    if (!Number.isFinite(detectedAtMs) || Date.now() - detectedAtMs < minAgeMs) {
+      return 'maturity-blocked';
+    }
+  }
+
   return undefined;
 }
 
@@ -421,10 +457,17 @@ function deriveLabels(apiContainer: ApiContainerInput): string[] {
   const labels = apiContainer.labels;
   if (!labels || typeof labels !== 'object') return [];
   return Object.entries(labels).map(([k, v]) => {
-    if (v === null || v === undefined || v === '' || v === false || v === 0) {
+    if (v == null) {
       return k;
     }
-    return `${k}=${String(v)}`;
+    switch (v) {
+      case '':
+      case false:
+      case 0:
+        return k;
+      default:
+        return `${k}=${String(v)}`;
+    }
   });
 }
 
@@ -495,6 +538,14 @@ export function mapApiContainer(apiContainer: ApiContainerInput): Container {
     imageTagSemver: asOptionalBoolean(apiContainer.image?.tag?.semver),
     releaseLink: deriveReleaseLink(apiContainer),
     updateDetectedAt: deriveUpdateDetectedAt(apiContainer),
+    updateMaturity: getUpdateMaturity(
+      deriveUpdateDetectedAt(apiContainer),
+      !!apiContainer.updateAvailable,
+    ),
+    updateMaturityTooltip: formatUpdateAge(
+      deriveUpdateDetectedAt(apiContainer),
+      !!apiContainer.updateAvailable,
+    ),
     updatePolicyState,
     suppressedUpdateTag: deriveSuppressedUpdateTag(apiContainer, updatePolicyState),
     status: apiContainer.status === 'running' ? 'running' : 'stopped',

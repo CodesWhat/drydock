@@ -9,6 +9,7 @@ import { getSecurityConfiguration } from '../configuration/index.js';
 import log from '../log/index.js';
 import { sanitizeLogParam } from '../log/sanitize.js';
 import type { Container } from '../model/container.js';
+import { MS_PER_DAY } from '../model/maturity-policy.js';
 import * as registry from '../registry/index.js';
 import * as storeContainer from '../store/container.js';
 import { getErrorMessage } from '../util/error.js';
@@ -16,7 +17,7 @@ import { getTrivyDatabaseStatus } from './runtime.js';
 import { clearDigestScanCache, scanImageWithDedup } from './scan.js';
 
 const logScheduler = log.child({ component: 'security.scheduler' });
-const DEFAULT_CRON_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const DEFAULT_CRON_INTERVAL_MS = MS_PER_DAY;
 const CRON_INTERVAL_SAMPLE_SIZE = 64;
 
 let cronTask: ReturnType<typeof cron.schedule> | undefined;
@@ -222,6 +223,186 @@ async function scanDigestGroup(options: {
   }
 }
 
+function isScheduledScannerEnabled(
+  securityConfig: ReturnType<typeof getSecurityConfiguration>,
+): boolean {
+  return securityConfig.enabled && securityConfig.scanner === 'trivy';
+}
+
+function getContainersWithDigestValues(containers: Container[]): Container[] {
+  return containers.filter(
+    (container: Container) =>
+      container.image?.digest?.value && typeof container.image.digest.value === 'string',
+  );
+}
+
+function groupContainersByDigest(containersWithDigest: Container[]): Map<string, Container[]> {
+  const digestGroups = new Map<string, Container[]>();
+  for (const container of containersWithDigest) {
+    const digest = container.image?.digest?.value as string;
+    const group = digestGroups.get(digest);
+    if (group) {
+      group.push(container);
+    } else {
+      digestGroups.set(digest, [container]);
+    }
+  }
+  return digestGroups;
+}
+
+function normalizeScanConcurrency(concurrency: unknown): number {
+  return Math.max(1, Math.floor(Number(concurrency) || 1));
+}
+
+function normalizeBatchTimeoutMs(batchTimeout: unknown): number {
+  return Math.max(0, Math.floor(Number(batchTimeout) || 0));
+}
+
+function createBatchTimeout(
+  batchController: AbortController,
+  batchTimeoutMs: number,
+): ReturnType<typeof setTimeout> | undefined {
+  if (batchTimeoutMs <= 0) {
+    return undefined;
+  }
+
+  return setTimeout(() => {
+    const timeoutMessage = `Scheduled scan batch timed out after ${batchTimeoutMs}ms`;
+    logScheduler.warn(timeoutMessage);
+    batchController.abort(createAbortError(timeoutMessage));
+  }, batchTimeoutMs);
+}
+
+type ScheduledBatchPreparation = {
+  digestGroups: Map<string, Container[]>;
+  scanIntervalMs: number;
+  scanConcurrency: number;
+  batchTimeoutMs: number;
+  trivyDbUpdatedAt?: string;
+};
+
+async function prepareScheduledBatch(
+  securityConfig: ReturnType<typeof getSecurityConfiguration>,
+): Promise<ScheduledBatchPreparation | undefined> {
+  const containers = storeContainer.getContainersRaw();
+  const containersWithDigest = getContainersWithDigestValues(containers);
+
+  if (containersWithDigest.length === 0) {
+    logScheduler.info('No containers with digest values found, skipping scheduled scan');
+    return undefined;
+  }
+
+  const digestGroups = groupContainersByDigest(containersWithDigest);
+  const scanIntervalMs = getSchedulerScanIntervalMs();
+  const scanConcurrency = normalizeScanConcurrency(securityConfig.scan.concurrency);
+  const batchTimeoutMs = normalizeBatchTimeoutMs(securityConfig.scan.batchTimeout);
+  const trivyDbStatus = await getTrivyDatabaseStatus();
+  const trivyDbUpdatedAt = trivyDbStatus?.updatedAt;
+
+  const timeoutLabel = batchTimeoutMs > 0 ? `${batchTimeoutMs}ms` : 'disabled';
+  logScheduler.info(
+    `Scanning ${digestGroups.size} unique digests across ${containersWithDigest.length} containers (concurrency: ${scanConcurrency}, batch timeout: ${timeoutLabel})`,
+  );
+
+  return {
+    digestGroups,
+    scanIntervalMs,
+    scanConcurrency,
+    batchTimeoutMs,
+    trivyDbUpdatedAt,
+  };
+}
+
+type ScheduledScanOutcomeCounts = {
+  cachedCount: number;
+  scannedCount: number;
+  errorCount: number;
+  abortedCount: number;
+};
+
+function createInitialScheduledScanOutcomeCounts(): ScheduledScanOutcomeCounts {
+  return {
+    cachedCount: 0,
+    scannedCount: 0,
+    errorCount: 0,
+    abortedCount: 0,
+  };
+}
+
+function incrementScheduledScanOutcomeCount(
+  outcomeCounts: ScheduledScanOutcomeCounts,
+  outcome: ScanDigestGroupOutcome,
+): void {
+  switch (outcome) {
+    case 'cached':
+      outcomeCounts.cachedCount += 1;
+      return;
+    case 'scanned':
+      outcomeCounts.scannedCount += 1;
+      return;
+    case 'aborted':
+      outcomeCounts.abortedCount += 1;
+      return;
+    default:
+      outcomeCounts.errorCount += 1;
+      return;
+  }
+}
+
+type ScheduledBatchExecutionResult = ScheduledScanOutcomeCounts & {
+  skippedCount: number;
+};
+
+async function runScheduledBatchDigestWorkers(options: {
+  batchController: AbortController;
+  digestEntries: Array<[string, Container[]]>;
+  scanConcurrency: number;
+  scanIntervalMs: number;
+  trivyDbUpdatedAt?: string;
+}): Promise<ScheduledBatchExecutionResult> {
+  const { batchController, digestEntries, scanConcurrency, scanIntervalMs, trivyDbUpdatedAt } =
+    options;
+  const workerCount = Math.min(scanConcurrency, digestEntries.length);
+  const outcomeCounts = createInitialScheduledScanOutcomeCounts();
+  let nextDigestIndex = 0;
+
+  const getNextDigestGroup = (): [string, Container[]] | undefined => {
+    if (batchController.signal.aborted || nextDigestIndex >= digestEntries.length) {
+      return undefined;
+    }
+
+    const nextDigestGroup = digestEntries[nextDigestIndex];
+    nextDigestIndex += 1;
+    return nextDigestGroup;
+  };
+
+  await Promise.all(
+    Array.from({ length: workerCount }, async () => {
+      while (true) {
+        const nextDigestGroup = getNextDigestGroup();
+        if (!nextDigestGroup) {
+          return;
+        }
+
+        const [digest, group] = nextDigestGroup;
+        const outcome = await scanDigestGroup({
+          digest,
+          group,
+          signal: batchController.signal,
+          scanIntervalMs,
+          trivyDbUpdatedAt,
+        });
+        incrementScheduledScanOutcomeCount(outcomeCounts, outcome);
+      }
+    }),
+  );
+
+  return {
+    ...outcomeCounts,
+    skippedCount: digestEntries.length - nextDigestIndex,
+  };
+}
+
 export async function runScheduledScans(): Promise<void> {
   if (scanInProgress) {
     logScheduler.info('Scheduled scan already in progress, skipping');
@@ -229,7 +410,7 @@ export async function runScheduledScans(): Promise<void> {
   }
 
   const securityConfig = getSchedulerSecurityConfiguration();
-  if (!securityConfig.enabled || securityConfig.scanner !== 'trivy') {
+  if (!isScheduledScannerEnabled(securityConfig)) {
     logScheduler.info('Security scanner not enabled, skipping scheduled scan');
     return;
   }
@@ -239,100 +420,26 @@ export async function runScheduledScans(): Promise<void> {
   let batchTimeoutHandle: ReturnType<typeof setTimeout> | undefined;
 
   try {
-    const containers = storeContainer.getContainersRaw();
-    const containersWithDigest = containers.filter(
-      (c: Container) => c.image?.digest?.value && typeof c.image.digest.value === 'string',
-    );
-
-    if (containersWithDigest.length === 0) {
-      logScheduler.info('No containers with digest values found, skipping scheduled scan');
+    const scheduledBatch = await prepareScheduledBatch(securityConfig);
+    if (!scheduledBatch) {
       return;
     }
 
-    // Group by digest
-    const digestGroups = new Map<string, Container[]>();
-    for (const container of containersWithDigest) {
-      const digest = container.image?.digest?.value as string;
-      const group = digestGroups.get(digest);
-      if (group) {
-        group.push(container);
-      } else {
-        digestGroups.set(digest, [container]);
-      }
-    }
-
-    const scanIntervalMs = getSchedulerScanIntervalMs();
-    const scanConcurrency = Math.max(1, Math.floor(Number(securityConfig.scan.concurrency) || 1));
-    const batchTimeoutMs = Math.max(0, Math.floor(Number(securityConfig.scan.batchTimeout) || 0));
-    const trivyDbStatus = await getTrivyDatabaseStatus();
-    const trivyDbUpdatedAt = trivyDbStatus?.updatedAt;
-    let cachedCount = 0;
-    let scannedCount = 0;
-    let errorCount = 0;
-    let abortedCount = 0;
-
-    const timeoutLabel = batchTimeoutMs > 0 ? `${batchTimeoutMs}ms` : 'disabled';
-    logScheduler.info(
-      `Scanning ${digestGroups.size} unique digests across ${containersWithDigest.length} containers (concurrency: ${scanConcurrency}, batch timeout: ${timeoutLabel})`,
-    );
-
+    const { digestGroups, scanIntervalMs, scanConcurrency, batchTimeoutMs, trivyDbUpdatedAt } =
+      scheduledBatch;
     const digestEntries = Array.from(digestGroups.entries());
-    const workerCount = Math.min(scanConcurrency, digestEntries.length);
+
     batchController = new AbortController();
     scanAbortController = batchController;
-
-    if (batchTimeoutMs > 0) {
-      batchTimeoutHandle = setTimeout(() => {
-        const timeoutMessage = `Scheduled scan batch timed out after ${batchTimeoutMs}ms`;
-        logScheduler.warn(timeoutMessage);
-        batchController?.abort(createAbortError(timeoutMessage));
-      }, batchTimeoutMs);
-    }
-
-    let nextDigestIndex = 0;
-    const getNextDigestGroup = (): [string, Container[]] | undefined => {
-      if (batchController?.signal.aborted || nextDigestIndex >= digestEntries.length) {
-        return undefined;
-      }
-      const nextDigestGroup = digestEntries[nextDigestIndex];
-      nextDigestIndex += 1;
-      return nextDigestGroup;
-    };
-
-    await Promise.all(
-      Array.from({ length: workerCount }, async () => {
-        while (true) {
-          const nextDigestGroup = getNextDigestGroup();
-          if (!nextDigestGroup) {
-            return;
-          }
-          const [digest, group] = nextDigestGroup;
-          const outcome = await scanDigestGroup({
-            digest,
-            group,
-            signal: batchController?.signal,
-            scanIntervalMs,
-            trivyDbUpdatedAt,
-          });
-          switch (outcome) {
-            case 'cached':
-              cachedCount += 1;
-              break;
-            case 'scanned':
-              scannedCount += 1;
-              break;
-            case 'aborted':
-              abortedCount += 1;
-              break;
-            default:
-              errorCount += 1;
-              break;
-          }
-        }
-      }),
-    );
-
-    const skippedCount = digestEntries.length - nextDigestIndex;
+    batchTimeoutHandle = createBatchTimeout(batchController, batchTimeoutMs);
+    const { cachedCount, scannedCount, errorCount, abortedCount, skippedCount } =
+      await runScheduledBatchDigestWorkers({
+        batchController,
+        digestEntries,
+        scanConcurrency,
+        scanIntervalMs,
+        trivyDbUpdatedAt,
+      });
 
     logScheduler.info(
       `Scheduled scan complete: ${digestGroups.size} digests, ${cachedCount} cached, ${scannedCount} scanned fresh, ${errorCount} errors, ${abortedCount} aborted, ${skippedCount} skipped`,

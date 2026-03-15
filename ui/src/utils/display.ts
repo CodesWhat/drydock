@@ -63,3 +63,19 @@ export function updateKindColor(kind: string | null) {
   if (kind === 'digest') return { bg: 'var(--dd-neutral-muted)', text: 'var(--dd-neutral)' };
   return { bg: 'transparent', text: 'transparent' };
 }
+
+export function maturityColor(maturity: string | null) {
+  if (maturity === 'fresh') {
+    return {
+      bg: 'color-mix(in srgb, var(--dd-warning) 35%, var(--dd-bg-card))',
+      text: 'var(--dd-text)',
+    };
+  }
+  if (maturity === 'settled') {
+    return {
+      bg: 'color-mix(in srgb, var(--dd-info) 35%, var(--dd-bg-card))',
+      text: 'var(--dd-text)',
+    };
+  }
+  return { bg: 'transparent', text: 'transparent' };
+}

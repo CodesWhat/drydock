@@ -32,6 +32,12 @@ const LOCKOUT_STATE_FILE_SUFFIX = '.auth-lockouts.json';
 const LOCKOUT_STATE_PERSIST_DEBOUNCE_MS = 250;
 const LOGIN_LOCKOUT_ERROR_MESSAGE =
   'Account temporarily locked due to repeated failed login attempts';
+const LOCKOUT_ENTRY_NUMERIC_FIELDS: ReadonlyArray<keyof LoginLockoutEntry> = [
+  'failedAttempts',
+  'windowStartAt',
+  'lockedUntil',
+  'lastAttemptAt',
+];
 
 interface LoginLockoutEntry {
   failedAttempts: number;
@@ -101,16 +107,7 @@ function isLoginLockoutEntry(candidate: unknown): candidate is LoginLockoutEntry
     return false;
   }
   const entry = candidate as Partial<LoginLockoutEntry>;
-  return (
-    typeof entry.failedAttempts === 'number' &&
-    Number.isFinite(entry.failedAttempts) &&
-    typeof entry.windowStartAt === 'number' &&
-    Number.isFinite(entry.windowStartAt) &&
-    typeof entry.lockedUntil === 'number' &&
-    Number.isFinite(entry.lockedUntil) &&
-    typeof entry.lastAttemptAt === 'number' &&
-    Number.isFinite(entry.lastAttemptAt)
-  );
+  return LOCKOUT_ENTRY_NUMERIC_FIELDS.every((field) => Number.isFinite(entry[field]));
 }
 
 function toPersistedRecord(

@@ -11,6 +11,8 @@
     "lint:fix": "biome check --fix .",
     "lint": "biome check .",
     "cucumber": "cucumber-js **/*.feature",
+    "test:playwright": "playwright test",
+    "test:playwright:ui": "playwright test --ui",
     "test:local": "dotenvx run -- ../scripts/run-e2e-tests.sh",
     "test:setup": "dotenvx run -- ../scripts/setup-test-containers.sh",
     "test:start-drydock": "dotenvx run -- ../scripts/start-drydock.sh",
@@ -29,6 +31,7 @@
   },
   "devDependencies": {
     "@dotenvx/dotenvx": "1.53.0",
+    "@playwright/test": "^1.58.2",
     "artillery": "2.0.30"
   },
   "overrides": {

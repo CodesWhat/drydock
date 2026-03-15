@@ -16,6 +16,44 @@ interface AppriseNotifyBody {
  * Apprise Trigger implementation
  */
 class Apprise extends Trigger {
+  private buildNotifyPayload(
+    title: string,
+    message: string,
+  ): { uri: string; body: AppriseNotifyBody } {
+    let uri = `${this.configuration.url}/notify`;
+    const body: AppriseNotifyBody = {
+      title,
+      body: message,
+      format: 'text',
+      type: 'info',
+    };
+
+    // Persistent storage usage (target apprise yml config file and tags)
+    if (this.configuration.config) {
+      uri += `/${encodeURIComponent(this.configuration.config)}`;
+      if (this.configuration.tag) {
+        body.tag = this.configuration.tag;
+      }
+    } else {
+      // Standard usage
+      body.urls = this.configuration.urls;
+    }
+
+    return { uri, body };
+  }
+
+  private async sendNotification(title: string, message: string): Promise<unknown> {
+    const { uri, body } = this.buildNotifyPayload(title, message);
+    const response = await axios({
+      method: 'POST',
+      url: uri,
+      headers: { 'Content-Type': 'application/json' },
+      data: body,
+      timeout: getOutboundHttpTimeoutMs(),
+    });
+    return response.data;
+  }
+
   /**
    * Get the Trigger configuration schema.
    * @returns {*}
@@ -48,34 +86,10 @@ class Apprise extends Trigger {
    * @returns {Promise<void>}
    */
   async trigger(container) {
-    let uri = `${this.configuration.url}/notify`;
-    const body: AppriseNotifyBody = {
-      title: this.renderSimpleTitle(container),
-      body: this.renderSimpleBody(container),
-      format: 'text',
-      type: 'info',
-    };
-
-    // Persistent storage usage (target apprise yml config file and tags)
-    if (this.configuration.config) {
-      uri += `/${encodeURIComponent(this.configuration.config)}`;
-      if (this.configuration.tag) {
-        body.tag = this.configuration.tag;
-      }
-
-      // Standard usage
-    } else {
-      body.urls = this.configuration.urls;
-    }
-    const options = {
-      method: 'POST',
-      url: uri,
-      headers: { 'Content-Type': 'application/json' },
-      data: body,
-      timeout: getOutboundHttpTimeoutMs(),
-    };
-    const response = await axios(options);
-    return response.data;
+    return this.sendNotification(
+      this.renderSimpleTitle(container),
+      this.renderSimpleBody(container),
+    );
   }
 
   /**
@@ -84,35 +98,10 @@ class Apprise extends Trigger {
    * @returns {Promise<*>}
    */
   async triggerBatch(containers) {
-    let uri = `${this.configuration.url}/notify`;
-    const body: AppriseNotifyBody = {
-      title: this.renderBatchTitle(containers),
-      body: this.renderBatchBody(containers),
-      format: 'text',
-      type: 'info',
-    };
-
-    // Persistent storage usage (target apprise yml config file and tags)
-    if (this.configuration.config) {
-      uri += `/${encodeURIComponent(this.configuration.config)}`;
-      if (this.configuration.tag) {
-        body.tag = this.configuration.tag;
-      }
-
-      // Standard usage
-    } else {
-      body.urls = this.configuration.urls;
-    }
-
-    const options = {
-      method: 'POST',
-      url: uri,
-      headers: { 'Content-Type': 'application/json' },
-      data: body,
-      timeout: getOutboundHttpTimeoutMs(),
-    };
-    const response = await axios(options);
-    return response.data;
+    return this.sendNotification(
+      this.renderBatchTitle(containers),
+      this.renderBatchBody(containers),
+    );
   }
 }
 

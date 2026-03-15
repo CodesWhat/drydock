@@ -1,4 +1,4 @@
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, type Ref, ref, watch } from 'vue';
 import { getAgents } from '../../services/agent';
 import {
   getAllContainers,
@@ -17,6 +17,10 @@ import type {
   DashboardServerInfo,
   RecentAuditStatus,
 } from './dashboardTypes';
+import {
+  createMaintenanceCountdownController,
+  createRealtimeRefreshScheduler,
+} from './useDashboardData.helpers';
 import { getWatcherConfiguration } from './watcherConfiguration';
 
 const DASHBOARD_REALTIME_REFRESH_DEBOUNCE_MS = 1_000;
@@ -25,7 +29,26 @@ interface DashboardRefreshOptions {
   background?: boolean;
 }
 
-type RealtimeRefreshMode = 'summary' | 'full';
+interface DashboardStateRefs {
+  loading: Ref<boolean>;
+  error: Ref<string | null>;
+  containerSummary: Ref<DashboardContainerSummary | null>;
+  containers: Ref<Container[]>;
+  serverInfo: Ref<DashboardServerInfo | null>;
+  agents: Ref<DashboardAgent[]>;
+  watchers: Ref<unknown[]>;
+  registries: Ref<unknown[]>;
+  recentStatusByContainer: Ref<Record<string, RecentAuditStatus>>;
+}
+
+interface DashboardDataResponse {
+  containersRes: unknown;
+  serverRes: DashboardServerInfo;
+  agentsRes: DashboardAgent[];
+  watchersRes: unknown;
+  registriesRes: unknown;
+  recentStatusRes: unknown;
+}
 
 function normalizeRecentStatusByContainer(response: unknown): Record<string, RecentAuditStatus> {
   if (!response || typeof response !== 'object') return {};
@@ -116,82 +139,46 @@ function buildContainerSummaryFromContainers(containers: Container[]): Dashboard
   };
 }
 
-function selectRealtimeRefreshMode(
-  current: RealtimeRefreshMode | undefined,
-  requested: RealtimeRefreshMode,
-): RealtimeRefreshMode {
-  if (current === 'full' || requested === 'full') {
-    return 'full';
-  }
-  return 'summary';
+function isPageVisible(): boolean {
+  return typeof document === 'undefined' || document.visibilityState !== 'hidden';
 }
 
-export function useDashboardData() {
-  const loading = ref(true);
-  const error = ref<string | null>(null);
+function hasRenderedDashboardData(state: DashboardStateRefs): boolean {
+  const hasRenderedCollections = [
+    state.containers.value,
+    state.watchers.value,
+    state.registries.value,
+    state.agents.value,
+  ].some((items) => items.length > 0);
 
-  const containerSummary = ref<DashboardContainerSummary | null>(null);
-  const containers = ref<Container[]>([]);
-  const serverInfo = ref<DashboardServerInfo | null>(null);
-  const agents = ref<DashboardAgent[]>([]);
-  const watchers = ref<unknown[]>([]);
-  const registries = ref<unknown[]>([]);
-  const recentStatusByContainer = ref<Record<string, RecentAuditStatus>>({});
-  const maintenanceCountdownNow = ref(Date.now());
-  const hasMaintenanceWindows = computed(() =>
-    watchers.value.some((watcher) => watcherHasMaintenanceWindow(watcher)),
+  return (
+    hasRenderedCollections ||
+    state.serverInfo.value !== null ||
+    state.containerSummary.value !== null
   );
+}
 
-  let maintenanceCountdownTimer: ReturnType<typeof setInterval> | undefined;
-  let realtimeRefreshTimer: ReturnType<typeof setTimeout> | undefined;
-  let scheduledRealtimeRefreshMode: RealtimeRefreshMode | undefined;
-  let stopMaintenanceWindowWatch!: ReturnType<typeof watch>;
+function applyFetchedDashboardData(state: DashboardStateRefs, response: DashboardDataResponse) {
+  state.containers.value = mapApiContainers(response.containersRes);
+  state.containerSummary.value = buildContainerSummaryFromContainers(state.containers.value);
+  state.serverInfo.value = response.serverRes;
+  state.agents.value = response.agentsRes;
+  state.watchers.value = Array.isArray(response.watchersRes) ? response.watchersRes : [];
+  state.registries.value = Array.isArray(response.registriesRes) ? response.registriesRes : [];
+  state.recentStatusByContainer.value = normalizeRecentStatusByContainer(response.recentStatusRes);
+  state.error.value = null;
+}
 
-  function isPageVisible() {
-    return typeof document === 'undefined' || document.visibilityState !== 'hidden';
-  }
-
-  function stopMaintenanceCountdownTimer() {
-    if (maintenanceCountdownTimer !== undefined) {
-      clearInterval(maintenanceCountdownTimer);
-      maintenanceCountdownTimer = undefined;
-    }
-  }
-
-  function syncMaintenanceCountdownTimer() {
-    const shouldRunTimer = hasMaintenanceWindows.value && isPageVisible();
-    if (!shouldRunTimer) {
-      stopMaintenanceCountdownTimer();
-      return;
-    }
-    maintenanceCountdownNow.value = Date.now();
-    if (maintenanceCountdownTimer !== undefined) {
-      return;
-    }
-    maintenanceCountdownTimer = window.setInterval(() => {
-      maintenanceCountdownNow.value = Date.now();
-    }, 30_000);
-  }
-
-  function hasRenderedDashboardData() {
-    return (
-      containers.value.length > 0 ||
-      watchers.value.length > 0 ||
-      registries.value.length > 0 ||
-      agents.value.length > 0 ||
-      serverInfo.value !== null ||
-      containerSummary.value !== null
-    );
-  }
-
+function createDashboardDataFetchers(state: DashboardStateRefs) {
   async function fetchDashboardData(options: DashboardRefreshOptions = {}) {
     const background = options.background === true;
-    const hasRenderedData = hasRenderedDashboardData();
+    const hasRenderedData = hasRenderedDashboardData(state);
 
     if (!background) {
-      loading.value = true;
-      error.value = null;
+      state.loading.value = true;
+      state.error.value = null;
     }
+
     try {
       const [containersRes, serverRes, agentsRes, watchersRes, registriesRes, recentStatusRes] =
         await Promise.all([
@@ -202,70 +189,107 @@ export function useDashboardData() {
           getAllRegistries(),
           getContainerRecentStatus(),
         ]);
-      containers.value = mapApiContainers(containersRes);
-      containerSummary.value = buildContainerSummaryFromContainers(containers.value);
-      serverInfo.value = serverRes;
-      agents.value = agentsRes;
-      watchers.value = Array.isArray(watchersRes) ? watchersRes : [];
-      registries.value = Array.isArray(registriesRes) ? registriesRes : [];
-
-      recentStatusByContainer.value = normalizeRecentStatusByContainer(recentStatusRes);
-      error.value = null;
+      applyFetchedDashboardData(state, {
+        containersRes,
+        serverRes,
+        agentsRes,
+        watchersRes,
+        registriesRes,
+        recentStatusRes,
+      });
     } catch (e: unknown) {
       if (!background || !hasRenderedData) {
-        error.value = errorMessage(e, 'Failed to load dashboard data');
+        state.error.value = errorMessage(e, 'Failed to load dashboard data');
       } else {
         console.debug(errorMessage(e, 'Dashboard background refresh failed'));
       }
     } finally {
       if (!background) {
-        loading.value = false;
+        state.loading.value = false;
       }
     }
   }
 
   async function fetchDashboardSummary() {
-    const hasRenderedData = hasRenderedDashboardData();
+    const hasRenderedData = hasRenderedDashboardData(state);
     try {
       const summary = await getContainerSummary();
-      containerSummary.value = normalizeContainerSummary(summary);
-      error.value = null;
+      state.containerSummary.value = normalizeContainerSummary(summary);
+      state.error.value = null;
     } catch (e: unknown) {
       if (!hasRenderedData) {
-        error.value = errorMessage(e, 'Failed to load dashboard data');
+        state.error.value = errorMessage(e, 'Failed to load dashboard data');
       } else {
         console.debug(errorMessage(e, 'Dashboard summary refresh failed'));
       }
     }
   }
 
-  function scheduleRealtimeRefresh(mode: RealtimeRefreshMode) {
-    scheduledRealtimeRefreshMode = selectRealtimeRefreshMode(scheduledRealtimeRefreshMode, mode);
-    if (realtimeRefreshTimer !== undefined) {
-      clearTimeout(realtimeRefreshTimer);
-    }
-    realtimeRefreshTimer = window.setTimeout(() => {
-      realtimeRefreshTimer = undefined;
-      const refreshMode = scheduledRealtimeRefreshMode;
-      scheduledRealtimeRefreshMode = undefined;
-      if (refreshMode === 'full') {
-        void fetchDashboardData({ background: true });
-        return;
-      }
-      void fetchDashboardSummary();
-    }, DASHBOARD_REALTIME_REFRESH_DEBOUNCE_MS);
-  }
+  return {
+    fetchDashboardData,
+    fetchDashboardSummary,
+  };
+}
 
-  const summaryRefreshListener = (() => scheduleRealtimeRefresh('summary')) as EventListener;
-  const fullRefreshListener = (() => scheduleRealtimeRefresh('full')) as EventListener;
-  const visibilityChangeListener = syncMaintenanceCountdownTimer as EventListener;
+export function useDashboardData() {
+  const loading = ref(true);
+  const error = ref<string | null>(null);
+  const containerSummary = ref<DashboardContainerSummary | null>(null);
+  const containers = ref<Container[]>([]);
+  const serverInfo = ref<DashboardServerInfo | null>(null);
+  const agents = ref<DashboardAgent[]>([]);
+  const watchers = ref<unknown[]>([]);
+  const registries = ref<unknown[]>([]);
+  const recentStatusByContainer = ref<Record<string, RecentAuditStatus>>({});
+  const maintenanceCountdownNow = ref(Date.now());
+
+  const state: DashboardStateRefs = {
+    loading,
+    error,
+    containerSummary,
+    containers,
+    serverInfo,
+    agents,
+    watchers,
+    registries,
+    recentStatusByContainer,
+  };
+
+  const { fetchDashboardData, fetchDashboardSummary } = createDashboardDataFetchers(state);
+  const hasMaintenanceWindows = computed(() =>
+    watchers.value.some((watcher) => watcherHasMaintenanceWindow(watcher)),
+  );
+  const maintenanceCountdownController = createMaintenanceCountdownController({
+    hasMaintenanceWindows,
+    maintenanceCountdownNow,
+    isPageVisible,
+    setIntervalFn: window.setInterval.bind(window),
+    clearIntervalFn: window.clearInterval.bind(window),
+  });
+  const realtimeRefreshScheduler = createRealtimeRefreshScheduler({
+    debounceMs: DASHBOARD_REALTIME_REFRESH_DEBOUNCE_MS,
+    refreshSummary: () => {
+      void fetchDashboardSummary();
+    },
+    refreshFull: () => {
+      void fetchDashboardData({ background: true });
+    },
+    setTimeoutFn: window.setTimeout.bind(window),
+    clearTimeoutFn: window.clearTimeout.bind(window),
+  });
+
+  const summaryRefreshListener = (() =>
+    realtimeRefreshScheduler.schedule('summary')) as EventListener;
+  const fullRefreshListener = (() => realtimeRefreshScheduler.schedule('full')) as EventListener;
+  const visibilityChangeListener = maintenanceCountdownController.sync as EventListener;
+  let stopMaintenanceWindowWatch: ReturnType<typeof watch> | undefined;
 
   onMounted(async () => {
     globalThis.addEventListener('dd:sse-container-changed', summaryRefreshListener);
     globalThis.addEventListener('dd:sse-scan-completed', fullRefreshListener);
     globalThis.addEventListener('dd:sse-connected', fullRefreshListener);
     document.addEventListener('visibilitychange', visibilityChangeListener);
-    stopMaintenanceWindowWatch = watch(hasMaintenanceWindows, syncMaintenanceCountdownTimer, {
+    stopMaintenanceWindowWatch = watch(hasMaintenanceWindows, maintenanceCountdownController.sync, {
       immediate: true,
     });
     await fetchDashboardData();
@@ -276,13 +300,9 @@ export function useDashboardData() {
     globalThis.removeEventListener('dd:sse-scan-completed', fullRefreshListener);
     globalThis.removeEventListener('dd:sse-connected', fullRefreshListener);
     document.removeEventListener('visibilitychange', visibilityChangeListener);
-    stopMaintenanceWindowWatch();
-    if (realtimeRefreshTimer !== undefined) {
-      clearTimeout(realtimeRefreshTimer);
-      realtimeRefreshTimer = undefined;
-    }
-    scheduledRealtimeRefreshMode = undefined;
-    stopMaintenanceCountdownTimer();
+    stopMaintenanceWindowWatch?.();
+    realtimeRefreshScheduler.dispose();
+    maintenanceCountdownController.dispose();
   });
 
   return {

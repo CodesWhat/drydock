@@ -2,6 +2,11 @@ import type { Meta, StoryObj } from '@storybook/vue3';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import WatchersView from './WatchersView.vue';
 
+interface StoryMockRequest {
+  method: string;
+  path: string;
+}
+
 interface WatcherApiItem {
   id: string;
   name: string;
@@ -33,23 +38,32 @@ const watcherFixtures: WatcherApiItem[] = [
   },
 ];
 
-function installWatchersMock(data: WatcherApiItem[]) {
-  globalThis.fetch = async (input: RequestInfo | URL) => {
-    const raw =
-      typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
-    const path = raw.startsWith('http') ? new URL(raw).pathname : raw;
+const JSON_HEADERS = { 'Content-Type': 'application/json' };
 
-    if (path === '/api/watchers') {
-      return new Response(JSON.stringify(data), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      });
+function createJsonResponse(payload: unknown, status = 200): Response {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: JSON_HEADERS,
+  });
+}
+
+function parseStoryRequest(input: RequestInfo | URL, init?: RequestInit): StoryMockRequest {
+  const raw =
+    typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+  const url = raw.startsWith('http') ? new URL(raw) : new URL(raw, 'http://localhost');
+  const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
+  return { method, path: url.pathname };
+}
+
+function installWatchersMock(data: WatcherApiItem[]) {
+  globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = parseStoryRequest(input, init);
+
+    if (request.method === 'GET' && request.path === '/api/watchers') {
+      return createJsonResponse(data);
     }
 
-    return new Response(JSON.stringify({ error: `No mock for ${path}` }), {
-      status: 404,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    return createJsonResponse({ error: `No mock for ${request.method} ${request.path}` }, 404);
   };
 }
 
@@ -69,36 +83,43 @@ const meta = {
 
 export default meta;
 type Story = StoryObj<typeof meta>;
+type StoryCanvas = ReturnType<typeof within>;
 
-export const DefaultTable: Story = {
-  loaders: [
-    async () => {
-      installWatchersMock(watcherFixtures);
-      return {};
-    },
-  ],
-  play: async ({ canvasElement }) => {
+function createWatchersLoader(data: WatcherApiItem[]): NonNullable<Story['loaders']>[number] {
+  return async () => {
+    installWatchersMock(data);
+    return {};
+  };
+}
+
+function createWatchersStory(data: WatcherApiItem[], play: NonNullable<Story['play']>): Story {
+  return {
+    loaders: [createWatchersLoader(data)],
+    play,
+  };
+}
+
+async function expectTextVisible(canvas: StoryCanvas, text: string): Promise<void> {
+  await waitFor(() => {
+    expect(canvas.getByText(text)).toBeInTheDocument();
+  });
+}
+
+export const DefaultTable: Story = createWatchersStory(
+  watcherFixtures,
+  async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await waitFor(() => {
-      expect(canvas.getByText('Local Docker')).toBeInTheDocument();
-    });
+    await expectTextVisible(canvas, 'Local Docker');
     await expect(canvas.getByText('Edge Cluster 1')).toBeInTheDocument();
   },
-};
+);
 
-export const ViewModeAndFilter: Story = {
-  loaders: [
-    async () => {
-      installWatchersMock(watcherFixtures);
-      return {};
-    },
-  ],
-  play: async ({ canvasElement }) => {
+export const ViewModeAndFilter: Story = createWatchersStory(
+  watcherFixtures,
+  async ({ canvasElement }) => {
     const canvas = within(canvasElement);
 
-    await waitFor(() => {
-      expect(canvas.getByText('Local Docker')).toBeInTheDocument();
-    });
+    await expectTextVisible(canvas, 'Local Docker');
 
     await userEvent.click(canvas.getByTitle('Cards view'));
     await expect(canvas.getByText('Edge Cluster 2')).toBeInTheDocument();
@@ -107,19 +128,9 @@ export const ViewModeAndFilter: Story = {
     await userEvent.type(canvas.getByPlaceholderText('Filter by name...'), 'edge cluster 1');
     await expect(canvas.getByText('Edge Cluster 1')).toBeInTheDocument();
   },
-};
+);
 
-export const Empty: Story = {
-  loaders: [
-    async () => {
-      installWatchersMock([]);
-      return {};
-    },
-  ],
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
-    await waitFor(() => {
-      expect(canvas.getByText('No watchers match your filters')).toBeInTheDocument();
-    });
-  },
-};
+export const Empty: Story = createWatchersStory([], async ({ canvasElement }) => {
+  const canvas = within(canvasElement);
+  await expectTextVisible(canvas, 'No watchers match your filters');
+});

@@ -13,6 +13,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **CSRF validation behind reverse proxies** — Same-origin mutation checks now honor `X-Forwarded-Proto` and `X-Forwarded-Host` when present before falling back to direct request protocol/host, preventing false `403 CSRF validation failed` responses in TLS-terminating proxy setups. ([#146](https://github.com/CodesWhat/drydock/issues/146))
+- **Hosts page missing env-var-configured watchers** — The Hosts page hardcoded a single "Local" entry and only added agent-based hosts. Watchers configured via `DD_WATCHER_*` environment variables (e.g. remote Docker hosts) were never displayed, even though their containers appeared correctly on the Containers page. The page now fetches all watchers from the API and displays each local watcher with its actual name and connection address. ([#151](https://github.com/CodesWhat/drydock/issues/151))
+
+## [1.4.1]
+
+### Added
+
+- **Headless mode (`DD_SERVER_UI_ENABLED`)** — Run drydock as an API-only service by setting `DD_SERVER_UI_ENABLED=false`. The REST API, SSE, and healthcheck endpoints remain fully functional while the UI is not served. Useful for controller nodes that only manage agents.
+- **Maturity-based update policy** — Per-container update maturity policy via `dd.updatePolicy.maturityMode` (`all` or `mature`) and `dd.updatePolicy.maturityMinAgeDays` (default 7). When set to `mature`, containers with updates detected less than the configured age threshold are blocked from triggering until the update has settled. UI shows NEW/MATURE badges with flame/clock icons on containers with available updates. ([#120](https://github.com/CodesWhat/drydock/discussions/120))
+- **`?groupByStack=true` URL parameter** — Bookmarkable URL parameter to enable stack grouping on the containers page. Also accepts `?groupByStack=1`. ([#145](https://github.com/CodesWhat/drydock/issues/145))
+
+### Changed
+
+- **Connection-lost overlay animation** — The connection-lost and reconnecting overlays now use a bounce animation for improved visual feedback.
+- **Watch target resolution refactored to discriminated union** — Internal refactor of the watch target resolution logic for improved type safety and maintainability.
+
+### Fixed
+
+- **Agent handshake and SSE validation failure** — Fixed agent API returning redacted container data (with `sensitive` field on env entries) instead of raw data, causing controller-side Joi validation to reject the handshake and crash on real-time SSE container events. SSE payloads now prefer canonical raw store data with sanitization fallback. ([#141](https://github.com/CodesWhat/drydock/issues/141))
+- **Mangled argon2 hash detection** — Docker Compose `$` interpolation can strip `$` delimiters from argon2 PHC hashes, producing an invalid hash that silently failed registration. Drydock now detects mangled hashes at startup and surfaces an actionable error message. ([#147](https://github.com/CodesWhat/drydock/issues/147))
+- **Anonymous auth fallback** — When all configured auth providers fail to register (e.g. due to a mangled hash), Drydock now falls back to anonymous mode if `DD_ANONYMOUS_AUTH_CONFIRM=true` is set, instead of leaving the user with no way to log in. ([#147](https://github.com/CodesWhat/drydock/issues/147))
+- **Auth registration errors on login page** — Registration warnings (e.g. invalid hash format) are now surfaced on the login page so users can see exactly what went wrong instead of a generic "No authentication methods configured" message. ([#147](https://github.com/CodesWhat/drydock/issues/147))
+- **CSP inline style violations** — Replaced runtime `element.style` mutations (DataTable column resize, tooltip directive, theme transitions, preference restore) with CSS custom properties and class-based styling. Relaxed `style-src` to include `'unsafe-inline'` for vendor libraries (iconify-icon, Vue Transition) that set `element.style` programmatically.
+- **Compose trigger affinity across remapped roots** — Compose trigger file-path matching now uses suffix-based comparison as a fallback when the container's compose label path (host mount) differs from the trigger's configured path (container-internal), preventing missed trigger associations in bind-mount setups.
+- **Compose trigger association** — Enforce compose-file affinity when associating triggers with containers, preventing incorrect trigger-container matching. ([#139](https://github.com/CodesWhat/drydock/issues/139))
+- **Update All button icon centering** — Fixed icon-text alignment in the Update All group header button to match the split button pattern used elsewhere.
+- **Selected card border clipping** — Fixed card border clipping on the first grid column in card view.
+
+### Security
+
+- **Username enumeration timing side-channel** — Eliminated timing difference between valid and invalid usernames during authentication.
+- **LokiJS metadata exposure** — Stripped internal LokiJS fields (`$loki`, `meta`) from settings API responses, agent API container responses, and `/app` endpoint.
+- **Permissions-Policy header** — Added `Permissions-Policy` header to restrict browser feature access (camera, microphone, geolocation, etc.).
+- **CSP and Cross-Origin-Embedder-Policy** — Tightened Content Security Policy and added COEP header.
+- **Production image hardening** — Removed `wget`, `nc`, and `npm` from the production Docker image; upgraded zlib.
+
+### Dependencies
+
+- **undici** — Bumped to 7.24.1 (fixes 12 CVEs including WebSocket memory consumption, CRLF injection, and request smuggling).
+
 ## [1.4.0] — 2026-02-28
 
 ### Breaking Changes

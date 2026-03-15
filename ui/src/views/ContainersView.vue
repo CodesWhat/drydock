@@ -18,6 +18,7 @@ import { getAllContainers, getContainerGroups, refreshAllContainers } from '../s
 import type { Container } from '../types/container';
 import { mapApiContainers } from '../utils/container-mapper';
 import {
+  maturityColor,
   parseServer,
   registryColorBg,
   registryColorText,
@@ -193,6 +194,7 @@ const {
   containerActionsDisabledReason,
   containerActionsEnabled,
   clearPolicySelected,
+  clearMaturityPolicySelected,
   clearSkipsSelected,
   confirmDelete,
   confirmForceUpdate,
@@ -229,14 +231,20 @@ const {
   runAssociatedTrigger,
   runContainerPreview,
   scanContainer,
+  selectedHasMaturityPolicy,
+  selectedMaturityMinAgeDays,
+  selectedMaturityMode,
   selectedSkipDigests,
   selectedSkipTags,
   selectedSnoozeUntil,
   selectedUpdatePolicy,
+  setMaturityPolicySelected,
   skipCurrentForSelected,
   skipUpdate,
   skippedUpdates,
   snoozeDateInput,
+  maturityModeInput,
+  maturityMinAgeDaysInput,
   snoozeSelected,
   snoozeSelectedUntilDate,
   startContainer,
@@ -422,6 +430,20 @@ watch(
       void loadGroups();
     }
   },
+);
+
+function applyGroupByStackFromQuery(queryValue: unknown) {
+  const raw = Array.isArray(queryValue) ? queryValue[0] : queryValue;
+  if (typeof raw !== 'string') {
+    return;
+  }
+  groupByStack.value = raw === 'true' || raw === '1';
+}
+
+applyGroupByStackFromQuery(route.query.groupByStack);
+watch(
+  () => route.query.groupByStack,
+  (value) => applyGroupByStackFromQuery(value),
 );
 
 function toggleGroupCollapse(key: string) {
@@ -674,6 +696,7 @@ provide(containersViewTemplateContextKey, {
   displayContainers,
   actionsMenuStyle,
   updateKindColor,
+  maturityColor,
   hasRegistryError,
   registryErrorTooltip,
   containerPolicyTooltip,
@@ -736,6 +759,13 @@ provide(containersViewTemplateContextKey, {
   selectedSkipDigests,
   clearSkipsSelected,
   selectedUpdatePolicy,
+  selectedHasMaturityPolicy,
+  selectedMaturityMode,
+  selectedMaturityMinAgeDays,
+  maturityModeInput,
+  maturityMinAgeDaysInput,
+  setMaturityPolicySelected,
+  clearMaturityPolicySelected,
   clearPolicySelected,
   policyMessage,
   policyError,

@@ -7,6 +7,12 @@ import type {
   ContainerSignatureVerification,
 } from '../security/scan.js';
 import * as tag from '../tag/index.js';
+import {
+  MATURITY_MIN_AGE_DAYS_MAX,
+  MATURITY_MIN_AGE_DAYS_MIN,
+  maturityMinAgeDaysToMilliseconds,
+  resolveMaturityMinAgeDays,
+} from './maturity-policy.js';
 
 const { parse: parseSemver, diff: diffSemver, transform: transformTag } = tag;
 
@@ -53,6 +59,8 @@ export interface ContainerUpdatePolicy {
   skipTags?: string[];
   skipDigests?: string[];
   snoozeUntil?: string;
+  maturityMode?: 'all' | 'mature';
+  maturityMinAgeDays?: number;
 }
 
 export interface ContainerSecurityState {
@@ -186,6 +194,12 @@ const schema = joi.object({
     skipTags: joi.array().items(joi.string()),
     skipDigests: joi.array().items(joi.string()),
     snoozeUntil: joi.string().isoDate(),
+    maturityMode: joi.string().valid('all', 'mature'),
+    maturityMinAgeDays: joi
+      .number()
+      .integer()
+      .min(MATURITY_MIN_AGE_DAYS_MIN)
+      .max(MATURITY_MIN_AGE_DAYS_MAX),
   }),
   security: joi.object({
     scan: containerSecurityScanSchema,
@@ -430,6 +444,18 @@ function isUpdateSuppressed(container: Container, updateKind: ContainerUpdateKin
   if (updatePolicy.snoozeUntil) {
     const snoozeUntilDate = new Date(updatePolicy.snoozeUntil);
     if (!Number.isNaN(snoozeUntilDate.getTime()) && snoozeUntilDate.getTime() > Date.now()) {
+      return true;
+    }
+  }
+
+  if (updatePolicy.maturityMode === 'mature') {
+    const updateDetectedAtMs = Date.parse(container.updateDetectedAt || '');
+    const maturityMinAgeDays = resolveMaturityMinAgeDays(updatePolicy.maturityMinAgeDays);
+    const maturityMinAgeMs = maturityMinAgeDaysToMilliseconds(maturityMinAgeDays);
+    if (
+      !Number.isFinite(updateDetectedAtMs) ||
+      Date.now() - updateDetectedAtMs < maturityMinAgeMs
+    ) {
       return true;
     }
   }

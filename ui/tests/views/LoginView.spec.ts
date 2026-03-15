@@ -44,8 +44,8 @@ function trackWrapper(wrapper: VueWrapper) {
   return wrapper;
 }
 
-async function mountLogin(strategies: any[] = []) {
-  mockGetStrategies.mockResolvedValue(strategies);
+async function mountLogin(strategies: any[] = [], warnings: string[] = []) {
+  mockGetStrategies.mockResolvedValue({ strategies, warnings });
   const wrapper = trackWrapper(mountWithPlugins(LoginView));
   await flushPromises();
   return wrapper;
@@ -96,6 +96,20 @@ describe('LoginView', () => {
     it('shows no-methods message when no strategies are returned', async () => {
       const wrapper = await mountLogin([]);
       expect(wrapper.text()).toContain('No authentication methods configured');
+    });
+
+    it('displays registration warnings when no strategies and warnings exist', async () => {
+      const wrapper = await mountLogin(
+        [],
+        ['Some authentications failed to register ("hash" is required)'],
+      );
+      expect(wrapper.text()).toContain('No authentication methods configured');
+      expect(wrapper.text()).toContain('Some authentications failed to register');
+    });
+
+    it('does not display warnings when strategies exist', async () => {
+      const wrapper = await mountLogin([{ type: 'basic', name: 'basic' }], ['Some warning']);
+      expect(wrapper.text()).not.toContain('Some warning');
     });
   });
 
@@ -373,7 +387,7 @@ describe('LoginView', () => {
       mockGetStrategies
         .mockRejectedValueOnce(new Error('offline'))
         .mockRejectedValueOnce(new Error('still offline'))
-        .mockResolvedValueOnce([{ type: 'basic', name: 'basic' }]);
+        .mockResolvedValueOnce({ strategies: [{ type: 'basic', name: 'basic' }], warnings: [] });
 
       const wrapper = trackWrapper(mountWithPlugins(LoginView));
       await flushPromises();

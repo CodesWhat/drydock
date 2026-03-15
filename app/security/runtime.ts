@@ -48,6 +48,12 @@ type TrivyDatabaseStatusInFlight = {
 };
 let trivyDbStatusInFlight: TrivyDatabaseStatusInFlight | undefined;
 
+interface RuntimeToolCheck {
+  enabled: boolean;
+  command: string;
+  availability: CommandAvailabilityResult;
+}
+
 export function hasValidCommandPath(command: string): boolean {
   if (command.includes('\0') || DISALLOWED_COMMAND_CHARACTERS_PATTERN.test(command)) {
     return false;
@@ -113,6 +119,108 @@ function buildDisabledToolStatus(message: string): SecurityRuntimeToolStatus {
     commandAvailable: null,
     status: 'disabled',
     message,
+  };
+}
+
+function getUnavailableCommandMessage(
+  toolName: 'Trivy' | 'Cosign',
+  command: string,
+  invalidPath: boolean,
+): string {
+  if (invalidPath) {
+    return `${toolName} command "${command}" is invalid; use a command name or absolute path`;
+  }
+  return `${toolName} command "${command}" is not available in this runtime`;
+}
+
+function buildScannerMessage(check: RuntimeToolCheck, server: string): string {
+  if (check.availability.available) {
+    if (server) {
+      return 'Trivy client is ready (server mode enabled)';
+    }
+    return 'Trivy client is ready';
+  }
+  return getUnavailableCommandMessage('Trivy', check.command, check.availability.invalidPath);
+}
+
+function buildSignatureMessage(check: RuntimeToolCheck): string {
+  if (check.availability.available) {
+    return 'Cosign is ready for signature verification';
+  }
+  return getUnavailableCommandMessage('Cosign', check.command, check.availability.invalidPath);
+}
+
+function buildScannerRuntimeStatus(
+  check: RuntimeToolCheck,
+  configuredScanner: string,
+  server: string,
+): SecurityRuntimeToolStatus & { scanner: string; server: string } {
+  if (!check.enabled) {
+    return {
+      ...buildDisabledToolStatus('Vulnerability scanner is disabled'),
+      scanner: configuredScanner,
+      server,
+    };
+  }
+
+  return {
+    enabled: true,
+    command: check.command,
+    commandAvailable: check.availability.available,
+    status: check.availability.available ? 'ready' : 'missing',
+    message: buildScannerMessage(check, server),
+    scanner: 'trivy',
+    server,
+  };
+}
+
+function buildSignatureRuntimeStatus(check: RuntimeToolCheck): SecurityRuntimeToolStatus {
+  if (!check.enabled) {
+    return buildDisabledToolStatus('Signature verification is disabled');
+  }
+
+  return {
+    enabled: true,
+    command: check.command,
+    commandAvailable: check.availability.available,
+    status: check.availability.available ? 'ready' : 'missing',
+    message: buildSignatureMessage(check),
+  };
+}
+
+function buildRequirement(
+  toolName: 'trivy' | 'cosign',
+  check: RuntimeToolCheck,
+): string | undefined {
+  if (!check.enabled || check.availability.available) {
+    return undefined;
+  }
+  return `Install ${toolName} (configured command: "${check.command}")`;
+}
+
+function isDefinedValue<T>(value: T | undefined): value is T {
+  return value !== undefined;
+}
+
+async function resolveRuntimeToolCheck(
+  enabled: boolean,
+  configuredCommand: string | undefined,
+  defaultCommand: string,
+): Promise<RuntimeToolCheck> {
+  if (!enabled) {
+    return {
+      enabled: false,
+      command: '',
+      availability: { available: false, invalidPath: false },
+    };
+  }
+
+  const command = configuredCommand || defaultCommand;
+  const availability = await checkCommandAvailability(command);
+  return {
+    enabled: true,
+    command,
+    availability,
   };
 }
 
@@ -188,67 +296,29 @@ export async function getTrivyDatabaseStatus(): Promise<TrivyDatabaseStatus | un
 
 export async function getSecurityRuntimeStatus(): Promise<SecurityRuntimeStatus> {
   const configuration = getSecurityConfiguration();
+  const scannerCheck = await resolveRuntimeToolCheck(
+    configuration.enabled && configuration.scanner === 'trivy',
+    configuration.trivy.command,
+    'trivy',
+  );
+  const signatureCheck = await resolveRuntimeToolCheck(
+    Boolean(configuration.signature.verify),
+    configuration.signature.cosign.command,
+    'cosign',
+  );
 
-  const scannerEnabled = configuration.enabled && configuration.scanner === 'trivy';
-  const scannerCommand = scannerEnabled ? configuration.trivy.command || 'trivy' : '';
-  const scannerAvailability = scannerEnabled
-    ? await checkCommandAvailability(scannerCommand)
-    : { available: false, invalidPath: false };
+  const scannerStatus = buildScannerRuntimeStatus(
+    scannerCheck,
+    configuration.scanner || '',
+    configuration.trivy.server || '',
+  );
+  const signatureStatus = buildSignatureRuntimeStatus(signatureCheck);
+  const requirements = [
+    buildRequirement('trivy', scannerCheck),
+    buildRequirement('cosign', signatureCheck),
+  ].filter(isDefinedValue);
 
-  const signatureEnabled = Boolean(configuration.signature.verify);
-  const signatureCommand = signatureEnabled
-    ? configuration.signature.cosign.command || 'cosign'
-    : '';
-  const signatureAvailability = signatureEnabled
-    ? await checkCommandAvailability(signatureCommand)
-    : { available: false, invalidPath: false };
-
-  const scannerStatus: SecurityRuntimeToolStatus & { scanner: string; server: string } =
-    scannerEnabled
-      ? {
-          enabled: true,
-          command: scannerCommand,
-          commandAvailable: scannerAvailability.available,
-          status: scannerAvailability.available ? 'ready' : 'missing',
-          message: scannerAvailability.available
-            ? configuration.trivy.server
-              ? 'Trivy client is ready (server mode enabled)'
-              : 'Trivy client is ready'
-            : scannerAvailability.invalidPath
-              ? `Trivy command "${scannerCommand}" is invalid; use a command name or absolute path`
-              : `Trivy command "${scannerCommand}" is not available in this runtime`,
-          scanner: 'trivy',
-          server: configuration.trivy.server || '',
-        }
-      : {
-          ...buildDisabledToolStatus('Vulnerability scanner is disabled'),
-          scanner: configuration.scanner || '',
-          server: configuration.trivy.server || '',
-        };
-
-  const signatureStatus: SecurityRuntimeToolStatus = signatureEnabled
-    ? {
-        enabled: true,
-        command: signatureCommand,
-        commandAvailable: signatureAvailability.available,
-        status: signatureAvailability.available ? 'ready' : 'missing',
-        message: signatureAvailability.available
-          ? 'Cosign is ready for signature verification'
-          : signatureAvailability.invalidPath
-            ? `Cosign command "${signatureCommand}" is invalid; use a command name or absolute path`
-            : `Cosign command "${signatureCommand}" is not available in this runtime`,
-      }
-    : buildDisabledToolStatus('Signature verification is disabled');
-
-  const requirements: string[] = [];
-  if (scannerEnabled && !scannerAvailability.available) {
-    requirements.push(`Install trivy (configured command: "${scannerCommand}")`);
-  }
-  if (signatureEnabled && !signatureAvailability.available) {
-    requirements.push(`Install cosign (configured command: "${signatureCommand}")`);
-  }
-
-  const ready = scannerEnabled && scannerAvailability.available;
+  const ready = scannerCheck.enabled && scannerCheck.availability.available;
 
   return {
     checkedAt: new Date().toISOString(),

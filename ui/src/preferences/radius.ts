@@ -9,6 +9,9 @@ export interface RadiusPreset {
   lg: number;
 }
 
+const RADIUS_CLASS_PREFIX = 'dd-radius-';
+const RADIUS_CLASS_NAMES = new Set(RADIUS_PRESET_IDS.map((id) => `${RADIUS_CLASS_PREFIX}${id}`));
+
 const RADIUS_PRESET_BY_ID: Record<RadiusPresetId, RadiusPreset> = {
   none: { id: 'none', label: 'None', sm: 0, md: 0, lg: 0 },
   sharp: { id: 'sharp', label: 'Sharp', sm: 2, md: 3, lg: 4 },
@@ -21,11 +24,11 @@ export const RADIUS_PRESET_VALUES: RadiusPreset[] = RADIUS_PRESET_IDS.map(
   (id) => RADIUS_PRESET_BY_ID[id],
 );
 
-/** Apply border-radius CSS variables to documentElement. */
+/** Apply radius preset as a class on the document root. */
 export function applyRadius(id: RadiusPresetId): void {
-  const p = RADIUS_PRESET_BY_ID[id];
   const el = document.documentElement;
-  el.style.setProperty('--dd-radius', `${p.md}px`);
-  el.style.setProperty('--dd-radius-sm', `${p.sm}px`);
-  el.style.setProperty('--dd-radius-lg', `${p.lg}px`);
+  for (const className of RADIUS_CLASS_NAMES) {
+    el.classList.remove(className);
+  }
+  el.classList.add(`${RADIUS_CLASS_PREFIX}${id}`);
 }

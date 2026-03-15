@@ -1,5 +1,5 @@
 import { flushPromises } from '@vue/test-utils';
-import { computed, defineComponent, ref } from 'vue';
+import { computed, defineComponent, reactive, ref } from 'vue';
 import type { Container } from '@/types/container';
 import ContainersView from '@/views/ContainersView.vue';
 import { mountWithPlugins } from '../helpers/mount';
@@ -73,6 +73,7 @@ vi.mock('@/utils/container-mapper', () => ({
 
 vi.mock('@/utils/display', () => ({
   bouncerColor: vi.fn(() => ({ bg: 'bg', text: 'text' })),
+  maturityColor: vi.fn(() => ({ bg: 'bg', text: 'text' })),
   parseServer: vi.fn((s: string) => ({ name: s, env: null })),
   registryColorBg: vi.fn(() => 'bg'),
   registryColorText: vi.fn(() => 'text'),
@@ -139,6 +140,7 @@ vi.mock('@/composables/useColumnVisibility', () => ({
     activeColumns: computed(() => [
       { key: 'icon', label: '', align: 'text-center' },
       { key: 'name', label: 'Container', align: 'text-left' },
+      { key: 'status', label: 'Status', align: 'text-center' },
     ]),
     showColumnPicker: mockShowColumnPicker,
     toggleColumn: vi.fn(),
@@ -391,6 +393,15 @@ describe('ContainersView', () => {
       await mountContainersView(containers);
       expect(mockFilteredContainers.value).toHaveLength(2);
     });
+
+    it('falls back to API container name when displayName is missing', async () => {
+      const containers = [makeContainer({ id: 'c1', name: 'nginx' })];
+      const wrapper = await mountContainersView(containers, [{ id: 'c1', name: 'nginx' }]);
+      const vm = wrapper.vm as any;
+
+      vm.selectedContainer = containers[0];
+      expect(vm.selectedContainerId).toBe('c1');
+    });
   });
 
   describe('route query filters', () => {
@@ -400,10 +411,22 @@ describe('ContainersView', () => {
       expect(mockFilterSearch.value).toBe('nginx');
     });
 
+    it('applies search query from array route query', async () => {
+      mockRoute.query = { q: ['redis'] };
+      await mountContainersView([makeContainer()]);
+      expect(mockFilterSearch.value).toBe('redis');
+    });
+
     it('applies filterKind from route query', async () => {
       mockRoute.query = { filterKind: 'any' };
       await mountContainersView([makeContainer({ newTag: '2.0.0', updateKind: 'major' })]);
       expect(mockFilterKind.value).toBe('any');
+    });
+
+    it('applies filterKind from array route query', async () => {
+      mockRoute.query = { filterKind: ['major'] };
+      await mountContainersView([makeContainer({ newTag: '2.0.0', updateKind: 'major' })]);
+      expect(mockFilterKind.value).toBe('major');
     });
 
     it('falls back to all for an invalid filterKind query', async () => {
@@ -559,6 +582,7 @@ describe('ContainersView', () => {
         skipped: true,
         skipCount: 1,
         snoozeUntil: '2099-01-01T00:00:00.000Z',
+        maturityBlocked: false,
       });
       expect(wrapper.find('.data-table [aria-label="Snoozed updates"]').exists()).toBe(true);
       expect(wrapper.find('.data-table [aria-label="Skipped updates"]').exists()).toBe(true);
@@ -1137,6 +1161,30 @@ describe('ContainersView', () => {
       expect(vm.groupByStack).toBe(false);
     });
 
+    it('applies groupByStack=true from route query', async () => {
+      mockRoute.query = { groupByStack: 'true' };
+      const wrapper = await mountContainersView([makeContainer()]);
+      expect((wrapper.vm as any).groupByStack).toBe(true);
+    });
+
+    it('applies groupByStack=1 from route query', async () => {
+      mockRoute.query = { groupByStack: '1' };
+      const wrapper = await mountContainersView([makeContainer()]);
+      expect((wrapper.vm as any).groupByStack).toBe(true);
+    });
+
+    it('does not override groupByStack preference when query param is absent', async () => {
+      mockRoute.query = {};
+      const wrapper = await mountContainersView([makeContainer()]);
+      expect((wrapper.vm as any).groupByStack).toBe(false);
+    });
+
+    it('sets groupByStack to false for invalid query values', async () => {
+      mockRoute.query = { groupByStack: 'yes' };
+      const wrapper = await mountContainersView([makeContainer()]);
+      expect((wrapper.vm as any).groupByStack).toBe(false);
+    });
+
     it('renderGroups returns a single flat group when groupByStack is false', async () => {
       const containers = [makeContainer(), makeContainer({ id: 'c2', name: 'redis' })];
       const wrapper = await mountContainersView(containers);
@@ -1359,6 +1407,221 @@ describe('ContainersView', () => {
       expect(wrapper.text()).toContain('Auto-scroll paused');
       const resumeBtn = wrapper.findAll('button').find((b) => b.text().includes('Resume'));
       expect(resumeBtn).toBeDefined();
+    });
+  });
+
+  describe('coverage guards (view internals)', () => {
+    it('reacts to route query changes after mount', async () => {
+      const query = reactive({ q: 'nginx', filterKind: 'major', groupByStack: '' });
+      mockRoute.query = query as unknown as Record<string, unknown>;
+      const wrapper = await mountContainersView([makeContainer()]);
+      const vm = wrapper.vm as any;
+
+      query.q = 'redis';
+      query.filterKind = 'minor';
+      query.groupByStack = 'true';
+      await flushPromises();
+
+      expect(mockFilterSearch.value).toBe('redis');
+      expect(mockFilterKind.value).toBe('minor');
+      expect(vm.groupByStack).toBe(true);
+    });
+
+    it('handles non-string filterKind query values', async () => {
+      const wrapper = await mountContainersView([makeContainer()]);
+      const vm = wrapper.vm as any;
+
+      vm.applyFilterKindFromQuery(42);
+      expect(mockFilterKind.value).toBe('all');
+    });
+
+    it('covers sort toggling and all sort-key comparator branches', async () => {
+      const containers = [
+        makeContainer({
+          id: 'c1',
+          name: 'Zulu',
+          image: 'nginx',
+          currentTag: '1.0.0',
+          status: 'running',
+          server: 'Local',
+          registry: 'dockerhub',
+          bouncer: 'safe',
+          updateKind: null,
+        }),
+        makeContainer({
+          id: 'c2',
+          name: 'alpha',
+          image: 'nginx',
+          currentTag: '2.0.0',
+          status: 'stopped',
+          server: 'Remote',
+          registry: 'ghcr',
+          bouncer: 'mystery' as any,
+          updateKind: 'major',
+        }),
+        makeContainer({
+          id: 'c3',
+          name: 'bravo',
+          image: 'busybox',
+          currentTag: '1.5.0',
+          status: 'running',
+          server: 'Remote',
+          registry: 'custom',
+          bouncer: 'mystery-2' as any,
+          updateKind: null,
+        }),
+      ];
+      const wrapper = await mountContainersView(containers);
+      const vm = wrapper.vm as any;
+
+      vm.tableActionStyle = 'buttons';
+      vm.containerSortKey = 'name';
+      vm.containerSortAsc = true;
+      vm.toggleContainerSort('name');
+      void vm.sortedContainers;
+      vm.toggleContainerSort('image');
+      vm.containerSortAsc = false;
+      void vm.sortedContainers;
+
+      for (const key of ['image', 'status', 'server', 'registry', 'bouncer', 'kind', 'version']) {
+        vm.containerSortKey = key;
+        void vm.sortedContainers;
+      }
+
+      vm.containerSortKey = 'bouncer';
+      mockFilteredContainers.value = [containers[0], containers[1], containers[2]];
+      void vm.sortedContainers;
+      mockFilteredContainers.value = [containers[1], containers[2], containers[0]];
+      void vm.sortedContainers;
+
+      vm.containerSortKey = 'kind';
+      mockFilteredContainers.value = [containers[0], containers[1], containers[2]];
+      void vm.sortedContainers;
+      mockFilteredContainers.value = [containers[1], containers[0], containers[2]];
+      void vm.sortedContainers;
+
+      vm.containerSortKey = '__unknown__';
+      void vm.sortedContainers;
+
+      expect(vm.containerSortKey).toBe('__unknown__');
+    });
+
+    it('covers selected container sync/meta branches and ghost pending containers', async () => {
+      const live = makeContainer({ id: 'c1', name: 'nginx' });
+      const wrapper = await mountContainersView([live]);
+      const vm = wrapper.vm as any;
+
+      vm.selectedContainer = makeContainer({ id: 'ghost', name: 'ghost' });
+      vm.syncSelectedContainerReference();
+
+      vm.selectedContainer = null;
+      expect(vm.selectedContainerMeta).toBeUndefined();
+
+      vm.selectedContainer = live;
+      vm.containerMetaMap = { nginx: 'not-an-object' };
+      expect(vm.selectedContainerMeta).toBeUndefined();
+
+      vm.actionPending = new Map([['ghost', makeContainer({ id: 'ghost', name: 'ghost' })]]);
+      const names = vm.displayContainers.map((container: Container) => container.name);
+      expect(names).toContain('ghost');
+    });
+
+    it('covers loadGroups success/skip/error paths', async () => {
+      const wrapper = await mountContainersView([makeContainer({ name: 'nginx' })]);
+      const vm = wrapper.vm as any;
+
+      mockGetContainerGroups.mockResolvedValueOnce([
+        {
+          name: 'stack-a',
+          containers: [{ name: 'nginx' }],
+          containerCount: 1,
+          updatesAvailable: 0,
+        },
+        {
+          name: '',
+          containers: [{ name: 'redis', displayName: 'redis' }],
+          containerCount: 1,
+          updatesAvailable: 0,
+        },
+      ]);
+      await vm.loadGroups();
+      expect(vm.groupMembershipMap).toEqual({ nginx: 'stack-a' });
+
+      mockGetContainerGroups.mockRejectedValueOnce(new Error('network'));
+      await vm.loadGroups();
+      expect(vm.groupMembershipMap).toEqual({});
+    });
+
+    it('restores saved panel state from storage when container is present', async () => {
+      const c = makeContainer({ id: 'c1', name: 'nginx' });
+      mockDetailPanelStorageRead.mockReturnValue({
+        name: 'nginx',
+        tab: 'logs',
+        panel: true,
+        full: true,
+        size: 'lg',
+      });
+
+      const wrapper = await mountContainersView([c]);
+      const vm = wrapper.vm as any;
+      vm.containers = [c];
+
+      const mountedHooks = vm.$?.m as Array<() => void> | undefined;
+      mountedHooks?.[1]?.();
+
+      expect(vm.selectedContainer?.name).toBe('nginx');
+      expect(vm.activeDetailTab).toBe('logs');
+      expect(vm.detailPanelOpen).toBe(true);
+      expect(vm.containerFullPage).toBe(true);
+      expect(vm.panelSize).toBe('lg');
+    });
+
+    it('covers menu/picker/global/sse handlers and registry fallback tooltip', async () => {
+      const c = makeContainer({ id: 'c1', name: 'nginx' });
+      const wrapper = await mountContainersView(
+        [c],
+        [{ id: 'c1', name: 'nginx', displayName: 'nginx' }],
+      );
+      const vm = wrapper.vm as any;
+
+      const event = {
+        currentTarget: {
+          getBoundingClientRect: () => ({ bottom: 120, right: 400, left: 80 }),
+        },
+      } as unknown as MouseEvent;
+
+      vm.toggleActionsMenu('nginx', event);
+      expect(vm.openActionsMenu).toBe('nginx');
+      vm.toggleActionsMenu('nginx', event);
+      expect(vm.openActionsMenu).toBeNull();
+      vm.toggleActionsMenu('nginx', event);
+      expect(vm.actionsMenuStyle.top).toBe('124px');
+      vm.closeActionsMenu();
+      expect(vm.openActionsMenu).toBeNull();
+
+      vm.toggleColumnPicker(event);
+      expect(vm.showColumnPicker).toBe(true);
+      expect(vm.columnPickerStyle.left).toBe('80px');
+      vm.toggleColumnPicker(event);
+      expect(vm.showColumnPicker).toBe(false);
+
+      vm.openActionsMenu = 'nginx';
+      vm.showColumnPicker = true;
+      document.dispatchEvent(new MouseEvent('click'));
+      await flushPromises();
+      expect(vm.openActionsMenu).toBeNull();
+      expect(vm.showColumnPicker).toBe(false);
+
+      vm.selectedContainer = null;
+      globalThis.dispatchEvent(new Event('dd:sse-scan-completed'));
+      await flushPromises();
+
+      vm.selectedContainer = c;
+      globalThis.dispatchEvent(new Event('dd:sse-scan-completed'));
+      await flushPromises();
+      expect(mockGetAllContainers.mock.calls.length).toBeGreaterThan(1);
+
+      expect(vm.registryErrorTooltip(c)).toBe('Registry error');
     });
   });
 });

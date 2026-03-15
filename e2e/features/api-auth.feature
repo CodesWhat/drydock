@@ -4,9 +4,10 @@ Feature: Drydock auth API Exposure
     When I GET /auth/strategies
     Then response code should be 200
     And response body should be valid json
-    And response body path $ should be of type array with length 1
-    And response body path $[0].type should be basic
-    And response body path $[0].name should be Login
+    And response body path $.strategies should be of type array with length 1
+    And response body path $.strategies[0].type should be basic
+    And response body path $.strategies[0].name should be Login
+    And response body path $.warnings should be of type array with length 0
 
   Scenario: Drydock must allow to login with basic auth
     When I POST to /auth/login

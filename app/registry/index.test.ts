@@ -71,6 +71,7 @@ beforeEach(async () => {
   mockGetWatcherConfigurations.mockImplementation(() => watchers);
   mockGetAuthenticationConfigurations.mockImplementation(() => authentications);
   mockGetAgentConfigurations.mockImplementation(() => agents);
+  registry.testable_registrationWarnings.length = 0;
 });
 
 afterEach(async () => {
@@ -721,6 +722,76 @@ test('registerAuthentications should register anonymous auth when confirmation i
       process.env.DD_ANONYMOUS_AUTH_CONFIRM = previousAnonymousConfirmation;
     }
   }
+});
+
+test('registerAuthentications should fallback to anonymous when all configured providers fail and confirmation is enabled', async () => {
+  const previousAnonymousConfirmation = process.env.DD_ANONYMOUS_AUTH_CONFIRM;
+  process.env.DD_ANONYMOUS_AUTH_CONFIRM = 'true';
+  const spyLog = vi.spyOn(registry.testable_log, 'warn');
+
+  try {
+    mockIsUpgrade.mockReturnValue(false);
+    authentications = {
+      basic: {
+        broken: {
+          fail: true,
+        },
+      },
+    };
+    await registry.testable_registerAuthentications();
+
+    expect(Object.keys(registry.getState().authentication)).toEqual(['anonymous.anonymous']);
+    expect(spyLog).toHaveBeenCalledWith(
+      expect.stringContaining('All configured authentication providers failed to register'),
+    );
+    expect(registry.getRegistrationWarnings()).toEqual([
+      expect.stringContaining('Some authentications failed to register'),
+    ]);
+  } finally {
+    if (previousAnonymousConfirmation === undefined) {
+      delete process.env.DD_ANONYMOUS_AUTH_CONFIRM;
+    } else {
+      process.env.DD_ANONYMOUS_AUTH_CONFIRM = previousAnonymousConfirmation;
+    }
+  }
+});
+
+test('registerAuthentications should log error when all configured providers fail and no anonymous confirmation on fresh install', async () => {
+  mockIsUpgrade.mockReturnValue(false);
+  const spyError = vi.spyOn(registry.testable_log, 'error');
+
+  authentications = {
+    basic: {
+      broken: {
+        fail: true,
+      },
+    },
+  };
+  await registry.testable_registerAuthentications();
+
+  expect(Object.keys(registry.getState().authentication)).toEqual([]);
+  expect(spyError).toHaveBeenCalledWith(
+    expect.stringContaining('Anonymous authentication fallback also failed'),
+  );
+});
+
+test('registerAuthentications should fallback to anonymous when all configured providers fail on upgrade', async () => {
+  mockIsUpgrade.mockReturnValue(true);
+  const spyLog = vi.spyOn(registry.testable_log, 'warn');
+
+  authentications = {
+    basic: {
+      broken: {
+        fail: true,
+      },
+    },
+  };
+  await registry.testable_registerAuthentications();
+
+  expect(Object.keys(registry.getState().authentication)).toEqual(['anonymous.anonymous']);
+  expect(spyLog).toHaveBeenCalledWith(
+    expect.stringContaining('All configured authentication providers failed to register'),
+  );
 });
 
 test('init should register all components', async () => {

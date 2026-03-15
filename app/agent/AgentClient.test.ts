@@ -162,6 +162,18 @@ describe('AgentClient', () => {
           }),
       ).toThrowError('Invalid agent URL protocol: httpx:');
     });
+
+    test('should warn when secret is configured over plaintext http', () => {
+      const c = new AgentClient('a', {
+        host: 'myhost',
+        port: 4000,
+        secret: 's',
+      });
+
+      expect(c.log.warn).toHaveBeenCalledWith(
+        'Agent a is configured with a secret over insecure HTTP (http://myhost:4000). Configure HTTPS (certfile/cafile) to protect X-Dd-Agent-Secret.',
+      );
+    });
   });
 
   describe('init', () => {
@@ -235,6 +247,34 @@ describe('AgentClient', () => {
       await client.processContainer(container);
       expect(event.emitContainerReport).toHaveBeenCalledWith(
         expect.objectContaining({ changed: false }),
+      );
+    });
+
+    test('should strip sensitive field from env entries before storing', async () => {
+      storeContainer.getContainer.mockReturnValue(undefined);
+      storeContainer.insertContainer.mockReturnValue({ id: 'c1' });
+      const container = {
+        id: 'c1',
+        name: 'test',
+        details: {
+          ports: [],
+          volumes: [],
+          env: [
+            { key: 'NORMAL', value: 'foo', sensitive: false },
+            { key: 'API_KEY', value: '[REDACTED]', sensitive: true },
+          ],
+        },
+      };
+      await client.processContainer(container);
+      expect(storeContainer.insertContainer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          details: expect.objectContaining({
+            env: [
+              { key: 'NORMAL', value: 'foo' },
+              { key: 'API_KEY', value: '[REDACTED]' },
+            ],
+          }),
+        }),
       );
     });
 

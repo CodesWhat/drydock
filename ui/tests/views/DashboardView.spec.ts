@@ -606,7 +606,7 @@ describe('DashboardView', () => {
       expect(rows[0].text()).toContain('has-update');
     });
 
-    it('shows snoozed and skipped policy updates in recent updates', async () => {
+    it('shows snoozed, skipped, and maturity-blocked policy updates in recent updates', async () => {
       const containers = [
         {
           ...makeContainer({
@@ -628,18 +628,33 @@ describe('DashboardView', () => {
           updatePolicyState: 'skipped',
           suppressedUpdateTag: '7.0.0',
         } as Container,
+        {
+          ...makeContainer({
+            id: 'c3',
+            name: 'maturity-blocked-postgres',
+            currentTag: '15.0.0',
+            newTag: null,
+          }),
+          updatePolicyState: 'maturity-blocked',
+          suppressedUpdateTag: '16.0.0',
+        } as Container,
       ];
 
       const wrapper = await mountDashboard(containers);
       const widget = wrapper.find('[data-widget-id="recent-updates"]');
       const rows = widget.findAll('tbody tr').filter((r) => !r.attributes('aria-hidden'));
-      expect(rows.length).toBe(2);
+      expect(rows.length).toBe(3);
       const rowTexts = rows.map((row) => row.text().toLowerCase());
       expect(
         rowTexts.some((text) => text.includes('snoozed-nginx') && text.includes('snoozed')),
       ).toBe(true);
       expect(
         rowTexts.some((text) => text.includes('skipped-redis') && text.includes('skipped')),
+      ).toBe(true);
+      expect(
+        rowTexts.some(
+          (text) => text.includes('maturity-blocked-postgres') && text.includes('maturity-blocked'),
+        ),
       ).toBe(true);
     });
 

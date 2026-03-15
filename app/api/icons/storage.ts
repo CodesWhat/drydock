@@ -94,45 +94,57 @@ let lastIconCacheEnforcementMs = 0;
 let iconCacheEnforcementPromise: Promise<void> | null = null;
 const protectedCachePathsDuringEnforcement = new Set<string>();
 
+function isIconCacheEntry(entry: IconCacheEntry | null): entry is IconCacheEntry {
+  return entry !== null;
+}
+
+async function listIconProviderDirectories(cacheBase: string) {
+  const providerEntries = await fs.readdir(cacheBase, { withFileTypes: true }).catch(() => []);
+  return providerEntries
+    .filter((providerEntry) => providerEntry.isDirectory())
+    .map((providerEntry) => path.join(cacheBase, providerEntry.name));
+}
+
+async function statIconCacheEntry(iconPath: string): Promise<IconCacheEntry | null> {
+  try {
+    const iconStats = await fs.stat(iconPath);
+    if (!iconStats.isFile()) {
+      return null;
+    }
+    return {
+      path: iconPath,
+      mtimeMs: iconStats.mtimeMs,
+      size: iconStats.size,
+    };
+  } catch {
+    // Ignore entries that disappear between directory scan and stat.
+    return null;
+  }
+}
+
+async function listProviderIconCacheEntries(providerDirectory: string) {
+  const iconEntries = await fs.readdir(providerDirectory).catch(() => []);
+  const providerCacheEntries: IconCacheEntry[] = [];
+
+  for (let index = 0; index < iconEntries.length; index += ICON_CACHE_STAT_BATCH_SIZE) {
+    const iconBatch = iconEntries.slice(index, index + ICON_CACHE_STAT_BATCH_SIZE);
+    const statResults = await Promise.all(
+      iconBatch.map((iconEntry) => statIconCacheEntry(path.join(providerDirectory, iconEntry))),
+    );
+    providerCacheEntries.push(...statResults.filter(isIconCacheEntry));
+  }
+
+  return providerCacheEntries;
+}
+
 async function listIconCacheEntries() {
   const cacheBase = getIconCacheBaseDirectory();
-  const providerEntries = await fs.readdir(cacheBase, { withFileTypes: true }).catch(() => []);
+  const providerDirectories = await listIconProviderDirectories(cacheBase);
   const cacheEntries: IconCacheEntry[] = [];
 
-  for (const providerEntry of providerEntries) {
-    if (!providerEntry.isDirectory()) {
-      continue;
-    }
-    const providerDirectory = path.join(cacheBase, providerEntry.name);
-    const iconEntries = await fs.readdir(providerDirectory).catch(() => []);
-    for (let index = 0; index < iconEntries.length; index += ICON_CACHE_STAT_BATCH_SIZE) {
-      const iconBatch = iconEntries.slice(index, index + ICON_CACHE_STAT_BATCH_SIZE);
-      const statResults = await Promise.all(
-        iconBatch.map(async (iconEntry): Promise<IconCacheEntry | null> => {
-          const iconPath = path.join(providerDirectory, iconEntry);
-          try {
-            const iconStats = await fs.stat(iconPath);
-            if (!iconStats.isFile()) {
-              return null;
-            }
-            return {
-              path: iconPath,
-              mtimeMs: iconStats.mtimeMs,
-              size: iconStats.size,
-            };
-          } catch {
-            // Ignore entries that disappear between directory scan and stat.
-            return null;
-          }
-        }),
-      );
-
-      for (const statResult of statResults) {
-        if (statResult) {
-          cacheEntries.push(statResult);
-        }
-      }
-    }
+  for (const providerDirectory of providerDirectories) {
+    const providerCacheEntries = await listProviderIconCacheEntries(providerDirectory);
+    cacheEntries.push(...providerCacheEntries);
   }
 
   return cacheEntries;

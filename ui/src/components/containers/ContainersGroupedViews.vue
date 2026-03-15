@@ -36,6 +36,7 @@ const {
   displayContainers,
   actionsMenuStyle,
   updateKindColor,
+  maturityColor,
   hasRegistryError,
   registryErrorTooltip,
   containerPolicyTooltip,
@@ -49,6 +50,16 @@ const {
   filterSearch,
   clearFilters,
 } = useContainersViewTemplateContext();
+
+function updateMaturityLabel(maturity: 'fresh' | 'settled' | null): 'NEW' | 'MATURE' {
+  return maturity === 'fresh' ? 'NEW' : 'MATURE';
+}
+
+function updateMaturityFallbackTooltip(
+  maturity: 'fresh' | 'settled' | null,
+): 'New update' | 'Mature update' {
+  return maturity === 'fresh' ? 'New update' : 'Mature update';
+}
 </script>
 
 <template>
@@ -76,7 +87,7 @@ const {
           </span>
           <button
             v-if="group.updatableCount > 0 || !containerActionsEnabled"
-            class="ml-auto inline-flex items-center gap-1 px-2 py-1 dd-rounded border text-[0.625rem] font-semibold transition-colors"
+            class="ml-auto inline-flex items-center justify-center px-2 py-1 dd-rounded border text-[0.625rem] font-semibold transition-colors"
             :class="!containerActionsEnabled || groupUpdateInProgress.has(group.key) || actionInProgress
               ? 'dd-text-muted cursor-not-allowed opacity-60'
               : 'dd-text hover:dd-bg-elevated'"
@@ -86,8 +97,9 @@ const {
             <AppIcon
               :name="!containerActionsEnabled ? 'lock' : groupUpdateInProgress.has(group.key) ? 'spinner' : 'cloud-download'"
               :size="11"
+              class="mr-1"
               :class="!containerActionsEnabled ? '' : groupUpdateInProgress.has(group.key) ? 'dd-spin' : ''" />
-            <span>{{ containerActionsEnabled ? 'Update all' : 'Actions disabled' }}</span>
+            {{ containerActionsEnabled ? 'Update all' : 'Actions disabled' }}
           </button>
         </div>
 
@@ -142,6 +154,12 @@ const {
                       v-tooltip.top="tt(c.updateKind)">
                   <AppIcon :name="c.updateKind === 'major' ? 'chevrons-up' : c.updateKind === 'minor' ? 'chevron-up' : c.updateKind === 'patch' ? 'hashtag' : 'fingerprint'" :size="12" />
                 </span>
+                <span v-if="c.updateMaturity" class="badge px-1.5 py-0 text-[0.5625rem] inline-flex items-center gap-1"
+                      :style="{ backgroundColor: maturityColor(c.updateMaturity).bg, color: maturityColor(c.updateMaturity).text }"
+                      v-tooltip.top="tt(c.updateMaturityTooltip ?? updateMaturityFallbackTooltip(c.updateMaturity))">
+                  <AppIcon :name="c.updateMaturity === 'fresh' ? 'flame' : 'clock'" :size="12" />
+                  <span class="uppercase font-bold tracking-wide leading-none">{{ updateMaturityLabel(c.updateMaturity) }}</span>
+                </span>
                 <span v-if="c.bouncer === 'blocked'" class="badge px-1.5 py-0 text-[0.5625rem]"
                       style="background: var(--dd-danger-muted); color: var(--dd-danger);"
                       v-tooltip.top="tt('Blocked')">
@@ -172,6 +190,13 @@ const {
                       v-tooltip.top="tt(containerPolicyTooltip(c.name, 'skipped'))">
                   <AppIcon name="skip-forward" :size="12" />
                 </span>
+                <span v-if="getContainerListPolicyState(c.name).maturityBlocked"
+                      class="badge px-1.5 py-0 text-[0.5625rem]"
+                      style="background: var(--dd-primary-muted); color: var(--dd-primary);"
+                      aria-label="Maturity-blocked updates"
+                      v-tooltip.top="tt(containerPolicyTooltip(c.name, 'maturity'))">
+                  <AppIcon name="clock" :size="12" />
+                </span>
                 <span class="badge px-1.5 py-0 text-[0.5625rem]"
                       :style="{
                         backgroundColor: c.status === 'running' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
@@ -197,7 +222,7 @@ const {
           </div>
           <div v-else class="text-center">
             <span class="text-[0.6875rem] dd-text-secondary truncate block max-w-[140px] mx-auto" v-tooltip.top="c.currentTag">{{ c.currentTag }}</span>
-            <div v-if="getContainerListPolicyState(c.name).snoozed || getContainerListPolicyState(c.name).skipped"
+            <div v-if="getContainerListPolicyState(c.name).snoozed || getContainerListPolicyState(c.name).skipped || getContainerListPolicyState(c.name).maturityBlocked"
                  class="mt-1 inline-flex items-center justify-center gap-1">
               <span v-if="getContainerListPolicyState(c.name).snoozed"
                     class="inline-flex items-center justify-center"
@@ -213,6 +238,13 @@ const {
                     v-tooltip.top="tt(containerPolicyTooltip(c.name, 'skipped'))">
                 <AppIcon name="skip-forward" :size="11" />
               </span>
+              <span v-if="getContainerListPolicyState(c.name).maturityBlocked"
+                    class="inline-flex items-center justify-center"
+                    style="color: var(--dd-primary);"
+                    aria-label="Maturity-blocked updates"
+                    v-tooltip.top="tt(containerPolicyTooltip(c.name, 'maturity'))">
+                <AppIcon name="clock" :size="11" />
+              </span>
             </div>
             <div
               v-if="c.noUpdateReason"
@@ -227,11 +259,19 @@ const {
         </template>
         <!-- Kind badge -->
         <template #cell-kind="{ row: c }">
+          <div class="inline-flex items-center gap-1">
           <span v-if="c.updateKind" class="badge text-[0.5625rem] uppercase font-bold"
                 :style="{ backgroundColor: updateKindColor(c.updateKind).bg, color: updateKindColor(c.updateKind).text }">
             {{ c.updateKind }}
           </span>
           <span v-else class="text-[0.625rem] dd-text-muted">&mdash;</span>
+          <span v-if="c.updateMaturity" class="badge px-1.5 py-0 text-[0.5625rem] inline-flex items-center gap-1"
+                :style="{ backgroundColor: maturityColor(c.updateMaturity).bg, color: maturityColor(c.updateMaturity).text }"
+                v-tooltip.top="tt(c.updateMaturityTooltip ?? updateMaturityFallbackTooltip(c.updateMaturity))">
+            <AppIcon :name="c.updateMaturity === 'fresh' ? 'flame' : 'clock'" :size="11" />
+            <span class="uppercase font-bold tracking-wide leading-none">{{ updateMaturityLabel(c.updateMaturity) }}</span>
+          </span>
+          </div>
         </template>
         <!-- Status -->
         <template #cell-status="{ row: c }">
@@ -509,6 +549,13 @@ const {
                     v-tooltip.top="tt(containerPolicyTooltip(c.name, 'skipped'))">
                 <AppIcon name="skip-forward" :size="12" />
               </span>
+              <span v-if="getContainerListPolicyState(c.name).maturityBlocked"
+                    class="inline-flex items-center justify-center"
+                    style="color: var(--dd-primary);"
+                    aria-label="Maturity-blocked updates"
+                    v-tooltip.top="tt(containerPolicyTooltip(c.name, 'maturity'))">
+                <AppIcon name="clock" :size="12" />
+              </span>
             </div>
           </div>
 
@@ -526,6 +573,12 @@ const {
                       v-tooltip.top="c.newTag">
                   {{ c.newTag }}
                 </span>
+                <span v-if="c.updateMaturity" class="badge px-1.5 py-0 text-[0.5625rem] ml-1 shrink-0 inline-flex items-center gap-1"
+                      :style="{ backgroundColor: maturityColor(c.updateMaturity).bg, color: maturityColor(c.updateMaturity).text }"
+                      v-tooltip.top="tt(c.updateMaturityTooltip ?? updateMaturityFallbackTooltip(c.updateMaturity))">
+                  <AppIcon :name="c.updateMaturity === 'fresh' ? 'flame' : 'clock'" :size="11" />
+                  <span class="uppercase font-bold tracking-wide leading-none">{{ updateMaturityLabel(c.updateMaturity) }}</span>
+                </span>
               </template>
               <template v-else>
                 <span
@@ -537,7 +590,7 @@ const {
                   <AppIcon name="warning" :size="11" class="shrink-0" />
                   <span class="truncate">{{ c.noUpdateReason }}</span>
                 </span>
-                <template v-else-if="getContainerListPolicyState(c.name).snoozed || getContainerListPolicyState(c.name).skipped">
+                <template v-else-if="getContainerListPolicyState(c.name).snoozed || getContainerListPolicyState(c.name).skipped || getContainerListPolicyState(c.name).maturityBlocked">
                   <span v-if="getContainerListPolicyState(c.name).snoozed"
                         class="inline-flex items-center justify-center ml-1"
                         style="color: var(--dd-info);"
@@ -551,6 +604,13 @@ const {
                         aria-label="Skipped updates"
                         v-tooltip.top="tt(containerPolicyTooltip(c.name, 'skipped'))">
                     <AppIcon name="skip-forward" :size="13" />
+                  </span>
+                  <span v-if="getContainerListPolicyState(c.name).maturityBlocked"
+                        class="inline-flex items-center justify-center"
+                        style="color: var(--dd-primary);"
+                        aria-label="Maturity-blocked updates"
+                        v-tooltip.top="tt(containerPolicyTooltip(c.name, 'maturity'))">
+                    <AppIcon name="clock" :size="13" />
                   </span>
                 </template>
                 <AppIcon v-else name="check" :size="14" class="ml-1" style="color: var(--dd-success);" />
@@ -655,6 +715,12 @@ const {
                   :style="{ backgroundColor: updateKindColor(c.updateKind).bg, color: updateKindColor(c.updateKind).text }">
               {{ c.updateKind }}
             </span>
+            <span v-if="c.updateMaturity" class="badge px-1.5 py-0 text-[0.5625rem] inline-flex items-center gap-1"
+                  :style="{ backgroundColor: maturityColor(c.updateMaturity).bg, color: maturityColor(c.updateMaturity).text }"
+                  v-tooltip.top="tt(c.updateMaturityTooltip ?? updateMaturityFallbackTooltip(c.updateMaturity))">
+              <AppIcon :name="c.updateMaturity === 'fresh' ? 'flame' : 'clock'" :size="11" />
+              <span class="uppercase font-bold tracking-wide leading-none">{{ updateMaturityLabel(c.updateMaturity) }}</span>
+            </span>
             <!-- Status: icon on mobile, badge on desktop -->
             <AppIcon :name="c.status === 'running' ? 'play' : 'stop'" :size="13" class="shrink-0 md:!hidden"
                      :style="{ color: c.status === 'running' ? 'var(--dd-success)' : 'var(--dd-danger)' }" />
@@ -685,6 +751,13 @@ const {
                   aria-label="Skipped updates"
                   v-tooltip.top="tt(containerPolicyTooltip(c.name, 'skipped'))">
               <AppIcon name="skip-forward" :size="12" />
+            </span>
+            <span v-if="getContainerListPolicyState(c.name).maturityBlocked"
+                  class="inline-flex items-center justify-center"
+                  style="color: var(--dd-primary);"
+                  aria-label="Maturity-blocked updates"
+                  v-tooltip.top="tt(containerPolicyTooltip(c.name, 'maturity'))">
+              <AppIcon name="clock" :size="12" />
             </span>
             <!-- Bouncer: icon in badge -->
             <span v-if="c.bouncer === 'blocked'" class="badge px-1.5 py-0 text-[0.5625rem]"

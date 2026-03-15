@@ -224,7 +224,7 @@ jobs:
             --clobber
 
       - name: Attest build provenance
-        if: steps.digest.outputs.value
+        if: always() && steps.digest.outputs.value
         uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32  # v4.1.0
         with:
           subject-name: ghcr.io/${{ github.repository }}

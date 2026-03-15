@@ -11,6 +11,16 @@ const COMPOSE_DIRECTORY_FILE_CANDIDATES = new Set([
   'docker-compose.yaml',
   'docker-compose.yml',
 ]);
+const AMBIGUOUS_COMPOSE_PARENT_SEGMENTS = new Set([
+  'app',
+  'apps',
+  'compose',
+  'docker',
+  'service',
+  'services',
+  'stack',
+  'stacks',
+]);
 
 interface FindDockerTriggerForContainerOptions {
   triggerTypes?: string[];
@@ -81,10 +91,118 @@ function doesComposeFileMatchConfiguredFile(
     ? normalizedConfiguredComposeFilePath
     : `${normalizedConfiguredComposeFilePath}${path.sep}`;
   if (!normalizedComposeFilePath.startsWith(configuredDirectoryPrefix)) {
-    return false;
+    return doesComposeFilePathSuffixMatchConfiguredPath(
+      normalizedComposeFilePath,
+      normalizedConfiguredComposeFilePath,
+    );
   }
 
   return COMPOSE_DIRECTORY_FILE_CANDIDATES.has(path.basename(normalizedComposeFilePath));
+}
+
+function splitPathSegments(composeFilePath: string): string[] {
+  return path
+    .normalize(composeFilePath)
+    .split(path.sep)
+    .filter((segment) => segment.length > 0 && segment !== '.');
+}
+
+function countCommonPathSuffixSegments(leftSegments: string[], rightSegments: string[]): number {
+  const maxComparableSegments = Math.min(leftSegments.length, rightSegments.length);
+  let commonSuffixSegmentCount = 0;
+
+  while (commonSuffixSegmentCount < maxComparableSegments) {
+    const leftSegment = leftSegments[leftSegments.length - commonSuffixSegmentCount - 1];
+    const rightSegment = rightSegments[rightSegments.length - commonSuffixSegmentCount - 1];
+    if (leftSegment !== rightSegment) {
+      break;
+    }
+    commonSuffixSegmentCount += 1;
+  }
+
+  return commonSuffixSegmentCount;
+}
+
+function hasAmbiguousSingleDirectorySuffixMatch(
+  leftSegments: string[],
+  rightSegments: string[],
+  commonSuffixSegmentCount: number,
+): boolean {
+  if (commonSuffixSegmentCount !== 2) {
+    return false;
+  }
+
+  const parentSegment = leftSegments[leftSegments.length - 2];
+  return (
+    parentSegment === rightSegments[rightSegments.length - 2] &&
+    AMBIGUOUS_COMPOSE_PARENT_SEGMENTS.has(parentSegment.toLowerCase())
+  );
+}
+
+function hasAmbiguousSingleSegmentDirectoryMatch(
+  leftSegments: string[],
+  rightSegments: string[],
+  commonSuffixSegmentCount: number,
+): boolean {
+  if (commonSuffixSegmentCount !== 1) {
+    return false;
+  }
+
+  const lastSegment = leftSegments[leftSegments.length - 1];
+  return (
+    lastSegment === rightSegments[rightSegments.length - 1] &&
+    AMBIGUOUS_COMPOSE_PARENT_SEGMENTS.has(lastSegment.toLowerCase())
+  );
+}
+
+function doesComposeFilePathSuffixMatchConfiguredPath(
+  composeFilePath: string,
+  configuredComposeFilePath: string,
+): boolean {
+  const composeFileSegments = splitPathSegments(composeFilePath);
+  const configuredPathSegments = splitPathSegments(configuredComposeFilePath);
+  const composeFileName = path.basename(composeFilePath);
+  const configuredPathFileName = path.basename(configuredComposeFilePath);
+  const hasGenericComposeFileName =
+    COMPOSE_DIRECTORY_FILE_CANDIDATES.has(composeFileName) ||
+    COMPOSE_DIRECTORY_FILE_CANDIDATES.has(configuredPathFileName);
+
+  const composeFileCommonSuffixSegments = countCommonPathSuffixSegments(
+    composeFileSegments,
+    configuredPathSegments,
+  );
+  const requiredFileSuffixSegments = hasGenericComposeFileName ? 2 : 1;
+  if (
+    composeFileCommonSuffixSegments >= requiredFileSuffixSegments &&
+    !hasAmbiguousSingleDirectorySuffixMatch(
+      composeFileSegments,
+      configuredPathSegments,
+      composeFileCommonSuffixSegments,
+    )
+  ) {
+    return true;
+  }
+
+  if (!COMPOSE_DIRECTORY_FILE_CANDIDATES.has(composeFileName)) {
+    return false;
+  }
+
+  const composeDirectorySegments = splitPathSegments(path.dirname(composeFilePath));
+  const composeDirectoryCommonSuffixSegments = countCommonPathSuffixSegments(
+    composeDirectorySegments,
+    configuredPathSegments,
+  );
+  if (
+    composeDirectoryCommonSuffixSegments >= 1 &&
+    !hasAmbiguousSingleSegmentDirectoryMatch(
+      composeDirectorySegments,
+      configuredPathSegments,
+      composeDirectoryCommonSuffixSegments,
+    )
+  ) {
+    return true;
+  }
+  return false;
 }
 
 function isTriggerAgentCompatible(

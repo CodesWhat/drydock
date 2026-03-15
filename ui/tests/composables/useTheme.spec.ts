@@ -6,8 +6,6 @@ describe('useTheme', () => {
     vi.resetModules();
     vi.unstubAllGlobals();
     document.documentElement.className = '';
-    document.documentElement.style.removeProperty('--x');
-    document.documentElement.style.removeProperty('--y');
   });
 
   async function loadUseTheme() {
@@ -158,8 +156,6 @@ describe('useTheme', () => {
       );
 
       expect(startViewTransition).toHaveBeenCalledOnce();
-      expect(document.documentElement.style.getPropertyValue('--x')).toBe('40px');
-      expect(document.documentElement.style.getPropertyValue('--y')).toBe('80px');
       expect(document.documentElement.classList.contains('theme-catppuccin')).toBe(true);
       expect(document.documentElement.classList.contains('dd-transitioning')).toBe(false);
     });

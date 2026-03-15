@@ -4,6 +4,8 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
+    // Coverage writes can race with clean-up; keep file execution serial.
+    fileParallelism: false,
     exclude: ['**/node_modules/**', '**/dist/**'],
     server: {
       deps: {
@@ -11,7 +13,9 @@ export default defineConfig({
       },
     },
     coverage: {
-      provider: 'v8',
+      // Use v8 coverage with a small wrapper that avoids a Vitest temp-dir race.
+      provider: 'custom',
+      customProviderModule: './vitest.coverage-provider.ts',
       reporter: ['text', 'lcov', 'html'],
       include: ['**/*.{js,ts}'],
       exclude: [
@@ -22,6 +26,7 @@ export default defineConfig({
         '**/*.d.ts',
         '**/*.typecheck.ts',
         'vitest.config.ts',
+        'vitest.coverage-provider.ts',
       ],
       thresholds: {
         lines: 100,
@@ -29,6 +34,6 @@ export default defineConfig({
         functions: 100,
         statements: 100,
       },
-    },
+    } as any,
   },
 });

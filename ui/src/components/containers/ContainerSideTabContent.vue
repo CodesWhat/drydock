@@ -100,6 +100,13 @@ const {
   selectedSkipDigests,
   clearSkipsSelected,
   selectedUpdatePolicy,
+  selectedHasMaturityPolicy,
+  selectedMaturityMode,
+  selectedMaturityMinAgeDays,
+  maturityModeInput,
+  maturityMinAgeDaysInput,
+  setMaturityPolicySelected,
+  clearMaturityPolicySelected,
   clearPolicySelected,
   policyMessage,
   policyError,
@@ -685,6 +692,40 @@ const {
                   </button>
                 </div>
               </div>
+              <!-- Maturity group -->
+              <div>
+                <div class="text-[0.5625rem] uppercase tracking-wider mb-1.5 dd-text-muted">Maturity</div>
+                <div class="flex flex-wrap gap-1.5 items-center">
+                  <select
+                    v-model="maturityModeInput"
+                    class="px-2 py-1.5 dd-rounded text-[0.625rem] outline-none dd-bg dd-text"
+                    :disabled="policyInProgress !== null"
+                  >
+                    <option value="all">Allow New + Mature</option>
+                    <option value="mature">Mature Only</option>
+                  </select>
+                  <input
+                    v-model.number="maturityMinAgeDaysInput"
+                    type="number"
+                    min="1"
+                    max="365"
+                    class="w-[92px] px-2 py-1.5 dd-rounded text-[0.625rem] outline-none dd-bg dd-text"
+                    :disabled="policyInProgress !== null"
+                  />
+                  <button class="px-2.5 py-1.5 dd-rounded text-[0.625rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
+                          :style="{}"
+                          :disabled="policyInProgress !== null"
+                          @click="setMaturityPolicySelected(maturityModeInput)">
+                    Apply Maturity
+                  </button>
+                  <button class="px-2.5 py-1.5 dd-rounded text-[0.625rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
+                          :style="{}"
+                          :disabled="!selectedHasMaturityPolicy || policyInProgress !== null"
+                          @click="clearMaturityPolicySelected">
+                    Clear Maturity
+                  </button>
+                </div>
+              </div>
               <!-- Reset group -->
               <div>
                 <div class="text-[0.5625rem] uppercase tracking-wider mb-1.5 dd-text-muted">Reset</div>
@@ -707,6 +748,12 @@ const {
                 <div v-if="selectedSnoozeUntil">
                   Snoozed until:
                   <span class="dd-text">{{ formatTimestamp(selectedSnoozeUntil) }}</span>
+                </div>
+                <div v-if="selectedHasMaturityPolicy">
+                  Maturity mode:
+                  <span class="dd-text">
+                    {{ selectedMaturityMode === 'mature' ? `Mature only (${selectedMaturityMinAgeDays}d minimum)` : 'Allow all updates' }}
+                  </span>
                 </div>
                 <div v-if="selectedSkipTags.length > 0">
                   Skipped tags:
@@ -738,7 +785,7 @@ const {
                     </span>
                   </div>
                 </div>
-                <div v-if="!selectedSnoozeUntil && selectedSkipTags.length === 0 && selectedSkipDigests.length === 0"
+                <div v-if="!selectedSnoozeUntil && selectedSkipTags.length === 0 && selectedSkipDigests.length === 0 && !selectedHasMaturityPolicy"
                      class="italic">
                   No active update policy.
                 </div>

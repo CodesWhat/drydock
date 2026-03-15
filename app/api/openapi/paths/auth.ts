@@ -22,7 +22,12 @@ export const authPaths = {
       security: [],
       responses: {
         200: jsonResponse('Authentication strategies', {
-          $ref: '#/components/schemas/GenericArray',
+          type: 'object',
+          properties: {
+            strategies: { type: 'array', items: { type: 'object' } },
+            warnings: { type: 'array', items: { type: 'string' } },
+          },
+          required: ['strategies', 'warnings'],
         }),
       },
     },

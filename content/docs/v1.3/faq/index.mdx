@@ -1,25 +1,10 @@
 ---
 title: "FAQ"
-description: "If at startup you face an issue looking like"
+description: "Frequently asked questions and common troubleshooting tips for drydock v1.3."
 ---
 
-## Core dumped on Raspberry PI
+import { Callout } from 'fumadocs-ui/components/callout';
 
-If at startup you face an issue looking like
-
-```text
-#
-# Fatal error in , line 0
-# unreachable code
-#
-#
-#
-#FailureMessage Object: 0x7eace25c
-```
-
-Add the `--security-opt seccomp=unconfined` option to your docker command
-Example
-
-```bash
-docker run ... --security-opt seccomp=unconfined codeswhat/drydock
-```
+<Callout type="info">
+The v1.3 FAQ has been consolidated into the [current FAQ](/docs/faq). Please refer to the latest version for up-to-date troubleshooting guidance.
+</Callout>

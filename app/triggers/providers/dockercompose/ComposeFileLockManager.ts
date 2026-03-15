@@ -28,6 +28,98 @@ export class ComposeFileLockManager {
     this.getLog?.()?.warn?.(message);
   }
 
+  private resolveComposeFilePath(file: string) {
+    return resolveConfiguredPath(file, {
+      label: 'Compose file path',
+    });
+  }
+
+  private queueComposeFileLockOperation(filePath: string) {
+    const previouslyQueuedLockOperation =
+      ComposeFileLockManager.composeFileLockQueue.get(filePath) || Promise.resolve();
+    let releaseQueuedLockOperation!: () => void;
+    const queuedLockOperation = new Promise<void>((resolve) => {
+      releaseQueuedLockOperation = resolve;
+    });
+    ComposeFileLockManager.composeFileLockQueue.set(filePath, queuedLockOperation);
+    return {
+      previouslyQueuedLockOperation,
+      queuedLockOperation,
+      releaseQueuedLockOperation,
+    };
+  }
+
+  private async waitForQueuedComposeFileLock(previouslyQueuedLockOperation: Promise<void>) {
+    try {
+      await previouslyQueuedLockOperation;
+    } catch {
+      // Ignore queue failures from previous operations and proceed with lock acquisition.
+    }
+  }
+
+  private finalizeQueuedComposeFileLockOperation(
+    filePath: string,
+    queuedLockOperation: Promise<void>,
+    releaseQueuedLockOperation: () => void,
+  ) {
+    releaseQueuedLockOperation();
+    if (ComposeFileLockManager.composeFileLockQueue.get(filePath) === queuedLockOperation) {
+      ComposeFileLockManager.composeFileLockQueue.delete(filePath);
+    }
+  }
+
+  private async tryCreateComposeFileLock(lockFilePath: string) {
+    await fs.writeFile(lockFilePath, `${process.pid}:${Date.now()}\n`, { flag: 'wx' });
+  }
+
+  private async acquireComposeFileLock(filePath: string) {
+    const lockFilePath = `${filePath}${COMPOSE_FILE_LOCK_SUFFIX}`;
+    const lockWaitDeadline = Date.now() + COMPOSE_FILE_LOCK_MAX_WAIT_MS;
+    while (true) {
+      try {
+        await this.tryCreateComposeFileLock(lockFilePath);
+        this._composeFileLocksHeld.add(filePath);
+        return lockFilePath;
+      } catch (e: any) {
+        if (e?.code !== 'EEXIST') {
+          throw e;
+        }
+        const staleLockReleased = await this.maybeReleaseStaleComposeFileLock(lockFilePath);
+        if (staleLockReleased) {
+          continue;
+        }
+        const remainingWaitMs = lockWaitDeadline - Date.now();
+        if (remainingWaitMs <= 0) {
+          throw new Error(`Timed out waiting for compose file lock ${lockFilePath}`);
+        }
+        await this.waitForComposeFileLockChange(lockFilePath, remainingWaitMs);
+      }
+    }
+  }
+
+  private async releaseComposeFileLock(filePath: string, lockFilePath: string) {
+    this._composeFileLocksHeld.delete(filePath);
+    try {
+      await fs.unlink(lockFilePath);
+    } catch (e: any) {
+      if (e?.code !== 'ENOENT') {
+        this.warn(`Could not remove compose file lock ${lockFilePath} (${e.message})`);
+      }
+    }
+  }
+
+  private async runOperationWithComposeFileLock(
+    filePath: string,
+    operation: (resolvedFilePath: string) => Promise<unknown>,
+  ) {
+    const lockFilePath = await this.acquireComposeFileLock(filePath);
+    try {
+      return await operation(filePath);
+    } finally {
+      await this.releaseComposeFileLock(filePath, lockFilePath);
+    }
+  }
+
   async maybeReleaseStaleComposeFileLock(lockFilePath: string) {
     try {
       const lockFileStats = await fs.stat(lockFilePath);
@@ -91,68 +183,22 @@ export class ComposeFileLockManager {
     file: string,
     operation: (resolvedFilePath: string) => Promise<unknown>,
   ): Promise<unknown> {
-    const filePath = resolveConfiguredPath(file, {
-      label: 'Compose file path',
-    });
+    const filePath = this.resolveComposeFilePath(file);
     if (this._composeFileLocksHeld.has(filePath)) {
       return operation(filePath);
     }
 
-    const previouslyQueuedLockOperation =
-      ComposeFileLockManager.composeFileLockQueue.get(filePath) || Promise.resolve();
-    let releaseQueuedLockOperation!: () => void;
-    const queuedLockOperation = new Promise<void>((resolve) => {
-      releaseQueuedLockOperation = resolve;
-    });
-    ComposeFileLockManager.composeFileLockQueue.set(filePath, queuedLockOperation);
-
+    const { previouslyQueuedLockOperation, queuedLockOperation, releaseQueuedLockOperation } =
+      this.queueComposeFileLockOperation(filePath);
     try {
-      await previouslyQueuedLockOperation;
-    } catch {
-      // Ignore queue failures from previous operations and proceed with lock acquisition.
-    }
-
-    try {
-      const lockFilePath = `${filePath}${COMPOSE_FILE_LOCK_SUFFIX}`;
-      const lockWaitDeadline = Date.now() + COMPOSE_FILE_LOCK_MAX_WAIT_MS;
-      while (true) {
-        try {
-          await fs.writeFile(lockFilePath, `${process.pid}:${Date.now()}\n`, { flag: 'wx' });
-          this._composeFileLocksHeld.add(filePath);
-          break;
-        } catch (e: any) {
-          if (e?.code !== 'EEXIST') {
-            throw e;
-          }
-          const staleLockReleased = await this.maybeReleaseStaleComposeFileLock(lockFilePath);
-          if (staleLockReleased) {
-            continue;
-          }
-          const remainingWaitMs = lockWaitDeadline - Date.now();
-          if (remainingWaitMs <= 0) {
-            throw new Error(`Timed out waiting for compose file lock ${lockFilePath}`);
-          }
-          await this.waitForComposeFileLockChange(lockFilePath, remainingWaitMs);
-        }
-      }
-
-      try {
-        return await operation(filePath);
-      } finally {
-        this._composeFileLocksHeld.delete(filePath);
-        try {
-          await fs.unlink(lockFilePath);
-        } catch (e: any) {
-          if (e?.code !== 'ENOENT') {
-            this.warn(`Could not remove compose file lock ${lockFilePath} (${e.message})`);
-          }
-        }
-      }
+      await this.waitForQueuedComposeFileLock(previouslyQueuedLockOperation);
+      return await this.runOperationWithComposeFileLock(filePath, operation);
     } finally {
-      releaseQueuedLockOperation();
-      if (ComposeFileLockManager.composeFileLockQueue.get(filePath) === queuedLockOperation) {
-        ComposeFileLockManager.composeFileLockQueue.delete(filePath);
-      }
+      this.finalizeQueuedComposeFileLockOperation(
+        filePath,
+        queuedLockOperation,
+        releaseQueuedLockOperation,
+      );
     }
   }
 }

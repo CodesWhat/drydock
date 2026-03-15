@@ -252,6 +252,7 @@ test('getServerConfiguration should return configured api (new vars)', async () 
     session: {},
     tls: {},
     trustproxy: false,
+    ui: {},
   });
 });
 
@@ -274,7 +275,17 @@ test('getServerConfiguration should allow disabling metrics auth', async () => {
     session: {},
     tls: {},
     trustproxy: false,
+    ui: {},
   });
+});
+
+test('getServerConfiguration should allow disabling the UI router', async () => {
+  configuration.ddEnvVars.DD_SERVER_UI_ENABLED = 'false';
+  const config = configuration.getServerConfiguration();
+  expect(config.ui).toStrictEqual({
+    enabled: false,
+  });
+  delete configuration.ddEnvVars.DD_SERVER_UI_ENABLED;
 });
 
 test('getServerConfiguration should allow tuning compression', async () => {

@@ -153,9 +153,10 @@ function callGetContainer(
 function callGetContainerUpdateOperations(
   handlers: ReturnType<typeof createCrudHandlers>,
   id: string | string[] | undefined = 'c1',
+  query: Record<string, unknown> = {},
 ) {
   const res = createMockResponse();
-  handlers.getContainerUpdateOperations({ params: { id } } as any, res as any);
+  handlers.getContainerUpdateOperations({ params: { id }, query } as any, res as any);
   return res;
 }
 
@@ -715,6 +716,36 @@ describe('api/container/crud', () => {
       });
     });
 
+    test('uses lightweight container count for security overview totals', () => {
+      const harness = createHarness({
+        containers: [
+          createContainer({
+            id: 'c1',
+            name: 'nginx',
+            displayName: 'nginx',
+            security: {
+              scan: {
+                scannedAt: '2026-02-01T10:00:00.000Z',
+                vulnerabilities: [],
+              },
+            },
+          }),
+        ],
+      });
+      harness.deps.getContainerCountFromStore.mockReturnValue(42);
+
+      const res = callGetContainerSecurityVulnerabilities(harness.handlers);
+
+      expect(harness.deps.getContainerCountFromStore).toHaveBeenCalledWith({});
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          totalContainers: 42,
+          scannedContainers: 1,
+        }),
+      );
+    });
+
     test('supports limit/offset pagination for aggregated vulnerabilities', () => {
       const harness = createHarness({
         containers: [
@@ -1186,6 +1217,23 @@ describe('api/container/crud', () => {
       );
     });
 
+    test('returns empty overview when container count is zero', () => {
+      const harness = createHarness({ containers: [] });
+      harness.deps.getContainerCountFromStore.mockReturnValue(0);
+
+      const res = callGetContainerSecurityVulnerabilities(harness.handlers);
+      const payload = res.json.mock.calls[0][0];
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(payload).toMatchObject({
+        totalContainers: 0,
+        scannedContainers: 0,
+        total: 0,
+        images: [],
+      });
+      expect(harness.deps.getContainersFromStore).not.toHaveBeenCalled();
+    });
+
     test('returns redacted container when id exists', () => {
       const redacted = { id: 'c1', details: { env: [{ key: 'TOKEN', value: '[REDACTED]' }] } };
       const harness = createHarness({
@@ -1230,7 +1278,66 @@ describe('api/container/crud', () => {
       expect(res.json).toHaveBeenCalledWith({
         data: [{ id: 'op-1' }, { id: 'op-2' }],
         total: 2,
+        limit: 0,
+        offset: 0,
+        hasMore: false,
       });
+    });
+
+    test('applies limit/offset pagination to update-operation history', () => {
+      const harness = createHarness({
+        containers: [createContainer({ id: 'c1', name: 'edge-api' })],
+      });
+      harness.deps.updateOperationStore.getOperationsByContainerName.mockReturnValue([
+        { id: 'op-1' },
+        { id: 'op-2' },
+        { id: 'op-3' },
+      ]);
+
+      const res = callGetContainerUpdateOperations(harness.handlers, 'c1', {
+        limit: '1',
+        offset: '1',
+      });
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        data: [{ id: 'op-2' }],
+        total: 3,
+        limit: 1,
+        offset: 1,
+        hasMore: true,
+        _links: {
+          self: '/api/containers/c1/update-operations?limit=1&offset=1',
+          next: '/api/containers/c1/update-operations?limit=1&offset=2',
+        },
+      });
+    });
+
+    test('applies offset-only pagination when limit is zero for update-operations', () => {
+      const harness = createHarness({
+        containers: [createContainer({ id: 'c1', name: 'edge-api' })],
+      });
+      harness.deps.updateOperationStore.getOperationsByContainerName.mockReturnValue([
+        { id: 'op-1' },
+        { id: 'op-2' },
+        { id: 'op-3' },
+      ]);
+
+      const res = callGetContainerUpdateOperations(harness.handlers, 'c1', {
+        limit: '0',
+        offset: '1',
+      });
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: [{ id: 'op-2' }, { id: 'op-3' }],
+          total: 3,
+          limit: 0,
+          offset: 1,
+          hasMore: false,
+        }),
+      );
     });
 
     test('returns 404 for update-operation lookup when container is missing', () => {
