@@ -103,6 +103,8 @@ When enabled, candidate images are verified with [cosign](https://docs.sigstore.
 
 <Callout type="info">When `DD_SECURITY_COSIGN_KEY` is empty, cosign runs in keyless mode using Sigstore's public transparency log. Set `DD_SECURITY_COSIGN_IDENTITY` and `DD_SECURITY_COSIGN_ISSUER` to constrain keyless verification to a specific signer.</Callout>
 
+<Callout type="info">The examples below use a direct Docker socket mount for brevity. For production deployments, use a [socket proxy](/docs/configuration/watchers#option-1-socket-proxy-recommended) instead — all security features work identically with proxy-based connections.</Callout>
+
 ### Key-based verification
 
 ```yaml
