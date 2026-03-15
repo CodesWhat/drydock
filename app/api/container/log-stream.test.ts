@@ -1,4 +1,9 @@
 import { EventEmitter } from 'node:events';
+import { WebSocketServer } from 'ws';
+import * as configuration from '../../configuration/index.js';
+import * as registry from '../../registry/index.js';
+import * as storeContainer from '../../store/container.js';
+import * as rateLimitKey from '../rate-limit-key.js';
 import {
   attachContainerLogStreamWebSocketServer,
   createContainerLogStreamGateway,
@@ -6,8 +11,6 @@ import {
   createDockerLogMessageDecoder,
   parseContainerLogStreamQuery,
 } from './log-stream.js';
-import * as registry from '../../registry/index.js';
-import * as storeContainer from '../../store/container.js';
 
 function dockerFrame(payload: string, streamType = 1): Buffer {
   const payloadBuffer = Buffer.from(payload, 'utf8');
@@ -66,6 +69,30 @@ describe('api/container/log-stream', () => {
         since: 1767225600,
         follow: false,
       });
+    });
+
+    test('parses numeric since timestamps', () => {
+      const query = parseContainerLogStreamQuery(
+        new URLSearchParams({
+          since: '1700000000',
+        }),
+      );
+      expect(query).toEqual({
+        stdout: true,
+        stderr: true,
+        tail: 100,
+        since: 1700000000,
+        follow: true,
+      });
+    });
+
+    test('falls back when numeric since overflows finite bounds', () => {
+      const query = parseContainerLogStreamQuery(
+        new URLSearchParams({
+          since: '9'.repeat(400),
+        }),
+      );
+      expect(query.since).toBe(0);
     });
 
     test('falls back on invalid values', () => {
@@ -172,6 +199,42 @@ describe('api/container/log-stream', () => {
         },
       ]);
     });
+
+    test('flush trims trailing carriage returns from partial lines', () => {
+      const decoder = createDockerLogMessageDecoder();
+      decoder.push({
+        type: 'stdout',
+        payload: 'partial line with carriage\r',
+      });
+      expect(decoder.flush()).toEqual([
+        {
+          type: 'stdout',
+          ts: 'partial',
+          line: 'line with carriage',
+        },
+      ]);
+    });
+
+    test('defaults trailing partial to empty when split pop returns undefined', () => {
+      const decoder = createDockerLogMessageDecoder();
+      const popSpy = vi.spyOn(Array.prototype, 'pop').mockReturnValueOnce(undefined as never);
+      try {
+        expect(
+          decoder.push({
+            type: 'stdout',
+            payload: '',
+          }),
+        ).toEqual([
+          {
+            type: 'stdout',
+            ts: '',
+            line: '',
+          },
+        ]);
+      } finally {
+        popSpy.mockRestore();
+      }
+    });
   });
 
   describe('createContainerLogStreamGateway', () => {
@@ -195,6 +258,43 @@ describe('api/container/log-stream', () => {
 
       expect(socket.write).toHaveBeenCalledWith(expect.stringContaining('404 Not Found'));
       expect(socket.destroy).toHaveBeenCalledTimes(1);
+    });
+
+    test('returns 404 when upgrade url is missing or malformed', async () => {
+      const gateway = createContainerLogStreamGateway({
+        getContainer: vi.fn(),
+        getWatchers: vi.fn(() => ({})),
+        sessionMiddleware: (_req: unknown, _res: unknown, next: (error?: unknown) => void) =>
+          next(),
+      });
+
+      const socketWithoutUrl = createUpgradeSocket();
+      await gateway.handleUpgrade(
+        { socket: { remoteAddress: '127.0.0.1' } } as any,
+        socketWithoutUrl as any,
+        Buffer.alloc(0),
+      );
+      expect(socketWithoutUrl.write).toHaveBeenCalledWith(expect.stringContaining('404 Not Found'));
+
+      const socketWithDecodeError = createUpgradeSocket();
+      await gateway.handleUpgrade(
+        createUpgradeRequest('/api/v1/containers/%E0%A4%A/logs/stream') as any,
+        socketWithDecodeError as any,
+        Buffer.alloc(0),
+      );
+      expect(socketWithDecodeError.write).toHaveBeenCalledWith(
+        expect.stringContaining('404 Not Found'),
+      );
+
+      const socketWithInvalidUrl = createUpgradeSocket();
+      await gateway.handleUpgrade(
+        { url: 'http://[::1', socket: { remoteAddress: '127.0.0.1' } } as any,
+        socketWithInvalidUrl as any,
+        Buffer.alloc(0),
+      );
+      expect(socketWithInvalidUrl.write).toHaveBeenCalledWith(
+        expect.stringContaining('404 Not Found'),
+      );
     });
 
     test('returns 503 when session middleware is not configured', async () => {
@@ -268,6 +368,44 @@ describe('api/container/log-stream', () => {
       expect(socket.destroy).toHaveBeenCalledTimes(1);
     });
 
+    test('uses ip:unknown rate-limit key when remote address is unavailable', async () => {
+      const gateway = createContainerLogStreamGateway({
+        getContainer: vi.fn(),
+        getWatchers: vi.fn(() => ({})),
+        sessionMiddleware: (_req: any, _res: unknown, next: (error?: unknown) => void) => next(),
+        webSocketServer: {
+          handleUpgrade: vi.fn(),
+        },
+        isRateLimited: vi.fn(() => false),
+      });
+      const socket = createUpgradeSocket();
+      await gateway.handleUpgrade(
+        { url: '/api/v1/containers/c1/logs/stream', socket: {} } as any,
+        socket as any,
+        Buffer.alloc(0),
+      );
+      expect(socket.write).toHaveBeenCalledWith(expect.stringContaining('401 Unauthorized'));
+    });
+
+    test('uses ip:unknown rate-limit key when remote address is blank', async () => {
+      const gateway = createContainerLogStreamGateway({
+        getContainer: vi.fn(),
+        getWatchers: vi.fn(() => ({})),
+        sessionMiddleware: (_req: any, _res: unknown, next: (error?: unknown) => void) => next(),
+        webSocketServer: {
+          handleUpgrade: vi.fn(),
+        },
+        isRateLimited: vi.fn(() => false),
+      });
+      const socket = createUpgradeSocket();
+      await gateway.handleUpgrade(
+        { url: '/api/v1/containers/c1/logs/stream', socket: { remoteAddress: '   ' } } as any,
+        socket as any,
+        Buffer.alloc(0),
+      );
+      expect(socket.write).toHaveBeenCalledWith(expect.stringContaining('401 Unauthorized'));
+    });
+
     test('rejects unauthenticated upgrades', async () => {
       const mockWebSocketServer = {
         handleUpgrade: vi.fn(),
@@ -300,7 +438,9 @@ describe('api/container/log-stream', () => {
         close: ReturnType<typeof vi.fn>;
       };
       ws.send = vi.fn();
-      ws.close = vi.fn();
+      ws.close = vi.fn(() => {
+        ws.emit('close');
+      });
 
       const mockWebSocketServer = {
         handleUpgrade: vi.fn((_req, _socket, _head, callback: (socket: unknown) => void) =>
@@ -335,7 +475,9 @@ describe('api/container/log-stream', () => {
         close: ReturnType<typeof vi.fn>;
       };
       ws.send = vi.fn();
-      ws.close = vi.fn();
+      ws.close = vi.fn(() => {
+        ws.emit('close');
+      });
 
       const gateway = createContainerLogStreamGateway({
         getContainer: vi.fn(() => ({
@@ -567,7 +709,7 @@ describe('api/container/log-stream', () => {
       expect(dockerStream.destroy).toHaveBeenCalledTimes(1);
     });
 
-    test('closes websocket when stream ends naturally', async () => {
+    test('cleans up docker stream when websocket emits error', async () => {
       const dockerStream = new EventEmitter() as EventEmitter & {
         destroy: ReturnType<typeof vi.fn>;
       };
@@ -588,6 +730,63 @@ describe('api/container/log-stream', () => {
       };
       ws.send = vi.fn();
       ws.close = vi.fn();
+
+      const gateway = createContainerLogStreamGateway({
+        getContainer: vi.fn(() => ({
+          id: 'c1',
+          name: 'my-container',
+          watcher: 'local',
+          status: 'running',
+        })),
+        getWatchers: vi.fn(() => ({
+          'docker.local': mockWatcher,
+        })),
+        sessionMiddleware: (req: any, _res: unknown, next: (error?: unknown) => void) => {
+          req.session = { passport: { user: '{"username":"alice"}' } };
+          req.sessionID = 'session-1';
+          next();
+        },
+        webSocketServer: {
+          handleUpgrade: vi.fn((_req, _socket, _head, callback: (socket: unknown) => void) =>
+            callback(ws),
+          ),
+        },
+        isRateLimited: vi.fn(() => false),
+      });
+
+      await gateway.handleUpgrade(
+        createUpgradeRequest('/api/v1/containers/c1/logs/stream') as any,
+        createUpgradeSocket() as any,
+        Buffer.alloc(0),
+      );
+
+      ws.emit('error', new Error('ws boom'));
+      expect(dockerStream.destroy).toHaveBeenCalledTimes(1);
+    });
+
+    test('closes websocket when stream ends naturally', async () => {
+      const dockerStream = new EventEmitter() as EventEmitter & {
+        destroy: ReturnType<typeof vi.fn>;
+      };
+      dockerStream.destroy = vi.fn();
+
+      const mockDockerContainer = {
+        logs: vi.fn().mockResolvedValue(dockerStream),
+      };
+      const mockWatcher = {
+        dockerApi: {
+          getContainer: vi.fn(() => mockDockerContainer),
+        },
+      };
+
+      const ws = new EventEmitter() as EventEmitter & {
+        send: ReturnType<typeof vi.fn>;
+        close: ReturnType<typeof vi.fn>;
+      };
+      ws.send = vi.fn();
+      ws.close = vi.fn(() => {
+        ws.emit('close');
+      });
 
       const gateway = createContainerLogStreamGateway({
         getContainer: vi.fn(() => ({
@@ -720,9 +919,106 @@ describe('api/container/log-stream', () => {
       expect(socket.write).not.toHaveBeenCalled();
       expect(socket.destroy).not.toHaveBeenCalled();
     });
+
+    test('applies default fixed-window rate limiter', async () => {
+      const gateway = createContainerLogStreamGateway({
+        getContainer: vi.fn(),
+        getWatchers: vi.fn(() => ({})),
+        sessionMiddleware: (_req: any, _res: unknown, next: (error?: unknown) => void) => next(),
+      });
+
+      const request = {
+        url: '/api/v1/containers/c1/logs/stream',
+        socket: { remoteAddress: '127.0.0.1' },
+      } as any;
+
+      for (let index = 0; index < 1000; index += 1) {
+        const socket = createUpgradeSocket();
+        await gateway.handleUpgrade(request, socket as any, Buffer.alloc(0));
+        expect(socket.write).toHaveBeenCalledWith(expect.stringContaining('401 Unauthorized'));
+      }
+
+      const rateLimitedSocket = createUpgradeSocket();
+      await gateway.handleUpgrade(request, rateLimitedSocket as any, Buffer.alloc(0));
+      expect(rateLimitedSocket.write).toHaveBeenCalledWith(
+        expect.stringContaining('429 Too Many Requests'),
+      );
+    });
   });
 
   describe('attachContainerLogStreamWebSocketServer', () => {
+    test('uses default ip-based key resolver when identity-aware keying is disabled', async () => {
+      const webSocketUpgradeSpy = vi
+        .spyOn(WebSocketServer.prototype, 'handleUpgrade')
+        .mockImplementation((_request, _socket, _head, callback) => {
+          const ws = new EventEmitter() as EventEmitter & {
+            send: ReturnType<typeof vi.fn>;
+            close: ReturnType<typeof vi.fn>;
+          };
+          ws.send = vi.fn();
+          ws.close = vi.fn(() => {
+            ws.emit('close');
+          });
+          callback(ws as any);
+        });
+      const getStateSpy = vi.spyOn(registry, 'getState').mockReturnValue({
+        watcher: {
+          'docker.local': {
+            dockerApi: {
+              getContainer: vi.fn(() => ({
+                logs: vi
+                  .fn()
+                  .mockResolvedValue(dockerFrame('2026-01-01T00:00:00.000000000Z hello\n', 1)),
+              })),
+            },
+          },
+        },
+      } as any);
+      const getContainerSpy = vi.spyOn(storeContainer, 'getContainer').mockReturnValue({
+        id: 'c1',
+        name: 'default-key-container',
+        watcher: 'local',
+        status: 'running',
+      } as any);
+      const listeners: Array<(request: unknown, socket: unknown, head: Buffer) => void> = [];
+      const server = {
+        on: vi.fn(
+          (
+            _event: 'upgrade',
+            listener: (request: unknown, socket: unknown, head: Buffer) => void,
+          ) => {
+            listeners.push(listener);
+          },
+        ),
+      };
+
+      try {
+        attachContainerLogStreamWebSocketServer({
+          server: server as any,
+          sessionMiddleware: (req: any, _res: unknown, next: (error?: unknown) => void) => {
+            req.session = { passport: { user: '{"username":"alice"}' } };
+            req.sessionID = 'session-1';
+            next();
+          },
+          serverConfiguration: {
+            ratelimit: { identitykeying: false },
+          },
+        });
+
+        const socket = createUpgradeSocket();
+        listeners[0](
+          createUpgradeRequest('/api/v1/containers/c1/logs/stream') as any,
+          socket as any,
+          Buffer.alloc(0),
+        );
+        await new Promise((resolve) => setImmediate(resolve));
+      } finally {
+        webSocketUpgradeSpy.mockRestore();
+        getStateSpy.mockRestore();
+        getContainerSpy.mockRestore();
+      }
+    });
+
     test('registers an upgrade listener', async () => {
       const getStateSpy = vi.spyOn(registry, 'getState').mockReturnValue({ watcher: {} } as any);
       const getContainerSpy = vi.spyOn(storeContainer, 'getContainer').mockReturnValue(undefined);
@@ -761,6 +1057,171 @@ describe('api/container/log-stream', () => {
       } finally {
         getStateSpy.mockRestore();
         getContainerSpy.mockRestore();
+      }
+    });
+
+    test('falls back to ip key when identity-aware key generator returns an empty key', async () => {
+      const createKeySpy = vi
+        .spyOn(rateLimitKey, 'createAuthenticatedRouteRateLimitKeyGenerator')
+        .mockReturnValue(() => '' as any);
+      const webSocketUpgradeSpy = vi
+        .spyOn(WebSocketServer.prototype, 'handleUpgrade')
+        .mockImplementation((_request, _socket, _head, callback) => {
+          const ws = new EventEmitter() as EventEmitter & {
+            send: ReturnType<typeof vi.fn>;
+            close: ReturnType<typeof vi.fn>;
+          };
+          ws.send = vi.fn();
+          ws.close = vi.fn();
+          callback(ws as any);
+        });
+      const getStateSpy = vi.spyOn(registry, 'getState').mockReturnValue({
+        watcher: {
+          'docker.local': {
+            dockerApi: {
+              getContainer: vi.fn(() => ({
+                logs: vi
+                  .fn()
+                  .mockResolvedValue(dockerFrame('2026-01-01T00:00:00.000000000Z hello\n', 1)),
+              })),
+            },
+          },
+        },
+      } as any);
+      const getContainerSpy = vi.spyOn(storeContainer, 'getContainer').mockReturnValue({
+        id: 'c1',
+        name: 'fallback-container',
+        watcher: 'local',
+        status: 'running',
+      } as any);
+      const listeners: Array<(request: unknown, socket: unknown, head: Buffer) => void> = [];
+      const server = {
+        on: vi.fn(
+          (
+            _event: 'upgrade',
+            listener: (request: unknown, socket: unknown, head: Buffer) => void,
+          ) => {
+            listeners.push(listener);
+          },
+        ),
+      };
+
+      try {
+        attachContainerLogStreamWebSocketServer({
+          server: server as any,
+          sessionMiddleware: (req: any, _res: unknown, next: (error?: unknown) => void) => {
+            req.session = { passport: { user: '{"username":"alice"}' } };
+            req.sessionID = 'session-1';
+            next();
+          },
+          serverConfiguration: {
+            ratelimit: { identitykeying: true },
+          },
+        });
+
+        const socket = createUpgradeSocket();
+        listeners[0](
+          createUpgradeRequest('/api/v1/containers/c1/logs/stream') as any,
+          socket as any,
+          Buffer.alloc(0),
+        );
+        await new Promise((resolve) => setImmediate(resolve));
+      } finally {
+        createKeySpy.mockRestore();
+        webSocketUpgradeSpy.mockRestore();
+        getStateSpy.mockRestore();
+        getContainerSpy.mockRestore();
+      }
+    });
+
+    test('uses generated identity-aware keys when available', async () => {
+      const webSocketUpgradeSpy = vi
+        .spyOn(WebSocketServer.prototype, 'handleUpgrade')
+        .mockImplementation((_request, _socket, _head, callback) => {
+          const ws = new EventEmitter() as EventEmitter & {
+            send: ReturnType<typeof vi.fn>;
+            close: ReturnType<typeof vi.fn>;
+          };
+          ws.send = vi.fn();
+          ws.close = vi.fn();
+          callback(ws as any);
+        });
+      const getStateSpy = vi.spyOn(registry, 'getState').mockReturnValue({
+        watcher: {
+          'docker.local': {
+            dockerApi: {
+              getContainer: vi.fn(() => ({
+                logs: vi
+                  .fn()
+                  .mockResolvedValue(dockerFrame('2026-01-01T00:00:00.000000000Z hello\n', 1)),
+              })),
+            },
+          },
+        },
+      } as any);
+      const getContainerSpy = vi.spyOn(storeContainer, 'getContainer').mockReturnValue({
+        id: 'c1',
+        name: 'identity-key-container',
+        watcher: 'local',
+        status: 'running',
+      } as any);
+      const listeners: Array<(request: unknown, socket: unknown, head: Buffer) => void> = [];
+      const server = {
+        on: vi.fn(
+          (
+            _event: 'upgrade',
+            listener: (request: unknown, socket: unknown, head: Buffer) => void,
+          ) => {
+            listeners.push(listener);
+          },
+        ),
+      };
+
+      try {
+        attachContainerLogStreamWebSocketServer({
+          server: server as any,
+          sessionMiddleware: (req: any, _res: unknown, next: (error?: unknown) => void) => {
+            req.session = { passport: { user: '{"username":"alice"}' } };
+            req.sessionID = 'session-identity';
+            next();
+          },
+          serverConfiguration: {
+            ratelimit: { identitykeying: true },
+          },
+        });
+
+        const socket = createUpgradeSocket();
+        listeners[0](
+          createUpgradeRequest('/api/v1/containers/c1/logs/stream') as any,
+          socket as any,
+          Buffer.alloc(0),
+        );
+        await new Promise((resolve) => setImmediate(resolve));
+      } finally {
+        webSocketUpgradeSpy.mockRestore();
+        getStateSpy.mockRestore();
+        getContainerSpy.mockRestore();
+      }
+    });
+
+    test('uses getServerConfiguration when serverConfiguration is omitted', async () => {
+      const serverConfigurationSpy = vi
+        .spyOn(configuration, 'getServerConfiguration')
+        .mockReturnValue({ ratelimit: { identitykeying: false } } as any);
+      const server = {
+        on: vi.fn(),
+      };
+
+      try {
+        attachContainerLogStreamWebSocketServer({
+          server: server as any,
+          sessionMiddleware: (_req: any, _res: unknown, next: (error?: unknown) => void) => next(),
+        });
+
+        expect(serverConfigurationSpy).toHaveBeenCalled();
+        expect(server.on).toHaveBeenCalledWith('upgrade', expect.any(Function));
+      } finally {
+        serverConfigurationSpy.mockRestore();
       }
     });
   });

@@ -78,6 +78,34 @@ describe('api/container/logs', () => {
         timestamps: true,
       });
     });
+
+    test('uses first array value for since query param', () => {
+      expect(
+        parseContainerLogDownloadQuery({
+          since: ['1700000000', '1700000001'],
+        } as any),
+      ).toEqual({
+        stdout: true,
+        stderr: true,
+        tail: 1000,
+        since: 1700000000,
+        timestamps: true,
+      });
+    });
+
+    test('falls back when numeric since overflows finite bounds', () => {
+      expect(
+        parseContainerLogDownloadQuery({
+          since: '9'.repeat(400),
+        } as any),
+      ).toEqual({
+        stdout: true,
+        stderr: true,
+        tail: 1000,
+        since: 0,
+        timestamps: true,
+      });
+    });
   });
 
   describe('demuxDockerStream', () => {
@@ -166,6 +194,80 @@ describe('api/container/logs', () => {
       );
 
       expect(res.send).toHaveBeenCalledWith('');
+    });
+
+    test('falls back to empty payload when agent response is null', async () => {
+      const handlers = createLogHandlers({
+        storeContainer: {
+          getContainer: vi.fn(() => ({
+            id: 'c1',
+            name: 'test',
+            watcher: 'local',
+            status: 'running',
+            agent: 'remote',
+          })),
+        },
+        getAgent: vi.fn(() => ({
+          getContainerLogs: vi.fn().mockResolvedValue(null),
+        })),
+        getWatchers: vi.fn(() => ({})),
+        getErrorMessage: vi.fn(() => 'error'),
+      } as any);
+
+      const res = createMockResponse();
+      await handlers.getContainerLogs(
+        {
+          params: { id: 'c1' },
+          query: {},
+          headers: {},
+        } as any,
+        res as any,
+      );
+
+      expect(res.send).toHaveBeenCalledWith('');
+    });
+  });
+
+  describe('download response headers', () => {
+    test('supports array-form accept-encoding headers and empty container names', async () => {
+      const handlers = createLogHandlers({
+        storeContainer: {
+          getContainer: vi.fn(() => ({
+            id: 'c1',
+            name: '',
+            watcher: 'local',
+            status: 'running',
+          })),
+        },
+        getAgent: vi.fn(() => undefined),
+        getWatchers: vi.fn(() => ({
+          'docker.local': {
+            dockerApi: {
+              getContainer: vi.fn(() => ({
+                logs: vi.fn().mockResolvedValue(Buffer.alloc(0)),
+              })),
+            },
+          },
+        })),
+        getErrorMessage: vi.fn(() => 'error'),
+      } as any);
+
+      const res = createMockResponse();
+      await handlers.getContainerLogs(
+        {
+          params: { id: 'c1' },
+          query: {},
+          headers: { 'accept-encoding': ['br', 'gzip'] },
+        } as any,
+        res as any,
+      );
+
+      expect(res.setHeader).toHaveBeenCalledWith(
+        'Content-Disposition',
+        'attachment; filename="container-logs.txt.gz"',
+      );
+      expect(res.setHeader).toHaveBeenCalledWith('Content-Encoding', 'gzip');
+      expect(res.send).toHaveBeenCalledWith(expect.any(Buffer));
     });
   });
 });
