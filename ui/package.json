@@ -21,6 +21,7 @@
     "lint": "biome check .",
     "test:unit": "vitest run --coverage",
     "test:unit:watch": "vitest",
+    "test:mutation": "stryker run",
     "test:storybook": "COMPONENTS_DTS=false storybook build --test --quiet",
     "storybook": "COMPONENTS_DTS=false storybook dev -p 6006",
     "build-storybook": "COMPONENTS_DTS=false storybook build",
@@ -34,6 +35,9 @@
     "vue-router": "^5.0.2"
   },
   "devDependencies": {
+    "@stryker-mutator/core": "^9.6.0",
+    "@stryker-mutator/typescript-checker": "^9.6.0",
+    "@stryker-mutator/vitest-runner": "^9.6.0",
     "@fontsource/comic-mono": "^5.2.5",
     "@fontsource/commit-mono": "^5.2.5",
     "@fontsource/inconsolata": "^5.2.7",

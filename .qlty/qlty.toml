@@ -123,10 +123,12 @@ name = "trufflehog"
 [[plugin]]
 name = "yamllint"
 
-[[plugin]]
-name = "zizmor"
-
 # Entrypoint uses su-exec for runtime privilege drop; no static USER needed
 [[triage]]
 match.rules = ["trivy:DS002", "trivy:DS-0002"]
+set.ignored = true
+
+# markdownlint table style is low-signal for this repository's docs format
+[[triage]]
+match.rules = ["markdownlint:MD060"]
 set.ignored = true
