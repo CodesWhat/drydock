@@ -243,33 +243,23 @@ docker run \
 
 ## Docker Socket Security
 
-Drydock runs as a non-root user by default for security. This means a **read-only** Docker socket mount (`:ro`) will fail with a permission error because the Linux VFS denies `connect()` on a read-only bind mount for non-root users.
+Drydock needs to communicate with the Docker Engine API to monitor containers and (optionally) perform updates. By default this means mounting the Docker socket — which grants broad access to the host. This section covers all available approaches to secure that access, from the recommended socket proxy to remote TLS connections.
 
-There are two ways to resolve this:
+### Security comparison
 
-### Option 1: Break-glass root mode (less secure)
+| Approach | Attack surface | Privilege level | Setup complexity | Auto-updates? |
+| --- | --- | --- | --- | --- |
+| **Socket proxy** (recommended) | Filtered API only | Non-root | Low | Yes (with `POST=1`) |
+| **Remote Docker over TLS** | Network + TLS | Non-root | Medium | Yes |
+| **Rootless Docker** | Full API, unprivileged daemon | Non-root | Medium | Yes |
+| **Direct socket mount** | Full Docker API | Root | Trivial | Yes |
+| **Break-glass root mode** | Full Docker API + host root | Root | Trivial | Yes |
 
-If you cannot use a socket proxy yet, you can explicitly opt into root mode. This is a break-glass path and should not be your default.
-Both flags are required; setting only `DD_RUN_AS_ROOT=true` fails closed at startup.
-
-```yaml
-services:
-  drydock:
-    image: codeswhat/drydock
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-    environment:
-      - DD_RUN_AS_ROOT=true
-      - DD_ALLOW_INSECURE_ROOT=true
-    ports:
-      - 3000:3000
-```
-
-<Callout type="warn">Running as root trades away the privilege-drop security boundary. Use this only as a temporary break-glass fallback; prefer socket proxy mode for long-term deployments.</Callout>
-
-### Option 2: Socket proxy (recommended)
+### Option 1: Socket proxy (recommended)
 
 A socket proxy runs as a separate container with access to the Docker socket and exposes only the API endpoints Drydock needs. Drydock connects to the proxy over HTTP, so no socket mount is required at all.
+
+This is the **recommended approach** for all deployments. It provides a strict security boundary with minimal setup.
 
 ```yaml
 services:
@@ -313,6 +303,157 @@ services:
 | Docker trigger (auto-updates) | All of the above **plus** `POST=1`, `NETWORKS=1` |
 
 <Callout type="warn">Container actions (start, stop, restart, update) require a Docker trigger to be configured. If you only want container actions without automatic updates, set `DD_TRIGGER_DOCKER_{name}_AUTO=false`. Without a Docker trigger, the UI will show "No docker trigger found for this container" when attempting actions.</Callout>
+
+#### Alternative socket proxies
+
+[Tecnativa/docker-socket-proxy](https://github.com/Tecnativa/docker-socket-proxy) is the most widely used option, but any HAProxy or nginx-based Docker socket proxy that filters by HTTP method and path will work. The key requirement is that the proxy exposes the Docker Engine API endpoints listed in the permissions table above and blocks everything else (especially `exec`, `build`, and `swarm` endpoints).
+
+Other compatible proxies include [linuxserver/docker-socket-proxy](https://github.com/linuxserver/docker-socket-proxy) (a fork with additional features).
+
+### Option 2: Remote Docker over TLS
+
+Instead of mounting the socket at all, Drydock can connect to a remote Docker host over the network using mutual TLS (mTLS). This is ideal for multi-host setups or when you want to completely avoid socket mounts.
+
+#### Step 1: Generate TLS certificates on the Docker host
+
+Follow the official [Docker TLS guide](https://docs.docker.com/engine/security/protect-access/#use-tls-https-to-protect-the-docker-daemon-socket) to generate a CA, server certificate, and client certificate.
+
+#### Step 2: Configure the Docker daemon
+
+Configure the daemon to listen on a TLS port by adding this to `/etc/docker/daemon.json`:
+
+```json
+{
+  "hosts": ["unix:///var/run/docker.sock", "tcp://0.0.0.0:2376"],
+  "tls": true,
+  "tlscacert": "/etc/docker/ca.pem",
+  "tlscert": "/etc/docker/server-cert.pem",
+  "tlskey": "/etc/docker/server-key.pem",
+  "tlsverify": true
+}
+```
+
+#### Step 3: Configure Drydock
+
+Configure Drydock with the client certificates:
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    environment:
+      - DD_WATCHER_REMOTE_HOST=docker-host.example.com
+      - DD_WATCHER_REMOTE_PORT=2376
+      - DD_WATCHER_REMOTE_CAFILE=/certs/ca.pem
+      - DD_WATCHER_REMOTE_CERTFILE=/certs/client-cert.pem
+      - DD_WATCHER_REMOTE_KEYFILE=/certs/client-key.pem
+    volumes:
+      - ./certs/ca.pem:/certs/ca.pem:ro
+      - ./certs/client-cert.pem:/certs/client-cert.pem:ro
+      - ./certs/client-key.pem:/certs/client-key.pem:ro
+    ports:
+      - 3000:3000
+```
+
+<Callout type="info">When TLS certificates are provided (`CAFILE`, `CERTFILE`, `KEYFILE`), Drydock automatically uses HTTPS regardless of the `PROTOCOL` setting.</Callout>
+
+<Callout type="warn">Keep your client certificates secure. Mount them read-only (`:ro`) and restrict file permissions to the Drydock user.</Callout>
+
+### Option 3: Rootless Docker
+
+[Rootless Docker](https://docs.docker.com/engine/security/rootless/) runs the Docker daemon entirely in user space without root privileges. Even full socket access does not grant host root because the daemon itself is unprivileged.
+
+**Step 1: Install rootless Docker** following the [official guide](https://docs.docker.com/engine/security/rootless/#install).
+
+**Step 2: Find your rootless socket path:**
+
+```bash
+echo $XDG_RUNTIME_DIR/docker.sock
+# Typically: /run/user/1000/docker.sock
+```
+
+**Step 3: Mount the rootless socket:**
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    volumes:
+      - /run/user/1000/docker.sock:/var/run/docker.sock
+    ports:
+      - 3000:3000
+```
+
+<Callout type="info">The rootless socket path varies by user. Replace `1000` with your user's UID (`id -u`).</Callout>
+
+<Callout type="warn">Rootless Docker has some limitations: no `--privileged` containers, limited network configuration, and some storage drivers may not be available. Check the [official limitations list](https://docs.docker.com/engine/security/rootless/#known-limitations) for your use case.</Callout>
+
+You can combine rootless Docker with a socket proxy for defense in depth — even if the proxy is compromised, the attacker only gains unprivileged access.
+
+### Option 4: Direct socket mount (default)
+
+The simplest approach — mount the Docker socket directly. Drydock runs as a non-root user inside the container, but the socket grants access to the full Docker API.
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - 3000:3000
+```
+
+<Callout type="warn">Direct socket access grants the container full control over the Docker daemon, including the ability to create privileged containers, mount host filesystems, and effectively gain root access to the host. Use a socket proxy or remote TLS connection for production deployments.</Callout>
+
+### Option 5: Break-glass root mode (least secure)
+
+If the non-root user cannot connect to the socket (common with `:ro` mounts), you can explicitly opt into root mode. This is a break-glass path and should not be your default. Both flags are required; setting only `DD_RUN_AS_ROOT=true` fails closed at startup.
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - DD_RUN_AS_ROOT=true
+      - DD_ALLOW_INSECURE_ROOT=true
+    ports:
+      - 3000:3000
+```
+
+<Callout type="warn">Running as root trades away the privilege-drop security boundary. Use this only as a temporary break-glass fallback; prefer socket proxy mode for long-term deployments.</Callout>
+
+### Which Docker API endpoints does Drydock use?
+
+Understanding exactly what Drydock accesses helps you configure socket proxies and evaluate your security posture.
+
+**Read-only operations (watchers):**
+
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /containers/json` | List running containers |
+| `GET /containers/{id}/json` | Inspect container details and labels |
+| `GET /images/json` | List images on the host |
+| `GET /images/{id}/json` | Inspect image metadata (tags, digests, architecture) |
+| `GET /events` | Stream real-time container lifecycle events |
+| `GET /services/{id}` | Inspect Docker Swarm service labels |
+
+**Write operations (triggers — only when performing updates):**
+
+| Endpoint | Purpose |
+| --- | --- |
+| `POST /images/create` | Pull new image versions |
+| `POST /containers/create` | Create replacement container |
+| `POST /containers/{id}/start` | Start the new container |
+| `POST /containers/{id}/stop` | Stop the old container |
+| `POST /containers/{id}/wait` | Wait for container removal |
+| `DELETE /containers/{id}` | Remove the old container |
+| `DELETE /images/{id}` | Prune old images (when enabled) |
+| `POST /networks/{id}/connect` | Connect container to additional networks |
+
+If you only need monitoring (no auto-updates), a read-only socket proxy configuration is sufficient.
 
 ### Watch 1 local Docker host and 2 remote docker hosts at the same time
 

@@ -1,13 +1,19 @@
+import dns from 'node:dns';
 import * as agentServer from './agent/api/index.js';
 import * as agentManager from './agent/index.js';
 import * as api from './api/index.js';
-import { getVersion } from './configuration/index.js';
+import { getDnsMode, getVersion } from './configuration/index.js';
 import { runConfigMigrateCommandIfRequested } from './configuration/migrate-cli.js';
 import log from './log/index.js';
 import * as prometheus from './prometheus/index.js';
 import * as registry from './registry/index.js';
 import * as securityScheduler from './security/scheduler.js';
 import * as store from './store/index.js';
+
+// Configure DNS result ordering (DD_DNS_MODE, default: ipv4first).
+// Defaults to IPv4-first to work around musl libc (Alpine) resolver issues
+// that cause getaddrinfo EAI_AGAIN errors (#161).
+dns.setDefaultResultOrder(getDnsMode());
 
 const commandExitCode = runConfigMigrateCommandIfRequested(process.argv.slice(2));
 

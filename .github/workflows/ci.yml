@@ -19,7 +19,6 @@ jobs:
   zizmor:
     name: Actions Security
     runs-on: ubuntu-latest
-    continue-on-error: true  # advisory — GitHub API rate limits cause intermittent 403
     permissions:
       contents: read
       security-events: write
@@ -76,16 +75,27 @@ jobs:
         uses: qltysh/qlty-action/install@a19242102d17e497f437d7466aa01b528537e899  # v2.2.0
 
       - name: Qlty check (all plugins)
-        uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08  # v3.0.2
-        with:
-          timeout_minutes: 8
-          max_attempts: 3
-          retry_on: any
-          command: qlty check --all --no-progress
+        run: |
+          for attempt in 1 2 3; do
+            echo "::group::Attempt $attempt of 3"
+            if qlty check --all --no-progress; then
+              echo "::endgroup::"
+              exit 0
+            fi
+            echo "::endgroup::"
+            if [ "$attempt" -lt 3 ]; then
+              echo "Attempt $attempt failed, retrying in 10s..."
+              sleep 10
+            fi
+          done
+          echo "::error::Qlty check failed after 3 attempts"
+          exit 1
+        timeout-minutes: 8
 
   test:
     name: Test & Coverage
     runs-on: ubuntu-latest
+    environment: ci
     permissions:
       contents: read
 
@@ -173,14 +183,18 @@ jobs:
         run: npm run test:storybook
         working-directory: ui
 
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a  # v4.0.0
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd  # v4.0.0
 
-      - name: Docker build (smoke test)
+      - name: Docker build (multi-platform smoke test)
         uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294  # v7.0.0
         with:
           context: .
           push: false
+          platforms: linux/amd64,linux/arm64
           build-args: DD_VERSION=ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -240,6 +254,7 @@ jobs:
     if: github.event_name == 'pull_request'
     continue-on-error: true  # advisory until baselines stabilize for this release cycle
     needs: [build]
+    environment: ci
     permissions:
       contents: read
       actions: read
@@ -434,7 +449,7 @@ jobs:
 
       - name: Upload load test artifact (smoke)
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7.0.0
         with:
           name: load-test-smoke-${{ github.run_id }}-${{ github.run_attempt }}
           path: artifacts/load-test/smoke/*.json
@@ -443,7 +458,7 @@ jobs:
 
       - name: Upload load test artifact (behavior)
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7.0.0
         with:
           name: load-test-behavior-${{ github.run_id }}-${{ github.run_attempt }}
           path: artifacts/load-test/behavior/*.json
@@ -455,6 +470,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'push'
     needs: [build]
+    environment: ci
     permissions:
       contents: read
 
@@ -538,7 +554,7 @@ jobs:
 
       - name: Upload load test artifact (ci)
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7.0.0
         with:
           name: load-test-ci-${{ github.run_id }}-${{ github.run_attempt }}
           path: artifacts/load-test/ci/*.json
@@ -547,7 +563,7 @@ jobs:
 
       - name: Upload load test artifact (behavior)
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7.0.0
         with:
           name: load-test-behavior-${{ github.run_id }}-${{ github.run_attempt }}
           path: artifacts/load-test/behavior/*.json

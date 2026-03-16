@@ -37,6 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Compose path deduplication** — Replaced `indexOf`-based dedup with `Set` for compose file path detection in container security view.
 - **Build provenance attestation** — CI attestation step now runs with `if: always()` so provenance is attested even when prior optional steps are skipped.
 - **Container recreate alias duplicates in triggers** — When containers were recreated externally (via Portainer or `docker compose up`), Docker's transient `<id-prefix>_<name>` aliases were treated as new containers, producing duplicate entries in MQTT Home Assistant discovery sensors and Telegram notifications. Added alias deduplication filtering and force-removal of stale container IDs on recreate detection. ([#156](https://github.com/CodesWhat/drydock/issues/156))
+- **DNS resolution failures on Alpine (EAI_AGAIN)** — Node.js 24 defaults to `verbatim` DNS ordering, which on Alpine's musl libc can cause `getaddrinfo EAI_AGAIN` errors when IPv6 records are returned first on dual-stack networks. Drydock now defaults to IPv4-first DNS ordering at startup, configurable via `DD_DNS_MODE` (`ipv4first` | `ipv6first` | `verbatim`, default: `ipv4first`). ([#161](https://github.com/CodesWhat/drydock/issues/161))
 - **Stale store data after external container recreation** — Watch-at-start scan was suppressed when the store already had container data, leaving stale records from the previous run after external container recreation. Removed the suppression so every startup runs a full scan with alias filtering. ([#157](https://github.com/CodesWhat/drydock/issues/157))
 - **Watcher container counts on Hosts page** — Per-watcher container counts on the Hosts page used `watcher.id` (e.g. `docker.esk83`) as the lookup key instead of `watcher.name` (e.g. `esk83`), causing counts to display as zero for env-var-configured watchers. ([#155](https://github.com/CodesWhat/drydock/issues/155))
 - **Docker images tagged `:main` with no version** — CI release workflow triggered on both main branch pushes and version tags, producing Docker images tagged `:main` that showed `DD_VERSION=main` instead of a real version number. Release workflow now only triggers on version tags (`v*`). ([#154](https://github.com/CodesWhat/drydock/issues/154))
@@ -48,6 +49,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Auth audit log injection** — Login identity values are now sanitized with `sanitizeLogParam()` before inclusion in audit log details, preventing log injection via crafted usernames.
 - **SSE self-update ack hardening** — Added validation for empty `clientId`/`clientToken`, non-ack broadcast mode, and client-not-bound-to-operation rejection.
 - **FAQ: removed insecure seccomp advice** — Removed the "Core dumped on Raspberry PI" FAQ entry that recommended `--security-opt seccomp=unconfined`, which completely disables the kernel's syscall sandbox. The underlying libseccomp2 bug was fixed in all supported OS versions since 2021.
+
+### Documentation
+
+- **Docker socket security guide** — Expanded watcher docs with comprehensive security section: comparison table of all access methods, socket proxy setup (recommended), remote Docker over TLS with cert generation walkthrough, rootless Docker guide, full Docker API endpoint reference showing exactly which endpoints Drydock uses for read-only monitoring vs write operations (updates).
 
 ### Dependencies
 

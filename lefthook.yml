@@ -5,7 +5,7 @@
 #   0. Clean tree gate — rejects untracked/uncommitted/stashed files
 #   1. Lint gate (~20s) — catches formatting/lint before burning CPU
 #   2. Build + test (~26s parallel) — independent workspaces run concurrently
-#   3. E2E + advisory scans (zizmor)
+#   3. E2E + zizmor (blocking)
 #
 # Snyk scans are CI-only (release workflow) to preserve the 200/month quota.
 #
@@ -76,10 +76,10 @@ pre-push:
       priority: 5
       timeout: 2m
 
-    # ── Advisory: mirrors CI advisory jobs (non-blocking) ────────────
+    # ── Zizmor: GitHub Actions security scanner (blocking) ───────────
     zizmor:
       glob: '.github/workflows/*.yml'
-      run: zizmor .github/workflows/ || true
+      run: zizmor .github/workflows/
       skip:
         - run: '! command -v zizmor >/dev/null 2>&1'
       priority: 6

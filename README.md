@@ -67,6 +67,45 @@
 
 <h2 align="center" id="quick-start">🚀 Quick Start</h2>
 
+**Recommended: use a socket proxy** to restrict which Docker API endpoints Drydock can access. This avoids giving the container full access to the Docker socket.
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    depends_on:
+      socket-proxy:
+        condition: service_healthy
+    environment:
+      - DD_WATCHER_LOCAL_HOST=socket-proxy
+      - DD_WATCHER_LOCAL_PORT=2375
+      - DD_AUTH_BASIC_ADMIN_USER=admin
+      - "DD_AUTH_BASIC_ADMIN_HASH=<paste-argon2id-hash>"
+    ports:
+      - 3000:3000
+
+  socket-proxy:
+    image: tecnativa/docker-socket-proxy
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - CONTAINERS=1
+      - IMAGES=1
+      - EVENTS=1
+      - SERVICES=1
+      # Add POST=1 and NETWORKS=1 for container actions and auto-updates
+    healthcheck:
+      test: wget --spider http://localhost:2375/version || exit 1
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
+```
+
+<details>
+<summary>Alternative: quick start with direct socket mount</summary>
+
 ```bash
 docker run -d \
   --name drydock \
@@ -76,6 +115,10 @@ docker run -d \
   -e "DD_AUTH_BASIC_ADMIN_HASH=<paste-argon2id-hash>" \
   codeswhat/drydock:latest
 ```
+
+> **Warning:** Direct socket access grants the container full control over the Docker daemon. Use the socket proxy setup above for production deployments. See the [Docker Socket Security guide](https://drydock.codeswhat.com/docs/configuration/watchers#docker-socket-security) for all options including remote TLS and rootless Docker.
+
+</details>
 
 > Generate a password hash (`argon2` CLI — install via your package manager):
 >
@@ -321,6 +364,7 @@ Drop-in replacement — swap the image, restart, done. All `WUD_*` env vars and 
 | **v2.4.0** | Data Safety & Templates | Scheduled backups (S3, SFTP), compose templates, secret management |
 | **v3.0.0** | Advanced Platform | Network topology, GPU monitoring, full i18n translations |
 | **v3.1.0** | Enterprise Access & Compliance | RBAC, LDAP/AD, environment-scoped permissions, audit logging, Wolfi hardened image |
+| **v3.2.0** | Drydock Socket Proxy | Built-in companion proxy container (allowlist-filtered Docker API), rootless Docker & remote TLS security docs |
 
 <hr>
 

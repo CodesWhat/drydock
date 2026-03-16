@@ -3,6 +3,8 @@ title: "Agents"
 description: "Agent Mode allows running Drydock in a distributed manner across multiple Docker hosts."
 ---
 
+import { Callout } from 'fumadocs-ui/components/callout';
+
 The **Agent Mode** allows running drydock in a distributed manner.
 
 - **Agent Node**: Runs near the Docker socket (or other container sources). It performs discovery and update checks.
@@ -28,6 +30,8 @@ To run drydock in Agent mode, start the application with the `--agent` command l
 | `DD_REGISTRY_{name}_*` | ⚪ | [Registry](/docs/configuration/registries) configuration (For update checks) | |
 
 ### Agent Example (Docker Compose)
+
+<Callout type="info">This example uses a direct socket mount for simplicity. Agents also support [socket proxy](/docs/configuration/watchers#option-1-socket-proxy-recommended) and [remote TLS](/docs/configuration/watchers#option-2-remote-docker-over-tls) connections — configure the agent's watcher with `DD_WATCHER_LOCAL_HOST` and `DD_WATCHER_LOCAL_PORT` instead of a socket mount.</Callout>
 
 ```yaml
 services:
