@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Drydock CI Audit — Round 2</title>
+<style>
+  :root {
+    --bg: #1a1a2e;
+    --surface: #16213e;
+    --surface2: #1a2744;
+    --border: #2a3a5c;
+    --text: #e0e0e0;
+    --text-dim: #8892a4;
+    --accent-red: #ff6b6b;
+    --accent-orange: #ffa94d;
+    --accent-green: #69db7c;
+    --accent-blue: #74c0fc;
+    --accent-purple: #b197fc;
+    --accent-yellow: #ffd43b;
+    --tag-bg: rgba(255,255,255,0.06);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'SF Mono', 'Cascadia Code', 'JetBrains Mono', monospace;
+    background: var(--bg); color: var(--text);
+    padding: 2rem; line-height: 1.6;
+    max-width: 1000px; margin: 0 auto;
+  }
+  h1 { font-size: 1.4rem; font-weight: 600; color: #fff; margin-bottom: 0.25rem; }
+  .subtitle { color: var(--text-dim); font-size: 0.8rem; margin-bottom: 1.5rem; border-bottom: 1px solid var(--border); padding-bottom: 1rem; }
+
+  .summary { display: flex; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap; }
+  .chip { font-size: 0.75rem; padding: 0.2rem 0.6rem; border-radius: 4px; display: flex; align-items: center; gap: 0.35rem; }
+  .chip-closed { background: rgba(105, 219, 124, 0.08); color: rgba(105, 219, 124, 0.5); }
+  .chip-open { background: rgba(255, 107, 107, 0.12); color: var(--accent-red); }
+  .chip-wontfix { background: rgba(136, 146, 164, 0.08); color: rgba(136, 146, 164, 0.5); }
+  .chip b { font-size: 0.9rem; }
+
+  .toolbar { display: flex; gap: 0.5rem; margin-bottom: 2rem; flex-wrap: wrap; }
+  .toolbar button { background: var(--surface2); border: 1px solid var(--border); color: var(--text-dim); padding: 0.35rem 0.75rem; border-radius: 6px; cursor: pointer; font-family: inherit; font-size: 0.75rem; transition: all 0.15s; }
+  .toolbar button:hover { background: #223050; color: var(--text); }
+  .toolbar button.active { border-color: var(--accent-blue); color: var(--accent-blue); background: rgba(116, 192, 252, 0.08); }
+  .toolbar button.copied { color: var(--accent-green); border-color: var(--accent-green); }
+  .toolbar .spacer { flex: 1; }
+  .toolbar .copy-all-btn { border-color: var(--accent-green); color: var(--accent-green); }
+
+  .concern-section { margin-bottom: 1.5rem; }
+  .concern-header { font-size: 0.95rem; font-weight: 600; margin-bottom: 0.5rem; padding: 0.4rem 0; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+  .concern-section[data-concern="release"] .concern-header { color: var(--accent-red); }
+  .concern-section[data-concern="gates"] .concern-header { color: var(--accent-orange); }
+  .concern-section[data-concern="efficiency"] .concern-header { color: var(--accent-yellow); }
+  .concern-section[data-concern="observability"] .concern-header { color: var(--accent-green); }
+  .concern-section[data-concern="hardening"] .concern-header { color: var(--accent-purple); }
+  .concern-section[data-concern="decisions"] .concern-header { color: var(--text-dim); }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 0.75rem 1rem; margin-bottom: 0.5rem; transition: border-color 0.15s; }
+  .card:hover { border-color: #3a5080; }
+  .card.hidden { display: none !important; }
+  .card-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem; }
+  .card-content { flex: 1; min-width: 0; }
+  .card-title { font-weight: 600; font-size: 0.82rem; color: #fff; margin-bottom: 0.25rem; }
+  .card-body { font-size: 0.75rem; color: var(--text-dim); line-height: 1.45; }
+  .card-detail { margin-top: 0.3rem; font-size: 0.72rem; color: var(--text-dim); }
+  .card-detail em { color: var(--accent-purple); font-style: normal; }
+  .card-footer { margin-top: 0.3rem; font-size: 0.68rem; color: #4a5a7a; }
+  .card-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 0.3rem; flex-shrink: 0; }
+
+  .severity { font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.05em; padding: 0.1rem 0.35rem; border-radius: 3px; font-weight: 600; }
+  .sev-high { background: rgba(255, 107, 107, 0.15); color: var(--accent-red); }
+  .sev-medium { background: rgba(255, 169, 77, 0.15); color: var(--accent-orange); }
+  .sev-low { background: rgba(136, 146, 164, 0.12); color: var(--text-dim); }
+
+  .status { display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.65rem; padding: 0.1rem 0.4rem; border-radius: 4px; font-weight: 500; white-space: nowrap; }
+  .status-fixed { background: rgba(105, 219, 124, 0.12); color: var(--accent-green); }
+  .status-open { background: rgba(255, 107, 107, 0.12); color: var(--accent-red); }
+  .status-wontfix { background: rgba(136, 146, 164, 0.12); color: var(--text-dim); }
+  .dot { width: 5px; height: 5px; border-radius: 50%; display: inline-block; }
+  .dot-fixed { background: var(--accent-green); }
+  .dot-open { background: var(--accent-red); }
+  .dot-wontfix { background: var(--text-dim); }
+
+  .copy-card-btn { background: transparent; border: 1px solid var(--border); color: var(--text-dim); padding: 0.2rem 0.45rem; border-radius: 4px; cursor: pointer; font-family: inherit; font-size: 0.65rem; transition: all 0.15s; white-space: nowrap; }
+  .copy-card-btn:hover { border-color: var(--accent-green); color: var(--accent-green); }
+  .copy-card-btn.copied { border-color: var(--accent-green); color: var(--accent-green); }
+  .copy-group-btn { background: var(--surface2); border: 1px solid var(--border); color: var(--text-dim); padding: 0.25rem 0.6rem; border-radius: 5px; cursor: pointer; font-family: inherit; font-size: 0.7rem; transition: all 0.15s; }
+  .copy-group-btn:hover { background: #223050; color: var(--text); }
+  .copy-group-btn.copied { color: var(--accent-green); border-color: var(--accent-green); }
+
+  code { background: rgba(255,255,255,0.06); padding: 0.05rem 0.25rem; border-radius: 3px; font-size: inherit; }
+
+  .file-group { margin-bottom: 1.5rem; }
+  .file-group-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem; padding: 0.4rem 0; border-bottom: 1px solid var(--border); }
+  .file-group-title { font-size: 0.85rem; font-weight: 600; color: var(--accent-blue); display: flex; align-items: center; gap: 0.4rem; }
+  .file-group-title .count { font-size: 0.7rem; background: rgba(116, 192, 252, 0.12); color: var(--accent-blue); padding: 0.1rem 0.4rem; border-radius: 3px; }
+
+  .divider { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+  .round-label { font-size: 0.7rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 0.5rem; }
+</style>
+</head>
+<body>
+
+<h1>Drydock CI Pipeline Audit</h1>
+<p class="subtitle">March 2026 &mdash; lefthook + GitHub Actions &mdash; Round 1 + Round 2</p>
+
+<div class="summary">
+  <span class="chip chip-closed"><b>26</b> closed (round 1)</span>
+  <span class="chip chip-open"><b>4</b> new open (round 2)</span>
+  <span class="chip chip-wontfix"><b>1</b> won't fix</span>
+</div>
+
+<div class="toolbar">
+  <button class="active" data-filter="open" onclick="setFilter('open')">Open only</button>
+  <button data-filter="all" onclick="setFilter('all')">All</button>
+  <button data-filter="fixed" onclick="setFilter('fixed')">Closed</button>
+  <span class="spacer"></span>
+  <button data-view="concern" onclick="setView('concern')" class="active">By concern</button>
+  <button data-view="file" onclick="setView('file')">By file</button>
+  <span class="spacer"></span>
+  <button class="copy-all-btn" onclick="copyAllOpen()">Copy all open</button>
+</div>
+
+<div id="view-concern">
+
+<!-- ═══════════════════════════════════════ -->
+<!-- ROUND 2 — NEW FINDINGS                 -->
+<!-- ═══════════════════════════════════════ -->
+
+<div class="concern-section" data-concern="efficiency">
+  <div class="concern-header">
+    <span>CI Efficiency</span>
+    <button class="copy-group-btn" onclick="copyConcern('efficiency')">Copy open</button>
+  </div>
+
+  <div class="card" data-status="open" data-files="run-playwright-qa.sh" data-concern="efficiency">
+    <div class="card-row">
+      <div class="card-content">
+        <div class="card-title">Playwright pre-push rebuilds Docker image every time</div>
+        <div class="card-body"><code>run-playwright-qa.sh</code> does a full <code>docker build</code> on every pre-push. No cache, no reuse. Adds 2-3+ min per push.</div>
+        <div class="card-detail"><em>Fix:</em> Skip rebuild if <code>drydock:dev</code> image already exists and source hasn't changed. Check <code>docker inspect</code> timestamp vs last git commit.</div>
+        <div class="card-footer">scripts/run-playwright-qa.sh:19</div>
+      </div>
+      <div class="card-actions">
+        <span class="severity sev-medium">med</span>
+        <span class="status status-open"><span class="dot dot-open"></span> Open</span>
+        <button class="copy-card-btn" onclick="copyCard(this)">Copy</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" data-status="open" data-files="lefthook.yml" data-concern="efficiency">
+    <div class="card-row">
+      <div class="card-content">
+        <div class="card-title">Playwright pre-push timeout too short for cold start</div>
+        <div class="card-body">Timeout is 10m but first run includes browser install + Docker build + tests = 12-15 min. Will kill the process before completion.</div>
+        <div class="card-detail"><em>Fix:</em> Increase to <code>15m</code> in lefthook.yml.</div>
+        <div class="card-footer">lefthook.yml:99</div>
+      </div>
+      <div class="card-actions">
+        <span class="severity sev-low">low</span>
+        <span class="status status-open"><span class="dot dot-open"></span> Open</span>
+        <button class="copy-card-btn" onclick="copyCard(this)">Copy</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Round 1 closed items -->
+  <div class="card" data-status="fixed" data-files="10-ci-verify.yml" data-concern="efficiency">
+    <div class="card-row">
+      <div class="card-content">
+        <div class="card-title">Redundant Docker builds across jobs</div>
+        <div class="card-body">Playwright, DAST, load tests each rebuilt the image. ~3-5 min wasted/run.</div>
+        <div class="card-detail"><em>Fix:</em> Build job exports QA image as artifact. Consumers download + load.</div>
+        <div class="card-footer">H2 &middot; 10-ci-verify.yml</div>
+      </div>
+      <div class="card-actions"><span class="status status-fixed"><span class="dot dot-fixed"></span> Closed</span></div>
+    </div>
+  </div>
+
+  <div class="card" data-status="fixed" data-files="10-ci-verify.yml" data-concern="efficiency">
+    <div class="card-row">
+      <div class="card-content">
+        <div class="card-title">Qlty plugin downloads on every run</div>
+        <div class="card-body">~30s wasted per run, no caching.</div>
+        <div class="card-detail"><em>Fix:</em> <code>actions/cache</code> keyed to <code>qlty.toml</code> hash.</div>
+        <div class="card-footer">M10 &middot; 10-ci-verify.yml</div>
+      </div>
+      <div class="card-actions"><span class="status status-fixed"><span class="dot dot-fixed"></span> Closed</span></div>
+    </div>
+  </div>
+
+  <div class="card" data-status="fixed" data-files="40-50-60" data-concern="efficiency">
+    <div class="card-row">
+      <div class="card-content">
+        <div class="card-title">4 workflows firing on merge to main</div>
+        <div class="card-body">CodeQL, Fuzz, Scorecard triggered alongside CI Verify.</div>
+        <div class="card-detail"><em>Fix:</em> Dropped push:main. Kept schedule + PR only.</div>
+        <div class="card-footer">H2b &middot; 40/50/60 workflows</div>
+      </div>
+      <div class="card-actions"><span class="status status-fixed"><span class="dot dot-fixed"></span> Closed</span></div>
+    </div>
+  </div>
+
+  <div class="card" data-status="fixed" data-files="70-security-snyk.yml" data-concern="efficiency">
+    <div class="card-row">
+      <div class="card-content">
+        <div class="card-title">Snyk container scan rebuilt image from scratch</div>
+        <div class="card-body">Weekly scan built without cache. ~5-10 min redundant.</div>
+        <div class="card-detail"><em>Fix:</em> Buildx + GHA cache.</div>
+        <div class="card-footer">70-security-snyk.yml</div>
+      </div>
+      <div class="card-actions"><span class="status status-fixed"><span class="dot dot-fixed"></span> Closed</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="concern-section" data-concern="observability">
+  <div class="concern-header">
+    <span>Observability &amp; Artifacts</span>
+    <button class="copy-group-btn" onclick="copyConcern('observability')">Copy open</button>
+  </div>
+
+  <div class="card" data-status="open" data-files="10-ci-verify.yml" data-concern="observability">
+    <div class="card-row">
+      <div class="card-content">
+        <div class="card-title">DAST findings not in job summary</div>
+        <div class="card-body">ZAP and Nuclei upload report artifacts but don't add anything to <code>GITHUB_STEP_SUMMARY</code>. Other jobs (lint, test, load) all write summaries.</div>
+        <div class="card-detail"><em>Fix:</em> Add summary step after each DAST scan: finding count + severity breakdown + link to artifact.</div>
+        <div class="card-footer">10-ci-verify.yml (dast-zap-baseline, dast-nuclei jobs)</div>
+      </div>
+      <div class="card-actions">
+        <span class="severity sev-low">low</span>
+        <span class="status status-open"><span class="dot dot-open"></span> Open</span>
+        <button class="copy-card-btn" onclick="copyCard(this)">Copy</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" data-status="open" data-files="run-e2e-tests.sh" data-concern="observability">
+    <div class="card-row">
+      <div class="card-content">
+        <div class="card-title">E2E port discovery fragile with IPv6</div>
+        <div class="card-body"><code>docker port ... | head -1 | cut -d: -f2</code> breaks if Docker returns IPv6 format <code>[::1]:12345</code>.</div>
+        <div class="card-detail"><em>Fix:</em> Use <code>awk -F: '{print $NF}'</code> or <code>docker inspect</code> format string to extract port reliably.</div>
+        <div class="card-footer">scripts/run-e2e-tests.sh:62</div>
+      </div>
+      <div class="card-actions">
+        <span class="severity sev-low">low</span>
+        <span class="status status-open"><span class="dot dot-open"></span> Open</span>
+        <button class="copy-card-btn" onclick="copyCard(this)">Copy</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Round 1 closed items -->
+  <div class="card" data-status="fixed" data-files="lefthook.yml,run-playwright-qa.sh" data-concern="observability">
+    <div class="card-row">
+      <div class="card-content">
+        <div class="card-title">Playwright pre-push had no runner script</div>
+        <div class="card-detail"><em>Fix:</em> Added <code>run-playwright-qa.sh</code> with full lifecycle.</div>
+        <div class="card-footer">C3</div>
+      </div>
+      <div class="card-actions"><span class="status status-fixed"><span class="dot dot-fixed"></span> Closed</span></div>
+    </div>
+  </div>
+
+  <div class="card" data-status="fixed" data-files="10-ci-verify.yml" data-concern="observability">
+    <div class="card-row">
+      <div class="card-content">
+        <div class="card-title">Dependency review only on PRs</div>
+        <div class="card-detail"><em>Fix:</em> PR + push with base-ref/head-ref.</div>
+        <div class="card-footer">M1</div>
+      </div>
+      <div class="card-actions"><span class="status status-fixed"><span class="dot dot-fixed"></span> Closed</span></div>
+    </div>
+  </div>
+
+  <div class="card" data-status="fixed" data-files="qlty-smells-gate.mjs" data-concern="observability">
+    <div class="card-row">
+      <div class="card-content">
+        <div class="card-title">Qlty smells had no artifact output</div>
+        <div class="card-detail"><em>Fix:</em> SARIF + markdown summary uploaded.</div>
+        <div class="card-footer">M7</div>
+      </div>
+      <div class="card-actions"><span class="status status-fixed"><span class="dot dot-fixed"></span> Closed</span></div>
+    </div>
+  </div>
+
+  <div class="card" data-status="fixed" data-files="50-security-fuzz.yml" data-concern="observability">
+    <div class="card-row">
+      <div class="card-content">
+        <div class="card-title">Fuzz failures were silent</div>
+        <div class="card-detail"><em>Fix:</em> Artifact log + job summary + auto GitHub issue.</div>
+        <div class="card-footer">M9</div>
+      </div>
+      <div class="card-actions"><span class="status status-fixed"><span class="dot dot-fixed"></span> Closed</span></div>
+    </div>
+  </div>
+
+  <div class="card" data-status="fixed" data-files="run-e2e-tests.sh" data-concern="observability">
+    <div class="card-row">
+      <div class="card-content">
+        <div class="card-title">E2E lock PID check used kill -0</div>
+        <div class="card-detail"><em>Fix:</em> <code>ps -p</code> with numeric guard.</div>
+        <div class="card-footer">H11</div>
+      </div>
+      <div class="card-actions"><span class="status status-fixed"><span class="dot dot-fixed"></span> Closed</span></div>
+    </div>
+  </div>
+
+  <div class="card" data-status="fixed" data-files="70-security-snyk.yml" data-concern="observability">
+    <div class="card-row">
+      <div class="card-content">
+        <div class="card-title">Snyk CLI version pinned inline in 4 places</div>
+        <div class="card-detail"><em>Fix:</em> Single workflow-level env var.</div>
+        <div class="card-footer">70-security-snyk.yml</div>
+      </div>
+      <div class="card-actions"><span class="status status-fixed"><span class="dot dot-fixed"></span> Closed</span></div>
+    </div>
+  </div>
+
+  <div class="card" data-status="fixed" data-files="10-ci-verify.yml" data-concern="observability">
+    <div class="card-row">
+      <div class="card-content">
+        <div class="card-title">Load test baselines via fragile API search</div>
+        <div class="card-detail"><em>Fix:</em> Committed baseline file at <code>test/load-test-baselines/ci-smoke.json</code>.</div>
+        <div class="card-footer">10-ci-verify.yml</div>
+      </div>
+      <div class="card-actions"><span class="status status-fixed"><span class="dot dot-fixed"></span> Closed</span></div>
+    </div>
+  </div>
+
+  <div class="card" data-status="fixed" data-files="extract-changelog-entry.mjs" data-concern="observability">
+    <div class="card-row">
+      <div class="card-content">
+        <div class="card-title">Changelog extraction didn't validate date format</div>
+        <div class="card-detail"><em>Fix:</em> YYYY-MM-DD strict validation.</div>
+        <div class="card-footer">extract-changelog-entry.mjs</div>
+      </div>
+      <div class="card-actions"><span class="status status-fixed"><span class="dot dot-fixed"></span> Closed</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="concern-section" data-concern="release">
+  <div class="concern-header">
+    <span>Release Integrity</span>
+    <button class="copy-group-btn" onclick="copyConcern('release')">Copy open</button>
+  </div>
+
+  <!-- All round 1 closed -->
+  <div class="card" data-status="fixed" data-files="30-release-from-tag.yml" data-concern="release">
+    <div class="card-row">
+      <div class="card-content">
+        <div class="card-title">Auto-tag re-ran full CI recursively</div>
+        <div class="card-detail"><em>Fix:</em> SHA-based verification gate.</div>
+        <div class="card-footer">C2</div>
+      </div>
+      <div class="card-actions"><span class="status status-fixed"><span class="dot dot-fixed"></span> Closed</span></div>
+    </div>
+  </div>
+
+  <div class="card" data-status="fixed" data-files="20-release-cut.yml,30-release-from-tag.yml" data-concern="release">
+    <div class="card-row">
+      <div class="card-content">
+        <div class="card-title">Release cut didn't verify prior CI</div>
+        <div class="card-detail"><em>Fix:</em> SHA verification in both workflows.</div>
+        <div class="card-footer">H1</div>
+      </div>
+      <div class="card-actions"><span class="status status-fixed"><span class="dot dot-fixed"></span> Closed</span></div>
+    </div>
+  </div>
+
+  <div class="card" data-status="fixed" data-files="30-release-from-tag.yml" data-concern="release">
+    <div class="card-row">
+      <div class="card-content">
+        <div class="card-title">Release retry rebuilt from scratch</div>
+        <div class="card-detail"><em>Fix:</em> Manifest-only re-publish.</div>
+        <div class="card-footer">H12</div>
+      </div>
+      <div class="card-actions"><span class="status status-fixed"><span class="dot dot-fixed"></span> Closed</span></div>
+    </div>
+  </div>
+
+  <div class="card" data-status="fixed" data-files="20-release-cut.yml" data-concern="release">
+    <div class="card-row">
+      <div class="card-content">
+        <div class="card-title">CHANGELOG entry validation before release</div>
+        <div class="card-detail"><em>Fix:</em> Validation step before tag creation.</div>
+        <div class="card-footer">M14</div>
+      </div>
+      <div class="card-actions"><span class="status status-fixed"><span class="dot dot-fixed"></span> Closed</span></div>
+    </div>
+  </div>
+
+  <div class="card" data-status="fixed" data-files="30-release-from-tag.yml" data-concern="release">
+    <div class="card-row">
+      <div class="card-content">
+        <div class="card-title">package.json version must match tag</div>
+        <div class="card-detail"><em>Fix:</em> Assertion compares base version across root/app/ui package.json.</div>
+        <div class="card-footer">L5</div>
+      </div>
+      <div class="card-actions"><span class="status status-fixed"><span class="dot dot-fixed"></span> Closed</span></div>
+    </div>
+  </div>
+
+  <div class="card" data-status="fixed" data-files="20-release-cut.yml,30-release-from-tag.yml" data-concern="release">
+    <div class="card-row">
+      <div class="card-content">
+        <div class="card-title">Workflow filename hardcoded in release polling</div>
+        <div class="card-detail"><em>Fix:</em> Dynamic resolution via API + pre-flight validation.</div>
+        <div class="card-footer">20/30 workflows</div>
+      </div>
+      <div class="card-actions"><span class="status status-fixed"><span class="dot dot-fixed"></span> Closed</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="concern-section" data-concern="gates">
+  <div class="concern-header">
+    <span>Gates &amp; Blocking</span>
+    <button class="copy-group-btn" onclick="copyConcern('gates')">Copy open</button>
+  </div>
+
+  <!-- All round 1 closed -->
+  <div class="card" data-status="fixed" data-files="10-ci-verify.yml,lefthook.yml" data-concern="gates">
+    <div class="card-row">
+      <div class="card-content">
+        <div class="card-title">Zizmor was non-blocking</div>
+        <div class="card-detail"><em>Fix:</em> Blocking in CI + local. Fails with install instructions.</div>
+        <div class="card-footer">H4</div>
+      </div>
+      <div class="card-actions"><span class="status status-fixed"><span class="dot dot-fixed"></span> Closed</span></div>
+    </div>
+  </div>
+
+  <div class="card" data-status="fixed" data-files="70-security-snyk.yml" data-concern="gates">
+    <div class="card-row">
+      <div class="card-content">
+        <div class="card-title">Snyk quota gate didn't block scan jobs</div>
+        <div class="card-detail"><em>Fix:</em> <code>if: needs.quota-plan.result == 'success'</code>.</div>
+        <div class="card-footer">H3</div>
+      </div>
+      <div class="card-actions"><span class="status status-fixed"><span class="dot dot-fixed"></span> Closed</span></div>
+    </div>
+  </div>
+
+  <div class="card" data-status="fixed" data-files="70-security-snyk.yml" data-concern="gates">
+    <div class="card-row">
+      <div class="card-content">
+        <div class="card-title">Snyk Code had continue-on-error</div>
+        <div class="card-detail"><em>Fix:</em> Removed. Weekly run is blocking.</div>
+        <div class="card-footer">H10</div>
+      </div>
+      <div class="card-actions"><span class="status status-fixed"><span class="dot dot-fixed"></span> Closed</span></div>
+    </div>
+  </div>
+
+  <div class="card" data-status="fixed" data-files="lefthook.yml" data-concern="gates">
+    <div class="card-row">
+      <div class="card-content">
+        <div class="card-title">Clean-tree gate blocked on untracked files</div>
+        <div class="card-detail"><em>Fix:</em> <code>git diff --quiet</code> &mdash; tracked changes only.</div>
+        <div class="card-footer">H8</div>
+      </div>
+      <div class="card-actions"><span class="status status-fixed"><span class="dot dot-fixed"></span> Closed</span></div>
+    </div>
+  </div>
+
+  <div class="card" data-status="fixed" data-files="all-workflows" data-concern="gates">
+    <div class="card-row">
+      <div class="card-content">
+        <div class="card-title">No job timeouts</div>
+        <div class="card-detail"><em>Fix:</em> <code>timeout-minutes</code> on all 26 jobs.</div>
+        <div class="card-footer">M2</div>
+      </div>
+      <div class="card-actions"><span class="status status-fixed"><span class="dot dot-fixed"></span> Closed</span></div>
+    </div>
+  </div>
+
+  <div class="card" data-status="fixed" data-files="check-load-test-regression.sh" data-concern="gates">
+    <div class="card-row">
+      <div class="card-content">
+        <div class="card-title">No absolute perf ceiling</div>
+        <div class="card-detail"><em>Fix:</em> p95 &le; 1200ms, p99 &le; 2500ms, rate &ge; 10/s.</div>
+        <div class="card-footer">M8</div>
+      </div>
+      <div class="card-actions"><span class="status status-fixed"><span class="dot dot-fixed"></span> Closed</span></div>
+    </div>
+  </div>
+
+  <div class="card" data-status="fixed" data-files="10-ci-verify.yml,validate-commit-range.mjs" data-concern="gates">
+    <div class="card-row">
+      <div class="card-content">
+        <div class="card-title">Commit message validation missing from CI</div>
+        <div class="card-detail"><em>Fix:</em> PR commit range validator + required status check.</div>
+        <div class="card-footer">10-ci-verify.yml + validate-commit-range.mjs</div>
+      </div>
+      <div class="card-actions"><span class="status status-fixed"><span class="dot dot-fixed"></span> Closed</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="concern-section" data-concern="hardening">
+  <div class="concern-header">
+    <span>Hardening &amp; Config</span>
+    <button class="copy-group-btn" onclick="copyConcern('hardening')">Copy open</button>
+  </div>
+
+  <div class="card" data-status="fixed" data-files="snyk-quota-config.json,snyk-quota-plan.mjs" data-concern="hardening">
+    <div class="card-row">
+      <div class="card-content">
+        <div class="card-title">Snyk quota limits hardcoded in script</div>
+        <div class="card-detail"><em>Fix:</em> Single config file <code>snyk-quota-config.json</code>.</div>
+        <div class="card-footer">70-security-snyk.yml + scripts/</div>
+      </div>
+      <div class="card-actions"><span class="status status-fixed"><span class="dot dot-fixed"></span> Closed</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="concern-section" data-concern="decisions">
+  <div class="concern-header"><span>Decisions</span></div>
+
+  <div class="card" data-status="wontfix" data-files="" data-concern="decisions">
+    <div class="card-row">
+      <div class="card-content">
+        <div class="card-title">Snyk as release-cut prerequisite</div>
+        <div class="card-body">Weekly scan sufficient. Hard-gating would block emergency hotfixes.</div>
+        <div class="card-footer">H3 note</div>
+      </div>
+      <div class="card-actions"><span class="status status-wontfix"><span class="dot dot-wontfix"></span> Won't fix</span></div>
+    </div>
+  </div>
+</div>
+
+</div><!-- end view-concern -->
+
+<div id="view-file" class="hidden"></div>
+
+<script>
+function getCardMarkdown(card) {
+  const title = card.querySelector('.card-title').textContent.trim();
+  const body = card.querySelector('.card-body');
+  const footer = card.querySelector('.card-footer').textContent.trim();
+  const detail = card.querySelector('.card-detail');
+  const sev = card.querySelector('.severity');
+  let md = `### ${title}`;
+  if (sev) md += ` [${sev.textContent.trim()}]`;
+  md += `\n> ${footer}\n\n`;
+  if (body) md += `${body.textContent.trim()}\n\n`;
+  if (detail) md += `${detail.textContent.trim()}\n\n`;
+  return md;
+}
+
+function copyCard(btn) {
+  const card = btn.closest('.card');
+  navigator.clipboard.writeText(getCardMarkdown(card)).then(() => {
+    btn.textContent = 'Copied!'; btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 1500);
+  });
+}
+
+function copyConcern(concern) {
+  const section = document.querySelector(`.concern-section[data-concern="${concern}"]`);
+  const cards = section.querySelectorAll('.card[data-status="open"]');
+  if (!cards.length) return;
+  const heading = section.querySelector('.concern-header span').textContent.trim();
+  let md = `## ${heading}\n\n`;
+  cards.forEach(c => md += getCardMarkdown(c));
+  const btn = section.querySelector('.copy-group-btn');
+  navigator.clipboard.writeText(md).then(() => {
+    btn.textContent = 'Copied!'; btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = 'Copy open'; btn.classList.remove('copied'); }, 1500);
+  });
+}
+
+function copyAllOpen() {
+  const cards = document.querySelectorAll('#view-concern .card[data-status="open"]');
+  let md = '# Drydock CI Audit — Open Items (Round 2)\n\n';
+  let cur = '';
+  cards.forEach(c => {
+    const s = c.closest('.concern-section').querySelector('.concern-header span').textContent.trim();
+    if (s !== cur) { cur = s; md += `## ${s}\n\n`; }
+    md += getCardMarkdown(c);
+  });
+  const btn = document.querySelector('.copy-all-btn');
+  navigator.clipboard.writeText(md).then(() => {
+    btn.textContent = 'Copied!'; btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = 'Copy all open'; btn.classList.remove('copied'); }, 1500);
+  });
+}
+
+let currentFilter = 'open';
+function setFilter(f) {
+  currentFilter = f;
+  document.querySelectorAll('.toolbar button[data-filter]').forEach(b => b.classList.toggle('active', b.dataset.filter === f));
+  applyFilter();
+}
+function applyFilter() {
+  document.querySelectorAll('.card').forEach(c => {
+    const s = c.dataset.status;
+    if (currentFilter === 'all') c.classList.remove('hidden');
+    else if (currentFilter === 'open') c.classList.toggle('hidden', s !== 'open');
+    else if (currentFilter === 'fixed') c.classList.toggle('hidden', s !== 'fixed' && s !== 'wontfix');
+  });
+  document.querySelectorAll('.concern-section, .file-group').forEach(sec => {
+    sec.classList.toggle('hidden', sec.querySelectorAll('.card:not(.hidden)').length === 0);
+  });
+}
+
+function setView(v) {
+  document.querySelectorAll('.toolbar button[data-view]').forEach(b => b.classList.toggle('active', b.dataset.view === v));
+  document.getElementById('view-concern').classList.toggle('hidden', v !== 'concern');
+  document.getElementById('view-file').classList.toggle('hidden', v !== 'file');
+  if (v === 'file') buildFileView();
+  applyFilter();
+}
+
+function buildFileView() {
+  const container = document.getElementById('view-file');
+  if (container.children.length > 0) return;
+  const fileMap = new Map();
+  document.querySelectorAll('#view-concern .card').forEach(card => {
+    (card.dataset.files || 'other').split(',').forEach(f => {
+      f = f.trim(); if (!f) return;
+      if (!fileMap.has(f)) fileMap.set(f, []);
+      fileMap.get(f).push(card.cloneNode(true));
+    });
+  });
+  [...fileMap.entries()]
+    .sort((a, b) => {
+      const ao = a[1].filter(c => c.dataset.status === 'open').length;
+      const bo = b[1].filter(c => c.dataset.status === 'open').length;
+      return bo !== ao ? bo - ao : a[0].localeCompare(b[0]);
+    })
+    .forEach(([file, cards]) => {
+      const oc = cards.filter(c => c.dataset.status === 'open').length;
+      const g = document.createElement('div'); g.className = 'file-group';
+      const h = document.createElement('div'); h.className = 'file-group-header';
+      h.innerHTML = `<span class="file-group-title">${file}${oc ? ` <span class="count">${oc} open</span>` : ''}</span><button class="copy-group-btn" onclick="copyFileGroup(this,'${file}')">Copy open</button>`;
+      g.appendChild(h);
+      cards.forEach(c => { const b = c.querySelector('.copy-card-btn'); if (b) b.setAttribute('onclick','copyCard(this)'); g.appendChild(c); });
+      container.appendChild(g);
+    });
+}
+
+function copyFileGroup(btn, file) {
+  const cards = btn.closest('.file-group').querySelectorAll('.card[data-status="open"]');
+  if (!cards.length) return;
+  let md = `## ${file}\n\n`;
+  cards.forEach(c => md += getCardMarkdown(c));
+  navigator.clipboard.writeText(md).then(() => {
+    btn.textContent = 'Copied!'; btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = 'Copy open'; btn.classList.remove('copied'); }, 1500);
+  });
+}
+
+applyFilter();
+</script>
+</body>
+</html>

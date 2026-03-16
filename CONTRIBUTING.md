@@ -69,7 +69,8 @@ npm run format     # biome format --write .
 Or check everything from the repo root:
 
 ```bash
-qlty check --all --no-progress
+./scripts/qlty-check-gate.sh all
+node scripts/qlty-smells-gate.mjs --scope=all
 ```
 
 ## Commit convention
@@ -125,14 +126,33 @@ Scope is optional. Subject line should be imperative, lowercase, no trailing per
 |---|---|
 |`ts-nocheck`|Rejects any `@ts-nocheck` directives|
 |`biome`|Biome lint and format check|
-|`qlty`|Full qlty lint pass (`qlty check --all`)|
+|`qlty`|Blocking qlty lint gate (`medium+` severity)|
+|`qlty-smells`|Advisory smells report (complexity/duplication)|
 |`build-and-test`|Parallel build + test for both `app/` and `ui/`|
 |`e2e`|Cucumber E2E tests against a fresh Drydock instance|
+|`e2e-playwright`|Builds `drydock:dev`, starts QA compose stack, waits for health, then runs Playwright critical UI flows|
 |`zizmor`|GitHub Actions workflow linting (advisory, skipped if not installed)|
-|`snyk-deps`|Dependency vulnerability scan (skipped if Snyk not installed)|
-|`snyk-code`|Static analysis security scan (skipped if Snyk not installed)|
 
-If lefthook passes locally, CI will pass. Fix any issues **before** pushing.
+## Commit message checks
+
+Lefthook also enforces commit messages on every `git commit` via `commit-msg`:
+
+```text
+<emoji> <type>(<scope>): <description>
+```
+
+If the hook fails, it prints an explicit `AI_ACTION_REQUIRED` line and a ready-to-run amend command.
+
+## Paid security scans
+
+Snyk paid products are intentionally separated from the PR/push fast path:
+
+- Open Source
+- Code
+- Container
+- IaC
+
+They run via `.github/workflows/70-security-snyk.yml` on a weekly cadence (plus manual dispatch on the default branch) so free scanners (Qlty plugins, CodeQL, Scorecard, fuzz) can catch most issues continuously without burning paid monthly test quotas.
 
 ## Documentation
 

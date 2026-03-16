@@ -1,0 +1,56 @@
+---
+title: "Verify Packages with Cosign"
+description: "Verify official Drydock container images and release archives before deployment."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+Cosign signing is performed during release publishing. Consumers should verify signatures before deployment.
+
+## Verify container images
+
+Use the same verification policy that release CI enforces:
+
+```bash
+IMAGE="quay.io/codeswhat/drydock:1.3.9"
+IDENTITY_REGEX='^https://github.com/CodesWhat/drydock/.github/workflows/release.yml@refs/(heads/main|tags/.+)$'
+OIDC_ISSUER='https://token.actions.githubusercontent.com'
+
+cosign verify \
+  --certificate-identity-regexp "${IDENTITY_REGEX}" \
+  --certificate-oidc-issuer "${OIDC_ISSUER}" \
+  "${IMAGE}"
+```
+
+You can run the same command for:
+
+- `docker.io/codeswhat/drydock:<tag>`
+- `ghcr.io/codeswhat/drydock:<tag>`
+- `quay.io/codeswhat/drydock:<tag>`
+
+## Verify GitHub release archives
+
+```bash
+TAG="v1.3.9"
+BASE_URL="https://github.com/CodesWhat/drydock/releases/download/${TAG}"
+ARCHIVE="drydock-${TAG}.tar.gz"
+IDENTITY_REGEX='^https://github.com/CodesWhat/drydock/.github/workflows/release.yml@refs/(heads/main|tags/.+)$'
+OIDC_ISSUER='https://token.actions.githubusercontent.com'
+
+curl -fsSLO "${BASE_URL}/${ARCHIVE}"
+curl -fsSLO "${BASE_URL}/${ARCHIVE}.sig"
+curl -fsSLO "${BASE_URL}/${ARCHIVE}.pem"
+
+cosign verify-blob \
+  --signature "${ARCHIVE}.sig" \
+  --certificate "${ARCHIVE}.pem" \
+  --certificate-identity-regexp "${IDENTITY_REGEX}" \
+  --certificate-oidc-issuer "${OIDC_ISSUER}" \
+  "${ARCHIVE}"
+```
+
+## Why old tags may look different
+
+Some older releases expose legacy `sha256-<digest>.sig` tags in registries. Newer releases may store signatures via OCI referrers instead, which means you might not see a `.sig` tag even though `cosign verify` succeeds.
+
+<Callout type="warn">If verification fails, do not deploy the artifact.</Callout>

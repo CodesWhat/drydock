@@ -14,7 +14,7 @@
 
 <p align="center">
   <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.4.1-blue" alt="Version"></a>
-  <a href="https://github.com/CodesWhat/drydock/pkgs/container/drydock"><img src="https://img.shields.io/badge/GHCR-32K%2B_pulls-2ea44f?logo=github&logoColor=white" alt="GHCR pulls"></a>
+  <a href="https://github.com/CodesWhat/drydock/pkgs/container/drydock"><img src="https://img.shields.io/badge/GHCR-40K%2B_pulls-2ea44f?logo=github&logoColor=white" alt="GHCR pulls"></a>
   <a href="https://hub.docker.com/r/codeswhat/drydock"><img src="https://img.shields.io/docker/pulls/codeswhat/drydock?logo=docker&logoColor=white&label=Docker+Hub" alt="Docker Hub pulls"></a>
   <a href="https://quay.io/repository/codeswhat/drydock"><img src="https://img.shields.io/badge/Quay.io-image-ee0000?logo=redhat&logoColor=white" alt="Quay.io"></a>
   <br>
@@ -37,7 +37,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/CodesWhat/drydock/actions/workflows/ci.yml"><img src="https://github.com/CodesWhat/drydock/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
+  <a href="https://github.com/CodesWhat/drydock/actions/workflows/10-ci-verify.yml"><img src="https://github.com/CodesWhat/drydock/actions/workflows/10-ci-verify.yml/badge.svg?branch=main" alt="CI"></a>
   <a href="https://www.bestpractices.dev/projects/11915"><img src="https://www.bestpractices.dev/projects/11915/badge" alt="OpenSSF Best Practices"></a>
   <a href="https://securityscorecards.dev/viewer/?uri=github.com/CodesWhat/drydock"><img src="https://img.shields.io/ossf-scorecard/github.com/CodesWhat/drydock?label=openssf+scorecard&style=flat" alt="OpenSSF Scorecard"></a>
   <br>

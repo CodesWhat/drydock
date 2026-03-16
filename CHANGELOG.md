@@ -14,6 +14,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Update-operations pagination** — `GET /api/containers/:id/update-operations` now supports `limit` and `offset` query parameters with `_links` navigation, matching the existing container list pagination pattern.
 - **Periodic audit log pruning** — Audit store now runs a background timer (hourly, unref'd) to prune stale entries even with low insert volume, in addition to the existing insert-count-based pruning.
+- **Container release notes enrichment** — Watch cycles now enrich update candidates with GitHub release metadata (`result.releaseNotes` and `result.releaseLink`), and full notes are available via `GET /api/containers/:id/release-notes`.
+- **Container list sort and filter query params** — `GET /api/containers` now supports `sort` (`name`, `status`, `age`, `created`, with optional `-` prefix for descending), plus `status`, `kind`, `watcher`, and `maturity` filters.
+- **Update age and maturity API signals** — Container payloads now track `updateAge` and support maturity states (`hot`, `mature`, `established`) for filtering and policy workflows.
+- **Suggested semver tag hints** — Containers tracked on non-semver tags such as `latest` now expose `result.suggestedTag` to surface the best semver target.
+- **`oninclude` trigger auto mode** — Trigger `auto` now supports `oninclude`, which only auto-runs for containers explicitly matched by include labels. ([#160](https://github.com/CodesWhat/drydock/issues/160))
+- **Container runtime observability APIs** — Added `/api/containers/stats`, `/api/containers/:id/stats`, and `/api/containers/:id/stats/stream` for resource telemetry, plus richer per-container runtime snapshots.
+- **Real-time container log streaming** — Added WebSocket streaming at `/api/v1/containers/:id/logs/stream` with `stdout`/`stderr`, `tail`, `since`, and `follow` controls.
+- **Container logs and runtime stats panels** — Container detail views now include dedicated live Logs and Runtime Stats tabs (including full-page logs route support).
+- **Signed registry webhook receiver** — Added `POST /api/webhooks/registry` with HMAC signature verification and provider-specific payload parsing for registry push events.
+- **Auth lockout Prometheus observability** — Added Prometheus metrics for login success/failure and lockout activity.
 
 ### Changed
 
@@ -23,6 +33,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Decompose useContainerActions** — Split the 1200-line composable into focused modules: `useContainerBackups`, `useContainerPolicy`, `useContainerPreview`, and `useContainerTriggers`.
 - **Registry error handling** — Replaced `catch (e: any)` with `catch (e: unknown)` and `getErrorMessage(e)` in component registration and trigger/watcher startup.
 - **E2E test resilience** — Container row count assertions now use `toBeGreaterThan(0)` instead of hardcoded counts, preventing false failures when the QA environment has a different number of containers.
+- **Registry digest cache dedup per poll cycle** — Digest cache lookups now deduplicate repeated requests within a single poll cycle, reducing redundant registry calls and improving metric accuracy.
+
+### Documentation
+
+- **Podman docs expansion** — Added Podman setup/compatibility guidance plus SELinux, `podman-compose`, and production notes in watcher and FAQ docs.
+- **Docs site URL rebrand** — Replaced `drydock.codeswhat.com` links with `getdrydock.com` across docs pages, sitemap/robots metadata, and website copy.
 
 ### Fixed
 

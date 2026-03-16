@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Drydock CI Pipeline</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#fafafa;color:#1a1a1a;overflow-x:auto}
+
+/* Canvas */
+.canvas{min-width:1400px;padding:48px 48px 64px}
+
+/* Header */
+header{margin-bottom:40px}
+header h1{font-size:32px;font-weight:700;letter-spacing:-0.5px;color:#111}
+header p{font-size:14px;color:#666;margin-top:4px}
+
+/* Legend */
+.legend{display:flex;gap:24px;margin-bottom:36px;flex-wrap:wrap}
+.legend-item{display:flex;align-items:center;gap:6px;font-size:12px;color:#666;font-weight:500}
+.legend-dot{width:10px;height:10px;border-radius:3px}
+
+/* Swimlanes */
+.swimlane{display:flex;align-items:stretch;margin-bottom:2px;min-height:120px}
+.swimlane-label{
+  width:140px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;
+  color:#fff;border-radius:8px 0 0 8px;
+  writing-mode:horizontal-tb;text-align:center;padding:12px 8px;
+}
+.swimlane-content{
+  flex:1;display:flex;align-items:center;gap:12px;
+  padding:16px 24px;
+  background:#fff;border:1px solid #e5e5e5;border-left:none;
+  border-radius:0 8px 8px 0;
+  flex-wrap:wrap;position:relative;
+}
+
+/* Lane colors */
+.lane-commit .swimlane-label{background:#10b981}
+.lane-push .swimlane-label{background:#3b82f6}
+.lane-ci .swimlane-label{background:#6366f1}
+.lane-release .swimlane-label{background:#ec4899}
+.lane-schedule .swimlane-label{background:#8b5cf6}
+.lane-manual .swimlane-label{background:#f59e0b}
+
+/* Nodes */
+.node{
+  display:inline-flex;align-items:center;gap:8px;
+  padding:8px 14px;border-radius:8px;
+  font-size:12px;font-weight:600;
+  white-space:nowrap;position:relative;
+  border:2px solid;
+  transition:transform .15s,box-shadow .15s;
+  cursor:default;
+}
+.node:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,.1)}
+.node .emoji{font-size:15px}
+.node-sub{font-size:10px;color:#666;font-weight:400;display:block;margin-top:1px}
+
+/* Node types */
+.n-block{background:#dcfce7;border-color:#86efac;color:#166534}
+.n-advisory{background:#fef9c3;border-color:#fde047;color:#854d0e}
+.n-conditional{background:#dbeafe;border-color:#93c5fd;color:#1e40af}
+.n-paid{background:#f3e8ff;border-color:#c4b5fd;color:#5b21b6}
+.n-action{background:#fce7f3;border-color:#f9a8d4;color:#9d174d}
+
+/* Arrows between nodes */
+.arrow{
+  display:flex;align-items:center;flex-shrink:0;
+  color:#d1d5db;font-size:18px;
+}
+.arrow svg{width:24px;height:24px}
+
+/* Separator between lanes */
+.lane-sep{
+  display:flex;align-items:center;justify-content:center;
+  padding:6px 0 6px 140px;
+}
+.lane-sep-line{
+  flex:1;height:0;border-top:2px dashed #e5e5e5;
+}
+.lane-sep-label{
+  padding:2px 16px;font-size:11px;font-weight:600;color:#999;
+  background:#fafafa;white-space:nowrap;
+}
+
+/* Group box */
+.group{
+  display:flex;flex-wrap:wrap;align-items:center;gap:8px;
+  padding:10px 14px;border-radius:10px;
+  border:1px dashed #d1d5db;background:rgba(0,0,0,.015);
+}
+.group-label{
+  width:100%;font-size:10px;font-weight:700;text-transform:uppercase;
+  letter-spacing:0.8px;color:#999;margin-bottom:2px;
+}
+
+/* Info cards at bottom */
+.info-row{display:flex;gap:16px;margin-top:36px;flex-wrap:wrap}
+.info-card{
+  flex:1;min-width:280px;
+  background:#fff;border:1px solid #e5e5e5;border-radius:12px;
+  padding:20px;
+}
+.info-card h3{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#999;margin-bottom:10px}
+.info-card ul{list-style:none;padding:0}
+.info-card li{font-size:13px;color:#444;padding:4px 0;border-bottom:1px solid #f5f5f5;display:flex;gap:8px}
+.info-card li:last-child{border-bottom:none}
+.info-card li .label{color:#999;font-size:11px;min-width:80px;flex-shrink:0;font-weight:600}
+
+/* Schedule mini table */
+.sched{width:100%;font-size:12px;border-collapse:collapse}
+.sched th{text-align:left;padding:6px 8px;border-bottom:2px solid #eee;color:#999;font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:0.5px}
+.sched td{padding:6px 8px;border-bottom:1px solid #f5f5f5;color:#444}
+.sched tr:last-child td{border-bottom:none}
+.sched .dot{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:6px}
+</style>
+</head>
+<body>
+<div class="canvas">
+
+<header>
+  <h1>Drydock CI Pipeline</h1>
+  <p>Commit &rarr; Push &rarr; PR &rarr; Merge &rarr; Release &mdash; updated 2026-03-16</p>
+</header>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:#86efac"></div> Blocking</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#fde047"></div> Advisory</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#93c5fd"></div> Conditional</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#c4b5fd"></div> Paid / Quota</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#f9a8d4"></div> Action / Output</div>
+  <div class="legend-item" style="margin-left:auto;opacity:.6"><span style="font-size:11px">Arrows = sequential &nbsp;|&nbsp; Grouped = parallel</span></div>
+</div>
+
+<!-- ═══════════════════════ COMMIT ═══════════════════════ -->
+<div class="swimlane lane-commit">
+  <div class="swimlane-label">Commit</div>
+  <div class="swimlane-content">
+    <div class="node n-block"><span class="emoji">💬</span> Commit message format<span class="node-sub">gitmoji + conventional</span></div>
+    <div class="arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14m-4-4 4 4-4 4"/></svg></div>
+    <div class="node n-block"><span class="emoji">🔧</span> Biome fix + format<span class="node-sub">auto-fix, re-stage</span></div>
+    <div class="arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14m-4-4 4 4-4 4"/></svg></div>
+    <div class="node n-block"><span class="emoji">📊</span> Per-file coverage<span class="node-sub">100% on staged files</span></div>
+  </div>
+</div>
+
+<div class="lane-sep"><div class="lane-sep-line"></div><div class="lane-sep-label">git push</div><div class="lane-sep-line"></div></div>
+
+<!-- ═══════════════════════ PUSH ═══════════════════════ -->
+<div class="swimlane lane-push">
+  <div class="swimlane-label">Pre-push</div>
+  <div class="swimlane-content">
+    <div class="node n-block"><span class="emoji">🌳</span> Clean tree<span class="node-sub">no uncommitted changes</span></div>
+    <div class="arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14m-4-4 4 4-4 4"/></svg></div>
+
+    <div class="group">
+      <div class="group-label">Lint gate ~1 min (sequential)</div>
+      <div class="node n-block"><span class="emoji">🚫</span> ts-nocheck</div>
+      <div class="arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14m-4-4 4 4-4 4"/></svg></div>
+      <div class="node n-block"><span class="emoji">🔧</span> Biome</div>
+      <div class="arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14m-4-4 4 4-4 4"/></svg></div>
+      <div class="node n-block"><span class="emoji">🔍</span> Qlty gate</div>
+    </div>
+    <div class="arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14m-4-4 4 4-4 4"/></svg></div>
+
+    <div class="node n-advisory"><span class="emoji">👃</span> Qlty smells<span class="node-sub">complexity / duplication</span></div>
+    <div class="arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14m-4-4 4 4-4 4"/></svg></div>
+
+    <div class="group">
+      <div class="group-label">Build + Test ~45s (parallel)</div>
+      <div class="node n-block"><span class="emoji">⚙️</span> app: tsc + vitest</div>
+      <div class="node n-block"><span class="emoji">🎨</span> ui: vite + vitest</div>
+    </div>
+    <div class="arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14m-4-4 4 4-4 4"/></svg></div>
+
+    <div class="group">
+      <div class="group-label">E2E ~10 min (sequential)</div>
+      <div class="node n-block"><span class="emoji">🥒</span> Cucumber</div>
+      <div class="arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14m-4-4 4 4-4 4"/></svg></div>
+      <div class="node n-block"><span class="emoji">🎭</span> Playwright<span class="node-sub">builds image</span></div>
+    </div>
+    <div class="arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14m-4-4 4 4-4 4"/></svg></div>
+
+    <div class="node n-block"><span class="emoji">🔐</span> Zizmor<span class="node-sub">blocks, requires install</span></div>
+  </div>
+</div>
+
+<div class="lane-sep"><div class="lane-sep-line"></div><div class="lane-sep-label">PR opened / push to main or release</div><div class="lane-sep-line"></div></div>
+
+<!-- ═══════════════════════ CI ═══════════════════════ -->
+<div class="swimlane lane-ci">
+  <div class="swimlane-label">CI Verify</div>
+  <div class="swimlane-content" style="flex-direction:column;align-items:stretch;gap:12px">
+
+    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+      <div class="group" style="flex:1">
+        <div class="group-label">Immediate start (parallel)</div>
+        <div class="node n-block"><span class="emoji">🔐</span> Zizmor</div>
+        <div class="node n-conditional"><span class="emoji">📦</span> Dep Review<span class="node-sub">PR + main push</span></div>
+        <div class="node n-conditional"><span class="emoji">💬</span> Commit Msg Gate<span class="node-sub">PR only</span></div>
+        <div class="node n-block"><span class="emoji">🧹</span> Lint + Smells</div>
+        <div class="node n-block"><span class="emoji">🧪</span> Test + Codecov</div>
+        <div class="node n-block"><span class="emoji">🏗️</span> Build<span class="node-sub">UI + Docker + QA artifact</span></div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:8px;align-items:center;padding-left:8px">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" stroke-width="2"><path d="M12 5v14m-4-4 4 4 4-4"/></svg>
+      <span style="font-size:11px;color:#999;font-weight:600">needs: build</span>
+    </div>
+
+    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+      <div class="group" style="flex:1">
+        <div class="group-label">After build (parallel)</div>
+        <div class="node n-block"><span class="emoji">🥒</span> E2E Cucumber</div>
+        <div class="node n-block"><span class="emoji">🎭</span> Playwright<span class="node-sub">loads QA artifact</span></div>
+        <div class="node n-conditional"><span class="emoji">🔬</span> DAST ZAP<span class="node-sub">release/* only</span></div>
+        <div class="node n-conditional"><span class="emoji">☢️</span> DAST Nuclei<span class="node-sub">release/* only</span></div>
+        <div class="node n-advisory"><span class="emoji">📊</span> Load Smoke<span class="node-sub">PR only, advisory</span></div>
+        <div class="node n-block"><span class="emoji">📈</span> Load CI<span class="node-sub">push only, enforced baseline</span></div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:8px;align-items:center;padding-left:8px">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" stroke-width="2"><path d="M12 5v14m-4-4 4 4 4-4"/></svg>
+      <span style="font-size:11px;color:#999;font-weight:600">all green on main &rarr;</span>
+    </div>
+
+    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+      <div class="node n-action"><span class="emoji">🏷️</span> Auto Tag<span class="node-sub">analyze commits &rarr; semver bump &rarr; push tag</span></div>
+    </div>
+
+  </div>
+</div>
+
+<div class="lane-sep"><div class="lane-sep-line"></div><div class="lane-sep-label">tag v* pushed (auto or manual cut)</div><div class="lane-sep-line"></div></div>
+
+<!-- ═══════════════════════ RELEASE ═══════════════════════ -->
+<div class="swimlane lane-release">
+  <div class="swimlane-label">Release</div>
+  <div class="swimlane-content">
+    <div class="group">
+      <div class="group-label">Pre-flight gates (sequential)</div>
+      <div class="node n-block"><span class="emoji">🔢</span> Version assert<span class="node-sub">tag vs package.json</span></div>
+      <div class="arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14m-4-4 4 4-4 4"/></svg></div>
+      <div class="node n-block"><span class="emoji">✅</span> Verify CI<span class="node-sub">dynamic workflow lookup</span></div>
+    </div>
+    <div class="arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14m-4-4 4 4-4 4"/></svg></div>
+
+    <div class="group">
+      <div class="group-label">Build + Publish</div>
+      <div class="node n-action"><span class="emoji">🐳</span> Multi-arch<span class="node-sub">amd64 + arm64</span></div>
+      <div class="node n-action"><span class="emoji">📦</span> Push registries<span class="node-sub">GHCR + Hub + Quay</span></div>
+    </div>
+    <div class="arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14m-4-4 4 4-4 4"/></svg></div>
+
+    <div class="group">
+      <div class="group-label">Sign + Attest</div>
+      <div class="node n-action"><span class="emoji">📜</span> SBOM</div>
+      <div class="node n-action"><span class="emoji">🔏</span> Cosign + verify</div>
+      <div class="node n-action"><span class="emoji">🛡️</span> SLSA provenance</div>
+    </div>
+    <div class="arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14m-4-4 4 4-4 4"/></svg></div>
+
+    <div class="group">
+      <div class="group-label">GitHub Release</div>
+      <div class="node n-block"><span class="emoji">📋</span> CHANGELOG gate<span class="node-sub">required for stable + RC</span></div>
+      <div class="node n-action"><span class="emoji">📝</span> Notes from CHANGELOG</div>
+      <div class="node n-action"><span class="emoji">📎</span> Archives + signatures</div>
+      <div class="node n-conditional"><span class="emoji">🏷️</span> RC prerelease<span class="node-sub">--prerelease on *-rc.*</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="lane-sep"><div class="lane-sep-line"></div><div class="lane-sep-label">manual override</div><div class="lane-sep-line"></div></div>
+
+<!-- ═══════════════════════ MANUAL ═══════════════════════ -->
+<div class="swimlane lane-manual">
+  <div class="swimlane-label">Manual Cut</div>
+  <div class="swimlane-content">
+    <div class="node n-block"><span class="emoji">✅</span> Verify CI passed<span class="node-sub">dynamic workflow lookup</span></div>
+    <div class="arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14m-4-4 4 4-4 4"/></svg></div>
+    <div class="node n-action"><span class="emoji">🔢</span> Infer or specify bump</div>
+    <div class="arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14m-4-4 4 4-4 4"/></svg></div>
+    <div class="node n-block"><span class="emoji">📋</span> CHANGELOG gate<span class="node-sub">non-empty entry required</span></div>
+    <div class="arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14m-4-4 4 4-4 4"/></svg></div>
+    <div class="node n-action"><span class="emoji">🏷️</span> Create + push tag<span class="node-sub">triggers Release lane</span></div>
+  </div>
+</div>
+
+<div class="lane-sep"><div class="lane-sep-line"></div><div class="lane-sep-label">weekly / on-demand</div><div class="lane-sep-line"></div></div>
+
+<!-- ═══════════════════════ SCHEDULED ═══════════════════════ -->
+<div class="swimlane lane-schedule">
+  <div class="swimlane-label">Scheduled</div>
+  <div class="swimlane-content" style="padding:12px 20px">
+    <table class="sched">
+      <thead><tr><th></th><th>Scan</th><th>When</th><th>Also runs on</th><th>Gate</th></tr></thead>
+      <tbody>
+        <tr><td><span class="dot" style="background:#86efac"></span></td><td>CodeQL SAST</td><td>Mon 06:30</td><td>PRs</td><td>Blocking</td></tr>
+        <tr><td><span class="dot" style="background:#86efac"></span></td><td>Fuzz Testing</td><td>Sun 06:00</td><td>PRs</td><td>Blocking</td></tr>
+        <tr><td><span class="dot" style="background:#fde047"></span></td><td>OpenSSF Scorecard</td><td>Mon 06:00</td><td>branch protection</td><td>Advisory</td></tr>
+        <tr><td><span class="dot" style="background:#fde047"></span></td><td>Mutation (Stryker)</td><td>Tue 06:15</td><td>manual</td><td>Advisory</td></tr>
+        <tr><td><span class="dot" style="background:#c4b5fd"></span></td><td>Snyk Open Source</td><td>Mon 07:15</td><td>manual (main)</td><td>Blocking (quota-gated)</td></tr>
+        <tr><td><span class="dot" style="background:#c4b5fd"></span></td><td>Snyk Code SAST</td><td>Mon 07:15</td><td>manual (main)</td><td>Blocking (quota-gated)</td></tr>
+        <tr><td><span class="dot" style="background:#c4b5fd"></span></td><td>Snyk Container</td><td>Mon 07:15</td><td>manual (main)</td><td>Blocking (quota-gated)</td></tr>
+        <tr><td><span class="dot" style="background:#c4b5fd"></span></td><td>Snyk IaC</td><td>Mon 07:15</td><td>manual (main)</td><td>Blocking (quota-gated)</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ═══════════════════════ INFO CARDS ═══════════════════════ -->
+<div class="info-row">
+  <div class="info-card">
+    <h3>Gate Layering</h3>
+    <ul>
+      <li><span class="label">Commit</span> Format + per-file coverage (staged only)</li>
+      <li><span class="label">Push</span> Clean tree + full lint + build + test + E2E + Zizmor</li>
+      <li><span class="label">PR</span> + dep review + commit msg gate + load smoke</li>
+      <li><span class="label">Merge</span> + enforced load test (committed baseline) + auto-tag</li>
+      <li><span class="label">Release</span> Version assert &rarr; CI verify &rarr; build &rarr; sign &rarr; CHANGELOG gate &rarr; publish</li>
+      <li><span class="label">Manual Cut</span> CI verify &rarr; bump &rarr; CHANGELOG gate &rarr; tag</li>
+      <li><span class="label">Weekly</span> Paid security + mutation testing</li>
+    </ul>
+  </div>
+  <div class="info-card">
+    <h3>Design Decisions</h3>
+    <ul>
+      <li><span class="label">Free / Paid</span> Free tools gate PRs, paid (Snyk) weekly + quota-gated</li>
+      <li><span class="label">QA Image</span> Built once in CI, shared as artifact</li>
+      <li><span class="label">Release CI</span> Dynamic workflow lookup, polls for prior success</li>
+      <li><span class="label">Version</span> Tag base version asserted against all package.json files</li>
+      <li><span class="label">CHANGELOG</span> Required for stable and RC; extraction enforces YYYY-MM-DD</li>
+      <li><span class="label">DAST</span> Only on release/* branches</li>
+      <li><span class="label">Load Test</span> Advisory on PR, enforced on merge (committed baseline)</li>
+      <li><span class="label">Zizmor</span> Blocking in both pre-push (requires local install) and CI</li>
+      <li><span class="label">Auto-tag</span> Requires ALL gates green, main push only</li>
+    </ul>
+  </div>
+  <div class="info-card">
+    <h3>Versioning &amp; Tags</h3>
+    <ul>
+      <li><span class="label">Stable</span> v1.5.0 &rarr; Docker: 1.5.0, 1.5, 1, latest</li>
+      <li><span class="label">RC</span> v1.5.0-rc.1 &rarr; Docker: 1.5.0-rc.1 only (--prerelease)</li>
+      <li><span class="label">Hotfix</span> Increment patch: v1.5.1, v1.5.2, ... (no ceiling)</li>
+      <li><span class="label">Registries</span> GHCR + Docker Hub + Quay.io</li>
+      <li><span class="label">Signing</span> Cosign keyless + SLSA provenance + SBOM</li>
+    </ul>
+  </div>
+</div>
+
+<div class="info-row" style="margin-top:16px">
+  <div class="info-card">
+    <h3>Timing</h3>
+    <ul>
+      <li><span class="label">Commit</span> ~5s (format + biome fix)</li>
+      <li><span class="label">Push</span> ~8-12 min (full local pipeline)</li>
+      <li><span class="label">CI (PR)</span> ~12 min (parallel jobs)</li>
+      <li><span class="label">CI (merge)</span> ~14 min (+ load test)</li>
+      <li><span class="label">Release</span> ~8 min (multi-arch build)</li>
+      <li><span class="label">Total</span> Commit to Docker Hub: ~35 min</li>
+    </ul>
+  </div>
+  <div class="info-card">
+    <h3>Workflow Files</h3>
+    <ul>
+      <li><span class="label">CI Verify</span> 10-ci-verify.yml</li>
+      <li><span class="label">Release Cut</span> 20-release-cut.yml (manual dispatch)</li>
+      <li><span class="label">Release Tag</span> 30-release-from-tag.yml (on tag push)</li>
+      <li><span class="label">CodeQL</span> 40-codeql.yml</li>
+      <li><span class="label">Fuzz</span> 50-fuzz.yml</li>
+      <li><span class="label">Scorecard</span> 60-scorecard.yml</li>
+      <li><span class="label">Snyk</span> 70-security-snyk.yml (weekly + manual)</li>
+      <li><span class="label">Stryker</span> 80-mutation.yml</li>
+    </ul>
+  </div>
+</div>
+
+</div>
+</body>
+</html>

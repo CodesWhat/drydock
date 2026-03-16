@@ -454,7 +454,7 @@ export default function Home() {
                     rel="noopener noreferrer"
                   >
                     <img
-                      src="https://img.shields.io/badge/GHCR-30K%2B_pulls-2ea44f?logo=github&logoColor=white"
+                      src="https://img.shields.io/badge/GHCR-40K%2B_pulls-2ea44f?logo=github&logoColor=white"
                       alt="GHCR pulls"
                     />
                   </a>
