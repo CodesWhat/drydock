@@ -96,6 +96,7 @@ jobs:
   test:
     name: Test & Coverage
     runs-on: ubuntu-latest
+    environment: ci
     permissions:
       contents: read
 
@@ -254,6 +255,7 @@ jobs:
     if: github.event_name == 'pull_request'
     continue-on-error: true  # advisory until baselines stabilize for this release cycle
     needs: [build]
+    environment: ci
     permissions:
       contents: read
       actions: read
@@ -469,6 +471,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'push'
     needs: [build]
+    environment: ci
     permissions:
       contents: read
 
