@@ -84,6 +84,7 @@ vi.mock('@/utils/display', () => ({
   registryColorText: vi.fn(() => 'text'),
   registryLabel: vi.fn((r: string) => r),
   serverBadgeColor: vi.fn(() => ({ bg: 'bg', text: 'text' })),
+  suggestedTagColor: vi.fn(() => ({ bg: 'bg', text: 'text' })),
   updateKindColor: vi.fn(() => ({ bg: 'bg', text: 'text' })),
 }));
 
@@ -268,6 +269,19 @@ const childStubs = {
     template:
       '<div data-test="container-logs-stub" :data-id="containerId" :data-name="containerName" :data-compact="compact === undefined ? `false` : `true`">{{ containerName }}</div>',
     props: ['containerId', 'containerName', 'compact'],
+  },
+  UpdateMaturityBadge: {
+    template: '<span data-test="update-maturity-badge" v-if="maturity">{{ maturity }}</span>',
+    props: ['maturity', 'tooltip', 'size'],
+  },
+  SuggestedTagBadge: {
+    template: '<span data-test="suggested-tag-badge" v-if="tag">{{ tag }}</span>',
+    props: ['tag', 'currentTag'],
+  },
+  ReleaseNotesLink: {
+    template:
+      '<span data-test="release-notes-link"><a v-if="releaseLink" :href="releaseLink">Release notes</a></span>',
+    props: ['releaseNotes', 'releaseLink'],
   },
 };
 

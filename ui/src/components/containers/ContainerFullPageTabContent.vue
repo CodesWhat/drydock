@@ -1,7 +1,11 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue';
+import AppButton from '../AppButton.vue';
 import ContainerLogs from './ContainerLogs.vue';
 import ContainerStats from './ContainerStats.vue';
+import UpdateMaturityBadge from './UpdateMaturityBadge.vue';
+import SuggestedTagBadge from './SuggestedTagBadge.vue';
+import ReleaseNotesLink from './ReleaseNotesLink.vue';
 import { revealContainerEnv } from '../../services/container';
 import { useContainersViewTemplateContext } from './containersViewTemplateContext';
 
@@ -244,16 +248,11 @@ const {
                 <AppIcon name="warning" :size="12" class="shrink-0 mt-0.5" style="color: var(--dd-warning);" />
                 <span class="flex-1 min-w-0 whitespace-normal break-words" style="color: var(--dd-warning);">{{ selectedContainer.noUpdateReason }}</span>
               </div>
-              <a
-                v-if="selectedContainer.releaseLink"
-                :href="selectedContainer.releaseLink"
-                target="_blank"
-                rel="noopener noreferrer"
-                class="inline-flex items-center text-xs underline hover:no-underline"
-                style="color: var(--dd-info);"
-              >
-                Release notes
-              </a>
+              <div v-if="selectedContainer.updateKind || selectedContainer.updateMaturity || selectedContainer.suggestedTag" class="flex items-center gap-1.5 flex-wrap">
+                <UpdateMaturityBadge :maturity="selectedContainer.updateMaturity" :tooltip="selectedContainer.updateMaturityTooltip" />
+                <SuggestedTagBadge :tag="selectedContainer.suggestedTag" :current-tag="selectedContainer.currentTag" />
+              </div>
+              <ReleaseNotesLink :release-notes="selectedContainer.releaseNotes" :release-link="selectedContainer.releaseLink" />
               <div class="pt-1 space-y-1.5">
                 <div class="text-[0.625rem] font-semibold uppercase tracking-wider dd-text-muted">Tag Filters</div>
                 <div class="flex items-start gap-2 px-3 py-2 dd-rounded text-[0.6875rem]"
@@ -422,12 +421,10 @@ const {
             <div class="px-4 py-3 flex items-center gap-2">
               <AppIcon name="security" :size="12" class="dd-text-muted" />
               <span class="text-[0.6875rem] font-semibold uppercase tracking-wider dd-text-muted">Security</span>
-              <button class="ml-auto px-2 py-1 dd-rounded text-[0.625rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-
-                      :disabled="detailVulnerabilityLoading || detailSbomLoading"
+              <AppButton size="xs" class="ml-auto" :disabled="detailVulnerabilityLoading || detailSbomLoading"
                       @click="loadDetailSecurityData">
                 {{ detailVulnerabilityLoading || detailSbomLoading ? 'Refreshing...' : 'Refresh' }}
-              </button>
+              </AppButton>
             </div>
             <div class="p-4 space-y-3">
               <div v-if="detailVulnerabilityLoading"
@@ -486,12 +483,10 @@ const {
                     <option value="spdx-json">spdx-json</option>
                     <option value="cyclonedx-json">cyclonedx-json</option>
                   </select>
-                  <button class="px-2 py-1 dd-rounded text-[0.625rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-    
-                          :disabled="detailSbomLoading"
+                  <AppButton size="xs" :disabled="detailSbomLoading"
                           @click="loadDetailSbom">
                     {{ detailSbomLoading ? 'Loading SBOM...' : 'Refresh SBOM' }}
-                  </button>
+                  </AppButton>
                 </div>
                 <div v-if="detailSbomError"
                      class="px-3 py-2 dd-rounded text-xs"
@@ -557,11 +552,11 @@ const {
                   <template v-else>
                     <span v-if="getRevealedValue(selectedContainer.id, e.key)" class="truncate dd-text">{{ getRevealedValue(selectedContainer.id, e.key) }}</span>
                     <span v-else class="truncate dd-text-muted">&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;</span>
-                    <button class="shrink-0 p-0.5 dd-text-muted hover:dd-text transition-colors"
+                    <AppButton size="none" variant="plain" weight="none" class="shrink-0 p-0.5 dd-text-muted hover:dd-text transition-colors"
                             :disabled="envRevealLoading"
                             @click="toggleReveal(selectedContainer.id, e.key)">
                       <AppIcon :name="getRevealedValue(selectedContainer.id, e.key) ? 'eye-slash' : 'eye'" :size="11" />
-                    </button>
+                    </AppButton>
                   </template>
                 </div>
               </div>
@@ -628,73 +623,56 @@ const {
                 <div>
                   <div class="text-[0.5625rem] uppercase tracking-wider mb-1.5 dd-text-muted">Actions</div>
                   <div class="flex flex-wrap gap-2">
-                    <button class="px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-      
-                            :disabled="previewLoading"
+                    <AppButton size="md" :disabled="previewLoading"
                             @click="runContainerPreview">
                       {{ previewLoading ? 'Previewing...' : 'Preview Update' }}
-                    </button>
-                    <button v-if="selectedContainer.bouncer === 'blocked'"
-                            class="px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors"
-                            :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)', border: '1px solid var(--dd-danger)' }"
+                    </AppButton>
+                    <AppButton v-if="selectedContainer.bouncer === 'blocked'" size="md" variant="plain" :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)', border: '1px solid var(--dd-danger)' }"
                             :disabled="actionInProgress === selectedContainer.name"
                             @click="confirmForceUpdate(selectedContainer.name)">
                       <AppIcon name="lock" :size="10" class="mr-1 inline" />Force Update
-                    </button>
-                    <button v-else
-                            class="px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-      
+                    </AppButton>
+                    <AppButton v-else
+                            size="md"
                             :disabled="!selectedContainer.newTag || actionInProgress === selectedContainer.name"
                             @click="confirmUpdate(selectedContainer.name)">
                       Update Now
-                    </button>
-                    <button class="px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-      
-                            :disabled="actionInProgress === selectedContainer.name"
+                    </AppButton>
+                    <AppButton size="md" :disabled="actionInProgress === selectedContainer.name"
                             @click="scanContainer(selectedContainer.name)">
                       Scan Now
-                    </button>
+                    </AppButton>
                   </div>
                 </div>
                 <!-- Skip & Snooze group -->
                 <div>
                   <div class="text-[0.5625rem] uppercase tracking-wider mb-1.5 dd-text-muted">Skip & Snooze</div>
                   <div class="flex flex-wrap gap-2">
-                    <button class="px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-      
-                            :disabled="!selectedContainer.newTag || policyInProgress !== null"
+                    <AppButton size="md" :disabled="!selectedContainer.newTag || policyInProgress !== null"
                             @click="skipCurrentForSelected">
                       Skip This Update
-                    </button>
-                    <button class="px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-      
-                            :disabled="policyInProgress !== null"
+                    </AppButton>
+                    <AppButton size="md" :disabled="policyInProgress !== null"
                             @click="snoozeSelected(1)">
                       Snooze 1d
-                    </button>
-                    <button class="px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-      
-                            :disabled="policyInProgress !== null"
+                    </AppButton>
+                    <AppButton size="md" :disabled="policyInProgress !== null"
                             @click="snoozeSelected(7)">
                       Snooze 7d
-                    </button>
+                    </AppButton>
                     <input
                       v-model="snoozeDateInput"
                       type="date"
                       class="px-2.5 py-1.5 dd-rounded text-[0.6875rem] outline-none dd-bg dd-text"
                       :disabled="policyInProgress !== null" />
-                    <button class="px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-      
-                            :disabled="!snoozeDateInput || policyInProgress !== null"
+                    <AppButton size="md" :disabled="!snoozeDateInput || policyInProgress !== null"
                             @click="snoozeSelectedUntilDate">
                       Snooze Until
-                    </button>
-                    <button class="px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-      
-                            :disabled="!selectedSnoozeUntil || policyInProgress !== null"
+                    </AppButton>
+                    <AppButton size="md" :disabled="!selectedSnoozeUntil || policyInProgress !== null"
                             @click="unsnoozeSelected">
                       Unsnooze
-                    </button>
+                    </AppButton>
                   </div>
                 </div>
                 <!-- Maturity group -->
@@ -717,34 +695,28 @@ const {
                       class="w-[104px] px-2.5 py-1.5 dd-rounded text-[0.6875rem] outline-none dd-bg dd-text"
                       :disabled="policyInProgress !== null"
                     />
-                    <button class="px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-                            :disabled="policyInProgress !== null"
+                    <AppButton size="md" :disabled="policyInProgress !== null"
                             @click="setMaturityPolicySelected(maturityModeInput)">
                       Apply Maturity
-                    </button>
-                    <button class="px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-                            :disabled="!selectedHasMaturityPolicy || policyInProgress !== null"
+                    </AppButton>
+                    <AppButton size="md" :disabled="!selectedHasMaturityPolicy || policyInProgress !== null"
                             @click="clearMaturityPolicySelected">
                       Clear Maturity
-                    </button>
+                    </AppButton>
                   </div>
                 </div>
                 <!-- Reset group -->
                 <div>
                   <div class="text-[0.5625rem] uppercase tracking-wider mb-1.5 dd-text-muted">Reset</div>
                   <div class="flex flex-wrap gap-2">
-                    <button class="px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-      
-                            :disabled="selectedSkipTags.length === 0 && selectedSkipDigests.length === 0"
+                    <AppButton size="md" :disabled="selectedSkipTags.length === 0 && selectedSkipDigests.length === 0"
                             @click="clearSkipsSelected">
                       Clear Skips
-                    </button>
-                    <button class="px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-      
-                            :disabled="Object.keys(selectedUpdatePolicy).length === 0"
+                    </AppButton>
+                    <AppButton size="md" :disabled="Object.keys(selectedUpdatePolicy).length === 0"
                             @click="clearPolicySelected">
                       Clear Policy
-                    </button>
+                    </AppButton>
                   </div>
                 </div>
                 <div class="space-y-1 text-[0.6875rem] dd-text-muted">
@@ -765,11 +737,11 @@ const {
                             class="inline-flex items-center gap-1.5 px-2 py-1 dd-rounded text-[0.6875rem] font-mono"
                             :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
                         <span class="dd-text">{{ tag }}</span>
-                        <button class="inline-flex items-center justify-center w-4 h-4 dd-rounded-sm transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
+                        <AppButton size="none" variant="plain" weight="none" class="inline-flex items-center justify-center w-4 h-4 dd-rounded-sm transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
                                 :disabled="policyInProgress !== null"
                                 @click="removeSkipTagSelected(tag)">
                           <AppIcon name="xmark" :size="9" />
-                        </button>
+                        </AppButton>
                       </span>
                     </div>
                   </div>
@@ -780,11 +752,11 @@ const {
                             class="inline-flex items-center gap-1.5 px-2 py-1 dd-rounded text-[0.6875rem] font-mono"
                             :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
                         <span class="dd-text">{{ digest }}</span>
-                        <button class="inline-flex items-center justify-center w-4 h-4 dd-rounded-sm transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
+                        <AppButton size="none" variant="plain" weight="none" class="inline-flex items-center justify-center w-4 h-4 dd-rounded-sm transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
                                 :disabled="policyInProgress !== null"
                                 @click="removeSkipDigestSelected(digest)">
                           <AppIcon name="xmark" :size="9" />
-                        </button>
+                        </AppButton>
                       </span>
                     </div>
                   </div>
@@ -868,12 +840,10 @@ const {
                       <div class="text-xs font-semibold dd-text truncate">{{ trigger.type }}.{{ trigger.name }}</div>
                       <div v-if="trigger.agent" class="text-[0.6875rem] dd-text-muted">agent: {{ trigger.agent }}</div>
                     </div>
-                    <button class="px-2.5 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-      
-                            :disabled="triggerRunInProgress !== null"
+                    <AppButton size="md" :disabled="triggerRunInProgress !== null"
                             @click="runAssociatedTrigger(trigger)">
                       {{ triggerRunInProgress === getTriggerKey(trigger) ? 'Running...' : 'Run' }}
-                    </button>
+                    </AppButton>
                   </div>
                 </div>
                 <p v-else class="text-xs dd-text-muted italic">No triggers associated with this container</p>
@@ -890,12 +860,10 @@ const {
               </div>
               <div class="p-4 space-y-2">
                 <div>
-                  <button class="px-2.5 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-    
-                          :disabled="backupsLoading || detailBackups.length === 0 || rollbackInProgress !== null"
+                  <AppButton size="md" :disabled="backupsLoading || detailBackups.length === 0 || rollbackInProgress !== null"
                           @click="confirmRollback()">
                     {{ rollbackInProgress === 'latest' ? 'Rolling back...' : 'Rollback Latest' }}
-                  </button>
+                  </AppButton>
                 </div>
                 <div v-if="backupsLoading" class="text-xs dd-text-muted">Loading backups...</div>
                 <div v-else-if="detailBackups.length > 0" class="space-y-2">
@@ -906,12 +874,10 @@ const {
                       <div class="text-xs font-semibold dd-text font-mono truncate">{{ backup.imageName }}:{{ backup.imageTag }}</div>
                       <div class="text-[0.6875rem] dd-text-muted">{{ formatTimestamp(backup.timestamp) }}</div>
                     </div>
-                    <button class="px-2.5 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-      
-                            :disabled="rollbackInProgress !== null"
+                    <AppButton size="md" :disabled="rollbackInProgress !== null"
                             @click="confirmRollback(backup.id)">
                       {{ rollbackInProgress === backup.id ? 'Rolling...' : 'Use' }}
-                    </button>
+                    </AppButton>
                   </div>
                 </div>
                 <p v-else class="text-xs dd-text-muted italic">No backups available yet</p>
