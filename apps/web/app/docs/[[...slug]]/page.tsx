@@ -27,7 +27,7 @@ export default async function Page(props: { params: Promise<{ slug?: string[] }>
   const data = page.data as any;
   const MDX = data.body;
 
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://drydock.codeswhat.com";
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://getdrydock.com";
   const segments = params.slug ?? [];
   const breadcrumbItems = [
     { name: "Home", url: baseUrl },
@@ -100,7 +100,7 @@ export async function generateMetadata(props: { params: Promise<{ slug?: string[
   const page = source.getPage(params.slug);
   if (!page) notFound();
 
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://drydock.codeswhat.com";
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://getdrydock.com";
   const url = `${baseUrl}${page.url}`;
 
   return {

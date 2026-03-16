@@ -5,12 +5,12 @@ import type { Dispatch, RefObject, SetStateAction } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 
-const DEMO_URL = process.env.NEXT_PUBLIC_DEMO_URL || "https://demo.drydock.codeswhat.com";
+const DEMO_URL = process.env.NEXT_PUBLIC_DEMO_URL || "https://demo.getdrydock.com";
 const DEMO_TRANSITION = "all 350ms cubic-bezier(0.4, 0, 0.2, 1)";
 const DEMO_SHARE_DATA = {
   title: "Drydock Interactive Demo",
   text: "Try Drydock — open source container update monitoring. Interactive demo, no install required.",
-  url: "https://demo.drydock.codeswhat.com",
+  url: "https://demo.getdrydock.com",
 };
 
 type DemoMode = "inline" | "expanding" | "fullscreen" | "collapsing";

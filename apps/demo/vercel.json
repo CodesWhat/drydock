@@ -10,7 +10,7 @@
       "headers": [
         {
           "key": "Content-Security-Policy",
-          "value": "frame-ancestors 'self' https://drydock.codeswhat.com https://*.vercel.app"
+          "value": "frame-ancestors 'self' https://getdrydock.com https://*.vercel.app"
         }
       ]
     }

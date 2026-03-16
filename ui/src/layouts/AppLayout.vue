@@ -1300,7 +1300,7 @@ onUnmounted(() => {
         One or more OIDC providers use an insecure
         <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">http://</code>
         discovery URL. HTTP discovery is deprecated and will be removed in v1.6.0.
-        <a href="https://drydock.codeswhat.com/docs/configuration/authentications/oidc"
+        <a href="https://getdrydock.com/docs/configuration/authentications/oidc"
            target="_blank"
            rel="noopener noreferrer"
            class="underline font-medium"
@@ -1354,7 +1354,7 @@ onUnmounted(() => {
             <div class="px-6 pb-5 flex flex-col gap-2"
                  :style="{ borderTop: '1px solid var(--dd-border)' }">
               <div class="pt-3 flex flex-col gap-1.5">
-                <a href="https://drydock.codeswhat.com" target="_blank" rel="noopener"
+                <a href="https://getdrydock.com" target="_blank" rel="noopener"
                    class="flex items-center gap-2.5 px-3 py-2 dd-rounded text-xs font-medium transition-colors dd-text-secondary hover:dd-text hover:dd-bg-elevated no-underline">
                   <AppIcon name="book" :size="12" class="dd-text-muted" />
                   Documentation

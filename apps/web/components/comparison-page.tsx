@@ -85,7 +85,7 @@ export function ComparisonPage({
                   height={20}
                   className="dark:invert"
                 />
-                drydock.codeswhat.com
+                getdrydock.com
               </Link>
 
               <h1 className="mt-6 mb-6 text-4xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100 sm:text-5xl lg:text-6xl">
