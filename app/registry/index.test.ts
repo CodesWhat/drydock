@@ -696,6 +696,24 @@ test('registerAuthentications should surface provider registration errors and lo
   ]);
 });
 
+test('registerAuthentications should preserve non-wrapped provider errors', async () => {
+  authentications = {
+    invalidprovider: {
+      andi: {
+        user: 'ANDI',
+        hash: TEST_BASIC_HASH,
+      },
+    },
+  };
+
+  await registry.testable_registerAuthentications();
+
+  const registrationErrors = registry.getAuthenticationRegistrationErrors();
+  expect(registrationErrors).toHaveLength(1);
+  expect(registrationErrors[0].provider).toBe('invalidprovider:andi');
+  expect(registrationErrors[0].error).toContain('Unknown authentication provider');
+});
+
 test('registerAuthentications should register anonymous auth on upgrade without confirmation', async () => {
   mockIsUpgrade.mockReturnValue(true);
   await registry.testable_registerAuthentications();
@@ -798,6 +816,21 @@ test('registerAuthentications should fallback to anonymous when all configured p
   expect(Object.keys(registry.getState().authentication)).toEqual(['anonymous.anonymous']);
   expect(spyLog).toHaveBeenCalledWith(
     expect.stringContaining('All configured authentication providers failed to register'),
+  );
+});
+
+test('registerAuthentications should log startup health guidance when DD_AUTH vars exist and auth config is empty', async () => {
+  configuration.ddEnvVars.DD_AUTH_BASIC_ANDI_USER = 'ANDI';
+  const spyLog = vi.spyOn(registry.testable_log, 'error');
+
+  authentications = {};
+  await registry.testable_registerAuthentications();
+
+  expect(Object.keys(registry.getState().authentication)).toEqual(['anonymous.anonymous']);
+  expect(spyLog).toHaveBeenCalledWith(
+    expect.stringContaining(
+      'Detected DD_AUTH_* environment variables, but no configured authentication providers were registered successfully.',
+    ),
   );
 });
 

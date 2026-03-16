@@ -344,6 +344,19 @@ describe('docker events helpers extraction', () => {
     expect(state.dockerEventsReconnectDelayMs).toBe(DOCKER_EVENTS_RECONNECT_BASE_DELAY_MS);
   });
 
+  test('splits event chunk when chunk is already a string', () => {
+    const result = splitDockerEventChunk('', '{"Action":"start"}\n');
+    expect(result.payloads).toEqual(['{"Action":"start"}']);
+    expect(result.buffer).toBe('');
+  });
+
+  test('splits event chunk when chunk has no toString method', () => {
+    const noPrototype = Object.create(null);
+    const result = splitDockerEventChunk('buffered', noPrototype);
+    expect(result.payloads).toEqual([]);
+    expect(result.buffer).toBe('buffered');
+  });
+
   test('provides docker events options with container event filters', () => {
     expect(getDockerEventsOptions()).toEqual({
       filters: {

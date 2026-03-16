@@ -12,6 +12,31 @@ const mockEmitSecurityAlert = vi.hoisted(() => vi.fn().mockResolvedValue(undefin
 const mockGetOperationsByContainerName = vi.hoisted(() => vi.fn());
 const mockCreateAuthenticatedRouteRateLimitKeyGenerator = vi.hoisted(() => vi.fn(() => undefined));
 const mockIsIdentityAwareRateLimitKeyingEnabled = vi.hoisted(() => vi.fn(() => false));
+const { mockCreateContainerStatsCollector, capturedContainerStatsCollectorDependencies } =
+  vi.hoisted(() => {
+    const captured = {
+      current: undefined as
+        | { getContainerById: (id: string) => unknown; getWatchers: () => Record<string, unknown> }
+        | undefined,
+    };
+
+    return {
+      mockCreateContainerStatsCollector: vi.fn((dependencies: unknown) => {
+        captured.current = dependencies as {
+          getContainerById: (id: string) => unknown;
+          getWatchers: () => Record<string, unknown>;
+        };
+        return {
+          watch: vi.fn(() => vi.fn()),
+          touch: vi.fn(),
+          subscribe: vi.fn(() => vi.fn()),
+          getLatest: vi.fn(() => undefined),
+          getHistory: vi.fn(() => []),
+        };
+      }),
+      capturedContainerStatsCollectorDependencies: captured,
+    };
+  });
 
 vi.mock('express', () => ({
   default: { Router: vi.fn(() => mockRouter) },
@@ -90,6 +115,10 @@ vi.mock('../agent/manager', () => ({
 
 vi.mock('../event/index.js', () => ({
   emitSecurityAlert: (...args: unknown[]) => mockEmitSecurityAlert(...args),
+}));
+
+vi.mock('../stats/collector.js', () => ({
+  createContainerStatsCollector: (...args: unknown[]) => mockCreateContainerStatsCollector(...args),
 }));
 
 vi.mock('./rate-limit-key.js', () => ({
@@ -305,6 +334,21 @@ describe('Container Router', () => {
           keyGenerator,
         }),
       );
+    });
+
+    test('should wire stats collector dependencies to store and registry state', () => {
+      expect(capturedContainerStatsCollectorDependencies.current).toBeDefined();
+      const dependencies = capturedContainerStatsCollectorDependencies.current!;
+      const container = { id: 'container-1' };
+
+      storeContainer.getContainer.mockReturnValue(container as any);
+      expect(dependencies.getContainerById('container-1')).toBe(container);
+
+      registry.getState.mockReturnValue({
+        watcher: undefined,
+        trigger: {},
+      } as any);
+      expect(dependencies.getWatchers()).toEqual({});
     });
   });
 

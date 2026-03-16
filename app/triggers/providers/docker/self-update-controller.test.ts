@@ -403,6 +403,23 @@ describe('self-update-controller orchestration', () => {
     );
   });
 
+  test('does not log rollback-start failure when old container start rejects with already-started string', async () => {
+    const oldContainer = createOldContainer({
+      inspect: vi.fn().mockResolvedValue({ State: { Running: false }, Name: '/drydock' }),
+      start: vi.fn().mockRejectedValue('already started by another process'),
+    });
+    const newContainer = createNewContainer({
+      start: vi.fn().mockRejectedValue(new Error('start failed')),
+    });
+    mockDocker(oldContainer, newContainer);
+
+    await expect(runSelfUpdateController()).rejects.toThrow('start failed');
+
+    expect(getLoggedStates().some((line) => line.includes('ROLLBACK_START_OLD_FAILED'))).toBe(
+      false,
+    );
+  });
+
   test('fails early when required env is missing', async () => {
     clearControllerEnv();
     process.env.DD_SELF_UPDATE_NEW_CONTAINER_ID = 'new-container-id';

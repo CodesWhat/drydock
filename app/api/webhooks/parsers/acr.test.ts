@@ -67,4 +67,9 @@ describe('parseAcrWebhookPayload', () => {
 
     expect(parseAcrWebhookPayload(payload)).toStrictEqual([]);
   });
+
+  test('returns empty list for non-object payload entries', () => {
+    expect(parseAcrWebhookPayload('not-an-event')).toStrictEqual([]);
+    expect(parseAcrWebhookPayload([null, 42, 'bad-entry'])).toStrictEqual([]);
+  });
 });

@@ -742,6 +742,142 @@ test('getImageManifestDigest should normalize docker hub references to canonical
   expect(superGetImageManifestDigestSpy).toHaveBeenCalledTimes(1);
 });
 
+test('getImageManifestDigest should treat blank registry URLs as docker.io for cache keys', async () => {
+  const superGetImageManifestDigestSpy = vi
+    .spyOn(Registry.prototype, 'getImageManifestDigest')
+    .mockResolvedValue({
+      digest: 'sha256:manifest-blank-registry',
+      created: '2026-03-10T12:00:00.000Z',
+      version: 2,
+    });
+
+  baseRegistry.startDigestCachePollCycle();
+  await baseRegistry.getImageManifestDigest({
+    name: 'postgres',
+    tag: { value: '16' },
+    architecture: 'amd64',
+    os: 'linux',
+    registry: { url: '   ' },
+  });
+  await baseRegistry.getImageManifestDigest({
+    name: 'library/postgres',
+    tag: { value: '16' },
+    architecture: 'amd64',
+    os: 'linux',
+    registry: { url: 'docker.io' },
+  });
+
+  expect(superGetImageManifestDigestSpy).toHaveBeenCalledTimes(1);
+});
+
+test('getImageManifestDigest should fall back to original image when normalizeImage throws during cache key generation', async () => {
+  const superGetImageManifestDigestSpy = vi
+    .spyOn(Registry.prototype, 'getImageManifestDigest')
+    .mockResolvedValue({
+      digest: 'sha256:manifest-normalize-throw',
+      created: '2026-03-10T12:00:00.000Z',
+      version: 2,
+    });
+  const normalizeImageSpy = vi.spyOn(baseRegistry, 'normalizeImage').mockImplementation(() => {
+    throw new Error('normalize failed');
+  });
+
+  baseRegistry.startDigestCachePollCycle();
+  const image = {
+    name: 'library/postgres',
+    tag: { value: '16' },
+    architecture: 'amd64',
+    os: 'linux',
+    registry: { url: 'docker.io' },
+  };
+  await baseRegistry.getImageManifestDigest(image);
+  await baseRegistry.getImageManifestDigest(image);
+
+  expect(superGetImageManifestDigestSpy).toHaveBeenCalledTimes(1);
+  normalizeImageSpy.mockRestore();
+});
+
+test('getImageManifestDigest should build cache key with defensive defaults for missing fields', async () => {
+  const superGetImageManifestDigestSpy = vi
+    .spyOn(Registry.prototype, 'getImageManifestDigest')
+    .mockResolvedValue({
+      digest: 'sha256:manifest-defaults',
+      created: '2026-03-10T12:00:00.000Z',
+      version: 2,
+    });
+
+  baseRegistry.startDigestCachePollCycle();
+  const image = {
+    registry: { url: 'docker.io' },
+    tag: { value: '' },
+  } as any;
+
+  await baseRegistry.getImageManifestDigest(image);
+  await baseRegistry.getImageManifestDigest(image);
+
+  expect(superGetImageManifestDigestSpy).toHaveBeenCalledTimes(1);
+});
+
+test('getImageManifestDigest should include variant and explicit digest in cache keys', async () => {
+  const superGetImageManifestDigestSpy = vi
+    .spyOn(Registry.prototype, 'getImageManifestDigest')
+    .mockResolvedValue({
+      digest: 'sha256:manifest-variant',
+      created: '2026-03-10T12:00:00.000Z',
+      version: 2,
+    });
+
+  baseRegistry.startDigestCachePollCycle();
+  const image = {
+    name: 'library/postgres',
+    tag: { value: '16' },
+    architecture: 'amd64',
+    os: 'linux',
+    variant: 'v8',
+    registry: { url: 'docker.io' },
+  };
+
+  await baseRegistry.getImageManifestDigest(image, 'sha256:explicit-digest');
+  await baseRegistry.getImageManifestDigest(image, 'sha256:explicit-digest');
+
+  expect(superGetImageManifestDigestSpy).toHaveBeenCalledTimes(1);
+});
+
+test('getImageManifestDigest should not cache responses without a digest string', async () => {
+  const superGetImageManifestDigestSpy = vi
+    .spyOn(Registry.prototype, 'getImageManifestDigest')
+    .mockResolvedValue({
+      digest: '',
+      created: '2026-03-10T12:00:00.000Z',
+      version: 2,
+    });
+
+  baseRegistry.startDigestCachePollCycle();
+  const image = {
+    name: 'library/postgres',
+    tag: { value: '16' },
+    architecture: 'amd64',
+    os: 'linux',
+    registry: { url: 'docker.io' },
+  };
+
+  await baseRegistry.getImageManifestDigest(image);
+  await baseRegistry.getImageManifestDigest(image);
+
+  expect(superGetImageManifestDigestSpy).toHaveBeenCalledTimes(2);
+});
+
+test('endDigestCachePollCycle should return zero hit rate when no requests were recorded', () => {
+  baseRegistry.startDigestCachePollCycle();
+  baseRegistry.log = {} as any;
+
+  expect(baseRegistry.endDigestCachePollCycle()).toEqual({
+    hits: 0,
+    misses: 0,
+    hitRate: 0,
+  });
+});
+
 test('endDigestCachePollCycle should log debug hit rate summary', async () => {
   const superGetImageManifestDigestSpy = vi
     .spyOn(Registry.prototype, 'getImageManifestDigest')

@@ -519,6 +519,22 @@ test('createContainer should throw error when error occurs', async () => {
   ).rejects.toThrowError('Error when creating container');
 });
 
+test('createContainer should stringify non-object errors in warning logs', async () => {
+  const dockerApi = {
+    createContainer: vi.fn().mockRejectedValue(Symbol('create failed')),
+    getNetwork: vi.fn(),
+  };
+  const logContainer = createMockLog('info', 'warn');
+
+  await expect(
+    docker.createContainer(dockerApi as any, { name: 'ko' }, 'name', logContainer as any),
+  ).rejects.toBeTypeOf('symbol');
+
+  expect(logContainer.warn).toHaveBeenCalledWith(
+    'Error when creating container name (Symbol(create failed))',
+  );
+});
+
 test('createContainer should connect additional networks after create', async () => {
   const connect = vi.fn().mockResolvedValue(undefined);
   const getNetwork = vi.fn().mockReturnValue({ connect });
@@ -3277,6 +3293,7 @@ describe('extracted lifecycle delegation', () => {
 describe('additional direct wrapper coverage', () => {
   test('isContainerNotFoundError should handle empty, status, and message-based inputs', () => {
     expect(docker.isContainerNotFoundError(undefined)).toBe(false);
+    expect(docker.isContainerNotFoundError('no such container as primitive')).toBe(false);
     expect(docker.isContainerNotFoundError({ statusCode: 404 })).toBe(true);
     expect(docker.isContainerNotFoundError({ status: 404 })).toBe(true);
     expect(docker.isContainerNotFoundError({ message: 'No such container: abc' })).toBe(true);
@@ -3284,6 +3301,7 @@ describe('additional direct wrapper coverage', () => {
     expect(docker.isContainerNotFoundError({ json: { message: 'No such container: ghi' } })).toBe(
       true,
     );
+    expect(docker.isContainerNotFoundError({ json: { message: 404 } })).toBe(false);
     expect(docker.isContainerNotFoundError({ message: 'something else' })).toBe(false);
   });
 

@@ -41,6 +41,16 @@ describe('parseQuayWebhookPayload', () => {
     expect(parseQuayWebhookPayload(payload)).toStrictEqual([]);
   });
 
+  test('returns empty list when image cannot be resolved', () => {
+    const payload = {
+      updated_tags: ['latest'],
+      docker_url: 'https://',
+      homepage: 'http://',
+    };
+
+    expect(parseQuayWebhookPayload(payload)).toStrictEqual([]);
+  });
+
   test('returns empty list for non-object payloads', () => {
     expect(parseQuayWebhookPayload(undefined)).toStrictEqual([]);
     expect(parseQuayWebhookPayload(false)).toStrictEqual([]);

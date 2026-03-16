@@ -2381,6 +2381,16 @@ describe('Dockercompose Trigger', () => {
     expect(mockLog.error).toHaveBeenCalledWith(expect.stringContaining('write failed'));
   });
 
+  test('writeComposeFile should stringify non-object write failures in logs', async () => {
+    fs.writeFile.mockRejectedValueOnce(42);
+
+    await expect(trigger.writeComposeFile('/opt/drydock/test/compose.yml', 'data')).rejects.toBe(
+      42,
+    );
+
+    expect(mockLog.error).toHaveBeenCalledWith(expect.stringContaining('(42)'));
+  });
+
   test('writeComposeFile should write atomically through temp file + rename under lock', async () => {
     await trigger.writeComposeFile('/opt/drydock/test/compose.yml', 'data');
 
@@ -2456,6 +2466,18 @@ describe('Dockercompose Trigger', () => {
     await expect(
       trigger.writeComposeFileAtomic('/opt/drydock/test/compose.yml', 'data'),
     ).rejects.toThrow('EACCES');
+
+    expect(fs.rename).toHaveBeenCalledTimes(1);
+  });
+
+  test('writeComposeFileAtomic should not retry when rename error code is non-string', async () => {
+    const malformedCodeError: any = new Error('rename failed');
+    malformedCodeError.code = 123;
+    fs.rename.mockRejectedValueOnce(malformedCodeError);
+
+    await expect(
+      trigger.writeComposeFileAtomic('/opt/drydock/test/compose.yml', 'data'),
+    ).rejects.toThrow('rename failed');
 
     expect(fs.rename).toHaveBeenCalledTimes(1);
   });

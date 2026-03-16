@@ -44,6 +44,18 @@ describe('verifyRegistryWebhookSignature', () => {
     ).toStrictEqual({ valid: false, reason: 'missing-signature' });
   });
 
+  test('treats blank signatures as missing', () => {
+    const payload = Buffer.from('{"event":"push"}');
+
+    expect(
+      verifyRegistryWebhookSignature({
+        payload,
+        secret: 'super-secret',
+        signature: '   ',
+      }),
+    ).toStrictEqual({ valid: false, reason: 'missing-signature' });
+  });
+
   test('returns missing-secret when secret is not configured', () => {
     const payload = Buffer.from('{"event":"push"}');
 
@@ -68,5 +80,32 @@ describe('verifyRegistryWebhookSignature', () => {
         signature,
       }),
     ).toStrictEqual({ valid: true });
+  });
+
+  test('returns invalid-signature for same-length but mismatched signatures', () => {
+    const payload = Buffer.from('{"event":"push"}');
+    const secret = 'super-secret';
+    const signature = signPayload(payload, secret);
+    const mismatchedSignature = `${signature.slice(0, -1)}${signature.endsWith('0') ? '1' : '0'}`;
+
+    expect(
+      verifyRegistryWebhookSignature({
+        payload,
+        secret,
+        signature: `sha256=${mismatchedSignature}`,
+      }),
+    ).toStrictEqual({ valid: false, reason: 'invalid-signature' });
+  });
+
+  test('treats malformed non-hex signatures as missing signatures', () => {
+    const payload = Buffer.from('{"event":"push"}');
+
+    expect(
+      verifyRegistryWebhookSignature({
+        payload,
+        secret: 'super-secret',
+        signature: 'sha256=this-is-not-hex',
+      }),
+    ).toStrictEqual({ valid: false, reason: 'missing-signature' });
   });
 });

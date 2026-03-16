@@ -226,4 +226,21 @@ describe('ComposeFileParser', () => {
       expect.stringContaining('Error when reading the docker-compose yaml file'),
     );
   });
+
+  test('getComposeFile should stringify non-Error synchronous read failures', () => {
+    const errorSpy = vi.fn();
+    const parser = new ComposeFileParser({
+      resolveComposeFilePath: (filePath) => filePath,
+      getLog: () => ({ error: errorSpy }),
+    });
+
+    fs.readFile.mockImplementation(() => {
+      throw 42;
+    });
+
+    expect(() => parser.getComposeFile('/bad.yml')).toThrow();
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Error when reading the docker-compose yaml file /bad.yml (42)'),
+    );
+  });
 });

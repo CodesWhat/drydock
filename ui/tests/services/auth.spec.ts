@@ -109,6 +109,42 @@ describe('Auth Service', () => {
         "Basic auth 'ANDI': hash is required",
       );
     });
+
+    it('falls back to generic credential error when payload is not an object', async () => {
+      fetch.mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        json: async () => 'not-an-object',
+      });
+
+      await expect(loginBasic('testuser', 'testpass')).rejects.toThrow(
+        'Username or password error',
+      );
+    });
+
+    it('falls back to generic credential error when payload has no error field', async () => {
+      fetch.mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        json: async () => ({ detail: 'missing field' }),
+      });
+
+      await expect(loginBasic('testuser', 'testpass')).rejects.toThrow(
+        'Username or password error',
+      );
+    });
+
+    it('falls back to generic credential error when payload error is non-string', async () => {
+      fetch.mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        json: async () => ({ error: { message: 'not-a-string' } }),
+      });
+
+      await expect(loginBasic('testuser', 'testpass')).rejects.toThrow(
+        'Username or password error',
+      );
+    });
   });
 
   describe('logout', () => {

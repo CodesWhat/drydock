@@ -1269,6 +1269,50 @@ describe('Basic Authentication', () => {
         });
       });
     });
+
+    test('should handle string errors thrown during password comparison', async () => {
+      mockTimingSafeEqual
+        .mockImplementationOnce(
+          (left: Buffer, right: Buffer) => left.length === right.length && left.equals(right),
+        )
+        .mockImplementationOnce(() => {
+          throw 'timingSafeEqual string failure';
+        });
+
+      basic.configuration = {
+        user: 'testuser',
+        hash: LEGACY_PLAIN_HASH,
+      };
+
+      await new Promise<void>((resolve) => {
+        basic.authenticate('testuser', LEGACY_PLAIN_HASH, (_err, result) => {
+          expect(result).toBe(false);
+          resolve();
+        });
+      });
+    });
+
+    test('should handle non-error objects thrown during password comparison', async () => {
+      mockTimingSafeEqual
+        .mockImplementationOnce(
+          (left: Buffer, right: Buffer) => left.length === right.length && left.equals(right),
+        )
+        .mockImplementationOnce(() => {
+          throw { reason: 'boom' };
+        });
+
+      basic.configuration = {
+        user: 'testuser',
+        hash: LEGACY_PLAIN_HASH,
+      };
+
+      await new Promise<void>((resolve) => {
+        basic.authenticate('testuser', LEGACY_PLAIN_HASH, (_err, result) => {
+          expect(result).toBe(false);
+          resolve();
+        });
+      });
+    });
   });
 
   describe('getMetadata', () => {

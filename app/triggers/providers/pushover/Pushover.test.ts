@@ -268,3 +268,64 @@ test('sendMessage should reject when send callback has error', async () => {
   po.configuration = { ...configurationValid };
   await expect(po.sendMessage({ title: 'Test', message: 'test' })).rejects.toThrow('send error');
 });
+
+test('sendMessage should preserve Error.toString output for callback errors', async () => {
+  vi.resetModules();
+  vi.doMock('pushover-notifications', () => ({
+    default: class Push {
+      set onerror(_fn) {}
+      send(_message, cb) {
+        cb(new Error('send failed'), null);
+      }
+    },
+  }));
+  const { default: PushoverFresh } = await import('./Pushover.js');
+  const po = new PushoverFresh();
+  po.configuration = { ...configurationValid };
+  await expect(po.sendMessage({ title: 'Test', message: 'test' })).rejects.toThrow(
+    'Error: send failed',
+  );
+});
+
+test('sendMessage should allow undefined onerror payloads', async () => {
+  vi.resetModules();
+  vi.doMock('pushover-notifications', () => ({
+    default: class Push {
+      set onerror(fn) {
+        this._onerror = fn;
+      }
+      send(_message, _cb) {
+        this._onerror(undefined);
+      }
+    },
+  }));
+  const { default: PushoverFresh } = await import('./Pushover.js');
+  const po = new PushoverFresh();
+  po.configuration = { ...configurationValid };
+  await expect(po.sendMessage({ title: 'Test', message: 'test' })).rejects.toMatchObject({
+    message: '',
+  });
+});
+
+test('sendMessage should fallback to unknown error when callback error cannot be stringified', async () => {
+  vi.resetModules();
+  vi.doMock('pushover-notifications', () => ({
+    default: class Push {
+      set onerror(_fn) {}
+      send(_message, cb) {
+        cb(
+          {
+            toString() {
+              throw new Error('stringify failed');
+            },
+          },
+          null,
+        );
+      }
+    },
+  }));
+  const { default: PushoverFresh } = await import('./Pushover.js');
+  const po = new PushoverFresh();
+  po.configuration = { ...configurationValid };
+  await expect(po.sendMessage({ title: 'Test', message: 'test' })).rejects.toThrow('Unknown error');
+});

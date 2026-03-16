@@ -263,6 +263,31 @@ describe('RegistryResolver', () => {
     );
   });
 
+  test('resolveRegistryManager should support symbol-valued registry names', () => {
+    const resolver = new RegistryResolver();
+    const registryKey = Symbol.for('hub');
+    const registryManager = {
+      getAuthPull: vi.fn(),
+      getImageFullName: vi.fn(),
+    };
+
+    const resolved = resolver.resolveRegistryManager(
+      {
+        image: {
+          registry: {
+            name: registryKey,
+          },
+        },
+      },
+      createLog(),
+      {
+        [registryKey]: registryManager,
+      },
+    );
+
+    expect(resolved).toBe(registryManager);
+  });
+
   test('resolveRegistryManager should include a stable error code for misconfigured registries', () => {
     const resolver = new RegistryResolver();
 
@@ -331,6 +356,41 @@ describe('RegistryResolver', () => {
     expect(log.debug).toHaveBeenCalledWith(
       'Resolved registry manager "unknown" using matcher "matcher-ghcr"',
     );
+  });
+
+  test('resolveRegistryManager should ignore non-object registry entries when matching', () => {
+    const resolver = new RegistryResolver();
+    const log = createLog();
+    const matcher = {
+      match: vi.fn(() => true),
+      getAuthPull: vi.fn(),
+      getImageFullName: vi.fn(),
+      normalizeImage: vi.fn(),
+      getId: vi.fn(() => 'matcher-ghcr'),
+    };
+
+    const resolved = resolver.resolveRegistryManager(
+      {
+        image: {
+          name: 'library/nginx',
+          registry: {
+            name: 'unknown',
+            url: 'ghcr.io',
+          },
+        },
+      },
+      log,
+      {
+        invalid: 'not-an-object' as any,
+        primary: matcher,
+      },
+      {
+        requireNormalizeImage: true,
+      },
+    );
+
+    expect(resolved).toBe(matcher);
+    expect(matcher.match).toHaveBeenCalled();
   });
 
   test('resolveRegistryManager should throw a typed error when matcher result is misconfigured', () => {

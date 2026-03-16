@@ -1,3 +1,5 @@
+import { RE2JS } from 're2js';
+import * as semver from './index.js';
 import { suggest } from './suggest.js';
 
 function createContainer(overrides: Record<string, unknown> = {}) {
@@ -42,6 +44,12 @@ describe('tag/suggest', () => {
     expect(suggest(container as any, ['0.9.0', '1.0.0', '1.0.1-alpha'])).toBe('1.0.0');
   });
 
+  test('should treat missing current tag value as untagged', () => {
+    const container = createContainer({ image: { tag: { value: undefined } } });
+
+    expect(suggest(container as any, ['1.0.0', '2.0.0'])).toBe('2.0.0');
+  });
+
   test('should apply include and exclude regex filters before suggesting', () => {
     const container = createContainer({
       includeTags: String.raw`^v?1\.`,
@@ -78,5 +86,83 @@ describe('tag/suggest', () => {
 
     expect(suggest(container as any, ['1.0.0', '2.0.0'], { warn })).toBe('2.0.0');
     expect(warn).toHaveBeenCalledTimes(2);
+  });
+
+  test('should preserve string errors thrown by regex compilation', () => {
+    const compileSpy = vi.spyOn(RE2JS, 'compile').mockImplementation(() => {
+      throw 'raw regex failure';
+    });
+    const warn = vi.fn();
+
+    try {
+      const container = createContainer({
+        includeTags: 'anything',
+        image: { tag: { value: 'latest' } },
+      });
+
+      expect(suggest(container as any, ['1.0.0'], { warn })).toBe('1.0.0');
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('raw regex failure'));
+    } finally {
+      compileSpy.mockRestore();
+    }
+  });
+
+  test('should stringify non-Error objects without a message field from regex compilation', () => {
+    const compileSpy = vi.spyOn(RE2JS, 'compile').mockImplementation(() => {
+      throw { reason: 'opaque-failure' };
+    });
+    const warn = vi.fn();
+
+    try {
+      const container = createContainer({
+        includeTags: 'anything',
+        image: { tag: { value: 'latest' } },
+      });
+
+      expect(suggest(container as any, ['1.0.0'], { warn })).toBe('1.0.0');
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('[object Object]'));
+    } finally {
+      compileSpy.mockRestore();
+    }
+  });
+
+  test('should ignore overlong include regex and continue without include filtering', () => {
+    const warn = vi.fn();
+    const container = createContainer({
+      includeTags: 'a'.repeat(1025),
+      image: { tag: { value: 'latest' } },
+    });
+
+    expect(suggest(container as any, ['1.0.0', '2.0.0'], { warn })).toBe('2.0.0');
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('Regex pattern exceeds maximum length'),
+    );
+  });
+
+  test('should drop semver candidates that only have prerelease metadata', () => {
+    const container = createContainer({ image: { tag: { value: 'latest' } } });
+
+    expect(suggest(container as any, ['1.2.3-ls132', '1.2.2'])).toBe('1.2.2');
+  });
+
+  test('should drop candidates with non-integer semver components', () => {
+    const parseSpy = vi.spyOn(semver, 'parse').mockImplementation((tag: string) => {
+      if (tag === 'bad-int') {
+        return {
+          major: 1.5,
+          minor: 0,
+          patch: 0,
+          prerelease: [],
+        } as any;
+      }
+      return null;
+    });
+
+    try {
+      const container = createContainer({ image: { tag: { value: 'latest' } } });
+      expect(suggest(container as any, ['bad-int'])).toBeNull();
+    } finally {
+      parseSpy.mockRestore();
+    }
   });
 });

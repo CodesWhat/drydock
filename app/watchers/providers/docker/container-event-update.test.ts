@@ -272,6 +272,77 @@ describe('container event update helpers', () => {
     expect(updateContainer).not.toHaveBeenCalled();
   });
 
+  test('processDockerEvent includes string error message when inspect rejects with a string', async () => {
+    const debug = vi.fn();
+
+    await processDockerEvent(
+      { Action: 'start', id: 'container123' },
+      {
+        watchCronDebounced: vi.fn(),
+        ensureRemoteAuthHeaders: vi.fn().mockResolvedValue(undefined),
+        inspectContainer: vi.fn().mockRejectedValue('socket hung up'),
+        getContainerFromStore: vi.fn(),
+        updateContainerFromInspect: vi.fn(),
+        debug,
+      },
+    );
+
+    expect(debug).toHaveBeenCalledWith(expect.stringContaining('(socket hung up)'));
+  });
+
+  test('processDockerEvent reports unknown error when inspect rejects with null', async () => {
+    const debug = vi.fn();
+
+    await processDockerEvent(
+      { Action: 'start', id: 'container123' },
+      {
+        watchCronDebounced: vi.fn(),
+        ensureRemoteAuthHeaders: vi.fn().mockResolvedValue(undefined),
+        inspectContainer: vi.fn().mockRejectedValue(null),
+        getContainerFromStore: vi.fn(),
+        updateContainerFromInspect: vi.fn(),
+        debug,
+      },
+    );
+
+    expect(debug).toHaveBeenCalledWith(expect.stringContaining('(unknown error)'));
+  });
+
+  test('processDockerEvent reports unknown error when inspect rejects with object message that is not a string', async () => {
+    const debug = vi.fn();
+
+    await processDockerEvent(
+      { Action: 'start', id: 'container123' },
+      {
+        watchCronDebounced: vi.fn(),
+        ensureRemoteAuthHeaders: vi.fn().mockResolvedValue(undefined),
+        inspectContainer: vi.fn().mockRejectedValue({ message: { reason: 'bad' } }),
+        getContainerFromStore: vi.fn(),
+        updateContainerFromInspect: vi.fn(),
+        debug,
+      },
+    );
+
+    expect(debug).toHaveBeenCalledWith(expect.stringContaining('(unknown error)'));
+  });
+
+  test('processDockerEvent treats non-object docker event as missing container id', async () => {
+    const watchCronDebounced = vi.fn().mockResolvedValue(undefined);
+    const debug = vi.fn();
+
+    await processDockerEvent(null, {
+      watchCronDebounced,
+      ensureRemoteAuthHeaders: vi.fn(),
+      inspectContainer: vi.fn(),
+      getContainerFromStore: vi.fn(),
+      updateContainerFromInspect: vi.fn(),
+      debug,
+    });
+
+    expect(debug).toHaveBeenCalledWith(expect.stringContaining('container id is missing'));
+    expect(watchCronDebounced).toHaveBeenCalledTimes(1);
+  });
+
   test('updateContainerFromInspect should persist when label values change', () => {
     const container = createMockContainer({
       name: 'same-name',

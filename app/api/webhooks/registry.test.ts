@@ -98,6 +98,7 @@ vi.mock('../../log/index.js', () => ({
   },
 }));
 
+import { markContainerFreshForScheduledPollSkip } from '../../watchers/registry-webhook-fresh.js';
 import * as registryWebhookRouter from './registry.js';
 
 function getHandler() {
@@ -195,6 +196,29 @@ describe('api/webhooks/registry', () => {
     expect(res.json).toHaveBeenCalledWith({ error: 'Invalid registry webhook signature' });
   });
 
+  test('returns 401 when registry webhook signature is missing', async () => {
+    mockVerifyRegistryWebhookSignature.mockReturnValue({
+      valid: false,
+      reason: 'missing-signature',
+    });
+    const handler = getHandler();
+    const req = createMockRequest({
+      body: {},
+      headers: {},
+    });
+    const res = createMockResponse();
+
+    await handler(req as any, res as any);
+
+    expect(mockVerifyRegistryWebhookSignature).toHaveBeenCalledWith(
+      expect.objectContaining({
+        signature: undefined,
+      }),
+    );
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(res.json).toHaveBeenCalledWith({ error: 'Missing registry webhook signature' });
+  });
+
   test('returns 400 when payload is not supported', async () => {
     mockParseRegistryWebhookPayload.mockReturnValue(undefined);
     const handler = getHandler();
@@ -231,7 +255,7 @@ describe('api/webhooks/registry', () => {
         references: [{ image: 'library/nginx', tag: 'latest' }],
         containers: expect.any(Array),
         watchers: expect.any(Object),
-        markContainerFresh: expect.any(Function),
+        markContainerFresh: markContainerFreshForScheduledPollSkip,
       }),
     );
     expect(res.status).toHaveBeenCalledWith(202);
@@ -246,5 +270,47 @@ describe('api/webhooks/registry', () => {
         watchersMissing: 0,
       },
     });
+  });
+
+  test('extracts x-drydock-signature and uses string body when raw body is absent', async () => {
+    const handler = getHandler();
+    const req = createMockRequest({
+      body: '{"event":"push"}',
+      headers: {
+        'x-drydock-signature': 'sha256=test',
+      },
+    });
+    const res = createMockResponse();
+
+    await handler(req as any, res as any);
+
+    expect(mockVerifyRegistryWebhookSignature).toHaveBeenCalledWith(
+      expect.objectContaining({
+        signature: 'sha256=test',
+        payload: Buffer.from('{"event":"push"}'),
+      }),
+    );
+    expect(res.status).toHaveBeenCalledWith(202);
+  });
+
+  test('uses an empty object payload when both rawBody and body are missing', async () => {
+    const handler = getHandler();
+    const req = createMockRequest({
+      headers: {
+        'x-drydock-signature': 'sha256=test',
+      },
+    });
+    delete (req as any).body;
+    const res = createMockResponse();
+
+    await handler(req as any, res as any);
+
+    expect(mockVerifyRegistryWebhookSignature).toHaveBeenCalledWith(
+      expect.objectContaining({
+        signature: 'sha256=test',
+        payload: Buffer.from('{}'),
+      }),
+    );
+    expect(res.status).toHaveBeenCalledWith(202);
   });
 });

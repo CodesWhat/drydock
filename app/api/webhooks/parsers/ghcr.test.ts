@@ -1,6 +1,11 @@
 import { parseGhcrWebhookPayload } from './ghcr.js';
 
 describe('parseGhcrWebhookPayload', () => {
+  test('returns empty list for non-object payloads', () => {
+    expect(parseGhcrWebhookPayload(undefined)).toStrictEqual([]);
+    expect(parseGhcrWebhookPayload('bad payload')).toStrictEqual([]);
+  });
+
   test('extracts image references from registry_package.metadata.container.tags', () => {
     const payload = {
       action: 'published',
@@ -52,6 +57,28 @@ describe('parseGhcrWebhookPayload', () => {
     ]);
   });
 
+  test('keeps image names that already include namespace', () => {
+    const payload = {
+      registry_package: {
+        package_type: 'container',
+        namespace: 'codeswhat',
+        name: 'codeswhat/drydock',
+        package_version: {
+          container_metadata: {
+            tags: ['stable'],
+          },
+        },
+      },
+    };
+
+    expect(parseGhcrWebhookPayload(payload)).toStrictEqual([
+      {
+        image: 'codeswhat/drydock',
+        tag: 'stable',
+      },
+    ]);
+  });
+
   test('returns empty list when package type is not container', () => {
     const payload = {
       registry_package: {
@@ -78,6 +105,22 @@ describe('parseGhcrWebhookPayload', () => {
         namespace: 'codeswhat',
         name: 'drydock',
         package_version: {},
+      },
+    };
+
+    expect(parseGhcrWebhookPayload(payload)).toStrictEqual([]);
+  });
+
+  test('returns empty list when package image name is missing', () => {
+    const payload = {
+      registry_package: {
+        package_type: 'container',
+        namespace: 'codeswhat',
+        package_version: {
+          container_metadata: {
+            tags: ['latest'],
+          },
+        },
       },
     };
 

@@ -351,6 +351,29 @@ test('handleContainerReport should stringify non-Error failures', async () => {
   expect(spyLog).toHaveBeenCalledWith('Error (string failure)');
 });
 
+test('handleContainerReport should stringify symbol failures', async () => {
+  trigger.configuration = {
+    threshold: 'all',
+    mode: 'simple',
+  };
+  const symbolFailure = Symbol('symbol failure');
+  trigger.trigger = () => {
+    throw symbolFailure;
+  };
+  await trigger.init();
+  const spyLog = vi.spyOn(log, 'warn');
+
+  await trigger.handleContainerReport({
+    changed: true,
+    container: {
+      name: 'container1',
+      updateAvailable: true,
+    },
+  });
+
+  expect(spyLog).toHaveBeenCalledWith(`Error (${String(symbolFailure)})`);
+});
+
 test('handleContainerReport should suppress repeated identical errors during a short burst', async () => {
   trigger.configuration = {
     threshold: 'all',

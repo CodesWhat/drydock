@@ -53,6 +53,7 @@ import mockCron from 'node-cron';
 import mockParse from 'parse-docker-image-name';
 import * as mockPrometheus from '../../../prometheus/watcher.js';
 import * as mockTag from '../../../tag/index.js';
+import * as dockerHelpers from './docker-helpers.js';
 import * as maintenance from './maintenance.js';
 
 const mockAxios = axios as Mocked<typeof axios>;
@@ -698,6 +699,27 @@ describe('Docker Watcher', () => {
         expect.stringContaining('Failed to fetch image detail'),
       );
       expect(result).toHaveLength(0);
+    });
+
+    test('should fallback to stringified error when image detail fetch error has empty message', async () => {
+      const getErrorMessageSpy = vi.spyOn(dockerHelpers, 'getErrorMessage').mockReturnValue('');
+      try {
+        mockDockerApi.listContainers.mockResolvedValue([
+          { Id: '1', Labels: { 'dd.watch': 'true' }, Names: ['/test1'] },
+        ]);
+        docker.addImageDetailsToContainer = vi.fn().mockRejectedValue({ message: '' });
+        await docker.register('watcher', 'docker', 'test', { watchbydefault: true });
+        docker.log = createMockLog(['warn', 'info', 'debug']);
+
+        const result = await docker.getContainers();
+
+        expect(docker.log.warn).toHaveBeenCalledWith(
+          expect.stringContaining('Failed to fetch image detail for container 1: [object Object]'),
+        );
+        expect(result).toEqual([{ message: '' }]);
+      } finally {
+        getErrorMessageSpy.mockRestore();
+      }
     });
 
     test('should skip maintenance counter increment when counter is unavailable', async () => {

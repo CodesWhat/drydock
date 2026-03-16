@@ -133,6 +133,18 @@ describe('API Router', () => {
     expect(mockJsonMiddleware).toHaveBeenCalledTimes(3);
   });
 
+  test('should capture raw mutation request body in json verify hook', () => {
+    const jsonOptions = mockExpressJson.mock.calls[0]?.[0];
+    expect(jsonOptions).toBeDefined();
+    expect(typeof jsonOptions.verify).toBe('function');
+
+    const req = {} as { rawBody?: Buffer };
+    const body = Buffer.from('{"hello":"world"}');
+    jsonOptions.verify(req, {}, body);
+
+    expect(req.rawBody).toEqual(Buffer.from('{"hello":"world"}'));
+  });
+
   test('should reject mutation requests with non-json content type when body is present', async () => {
     const auth = await import('./auth.js');
     const csrf = await import('./csrf.js');

@@ -76,6 +76,98 @@ describe('findContainersForImageReferences', () => {
     expect(matches).toHaveLength(1);
     expect(matches[0].id).toBe('hub-container');
   });
+
+  test('returns empty matches when either side has no candidates', () => {
+    expect(
+      findContainersForImageReferences([] as any, [{ image: 'nginx', tag: 'latest' }]),
+    ).toEqual([]);
+    expect(findContainersForImageReferences([createContainer() as any], [])).toEqual([]);
+  });
+
+  test('handles malformed or non-string registry hosts and still matches by image name', () => {
+    const containers = [
+      createContainer({
+        id: 'malformed-registry',
+        image: {
+          registry: {
+            url: 'https://[broken-host',
+          },
+          name: 'library/nginx',
+          tag: { value: 'latest' },
+        },
+      }),
+      createContainer({
+        id: 'missing-name',
+        image: {
+          registry: {
+            url: 42,
+          },
+          tag: { value: 'latest' },
+        },
+      }),
+    ];
+
+    const matches = findContainersForImageReferences(containers as any, [
+      { image: 'docker.io/library/nginx', tag: 'latest' },
+    ]);
+
+    expect(matches.map((container) => container.id)).toStrictEqual(['malformed-registry']);
+  });
+
+  test('normalizes bare registry hosts when protocol is missing', () => {
+    const containers = [
+      createContainer({
+        id: 'bare-host',
+        image: {
+          registry: {
+            url: 'registry-1.docker.io',
+          },
+          name: 'library/nginx',
+          tag: { value: 'latest' },
+        },
+      }),
+    ];
+
+    const matches = findContainersForImageReferences(containers as any, [
+      { image: 'docker.io/library/nginx', tag: 'latest' },
+    ]);
+
+    expect(matches.map((container) => container.id)).toStrictEqual(['bare-host']);
+  });
+
+  test('handles registry host fallback branches for unusual URL inputs', () => {
+    const containers = [
+      createContainer({
+        id: 'file-url-host-fallback',
+        image: {
+          registry: {
+            url: 'file:///tmp',
+          },
+          name: 'library/nginx',
+          tag: { value: 'latest' },
+        },
+      }),
+      createContainer({
+        id: 'slash-host-fallback',
+        image: {
+          registry: {
+            url: 'https:///',
+          },
+          name: 'library/nginx',
+          tag: { value: 'latest' },
+        },
+      }),
+    ];
+
+    const matches = findContainersForImageReferences(containers as any, [
+      { image: 'library/nginx', tag: 'latest' },
+    ]);
+
+    expect(matches.map((container) => container.id)).toStrictEqual([
+      'file-url-host-fallback',
+      'slash-host-fallback',
+    ]);
+  });
 });
 
 describe('runRegistryWebhookDispatch', () => {

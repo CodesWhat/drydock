@@ -49,6 +49,17 @@ describe('parseDockerHubWebhookPayload', () => {
     expect(parseDockerHubWebhookPayload(payload)).toStrictEqual([]);
   });
 
+  test('returns an empty list when repository name cannot be resolved', () => {
+    const payload = {
+      repository: {},
+      push_data: {
+        tag: 'latest',
+      },
+    };
+
+    expect(parseDockerHubWebhookPayload(payload)).toStrictEqual([]);
+  });
+
   test('returns an empty list for non-object payloads', () => {
     expect(parseDockerHubWebhookPayload(undefined)).toStrictEqual([]);
     expect(parseDockerHubWebhookPayload('invalid')).toStrictEqual([]);

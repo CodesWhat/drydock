@@ -82,4 +82,9 @@ describe('parseEcrEventBridgePayload', () => {
 
     expect(parseEcrEventBridgePayload(payload)).toStrictEqual([]);
   });
+
+  test('returns empty list for non-object payload entries', () => {
+    expect(parseEcrEventBridgePayload('not-an-event')).toStrictEqual([]);
+    expect(parseEcrEventBridgePayload([null, 1, 'bad-entry'])).toStrictEqual([]);
+  });
 });
