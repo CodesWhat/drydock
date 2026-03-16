@@ -2128,6 +2128,18 @@ describe('api/container/crud', () => {
       );
     });
 
+    test('returns 404 when container is missing', async () => {
+      const harness = createHarness({
+        containers: [createContainer({ id: 'c1' })],
+      });
+
+      const res = await callGetContainerReleaseNotes(harness.handlers, 'missing');
+
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Container not found' });
+      expect(mockGetFullReleaseNotesForContainer).not.toHaveBeenCalled();
+    });
+
     test('returns 404 when release notes are unavailable', async () => {
       const harness = createHarness({
         containers: [createContainer({ id: 'c1' })],
