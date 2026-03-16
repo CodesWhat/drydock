@@ -3,6 +3,7 @@ import {
   getAllContainers,
   getContainerLogs,
   getContainerRecentStatus,
+  getContainerReleaseNotes,
   getContainerSbom,
   getContainerSummary,
   getContainerTriggers,
@@ -883,6 +884,52 @@ describe('Container Service', () => {
 
       await expect(getContainerSbom('c1')).rejects.toThrow(
         'Failed to get SBOM for container c1: Bad Request',
+      );
+    });
+  });
+
+  describe('getContainerReleaseNotes', () => {
+    it('fetches release notes successfully', async () => {
+      const mockNotes = {
+        title: 'Release 2.0',
+        body: 'New features',
+        url: 'https://github.com/org/repo/releases/tag/v2.0',
+        publishedAt: '2026-01-15T00:00:00Z',
+        provider: 'github',
+      };
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => mockNotes,
+      } as any);
+
+      const result = await getContainerReleaseNotes('c1');
+      expect(fetch).toHaveBeenCalledWith('/api/containers/c1/release-notes', {
+        credentials: 'include',
+      });
+      expect(result).toEqual(mockNotes);
+    });
+
+    it('returns null when release notes are not found (404)', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+        statusText: 'Not Found',
+      } as any);
+
+      const result = await getContainerReleaseNotes('c1');
+      expect(result).toBeNull();
+    });
+
+    it('throws when fetching release notes fails with non-404 error', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        statusText: 'Internal Server Error',
+      } as any);
+
+      await expect(getContainerReleaseNotes('c1')).rejects.toThrow(
+        'Failed to get release notes for container c1: Internal Server Error',
       );
     });
   });

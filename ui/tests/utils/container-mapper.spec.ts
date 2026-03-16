@@ -1153,4 +1153,94 @@ describe('container-mapper', () => {
       expect(c.securityDelta).toBeUndefined();
     });
   });
+
+  describe('suggestedTag', () => {
+    it('maps suggestedTag from result', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          result: { tag: '2.0', suggestedTag: 'v1.25.3' },
+          updateAvailable: true,
+        }),
+      );
+      expect(c.suggestedTag).toBe('v1.25.3');
+    });
+
+    it('returns undefined when suggestedTag is missing', () => {
+      const c = mapApiContainer(
+        makeApiContainer({ result: { tag: '2.0' }, updateAvailable: true }),
+      );
+      expect(c.suggestedTag).toBeUndefined();
+    });
+
+    it('returns undefined when suggestedTag is empty string', () => {
+      const c = mapApiContainer(
+        makeApiContainer({ result: { tag: '2.0', suggestedTag: '  ' }, updateAvailable: true }),
+      );
+      expect(c.suggestedTag).toBeUndefined();
+    });
+  });
+
+  describe('sourceRepo', () => {
+    it('maps sourceRepo from API container', () => {
+      const c = mapApiContainer(makeApiContainer({ sourceRepo: 'https://github.com/nginx/nginx' }));
+      expect(c.sourceRepo).toBe('https://github.com/nginx/nginx');
+    });
+
+    it('returns undefined when sourceRepo is missing', () => {
+      const c = mapApiContainer(makeApiContainer());
+      expect(c.sourceRepo).toBeUndefined();
+    });
+  });
+
+  describe('releaseNotes', () => {
+    it('maps complete releaseNotes from result', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          result: {
+            tag: '2.0',
+            releaseNotes: {
+              title: 'Release 2.0',
+              body: 'New features',
+              url: 'https://github.com/org/repo/releases/tag/v2.0',
+              publishedAt: '2026-01-15T00:00:00Z',
+              provider: 'github',
+            },
+          },
+          updateAvailable: true,
+        }),
+      );
+      expect(c.releaseNotes).toEqual({
+        title: 'Release 2.0',
+        body: 'New features',
+        url: 'https://github.com/org/repo/releases/tag/v2.0',
+        publishedAt: '2026-01-15T00:00:00Z',
+        provider: 'github',
+      });
+    });
+
+    it('returns null when releaseNotes is missing', () => {
+      const c = mapApiContainer(
+        makeApiContainer({ result: { tag: '2.0' }, updateAvailable: true }),
+      );
+      expect(c.releaseNotes).toBeNull();
+    });
+
+    it('returns null when releaseNotes has missing required fields', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          result: {
+            tag: '2.0',
+            releaseNotes: { title: 'Release', body: '', url: '', publishedAt: '', provider: '' },
+          },
+          updateAvailable: true,
+        }),
+      );
+      expect(c.releaseNotes).toBeNull();
+    });
+
+    it('returns null when result is null', () => {
+      const c = mapApiContainer(makeApiContainer());
+      expect(c.releaseNotes).toBeNull();
+    });
+  });
 });

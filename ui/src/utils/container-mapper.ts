@@ -17,6 +17,7 @@
 import { getEffectiveDisplayIcon } from '../services/image-icon';
 import type {
   Container,
+  ContainerReleaseNotes,
   ContainerSecurityDelta,
   ContainerSecuritySummary,
 } from '../types/container';
@@ -45,11 +46,21 @@ interface ApiContainerImage {
   } | null;
 }
 
+interface ApiContainerReleaseNotes {
+  title?: unknown;
+  body?: unknown;
+  url?: unknown;
+  publishedAt?: unknown;
+  provider?: unknown;
+}
+
 interface ApiContainerResult {
   tag?: unknown;
+  suggestedTag?: unknown;
   digest?: unknown;
   link?: unknown;
   noUpdateReason?: unknown;
+  releaseNotes?: ApiContainerReleaseNotes | null;
 }
 
 interface ApiContainerUpdateKind {
@@ -123,6 +134,7 @@ interface ApiContainerInput {
   transformTags?: unknown;
   triggerInclude?: unknown;
   triggerExclude?: unknown;
+  sourceRepo?: unknown;
   error?: { message?: unknown } | null;
   ports?: unknown;
   volumes?: unknown;
@@ -521,6 +533,19 @@ function deriveRuntimeDetails(
   };
 }
 
+/** Derive inline release notes summary from API result. */
+function deriveReleaseNotes(apiContainer: ApiContainerInput): ContainerReleaseNotes | null {
+  const rn = apiContainer.result?.releaseNotes;
+  if (!rn || typeof rn !== 'object') return null;
+  const title = asNonEmptyString(rn.title);
+  const body = asNonEmptyString(rn.body);
+  const url = asNonEmptyString(rn.url);
+  const publishedAt = asNonEmptyString(rn.publishedAt);
+  const provider = asNonEmptyString(rn.provider);
+  if (!title || !body || !url || !publishedAt || !provider) return null;
+  return { title, body, url, publishedAt, provider };
+}
+
 /** Map a single API container to the UI Container type. */
 export function mapApiContainer(apiContainer: ApiContainerInput): Container {
   const runtimeDetails = deriveRuntimeDetails(apiContainer);
@@ -545,6 +570,9 @@ export function mapApiContainer(apiContainer: ApiContainerInput): Container {
     imageVariant: asNonEmptyString(apiContainer.image?.variant),
     imageDigestWatch: asOptionalBoolean(apiContainer.image?.digest?.watch),
     imageTagSemver: asOptionalBoolean(apiContainer.image?.tag?.semver),
+    suggestedTag: asNonEmptyString(apiContainer.result?.suggestedTag),
+    sourceRepo: asNonEmptyString(apiContainer.sourceRepo),
+    releaseNotes: deriveReleaseNotes(apiContainer),
     releaseLink: deriveReleaseLink(apiContainer),
     updateDetectedAt: deriveUpdateDetectedAt(apiContainer),
     updateMaturity: getUpdateMaturity(
