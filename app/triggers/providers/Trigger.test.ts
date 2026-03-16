@@ -978,7 +978,7 @@ test('renderSimpleBody should evaluate js functions when template is a customize
 test('renderSimpleBody should expose releaseNotes variables and truncate body for notification context', async () => {
   const longReleaseBody = 'x'.repeat(900);
   trigger.configuration.simplebody =
-    '${releaseNotes.title}|${releaseNotes.url}|${releaseNotes.body}';
+    '${container.result.releaseNotes.title}|${container.result.releaseNotes.url}|${container.result.releaseNotes.body}';
 
   const renderedBody = trigger.renderSimpleBody({
     name: 'container-name',
@@ -997,6 +997,25 @@ test('renderSimpleBody should expose releaseNotes variables and truncate body fo
   expect(title).toBe('Release 2.0.0');
   expect(url).toBe('https://github.com/acme/service/releases/tag/v2.0.0');
   expect(body.length).toBeLessThanOrEqual(500);
+});
+
+test('renderSimpleBody should keep short releaseNotes body unchanged', () => {
+  trigger.configuration.simplebody = '${container.result.releaseNotes.body}';
+
+  const renderedBody = trigger.renderSimpleBody({
+    name: 'container-name',
+    result: {
+      releaseNotes: {
+        title: 'Release 2.0.1',
+        body: 'short body',
+        url: 'https://github.com/acme/service/releases/tag/v2.0.1',
+        publishedAt: '2026-03-01T00:00:00.000Z',
+        provider: 'github',
+      },
+    },
+  });
+
+  expect(renderedBody).toBe('short body');
 });
 
 test('renderBatchTitle should replace placeholders when called', async () => {
@@ -1030,6 +1049,70 @@ test('renderBatchBody should replace placeholders when called', async () => {
   ).toEqual(
     '- Container container-name running with tag 1.0.0 can be updated to tag 2.0.0\nhttp://test\n',
   );
+});
+
+test('composeMessage should include title and body when disabletitle is false', () => {
+  trigger.configuration.disabletitle = false;
+  trigger.configuration.simpletitle = 'Title for ${container.name}';
+  trigger.configuration.simplebody = 'Body for ${container.name}';
+
+  expect(
+    trigger.composeMessage({
+      name: 'container-name',
+      updateKind: {
+        kind: 'tag',
+      },
+    }),
+  ).toBe('Title for container-name\n\nBody for container-name');
+});
+
+test('composeMessage should return body only when disabletitle is true', () => {
+  trigger.configuration.disabletitle = true;
+  trigger.configuration.simpletitle = 'Title for ${container.name}';
+  trigger.configuration.simplebody = 'Body for ${container.name}';
+
+  expect(
+    trigger.composeMessage({
+      name: 'container-name',
+      updateKind: {
+        kind: 'tag',
+      },
+    }),
+  ).toBe('Body for container-name');
+});
+
+test('composeBatchMessage should include title and body when disabletitle is false', () => {
+  trigger.configuration.disabletitle = false;
+  trigger.configuration.batchtitle = 'Batch ${containers.length}';
+  trigger.configuration.simplebody = 'Body for ${container.name}';
+
+  expect(
+    trigger.composeBatchMessage([
+      {
+        name: 'container-name',
+        updateKind: {
+          kind: 'tag',
+        },
+      },
+    ]),
+  ).toBe('Batch 1\n\n- Body for container-name\n');
+});
+
+test('composeBatchMessage should return body only when disabletitle is true', () => {
+  trigger.configuration.disabletitle = true;
+  trigger.configuration.batchtitle = 'Batch ${containers.length}';
+  trigger.configuration.simplebody = 'Body for ${container.name}';
+
+  expect(
+    trigger.composeBatchMessage([
+      {
+        name: 'container-name',
+        updateKind: {
+          kind: 'tag',
+        },
+      },
+    ]),
+  ).toBe('- Body for container-name\n');
 });
 
 test('init should invoke registered simple callback when handleContainerReport is called', async () => {

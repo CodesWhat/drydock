@@ -11,7 +11,7 @@ const configurationValid = {
   mode: 'simple',
   threshold: 'all',
   once: true,
-  auto: true,
+  auto: 'all',
   order: 100,
   simpletitle: 'New ${container.updateKind.kind} found for container ${container.name}',
   simplebody:
@@ -57,7 +57,7 @@ test('maskConfiguration should mask sensitive data', async () => {
     mode: 'simple',
     threshold: 'all',
     once: true,
-    auto: true,
+    auto: 'all',
     order: 100,
     simpletitle: configurationValid.simpletitle,
     simplebody: configurationValid.simplebody,

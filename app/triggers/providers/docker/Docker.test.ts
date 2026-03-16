@@ -10,7 +10,7 @@ const configurationValid = {
   threshold: 'all',
   mode: 'simple',
   once: true,
-  auto: true,
+  auto: 'all',
   order: 100,
   autoremovetimeout: 10000,
   backupcount: 3,

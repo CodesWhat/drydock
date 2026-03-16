@@ -17,7 +17,7 @@ const configurationValid = {
   threshold: 'all',
   mode: 'simple',
   once: true,
-  auto: true,
+  auto: 'all',
   order: 100,
   simpletitle: 'New ${container.updateKind.kind} found for container ${container.name}',
 
@@ -54,7 +54,7 @@ test('maskConfiguration should mask sensitive data', async () => {
     chatid: '[REDACTED]',
     mode: 'simple',
     once: true,
-    auto: true,
+    auto: 'all',
     order: 100,
     simplebody:
       'Container ${container.name} running with ${container.updateKind.kind} ${container.updateKind.localValue} can be updated to ${container.updateKind.kind} ${container.updateKind.remoteValue}${container.result && container.result.link ? "\\n" + container.result.link : ""}',

@@ -2,7 +2,6 @@ import * as event from '../../event/index.js';
 import { type Container, fullName } from '../../model/container.js';
 import { getTriggerCounter } from '../../prometheus/trigger.js';
 import Component, { type ComponentConfiguration } from '../../registry/Component.js';
-import { truncateReleaseNotesBody } from '../../release-notes/index.js';
 import * as storeContainer from '../../store/container.js';
 import * as notificationStore from '../../store/notification.js';
 import { renderBatch, renderSimple } from './trigger-expression-parser.js';
@@ -53,6 +52,13 @@ interface EventDispatchOptions extends notificationStore.NotificationRuleDispatc
 const AUTO_TRIGGER_ERROR_SUPPRESSION_WINDOW_MS = 15_000;
 const AUTO_TRIGGER_ERROR_SUPPRESSION_RETENTION_MS = AUTO_TRIGGER_ERROR_SUPPRESSION_WINDOW_MS * 4;
 const TRIGGER_RELEASE_NOTES_BODY_MAX_LENGTH = 500;
+
+function truncateReleaseNotesBody(body: string, maxLength: number) {
+  if (body.length <= maxLength) {
+    return body;
+  }
+  return body.slice(0, maxLength);
+}
 
 function buildAgentDisconnectedContainer(agentName: string, reason?: string): Container {
   return {

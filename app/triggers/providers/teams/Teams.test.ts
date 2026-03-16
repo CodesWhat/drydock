@@ -20,7 +20,7 @@ const configurationValid = {
   threshold: 'all',
   mode: 'simple',
   once: true,
-  auto: true,
+  auto: 'all',
   order: 100,
   simpletitle: 'Test Title',
   simplebody: 'Test Body',

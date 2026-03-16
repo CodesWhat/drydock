@@ -11,7 +11,7 @@ const configurationValid = {
   url: 'http://xxx.com',
   urls: 'maito://user:pass@gmail.com',
   threshold: 'all',
-  auto: true,
+  auto: 'all',
   order: 100,
   once: true,
   mode: 'simple',
