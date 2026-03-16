@@ -6,13 +6,23 @@ import {
 } from './docker-helpers.js';
 import { areRuntimeDetailsEqual, getRuntimeDetailsFromInspect } from './runtime-details.js';
 
+const RECREATED_CONTAINER_NAME_PATTERN = /^([a-f0-9]{12})_(.+)$/i;
+
+export function isRecreatedContainerAlias(containerId: string, containerName: string): boolean {
+  const match = containerName.match(RECREATED_CONTAINER_NAME_PATTERN);
+  if (!match) {
+    return false;
+  }
+  const [, shortIdPrefix] = match;
+  return containerId.toLowerCase().startsWith(shortIdPrefix.toLowerCase());
+}
+
 export interface ProcessDockerEventDependencies {
   watchCronDebounced: () => Promise<void>;
   ensureRemoteAuthHeaders: () => Promise<void>;
   inspectContainer: (containerId: string) => Promise<any>;
   getContainerFromStore: (containerId: string) => Container | undefined;
-  updateContainerFromInspect: (containerFound: Container, containerInspect: any) => void;
-  isRecreatedContainerAlias: (containerId: string) => Promise<boolean>;
+  updateContainerFromInspect: (containerFound: Container, containerInspect: unknown) => void;
   debug: (message: string) => void;
 }
 
@@ -50,10 +60,14 @@ export async function processDockerEvent(
   }
 
   try {
+    await dependencies.ensureRemoteAuthHeaders();
+    const containerInspect = await dependencies.inspectContainer(containerId);
+
     // Check if this container has a transient recreate alias name (e.g. d6ea364fbc03_termix).
-    // If so, skip direct inspection — the alias is short-lived and a debounced full refresh
+    // If so, skip processing — the alias is short-lived and a debounced full refresh
     // will pick up the container under its real name after Docker renames it (#156).
-    if (await dependencies.isRecreatedContainerAlias(containerId)) {
+    const inspectName = (containerInspect?.Name || '').replace(/^\//, '');
+    if (isRecreatedContainerAlias(containerId, inspectName)) {
       dependencies.debug(
         `Skipping docker event action=[${action}] for recreated container alias id=[${containerId}]`,
       );
@@ -61,8 +75,6 @@ export async function processDockerEvent(
       return;
     }
 
-    await dependencies.ensureRemoteAuthHeaders();
-    const containerInspect = await dependencies.inspectContainer(containerId);
     const containerFound = dependencies.getContainerFromStore(containerId);
 
     if (containerFound) {

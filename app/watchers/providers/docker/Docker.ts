@@ -1499,6 +1499,5 @@ export {
   normalizeConfigNumberValue as testable_normalizeConfigNumberValue,
   normalizeContainer as testable_normalizeContainer,
   pruneOldContainers as testable_pruneOldContainers,
-  RECREATED_CONTAINER_NAME_PATTERN,
   shouldUpdateDisplayNameFromContainerName as testable_shouldUpdateDisplayNameFromContainerName,
 };
