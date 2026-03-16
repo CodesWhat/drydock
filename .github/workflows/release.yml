@@ -24,6 +24,7 @@ jobs:
   release:
     name: Docker Build & Push
     runs-on: ubuntu-latest
+    environment: release-publish
     needs: [ci]
     permissions:
       contents: write

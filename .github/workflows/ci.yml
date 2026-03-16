@@ -88,6 +88,7 @@ jobs:
   test:
     name: Test & Coverage
     runs-on: ubuntu-latest
+    environment: ci-codecov
     permissions:
       contents: read
 
@@ -557,6 +558,7 @@ jobs:
   load-test-smoke:
     name: Load Test (Smoke)
     runs-on: ubuntu-latest
+    environment: ci-artillery
     if: github.event_name == 'pull_request'
     continue-on-error: true  # advisory until baselines stabilize for this release cycle
     needs: [build]
@@ -773,6 +775,7 @@ jobs:
   load-test-ci:
     name: Load Test (CI)
     runs-on: ubuntu-latest
+    environment: ci-artillery
     if: github.event_name == 'push'
     needs: [build]
     permissions:
