@@ -1,11 +1,15 @@
-name: OpenSSF Scorecard
+name: "🛡️ OpenSSF Scorecard"
+run-name: >-
+  ${{
+    github.event_name == 'branch_protection_rule' && '🛡️ Scorecard — Branch protection changed' ||
+    github.event_name == 'schedule' && '🛡️ Scorecard — Weekly schedule' ||
+    format('🛡️ Scorecard — {0}', github.ref_name)
+  }}
 
 on:
   branch_protection_rule:
   schedule:
     - cron: '0 6 * * 1'  # Weekly on Monday at 06:00 UTC
-  push:
-    branches: [main]
 
 permissions: read-all
 
@@ -13,6 +17,7 @@ jobs:
   analysis:
     name: Scorecard analysis
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: read  # Checkout code
       security-events: write  # Upload SARIF results

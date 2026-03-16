@@ -1,0 +1,68 @@
+name: "🧬 Mutation Testing"
+run-name: >-
+  ${{
+    github.event_name == 'schedule' && '🧬 Mutation — Weekly schedule' ||
+    format('🧬 Mutation — Manual by {0}', github.actor)
+  }}
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '15 6 * * 2'  # Weekly on Tuesday at 06:15 UTC
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mutation-testing-${{ github.workflow }}
+  cancel-in-progress: true
+
+jobs:
+  stryker:
+    name: "Stryker (${{ matrix.package }})"
+    runs-on: ubuntu-latest
+    timeout-minutes: 60  # Mutation testing is intentionally expensive; cap runaway mutants
+    continue-on-error: true  # advisory while mutation baseline matures
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - package: app
+            lockfile: app/package-lock.json
+          - package: ui
+            lockfile: ui/package-lock.json
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@58077d3c7e43986b6b15fba718e8ea69e387dfcc  # v2.15.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f  # v6.3.0
+        with:
+          node-version: 24
+          cache: 'npm'
+          cache-dependency-path: ${{ matrix.lockfile }}
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: ${{ matrix.package }}
+
+      - name: Run Stryker
+        run: npm run test:mutation
+        working-directory: ${{ matrix.package }}
+
+      - name: Upload mutation report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: mutation-report-${{ matrix.package }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ matrix.package }}/reports/mutation
+          if-no-files-found: warn
+          retention-days: 14

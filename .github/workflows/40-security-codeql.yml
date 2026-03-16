@@ -1,8 +1,12 @@
-name: CodeQL
+name: "🔐 CodeQL Scan"
+run-name: >-
+  ${{
+    github.event_name == 'pull_request' && format('🔐 CodeQL — PR #{0}: {1}', github.event.pull_request.number, github.event.pull_request.title) ||
+    github.event_name == 'schedule' && '🔐 CodeQL — Weekly schedule' ||
+    format('🔐 CodeQL — {0}', github.ref_name)
+  }}
 
 on:
-  push:
-    branches: [main]
   pull_request:
     branches: [main]
   schedule:
@@ -14,6 +18,7 @@ jobs:
   analyze:
     name: Analyze
     runs-on: ubuntu-latest
+    timeout-minutes: 60  # CodeQL init/autobuild/analyze can be long on cache misses
     permissions:
       security-events: write
       contents: read

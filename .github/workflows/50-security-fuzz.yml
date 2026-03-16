@@ -1,0 +1,146 @@
+name: "🧪 Fuzz Testing"
+run-name: >-
+  ${{
+    github.event_name == 'pull_request' && format('🧪 Fuzz — PR #{0}: {1}', github.event.pull_request.number, github.event.pull_request.title) ||
+    github.event_name == 'schedule' && '🧪 Fuzz — Weekly schedule' ||
+    format('🧪 Fuzz — {0}', github.ref_name)
+  }}
+
+on:
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 6 * * 0'  # Weekly on Sunday at 06:00 UTC
+
+permissions:
+  contents: read
+
+jobs:
+  fuzz:
+    name: Fuzz
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      issues: write
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@58077d3c7e43986b6b15fba718e8ea69e387dfcc  # v2.15.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f  # v6.3.0
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: app
+
+      - name: Run fuzz tests
+        id: fuzz-run
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          mkdir -p ../artifacts/fuzz
+          npx vitest run --reporter=verbose '.fuzz.test.ts' 2>&1 | tee ../artifacts/fuzz/fuzz-test.log
+        working-directory: app
+
+      - name: Summarize fuzz result
+        id: fuzz-status
+        if: always()
+        env:
+          FUZZ_OUTCOME: ${{ steps.fuzz-run.outcome }}
+        run: |
+          set -euo pipefail
+
+          if [ "${FUZZ_OUTCOME}" = "success" ]; then
+            echo "failed=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Fuzz Testing"
+              echo "- Result: PASS"
+              echo "- Log artifact: \`fuzz-log-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}\`"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          echo "failed=true" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Fuzz Testing"
+            echo "- Result: FAIL"
+            echo "- AI_ACTION_REQUIRED: inspect fuzz log artifact and failing seed/case before merge."
+            echo "- Log artifact: \`fuzz-log-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload fuzz log artifact
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: fuzz-log-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/fuzz/fuzz-test.log
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Notify via issue on unattended failure
+        if: steps.fuzz-status.outputs.failed == 'true' && (github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main'))
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_TITLE: "🚨 CI: Fuzz tests failing on main"
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+
+          api_headers=(
+            -H "Authorization: Bearer ${GH_TOKEN}"
+            -H "Accept: application/vnd.github+json"
+          )
+
+          issues_url="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/issues?state=open&per_page=100"
+          open_issues="$(curl -fsSL "${api_headers[@]}" "${issues_url}")"
+          existing_number="$(echo "${open_issues}" | jq -r --arg title "${ISSUE_TITLE}" '.[] | select(.title == $title and (.pull_request | not)) | .number' | head -n1)"
+
+          comment_body=$(
+            cat <<EOF
+          Fuzz job failed again.
+
+          - Workflow run: ${RUN_URL}
+          - Commit: \`${GITHUB_SHA}\`
+          - Ref: \`${GITHUB_REF}\`
+          - Log artifact: \`fuzz-log-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}\`
+          EOF
+          )
+
+          if [ -n "${existing_number}" ]; then
+            comment_url="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/issues/${existing_number}/comments"
+            curl -fsSL -X POST "${api_headers[@]}" "${comment_url}" \
+              -d "$(jq -n --arg body "${comment_body}" '{body: $body}')" >/dev/null
+            exit 0
+          fi
+
+          issue_body=$(
+            cat <<EOF
+          Fuzz tests are failing on unattended runs.
+
+          - Latest failing run: ${RUN_URL}
+          - Commit: \`${GITHUB_SHA}\`
+          - Ref: \`${GITHUB_REF}\`
+          - Log artifact: \`fuzz-log-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}\`
+
+          Keep this issue open until fuzz is green again.
+          EOF
+          )
+
+          create_url="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/issues"
+          curl -fsSL -X POST "${api_headers[@]}" "${create_url}" \
+            -d "$(jq -n --arg title "${ISSUE_TITLE}" --arg body "${issue_body}" '{title: $title, body: $body}')" >/dev/null
+
+      - name: Fail workflow on fuzz failure
+        if: steps.fuzz-status.outputs.failed == 'true'
+        run: exit 1
