@@ -1,0 +1,18 @@
+{
+  "meta": {
+    "source": "committed-baseline",
+    "description": "Reference smoke baseline for CI regression checks.",
+    "updated_at": "2026-03-16"
+  },
+  "aggregate": {
+    "summaries": {
+      "http.response_time": {
+        "p95": 425.0,
+        "p99": 910.0
+      }
+    },
+    "rates": {
+      "http.request_rate": 42.0
+    }
+  }
+}

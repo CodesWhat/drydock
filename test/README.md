@@ -57,7 +57,7 @@ npm run load:rate-limit
 - In CI, the workflow enables Buildx + GHA cache to speed repeated image builds.
 - CI uploads Artillery JSON reports as workflow artifacts and posts a short p95/p99/request-rate summary in the job summary.
 - PR smoke CI also performs a regression check against the latest non-expired `load-test-ci` artifact from `main`.
-- Regression check defaults to advisory mode with drift thresholds: `p95 <= +20%`, `p99 <= +25%`, `request_rate >= -15%`.
+- Regression check defaults to advisory mode with both drift and absolute thresholds: `p95 <= +20%` and `<= 1200ms`, `p99 <= +25%` and `<= 2500ms`, `request_rate >= -15%` and `>= 10 req/s`.
 - To enforce the gate, set `DD_LOAD_TEST_REGRESSION_ENFORCE=true` in the CI step environment.
 - You can run the same check locally with `./scripts/check-load-test-regression.sh <current.json> <baseline.json>`.
 - Correctness checks (5xx, failed VUs, and optional 429 bounds) are handled by `./scripts/check-load-test-correctness.sh <report.json> "<title>"`.
