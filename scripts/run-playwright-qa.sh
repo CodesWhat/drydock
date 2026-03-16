@@ -5,7 +5,7 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 REPO_ROOT=$(cd "$SCRIPT_DIR/.." && pwd)
 COMPOSE_FILE="$REPO_ROOT/test/qa-compose.yml"
 PROJECT_NAME="${DD_PLAYWRIGHT_PROJECT:-drydock-playwright-local}"
-HEALTH_URL="${DD_PLAYWRIGHT_HEALTH_URL:-http://localhost:3333/api/health}"
+HEALTH_URL="${DD_PLAYWRIGHT_HEALTH_URL:-http://localhost:3333/health}"
 QA_IMAGE="drydock:dev"
 
 cleanup() {
