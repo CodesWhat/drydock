@@ -27,6 +27,7 @@ jobs:
     name: Prepare Snyk Context
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    environment: ci-security
     outputs:
       has_token: ${{ steps.token.outputs.has_token }}
       is_default_branch: ${{ steps.token.outputs.is_default_branch }}
@@ -84,6 +85,7 @@ jobs:
     name: Snyk Open Source
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    environment: ci-security
     needs: [prepare, quota-plan]
     if: ${{ needs.quota-plan.result == 'success' && needs.prepare.outputs.has_token == 'true' && needs.prepare.outputs.is_default_branch == 'true' }}
     env:
@@ -120,6 +122,7 @@ jobs:
     name: Snyk Code
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    environment: ci-security
     needs: [prepare, quota-plan]
     if: ${{ needs.quota-plan.result == 'success' && needs.prepare.outputs.has_token == 'true' && needs.prepare.outputs.is_default_branch == 'true' }}
     env:
@@ -152,6 +155,7 @@ jobs:
     name: Snyk Container
     runs-on: ubuntu-latest
     timeout-minutes: 30  # Includes Docker image build before scan
+    environment: ci-security
     needs: [prepare, quota-plan]
     if: ${{ needs.quota-plan.result == 'success' && needs.prepare.outputs.has_token == 'true' && needs.prepare.outputs.is_default_branch == 'true' }}
     env:
@@ -197,6 +201,7 @@ jobs:
     name: Snyk IaC
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    environment: ci-security
     needs: [prepare, quota-plan]
     if: ${{ needs.quota-plan.result == 'success' && needs.prepare.outputs.has_token == 'true' && needs.prepare.outputs.is_default_branch == 'true' }}
     env:
