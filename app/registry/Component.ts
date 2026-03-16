@@ -5,7 +5,7 @@ import { redactTriggerConfigurationInfrastructureDetails } from './trigger-confi
 type AppLogger = typeof log;
 
 export interface ComponentConfiguration {
-  [key: string]: unknown;
+  [key: string]: any;
 }
 
 type ConfigurationSchemaValidationResult = {

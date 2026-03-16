@@ -18,7 +18,7 @@ interface RegistryManifest {
   created?: string;
 }
 
-interface RegistryTagsList {
+export interface RegistryTagsList {
   name: string;
   tags: string[];
 }

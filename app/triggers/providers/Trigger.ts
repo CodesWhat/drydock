@@ -669,7 +669,7 @@ class Trigger extends Component {
    * @returns {*}
    */
   validateConfiguration(configuration: TriggerConfiguration): TriggerConfiguration {
-    const schema = this.getConfigurationSchema();
+    const schema = this.getConfigurationSchema() as ReturnType<typeof this.joi.object>;
     const schemaWithDefaultOptions = schema.append({
       auto: this.joi
         .alternatives()

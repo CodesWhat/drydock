@@ -177,7 +177,10 @@ class PostStartExecutor {
     const hookConfiguration: PostStartHookConfiguration | PostStartHookObject =
       typeof hook === 'string' ? { command: hook } : hook;
     if (hookConfiguration.command) {
-      return hookConfiguration;
+      return {
+        ...hookConfiguration,
+        command: hookConfiguration.command,
+      };
     }
 
     this.getLog()?.warn?.(

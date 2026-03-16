@@ -200,7 +200,7 @@ export function updateComposeServiceImagesInText(
 class ComposeFileParser {
   _composeCacheMaxEntries = COMPOSE_CACHE_MAX_ENTRIES;
   _composeObjectCache = new Map<string, { mtimeMs: number; compose: unknown }>();
-  _composeDocumentCache = new Map<string, { mtimeMs: number; composeDoc: unknown }>();
+  _composeDocumentCache = new Map<string, { mtimeMs: number; composeDoc: ComposeDocument }>();
 
   private readonly resolveComposeFilePath: (file: string) => string;
   private readonly getDefaultComposeFilePath: () => string | null | undefined;

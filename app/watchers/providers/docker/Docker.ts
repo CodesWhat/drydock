@@ -8,9 +8,14 @@ import debounceImport from 'just-debounce';
 import cron, { type ScheduledTask } from 'node-cron';
 import parse from 'parse-docker-image-name';
 
-type DebounceFn = typeof import('just-debounce').default;
+type DebounceFn = <T extends (...args: any[]) => void>(
+  fn: T,
+  delay: number,
+  atStart?: boolean,
+  guarantee?: boolean,
+) => (...args: Parameters<T>) => void;
 const debounceModule = debounceImport as unknown as { default?: DebounceFn };
-const debounce: DebounceFn = debounceModule.default || debounceImport;
+const debounce: DebounceFn = debounceModule.default || (debounceImport as unknown as DebounceFn);
 
 import { ddEnvVars } from '../../../configuration/index.js';
 import * as event from '../../../event/index.js';
@@ -176,7 +181,12 @@ interface DockerApiWithMutableModemHeaders {
 
 interface DockerContainerSummaryLike {
   Id: string;
+  Image: string;
   Labels?: Record<string, string>;
+  Names?: string[];
+  State?: string;
+  Ports?: unknown;
+  Mounts?: unknown;
   [key: string]: unknown;
 }
 
@@ -537,7 +547,7 @@ class Docker extends Watcher {
     if (!authorizationValue) {
       return;
     }
-    const dockerApiWithModem = this.dockerApi as Dockerode & DockerApiWithMutableModemHeaders;
+    const dockerApiWithModem = this.dockerApi as unknown as DockerApiWithMutableModemHeaders;
     if (!dockerApiWithModem.modem) {
       dockerApiWithModem.modem = {};
     }
@@ -876,7 +886,7 @@ class Docker extends Watcher {
     }
     const containers = (await this.dockerApi.listContainers(
       listContainersOptions,
-    )) as DockerContainerSummaryLike[];
+    )) as unknown as DockerContainerSummaryLike[];
 
     const swarmServiceLabelsCache = new Map<string, Promise<Record<string, string>>>();
     const containersWithResolvedLabels: DockerContainerSummaryWithLabels[] = await Promise.all(

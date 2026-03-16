@@ -69,7 +69,7 @@ interface ImgsetMatchCandidate {
 
 interface DockerContainerSummaryLike {
   Id?: unknown;
-  Names?: unknown;
+  Names?: string[];
   [key: string]: unknown;
 }
 
@@ -194,7 +194,7 @@ export async function pruneOldContainers(
   }
 }
 
-function getRecreatedContainerBaseName(container: { Id?: unknown; Names?: unknown }) {
+function getRecreatedContainerBaseName(container: { Id?: unknown; Names?: string[] }) {
   const containerId = typeof container.Id === 'string' ? container.Id : '';
   if (containerId === '') {
     return undefined;
