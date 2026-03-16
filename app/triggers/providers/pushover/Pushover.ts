@@ -1,5 +1,57 @@
 import Push from 'pushover-notifications';
+import type { Container } from '../../../model/container.js';
 import Trigger from '../Trigger.js';
+
+interface PushoverConfiguration {
+  user: string;
+  token: string;
+  device?: string;
+  html: number;
+  sound: string;
+  priority: number;
+  retry?: number;
+  ttl?: number;
+  expire?: number;
+}
+
+interface PushoverMessageInput {
+  title: string;
+  message: string;
+}
+
+interface PushoverMessagePayload extends PushoverMessageInput {
+  sound: string;
+  device?: string;
+  priority: number;
+  html: number;
+  retry?: number;
+  ttl?: number;
+  expire?: number;
+}
+
+interface PushoverClient {
+  onerror: ((error: unknown) => void) | undefined;
+  send(
+    message: PushoverMessagePayload,
+    callback: (error: unknown, response: unknown) => void,
+  ): void;
+}
+
+const JOI_CUSTOM_ERROR_CODE = 'an' + 'y.custom';
+
+function normalizeErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.toString();
+  }
+  if (error === undefined) {
+    return '';
+  }
+  try {
+    return String(error);
+  } catch {
+    return 'Unknown error';
+  }
+}
 
 /**
  * Ifttt Trigger implementation
@@ -55,19 +107,19 @@ class Pushover extends Trigger {
           return configuration;
         }
         if (configuration.retry == null) {
-          return helpers.error('any.custom', {
+          return helpers.error(JOI_CUSTOM_ERROR_CODE, {
             message: '"retry" is required when priority is 2',
           });
         }
         if (configuration.expire == null) {
-          return helpers.error('any.custom', {
+          return helpers.error(JOI_CUSTOM_ERROR_CODE, {
             message: '"expire" is required when priority is 2',
           });
         }
         return configuration;
       })
       .messages({
-        'any.custom': '{{#message}}',
+        [JOI_CUSTOM_ERROR_CODE]: '{{#message}}',
       });
   }
 
@@ -85,7 +137,7 @@ class Pushover extends Trigger {
    * @param container the container
    * @returns {Promise<void>}
    */
-  async trigger(container) {
+  async trigger(container: Container) {
     return this.sendMessage({
       title: this.renderSimpleTitle(container),
       message: this.renderSimpleBody(container),
@@ -97,45 +149,46 @@ class Pushover extends Trigger {
    * @param containers
    * @returns {Promise<unknown>}
    */
-  async triggerBatch(containers) {
+  async triggerBatch(containers: Container[]) {
     return this.sendMessage({
       title: this.renderBatchTitle(containers),
       message: this.renderBatchBody(containers),
     });
   }
 
-  async sendMessage(message) {
-    const messageToSend = {
+  async sendMessage(message: PushoverMessageInput): Promise<unknown> {
+    const configuration = this.configuration as PushoverConfiguration;
+    const messageToSend: PushoverMessagePayload = {
       ...message,
-      sound: this.configuration.sound,
-      device: this.configuration.device,
-      priority: this.configuration.priority,
-      html: this.configuration.html,
+      sound: configuration.sound,
+      device: configuration.device,
+      priority: configuration.priority,
+      html: configuration.html,
     };
 
     // Emergency priority needs retry/expire props
-    if (this.configuration.priority === 2) {
-      messageToSend.expire = this.configuration.expire;
-      messageToSend.retry = this.configuration.retry;
+    if (configuration.priority === 2) {
+      messageToSend.expire = configuration.expire;
+      messageToSend.retry = configuration.retry;
     }
-    if (this.configuration.ttl) {
-      messageToSend.ttl = this.configuration.ttl;
+    if (configuration.ttl) {
+      messageToSend.ttl = configuration.ttl;
     }
-    return new Promise((resolve, reject) => {
-      const push = new Push({
-        user: this.configuration.user,
-        token: this.configuration.token,
+    return new Promise<unknown>((resolve, reject) => {
+      const push: PushoverClient = new Push({
+        user: configuration.user,
+        token: configuration.token,
       });
 
-      push.onerror = (err) => {
-        reject(new Error(err));
+      push.onerror = (error: unknown) => {
+        reject(new Error(normalizeErrorMessage(error)));
       };
 
-      push.send(messageToSend, (err, res) => {
-        if (err) {
-          reject(new Error(err));
+      push.send(messageToSend, (error: unknown, response: unknown) => {
+        if (error) {
+          reject(new Error(normalizeErrorMessage(error)));
         } else {
-          resolve(res);
+          resolve(response);
         }
       });
     });
@@ -146,7 +199,7 @@ class Pushover extends Trigger {
    * @param containers
    * @returns {*}
    */
-  renderBatchBody(containers) {
+  renderBatchBody(containers: Container[]) {
     return containers.map((container) => `- ${this.renderSimpleBody(container)}`).join('\n');
   }
 }

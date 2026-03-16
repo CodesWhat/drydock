@@ -5,8 +5,10 @@ import {
   fullName,
   validate as validateContainer,
 } from '../../../model/container.js';
+import type Registry from '../../../registries/Registry.js';
 import * as registry from '../../../registry/index.js';
 import { suggest as suggestTag } from '../../../tag/suggest.js';
+import { getErrorMessage } from '../../../util/error.js';
 import { getImageForRegistryLookup } from './docker-helpers.js';
 import { getTagCandidates } from './tag-candidates.js';
 
@@ -29,7 +31,7 @@ export interface ContainerWatchLogger {
   debug: (message: string) => void;
 }
 
-export function getRegistries() {
+export function getRegistries(): Record<string, Registry> {
   return registry.getState().registry;
 }
 
@@ -50,7 +52,7 @@ export function normalizeContainer(container: Container) {
 }
 
 /** Get the Docker Registry by name. */
-export function getRegistry(registryName: string) {
+export function getRegistry(registryName: string): Registry {
   const registryToReturn = getRegistries()[registryName];
   if (!registryToReturn) {
     throw new Error(`Unsupported Registry ${registryName}`);
@@ -95,7 +97,7 @@ export async function findNewVersion(
 ): Promise<ContainerResult> {
   let registryProvider: ContainerTagLookupProvider;
   try {
-    registryProvider = getRegistry(container.image.registry.name) as ContainerTagLookupProvider;
+    registryProvider = getRegistry(container.image.registry.name);
   } catch {
     logContainer.error(`Unsupported registry (${container.image.registry.name})`);
     return { tag: container.image.tag.value };
@@ -135,9 +137,9 @@ export async function findNewVersion(
         result.publishedAt = publishedAt;
       }
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (typeof logContainer.debug === 'function') {
-      logContainer.debug(`Remote publish date lookup failed (${error.message})`);
+      logContainer.debug(`Remote publish date lookup failed (${getErrorMessage(error)})`);
     }
   }
 

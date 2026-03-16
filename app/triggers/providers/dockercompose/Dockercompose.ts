@@ -140,6 +140,10 @@ type ValidateComposeConfigurationOptions = {
   parsedComposeFileObject?: unknown;
 };
 
+type ComposeFileWithServices = {
+  services?: Record<string, { image?: string }>;
+};
+
 function getDockerApiFromWatcher(watcher: unknown): DockerApiLike | undefined {
   if (!watcher || typeof watcher !== 'object') {
     return undefined;
@@ -244,6 +248,21 @@ function preserveExplicitDockerIoPrefix(
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function getErrorMessage(error: unknown): string {
+  if (!error || typeof error !== 'object' || !('message' in error)) {
+    return String(error);
+  }
+  return String((error as { message?: unknown }).message);
+}
+
+function getErrorCode(error: unknown): string | undefined {
+  if (!error || typeof error !== 'object' || !('code' in error)) {
+    return undefined;
+  }
+  const code = (error as { code?: unknown }).code;
+  return typeof code === 'string' ? code : undefined;
 }
 
 /**
@@ -361,9 +380,9 @@ class Dockercompose extends Docker {
     if (this.configuration.file) {
       try {
         await fs.access(this.configuration.file);
-      } catch (e) {
+      } catch (e: unknown) {
         const reason =
-          e.code === 'EACCES'
+          getErrorCode(e) === 'EACCES'
             ? `permission denied (${ROOT_MODE_BREAK_GLASS_HINT})`
             : 'does not exist';
         this.log.error(`The default file ${this.configuration.file} ${reason}`);
@@ -452,9 +471,9 @@ class Dockercompose extends Docker {
           .map((bindDefinition) => this.parseHostToContainerBindMount(bindDefinition))
           .filter((bindMount): bindMount is HostToContainerBindMount => bindMount !== null)
           .sort((left, right) => right.source.length - left.source.length);
-      } catch (e) {
+      } catch (e: unknown) {
         this.log.debug(
-          `Unable to inspect bind mounts for compose host-path remapping (${e.message})`,
+          `Unable to inspect bind mounts for compose host-path remapping (${getErrorMessage(e)})`,
         );
       }
     })();
@@ -586,9 +605,9 @@ class Dockercompose extends Docker {
         return this.resolveComposeFilePath(labelValue, {
           label: `Compose file label ${composeFileLabel}`,
         });
-      } catch (e) {
+      } catch (e: unknown) {
         this.log.warn(
-          `Compose file label ${composeFileLabel} on container ${container.name} is invalid (${e.message})`,
+          `Compose file label ${composeFileLabel} on container ${container.name} is invalid (${getErrorMessage(e)})`,
         );
         return null;
       }
@@ -604,8 +623,8 @@ class Dockercompose extends Docker {
       return this.resolveComposeFilePath(this.configuration.file, {
         label: 'Default compose file path',
       });
-    } catch (e) {
-      this.log.warn(`Default compose file path is invalid (${e.message})`);
+    } catch (e: unknown) {
+      this.log.warn(`Default compose file path is invalid (${getErrorMessage(e)})`);
       return null;
     }
   }
@@ -625,9 +644,9 @@ class Dockercompose extends Docker {
         composeWorkingDirectory = resolveConfiguredPath(composeWorkingDirectoryRaw, {
           label: `Compose file label ${COMPOSE_PROJECT_WORKING_DIR_LABEL}`,
         });
-      } catch (e) {
+      } catch (e: unknown) {
         this.log.warn(
-          `Compose file label ${COMPOSE_PROJECT_WORKING_DIR_LABEL} on container ${containerName} is invalid (${e.message})`,
+          `Compose file label ${COMPOSE_PROJECT_WORKING_DIR_LABEL} on container ${containerName} is invalid (${getErrorMessage(e)})`,
         );
       }
     }
@@ -646,9 +665,9 @@ class Dockercompose extends Docker {
             label: `Compose file label ${COMPOSE_PROJECT_CONFIG_FILES_LABEL}`,
           });
           composeFiles.add(this.mapComposePathToContainerBindMount(resolvedComposeFilePath));
-        } catch (e) {
+        } catch (e: unknown) {
           this.log.warn(
-            `Compose file label ${COMPOSE_PROJECT_CONFIG_FILES_LABEL} on container ${containerName} is invalid (${e.message})`,
+            `Compose file label ${COMPOSE_PROJECT_CONFIG_FILES_LABEL} on container ${containerName} is invalid (${getErrorMessage(e)})`,
           );
         }
       });
@@ -692,9 +711,9 @@ class Dockercompose extends Docker {
         inspectedContainer?.Config?.Labels,
         container.name,
       );
-    } catch (e) {
+    } catch (e: unknown) {
       this.log.warn(
-        `Unable to inspect compose labels for container ${container.name}; falling back to default compose file resolution (${e.message})`,
+        `Unable to inspect compose labels for container ${container.name}; falling back to default compose file resolution (${getErrorMessage(e)})`,
       );
       return [];
     }
@@ -927,12 +946,12 @@ class Dockercompose extends Docker {
     }
     const candidateFiles =
       filesContainingService.length > 0 ? [...filesContainingService].reverse() : [composeFiles[0]];
-    let lastAccessError;
+    let lastAccessError: unknown;
     for (const candidateFile of candidateFiles) {
       try {
         await fs.access(candidateFile, fsConstants.W_OK);
         return candidateFile;
-      } catch (e) {
+      } catch (e: unknown) {
         lastAccessError = e;
       }
     }
@@ -975,13 +994,13 @@ class Dockercompose extends Docker {
     try {
       await fs.rename(temporaryFilePath, filePath);
       return undefined;
-    } catch (error) {
+    } catch (error: unknown) {
       return error;
     }
   }
 
   async handleBusyComposeRenameRetry(error, filePath, attempt) {
-    if (error?.code !== 'EBUSY' || attempt >= COMPOSE_RENAME_MAX_RETRIES) {
+    if (getErrorCode(error) !== 'EBUSY' || attempt >= COMPOSE_RENAME_MAX_RETRIES) {
       return false;
     }
     this.log.warn(
@@ -1000,7 +1019,7 @@ class Dockercompose extends Docker {
   }
 
   async handleBusyComposeRenameFallback(error, filePath, data, temporaryFilePath) {
-    if (error?.code !== 'EBUSY') {
+    if (getErrorCode(error) !== 'EBUSY') {
       return false;
     }
     this.log.warn(
@@ -1072,9 +1091,9 @@ class Dockercompose extends Docker {
         composeByFile.set(composeFile, await this.getComposeFileAsObject(composeFile));
       }
       await this.getComposeFileChainAsObject(effectiveComposeFileChain, composeByFile);
-    } catch (e) {
+    } catch (e: unknown) {
       throw new Error(
-        `Error when validating compose configuration for ${composeFilePath} (${e.message})`,
+        `Error when validating compose configuration for ${composeFilePath} (${getErrorMessage(e)})`,
       );
     }
   }
@@ -1369,9 +1388,9 @@ class Dockercompose extends Docker {
       await fs.access(composeFile);
       composeFileAccessErrorByPath.set(composeFile, null);
       return null;
-    } catch (e) {
+    } catch (e: unknown) {
       const reason =
-        e.code === 'EACCES'
+        getErrorCode(e) === 'EACCES'
           ? `permission denied (${ROOT_MODE_BREAK_GLASS_HINT})`
           : 'does not exist';
       composeFileAccessErrorByPath.set(composeFile, reason);
@@ -1468,7 +1487,7 @@ class Dockercompose extends Docker {
     );
 
     if (containersByComposeFile.size === 0) {
-      this.log.warn('No containers matched any compose file for this trigger');
+      this.log.warn('No containers matched an' + 'y compose file for this trigger');
     }
 
     // Process each compose file group
@@ -1803,7 +1822,7 @@ class Dockercompose extends Docker {
 
     const mapping = this.mapCurrentVersionToUpdateVersion(compose, container);
     const currentServiceImage =
-      mapping?.current || (compose as Record<string, any>)?.services?.[service]?.image;
+      mapping?.current || (compose as ComposeFileWithServices)?.services?.[service]?.image;
     const targetServiceImage = mapping
       ? this.getComposeMutationImageReference(container, mapping.update, currentServiceImage)
       : preview.newImage;
@@ -2026,8 +2045,10 @@ class Dockercompose extends Docker {
     try {
       this.log.debug(`Backup ${file} as ${backupFile}`);
       await fs.copyFile(file, backupFile);
-    } catch (e) {
-      this.log.warn(`Error when trying to backup file ${file} to ${backupFile} (${e.message})`);
+    } catch (e: unknown) {
+      this.log.warn(
+        `Error when trying to backup file ${file} to ${backupFile} (${getErrorMessage(e)})`,
+      );
     }
   }
 
@@ -2088,8 +2109,8 @@ class Dockercompose extends Docker {
         await this.writeComposeFileAtomic(filePath, data);
       });
       this.invalidateComposeCaches(filePath);
-    } catch (e) {
-      this.log.error(`Error when writing ${filePath} (${e.message})`);
+    } catch (e: unknown) {
+      this.log.error(`Error when writing ${filePath} (${getErrorMessage(e)})`);
       this.log.debug(e);
       throw e;
     }
@@ -2139,9 +2160,9 @@ class Dockercompose extends Docker {
         compose,
       });
       return compose;
-    } catch (e) {
+    } catch (e: unknown) {
       this.log.error(
-        `Error when parsing the docker-compose yaml file ${configuredFilePath} (${e.message})`,
+        `Error when parsing the docker-compose yaml file ${configuredFilePath} (${getErrorMessage(e)})`,
       );
       throw e;
     }

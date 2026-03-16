@@ -1,10 +1,16 @@
 import * as event from '../../../event/index.js';
-import { type Container, fullName } from '../../../model/container.js';
+import {
+  type Container,
+  type ContainerReport,
+  type ContainerResult,
+  fullName,
+} from '../../../model/container.js';
 import * as storeContainer from '../../../store/container.js';
 import { getErrorMessage } from './docker-helpers.js';
 import { enrichContainerWithReleaseNotes } from './release-notes-enrichment.js';
 
 interface ContainerWatchLogger {
+  error: (message: string) => void;
   warn: (message: string) => void;
   debug: (message: string | unknown) => void;
 }
@@ -16,8 +22,11 @@ interface ChildContainerLoggerFactory {
 interface WatchContainerDependencies {
   ensureLogger: () => void;
   log: ChildContainerLoggerFactory;
-  findNewVersion: (container: Container, logContainer: ContainerWatchLogger) => Promise<any>;
-  mapContainerToContainerReport: (containerWithResult: Container) => any;
+  findNewVersion: (
+    container: Container,
+    logContainer: ContainerWatchLogger,
+  ) => Promise<ContainerResult>;
+  mapContainerToContainerReport: (containerWithResult: Container) => ContainerReport;
 }
 
 interface MapContainerToReportDependencies {
@@ -33,7 +42,7 @@ interface MapContainerToReportDependencies {
 export async function watchContainer(
   container: Container,
   { ensureLogger, log, findNewVersion, mapContainerToContainerReport }: WatchContainerDependencies,
-) {
+): Promise<ContainerReport> {
   ensureLogger();
   // Child logger for the container to process
   const logContainer = log.child({ container: fullName(container) });
@@ -47,7 +56,7 @@ export async function watchContainer(
   try {
     containerWithResult.result = await findNewVersion(container, logContainer);
     await enrichContainerWithReleaseNotes(containerWithResult, logContainer);
-  } catch (e: any) {
+  } catch (e: unknown) {
     const errorMessage = getErrorMessage(e);
     logContainer.warn(`Error when processing (${errorMessage})`);
     logContainer.debug(e);
@@ -69,7 +78,7 @@ export async function watchContainer(
 export function mapContainerToContainerReport(
   containerWithResult: Container,
   { ensureLogger, log }: MapContainerToReportDependencies,
-) {
+): ContainerReport {
   ensureLogger();
   const logContainer = log.child({
     container: fullName(containerWithResult),

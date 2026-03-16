@@ -27,6 +27,19 @@ const releaseNotesCache = new Map<string, CacheEntry<ReleaseNotes | null>>();
 const sourceRepoCache = new Map<string, CacheEntry<string | null>>();
 const providers: ReleaseNotesProviderClient[] = [new GithubProvider()];
 
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === 'object' && error !== null && 'message' in error) {
+    const { message } = error as { message: unknown };
+    if (typeof message === 'string') {
+      return message;
+    }
+  }
+  return String(error);
+}
+
 function pruneExpiredCache<T>(cache: Map<string, CacheEntry<T>>) {
   const now = Date.now();
   for (const [cacheKey, cacheEntry] of cache.entries()) {
@@ -66,7 +79,10 @@ function getImageRegistryHostname(image: Container['image'] | undefined) {
   try {
     return new URL(withProtocol).hostname.toLowerCase();
   } catch {
-    return registryUrl.replace(/^https?:\/\//i, '').split('/')[0].toLowerCase();
+    return registryUrl
+      .replace(/^https?:\/\//i, '')
+      .split('/')[0]
+      .toLowerCase();
   }
 }
 
@@ -171,8 +187,8 @@ async function lookupSourceRepoFromDockerHubTagMetadata(imageName: string, tag: 
     if (sourceRepoCandidate) {
       return sourceRepoCandidate;
     }
-  } catch (error: any) {
-    log.debug(`Unable to query Docker Hub tag metadata (${error?.message || error})`);
+  } catch (error: unknown) {
+    log.debug(`Unable to query Docker Hub tag metadata (${getErrorMessage(error)})`);
   }
 
   try {
@@ -181,8 +197,8 @@ async function lookupSourceRepoFromDockerHubTagMetadata(imageName: string, tag: 
       requestOptions,
     );
     return normalizeSourceRepo(getSourceRepoFromHubPayload(repositoryResponse?.data));
-  } catch (error: any) {
-    log.debug(`Unable to query Docker Hub repository metadata (${error?.message || error})`);
+  } catch (error: unknown) {
+    log.debug(`Unable to query Docker Hub repository metadata (${getErrorMessage(error)})`);
   }
 
   return undefined;
@@ -278,7 +294,9 @@ function getReleaseNotesCacheKey(providerId: string, sourceRepo: string, tag: st
 }
 
 async function getReleaseNotesForSourceRepo(sourceRepo: string, tag: string) {
-  const provider = providers.find((releaseNotesProvider) => releaseNotesProvider.supports(sourceRepo));
+  const provider = providers.find((releaseNotesProvider) =>
+    releaseNotesProvider.supports(sourceRepo),
+  );
   if (!provider) {
     return undefined;
   }

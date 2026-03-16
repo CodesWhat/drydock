@@ -514,6 +514,21 @@ function classifyCosignFailure(errorMessage: string): SecuritySignatureStatus {
   return 'error';
 }
 
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (typeof error !== 'object' || error === null) {
+    return fallback;
+  }
+
+  const message = (error as { message?: unknown }).message;
+  if (typeof message === 'string') {
+    return message || fallback;
+  }
+  if (message) {
+    return `${message}`;
+  }
+  return fallback;
+}
+
 /**
  * Run vulnerability scan for an image using the configured scanner.
  * Currently supports Trivy only.
@@ -559,8 +574,8 @@ export async function scanImageForVulnerabilities(
       summary,
       vulnerabilities: vulnerabilitiesToStore,
     };
-  } catch (error: any) {
-    const errorMessage = error?.message || 'Unknown security scan error';
+  } catch (error: unknown) {
+    const errorMessage = getErrorMessage(error, 'Unknown security scan error');
     logSecurity.warn(`Security scan failed (${errorMessage})`);
     return mapToErrorResult(options.image, blockSeverities, errorMessage);
   }
@@ -597,8 +612,8 @@ export async function verifyImageSignature(
     const signaturesCount = signatures > 0 ? signatures : 1;
     logSecurity.info(`Signature verification passed (${signaturesCount} signatures)`);
     return mapToSignatureResult(options.image, configuration, 'verified', signaturesCount);
-  } catch (error: any) {
-    const errorMessage = error?.message || 'Unknown signature verification error';
+  } catch (error: unknown) {
+    const errorMessage = getErrorMessage(error, 'Unknown signature verification error');
     const status = classifyCosignFailure(errorMessage);
     logSecurity.warn(`Signature verification ${status} (${errorMessage})`);
     return mapToSignatureResult(options.image, configuration, status, 0, errorMessage);
@@ -639,8 +654,8 @@ export async function generateImageSbom(
       const sbomOutput = await runTrivySbomCommand(options, configuration, format);
       documentMap.set(format, JSON.parse(sbomOutput));
       generatedFormats.push(format);
-    } catch (error: any) {
-      errors.push(`${format}: ${error?.message || 'Unknown SBOM generation error'}`);
+    } catch (error: unknown) {
+      errors.push(`${format}: ${getErrorMessage(error, 'Unknown SBOM generation error')}`);
     }
   }
 

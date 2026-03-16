@@ -517,7 +517,7 @@ function validateCosignKeyPath(rawKeyPath: string): string {
     if (!keyStats.isFile()) {
       throw new Error('DD_SECURITY_COSIGN_KEY must reference an existing regular file');
     }
-  } catch (e) {
+  } catch (e: unknown) {
     if (
       e instanceof Error &&
       e.message === 'DD_SECURITY_COSIGN_KEY must reference an existing regular file'
@@ -642,8 +642,9 @@ function parseSafePublicUrlCandidate(value: unknown): URL | undefined {
     return undefined;
   }
   const trimmedValue = value.trim();
-  // biome-ignore lint/suspicious/noControlCharactersInRegex: intentional control character detection for input validation
-  if (trimmedValue.length === 0 || /[\u0000-\u001F\u007F]/.test(trimmedValue)) {
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: intentional control char detection for input validation
+  const controlCharacterPattern = /[\x00-\x1F\x7F]/;
+  if (trimmedValue.length === 0 || controlCharacterPattern.test(trimmedValue)) {
     return undefined;
   }
 

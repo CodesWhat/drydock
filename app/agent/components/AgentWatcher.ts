@@ -1,4 +1,4 @@
-import type { Container } from '../../model/container.js';
+import type { Container, ContainerReport } from '../../model/container.js';
 import Watcher from '../../watchers/Watcher.js';
 import { getRequiredAgentClient } from './getRequiredAgentClient.js';
 
@@ -11,7 +11,7 @@ class AgentWatcher extends Watcher {
    * Watch main method.
    * Delegate to the agent client.
    */
-  async watch(): Promise<any[]> {
+  async watch(): Promise<ContainerReport[]> {
     const client = getRequiredAgentClient(this.agent, 'AgentWatcher');
     return client.watch(this.type, this.name);
   }
@@ -20,7 +20,7 @@ class AgentWatcher extends Watcher {
    * Watch a Container.
    * Delegate to the agent client.
    */
-  async watchContainer(container: Container): Promise<any> {
+  async watchContainer(container: Container): Promise<ContainerReport> {
     const client = getRequiredAgentClient(this.agent, 'AgentWatcher');
     return client.watchContainer(this.type, this.name, container);
   }

@@ -109,6 +109,11 @@ export function getAuthenticationRegistrationErrors(): AuthenticationRegistratio
   return [...authenticationRegistrationErrors];
 }
 
+function addComponentToState(kind: ComponentKind, component: Component) {
+  const components = state[kind] as Record<string, Component>;
+  components[component.getId()] = component;
+}
+
 /**
  * Register a component.
  *
@@ -148,9 +153,7 @@ export async function registerComponent(options: RegisterComponentOptions): Prom
       agent,
     );
 
-    // Type assertion is safe here because we know the kind matches the expected type
-    // if the file structure and inheritance are correct
-    (state[kind] as any)[component.getId()] = component;
+    addComponentToState(kind, component);
     return componentRegistered;
   } catch (e: unknown) {
     const availableProviders = getAvailableProviders(componentPath, (message) =>
@@ -379,7 +382,7 @@ function applyTriggerGroupDefaults(
  */
 async function registerWatchers(options: RegistrationOptions = {}) {
   const configurations = getWatcherConfigurations();
-  let watchersToRegister: Promise<any>[] = [];
+  let watchersToRegister: Promise<Component>[] = [];
   try {
     if (Object.keys(configurations).length === 0) {
       if (options.agent) {
@@ -453,8 +456,8 @@ async function registerTriggers(options: RegistrationOptions = {}) {
 
   try {
     await registerComponents('trigger', configurations, 'triggers/providers');
-  } catch (e: any) {
-    log.warn(`Some triggers failed to register (${e.message})`);
+  } catch (e: unknown) {
+    log.warn(`Some triggers failed to register (${getErrorMessage(e)})`);
     log.debug(e);
   }
 }
@@ -506,8 +509,8 @@ async function registerRegistries() {
 
   try {
     await registerComponents('registry', registriesToRegister, 'registries/providers');
-  } catch (e: any) {
-    log.warn(`Some registries failed to register (${e.message})`);
+  } catch (e: unknown) {
+    log.warn(`Some registries failed to register (${getErrorMessage(e)})`);
     log.debug(e);
   }
 }
@@ -535,8 +538,8 @@ async function registerAuthentications() {
         configuration: {},
         componentPath: 'authentications/providers',
       });
-    } catch (e: any) {
-      log.error(`Some authentications failed to register (${e.message})`);
+    } catch (e: unknown) {
+      log.error(`Some authentications failed to register (${getErrorMessage(e)})`);
       log.debug(e);
     }
     if (hasAuthEnvConfiguration) {
@@ -625,8 +628,8 @@ async function registerAuthentications() {
         configuration: {},
         componentPath: 'authentications/providers',
       });
-    } catch (e: any) {
-      const fallbackMessage = `Anonymous authentication fallback also failed (${e.message}). Check your DD_AUTH_BASIC_* environment variables. Set DD_ANONYMOUS_AUTH_CONFIRM=true to allow anonymous access as a fallback.`;
+    } catch (e: unknown) {
+      const fallbackMessage = `Anonymous authentication fallback also failed (${getErrorMessage(e)}). Check your DD_AUTH_BASIC_* environment variables. Set DD_ANONYMOUS_AUTH_CONFIRM=true to allow anonymous access as a fallback.`;
       log.error(fallbackMessage);
       log.debug(e);
       registrationWarnings.push(fallbackMessage);
@@ -645,8 +648,8 @@ async function registerAgents() {
       const agent = new Agent();
       const registered = await agent.register('agent', 'dd', name, config);
       state.agent[registered.getId()] = registered;
-    } catch (e: any) {
-      log.warn(`Agent ${name} failed to register (${e.message})`);
+    } catch (e: unknown) {
+      log.warn(`Agent ${name} failed to register (${getErrorMessage(e)})`);
       log.debug(e);
     }
   });
@@ -662,8 +665,10 @@ async function registerAgents() {
 async function deregisterComponent(component: Component, kind: ComponentKind) {
   try {
     await component.deregister();
-  } catch (e: any) {
-    throw new Error(`Error when deregistering component ${component.getId()} (${e.message})`);
+  } catch (e: unknown) {
+    throw new Error(
+      `Error when deregistering component ${component.getId()} (${getErrorMessage(e)})`,
+    );
   } finally {
     const components = getState()[kind];
     if (components) {
@@ -747,8 +752,8 @@ async function deregisterAll() {
     await deregisterRegistries();
     await deregisterAuthentications();
     await deregisterAgents();
-  } catch (e: any) {
-    throw new Error(`Error when trying to deregister ${e.message}`);
+  } catch (e: unknown) {
+    throw new Error(`Error when trying to deregister ${getErrorMessage(e)}`);
   }
 }
 
@@ -758,8 +763,8 @@ async function shutdown() {
     await deregisterAll();
     await store.save();
     process.exit(0);
-  } catch (e: any) {
-    log.error(e.message);
+  } catch (e: unknown) {
+    log.error(getErrorMessage(e));
     process.exit(1);
   }
 }

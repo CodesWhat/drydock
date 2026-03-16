@@ -4109,7 +4109,7 @@ describe('Dockercompose Trigger', () => {
     // Backup pruning
     expect(backupStore.pruneOldBackups).toHaveBeenCalledWith('nginx', undefined);
     // Update applied event
-    expect(emitContainerUpdateApplied).toHaveBeenCalledWith('test_nginx');
+    expect(emitContainerUpdateApplied).toHaveBeenCalledWith('local_nginx');
   });
 
   test('processComposeFile should run security scanning but skip post-update lifecycle in dryrun mode', async () => {
@@ -4156,7 +4156,7 @@ describe('Dockercompose Trigger', () => {
 
     expect(emitContainerUpdateApplied).not.toHaveBeenCalled();
     expect(emitContainerUpdateFailed).toHaveBeenCalledWith({
-      containerName: 'test_nginx',
+      containerName: 'local_nginx',
       error: 'compose pull failed',
     });
   });

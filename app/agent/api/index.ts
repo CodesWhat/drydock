@@ -20,6 +20,22 @@ const SAFE_LOG_COMPONENT_PATTERN = /^[a-zA-Z0-9._-]+$/;
 
 let cachedSecret: string | undefined;
 
+function getErrorMessageValue(error: unknown): unknown {
+  if (!error || typeof error !== 'object') {
+    return undefined;
+  }
+
+  return (error as { message?: unknown }).message;
+}
+
+function stringifyErrorMessage(message: unknown): string {
+  try {
+    return `${message as string}`;
+  } catch {
+    return String(message);
+  }
+}
+
 function getValidatedLogLevel(level: unknown): string | undefined | null {
   if (level == null) {
     return undefined;
@@ -80,9 +96,10 @@ export async function init() {
   } else if (agentSecretFile) {
     try {
       cachedSecret = fs.readFileSync(agentSecretFile, 'utf-8').trim();
-    } catch (e: any) {
-      log.error(`Error reading secret file: ${sanitizeLogParam(e.message)}`);
-      throw new Error(`Error reading secret file: ${e.message}`);
+    } catch (e: unknown) {
+      const errorMessage = getErrorMessageValue(e);
+      log.error(`Error reading secret file: ${sanitizeLogParam(errorMessage)}`);
+      throw new Error(`Error reading secret file: ${stringifyErrorMessage(errorMessage)}`);
     }
   }
 

@@ -5,7 +5,7 @@ import { getSelfHostedBasicConfigurationSchema } from './selfHostedBasicConfigur
  * Generic self-hosted Docker v2 registry with optional basic auth.
  */
 class SelfHostedBasic extends BaseRegistry {
-  getConfigurationSchema(): any {
+  getConfigurationSchema(): ReturnType<typeof getSelfHostedBasicConfigurationSchema> {
     return getSelfHostedBasicConfigurationSchema(this.joi);
   }
 

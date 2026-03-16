@@ -708,7 +708,7 @@ function addResultChangedFunction(container: Container) {
  * @param container
  * @returns {*}
  */
-export function validate(container: any): Container {
+export function validate(container: unknown): Container {
   const validation = schema.validate(container);
   if (validation.error) {
     throw new Error(`Error when validating container properties ${validation.error}`);
@@ -742,7 +742,7 @@ export function validate(container: any): Container {
  * @returns {*}
  */
 export function flatten(container: Container) {
-  const containerFlatten: any = flat(container, {
+  const containerFlatten = flat<Container, Record<string, unknown>>(container, {
     delimiter: '_',
     transformKey: (key: string) => snakeCase(key),
   });

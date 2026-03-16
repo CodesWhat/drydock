@@ -1,7 +1,7 @@
-import { ServerResponse, type IncomingMessage } from 'node:http';
+import { type IncomingMessage, ServerResponse } from 'node:http';
 import type { Socket } from 'node:net';
 import type { Readable } from 'node:stream';
-import { WebSocketServer, type WebSocket } from 'ws';
+import { type WebSocket, WebSocketServer } from 'ws';
 import { getServerConfiguration } from '../../configuration/index.js';
 import type { Container } from '../../model/container.js';
 import * as registry from '../../registry/index.js';
@@ -44,6 +44,12 @@ type WebSocketServerLike = {
     callback: (webSocket: WebSocketLike) => void,
   ) => void;
 };
+
+type IdentityAwareRateLimitKeyGenerator = NonNullable<
+  ReturnType<typeof createAuthenticatedRouteRateLimitKeyGenerator>
+>;
+type IdentityAwareRateLimitRequest = Parameters<IdentityAwareRateLimitKeyGenerator>[0];
+type IdentityAwareRateLimitResponse = Parameters<IdentityAwareRateLimitKeyGenerator>[1];
 
 interface ParsedContainerLogStreamQuery {
   stdout: boolean;
@@ -538,7 +544,10 @@ function createIdentityAwareUpgradeRateLimitKeyResolver(
   return (request: UpgradeRequest, authenticated: boolean) => {
     request.ip = request.socket.remoteAddress;
     request.isAuthenticated = () => authenticated;
-    const generatedKey = identityAwareRateLimitKeyGenerator(request as any, {} as any);
+    const generatedKey = identityAwareRateLimitKeyGenerator(
+      request as unknown as IdentityAwareRateLimitRequest,
+      {} as IdentityAwareRateLimitResponse,
+    );
     if (typeof generatedKey === 'string' && generatedKey.length > 0) {
       return generatedKey;
     }

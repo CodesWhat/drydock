@@ -3,6 +3,7 @@ import { sendErrorResponse } from '../../api/error-response.js';
 import { getServerConfiguration } from '../../configuration/index.js';
 import * as registry from '../../registry/index.js';
 import * as storeContainer from '../../store/container.js';
+import { getErrorMessage } from '../../util/error.js';
 
 type AgentDockerWatcher = {
   dockerApi: {
@@ -82,8 +83,8 @@ export async function getContainerLogs(req: Request, res: Response) {
       .logs({ stdout: true, stderr: true, tail, since, timestamps, follow: false });
     const logs = demuxDockerStream(logsBuffer);
     res.status(200).json({ logs });
-  } catch (e: any) {
-    sendErrorResponse(res, 500, `Error fetching container logs (${e.message})`);
+  } catch (e: unknown) {
+    sendErrorResponse(res, 500, `Error fetching container logs (${getErrorMessage(e)})`);
   }
 }
 

@@ -2,11 +2,16 @@ import fs from 'node:fs';
 import Dockerode from 'dockerode';
 import { resolveConfiguredPath } from '../../../runtime/paths.js';
 import { getErrorMessage } from './docker-helpers.js';
+import type { MutableOidcState, OidcContext, OidcRemoteAuthConfiguration } from './oidc.js';
 import {
   initializeRemoteOidcStateFromConfiguration,
   isRemoteOidcTokenRefreshRequired,
   refreshRemoteOidcAccessToken,
 } from './oidc.js';
+
+type DockerRemoteAuthConfiguration = OidcRemoteAuthConfiguration & {
+  insecure?: boolean;
+};
 
 interface DockerRemoteAuthWatcher {
   name: string;
@@ -21,13 +26,13 @@ interface DockerRemoteAuthWatcher {
     cafile?: string;
     certfile?: string;
     keyfile?: string;
-    auth?: any;
+    auth?: DockerRemoteAuthConfiguration;
   };
   log: {
     warn: (message: string) => void;
   };
   applyRemoteAuthHeaders: (options: Dockerode.DockerOptions) => void;
-  getRemoteAuthResolution: (auth: any) => {
+  getRemoteAuthResolution: (auth: OidcRemoteAuthConfiguration | undefined) => {
     authType: string;
     hasBearer: boolean;
     hasBasic: boolean;
@@ -35,8 +40,8 @@ interface DockerRemoteAuthWatcher {
   };
   isHttpsRemoteWatcher: (options: Dockerode.DockerOptions) => boolean;
   handleRemoteAuthFailure: (message: string) => void;
-  getOidcContext: () => any;
-  getOidcStateAdapter: () => any;
+  getOidcContext: () => OidcContext;
+  getOidcStateAdapter: () => MutableOidcState;
   setRemoteAuthorizationHeader: (authorizationValue: string) => void;
 }
 
@@ -72,7 +77,7 @@ export function initWatcherWithRemoteAuth(watcher: DockerRemoteAuthWatcher): voi
     }
     try {
       watcher.applyRemoteAuthHeaders(options);
-    } catch (e: any) {
+    } catch (e: unknown) {
       const authFailureMessage = getErrorMessage(
         e,
         `Unable to authenticate remote watcher ${watcher.name}`,

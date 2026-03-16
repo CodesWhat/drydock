@@ -20,6 +20,9 @@ interface HookResult {
   timedOut: boolean;
 }
 
+type HookLogger = Pick<typeof log, 'info' | 'warn'>;
+type HookOutput = string | Buffer;
+
 function isHooksExecutionEnabled(): boolean {
   return process.env.DD_HOOKS_ENABLED?.trim().toLowerCase() === 'true';
 }
@@ -38,14 +41,14 @@ function resolveExitCode(
   return typeof exitCode === 'number' ? exitCode : 1;
 }
 
-function toTruncatedText(output: unknown): string {
+function toTruncatedText(output: HookOutput): string {
   return typeof output === 'string' ? output.slice(0, MAX_OUTPUT_BYTES) : '';
 }
 
 function createHookResult(
   error: NodeJS.ErrnoException | null,
-  stdout: unknown,
-  stderr: unknown,
+  stdout: HookOutput,
+  stderr: HookOutput,
   fallbackExitCode: number | null,
 ): HookResult {
   const timedOut = isTimedOut(error);
@@ -57,7 +60,12 @@ function createHookResult(
   };
 }
 
-function logHookResult(hookLog: any, label: string, timeout: number, result: HookResult): void {
+function logHookResult(
+  hookLog: HookLogger,
+  label: string,
+  timeout: number,
+  result: HookResult,
+): void {
   if (result.timedOut) {
     hookLog.warn(`Hook ${label} timed out after ${timeout}ms`);
     return;
@@ -78,7 +86,7 @@ function logHookResult(hookLog: any, label: string, timeout: number, result: Hoo
  * unescaped arguments while still supporting shell syntax in the command.
  */
 export async function runHook(command: string, options: HookRunnerOptions): Promise<HookResult> {
-  const hookLog = log.child({ hook: options.label });
+  const hookLog: HookLogger = log.child({ hook: options.label });
   if (!isHooksExecutionEnabled()) {
     hookLog.info(`Skipping ${options.label} hook because DD_HOOKS_ENABLED is not true`);
     return {
@@ -95,7 +103,11 @@ export async function runHook(command: string, options: HookRunnerOptions): Prom
 
   return new Promise<HookResult>((resolve) => {
     let child: ReturnType<typeof execFile> | undefined;
-    const callback = (error: NodeJS.ErrnoException | null, stdout: unknown, stderr: unknown) => {
+    const callback = (
+      error: NodeJS.ErrnoException | null,
+      stdout: HookOutput,
+      stderr: HookOutput,
+    ) => {
       const result = createHookResult(error, stdout, stderr, child?.exitCode ?? null);
       logHookResult(hookLog, options.label, timeout, result);
       resolve(result);

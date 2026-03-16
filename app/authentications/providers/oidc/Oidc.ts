@@ -418,7 +418,7 @@ class Oidc extends Authentication {
     this.logoutUrl = this.configuration.logouturl;
     try {
       this.logoutUrl = openidClient.buildEndSessionUrl(this.client).href;
-    } catch (e) {
+    } catch (e: unknown) {
       this.log.warn(` End session url is not supported (${getErrorMessage(e)})`);
     }
   }
@@ -560,7 +560,7 @@ class Oidc extends Authentication {
       } else {
         await persistOidcChecks();
       }
-    } catch (e) {
+    } catch (e: unknown) {
       this.log.warn(`Unable to persist OIDC session checks (${getErrorMessage(e)})`);
       res.status(500).json({ error: 'Unable to initialize OIDC session' });
       return;
@@ -615,7 +615,7 @@ class Oidc extends Authentication {
       });
 
       this.completePassportLogin(req, res, user, loginVerificationStartedAt);
-    } catch (err) {
+    } catch (err: unknown) {
       this.log.warn(`Error when logging the user [${getErrorMessage(err)}]`);
       this.recordLoginMetrics('error', loginVerificationStartedAt);
       res.status(401).json({ error: 'Authentication failed' });
@@ -790,7 +790,7 @@ class Oidc extends Authentication {
       const user = await this.getUserFromAccessToken(accessToken);
       this.recordLoginMetrics('success', verifyStartedAt);
       done(null, user);
-    } catch (e) {
+    } catch (e: unknown) {
       this.log.warn(`Error when validating the user access token (${getErrorMessage(e)})`);
       this.recordLoginMetrics('invalid', verifyStartedAt);
       done(null, false);

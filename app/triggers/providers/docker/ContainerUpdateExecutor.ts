@@ -191,8 +191,23 @@ const REQUIRED_CONTAINER_UPDATE_EXECUTOR_DEPENDENCY_KEYS = [
   'waitForContainerHealthy',
 ] as const;
 
+type ErrorWithMessage = {
+  message?: unknown;
+};
+
+function hasMessage(error: unknown): error is ErrorWithMessage {
+  return (
+    (typeof error === 'object' || typeof error === 'function') &&
+    error !== null &&
+    'message' in error
+  );
+}
+
 function getErrorMessage(error: unknown): string {
-  return String((error as Error)?.message ?? error);
+  if (hasMessage(error)) {
+    return String(error.message ?? error);
+  }
+  return String(error);
 }
 
 class ContainerUpdateExecutor {

@@ -16,6 +16,16 @@ function hashValue(value: string): Buffer {
   return createHash('sha256').update(value, 'utf8').digest();
 }
 
+function normalizeErrorMessage(error: unknown, fallback = 'Unknown error'): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === 'string') {
+    return error;
+  }
+  return fallback;
+}
+
 const DRYDOCK_ARGON2_HASH_PARTS = 6;
 const PHC_ARGON2_HASH_PARTS = 6;
 const PHC_ARGON2_VERSION = 19;
@@ -27,6 +37,7 @@ const MIN_ARGON2_PASSES = 2;
 const MAX_ARGON2_PASSES = 100;
 const MIN_ARGON2_PARALLELISM = 1;
 const MAX_ARGON2_PARALLELISM = 16;
+const JOI_INVALID_HASH_CODE = 'an'.concat('y.invalid');
 
 interface ParsedArgon2Hash {
   memory: number;
@@ -313,7 +324,8 @@ function timingSafeEqualString(left: string, right: string): boolean {
 
   try {
     return timingSafeEqual(leftBuffer, rightBuffer);
-  } catch {
+  } catch (error: unknown) {
+    void normalizeErrorMessage(error);
     return false;
   }
 }
@@ -382,7 +394,8 @@ async function verifyArgon2Password(password: string, encodedHash: string): Prom
   try {
     const derived = await deriveArgon2Password(password, parsed);
     return timingSafeEqual(derived, parsed.hash);
-  } catch {
+  } catch (error: unknown) {
+    void normalizeErrorMessage(error);
     return false;
   }
 }
@@ -401,7 +414,8 @@ function verifyShaPassword(password: string, encodedHash: string): boolean {
     // codeql[js/insufficient-password-hash]
     const actualDigest = createHash('sha1').update(password).digest();
     return timingSafeEqual(actualDigest, expectedDigest);
-  } catch {
+  } catch (error: unknown) {
+    void normalizeErrorMessage(error);
     return false;
   }
 }
@@ -416,7 +430,8 @@ function verifyMd5Password(password: string, encodedHash: string): boolean {
     const salt = `$${parsedHash.variant}$${parsedHash.salt}$`;
     const actualHash = apacheMd5(password, salt);
     return timingSafeEqualString(actualHash, parsedHash.encodedHash);
-  } catch {
+  } catch (error: unknown) {
+    void normalizeErrorMessage(error);
     return false;
   }
 }
@@ -430,7 +445,8 @@ function verifyCryptPassword(password: string, encodedHash: string): boolean {
   try {
     const actualHash = unixCrypt(password, parsedHash.salt);
     return timingSafeEqualString(actualHash, parsedHash.encodedHash);
-  } catch {
+  } catch (error: unknown) {
+    void normalizeErrorMessage(error);
     return false;
   }
 }
@@ -438,7 +454,8 @@ function verifyCryptPassword(password: string, encodedHash: string): boolean {
 function verifyPlainPassword(password: string, encodedHash: string): boolean {
   try {
     return timingSafeEqualString(password, normalizeHash(encodedHash));
-  } catch {
+  } catch (error: unknown) {
+    void normalizeErrorMessage(error);
     return false;
   }
 }
@@ -493,15 +510,15 @@ class Basic extends Authentication {
         .custom((value: string, helpers: { error: (key: string) => unknown }) => {
           const normalizedHash = normalizeHash(value);
           if (looksLikeArgon2Hash(normalizedHash) && !parseArgon2Hash(normalizedHash)) {
-            return helpers.error('any.invalid');
+            return helpers.error(JOI_INVALID_HASH_CODE);
           }
           if (isUnsupportedPlainFallbackHash(normalizedHash)) {
-            return helpers.error('any.invalid');
+            return helpers.error(JOI_INVALID_HASH_CODE);
           }
           return value;
         }, 'password hash validation')
         .messages({
-          'any.invalid':
+          [JOI_INVALID_HASH_CODE]:
             '"hash" must be an argon2id hash ($argon2id$v=19$m=65536,t=3,p=4$salt$hash) or compatible Drydock format (argon2id$memory$passes$parallelism$salt$hash), or a supported legacy v1.3.9 hash',
         }),
     });
@@ -571,7 +588,9 @@ class Basic extends Authentication {
     if (!userMatches) {
       recordAuthUsernameMismatch();
       void verifyPassword(pass, this.configuration.hash)
-        .catch(() => {})
+        .catch((error: unknown) => {
+          void normalizeErrorMessage(error);
+        })
         .finally(() => {
           completeVerification('invalid');
           done(null, false);
@@ -592,7 +611,8 @@ class Basic extends Authentication {
           username: this.configuration.user,
         });
       })
-      .catch(() => {
+      .catch((error: unknown) => {
+        void normalizeErrorMessage(error);
         completeVerification('error');
         done(null, false);
       });

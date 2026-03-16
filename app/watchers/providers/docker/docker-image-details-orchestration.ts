@@ -142,7 +142,7 @@ interface DockerImageDetailsHelpers {
 
 type RuntimeDetails = ReturnType<typeof getRuntimeDetailsFromContainerSummary>;
 
-function getErrorMessage(error: unknown) {
+function getErrorMessage(error: unknown): string {
   if (error instanceof Error) {
     return error.message;
   }
@@ -282,8 +282,10 @@ async function inspectImageForContainer(
   try {
     await watcher.ensureRemoteAuthHeaders();
     return await watcher.dockerApi.getImage(imageName).inspect();
-  } catch (e: unknown) {
-    throw new Error(`Unable to inspect image for container ${containerId}: ${getErrorMessage(e)}`);
+  } catch (error: unknown) {
+    throw new Error(
+      `Unable to inspect image for container ${containerId}: ${getErrorMessage(error)}`,
+    );
   }
 }
 

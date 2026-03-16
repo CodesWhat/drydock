@@ -59,7 +59,7 @@ class Quay extends BaseRegistry {
   }
 
   /**
-   * Return Base64 credentials if any.
+   * Return Base64 credentials when configured.
    * @returns {string|undefined|*}
    */
   getAuthCredentials() {

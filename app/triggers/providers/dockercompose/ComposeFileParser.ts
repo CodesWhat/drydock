@@ -57,6 +57,13 @@ function formatReplacementImageValue(currentImageValueText: string, newImage: st
   return newImage;
 }
 
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
+}
+
 export function parseComposeDocument(composeFileText: string) {
   const parseDocumentOptions = {
     keepSourceTokens: true,
@@ -71,9 +78,11 @@ export function parseComposeDocument(composeFileText: string) {
   return composeDoc;
 }
 
+type ComposeDocument = ReturnType<typeof parseComposeDocument>;
+
 function buildComposeServiceImageTextEdit(
   composeFileText: string,
-  composeDoc: any,
+  composeDoc: ComposeDocument,
   serviceName: string,
   newImage: string,
 ): ComposeTextEdit {
@@ -158,7 +167,7 @@ export function updateComposeServiceImageInText(
   composeFileText: string,
   serviceName: string,
   newImage: string,
-  composeDoc: any = null,
+  composeDoc: ComposeDocument | null = null,
 ) {
   const doc = composeDoc || parseComposeDocument(composeFileText);
   const composeTextEdit = buildComposeServiceImageTextEdit(
@@ -173,7 +182,7 @@ export function updateComposeServiceImageInText(
 export function updateComposeServiceImagesInText(
   composeFileText: string,
   serviceImageUpdates: Map<string, string>,
-  composeDoc: any = null,
+  composeDoc: ComposeDocument | null = null,
 ) {
   if (serviceImageUpdates.size === 0) {
     return composeFileText;
@@ -280,9 +289,9 @@ class ComposeFileParser {
     const filePath = this.resolveComposeFilePath(configuredFilePath as string);
     try {
       return fs.readFile(filePath);
-    } catch (e: any) {
+    } catch (e: unknown) {
       this.getLog()?.error?.(
-        `Error when reading the docker-compose yaml file ${filePath} (${e.message})`,
+        `Error when reading the docker-compose yaml file ${filePath} (${getErrorMessage(e)})`,
       );
       throw e;
     }
@@ -311,9 +320,9 @@ class ComposeFileParser {
         compose,
       });
       return compose;
-    } catch (e: any) {
+    } catch (e: unknown) {
       this.getLog()?.error?.(
-        `Error when parsing the docker-compose yaml file ${configuredFilePath} (${e.message})`,
+        `Error when parsing the docker-compose yaml file ${configuredFilePath} (${getErrorMessage(e)})`,
       );
       throw e;
     }

@@ -5,10 +5,11 @@ import log from '../log/index.js';
 import type { ContainerImage } from '../model/container.js';
 import { getSummaryTags } from '../prometheus/registry.js';
 import Component from '../registry/Component.js';
+import { getErrorMessage } from '../util/error.js';
 import { getRegistryRequestTimeoutMs } from './configuration.js';
 
 interface RegistryImage extends ContainerImage {
-  // Add any registry specific properties if needed
+  // Add registry-specific properties if needed
 }
 
 interface RegistryManifest {
@@ -371,12 +372,12 @@ class Registry extends Component {
         return undefined;
       }
       return this.fetchImageCreatedFromBlob(image, configDigest);
-    } catch (error: any) {
+    } catch (error: unknown) {
       log.debug(
         `Unable to fetch manifest config created date for ${this.getImageFullName(
           image,
           manifestDigest,
-        )} (${error.message})`,
+        )} (${getErrorMessage(error)})`,
       );
       return undefined;
     }
@@ -400,34 +401,34 @@ class Registry extends Component {
         return undefined;
       }
       return Number.isNaN(Date.parse(configResponse.created)) ? undefined : configResponse.created;
-    } catch (error: any) {
+    } catch (error: unknown) {
       log.debug(
         `Unable to fetch image config blob created date for ${this.getImageFullName(
           image,
           digest,
-        )} (${error.message})`,
+        )} (${getErrorMessage(error)})`,
       );
       return undefined;
     }
   }
 
-  async callRegistry<T = any>(options: {
+  async callRegistry<T = unknown>(options: {
     image: ContainerImage;
     url: string;
     method?: Method;
-    headers?: any;
+    headers?: AxiosRequestConfig['headers'];
     resolveWithFullResponse: true;
   }): Promise<AxiosResponse<T>>;
 
-  async callRegistry<T = any>(options: {
+  async callRegistry<T = unknown>(options: {
     image: ContainerImage;
     url: string;
     method?: Method;
-    headers?: any;
+    headers?: AxiosRequestConfig['headers'];
     resolveWithFullResponse?: false;
   }): Promise<T>;
 
-  async callRegistry<T = any>({
+  async callRegistry<T = unknown>({
     image,
     url,
     method = 'get',
@@ -439,7 +440,7 @@ class Registry extends Component {
     image: ContainerImage;
     url: string;
     method?: Method;
-    headers?: any;
+    headers?: AxiosRequestConfig['headers'];
     resolveWithFullResponse?: boolean;
   }): Promise<T | AxiosResponse<T>> {
     const start = Date.now();

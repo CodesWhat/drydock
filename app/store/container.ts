@@ -22,14 +22,22 @@ const containersQueryCacheParsedEntries = new Map<string, Array<readonly [string
 const DEFAULT_CACHE_MAX_ENTRIES = getDefaultCacheMaxEntries();
 
 // Security state cache: keyed by "{watcher}_{name}" to survive container recreation
-const securityStateCache = new Map();
 const DEFAULT_CONTAINERS_QUERY_CACHE_MAX_ENTRIES = DEFAULT_CACHE_MAX_ENTRIES;
 const DEFAULT_SECURITY_STATE_CACHE_TTL_MS = 15 * 60 * 1000;
 const DEFAULT_SECURITY_STATE_CACHE_MAX_ENTRIES = DEFAULT_CACHE_MAX_ENTRIES;
 const SECURITY_STATE_CACHE_PRUNE_SCAN_BUDGET = 10;
 const CONTAINER_COLLECTION_INDICES = ['data.watcher', 'data.status', 'data.updateAvailable'];
 const UNSAFE_QUERY_PATH_SEGMENTS = new Set(['__proto__', 'prototype', 'constructor']);
-let securityStateCachePruneIterator: IterableIterator<[string, any]> | undefined;
+
+type SecurityStateCacheEntry = {
+  security: unknown;
+  expiresAt: number;
+};
+
+const securityStateCache = new Map<string, SecurityStateCacheEntry>();
+let securityStateCachePruneIterator:
+  | IterableIterator<[string, SecurityStateCacheEntry]>
+  | undefined;
 
 interface ContainerListPaginationOptions {
   limit?: number;
@@ -718,7 +726,10 @@ export function _resetContainerStoreStateForTests() {
   securityStateCachePruneIterator = undefined;
 }
 
-export function _setSecurityStateCacheEntryForTests(cacheKey: string, entry: any) {
+export function _setSecurityStateCacheEntryForTests(
+  cacheKey: string,
+  entry: SecurityStateCacheEntry,
+) {
   securityStateCache.set(cacheKey, entry);
 }
 

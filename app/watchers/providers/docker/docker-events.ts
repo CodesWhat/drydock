@@ -15,6 +15,12 @@ const DOCKER_CONTAINER_EVENT_TYPES = [
   'rename',
 ] as const;
 
+interface DockerEventsStream {
+  removeAllListeners?: (event: string) => void;
+  destroy?: () => void;
+  toString: () => string;
+}
+
 interface DockerEventsState {
   configuration: {
     watchevents?: boolean;
@@ -23,11 +29,11 @@ interface DockerEventsState {
   dockerEventsReconnectTimeout?: ReturnType<typeof setTimeout>;
   dockerEventsReconnectDelayMs: number;
   dockerEventsReconnectAttempt: number;
-  dockerEventsStream?: any;
+  dockerEventsStream?: DockerEventsStream;
   dockerEventsBuffer: string;
   log?: {
-    warn?: (...args: any[]) => void;
-    debug?: (...args: any[]) => void;
+    warn?: (message: string) => void;
+    debug?: (message: string) => void;
   };
 }
 
@@ -37,7 +43,28 @@ export interface DockerEventsReconnectDependencies {
 }
 
 export interface DockerEventsStreamFailureDependencies {
-  scheduleDockerEventsReconnect: (reason: string, err?: any) => void;
+  scheduleDockerEventsReconnect: (reason: string, err?: unknown) => void;
+}
+
+function getErrorMessage(error: unknown): string {
+  if (typeof error !== 'object' || error === null) {
+    return '';
+  }
+  const message = (error as { message?: unknown }).message;
+  return typeof message === 'string' ? message : '';
+}
+
+function stringifyDockerEventChunk(dockerEventChunk: unknown): string {
+  if (typeof dockerEventChunk === 'string') {
+    return dockerEventChunk;
+  }
+  if (
+    dockerEventChunk &&
+    typeof (dockerEventChunk as { toString?: unknown }).toString === 'function'
+  ) {
+    return (dockerEventChunk as { toString: () => string }).toString();
+  }
+  return '';
 }
 
 function isDockerEventsReconnectEnabled(state: DockerEventsState) {
@@ -53,10 +80,11 @@ function logPendingReconnect(state: DockerEventsState, reason: string) {
 function logReconnectScheduled(
   state: DockerEventsState,
   reason: string,
-  err: any,
+  err: unknown,
   reconnectDelayMs: number,
 ) {
-  const errorMessage = err?.message ? ` (${err.message})` : '';
+  const reconnectErrorMessage = getErrorMessage(err);
+  const errorMessage = reconnectErrorMessage ? ` (${reconnectErrorMessage})` : '';
   if (state.log && typeof state.log.warn === 'function') {
     state.log.warn(
       `Docker event stream ${reason}${errorMessage}; reconnect attempt #${state.dockerEventsReconnectAttempt} in ${reconnectDelayMs}ms`,
@@ -64,8 +92,9 @@ function logReconnectScheduled(
   }
 }
 
-function logReconnectFailure(state: DockerEventsState, reconnectError: any) {
-  const errorMessage = reconnectError?.message ? ` (${reconnectError.message})` : '';
+function logReconnectFailure(state: DockerEventsState, reconnectError: unknown) {
+  const reconnectErrorMessage = getErrorMessage(reconnectError);
+  const errorMessage = reconnectErrorMessage ? ` (${reconnectErrorMessage})` : '';
   if (state.log && typeof state.log.warn === 'function') {
     state.log.warn(
       `Docker event stream reconnect attempt #${state.dockerEventsReconnectAttempt} failed${errorMessage}`,
@@ -85,7 +114,7 @@ async function attemptDockerEventsReconnect(
 
   try {
     await dependencies.listenDockerEvents();
-  } catch (reconnectError: any) {
+  } catch (reconnectError: unknown) {
     logReconnectFailure(state, reconnectError);
     scheduleDockerEventsReconnect(
       state,
@@ -129,7 +158,7 @@ export function scheduleDockerEventsReconnect(
   state: DockerEventsState,
   dependencies: DockerEventsReconnectDependencies,
   reason: string,
-  err?: any,
+  err?: unknown,
   maxDelayMs = DOCKER_EVENTS_RECONNECT_MAX_DELAY_MS,
 ) {
   if (!isDockerEventsReconnectEnabled(state)) {
@@ -156,9 +185,9 @@ export function scheduleDockerEventsReconnect(
 export function onDockerEventsStreamFailure(
   state: DockerEventsState,
   dependencies: DockerEventsStreamFailureDependencies,
-  stream: any,
+  stream: unknown,
   reason: string,
-  err?: any,
+  err?: unknown,
 ) {
   if (stream !== state.dockerEventsStream) {
     return;
@@ -166,16 +195,16 @@ export function onDockerEventsStreamFailure(
   dependencies.scheduleDockerEventsReconnect(reason, err);
 }
 
-export function isRecoverableDockerEventParseError(error: any) {
-  const message = `${error?.message || ''}`.toLowerCase();
+export function isRecoverableDockerEventParseError(error: unknown) {
+  const message = getErrorMessage(error).toLowerCase();
   return (
     message.includes('unexpected end of json input') ||
     message.includes('unterminated string in json')
   );
 }
 
-export function splitDockerEventChunk(buffer: string, dockerEventChunk: any) {
-  const chunkContent = `${buffer}${dockerEventChunk.toString()}`;
+export function splitDockerEventChunk(buffer: string, dockerEventChunk: unknown) {
+  const chunkContent = `${buffer}${stringifyDockerEventChunk(dockerEventChunk)}`;
   const payloads = chunkContent.split('\n');
   const lastPayload = payloads.pop();
 

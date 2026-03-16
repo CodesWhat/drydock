@@ -13,6 +13,18 @@ interface TriggerRouteParams {
   name: string;
 }
 
+function getErrorMessage(error: unknown): string | undefined {
+  if (
+    error &&
+    typeof error === 'object' &&
+    'message' in error &&
+    typeof error.message === 'string'
+  ) {
+    return error.message;
+  }
+  return undefined;
+}
+
 /**
  * Get Triggers.
  */
@@ -62,10 +74,11 @@ export async function runTriggerBatch(req: Request, res: Response) {
     });
     await trigger.triggerBatch(sanitizedContainers);
     res.status(200).json({});
-  } catch (e: any) {
+  } catch (e: unknown) {
+    const errorMessage = getErrorMessage(e);
     log.error(
-      `Error running batch trigger ${sanitizeLogParam(name)}: ${sanitizeLogParam(e.message)}`,
+      `Error running batch trigger ${sanitizeLogParam(name)}: ${sanitizeLogParam(errorMessage ?? '')}`,
     );
-    sendErrorResponse(res, 500, e.message);
+    sendErrorResponse(res, 500, errorMessage);
   }
 }

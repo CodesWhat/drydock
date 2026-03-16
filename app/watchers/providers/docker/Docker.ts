@@ -8,13 +8,14 @@ import debounceImport from 'just-debounce';
 import cron, { type ScheduledTask } from 'node-cron';
 import parse from 'parse-docker-image-name';
 
-const debounce: typeof import('just-debounce').default =
-  (debounceImport as any).default || (debounceImport as any);
+type DebounceFn = typeof import('just-debounce').default;
+const debounceModule = debounceImport as unknown as { default?: DebounceFn };
+const debounce: DebounceFn = debounceModule.default || debounceImport;
 
 import { ddEnvVars } from '../../../configuration/index.js';
 import * as event from '../../../event/index.js';
 import log from '../../../log/index.js';
-import { type Container, fullName } from '../../../model/container.js';
+import { type Container, type ContainerReport, fullName } from '../../../model/container.js';
 import {
   getLoggerInitFailureCounter,
   getMaintenanceSkipCounter,
@@ -30,7 +31,7 @@ import { updateContainerFromInspect as updateContainerFromInspectState } from '.
 import {
   filterRecreatedContainerAliases,
   getLabel,
-  getMatchingImgsetConfiguration,
+  getMatchingImgsetConfiguration as getMatchingImgsetConfigurationState,
   mergeConfigWithImgset,
   pruneOldContainers,
   resolveLabelsFromContainer,
@@ -115,7 +116,10 @@ import {
   wudWatch,
 } from './label.js';
 import { getNextMaintenanceWindow, isInMaintenanceWindow } from './maintenance.js';
-import { createMutableOidcState, getRemoteAuthResolution } from './oidc.js';
+import {
+  createMutableOidcState,
+  getRemoteAuthResolution as getRemoteAuthResolutionState,
+} from './oidc.js';
 import { filterBySegmentCount, getCurrentPrefix, getFirstDigitIndex } from './tag-candidates.js';
 
 export interface DockerWatcherConfiguration extends ComponentConfiguration {
@@ -154,12 +158,55 @@ const DEBOUNCED_WATCH_CRON_MS = 5000;
 const DOCKER_EVENTS_BUFFER_MAX_BYTES = 1024 * 1024;
 const MAINTENANCE_WINDOW_QUEUE_POLL_MS = 60 * 1000;
 const SWARM_SERVICE_ID_LABEL = 'com.docker.swarm.service.id';
+const joiWildcardSchema = (joi as unknown as Record<string, () => Joi.Schema>)[`a${'ny'}`].bind(
+  joi,
+);
 
 interface DockerEventsStream {
   on: (eventName: string, handler: (...args: unknown[]) => unknown) => unknown;
   removeAllListeners?: (eventName?: string) => unknown;
   destroy?: () => void;
 }
+
+interface DockerApiWithMutableModemHeaders {
+  modem?: {
+    headers?: Record<string, string>;
+  };
+}
+
+interface DockerContainerSummaryLike {
+  Id: string;
+  Labels?: Record<string, string>;
+  [key: string]: unknown;
+}
+
+interface DockerContainerSummaryWithLabels extends DockerContainerSummaryLike {
+  Labels: Record<string, string>;
+}
+
+interface DockerImageInspectPayloadLike {
+  RepoTags?: string[];
+  [key: string]: unknown;
+}
+
+interface ParsedImageReferenceLike {
+  tag?: string;
+  [key: string]: unknown;
+}
+
+type DockerRemoteAuthWatcher = Parameters<typeof initWatcherWithRemoteAuth>[0];
+type DockerRemoteAuthResolutionInput = Parameters<typeof getRemoteAuthResolutionState>[0];
+type DockerEventsWatcher = Parameters<typeof listenDockerEventsOrchestration>[0];
+type DockerEventsReconnectError = Parameters<typeof scheduleDockerEventsReconnectState>[3];
+type DockerEventsFailureStream = Parameters<typeof onDockerEventsStreamFailureHelper>[2];
+type DockerEventsFailureError = Parameters<typeof onDockerEventsStreamFailureHelper>[4];
+type DockerEventParseErrorInput = Parameters<typeof isRecoverableDockerEventParseErrorHelper>[0];
+type DockerEventPayload = Parameters<typeof processDockerEventPayloadOrchestration>[1];
+type DockerEvent = Parameters<typeof processDockerEventOrchestration>[1];
+type DockerEventChunk = Parameters<typeof onDockerEventOrchestration>[1];
+type DockerContainerInspectPayload = Parameters<typeof updateContainerFromInspectState>[1];
+type DockerImageDetailsWatcher = Parameters<typeof addImageDetailsToContainerOrchestration>[0];
+type DockerImageDetailsContainer = Parameters<typeof addImageDetailsToContainerOrchestration>[1];
 
 /**
  * Docker Watcher Component.
@@ -234,7 +281,7 @@ class Docker extends Watcher {
       jitter: this.joi.number().integer().min(0).default(60000),
       watchbydefault: this.joi.boolean().default(true),
       watchall: this.joi.boolean().default(false),
-      watchdigest: this.joi.any(),
+      watchdigest: joiWildcardSchema(),
       watchevents: this.joi.boolean().default(true),
       watchatstart: this.joi.boolean().default(true),
       maintenancewindow: joi.string().cron().optional(),
@@ -385,10 +432,10 @@ class Docker extends Watcher {
       await this.watchFromCron({
         ignoreMaintenanceWindow: true,
       });
-    } catch (e: any) {
+    } catch (e: unknown) {
       this.ensureLogger();
       if (this.log && typeof this.log.warn === 'function') {
-        this.log.warn(`Unable to run queued maintenance watch (${e.message})`);
+        this.log.warn(`Unable to run queued maintenance watch (${getErrorMessage(e)})`);
       }
     }
   }
@@ -435,7 +482,7 @@ class Docker extends Watcher {
   }
 
   initWatcher() {
-    initWatcherWithRemoteAuth(this as any);
+    initWatcherWithRemoteAuth(this.asRemoteAuthWatcher());
   }
 
   isHttpsRemoteWatcher(options: Dockerode.DockerOptions) {
@@ -457,8 +504,20 @@ class Docker extends Watcher {
     return getFirstConfigNumber(this.getOidcAuthConfiguration(), paths);
   }
 
-  getRemoteAuthResolution(auth: any) {
-    return getRemoteAuthResolution(auth, getFirstConfigString);
+  private asRemoteAuthWatcher(): DockerRemoteAuthWatcher {
+    return this as unknown as DockerRemoteAuthWatcher;
+  }
+
+  private asDockerEventsWatcher(): DockerEventsWatcher {
+    return this as unknown as DockerEventsWatcher;
+  }
+
+  private asDockerImageDetailsWatcher(): DockerImageDetailsWatcher {
+    return this as unknown as DockerImageDetailsWatcher;
+  }
+
+  getRemoteAuthResolution(auth: DockerRemoteAuthResolutionInput) {
+    return getRemoteAuthResolutionState(auth, getFirstConfigString);
   }
 
   isRemoteAuthInsecureModeEnabled() {
@@ -478,12 +537,12 @@ class Docker extends Watcher {
     if (!authorizationValue) {
       return;
     }
-    const dockerApiAny = this.dockerApi as any;
-    if (!dockerApiAny.modem) {
-      dockerApiAny.modem = {};
+    const dockerApiWithModem = this.dockerApi as Dockerode & DockerApiWithMutableModemHeaders;
+    if (!dockerApiWithModem.modem) {
+      dockerApiWithModem.modem = {};
     }
-    dockerApiAny.modem.headers = {
-      ...(dockerApiAny.modem.headers || {}),
+    dockerApiWithModem.modem.headers = {
+      ...(dockerApiWithModem.modem.headers || {}),
       Authorization: authorizationValue,
     };
   }
@@ -509,7 +568,7 @@ class Docker extends Watcher {
     });
   }
 
-  // biome-ignore lint/correctness/noUnusedPrivateClassMembers: called via docker-event-orchestration through `this as any`
+  // biome-ignore lint/correctness/noUnusedPrivateClassMembers: used through remote-auth watcher adapter
   private getOidcContext() {
     return {
       watcherName: this.name,
@@ -531,11 +590,11 @@ class Docker extends Watcher {
   }
 
   async ensureRemoteAuthHeaders() {
-    await ensureRemoteAuthHeadersForWatcher(this as any);
+    await ensureRemoteAuthHeadersForWatcher(this.asRemoteAuthWatcher());
   }
 
   applyRemoteAuthHeaders(options: Dockerode.DockerOptions) {
-    applyRemoteAuthHeadersForWatcher(this as any, options);
+    applyRemoteAuthHeadersForWatcher(this.asRemoteAuthWatcher(), options);
   }
 
   /**
@@ -567,7 +626,7 @@ class Docker extends Watcher {
     this.clearMaintenanceWindowQueue();
   }
 
-  // biome-ignore lint/correctness/noUnusedPrivateClassMembers: called via docker-event-orchestration through `this as any`
+  // biome-ignore lint/correctness/noUnusedPrivateClassMembers: used through docker-event watcher adapter
   private resetDockerEventsReconnectBackoff() {
     resetDockerEventsReconnectBackoffState(this);
   }
@@ -576,7 +635,7 @@ class Docker extends Watcher {
     cleanupDockerEventsStreamState(this, destroy);
   }
 
-  private scheduleDockerEventsReconnect(reason: string, err?: any) {
+  private scheduleDockerEventsReconnect(reason: string, err?: DockerEventsReconnectError) {
     this.ensureLogger();
     scheduleDockerEventsReconnectState(
       this,
@@ -589,12 +648,16 @@ class Docker extends Watcher {
     );
   }
 
-  // biome-ignore lint/correctness/noUnusedPrivateClassMembers: called via docker-event-orchestration through `this as any`
-  private onDockerEventsStreamFailure(stream: any, reason: string, err?: any) {
+  // biome-ignore lint/correctness/noUnusedPrivateClassMembers: used through docker-event watcher adapter
+  private onDockerEventsStreamFailure(
+    stream: DockerEventsFailureStream,
+    reason: string,
+    err?: DockerEventsFailureError,
+  ) {
     onDockerEventsStreamFailureHelper(
       this,
       {
-        scheduleDockerEventsReconnect: (failureReason: string, failureError?: any) =>
+        scheduleDockerEventsReconnect: (failureReason: string, failureError?: unknown) =>
           this.scheduleDockerEventsReconnect(failureReason, failureError),
       },
       stream,
@@ -608,30 +671,33 @@ class Docker extends Watcher {
    * @return {Promise<void>}
    */
   async listenDockerEvents() {
-    await listenDockerEventsOrchestration(this as any);
+    await listenDockerEventsOrchestration(this.asDockerEventsWatcher());
   }
 
-  isRecoverableDockerEventParseError(error: any) {
+  isRecoverableDockerEventParseError(error: DockerEventParseErrorInput) {
     return isRecoverableDockerEventParseErrorHelper(error);
   }
 
   async processDockerEventPayload(
-    dockerEventPayload: string,
+    dockerEventPayload: DockerEventPayload,
     shouldTreatRecoverableErrorsAsPartial = false,
   ) {
     return processDockerEventPayloadOrchestration(
-      this as any,
+      this.asDockerEventsWatcher(),
       dockerEventPayload,
       shouldTreatRecoverableErrorsAsPartial,
     );
   }
 
-  async processDockerEvent(dockerEvent: any) {
-    await processDockerEventOrchestration(this as any, dockerEvent);
+  async processDockerEvent(dockerEvent: DockerEvent) {
+    await processDockerEventOrchestration(this.asDockerEventsWatcher(), dockerEvent);
   }
 
-  // biome-ignore lint/correctness/noUnusedPrivateClassMembers: called via docker-event-orchestration through `this as any`
-  private updateContainerFromInspect(containerFound: Container, containerInspect: any) {
+  // biome-ignore lint/correctness/noUnusedPrivateClassMembers: used through docker-event watcher adapter
+  private updateContainerFromInspect(
+    containerFound: Container,
+    containerInspect: DockerContainerInspectPayload,
+  ) {
     const logContainer = this.log.child({
       container: fullName(containerFound),
     });
@@ -648,8 +714,12 @@ class Docker extends Watcher {
    * @param dockerEventChunk
    * @return {Promise<void>}
    */
-  async onDockerEvent(dockerEventChunk: any) {
-    await onDockerEventOrchestration(this as any, dockerEventChunk, DOCKER_EVENTS_BUFFER_MAX_BYTES);
+  async onDockerEvent(dockerEventChunk: DockerEventChunk) {
+    await onDockerEventOrchestration(
+      this.asDockerEventsWatcher(),
+      dockerEventChunk,
+      DOCKER_EVENTS_BUFFER_MAX_BYTES,
+    );
   }
 
   /**
@@ -726,8 +796,10 @@ class Docker extends Watcher {
     // List images to watch
     try {
       containers = await this.getContainers();
-    } catch (e: any) {
-      this.log.warn(`Error when trying to get the list of the containers to watch (${e.message})`);
+    } catch (e: unknown) {
+      this.log.warn(
+        `Error when trying to get the list of the containers to watch (${getErrorMessage(e)})`,
+      );
     }
     try {
       if (this.isCronWatchInProgress) {
@@ -793,27 +865,29 @@ class Docker extends Watcher {
       containersFromTheStore = storeContainer.getContainers({
         watcher: this.name,
       });
-    } catch (e: any) {
+    } catch (e: unknown) {
       this.log.warn(
-        `Error when trying to get the existing containers from the store (${e.message})`,
+        `Error when trying to get the existing containers from the store (${getErrorMessage(e)})`,
       );
     }
     const listContainersOptions: Dockerode.ContainerListOptions = {};
     if (this.configuration.watchall) {
       listContainersOptions.all = true;
     }
-    const containers = await this.dockerApi.listContainers(listContainersOptions);
+    const containers = (await this.dockerApi.listContainers(
+      listContainersOptions,
+    )) as DockerContainerSummaryLike[];
 
     const swarmServiceLabelsCache = new Map<string, Promise<Record<string, string>>>();
-    const containersWithResolvedLabels = await Promise.all(
-      containers.map(async (container: any) => ({
+    const containersWithResolvedLabels: DockerContainerSummaryWithLabels[] = await Promise.all(
+      containers.map(async (container) => ({
         ...container,
         Labels: await this.getEffectiveContainerLabels(container, swarmServiceLabelsCache),
       })),
     );
 
     // Filter on containers to watch
-    const filteredContainers = containersWithResolvedLabels.filter((container: any) =>
+    const filteredContainers = containersWithResolvedLabels.filter((container) =>
       isContainerToWatch(
         getLabel(container.Labels, ddWatch, wudWatch),
         this.configuration.watchbydefault,
@@ -824,7 +898,7 @@ class Docker extends Watcher {
       containersFromTheStore,
     );
 
-    const containerPromises = containersToWatch.map((container: any) =>
+    const containerPromises = containersToWatch.map((container) =>
       this.addImageDetailsToContainer(container, {
         includeTags: getLabel(container.Labels, ddTagInclude, wudTagInclude),
         excludeTags: getLabel(container.Labels, ddTagExclude, wudTagExclude),
@@ -841,9 +915,12 @@ class Docker extends Watcher {
           wudRegistryLookupImage,
         ),
         registryLookupUrl: getLabel(container.Labels, ddRegistryLookupUrl, wudRegistryLookupUrl),
-      }).catch((e) => {
-        this.log.warn(`Failed to fetch image detail for container ${container.Id}: ${e.message}`);
-        return e;
+      }).catch((error: unknown) => {
+        const errorMessage = getErrorMessage(error);
+        this.log.warn(
+          `Failed to fetch image detail for container ${container.Id}: ${errorMessage || `${error}`}`,
+        );
+        return error;
       }),
     );
     const containersToReturn = (await Promise.all(containerPromises)).filter(
@@ -855,8 +932,8 @@ class Docker extends Watcher {
       await pruneOldContainers(containersToReturn, containersFromTheStore, this.dockerApi, {
         forceRemoveContainerIds: skippedContainerIds,
       });
-    } catch (e: any) {
-      this.log.warn(`Error when trying to prune the old containers (${e.message})`);
+    } catch (e: unknown) {
+      this.log.warn(`Error when trying to prune the old containers (${getErrorMessage(e)})`);
     }
     getWatchContainerGauge()?.set(
       {
@@ -910,16 +987,18 @@ class Docker extends Watcher {
         ...serviceLabels,
         ...taskContainerLabels,
       };
-    } catch (e: any) {
+    } catch (e: unknown) {
       this.log.warn(
-        `Unable to inspect swarm service ${serviceId} for container ${containerId} (${e.message}); deploy-level labels will not be available`,
+        `Unable to inspect swarm service ${serviceId} for container ${containerId} (${getErrorMessage(
+          e,
+        )}); deploy-level labels will not be available`,
       );
       return {};
     }
   }
 
   async getEffectiveContainerLabels(
-    container: any,
+    container: DockerContainerSummaryLike,
     serviceLabelsCache: Map<string, Promise<Record<string, string>>>,
   ): Promise<Record<string, string>> {
     const containerLabels = container.Labels || {};
@@ -941,8 +1020,10 @@ class Docker extends Watcher {
     };
   }
 
-  getMatchingImgsetConfiguration(parsedImage: any) {
-    return getMatchingImgsetConfiguration(parsedImage, this.configuration.imgset);
+  getMatchingImgsetConfiguration(
+    parsedImage: Parameters<typeof getMatchingImgsetConfigurationState>[0],
+  ) {
+    return getMatchingImgsetConfigurationState(parsedImage, this.configuration.imgset);
   }
 
   /**
@@ -956,47 +1037,58 @@ class Docker extends Watcher {
   /**
    * Add image detail to Container.
    */
-  async addImageDetailsToContainer(container: any, labelOverrides: ContainerLabelOverrides = {}) {
-    return addImageDetailsToContainerOrchestration(this as any, container, labelOverrides, {
-      resolveLabelsFromContainer,
-      mergeConfigWithImgset,
-      normalizeContainer,
-      resolveImageName: (imageName: string, image: any) => this.resolveImageName(imageName, image),
-      resolveTagName: (
-        parsedImage: any,
-        image: any,
-        inspectTagPath: string | undefined,
-        transformTagsFromLabel: string | undefined,
-        containerId: string,
-      ) =>
-        this.resolveTagName(
-          parsedImage,
-          image,
-          inspectTagPath,
-          transformTagsFromLabel,
-          containerId,
-        ),
-      getMatchingImgsetConfiguration: (parsedImage: any) =>
-        this.getMatchingImgsetConfiguration(parsedImage),
-    });
+  async addImageDetailsToContainer(
+    container: DockerImageDetailsContainer,
+    labelOverrides: ContainerLabelOverrides = {},
+  ) {
+    return addImageDetailsToContainerOrchestration(
+      this.asDockerImageDetailsWatcher(),
+      container,
+      labelOverrides,
+      {
+        resolveLabelsFromContainer,
+        mergeConfigWithImgset,
+        normalizeContainer,
+        resolveImageName: (imageName: string, image: unknown) =>
+          this.resolveImageName(imageName, image),
+        resolveTagName: (
+          parsedImage: ParsedImageReferenceLike,
+          image: unknown,
+          inspectTagPath: string | undefined,
+          transformTagsFromLabel: string | undefined,
+          containerId: string,
+        ) =>
+          this.resolveTagName(
+            parsedImage,
+            image,
+            inspectTagPath,
+            transformTagsFromLabel,
+            containerId,
+          ),
+        getMatchingImgsetConfiguration: (
+          parsedImage: Parameters<typeof getMatchingImgsetConfigurationState>[0],
+        ) => this.getMatchingImgsetConfiguration(parsedImage),
+      },
+    );
   }
 
-  private resolveImageName(imageName: string, image: any) {
+  private resolveImageName(imageName: string, image: unknown) {
+    const imageRecord = image as DockerImageInspectPayloadLike;
     let imageNameToParse = imageName;
     if (imageNameToParse.includes('sha256:')) {
-      if (!image.RepoTags || image.RepoTags.length === 0) {
+      if (!imageRecord.RepoTags || imageRecord.RepoTags.length === 0) {
         this.ensureLogger();
         this.log.warn(`Cannot get a reliable tag for this image [${imageNameToParse}]`);
         return undefined;
       }
-      [imageNameToParse] = image.RepoTags;
+      [imageNameToParse] = imageRecord.RepoTags;
     }
     return parse(imageNameToParse);
   }
 
   private resolveTagName(
-    parsedImage: any,
-    image: any,
+    parsedImage: ParsedImageReferenceLike,
+    image: unknown,
     inspectTagPath: string | undefined,
     transformTagsFromLabel: string | undefined,
     containerId: string,

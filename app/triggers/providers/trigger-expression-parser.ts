@@ -10,7 +10,7 @@ type TemplateVars = Record<string, unknown>;
 
 /**
  * Safely resolve a dotted property path on an object.
- * Returns undefined when any segment along the path is nullish.
+ * Returns undefined when a segment along the path is nullish.
  */
 function resolvePath(obj: unknown, path: string): unknown {
   return path.split('.').reduce<unknown>((cur, key) => {

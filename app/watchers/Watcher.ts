@@ -13,14 +13,14 @@ abstract class Watcher extends Component {
 
   /**
    * Watch main method.
-   * @returns {Promise<any[]>}
+   * @returns {Promise<ContainerReport[]>}
    */
   abstract watch(): Promise<ContainerReport[]>;
 
   /**
    * Watch a Container.
    * @param container
-   * @returns {Promise<any>}
+   * @returns {Promise<ContainerReport>}
    */
   abstract watchContainer(container: Container): Promise<ContainerReport>;
 }

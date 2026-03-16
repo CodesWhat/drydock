@@ -1,11 +1,20 @@
 import type { ContainerRuntimeDetails } from '../../../model/container.js';
 
+type UnknownRecord = Record<string, unknown>;
+
 function getEmptyRuntimeDetails(): ContainerRuntimeDetails {
   return {
     ports: [],
     volumes: [],
     env: [],
   };
+}
+
+function asUnknownRecord(value: unknown): UnknownRecord | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+  return value as UnknownRecord;
 }
 
 function isNonEmptyString(value: unknown): value is string {
@@ -26,14 +35,15 @@ function normalizeRuntimeEnvList(values: unknown): ContainerRuntimeDetails['env'
   const seen = new Set<string>();
   const envList: ContainerRuntimeDetails['env'] = [];
   for (const value of values) {
-    if (!value || typeof value !== 'object') {
+    const envValueCandidate = asUnknownRecord(value);
+    if (!envValueCandidate) {
       continue;
     }
-    const key = isNonEmptyString((value as any).key) ? (value as any).key.trim() : '';
+    const key = isNonEmptyString(envValueCandidate.key) ? envValueCandidate.key.trim() : '';
     if (key === '') {
       continue;
     }
-    const rawEnvValue = (value as any).value;
+    const rawEnvValue = envValueCandidate.value;
     const envValue = typeof rawEnvValue === 'string' ? rawEnvValue : `${rawEnvValue ?? ''}`;
     const dedupeKey = `${key}\u0000${envValue}`;
     if (seen.has(dedupeKey)) {
@@ -46,13 +56,14 @@ function normalizeRuntimeEnvList(values: unknown): ContainerRuntimeDetails['env'
 }
 
 export function normalizeRuntimeDetails(details: unknown): ContainerRuntimeDetails {
-  if (!details || typeof details !== 'object') {
+  const runtimeDetails = asUnknownRecord(details);
+  if (!runtimeDetails) {
     return getEmptyRuntimeDetails();
   }
   return {
-    ports: normalizeRuntimeStringList((details as any).ports),
-    volumes: normalizeRuntimeStringList((details as any).volumes),
-    env: normalizeRuntimeEnvList((details as any).env),
+    ports: normalizeRuntimeStringList(runtimeDetails.ports),
+    volumes: normalizeRuntimeStringList(runtimeDetails.volumes),
+    env: normalizeRuntimeEnvList(runtimeDetails.env),
   };
 }
 
@@ -123,11 +134,12 @@ function formatInspectContainerPortBindings(containerPort: string, bindings: unk
 }
 
 function formatInspectPortBinding(containerPort: string, binding: unknown): string | null {
-  if (!binding || typeof binding !== 'object') {
+  const portBinding = asUnknownRecord(binding);
+  if (!portBinding) {
     return null;
   }
-  const hostIp = typeof (binding as any).HostIp === 'string' ? (binding as any).HostIp : '';
-  const hostPortRaw = (binding as any).HostPort;
+  const hostIp = typeof portBinding.HostIp === 'string' ? portBinding.HostIp : '';
+  const hostPortRaw = portBinding.HostPort;
   const hostPort = hostPortRaw !== undefined && hostPortRaw !== null ? `${hostPortRaw}` : '';
   if (hostPort === '') {
     return containerPort;
@@ -142,21 +154,22 @@ function formatContainerPortsFromSummary(containerPorts: unknown): string[] {
   }
   const formattedPorts: string[] = [];
   for (const port of containerPorts) {
-    if (!port || typeof port !== 'object') {
+    const summaryPort = asUnknownRecord(port);
+    if (!summaryPort) {
       continue;
     }
-    const privatePort = (port as any).PrivatePort;
+    const privatePort = summaryPort.PrivatePort;
     if (privatePort === undefined || privatePort === null) {
       continue;
     }
-    const protocol = isNonEmptyString((port as any).Type) ? (port as any).Type : 'tcp';
+    const protocol = isNonEmptyString(summaryPort.Type) ? summaryPort.Type : 'tcp';
     const containerPort = `${privatePort}/${protocol}`;
-    const publicPort = (port as any).PublicPort;
+    const publicPort = summaryPort.PublicPort;
     if (publicPort === undefined || publicPort === null) {
       formattedPorts.push(containerPort);
       continue;
     }
-    const hostIp = isNonEmptyString((port as any).IP) ? `${(port as any).IP}:` : '';
+    const hostIp = isNonEmptyString(summaryPort.IP) ? `${summaryPort.IP}:` : '';
     formattedPorts.push(`${hostIp}${publicPort}->${containerPort}`);
   }
   return normalizeRuntimeStringList(formattedPorts);
@@ -174,30 +187,31 @@ function formatContainerVolumes(mounts: unknown): string[] {
 }
 
 function formatContainerMountVolume(mount: unknown): string | null {
-  if (!mount || typeof mount !== 'object') {
+  const mountDetails = asUnknownRecord(mount);
+  if (!mountDetails) {
     return null;
   }
-  const source = getContainerMountSource(mount);
-  const destination = getContainerMountDestination(mount);
+  const source = getContainerMountSource(mountDetails);
+  const destination = getContainerMountDestination(mountDetails);
   const baseVolume = formatVolumeBinding(source, destination);
   if (baseVolume === '') {
     return null;
   }
-  return (mount as any).RW === false ? `${baseVolume}:ro` : baseVolume;
+  return mountDetails.RW === false ? `${baseVolume}:ro` : baseVolume;
 }
 
-function getContainerMountSource(mount: unknown): string {
-  if (isNonEmptyString((mount as any).Name)) {
-    return (mount as any).Name.trim();
+function getContainerMountSource(mount: UnknownRecord): string {
+  if (isNonEmptyString(mount.Name)) {
+    return mount.Name.trim();
   }
-  if (isNonEmptyString((mount as any).Source)) {
-    return (mount as any).Source.trim();
+  if (isNonEmptyString(mount.Source)) {
+    return mount.Source.trim();
   }
   return '';
 }
 
-function getContainerMountDestination(mount: unknown): string {
-  return isNonEmptyString((mount as any).Destination) ? (mount as any).Destination.trim() : '';
+function getContainerMountDestination(mount: UnknownRecord): string {
+  return isNonEmptyString(mount.Destination) ? mount.Destination.trim() : '';
 }
 
 function formatVolumeBinding(source: string, destination: string): string {
@@ -230,18 +244,23 @@ function formatContainerEnv(envVars: unknown): ContainerRuntimeDetails['env'] {
   return normalizeRuntimeEnvList(parsedEnv);
 }
 
-export function getRuntimeDetailsFromInspect(containerInspect: any): ContainerRuntimeDetails {
+export function getRuntimeDetailsFromInspect(containerInspect: unknown): ContainerRuntimeDetails {
+  const inspect = asUnknownRecord(containerInspect);
+  const networkSettings = asUnknownRecord(inspect?.NetworkSettings);
+  const config = asUnknownRecord(inspect?.Config);
+
   return {
-    ports: formatContainerPortsFromInspect(containerInspect?.NetworkSettings?.Ports),
-    volumes: formatContainerVolumes(containerInspect?.Mounts),
-    env: formatContainerEnv(containerInspect?.Config?.Env),
+    ports: formatContainerPortsFromInspect(networkSettings?.Ports),
+    volumes: formatContainerVolumes(inspect?.Mounts),
+    env: formatContainerEnv(config?.Env),
   };
 }
 
-export function getRuntimeDetailsFromContainerSummary(container: any): ContainerRuntimeDetails {
+export function getRuntimeDetailsFromContainerSummary(container: unknown): ContainerRuntimeDetails {
+  const containerSummary = asUnknownRecord(container);
   return {
-    ports: formatContainerPortsFromSummary(container?.Ports),
-    volumes: formatContainerVolumes(container?.Mounts),
+    ports: formatContainerPortsFromSummary(containerSummary?.Ports),
+    volumes: formatContainerVolumes(containerSummary?.Mounts),
     env: [],
   };
 }

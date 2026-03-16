@@ -171,6 +171,9 @@ class Trigger extends Component {
     if (error instanceof Error) {
       return error.message;
     }
+    if (typeof error === 'symbol') {
+      return String(error);
+    }
     return `${error}`;
   }
 
@@ -712,15 +715,13 @@ class Trigger extends Component {
    * Preview what an update would do without performing it.
    * Can be overridden in trigger implementation class.
    */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async preview(container: Container): Promise<Record<string, unknown>> {
+  async preview(_container: Container): Promise<Record<string, unknown>> {
     return {};
   }
 
   /**
    * Trigger method. Must be overridden in trigger implementation class.
    */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async trigger(containerWithResult: Container): Promise<unknown> {
     // do nothing by default
     this.log.warn('Cannot trigger container result; this trigger does not implement "simple" mode');
@@ -767,8 +768,7 @@ class Trigger extends Component {
    * @param containerId the container identifier
    * @param triggerResult the result returned by trigger() when the notification was sent
    */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async dismiss(containerId: string, triggerResult: unknown): Promise<void> {
+  async dismiss(_containerId: string, _triggerResult: unknown): Promise<void> {
     // do nothing by default
   }
 

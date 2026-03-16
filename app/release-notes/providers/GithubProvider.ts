@@ -4,8 +4,38 @@ import type { ReleaseNotes, ReleaseNotesProviderClient } from '../types.js';
 
 const log = logger.child({ component: 'release-notes.provider.github' });
 
+type UnknownRecord = Record<string, unknown>;
+
+function isRecord(value: unknown): value is UnknownRecord {
+  return typeof value === 'object' && value !== null;
+}
+
+function getErrorStatusCode(error: unknown) {
+  if (!isRecord(error) || !isRecord(error.response)) {
+    return undefined;
+  }
+  return error.response.status;
+}
+
+function getErrorHeader(error: unknown, headerName: string) {
+  if (!isRecord(error) || !isRecord(error.response) || !isRecord(error.response.headers)) {
+    return undefined;
+  }
+  return error.response.headers[headerName];
+}
+
+function getDebugErrorMessage(error: unknown) {
+  if (isRecord(error) && error.message) {
+    return String(error.message);
+  }
+  return String(error);
+}
+
 function normalizeGithubRepo(sourceRepo: string) {
-  const normalized = sourceRepo.trim().replace(/^https?:\/\//i, '').replace(/\/+$/g, '');
+  const normalized = sourceRepo
+    .trim()
+    .replace(/^https?:\/\//i, '')
+    .replace(/\/+$/g, '');
   const withoutGitSuffix = normalized.replace(/\.git$/i, '');
   if (!withoutGitSuffix.toLowerCase().startsWith('github.com/')) {
     return undefined;
@@ -28,7 +58,9 @@ function buildTagVariants(tag: string) {
     return [];
   }
   if (tagNormalized.startsWith('v')) {
-    return [tagNormalized, tagNormalized.substring(1)].filter((tagCandidate) => tagCandidate !== '');
+    return [tagNormalized, tagNormalized.substring(1)].filter(
+      (tagCandidate) => tagCandidate !== '',
+    );
   }
   return [`v${tagNormalized}`, tagNormalized];
 }
@@ -37,10 +69,18 @@ class GithubProvider implements ReleaseNotesProviderClient {
   id = 'github' as const;
 
   supports(sourceRepo: string) {
-    return sourceRepo.trim().replace(/^https?:\/\//i, '').toLowerCase().startsWith('github.com/');
+    return sourceRepo
+      .trim()
+      .replace(/^https?:\/\//i, '')
+      .toLowerCase()
+      .startsWith('github.com/');
   }
 
-  async fetchByTag(sourceRepo: string, tag: string, token?: string): Promise<ReleaseNotes | undefined> {
+  async fetchByTag(
+    sourceRepo: string,
+    tag: string,
+    token?: string,
+  ): Promise<ReleaseNotes | undefined> {
     const repo = normalizeGithubRepo(sourceRepo);
     if (!repo) {
       return undefined;
@@ -86,19 +126,19 @@ class GithubProvider implements ReleaseNotesProviderClient {
           publishedAt,
           provider: 'github',
         };
-      } catch (error: any) {
-        const statusCode = error?.response?.status;
+      } catch (error: unknown) {
+        const statusCode = getErrorStatusCode(error);
         if (statusCode === 404) {
           continue;
         }
         if (
           statusCode === 403 &&
-          `${error?.response?.headers?.['x-ratelimit-remaining'] ?? ''}` === '0'
+          `${getErrorHeader(error, 'x-ratelimit-remaining') ?? ''}` === '0'
         ) {
           log.warn('GitHub release notes lookup is rate-limited');
           return undefined;
         }
-        log.debug(`Unable to fetch GitHub release notes (${error?.message || error})`);
+        log.debug(`Unable to fetch GitHub release notes (${getDebugErrorMessage(error)})`);
         return undefined;
       }
     }

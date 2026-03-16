@@ -6,32 +6,68 @@ import {
 } from './docker-helpers.js';
 import { areRuntimeDetailsEqual, getRuntimeDetailsFromInspect } from './runtime-details.js';
 
+type UnknownRecord = Record<string, unknown>;
+
+interface DockerContainerInspectLike {
+  State: {
+    Status: string;
+  };
+  Name?: string;
+  Config?: {
+    Labels?: Record<string, string>;
+  };
+}
+
+function asUnknownRecord(value: unknown): UnknownRecord | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+  return value as UnknownRecord;
+}
+
+function getErrorMessage(error: unknown): string {
+  if (typeof error === 'string') {
+    return error;
+  }
+  const errorRecord = asUnknownRecord(error);
+  if (!errorRecord) {
+    return 'unknown error';
+  }
+  return typeof errorRecord.message === 'string' ? errorRecord.message : 'unknown error';
+}
+
 export interface ProcessDockerEventDependencies {
   watchCronDebounced: () => Promise<void>;
   ensureRemoteAuthHeaders: () => Promise<void>;
-  inspectContainer: (containerId: string) => Promise<any>;
+  inspectContainer: (containerId: string) => Promise<unknown>;
   getContainerFromStore: (containerId: string) => Container | undefined;
-  updateContainerFromInspect: (containerFound: Container, containerInspect: any) => void;
+  updateContainerFromInspect: (containerFound: Container, containerInspect: unknown) => void;
   debug: (message: string) => void;
 }
 
-function resolveContainerIdFromDockerEvent(dockerEvent: any) {
-  if (typeof dockerEvent?.id === 'string' && dockerEvent.id !== '') {
-    return dockerEvent.id;
+function resolveContainerIdFromDockerEvent(dockerEvent: unknown) {
+  const dockerEventRecord = asUnknownRecord(dockerEvent);
+  if (!dockerEventRecord) {
+    return undefined;
   }
 
-  if (typeof dockerEvent?.Actor?.ID === 'string' && dockerEvent.Actor.ID !== '') {
-    return dockerEvent.Actor.ID;
+  if (typeof dockerEventRecord.id === 'string' && dockerEventRecord.id !== '') {
+    return dockerEventRecord.id;
+  }
+
+  const actorRecord = asUnknownRecord(dockerEventRecord.Actor);
+  if (typeof actorRecord?.ID === 'string' && actorRecord.ID !== '') {
+    return actorRecord.ID;
   }
 
   return undefined;
 }
 
 export async function processDockerEvent(
-  dockerEvent: any,
+  dockerEvent: unknown,
   dependencies: ProcessDockerEventDependencies,
 ) {
-  const action = dockerEvent.Action;
+  const action = asUnknownRecord(dockerEvent)?.Action;
   const containerId = resolveContainerIdFromDockerEvent(dockerEvent);
 
   if (action === 'destroy' || action === 'create') {
@@ -57,9 +93,9 @@ export async function processDockerEvent(
       // Schedule a full refresh so the final human-readable name is captured.
       await dependencies.watchCronDebounced();
     }
-  } catch (e: any) {
+  } catch (e: unknown) {
     dependencies.debug(
-      `Unable to get container details for container id=[${containerId}] (${e.message})`,
+      `Unable to get container details for container id=[${containerId}] (${getErrorMessage(e)})`,
     );
   }
 }
@@ -92,16 +128,17 @@ function areLabelsEqual(labelsA: Record<string, string>, labelsB: Record<string,
 
 export function updateContainerFromInspect(
   containerFound: Container,
-  containerInspect: any,
+  containerInspect: unknown,
   dependencies: UpdateContainerFromInspectDependencies,
 ) {
-  const newStatus = containerInspect.State.Status;
-  const newName = (containerInspect.Name || '').replace(/^\//, '');
+  const dockerContainerInspect = containerInspect as DockerContainerInspectLike;
+  const newStatus = dockerContainerInspect.State.Status;
+  const newName = (dockerContainerInspect.Name || '').replace(/^\//, '');
   const oldStatus = containerFound.status;
   const oldName = containerFound.name;
   const oldDisplayName = containerFound.displayName;
 
-  const labelsFromInspect = containerInspect.Config?.Labels;
+  const labelsFromInspect = dockerContainerInspect.Config?.Labels;
   const labelsCurrent = containerFound.labels || {};
   const labelsToApply = labelsFromInspect || labelsCurrent;
   const labelsChanged = !areLabelsEqual(labelsCurrent, labelsToApply);
@@ -109,7 +146,7 @@ export function updateContainerFromInspect(
   const customDisplayNameFromLabel = dependencies.getCustomDisplayNameFromLabels(labelsToApply);
   const hasCustomDisplayName =
     customDisplayNameFromLabel && customDisplayNameFromLabel.trim() !== '';
-  const runtimeDetailsFromInspect = getRuntimeDetailsFromInspect(containerInspect);
+  const runtimeDetailsFromInspect = getRuntimeDetailsFromInspect(dockerContainerInspect);
   const runtimeDetailsChanged = !areRuntimeDetailsEqual(
     containerFound.details,
     runtimeDetailsFromInspect,

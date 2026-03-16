@@ -8,6 +8,28 @@ import * as storeContainer from '../../store/container.js';
 
 const log = logger.child({ component: 'agent-api-watcher' });
 
+interface ErrorWithMessage {
+  message: string;
+}
+
+function hasStringMessage(value: unknown): value is ErrorWithMessage {
+  if (typeof value !== 'object' || value === null || !('message' in value)) {
+    return false;
+  }
+  const candidate = value as { message?: unknown };
+  return typeof candidate.message === 'string';
+}
+
+function normalizeErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (hasStringMessage(error)) {
+    return error.message;
+  }
+  return String(error);
+}
+
 /**
  * Get Watchers.
  */
@@ -34,9 +56,12 @@ export async function watchWatcher(req: Request, res: Response) {
   try {
     const results = await watcher.watch();
     res.json(results);
-  } catch (e: any) {
-    log.error(`Error watching watcher ${sanitizeLogParam(name)}: ${sanitizeLogParam(e.message)}`);
-    sendErrorResponse(res, 500, e.message);
+  } catch (e: unknown) {
+    const errorMessage = normalizeErrorMessage(e);
+    log.error(
+      `Error watching watcher ${sanitizeLogParam(name)}: ${sanitizeLogParam(errorMessage)}`,
+    );
+    sendErrorResponse(res, 500, errorMessage);
   }
 }
 
@@ -64,8 +89,11 @@ export async function watchContainer(req: Request, res: Response) {
   try {
     const result = await watcher.watchContainer(container);
     res.json(result);
-  } catch (e: any) {
-    log.error(`Error watching container ${sanitizeLogParam(id)}: ${sanitizeLogParam(e.message)}`);
-    sendErrorResponse(res, 500, e.message);
+  } catch (e: unknown) {
+    const errorMessage = normalizeErrorMessage(e);
+    log.error(
+      `Error watching container ${sanitizeLogParam(id)}: ${sanitizeLogParam(errorMessage)}`,
+    );
+    sendErrorResponse(res, 500, errorMessage);
   }
 }

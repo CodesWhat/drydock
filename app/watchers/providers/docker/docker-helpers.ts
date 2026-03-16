@@ -24,6 +24,25 @@ export interface ResolvedImgset {
   inspectTagPath?: string;
 }
 
+type UnknownRecord = Record<string, unknown>;
+
+interface ContainerWithNames {
+  Names?: string[];
+}
+
+interface ParsedImageLike {
+  path?: string;
+  domain?: string;
+}
+
+interface ImageWithRepoDigests {
+  RepoDigests?: string[];
+}
+
+function isRecord(value: unknown): value is UnknownRecord {
+  return typeof value === 'object' && value !== null;
+}
+
 export function getErrorMessage(error: unknown, fallback = UNKNOWN_CONTAINER_PROCESSING_ERROR) {
   return getSharedErrorMessage(error, fallback);
 }
@@ -62,7 +81,7 @@ export function getOldContainers(newContainers: Container[], containersFromTheSt
   );
 }
 
-export function getContainerName(container: any) {
+export function getContainerName(container: ContainerWithNames) {
   let containerName = '';
   const names = container.Names;
   if (names && names.length > 0) {
@@ -85,7 +104,7 @@ export function getContainerDisplayName(
   return containerName;
 }
 
-function normalizeConfigStringValue(value: any) {
+function normalizeConfigStringValue(value: unknown) {
   if (typeof value !== 'string') {
     return undefined;
   }
@@ -93,19 +112,19 @@ function normalizeConfigStringValue(value: any) {
   return valueTrimmed === '' ? undefined : valueTrimmed;
 }
 
-function getNestedValue(value: any, path: string) {
+function getNestedValue(value: unknown, path: string) {
   return path
     .split('.')
     .filter((item) => item !== '')
-    .reduce((nestedValue, item) => {
-      if (nestedValue === undefined || nestedValue === null || typeof nestedValue !== 'object') {
+    .reduce<unknown>((nestedValue, item) => {
+      if (!isRecord(nestedValue)) {
         return undefined;
       }
       return nestedValue[item];
     }, value);
 }
 
-export function getFirstConfigString(value: any, paths: string[]) {
+export function getFirstConfigString(value: unknown, paths: string[]) {
   for (const path of paths) {
     const pathValue = normalizeConfigStringValue(getNestedValue(value, path));
     if (pathValue !== undefined) {
@@ -115,7 +134,7 @@ export function getFirstConfigString(value: any, paths: string[]) {
   return undefined;
 }
 
-function getImageReferenceCandidates(path: string, domain?: string) {
+function getImageReferenceCandidates(path?: string, domain?: string) {
   const pathNormalized = normalizeConfigStringValue(path)?.toLowerCase();
   if (!pathNormalized) {
     return [];
@@ -150,17 +169,17 @@ export function getImageReferenceCandidatesFromPattern(pattern: string) {
       return [patternNormalized.toLowerCase()];
     }
     return getImageReferenceCandidates(parsedPattern.path, parsedPattern.domain);
-  } catch (e) {
+  } catch (_error: unknown) {
     log.debug(`Invalid imgset image pattern "${patternNormalized}" - using normalized value`);
     return [patternNormalized.toLowerCase()];
   }
 }
 
-function getImageReferenceCandidatesFromParsedImage(parsedImage: any) {
+function getImageReferenceCandidatesFromParsedImage(parsedImage: ParsedImageLike) {
   return getImageReferenceCandidates(parsedImage?.path, parsedImage?.domain);
 }
 
-export function getImgsetSpecificity(imagePattern: string, parsedImage: any) {
+export function getImgsetSpecificity(imagePattern: string, parsedImage: ParsedImageLike) {
   const patternCandidates = getImageReferenceCandidatesFromPattern(imagePattern);
   if (patternCandidates.length === 0) {
     return -1;
@@ -183,7 +202,10 @@ export function getImgsetSpecificity(imagePattern: string, parsedImage: any) {
   );
 }
 
-export function getResolvedImgsetConfiguration(name: string, imgsetConfiguration: any) {
+export function getResolvedImgsetConfiguration(
+  name: string,
+  imgsetConfiguration: unknown,
+): ResolvedImgset {
   return {
     name,
     includeTags: getFirstConfigString(imgsetConfiguration, [
@@ -228,7 +250,7 @@ export function getResolvedImgsetConfiguration(name: string, imgsetConfiguration
       'inspect.tag.path',
       'inspectTagPath',
     ]),
-  } as ResolvedImgset;
+  };
 }
 
 export function getContainerConfigValue(
@@ -238,7 +260,7 @@ export function getContainerConfigValue(
   return normalizeConfigStringValue(labelValue) || normalizeConfigStringValue(imgsetValue);
 }
 
-export function normalizeConfigNumberValue(value: any) {
+export function normalizeConfigNumberValue(value: unknown) {
   if (typeof value === 'number' && Number.isFinite(value)) {
     return value;
   }
@@ -251,7 +273,7 @@ export function normalizeConfigNumberValue(value: any) {
   return undefined;
 }
 
-export function getFirstConfigNumber(value: any, paths: string[]) {
+export function getFirstConfigNumber(value: unknown, paths: string[]) {
   for (const path of paths) {
     const pathValue = normalizeConfigNumberValue(getNestedValue(value, path));
     if (pathValue !== undefined) {
@@ -266,7 +288,7 @@ export function getFirstConfigNumber(value: any, paths: string[]) {
  * @param containerImage
  * @returns {*} digest
  */
-export function getRepoDigest(containerImage: any) {
+export function getRepoDigest(containerImage: ImageWithRepoDigests) {
   if (!containerImage.RepoDigests || containerImage.RepoDigests.length === 0) {
     return undefined;
   }
@@ -279,16 +301,16 @@ export function getRepoDigest(containerImage: any) {
  * Resolve a value in a Docker inspect payload from a slash-separated path.
  * Example: Config/Labels/org.opencontainers.image.version
  */
-export function getInspectValueByPath(containerInspect: any, path: string) {
+export function getInspectValueByPath(containerInspect: unknown, path: string) {
   if (!path) {
     return undefined;
   }
   const pathSegments = path.split('/').filter((segment) => segment !== '');
-  return pathSegments.reduce((value, key) => {
+  return pathSegments.reduce<unknown>((value, key) => {
     if (value === undefined || value === null) {
       return undefined;
     }
-    return value[key];
+    return (value as UnknownRecord)[key];
   }, containerInspect);
 }
 
@@ -296,7 +318,7 @@ export function getInspectValueByPath(containerInspect: any, path: string) {
  * Try to derive a semver tag from a Docker inspect path.
  */
 export function getSemverTagFromInspectPath(
-  containerInspect: any,
+  containerInspect: unknown,
   inspectPath: string,
   transformTags: string,
 ) {
@@ -333,7 +355,7 @@ export function isContainerToWatch(watchLabelValue: string, watchByDefault: bool
  */
 export function isDigestToWatch(
   watchDigestLabelValue: string,
-  parsedImage: any,
+  parsedImage: ParsedImageLike,
   isSemver: boolean,
 ) {
   const domain = parsedImage.domain;
@@ -393,7 +415,7 @@ export function getImageForRegistryLookup(image: ContainerImage) {
           url: lookupUrl,
         },
       };
-    } catch (e) {
+    } catch (_error: unknown) {
       log.debug(`Invalid registry lookup URL "${lookupImageTrimmed}" - using image defaults`);
       return image;
     }

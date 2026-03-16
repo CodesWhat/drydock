@@ -1,4 +1,21 @@
+import type { ContainerImage } from '../../../model/container.js';
 import Quay from '../quay/Quay.js';
+
+interface TrueforgeImageLike {
+  registry?: {
+    url?: unknown;
+  };
+}
+
+interface TrueforgeConfiguration {
+  username?: string;
+  token?: string;
+}
+
+interface TrueforgePullCredentials {
+  username: string;
+  password: string;
+}
 
 /**
  * Linux-Server Container Registry integration.
@@ -23,7 +40,7 @@ class Trueforge extends Quay {
    * @returns {boolean}
    */
 
-  match(image) {
+  match(image: TrueforgeImageLike): boolean {
     const url = image?.registry?.url;
     if (typeof url !== 'string') {
       return false;
@@ -40,17 +57,18 @@ class Trueforge extends Quay {
    * @returns {*}
    */
 
-  normalizeImage(image) {
+  normalizeImage(image: ContainerImage): ContainerImage {
     return this.normalizeImageUrl(image);
   }
 
   /**
-   * Return Base64 credentials if any.
+   * Return Base64 credentials when configured.
    * @returns {string|undefined}
    */
-  getAuthCredentials() {
-    if (this.configuration.username) {
-      return Trueforge.base64Encode(this.configuration.username, this.configuration.token);
+  getAuthCredentials(): string | undefined {
+    const configuration = this.configuration as TrueforgeConfiguration;
+    if (configuration.username) {
+      return Trueforge.base64Encode(configuration.username, configuration.token as string);
     }
     return undefined;
   }
@@ -59,11 +77,12 @@ class Trueforge extends Quay {
    * Return username / password for Docker(+compose) triggers usage.
    * @return {{password: string, username: string}|undefined}
    */
-  async getAuthPull() {
-    if (this.configuration.username) {
+  async getAuthPull(): Promise<TrueforgePullCredentials | undefined> {
+    const configuration = this.configuration as TrueforgeConfiguration;
+    if (configuration.username) {
       return {
-        username: this.configuration.username,
-        password: this.configuration.token,
+        username: configuration.username,
+        password: configuration.token as string,
       };
     }
     return undefined;

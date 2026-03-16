@@ -80,7 +80,7 @@ export function getAuthStatus(_req: Request, res: Response): void {
 
 /**
  * Return the registered strategies from the registry.
- * Includes any registration warnings so the login UI can surface them.
+ * Includes registration warnings so the login UI can surface them.
  * @param req
  * @param res
  */

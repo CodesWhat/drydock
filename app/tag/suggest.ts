@@ -17,7 +17,31 @@ interface StableSemverCandidate {
   patch: number;
 }
 
+interface MessageLikeError {
+  message: string;
+}
+
 const PRERELEASE_LABEL_PATTERN = /(?:^|[+._-])(alpha|beta|rc|dev|nightly|canary)(?:$|[+._-])/i;
+
+function isMessageLikeError(error: unknown): error is MessageLikeError {
+  if (typeof error !== 'object' || error === null) {
+    return false;
+  }
+
+  return 'message' in error && typeof (error as { message: unknown }).message === 'string';
+}
+
+function normalizeErrorMessage(error: unknown): string {
+  if (isMessageLikeError(error)) {
+    return error.message;
+  }
+
+  if (typeof error === 'string') {
+    return error;
+  }
+
+  return String(error);
+}
 
 function safeRegExp(pattern: string, logger: TagSuggestionLogger): SafeRegex | null {
   const MAX_PATTERN_LENGTH = 1024;
@@ -32,8 +56,8 @@ function safeRegExp(pattern: string, logger: TagSuggestionLogger): SafeRegex | n
         return compiled.matcher(s).find();
       },
     };
-  } catch (e: any) {
-    logger.warn?.(`Invalid regex pattern "${pattern}": ${e.message}`);
+  } catch (e: unknown) {
+    logger.warn?.(`Invalid regex pattern "${pattern}": ${normalizeErrorMessage(e)}`);
     return null;
   }
 }

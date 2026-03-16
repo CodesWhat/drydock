@@ -67,6 +67,14 @@ interface ImgsetMatchCandidate {
   imgset: ResolvedImgset;
 }
 
+interface DockerContainerSummaryLike {
+  Id?: unknown;
+  Names?: unknown;
+  [key: string]: unknown;
+}
+
+type DockerImgsetConfigurations = Record<string, unknown>;
+
 interface DockerApiContainerInspector {
   getContainer: (containerId: string) => {
     inspect: () => Promise<{
@@ -179,7 +187,7 @@ export async function pruneOldContainers(
       if (newStatus) {
         storeContainer.updateContainer({ ...containerToRemove, status: newStatus });
       }
-    } catch {
+    } catch (_error: unknown) {
       // Container no longer exists in Docker — remove from store
       storeContainer.deleteContainer(containerToRemove.id);
     }
@@ -214,7 +222,7 @@ function getDockerContainerId(container: { Id?: unknown }) {
   return typeof container.Id === 'string' ? container.Id : '';
 }
 
-function buildDockerContainerNameToIds(containers: any[]) {
+function buildDockerContainerNameToIds<T extends DockerContainerSummaryLike>(containers: T[]) {
   const dockerContainerNameToIds = new Map<string, Set<string>>();
 
   for (const container of containers) {
@@ -251,10 +259,10 @@ function hasSiblingDockerContainerWithName(
   return false;
 }
 
-export function filterRecreatedContainerAliases(
-  containers: any[],
+export function filterRecreatedContainerAliases<T extends DockerContainerSummaryLike>(
+  containers: T[],
   containersFromTheStore: Container[],
-): { containersToWatch: any[]; skippedContainerIds: Set<string> } {
+): { containersToWatch: T[]; skippedContainerIds: Set<string> } {
   const storeContainerNames = new Set(
     containersFromTheStore
       .filter((container) => typeof container.name === 'string' && container.name !== '')
@@ -263,7 +271,7 @@ export function filterRecreatedContainerAliases(
 
   const dockerContainerNameToIds = buildDockerContainerNameToIds(containers);
 
-  const containersToWatch = [];
+  const containersToWatch: T[] = [];
   const skippedContainerIds = new Set<string>();
   for (const container of containers) {
     const containerId = getDockerContainerId(container);
@@ -363,8 +371,8 @@ export function mergeConfigWithImgset(
 
 function getImgsetMatchCandidate(
   imgsetName: string,
-  imgsetConfiguration: any,
-  parsedImage: any,
+  imgsetConfiguration: unknown,
+  parsedImage: unknown,
 ): ImgsetMatchCandidate | undefined {
   const imagePattern = getFirstConfigString(imgsetConfiguration, ['image', 'match']);
   if (!imagePattern) {
@@ -391,8 +399,8 @@ function isBetterImgsetMatch(candidate: ImgsetMatchCandidate, currentBest: Imgse
 }
 
 export function getMatchingImgsetConfiguration(
-  parsedImage: any,
-  configuredImgsets: Record<string, any> | undefined,
+  parsedImage: unknown,
+  configuredImgsets: DockerImgsetConfigurations | undefined,
 ): ResolvedImgset | undefined {
   if (!configuredImgsets || typeof configuredImgsets !== 'object') {
     return undefined;

@@ -22,6 +22,10 @@ export type ContainerSortMode =
   | '-age'
   | 'created'
   | '-created';
+type AscendingContainerSortMode = Exclude<
+  ContainerSortMode,
+  '-name' | '-status' | '-age' | '-created'
+>;
 
 const CONTAINER_LIST_QUERY_SCHEMA = joi.object({
   sort: joi
@@ -87,10 +91,10 @@ export function getFirstNonEmptyQueryValue(value: unknown): string | undefined {
 
 function parseContainerSortMode(sortQuery: unknown): ContainerSortMode {
   const sortValue = getFirstNonEmptyQueryValue(sortQuery);
-  if (!sortValue) {
+  if (!sortValue || !isContainerSortMode(sortValue)) {
     return DEFAULT_CONTAINER_SORT_MODE;
   }
-  return sortValue as ContainerSortMode;
+  return sortValue;
 }
 
 export function parseContainerMaturityFilter(
@@ -285,12 +289,38 @@ function sortContainersByName(containers: Container[], descending = false): Cont
   return containersSorted;
 }
 
+function isContainerSortMode(value: string): value is ContainerSortMode {
+  return (
+    value === 'name' ||
+    value === '-name' ||
+    value === 'status' ||
+    value === '-status' ||
+    value === 'age' ||
+    value === '-age' ||
+    value === 'created' ||
+    value === '-created'
+  );
+}
+
+function normalizeContainerSortMode(sortMode: ContainerSortMode): AscendingContainerSortMode {
+  if (sortMode === '-name') {
+    return 'name';
+  }
+  if (sortMode === '-status') {
+    return 'status';
+  }
+  if (sortMode === '-age') {
+    return 'age';
+  }
+  if (sortMode === '-created') {
+    return 'created';
+  }
+  return sortMode;
+}
+
 export function sortContainers(containers: Container[], sortMode: ContainerSortMode): Container[] {
   const isDescending = sortMode.startsWith('-');
-  const normalizedSortMode = (isDescending ? sortMode.slice(1) : sortMode) as Exclude<
-    ContainerSortMode,
-    '-name' | '-status' | '-age' | '-created'
-  >;
+  const normalizedSortMode = normalizeContainerSortMode(sortMode);
 
   let containersSorted: Container[];
   if (normalizedSortMode === 'status') {

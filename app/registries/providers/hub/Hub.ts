@@ -1,7 +1,18 @@
 import axios from 'axios';
+import type { ContainerImage } from '../../../model/container.js';
 import { withAuthorizationHeader } from '../../../security/auth.js';
 import Custom from '../custom/Custom.js';
 import { getTokenAuthConfigurationSchema } from '../shared/tokenAuthConfigurationSchema.js';
+
+type AuthRequestOptions = Parameters<typeof withAuthorizationHeader>[0];
+
+interface HubTokenResponse {
+  token?: unknown;
+}
+
+interface HubTagMetadataResponse {
+  last_updated?: unknown;
+}
 
 /**
  * Docker Hub integration.
@@ -36,7 +47,7 @@ class Hub extends Custom {
    * @returns {boolean}
    */
 
-  match(image) {
+  match(image: ContainerImage) {
     const registryUrl = image?.registry?.url;
     return (
       !registryUrl ||
@@ -50,7 +61,7 @@ class Hub extends Custom {
    * @param image
    * @returns {*}
    */
-  normalizeImage(image) {
+  normalizeImage(image: ContainerImage) {
     const imageNormalized = super.normalizeImage(image);
     if (imageNormalized.name) {
       imageNormalized.name = imageNormalized.name.includes('/')
@@ -66,7 +77,7 @@ class Hub extends Custom {
    * @param requestOptions
    * @returns {Promise<*>}
    */
-  async authenticate(image, requestOptions) {
+  async authenticate(image: ContainerImage, requestOptions: AuthRequestOptions) {
     const scope = encodeURIComponent(`repository:${image.name}:pull`);
     const axiosConfig = {
       method: 'GET',
@@ -76,13 +87,13 @@ class Hub extends Custom {
       } as Record<string, string>,
     };
 
-    // Add Authorization if any
+    // Add Authorization when credentials are available
     const credentials = this.getAuthCredentials();
     if (credentials) {
       axiosConfig.headers.Authorization = `Basic ${credentials}`;
     }
 
-    const response = await axios(axiosConfig);
+    const response = await axios<HubTokenResponse>(axiosConfig);
     return withAuthorizationHeader(
       requestOptions,
       'Bearer',
@@ -91,20 +102,20 @@ class Hub extends Custom {
     );
   }
 
-  getImageFullName(image, tagOrDigest) {
+  getImageFullName(image: ContainerImage, tagOrDigest: string) {
     let fullName = super.getImageFullName(image, tagOrDigest);
     fullName = fullName.replaceAll('registry-1.docker.io/', '');
     fullName = fullName.replaceAll('library/', '');
     return fullName;
   }
 
-  async getImagePublishedAt(image, tag?: string): Promise<string | undefined> {
+  async getImagePublishedAt(image: ContainerImage, tag?: string): Promise<string | undefined> {
     const tagToLookup = typeof tag === 'string' && tag.length > 0 ? tag : image.tag?.value;
     if (typeof image.name !== 'string' || image.name.length === 0 || !tagToLookup) {
       return undefined;
     }
 
-    const response = await axios({
+    const response = await axios<HubTagMetadataResponse>({
       method: 'GET',
       url: `https://hub.docker.com/v2/repositories/${image.name}/tags/${encodeURIComponent(
         tagToLookup,
