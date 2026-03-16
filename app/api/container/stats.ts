@@ -15,7 +15,6 @@ interface StatsStoreContainerApi {
 
 interface StreamableResponse extends Response {
   flush?: () => void;
-  flushHeaders?: () => void;
 }
 
 export interface StatsHandlerDependencies {
