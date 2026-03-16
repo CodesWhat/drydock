@@ -198,12 +198,13 @@ describe('container event update helpers', () => {
     expect(watchCronDebounced).toHaveBeenCalledTimes(1);
   });
 
-  test('processDockerEvent debounces refresh for recreated container alias after inspecting', async () => {
+  test('processDockerEvent debounces refresh for transient recreated container alias after inspecting', async () => {
     const aliasContainerId = 'd6ea364fbc03aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
     const watchCronDebounced = vi.fn().mockResolvedValue(undefined);
     const ensureRemoteAuthHeaders = vi.fn().mockResolvedValue(undefined);
     const inspectContainer = vi.fn().mockResolvedValue({
       Name: '/d6ea364fbc03_termix',
+      Created: new Date().toISOString(),
       State: { Status: 'running' },
     });
     const getContainerFromStore = vi.fn();
@@ -225,7 +226,83 @@ describe('container event update helpers', () => {
     expect(inspectContainer).toHaveBeenCalledWith(aliasContainerId);
     expect(watchCronDebounced).toHaveBeenCalledTimes(1);
     expect(getContainerFromStore).not.toHaveBeenCalled();
-    expect(debug).toHaveBeenCalledWith(expect.stringContaining('recreated container alias'));
+    expect(debug).toHaveBeenCalledWith(
+      expect.stringContaining('Skipping transient recreated container alias'),
+    );
+  });
+
+  test('processDockerEvent does not skip persistent recreated alias and updates matching container', async () => {
+    const aliasContainerId = 'd6ea364fbc03aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+    const watchCronDebounced = vi.fn().mockResolvedValue(undefined);
+    const ensureRemoteAuthHeaders = vi.fn().mockResolvedValue(undefined);
+    const inspectContainer = vi.fn().mockResolvedValue({
+      Name: '/d6ea364fbc03_termix',
+      Created: new Date(Date.now() - 60 * 1000).toISOString(),
+      State: { Status: 'running' },
+    });
+    const containerFound = createMockContainer({ id: aliasContainerId });
+    const getContainerFromStore = vi.fn().mockReturnValue(containerFound);
+    const updateContainerFromInspectMock = vi.fn();
+    const debug = vi.fn();
+
+    await processDockerEvent(
+      { Action: 'start', id: aliasContainerId },
+      {
+        watchCronDebounced,
+        ensureRemoteAuthHeaders,
+        inspectContainer,
+        getContainerFromStore,
+        updateContainerFromInspect: updateContainerFromInspectMock,
+        debug,
+      },
+    );
+
+    expect(watchCronDebounced).toHaveBeenCalledTimes(1);
+    expect(getContainerFromStore).toHaveBeenCalledWith(aliasContainerId);
+    expect(updateContainerFromInspectMock).toHaveBeenCalledWith(
+      containerFound,
+      expect.objectContaining({ Name: '/d6ea364fbc03_termix' }),
+    );
+    expect(debug).toHaveBeenCalledWith(
+      expect.stringContaining('persisted beyond transient window'),
+    );
+  });
+
+  test('processDockerEvent treats future numeric Created timestamp as non-transient alias', async () => {
+    const aliasContainerId = 'd6ea364fbc03aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+    const watchCronDebounced = vi.fn().mockResolvedValue(undefined);
+    const ensureRemoteAuthHeaders = vi.fn().mockResolvedValue(undefined);
+    const inspectContainer = vi.fn().mockResolvedValue({
+      Name: '/d6ea364fbc03_termix',
+      Created: Date.now() + 60 * 1000,
+      State: { Status: 'running' },
+    });
+    const containerFound = createMockContainer({ id: aliasContainerId });
+    const getContainerFromStore = vi.fn().mockReturnValue(containerFound);
+    const updateContainerFromInspectMock = vi.fn();
+    const debug = vi.fn();
+
+    await processDockerEvent(
+      { Action: 'start', id: aliasContainerId },
+      {
+        watchCronDebounced,
+        ensureRemoteAuthHeaders,
+        inspectContainer,
+        getContainerFromStore,
+        updateContainerFromInspect: updateContainerFromInspectMock,
+        debug,
+      },
+    );
+
+    expect(watchCronDebounced).toHaveBeenCalledTimes(1);
+    expect(getContainerFromStore).toHaveBeenCalledWith(aliasContainerId);
+    expect(updateContainerFromInspectMock).toHaveBeenCalledWith(
+      containerFound,
+      expect.objectContaining({ Name: '/d6ea364fbc03_termix' }),
+    );
+    expect(debug).toHaveBeenCalledWith(
+      expect.stringContaining('persisted beyond transient window'),
+    );
   });
 
   test('updateContainerFromInspect updates status/name/displayName and persists', () => {

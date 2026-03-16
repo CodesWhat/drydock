@@ -7,6 +7,7 @@ import {
 import { areRuntimeDetailsEqual, getRuntimeDetailsFromInspect } from './runtime-details.js';
 
 const RECREATED_CONTAINER_NAME_PATTERN = /^([a-f0-9]{12})_(.+)$/i;
+const RECREATED_CONTAINER_ALIAS_TRANSIENT_WINDOW_MS = 30 * 1000;
 
 export function isRecreatedContainerAlias(containerId: string, containerName: string): boolean {
   const match = containerName.match(RECREATED_CONTAINER_NAME_PATTERN);
@@ -15,6 +16,40 @@ export function isRecreatedContainerAlias(containerId: string, containerName: st
   }
   const [, shortIdPrefix] = match;
   return containerId.toLowerCase().startsWith(shortIdPrefix.toLowerCase());
+}
+
+function parseTimestampToMs(timestamp: unknown): number | undefined {
+  if (typeof timestamp === 'number' && Number.isFinite(timestamp) && timestamp > 0) {
+    return timestamp >= 1_000_000_000_000 ? Math.trunc(timestamp) : Math.trunc(timestamp * 1000);
+  }
+  if (typeof timestamp === 'string' && timestamp !== '') {
+    const parsed = Date.parse(timestamp);
+    if (!Number.isNaN(parsed)) {
+      return parsed;
+    }
+  }
+  return undefined;
+}
+
+function getContainerCreatedAtMs(containerInspect: any): number | undefined {
+  return (
+    parseTimestampToMs(containerInspect?.Created) ??
+    parseTimestampToMs(containerInspect?.State?.StartedAt)
+  );
+}
+
+function isWithinRecreatedAliasTransientWindow(
+  createdAtMs: number | undefined,
+  nowMs: number,
+): boolean {
+  if (createdAtMs === undefined) {
+    return false;
+  }
+  const ageMs = nowMs - createdAtMs;
+  if (ageMs < 0) {
+    return false;
+  }
+  return ageMs <= RECREATED_CONTAINER_ALIAS_TRANSIENT_WINDOW_MS;
 }
 
 export interface ProcessDockerEventDependencies {
@@ -62,17 +97,27 @@ export async function processDockerEvent(
   try {
     await dependencies.ensureRemoteAuthHeaders();
     const containerInspect = await dependencies.inspectContainer(containerId);
-
-    // Check if this container has a transient recreate alias name (e.g. d6ea364fbc03_termix).
-    // If so, skip processing — the alias is short-lived and a debounced full refresh
-    // will pick up the container under its real name after Docker renames it (#156).
     const inspectName = (containerInspect?.Name || '').replace(/^\//, '');
-    if (isRecreatedContainerAlias(containerId, inspectName)) {
+    const isAlias = isRecreatedContainerAlias(containerId, inspectName);
+    const isTransientAlias = isWithinRecreatedAliasTransientWindow(
+      getContainerCreatedAtMs(containerInspect),
+      Date.now(),
+    );
+
+    // Transient aliases should be ignored briefly during recreate/rename races.
+    // Do not suppress indefinitely, otherwise a persistent alias can become a blind spot.
+    if (isAlias && isTransientAlias) {
       dependencies.debug(
-        `Skipping docker event action=[${action}] for recreated container alias id=[${containerId}]`,
+        `Skipping transient recreated container alias action=[${action}] id=[${containerId}]`,
       );
       await dependencies.watchCronDebounced();
       return;
+    }
+    if (isAlias) {
+      dependencies.debug(
+        `Recreated container alias persisted beyond transient window id=[${containerId}]; scheduling refresh`,
+      );
+      await dependencies.watchCronDebounced();
     }
 
     const containerFound = dependencies.getContainerFromStore(containerId);

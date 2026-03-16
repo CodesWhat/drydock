@@ -5459,12 +5459,14 @@ describe('Docker Watcher', () => {
       expect(result.skippedContainerIds.size).toBe(0);
     });
 
-    test('filterRecreatedContainerAliases should skip alias even when no sibling and no store match', () => {
+    test('filterRecreatedContainerAliases should skip fresh alias even when no sibling and no store match', () => {
+      const freshCreated = Math.floor(Date.now() / 1000);
       const result = testable_filterRecreatedContainerAliases(
         [
           {
             Id: '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a10',
             Names: ['/7ea6b8a42686_termix'],
+            Created: freshCreated,
           },
         ],
         [],
@@ -5475,12 +5477,59 @@ describe('Docker Watcher', () => {
       ]);
     });
 
-    test('filterRecreatedContainerAliases should skip alias but keep non-alias entry with same container id', () => {
+    test('filterRecreatedContainerAliases should keep stale alias when no sibling and no store match', () => {
+      const staleCreated = Math.floor((Date.now() - 60 * 1000) / 1000);
       const result = testable_filterRecreatedContainerAliases(
         [
           {
             Id: '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a10',
             Names: ['/7ea6b8a42686_termix'],
+            Created: staleCreated,
+          },
+        ],
+        [],
+      );
+      expect(result.containersToWatch).toEqual([
+        {
+          Id: '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a10',
+          Names: ['/7ea6b8a42686_termix'],
+          Created: staleCreated,
+        },
+      ]);
+      expect(result.skippedContainerIds.size).toBe(0);
+    });
+
+    test('filterRecreatedContainerAliases should keep alias when Created is in the future', () => {
+      const futureCreated = Math.floor((Date.now() + 60 * 1000) / 1000);
+      const result = testable_filterRecreatedContainerAliases(
+        [
+          {
+            Id: '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a10',
+            Names: ['/7ea6b8a42686_termix'],
+            Created: futureCreated,
+          },
+        ],
+        [],
+      );
+
+      expect(result.containersToWatch).toEqual([
+        {
+          Id: '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a10',
+          Names: ['/7ea6b8a42686_termix'],
+          Created: futureCreated,
+        },
+      ]);
+      expect(result.skippedContainerIds.size).toBe(0);
+    });
+
+    test('filterRecreatedContainerAliases should skip fresh alias but keep non-alias entry with same container id', () => {
+      const freshCreated = Math.floor(Date.now() / 1000);
+      const result = testable_filterRecreatedContainerAliases(
+        [
+          {
+            Id: '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a10',
+            Names: ['/7ea6b8a42686_termix'],
+            Created: freshCreated,
           },
           {
             Id: '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a10',
