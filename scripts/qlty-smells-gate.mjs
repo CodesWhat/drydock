@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
+import { spawnSync } from 'node:child_process';
 import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { spawnSync } from 'node:child_process';
 
 function parseArgs(argv) {
   const defaults = {

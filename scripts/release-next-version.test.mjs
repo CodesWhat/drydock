@@ -1,5 +1,5 @@
-import test from 'node:test';
 import assert from 'node:assert/strict';
+import test from 'node:test';
 import { bumpSemver, inferReleaseLevel } from './release-next-version.mjs';
 
 test('infers minor when at least one feat commit exists', () => {

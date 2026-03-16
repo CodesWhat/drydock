@@ -56,7 +56,7 @@
 
   .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 0.75rem 1rem; margin-bottom: 0.5rem; transition: border-color 0.15s; }
   .card:hover { border-color: #3a5080; }
-  .card.hidden { display: none !important; }
+  .card.hidden { display: none; }
   .card-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem; }
   .card-content { flex: 1; min-width: 0; }
   .card-title { font-weight: 600; font-size: 0.82rem; color: #fff; margin-bottom: 0.25rem; }
@@ -110,14 +110,14 @@
 </div>
 
 <div class="toolbar">
-  <button class="active" data-filter="open" onclick="setFilter('open')">Open only</button>
-  <button data-filter="all" onclick="setFilter('all')">All</button>
-  <button data-filter="fixed" onclick="setFilter('fixed')">Closed</button>
+  <button type="button" class="active" data-filter="open" onclick="setFilter('open')">Open only</button>
+  <button type="button" data-filter="all" onclick="setFilter('all')">All</button>
+  <button type="button" data-filter="fixed" onclick="setFilter('fixed')">Closed</button>
   <span class="spacer"></span>
-  <button data-view="concern" onclick="setView('concern')" class="active">By concern</button>
-  <button data-view="file" onclick="setView('file')">By file</button>
+  <button type="button" data-view="concern" onclick="setView('concern')" class="active">By concern</button>
+  <button type="button" data-view="file" onclick="setView('file')">By file</button>
   <span class="spacer"></span>
-  <button class="copy-all-btn" onclick="copyAllOpen()">Copy all open</button>
+  <button type="button" class="copy-all-btn" onclick="copyAllOpen()">Copy all open</button>
 </div>
 
 <div id="view-concern">
@@ -129,7 +129,7 @@
 <div class="concern-section" data-concern="efficiency">
   <div class="concern-header">
     <span>CI Efficiency</span>
-    <button class="copy-group-btn" onclick="copyConcern('efficiency')">Copy open</button>
+    <button type="button" class="copy-group-btn" onclick="copyConcern('efficiency')">Copy open</button>
   </div>
 
   <div class="card" data-status="open" data-files="run-playwright-qa.sh" data-concern="efficiency">
@@ -143,7 +143,7 @@
       <div class="card-actions">
         <span class="severity sev-medium">med</span>
         <span class="status status-open"><span class="dot dot-open"></span> Open</span>
-        <button class="copy-card-btn" onclick="copyCard(this)">Copy</button>
+        <button type="button" class="copy-card-btn" onclick="copyCard(this)">Copy</button>
       </div>
     </div>
   </div>
@@ -159,7 +159,7 @@
       <div class="card-actions">
         <span class="severity sev-low">low</span>
         <span class="status status-open"><span class="dot dot-open"></span> Open</span>
-        <button class="copy-card-btn" onclick="copyCard(this)">Copy</button>
+        <button type="button" class="copy-card-btn" onclick="copyCard(this)">Copy</button>
       </div>
     </div>
   </div>
@@ -217,7 +217,7 @@
 <div class="concern-section" data-concern="observability">
   <div class="concern-header">
     <span>Observability &amp; Artifacts</span>
-    <button class="copy-group-btn" onclick="copyConcern('observability')">Copy open</button>
+    <button type="button" class="copy-group-btn" onclick="copyConcern('observability')">Copy open</button>
   </div>
 
   <div class="card" data-status="open" data-files="10-ci-verify.yml" data-concern="observability">
@@ -231,7 +231,7 @@
       <div class="card-actions">
         <span class="severity sev-low">low</span>
         <span class="status status-open"><span class="dot dot-open"></span> Open</span>
-        <button class="copy-card-btn" onclick="copyCard(this)">Copy</button>
+        <button type="button" class="copy-card-btn" onclick="copyCard(this)">Copy</button>
       </div>
     </div>
   </div>
@@ -247,7 +247,7 @@
       <div class="card-actions">
         <span class="severity sev-low">low</span>
         <span class="status status-open"><span class="dot dot-open"></span> Open</span>
-        <button class="copy-card-btn" onclick="copyCard(this)">Copy</button>
+        <button type="button" class="copy-card-btn" onclick="copyCard(this)">Copy</button>
       </div>
     </div>
   </div>
@@ -345,7 +345,7 @@
 <div class="concern-section" data-concern="release">
   <div class="concern-header">
     <span>Release Integrity</span>
-    <button class="copy-group-btn" onclick="copyConcern('release')">Copy open</button>
+    <button type="button" class="copy-group-btn" onclick="copyConcern('release')">Copy open</button>
   </div>
 
   <!-- All round 1 closed -->
@@ -419,7 +419,7 @@
 <div class="concern-section" data-concern="gates">
   <div class="concern-header">
     <span>Gates &amp; Blocking</span>
-    <button class="copy-group-btn" onclick="copyConcern('gates')">Copy open</button>
+    <button type="button" class="copy-group-btn" onclick="copyConcern('gates')">Copy open</button>
   </div>
 
   <!-- All round 1 closed -->
@@ -504,7 +504,7 @@
 <div class="concern-section" data-concern="hardening">
   <div class="concern-header">
     <span>Hardening &amp; Config</span>
-    <button class="copy-group-btn" onclick="copyConcern('hardening')">Copy open</button>
+    <button type="button" class="copy-group-btn" onclick="copyConcern('hardening')">Copy open</button>
   </div>
 
   <div class="card" data-status="fixed" data-files="snyk-quota-config.json,snyk-quota-plan.mjs" data-concern="hardening">
@@ -638,7 +638,7 @@ function buildFileView() {
       const oc = cards.filter(c => c.dataset.status === 'open').length;
       const g = document.createElement('div'); g.className = 'file-group';
       const h = document.createElement('div'); h.className = 'file-group-header';
-      h.innerHTML = `<span class="file-group-title">${file}${oc ? ` <span class="count">${oc} open</span>` : ''}</span><button class="copy-group-btn" onclick="copyFileGroup(this,'${file}')">Copy open</button>`;
+      h.innerHTML = `<span class="file-group-title">${file}${oc ? ` <span class="count">${oc} open</span>` : ''}</span><button type="button" class="copy-group-btn" onclick="copyFileGroup(this,'${file}')">Copy open</button>`;
       g.appendChild(h);
       cards.forEach(c => { const b = c.querySelector('.copy-card-btn'); if (b) b.setAttribute('onclick','copyCard(this)'); g.appendChild(c); });
       container.appendChild(g);

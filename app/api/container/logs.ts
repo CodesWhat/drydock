@@ -1,5 +1,5 @@
-import type { Request, Response } from 'express';
 import { gzipSync } from 'node:zlib';
+import type { Request, Response } from 'express';
 import type { AgentClient } from '../../agent/AgentClient.js';
 import type { Container } from '../../model/container.js';
 import { sendErrorResponse } from '../error-response.js';

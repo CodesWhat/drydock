@@ -7,7 +7,9 @@ function escapeRegExp(value) {
 }
 
 function normalizeVersion(version) {
-  return String(version ?? '').trim().replace(/^v/u, '');
+  return String(version ?? '')
+    .trim()
+    .replace(/^v/u, '');
 }
 
 function listChangelogVersions(changelog) {
@@ -46,9 +48,7 @@ export function extractChangelogEntry(changelog, version) {
   }
 
   const strictHeadingRegex = new RegExp(
-    `^##\\s+\\[${escapeRegExp(
-      normalizedVersion,
-    )}\\]\\s+-\\s+\\d{4}-\\d{2}-\\d{2}\\s*$`,
+    `^##\\s+\\[${escapeRegExp(normalizedVersion)}\\]\\s+-\\s+\\d{4}-\\d{2}-\\d{2}\\s*$`,
     'u',
   );
   if (!strictHeadingRegex.test(startMatch[0])) {

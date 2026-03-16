@@ -34,7 +34,9 @@ export function validateCommitMessage(rawMessage) {
     if (!/^\p{Emoji}/u.test(subject)) {
       errors.push('Missing required emoji (gitmoji) prefix.');
     }
-    if (!/\s(feat|fix|docs|style|refactor|perf|test|chore|security|deps|revert)(\(|:)/u.test(subject)) {
+    if (
+      !/\s(feat|fix|docs|style|refactor|perf|test|chore|security|deps|revert)(\(|:)/u.test(subject)
+    ) {
       errors.push('Missing or unsupported commit type.');
     }
     errors.push('Subject does not match required format.');

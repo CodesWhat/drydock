@@ -1,5 +1,5 @@
-import test from 'node:test';
 import assert from 'node:assert/strict';
+import test from 'node:test';
 import { validateCommitMessage } from './commit-message.mjs';
 
 test('accepts a valid feat message with scope', () => {

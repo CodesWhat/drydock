@@ -4,10 +4,7 @@ import { fullName } from '../../../model/container.js';
 import * as registry from '../../../registry/index.js';
 import * as storeContainer from '../../../store/container.js';
 import { mockConstructor } from '../../../test/mock-constructor.js';
-import {
-  _resetRegistryWebhookFreshStateForTests,
-  markContainerFreshForScheduledPollSkip,
-} from '../../registry-webhook-fresh.js';
+import { _resetRegistryWebhookFreshStateForTests } from '../../registry-webhook-fresh.js';
 import Docker, {
   testable_filterBySegmentCount,
   testable_filterRecreatedContainerAliases,
@@ -63,7 +60,6 @@ vi.mock('./maintenance.js', () => ({
   getNextMaintenanceWindow: vi.fn(() => undefined),
 }));
 
-import mockFs from 'node:fs';
 import axios from 'axios';
 import mockDockerode from 'dockerode';
 import mockDebounce from 'just-debounce';
@@ -72,19 +68,6 @@ import mockParse from 'parse-docker-image-name';
 import * as mockPrometheus from '../../../prometheus/watcher.js';
 import * as mockTag from '../../../tag/index.js';
 import * as maintenance from './maintenance.js';
-import * as oidcModule from './oidc.js';
-import {
-  applyRemoteOidcTokenPayload,
-  getOidcGrantType,
-  handleTokenErrorResponse,
-  initializeRemoteOidcStateFromConfiguration,
-  isRemoteOidcTokenRefreshRequired,
-  OIDC_DEVICE_URL_PATHS,
-  OIDC_GRANT_TYPE_PATHS,
-  performDeviceCodeFlow,
-  pollDeviceCodeToken,
-  refreshRemoteOidcAccessToken,
-} from './oidc.js';
 
 const mockAxios = axios as Mocked<typeof axios>;
 

@@ -63,7 +63,9 @@ export function inferReleaseLevel(commits) {
 }
 
 export function bumpSemver(currentVersion, level) {
-  const match = String(currentVersion ?? '').trim().match(/^v?(?<major>\d+)\.(?<minor>\d+)\.(?<patch>\d+)$/u);
+  const match = String(currentVersion ?? '')
+    .trim()
+    .match(/^v?(?<major>\d+)\.(?<minor>\d+)\.(?<patch>\d+)$/u);
   if (!match?.groups) {
     throw new Error(`Invalid current version: ${currentVersion}`);
   }

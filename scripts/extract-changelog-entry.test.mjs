@@ -1,5 +1,5 @@
-import test from 'node:test';
 import assert from 'node:assert/strict';
+import test from 'node:test';
 import { extractChangelogEntry } from './extract-changelog-entry.mjs';
 
 const SAMPLE_CHANGELOG = `# Changelog
@@ -43,8 +43,5 @@ test('throws when matched version heading does not use YYYY-MM-DD date', () => {
 - add release automation
 `;
 
-  assert.throws(
-    () => extractChangelogEntry(invalidDateChangelog, '1.4.2'),
-    /YYYY-MM-DD/u,
-  );
+  assert.throws(() => extractChangelogEntry(invalidDateChangelog, '1.4.2'), /YYYY-MM-DD/u);
 });

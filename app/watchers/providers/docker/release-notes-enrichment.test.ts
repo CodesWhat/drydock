@@ -6,8 +6,7 @@ const mockGetFullReleaseNotesForContainer = vi.hoisted(() => vi.fn());
 const mockToContainerReleaseNotes = vi.hoisted(() => vi.fn((notes) => notes));
 
 vi.mock('../../../release-notes/index.js', () => ({
-  resolveSourceRepoForContainer: (...args: unknown[]) =>
-    mockResolveSourceRepoForContainer(...args),
+  resolveSourceRepoForContainer: (...args: unknown[]) => mockResolveSourceRepoForContainer(...args),
   getFullReleaseNotesForContainer: (...args: unknown[]) =>
     mockGetFullReleaseNotesForContainer(...args),
   toContainerReleaseNotes: (...args: unknown[]) => mockToContainerReleaseNotes(...args),

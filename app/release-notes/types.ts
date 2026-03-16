@@ -11,5 +11,9 @@ export interface ReleaseNotes {
 export interface ReleaseNotesProviderClient {
   id: ReleaseNotesProvider;
   supports: (sourceRepo: string) => boolean;
-  fetchByTag: (sourceRepo: string, tag: string, token?: string) => Promise<ReleaseNotes | undefined>;
+  fetchByTag: (
+    sourceRepo: string,
+    tag: string,
+    token?: string,
+  ) => Promise<ReleaseNotes | undefined>;
 }

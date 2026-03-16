@@ -76,7 +76,8 @@ export function evaluateQuotaPlan({
   const normalizedQuotas = normalizeQuotas(quotas);
   const normalizedRunsPerMonth = toPositiveInt(runsPerMonth, 'runsPerMonth');
   const monthly = {
-    openSource: normalizedRunsPerMonth * toPositiveInt(openSourceTestsPerRun, 'openSourceTestsPerRun'),
+    openSource:
+      normalizedRunsPerMonth * toPositiveInt(openSourceTestsPerRun, 'openSourceTestsPerRun'),
     code: normalizedRunsPerMonth * toPositiveInt(codeTestsPerRun, 'codeTestsPerRun'),
     container: normalizedRunsPerMonth * toPositiveInt(containerTestsPerRun, 'containerTestsPerRun'),
     iac: normalizedRunsPerMonth * toPositiveInt(iacTestsPerRun, 'iacTestsPerRun'),
@@ -87,9 +88,7 @@ export function evaluateQuotaPlan({
     const monthlyTests = monthly[product];
     const quota = normalizedQuotas[product];
     if (monthlyTests > quota) {
-      violations.push(
-        `${product} exceeds monthly quota: ${monthlyTests}/${quota}`,
-      );
+      violations.push(`${product} exceeds monthly quota: ${monthlyTests}/${quota}`);
     }
   }
 
