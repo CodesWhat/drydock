@@ -419,7 +419,7 @@ describe('ConfigView', () => {
       expect(text).toContain('WUD_SERVER_PORT');
       expect(text).toContain('wud.watch');
       expect(text).toContain('node dist/index.js config migrate --dry-run');
-      expect(w.find('a[href="https://drydock.codeswhat.com/docs/quickstart"]').exists()).toBe(true);
+      expect(w.find('a[href="https://getdrydock.com/docs/quickstart"]').exists()).toBe(true);
     });
   });
 

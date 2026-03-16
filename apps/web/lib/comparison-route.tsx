@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { ComparisonPage, type ComparisonRow, type Highlight } from "@/components/comparison-page";
 
-const fallbackBaseUrl = "https://drydock.codeswhat.com";
+const fallbackBaseUrl = "https://getdrydock.com";
 
 function getBaseUrl() {
   return process.env.NEXT_PUBLIC_SITE_URL || fallbackBaseUrl;
