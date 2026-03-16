@@ -486,6 +486,49 @@ describe('docker image details orchestration module', () => {
     });
   });
 
+  test('detects sourceRepo from manual label override and OCI source labels', async () => {
+    vi.spyOn(storeContainer, 'getContainer').mockReturnValue(undefined);
+
+    const { watcher, inspectContainer, inspectImage } = createWatcher();
+    inspectContainer.mockResolvedValue({});
+    inspectImage.mockResolvedValue({
+      Id: 'image-new',
+      RepoDigests: ['ghcr.io/acme/service@sha256:new'],
+      Architecture: 'amd64',
+      Os: 'linux',
+      Created: '2026-02-01T00:00:00.000Z',
+      Config: {
+        Labels: {
+          'org.opencontainers.image.source': 'https://github.com/acme/service',
+        },
+      },
+    });
+
+    const resultFromImageSource = await addImageDetailsToContainerOrchestration(
+      watcher as any,
+      createDockerSummaryContainer({
+        Labels: {},
+      }),
+      {},
+      createHelpers() as any,
+    );
+
+    expect(resultFromImageSource?.sourceRepo).toBe('github.com/acme/service');
+
+    const resultFromManualOverride = await addImageDetailsToContainerOrchestration(
+      watcher as any,
+      createDockerSummaryContainer({
+        Labels: {
+          'dd.source.repo': 'github.com/acme/override',
+        },
+      }),
+      {},
+      createHelpers() as any,
+    );
+
+    expect(resultFromManualOverride?.sourceRepo).toBe('github.com/acme/override');
+  });
+
   test('falls back to summary runtime details when container inspect is unavailable', async () => {
     vi.spyOn(storeContainer, 'getContainer').mockReturnValue(undefined);
 

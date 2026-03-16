@@ -339,6 +339,18 @@ export const openApiSchemas = {
     required: ['id', 'name'],
     additionalProperties: true,
   },
+  ReleaseNotesResource: {
+    type: 'object',
+    properties: {
+      title: { type: 'string' },
+      body: { type: 'string' },
+      url: { type: 'string' },
+      publishedAt: { type: 'string', format: 'date-time' },
+      provider: { type: 'string', enum: ['github', 'gitlab', 'gitea'] },
+    },
+    required: ['title', 'body', 'url', 'publishedAt', 'provider'],
+    additionalProperties: false,
+  },
   VulnerabilitySummary: {
     type: 'object',
     properties: {

@@ -28,9 +28,21 @@ import Docker, {
 } from './Docker.js';
 
 const mockDdEnvVars = vi.hoisted(() => ({}) as Record<string, string | undefined>);
+const mockDetectSourceRepoFromImageMetadata = vi.hoisted(() => vi.fn());
+const mockResolveSourceRepoForContainer = vi.hoisted(() => vi.fn());
+const mockGetFullReleaseNotesForContainer = vi.hoisted(() => vi.fn());
+const mockToContainerReleaseNotes = vi.hoisted(() => vi.fn((notes) => notes));
 vi.mock('../../../configuration/index.js', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../configuration/index.js')>()),
   ddEnvVars: mockDdEnvVars,
+}));
+vi.mock('../../../release-notes/index.js', () => ({
+  detectSourceRepoFromImageMetadata: (...args: unknown[]) =>
+    mockDetectSourceRepoFromImageMetadata(...args),
+  resolveSourceRepoForContainer: (...args: unknown[]) => mockResolveSourceRepoForContainer(...args),
+  getFullReleaseNotesForContainer: (...args: unknown[]) =>
+    mockGetFullReleaseNotesForContainer(...args),
+  toContainerReleaseNotes: (...args: unknown[]) => mockToContainerReleaseNotes(...args),
 }));
 
 // Mock all dependencies
@@ -1834,6 +1846,46 @@ describe('Docker Watcher', () => {
       expect(event.emitWatcherStop).toHaveBeenCalledWith(docker);
     });
 
+    test('should start and end digest cache poll cycle for cache-aware registries', async () => {
+      const startDigestCachePollCycle = vi.fn();
+      const endDigestCachePollCycle = vi.fn();
+      registry.getState.mockReturnValue({
+        registry: {
+          hub: {
+            startDigestCachePollCycle,
+            endDigestCachePollCycle,
+          },
+        },
+      });
+      docker.getContainers = vi.fn().mockResolvedValue([]);
+
+      await docker.watch();
+
+      expect(startDigestCachePollCycle).toHaveBeenCalledTimes(1);
+      expect(endDigestCachePollCycle).toHaveBeenCalledTimes(1);
+    });
+
+    test('should end digest cache poll cycle even when watch throws while listing containers', async () => {
+      const startDigestCachePollCycle = vi.fn();
+      const endDigestCachePollCycle = vi.fn();
+      registry.getState.mockReturnValue({
+        registry: {
+          hub: {
+            startDigestCachePollCycle,
+            endDigestCachePollCycle,
+          },
+        },
+      });
+      const mockLog = createMockLog(['warn']);
+      docker.log = mockLog;
+      docker.getContainers = vi.fn().mockRejectedValue(new Error('Docker unavailable'));
+
+      await docker.watch();
+
+      expect(startDigestCachePollCycle).toHaveBeenCalledTimes(1);
+      expect(endDigestCachePollCycle).toHaveBeenCalledTimes(1);
+    });
+
     test('should handle error getting containers', async () => {
       const mockLog = createMockLog(['warn']);
       docker.log = mockLog;
@@ -1967,6 +2019,85 @@ describe('Docker Watcher', () => {
         'Error when processing (Unexpected container processing error)',
       );
       expect(container.error).toEqual({ message: 'Unexpected container processing error' });
+    });
+
+    test('should attach release notes and source repo for update-available containers', async () => {
+      const container = {
+        id: 'test123',
+        name: 'test',
+        updateAvailable: true,
+        image: {
+          name: 'acme/service',
+          registry: {
+            url: 'ghcr.io',
+          },
+          tag: {
+            value: '1.0.0',
+          },
+        },
+      };
+      const mockLog = createMockLogWithChild(['warn', 'debug']);
+      docker.log = mockLog;
+      docker.findNewVersion = vi.fn().mockResolvedValue({ tag: '2.0.0' });
+      docker.mapContainerToContainerReport = vi.fn().mockReturnValue({ container, changed: false });
+      mockResolveSourceRepoForContainer.mockResolvedValue('github.com/acme/service');
+      mockGetFullReleaseNotesForContainer.mockResolvedValue({
+        title: 'v2.0.0',
+        body: 'Release body',
+        url: 'https://github.com/acme/service/releases/tag/v2.0.0',
+        publishedAt: '2026-03-01T00:00:00.000Z',
+        provider: 'github',
+      });
+      mockToContainerReleaseNotes.mockReturnValue({
+        title: 'v2.0.0',
+        body: 'Release body',
+        url: 'https://github.com/acme/service/releases/tag/v2.0.0',
+        publishedAt: '2026-03-01T00:00:00.000Z',
+        provider: 'github',
+      });
+
+      await docker.watchContainer(container as any);
+
+      expect(mockResolveSourceRepoForContainer).toHaveBeenCalledWith(container);
+      expect(mockGetFullReleaseNotesForContainer).toHaveBeenCalledWith(container);
+      expect(container.sourceRepo).toBe('github.com/acme/service');
+      expect(container.result?.releaseNotes).toEqual({
+        title: 'v2.0.0',
+        body: 'Release body',
+        url: 'https://github.com/acme/service/releases/tag/v2.0.0',
+        publishedAt: '2026-03-01T00:00:00.000Z',
+        provider: 'github',
+      });
+    });
+
+    test('should ignore release notes failures', async () => {
+      const container = {
+        id: 'test123',
+        name: 'test',
+        updateAvailable: true,
+        image: {
+          name: 'acme/service',
+          registry: {
+            url: 'ghcr.io',
+          },
+          tag: {
+            value: '1.0.0',
+          },
+        },
+      };
+      const mockLog = createMockLogWithChild(['warn', 'debug']);
+      docker.log = mockLog;
+      docker.findNewVersion = vi.fn().mockResolvedValue({ tag: '2.0.0' });
+      docker.mapContainerToContainerReport = vi.fn().mockReturnValue({ container, changed: false });
+      mockResolveSourceRepoForContainer.mockResolvedValue('github.com/acme/service');
+      mockGetFullReleaseNotesForContainer.mockRejectedValue(new Error('rate limited'));
+
+      await docker.watchContainer(container as any);
+
+      expect(container.error).toBeUndefined();
+      expect(mockLog._child.debug).toHaveBeenCalledWith(
+        expect.stringContaining('Unable to fetch release notes'),
+      );
     });
   });
 

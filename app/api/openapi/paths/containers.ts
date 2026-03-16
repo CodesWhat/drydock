@@ -290,6 +290,21 @@ export const containerPaths = {
       },
     },
   },
+  '/api/containers/{id}/release-notes': {
+    get: {
+      tags: ['Containers'],
+      summary: 'Get full release notes for the current update target',
+      operationId: 'getContainerReleaseNotes',
+      parameters: [containerIdPathParam],
+      responses: {
+        200: jsonResponse('Release notes', {
+          $ref: '#/components/schemas/ReleaseNotesResource',
+        }),
+        401: errorResponse('Authentication required'),
+        404: errorResponse('Release notes not available'),
+      },
+    },
+  },
   '/api/containers/{id}/update-operations': {
     get: {
       tags: ['Containers'],

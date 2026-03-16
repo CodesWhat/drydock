@@ -133,6 +133,51 @@ test('model should be validated when compliant', async () => {
   });
 });
 
+test('model should accept sourceRepo and releaseNotes metadata', async () => {
+  const containerValidated = container.validate({
+    id: 'container-release-notes-123',
+    name: 'test',
+    watcher: 'test',
+    sourceRepo: 'github.com/acme/service',
+    image: {
+      id: 'image-release-notes-123',
+      registry: {
+        name: 'hub',
+        url: 'https://hub',
+      },
+      name: 'organization/image',
+      tag: {
+        value: '1.0.0',
+        semver: true,
+      },
+      digest: {
+        watch: false,
+      },
+      architecture: 'arch',
+      os: 'os',
+    },
+    result: {
+      tag: '1.1.0',
+      releaseNotes: {
+        title: 'v1.1.0',
+        body: 'Release body',
+        url: 'https://github.com/acme/service/releases/tag/v1.1.0',
+        publishedAt: '2026-03-01T00:00:00.000Z',
+        provider: 'github',
+      },
+    },
+  });
+
+  expect(containerValidated.sourceRepo).toBe('github.com/acme/service');
+  expect(containerValidated.result?.releaseNotes).toEqual({
+    title: 'v1.1.0',
+    body: 'Release body',
+    url: 'https://github.com/acme/service/releases/tag/v1.1.0',
+    publishedAt: '2026-03-01T00:00:00.000Z',
+    provider: 'github',
+  });
+});
+
 test('model should not be validated when invalid', async () => {
   expect(() => {
     container.validate({});

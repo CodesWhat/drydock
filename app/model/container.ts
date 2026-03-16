@@ -51,6 +51,15 @@ export interface ContainerResult {
   publishedAt?: string;
   link?: string;
   noUpdateReason?: string;
+  releaseNotes?: ContainerReleaseNotes;
+}
+
+export interface ContainerReleaseNotes {
+  title: string;
+  body: string;
+  url: string;
+  publishedAt: string;
+  provider: 'github' | 'gitlab' | 'gitea';
 }
 
 export interface ContainerUpdateKind {
@@ -118,6 +127,7 @@ export interface Container {
   updateAge?: number;
   updateMaturityLevel?: 'hot' | 'mature' | 'established';
   labels?: Record<string, string>;
+  sourceRepo?: string;
   details?: ContainerRuntimeDetails;
   resultChanged?: (otherContainer: Container | undefined) => boolean;
 }
@@ -256,6 +266,13 @@ const schema = joi.object({
     publishedAt: joi.string().isoDate(),
     link: joi.string(),
     noUpdateReason: joi.string().min(1),
+    releaseNotes: joi.object({
+      title: joi.string().required(),
+      body: joi.string().required(),
+      url: joi.string().required(),
+      publishedAt: joi.string().isoDate().required(),
+      provider: joi.string().valid('github', 'gitlab', 'gitea').required(),
+    }),
   }),
   error: joi.object({
     message: joi.string().min(1).required(),
@@ -275,6 +292,7 @@ const schema = joi.object({
   updateMaturityLevel: joi.string().valid('hot', 'mature', 'established'),
   resultChanged: joi.function(),
   labels: joi.object(),
+  sourceRepo: joi.string(),
   details: joi.object({
     ports: joi.array().items(joi.string()).required(),
     volumes: joi.array().items(joi.string()).required(),

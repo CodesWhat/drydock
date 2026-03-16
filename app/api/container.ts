@@ -233,6 +233,7 @@ export function init() {
   router.get('/security/vulnerabilities', crudHandlers.getContainerSecurityVulnerabilities);
   router.get('/:id/stats', statsHandlers.getContainerStats);
   router.get('/:id/stats/stream', statsHandlers.streamContainerStats);
+  router.get('/:id/release-notes', crudHandlers.getContainerReleaseNotes);
   router.get('/:id', crudHandlers.getContainer);
   router.get('/:id/update-operations', crudHandlers.getContainerUpdateOperations);
   router.delete(

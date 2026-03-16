@@ -99,6 +99,19 @@ describe('trigger-expression-parser', () => {
     const output = renderSimple('Pin to ${suggestedTag}', baseContainer as any);
     expect(output).toBe('Pin to 1.2.3');
   });
+
+  test('renderSimple should expose releaseNotes template variable', () => {
+    const output = renderSimple('${releaseNotes.title}', {
+      ...baseContainer,
+      result: {
+        ...baseContainer.result,
+        releaseNotes: {
+          title: 'Release title',
+        },
+      },
+    } as any);
+    expect(output).toBe('Release title');
+  });
 });
 
 describe('legacy template variable deprecation warnings', () => {

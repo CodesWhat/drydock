@@ -1,5 +1,12 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { createMockResponse } from '../../test/helpers.js';
+
+const mockGetFullReleaseNotesForContainer = vi.hoisted(() => vi.fn());
+vi.mock('../../release-notes/index.js', () => ({
+  getFullReleaseNotesForContainer: (...args: unknown[]) =>
+    mockGetFullReleaseNotesForContainer(...args),
+}));
+
 import { createCrudHandlers } from './crud.js';
 
 type CrudDependencies = Parameters<typeof createCrudHandlers>[0];
@@ -192,6 +199,15 @@ function callGetContainer(
   return res;
 }
 
+async function callGetContainerReleaseNotes(
+  handlers: ReturnType<typeof createCrudHandlers>,
+  id: string | string[] | undefined = 'c1',
+) {
+  const res = createMockResponse();
+  await handlers.getContainerReleaseNotes({ params: { id } } as any, res as any);
+  return res;
+}
+
 function callGetContainerUpdateOperations(
   handlers: ReturnType<typeof createCrudHandlers>,
   id: string | string[] | undefined = 'c1',
@@ -250,6 +266,7 @@ async function callWatchContainer(
 describe('api/container/crud', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGetFullReleaseNotesForContainer.mockResolvedValue(undefined);
   });
 
   describe('createCrudHandlers dependency grouping', () => {
@@ -2073,6 +2090,67 @@ describe('api/container/crud', () => {
       expect(res.status).toHaveBeenCalledWith(404);
       expect(res.json).toHaveBeenCalledWith({ error: 'Container not found' });
       expect(harness.deps.updateOperationStore.getOperationsByContainerName).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('release notes handler', () => {
+    test('returns full release notes when available', async () => {
+      mockGetFullReleaseNotesForContainer.mockResolvedValue({
+        title: 'Release 2.0.0',
+        body: 'Full release notes body',
+        url: 'https://github.com/acme/service/releases/tag/v2.0.0',
+        publishedAt: '2026-03-01T00:00:00.000Z',
+        provider: 'github',
+      });
+      const harness = createHarness({
+        containers: [
+          createContainer({
+            id: 'c1',
+            sourceRepo: 'github.com/acme/service',
+            result: {
+              tag: '2.0.0',
+            },
+          }),
+        ],
+      });
+
+      const res = await callGetContainerReleaseNotes(harness.handlers, 'c1');
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'Release 2.0.0',
+          body: 'Full release notes body',
+          url: 'https://github.com/acme/service/releases/tag/v2.0.0',
+          publishedAt: '2026-03-01T00:00:00.000Z',
+          provider: 'github',
+        }),
+      );
+    });
+
+    test('returns 404 when release notes are unavailable', async () => {
+      const harness = createHarness({
+        containers: [createContainer({ id: 'c1' })],
+      });
+
+      const res = await callGetContainerReleaseNotes(harness.handlers, 'c1');
+
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Release notes not available' });
+    });
+
+    test('returns 500 when release notes lookup throws', async () => {
+      mockGetFullReleaseNotesForContainer.mockRejectedValue(new Error('boom'));
+      const harness = createHarness({
+        containers: [createContainer({ id: 'c1' })],
+      });
+
+      const res = await callGetContainerReleaseNotes(harness.handlers, 'c1');
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Error retrieving release notes (boom)',
+      });
     });
   });
 

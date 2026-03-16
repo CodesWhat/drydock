@@ -216,6 +216,7 @@ describe('Container Router', () => {
       expect(router.get).toHaveBeenCalledWith('/recent-status', expect.any(Function));
       expect(router.post).toHaveBeenCalledWith('/watch', expect.any(Function));
       expect(router.get).toHaveBeenCalledWith('/:id', expect.any(Function));
+      expect(router.get).toHaveBeenCalledWith('/:id/release-notes', expect.any(Function));
       expect(router.get).toHaveBeenCalledWith('/:id/stats', expect.any(Function));
       expect(router.get).toHaveBeenCalledWith('/:id/stats/stream', expect.any(Function));
       expect(router.delete).toHaveBeenCalledWith(

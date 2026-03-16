@@ -1,4 +1,5 @@
 import type { Container } from '../../../model/container.js';
+import { detectSourceRepoFromImageMetadata } from '../../../release-notes/index.js';
 import * as storeContainer from '../../../store/container.js';
 import { parse as parseSemver, transform as transformTag } from '../../../tag/index.js';
 import {
@@ -53,6 +54,9 @@ interface DockerImageInspectPayload {
   Os?: string;
   Variant?: string;
   Created?: string;
+  Config?: {
+    Labels?: Record<string, string>;
+  };
   [key: string]: unknown;
 }
 
@@ -442,6 +446,12 @@ export async function addImageDetailsToContainerOrchestration(
       created: image.Created,
     },
     labels: containerLabels,
+    sourceRepo: detectSourceRepoFromImageMetadata({
+      containerLabels,
+      imageLabels: image.Config?.Labels,
+      imageRegistryDomain: parsedImage.domain,
+      imagePath: parsedImage.path,
+    }),
     details: runtimeDetails,
     result: {
       tag: tagName,

@@ -349,6 +349,8 @@ export function renderSimple(template: string, container: Container): string {
   if (template) warnLegacyTemplateVars(template, LEGACY_SIMPLE_VARS, 'container');
   const vars: TemplateVars = {
     container,
+    releaseNotes: container.result?.releaseNotes,
+    suggestedTag: container.result?.suggestedTag ?? container.result?.tag ?? '',
     // Deprecated vars for backward compatibility
     id: container.id,
     name: container.name,
@@ -357,7 +359,6 @@ export function renderSimple(template: string, container: Container): string {
     semver: container.updateKind?.semverDiff ?? '',
     local: container.updateKind?.localValue ?? '',
     remote: container.updateKind?.remoteValue ?? '',
-    suggestedTag: container.result?.suggestedTag ?? '',
     link: container.result?.link ?? '',
   };
   return safeInterpolate(template, vars);

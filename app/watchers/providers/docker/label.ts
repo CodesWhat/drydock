@@ -86,6 +86,11 @@ export const ddTriggerExclude = 'dd.trigger.exclude';
 export const wudTriggerExclude = 'wud.trigger.exclude';
 
 /**
+ * Optional source repository override used for release-notes lookup.
+ */
+export const ddSourceRepo = 'dd.source.repo';
+
+/**
  * Optional group name for container grouping / stack views.
  */
 export const ddGroup = 'dd.group';

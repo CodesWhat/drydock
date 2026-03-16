@@ -6,6 +6,7 @@ import {
   maturityMinAgeDaysToMilliseconds,
   resolveMaturityMinAgeDays,
 } from '../../model/maturity-policy.js';
+import { getFullReleaseNotesForContainer } from '../../release-notes/index.js';
 import { getContainerStatusSummary } from '../../util/container-summary.js';
 import { sendErrorResponse } from '../error-response.js';
 import { buildPaginationLinks, type PaginationLinks } from '../pagination-links.js';
@@ -757,6 +758,33 @@ function getContainerHandler(context: CrudHandlerContext, req: Request, res: Res
   }
 }
 
+async function getContainerReleaseNotesHandler(
+  context: CrudHandlerContext,
+  req: Request,
+  res: Response,
+) {
+  const id = getPathParamValue(req.params.id);
+  const container = getContainerOrNotFound(context, id, res);
+  if (!container) {
+    return;
+  }
+
+  try {
+    const releaseNotes = await getFullReleaseNotesForContainer(container);
+    if (!releaseNotes) {
+      sendErrorResponse(res, 404, 'Release notes not available');
+      return;
+    }
+    res.status(200).json(releaseNotes);
+  } catch (error: unknown) {
+    sendErrorResponse(
+      res,
+      500,
+      `Error retrieving release notes (${context.getErrorMessage(error)})`,
+    );
+  }
+}
+
 function getContainerUpdateOperationsHandler(
   context: CrudHandlerContext,
   req: Request,
@@ -939,6 +967,9 @@ export function createCrudHandlers(dependencies: CrudHandlerDependencies) {
     },
     getContainer(req: Request, res: Response) {
       getContainerHandler(context, req, res);
+    },
+    getContainerReleaseNotes(req: Request, res: Response) {
+      return getContainerReleaseNotesHandler(context, req, res);
     },
     getContainerUpdateOperations(req: Request, res: Response) {
       getContainerUpdateOperationsHandler(context, req, res);
