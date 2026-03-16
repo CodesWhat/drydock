@@ -27,7 +27,7 @@ pre-commit:
       glob: '*.{ts,vue}'
       run: ./scripts/pre-commit-coverage.sh
       priority: 3
-      timeout: 2m
+      timeout: 5m
 
 pre-push:
   piped: true

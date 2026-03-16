@@ -36,6 +36,10 @@ import { consumeFreshContainerScheduledPollSkip } from '../../registry-webhook-f
 import Watcher from '../../Watcher.js';
 import { updateContainerFromInspect as updateContainerFromInspectState } from './container-event-update.js';
 import {
+  endDigestCachePollCycleForRegistries,
+  startDigestCachePollCycleForRegistries,
+} from './digest-cache-lifecycle.js';
+import {
   listenDockerEventsOrchestration,
   onDockerEventOrchestration,
   processDockerEventOrchestration,
@@ -110,6 +114,7 @@ import {
 } from './label.js';
 import { getNextMaintenanceWindow, isInMaintenanceWindow } from './maintenance.js';
 import { createMutableOidcState, getRemoteAuthResolution } from './oidc.js';
+import { enrichContainerWithReleaseNotes } from './release-notes-enrichment.js';
 import {
   filterBySegmentCount,
   getCurrentPrefix,
@@ -274,14 +279,9 @@ interface ContainerWatchLogger {
   debug: (message: string) => void;
 }
 
-/**
- * Return all supported registries
- * @returns {*}
- */
 function getRegistries() {
   return registry.getState().registry;
 }
-
 function normalizeContainer(container: Container) {
   const containerWithNormalizedImage = structuredClone(container);
   const imageForMatching = getImageForRegistryLookup(containerWithNormalizedImage.image);
@@ -298,10 +298,7 @@ function normalizeContainer(container: Container) {
   return validateContainer(containerWithNormalizedImage);
 }
 
-/**
- * Get the Docker Registry by name.
- * @param registryName
- */
+/** Get the Docker Registry by name. */
 function getRegistry(registryName: string) {
   const registryToReturn = getRegistries()[registryName];
   if (!registryToReturn) {
@@ -1093,6 +1090,7 @@ class Docker extends Watcher {
   async watch() {
     this.ensureLogger();
     let containers: Container[] = [];
+    startDigestCachePollCycleForRegistries();
 
     // Dispatch event to notify start watching
     event.emitWatcherStart(this);
@@ -1132,6 +1130,7 @@ class Docker extends Watcher {
       event.emitContainerReports(containerReports);
       return containerReports;
     } finally {
+      endDigestCachePollCycleForRegistries();
       // Dispatch event to notify stop watching
       event.emitWatcherStop(this);
     }
@@ -1155,6 +1154,7 @@ class Docker extends Watcher {
 
     try {
       containerWithResult.result = await this.findNewVersion(container, logContainer);
+      await enrichContainerWithReleaseNotes(containerWithResult, logContainer);
     } catch (e: any) {
       const errorMessage = getErrorMessage(e);
       logContainer.warn(`Error when processing (${errorMessage})`);

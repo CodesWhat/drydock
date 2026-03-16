@@ -1,12 +1,21 @@
 import fs from 'node:fs';
 import https from 'node:https';
 import axios, { type AxiosRequestConfig } from 'axios';
+import type { ContainerImage } from '../model/container.js';
+import * as registryPrometheus from '../prometheus/registry.js';
 import { resolveConfiguredPath } from '../runtime/paths.js';
 import { failClosedAuth, requireAuthString, withAuthorizationHeader } from '../security/auth.js';
 import { REGISTRY_BEARER_TOKEN_CACHE_TTL_MS } from './configuration.js';
 import Registry from './Registry.js';
 
 type RegistryRequestOptions = AxiosRequestConfig;
+type RegistryManifestLookupResult = Awaited<ReturnType<Registry['getImageManifestDigest']>>;
+type DigestCacheEntry = {
+  digest: string;
+  created?: string;
+  version?: number;
+  fetchedAt: number;
+};
 
 /**
  * Base Registry with common patterns
@@ -14,6 +23,10 @@ type RegistryRequestOptions = AxiosRequestConfig;
 class BaseRegistry extends Registry {
   private httpsAgent?: https.Agent;
   private bearerTokenCache = new Map<string, { token: string; expiresAt: number }>();
+  private digestManifestCache = new Map<string, DigestCacheEntry>();
+  private digestManifestCacheInFlight = new Map<string, Promise<RegistryManifestLookupResult>>();
+  private digestCacheHits = 0;
+  private digestCacheMisses = 0;
 
   private getBearerTokenCacheKey(authUrl: string, credentials?: string) {
     return `${authUrl}|${credentials || ''}`;
@@ -25,6 +38,80 @@ class BaseRegistry extends Registry {
         this.bearerTokenCache.delete(key);
       }
     }
+  }
+
+  private getCanonicalRegistryHost(registryUrl: string | undefined): string {
+    if (!registryUrl || registryUrl.trim().length === 0) {
+      return 'docker.io';
+    }
+
+    const host = this.getRegistryHostname(registryUrl);
+    if (host === 'registry-1.docker.io' || host === 'index.docker.io') {
+      return 'docker.io';
+    }
+    return host;
+  }
+
+  private buildDigestCacheKey(image: ContainerImage, digest?: string): string {
+    let normalizedImage = image;
+    try {
+      normalizedImage = this.normalizeImage(structuredClone(image));
+    } catch {
+      normalizedImage = image;
+    }
+
+    const registryHost = this.getCanonicalRegistryHost(normalizedImage?.registry?.url);
+    const imageName = normalizedImage?.name || '';
+    const repository =
+      registryHost === 'docker.io' && imageName.length > 0 && !imageName.includes('/')
+        ? `library/${imageName}`
+        : imageName;
+    const tagOrDigest =
+      (typeof digest === 'string' && digest.length > 0 ? digest : normalizedImage?.tag?.value) ||
+      'latest';
+    const architecture = normalizedImage?.architecture || 'unknown';
+    const os = normalizedImage?.os || 'unknown';
+    const variant = normalizedImage?.variant ? `/${normalizedImage.variant}` : '';
+
+    return `${registryHost}/${repository}:${tagOrDigest}|${os}/${architecture}${variant}`;
+  }
+
+  private recordDigestCacheHit() {
+    this.digestCacheHits += 1;
+    const counter = registryPrometheus.getDigestCacheHitsCounter?.();
+    if (counter) {
+      counter.inc();
+    }
+  }
+
+  private recordDigestCacheMiss() {
+    this.digestCacheMisses += 1;
+    const counter = registryPrometheus.getDigestCacheMissesCounter?.();
+    if (counter) {
+      counter.inc();
+    }
+  }
+
+  public startDigestCachePollCycle() {
+    this.digestManifestCache.clear();
+    this.digestManifestCacheInFlight.clear();
+    this.digestCacheHits = 0;
+    this.digestCacheMisses = 0;
+  }
+
+  public endDigestCachePollCycle() {
+    const totalRequests = this.digestCacheHits + this.digestCacheMisses;
+    const hitRate = totalRequests === 0 ? 0 : (this.digestCacheHits / totalRequests) * 100;
+    if (this.log && typeof this.log.debug === 'function') {
+      this.log.debug(
+        `${this.getId()} digest cache hit rate ${hitRate.toFixed(2)}% (${this.digestCacheHits} hits, ${this.digestCacheMisses} misses)`,
+      );
+    }
+    return {
+      hits: this.digestCacheHits,
+      misses: this.digestCacheMisses,
+      hitRate,
+    };
   }
 
   /**
@@ -174,6 +261,49 @@ class BaseRegistry extends Registry {
       requestOptionsWithAuth.headers = headers as AxiosRequestConfig['headers'];
     }
     return requestOptionsWithAuth;
+  }
+
+  async getImageManifestDigest(
+    image: ContainerImage,
+    digest?: string,
+  ): Promise<RegistryManifestLookupResult> {
+    const cacheKey = this.buildDigestCacheKey(image, digest);
+    const cachedEntry = this.digestManifestCache.get(cacheKey);
+    if (cachedEntry) {
+      this.recordDigestCacheHit();
+      return {
+        digest: cachedEntry.digest,
+        created: cachedEntry.created,
+        version: cachedEntry.version,
+      };
+    }
+
+    const inFlightLookup = this.digestManifestCacheInFlight.get(cacheKey);
+    if (inFlightLookup) {
+      this.recordDigestCacheHit();
+      return inFlightLookup;
+    }
+
+    this.recordDigestCacheMiss();
+    const manifestLookup = (async () => {
+      const manifest = await super.getImageManifestDigest(image, digest);
+      if (typeof manifest?.digest === 'string' && manifest.digest.length > 0) {
+        this.digestManifestCache.set(cacheKey, {
+          digest: manifest.digest,
+          created: manifest.created,
+          version: manifest.version,
+          fetchedAt: Date.now(),
+        });
+      }
+      return manifest;
+    })();
+
+    this.digestManifestCacheInFlight.set(cacheKey, manifestLookup);
+    try {
+      return await manifestLookup;
+    } finally {
+      this.digestManifestCacheInFlight.delete(cacheKey);
+    }
   }
 
   /**
