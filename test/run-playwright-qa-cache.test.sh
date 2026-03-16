@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2016
 set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -73,7 +74,7 @@ run_case() {
 		did_build=1
 	fi
 
-	if [[ "$did_build" != "$expect_build" ]]; then
+	if [[ $did_build != "$expect_build" ]]; then
 		echo "FAIL: $case_name (expected build=$expect_build, got build=$did_build)" >&2
 		echo "mock log:" >&2
 		sed 's/^/  /' "$MOCK_LOG" >&2

@@ -13,20 +13,20 @@ export GAPS_FILE=".coverage-gaps.json"
 fail=0
 
 run_coverage() {
-  local workspace=$1
-  local json_dir="${workspace}/coverage"
+	local workspace=$1
 
-  echo "📊 ${workspace}: running coverage..."
-  if ! (cd "${workspace}" && npx vitest run --coverage --reporter=json --reporter=dot 2>&1); then
-    echo "❌ ${workspace} coverage below threshold" >&2
-    fail=1
-  fi
+	echo "📊 ${workspace}: running coverage..."
+	if ! (cd "${workspace}" && npx vitest run --coverage --reporter=json --reporter=dot 2>&1); then
+		echo "❌ ${workspace} coverage below threshold" >&2
+		fail=1
+	fi
 }
 
 run_coverage "app"
 run_coverage "ui"
 
 # Parse coverage JSON summaries into a single gap report
+# shellcheck disable=SC2016
 node -e '
 const fs = require("fs");
 const path = require("path");
@@ -80,10 +80,10 @@ if (gaps.length > 0) {
 ' 2>&1
 
 if [ $fail -ne 0 ]; then
-  echo ""
-  echo "Coverage thresholds not met. Fix gaps before pushing."
-  echo "Run: cat .coverage-gaps.json  — to see exact gaps"
-  exit 1
+	echo ""
+	echo "Coverage thresholds not met. Fix gaps before pushing."
+	echo "Run: cat .coverage-gaps.json  — to see exact gaps"
+	exit 1
 fi
 
 # Clean state — remove gap file when everything passes

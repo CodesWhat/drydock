@@ -46,14 +46,14 @@ should_build_qa_image() {
 
 	local image_created
 	image_created=$(docker image inspect --format='{{.Created}}' "$QA_IMAGE" 2>/dev/null | head -n 1 || true)
-	if [[ -z "$image_created" ]]; then
+	if [[ -z $image_created ]]; then
 		echo "ℹ️  Unable to read '$QA_IMAGE' creation timestamp; building..."
 		return 0
 	fi
 
 	local last_commit_epoch
 	last_commit_epoch=$(git -C "$REPO_ROOT" log -1 --format=%ct 2>/dev/null || true)
-	if [[ ! "$last_commit_epoch" =~ ^[0-9]+$ ]]; then
+	if [[ ! $last_commit_epoch =~ ^[0-9]+$ ]]; then
 		echo "ℹ️  Unable to read latest git commit timestamp; building..."
 		return 0
 	fi
@@ -69,7 +69,7 @@ should_build_qa_image() {
 		return 0
 	fi
 
-	if (( image_created_epoch >= last_commit_epoch )); then
+	if ((image_created_epoch >= last_commit_epoch)); then
 		echo "♻️  Reusing '$QA_IMAGE' (newer than latest commit)."
 		return 1
 	fi

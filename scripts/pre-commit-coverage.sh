@@ -14,23 +14,23 @@ has_app=false
 has_ui=false
 
 for f in "$@"; do
-  case "${f}" in
-    app/*) has_app=true ;;
-    ui/*)  has_ui=true ;;
-  esac
+	case "${f}" in
+	app/*) has_app=true ;;
+	ui/*) has_ui=true ;;
+	esac
 done
 
 if ! "${has_app}" && ! "${has_ui}"; then
-  echo "No app/ or ui/ files staged; skipping tests."
-  exit 0
+	echo "No app/ or ui/ files staged; skipping tests."
+	exit 0
 fi
 
 if "${has_app}"; then
-  echo "⏳ app: running tests on changed files..."
-  (cd app && npx vitest run --changed HEAD --reporter=dot)
+	echo "⏳ app: running tests on changed files..."
+	(cd app && npx vitest run --changed HEAD --reporter=dot)
 fi
 
 if "${has_ui}"; then
-  echo "⏳ ui: running tests on changed files..."
-  (cd ui && npx vitest run --changed HEAD --reporter=dot)
+	echo "⏳ ui: running tests on changed files..."
+	(cd ui && npx vitest run --changed HEAD --reporter=dot)
 fi

@@ -25,8 +25,6 @@ pre-commit:
       glob: '*.{ts,js,json,vue,css}'
       run: npx biome format --write --no-errors-on-unmatched {staged_files} && git add {staged_files}
       priority: 2
-    # Coverage enforcement happens in pre-push (build-and-test).
-    # Pre-commit only does biome fix+format for fast feedback.
 
 commit-msg:
   commands:
