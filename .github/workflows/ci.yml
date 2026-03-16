@@ -19,7 +19,6 @@ jobs:
   zizmor:
     name: Actions Security
     runs-on: ubuntu-latest
-    continue-on-error: true  # advisory — GitHub API rate limits cause intermittent 403
     permissions:
       contents: read
       security-events: write
