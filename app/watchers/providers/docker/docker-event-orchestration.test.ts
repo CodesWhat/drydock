@@ -283,6 +283,52 @@ describe('docker event orchestration helpers', () => {
 
     dependencies.debug('debug-line');
     expect(watcher.log.debug).toHaveBeenCalledWith('debug-line');
+
+    // isRecreatedContainerAlias — non-alias name returns false
+    const isAlias = await dependencies.isRecreatedContainerAlias('container123');
+    expect(isAlias).toBe(false);
+  });
+
+  test('processDockerEventOrchestration isRecreatedContainerAlias returns true for self-id-prefixed alias', async () => {
+    const processDockerEventStateMock = vi.mocked(processDockerEventState);
+    const aliasContainerId = '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a10';
+    const inspect = vi
+      .fn()
+      .mockResolvedValue({ Name: '/7ea6b8a42686_termix', State: { Status: 'running' } });
+    const { watcher } = createWatcher({
+      dockerApi: {
+        getContainer: vi.fn().mockReturnValue({ inspect }),
+        getEvents: vi.fn(),
+      },
+    });
+    processDockerEventStateMock.mockResolvedValue(undefined);
+
+    await processDockerEventOrchestration(watcher as any, {
+      Action: 'start',
+      id: aliasContainerId,
+    });
+
+    const [, dependencies] = processDockerEventStateMock.mock.calls[0] as any;
+    const isAlias = await dependencies.isRecreatedContainerAlias(aliasContainerId);
+    expect(isAlias).toBe(true);
+  });
+
+  test('processDockerEventOrchestration isRecreatedContainerAlias returns false on inspect failure', async () => {
+    const processDockerEventStateMock = vi.mocked(processDockerEventState);
+    const inspect = vi.fn().mockRejectedValue(new Error('No such container'));
+    const { watcher } = createWatcher({
+      dockerApi: {
+        getContainer: vi.fn().mockReturnValue({ inspect }),
+        getEvents: vi.fn(),
+      },
+    });
+    processDockerEventStateMock.mockResolvedValue(undefined);
+
+    await processDockerEventOrchestration(watcher as any, { Action: 'start', id: 'gone' });
+
+    const [, dependencies] = processDockerEventStateMock.mock.calls[0] as any;
+    const isAlias = await dependencies.isRecreatedContainerAlias('gone');
+    expect(isAlias).toBe(false);
   });
 
   test('onDockerEventOrchestration processes complete payloads and keeps incomplete payload in buffer', async () => {

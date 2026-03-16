@@ -31,6 +31,7 @@ describe('container event update helpers', () => {
         inspectContainer: vi.fn(),
         getContainerFromStore: vi.fn(),
         updateContainerFromInspect: vi.fn(),
+        isRecreatedContainerAlias: vi.fn().mockResolvedValue(false),
         debug: vi.fn(),
       },
     );
@@ -53,6 +54,7 @@ describe('container event update helpers', () => {
         inspectContainer,
         getContainerFromStore,
         updateContainerFromInspect: updateContainerFromInspectMock,
+        isRecreatedContainerAlias: vi.fn().mockResolvedValue(false),
         debug: vi.fn(),
       },
     );
@@ -81,6 +83,7 @@ describe('container event update helpers', () => {
         inspectContainer,
         getContainerFromStore,
         updateContainerFromInspect: updateContainerFromInspectMock,
+        isRecreatedContainerAlias: vi.fn().mockResolvedValue(false),
         debug: vi.fn(),
       },
     );
@@ -107,6 +110,7 @@ describe('container event update helpers', () => {
         inspectContainer,
         getContainerFromStore: vi.fn(),
         updateContainerFromInspect: vi.fn(),
+        isRecreatedContainerAlias: vi.fn().mockResolvedValue(false),
         debug,
       },
     );
@@ -127,6 +131,7 @@ describe('container event update helpers', () => {
         inspectContainer: vi.fn().mockRejectedValue(new Error('No such container')),
         getContainerFromStore: vi.fn(),
         updateContainerFromInspect: vi.fn(),
+        isRecreatedContainerAlias: vi.fn().mockResolvedValue(false),
         debug,
       },
     );
@@ -150,11 +155,37 @@ describe('container event update helpers', () => {
         }),
         getContainerFromStore: vi.fn().mockReturnValue(undefined),
         updateContainerFromInspect: vi.fn(),
+        isRecreatedContainerAlias: vi.fn().mockResolvedValue(false),
         debug: vi.fn(),
       },
     );
 
     expect(watchCronDebounced).toHaveBeenCalledTimes(1);
+  });
+
+  test('processDockerEvent debounces refresh for recreated container alias instead of inspecting', async () => {
+    const watchCronDebounced = vi.fn().mockResolvedValue(undefined);
+    const inspectContainer = vi.fn();
+    const ensureRemoteAuthHeaders = vi.fn();
+    const debug = vi.fn();
+
+    await processDockerEvent(
+      { Action: 'start', id: 'd6ea364fbc03aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
+      {
+        watchCronDebounced,
+        ensureRemoteAuthHeaders,
+        inspectContainer,
+        getContainerFromStore: vi.fn(),
+        updateContainerFromInspect: vi.fn(),
+        isRecreatedContainerAlias: vi.fn().mockResolvedValue(true),
+        debug,
+      },
+    );
+
+    expect(watchCronDebounced).toHaveBeenCalledTimes(1);
+    expect(ensureRemoteAuthHeaders).not.toHaveBeenCalled();
+    expect(inspectContainer).not.toHaveBeenCalled();
+    expect(debug).toHaveBeenCalledWith(expect.stringContaining('recreated container alias'));
   });
 
   test('updateContainerFromInspect updates status/name/displayName and persists', () => {

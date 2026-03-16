@@ -2,6 +2,7 @@ import type Dockerode from 'dockerode';
 import type { Container } from '../../../model/container.js';
 import * as storeContainer from '../../../store/container.js';
 import { processDockerEvent as processDockerEventState } from './container-event-update.js';
+import { RECREATED_CONTAINER_NAME_PATTERN } from './Docker.js';
 import {
   getDockerEventsOptions,
   shouldAttemptBufferedPayloadParse,
@@ -131,6 +132,21 @@ export async function processDockerEventOrchestration(
     getContainerFromStore: (containerId: string) => storeContainer.getContainer(containerId),
     updateContainerFromInspect: (containerFound: Container, containerInspect: any) =>
       watcher.updateContainerFromInspect(containerFound, containerInspect),
+    isRecreatedContainerAlias: async (containerId: string) => {
+      try {
+        const containerObj = watcher.dockerApi.getContainer(containerId);
+        const inspect = await containerObj.inspect();
+        const name = (inspect.Name || '').replace(/^\//, '');
+        const match = name.match(RECREATED_CONTAINER_NAME_PATTERN);
+        if (!match) {
+          return false;
+        }
+        const [, shortIdPrefix] = match;
+        return containerId.toLowerCase().startsWith(shortIdPrefix.toLowerCase());
+      } catch {
+        return false;
+      }
+    },
     debug: (message: string) => watcher.log.debug(message),
   });
 }

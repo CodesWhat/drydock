@@ -389,48 +389,10 @@ function getDockerContainerId(container: { Id?: unknown }) {
   return typeof container.Id === 'string' ? container.Id : '';
 }
 
-function buildDockerContainerNameToIds(containers: any[]) {
-  const dockerContainerNameToIds = new Map<string, Set<string>>();
-
-  for (const container of containers) {
-    const containerName = getContainerName(container);
-    const containerId = getDockerContainerId(container);
-    if (containerName === '' || containerId === '') {
-      continue;
-    }
-
-    const idsForName = dockerContainerNameToIds.get(containerName) || new Set<string>();
-    idsForName.add(containerId);
-    dockerContainerNameToIds.set(containerName, idsForName);
-  }
-
-  return dockerContainerNameToIds;
-}
-
-function hasSiblingDockerContainerWithName(
-  dockerContainerNameToIds: Map<string, Set<string>>,
-  containerName: string,
-  containerId: string,
-) {
-  const containerIds = dockerContainerNameToIds.get(containerName);
-  if (!containerIds) {
-    return false;
-  }
-  return containerIds.size > 1 || (containerIds.size === 1 && !containerIds.has(containerId));
-}
-
 function filterRecreatedContainerAliases(
   containers: any[],
-  containersFromTheStore: Container[],
+  _containersFromTheStore: Container[],
 ): { containersToWatch: any[]; skippedContainerIds: Set<string> } {
-  const storeContainerNames = new Set(
-    containersFromTheStore
-      .filter((container) => typeof container.name === 'string' && container.name !== '')
-      .map((container) => container.name),
-  );
-
-  const dockerContainerNameToIds = buildDockerContainerNameToIds(containers);
-
   const containersToWatch = [];
   const skippedContainerIds = new Set<string>();
   for (const container of containers) {
@@ -442,19 +404,12 @@ function filterRecreatedContainerAliases(
       continue;
     }
 
-    const hasDockerContainerWithBaseName = hasSiblingDockerContainerWithName(
-      dockerContainerNameToIds,
-      recreatedContainerBaseName,
-      containerId,
-    );
-    const hasStoreContainerWithBaseName = storeContainerNames.has(recreatedContainerBaseName);
-
-    if (hasDockerContainerWithBaseName || hasStoreContainerWithBaseName) {
-      skippedContainerIds.add(containerId);
-      continue;
-    }
-
-    containersToWatch.push(container);
+    // A container whose name starts with its own 12-char hex ID prefix is
+    // always a transient Docker recreate alias (e.g. d6ea364fbc03_termix).
+    // Skip it unconditionally — Docker will rename it shortly and the next
+    // cron cycle picks up the real name. This closes the race window where
+    // the alias is seen before the rename completes (#156).
+    skippedContainerIds.add(containerId);
   }
 
   return { containersToWatch, skippedContainerIds };
@@ -1544,5 +1499,6 @@ export {
   normalizeConfigNumberValue as testable_normalizeConfigNumberValue,
   normalizeContainer as testable_normalizeContainer,
   pruneOldContainers as testable_pruneOldContainers,
+  RECREATED_CONTAINER_NAME_PATTERN,
   shouldUpdateDisplayNameFromContainerName as testable_shouldUpdateDisplayNameFromContainerName,
 };
