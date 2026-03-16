@@ -138,6 +138,29 @@ Token exchange is required for most registries, even for public images. Common c
 
 Check the drydock logs at `debug` level for the exact token exchange URL and response status.
 
+## DNS resolution failures (getaddrinfo EAI_AGAIN)
+
+If drydock logs show errors like `getaddrinfo EAI_AGAIN auth.docker.io` or `token request failed (getaddrinfo EAI_AGAIN ghcr.io)`, DNS resolution is failing inside the container even though the hosts are reachable via `ping`.
+
+**Why this happens:** Drydock runs on Alpine Linux, which uses musl libc instead of glibc. Musl's DNS resolver handles dual-stack (IPv4/IPv6) networks less robustly than glibc. On some hosts — particularly NixOS, certain Kubernetes setups, or systems with IPv6 enabled but not fully routable — DNS lookups return IPv6 records first and time out before falling back to IPv4.
+
+**Fix (default since v1.4.3):** Drydock now defaults to IPv4-first DNS ordering, which resolves this for most users. No action is needed unless you run in an IPv6-only environment.
+
+If you need to change the DNS behavior, set `DD_DNS_MODE`:
+
+| Value | Behavior |
+| --- | --- |
+| `ipv4first` | IPv4 addresses tried first (default) |
+| `ipv6first` | IPv6 addresses tried first |
+| `verbatim` | Use OS resolver order (Node.js default, may trigger the bug on Alpine) |
+
+```yaml
+environment:
+  - DD_DNS_MODE=verbatim  # Only set this if you need IPv6-first or OS-native ordering
+```
+
+<Callout type="info">This setting calls Node.js `dns.setDefaultResultOrder()` at startup and affects all outbound connections (registry checks, trigger webhooks, agent communication).</Callout>
+
 ## Container shows "update available" but it is wrong (tag family mismatch)
 
 This usually happens when the registry has tags from different naming families (e.g. `5.1.4` and `20.04.1` for Ubuntu, or `18-alpine` vs `18.20.1`). Drydock may pick a higher semver tag from a different family.

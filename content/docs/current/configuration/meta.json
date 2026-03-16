@@ -5,6 +5,7 @@
     "actions",
     "agents",
     "authentications",
+    "dns",
     "hooks",
     "logs",
     "registries",
