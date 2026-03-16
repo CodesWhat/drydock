@@ -4,8 +4,9 @@
 # Pre-push pipeline (piped = sequential, fail-fast):
 #   0. Clean tree gate — rejects untracked/uncommitted/stashed files
 #   1. Lint gate (~20s) — catches formatting/lint before burning CPU
-#   2. Build + test (~26s parallel) — independent workspaces run concurrently
-#   3. E2E + advisory scans (zizmor)
+#   2. Build + test (~45s parallel) — no coverage, just pass/fail
+#   3. Coverage gate — 100% thresholds, separate for clear error output
+#   4. E2E + advisory scans (zizmor)
 #
 # Snyk paid scans are CI-only via the scheduled/manual paid workflow
 # to preserve free-tier monthly quotas.
@@ -24,11 +25,8 @@ pre-commit:
       glob: '*.{ts,js,json,vue,css}'
       run: npx biome format --write --no-errors-on-unmatched {staged_files} && git add {staged_files}
       priority: 2
-    coverage:
-      glob: '*.{ts,vue}'
-      run: ./scripts/pre-commit-coverage.sh {staged_files}
-      priority: 3
-      timeout: 5m
+    # Coverage enforcement happens in pre-push (build-and-test).
+    # Pre-commit only does biome fix+format for fast feedback.
 
 commit-msg:
   commands:
@@ -81,21 +79,29 @@ pre-push:
       timeout: 30s
 
     # ── Build + test: parallel across independent workspaces ─────────
+    # Tests run WITHOUT --coverage for speed; coverage is a separate gate.
     build-and-test:
       run: ./scripts/pre-push-build-test.sh
       priority: 5
       timeout: 3m
 
+    # ── Coverage: 100% threshold enforcement (separate for clear output) ─
+    coverage:
+      run: ./scripts/pre-push-coverage.sh
+      fail_text: "Coverage below 100% — fix gaps before pushing"
+      priority: 6
+      timeout: 5m
+
     # ── E2E: mirrors CI "E2E Tests" job ──────────────────────────────
     e2e:
       run: ./scripts/run-e2e-tests.sh
-      priority: 6
+      priority: 7
       timeout: 2m
 
     # ── Browser E2E: Playwright critical UI flows ───────────────────
     e2e-playwright:
       run: ./scripts/run-playwright-qa.sh
-      priority: 7
+      priority: 8
       timeout: 15m
 
     # ── Actions security scan: require local zizmor install ──────────
@@ -107,5 +113,5 @@ pre-push:
           exit 1
         fi
         zizmor .github/workflows/
-      priority: 8
+      priority: 9
       timeout: 30s
