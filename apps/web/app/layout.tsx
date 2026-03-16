@@ -20,12 +20,12 @@ export const metadata: Metadata = {
   title: "Drydock - Container Update Monitoring",
   description:
     "Open source container update monitoring built in TypeScript. Auto-discover containers, detect image updates, and trigger notifications across 20+ services.",
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "https://drydock.codeswhat.com"),
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "https://getdrydock.com"),
   openGraph: {
     title: "Drydock - Container Update Monitoring",
     description:
       "Open source container update monitoring built in TypeScript. Auto-discover containers, detect image updates, and trigger notifications across 20+ services.",
-    url: process.env.NEXT_PUBLIC_SITE_URL || "https://drydock.codeswhat.com",
+    url: process.env.NEXT_PUBLIC_SITE_URL || "https://getdrydock.com",
     siteName: "Drydock",
     locale: "en_US",
     type: "website",
@@ -82,7 +82,7 @@ export const metadata: Metadata = {
   },
   manifest: "/site.webmanifest",
   alternates: {
-    canonical: process.env.NEXT_PUBLIC_SITE_URL || "https://drydock.codeswhat.com",
+    canonical: process.env.NEXT_PUBLIC_SITE_URL || "https://getdrydock.com",
   },
 };
 

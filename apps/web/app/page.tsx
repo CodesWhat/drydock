@@ -392,7 +392,7 @@ const roadmap = [
 ];
 
 export default function Home() {
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://drydock.codeswhat.com";
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://getdrydock.com";
 
   const jsonLd = {
     "@context": "https://schema.org",
@@ -659,7 +659,7 @@ export default function Home() {
                     <img src="https://snyk.io/test/github/CodesWhat/drydock/badge.svg" alt="Snyk" />
                   </a>
                   <img
-                    src="https://visitor-badge.laobi.icu/badge?page_id=drydock.codeswhat.com&left_text=site%20views"
+                    src="https://visitor-badge.laobi.icu/badge?page_id=getdrydock.com&left_text=site%20views"
                     alt="Site views"
                   />
                   <a href="https://ko-fi.com/codeswhat" target="_blank" rel="noopener noreferrer">

@@ -107,7 +107,7 @@ const emit = defineEmits<{
         Run <code class="font-mono">node dist/index.js config migrate --dry-run</code> then
         <code class="font-mono">node dist/index.js config migrate --file &lt;path&gt;</code>.
         <a
-          href="https://drydock.codeswhat.com/docs/quickstart"
+          href="https://getdrydock.com/docs/quickstart"
           target="_blank"
           rel="noopener noreferrer"
           class="underline ml-1"

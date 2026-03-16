@@ -60,7 +60,7 @@ describe('SecurityEmptyState', () => {
     });
     expect(wrapper.text()).toContain('Trivy is not installed');
     expect(wrapper.get('a').attributes('href')).toBe(
-      'https://drydock.codeswhat.com/docs/configuration/security',
+      'https://getdrydock.com/docs/configuration/security',
     );
     expect(wrapper.find('[data-testid="security-empty-scan-now"]').exists()).toBe(false);
   });
