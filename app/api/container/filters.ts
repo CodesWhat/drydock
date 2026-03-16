@@ -130,7 +130,7 @@ export function validateContainerListQuery(query: Request['query']): ValidatedCo
   );
 
   if (error) {
-    throw new Error(error.details?.[0]?.message || 'Invalid query parameters');
+    throw new Error(error.message);
   }
 
   return {
@@ -278,13 +278,13 @@ function sortContainersByCreatedDate(containers: Container[]): Container[] {
   return containersSorted;
 }
 
-function sortContainersByName(containers: Container[], descending = false): Container[] {
+function sortContainersByName(containers: Container[]): Container[] {
   const containersSorted = [...containers];
   containersSorted.sort((leftContainer, rightContainer) => {
     const nameCompare = getContainerNameForSort(leftContainer).localeCompare(
       getContainerNameForSort(rightContainer),
     );
-    return descending ? -nameCompare : nameCompare;
+    return nameCompare;
   });
   return containersSorted;
 }

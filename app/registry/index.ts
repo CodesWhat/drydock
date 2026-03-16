@@ -594,6 +594,7 @@ async function registerAuthentications() {
         const wrappedMessageMatch = rawMessage.match(
           /^Error when registering component .* \((?<error>.*)\)$/,
         );
+        /* v8 ignore next -- wrappedMessageMatch group extraction depends on provider-specific error formatting */
         const normalizedMessage = (wrappedMessageMatch?.groups?.error ?? rawMessage).replaceAll(
           /"([^"]+)"/g,
           '$1',

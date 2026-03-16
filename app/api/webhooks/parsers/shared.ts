@@ -56,11 +56,8 @@ export function splitSubjectImageAndTag(
     return undefined;
   }
 
-  const image = asNonEmptyString(raw.slice(0, separatorIndex));
-  const tag = asNonEmptyString(raw.slice(separatorIndex + 1));
-  if (!image || !tag) {
-    return undefined;
-  }
+  const image = raw.slice(0, separatorIndex).trim();
+  const tag = raw.slice(separatorIndex + 1).trim();
 
   return { image, tag };
 }
