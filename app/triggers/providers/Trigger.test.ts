@@ -47,7 +47,63 @@ beforeEach(async () => {
 
 test('validateConfiguration should return validated configuration when valid', async () => {
   const validatedConfiguration = trigger.validateConfiguration(configurationValid);
-  expect(validatedConfiguration).toStrictEqual(configurationValid);
+  expect(validatedConfiguration).toStrictEqual({
+    ...configurationValid,
+    auto: 'all',
+  });
+});
+
+test('validateConfiguration should normalize auto=true to all', () => {
+  const validatedConfiguration = trigger.validateConfiguration({
+    ...configurationValid,
+    auto: true,
+  });
+  expect(validatedConfiguration.auto).toBe('all');
+});
+
+test('validateConfiguration should normalize auto=false to none', () => {
+  const validatedConfiguration = trigger.validateConfiguration({
+    ...configurationValid,
+    auto: false,
+  });
+  expect(validatedConfiguration.auto).toBe('none');
+});
+
+test('validateConfiguration should accept and normalize auto all/none/oninclude values', () => {
+  expect(
+    trigger.validateConfiguration({
+      ...configurationValid,
+      auto: 'all',
+    }).auto,
+  ).toBe('all');
+
+  expect(
+    trigger.validateConfiguration({
+      ...configurationValid,
+      auto: 'none',
+    }).auto,
+  ).toBe('none');
+
+  expect(
+    trigger.validateConfiguration({
+      ...configurationValid,
+      auto: 'oninclude',
+    }).auto,
+  ).toBe('oninclude');
+});
+
+test('validateConfiguration should normalize mixed-case auto value', () => {
+  const validatedConfiguration = trigger.validateConfiguration({
+    ...configurationValid,
+    auto: 'OnInclude',
+  });
+  expect(validatedConfiguration.auto).toBe('oninclude');
+});
+
+test('validateConfiguration should default auto to all when not specified', () => {
+  const { auto, ...configurationWithoutAuto } = configurationValid;
+  const validatedConfiguration = trigger.validateConfiguration(configurationWithoutAuto);
+  expect(validatedConfiguration.auto).toBe('all');
 });
 
 test('validateConfiguration should accept digest and non-digest thresholds', async () => {
@@ -97,6 +153,71 @@ test('init should register handlers with trigger id and order', async () => {
     id: 'docker.update',
     order: 42,
   });
+});
+
+test('init should not register auto listeners when auto is none', async () => {
+  const reportSpy = vi.spyOn(event, 'registerContainerReport');
+  const reportsSpy = vi.spyOn(event, 'registerContainerReports');
+  const updateAppliedSpy = vi.spyOn(event, 'registerContainerUpdateApplied');
+  const updateFailedSpy = vi.spyOn(event, 'registerContainerUpdateFailed');
+  const securityAlertSpy = vi.spyOn(event, 'registerSecurityAlert');
+  const agentDisconnectedSpy = vi.spyOn(event, 'registerAgentDisconnected');
+  trigger.configuration = trigger.validateConfiguration({
+    ...configurationValid,
+    auto: 'none',
+  });
+
+  await trigger.init();
+
+  expect(reportSpy).not.toHaveBeenCalled();
+  expect(reportsSpy).not.toHaveBeenCalled();
+  expect(updateAppliedSpy).not.toHaveBeenCalled();
+  expect(updateFailedSpy).not.toHaveBeenCalled();
+  expect(securityAlertSpy).not.toHaveBeenCalled();
+  expect(agentDisconnectedSpy).not.toHaveBeenCalled();
+});
+
+test('init should not register auto listeners when auto is false', async () => {
+  const reportSpy = vi.spyOn(event, 'registerContainerReport');
+  const reportsSpy = vi.spyOn(event, 'registerContainerReports');
+  const updateAppliedSpy = vi.spyOn(event, 'registerContainerUpdateApplied');
+  const updateFailedSpy = vi.spyOn(event, 'registerContainerUpdateFailed');
+  const securityAlertSpy = vi.spyOn(event, 'registerSecurityAlert');
+  const agentDisconnectedSpy = vi.spyOn(event, 'registerAgentDisconnected');
+  trigger.configuration = trigger.validateConfiguration({
+    ...configurationValid,
+    auto: false,
+  });
+
+  await trigger.init();
+
+  expect(reportSpy).not.toHaveBeenCalled();
+  expect(reportsSpy).not.toHaveBeenCalled();
+  expect(updateAppliedSpy).not.toHaveBeenCalled();
+  expect(updateFailedSpy).not.toHaveBeenCalled();
+  expect(securityAlertSpy).not.toHaveBeenCalled();
+  expect(agentDisconnectedSpy).not.toHaveBeenCalled();
+});
+
+test('init should register auto listeners when auto is oninclude', async () => {
+  const reportSpy = vi.spyOn(event, 'registerContainerReport');
+  const updateAppliedSpy = vi.spyOn(event, 'registerContainerUpdateApplied');
+  const updateFailedSpy = vi.spyOn(event, 'registerContainerUpdateFailed');
+  const securityAlertSpy = vi.spyOn(event, 'registerSecurityAlert');
+  const agentDisconnectedSpy = vi.spyOn(event, 'registerAgentDisconnected');
+  trigger.configuration = trigger.validateConfiguration({
+    ...configurationValid,
+    auto: 'oninclude',
+    mode: 'simple',
+  });
+
+  await trigger.init();
+
+  expect(reportSpy).toHaveBeenCalled();
+  expect(updateAppliedSpy).toHaveBeenCalled();
+  expect(updateFailedSpy).toHaveBeenCalled();
+  expect(securityAlertSpy).toHaveBeenCalled();
+  expect(agentDisconnectedSpy).toHaveBeenCalled();
 });
 
 test('deregister should unregister container report handler', async () => {
@@ -636,6 +757,67 @@ test('mustTrigger should accept trigger name-only exclude filters', async () => 
   ).toBe(false);
 });
 
+test('mustTrigger should fire without include label when auto is true', () => {
+  trigger.type = 'docker';
+  trigger.name = 'update';
+  trigger.configuration.auto = true;
+
+  expect(
+    trigger.mustTrigger({
+      updateKind: {
+        kind: 'tag',
+        semverDiff: 'minor',
+      },
+    }),
+  ).toBe(true);
+});
+
+test('mustTrigger should fire without include label when auto is all', () => {
+  trigger.type = 'docker';
+  trigger.name = 'update';
+  trigger.configuration.auto = 'all';
+
+  expect(
+    trigger.mustTrigger({
+      updateKind: {
+        kind: 'tag',
+        semverDiff: 'minor',
+      },
+    }),
+  ).toBe(true);
+});
+
+test('mustTrigger should not fire without include label when auto is oninclude', () => {
+  trigger.type = 'docker';
+  trigger.name = 'update';
+  trigger.configuration.auto = 'oninclude';
+
+  expect(
+    trigger.mustTrigger({
+      updateKind: {
+        kind: 'tag',
+        semverDiff: 'minor',
+      },
+    }),
+  ).toBe(false);
+});
+
+test('mustTrigger should fire with include label when auto is oninclude', () => {
+  trigger.type = 'docker';
+  trigger.name = 'update';
+  trigger.configuration.auto = 'oninclude';
+
+  expect(
+    trigger.mustTrigger({
+      triggerInclude: 'update:minor',
+      updateKind: {
+        kind: 'tag',
+        semverDiff: 'minor',
+      },
+    }),
+  ).toBe(true);
+});
+
 // --- Hybrid Triggers: name-only matching for include/exclude ---
 
 test('doesReferenceMatchId should match name-only against multiple trigger types', async () => {
@@ -791,6 +973,30 @@ test('renderSimpleBody should evaluate js functions when template is a customize
       },
     }),
   ).toEqual('Container container-name update from sha256:9a82d577 to sha256:6cdd4791');
+});
+
+test('renderSimpleBody should expose releaseNotes variables and truncate body for notification context', async () => {
+  const longReleaseBody = 'x'.repeat(900);
+  trigger.configuration.simplebody =
+    '${releaseNotes.title}|${releaseNotes.url}|${releaseNotes.body}';
+
+  const renderedBody = trigger.renderSimpleBody({
+    name: 'container-name',
+    result: {
+      releaseNotes: {
+        title: 'Release 2.0.0',
+        body: longReleaseBody,
+        url: 'https://github.com/acme/service/releases/tag/v2.0.0',
+        publishedAt: '2026-03-01T00:00:00.000Z',
+        provider: 'github',
+      },
+    },
+  });
+
+  const [title, url, body] = renderedBody.split('|');
+  expect(title).toBe('Release 2.0.0');
+  expect(url).toBe('https://github.com/acme/service/releases/tag/v2.0.0');
+  expect(body.length).toBeLessThanOrEqual(500);
 });
 
 test('renderBatchTitle should replace placeholders when called', async () => {

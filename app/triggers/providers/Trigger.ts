@@ -2,6 +2,7 @@ import * as event from '../../event/index.js';
 import { type Container, fullName } from '../../model/container.js';
 import { getTriggerCounter } from '../../prometheus/trigger.js';
 import Component, { type ComponentConfiguration } from '../../registry/Component.js';
+import { truncateReleaseNotesBody } from '../../release-notes/index.js';
 import * as storeContainer from '../../store/container.js';
 import * as notificationStore from '../../store/notification.js';
 import { renderBatch, renderSimple } from './trigger-expression-parser.js';
@@ -12,6 +13,7 @@ import {
 } from './trigger-threshold.js';
 
 type SupportedThreshold = (typeof SUPPORTED_THRESHOLDS)[number];
+type TriggerAutoMode = 'all' | 'oninclude' | 'none';
 type NotificationRuleId =
   | 'update-available'
   | 'update-applied'
@@ -50,6 +52,7 @@ interface EventDispatchOptions extends notificationStore.NotificationRuleDispatc
 
 const AUTO_TRIGGER_ERROR_SUPPRESSION_WINDOW_MS = 15_000;
 const AUTO_TRIGGER_ERROR_SUPPRESSION_RETENTION_MS = AUTO_TRIGGER_ERROR_SUPPRESSION_WINDOW_MS * 4;
+const TRIGGER_RELEASE_NOTES_BODY_MAX_LENGTH = 500;
 
 function buildAgentDisconnectedContainer(agentName: string, reason?: string): Container {
   return {
@@ -96,7 +99,7 @@ function isSupportedThreshold(value: string): value is SupportedThreshold {
 }
 
 export interface TriggerConfiguration extends ComponentConfiguration {
-  auto?: boolean;
+  auto?: boolean | TriggerAutoMode;
   order?: number;
   threshold?: string;
   mode?: string;
@@ -142,6 +145,20 @@ class Trigger extends Component {
 
   static parseThresholdWithDigestBehavior(threshold: string | undefined) {
     return parseThresholdWithDigestBehaviorHelper(threshold);
+  }
+
+  private static normalizeAutoMode(auto: TriggerConfiguration['auto']): TriggerAutoMode {
+    if (auto === false) {
+      return 'none';
+    }
+    if (auto === true || auto === undefined) {
+      return 'all';
+    }
+    return auto.toLowerCase() as TriggerAutoMode;
+  }
+
+  private getAutoMode() {
+    return Trigger.normalizeAutoMode(this.configuration.auto);
   }
 
   private static getErrorMessage(error: unknown): string {
@@ -516,7 +533,7 @@ class Trigger extends Component {
 
   isTriggerIncluded(containerResult: Container, triggerInclude: string | undefined) {
     if (!triggerInclude) {
-      return true;
+      return this.getAutoMode() !== 'oninclude';
     }
     return this.isTriggerIncludedOrExcluded(containerResult, triggerInclude);
   }
@@ -552,7 +569,7 @@ class Trigger extends Component {
    */
   async init() {
     await this.initTrigger();
-    if (this.configuration.auto) {
+    if (this.getAutoMode() !== 'none') {
       this.log.info(`Registering for auto execution`);
       if (this.configuration.mode?.toLowerCase() === 'simple') {
         this.unregisterContainerReport = event.registerContainerReport(
@@ -645,7 +662,10 @@ class Trigger extends Component {
   validateConfiguration(configuration: TriggerConfiguration): TriggerConfiguration {
     const schema = this.getConfigurationSchema();
     const schemaWithDefaultOptions = schema.append({
-      auto: this.joi.bool().default(true),
+      auto: this.joi
+        .alternatives()
+        .try(this.joi.bool(), this.joi.string().insensitive().valid('all', 'oninclude', 'none'))
+        .default(true),
       order: this.joi.number().default(100),
       threshold: this.joi
         .string()
@@ -669,7 +689,9 @@ class Trigger extends Component {
     if (schemaValidated.error) {
       throw schemaValidated.error;
     }
-    return schemaValidated.value;
+    const normalizedConfiguration = schemaValidated.value as TriggerConfiguration;
+    normalizedConfiguration.auto = Trigger.normalizeAutoMode(normalizedConfiguration.auto);
+    return normalizedConfiguration;
   }
 
   /**
@@ -795,12 +817,34 @@ class Trigger extends Component {
   }
 
   /**
+   * Build the container template context used by trigger body/title rendering.
+   * Release notes bodies are shortened for notifications to avoid excessively long payloads.
+   */
+  private getTemplateContainer(container: Container): Container {
+    const releaseNotes = container.result?.releaseNotes;
+    if (!releaseNotes || typeof releaseNotes.body !== 'string') {
+      return container;
+    }
+
+    return {
+      ...container,
+      result: {
+        ...container.result,
+        releaseNotes: {
+          ...releaseNotes,
+          body: truncateReleaseNotesBody(releaseNotes.body, TRIGGER_RELEASE_NOTES_BODY_MAX_LENGTH),
+        },
+      },
+    };
+  }
+
+  /**
    * Render trigger title simple.
    * @param container
    * @returns {*}
    */
   renderSimpleTitle(container: Container) {
-    return renderSimple(this.configuration.simpletitle ?? '', container);
+    return renderSimple(this.configuration.simpletitle ?? '', this.getTemplateContainer(container));
   }
 
   /**
@@ -809,7 +853,7 @@ class Trigger extends Component {
    * @returns {*}
    */
   renderSimpleBody(container: Container) {
-    return renderSimple(this.configuration.simplebody ?? '', container);
+    return renderSimple(this.configuration.simplebody ?? '', this.getTemplateContainer(container));
   }
 
   /**
