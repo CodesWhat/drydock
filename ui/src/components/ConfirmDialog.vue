@@ -75,7 +75,7 @@ onUnmounted(() => globalThis.removeEventListener('keydown', handleKeydown));
 
           <!-- Footer -->
           <div class="px-5 pt-3 pb-4.5 flex items-center justify-end gap-2.5">
-            <button
+            <AppButton size="none" variant="plain" weight="none"
               class="px-4 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors cursor-pointer"
               :aria-label="current.rejectLabel || 'Cancel'"
               :style="{
@@ -85,8 +85,8 @@ onUnmounted(() => globalThis.removeEventListener('keydown', handleKeydown));
               }"
               @click="reject">
               {{ current.rejectLabel || 'Cancel' }}
-            </button>
-            <button
+            </AppButton>
+            <AppButton size="none" variant="plain" weight="none"
               class="px-4 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors flex items-center gap-1.5 cursor-pointer"
               :aria-label="current.acceptLabel || 'Confirm'"
               :style="current.severity === 'danger'
@@ -102,7 +102,7 @@ onUnmounted(() => globalThis.removeEventListener('keydown', handleKeydown));
                   }"
               @click="accept">
               {{ current.acceptLabel || 'Confirm' }}
-            </button>
+            </AppButton>
           </div>
         </div>
       </div>

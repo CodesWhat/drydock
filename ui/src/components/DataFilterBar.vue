@@ -38,15 +38,15 @@ function viewModeLabel(id: string): string {
       <div class="flex items-center gap-2.5 relative">
         <!-- Filter toggle button -->
         <div v-if="!hideFilter" class="relative" v-tooltip.top="'Filters'">
-          <button type="button"
-                  class="w-7 h-7 dd-rounded flex items-center justify-center text-[0.6875rem] transition-colors"
+          <AppButton size="icon-sm" variant="plain" class="text-[0.6875rem]" type="button"
+                  
                   :class="showFilters || (activeFilterCount ?? 0) > 0 ? 'dd-text dd-bg-elevated' : 'dd-text-secondary hover:dd-text hover:dd-bg-elevated'"
                   aria-label="Toggle filters"
                   :aria-expanded="String(showFilters)"
                   :aria-controls="filterPanelId"
                   @click.stop="emit('update:showFilters', !showFilters)">
             <AppIcon name="filter" :size="13" />
-          </button>
+          </AppButton>
           <span v-if="(activeFilterCount ?? 0) > 0"
                 class="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full text-[0.5rem] font-bold flex items-center justify-center text-white pointer-events-none"
                 style="background: var(--dd-primary);">
@@ -71,7 +71,7 @@ function viewModeLabel(id: string): string {
           <div class="flex items-center dd-rounded overflow-hidden"
                role="group"
                aria-label="View mode">
-            <button v-for="vm in (viewModes ?? defaultViewModes)" :key="vm.id"
+            <AppButton size="none" variant="plain" weight="none" v-for="vm in (viewModes ?? defaultViewModes)" :key="vm.id"
                     type="button"
                     class="w-7 h-7 flex items-center justify-center text-[0.6875rem] transition-colors"
                     :class="modelValue === vm.id ? 'dd-text dd-bg-elevated' : 'dd-text-secondary hover:dd-text hover:dd-bg-elevated'"
@@ -80,7 +80,7 @@ function viewModeLabel(id: string): string {
                     :aria-pressed="String(modelValue === vm.id)"
                     @click="emit('update:modelValue', vm.id)">
               <AppIcon :name="vm.icon" :size="11" />
-            </button>
+            </AppButton>
           </div>
         </div>
       </div>

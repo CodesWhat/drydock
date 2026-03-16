@@ -305,11 +305,11 @@ onMounted(async () => {
                type="text"
                placeholder="Filter by name, description, or trigger..."
                class="flex-1 min-w-[120px] max-w-[320px] px-2.5 py-1.5 dd-rounded text-[0.6875rem] font-medium outline-none dd-bg dd-text dd-placeholder" />
-        <button v-if="searchQuery"
-                class="text-[0.625rem] dd-text-muted hover:dd-text transition-colors"
+        <AppButton size="none" variant="text-muted" weight="medium" class="text-[0.625rem]" v-if="searchQuery"
+                
                 @click="clearFilters">
           Clear
-        </button>
+        </AppButton>
       </template>
     </DataFilterBar>
 
@@ -509,18 +509,18 @@ onMounted(async () => {
             </div>
 
             <div class="pt-2 flex items-center gap-2">
-              <button class="inline-flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors disabled:opacity-50 disabled:pointer-events-none"
+              <AppButton size="none" variant="plain" weight="none" class="inline-flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors disabled:opacity-50 disabled:pointer-events-none"
                       :style="{ backgroundColor: 'var(--dd-primary)', color: 'white' }"
                       :disabled="detailSaving || !detailHasChanges"
                       @click="saveSelectedRule">
                 <AppIcon :name="detailSaving ? 'pending' : 'check'" :size="12" />
                 {{ detailSaving ? 'Saving...' : 'Save changes' }}
-              </button>
-              <button class="px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated disabled:opacity-50 disabled:pointer-events-none"
+              </AppButton>
+              <AppButton size="none" variant="plain" weight="none" class="px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated disabled:opacity-50 disabled:pointer-events-none"
                       :disabled="detailSaving || !detailHasChanges"
                       @click="syncDetailDraftFromRule">
                 Reset
-              </button>
+              </AppButton>
             </div>
           </div>
         </template>

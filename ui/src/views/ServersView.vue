@@ -200,11 +200,11 @@ onMounted(fetchServers);
                type="text"
                placeholder="Filter by name or address..."
                class="flex-1 min-w-[120px] max-w-[240px] px-2.5 py-1.5 dd-rounded text-[0.6875rem] font-medium outline-none dd-bg dd-text dd-placeholder" />
-        <button v-if="searchQuery"
-                class="text-[0.625rem] dd-text-muted hover:dd-text transition-colors"
+        <AppButton size="none" variant="text-muted" weight="medium" class="text-[0.625rem]" v-if="searchQuery"
+                
                 @click="searchQuery = ''">
           Clear
-        </button>
+        </AppButton>
       </template>
     </DataFilterBar>
 
@@ -411,11 +411,11 @@ onMounted(fetchServers);
             <!-- Actions -->
             <div class="pt-2 flex gap-2"
                  :style="{ borderTop: '1px solid var(--dd-border)' }">
-              <button class="inline-flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors dd-text-secondary hover:dd-text hover:dd-bg-elevated"
+              <AppButton size="none" variant="plain" weight="none" class="inline-flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors dd-text-secondary hover:dd-text hover:dd-bg-elevated"
                       @click="fetchServers()">
                 <AppIcon name="restart" :size="11" />
                 Refresh
-              </button>
+              </AppButton>
             </div>
           </div>
         </template>

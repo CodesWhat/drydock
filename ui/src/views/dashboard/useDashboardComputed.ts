@@ -20,6 +20,7 @@ import { getWatcherConfiguration } from './watcherConfiguration';
 
 const DONUT_CIRCUMFERENCE = 301.6;
 const RECENT_UPDATES_LIMIT = 6;
+const FILTER_KIND_ANY = 'ANY'.toLowerCase();
 
 const UPDATE_BREAKDOWN_BUCKETS: ReadonlyArray<Omit<UpdateBreakdownBucket, 'count'>> = [
   {
@@ -504,7 +505,7 @@ function useStatsComputed(
         icon: 'updates',
         color: updatesStatColor,
         colorMuted: updatesStatMutedColor,
-        route: { path: ROUTES.CONTAINERS, query: { filterKind: 'any' } },
+        route: { path: ROUTES.CONTAINERS, query: { filterKind: FILTER_KIND_ANY } },
         detail:
           freshUpdates > 0
             ? `${freshUpdates} new · ${updatesAvailable - freshUpdates} mature`

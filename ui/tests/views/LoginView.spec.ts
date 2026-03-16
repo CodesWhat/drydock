@@ -146,7 +146,7 @@ describe('LoginView', () => {
     });
 
     it('shows error on login failure', async () => {
-      mockLoginBasic.mockRejectedValue(new Error('bad creds'));
+      mockLoginBasic.mockRejectedValue(new Error('Username or password error'));
       const wrapper = await mountLogin([{ type: 'basic', name: 'basic' }]);
 
       await wrapper.find('input[type="text"]').setValue('admin');
@@ -155,6 +155,19 @@ describe('LoginView', () => {
       await flushPromises();
 
       expect(wrapper.text()).toContain('Invalid username or password');
+    });
+
+    it('shows server-provided auth error when available', async () => {
+      mockLoginBasic.mockRejectedValue(new Error("Basic auth 'ANDI': hash is required"));
+      const wrapper = await mountLogin([{ type: 'basic', name: 'basic' }]);
+
+      await wrapper.find('input[type="text"]').setValue('admin');
+      await wrapper.find('input[type="password"]').setValue('wrong');
+      await wrapper.find('form').trigger('submit');
+      await flushPromises();
+
+      expect(wrapper.text()).toContain("Basic auth 'ANDI': hash is required");
+      expect(wrapper.text()).not.toContain('Invalid username or password');
     });
 
     it('shows Signing in... text while submitting', async () => {

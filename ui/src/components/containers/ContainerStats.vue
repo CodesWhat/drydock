@@ -280,7 +280,7 @@ onUnmounted(() => {
         </span>
       </div>
 
-      <button
+      <AppButton size="none" variant="plain" weight="none"
         type="button"
         class="px-2.5 py-1 text-[0.625rem] font-semibold dd-rounded transition-colors hover:opacity-90"
         :style="{
@@ -290,7 +290,7 @@ onUnmounted(() => {
         data-test="stats-toggle-stream"
         @click="toggleStream">
         {{ streamPaused ? 'Resume' : 'Pause' }}
-      </button>
+      </AppButton>
     </div>
 
     <div

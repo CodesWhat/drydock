@@ -1,4 +1,5 @@
 import { config } from '@vue/test-utils';
+import AppButton from '@/components/AppButton.vue';
 
 // Some CI/runtime environments expose an incompatible localStorage object.
 // Override with a minimal Storage-compatible mock used by this test suite.
@@ -95,4 +96,8 @@ config.global.provide = {
 
 config.global.directives = {
   tooltip: {},
+};
+
+config.global.components = {
+  AppButton,
 };

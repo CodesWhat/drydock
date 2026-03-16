@@ -265,7 +265,7 @@ function deriveBouncer(apiContainer: ApiContainerInput): BouncerStatus {
   return deriveBouncerFromScan(getSecurityScan(apiContainer, 'scan'));
 }
 
-/** Derive whether a container has any persisted security scan result. */
+/** Derive whether a container has a persisted security scan result. */
 function deriveSecurityScanState(apiContainer: ApiContainerInput): 'scanned' | 'not-scanned' {
   return deriveSecurityScanStateFromScan(getSecurityScan(apiContainer, 'scan'));
 }
@@ -283,7 +283,7 @@ function deriveUpdateBouncer(apiContainer: ApiContainerInput): BouncerStatus | u
   return deriveBouncerFromScan(updateScan);
 }
 
-/** Derive whether a container has any persisted update security scan result. */
+/** Derive whether a container has a persisted update security scan result. */
 function deriveUpdateSecurityScanState(
   apiContainer: ApiContainerInput,
 ): 'scanned' | 'not-scanned' | undefined {

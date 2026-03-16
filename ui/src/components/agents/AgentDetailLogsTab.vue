@@ -98,22 +98,22 @@ function asLog(entry: unknown): AgentLog {
             @keyup.enter="emit('refresh')"
           />
 
-          <button
+          <AppButton size="none" variant="plain" weight="none"
             data-testid="agent-log-apply"
             class="px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors dd-bg-elevated dd-text hover:opacity-90"
             :class="props.loading ? 'opacity-50 pointer-events-none' : ''"
             @click="emit('refresh')"
           >
             Apply
-          </button>
-          <button
+          </AppButton>
+          <AppButton size="none" variant="plain" weight="none"
             class="px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors dd-text-muted hover:dd-text"
             :class="props.loading ? 'opacity-50 pointer-events-none' : ''"
             @click="emit('reset')"
           >
             Reset
-          </button>
-          <button
+          </AppButton>
+          <AppButton size="none" variant="plain" weight="none"
             data-testid="agent-log-refresh"
             class="p-1.5 dd-rounded transition-colors dd-text-muted hover:dd-text"
             :class="props.loading ? 'opacity-50 pointer-events-none' : ''"
@@ -121,7 +121,7 @@ function asLog(entry: unknown): AgentLog {
             @click="emit('refresh')"
           >
             <AppIcon name="refresh" :size="12" />
-          </button>
+          </AppButton>
         </div>
       </template>
 

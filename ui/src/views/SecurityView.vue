@@ -234,11 +234,11 @@ onUnmounted(() => {
             <option value="yes">Yes</option>
             <option value="no">No</option>
           </select>
-          <button v-if="activeSecFilterCount > 0"
+          <AppButton size="none" variant="plain" weight="none" v-if="activeSecFilterCount > 0"
                   class="text-[0.625rem] font-medium px-2 py-1 dd-rounded transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
                   @click="clearSecFilters">
             Clear all
-          </button>
+          </AppButton>
         </template>
         <template #left>
           <template v-if="runtimeStatus">
@@ -276,7 +276,7 @@ onUnmounted(() => {
         </template>
         <template #center>
           <span class="inline-flex" v-tooltip.top="scanDisabledReason">
-            <button class="h-7 dd-rounded flex items-center justify-center gap-1.5 text-[0.6875rem] font-semibold transition-colors"
+            <AppButton size="none" variant="plain" weight="none" class="h-7 dd-rounded flex items-center justify-center gap-1.5 text-[0.6875rem] font-semibold transition-colors"
                     :class="[
                       scanning || runtimeLoading || !scannerReady
                         ? 'dd-text-muted cursor-not-allowed'
@@ -287,7 +287,7 @@ onUnmounted(() => {
                     @click="scanAllContainers">
               <AppIcon name="restart" :size="11" :class="{ 'animate-spin': scanning }" />
               <span v-if="!isCompact">Scan Now</span>
-            </button>
+            </AppButton>
           </span>
         </template>
       </DataFilterBar>
@@ -619,21 +619,18 @@ onUnmounted(() => {
                 <option value="spdx-json">spdx-json</option>
                 <option value="cyclonedx-json">cyclonedx-json</option>
               </select>
-              <button class="px-2 py-1 dd-rounded text-[0.625rem] font-semibold transition-colors dd-text-secondary hover:dd-text hover:dd-bg-elevated"
-                      :disabled="detailSbomLoading"
+              <AppButton size="xs" variant="secondary" :disabled="detailSbomLoading"
                       @click="loadDetailSbom">
                 {{ detailSbomLoading ? 'Loading SBOM...' : 'Refresh SBOM' }}
-              </button>
-              <button class="px-2 py-1 dd-rounded text-[0.625rem] font-semibold transition-colors dd-text-secondary hover:dd-text hover:dd-bg-elevated"
-                      :disabled="!detailSbomDocument"
+              </AppButton>
+              <AppButton size="xs" variant="secondary" :disabled="!detailSbomDocument"
                       @click="showSbomDocument = !showSbomDocument">
                 {{ showSbomDocument ? 'Hide SBOM' : 'View SBOM' }}
-              </button>
-              <button class="px-2 py-1 dd-rounded text-[0.625rem] font-semibold transition-colors dd-text-secondary hover:dd-text hover:dd-bg-elevated"
-                      :disabled="!detailSbomDocument"
+              </AppButton>
+              <AppButton size="xs" variant="secondary" :disabled="!detailSbomDocument"
                       @click="downloadDetailSbom">
                 Download SBOM
-              </button>
+              </AppButton>
             </div>
 
             <div v-if="detailSbomError"

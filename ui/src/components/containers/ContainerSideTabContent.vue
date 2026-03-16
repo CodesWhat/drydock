@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue';
-import AppButton from '../AppButton.vue';
 import ContainerLogs from './ContainerLogs.vue';
 import ContainerStats from './ContainerStats.vue';
 import UpdateMaturityBadge from './UpdateMaturityBadge.vue';
@@ -15,11 +14,11 @@ const revealedKeys = reactive(new Set<string>());
 const envRevealLoading = ref(false);
 const envRevealError = ref<string | null>(null);
 
-function revealCacheKey(containerId: string, key: string) {
+function revealCacheKey(containerId: string, key: string): string {
   return `${containerId}:${key}`;
 }
 
-async function toggleReveal(containerId: string, key: string) {
+async function toggleReveal(containerId: string, key: string): Promise<void> {
   const cacheKey = revealCacheKey(containerId, key);
 
   if (revealedKeys.has(cacheKey)) {

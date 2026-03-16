@@ -7,7 +7,12 @@ import UpdateMaturityBadge from './UpdateMaturityBadge.vue';
 import SuggestedTagBadge from './SuggestedTagBadge.vue';
 import ReleaseNotesLink from './ReleaseNotesLink.vue';
 import { revealContainerEnv } from '../../services/container';
+import { errorMessage } from '../../utils/error';
 import { useContainersViewTemplateContext } from './containersViewTemplateContext';
+
+interface RevealEnvResponse {
+  env?: Array<{ key: string; value: string }>;
+}
 
 const revealedEnvCache = reactive(new Map<string, Map<string, string>>());
 const revealedKeys = reactive(new Set<string>());
@@ -33,14 +38,15 @@ async function toggleReveal(containerId: string, key: string) {
 
   envRevealLoading.value = true;
   try {
-    const result = await revealContainerEnv(containerId);
+    const result: RevealEnvResponse = await revealContainerEnv(containerId);
     const envMap = new Map<string, string>();
     for (const entry of result.env || []) {
       envMap.set(entry.key, entry.value);
     }
     revealedEnvCache.set(containerId, envMap);
     revealedKeys.add(cacheKey);
-  } catch {
+  } catch (error: unknown) {
+    void errorMessage(error);
     // silently fail — user can retry
   } finally {
     envRevealLoading.value = false;

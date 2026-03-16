@@ -22,7 +22,7 @@ function truncateBody(body: string, maxLength: number = 200): string {
 <template>
   <!-- Inline release notes with expandable preview -->
   <div v-if="props.releaseNotes" class="inline-flex flex-col" data-test="release-notes-link">
-    <button
+    <AppButton size="none" variant="plain" weight="none"
       class="inline-flex items-center gap-1 text-[0.6875rem] underline hover:no-underline transition-colors"
       style="color: var(--dd-info);"
       @click.stop="toggleExpand"
@@ -30,7 +30,7 @@ function truncateBody(body: string, maxLength: number = 200): string {
       <AppIcon name="file-text" :size="12" />
       Release notes
       <AppIcon :name="expanded ? 'chevron-up' : 'chevron-down'" :size="10" />
-    </button>
+    </AppButton>
     <div
       v-if="expanded"
       class="mt-2 px-2.5 py-2 dd-rounded text-[0.6875rem] space-y-1.5"

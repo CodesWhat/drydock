@@ -78,7 +78,7 @@ function handleFontSizeInput(event: Event) {
       </div>
       <div class="p-4">
         <div class="grid grid-cols-2 gap-3">
-          <button
+          <AppButton size="none" variant="plain" weight="none"
             v-for="fam in props.themeFamilies"
             :key="fam.id"
             class="dd-rounded p-3 text-left transition-[color,background-color,border-color,opacity,transform,box-shadow] border"
@@ -107,7 +107,7 @@ function handleFontSizeInput(event: Event) {
             <div class="text-[0.625rem] dd-text-muted">
               {{ fam.description }}
             </div>
-          </button>
+          </AppButton>
         </div>
       </div>
     </div>
@@ -125,7 +125,7 @@ function handleFontSizeInput(event: Event) {
       </div>
       <div class="p-5">
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          <button
+          <AppButton size="none" variant="plain" weight="none"
             v-for="font in props.fontOptions"
             :key="font.id"
             class="flex items-center gap-3 px-4 py-3 dd-rounded text-left transition-colors border"
@@ -169,7 +169,7 @@ function handleFontSizeInput(event: Event) {
               :size="14"
               class="text-drydock-secondary shrink-0"
             />
-          </button>
+          </AppButton>
         </div>
       </div>
     </div>
@@ -219,7 +219,7 @@ function handleFontSizeInput(event: Event) {
       </div>
       <div class="p-5">
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-          <button
+          <AppButton size="none" variant="plain" weight="none"
             v-for="(label, lib) in props.libraryLabels"
             :key="lib"
             class="flex items-center gap-3 px-4 py-3 dd-rounded text-left transition-colors border"
@@ -254,7 +254,7 @@ function handleFontSizeInput(event: Event) {
             <div v-if="props.iconLibrary === lib" class="ml-auto shrink-0">
               <AppIcon name="check" :size="14" class="text-drydock-secondary" />
             </div>
-          </button>
+          </AppButton>
         </div>
       </div>
     </div>
@@ -304,7 +304,7 @@ function handleFontSizeInput(event: Event) {
       </div>
       <div class="p-5">
         <div class="grid grid-cols-5 gap-2">
-          <button
+          <AppButton size="none" variant="plain" weight="none"
             v-for="p in props.radiusPresets"
             :key="p.id"
             class="flex flex-col items-center gap-2 px-3 py-3 dd-rounded transition-colors"
@@ -326,7 +326,7 @@ function handleFontSizeInput(event: Event) {
             >
               {{ p.label }}
             </div>
-          </button>
+          </AppButton>
         </div>
       </div>
     </div>

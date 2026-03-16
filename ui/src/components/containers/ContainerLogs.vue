@@ -562,7 +562,7 @@ onBeforeUnmount(() => {
         </div>
 
         <div class="flex items-center gap-1.5">
-          <button
+          <AppButton size="none" variant="plain" weight="none"
             type="button"
             data-test="container-log-toggle-pause"
             class="px-2 py-1 dd-rounded text-[0.625rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
@@ -572,17 +572,17 @@ onBeforeUnmount(() => {
               <AppIcon :name="streamPaused ? 'play' : 'pause'" :size="11" />
               {{ streamPaused ? 'Resume' : 'Pause' }}
             </span>
-          </button>
+          </AppButton>
 
-          <button
+          <AppButton size="none" variant="plain" weight="none"
             type="button"
             class="px-2 py-1 dd-rounded text-[0.625rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
             @click="togglePin"
           >
             {{ autoScrollPinned ? 'Unpin' : 'Pin' }}
-          </button>
+          </AppButton>
 
-          <button
+          <AppButton size="none" variant="plain" weight="none"
             type="button"
             data-test="container-log-download"
             class="px-2 py-1 dd-rounded text-[0.625rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
@@ -593,7 +593,7 @@ onBeforeUnmount(() => {
               <AppIcon name="download" :size="11" />
               Download
             </span>
-          </button>
+          </AppButton>
         </div>
       </div>
 
@@ -613,7 +613,7 @@ onBeforeUnmount(() => {
           />
         </div>
 
-        <button
+        <AppButton size="none" variant="plain" weight="none"
           type="button"
           data-test="container-log-regex-toggle"
           class="px-2 py-1.5 dd-rounded text-[0.625rem] font-semibold uppercase tracking-wide transition-colors"
@@ -621,9 +621,9 @@ onBeforeUnmount(() => {
           @click="regexSearch = !regexSearch"
         >
           .* Regex
-        </button>
+        </AppButton>
 
-        <button
+        <AppButton size="none" variant="plain" weight="none"
           type="button"
           class="px-2 py-1.5 dd-rounded text-[0.625rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
           :class="showStdout ? 'ring-1 ring-white/10' : ''"
@@ -633,9 +633,9 @@ onBeforeUnmount(() => {
             <span class="w-1.5 h-1.5 rounded-full" style="background-color: var(--dd-success)" />
             stdout
           </span>
-        </button>
+        </AppButton>
 
-        <button
+        <AppButton size="none" variant="plain" weight="none"
           type="button"
           data-test="container-log-toggle-stderr"
           class="px-2 py-1.5 dd-rounded text-[0.625rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
@@ -646,7 +646,7 @@ onBeforeUnmount(() => {
             <span class="w-1.5 h-1.5 rounded-full" style="background-color: var(--dd-danger)" />
             stderr
           </span>
-        </button>
+        </AppButton>
 
         <select
           v-model="tailSize"
@@ -665,7 +665,7 @@ onBeforeUnmount(() => {
           </option>
         </select>
 
-        <button
+        <AppButton size="none" variant="plain" weight="none"
           type="button"
           data-test="container-log-prev-match"
           class="px-2 py-1.5 dd-rounded text-[0.625rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
@@ -673,8 +673,8 @@ onBeforeUnmount(() => {
           @click="jumpToMatch('prev')"
         >
           Prev
-        </button>
-        <button
+        </AppButton>
+        <AppButton size="none" variant="plain" weight="none"
           type="button"
           data-test="container-log-next-match"
           class="px-2 py-1.5 dd-rounded text-[0.625rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
@@ -682,7 +682,7 @@ onBeforeUnmount(() => {
           @click="jumpToMatch('next')"
         >
           Next
-        </button>
+        </AppButton>
         <span data-test="container-log-match-index" class="text-[0.625rem] dd-text-muted font-mono">{{ matchLabel }}</span>
       </div>
 

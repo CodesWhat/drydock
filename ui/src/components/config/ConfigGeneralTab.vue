@@ -296,7 +296,7 @@ const emit = defineEmits<{
             <span v-if="props.cacheCleared !== null" class="text-[0.625rem] dd-text-success">
               {{ props.cacheCleared }} cleared
             </span>
-            <button
+            <AppButton size="none" variant="plain" weight="none"
               class="px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors"
               :class="props.cacheClearing ? 'opacity-50 pointer-events-none' : ''"
               :style="{
@@ -308,7 +308,7 @@ const emit = defineEmits<{
             >
               <AppIcon name="trash" :size="10" class="mr-1" />
               Clear Cache
-            </button>
+            </AppButton>
           </div>
         </div>
       </div>

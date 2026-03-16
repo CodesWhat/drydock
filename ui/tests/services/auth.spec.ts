@@ -97,6 +97,18 @@ describe('Auth Service', () => {
         'Username or password error',
       );
     });
+
+    it('surfaces API error details for non-credential failures', async () => {
+      fetch.mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        json: async () => ({ error: "Basic auth 'ANDI': hash is required" }),
+      });
+
+      await expect(loginBasic('testuser', 'testpass')).rejects.toThrow(
+        "Basic auth 'ANDI': hash is required",
+      );
+    });
   });
 
   describe('logout', () => {

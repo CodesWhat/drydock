@@ -362,7 +362,7 @@ function handleSelectIconLibrary(library: string) {
 <template>
   <DataViewLayout>
     <div class="flex gap-1 mb-6" :style="{ borderBottom: '1px solid var(--dd-border)' }">
-      <button
+      <AppButton size="none" variant="plain" weight="none"
         v-for="tab in settingsTabs"
         :key="tab.id"
         class="px-4 py-2.5 text-xs font-semibold transition-colors relative"
@@ -375,7 +375,7 @@ function handleSelectIconLibrary(library: string) {
           v-if="activeSettingsTab === tab.id"
           class="absolute bottom-0 left-0 right-0 h-[2px] bg-drydock-secondary rounded-t-full"
         />
-      </button>
+      </AppButton>
     </div>
 
     <ConfigGeneralTab

@@ -96,11 +96,11 @@ const {
       <div v-else-if="error" class="flex flex-col items-center justify-center py-16">
         <div class="text-sm font-medium dd-text-danger mb-2">Failed to load dashboard</div>
         <div class="text-xs dd-text-muted">{{ error }}</div>
-        <button
+        <AppButton size="none" variant="plain" weight="none"
           class="mt-4 px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors dd-bg-elevated dd-text hover:opacity-90"
           @click="fetchDashboardData">
           Retry
-        </button>
+        </AppButton>
       </div>
 
       <template v-else>
@@ -174,8 +174,7 @@ const {
                 Updates Available
               </h2>
             </div>
-            <button class="text-[0.6875rem] font-medium text-drydock-secondary hover:underline"
-                    @click="navigateTo({ path: ROUTES.CONTAINERS, query: { filterKind: 'any' } })">View all &rarr;</button>
+            <AppButton size="none" variant="link-secondary" weight="medium" class="text-[0.6875rem]" @click="navigateTo({ path: ROUTES.CONTAINERS, query: { filterKind: 'any' } })">View all &rarr;</AppButton>
           </div>
 
           <DataTable
@@ -289,8 +288,7 @@ const {
                 Security Overview
               </h2>
             </div>
-            <button class="text-[0.6875rem] font-medium text-drydock-secondary hover:underline"
-                    @click="navigateTo(ROUTES.SECURITY)">View all &rarr;</button>
+            <AppButton size="none" variant="link-secondary" weight="medium" class="text-[0.6875rem]" @click="navigateTo(ROUTES.SECURITY)">View all &rarr;</AppButton>
           </div>
 
           <div class="p-5">
@@ -443,8 +441,7 @@ const {
                 Resource Usage
               </h2>
             </div>
-            <button class="text-[0.6875rem] font-medium text-drydock-secondary hover:underline"
-                    @click="navigateTo(ROUTES.CONTAINERS)">View all &rarr;</button>
+            <AppButton size="none" variant="link-secondary" weight="medium" class="text-[0.6875rem]" @click="navigateTo(ROUTES.CONTAINERS)">View all &rarr;</AppButton>
           </div>
 
           <div class="p-4 space-y-4">
@@ -567,8 +564,7 @@ const {
                 Host Status
               </h2>
             </div>
-            <button class="text-[0.6875rem] font-medium text-drydock-secondary hover:underline"
-                    @click="navigateTo(ROUTES.SERVERS)">View all &rarr;</button>
+            <AppButton size="none" variant="link-secondary" weight="medium" class="text-[0.6875rem]" @click="navigateTo(ROUTES.SERVERS)">View all &rarr;</AppButton>
           </div>
 
           <div class="p-4 space-y-3">
@@ -632,8 +628,7 @@ const {
                 Update Breakdown
               </h2>
             </div>
-            <button class="text-[0.6875rem] font-medium text-drydock-secondary hover:underline"
-                    @click="navigateTo({ path: ROUTES.CONTAINERS, query: { filterKind: 'any' } })">View all &rarr;</button>
+            <AppButton size="none" variant="link-secondary" weight="medium" class="text-[0.6875rem]" @click="navigateTo({ path: ROUTES.CONTAINERS, query: { filterKind: 'any' } })">View all &rarr;</AppButton>
           </div>
 
           <div class="p-5">

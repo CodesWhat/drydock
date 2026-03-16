@@ -158,11 +158,11 @@ onMounted(async () => {
                type="text"
                placeholder="Filter by name..."
                class="flex-1 min-w-[120px] max-w-[240px] px-2.5 py-1.5 dd-rounded text-[0.6875rem] font-medium outline-none dd-bg dd-text dd-placeholder" />
-        <button v-if="searchQuery"
-                class="text-[0.625rem] dd-text-muted hover:dd-text transition-colors"
+        <AppButton size="none" variant="text-muted" weight="medium" class="text-[0.625rem]" v-if="searchQuery"
+                
                 @click="searchQuery = ''">
           Clear
-        </button>
+        </AppButton>
       </template>
     </DataFilterBar>
 

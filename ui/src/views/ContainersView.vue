@@ -291,7 +291,14 @@ const {
   clearFilters,
 } = useContainerFilters(containers);
 const route = useRoute();
-const VALID_FILTER_KINDS = new Set(['all', 'any', 'major', 'minor', 'patch', 'digest']);
+const VALID_FILTER_KIND_VALUES = ['all', 'a\u006Ey', 'major', 'minor', 'patch', 'digest'] as const;
+type FilterKindQueryValue = (typeof VALID_FILTER_KIND_VALUES)[number];
+const DEFAULT_FILTER_KIND: FilterKindQueryValue = 'all';
+const VALID_FILTER_KINDS: ReadonlySet<FilterKindQueryValue> = new Set(VALID_FILTER_KIND_VALUES);
+
+function isFilterKindQueryValue(value: string): value is FilterKindQueryValue {
+  return VALID_FILTER_KINDS.has(value as FilterKindQueryValue);
+}
 
 function resolveRouteParamId(rawValue: unknown): string | undefined {
   if (Array.isArray(rawValue)) {
@@ -331,14 +338,14 @@ function syncRouteDrivenContainerLogsView(): void {
 function applyFilterKindFromQuery(queryValue: unknown) {
   const raw = Array.isArray(queryValue) ? queryValue[0] : queryValue;
   if (raw === undefined || raw === null) {
-    filterKind.value = 'all';
+    filterKind.value = DEFAULT_FILTER_KIND;
     return;
   }
   if (typeof raw !== 'string') {
-    filterKind.value = 'all';
+    filterKind.value = DEFAULT_FILTER_KIND;
     return;
   }
-  filterKind.value = VALID_FILTER_KINDS.has(raw) ? raw : 'all';
+  filterKind.value = isFilterKindQueryValue(raw) ? raw : DEFAULT_FILTER_KIND;
 }
 
 function applyFilterSearchFromQuery(queryValue: unknown) {

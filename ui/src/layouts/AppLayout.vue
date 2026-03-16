@@ -51,7 +51,7 @@ watch(isMobile, (val) => {
   if (!val) isMobileMenuOpen.value = false;
 });
 
-// Close mobile menu on any route change (safety net for non-sidebar navigation)
+// Close mobile menu on route changes (safety net for non-sidebar navigation)
 watch(
   () => route.path,
   () => {
@@ -1123,12 +1123,12 @@ onUnmounted(() => {
           <span class="sidebar-label font-bold text-sm tracking-widest dd-text"
                 style="letter-spacing:0.15em;">DRYDOCK</span>
         </div>
-        <button v-if="isMobile"
+        <AppButton size="none" variant="plain" weight="none" v-if="isMobile"
                 aria-label="Close menu"
                 class="p-1 dd-text-muted hover:dd-text transition-colors"
                 @click="isMobileMenuOpen = false">
           <AppIcon name="close" :size="14" />
-        </button>
+        </AppButton>
       </div>
 
       <!-- Nav groups -->
@@ -1180,7 +1180,7 @@ onUnmounted(() => {
 
       <!-- Sidebar search -->
       <div class="shrink-0 pt-3 pb-3" :class="isCollapsed ? 'px-2' : 'px-3'">
-        <button aria-label="Search"
+        <AppButton size="none" variant="plain" weight="none" aria-label="Search"
                 class="w-full flex items-center dd-rounded text-xs transition-colors dd-bg-card dd-text-secondary hover:dd-bg-elevated hover:dd-text"
                 :class="isCollapsed ? 'justify-center py-2.5' : 'gap-2 px-3 py-2'"
                 :style="{ border: '1px solid var(--dd-border)' }"
@@ -1192,25 +1192,25 @@ onUnmounted(() => {
               <span class="text-[0.5625rem]">&#8984;</span>K
             </kbd>
           </template>
-        </button>
+        </AppButton>
       </div>
 
       <!-- Sidebar footer -->
       <div class="shrink-0 px-3 py-2.5 flex items-center gap-1"
            :class="isCollapsed ? 'flex-col' : 'flex-row justify-between'">
-        <button aria-label="About Drydock"
+        <AppButton size="none" variant="plain" weight="none" aria-label="About Drydock"
                 class="flex items-center justify-center w-7 h-7 dd-rounded text-xs transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
                 v-tooltip.top="'About Drydock'"
                 @click="showAbout = true">
           <AppIcon name="info" :size="14" />
-        </button>
-        <button v-if="!isMobile"
+        </AppButton>
+        <AppButton size="none" variant="plain" weight="none" v-if="!isMobile"
                 :aria-label="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
                 class="flex items-center justify-center w-7 h-7 dd-rounded text-xs transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
                 v-tooltip.top="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
                 @click="sidebarCollapsed = !sidebarCollapsed">
           <AppIcon :name="sidebarCollapsed ? 'sidebar-expand' : 'sidebar-collapse'" :size="14" />
-        </button>
+        </AppButton>
       </div>
     </aside>
 
@@ -1226,7 +1226,7 @@ onUnmounted(() => {
               }">
         <!-- Left: hamburger + breadcrumb -->
         <div class="flex items-center gap-3">
-          <button v-if="isMobile"
+          <AppButton size="none" variant="plain" weight="none" v-if="isMobile"
                   aria-label="Toggle menu"
                   :aria-expanded="String(isMobileMenuOpen)"
                   class="flex flex-col items-center justify-center w-8 h-8 gap-1 rounded-md transition-colors hover:dd-bg-elevated"
@@ -1234,7 +1234,7 @@ onUnmounted(() => {
             <span class="hamburger-line block w-4 h-[2px] rounded-full" style="background: var(--dd-text-muted)" />
             <span class="hamburger-line block w-4 h-[2px] rounded-full" style="background: var(--dd-text-muted)" />
             <span class="hamburger-line block w-4 h-[2px] rounded-full" style="background: var(--dd-text-muted)" />
-          </button>
+          </AppButton>
 
           <nav class="flex items-center gap-1.5 text-[0.8125rem]">
             <AppIcon :name="currentPageIcon" :size="16" class="leading-none dd-text-muted" />
@@ -1254,7 +1254,7 @@ onUnmounted(() => {
           <NotificationBell />
 
           <div class="relative user-menu-wrapper">
-            <button aria-label="User menu"
+            <AppButton size="none" variant="plain" weight="none" aria-label="User menu"
                     :aria-expanded="String(showUserMenu)"
                     class="flex items-center gap-2 dd-rounded px-1.5 py-1 transition-colors hover:dd-bg-elevated"
                     @click="toggleUserMenu">
@@ -1263,7 +1263,7 @@ onUnmounted(() => {
                 {{ userInitials }}
               </div>
               <AppIcon name="chevron-down" :size="12" class="dd-text-muted" />
-            </button>
+            </AppButton>
             <Transition name="menu-fade">
               <div v-if="showUserMenu"
                    class="absolute right-0 top-full mt-1 min-w-[160px] py-1 dd-rounded-lg shadow-lg z-50"
@@ -1272,18 +1272,16 @@ onUnmounted(() => {
                      :style="{ borderBottom: '1px solid var(--dd-border)' }">
                   {{ currentUser?.username || 'User' }}
                 </div>
-                <button class="w-full text-left px-3 py-1.5 text-[0.6875rem] font-medium transition-colors flex items-center gap-2 dd-text hover:dd-bg-elevated"
-                        @click="showUserMenu = false; router.push({ path: ROUTES.CONFIG, query: { tab: 'profile' } })">
+                <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text" @click="showUserMenu = false; router.push({ path: ROUTES.CONFIG, query: { tab: 'profile' } })">
                   <AppIcon name="user" :size="11" class="dd-text-muted" />
                   Profile
-                </button>
+                </AppButton>
                 <div class="my-0.5" :style="{ borderTop: '1px solid var(--dd-border)' }" />
-                <button class="w-full text-left px-3 py-1.5 text-[0.6875rem] font-medium transition-colors flex items-center gap-2 hover:dd-bg-elevated"
-                        style="color: var(--dd-danger);"
+                <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2" style="color: var(--dd-danger);"
                         @click="handleSignOut">
                   <AppIcon name="sign-out" :size="11" />
                   Sign out
-                </button>
+                </AppButton>
               </div>
             </Transition>
           </div>
@@ -1337,11 +1335,11 @@ onUnmounted(() => {
                aria-labelledby="about-dialog-title"
                class="relative w-full max-w-[340px] dd-rounded-lg overflow-hidden shadow-2xl"
                :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }">
-            <button aria-label="Close"
+            <AppButton size="none" variant="plain" weight="none" aria-label="Close"
                     class="absolute top-3 right-3 z-10 w-6 h-6 flex items-center justify-center dd-rounded transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
                     @click="showAbout = false">
               <AppIcon name="xmark" :size="12" />
-            </button>
+            </AppButton>
             <div class="flex flex-col items-center pt-6 pb-4 px-6">
               <div class="-mx-6 w-[calc(100%+3rem)] h-12 mb-3 relative pointer-events-none">
                 <img :src="whaleLogo" alt="Drydock" class="h-10 w-[65px] absolute top-1 about-swim"
@@ -1406,7 +1404,7 @@ onUnmounted(() => {
             </div>
             <div class="px-3 py-2 flex items-center gap-1.5"
                  :style="{ borderBottom: '1px solid var(--dd-border)' }">
-              <button
+              <AppButton size="none" variant="plain" weight="none"
                 v-for="scopeOption in SEARCH_SCOPE_OPTIONS"
                 :key="scopeOption.id"
                 class="inline-flex items-center gap-1 px-2 py-1 text-[0.625rem] uppercase tracking-wide font-semibold border dd-rounded transition-colors"
@@ -1415,7 +1413,7 @@ onUnmounted(() => {
                 @click="applySearchScope(scopeOption.id)">
                 {{ scopeOption.label }}
                 <span class="text-[0.5625rem] opacity-80">{{ searchScopeCounts[scopeOption.id] }}</span>
-              </button>
+              </AppButton>
               <span class="ml-auto text-[0.625rem] dd-text-muted">
                 {{ searchResults.length }} shown
               </span>
@@ -1426,7 +1424,7 @@ onUnmounted(() => {
                      :style="groupIndex > 0 ? { borderTop: '1px solid var(--dd-border)' } : {}">
                   {{ group.label }}
                 </div>
-                <button
+                <AppButton size="none" variant="plain" weight="none"
                   v-for="result in group.items"
                   :key="result.id"
                   class="w-full px-4 py-2.5 text-left flex items-center gap-3 transition-colors"
@@ -1446,7 +1444,7 @@ onUnmounted(() => {
                     <div class="text-[0.625rem] truncate dd-text-muted">{{ result.subtitle }}</div>
                   </div>
                   <AppIcon name="chevron-right" :size="11" class="dd-text-muted shrink-0" />
-                </button>
+                </AppButton>
               </template>
               <div v-if="searchResults.length === 0"
                    class="px-4 py-6 text-center text-xs dd-text-muted">

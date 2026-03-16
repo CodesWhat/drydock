@@ -37,7 +37,7 @@ const testIdPrefix = attrs['data-testid'] as string | undefined;
       </div>
     </div>
     <div class="flex items-center gap-2 shrink-0">
-      <button
+      <AppButton size="none" variant="plain" weight="none"
         :data-testid="testIdPrefix ? `${testIdPrefix}-dismiss-session` : undefined"
         class="text-[0.6875rem] px-2.5 py-1.5 dd-rounded transition-colors"
         :style="{
@@ -47,8 +47,8 @@ const testIdPrefix = attrs['data-testid'] as string | undefined;
         }"
         @click="$emit('dismiss')">
         {{ dismissLabel ?? 'Dismiss' }}
-      </button>
-      <button
+      </AppButton>
+      <AppButton size="none" variant="plain" weight="none"
         v-if="permanentDismissLabel !== undefined"
         :data-testid="testIdPrefix ? `${testIdPrefix}-dismiss-forever` : undefined"
         class="text-[0.6875rem] px-2.5 py-1.5 dd-rounded transition-colors"
@@ -59,7 +59,7 @@ const testIdPrefix = attrs['data-testid'] as string | undefined;
         }"
         @click="$emit('dismiss-permanent')">
         {{ permanentDismissLabel }}
-      </button>
+      </AppButton>
     </div>
   </div>
 </template>

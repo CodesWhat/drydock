@@ -128,28 +128,28 @@ function asEntry(entry: unknown): AppLogEntry {
                 @keyup.enter="emit('refresh')"
               />
 
-              <button
+              <AppButton size="none" variant="plain" weight="none"
                 class="px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors dd-bg-elevated dd-text hover:opacity-90"
                 :class="props.loading ? 'opacity-50 pointer-events-none' : ''"
                 @click="emit('refresh')"
               >
                 Apply
-              </button>
-              <button
+              </AppButton>
+              <AppButton size="none" variant="plain" weight="none"
                 class="px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors dd-text-muted hover:dd-text"
                 :class="props.loading ? 'opacity-50 pointer-events-none' : ''"
                 @click="emit('reset')"
               >
                 Reset
-              </button>
-              <button
+              </AppButton>
+              <AppButton size="none" variant="plain" weight="none"
                 class="p-1.5 dd-rounded transition-colors dd-text-muted hover:dd-text"
                 :class="props.loading ? 'opacity-50 pointer-events-none' : ''"
                 v-tooltip.top="'Refresh'"
                 @click="emit('refresh')"
               >
                 <AppIcon name="refresh" :size="12" />
-              </button>
+              </AppButton>
               <div class="ml-auto text-[0.625rem] dd-text-muted">
                 Server Level: <span class="font-semibold dd-text capitalize">{{ props.logLevel }}</span>
               </div>
@@ -183,13 +183,13 @@ function asEntry(entry: unknown): AppLogEntry {
               :style="{ backgroundColor: 'var(--dd-warning-muted)' }"
             >
               <span class="font-semibold" :style="{ color: 'var(--dd-warning)' }">Auto-scroll paused</span>
-              <button
+              <AppButton size="none" variant="plain" weight="none"
                 class="px-2 py-0.5 dd-rounded text-[0.625rem] font-semibold transition-colors"
                 :style="{ backgroundColor: 'var(--dd-warning)', color: 'var(--dd-bg)' }"
                 @click="emit('resume-auto-scroll')"
               >
                 Resume
-              </button>
+              </AppButton>
             </div>
           </template>
         </LogViewer>

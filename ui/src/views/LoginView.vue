@@ -5,6 +5,7 @@ import { ROUTES } from '../router/routes';
 import whaleLogo from '../assets/whale-logo.png?inline';
 import { getOidcRedirection, getStrategies, loginBasic, setRememberMe } from '../services/auth';
 import { useTheme } from '../theme/useTheme';
+import { errorMessage } from '../utils/error';
 
 const router = useRouter();
 const route = useRoute();
@@ -19,6 +20,40 @@ interface Strategy {
 interface AuthProviderError {
   provider: string;
   error: string;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function isStrategy(value: unknown): value is Strategy {
+  if (!isRecord(value)) {
+    return false;
+  }
+  if (typeof value.type !== 'string' || typeof value.name !== 'string') {
+    return false;
+  }
+  return typeof value.redirect === 'undefined' || typeof value.redirect === 'boolean';
+}
+
+function isAuthProviderError(value: unknown): value is AuthProviderError {
+  return isRecord(value) && typeof value.provider === 'string' && typeof value.error === 'string';
+}
+
+function parseStrategies(value: unknown): Strategy[] {
+  return Array.isArray(value) ? value.filter(isStrategy) : [];
+}
+
+function parseAuthProviderErrors(value: unknown): AuthProviderError[] {
+  return Array.isArray(value) ? value.filter(isAuthProviderError) : [];
+}
+
+function extractOidcRedirect(value: unknown): string | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  const redirect = value.redirect ?? value.url;
+  return typeof redirect === 'string' ? redirect : undefined;
 }
 
 const strategies = ref<Strategy[]>([]);
@@ -80,8 +115,17 @@ async function handleBasicLogin() {
   try {
     await loginBasic(username.value, password.value, rememberMe.value);
     navigateAfterLogin();
-  } catch {
-    error.value = 'Invalid username or password';
+  } catch (loginError: unknown) {
+    const loginErrorMessage = errorMessage(loginError).trim();
+    if (
+      loginErrorMessage.length === 0 ||
+      loginErrorMessage === 'Username or password error' ||
+      loginErrorMessage === 'Unauthorized'
+    ) {
+      error.value = 'Invalid username or password';
+    } else {
+      error.value = loginErrorMessage;
+    }
   } finally {
     submitting.value = false;
   }
@@ -91,11 +135,7 @@ async function handleOidc(name: string) {
   try {
     await setRememberMe(rememberMe.value);
     const result = await getOidcRedirection(name);
-    const redirect =
-      result && typeof result === 'object'
-        ? ((result as { redirect?: unknown; url?: unknown }).redirect ??
-          (result as { redirect?: unknown; url?: unknown }).url)
-        : undefined;
+    const redirect = extractOidcRedirect(result);
 
     if (typeof redirect === 'string') {
       const parsedUrl = new URL(redirect, globalThis.location.origin);
@@ -123,11 +163,11 @@ function oidcIcon(name: string): string {
 
 async function loadStrategies() {
   const response = await getStrategies();
-  const data = response.providers as Strategy[];
+  const data = parseStrategies(response.providers);
   strategies.value = data;
   hasBasic.value = data.some((s: Strategy) => s.type === 'basic');
   oidcStrategies.value = data.filter((s: Strategy) => s.type === 'oidc');
-  authErrors.value = response.errors ?? [];
+  authErrors.value = parseAuthProviderErrors(response.errors);
   error.value = '';
   connectionLost.value = false;
   retryDelayMs = INITIAL_RETRY_DELAY_MS;
@@ -249,7 +289,7 @@ onUnmounted(() => {
             />
           </div>
 
-          <button
+          <AppButton size="none" variant="plain" weight="none"
             type="submit"
             :disabled="submitting"
             class="w-full py-2.5 text-sm font-semibold dd-rounded transition-colors cursor-pointer"
@@ -260,7 +300,7 @@ onUnmounted(() => {
               Signing in...
             </template>
             <template v-else>Sign in</template>
-          </button>
+          </AppButton>
         </form>
 
         <!-- OIDC separator (only if both basic and OIDC exist) -->
@@ -272,7 +312,7 @@ onUnmounted(() => {
 
         <!-- OIDC provider buttons -->
         <div v-if="oidcStrategies.length > 0" :class="oidcLayoutClass">
-          <button
+          <AppButton size="none" variant="plain" weight="none"
             v-for="strategy in oidcStrategies"
             :key="strategy.name"
             type="button"
@@ -282,10 +322,10 @@ onUnmounted(() => {
           >
             <AppIcon :name="oidcIcon(strategy.name)" :size="13" />
             {{ strategy.name }}
-          </button>
+          </AppButton>
         </div>
 
-        <!-- Remember me (shown for any auth method) -->
+        <!-- Remember me (shown for all auth methods) -->
         <label v-if="hasBasic || oidcStrategies.length > 0"
                class="flex items-center gap-2 mt-4 cursor-pointer select-none">
           <input

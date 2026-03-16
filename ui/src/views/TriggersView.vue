@@ -207,11 +207,11 @@ onMounted(async () => {
                type="text"
                placeholder="Filter by name..."
                class="flex-1 min-w-[120px] max-w-[240px] px-2.5 py-1.5 dd-rounded text-[0.6875rem] font-medium outline-none dd-bg dd-text dd-placeholder" />
-        <button v-if="searchQuery"
-                class="text-[0.625rem] dd-text-muted hover:dd-text transition-colors"
+        <AppButton size="none" variant="text-muted" weight="medium" class="text-[0.625rem]" v-if="searchQuery"
+                
                 @click="clearFilters">
           Clear
-        </button>
+        </AppButton>
       </template>
     </DataFilterBar>
 
@@ -287,7 +287,7 @@ onMounted(async () => {
                   }">
               {{ item.status }}
             </span>
-            <button class="inline-flex items-center gap-1 px-2 py-1 dd-rounded text-[0.625rem] font-bold transition-[color,background-color,border-color,opacity,transform,box-shadow] text-white"
+            <AppButton size="none" variant="plain" weight="none" class="inline-flex items-center gap-1 px-2 py-1 dd-rounded text-[0.625rem] font-bold transition-[color,background-color,border-color,opacity,transform,box-shadow] text-white"
                     :style="{ background: testResult?.id === item.id
                       ? (testResult.success ? 'var(--dd-success)' : 'var(--dd-danger)')
                       : 'linear-gradient(135deg, var(--dd-primary), var(--dd-info))' }"
@@ -295,7 +295,7 @@ onMounted(async () => {
                     @click.stop="testTrigger(item)">
               <AppIcon :name="testingTrigger === item.id ? 'pending' : testResult?.id === item.id ? (testResult.success ? 'check' : 'xmark') : 'play'" :size="11" />
               {{ testingTrigger === item.id ? 'Testing...' : testResult?.id === item.id ? (testResult.success ? 'Sent!' : 'Failed') : 'Test' }}
-            </button>
+            </AppButton>
           </div>
           <p v-if="testError?.id === item.id" class="mt-2 text-[0.625rem] break-words" style="color: var(--dd-danger);">
             {{ testError.message }}
@@ -336,7 +336,7 @@ onMounted(async () => {
           </div>
         </div>
         <div class="mt-4 pt-3" :style="{ borderTop: '1px solid var(--dd-border)' }">
-          <button class="inline-flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[0.6875rem] font-bold tracking-wide transition-[color,background-color,border-color,opacity,transform,box-shadow] text-white"
+          <AppButton size="none" variant="plain" weight="none" class="inline-flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[0.6875rem] font-bold tracking-wide transition-[color,background-color,border-color,opacity,transform,box-shadow] text-white"
                   :style="{ background: testResult?.id === item.id
                     ? (testResult.success ? 'var(--dd-success)' : 'var(--dd-danger)')
                     : 'linear-gradient(135deg, var(--dd-primary), var(--dd-info))',
@@ -345,7 +345,7 @@ onMounted(async () => {
                   @click.stop="testTrigger(item)">
             <AppIcon :name="testingTrigger === item.id ? 'pending' : testResult?.id === item.id ? (testResult.success ? 'check' : 'xmark') : 'play'" :size="10" />
             {{ testingTrigger === item.id ? 'Testing...' : testResult?.id === item.id ? (testResult.success ? 'Sent!' : 'Failed') : 'Test' }}
-          </button>
+          </AppButton>
           <p v-if="testError?.id === item.id" class="mt-2 text-[0.625rem] break-words" style="color: var(--dd-danger);">
             {{ testError.message }}
           </p>
@@ -409,7 +409,7 @@ onMounted(async () => {
 
             <!-- Test trigger button -->
             <div class="pt-2" :style="{ borderTop: '1px solid var(--dd-border)' }">
-              <button class="inline-flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[0.6875rem] font-bold tracking-wide transition-[color,background-color,border-color,opacity,transform,box-shadow] text-white"
+              <AppButton size="none" variant="plain" weight="none" class="inline-flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[0.6875rem] font-bold tracking-wide transition-[color,background-color,border-color,opacity,transform,box-shadow] text-white"
                       :style="{ background: testResult?.id === selectedTrigger.id
                         ? (testResult.success ? 'var(--dd-success)' : 'var(--dd-danger)')
                         : 'linear-gradient(135deg, var(--dd-primary), var(--dd-info))',
@@ -418,7 +418,7 @@ onMounted(async () => {
                       @click.stop="testTrigger(selectedTrigger)">
                 <AppIcon :name="testingTrigger === selectedTrigger.id ? 'pending' : testResult?.id === selectedTrigger.id ? (testResult.success ? 'check' : 'xmark') : 'play'" :size="11" />
                 {{ testingTrigger === selectedTrigger.id ? 'Testing...' : testResult?.id === selectedTrigger.id ? (testResult.success ? 'Sent!' : 'Failed') : 'Test Trigger' }}
-              </button>
+              </AppButton>
               <p v-if="testError?.id === selectedTrigger.id"
                  class="mt-2 text-[0.625rem] break-words"
                  style="color: var(--dd-danger);">

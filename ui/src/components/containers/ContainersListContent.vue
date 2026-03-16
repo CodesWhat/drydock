@@ -1,6 +1,11 @@
 <script setup lang="ts">
 import ContainersGroupedViews from './ContainersGroupedViews.vue';
-import { useContainersViewTemplateContext } from './containersViewTemplateContext';
+import {
+  type ContainersViewTemplateContext,
+  useContainersViewTemplateContext,
+} from './containersViewTemplateContext';
+
+const templateContext: ContainersViewTemplateContext = useContainersViewTemplateContext();
 
 const {
   error,
@@ -28,7 +33,7 @@ const {
   groupByStack,
   rechecking,
   recheckAll,
-} = useContainersViewTemplateContext();
+} = templateContext;
 </script>
 
 <template>
@@ -95,40 +100,40 @@ const {
           <option value="patch">Patch</option>
           <option value="digest">Digest</option>
         </select>
-        <button
+        <AppButton size="none" variant="plain" weight="none"
           v-if="activeFilterCount > 0 || filterSearch"
           class="text-[0.625rem] font-medium px-2 py-1 dd-rounded transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
           @click="clearFilters">
           Clear all
-        </button>
+        </AppButton>
       </template>
       <template #extra-buttons>
         <div v-if="containerViewMode === 'table'">
-          <button
-            class="w-7 h-7 dd-rounded flex items-center justify-center text-[0.6875rem] transition-colors"
+          <AppButton size="icon-sm" variant="plain" class="text-[0.6875rem]"
+            
             :class="showColumnPicker ? 'dd-text dd-bg-elevated' : 'dd-text-secondary hover:dd-text hover:dd-bg-elevated'"
             v-tooltip.top="tt('Toggle columns')"
             @click.stop="toggleColumnPicker($event)">
             <AppIcon name="config" :size="12" />
-          </button>
+          </AppButton>
         </div>
       </template>
       <template #left>
-        <button
-          class="w-7 h-7 dd-rounded flex items-center justify-center text-[0.6875rem] transition-colors"
+        <AppButton size="icon-sm" variant="plain" class="text-[0.6875rem]"
+          
           :class="groupByStack ? 'dd-text dd-bg-elevated' : 'dd-text-secondary hover:dd-text hover:dd-bg-elevated'"
           v-tooltip.top="tt('Group by stack')"
           @click="groupByStack = !groupByStack">
           <AppIcon name="stack" :size="13" />
-        </button>
-        <button
-          class="w-7 h-7 dd-rounded flex items-center justify-center text-[0.6875rem] transition-colors"
+        </AppButton>
+        <AppButton size="icon-sm" variant="plain" class="text-[0.6875rem]"
+          
           :class="rechecking ? 'dd-text-muted cursor-wait' : 'dd-text-secondary hover:dd-text hover:dd-bg-elevated'"
           :disabled="rechecking"
           v-tooltip.top="tt('Recheck for updates')"
           @click="recheckAll">
           <AppIcon name="restart" :size="13" :class="{ 'animate-spin': rechecking }" />
-        </button>
+        </AppButton>
       </template>
     </DataFilterBar>
 
@@ -143,7 +148,7 @@ const {
       }"
       @click.stop>
       <div class="px-3 py-1 text-[0.5625rem] font-bold uppercase tracking-wider dd-text-muted">Columns</div>
-      <button
+      <AppButton size="none" variant="plain" weight="none"
         v-for="column in allColumns.filter((columnItem) => columnItem.label)"
         :key="column.key"
         class="w-full text-left px-3 py-1.5 text-[0.6875rem] font-medium transition-colors flex items-center gap-2 hover:dd-bg-elevated"
@@ -154,7 +159,7 @@ const {
           :size="10"
           :style="visibleColumns.has(column.key) ? { color: 'var(--dd-primary)' } : {}" />
         {{ column.label }}
-      </button>
+      </AppButton>
     </div>
 
     <ContainersGroupedViews />

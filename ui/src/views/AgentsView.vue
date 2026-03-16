@@ -223,7 +223,8 @@ async function fetchAgentLogs(
     if (!options.silent) {
       agentLogsLastFetched.value = new Date().toISOString();
     }
-  } catch {
+  } catch (e: unknown) {
+    void errorMessage(e, 'Failed to load agent logs');
     if (!options.silent) {
       agentLogsError.value = 'Failed to load agent logs';
     }
@@ -467,20 +468,19 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
                      type="text"
                      placeholder="Filter by name..."
                      class="flex-1 min-w-[120px] max-w-[240px] px-2.5 py-1.5 dd-rounded text-[0.6875rem] font-medium outline-none dd-bg dd-text dd-placeholder" />
-              <button v-if="searchQuery"
-                      class="text-[0.625rem] dd-text-muted hover:dd-text transition-colors"
+              <AppButton size="none" variant="text-muted" weight="medium" class="text-[0.625rem]" v-if="searchQuery"
+                      
                       @click="searchQuery = ''">
                 Clear
-              </button>
+              </AppButton>
             </template>
             <template #extra-buttons>
               <div v-if="agentViewMode === 'table'" class="relative">
-                <button class="w-7 h-7 dd-rounded flex items-center justify-center text-[0.6875rem] transition-colors"
-                        :class="showAgentColumnPicker ? 'dd-text dd-bg-elevated' : 'dd-text-secondary hover:dd-text hover:dd-bg-elevated'"
+                <AppButton size="icon-sm" variant="plain" class="text-[0.6875rem]" :class="showAgentColumnPicker ? 'dd-text dd-bg-elevated' : 'dd-text-secondary hover:dd-text hover:dd-bg-elevated'"
                         v-tooltip.top="'Toggle columns'"
                         @click.stop="showAgentColumnPicker = !showAgentColumnPicker">
                   <AppIcon name="config" :size="12" />
-                </button>
+                </AppButton>
                 <div v-if="showAgentColumnPicker" @click.stop
                      class="absolute right-0 top-9 z-50 min-w-[160px] py-1.5 dd-rounded shadow-lg"
                      :style="{
@@ -489,14 +489,14 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
                        boxShadow: 'var(--dd-shadow-lg)',
                      }">
                   <div class="px-3 py-1 text-[0.5625rem] font-bold uppercase tracking-wider dd-text-muted">Columns</div>
-                  <button v-for="col in agentAllColumns" :key="col.key"
-                          class="w-full text-left px-3 py-1.5 text-[0.6875rem] font-medium transition-colors flex items-center gap-2 hover:dd-bg-elevated"
+                  <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2" v-for="col in agentAllColumns" :key="col.key"
+                          
                           :class="col.required ? 'dd-text-muted cursor-not-allowed' : 'dd-text'"
                           @click="toggleAgentColumn(col.key)">
                     <AppIcon :name="agentVisibleColumns.has(col.key) ? 'check' : 'square'" :size="10"
                              :style="agentVisibleColumns.has(col.key) ? { color: 'var(--dd-primary)' } : {}" />
                     {{ col.label }}
-                  </button>
+                  </AppButton>
                 </div>
               </div>
             </template>
@@ -702,11 +702,11 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
               </div>
               <!-- Action buttons -->
               <div class="mt-4 pt-3 flex items-center gap-2" :style="{ borderTop: '1px solid var(--dd-border)' }">
-                <button class="inline-flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[0.6875rem] font-medium transition-colors dd-text-secondary hover:dd-text hover:dd-bg-elevated"
+                <AppButton size="none" variant="plain" weight="none" class="inline-flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[0.6875rem] font-medium transition-colors dd-text-secondary hover:dd-text hover:dd-bg-elevated"
                         @click.stop="selectAgent(agent)">
                   <AppIcon name="info" :size="11" />
                   Details
-                </button>
+                </AppButton>
               </div>
             </template>
           </DataListAccordion>
@@ -749,7 +749,7 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
           <template #tabs>
             <div class="shrink-0 flex px-4 gap-1"
                  :style="{ borderBottom: '1px solid var(--dd-border)' }">
-              <button v-for="tab in agentDetailTabs" :key="tab.id"
+              <AppButton size="none" variant="plain" weight="none" v-for="tab in agentDetailTabs" :key="tab.id"
                       class="px-3 py-2.5 text-[0.6875rem] font-medium transition-colors relative"
                       :class="agentDetailTab === tab.id
                         ? 'text-drydock-secondary'
@@ -759,7 +759,7 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
                 {{ tab.label }}
                 <div v-if="agentDetailTab === tab.id"
                      class="absolute bottom-0 left-0 right-0 h-[2px] bg-drydock-secondary rounded-t-full" />
-              </button>
+              </AppButton>
             </div>
           </template>
 

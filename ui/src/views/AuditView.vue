@@ -252,11 +252,11 @@ onMounted(fetchAudit);
                type="date"
                aria-label="To date"
                class="px-2.5 py-1.5 dd-rounded text-[0.6875rem] font-medium outline-none dd-bg dd-text" />
-        <button v-if="activeFilterCount > 0"
+        <AppButton size="none" variant="plain" weight="none" v-if="activeFilterCount > 0"
                 class="text-[0.625rem] dd-text-muted hover:dd-text transition-colors"
                 @click="clearFilters">
           Clear
-        </button>
+        </AppButton>
       </template>
     </DataFilterBar>
 
@@ -396,16 +396,16 @@ onMounted(fetchAudit);
         Page {{ page }} of {{ totalPages }} ({{ total }} entries)
       </span>
       <div class="flex items-center gap-1.5">
-        <button class="px-2.5 py-1 dd-rounded text-[0.6875rem] font-medium dd-bg dd-text disabled:opacity-40"
+        <AppButton size="none" variant="plain" weight="none" class="px-2.5 py-1 dd-rounded text-[0.6875rem] font-medium dd-bg dd-text disabled:opacity-40"
                 :disabled="page <= 1"
                 @click="prevPage">
           <AppIcon name="chevron-left" :size="11" />
-        </button>
-        <button class="px-2.5 py-1 dd-rounded text-[0.6875rem] font-medium dd-bg dd-text disabled:opacity-40"
+        </AppButton>
+        <AppButton size="none" variant="plain" weight="none" class="px-2.5 py-1 dd-rounded text-[0.6875rem] font-medium dd-bg dd-text disabled:opacity-40"
                 :disabled="page >= totalPages"
                 @click="nextPage">
           <AppIcon name="chevron-right" :size="11" />
-        </button>
+        </AppButton>
       </div>
     </div>
 
