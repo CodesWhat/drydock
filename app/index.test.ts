@@ -1,6 +1,7 @@
 // Mock all dependencies
 vi.mock('./configuration', () => ({
   getVersion: vi.fn(() => '1.0.0'),
+  getDnsMode: vi.fn(() => 'ipv4first'),
 }));
 vi.mock('./configuration/migrate-cli', () => ({
   runConfigMigrateCommandIfRequested: vi.fn(() => null),
