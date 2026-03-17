@@ -55,6 +55,11 @@ class OidcStrategy extends Strategy {
         : (req.headers.authorization ?? '');
       const bearerTokenMatch = authorization.match(/^Bearer\s+(\S+)$/);
       const accessToken = bearerTokenMatch?.[1] ?? '';
+      if (accessToken === '') {
+        this.log.debug('No bearer token provided');
+        passportStrategy.fail(401);
+        return;
+      }
       this.verify(accessToken, (err, user) => {
         if (err || !user) {
           this.log.warn('Bearer token validation failed');
