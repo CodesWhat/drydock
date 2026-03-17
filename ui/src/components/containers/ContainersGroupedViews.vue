@@ -137,7 +137,7 @@ function updateMaturityFallbackTooltip(
                 <span v-if="c.newTag" class="inline-flex items-center gap-0.5 text-[0.5625rem] font-semibold dd-text-secondary min-w-0">
                   <span class="truncate max-w-[80px]">{{ c.currentTag }}</span>
                   <AppIcon name="arrow-right" :size="11" class="dd-text-muted mx-0.5 shrink-0" />
-                  <span class="truncate max-w-[100px]" style="color: var(--dd-primary);" v-tooltip.top="c.newTag">{{ c.newTag }}</span>
+                  <CopyableTag :tag="c.newTag" class="truncate max-w-[100px]" style="color: var(--dd-primary);" @click.stop>{{ c.newTag }}</CopyableTag>
                 </span>
                 <span
                   v-else-if="c.noUpdateReason"
@@ -218,7 +218,7 @@ function updateMaturityFallbackTooltip(
           <div v-if="c.newTag" class="flex items-center justify-center gap-1.5 min-w-0 max-w-[260px]">
             <span class="text-[0.6875rem] dd-text-secondary truncate shrink-0 max-w-[100px]" v-tooltip.top="c.currentTag">{{ c.currentTag }}</span>
             <AppIcon name="arrow-right" :size="8" class="dd-text-muted shrink-0" />
-            <span class="text-[0.6875rem] font-semibold truncate max-w-[140px]" style="color: var(--dd-primary);" v-tooltip.top="c.newTag">{{ c.newTag }}</span>
+            <CopyableTag :tag="c.newTag" class="text-[0.6875rem] font-semibold truncate max-w-[140px]" style="color: var(--dd-primary);" @click.stop>{{ c.newTag }}</CopyableTag>
           </div>
           <div v-else class="text-center">
             <span class="text-[0.6875rem] dd-text-secondary truncate block max-w-[140px] mx-auto" v-tooltip.top="c.currentTag">{{ c.currentTag }}</span>
@@ -563,16 +563,15 @@ function updateMaturityFallbackTooltip(
           <div class="px-4 py-3 min-w-0">
             <div class="flex items-center gap-2 flex-wrap min-w-0">
               <span class="text-[0.6875rem] dd-text-muted shrink-0">Current</span>
-              <span class="text-xs font-bold dd-text truncate max-w-[120px]" v-tooltip.top="c.currentTag">
+              <CopyableTag :tag="c.currentTag" class="text-xs font-bold dd-text truncate max-w-[120px]" @click.stop>
                 {{ c.currentTag }}
-              </span>
+              </CopyableTag>
               <template v-if="c.newTag">
                 <span class="text-[0.6875rem] ml-1 dd-text-muted shrink-0">Latest</span>
-                <span class="text-xs font-bold truncate max-w-[140px]"
-                      :style="{ color: updateKindColor(c.updateKind).text }"
-                      v-tooltip.top="c.newTag">
+                <CopyableTag :tag="c.newTag" class="text-xs font-bold truncate max-w-[140px]"
+                      :style="{ color: updateKindColor(c.updateKind).text }" @click.stop>
                   {{ c.newTag }}
-                </span>
+                </CopyableTag>
                 <span v-if="c.updateMaturity" class="badge text-[0.5625rem] ml-1 shrink-0 uppercase font-bold inline-flex items-center gap-1"
                       :style="{ backgroundColor: maturityColor(c.updateMaturity).bg, color: maturityColor(c.updateMaturity).text }"
                       v-tooltip.top="tt(c.updateMaturityTooltip ?? updateMaturityFallbackTooltip(c.updateMaturity))">

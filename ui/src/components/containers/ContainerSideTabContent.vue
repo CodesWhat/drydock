@@ -200,10 +200,10 @@ const {
               <div class="flex items-center gap-2 px-2.5 py-1.5 dd-rounded text-[0.6875rem] font-mono"
                    :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
                 <span class="dd-text-secondary">Current:</span>
-                <span class="font-bold dd-text">{{ selectedContainer.currentTag }}</span>
+                <CopyableTag :tag="selectedContainer.currentTag" class="font-bold dd-text">{{ selectedContainer.currentTag }}</CopyableTag>
                 <template v-if="selectedContainer.newTag">
                   <AppIcon name="arrow-right" :size="8" class="dd-text-muted" />
-                  <span class="font-bold" style="color: var(--dd-success);">{{ selectedContainer.newTag }}</span>
+                  <CopyableTag :tag="selectedContainer.newTag" class="font-bold" style="color: var(--dd-success);">{{ selectedContainer.newTag }}</CopyableTag>
                 </template>
               </div>
               <div
