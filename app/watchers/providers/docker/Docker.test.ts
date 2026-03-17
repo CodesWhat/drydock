@@ -5495,6 +5495,42 @@ describe('Docker Watcher', () => {
       ]);
     });
 
+    test('filterRecreatedContainerAliases should skip fresh alias when Created is an ISO string', () => {
+      const result = testable_filterRecreatedContainerAliases(
+        [
+          {
+            Id: '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a10',
+            Names: ['/7ea6b8a42686_termix'],
+            Created: new Date().toISOString(),
+          },
+        ],
+        [],
+      );
+
+      expect(result.containersToWatch).toHaveLength(0);
+      expect(Array.from(result.skippedContainerIds)).toEqual([
+        '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a10',
+      ]);
+    });
+
+    test('filterRecreatedContainerAliases should skip fresh alias when Created is a numeric string', () => {
+      const result = testable_filterRecreatedContainerAliases(
+        [
+          {
+            Id: '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a10',
+            Names: ['/7ea6b8a42686_termix'],
+            Created: `${Math.floor(Date.now() / 1000)}`,
+          },
+        ],
+        [],
+      );
+
+      expect(result.containersToWatch).toHaveLength(0);
+      expect(Array.from(result.skippedContainerIds)).toEqual([
+        '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a10',
+      ]);
+    });
+
     test('filterRecreatedContainerAliases should keep stale alias when no sibling and no store match', () => {
       const staleCreated = Math.floor((Date.now() - 60 * 1000) / 1000);
       const result = testable_filterRecreatedContainerAliases(
@@ -5589,6 +5625,23 @@ describe('Docker Watcher', () => {
           Names: ['/termix'],
         },
       ]);
+      expect(Array.from(result.skippedContainerIds)).toEqual([aliasContainerId]);
+    });
+
+    test('filterRecreatedContainerAliases should skip alias when the same docker container exposes base name in Names', () => {
+      const aliasContainerId = '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a10';
+      const result = testable_filterRecreatedContainerAliases(
+        [
+          {
+            Id: aliasContainerId,
+            Names: ['/7ea6b8a42686_termix', '/termix'],
+            Created: Math.floor((Date.now() - 60 * 1000) / 1000),
+          },
+        ],
+        [],
+      );
+
+      expect(result.containersToWatch).toEqual([]);
       expect(Array.from(result.skippedContainerIds)).toEqual([aliasContainerId]);
     });
 

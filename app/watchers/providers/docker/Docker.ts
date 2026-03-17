@@ -390,14 +390,30 @@ function getDockerContainerId(container: { Id?: unknown }) {
   return typeof container.Id === 'string' ? container.Id : '';
 }
 
-function getContainerCreatedAtMs(container: { Created?: unknown }): number | undefined {
-  const created = container.Created;
-  if (typeof created !== 'number' || !Number.isFinite(created) || created <= 0) {
-    return undefined;
+function parseContainerTimestampToMs(timestamp: unknown): number | undefined {
+  if (typeof timestamp === 'number' && Number.isFinite(timestamp) && timestamp > 0) {
+    return timestamp >= 1_000_000_000_000 ? Math.trunc(timestamp) : Math.trunc(timestamp * 1000);
   }
-  // Docker list payloads typically expose Created as Unix seconds.
-  // Handle both seconds and milliseconds defensively.
-  return created >= 1_000_000_000_000 ? Math.trunc(created) : Math.trunc(created * 1000);
+  if (typeof timestamp !== 'string' || timestamp === '') return undefined;
+  const numeric = Number(timestamp);
+  if (Number.isFinite(numeric) && numeric > 0) {
+    return numeric >= 1_000_000_000_000 ? Math.trunc(numeric) : Math.trunc(numeric * 1000);
+  }
+  const parsed = Date.parse(timestamp);
+  return Number.isNaN(parsed) ? undefined : parsed;
+}
+
+function getContainerCreatedAtMs(container: { Created?: unknown }): number | undefined {
+  return parseContainerTimestampToMs(container.Created);
+}
+
+function hasDockerContainerName(container: { Names?: unknown }, expectedName: string): boolean {
+  return (
+    Array.isArray(container.Names) &&
+    container.Names.some(
+      (name) => typeof name === 'string' && name.replace(/^\//, '') === expectedName,
+    )
+  );
 }
 
 function isWithinRecreatedAliasTransientWindow(
@@ -460,7 +476,6 @@ function filterRecreatedContainerAliases(
   for (const container of containers) {
     const containerId = getDockerContainerId(container);
     const recreatedContainerBaseName = getRecreatedContainerBaseName(container);
-
     if (!recreatedContainerBaseName || containerId === '') {
       containersToWatch.push(container);
       continue;
@@ -472,12 +487,21 @@ function filterRecreatedContainerAliases(
       containerId,
     );
     const hasStoreContainerWithBaseName = storeContainerNames.has(recreatedContainerBaseName);
+    const hasBaseNameInSameContainer = hasDockerContainerName(
+      container,
+      recreatedContainerBaseName,
+    );
     const isFreshAlias = isWithinRecreatedAliasTransientWindow(
       getContainerCreatedAtMs(container),
       nowMs,
     );
 
-    if (hasDockerContainerWithBaseName || hasStoreContainerWithBaseName || isFreshAlias) {
+    if (
+      hasDockerContainerWithBaseName ||
+      hasStoreContainerWithBaseName ||
+      hasBaseNameInSameContainer ||
+      isFreshAlias
+    ) {
       // Skip known/likely transient aliases, but do not skip indefinitely.
       // Persisting aliases should be surfaced to avoid long-lived blind spots.
       skippedContainerIds.add(containerId);
