@@ -1,6 +1,6 @@
 # Drydock Documentation
 
-The published documentation is available at **[drydock.codeswhat.com/docs](https://drydock.codeswhat.com/docs)**.
+The published documentation is available at **[getdrydock.com/docs](https://getdrydock.com/docs)**.
 
 ## Source of truth
 

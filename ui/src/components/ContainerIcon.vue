@@ -25,24 +25,24 @@ const failed = ref(false);
  */
 const resolved = computed(() => {
   const raw = props.icon;
-  if (!raw) return { type: 'fallback' as const };
+  if (!raw) return { type: 'fallback' as const, mono: false };
   const icon = normalizeIconPrefix(raw);
-  if (!icon) return { type: 'fallback' as const };
+  if (!icon) return { type: 'fallback' as const, mono: false };
 
   if (icon.startsWith('sh-')) {
-    return { type: 'proxy' as const, src: `/api/icons/selfhst/${icon.slice(3)}` };
+    return { type: 'proxy' as const, src: `/api/icons/selfhst/${icon.slice(3)}`, mono: false };
   }
   if (icon.startsWith('hl-')) {
-    return { type: 'proxy' as const, src: `/api/icons/homarr/${icon.slice(3)}` };
+    return { type: 'proxy' as const, src: `/api/icons/homarr/${icon.slice(3)}`, mono: false };
   }
   if (icon.startsWith('si-')) {
-    return { type: 'proxy' as const, src: `/api/icons/simple/${icon.slice(3)}` };
+    return { type: 'proxy' as const, src: `/api/icons/simple/${icon.slice(3)}`, mono: true };
   }
   if (icon.startsWith('http://') || icon.startsWith('https://')) {
-    return { type: 'url' as const, src: icon };
+    return { type: 'url' as const, src: icon, mono: false };
   }
   // Treat anything else as a selfhst slug
-  return { type: 'proxy' as const, src: `/api/icons/selfhst/${icon}` };
+  return { type: 'proxy' as const, src: `/api/icons/selfhst/${icon}`, mono: false };
 });
 </script>
 
@@ -52,6 +52,7 @@ const resolved = computed(() => {
     <img v-if="!failed"
          :src="resolved.src"
          class="max-w-full max-h-full object-contain"
+         :class="{ 'dark:invert': resolved.mono }"
          loading="lazy"
          @error="failed = true" />
     <AppIcon v-else name="containers" :size="size" class="dd-text-muted" />

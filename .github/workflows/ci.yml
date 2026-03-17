@@ -42,6 +42,7 @@ jobs:
 
   lint:
     name: Lint
+    needs: [zizmor]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -94,6 +95,7 @@ jobs:
 
   test:
     name: Test & Coverage
+    needs: [zizmor]
     runs-on: ubuntu-latest
     environment: ci
     permissions:
@@ -149,7 +151,7 @@ jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
-    needs: [zizmor]
+    needs: [zizmor, lint, test]
     permissions:
       contents: read
 

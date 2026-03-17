@@ -28,8 +28,7 @@ export function registerIcons() {
  */
 export function disableIconifyApi() {
   _api.setAPIModule('', {
-    prepare: (_provider: string, _prefix: string, _icons: string[]) =>
-      [] as { provider: string; prefix: string; icons: string[] }[],
+    prepare: (_provider: string, _prefix: string, _icons: string[]) => [],
     send: (_host: string, _params: unknown, _callback: unknown) => {},
   });
 }

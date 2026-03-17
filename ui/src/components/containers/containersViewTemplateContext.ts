@@ -74,7 +74,7 @@ interface ContainersViewDisplayContainer extends Container {
   _pending?: true;
 }
 
-interface ContainersViewRenderGroup {
+export interface ContainersViewRenderGroup {
   key: string;
   name: string | null;
   containers: ContainersViewDisplayContainer[];
@@ -83,7 +83,7 @@ interface ContainersViewRenderGroup {
   updatableCount: number;
 }
 
-interface ContainersViewTableColumn {
+export interface ContainersViewTableColumn {
   key: string;
   label: string;
   align?: string;

@@ -2,6 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { nextTick, ref } from 'vue';
 import ContainerSideTabContent from '@/components/containers/ContainerSideTabContent.vue';
+import type { Container } from '@/types/container';
 
 const mockRevealContainerEnv = vi.fn();
 const mockSetMaturityPolicySelected = vi.fn();
@@ -15,15 +16,20 @@ vi.mock('@/services/container', () => ({
   revealContainerEnv: (...args: unknown[]) => mockRevealContainerEnv(...args),
 }));
 
-function createSelectedContainer() {
+function createSelectedContainer(): Container {
   return {
     id: 'container-1',
     name: 'nginx',
     image: 'nginx',
+    icon: 'docker',
     currentTag: 'latest',
+    newTag: null,
     status: 'running',
+    registry: 'dockerhub',
+    updateKind: null,
+    updateMaturity: null,
+    bouncer: 'safe',
     server: 'local',
-    newTag: undefined,
     details: {
       ports: [],
       volumes: [],

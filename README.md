@@ -13,8 +13,8 @@
 </div>
 
 <p align="center">
-  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.4.1-blue" alt="Version"></a>
-  <a href="https://github.com/CodesWhat/drydock/pkgs/container/drydock"><img src="https://img.shields.io/badge/GHCR-32K%2B_pulls-2ea44f?logo=github&logoColor=white" alt="GHCR pulls"></a>
+  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.4.4-blue" alt="Version"></a>
+  <a href="https://github.com/CodesWhat/drydock/pkgs/container/drydock"><img src="https://img.shields.io/badge/GHCR-40K%2B_pulls-2ea44f?logo=github&logoColor=white" alt="GHCR pulls"></a>
   <a href="https://hub.docker.com/r/codeswhat/drydock"><img src="https://img.shields.io/docker/pulls/codeswhat/drydock?logo=docker&logoColor=white&label=Docker+Hub" alt="Docker Hub pulls"></a>
   <a href="https://quay.io/repository/codeswhat/drydock"><img src="https://img.shields.io/badge/Quay.io-image-ee0000?logo=redhat&logoColor=white" alt="Quay.io"></a>
   <br>
@@ -50,7 +50,7 @@
 
 <h2 align="center">📑 Contents</h2>
 
-- [📖 Documentation](https://drydock.codeswhat.com/docs)
+- [📖 Documentation](https://getdrydock.com/docs)
 - [🚀 Quick Start](#quick-start)
 - [📸 Screenshots & Live Demo](#screenshots)
 - [✨ Features](#features)
@@ -116,7 +116,7 @@ docker run -d \
   codeswhat/drydock:latest
 ```
 
-> **Warning:** Direct socket access grants the container full control over the Docker daemon. Use the socket proxy setup above for production deployments. See the [Docker Socket Security guide](https://drydock.codeswhat.com/docs/configuration/watchers#docker-socket-security) for all options including remote TLS and rootless Docker.
+> **Warning:** Direct socket access grants the container full control over the Docker daemon. Use the socket proxy setup above for production deployments. See the [Docker Socket Security guide](https://getdrydock.com/docs/configuration/watchers#docker-socket-security) for all options including remote TLS and rootless Docker.
 
 </details>
 
@@ -133,12 +133,12 @@ docker run -d \
 > ```
 >
 > Legacy v1.3.9 Basic auth hashes (`{SHA}`, `$apr1$`/`$1$`, `crypt`, and plain) are accepted for upgrade compatibility but deprecated (removed in v1.6.0). Argon2id is recommended for all new configurations.
-> Authentication is **required by default**. See the [auth docs](https://drydock.codeswhat.com/docs/configuration/authentications) for OIDC, anonymous access, and other options.
+> Authentication is **required by default**. See the [auth docs](https://getdrydock.com/docs/configuration/authentications) for OIDC, anonymous access, and other options.
 > To explicitly allow anonymous access on fresh installs, set `DD_ANONYMOUS_AUTH_CONFIRM=true`.
 
 The image includes `trivy` and `cosign` binaries for local vulnerability scanning and image verification.
 
-See the [Quick Start guide](https://drydock.codeswhat.com/docs/quickstart) for Docker Compose, socket security, reverse proxy, and alternative registries.
+See the [Quick Start guide](https://getdrydock.com/docs/quickstart) for Docker Compose, socket security, reverse proxy, and alternative registries.
 
 <hr>
 
@@ -159,7 +159,7 @@ See the [Quick Start guide](https://drydock.codeswhat.com/docs/quickstart) for D
 
 **Why look at screenshots when you can experience it yourself?**
 
-<a href="https://demo.drydock.codeswhat.com"><img src="https://img.shields.io/badge/Try_the_Live_Demo-4f46e5?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IndoaXRlIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBvbHlnb24gcG9pbnRzPSI2IDMgMjAgMTIgNiAyMSA2IDMiLz48L3N2Zz4=&logoColor=white" alt="Try the Live Demo" height="36"></a>
+<a href="https://demo.getdrydock.com"><img src="https://img.shields.io/badge/Try_the_Live_Demo-4f46e5?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IndoaXRlIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBvbHlnb24gcG9pbnRzPSI2IDMgMjAgMTIgNiAyMSA2IDMiLz48L3N2Zz4=&logoColor=white" alt="Try the Live Demo" height="36"></a>
 
 Fully interactive — real UI, mock data, no install required. Runs entirely in-browser.
 
@@ -351,7 +351,10 @@ Drop-in replacement — swap the image, restart, done. All `WUD_*` env vars and 
 | --- | --- | --- |
 | **v1.3.x** ✅ | Security & Stability | Trivy scanning, Update Bouncer, SBOM, 7 new registries, 4 new triggers, rollback fixes, GHCR auth, self-hosted TLS, re2js regex engine, compose trigger fixes, DB persistence on shutdown |
 | **v1.4.0** ✅ | UI Modernization & Hardening | Tailwind CSS 4 + custom component library, 6 themes, 7 icon libraries, font size preference, Cmd/K command palette, OpenAPI 3.1.0 endpoint, standardized API responses with pagination, compose-native YAML-preserving updates, rename-first rollback with health gates, self-update controller with SSE ack, fail-closed auth enforcement, OIDC redirect URL validation, tag-family semver, notification rules, container grouping by stack, audit history view, dual-slot security scanning, scheduled scans, WUD migration CLI, bundled offline icons, dashboard drag-reorder, gzip compression, API error sanitization, agent log validation, TLS path redaction, audit store indexing with 30-day retention, type-safe store modules, durable batch scans, recent-status API, advisory-only security scanning, compose trigger hardening (auto-detection, validation, reconciliation, digest pinning, batch mode, multi-file awareness), reactive server feature flags, identity-aware rate limiting, API hardening |
-| **v1.4.1** | Patch & Polish | Headless mode (API-only), maturity-based update policy (NEW/MATURE badges), `?groupByStack=true` URL param, agent handshake + SSE fix (#141), mangled hash detection + anonymous fallback + login error surfacing (#147), CSRF behind reverse proxies (#146), compose trigger affinity across remapped roots, CSP inline style elimination, connection-lost animation, LokiJS metadata stripping, timing side-channel fix, image hardening |
+| **v1.4.1** ✅ | Patch & Polish | Headless mode (API-only), maturity-based update policy (NEW/MATURE badges), `?groupByStack=true` URL param, agent handshake + SSE fix (#141), mangled hash detection + anonymous fallback + login error surfacing (#147), CSRF behind reverse proxies (#146), compose trigger affinity across remapped roots, CSP inline style elimination, connection-lost animation, LokiJS metadata stripping, timing side-channel fix, image hardening |
+| **v1.4.2** ✅ | Bug Fixes | Watcher container count fix (#155), container recreate alias filtering (#156), stale store data fix (#157), CI versioned-only images (#154), maturity badge sizing, dependency upgrades |
+| **v1.4.3** ✅ | DNS & Security | Configurable DNS result ordering for Alpine EAI_AGAIN fix (#161), Docker socket security guide, zizmor blocking in CI, scoped GitHub environments |
+| **v1.4.4** ✅ | UI Polish & Hardening | Alias dedup hardening with 30s transient window (#156), dashboard host-status for remote watchers (#155), tooltip viewport fix (#165), click-to-copy version tags (#164), Simple Icons dark mode inversion, theme switcher fix, search button polish, URL rebrand to getdrydock.com |
 | **v1.5.0** | Observability & User-Requested Features | Real-time log viewer, container resource monitoring, registry webhooks, auth endpoint telemetry/guardrails, image maturity/sort-by-age indicator, URL-driven filter/sort state, release notes in UI & notifications, smart tag suggestions, digest check deduplication, Podman setup docs |
 | **v1.5.1** | Scanner Decoupling | Backend-based scanner execution (docker/remote), Grype provider, scanner asset lifecycle |
 | **v1.6.0** | Notifications & Release Intel | Notification templates, MS Teams & Matrix triggers, remove all deprecated compatibility aliases (see [DEPRECATIONS.md](DEPRECATIONS.md)) |
@@ -372,11 +375,11 @@ Drop-in replacement — swap the image, restart, done. All `WUD_*` env vars and 
 
 | Resource | Link |
 | --- | --- |
-| Website | [drydock.codeswhat.com](https://drydock.codeswhat.com/) |
-| Live Demo | [demo.drydock.codeswhat.com](https://demo.drydock.codeswhat.com) |
-| Docs | [drydock.codeswhat.com/docs](https://drydock.codeswhat.com/docs) |
-| Configuration | [Configuration](https://drydock.codeswhat.com/docs/configuration) |
-| Quick Start | [Quick Start](https://drydock.codeswhat.com/docs/quickstart) |
+| Website | [getdrydock.com](https://getdrydock.com/) |
+| Live Demo | [demo.getdrydock.com](https://demo.getdrydock.com) |
+| Docs | [getdrydock.com/docs](https://getdrydock.com/docs) |
+| Configuration | [Configuration](https://getdrydock.com/docs/configuration) |
+| Quick Start | [Quick Start](https://getdrydock.com/docs/quickstart) |
 | Changelog | [`CHANGELOG.md`](CHANGELOG.md) |
 | Deprecations | [`DEPRECATIONS.md`](DEPRECATIONS.md) |
 | Roadmap | See [Roadmap](#roadmap) section above |

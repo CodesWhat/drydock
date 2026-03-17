@@ -7,7 +7,7 @@ export const appHandlers = [
       version: '1.4.1',
       description: 'Docker container update manager',
       repository: 'https://github.com/CodesWhat/drydock',
-      documentation: 'https://drydock.codeswhat.com/docs',
+      documentation: 'https://getdrydock.com/docs',
     }),
   ),
 ];

@@ -290,7 +290,7 @@ describe('useVulnerabilities', () => {
     });
     await state.fetchVulnerabilities();
 
-    const summary = state.imageSummaries.value[0] as Record<string, unknown>;
+    const summary = state.imageSummaries.value[0] as unknown as Record<string, unknown>;
     expect(summary.vulns).toBeUndefined();
     expect(state.vulnerabilitiesByImage.value.nginx).toHaveLength(2);
     expect(state.vulnerabilitiesByImage.value.nginx.map((v) => v.id)).toEqual(['CVE-1', 'CVE-2']);

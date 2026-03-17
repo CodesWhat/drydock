@@ -5,9 +5,12 @@ import {
   getWatcherProviderIcon,
 } from '@/services/watcher';
 
+let fetchMock: ReturnType<typeof vi.fn>;
+
 describe('Watcher Service', () => {
   beforeEach(() => {
-    global.fetch = vi.fn();
+    fetchMock = vi.fn();
+    global.fetch = fetchMock as unknown as typeof fetch;
   });
 
   it('returns docker icon for docker provider', () => {
@@ -28,20 +31,20 @@ describe('Watcher Service', () => {
 
   it('should get all watchers', async () => {
     const mockWatchers = [{ id: 'docker.local' }];
-    global.fetch.mockResolvedValue({
+    fetchMock.mockResolvedValue({
       ok: true,
       json: vi.fn().mockResolvedValue({ data: mockWatchers, total: 1 }),
     });
 
     const result = await getAllWatchers();
 
-    expect(global.fetch).toHaveBeenCalledWith('/api/watchers', { credentials: 'include' });
+    expect(fetchMock).toHaveBeenCalledWith('/api/watchers', { credentials: 'include' });
     expect(result).toEqual(mockWatchers);
   });
 
   it('supports array payload shape when listing watchers', async () => {
     const mockWatchers = [{ id: 'array-shape' }];
-    global.fetch.mockResolvedValue({
+    fetchMock.mockResolvedValue({
       ok: true,
       json: vi.fn().mockResolvedValue(mockWatchers),
     });
@@ -52,7 +55,7 @@ describe('Watcher Service', () => {
 
   it('supports items payload shape when listing watchers', async () => {
     const mockWatchers = [{ id: 'items-shape' }];
-    global.fetch.mockResolvedValue({
+    fetchMock.mockResolvedValue({
       ok: true,
       json: vi.fn().mockResolvedValue({ items: mockWatchers }),
     });
@@ -63,7 +66,7 @@ describe('Watcher Service', () => {
 
   it('supports entries payload shape when listing watchers', async () => {
     const mockWatchers = [{ id: 'ignored' }];
-    global.fetch.mockResolvedValue({
+    fetchMock.mockResolvedValue({
       ok: true,
       json: vi.fn().mockResolvedValue({ entries: mockWatchers }),
     });
@@ -73,7 +76,7 @@ describe('Watcher Service', () => {
   });
 
   it('returns empty array when watcher payload is not an object', async () => {
-    global.fetch.mockResolvedValue({
+    fetchMock.mockResolvedValue({
       ok: true,
       json: vi.fn().mockResolvedValue('not-an-object'),
     });
@@ -83,7 +86,7 @@ describe('Watcher Service', () => {
   });
 
   it('throws when fetching all watchers fails', async () => {
-    global.fetch.mockResolvedValue({
+    fetchMock.mockResolvedValue({
       ok: false,
       statusText: 'Internal Server Error',
       json: vi.fn().mockResolvedValue({}),
@@ -94,21 +97,21 @@ describe('Watcher Service', () => {
 
   it('fetches a specific watcher by type and name', async () => {
     const mockWatcher = { id: 'docker.local', type: 'docker', name: 'local' };
-    global.fetch.mockResolvedValue({
+    fetchMock.mockResolvedValue({
       ok: true,
       json: vi.fn().mockResolvedValue(mockWatcher),
     });
 
     const result = await getWatcher({ type: 'docker', name: 'local' });
 
-    expect(global.fetch).toHaveBeenCalledWith('/api/watchers/docker/local', {
+    expect(fetchMock).toHaveBeenCalledWith('/api/watchers/docker/local', {
       credentials: 'include',
     });
     expect(result).toEqual(mockWatcher);
   });
 
   it('throws when fetching a specific watcher fails', async () => {
-    global.fetch.mockResolvedValue({
+    fetchMock.mockResolvedValue({
       ok: false,
       statusText: 'Not Found',
       json: vi.fn().mockResolvedValue({}),
@@ -121,14 +124,14 @@ describe('Watcher Service', () => {
 
   it('fetches an agent-scoped watcher when agent is provided', async () => {
     const mockWatcher = { id: 'edge.docker.local', type: 'docker', name: 'local', agent: 'edge' };
-    global.fetch.mockResolvedValue({
+    fetchMock.mockResolvedValue({
       ok: true,
       json: vi.fn().mockResolvedValue(mockWatcher),
     });
 
     const result = await getWatcher({ agent: 'edge', type: 'docker', name: 'local' });
 
-    expect(global.fetch).toHaveBeenCalledWith('/api/watchers/docker/local/edge', {
+    expect(fetchMock).toHaveBeenCalledWith('/api/watchers/docker/local/edge', {
       credentials: 'include',
     });
     expect(result).toEqual(mockWatcher);

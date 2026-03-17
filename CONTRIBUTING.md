@@ -129,13 +129,13 @@ Scope is optional. Subject line should be imperative, lowercase, no trailing per
 |3|`qlty`|Full qlty lint pass (`qlty check --all`)|Fail|
 |4|`build-and-test`|Parallel build + test for both `app/` and `ui/`|Fail|
 |5|`e2e`|Cucumber E2E tests against a fresh Drydock instance|Fail|
-|6|`zizmor`|GitHub Actions workflow linting (advisory, skipped if not installed)|Skip if not installed|
+|6|`zizmor`|GitHub Actions workflow linting (blocking)|Fail|
 
 If lefthook passes locally, CI will pass. Fix any issues **before** pushing.
 
 ## Documentation
 
-Documentation lives in `content/docs/` (MDX format, versioned by release) and is published to [drydock.codeswhat.com](https://drydock.codeswhat.com). When your code change affects user-facing behavior, include the corresponding documentation update in the same PR.
+Documentation lives in `content/docs/` (MDX format, versioned by release) and is published to [getdrydock.com](https://getdrydock.com). When your code change affects user-facing behavior, include the corresponding documentation update in the same PR.
 
 CHANGELOG and README updates should accompany each logical change — don't batch them separately.
 

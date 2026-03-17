@@ -15,7 +15,7 @@ function makeContainer(
   status: 'running' | 'stopped',
   counters: { serverReads: number },
 ): Container {
-  const container: Record<string, unknown> = {
+  const container: Container = {
     id: `c-${id}`,
     name: `container-${id}`,
     image: `image-${id}`,
@@ -23,8 +23,11 @@ function makeContainer(
     currentTag: '1.0.0',
     newTag: null,
     updateKind: null,
+    updateMaturity: null,
     bouncer: 'safe',
     registry: 'dockerhub',
+    server,
+    status,
     details: { ports: [], volumes: [], env: [], labels: [] },
   };
 
@@ -45,7 +48,7 @@ function makeContainer(
     },
   });
 
-  return container as Container;
+  return container;
 }
 
 function makeBaseContainer(overrides: Partial<Container> = {}): Container {
@@ -57,6 +60,7 @@ function makeBaseContainer(overrides: Partial<Container> = {}): Container {
     currentTag: '1.0.0',
     newTag: null,
     updateKind: null,
+    updateMaturity: null,
     bouncer: 'safe',
     registry: 'dockerhub',
     server: 'Local',
@@ -199,6 +203,88 @@ describe('useDashboardComputed servers', () => {
     });
 
     expect(state.servers.value.find((row) => row.name === 'edge-d')?.host).toBe('edge-d.local');
+  });
+
+  it('includes non-agent remote watchers with correct container counts', () => {
+    const watchers = [
+      { name: 'local', configuration: { socket: '/var/run/docker.sock' } },
+      { name: 'esk83', configuration: { host: '10.0.0.83', port: 2375 } },
+      { name: 'esk00', configuration: { host: '10.0.0.100', port: 2375, protocol: 'https' } },
+    ];
+    const containers: Container[] = [
+      makeBaseContainer({ id: 'l-1', server: 'Local', status: 'running' }),
+      makeBaseContainer({ id: 'e83-1', server: 'Esk83', status: 'running' }),
+      makeBaseContainer({ id: 'e83-2', server: 'Esk83', status: 'stopped' }),
+      makeBaseContainer({ id: 'e00-1', server: 'Esk00', status: 'running' }),
+    ];
+    const state = createState({ watchers, containers });
+
+    expect(state.servers.value).toEqual([
+      {
+        name: 'Local',
+        host: 'unix:///var/run/docker.sock',
+        status: 'connected',
+        containers: { running: 1, total: 1 },
+      },
+      {
+        name: 'Esk83',
+        host: 'http://10.0.0.83:2375',
+        status: 'connected',
+        containers: { running: 1, total: 2 },
+      },
+      {
+        name: 'Esk00',
+        host: 'https://10.0.0.100:2375',
+        status: 'connected',
+        containers: { running: 1, total: 1 },
+      },
+    ]);
+  });
+
+  it('includes non-agent remote watchers alongside agents without double-counting', () => {
+    const watchers = [
+      { name: 'local', configuration: { socket: '/var/run/docker.sock' } },
+      { name: 'remote1', configuration: { host: '10.0.0.50', port: 2375 } },
+    ];
+    const agents: DashboardAgent[] = [
+      { name: 'edge-a', connected: true, host: '10.0.0.10', port: 2375 },
+    ];
+    const containers: Container[] = [
+      makeBaseContainer({ id: 'l-1', server: 'Local', status: 'running' }),
+      makeBaseContainer({ id: 'r-1', server: 'Remote1', status: 'running' }),
+      makeBaseContainer({ id: 'a-1', server: 'edge-a', status: 'running' }),
+    ];
+    const state = createState({ watchers, agents, containers });
+
+    const serverNames = state.servers.value.map((s) => s.name);
+    expect(serverNames).toEqual(['Local', 'Remote1', 'edge-a']);
+    expect(state.servers.value.reduce((sum, s) => sum + s.containers.total, 0)).toBe(3);
+  });
+
+  it('ignores only watchers with truthy agent while keeping falsy-agent watcher records', () => {
+    const watchers = [
+      null,
+      123,
+      { name: 'local', configuration: { socket: '/var/run/docker.sock' } },
+      { name: 'with-agent', agent: 'edge-a', configuration: { host: '10.0.0.55', port: 2375 } },
+      { name: 'empty-agent', agent: '', configuration: { host: '10.0.0.56', port: 2375 } },
+    ];
+    const state = createState({ watchers, containers: [] });
+
+    expect(state.servers.value.map((row) => row.name)).toEqual(['Local', 'Empty-agent']);
+  });
+
+  it('uses socket host for local watcher and bare host when no port for remote watcher', () => {
+    const watchers = [
+      { name: 'local', configuration: { socket: '/var/run/docker.sock' } },
+      { name: 'bare', configuration: { host: 'bare.local' } },
+    ];
+    const state = createState({ watchers, containers: [] });
+
+    expect(state.servers.value.find((s) => s.name === 'Local')?.host).toBe(
+      'unix:///var/run/docker.sock',
+    );
+    expect(state.servers.value.find((s) => s.name === 'Bare')?.host).toBe('bare.local');
   });
 });
 
@@ -652,7 +738,7 @@ describe('useDashboardComputed recent updates', () => {
         id: `u-${index}`,
         name: `update-${String(index).padStart(3, '0')}`,
         newTag: `2.${index}.0`,
-      }) as Record<string, unknown>;
+      });
 
       Object.defineProperty(container, 'updateDetectedAt', {
         configurable: true,
@@ -665,7 +751,7 @@ describe('useDashboardComputed recent updates', () => {
         },
       });
 
-      return container as Container;
+      return container;
     });
 
     const state = createState({ containers });

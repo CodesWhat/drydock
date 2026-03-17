@@ -149,7 +149,7 @@ The `WATCHATSTART` env var is deprecated. Drydock watches at startup by default.
 
 Several trigger template variable names have been replaced with more descriptive equivalents. The old names are retained as aliases.
 
-**Migration:** Update trigger templates to use the new variable names. See the [trigger configuration docs](https://drydock.codeswhat.com/docs/configuration/triggers) for the full variable reference.
+**Migration:** Update trigger templates to use the new variable names. See the [trigger configuration docs](https://getdrydock.com/docs/configuration/triggers) for the full variable reference.
 
 ---
 

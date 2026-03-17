@@ -6,6 +6,8 @@
 @import "@fontsource/ibm-plex-mono/600.css";
 @import "@fontsource/ibm-plex-mono/700.css";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 html,
 body {
   overflow: hidden;
@@ -342,16 +344,9 @@ body.dd-col-resizing {
   user-select: none;
 }
 
-/* Tooltip directive */
-.dd-tooltip-anchor {
-  position: relative;
-}
-.dd-tooltip-anchor::after {
-  content: attr(data-dd-tooltip);
-  position: absolute;
-  left: 50%;
-  bottom: calc(100% + 8px);
-  transform: translate(-50%, 2px);
+/* Tooltip directive — shared singleton appended to body */
+.dd-tooltip-popup {
+  position: fixed;
   z-index: 9999;
   pointer-events: none;
   opacity: 0;
@@ -364,13 +359,10 @@ body.dd-col-resizing {
   box-shadow: 0 4px 12px rgb(0 0 0 / 20%);
   background: var(--dd-bg-card);
   color: var(--dd-text);
-  transition:
-    opacity 0.15s ease,
-    transform 0.15s ease;
+  transition: opacity 0.15s ease;
 }
-.dd-tooltip-anchor.dd-tooltip-visible::after {
+.dd-tooltip-popup.dd-tooltip-visible {
   opacity: 1;
-  transform: translate(-50%, 0);
 }
 
 /* Scrollbar styling — overlay so scrollbars never shift layout */

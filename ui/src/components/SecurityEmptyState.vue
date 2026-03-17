@@ -59,7 +59,7 @@ defineEmits<{
 
       <a
         v-if="!hasVulnerabilityData && scannerSetupNeeded"
-        href="https://drydock.codeswhat.com/docs/configuration/security"
+        href="https://getdrydock.com/docs/configuration/security"
         target="_blank"
         rel="noopener noreferrer"
         class="text-xs font-medium px-3 py-1.5 dd-rounded transition-colors flex items-center gap-1.5 no-underline text-drydock-secondary bg-drydock-secondary/10 hover:bg-drydock-secondary/20"

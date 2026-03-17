@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 
-const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://drydock.codeswhat.com";
+const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://getdrydock.com";
 
 export const metadata: Metadata = {
   title: "Drydock vs Alternatives — Container Update Tool Comparisons",

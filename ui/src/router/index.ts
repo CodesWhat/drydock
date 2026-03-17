@@ -1,4 +1,9 @@
-import { createRouter, createWebHistory, type RouteLocationNormalized } from 'vue-router';
+import {
+  createRouter,
+  createWebHistory,
+  type RouteLocationNormalized,
+  type RouteRecordRaw,
+} from 'vue-router';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { getUser } from '@/services/auth';
 import { ROUTES } from './routes';
@@ -20,11 +25,11 @@ const viewLoaders = {
   logs: () => import('../views/LogsView.vue'),
 };
 
-function createLazyRoute(path: string, name: keyof typeof viewLoaders) {
+function createLazyRoute(path: string, name: keyof typeof viewLoaders): RouteRecordRaw {
   return { path, name, component: viewLoaders[name] };
 }
 
-const routes = [
+const routes: RouteRecordRaw[] = [
   createLazyRoute(ROUTES.LOGIN, 'login'),
   {
     path: ROUTES.DASHBOARD,
