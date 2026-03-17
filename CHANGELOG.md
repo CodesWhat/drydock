@@ -10,6 +10,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.4] — 2026-03-16
+
+### Added
+
+- **Click-to-copy on version tags** — CopyableTag component with clipboard feedback on all version displays (dashboard, container list, detail panels). ([#164](https://github.com/CodesWhat/drydock/issues/164))
+- **Dark mode icon inversion** — Simple Icons (`si:` prefix) auto-invert in dark mode via Tailwind dark variant.
+- **Tailwind v4 class-based dark mode** — `@custom-variant dark` directive for proper `.dark` class detection.
+
+### Changed
+
+- **Dashboard Updates Available version column centered.**
+- **Sidebar search button border removed** — `⌘K` badge improved dark mode contrast.
+- **URL rebrand** — All URLs updated from `drydock.codeswhat.com` to `getdrydock.com`.
+
+### Fixed
+
+- **Dashboard host-status widget showing 0 for non-agent remote watchers** — Dashboard host-status widget incorrectly showed zero container counts for non-agent remote watchers by using `watcher.id` instead of `watcher.name` as the lookup key. ([#155](https://github.com/CodesWhat/drydock/issues/155))
+- **Container recreate alias duplicates** — Unconditional 30s transient window skip, single inspect per event, event path guard prevent Docker's transient `<id-prefix>_<name>` aliases from producing duplicate container entries in triggers. ([#156](https://github.com/CodesWhat/drydock/issues/156))
+- **Tooltip viewport overflow** — Replaced CSS pseudo-element tooltips with body-appended popup using `position:fixed` and auto-flip. ([#165](https://github.com/CodesWhat/drydock/issues/165))
+- **Theme switcher broken** — Restored document binding for `startViewTransition` API.
+
+## [1.4.3] — 2026-03-16
+
+### Fixed
+
+- **DNS resolution failures on Alpine (EAI_AGAIN)** — Node.js 24 defaults to `verbatim` DNS ordering, which on Alpine's musl libc can cause `getaddrinfo EAI_AGAIN` errors when IPv6 records are returned first on dual-stack networks. Drydock now defaults to IPv4-first DNS ordering at startup, configurable via `DD_DNS_MODE` (`ipv4first` | `ipv6first` | `verbatim`, default: `ipv4first`). ([#161](https://github.com/CodesWhat/drydock/issues/161))
+- **Multi-platform Docker build validation** — CI now validates multi-platform Docker builds to catch architecture-specific failures early.
+
+### Security
+
+- **Zizmor findings blocking in CI and lefthook** — GitHub Actions security findings from zizmor are now blocking in both CI and local pre-push hooks.
+- **Secrets scoped to dedicated GitHub environments** — CI secrets are now scoped to dedicated GitHub environments instead of repository-level access.
+
+### Documentation
+
+- **Docker socket security guide** — Expanded watcher docs with comprehensive security section: comparison table of all access methods, socket proxy setup (recommended), remote Docker over TLS with cert generation walkthrough, rootless Docker guide, full Docker API endpoint reference showing exactly which endpoints Drydock uses for read-only monitoring vs write operations (updates).
+
+### Dependencies
+
+- **CI actions** — Bumped upload-artifact to v7 and replaced nick-fields/retry.
+
+## [1.4.2] — 2026-03-15
+
 ### Added
 
 - **Update-operations pagination** — `GET /api/containers/:id/update-operations` now supports `limit` and `offset` query parameters with `_links` navigation, matching the existing container list pagination pattern.
@@ -37,7 +80,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Compose path deduplication** — Replaced `indexOf`-based dedup with `Set` for compose file path detection in container security view.
 - **Build provenance attestation** — CI attestation step now runs with `if: always()` so provenance is attested even when prior optional steps are skipped.
 - **Container recreate alias duplicates in triggers** — When containers were recreated externally (via Portainer or `docker compose up`), Docker's transient `<id-prefix>_<name>` aliases were treated as new containers, producing duplicate entries in MQTT Home Assistant discovery sensors and Telegram notifications. Added alias deduplication filtering and force-removal of stale container IDs on recreate detection. ([#156](https://github.com/CodesWhat/drydock/issues/156))
-- **DNS resolution failures on Alpine (EAI_AGAIN)** — Node.js 24 defaults to `verbatim` DNS ordering, which on Alpine's musl libc can cause `getaddrinfo EAI_AGAIN` errors when IPv6 records are returned first on dual-stack networks. Drydock now defaults to IPv4-first DNS ordering at startup, configurable via `DD_DNS_MODE` (`ipv4first` | `ipv6first` | `verbatim`, default: `ipv4first`). ([#161](https://github.com/CodesWhat/drydock/issues/161))
 - **Stale store data after external container recreation** — Watch-at-start scan was suppressed when the store already had container data, leaving stale records from the previous run after external container recreation. Removed the suppression so every startup runs a full scan with alias filtering. ([#157](https://github.com/CodesWhat/drydock/issues/157))
 - **Watcher container counts on Hosts page** — Per-watcher container counts on the Hosts page used `watcher.id` (e.g. `docker.esk83`) as the lookup key instead of `watcher.name` (e.g. `esk83`), causing counts to display as zero for env-var-configured watchers. ([#155](https://github.com/CodesWhat/drydock/issues/155))
 - **Docker images tagged `:main` with no version** — CI release workflow triggered on both main branch pushes and version tags, producing Docker images tagged `:main` that showed `DD_VERSION=main` instead of a real version number. Release workflow now only triggers on version tags (`v*`). ([#154](https://github.com/CodesWhat/drydock/issues/154))
@@ -50,10 +92,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **SSE self-update ack hardening** — Added validation for empty `clientId`/`clientToken`, non-ack broadcast mode, and client-not-bound-to-operation rejection.
 - **FAQ: removed insecure seccomp advice** — Removed the "Core dumped on Raspberry PI" FAQ entry that recommended `--security-opt seccomp=unconfined`, which completely disables the kernel's syscall sandbox. The underlying libseccomp2 bug was fixed in all supported OS versions since 2021.
 
-### Documentation
-
-- **Docker socket security guide** — Expanded watcher docs with comprehensive security section: comparison table of all access methods, socket proxy setup (recommended), remote Docker over TLS with cert generation walkthrough, rootless Docker guide, full Docker API endpoint reference showing exactly which endpoints Drydock uses for read-only monitoring vs write operations (updates).
-
 ### Dependencies
 
 - **biome** — Bumped to 2.4.7 with import ordering fixes for new lint rules.
@@ -61,7 +99,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **UI packages** — Bumped vue, vitest, storybook, and icon packages.
 - **CI actions** — Bumped zizmor-action to v0.5.2 and cosign-installer to v4.1.0.
 
-## [1.4.1]
+## [1.4.1] — 2026-03-14
 
 ### Added
 

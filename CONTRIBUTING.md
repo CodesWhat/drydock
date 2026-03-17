@@ -129,7 +129,7 @@ Scope is optional. Subject line should be imperative, lowercase, no trailing per
 |3|`qlty`|Full qlty lint pass (`qlty check --all`)|Fail|
 |4|`build-and-test`|Parallel build + test for both `app/` and `ui/`|Fail|
 |5|`e2e`|Cucumber E2E tests against a fresh Drydock instance|Fail|
-|6|`zizmor`|GitHub Actions workflow linting (advisory, skipped if not installed)|Skip if not installed|
+|6|`zizmor`|GitHub Actions workflow linting (blocking)|Fail|
 
 If lefthook passes locally, CI will pass. Fix any issues **before** pushing.
 
