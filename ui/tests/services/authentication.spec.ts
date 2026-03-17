@@ -43,7 +43,7 @@ describe('Authentication Service', () => {
 
     const result = await getAllAuthentications();
 
-    expect(fetch).toHaveBeenCalledWith('/api/authentications', {
+    expect(fetch).toHaveBeenCalledWith('/api/v1/authentications', {
       credentials: 'include',
     });
     expect(result).toEqual(mockAuthentications);
@@ -113,7 +113,7 @@ describe('Authentication Service', () => {
 
     const result = await getAuthentication({ type: 'basic', name: 'local' });
 
-    expect(fetch).toHaveBeenCalledWith('/api/authentications/basic/local', {
+    expect(fetch).toHaveBeenCalledWith('/api/v1/authentications/basic/local', {
       credentials: 'include',
     });
     expect(result).toEqual(mockAuthentication);
@@ -145,7 +145,7 @@ describe('Authentication Service', () => {
 
     const result = await getAuthentication({ agent: 'edge', type: 'basic', name: 'local' });
 
-    expect(fetch).toHaveBeenCalledWith('/api/authentications/basic/local/edge', {
+    expect(fetch).toHaveBeenCalledWith('/api/v1/authentications/basic/local/edge', {
       credentials: 'include',
     });
     expect(result).toEqual(mockAuthentication);

@@ -79,7 +79,7 @@ function getRegistryProviderColor(provider: string) {
  * @returns {Promise<unknown>}
  */
 async function getAllRegistries() {
-  const response = await fetch('/api/registries', { credentials: 'include' });
+  const response = await fetch('/api/v1/registries', { credentials: 'include' });
   if (!response.ok) {
     throw new Error(`Failed to get registries: ${response.statusText}`);
   }
@@ -88,7 +88,7 @@ async function getAllRegistries() {
 }
 
 function buildRegistryDetailPath({ type, name, agent }: RegistryDetailPathOptions) {
-  const segments = ['/api/registries'];
+  const segments = ['/api/v1/registries'];
   segments.push(encodeURIComponent(type), encodeURIComponent(name));
   if (agent) {
     segments.push(encodeURIComponent(agent));

@@ -28,7 +28,7 @@ export async function getAuditLog(
   if (params.from) query.set('from', params.from);
   if (params.to) query.set('to', params.to);
   const queryString = query.toString();
-  const url = `/api/audit?${queryString}`;
+  const url = `/api/v1/audit?${queryString}`;
   const response = await fetch(url, { credentials: 'include' });
   if (!response.ok) throw new Error(`Failed to fetch audit log: ${response.statusText}`);
   const payload = await response.json();

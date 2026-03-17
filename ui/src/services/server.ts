@@ -1,5 +1,5 @@
 async function getServer() {
-  const response = await fetch('/api/server', { credentials: 'include' });
+  const response = await fetch('/api/v1/server', { credentials: 'include' });
   if (!response.ok) {
     throw new Error(`Failed to get server: ${response.statusText}`);
   }
@@ -7,7 +7,7 @@ async function getServer() {
 }
 
 async function getSecurityRuntime() {
-  const response = await fetch('/api/server/security/runtime', { credentials: 'include' });
+  const response = await fetch('/api/v1/server/security/runtime', { credentials: 'include' });
   if (!response.ok) {
     let details = '';
     try {

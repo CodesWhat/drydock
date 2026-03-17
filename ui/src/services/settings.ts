@@ -3,12 +3,12 @@ interface Settings {
 }
 
 async function getSettings(): Promise<Settings> {
-  const response = await fetch('/api/settings', { credentials: 'include' });
+  const response = await fetch('/api/v1/settings', { credentials: 'include' });
   return response.json();
 }
 
 async function updateSettings(settings: Partial<Settings>): Promise<Settings> {
-  const response = await fetch('/api/settings', {
+  const response = await fetch('/api/v1/settings', {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
@@ -22,7 +22,7 @@ async function updateSettings(settings: Partial<Settings>): Promise<Settings> {
 }
 
 async function clearIconCache(): Promise<{ cleared: number }> {
-  const response = await fetch('/api/icons/cache', {
+  const response = await fetch('/api/v1/icons/cache', {
     method: 'DELETE',
     credentials: 'include',
   });

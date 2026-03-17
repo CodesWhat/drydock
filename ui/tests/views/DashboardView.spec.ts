@@ -1148,7 +1148,7 @@ describe('DashboardView', () => {
       } as any);
 
       await expect(getContainerGroups()).resolves.toEqual(groups);
-      expect(fetch).toHaveBeenCalledWith('/api/containers/groups', { credentials: 'include' });
+      expect(fetch).toHaveBeenCalledWith('/api/v1/containers/groups', { credentials: 'include' });
     });
 
     it('throws when fetching container groups fails', async () => {

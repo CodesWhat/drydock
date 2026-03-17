@@ -33,7 +33,7 @@ function getAuthProviderColor(type: string) {
 }
 
 async function getAllAuthentications() {
-  const response = await fetch('/api/authentications', { credentials: 'include' });
+  const response = await fetch('/api/v1/authentications', { credentials: 'include' });
   if (!response.ok) {
     throw new Error(`Failed to get authentications: ${response.statusText}`);
   }
@@ -42,7 +42,7 @@ async function getAllAuthentications() {
 }
 
 function buildAuthenticationDetailPath({ type, name, agent }: AuthenticationDetailPathOptions) {
-  const segments = ['/api/authentications'];
+  const segments = ['/api/v1/authentications'];
   segments.push(encodeURIComponent(type), encodeURIComponent(name));
   if (agent) {
     segments.push(encodeURIComponent(agent));

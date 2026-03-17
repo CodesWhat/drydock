@@ -42,7 +42,7 @@ class SseService {
       this.eventSource.close();
     }
 
-    this.eventSource = new EventSource('/api/events/ui');
+    this.eventSource = new EventSource('/api/v1/events/ui');
 
     this.eventSource.addEventListener('dd:connected', (event: MessageEvent) => {
       const connectedPayload = this.parseConnectedPayload(event?.data);
@@ -152,7 +152,7 @@ class SseService {
       if (lastEventId) {
         payload.lastEventId = lastEventId;
       }
-      await fetch(`/api/events/ui/self-update/${encodeURIComponent(opId)}/ack`, {
+      await fetch(`/api/v1/events/ui/self-update/${encodeURIComponent(opId)}/ack`, {
         method: 'POST',
         credentials: 'include',
         headers: {

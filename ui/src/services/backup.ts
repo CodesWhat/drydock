@@ -1,7 +1,7 @@
 import { extractCollectionData } from '../utils/api';
 
 async function getBackups(containerId: string) {
-  const response = await fetch(`/api/containers/${containerId}/backups`, {
+  const response = await fetch(`/api/v1/containers/${containerId}/backups`, {
     credentials: 'include',
   });
   if (!response.ok) {
@@ -23,7 +23,7 @@ async function rollback(containerId: string, backupId?: string) {
   if (backupId) {
     options.body = JSON.stringify({ backupId });
   }
-  const response = await fetch(`/api/containers/${containerId}/rollback`, options);
+  const response = await fetch(`/api/v1/containers/${containerId}/rollback`, options);
   if (!response.ok) {
     let details = '';
     try {

@@ -44,7 +44,7 @@ function installAuthMock(data: AuthenticationApiItem[]) {
       typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
     const path = raw.startsWith('http') ? new URL(raw).pathname : raw;
 
-    if (path === '/api/authentications') {
+    if (path === '/api/v1/authentications') {
       return new Response(JSON.stringify(data), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },

@@ -51,7 +51,7 @@ describe('Trigger Service', () => {
 
       const result = await getAllTriggers();
 
-      expect(fetch).toHaveBeenCalledWith('/api/triggers', { credentials: 'include' });
+      expect(fetch).toHaveBeenCalledWith('/api/v1/triggers', { credentials: 'include' });
       expect(result).toEqual(mockTriggers);
     });
 
@@ -155,7 +155,7 @@ describe('Trigger Service', () => {
         container,
       });
 
-      expect(fetch).toHaveBeenCalledWith('/api/triggers/webhook/hook1', {
+      expect(fetch).toHaveBeenCalledWith('/api/v1/triggers/webhook/hook1', {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -212,7 +212,7 @@ describe('Trigger Service', () => {
         container,
       });
 
-      expect(fetch).toHaveBeenCalledWith('/api/triggers/webhook/hook1/edge', {
+      expect(fetch).toHaveBeenCalledWith('/api/v1/triggers/webhook/hook1/edge', {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -232,7 +232,7 @@ describe('Trigger Service', () => {
 
       const result = await getTrigger({ type: 'slack', name: 'alerts' });
 
-      expect(fetch).toHaveBeenCalledWith('/api/triggers/slack/alerts', {
+      expect(fetch).toHaveBeenCalledWith('/api/v1/triggers/slack/alerts', {
         credentials: 'include',
       });
       expect(result).toEqual(mockTrigger);
@@ -259,7 +259,7 @@ describe('Trigger Service', () => {
 
       const result = await getTrigger({ agent: 'edge', type: 'slack', name: 'alerts' });
 
-      expect(fetch).toHaveBeenCalledWith('/api/triggers/slack/alerts/edge', {
+      expect(fetch).toHaveBeenCalledWith('/api/v1/triggers/slack/alerts/edge', {
         credentials: 'include',
       });
       expect(result).toEqual(mockTrigger);

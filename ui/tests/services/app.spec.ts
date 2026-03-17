@@ -52,7 +52,7 @@ describe('Server Service', () => {
 
     const result = await getServer();
 
-    expect(fetchMock).toHaveBeenCalledWith('/api/server', { credentials: 'include' });
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/server', { credentials: 'include' });
     expect(result).toEqual(mockResponse);
   });
 });

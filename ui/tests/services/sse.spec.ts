@@ -44,7 +44,7 @@ describe('SseService', () => {
 
   it('creates EventSource on connect', () => {
     sseService.connect(mockEventBus);
-    expect(MockEventSourceCtor).toHaveBeenCalledWith('/api/events/ui');
+    expect(MockEventSourceCtor).toHaveBeenCalledWith('/api/v1/events/ui');
   });
 
   it('registers event listeners for dd:connected, dd:self-update, container lifecycle events, agent status events, dd:scan-started, and dd:scan-completed', () => {
@@ -131,7 +131,7 @@ describe('SseService', () => {
       }),
     );
     expect(mockFetch).toHaveBeenCalledWith(
-      '/api/events/ui/self-update/op-123/ack',
+      '/api/v1/events/ui/self-update/op-123/ack',
       expect.objectContaining({
         method: 'POST',
         credentials: 'include',
@@ -150,7 +150,7 @@ describe('SseService', () => {
     eventListeners['dd:self-update']({ data: '{"opId":"op-456"}' });
 
     expect(mockFetch).toHaveBeenCalledWith(
-      '/api/events/ui/self-update/op-456/ack',
+      '/api/v1/events/ui/self-update/op-456/ack',
       expect.objectContaining({
         body: JSON.stringify({
           clientId: connectedPayload.clientId,
@@ -212,7 +212,7 @@ describe('SseService', () => {
     expect(mockEventBus.emit).not.toHaveBeenCalledWith('connection-lost');
 
     vi.advanceTimersByTime(5000);
-    expect(MockEventSourceCtor).toHaveBeenCalledWith('/api/events/ui');
+    expect(MockEventSourceCtor).toHaveBeenCalledWith('/api/v1/events/ui');
   });
 
   it('clears pending reconnect timer before scheduling a new one', () => {

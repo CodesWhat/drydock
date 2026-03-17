@@ -117,7 +117,7 @@ function installContainersMock(data: ContainerApiItem[]) {
     const url = raw.startsWith('http') ? new URL(raw) : new URL(raw, 'http://localhost');
     const path = url.pathname;
 
-    if (path === '/api/containers') {
+    if (path === '/api/v1/containers') {
       return new Response(JSON.stringify(data), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },

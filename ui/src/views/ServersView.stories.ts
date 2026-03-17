@@ -34,19 +34,19 @@ function installServersMock() {
       typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
     const path = raw.startsWith('http') ? new URL(raw).pathname : raw;
 
-    if (path === '/api/server') {
+    if (path === '/api/v1/server') {
       return new Response(JSON.stringify({ name: 'drydock', version: '1.4.0' }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       });
     }
-    if (path === '/api/agents') {
+    if (path === '/api/v1/agents') {
       return new Response(JSON.stringify(agentsFixture), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       });
     }
-    if (path === '/api/containers') {
+    if (path === '/api/v1/containers') {
       return new Response(JSON.stringify(containersFixture), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },

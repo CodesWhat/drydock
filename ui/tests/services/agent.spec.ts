@@ -20,7 +20,7 @@ describe('Agent Service', () => {
 
       const agents = await getAgents();
 
-      expect(fetch).toHaveBeenCalledWith('/api/agents', { credentials: 'include' });
+      expect(fetch).toHaveBeenCalledWith('/api/v1/agents', { credentials: 'include' });
       expect(agents).toEqual(mockAgents);
     });
 

@@ -18,7 +18,7 @@ describe('Settings Service', () => {
 
       const result = await getSettings();
 
-      expect(global.fetch).toHaveBeenCalledWith('/api/settings', { credentials: 'include' });
+      expect(global.fetch).toHaveBeenCalledWith('/api/v1/settings', { credentials: 'include' });
       expect(result).toEqual(mockSettings);
     });
 
@@ -44,7 +44,7 @@ describe('Settings Service', () => {
 
       const result = await updateSettings({ internetlessMode: true });
 
-      expect(global.fetch).toHaveBeenCalledWith('/api/settings', {
+      expect(global.fetch).toHaveBeenCalledWith('/api/v1/settings', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -85,7 +85,7 @@ describe('Settings Service', () => {
 
       const result = await clearIconCache();
 
-      expect(global.fetch).toHaveBeenCalledWith('/api/icons/cache', {
+      expect(global.fetch).toHaveBeenCalledWith('/api/v1/icons/cache', {
         method: 'DELETE',
         credentials: 'include',
       });
