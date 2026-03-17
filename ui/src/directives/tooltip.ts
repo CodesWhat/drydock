@@ -67,8 +67,7 @@ function showTooltip(el: HTMLElement, state: TooltipState) {
 
   // Dismiss any other active tooltip first
   if (activeAnchor && activeAnchor !== el) {
-    const prev = stateMap.get(activeAnchor);
-    if (prev) hideTooltip();
+    hideTooltip();
   }
 
   const tip = getSharedTip();
@@ -89,10 +88,9 @@ function showTooltip(el: HTMLElement, state: TooltipState) {
 }
 
 function hideTooltip() {
-  if (sharedTip) {
-    sharedTip.classList.remove('dd-tooltip-visible');
-    sharedTip.remove();
-  }
+  const tip = getSharedTip();
+  tip.classList.remove('dd-tooltip-visible');
+  tip.remove();
   activeAnchor = null;
 }
 
