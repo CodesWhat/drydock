@@ -5,7 +5,28 @@ import * as registry from '../../../registry/index.js';
 import * as storeContainer from '../../../store/container.js';
 import { mockConstructor } from '../../../test/mock-constructor.js';
 import { _resetRegistryWebhookFreshStateForTests } from '../../registry-webhook-fresh.js';
+import {
+  filterRecreatedContainerAliases as testable_filterRecreatedContainerAliases,
+  getLabel as testable_getLabel,
+  pruneOldContainers as testable_pruneOldContainers,
+} from './container-init.js';
 import Docker, { testable_normalizeConfigNumberValue } from './Docker.js';
+import {
+  getContainerDisplayName as testable_getContainerDisplayName,
+  getContainerName as testable_getContainerName,
+  getImageForRegistryLookup as testable_getImageForRegistryLookup,
+  getImageReferenceCandidatesFromPattern as testable_getImageReferenceCandidatesFromPattern,
+  getImgsetSpecificity as testable_getImgsetSpecificity,
+  getInspectValueByPath as testable_getInspectValueByPath,
+  getOldContainers as testable_getOldContainers,
+  shouldUpdateDisplayNameFromContainerName as testable_shouldUpdateDisplayNameFromContainerName,
+} from './docker-helpers.js';
+import { normalizeContainer as testable_normalizeContainer } from './image-comparison.js';
+import {
+  filterBySegmentCount as testable_filterBySegmentCount,
+  getCurrentPrefix as testable_getCurrentPrefix,
+  getFirstDigitIndex as testable_getFirstDigitIndex,
+} from './tag-candidates.js';
 
 const mockDdEnvVars = vi.hoisted(() => ({}) as Record<string, string | undefined>);
 const mockDetectSourceRepoFromImageMetadata = vi.hoisted(() => vi.fn());
@@ -31,7 +52,7 @@ vi.mock('node-cron');
 vi.mock('just-debounce');
 vi.mock('../../../event');
 vi.mock('../../../store/container');
-vi.mock('../../../registry');
+vi.mock('../../../registry/index.js');
 vi.mock('../../../model/container');
 vi.mock('../../../tag');
 vi.mock('../../../prometheus/watcher');
@@ -2092,11 +2113,19 @@ describe('Docker Watcher', () => {
       expect(testable_getImageForRegistryLookup(image)).toBe(image);
     });
 
-    test('normalizeContainer should not mutate the input container object', () => {
+    test('normalizeContainer should not mutate the input container object', async () => {
+      const containerModule = await import('../../../model/container.js');
+      const realContainerModule = await vi.importActual<
+        typeof import('../../../model/container.js')
+      >('../../../model/container.js');
+      containerModule.validate.mockImplementation(realContainerModule.validate);
+
       const container = {
         id: 'c1',
         name: 'container-1',
+        watcher: 'docker',
         image: {
+          id: 'sha256:abc123',
           registry: {
             name: 'original-registry',
             url: 'custom.registry',
@@ -2109,14 +2138,18 @@ describe('Docker Watcher', () => {
           digest: {
             watch: false,
           },
+          architecture: 'amd64',
+          os: 'linux',
         },
       };
 
       registry.getState.mockReturnValue({ registry: {} });
       const result = testable_normalizeContainer(container);
 
+      expect(result).toBeDefined();
       expect(result.image.registry.name).toBe('unknown');
       expect(container.image.registry.name).toBe('original-registry');
+      expect(result.image).not.toBe(container.image);
     });
 
     test('getInspectValueByPath should return undefined for empty path', () => {

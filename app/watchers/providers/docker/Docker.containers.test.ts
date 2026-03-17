@@ -48,7 +48,7 @@ vi.mock('node-cron');
 vi.mock('just-debounce');
 vi.mock('../../../event');
 vi.mock('../../../store/container');
-vi.mock('../../../registry');
+vi.mock('../../../registry/index.js');
 vi.mock('../../../model/container');
 vi.mock('../../../tag');
 vi.mock('../../../prometheus/watcher');
@@ -3608,11 +3608,19 @@ describe('Docker Watcher', () => {
       expect(testable_getImageForRegistryLookup(image)).toBe(image);
     });
 
-    test('normalizeContainer should not mutate the input container object', () => {
+    test('normalizeContainer should not mutate the input container object', async () => {
+      const containerModule = await import('../../../model/container.js');
+      const realContainerModule = await vi.importActual<
+        typeof import('../../../model/container.js')
+      >('../../../model/container.js');
+      containerModule.validate.mockImplementation(realContainerModule.validate);
+
       const container = {
         id: 'c1',
         name: 'container-1',
+        watcher: 'docker',
         image: {
+          id: 'sha256:abc123',
           registry: {
             name: 'original-registry',
             url: 'custom.registry',
@@ -3625,14 +3633,18 @@ describe('Docker Watcher', () => {
           digest: {
             watch: false,
           },
+          architecture: 'amd64',
+          os: 'linux',
         },
       };
 
       registry.getState.mockReturnValue({ registry: {} });
       const result = testable_normalizeContainer(container);
 
+      expect(result).toBeDefined();
       expect(result.image.registry.name).toBe('unknown');
       expect(container.image.registry.name).toBe('original-registry');
+      expect(result.image).not.toBe(container.image);
     });
 
     test('getInspectValueByPath should return undefined for empty path', () => {
