@@ -231,6 +231,69 @@ describe('container event update helpers', () => {
     );
   });
 
+  test('processDockerEvent treats seconds-based Created timestamp as transient alias', async () => {
+    const aliasContainerId = 'd6ea364fbc03aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+    const watchCronDebounced = vi.fn().mockResolvedValue(undefined);
+    const inspectContainer = vi.fn().mockResolvedValue({
+      Name: '/d6ea364fbc03_termix',
+      Created: Math.floor(Date.now() / 1000),
+      State: { Status: 'running' },
+    });
+    const getContainerFromStore = vi.fn();
+    const debug = vi.fn();
+
+    await processDockerEvent(
+      { Action: 'start', id: aliasContainerId },
+      {
+        watchCronDebounced,
+        ensureRemoteAuthHeaders: vi.fn().mockResolvedValue(undefined),
+        inspectContainer,
+        getContainerFromStore,
+        updateContainerFromInspect: vi.fn(),
+        debug,
+      },
+    );
+
+    expect(watchCronDebounced).toHaveBeenCalledTimes(1);
+    expect(getContainerFromStore).not.toHaveBeenCalled();
+    expect(debug).toHaveBeenCalledWith(
+      expect.stringContaining('Skipping transient recreated container alias'),
+    );
+  });
+
+  test('processDockerEvent falls back to State.StartedAt when Created is invalid', async () => {
+    const aliasContainerId = 'd6ea364fbc03aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+    const watchCronDebounced = vi.fn().mockResolvedValue(undefined);
+    const inspectContainer = vi.fn().mockResolvedValue({
+      Name: '/d6ea364fbc03_termix',
+      Created: 'not-a-date',
+      State: {
+        Status: 'running',
+        StartedAt: new Date().toISOString(),
+      },
+    });
+    const getContainerFromStore = vi.fn();
+    const debug = vi.fn();
+
+    await processDockerEvent(
+      { Action: 'start', id: aliasContainerId },
+      {
+        watchCronDebounced,
+        ensureRemoteAuthHeaders: vi.fn().mockResolvedValue(undefined),
+        inspectContainer,
+        getContainerFromStore,
+        updateContainerFromInspect: vi.fn(),
+        debug,
+      },
+    );
+
+    expect(watchCronDebounced).toHaveBeenCalledTimes(1);
+    expect(getContainerFromStore).not.toHaveBeenCalled();
+    expect(debug).toHaveBeenCalledWith(
+      expect.stringContaining('Skipping transient recreated container alias'),
+    );
+  });
+
   test('processDockerEvent does not skip persistent recreated alias and updates matching container', async () => {
     const aliasContainerId = 'd6ea364fbc03aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
     const watchCronDebounced = vi.fn().mockResolvedValue(undefined);

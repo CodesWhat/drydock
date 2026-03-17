@@ -15,7 +15,7 @@ function makeContainer(
   status: 'running' | 'stopped',
   counters: { serverReads: number },
 ): Container {
-  const container: Record<string, unknown> = {
+  const container: Container = {
     id: `c-${id}`,
     name: `container-${id}`,
     image: `image-${id}`,
@@ -23,8 +23,11 @@ function makeContainer(
     currentTag: '1.0.0',
     newTag: null,
     updateKind: null,
+    updateMaturity: null,
     bouncer: 'safe',
     registry: 'dockerhub',
+    server,
+    status,
     details: { ports: [], volumes: [], env: [], labels: [] },
   };
 
@@ -45,7 +48,7 @@ function makeContainer(
     },
   });
 
-  return container as Container;
+  return container;
 }
 
 function makeBaseContainer(overrides: Partial<Container> = {}): Container {
@@ -57,6 +60,7 @@ function makeBaseContainer(overrides: Partial<Container> = {}): Container {
     currentTag: '1.0.0',
     newTag: null,
     updateKind: null,
+    updateMaturity: null,
     bouncer: 'safe',
     registry: 'dockerhub',
     server: 'Local',
@@ -255,6 +259,19 @@ describe('useDashboardComputed servers', () => {
     const serverNames = state.servers.value.map((s) => s.name);
     expect(serverNames).toEqual(['Local', 'Remote1', 'edge-a']);
     expect(state.servers.value.reduce((sum, s) => sum + s.containers.total, 0)).toBe(3);
+  });
+
+  it('ignores only watchers with truthy agent while keeping falsy-agent watcher records', () => {
+    const watchers = [
+      null,
+      123,
+      { name: 'local', configuration: { socket: '/var/run/docker.sock' } },
+      { name: 'with-agent', agent: 'edge-a', configuration: { host: '10.0.0.55', port: 2375 } },
+      { name: 'empty-agent', agent: '', configuration: { host: '10.0.0.56', port: 2375 } },
+    ];
+    const state = createState({ watchers, containers: [] });
+
+    expect(state.servers.value.map((row) => row.name)).toEqual(['Local', 'Empty-agent']);
   });
 
   it('uses socket host for local watcher and bare host when no port for remote watcher', () => {
@@ -721,7 +738,7 @@ describe('useDashboardComputed recent updates', () => {
         id: `u-${index}`,
         name: `update-${String(index).padStart(3, '0')}`,
         newTag: `2.${index}.0`,
-      }) as Record<string, unknown>;
+      });
 
       Object.defineProperty(container, 'updateDetectedAt', {
         configurable: true,
@@ -734,7 +751,7 @@ describe('useDashboardComputed recent updates', () => {
         },
       });
 
-      return container as Container;
+      return container;
     });
 
     const state = createState({ containers });

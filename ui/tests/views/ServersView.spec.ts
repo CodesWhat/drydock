@@ -37,7 +37,13 @@ const mockGetAllWatchers = getAllWatchers as ReturnType<typeof vi.fn>;
 
 function tableRows(wrapper: any) {
   const table = wrapper.findComponent(dataViewStubs.DataTable as any);
-  return (table.props('rows') ?? []) as Array<{ name: string; host: string }>;
+  return (table.props('rows') ?? []) as Array<{
+    id?: string;
+    name: string;
+    host: string;
+    status?: 'connected' | 'disconnected';
+    containers?: { total: number; running: number; stopped?: number };
+  }>;
 }
 
 async function mountServersView() {

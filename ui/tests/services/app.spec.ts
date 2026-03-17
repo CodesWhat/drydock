@@ -1,9 +1,12 @@
 import { getAppInfos } from '@/services/app';
 import { getServer } from '@/services/server';
 
+let fetchMock: ReturnType<typeof vi.fn>;
+
 describe('App Service', () => {
   beforeEach(() => {
-    global.fetch = vi.fn();
+    fetchMock = vi.fn();
+    global.fetch = fetchMock as unknown as typeof fetch;
   });
 
   afterEach(() => {
@@ -12,19 +15,19 @@ describe('App Service', () => {
 
   it('should get app infos', async () => {
     const mockResponse = { name: 'drydock', version: '1.0.0' };
-    global.fetch.mockResolvedValue({
+    fetchMock.mockResolvedValue({
       ok: true,
       json: vi.fn().mockResolvedValue(mockResponse),
     });
 
     const result = await getAppInfos();
 
-    expect(global.fetch).toHaveBeenCalledWith('/api/app', { credentials: 'include' });
+    expect(fetchMock).toHaveBeenCalledWith('/api/app', { credentials: 'include' });
     expect(result).toEqual(mockResponse);
   });
 
   it('should throw when fetching app infos fails', async () => {
-    global.fetch.mockResolvedValue({
+    fetchMock.mockResolvedValue({
       ok: false,
       statusText: 'Internal Server Error',
       json: vi.fn().mockResolvedValue({}),
@@ -36,19 +39,20 @@ describe('App Service', () => {
 
 describe('Server Service', () => {
   beforeEach(() => {
-    global.fetch = vi.fn();
+    fetchMock = vi.fn();
+    global.fetch = fetchMock as unknown as typeof fetch;
   });
 
   it('should get server data', async () => {
     const mockResponse = { configuration: {} };
-    global.fetch.mockResolvedValue({
+    fetchMock.mockResolvedValue({
       ok: true,
       json: vi.fn().mockResolvedValue(mockResponse),
     });
 
     const result = await getServer();
 
-    expect(global.fetch).toHaveBeenCalledWith('/api/server', { credentials: 'include' });
+    expect(fetchMock).toHaveBeenCalledWith('/api/server', { credentials: 'include' });
     expect(result).toEqual(mockResponse);
   });
 });

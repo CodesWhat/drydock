@@ -21,22 +21,23 @@ describe('vite build configuration', () => {
 
   it('splits framework and icon vendor bundles using manual chunks', () => {
     const manualChunks = getManualChunks();
+    const chunkFor = (id: string) => manualChunks(id, {} as Parameters<typeof manualChunks>[1]);
 
-    expect(manualChunks('/Users/test/app/src/main.ts')).toBeUndefined();
-    expect(manualChunks('/Users/test/app/node_modules/vue/dist/vue.runtime.esm-bundler.js')).toBe(
+    expect(chunkFor('/Users/test/app/src/main.ts')).toBeUndefined();
+    expect(chunkFor('/Users/test/app/node_modules/vue/dist/vue.runtime.esm-bundler.js')).toBe(
       'framework',
     );
-    expect(manualChunks('/Users/test/app/node_modules/vue-router/dist/vue-router.mjs')).toBe(
+    expect(chunkFor('/Users/test/app/node_modules/vue-router/dist/vue-router.mjs')).toBe(
       'framework',
     );
-    expect(manualChunks('/Users/test/app/node_modules/iconify-icon/dist/iconify-icon.mjs')).toBe(
+    expect(chunkFor('/Users/test/app/node_modules/iconify-icon/dist/iconify-icon.mjs')).toBe(
       'icons',
     );
-    expect(
-      manualChunks('/Users/test/app/node_modules/@headlessui/vue/dist/headlessui.esm.js'),
-    ).toBe('vendor');
-    expect(manualChunks('/Users/test/app/node_modules/pinia/dist/pinia.mjs')).toBe('vendor');
-    expect(manualChunks('C:\\app\\node_modules\\vue\\dist\\vue.runtime.esm-bundler.js')).toBe(
+    expect(chunkFor('/Users/test/app/node_modules/@headlessui/vue/dist/headlessui.esm.js')).toBe(
+      'vendor',
+    );
+    expect(chunkFor('/Users/test/app/node_modules/pinia/dist/pinia.mjs')).toBe('vendor');
+    expect(chunkFor('C:\\app\\node_modules\\vue\\dist\\vue.runtime.esm-bundler.js')).toBe(
       'framework',
     );
   });

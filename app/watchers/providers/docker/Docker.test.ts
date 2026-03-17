@@ -5477,6 +5477,24 @@ describe('Docker Watcher', () => {
       ]);
     });
 
+    test('filterRecreatedContainerAliases should skip fresh alias when Created is unix milliseconds', () => {
+      const freshCreatedMs = Date.now();
+      const result = testable_filterRecreatedContainerAliases(
+        [
+          {
+            Id: '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a10',
+            Names: ['/7ea6b8a42686_termix'],
+            Created: freshCreatedMs,
+          },
+        ],
+        [],
+      );
+      expect(result.containersToWatch).toHaveLength(0);
+      expect(Array.from(result.skippedContainerIds)).toEqual([
+        '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a10',
+      ]);
+    });
+
     test('filterRecreatedContainerAliases should keep stale alias when no sibling and no store match', () => {
       const staleCreated = Math.floor((Date.now() - 60 * 1000) / 1000);
       const result = testable_filterRecreatedContainerAliases(
