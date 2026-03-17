@@ -106,6 +106,23 @@ services:
       retries: 5
       start_period: 5s
 
+  # ── Portainer (container management UI) ─────────────
+  # Used for QA testing issue #156: recreating containers via Portainer
+  # triggers Docker's transient <hex12>_<name> alias race condition.
+  # Access at http://localhost:9443 (HTTPS) or http://localhost:9000
+  portainer:
+    image: portainer/portainer-ce:2.27.5
+    container_name: portainer
+    ports:
+      - "9000:9000"
+      - "9443:9443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer_data:/data
+    restart: unless-stopped
+    labels:
+      - dd.watch=false
+
   # ── Trivy vulnerability scanner (client-server mode) ──
   trivy-server:
     image: aquasec/trivy:latest
@@ -299,3 +316,6 @@ services:
     labels:
       - dd.watch=true
       - dd.display.name=Memcached (Stopped)
+
+volumes:
+  portainer_data:
