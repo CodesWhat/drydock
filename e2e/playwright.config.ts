@@ -1,6 +1,7 @@
 import { defineConfig } from '@playwright/test';
 
 const isCI = !!process.env.CI;
+const baseURL = process.env.DD_PLAYWRIGHT_BASE_URL || 'http://localhost:3333';
 
 export default defineConfig({
   testDir: './playwright',
@@ -12,7 +13,7 @@ export default defineConfig({
   reporter: isCI ? [['html', { outputFolder: 'playwright-report', open: 'never' }]] : [['list']],
 
   use: {
-    baseURL: 'http://localhost:3333',
+    baseURL,
     browserName: 'chromium',
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',

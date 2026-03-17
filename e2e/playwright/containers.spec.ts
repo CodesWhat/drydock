@@ -1,4 +1,4 @@
-import { expect, type Page, test } from '@playwright/test';
+import { expect, type Locator, type Page, test } from '@playwright/test';
 import { escapeRegExp, registerServerAvailabilityCheck } from './helpers/test-helpers';
 
 registerServerAvailabilityCheck(test);
@@ -35,26 +35,30 @@ async function showFilterPanel(page: Page): Promise<void> {
 
 async function openAnyContainerDetail(page: Page): Promise<string> {
   await openContainersView(page);
-  await switchToCardsView(page);
+  const detailPanel = page.locator('[data-test="container-side-detail"]');
 
   for (const containerName of KNOWN_CONTAINER_NAMES) {
-    const locator = page.getByRole('button', {
-      name: new RegExp(`Select ${escapeRegExp(containerName)}`, 'i'),
+    const locator = page.getByRole('row', {
+      name: new RegExp(`\\b${escapeRegExp(containerName)}\\b`, 'i'),
     });
     if ((await locator.count()) > 0) {
       await locator.first().click();
-      await expect(page.locator('[data-test="container-side-detail"]')).toBeVisible();
+      await expect(detailPanel).toBeVisible({ timeout: 15_000 });
       return containerName;
     }
   }
 
-  const fallback = page.getByRole('button', { name: /Select / }).first();
+  const fallback = page.locator('tbody tr').first();
   await expect(fallback).toBeVisible();
-  const label = (await fallback.getAttribute('aria-label')) || 'selected container';
+  const label = (await fallback.textContent()) || 'selected container';
   await fallback.click();
-  await expect(page.locator('[data-test="container-side-detail"]')).toBeVisible();
+  await expect(detailPanel).toBeVisible({ timeout: 15_000 });
 
-  return label.replace(/^Select\s+/i, '').trim();
+  return label.trim();
+}
+
+function detailTabButton(detailPanel: Locator, iconName: string): Locator {
+  return detailPanel.locator(`button:has(iconify-icon[icon*="${iconName}"])`).first();
 }
 
 function readContainerActionsFeatureFlag(payload: unknown): boolean | undefined {
@@ -118,19 +122,19 @@ test.describe('Containers', () => {
 
     await expect(detailPanel).toContainText(selectedName);
 
-    await detailPanel.getByRole('button', { name: 'Overview' }).click();
+    await detailTabButton(detailPanel, 'info').click();
     await expect(detailContent).toContainText('Version');
 
-    await detailPanel.getByRole('button', { name: 'Logs' }).click();
+    await detailTabButton(detailPanel, 'scroll').click();
     await expect(detailContent.getByPlaceholder('Search logs')).toBeVisible();
 
-    await detailPanel.getByRole('button', { name: 'Environment' }).click();
+    await detailTabButton(detailPanel, 'sliders-horizontal').click();
     await expect(detailContent).toContainText('Environment Variables');
 
-    await detailPanel.getByRole('button', { name: 'Labels' }).click();
+    await detailTabButton(detailPanel, 'cube').click();
     await expect(detailContent).toContainText('Labels');
 
-    await detailPanel.getByRole('button', { name: 'Actions' }).click();
+    await detailTabButton(detailPanel, 'lightning').click();
     await expect(detailContent).toContainText('Update Workflow');
   });
 
@@ -142,7 +146,7 @@ test.describe('Containers', () => {
     const detailPanel = page.locator('[data-test="container-side-detail"]');
     const detailContent = page.locator('[data-test="container-side-tab-content"]');
 
-    await detailPanel.getByRole('button', { name: 'Actions' }).click();
+    await detailTabButton(detailPanel, 'lightning').click();
 
     await expect(detailContent).toContainText('Associated Triggers');
     await expect(

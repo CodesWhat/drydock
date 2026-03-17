@@ -1,14 +1,16 @@
-import { test as setup } from '@playwright/test';
-import { getCredentials, isServerAvailable, loginWithBasicAuth } from './helpers/test-helpers';
+import { expect, test as setup } from '@playwright/test';
+import {
+  checkServerAvailability,
+  getCredentials,
+  getServerUnavailableMessage,
+  loginWithBasicAuth,
+} from './helpers/test-helpers';
 
 const authFile = 'playwright/.auth/user.json';
 
 setup('authenticate', async ({ page, request, baseURL }) => {
-  const healthy = await isServerAvailable(request);
-  setup.skip(
-    !healthy,
-    `Skipping auth setup because QA server is unavailable at ${baseURL || 'http://localhost:3333'}/api/health`,
-  );
+  const availability = await checkServerAvailability(request, baseURL);
+  expect(availability.healthy, getServerUnavailableMessage(baseURL)).toBeTruthy();
 
   const credentials = getCredentials();
 

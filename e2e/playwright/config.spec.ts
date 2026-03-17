@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, type Page, test } from '@playwright/test';
 import {
   clickSidebarNavItem,
   ensureSidebarExpanded,
@@ -6,6 +6,17 @@ import {
 } from './helpers/test-helpers';
 
 registerServerAvailabilityCheck(test);
+
+async function ensureFilterInputVisible(page: Page, placeholder: string) {
+  const input = page.getByPlaceholder(placeholder);
+  if (await input.isVisible().catch(() => false)) {
+    return input;
+  }
+
+  await page.getByRole('button', { name: 'Toggle filters' }).click();
+  await expect(input).toBeVisible();
+  return input;
+}
 
 test.describe('Config and management views', () => {
   test('config tabs support URL deep-links', async ({ page }) => {
@@ -37,14 +48,16 @@ test.describe('Config and management views', () => {
 
     await page.goto('/registries?q=ghcr');
     await expect(page).toHaveURL(/\/registries\?q=ghcr/);
-    await expect(page.getByPlaceholder('Filter by name or type...')).toHaveValue('ghcr');
+    await expect(await ensureFilterInputVisible(page, 'Filter by name or type...')).toHaveValue(
+      'ghcr',
+    );
 
     await page.goto('/triggers?q=slack');
     await expect(page).toHaveURL(/\/triggers\?q=slack/);
-    await expect(page.getByPlaceholder('Filter by name...')).toHaveValue('slack');
+    await expect(await ensureFilterInputVisible(page, 'Filter by name...')).toHaveValue('slack');
 
     await page.goto('/watchers?q=remote');
     await expect(page).toHaveURL(/\/watchers\?q=remote/);
-    await expect(page.getByPlaceholder('Filter by name...')).toHaveValue('remote');
+    await expect(await ensureFilterInputVisible(page, 'Filter by name...')).toHaveValue('remote');
   });
 });
