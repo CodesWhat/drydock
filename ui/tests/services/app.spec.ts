@@ -22,7 +22,7 @@ describe('App Service', () => {
 
     const result = await getAppInfos();
 
-    expect(fetchMock).toHaveBeenCalledWith('/api/app', { credentials: 'include' });
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/app', { credentials: 'include' });
     expect(result).toEqual(mockResponse);
   });
 
