@@ -1,4 +1,5 @@
 import { extractCollectionData } from '../utils/api';
+import type { ApiContainerInput } from '../utils/container-mapper';
 import { ApiError, errorMessage } from '../utils/error';
 
 interface ContainerGroupMember {
@@ -120,7 +121,9 @@ function buildContainerQueryString(options: GetAllContainersOptions): string {
   return queryString.length > 0 ? `?${queryString}` : '';
 }
 
-async function getAllContainers(optionsOrSignal: GetAllContainersOptions | AbortSignal = {}) {
+async function getAllContainers(
+  optionsOrSignal: GetAllContainersOptions | AbortSignal = {},
+): Promise<ApiContainerInput[]> {
   const options = isAbortSignal(optionsOrSignal) ? { signal: optionsOrSignal } : optionsOrSignal;
   const response = await fetch(`/api/containers${buildContainerQueryString(options)}`, {
     credentials: 'include',
@@ -130,7 +133,7 @@ async function getAllContainers(optionsOrSignal: GetAllContainersOptions | Abort
     throw new Error(`Failed to get containers: ${response.statusText}`);
   }
   const payload = await response.json();
-  return extractCollectionData(payload);
+  return extractCollectionData<ApiContainerInput>(payload);
 }
 
 async function getContainerSummary(): Promise<ContainerSummary> {
@@ -200,7 +203,7 @@ async function getContainerTriggers(containerId: string) {
     throw new Error(`Failed to get triggers for container ${containerId}: ${response.statusText}`);
   }
   const payload = await response.json();
-  return extractCollectionData(payload);
+  return extractCollectionData<Record<string, unknown>>(payload);
 }
 
 async function runTrigger({
@@ -243,7 +246,7 @@ async function getContainerUpdateOperations(containerId: string) {
     );
   }
   const payload = await response.json();
-  return extractCollectionData(payload);
+  return extractCollectionData<Record<string, unknown>>(payload);
 }
 
 async function getContainerVulnerabilities(containerId: string) {

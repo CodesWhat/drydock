@@ -19,7 +19,7 @@ async function getAllNotificationRules(): Promise<NotificationRule[]> {
     throw new Error(`Failed to get notifications: ${response.statusText}`);
   }
   const payload = await response.json();
-  return extractCollectionData(payload);
+  return extractCollectionData<NotificationRule>(payload);
 }
 
 async function updateNotificationRule(

@@ -28,27 +28,40 @@ const meta = {
 
 export default meta;
 type Story = StoryObj<typeof meta>;
+type PanelSize = 'sm' | 'md' | 'lg';
+
+interface DetailPanelStoryArgs {
+  open?: boolean;
+  isMobile?: boolean;
+  size?: PanelSize;
+  showSizeControls?: boolean;
+  showFullPage?: boolean;
+  'onUpdate:open'?: (value: boolean) => void;
+  'onUpdate:size'?: (value: PanelSize) => void;
+  onFullPage?: () => void;
+}
 
 const renderPanel = (args: Story['args']) => ({
   components: { DetailPanel },
   setup() {
-    const open = ref(!!args?.open);
-    const size = ref((args?.size ?? 'sm') as 'sm' | 'md' | 'lg');
+    const storyArgs = (args ?? {}) as DetailPanelStoryArgs;
+    const open = ref(!!storyArgs.open);
+    const size = ref((storyArgs.size ?? 'sm') as PanelSize);
 
     watch(
-      () => args?.open,
+      () => storyArgs.open,
       (value) => {
         open.value = !!value;
       },
     );
     watch(
-      () => args?.size,
+      () => storyArgs.size,
       (value) => {
-        size.value = (value ?? 'sm') as 'sm' | 'md' | 'lg';
+        size.value = (value ?? 'sm') as PanelSize;
       },
     );
 
-    return { args, open, size };
+    return { args: storyArgs, open, size };
   },
   template: `
     <div class="h-full flex">
