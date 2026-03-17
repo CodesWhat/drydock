@@ -1558,7 +1558,6 @@ class Docker extends Watcher {
     const logContainer = this.log.child({
       container: fullName(containerWithResult),
     });
-
     // Find container in db & compare
     const containerInDb = storeContainer.getContainer(containerWithResult.id);
 
@@ -1579,9 +1578,7 @@ class Docker extends Watcher {
     };
   }
 }
-
 export default Docker;
-
 export {
   filterBySegmentCount as testable_filterBySegmentCount,
   filterRecreatedContainerAliases as testable_filterRecreatedContainerAliases,
