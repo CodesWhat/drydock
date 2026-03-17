@@ -1,8 +1,13 @@
 import type { Request, Response } from 'express';
 import { sendErrorResponse } from '../../api/error-response.js';
 import { getServerConfiguration } from '../../configuration/index.js';
+import logger from '../../log/index.js';
+import { sanitizeLogParam } from '../../log/sanitize.js';
 import * as registry from '../../registry/index.js';
 import * as storeContainer from '../../store/container.js';
+import { getErrorMessage } from '../../util/error.js';
+
+const log = logger.child({ component: 'agent-api-container' });
 
 type AgentDockerWatcher = {
   dockerApi: {
@@ -82,8 +87,12 @@ export async function getContainerLogs(req: Request, res: Response) {
       .logs({ stdout: true, stderr: true, tail, since, timestamps, follow: false });
     const logs = demuxDockerStream(logsBuffer);
     res.status(200).json({ logs });
-  } catch (e: any) {
-    sendErrorResponse(res, 500, `Error fetching container logs (${e.message})`);
+  } catch (error: unknown) {
+    const message = getErrorMessage(error);
+    log.error(
+      `Error fetching container logs for ${sanitizeLogParam(id)} (${sanitizeLogParam(message)})`,
+    );
+    sendErrorResponse(res, 500, 'Error fetching container logs');
   }
 }
 

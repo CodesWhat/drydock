@@ -146,11 +146,7 @@ describe('agent API container', () => {
       req.query = {};
       await containerApi.getContainerLogs(req, res);
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          error: expect.stringContaining('Error fetching container logs'),
-        }),
-      );
+      expect(res.json).toHaveBeenCalledWith({ error: 'Error fetching container logs' });
     });
 
     test('should handle string response from docker logs', async () => {
