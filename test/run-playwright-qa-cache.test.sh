@@ -64,7 +64,7 @@ run_case() {
 	make_mock_binary "$mock_bin" npm 'exit 0'
 	make_mock_binary "$mock_bin" sleep 'exit 0'
 
-	if ! PATH="$mock_bin:$PATH" bash "$TARGET_SCRIPT" >/dev/null 2>&1; then
+	if ! PATH="$mock_bin:$PATH" DD_PLAYWRIGHT_PORT=0 DD_PLAYWRIGHT_RESTART_COLIMA=false bash "$TARGET_SCRIPT" >/dev/null 2>&1; then
 		echo "case '$case_name' failed to execute test target" >&2
 		exit 1
 	fi

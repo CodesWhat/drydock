@@ -5,8 +5,69 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 REPO_ROOT=$(cd "$SCRIPT_DIR/.." && pwd)
 COMPOSE_FILE="$REPO_ROOT/test/qa-compose.yml"
 PROJECT_NAME="${DD_PLAYWRIGHT_PROJECT:-drydock-playwright-local}"
-HEALTH_URL="${DD_PLAYWRIGHT_HEALTH_URL:-http://localhost:3333/health}"
 QA_IMAGE="drydock:dev"
+USER_PROVIDED_PLAYWRIGHT_PORT="${DD_PLAYWRIGHT_PORT:-}"
+DD_PLAYWRIGHT_PORT="${DD_PLAYWRIGHT_PORT:-3333}"
+RESTART_COLIMA="${DD_PLAYWRIGHT_RESTART_COLIMA:-true}"
+
+is_port_available() {
+	local port="$1"
+	python3 - "$port" <<'PY'
+import socket
+import sys
+
+port = int(sys.argv[1])
+sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+try:
+    sock.bind(("127.0.0.1", port))
+except OSError:
+    raise SystemExit(1)
+finally:
+    sock.close()
+PY
+}
+
+restart_colima() {
+	if [[ $RESTART_COLIMA != "true" ]]; then
+		return
+	fi
+
+	if ! command -v colima >/dev/null 2>&1; then
+		return
+	fi
+
+	echo "🔄 Restarting Colima..."
+	colima stop >/dev/null 2>&1 || true
+	colima start >/dev/null
+}
+
+wait_for_docker_engine() {
+	for _ in $(seq 1 60); do
+		if docker info >/dev/null 2>&1; then
+			return
+		fi
+		sleep 1
+	done
+
+	echo "❌ Docker engine did not become ready."
+	exit 1
+}
+
+restart_colima
+wait_for_docker_engine
+
+if ! is_port_available "$DD_PLAYWRIGHT_PORT"; then
+	echo "❌ DD_PLAYWRIGHT_PORT=$DD_PLAYWRIGHT_PORT is already in use."
+	if [[ -z $USER_PROVIDED_PLAYWRIGHT_PORT ]]; then
+		echo "   Default QA runs use localhost:3333. Free this port or set DD_PLAYWRIGHT_PORT."
+	fi
+	exit 1
+fi
+
+export DD_PLAYWRIGHT_PORT
+
+PLAYWRIGHT_BASE_URL="${DD_PLAYWRIGHT_BASE_URL:-http://localhost:${DD_PLAYWRIGHT_PORT}}"
+HEALTH_URL="${DD_PLAYWRIGHT_HEALTH_URL:-${PLAYWRIGHT_BASE_URL}/health}"
 
 cleanup() {
 	docker compose -p "$PROJECT_NAME" -f "$COMPOSE_FILE" down -v --remove-orphans >/dev/null 2>&1 || true
@@ -106,6 +167,6 @@ if ! curl -sf "$HEALTH_URL" >/dev/null 2>&1; then
 fi
 
 echo "🧪 Running Playwright E2E tests..."
-(cd "$REPO_ROOT/e2e" && npm run test:playwright)
+(cd "$REPO_ROOT/e2e" && DD_PLAYWRIGHT_BASE_URL="$PLAYWRIGHT_BASE_URL" npm run test:playwright)
 
 echo "✅ Playwright E2E tests completed"
