@@ -181,7 +181,7 @@ const {
             :columns="[
               { key: 'icon', label: '', icon: true },
               { key: 'container', label: 'Container', sortable: false },
-              { key: 'version', label: 'Version', sortable: false, align: 'text-left' },
+              { key: 'version', label: 'Version', sortable: false, align: 'text-center' },
               { key: 'type', label: 'Type', sortable: false },
             ]"
             :rows="recentUpdates"
@@ -213,25 +213,25 @@ const {
 
             <template #cell-version="{ row }">
               <!-- Desktop: horizontal old → new -->
-              <div class="hidden sm:flex items-center justify-start gap-1.5 min-w-0">
-                <span class="text-[0.6875rem] dd-text-secondary truncate max-w-[100px]" v-tooltip.top="row.oldVer">
+              <div class="hidden sm:flex items-center justify-center gap-1.5 min-w-0">
+                <CopyableTag :tag="row.oldVer" class="text-[0.6875rem] dd-text-secondary truncate max-w-[100px]">
                   {{ row.oldVer }}
-                </span>
+                </CopyableTag>
                 <AppIcon name="arrow-right" :size="8" class="dd-text-muted shrink-0" />
-                <span class="text-[0.6875rem] font-semibold truncate max-w-[120px]"
+                <CopyableTag :tag="row.newVer" class="text-[0.6875rem] font-semibold truncate max-w-[120px]"
                       :style="{ color: getUpdateKindColor(row.updateKind) }">
                   {{ row.newVer }}
-                </span>
+                </CopyableTag>
               </div>
               <!-- Mobile: stacked old ↓ new -->
               <div class="flex sm:hidden flex-col items-start gap-0.5 min-w-0">
-                <span class="text-[0.5625rem] dd-text-secondary break-all leading-tight">
+                <CopyableTag :tag="row.oldVer" class="text-[0.5625rem] dd-text-secondary break-all leading-tight">
                   {{ row.oldVer }}
-                </span>
-                <span class="text-[0.5625rem] font-semibold break-all leading-tight"
+                </CopyableTag>
+                <CopyableTag :tag="row.newVer" class="text-[0.5625rem] font-semibold break-all leading-tight"
                       :style="{ color: getUpdateKindColor(row.updateKind) }">
                   {{ row.newVer }}
-                </span>
+                </CopyableTag>
               </div>
             </template>
 

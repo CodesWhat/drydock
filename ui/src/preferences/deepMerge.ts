@@ -2,11 +2,8 @@ function isMergeableObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-export function deepMerge<T extends Record<string, unknown>>(
-  target: T,
-  source: Record<string, unknown>,
-): T {
-  for (const key of Object.keys(target)) {
+export function deepMerge<T extends object>(target: T, source: Record<string, unknown>): T {
+  for (const key of Object.keys(target as Record<string, unknown>)) {
     if (!(key in source)) continue;
 
     const typedKey = key as keyof T;

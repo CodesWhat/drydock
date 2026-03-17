@@ -230,12 +230,12 @@ const {
               <div class="flex items-center gap-3 px-3 py-2 dd-rounded text-xs font-mono"
                    :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
                 <span class="dd-text-secondary">Current:</span>
-                <span class="font-bold dd-text">{{ selectedContainer.currentTag }}</span>
+                <CopyableTag :tag="selectedContainer.currentTag" class="font-bold dd-text">{{ selectedContainer.currentTag }}</CopyableTag>
               </div>
               <div v-if="selectedContainer.newTag" class="flex items-center gap-3 px-3 py-2 dd-rounded text-xs font-mono"
                    :style="{ backgroundColor: 'var(--dd-success-muted)' }">
                 <span style="color: var(--dd-success);">Latest:</span>
-                <span class="font-bold" style="color: var(--dd-success);">{{ selectedContainer.newTag }}</span>
+                <CopyableTag :tag="selectedContainer.newTag!" class="font-bold" style="color: var(--dd-success);">{{ selectedContainer.newTag }}</CopyableTag>
                 <span class="badge text-[0.5625rem]"
                       :style="{ backgroundColor: updateKindColor(selectedContainer.updateKind).bg, color: updateKindColor(selectedContainer.updateKind).text }">
                   {{ selectedContainer.updateKind }}

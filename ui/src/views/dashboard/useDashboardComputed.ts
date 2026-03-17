@@ -673,21 +673,65 @@ function buildServerContainerCounts(containers: Container[]): Map<string, Server
   return countsByServer;
 }
 
+function deriveWatcherServerName(watcherName: string): string {
+  if (watcherName === 'local') {
+    return 'Local';
+  }
+  return watcherName.charAt(0).toUpperCase() + watcherName.slice(1);
+}
+
+function deriveWatcherHost(watcher: unknown): string {
+  const configuration = getWatcherConfiguration(watcher);
+  const socket = configuration.socket;
+  if (typeof socket === 'string' && socket) {
+    return `unix://${socket}`;
+  }
+  const host = typeof configuration.host === 'string' ? configuration.host : '';
+  const port = typeof configuration.port === 'number' ? configuration.port : undefined;
+  const protocol = typeof configuration.protocol === 'string' ? configuration.protocol : '';
+  if (host) {
+    return port ? `${protocol || 'http'}://${host}:${port}` : host;
+  }
+  return 'unix:///var/run/docker.sock';
+}
+
 function useServersComputed(input: UseDashboardComputedInput) {
   return computed<DashboardServerRow[]>(() => {
     const list: DashboardServerRow[] = [];
     const countsByServer = buildServerContainerCounts(input.containers.value);
 
-    const localContainerCounts = countsByServer.get('Local') ?? { running: 0, total: 0 };
-    list.push({
-      name: 'Local',
-      host: 'unix:///var/run/docker.sock',
-      status: 'connected',
-      containers: {
-        running: localContainerCounts.running,
-        total: localContainerCounts.total,
-      },
-    });
+    const nonAgentWatchers = input.watchers.value.filter(
+      (w) => w && typeof w === 'object' && !('agent' in w && (w as Record<string, unknown>).agent),
+    );
+
+    if (nonAgentWatchers.length > 0) {
+      for (const watcher of nonAgentWatchers) {
+        const watcherRecord = watcher as Record<string, unknown>;
+        const rawName = typeof watcherRecord.name === 'string' ? watcherRecord.name : 'local';
+        const serverName = deriveWatcherServerName(rawName);
+        const counts = countsByServer.get(serverName) ?? { running: 0, total: 0 };
+        list.push({
+          name: serverName,
+          host: deriveWatcherHost(watcher),
+          status: 'connected',
+          containers: {
+            running: counts.running,
+            total: counts.total,
+          },
+        });
+      }
+    } else {
+      const localContainerCounts = countsByServer.get('Local') ?? { running: 0, total: 0 };
+      list.push({
+        name: 'Local',
+        host: 'unix:///var/run/docker.sock',
+        status: 'connected',
+        containers: {
+          running: localContainerCounts.running,
+          total: localContainerCounts.total,
+        },
+      });
+    }
 
     for (const agent of input.agents.value) {
       const agentName =

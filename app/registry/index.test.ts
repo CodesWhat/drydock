@@ -696,22 +696,29 @@ test('registerAuthentications should surface provider registration errors and lo
   ]);
 });
 
-test('registerAuthentications should preserve non-wrapped provider errors', async () => {
+test('registerAuthentications should preserve unknown-provider error messages', async () => {
+  const spyLog = vi.spyOn(registry.testable_log, 'error');
   authentications = {
-    invalidprovider: {
-      andi: {
-        user: 'ANDI',
-        hash: TEST_BASIC_HASH,
-      },
+    definitely_missing_provider: {
+      fallback: {},
     },
   };
 
   await registry.testable_registerAuthentications();
 
-  const registrationErrors = registry.getAuthenticationRegistrationErrors();
-  expect(registrationErrors).toHaveLength(1);
-  expect(registrationErrors[0].provider).toBe('invalidprovider:andi');
-  expect(registrationErrors[0].error).toContain('Unknown authentication provider');
+  expect(spyLog).toHaveBeenCalledWith(
+    expect.stringContaining('Some authentications failed to register'),
+  );
+  expect(registry.getAuthenticationRegistrationErrors()).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        provider: 'definitely_missing_provider:fallback',
+        error: expect.stringContaining(
+          "Unknown authentication provider: 'definitely_missing_provider'.",
+        ),
+      }),
+    ]),
+  );
 });
 
 test('registerAuthentications should register anonymous auth on upgrade without confirmation', async () => {
@@ -719,6 +726,20 @@ test('registerAuthentications should register anonymous auth on upgrade without 
   await registry.testable_registerAuthentications();
 
   expect(Object.keys(registry.getState().authentication)).toEqual(['anonymous.anonymous']);
+});
+
+test('registerAuthentications should log an error when DD_AUTH env vars exist without provider config', async () => {
+  const spyLog = vi.spyOn(registry.testable_log, 'error');
+  configuration.ddEnvVars.DD_AUTH_BASIC_PRIMARY_USER = 'alice';
+  mockIsUpgrade.mockReturnValue(true);
+
+  await registry.testable_registerAuthentications();
+
+  expect(spyLog).toHaveBeenCalledWith(
+    expect.stringContaining(
+      'Detected DD_AUTH_* environment variables, but no configured authentication providers were registered successfully.',
+    ),
+  );
 });
 
 test('registerAuthentications should fail-closed on fresh install without confirmation', async () => {

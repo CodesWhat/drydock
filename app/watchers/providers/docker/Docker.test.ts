@@ -1707,6 +1707,671 @@ describe('Docker Watcher', () => {
     });
   });
 
+  describe('Additional Coverage - imgset pattern matching edge cases', () => {
+    test('should handle imgset with empty image pattern', async () => {
+      await docker.register('watcher', 'docker', 'test', {});
+      docker.configuration.imgset = { weird: { image: '   ' } };
+      mockParse.mockReturnValue({ path: undefined });
+      const result = docker.getMatchingImgsetConfiguration({
+        path: 'library/nginx',
+        domain: 'docker.io',
+      });
+      expect(result).toBeUndefined();
+    });
+
+    test('should return -1 specificity when parsedImage has no path', async () => {
+      await docker.register('watcher', 'docker', 'test', {
+        imgset: { test: { image: 'library/nginx' } },
+      });
+      mockParse.mockImplementation((v) => (v === 'library/nginx' ? { path: 'library/nginx' } : {}));
+      const result = docker.getMatchingImgsetConfiguration({ path: undefined, domain: undefined });
+      expect(result).toBeUndefined();
+    });
+
+    test('helper should return empty candidates for blank pattern', () => {
+      expect(testable_getImageReferenceCandidatesFromPattern('   ')).toEqual([]);
+    });
+
+    test('helper should fallback to normalized pattern when parsed pattern has no path', () => {
+      mockParse.mockReturnValue({ path: undefined });
+      expect(testable_getImageReferenceCandidatesFromPattern('docker.io')).toEqual(['docker.io']);
+    });
+
+    test('helper should fallback to normalized pattern when parser throws', () => {
+      mockParse.mockImplementation(() => {
+        throw new Error('invalid pattern');
+      });
+      expect(testable_getImageReferenceCandidatesFromPattern('INVALID[')).toEqual(['invalid[']);
+    });
+
+    test('helper should return -1 specificity when pattern produces no candidates', () => {
+      expect(
+        testable_getImgsetSpecificity('   ', { path: 'library/nginx', domain: 'docker.io' }),
+      ).toBe(-1);
+    });
+
+    test('helper should avoid array includes for candidate membership checks', () => {
+      mockParse.mockReturnValue({ path: 'library/nginx', domain: 'docker.io' });
+      const includesSpy = vi.spyOn(Array.prototype, 'includes');
+      const beforeCallCount = includesSpy.mock.calls.length;
+      const specificity = testable_getImgsetSpecificity('library/nginx', {
+        path: 'library/nginx',
+        domain: 'docker.io',
+      });
+      const callDelta = includesSpy.mock.calls.length - beforeCallCount;
+      includesSpy.mockRestore();
+
+      expect(specificity).toBeGreaterThan(0);
+      expect(callDelta).toBe(0);
+    });
+  });
+
+  describe('Additional Coverage - Docker helper functions', () => {
+    test('getLabel should fallback to wud key when dd key is absent', () => {
+      const labels = {
+        'wud.display.name': 'Legacy Name',
+      };
+      expect(testable_getLabel(labels, 'dd.display.name', 'wud.display.name')).toBe('Legacy Name');
+    });
+
+    test('getLabel should prefer dd key when both dd and wud keys are present', () => {
+      const labels = {
+        'dd.display.name': 'Preferred',
+        'wud.display.name': 'Legacy Name',
+      };
+      expect(testable_getLabel(labels, 'dd.display.name', 'wud.display.name')).toBe('Preferred');
+    });
+
+    test('getLabel should return undefined when fallback key is not provided', () => {
+      expect(testable_getLabel({}, 'dd.display.name')).toBeUndefined();
+    });
+
+    test('getCurrentPrefix should return the non-numeric prefix before the first digit', () => {
+      expect(testable_getCurrentPrefix('v2026.2.1')).toBe('v');
+    });
+
+    test('getCurrentPrefix should return empty string when there are no digits', () => {
+      expect(testable_getCurrentPrefix('latest')).toBe('');
+    });
+
+    test('filterBySegmentCount should drop tags without numeric groups', () => {
+      const filtered = testable_filterBySegmentCount(['latest', '1.2.4', '1.3.0'], {
+        transformTags: undefined,
+        image: {
+          tag: {
+            value: '1.2.3',
+          },
+        },
+      });
+
+      expect(filtered).toEqual(['1.2.4', '1.3.0']);
+    });
+
+    test('filterBySegmentCount should enforce numeric zero-padding style by segment', () => {
+      const filtered = testable_filterBySegmentCount(['5.1.5', '20.04.1', '5.01.6'], {
+        transformTags: undefined,
+        image: {
+          tag: {
+            value: '5.1.4',
+          },
+        },
+      });
+
+      expect(filtered).toEqual(['5.1.5']);
+    });
+
+    test('filterBySegmentCount should allow non-padded segments when current tag is padded', () => {
+      const filtered = testable_filterBySegmentCount(['20.10.1', '20.04.2'], {
+        transformTags: undefined,
+        image: {
+          tag: {
+            value: '20.04.1',
+          },
+        },
+      });
+
+      expect(filtered).toEqual(['20.10.1', '20.04.2']);
+    });
+
+    test('filterBySegmentCount should preserve current prefix family', () => {
+      const filtered = testable_filterBySegmentCount(['1.2.4', 'v1.2.4'], {
+        transformTags: undefined,
+        image: {
+          tag: {
+            value: 'v1.2.3',
+          },
+        },
+      });
+
+      expect(filtered).toEqual(['v1.2.4']);
+    });
+
+    test('filterBySegmentCount should preserve suffix family template', () => {
+      const filtered = testable_filterBySegmentCount(['1.2.4', '1.2.4-ls133', '1.2.4-r1'], {
+        transformTags: undefined,
+        image: {
+          tag: {
+            value: '1.2.3-ls132',
+          },
+        },
+      });
+
+      expect(filtered).toEqual(['1.2.4-ls133']);
+    });
+
+    test('getContainerName should extract first docker name entry and strip slash', () => {
+      expect(testable_getContainerName({ Names: ['/my-container'] })).toBe('my-container');
+    });
+
+    test('getContainerName should return empty string when names are missing', () => {
+      expect(testable_getContainerName({})).toBe('');
+    });
+
+    test('filterRecreatedContainerAliases should skip self-id-prefixed aliases when base name exists in store', () => {
+      const result = testable_filterRecreatedContainerAliases(
+        [
+          {
+            Id: '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a10',
+            Names: ['/7ea6b8a42686_termix'],
+          },
+        ],
+        [
+          {
+            id: 'termix-current',
+            watcher: 'docker-test',
+            name: 'termix',
+          } as any,
+        ],
+      );
+
+      expect(result.containersToWatch).toEqual([]);
+      expect(Array.from(result.skippedContainerIds)).toEqual([
+        '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a10',
+      ]);
+    });
+
+    test('filterRecreatedContainerAliases should ignore containers with missing Id or Names', () => {
+      const result = testable_filterRecreatedContainerAliases(
+        [
+          { Names: ['/abc123_myapp'] },
+          { Id: 'name-missing' },
+          { Id: '', Names: ['/def456_myapp'] },
+          { Id: 'valid1', Names: ['/valid1_myapp'] },
+        ],
+        [],
+      );
+      expect(result.containersToWatch).toHaveLength(4);
+      expect(result.skippedContainerIds.size).toBe(0);
+    });
+
+    test('filterRecreatedContainerAliases should skip fresh alias even when no sibling and no store match', () => {
+      const freshCreated = Math.floor(Date.now() / 1000);
+      const result = testable_filterRecreatedContainerAliases(
+        [
+          {
+            Id: '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a10',
+            Names: ['/7ea6b8a42686_termix'],
+            Created: freshCreated,
+          },
+        ],
+        [],
+      );
+      expect(result.containersToWatch).toHaveLength(0);
+      expect(Array.from(result.skippedContainerIds)).toEqual([
+        '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a10',
+      ]);
+    });
+
+    test('filterRecreatedContainerAliases should skip fresh alias when Created is unix milliseconds', () => {
+      const freshCreatedMs = Date.now();
+      const result = testable_filterRecreatedContainerAliases(
+        [
+          {
+            Id: '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a10',
+            Names: ['/7ea6b8a42686_termix'],
+            Created: freshCreatedMs,
+          },
+        ],
+        [],
+      );
+      expect(result.containersToWatch).toHaveLength(0);
+      expect(Array.from(result.skippedContainerIds)).toEqual([
+        '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a10',
+      ]);
+    });
+
+    test('filterRecreatedContainerAliases should keep stale alias when no sibling and no store match', () => {
+      const staleCreated = Math.floor((Date.now() - 60 * 1000) / 1000);
+      const result = testable_filterRecreatedContainerAliases(
+        [
+          {
+            Id: '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a10',
+            Names: ['/7ea6b8a42686_termix'],
+            Created: staleCreated,
+          },
+        ],
+        [],
+      );
+      expect(result.containersToWatch).toEqual([
+        {
+          Id: '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a10',
+          Names: ['/7ea6b8a42686_termix'],
+          Created: staleCreated,
+        },
+      ]);
+      expect(result.skippedContainerIds.size).toBe(0);
+    });
+
+    test('filterRecreatedContainerAliases should keep alias when Created is in the future', () => {
+      const futureCreated = Math.floor((Date.now() + 60 * 1000) / 1000);
+      const result = testable_filterRecreatedContainerAliases(
+        [
+          {
+            Id: '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a10',
+            Names: ['/7ea6b8a42686_termix'],
+            Created: futureCreated,
+          },
+        ],
+        [],
+      );
+
+      expect(result.containersToWatch).toEqual([
+        {
+          Id: '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a10',
+          Names: ['/7ea6b8a42686_termix'],
+          Created: futureCreated,
+        },
+      ]);
+      expect(result.skippedContainerIds.size).toBe(0);
+    });
+
+    test('filterRecreatedContainerAliases should skip fresh alias but keep non-alias entry with same container id', () => {
+      const freshCreated = Math.floor(Date.now() / 1000);
+      const result = testable_filterRecreatedContainerAliases(
+        [
+          {
+            Id: '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a10',
+            Names: ['/7ea6b8a42686_termix'],
+            Created: freshCreated,
+          },
+          {
+            Id: '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a10',
+            Names: ['/termix'],
+          },
+        ],
+        [],
+      );
+      expect(result.containersToWatch).toEqual([
+        {
+          Id: '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a10',
+          Names: ['/termix'],
+        },
+      ]);
+      expect(Array.from(result.skippedContainerIds)).toEqual([
+        '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a10',
+      ]);
+    });
+
+    test('filterRecreatedContainerAliases should skip alias when a sibling container already uses the base name', () => {
+      const aliasContainerId = '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a10';
+      const result = testable_filterRecreatedContainerAliases(
+        [
+          {
+            Id: aliasContainerId,
+            Names: ['/7ea6b8a42686_termix'],
+          },
+          {
+            Id: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+            Names: ['/termix'],
+          },
+        ],
+        [],
+      );
+
+      expect(result.containersToWatch).toEqual([
+        {
+          Id: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+          Names: ['/termix'],
+        },
+      ]);
+      expect(Array.from(result.skippedContainerIds)).toEqual([aliasContainerId]);
+    });
+
+    test('filterRecreatedContainerAliases should keep names that are not self-id-prefixed aliases', () => {
+      const result = testable_filterRecreatedContainerAliases(
+        [
+          {
+            Id: 'aaaaaaaaaaaa1111111111111111111111111111111111111111111111111111',
+            Names: ['/7ea6b8a42686_termix'],
+          },
+        ],
+        [
+          {
+            id: 'termix-current',
+            watcher: 'docker-test',
+            name: 'termix',
+          } as any,
+        ],
+      );
+
+      expect(result.containersToWatch).toHaveLength(1);
+      expect(result.skippedContainerIds.size).toBe(0);
+    });
+
+    test('getContainerDisplayName should fallback to container name when parsed image path is missing', () => {
+      expect(testable_getContainerDisplayName('my-container', undefined, undefined)).toBe(
+        'my-container',
+      );
+    });
+
+    test('normalizeConfigNumberValue should return undefined for non-finite numeric strings', () => {
+      expect(testable_normalizeConfigNumberValue('NaN')).toBeUndefined();
+    });
+
+    test('shouldUpdateDisplayNameFromContainerName should support empty old display names', () => {
+      expect(testable_shouldUpdateDisplayNameFromContainerName('new-name', 'old-name', '')).toBe(
+        true,
+      );
+    });
+
+    test('getFirstDigitIndex should return -1 when no digit exists', () => {
+      expect(testable_getFirstDigitIndex('latest')).toBe(-1);
+    });
+
+    test('getImageForRegistryLookup should ignore invalid legacy lookup url', () => {
+      const image = {
+        registry: {
+          url: 'harbor.example.com',
+          lookupUrl: 'https://%',
+        },
+        name: 'dockerhub-proxy/traefik',
+        tag: {
+          value: 'v3.5.3',
+        },
+      };
+      expect(testable_getImageForRegistryLookup(image)).toBe(image);
+    });
+
+    test('normalizeContainer should not mutate the input container object', () => {
+      const container = {
+        id: 'c1',
+        name: 'container-1',
+        image: {
+          registry: {
+            name: 'original-registry',
+            url: 'custom.registry',
+          },
+          name: 'myimage',
+          tag: {
+            value: '1.0.0',
+            semver: true,
+          },
+          digest: {
+            watch: false,
+          },
+        },
+      };
+
+      registry.getState.mockReturnValue({ registry: {} });
+      const result = testable_normalizeContainer(container);
+
+      expect(result.image.registry.name).toBe('unknown');
+      expect(container.image.registry.name).toBe('original-registry');
+    });
+
+    test('getInspectValueByPath should return undefined for empty path', () => {
+      expect(testable_getInspectValueByPath({ Config: { Labels: {} } }, '')).toBeUndefined();
+    });
+
+    test('getOldContainers should return empty array when arguments are missing', () => {
+      expect(testable_getOldContainers(undefined, [])).toEqual([]);
+      expect(testable_getOldContainers([], undefined)).toEqual([]);
+    });
+
+    test('getOldContainers should remove containers that still exist in new snapshot', () => {
+      const result = testable_getOldContainers(
+        [{ id: 'current-1' }],
+        [{ id: 'current-1' }, { id: 'stale-1' }],
+      );
+
+      expect(result).toEqual([{ id: 'stale-1' }]);
+    });
+
+    test('getOldContainers should perform near-linear id lookups', () => {
+      let newIdReads = 0;
+      let storeIdReads = 0;
+      const newContainers = Array.from({ length: 30 }, (_, index) => {
+        const container = {};
+        Object.defineProperty(container, 'id', {
+          enumerable: true,
+          get: () => {
+            newIdReads += 1;
+            return `id-${index}`;
+          },
+        });
+        return container;
+      });
+      const containersFromStore = Array.from({ length: 30 }, (_, index) => {
+        const container = {};
+        Object.defineProperty(container, 'id', {
+          enumerable: true,
+          get: () => {
+            storeIdReads += 1;
+            return `id-${index + 15}`;
+          },
+        });
+        return container;
+      });
+
+      const result = testable_getOldContainers(newContainers, containersFromStore);
+
+      expect(result).toHaveLength(15);
+      expect(newIdReads).toBeLessThanOrEqual(60);
+      expect(storeIdReads).toBeLessThanOrEqual(60);
+    });
+
+    test('pruneOldContainers should update status when stale container still exists in docker', async () => {
+      const dockerApi = {
+        getContainer: vi.fn().mockReturnValue({
+          inspect: vi.fn().mockResolvedValue({
+            State: {
+              Status: 'exited',
+            },
+          }),
+        }),
+      };
+
+      await testable_pruneOldContainers([], [{ id: 'old-1', name: 'old-container' }], dockerApi);
+
+      expect(storeContainer.updateContainer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'old-1',
+          status: 'exited',
+        }),
+      );
+    });
+
+    test('pruneOldContainers should delete stale entries when a same-name replacement exists', async () => {
+      const dockerApi = {
+        getContainer: vi.fn(),
+      };
+
+      await testable_pruneOldContainers(
+        [
+          {
+            id: 'new-1',
+            watcher: 'docker',
+            name: 'app',
+          },
+        ] as any,
+        [
+          {
+            id: 'old-1',
+            watcher: 'docker',
+            name: 'app',
+          },
+        ] as any,
+        dockerApi as any,
+      );
+
+      expect(dockerApi.getContainer).not.toHaveBeenCalled();
+      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('old-1');
+    });
+
+    test('pruneOldContainers should treat missing watcher as an empty watcher key', async () => {
+      const dockerApi = {
+        getContainer: vi.fn(),
+      };
+
+      await testable_pruneOldContainers(
+        [
+          {
+            id: 'new-1',
+            name: 'app',
+          },
+        ] as any,
+        [
+          {
+            id: 'old-1',
+            watcher: '',
+            name: 'app',
+          },
+        ] as any,
+        dockerApi as any,
+      );
+
+      expect(dockerApi.getContainer).not.toHaveBeenCalled();
+      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('old-1');
+    });
+
+    test('pruneOldContainers should force-delete stale ids skipped during alias filtering', async () => {
+      const dockerApi = {
+        getContainer: vi.fn().mockReturnValue({
+          inspect: vi.fn().mockResolvedValue({
+            State: {
+              Status: 'exited',
+            },
+          }),
+        }),
+      };
+
+      await testable_pruneOldContainers(
+        [],
+        [
+          {
+            id: 'alias-1',
+            watcher: 'docker',
+            name: '7ea6b8a42686_termix',
+          },
+        ] as any,
+        dockerApi as any,
+        {
+          forceRemoveContainerIds: new Set(['alias-1']),
+        },
+      );
+
+      expect(dockerApi.getContainer).not.toHaveBeenCalled();
+      expect(storeContainer.updateContainer).not.toHaveBeenCalled();
+      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('alias-1');
+    });
+  });
+
+  describe('Additional Coverage - maintenance queue internals', () => {
+    test('should consider maintenance window open and next date undefined when no window is configured', () => {
+      docker.configuration.maintenancewindow = undefined;
+      expect(docker.isMaintenanceWindowOpen()).toBe(true);
+      expect(docker.getNextMaintenanceWindowDate()).toBeUndefined();
+    });
+
+    test('queueMaintenanceWindowWatch should not schedule twice when queue timeout already exists', () => {
+      const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
+      docker.maintenanceWindowQueueTimeout = { existing: true } as any;
+
+      docker.queueMaintenanceWindowWatch();
+
+      expect(docker.maintenanceWindowWatchQueued).toBe(true);
+      expect(setTimeoutSpy).not.toHaveBeenCalled();
+      setTimeoutSpy.mockRestore();
+      docker.maintenanceWindowQueueTimeout = undefined;
+    });
+
+    test('checkQueuedMaintenanceWindowWatch should clear queue when no maintenance window is configured', async () => {
+      docker.configuration.maintenancewindow = undefined;
+      docker.maintenanceWindowWatchQueued = true;
+      const clearSpy = vi.spyOn(docker, 'clearMaintenanceWindowQueue');
+
+      await docker.checkQueuedMaintenanceWindowWatch();
+
+      expect(clearSpy).toHaveBeenCalled();
+    });
+
+    test('checkQueuedMaintenanceWindowWatch should requeue when maintenance window remains closed', async () => {
+      docker.configuration.maintenancewindow = '0 2 * * *';
+      docker.maintenanceWindowWatchQueued = true;
+      maintenance.isInMaintenanceWindow.mockReturnValue(false);
+      const queueSpy = vi.spyOn(docker, 'queueMaintenanceWindowWatch');
+
+      await docker.checkQueuedMaintenanceWindowWatch();
+
+      expect(queueSpy).toHaveBeenCalled();
+    });
+
+    test('checkQueuedMaintenanceWindowWatch should warn when queued execution fails', async () => {
+      docker.configuration.maintenancewindow = '0 2 * * *';
+      docker.maintenanceWindowWatchQueued = true;
+      maintenance.isInMaintenanceWindow.mockReturnValue(true);
+      docker.log = createMockLog(['info', 'warn']);
+      docker.watchFromCron = vi.fn().mockRejectedValue(new Error('queued-failure'));
+
+      await docker.checkQueuedMaintenanceWindowWatch();
+
+      expect(docker.log.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Unable to run queued maintenance watch (queued-failure)'),
+      );
+    });
+
+    test('queueMaintenanceWindowWatch should execute scheduled callback when timer fires', async () => {
+      vi.useFakeTimers();
+      try {
+        const checkSpy = vi
+          .spyOn(docker, 'checkQueuedMaintenanceWindowWatch')
+          .mockResolvedValue(undefined);
+        docker.maintenanceWindowQueueTimeout = undefined;
+
+        docker.queueMaintenanceWindowWatch();
+        await vi.runOnlyPendingTimersAsync();
+
+        expect(checkSpy).toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    test('checkQueuedMaintenanceWindowWatch should proceed without logging when info method is missing', async () => {
+      docker.configuration.maintenancewindow = '0 2 * * *';
+      docker.maintenanceWindowWatchQueued = true;
+      maintenance.isInMaintenanceWindow.mockReturnValue(true);
+      docker.log = createMockLog(['warn']);
+      docker.watchFromCron = vi.fn().mockResolvedValue([]);
+
+      await docker.checkQueuedMaintenanceWindowWatch();
+
+      expect(docker.watchFromCron).toHaveBeenCalledWith({
+        ignoreMaintenanceWindow: true,
+      });
+    });
+
+    test('checkQueuedMaintenanceWindowWatch should swallow queued errors when warn method is missing', async () => {
+      docker.configuration.maintenancewindow = '0 2 * * *';
+      docker.maintenanceWindowWatchQueued = true;
+      maintenance.isInMaintenanceWindow.mockReturnValue(true);
+      docker.log = createMockLog(['info']);
+      docker.watchFromCron = vi.fn().mockRejectedValue(new Error('queued-failure'));
+
+      await expect(docker.checkQueuedMaintenanceWindowWatch()).resolves.toBeUndefined();
+    });
+  });
+
   describe('Additional Coverage - OIDC edge branches', () => {
     test('applyRemoteOidcTokenPayload should return false when access token is missing and allowed', () => {
       const applied = applyRemoteOidcTokenPayload(

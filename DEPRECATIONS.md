@@ -77,7 +77,7 @@ Setting `DD_SERVER_CORS_ENABLED=true` without specifying `DD_SERVER_CORS_ORIGIN`
 | **Removed in** | v1.6.0 |
 | **Affects** | API consumers using `/api/...` instead of `/api/v1/...` |
 
-`/api/*` is a backward-compatible alias for `/api/v1/*`. The alias will be removed in v2.0.0.
+`/api/*` is a backward-compatible alias for `/api/v1/*`. The alias will be removed in v1.6.0.
 
 **Migration:** Update all API calls to use the `/api/v1/` prefix (e.g., `/api/v1/containers` instead of `/api/containers`).
 

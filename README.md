@@ -13,7 +13,7 @@
 </div>
 
 <p align="center">
-  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.4.1-blue" alt="Version"></a>
+  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.4.4-blue" alt="Version"></a>
   <a href="https://github.com/CodesWhat/drydock/pkgs/container/drydock"><img src="https://img.shields.io/badge/GHCR-40K%2B_pulls-2ea44f?logo=github&logoColor=white" alt="GHCR pulls"></a>
   <a href="https://hub.docker.com/r/codeswhat/drydock"><img src="https://img.shields.io/docker/pulls/codeswhat/drydock?logo=docker&logoColor=white&label=Docker+Hub" alt="Docker Hub pulls"></a>
   <a href="https://quay.io/repository/codeswhat/drydock"><img src="https://img.shields.io/badge/Quay.io-image-ee0000?logo=redhat&logoColor=white" alt="Quay.io"></a>
@@ -67,6 +67,45 @@
 
 <h2 align="center" id="quick-start">🚀 Quick Start</h2>
 
+**Recommended: use a socket proxy** to restrict which Docker API endpoints Drydock can access. This avoids giving the container full access to the Docker socket.
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    depends_on:
+      socket-proxy:
+        condition: service_healthy
+    environment:
+      - DD_WATCHER_LOCAL_HOST=socket-proxy
+      - DD_WATCHER_LOCAL_PORT=2375
+      - DD_AUTH_BASIC_ADMIN_USER=admin
+      - "DD_AUTH_BASIC_ADMIN_HASH=<paste-argon2id-hash>"
+    ports:
+      - 3000:3000
+
+  socket-proxy:
+    image: tecnativa/docker-socket-proxy
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - CONTAINERS=1
+      - IMAGES=1
+      - EVENTS=1
+      - SERVICES=1
+      # Add POST=1 and NETWORKS=1 for container actions and auto-updates
+    healthcheck:
+      test: wget --spider http://localhost:2375/version || exit 1
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
+```
+
+<details>
+<summary>Alternative: quick start with direct socket mount</summary>
+
 ```bash
 docker run -d \
   --name drydock \
@@ -76,6 +115,10 @@ docker run -d \
   -e "DD_AUTH_BASIC_ADMIN_HASH=<paste-argon2id-hash>" \
   codeswhat/drydock:latest
 ```
+
+> **Warning:** Direct socket access grants the container full control over the Docker daemon. Use the socket proxy setup above for production deployments. See the [Docker Socket Security guide](https://getdrydock.com/docs/configuration/watchers#docker-socket-security) for all options including remote TLS and rootless Docker.
+
+</details>
 
 > Generate a password hash (`argon2` CLI — install via your package manager):
 >
@@ -308,10 +351,13 @@ Drop-in replacement — swap the image, restart, done. All `WUD_*` env vars and 
 | --- | --- | --- |
 | **v1.3.x** ✅ | Security & Stability | Trivy scanning, Update Bouncer, SBOM, 7 new registries, 4 new triggers, rollback fixes, GHCR auth, self-hosted TLS, re2js regex engine, compose trigger fixes, DB persistence on shutdown |
 | **v1.4.0** ✅ | UI Modernization & Hardening | Tailwind CSS 4 + custom component library, 6 themes, 7 icon libraries, font size preference, Cmd/K command palette, OpenAPI 3.1.0 endpoint, standardized API responses with pagination, compose-native YAML-preserving updates, rename-first rollback with health gates, self-update controller with SSE ack, fail-closed auth enforcement, OIDC redirect URL validation, tag-family semver, notification rules, container grouping by stack, audit history view, dual-slot security scanning, scheduled scans, WUD migration CLI, bundled offline icons, dashboard drag-reorder, gzip compression, API error sanitization, agent log validation, TLS path redaction, audit store indexing with 30-day retention, type-safe store modules, durable batch scans, recent-status API, advisory-only security scanning, compose trigger hardening (auto-detection, validation, reconciliation, digest pinning, batch mode, multi-file awareness), reactive server feature flags, identity-aware rate limiting, API hardening |
-| **v1.4.1** | Patch & Polish | Headless mode (API-only), maturity-based update policy (NEW/MATURE badges), `?groupByStack=true` URL param, agent handshake + SSE fix (#141), mangled hash detection + anonymous fallback + login error surfacing (#147), CSRF behind reverse proxies (#146), compose trigger affinity across remapped roots, CSP inline style elimination, connection-lost animation, LokiJS metadata stripping, timing side-channel fix, image hardening |
-| **v1.5.0** | Observability | Real-time log viewer, container resource monitoring, registry webhooks, auth endpoint telemetry/guardrails, Podman setup docs |
+| **v1.4.1** ✅ | Patch & Polish | Headless mode (API-only), maturity-based update policy (NEW/MATURE badges), `?groupByStack=true` URL param, agent handshake + SSE fix (#141), mangled hash detection + anonymous fallback + login error surfacing (#147), CSRF behind reverse proxies (#146), compose trigger affinity across remapped roots, CSP inline style elimination, connection-lost animation, LokiJS metadata stripping, timing side-channel fix, image hardening |
+| **v1.4.2** ✅ | Bug Fixes | Watcher container count fix (#155), container recreate alias filtering (#156), stale store data fix (#157), CI versioned-only images (#154), maturity badge sizing, dependency upgrades |
+| **v1.4.3** ✅ | DNS & Security | Configurable DNS result ordering for Alpine EAI_AGAIN fix (#161), Docker socket security guide, zizmor blocking in CI, scoped GitHub environments |
+| **v1.4.4** ✅ | UI Polish & Hardening | Alias dedup hardening with 30s transient window (#156), dashboard host-status for remote watchers (#155), tooltip viewport fix (#165), click-to-copy version tags (#164), Simple Icons dark mode inversion, theme switcher fix, search button polish, URL rebrand to getdrydock.com |
+| **v1.5.0** | Observability & User-Requested Features | Real-time log viewer, container resource monitoring, registry webhooks, auth endpoint telemetry/guardrails, image maturity/sort-by-age indicator, URL-driven filter/sort state, release notes in UI & notifications, smart tag suggestions, digest check deduplication, Podman setup docs |
 | **v1.5.1** | Scanner Decoupling | Backend-based scanner execution (docker/remote), Grype provider, scanner asset lifecycle |
-| **v1.6.0** | Notifications & Release Intel | Notification templates, release notes in notifications, MS Teams & Matrix triggers, remove all deprecated compatibility aliases (see [DEPRECATIONS.md](DEPRECATIONS.md)) |
+| **v1.6.0** | Notifications & Release Intel | Notification templates, MS Teams & Matrix triggers, remove all deprecated compatibility aliases (see [DEPRECATIONS.md](DEPRECATIONS.md)) |
 | **v1.7.0** | Smart Updates & UX | Dependency-aware ordering, clickable port links, image prune, static image monitoring, dashboard customization |
 | **v1.8.0** | Fleet Management & Live Config | YAML config, live UI config panels, volume browser, parallel updates, SQLite store migration, i18n framework |
 | **v2.0.0** | Platform Expansion | Docker Swarm, Kubernetes watchers and triggers, basic GitOps |
@@ -321,6 +367,7 @@ Drop-in replacement — swap the image, restart, done. All `WUD_*` env vars and 
 | **v2.4.0** | Data Safety & Templates | Scheduled backups (S3, SFTP), compose templates, secret management |
 | **v3.0.0** | Advanced Platform | Network topology, GPU monitoring, full i18n translations |
 | **v3.1.0** | Enterprise Access & Compliance | RBAC, LDAP/AD, environment-scoped permissions, audit logging, Wolfi hardened image |
+| **v3.2.0** | Drydock Socket Proxy | Built-in companion proxy container (allowlist-filtered Docker API), rootless Docker & remote TLS security docs |
 
 <hr>
 

@@ -637,6 +637,21 @@ export type SecurityConfiguration = Pick<
   signature: Pick<ReturnType<typeof getSecurityConfiguration>['signature'], 'verify'>;
 };
 
+const DNS_MODE_VALUES = ['ipv4first', 'ipv6first', 'verbatim'] as const;
+export type DnsMode = (typeof DNS_MODE_VALUES)[number];
+
+/**
+ * Get DNS result ordering mode from DD_DNS_MODE.
+ * Defaults to 'ipv4first' to work around musl libc (Alpine) resolver issues (#161).
+ */
+export function getDnsMode(): DnsMode {
+  const raw = ddEnvVars.DD_DNS_MODE?.trim().toLowerCase();
+  if (raw && DNS_MODE_VALUES.includes(raw as DnsMode)) {
+    return raw as DnsMode;
+  }
+  return 'ipv4first';
+}
+
 function parseSafePublicUrlCandidate(value: unknown): URL | undefined {
   if (typeof value !== 'string') {
     return undefined;

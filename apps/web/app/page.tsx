@@ -215,8 +215,21 @@ const roadmap = [
     ],
   },
   {
+    version: "v1.4.1",
+    title: "Patch & Polish",
+    emoji: "\u{2705}",
+    status: "released" as const,
+    dotColor:
+      "border-emerald-500 bg-emerald-500 text-white dark:border-emerald-400 dark:bg-emerald-400 dark:text-neutral-900",
+    items: [
+      "Headless mode (API-only, no UI serving)",
+      "Maturity-based update policy (NEW/MATURE badges)",
+      "URL param groupByStack, agent handshake fix, login error surfacing",
+    ],
+  },
+  {
     version: "v1.5.0",
-    title: "Observability",
+    title: "Observability & User-Requested Features",
     emoji: "\u{26A1}",
     status: "next" as const,
     dotColor:
@@ -225,7 +238,25 @@ const roadmap = [
       "Real-time log viewer",
       "Container resource monitoring",
       "Registry webhook receiver",
-      "Scanner decoupling & Grype support",
+      "Auth endpoint telemetry & guardrails",
+      "Image maturity / sort-by-age indicator",
+      "URL-driven filter/sort state",
+      "Release notes in UI",
+      "Smart tag suggestion for latest containers",
+      "Digest check deduplication",
+    ],
+  },
+  {
+    version: "v1.5.1",
+    title: "Scanner Decoupling",
+    emoji: "\u{1F50C}",
+    status: "planned" as const,
+    dotColor:
+      "border-amber-400 bg-amber-50 text-amber-500 dark:border-amber-500 dark:bg-amber-950 dark:text-amber-400",
+    items: [
+      "Backend-based scanner execution (docker/remote)",
+      "Grype scanner provider",
+      "Scanner asset lifecycle management",
     ],
   },
   {
@@ -235,7 +266,7 @@ const roadmap = [
     status: "planned" as const,
     dotColor:
       "border-orange-400 bg-orange-50 text-orange-500 dark:border-orange-500 dark:bg-orange-950 dark:text-orange-400",
-    items: ["Notification templates", "Release notes in notifications", "Deprecation removals"],
+    items: ["Notification templates", "MS Teams & Matrix triggers", "Deprecation removals"],
   },
   {
     version: "v1.7.0",
@@ -409,7 +440,7 @@ export default function Home() {
 
               {/* Version Badge */}
               <Badge variant="secondary" className="mb-6 px-4 py-1.5 text-sm font-medium">
-                v1.4.0 &middot; Open Source
+                v1.4.1 &middot; Open Source
               </Badge>
 
               {/* Heading */}

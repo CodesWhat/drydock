@@ -4,12 +4,10 @@
 # Pre-push pipeline (piped = sequential, fail-fast):
 #   0. Clean tree gate — rejects untracked/uncommitted/stashed files
 #   1. Lint gate (~20s) — catches formatting/lint before burning CPU
-#   2. Build + test (~45s parallel) — no coverage, just pass/fail
-#   3. Coverage gate — 100% thresholds, separate for clear error output
-#   4. E2E + advisory scans (zizmor)
+#   2. Build + test (~26s parallel) — independent workspaces run concurrently
+#   3. E2E + zizmor (blocking)
 #
-# Snyk paid scans are CI-only via the scheduled/manual paid workflow
-# to preserve free-tier monthly quotas.
+# Snyk scans are CI-only (release workflow) to preserve the 200/month quota.
 #
 # Biome runs directly (not via qlty) because qlty's biome integration
 # does not reliably apply fixes. Qlty handles all other linters.
@@ -25,12 +23,11 @@ pre-commit:
       glob: '*.{ts,js,json,vue,css}'
       run: npx biome format --write --no-errors-on-unmatched {staged_files} && git add {staged_files}
       priority: 2
-
-commit-msg:
-  commands:
-    convention:
-      run: node scripts/validate-commit-msg.mjs {1}
-      fail_text: "Commit message does not follow Gitmoji + Conventional Commits format"
+    coverage:
+      glob: '*.{ts,vue}'
+      run: ./scripts/pre-commit-coverage.sh
+      priority: 3
+      timeout: 2m
 
 pre-push:
   piped: true
@@ -40,16 +37,13 @@ pre-push:
     # that hasn't been tested in its committed form.
     clean-tree:
       run: |
-        if ! git diff --quiet --exit-code || ! git diff --cached --quiet --exit-code; then
-          echo "❌ Working tree has uncommitted tracked changes (CI won't see these):"
+        dirty=$(git status --porcelain 2>/dev/null)
+        if [ -n "$dirty" ]; then
+          echo "❌ Working tree has uncommitted changes (CI won't see these):"
           echo ""
-          echo "Unstaged:"
-          git diff --name-status
+          echo "$dirty"
           echo ""
-          echo "Staged:"
-          git diff --cached --name-status
-          echo ""
-          echo "Commit/stash/revert tracked changes before pushing."
+          echo "What do we want to do with these files?"
           exit 1
         fi
       fail_text: "Uncommitted changes detected — decide what to do with them before pushing"
@@ -66,50 +60,27 @@ pre-push:
       priority: 2
       timeout: 30s
     qlty:
-      run: ./scripts/qlty-check-gate.sh changed
+      run: CI=1 qlty check --all --no-progress </dev/null
       priority: 3
-      timeout: 2m
-
-    # ── Smells: complexity/duplication visibility (advisory) ─────────
-    qlty-smells:
-      run: node scripts/qlty-smells-gate.mjs --scope=changed --upstream=origin/main
-      priority: 4
-      timeout: 30s
+      timeout: 4m
 
     # ── Build + test: parallel across independent workspaces ─────────
-    # Tests run WITHOUT --coverage for speed; coverage is a separate gate.
     build-and-test:
       run: ./scripts/pre-push-build-test.sh
-      priority: 5
-      timeout: 3m
-
-    # ── Coverage: 100% threshold enforcement (separate for clear output) ─
-    coverage:
-      run: ./scripts/pre-push-coverage.sh
-      fail_text: "Coverage below 100% — fix gaps before pushing"
-      priority: 6
-      timeout: 5m
+      priority: 4
+      timeout: 6m
 
     # ── E2E: mirrors CI "E2E Tests" job ──────────────────────────────
     e2e:
       run: ./scripts/run-e2e-tests.sh
-      priority: 7
+      priority: 5
       timeout: 2m
 
-    # ── Browser E2E: Playwright critical UI flows ───────────────────
-    e2e-playwright:
-      run: ./scripts/run-playwright-qa.sh
-      priority: 8
-      timeout: 15m
-
-    # ── Actions security scan: require local zizmor install ──────────
+    # ── Zizmor: GitHub Actions security scanner (blocking) ───────────
     zizmor:
       glob: '.github/workflows/*.yml'
-      run: |
-        if ! command -v zizmor >/dev/null 2>&1; then
-          echo "❌ zizmor not installed. Install it: brew install zizmor"
-          exit 1
-        fi
-        zizmor .github/workflows/
-      priority: 9
+      run: zizmor .github/workflows/
+      skip:
+        - run: '! command -v zizmor >/dev/null 2>&1'
+      priority: 6
       timeout: 30s

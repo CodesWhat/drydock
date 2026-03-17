@@ -10,7 +10,7 @@ import { getServer } from '../../services/server';
 import { type ContainerStatsSummaryItem, getAllContainerStats } from '../../services/stats';
 import { getAllWatchers } from '../../services/watcher';
 import type { Container } from '../../types/container';
-import { mapApiContainers } from '../../utils/container-mapper';
+import { type ApiContainerInput, mapApiContainers } from '../../utils/container-mapper';
 import { errorMessage } from '../../utils/error';
 import type {
   DashboardAgent,
@@ -44,7 +44,7 @@ interface DashboardStateRefs {
 }
 
 interface DashboardDataResponse {
-  containersRes: unknown;
+  containersRes: ApiContainerInput[];
   containerStatsRes: ContainerStatsSummaryItem[];
   serverRes: DashboardServerInfo;
   agentsRes: DashboardAgent[];

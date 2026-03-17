@@ -195,16 +195,25 @@ describe('DataFilterBar', () => {
   });
 
   describe('themed tooltips', () => {
+    function getTooltipPopup(): HTMLElement | null {
+      return document.body.querySelector('.dd-tooltip-popup');
+    }
+
+    afterEach(() => {
+      document.body.querySelectorAll('.dd-tooltip-popup').forEach((el) => el.remove());
+    });
+
     it('shows Filters tooltip when the filter control has an active badge', async () => {
       const w = factoryWithTooltip({ activeFilterCount: 2 });
       const filterButton = w.find('button[aria-label="Toggle filters"]');
       const filterControl = filterButton.element.parentElement as HTMLElement | null;
       expect(filterControl).not.toBeNull();
-      expect(filterControl?.getAttribute('data-dd-tooltip')).toBe('Filters');
       filterControl?.dispatchEvent(new MouseEvent('mouseenter', { bubbles: false }));
-      expect(filterControl?.classList.contains('dd-tooltip-visible')).toBe(true);
+      const tip = getTooltipPopup();
+      expect(tip).not.toBeNull();
+      expect(tip!.textContent).toBe('Filters');
       filterControl?.dispatchEvent(new MouseEvent('mouseleave', { bubbles: false }));
-      expect(filterControl?.classList.contains('dd-tooltip-visible')).toBe(false);
+      expect(getTooltipPopup()).toBeNull();
       w.unmount();
     });
 
@@ -214,11 +223,12 @@ describe('DataFilterBar', () => {
         .findAll('button')
         .find((b) => b.attributes('aria-label') === 'Cards view');
       expect(cardsButton).toBeDefined();
-      expect(cardsButton?.attributes('data-dd-tooltip')).toBe('Cards view');
       await cardsButton?.trigger('mouseenter');
-      expect(cardsButton?.classes()).toContain('dd-tooltip-visible');
+      const tip = getTooltipPopup();
+      expect(tip).not.toBeNull();
+      expect(tip!.textContent).toBe('Cards view');
       await cardsButton?.trigger('mouseleave');
-      expect(cardsButton?.classes()).not.toContain('dd-tooltip-visible');
+      expect(getTooltipPopup()).toBeNull();
       w.unmount();
     });
   });

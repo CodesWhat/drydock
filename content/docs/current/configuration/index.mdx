@@ -23,6 +23,7 @@ Please find below the documentation for each of them:
 - [**Authentication**](/docs/configuration/authentications)
 - [**Backup & Rollback**](/docs/configuration/rollback) — automatic image backup and one-click restore
 - [**Container Actions**](/docs/configuration/actions) — start, stop, restart, update, and delete
+- [**DNS**](/docs/configuration/dns) — DNS result ordering for Alpine/musl compatibility
 - [**Lifecycle Hooks**](/docs/configuration/hooks) — pre/post-update commands
 - [**Logs**](/docs/configuration/logs)
 - [**Registries**](/docs/configuration/registries)
@@ -37,6 +38,8 @@ Please find below the documentation for each of them:
 - [**Webhooks**](/docs/configuration/webhooks) — CI/CD integration
 
 ## Complete example
+
+<Callout type="warn">This example uses a direct Docker socket mount for brevity. For production deployments, use a [socket proxy](/docs/configuration/watchers#option-1-socket-proxy-recommended) or [remote TLS connection](/docs/configuration/watchers#option-2-remote-docker-over-tls) instead.</Callout>
 
 ```yaml
 services:

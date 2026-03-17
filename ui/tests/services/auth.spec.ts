@@ -7,25 +7,25 @@ import {
   setRememberMe,
 } from '@/services/auth';
 
-// Mock fetch globally
-global.fetch = vi.fn();
+const fetchMock = vi.fn();
+global.fetch = fetchMock as unknown as typeof fetch;
 
 describe('Auth Service', () => {
   beforeEach(() => {
-    fetch.mockClear();
+    fetchMock.mockReset();
   });
 
   describe('getUser', () => {
     it('returns user data when authenticated', async () => {
       const mockUser = { username: 'testuser', roles: ['admin'] };
-      fetch.mockResolvedValueOnce({
+      fetchMock.mockResolvedValueOnce({
         ok: true,
         json: async () => mockUser,
       });
 
       const user = await getUser();
 
-      expect(fetch).toHaveBeenCalledWith('/auth/user', {
+      expect(fetchMock).toHaveBeenCalledWith('/auth/user', {
         redirect: 'manual',
         credentials: 'include',
       });
@@ -33,7 +33,7 @@ describe('Auth Service', () => {
     });
 
     it('returns undefined when not authenticated', async () => {
-      fetch.mockResolvedValueOnce({
+      fetchMock.mockResolvedValueOnce({
         ok: false,
         status: 401,
       });
@@ -44,7 +44,7 @@ describe('Auth Service', () => {
     });
 
     it('handles network errors gracefully', async () => {
-      fetch.mockRejectedValueOnce(new Error('Network error'));
+      fetchMock.mockRejectedValueOnce(new Error('Network error'));
 
       const user = await getUser();
 
@@ -53,7 +53,7 @@ describe('Auth Service', () => {
 
     it('logs fallback error detail when thrown value is not an Error object', async () => {
       const debugSpy = vi.spyOn(console, 'debug').mockImplementation(() => {});
-      fetch.mockRejectedValueOnce('raw-network-error');
+      fetchMock.mockRejectedValueOnce('raw-network-error');
 
       try {
         const user = await getUser();
@@ -68,14 +68,14 @@ describe('Auth Service', () => {
   describe('loginBasic', () => {
     it('performs basic authentication successfully', async () => {
       const mockUser = { username: 'testuser' };
-      fetch.mockResolvedValueOnce({
+      fetchMock.mockResolvedValueOnce({
         ok: true,
         json: async () => mockUser,
       });
 
       const user = await loginBasic('testuser', 'testpass');
 
-      expect(fetch).toHaveBeenCalledWith('/auth/login', {
+      expect(fetchMock).toHaveBeenCalledWith('/auth/login', {
         method: 'POST',
         credentials: 'include',
         headers: {
@@ -88,7 +88,7 @@ describe('Auth Service', () => {
     });
 
     it('throws on login failure', async () => {
-      fetch.mockResolvedValueOnce({
+      fetchMock.mockResolvedValueOnce({
         ok: false,
         status: 401,
       });
@@ -150,14 +150,14 @@ describe('Auth Service', () => {
   describe('logout', () => {
     it('logs out user successfully', async () => {
       const mockResponse = { success: true };
-      fetch.mockResolvedValueOnce({
+      fetchMock.mockResolvedValueOnce({
         ok: true,
         json: async () => mockResponse,
       });
 
       const result = await logout();
 
-      expect(fetch).toHaveBeenCalledWith('/auth/logout', {
+      expect(fetchMock).toHaveBeenCalledWith('/auth/logout', {
         method: 'POST',
         credentials: 'include',
         redirect: 'manual',
@@ -175,21 +175,21 @@ describe('Auth Service', () => {
         ],
         errors: [{ provider: 'basic:ANDI', error: 'hash is required' }],
       };
-      fetch.mockResolvedValueOnce({
+      fetchMock.mockResolvedValueOnce({
         ok: true,
         json: async () => mockStrategies,
       });
 
       const strategies = await getStrategies();
 
-      expect(fetch).toHaveBeenCalledWith('/api/v1/auth/status', {
+      expect(fetchMock).toHaveBeenCalledWith('/api/v1/auth/status', {
         credentials: 'include',
       });
       expect(strategies).toEqual(mockStrategies);
     });
 
     it('throws when fetching authentication strategies fails', async () => {
-      fetch.mockResolvedValueOnce({
+      fetchMock.mockResolvedValueOnce({
         ok: false,
         statusText: 'Internal Server Error',
         json: async () => ({}),
@@ -204,14 +204,14 @@ describe('Auth Service', () => {
   describe('getOidcRedirection', () => {
     it('returns oidc redirection payload', async () => {
       const mockRedirection = { url: 'https://idp.example.com/authorize?code=abc' };
-      fetch.mockResolvedValueOnce({
+      fetchMock.mockResolvedValueOnce({
         ok: true,
         json: async () => mockRedirection,
       });
 
       const result = await getOidcRedirection('main');
 
-      expect(fetch).toHaveBeenCalledWith('/auth/oidc/main/redirect', {
+      expect(fetchMock).toHaveBeenCalledWith('/auth/oidc/main/redirect', {
         credentials: 'include',
       });
       expect(result).toEqual(mockRedirection);
@@ -220,13 +220,13 @@ describe('Auth Service', () => {
 
   describe('setRememberMe', () => {
     it('stores remember-me preference for auth redirects', async () => {
-      fetch.mockResolvedValueOnce({
+      fetchMock.mockResolvedValueOnce({
         ok: true,
       });
 
       await setRememberMe(true);
 
-      expect(fetch).toHaveBeenCalledWith('/auth/remember', {
+      expect(fetchMock).toHaveBeenCalledWith('/auth/remember', {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },

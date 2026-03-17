@@ -53,6 +53,9 @@ services:
 
 </Tab>
 <Tab value="Direct Mount">
+
+<Callout type="warn">Direct socket access grants the container full control over the Docker daemon. Use the **Socket Proxy** tab above for production deployments. See [Docker Socket Security](/docs/configuration/watchers#docker-socket-security) for all available options.</Callout>
+
 The simplest setup — mount the Docker socket directly. Works out of the box on most systems.
 
 ```yaml
@@ -72,6 +75,8 @@ services:
 <Callout type="info">If you need a **read-only** socket mount (`:ro`), break-glass root mode requires both `DD_RUN_AS_ROOT=true` and `DD_ALLOW_INSECURE_ROOT=true`. Prefer socket proxy mode for least privilege. See [Docker Socket Security](/docs/configuration/watchers/#docker-socket-security) for details.</Callout>
 </Tab>
 <Tab value="Docker CLI">
+
+<Callout type="warn">Direct socket access grants the container full control over the Docker daemon. Use the **Socket Proxy** tab above for production deployments. See [Docker Socket Security](/docs/configuration/watchers#docker-socket-security) for all available options.</Callout>
 
 ```bash
 docker run -d --name drydock \

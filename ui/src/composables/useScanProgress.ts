@@ -117,7 +117,13 @@ async function processContainerBatch(signal: AbortSignal) {
       break;
     }
 
-    const shouldCountAsDone = await processSingleContainer(container.id, signal);
+    const containerId = typeof container?.id === 'string' ? container.id : '';
+    if (containerId === '') {
+      scanProgress.value.done++;
+      continue;
+    }
+
+    const shouldCountAsDone = await processSingleContainer(containerId, signal);
     if (!shouldCountAsDone) {
       break;
     }

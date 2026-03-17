@@ -64,6 +64,41 @@ test('getLogBufferEnabled should return false when disabled via env', async () =
   delete configuration.ddEnvVars.DD_LOG_BUFFER_ENABLED;
 });
 
+test('getDnsMode should default to ipv4first', () => {
+  delete configuration.ddEnvVars.DD_DNS_MODE;
+  expect(configuration.getDnsMode()).toBe('ipv4first');
+});
+
+test('getDnsMode should accept ipv6first', () => {
+  configuration.ddEnvVars.DD_DNS_MODE = 'ipv6first';
+  expect(configuration.getDnsMode()).toBe('ipv6first');
+  delete configuration.ddEnvVars.DD_DNS_MODE;
+});
+
+test('getDnsMode should accept verbatim', () => {
+  configuration.ddEnvVars.DD_DNS_MODE = 'verbatim';
+  expect(configuration.getDnsMode()).toBe('verbatim');
+  delete configuration.ddEnvVars.DD_DNS_MODE;
+});
+
+test('getDnsMode should normalize casing', () => {
+  configuration.ddEnvVars.DD_DNS_MODE = 'IPV4FIRST';
+  expect(configuration.getDnsMode()).toBe('ipv4first');
+  delete configuration.ddEnvVars.DD_DNS_MODE;
+});
+
+test('getDnsMode should fallback to ipv4first for invalid values', () => {
+  configuration.ddEnvVars.DD_DNS_MODE = 'invalid';
+  expect(configuration.getDnsMode()).toBe('ipv4first');
+  delete configuration.ddEnvVars.DD_DNS_MODE;
+});
+
+test('getDnsMode should trim whitespace', () => {
+  configuration.ddEnvVars.DD_DNS_MODE = '  verbatim  ';
+  expect(configuration.getDnsMode()).toBe('verbatim');
+  delete configuration.ddEnvVars.DD_DNS_MODE;
+});
+
 test('should include additional legacy env count in warning suffix when more than 10 WUD vars are present', async () => {
   const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
   const legacyKeys = Array.from({ length: 12 }, (_, index) => `WUD_LEGACY_${index}`);

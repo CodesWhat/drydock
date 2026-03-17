@@ -66,7 +66,9 @@ const DataListAccordionStub = defineComponent({
   `,
 });
 
-function makeContainer(overrides: Partial<Container> = {}): Container {
+type DisplayContainer = Container & { _pending?: true };
+
+function makeContainer(overrides: Partial<Container> & { _pending?: true } = {}): DisplayContainer {
   return {
     id: overrides.id ?? 'c-1',
     name: overrides.name ?? 'alpha',

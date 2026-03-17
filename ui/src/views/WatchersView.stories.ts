@@ -84,8 +84,9 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 type StoryCanvas = ReturnType<typeof within>;
+type StoryLoader = () => Promise<Record<string, never>>;
 
-function createWatchersLoader(data: WatcherApiItem[]): NonNullable<Story['loaders']>[number] {
+function createWatchersLoader(data: WatcherApiItem[]): StoryLoader {
   return async () => {
     installWatchersMock(data);
     return {};

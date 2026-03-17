@@ -108,7 +108,7 @@ type SecurityScanType = 'scan' | 'updateScan';
  */
 type BouncerStatus = 'safe' | 'unsafe' | 'blocked';
 
-interface ApiContainerInput {
+export interface ApiContainerInput {
   id?: unknown;
   name?: unknown;
   displayName?: unknown;

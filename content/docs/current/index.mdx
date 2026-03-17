@@ -40,8 +40,8 @@ docker run -d --name drydock \
   codeswhat/drydock
 ```
 
-<Callout type="info">
-See the [Quick Start guide](/docs/quickstart) for detailed setup options including socket proxy configuration.
+<Callout type="warn">
+Direct socket access grants the container full control over the Docker daemon. See the [Quick Start guide](/docs/quickstart) for the recommended **socket proxy** setup and other [secure connection options](/docs/configuration/watchers#docker-socket-security).
 </Callout>
 
 ## 📚 Next steps

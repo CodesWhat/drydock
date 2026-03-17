@@ -1183,12 +1183,12 @@ onUnmounted(() => {
         <AppButton size="none" variant="plain" weight="none" aria-label="Search"
                 class="w-full flex items-center dd-rounded text-xs transition-colors dd-bg-card dd-text-secondary hover:dd-bg-elevated hover:dd-text"
                 :class="isCollapsed ? 'justify-center py-2.5' : 'gap-2 px-3 py-2'"
-                :style="{ border: '1px solid var(--dd-border)' }"
+                :style="{ border: 'none' }"
                 @click="showSearch = true; isMobileMenuOpen = false">
           <AppIcon name="search" :size="12" class="shrink-0" />
           <template v-if="!isCollapsed">
             <span class="sidebar-label">Search</span>
-            <kbd class="sidebar-label ml-auto px-1.5 py-0.5 dd-rounded-sm text-[0.625rem] font-medium dd-bg-elevated dd-text-muted">
+            <kbd class="sidebar-label ml-auto px-1.5 py-0.5 dd-rounded-sm text-[0.625rem] font-medium dd-text-secondary" style="background: var(--dd-border);">
               <span class="text-[0.5625rem]">&#8984;</span>K
             </kbd>
           </template>

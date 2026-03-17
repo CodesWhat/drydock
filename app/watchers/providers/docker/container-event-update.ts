@@ -36,6 +36,52 @@ function getErrorMessage(error: unknown): string {
   return typeof errorRecord.message === 'string' ? errorRecord.message : 'unknown error';
 }
 
+const RECREATED_CONTAINER_NAME_PATTERN = /^([a-f0-9]{12})_(.+)$/i;
+const RECREATED_CONTAINER_ALIAS_TRANSIENT_WINDOW_MS = 30 * 1000;
+
+export function isRecreatedContainerAlias(containerId: string, containerName: string): boolean {
+  const match = containerName.match(RECREATED_CONTAINER_NAME_PATTERN);
+  if (!match) {
+    return false;
+  }
+  const [, shortIdPrefix] = match;
+  return containerId.toLowerCase().startsWith(shortIdPrefix.toLowerCase());
+}
+
+function parseTimestampToMs(timestamp: unknown): number | undefined {
+  if (typeof timestamp === 'number' && Number.isFinite(timestamp) && timestamp > 0) {
+    return timestamp >= 1_000_000_000_000 ? Math.trunc(timestamp) : Math.trunc(timestamp * 1000);
+  }
+  if (typeof timestamp === 'string' && timestamp !== '') {
+    const parsed = Date.parse(timestamp);
+    if (!Number.isNaN(parsed)) {
+      return parsed;
+    }
+  }
+  return undefined;
+}
+
+function getContainerCreatedAtMs(containerInspect: any): number | undefined {
+  return (
+    parseTimestampToMs(containerInspect?.Created) ??
+    parseTimestampToMs(containerInspect?.State?.StartedAt)
+  );
+}
+
+function isWithinRecreatedAliasTransientWindow(
+  createdAtMs: number | undefined,
+  nowMs: number,
+): boolean {
+  if (createdAtMs === undefined) {
+    return false;
+  }
+  const ageMs = nowMs - createdAtMs;
+  if (ageMs < 0) {
+    return false;
+  }
+  return ageMs <= RECREATED_CONTAINER_ALIAS_TRANSIENT_WINDOW_MS;
+}
+
 export interface ProcessDockerEventDependencies {
   watchCronDebounced: () => Promise<void>;
   ensureRemoteAuthHeaders: () => Promise<void>;
@@ -46,6 +92,9 @@ export interface ProcessDockerEventDependencies {
 }
 
 function resolveContainerIdFromDockerEvent(dockerEvent: unknown) {
+  // Docker event payloads are not fully consistent across engine/API versions and transports:
+  // some emit the container id at the top level (`id`), while others nest it under `Actor.ID`.
+  // Read both paths so the watcher works reliably against local and remote daemons.
   const dockerEventRecord = asUnknownRecord(dockerEvent);
   if (!dockerEventRecord) {
     return undefined;
@@ -84,6 +133,31 @@ export async function processDockerEvent(
   try {
     await dependencies.ensureRemoteAuthHeaders();
     const containerInspect = await dependencies.inspectContainer(containerId);
+    const inspectName = (
+      ((containerInspect as Record<string, unknown>)?.Name as string) || ''
+    ).replace(/^\//, '');
+    const isAlias = isRecreatedContainerAlias(containerId, inspectName);
+    const isTransientAlias = isWithinRecreatedAliasTransientWindow(
+      getContainerCreatedAtMs(containerInspect),
+      Date.now(),
+    );
+
+    // Transient aliases should be ignored briefly during recreate/rename races.
+    // Do not suppress indefinitely, otherwise a persistent alias can become a blind spot.
+    if (isAlias && isTransientAlias) {
+      dependencies.debug(
+        `Skipping transient recreated container alias action=[${action}] id=[${containerId}]`,
+      );
+      await dependencies.watchCronDebounced();
+      return;
+    }
+    if (isAlias) {
+      dependencies.debug(
+        `Recreated container alias persisted beyond transient window id=[${containerId}]; scheduling refresh`,
+      );
+      await dependencies.watchCronDebounced();
+    }
+
     const containerFound = dependencies.getContainerFromStore(containerId);
 
     if (containerFound) {

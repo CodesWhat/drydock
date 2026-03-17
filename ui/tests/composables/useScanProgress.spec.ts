@@ -109,6 +109,26 @@ describe('useScanProgress', () => {
     expect(mockScanContainer).toHaveBeenCalledTimes(2);
   });
 
+  it('counts containers with invalid ids as done without calling scanContainer', async () => {
+    mockGetAllContainers.mockResolvedValue([
+      { id: 'c1' },
+      {},
+      { id: null },
+      { id: 42 },
+      { id: '' },
+      { id: 'c2' },
+    ]);
+    mockScanContainer.mockResolvedValue({});
+
+    const { scanProgress, scanAllContainers } = await loadComposable();
+    await scanAllContainers({ scannerReady: true, runtimeLoading: false });
+
+    expect(scanProgress.value).toEqual({ done: 6, total: 6 });
+    expect(mockScanContainer).toHaveBeenCalledTimes(2);
+    expect(mockScanContainer).toHaveBeenNthCalledWith(1, 'c1', expect.any(AbortSignal));
+    expect(mockScanContainer).toHaveBeenNthCalledWith(2, 'c2', expect.any(AbortSignal));
+  });
+
   it('resets scanning to false even if getAllContainers throws', async () => {
     mockGetAllContainers.mockRejectedValue(new Error('network error'));
 
