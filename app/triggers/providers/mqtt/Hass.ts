@@ -7,6 +7,10 @@ import {
   registerWatcherStop,
 } from '../../../event/index.js';
 import * as containerStore from '../../../store/container.js';
+import {
+  getSanitizedCanonicalContainerName,
+  getStaleSanitizedContainerNameCandidates,
+} from './naming.js';
 
 const HASS_DEVICE_ID = 'drydock';
 const HASS_DEVICE_NAME = 'drydock';
@@ -150,6 +154,8 @@ class Hass {
 
   log: HassLogger;
 
+  private containerStateTopicById = new Map<string, string>();
+
   private unregisterContainerAdded?: () => void;
   private unregisterContainerUpdated?: () => void;
   private unregisterContainerRemoved?: () => void;
@@ -204,6 +210,94 @@ class Hass {
 
     this.unregisterWatcherStop?.();
     this.unregisterWatcherStop = undefined;
+
+    this.containerStateTopicById.clear();
+  }
+
+  private getContainerId(container: { id?: unknown }) {
+    if (typeof container?.id !== 'string' || container.id === '') {
+      return undefined;
+    }
+    return container.id;
+  }
+
+  private getContainerStateTopicFromName({
+    watcherName,
+    containerName,
+  }: {
+    watcherName: string;
+    containerName: string;
+  }) {
+    return `${this.configuration.topic}/${watcherName}/${containerName}`;
+  }
+
+  private getStaleContainerStateTopics({
+    container,
+    currentStateTopic,
+  }: {
+    container: { id?: unknown; name?: unknown; watcher?: unknown };
+    currentStateTopic: string;
+  }) {
+    const staleStateTopics = new Set<string>();
+    const watcherName = typeof container?.watcher === 'string' ? container.watcher : '';
+    if (watcherName === '') {
+      return [];
+    }
+
+    const containerId = this.getContainerId(container);
+    if (containerId) {
+      const trackedStateTopic = this.containerStateTopicById.get(containerId);
+      if (trackedStateTopic && trackedStateTopic !== currentStateTopic) {
+        staleStateTopics.add(trackedStateTopic);
+      }
+    }
+
+    for (const staleContainerName of getStaleSanitizedContainerNameCandidates(container)) {
+      const staleStateTopic = this.getContainerStateTopicFromName({
+        watcherName,
+        containerName: staleContainerName,
+      });
+      /* v8 ignore start -- defensive: stale candidates are always different from current topic */
+      if (staleStateTopic !== currentStateTopic) {
+        /* v8 ignore stop */
+        staleStateTopics.add(staleStateTopic);
+      }
+    }
+
+    return Array.from(staleStateTopics);
+  }
+
+  private async removeDiscoveryTopics({
+    kind,
+    stateTopics,
+  }: {
+    kind: string;
+    stateTopics: string[];
+  }) {
+    for (const stateTopic of stateTopics) {
+      await this.removeSensor({
+        discoveryTopic: this.getDiscoveryTopic({
+          kind,
+          topic: stateTopic,
+        }),
+      });
+    }
+  }
+
+  private trackContainerStateTopic(container: { id?: unknown }, stateTopic: string) {
+    const containerId = this.getContainerId(container);
+    if (!containerId) {
+      return;
+    }
+    this.containerStateTopicById.set(containerId, stateTopic);
+  }
+
+  private clearTrackedContainerStateTopic(container: { id?: unknown }) {
+    const containerId = this.getContainerId(container);
+    if (!containerId) {
+      return;
+    }
+    this.containerStateTopicById.delete(containerId);
   }
 
   /**
@@ -216,9 +310,17 @@ class Hass {
       kind: 'update',
       topic: this.getContainerStateTopic({ container }),
     };
+    const staleStateTopics = this.getStaleContainerStateTopics({
+      container,
+      currentStateTopic: containerStateSensor.topic,
+    });
     const entityPictureOverride = resolveEntityPictureOverride(container);
     this.log.info(`Add hass container update sensor [${containerStateSensor.topic}]`);
     if (this.configuration.hass.discovery) {
+      await this.removeDiscoveryTopics({
+        kind: containerStateSensor.kind,
+        stateTopics: staleStateTopics,
+      });
       await this.publishDiscoveryMessage({
         discoveryTopic: this.getDiscoveryTopic({
           kind: containerStateSensor.kind,
@@ -239,6 +341,7 @@ class Hass {
         },
       });
     }
+    this.trackContainerStateTopic(container, containerStateSensor.topic);
     await this.updateContainerSensors(container);
   }
 
@@ -252,15 +355,22 @@ class Hass {
       kind: 'update',
       topic: this.getContainerStateTopic({ container }),
     };
+    const staleStateTopics = this.getStaleContainerStateTopics({
+      container,
+      currentStateTopic: containerStateSensor.topic,
+    });
+    const stateTopicsToRemove = [
+      containerStateSensor.topic,
+      ...staleStateTopics.filter((stateTopic) => stateTopic !== containerStateSensor.topic),
+    ];
     this.log.info(`Remove hass container update sensor [${containerStateSensor.topic}]`);
     if (this.configuration.hass.discovery) {
-      await this.removeSensor({
-        discoveryTopic: this.getDiscoveryTopic({
-          kind: containerStateSensor.kind,
-          topic: containerStateSensor.topic,
-        }),
+      await this.removeDiscoveryTopics({
+        kind: containerStateSensor.kind,
+        stateTopics: stateTopicsToRemove,
       });
     }
+    this.clearTrackedContainerStateTopic(container);
     await this.updateContainerSensors(container);
   }
 
@@ -504,7 +614,7 @@ class Hass {
    * @returns {Promise<*>}
    */
   async removeSensor({ discoveryTopic }) {
-    return this.client.publish(discoveryTopic, JSON.stringify({}), {
+    return this.client.publish(discoveryTopic, '', {
       retain: true,
     });
   }
@@ -525,8 +635,10 @@ class Hass {
    * @return {string}
    */
   getContainerStateTopic({ container }) {
-    const containerName = container.name.replaceAll('.', '-');
-    return `${this.configuration.topic}/${container.watcher}/${containerName}`;
+    return this.getContainerStateTopicFromName({
+      watcherName: container.watcher,
+      containerName: getSanitizedCanonicalContainerName(container),
+    });
   }
 
   /**
