@@ -160,6 +160,74 @@ describe('useTheme', () => {
       expect(document.documentElement.classList.contains('dd-transitioning')).toBe(false);
     });
 
+    it('sets clip-path origin CSS custom properties from click coordinates', async () => {
+      const startViewTransition = vi.fn((change: () => void) => {
+        change();
+        return { finished: Promise.resolve() };
+      });
+      Object.defineProperty(document, 'startViewTransition', {
+        configurable: true,
+        value: startViewTransition,
+      });
+
+      const root = document.documentElement;
+      const { transitionTheme, setThemeVariant } = await loadUseTheme();
+      await transitionTheme(() => setThemeVariant('light'), {
+        clientX: 1350,
+        clientY: 24,
+      } as MouseEvent);
+
+      // Properties are cleaned up after transition finishes
+      expect(root.style.getPropertyValue('--dd-transition-x')).toBe('');
+      expect(root.style.getPropertyValue('--dd-transition-y')).toBe('');
+    });
+
+    it('sets click-origin properties during the transition callback', async () => {
+      let capturedX = '';
+      let capturedY = '';
+      const startViewTransition = vi.fn((change: () => void) => {
+        // Capture the properties DURING the transition, before cleanup
+        capturedX = document.documentElement.style.getPropertyValue('--dd-transition-x');
+        capturedY = document.documentElement.style.getPropertyValue('--dd-transition-y');
+        change();
+        return { finished: Promise.resolve() };
+      });
+      Object.defineProperty(document, 'startViewTransition', {
+        configurable: true,
+        value: startViewTransition,
+      });
+
+      const { transitionTheme, setThemeVariant } = await loadUseTheme();
+      await transitionTheme(() => setThemeVariant('light'), {
+        clientX: 1350,
+        clientY: 24,
+      } as MouseEvent);
+
+      expect(capturedX).toBe('1350px');
+      expect(capturedY).toBe('24px');
+    });
+
+    it('falls back to center origin when no MouseEvent is provided', async () => {
+      let capturedX = '';
+      let capturedY = '';
+      const startViewTransition = vi.fn((change: () => void) => {
+        capturedX = document.documentElement.style.getPropertyValue('--dd-transition-x');
+        capturedY = document.documentElement.style.getPropertyValue('--dd-transition-y');
+        change();
+        return { finished: Promise.resolve() };
+      });
+      Object.defineProperty(document, 'startViewTransition', {
+        configurable: true,
+        value: startViewTransition,
+      });
+
+      const { transitionTheme, setThemeVariant } = await loadUseTheme();
+      await transitionTheme(() => setThemeVariant('light'));
+
+      expect(capturedX).toBe('50%');
+      expect(capturedY).toBe('50%');
+    });
+
     it('swallows aborted view transition promises and still cleans up state', async () => {
       const startViewTransition = vi.fn((change: () => void) => {
         change();
