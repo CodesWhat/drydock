@@ -1,6 +1,6 @@
 {
   "name": "drydock-demo",
-  "version": "1.4.1",
+  "version": "1.4.5",
   "private": true,
   "type": "module",
   "scripts": {
