@@ -13,6 +13,7 @@ describe('Settings Service', () => {
     it('should fetch settings from API', async () => {
       const mockSettings = { internetlessMode: false };
       (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: true,
         json: vi.fn().mockResolvedValue(mockSettings),
       });
 
@@ -25,12 +26,43 @@ describe('Settings Service', () => {
     it('should return settings with internetless mode enabled', async () => {
       const mockSettings = { internetlessMode: true };
       (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: true,
         json: vi.fn().mockResolvedValue(mockSettings),
       });
 
       const result = await getSettings();
 
       expect(result.internetlessMode).toBe(true);
+    });
+
+    it('should throw on server error', async () => {
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: false,
+        status: 503,
+        json: vi.fn().mockResolvedValue({ error: 'Failed to load settings' }),
+      });
+
+      await expect(getSettings()).rejects.toThrow('Failed to load settings');
+    });
+
+    it('should handle non-JSON error responses', async () => {
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: false,
+        status: 502,
+        json: vi.fn().mockRejectedValue(new Error('not json')),
+      });
+
+      await expect(getSettings()).rejects.toThrow('Unknown error');
+    });
+
+    it('should fall back to HTTP status when error body has no error field', async () => {
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: false,
+        status: 504,
+        json: vi.fn().mockResolvedValue({}),
+      });
+
+      await expect(getSettings()).rejects.toThrow('HTTP 504');
     });
   });
 
@@ -100,6 +132,16 @@ describe('Settings Service', () => {
       });
 
       await expect(clearIconCache()).rejects.toThrow('Failed to clear icon cache');
+    });
+
+    it('should handle non-JSON error responses', async () => {
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: false,
+        status: 500,
+        json: vi.fn().mockRejectedValue(new Error('not json')),
+      });
+
+      await expect(clearIconCache()).rejects.toThrow('Unknown error');
     });
   });
 });

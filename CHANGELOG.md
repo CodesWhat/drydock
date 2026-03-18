@@ -23,7 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **About modal version display** — Version is now fetched dynamically from the API instead of being hardcoded, ensuring the modal always reflects the running server version. ([#167](https://github.com/CodesWhat/drydock/issues/167))
 - **Version resolution fallback** — `DD_VERSION=unknown` is now skipped so the version is correctly read from `package.json` at startup.
 - **Theme circle transition origin** — The theme toggle circle animation now originates from the click point instead of the viewport center.
-- **Trigger code bugs** — Gotify URL and Apprise URL now correctly enforce `.required()` validation; Kafka `clientId` casing normalized.
+- **Trigger code bugs** — Gotify URL and Apprise URL now correctly enforce `.required()` validation; Kafka `clientId` casing normalized with `clientId` kept as a deprecated compatibility alias until v1.6.0.
 
 ### Security
 

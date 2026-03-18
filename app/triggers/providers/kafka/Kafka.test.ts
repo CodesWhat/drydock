@@ -79,6 +79,31 @@ test('validateConfiguration should throw error when invalid', async () => {
   }).toThrowError(joi.ValidationError);
 });
 
+test('validateConfiguration should accept legacy clientId with deprecation warning', async () => {
+  const warnSpy = vi.spyOn(kafka.log, 'warn');
+  const validatedConfiguration = kafka.validateConfiguration({
+    brokers: 'broker1:9000, broker2:9000',
+    clientId: 'legacy-client-id',
+  });
+
+  expect(validatedConfiguration.clientid).toBe('legacy-client-id');
+  expect(validatedConfiguration).not.toHaveProperty('clientId');
+  expect(warnSpy).toHaveBeenCalledWith(
+    'Kafka trigger configuration key "clientId" is deprecated and will be removed in v1.6.0. Use "clientid" instead.',
+  );
+});
+
+test('validateConfiguration should prefer explicit clientid over legacy clientId', async () => {
+  const validatedConfiguration = kafka.validateConfiguration({
+    brokers: 'broker1:9000, broker2:9000',
+    clientid: 'explicit-client',
+    clientId: 'legacy-client',
+  });
+
+  expect(validatedConfiguration.clientid).toBe('explicit-client');
+  expect(validatedConfiguration).not.toHaveProperty('clientId');
+});
+
 test('maskConfiguration should mask sensitive data', async () => {
   kafka.configuration = {
     brokers: 'broker1:9000, broker2:9000',

@@ -4,6 +4,7 @@ import { type RouteLocationRaw, useRouter } from 'vue-router';
 import { useConfirmDialog } from '../composables/useConfirmDialog';
 import { ROUTES } from '../router/routes';
 import { updateContainer } from '../services/container-actions';
+import { errorMessage } from '../utils/error';
 import { useDashboardComputed } from './dashboard/useDashboardComputed';
 import { useDashboardData } from './dashboard/useDashboardData';
 import { useDashboardWidgetOrder } from './dashboard/useDashboardWidgetOrder';
@@ -12,6 +13,7 @@ const router = useRouter();
 const confirm = useConfirmDialog();
 const dashboardUpdateInProgress = ref<string | null>(null);
 const dashboardUpdateAllInProgress = ref(false);
+const dashboardUpdateError = ref<string | null>(null);
 
 function navigateTo(route: RouteLocationRaw) {
   router.push(route);
@@ -83,9 +85,12 @@ function confirmDashboardUpdate(row: { id: string; name: string }) {
     rejectLabel: 'Cancel',
     accept: async () => {
       dashboardUpdateInProgress.value = row.id;
+      dashboardUpdateError.value = null;
       try {
         await updateContainer(row.id);
         await fetchDashboardData();
+      } catch (e: unknown) {
+        dashboardUpdateError.value = errorMessage(e, `Failed to update ${row.name}`);
       } finally {
         dashboardUpdateInProgress.value = null;
       }
@@ -102,11 +107,19 @@ function confirmDashboardUpdateAll() {
     rejectLabel: 'Cancel',
     accept: async () => {
       dashboardUpdateAllInProgress.value = true;
+      dashboardUpdateError.value = null;
       try {
-        for (const row of pendingUpdates.value) {
-          await updateContainer(row.id);
-        }
+        const updateResults = await Promise.allSettled(
+          pendingUpdates.value.map((row) => updateContainer(row.id)),
+        );
         await fetchDashboardData();
+        const firstRejectedUpdate = updateResults.find((result) => result.status === 'rejected');
+        if (firstRejectedUpdate?.status === 'rejected') {
+          dashboardUpdateError.value = errorMessage(
+            firstRejectedUpdate.reason,
+            'Failed to update all containers',
+          );
+        }
       } finally {
         dashboardUpdateAllInProgress.value = false;
       }
@@ -223,6 +236,13 @@ function confirmDashboardUpdateAll() {
               <button class="text-[0.6875rem] font-medium text-drydock-secondary hover:underline"
                       @click="navigateTo({ path: ROUTES.CONTAINERS, query: { filterKind: 'any' } })">View all &rarr;</button>
             </div>
+          </div>
+
+          <div v-if="dashboardUpdateError"
+               data-test="dashboard-update-error"
+               class="mx-5 mt-3 px-3 py-2 text-[0.6875rem] dd-rounded"
+               :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
+            {{ dashboardUpdateError }}
           </div>
 
           <div class="flex-1 min-h-0 overflow-y-auto">

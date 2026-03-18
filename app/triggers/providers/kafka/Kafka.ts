@@ -1,19 +1,52 @@
 import { Kafka as KafkaClient, type KafkaConfig, type Producer, type SASLOptions } from 'kafkajs';
-import Trigger from '../Trigger.js';
+import Trigger, { type TriggerConfiguration } from '../Trigger.js';
 
 type UserPasswordSaslMechanism = 'plain' | 'scram-sha-256' | 'scram-sha-512';
 type UserPasswordSaslOptions = Extract<SASLOptions, { username: string; password: string }>;
+type KafkaConfigurationWithLegacyAlias = TriggerConfiguration & {
+  clientid?: string;
+  clientId?: string;
+};
 
 const AUTH_TYPE_TO_SASL_MECHANISM = {
   PLAIN: 'plain',
   'SCRAM-SHA-256': 'scram-sha-256',
   'SCRAM-SHA-512': 'scram-sha-512',
 } as const;
+const DEPRECATED_CLIENT_ID_KEY = 'clientId';
+const warnedLegacyConfigurationKeys = new Set<string>();
 
 function toSaslMechanism(authType: string): UserPasswordSaslMechanism {
   return (
     AUTH_TYPE_TO_SASL_MECHANISM[authType as keyof typeof AUTH_TYPE_TO_SASL_MECHANISM] ?? 'plain'
   );
+}
+
+function normalizeLegacyConfiguration(
+  configuration: TriggerConfiguration,
+  warn: (message: string) => void,
+): TriggerConfiguration {
+  const configurationWithLegacyAlias = configuration as KafkaConfigurationWithLegacyAlias;
+  if (configurationWithLegacyAlias.clientId === undefined) {
+    return configuration;
+  }
+
+  const normalizedConfiguration: KafkaConfigurationWithLegacyAlias = {
+    ...configurationWithLegacyAlias,
+  };
+  if (normalizedConfiguration.clientid === undefined) {
+    normalizedConfiguration.clientid = configurationWithLegacyAlias.clientId;
+  }
+  delete normalizedConfiguration.clientId;
+
+  if (!warnedLegacyConfigurationKeys.has(DEPRECATED_CLIENT_ID_KEY)) {
+    warnedLegacyConfigurationKeys.add(DEPRECATED_CLIENT_ID_KEY);
+    warn(
+      'Kafka trigger configuration key "clientId" is deprecated and will be removed in v1.6.0. Use "clientid" instead.',
+    );
+  }
+
+  return normalizedConfiguration;
 }
 
 /**
@@ -22,6 +55,12 @@ function toSaslMechanism(authType: string): UserPasswordSaslMechanism {
 class Kafka extends Trigger {
   private kafka!: KafkaClient;
   private producer?: Producer;
+
+  validateConfiguration(configuration: TriggerConfiguration): TriggerConfiguration {
+    return super.validateConfiguration(
+      normalizeLegacyConfiguration(configuration, (message) => this.log.warn(message)),
+    );
+  }
 
   /**
    * Get the Trigger configuration schema.

@@ -4,6 +4,10 @@ interface Settings {
 
 async function getSettings(): Promise<Settings> {
   const response = await fetch('/api/v1/settings', { credentials: 'include' });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ error: 'Unknown error' }));
+    throw new Error(err.error || `HTTP ${response.status}`);
+  }
   return response.json();
 }
 

@@ -1227,5 +1227,111 @@ describe('DashboardView', () => {
       const updateAllBtn = wrapper.find('[data-test="dashboard-update-all-btn"]');
       expect(updateAllBtn.exists()).toBe(false);
     });
+
+    it('refreshes dashboard data after bulk update when one container update fails', async () => {
+      const containers = [
+        makeContainer({
+          id: 'c-success-1',
+          name: 'nginx',
+          newTag: '1.1.0',
+          updateKind: 'minor',
+        }),
+        makeContainer({
+          id: 'c-fail',
+          name: 'redis',
+          image: 'redis',
+          newTag: '7.1.0',
+          updateKind: 'minor',
+        }),
+        makeContainer({
+          id: 'c-success-2',
+          name: 'postgres',
+          image: 'postgres',
+          newTag: '16.1.0',
+          updateKind: 'minor',
+        }),
+      ];
+      mockUpdateContainer.mockImplementation(async (id: string) => {
+        if (id === 'c-fail') {
+          throw new Error('update exploded');
+        }
+      });
+
+      const wrapper = await mountDashboard(
+        containers,
+        [],
+        {},
+        {
+          recentStatuses: {
+            nginx: 'pending',
+            redis: 'pending',
+            postgres: 'pending',
+          },
+        },
+      );
+      const initialFetchCount = mockGetAllContainers.mock.calls.length;
+      const updateAllBtn = wrapper.find('[data-test="dashboard-update-all-btn"]');
+      const { useConfirmDialog } = await import('@/composables/useConfirmDialog');
+      const confirm = useConfirmDialog();
+
+      await updateAllBtn.trigger('click');
+      await confirm.accept();
+      await flushPromises();
+
+      expect(mockUpdateContainer).toHaveBeenCalledTimes(3);
+      expect(mockUpdateContainer).toHaveBeenCalledWith('c-success-1');
+      expect(mockUpdateContainer).toHaveBeenCalledWith('c-fail');
+      expect(mockUpdateContainer).toHaveBeenCalledWith('c-success-2');
+      expect(mockGetAllContainers.mock.calls.length).toBe(initialFetchCount + 1);
+    });
+
+    it('shows an inline error when a single dashboard update fails', async () => {
+      mockUpdateContainer.mockRejectedValueOnce(new Error('update exploded'));
+      const wrapper = await mountDashboard(
+        [pendingContainer],
+        [],
+        {},
+        {
+          recentStatuses: { nginx: 'pending' },
+        },
+      );
+      const { useConfirmDialog } = await import('@/composables/useConfirmDialog');
+      const confirm = useConfirmDialog();
+
+      await wrapper.find('[data-test="dashboard-update-btn"]').trigger('click');
+      await confirm.accept();
+      await flushPromises();
+
+      const updateError = wrapper.find('[data-test="dashboard-update-error"]');
+      expect(updateError.exists()).toBe(true);
+      expect(updateError.text()).toContain('update exploded');
+    });
+
+    it('clears dashboard update error after a successful retry', async () => {
+      mockUpdateContainer
+        .mockRejectedValueOnce(new Error('temporary failure'))
+        .mockResolvedValueOnce({});
+
+      const wrapper = await mountDashboard(
+        [pendingContainer],
+        [],
+        {},
+        {
+          recentStatuses: { nginx: 'pending' },
+        },
+      );
+      const { useConfirmDialog } = await import('@/composables/useConfirmDialog');
+      const confirm = useConfirmDialog();
+
+      await wrapper.find('[data-test="dashboard-update-btn"]').trigger('click');
+      await confirm.accept();
+      await flushPromises();
+      expect(wrapper.find('[data-test="dashboard-update-error"]').exists()).toBe(true);
+
+      await wrapper.find('[data-test="dashboard-update-btn"]').trigger('click');
+      await confirm.accept();
+      await flushPromises();
+      expect(wrapper.find('[data-test="dashboard-update-error"]').exists()).toBe(false);
+    });
   });
 });
