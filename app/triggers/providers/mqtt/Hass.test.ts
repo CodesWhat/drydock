@@ -7,7 +7,7 @@ import {
 } from '../../../event/index.js';
 import log from '../../../log/index.js';
 import * as containerStore from '../../../store/container.js';
-import Hass from './Hass.js';
+import Hass, { HASS_CONTAINER_STATE_TOPIC_TRACK_LIMIT } from './Hass.js';
 
 const MOCK_VERSION = '1.4.0-test';
 
@@ -102,6 +102,103 @@ test('publishDiscoveryMessage must publish a discovery message expected by HA', 
     }),
     { retain: true },
   );
+});
+
+test('removeSensor should publish an empty retained payload to remove discovery', async () => {
+  await hass.removeSensor({
+    discoveryTopic: 'my/discovery/topic',
+  });
+
+  expect(mqttClientMock.publish).toHaveBeenCalledWith('my/discovery/topic', '', {
+    retain: true,
+  });
+});
+
+test('addContainerSensor should remove stale discovery topic when the container name changes', async () => {
+  const updateContainerSensorsSpy = vi
+    .spyOn(hass, 'updateContainerSensors')
+    .mockResolvedValue(undefined);
+
+  await hass.addContainerSensor({
+    id: 'container-id-123',
+    name: 'old-name',
+    watcher: 'watcher-name',
+    displayIcon: 'mdi:docker',
+  });
+
+  mqttClientMock.publish.mockClear();
+
+  await hass.addContainerSensor({
+    id: 'container-id-123',
+    name: 'new-name',
+    watcher: 'watcher-name',
+    displayIcon: 'mdi:docker',
+  });
+
+  expect(mqttClientMock.publish).toHaveBeenCalledWith(
+    'homeassistant/update/topic_watcher-name_old-name/config',
+    '',
+    { retain: true },
+  );
+  expect(mqttClientMock.publish).toHaveBeenCalledWith(
+    'homeassistant/update/topic_watcher-name_new-name/config',
+    expect.any(String),
+    { retain: true },
+  );
+
+  updateContainerSensorsSpy.mockRestore();
+});
+
+test('addContainerSensor should canonicalize recreated alias-prefixed names to base topic', async () => {
+  const updateContainerSensorsSpy = vi
+    .spyOn(hass, 'updateContainerSensors')
+    .mockResolvedValue(undefined);
+
+  await hass.addContainerSensor({
+    id: '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a10',
+    name: '7ea6b8a42686_termix',
+    watcher: 'watcher-name',
+    displayIcon: 'mdi:docker',
+  });
+
+  expect(mqttClientMock.publish).toHaveBeenCalledWith(
+    'homeassistant/update/topic_watcher-name_7ea6b8a42686_termix/config',
+    '',
+    { retain: true },
+  );
+  expect(mqttClientMock.publish).toHaveBeenCalledWith(
+    'homeassistant/update/topic_watcher-name_termix/config',
+    expect.stringContaining('"state_topic":"topic/watcher-name/termix"'),
+    { retain: true },
+  );
+
+  updateContainerSensorsSpy.mockRestore();
+});
+
+test('addContainerSensor should remove legacy recreated-alias discovery topic for base names', async () => {
+  const updateContainerSensorsSpy = vi
+    .spyOn(hass, 'updateContainerSensors')
+    .mockResolvedValue(undefined);
+
+  await hass.addContainerSensor({
+    id: '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a10',
+    name: 'termix',
+    watcher: 'watcher-name',
+    displayIcon: 'mdi:docker',
+  });
+
+  expect(mqttClientMock.publish).toHaveBeenCalledWith(
+    'homeassistant/update/topic_watcher-name_7ea6b8a42686_termix/config',
+    '',
+    { retain: true },
+  );
+  expect(mqttClientMock.publish).toHaveBeenCalledWith(
+    'homeassistant/update/topic_watcher-name_termix/config',
+    expect.stringContaining('"state_topic":"topic/watcher-name/termix"'),
+    { retain: true },
+  );
+
+  updateContainerSensorsSpy.mockRestore();
 });
 
 test('addContainerSensor must publish sensor discovery message expected by HA', async () => {
@@ -257,7 +354,7 @@ test.each(
     watcher: 'watcher-name',
     displayIcon: 'mdi:docker',
   });
-  expect(mqttClientMock.publish).toHaveBeenCalledWith(data.discoveryTopic, JSON.stringify({}), {
+  expect(mqttClientMock.publish).toHaveBeenCalledWith(data.discoveryTopic, '', {
     retain: true,
   });
 });
@@ -439,19 +536,19 @@ test.each(containerData)('updateContainerSensors must publish all sensors expect
   expect(mqttClientMock.publish).toHaveBeenNthCalledWith(
     13,
     'homeassistant/sensor/topic_watcher-name_total_count/config',
-    '{}',
+    '',
     { retain: true },
   );
   expect(mqttClientMock.publish).toHaveBeenNthCalledWith(
     14,
     'homeassistant/sensor/topic_watcher-name_update_count/config',
-    '{}',
+    '',
     { retain: true },
   );
   expect(mqttClientMock.publish).toHaveBeenNthCalledWith(
     15,
     'homeassistant/binary_sensor/topic_watcher-name_update_status/config',
-    '{}',
+    '',
     { retain: true },
   );
 });
@@ -487,7 +584,7 @@ test.each(
     watcher: 'watcher-name',
     displayIcon: 'mdi:docker',
   });
-  expect(mqttClientMock.publish).toHaveBeenCalledWith(data.discoveryTopic, JSON.stringify({}), {
+  expect(mqttClientMock.publish).toHaveBeenCalledWith(data.discoveryTopic, '', {
     retain: true,
   });
 });
@@ -678,6 +775,116 @@ test('constructor should register event callbacks that invoke methods', async ()
 
   await watcherStopCb(testWatcher);
   expect(watcherSpy).toHaveBeenCalledWith({ watcher: testWatcher, isRunning: false });
+});
+
+test('addContainerSensor should handle container with empty watcher gracefully', async () => {
+  vi.spyOn(hass, 'updateContainerSensors').mockResolvedValue(undefined);
+  await hass.addContainerSensor({
+    id: 'container-id-123',
+    name: 'container-name',
+    watcher: '',
+    displayIcon: 'mdi:docker',
+  });
+  // Should still publish (no stale topic cleanup attempted when watcher is empty)
+  expect(mqttClientMock.publish).toHaveBeenCalled();
+});
+
+test('addContainerSensor should handle container with non-string watcher gracefully', async () => {
+  vi.spyOn(hass, 'updateContainerSensors').mockResolvedValue(undefined);
+  await hass.addContainerSensor({
+    id: 'container-id-123',
+    name: 'container-name',
+    watcher: undefined,
+    displayIcon: 'mdi:docker',
+  });
+  expect(mqttClientMock.publish).toHaveBeenCalled();
+});
+
+test('addContainerSensor should not duplicate stale topic when it matches current topic', async () => {
+  vi.spyOn(hass, 'updateContainerSensors').mockResolvedValue(undefined);
+
+  // Add with alias name — canonical resolves to same as stale candidate
+  await hass.addContainerSensor({
+    id: '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a10',
+    name: '7ea6b8a42686_termix',
+    watcher: 'watcher-name',
+    displayIcon: 'mdi:docker',
+  });
+
+  // The stale alias topic should be removed, the canonical published
+  const publishCalls = mqttClientMock.publish.mock.calls;
+  const discoveryTopics = publishCalls
+    .filter(([topic]) => topic.startsWith('homeassistant/'))
+    .map(([topic]) => topic);
+  // canonical topic should appear exactly once as a non-empty publish
+  const canonicalPublishes = publishCalls.filter(
+    ([topic, payload]) =>
+      topic === 'homeassistant/update/topic_watcher-name_termix/config' && payload !== '',
+  );
+  expect(canonicalPublishes).toHaveLength(1);
+});
+
+test('removeContainerSensor should clean up stale tracked topic when container id was previously tracked', async () => {
+  vi.spyOn(hass, 'updateContainerSensors').mockResolvedValue(undefined);
+
+  // First add with one name to track the topic by id
+  await hass.addContainerSensor({
+    id: 'container-id-456',
+    name: 'old-name',
+    watcher: 'watcher-name',
+    displayIcon: 'mdi:docker',
+  });
+
+  mqttClientMock.publish.mockClear();
+
+  // Now remove with a different name — should also remove the old tracked topic
+  await hass.removeContainerSensor({
+    id: 'container-id-456',
+    name: 'new-name',
+    watcher: 'watcher-name',
+    displayIcon: 'mdi:docker',
+  });
+
+  // Should have removed both current and stale discovery topics
+  const removeCalls = mqttClientMock.publish.mock.calls.filter(([, payload]) => payload === '');
+  expect(removeCalls.length).toBeGreaterThanOrEqual(2);
+  const removedTopics = removeCalls.map(([topic]) => topic);
+  expect(removedTopics).toContain('homeassistant/update/topic_watcher-name_new-name/config');
+  expect(removedTopics).toContain('homeassistant/update/topic_watcher-name_old-name/config');
+});
+
+test('addContainerSensor should enforce a defensive cap on tracked state topics', async () => {
+  const hassNoDiscovery = new Hass({
+    client: mqttClientMock,
+    configuration: {
+      topic: 'topic',
+      hass: {
+        discovery: false,
+        prefix: 'homeassistant',
+      },
+    },
+    log,
+  });
+
+  const hassWithInternalMap = hassNoDiscovery as unknown as {
+    containerStateTopicById: Map<string, string>;
+    enforceContainerStateTopicTrackLimit: () => void;
+  };
+  for (let index = 0; index <= HASS_CONTAINER_STATE_TOPIC_TRACK_LIMIT + 1; index += 1) {
+    hassWithInternalMap.containerStateTopicById.set(
+      `container-id-${index}`,
+      `topic/watcher-name/container-name-${index}`,
+    );
+  }
+
+  hassWithInternalMap.enforceContainerStateTopicTrackLimit();
+
+  expect(hassWithInternalMap.containerStateTopicById.size).toBe(
+    HASS_CONTAINER_STATE_TOPIC_TRACK_LIMIT,
+  );
+  expect(hassWithInternalMap.containerStateTopicById.has('container-id-0')).toBe(false);
+  expect(hassWithInternalMap.containerStateTopicById.has('container-id-1')).toBe(false);
+  expect(hassWithInternalMap.containerStateTopicById.has('container-id-2')).toBe(true);
 });
 
 test('deregister should invoke event unregister callbacks', async () => {

@@ -59,7 +59,7 @@ function installWatchersMock(data: WatcherApiItem[]) {
   globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = parseStoryRequest(input, init);
 
-    if (request.method === 'GET' && request.path === '/api/watchers') {
+    if (request.method === 'GET' && request.path === '/api/v1/watchers') {
       return createJsonResponse(data);
     }
 

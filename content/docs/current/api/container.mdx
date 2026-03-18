@@ -174,23 +174,26 @@ This operation lets you get the list of triggers associated to the container.
 ```bash
 curl http://drydock:3000/api/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/triggers
 
-[
-  {
-    "id": "ntfy.one",
-    "type": "ntfy",
-    "name": "one",
-    "configuration": {
-      "topic": "235ef38e-f1db-414a-964f-ce3f2cc8094d",
-      "url": "https://ntfy.sh",
-      "threshold": "major",
-      "mode": "simple",
-      "once": true,
-      "simpletitle": "New ${kind} found for container ${name}",
-      "simplebody": "Container ${container.name} running with ${container.updateKind.kind} ${container.updateKind.localValue} can be updated to ${container.updateKind.kind} ${container.updateKind.remoteValue}${container.result && container.result.link ? "\\n" + container.result.link : ""}",
-      "batchtitle": "${containers.length} updates available",
+{
+  "data": [
+    {
+      "id": "ntfy.one",
+      "type": "ntfy",
+      "name": "one",
+      "configuration": {
+        "topic": "235ef38e-f1db-414a-964f-ce3f2cc8094d",
+        "url": "https://ntfy.sh",
+        "threshold": "major",
+        "mode": "simple",
+        "once": true,
+        "simpletitle": "New ${kind} found for container ${name}",
+        "simplebody": "Container ${container.name} running with ${container.updateKind.kind} ${container.updateKind.localValue} can be updated to ${container.updateKind.kind} ${container.updateKind.remoteValue}${container.result && container.result.link ? "\\n" + container.result.link : ""}",
+        "batchtitle": "${containers.length} updates available",
+      }
     }
-  }
-]
+  ],
+  "total": 1
+}
 ```
 
 ## Watch a Container
@@ -417,18 +420,21 @@ This operation returns all image backups for a container, sorted by most recent 
 ```bash
 curl http://drydock:3000/api/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/backups
 
-[
-  {
-    "id": "abc123",
-    "containerId": "31a61a8305ef...",
-    "containerName": "homeassistant",
-    "imageName": "homeassistant/home-assistant",
-    "imageTag": "2021.6.4",
-    "imageDigest": "sha256:...",
-    "timestamp": "2021-06-15T10:30:00.000Z",
-    "triggerName": "docker.local"
-  }
-]
+{
+  "data": [
+    {
+      "id": "abc123",
+      "containerId": "31a61a8305ef...",
+      "containerName": "homeassistant",
+      "imageName": "homeassistant/home-assistant",
+      "imageTag": "2021.6.4",
+      "imageDigest": "sha256:...",
+      "timestamp": "2021-06-15T10:30:00.000Z",
+      "triggerName": "docker.local"
+    }
+  ],
+  "total": 1
+}
 ```
 
 ## Rollback a container
@@ -452,33 +458,39 @@ Returns the persisted update and rollback operation history for a container, sor
 ```bash
 curl http://drydock:3000/api/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/update-operations
 
-[
-  {
-    "id": "a1b2c3d4-...",
-    "containerName": "homeassistant",
-    "status": "succeeded",
-    "phase": "succeeded",
-    "createdAt": "2024-12-01T10:00:00.000Z",
-    "updatedAt": "2024-12-01T10:01:30.000Z",
-    "containerId": "31a61a8305ef...",
-    "triggerName": "docker.local",
-    "fromVersion": "2024.11.3",
-    "toVersion": "2024.12.0",
-    "targetImage": "homeassistant/home-assistant:2024.12.0"
-  },
-  {
-    "id": "e5f6a7b8-...",
-    "containerName": "homeassistant",
-    "status": "rolled-back",
-    "phase": "rolled-back",
-    "createdAt": "2024-11-20T08:00:00.000Z",
-    "updatedAt": "2024-11-20T08:02:00.000Z",
-    "containerId": "31a61a8305ef...",
-    "fromVersion": "2024.11.2",
-    "toVersion": "2024.11.3",
-    "rollbackReason": "Health check failed"
-  }
-]
+{
+  "data": [
+    {
+      "id": "a1b2c3d4-...",
+      "containerName": "homeassistant",
+      "status": "succeeded",
+      "phase": "succeeded",
+      "createdAt": "2024-12-01T10:00:00.000Z",
+      "updatedAt": "2024-12-01T10:01:30.000Z",
+      "containerId": "31a61a8305ef...",
+      "triggerName": "docker.local",
+      "fromVersion": "2024.11.3",
+      "toVersion": "2024.12.0",
+      "targetImage": "homeassistant/home-assistant:2024.12.0"
+    },
+    {
+      "id": "e5f6a7b8-...",
+      "containerName": "homeassistant",
+      "status": "rolled-back",
+      "phase": "rolled-back",
+      "createdAt": "2024-11-20T08:00:00.000Z",
+      "updatedAt": "2024-11-20T08:02:00.000Z",
+      "containerId": "31a61a8305ef...",
+      "fromVersion": "2024.11.2",
+      "toVersion": "2024.11.3",
+      "rollbackReason": "Health check failed"
+    }
+  ],
+  "total": 2,
+  "limit": 0,
+  "offset": 0,
+  "hasMore": false
+}
 ```
 
 ### Response fields

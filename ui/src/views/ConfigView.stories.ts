@@ -49,7 +49,7 @@ function handleConfigMockRequest(
   request: MockRequestDetails,
   init?: RequestInit,
 ): Response | undefined {
-  if (request.path === '/api/server' && request.method === 'GET') {
+  if (request.path === '/api/v1/server' && request.method === 'GET') {
     return createJsonResponse({
       configuration: {
         port: 3000,
@@ -60,16 +60,16 @@ function handleConfigMockRequest(
     });
   }
 
-  if (request.path === '/api/app' && request.method === 'GET') {
+  if (request.path === '/api/v1/app' && request.method === 'GET') {
     return createJsonResponse({ version: '1.4.0' });
   }
 
-  if (request.path === '/api/settings' && request.method === 'GET') {
+  if (request.path === '/api/v1/settings' && request.method === 'GET') {
     return createJsonResponse(state.settings);
   }
 
   if (
-    request.path === '/api/settings' &&
+    request.path === '/api/v1/settings' &&
     (request.method === 'PATCH' || request.method === 'PUT')
   ) {
     state.settings = {
@@ -79,7 +79,7 @@ function handleConfigMockRequest(
     return createJsonResponse(state.settings);
   }
 
-  if (request.path === '/api/icons/cache' && request.method === 'DELETE') {
+  if (request.path === '/api/v1/icons/cache' && request.method === 'DELETE') {
     return createJsonResponse({ cleared: state.cacheCleared });
   }
 

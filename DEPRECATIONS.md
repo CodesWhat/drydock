@@ -153,6 +153,20 @@ Several trigger template variable names have been replaced with more descriptive
 
 ---
 
+### Kafka trigger `clientId` configuration key
+
+| | |
+| --- | --- |
+| **Deprecated in** | v1.4.5 |
+| **Removed in** | v1.6.0 |
+| **Affects** | Kafka trigger configurations using `clientId` |
+
+Kafka trigger configuration now uses `clientid` (lowercase) as the canonical key. The legacy `clientId` key is accepted as a compatibility alias and logs a deprecation warning.
+
+**Migration:** Rename Kafka trigger config key `clientId` to `clientid`.
+
+---
+
 ### Registry `PUBLIC_TOKEN` configuration
 
 | | |

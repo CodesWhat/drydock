@@ -9,7 +9,7 @@ import { Callout } from 'fumadocs-ui/components/callout';
 
 Drydock runs as a non-root user by default. The entrypoint automatically detects the Docker socket GID and adds the `node` user to the matching group. If the socket is owned by GID 0 (root), the entrypoint refuses to start implicitly as root.
 
-**Recommended fix:** Use a [Docker socket proxy](/docs/configuration/watchers#option-2-socket-proxy-recommended) so drydock never needs direct socket access.
+**Recommended fix:** Use a [Docker socket proxy](/docs/configuration/watchers#option-1-socket-proxy-recommended) so drydock never needs direct socket access.
 
 **Break-glass override:** If you cannot use a socket proxy, set **both** environment variables:
 

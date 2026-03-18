@@ -11,6 +11,7 @@ import { loadRecentItems, saveRecentItems } from '@/layouts/recentStorage';
 import { preferences } from '@/preferences/store';
 import { usePreference } from '@/preferences/usePreference';
 import { getAgents } from '@/services/agent';
+import { getAppInfos } from '@/services/app';
 import { getUser, logout } from '@/services/auth';
 import { getAllAuthentications } from '@/services/authentication';
 import { getAllContainers } from '@/services/container';
@@ -229,6 +230,7 @@ async function handleSignOut() {
 
 // About modal
 const showAbout = ref(false);
+const appVersion = ref('');
 
 // Search modal
 const showSearch = ref(false);
@@ -1070,12 +1072,14 @@ onMounted(async () => {
   });
   // Fetch sidebar badge data and user info
   try {
-    const [, , user] = await Promise.all([
+    const [, , user, appInfos] = await Promise.all([
       refreshSidebarData(),
       refreshSearchResources(),
       getUser().catch(() => null),
+      getAppInfos().catch(() => null),
     ]);
     if (user) currentUser.value = user;
+    if (appInfos?.version) appVersion.value = appInfos.version;
   } catch {
     // Sidebar works without badge data
   }
@@ -1347,7 +1351,7 @@ onUnmounted(() => {
               </div>
               <h2 id="about-dialog-title" class="text-base font-bold dd-text">Drydock</h2>
               <span class="text-[0.6875rem] dd-text-muted mt-0.5">Docker Container Update Manager</span>
-              <span class="badge text-[0.625rem] font-semibold mt-2 dd-bg-elevated dd-text-secondary">v1.4.0</span>
+              <span v-if="appVersion" class="badge text-[0.625rem] font-semibold mt-2 dd-bg-elevated dd-text-secondary">v{{ appVersion }}</span>
             </div>
             <div class="px-6 pb-5 flex flex-col gap-2"
                  :style="{ borderTop: '1px solid var(--dd-border)' }">

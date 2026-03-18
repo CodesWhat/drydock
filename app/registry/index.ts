@@ -368,8 +368,9 @@ function applyTriggerGroupDefaults(
     configurations as TriggerGroupConfigurationInput,
     knownProviderSet,
     (groupName, value) => {
+      const sharedConfigurationKeys = Object.keys(value);
       log.info(
-        `Detected trigger group '${groupName}' with shared configuration: ${JSON.stringify(value)}`,
+        `Detected trigger group '${groupName}' with shared configuration keys: ${sharedConfigurationKeys.join(', ')}`,
       );
     },
   ) as ProviderConfigurationsByProvider | null | undefined;

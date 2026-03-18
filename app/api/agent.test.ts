@@ -92,7 +92,7 @@ describe('Agent Router', () => {
           memoryGb: 31.4,
           uptimeSeconds: 3600,
           lastSeen: '2026-02-28T10:00:00.000Z',
-          containers: { total: 3, running: 2, stopped: 1 },
+          containers: { total: 3, running: 2, stopped: 1, updatesAvailable: 0 },
           images: 2,
         },
         {
@@ -100,7 +100,7 @@ describe('Agent Router', () => {
           host: 'remote',
           port: 4000,
           connected: false,
-          containers: { total: 0, running: 0, stopped: 0 },
+          containers: { total: 0, running: 0, stopped: 0, updatesAvailable: 0 },
           images: 0,
         },
       ],
@@ -170,7 +170,7 @@ describe('Agent Router', () => {
       data: [
         expect.objectContaining({
           name: 'agent-fallbacks',
-          containers: { total: 3, running: 1, stopped: 2 },
+          containers: { total: 3, running: 1, stopped: 2, updatesAvailable: 0 },
           images: 3,
         }),
       ],
@@ -201,7 +201,7 @@ describe('Agent Router', () => {
       data: [
         expect.objectContaining({
           name: 'agent-typed',
-          containers: { total: 0, running: 0, stopped: 0 },
+          containers: { total: 0, running: 0, stopped: 0, updatesAvailable: 0 },
           images: 0,
         }),
       ],

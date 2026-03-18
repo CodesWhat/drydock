@@ -14,7 +14,7 @@ describe('preview service', () => {
 
     const result = await previewContainer('abc-123');
 
-    expect(global.fetch).toHaveBeenCalledWith('/api/containers/abc-123/preview', {
+    expect(global.fetch).toHaveBeenCalledWith('/api/v1/containers/abc-123/preview', {
       method: 'POST',
       credentials: 'include',
     });

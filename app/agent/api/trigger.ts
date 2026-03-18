@@ -79,6 +79,6 @@ export async function runTriggerBatch(req: Request, res: Response) {
     log.error(
       `Error running batch trigger ${sanitizeLogParam(name)}: ${sanitizeLogParam(errorMessage ?? '')}`,
     );
-    sendErrorResponse(res, 500, errorMessage);
+    sendErrorResponse(res, 500, `Error when running batch trigger ${type}.${name}`);
   }
 }

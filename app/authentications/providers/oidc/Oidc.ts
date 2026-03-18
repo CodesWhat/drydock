@@ -20,6 +20,14 @@ const OIDC_SESSION_LOCK_STALE_TTL_MS = 60 * 1000;
 const DEFAULT_MAX_CONCURRENT_SESSIONS_PER_USER = 5;
 const oidcSessionLocks = new Map<string, Promise<void>>();
 const OIDC_STATE_PATTERN = /^[A-Za-z0-9._~-]{8,256}$/;
+const SENSITIVE_OIDC_PARAMS = new Set([
+  'client_id',
+  'client_secret',
+  'code_challenge',
+  'state',
+  'nonce',
+  'code',
+]);
 
 interface OidcAppLike {
   use: (path: string, middleware: unknown) => void;
@@ -88,6 +96,21 @@ function isNonEmptyString(value: unknown): value is string {
 
 function isValidStateToken(value: unknown): value is string {
   return isNonEmptyString(value) && OIDC_STATE_PATTERN.test(value);
+}
+
+function redactUrlParams(url: string): string {
+  try {
+    const parsed = new URL(url);
+    let result = url;
+    for (const [key, value] of parsed.searchParams) {
+      if (SENSITIVE_OIDC_PARAMS.has(key) && value) {
+        result = result.replace(`${key}=${encodeURIComponent(value)}`, `${key}=[REDACTED]`);
+      }
+    }
+    return result;
+  } catch {
+    return '[unparseable URL]';
+  }
 }
 
 function parseHttpUrl(value: unknown): URL | undefined {
@@ -525,11 +548,11 @@ class Oidc extends Authentication {
       code_challenge: codeChallenge,
       state,
     }).href;
-    this.log.debug(`Build redirection url [${authUrl}]`);
+    this.log.debug(`Build redirection url [${redactUrlParams(authUrl)}]`);
     const parsedAuthUrl = parseHttpUrl(authUrl);
     if (!parsedAuthUrl || !this.isAllowedAuthorizationRedirect(parsedAuthUrl)) {
       this.log.warn(
-        `OIDC authorization redirect URL is not allowed for strategy ${sessionKey} (${authUrl})`,
+        `OIDC authorization redirect URL is not allowed for strategy ${sessionKey} (${redactUrlParams(authUrl)})`,
       );
       res.status(500).json({ error: 'Unable to initialize OIDC session' });
       return;

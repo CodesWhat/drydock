@@ -125,7 +125,7 @@ async function getAllContainers(
   optionsOrSignal: GetAllContainersOptions | AbortSignal = {},
 ): Promise<ApiContainerInput[]> {
   const options = isAbortSignal(optionsOrSignal) ? { signal: optionsOrSignal } : optionsOrSignal;
-  const response = await fetch(`/api/containers${buildContainerQueryString(options)}`, {
+  const response = await fetch(`/api/v1/containers${buildContainerQueryString(options)}`, {
     credentials: 'include',
     ...(options.signal ? { signal: options.signal } : {}),
   });
@@ -137,7 +137,7 @@ async function getAllContainers(
 }
 
 async function getContainerSummary(): Promise<ContainerSummary> {
-  const response = await fetch('/api/containers/summary', {
+  const response = await fetch('/api/v1/containers/summary', {
     credentials: 'include',
   });
   if (!response.ok) {
@@ -147,7 +147,7 @@ async function getContainerSummary(): Promise<ContainerSummary> {
 }
 
 async function getContainerRecentStatus(): Promise<ContainerRecentStatusResponse> {
-  const response = await fetch('/api/containers/recent-status', {
+  const response = await fetch('/api/v1/containers/recent-status', {
     credentials: 'include',
   });
   if (!response.ok) {
@@ -157,7 +157,7 @@ async function getContainerRecentStatus(): Promise<ContainerRecentStatusResponse
 }
 
 async function refreshAllContainers() {
-  const response = await fetch(`/api/containers/watch`, {
+  const response = await fetch(`/api/v1/containers/watch`, {
     method: 'POST',
     credentials: 'include',
   });
@@ -168,7 +168,7 @@ async function refreshAllContainers() {
 }
 
 async function refreshContainer(containerId: string) {
-  const response = await fetch(`/api/containers/${containerId}/watch`, {
+  const response = await fetch(`/api/v1/containers/${containerId}/watch`, {
     method: 'POST',
     credentials: 'include',
   });
@@ -182,7 +182,7 @@ async function refreshContainer(containerId: string) {
 }
 
 async function deleteContainer(containerId: string) {
-  const response = await fetch(`/api/containers/${containerId}`, {
+  const response = await fetch(`/api/v1/containers/${containerId}`, {
     method: 'DELETE',
     credentials: 'include',
     headers: {
@@ -196,7 +196,7 @@ async function deleteContainer(containerId: string) {
 }
 
 async function getContainerTriggers(containerId: string) {
-  const response = await fetch(`/api/containers/${containerId}/triggers`, {
+  const response = await fetch(`/api/v1/containers/${containerId}/triggers`, {
     credentials: 'include',
   });
   if (!response.ok) {
@@ -213,8 +213,8 @@ async function runTrigger({
   triggerAgent,
 }: ContainerTriggerRequest) {
   const url = triggerAgent
-    ? `/api/containers/${containerId}/triggers/${triggerType}/${triggerName}/${triggerAgent}`
-    : `/api/containers/${containerId}/triggers/${triggerType}/${triggerName}`;
+    ? `/api/v1/containers/${containerId}/triggers/${triggerType}/${triggerName}/${triggerAgent}`
+    : `/api/v1/containers/${containerId}/triggers/${triggerType}/${triggerName}`;
   const response = await fetch(url, {
     method: 'POST',
     credentials: 'include',
@@ -227,7 +227,7 @@ async function runTrigger({
 }
 
 async function getContainerLogs(containerId: string, tail: number = 100) {
-  const response = await fetch(`/api/containers/${containerId}/logs?tail=${tail}`, {
+  const response = await fetch(`/api/v1/containers/${containerId}/logs?tail=${tail}`, {
     credentials: 'include',
   });
   if (!response.ok) {
@@ -237,7 +237,7 @@ async function getContainerLogs(containerId: string, tail: number = 100) {
 }
 
 async function getContainerUpdateOperations(containerId: string) {
-  const response = await fetch(`/api/containers/${containerId}/update-operations`, {
+  const response = await fetch(`/api/v1/containers/${containerId}/update-operations`, {
     credentials: 'include',
   });
   if (!response.ok) {
@@ -250,7 +250,7 @@ async function getContainerUpdateOperations(containerId: string) {
 }
 
 async function getContainerVulnerabilities(containerId: string) {
-  const response = await fetch(`/api/containers/${containerId}/vulnerabilities`, {
+  const response = await fetch(`/api/v1/containers/${containerId}/vulnerabilities`, {
     credentials: 'include',
   });
   if (!response.ok) {
@@ -262,7 +262,7 @@ async function getContainerVulnerabilities(containerId: string) {
 }
 
 async function getSecurityVulnerabilityOverview(): Promise<SecurityVulnerabilityOverview> {
-  const response = await fetch('/api/containers/security/vulnerabilities', {
+  const response = await fetch('/api/v1/containers/security/vulnerabilities', {
     credentials: 'include',
   });
   if (!response.ok) {
@@ -273,7 +273,7 @@ async function getSecurityVulnerabilityOverview(): Promise<SecurityVulnerability
 
 async function getContainerSbom(containerId: string, format: string = 'spdx-json') {
   const response = await fetch(
-    `/api/containers/${containerId}/sbom?format=${encodeURIComponent(format)}`,
+    `/api/v1/containers/${containerId}/sbom?format=${encodeURIComponent(format)}`,
     {
       credentials: 'include',
     },
@@ -289,7 +289,7 @@ async function updateContainerPolicy(
   action: string,
   payload: Record<string, unknown> = {},
 ) {
-  const response = await fetch(`/api/containers/${containerId}/update-policy`, {
+  const response = await fetch(`/api/v1/containers/${containerId}/update-policy`, {
     method: 'PATCH',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
@@ -315,7 +315,7 @@ async function updateContainerPolicy(
 }
 
 async function getContainerGroups(): Promise<ContainerGroup[]> {
-  const response = await fetch('/api/containers/groups', { credentials: 'include' });
+  const response = await fetch('/api/v1/containers/groups', { credentials: 'include' });
   if (!response.ok) {
     throw new Error(`Failed to get container groups: ${response.statusText}`);
   }
@@ -324,7 +324,7 @@ async function getContainerGroups(): Promise<ContainerGroup[]> {
 }
 
 async function scanContainer(containerId: string, signal?: AbortSignal) {
-  const response = await fetch(`/api/containers/${containerId}/scan`, {
+  const response = await fetch(`/api/v1/containers/${containerId}/scan`, {
     method: 'POST',
     credentials: 'include',
     ...(signal ? { signal } : {}),
@@ -361,7 +361,7 @@ async function getContainerReleaseNotes(containerId: string) {
 }
 
 async function revealContainerEnv(containerId: string) {
-  const response = await fetch(`/api/containers/${containerId}/env/reveal`, {
+  const response = await fetch(`/api/v1/containers/${containerId}/env/reveal`, {
     method: 'POST',
     credentials: 'include',
   });

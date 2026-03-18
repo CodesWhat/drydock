@@ -26,9 +26,7 @@ If **any step fails**, the trigger automatically rolls back:
 2. Rename the old container back to the original name
 3. Restart the old container (if it was previously running)
 
-<Callout type="info">If Drydock restarts while an update is in progress, it automatically reconciles the interrupted operation on startup -- restoring the old container or cleaning up stale temporaries as needed.</Callout>
-
-<Callout type="info">When [Update Bouncer](/docs/configuration/security) is configured, candidate images are scanned for vulnerabilities before the update proceeds. If the scan finds blocking issues, the update is aborted and a `security-alert` notification is sent.</Callout>
+If Drydock restarts while an update is in progress, it automatically reconciles the interrupted operation on startup — restoring the old container or cleaning up stale temporaries as needed. When [Update Bouncer](/docs/configuration/security) is configured, candidate images are scanned for vulnerabilities before the update proceeds. If the scan finds blocking issues, the update is aborted and a `security-alert` notification is sent.
 
 ## Variables
 
@@ -39,9 +37,7 @@ If **any step fails**, the trigger automatically rolls back:
 | `DD_TRIGGER_DOCKER_{trigger_name}_BACKUPCOUNT` | ⚪ | Number of image backups to retain per container | Integer | `3` |
 | `DD_TRIGGER_DOCKER_{trigger_name}_AUTOREMOVETIMEOUT` | ⚪ | Wait timeout for container auto-removal (ms) | Integer | `10000` |
 
-<Callout type="info">This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration).</Callout>
-
-<Callout type="info">This trigger picks up the Docker configuration from the [configured Docker watchers](/docs/configuration/watchers) so it can handle updates on Local **and** Remote Docker hosts.</Callout>
+This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration). It picks up the Docker configuration from the [configured Docker watchers](/docs/configuration/watchers) so it can handle updates on Local **and** Remote Docker hosts.
 
 ## Image Backup & Rollback
 
@@ -101,8 +97,8 @@ Hooks execute via `/bin/sh -c` inside the Drydock container. The following envir
 A non-zero exit code or timeout is treated as failure. When `dd.hook.pre.abort` is `true` (the default), a failed pre-hook prevents the update from proceeding.
 
 <Callout type="warn">Hook labels are ignored unless `DD_HOOKS_ENABLED=true` is set on the Drydock container.</Callout>
-<Callout type="info">Lifecycle hooks are **not** executed during self-updates.</Callout>
-<Callout type="info">When hook labels are present, Drydock records `hook-configured` in the audit log before execution, then `hook-pre-*` / `hook-post-*` based on outcomes.</Callout>
+
+Lifecycle hooks are **not** executed during self-updates. When hook labels are present, Drydock records `hook-configured` in the audit log before execution, then `hook-pre-*` / `hook-post-*` based on outcomes.
 
 ## Self-Update
 

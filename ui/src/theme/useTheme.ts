@@ -89,7 +89,7 @@ function toggleVariant() {
   else preferences.theme.variant = 'dark';
 }
 
-async function transitionTheme(change: () => void, _e?: MouseEvent) {
+async function transitionTheme(change: () => void, e?: MouseEvent) {
   const startViewTransition = (
     document as Document & {
       startViewTransition?: (callback: () => void) => { finished: Promise<void> };
@@ -100,7 +100,16 @@ async function transitionTheme(change: () => void, _e?: MouseEvent) {
     return;
   }
 
-  document.documentElement.classList.add('dd-transitioning');
+  const root = document.documentElement;
+  if (e) {
+    root.style.setProperty('--dd-transition-x', `${e.clientX}px`);
+    root.style.setProperty('--dd-transition-y', `${e.clientY}px`);
+  } else {
+    root.style.setProperty('--dd-transition-x', '50%');
+    root.style.setProperty('--dd-transition-y', '50%');
+  }
+
+  root.classList.add('dd-transitioning');
 
   isTransitioning = true;
   const transition = startViewTransition(() => {
@@ -114,7 +123,9 @@ async function transitionTheme(change: () => void, _e?: MouseEvent) {
     /* aborted */
   }
   isTransitioning = false;
-  document.documentElement.classList.remove('dd-transitioning');
+  root.classList.remove('dd-transitioning');
+  root.style.removeProperty('--dd-transition-x');
+  root.style.removeProperty('--dd-transition-y');
 }
 
 export function useTheme() {

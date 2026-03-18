@@ -16,21 +16,27 @@ This operation lets you get all the configured triggers.
 ```bash
 curl http://drydock:3000/api/triggers
 
-[
-   {
-      "id":"smtp.gmail",
-      "type":"smtp",
-      "name":"gmail",
-      "configuration":{
-         "host":"smtp.gmail.com",
-         "port":465,
-         "user":"xxx@gmail.com",
-         "pass":"secret",
-         "from":"admin@dd.com",
-         "to":"xxx@gmail.com"
+{
+    "data": [
+      {
+        "id":"smtp.gmail",
+        "type":"smtp",
+        "name":"gmail",
+        "configuration":{
+           "host":"smtp.gmail.com",
+           "port":465,
+           "user":"xxx@gmail.com",
+           "pass":"secret",
+           "from":"admin@dd.com",
+           "to":"xxx@gmail.com"
+        }
       }
-   }
-]
+    ],
+    "total": 1,
+    "limit": 0,
+    "offset": 0,
+    "hasMore": false
+}
 ```
 
 ## Get a Trigger by id

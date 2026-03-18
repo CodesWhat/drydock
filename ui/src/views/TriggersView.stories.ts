@@ -9,7 +9,7 @@ interface TriggerApiItem {
   configuration: Record<string, string>;
 }
 
-const TRIGGERS_PATH = '/api/triggers';
+const TRIGGERS_PATH = '/api/v1/triggers';
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 
 const triggerFixtureRows = [

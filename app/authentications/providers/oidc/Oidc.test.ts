@@ -517,6 +517,54 @@ test('redirect should preserve pending checks from concurrent requests on the sa
   expect(res2.status).not.toHaveBeenCalled();
 });
 
+test('redirect should redact sensitive query params in debug log', async () => {
+  const urlWithSecrets = new URL(
+    'https://idp/auth?redirect_uri=https%3A%2F%2Fdd.example.com%2Fcb&scope=openid&client_id=my-secret-id&code_challenge=abc123&state=xyz789&code_challenge_method=S256',
+  );
+  openidClientMock.buildAuthorizationUrl = vi.fn().mockReturnValue(urlWithSecrets);
+  const req = createReq({ session: { save: vi.fn((cb) => cb()) } });
+  const res = createRes();
+
+  await oidc.redirect(req, res);
+
+  const debugMsg = oidc.log.debug.mock.calls[0][0];
+  expect(debugMsg).toContain('[REDACTED]');
+  expect(debugMsg).not.toContain('my-secret-id');
+  expect(debugMsg).not.toContain('abc123');
+  expect(debugMsg).not.toContain('xyz789');
+  expect(debugMsg).toContain('redirect_uri');
+  expect(debugMsg).toContain('scope=openid');
+});
+
+test('redirect should redact sensitive params in warn log for rejected redirect', async () => {
+  const urlWithSecrets = new URL(
+    'https://evil.example.com/auth?client_id=my-secret-id&state=xyz789',
+  );
+  openidClientMock.buildAuthorizationUrl = vi.fn().mockReturnValue(urlWithSecrets);
+  const req = createReq({ session: { save: vi.fn((cb) => cb()) } });
+  const res = createRes();
+
+  await oidc.redirect(req, res);
+
+  const warnMsg = oidc.log.warn.mock.calls[0][0];
+  expect(warnMsg).toContain('[REDACTED]');
+  expect(warnMsg).not.toContain('my-secret-id');
+  expect(warnMsg).not.toContain('xyz789');
+});
+
+test('redirect should redact malformed authorization urls in logs', async () => {
+  openidClientMock.buildAuthorizationUrl = vi.fn().mockReturnValue({ href: '%' });
+  const req = createReq({ session: { save: vi.fn((cb) => cb()) } });
+  const res = createRes();
+
+  await oidc.redirect(req, res);
+
+  expect(oidc.log.debug).toHaveBeenCalledWith(expect.stringContaining('[unparseable URL]'));
+  expect(oidc.log.warn).toHaveBeenCalledWith(expect.stringContaining('[unparseable URL]'));
+  expect(res.status).toHaveBeenCalledWith(500);
+  expect(res.json).toHaveBeenCalledWith({ error: 'Unable to initialize OIDC session' });
+});
+
 test('redirect should reject unexpected authorization redirect host', async () => {
   openidClientMock.buildAuthorizationUrl = vi
     .fn()

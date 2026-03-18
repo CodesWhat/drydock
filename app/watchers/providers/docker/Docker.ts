@@ -1135,9 +1135,7 @@ class Docker extends Watcher {
     });
   }
 }
-
 export default Docker;
-
 export {
   filterBySegmentCount as testable_filterBySegmentCount,
   filterRecreatedContainerAliases as testable_filterRecreatedContainerAliases,

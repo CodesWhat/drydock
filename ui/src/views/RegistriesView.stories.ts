@@ -35,7 +35,7 @@ const registryFixture: RegistryApiItem[] = [
 ];
 
 function installRegistriesMock(data: RegistryApiItem[]) {
-  installJsonPathMock('/api/registries', data);
+  installJsonPathMock('/api/v1/registries', data);
 }
 
 function registriesLoader(data: RegistryApiItem[]) {

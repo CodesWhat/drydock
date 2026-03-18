@@ -23,15 +23,25 @@ beforeEach(async () => {
   oidcStrategy.fail = vi.fn();
 });
 
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
 test('authenticate should return user from session if so', async () => {
   oidcStrategy.authenticate({ isAuthenticated: () => true });
   expect(oidcStrategy.success).toHaveBeenCalled();
 });
 
-test('authenticate should call super.authenticate when no existing session', async () => {
-  oidcStrategy.verify = vi.fn((token, cb) => cb(null, null));
+test('authenticate should debug and fail when no authorization header is provided', async () => {
+  oidcStrategy.verify = vi.fn((token, cb) => cb(null, { token }));
+  const debugSpy = vi.spyOn(oidcStrategy.log, 'debug').mockImplementation(() => {});
+  const warnSpy = vi.spyOn(oidcStrategy.log, 'warn').mockImplementation(() => {});
+
   oidcStrategy.authenticate({ isAuthenticated: () => false, headers: {} });
-  expect(oidcStrategy.verify).toHaveBeenCalledWith('', expect.any(Function));
+
+  expect(oidcStrategy.verify).not.toHaveBeenCalled();
+  expect(debugSpy).toHaveBeenCalledWith('No bearer token provided');
+  expect(warnSpy).not.toHaveBeenCalled();
   expect(oidcStrategy.fail).toHaveBeenCalledWith(401);
 });
 
@@ -47,6 +57,8 @@ test('authenticate should get & validate Bearer token', async () => {
 });
 
 test('authenticate should fail when bearer token verify returns no user', async () => {
+  const debugSpy = vi.spyOn(oidcStrategy.log, 'debug').mockImplementation(() => {});
+  const warnSpy = vi.spyOn(oidcStrategy.log, 'warn').mockImplementation(() => {});
   oidcStrategy.verify = vi.fn((token, cb) => cb(null, null));
   oidcStrategy.authenticate({
     isAuthenticated: () => false,
@@ -54,10 +66,15 @@ test('authenticate should fail when bearer token verify returns no user', async 
       authorization: 'Bearer invalid-token',
     },
   });
+
+  expect(oidcStrategy.verify).toHaveBeenCalledWith('invalid-token', expect.any(Function));
+  expect(warnSpy).toHaveBeenCalledWith('Bearer token validation failed');
+  expect(debugSpy).not.toHaveBeenCalledWith('Bearer token validated');
   expect(oidcStrategy.fail).toHaveBeenCalledWith(401);
 });
 
 test('authenticate should fail when bearer token verify returns error', async () => {
+  const warnSpy = vi.spyOn(oidcStrategy.log, 'warn').mockImplementation(() => {});
   oidcStrategy.verify = vi.fn((token, cb) => cb(new Error('verification error'), null));
   oidcStrategy.authenticate({
     isAuthenticated: () => false,
@@ -65,10 +82,15 @@ test('authenticate should fail when bearer token verify returns error', async ()
       authorization: 'Bearer bad-token',
     },
   });
+
+  expect(oidcStrategy.verify).toHaveBeenCalledWith('bad-token', expect.any(Function));
+  expect(warnSpy).toHaveBeenCalledWith('Bearer token validation failed');
   expect(oidcStrategy.fail).toHaveBeenCalledWith(401);
 });
 
 test('authenticate should succeed when bearer token verify returns valid user', async () => {
+  const debugSpy = vi.spyOn(oidcStrategy.log, 'debug').mockImplementation(() => {});
+  const warnSpy = vi.spyOn(oidcStrategy.log, 'warn').mockImplementation(() => {});
   const user = { username: 'test@example.com' };
   oidcStrategy.verify = vi.fn((token, cb) => cb(null, user));
   oidcStrategy.authenticate({
@@ -77,6 +99,10 @@ test('authenticate should succeed when bearer token verify returns valid user', 
       authorization: 'Bearer valid-token',
     },
   });
+
+  expect(oidcStrategy.verify).toHaveBeenCalledWith('valid-token', expect.any(Function));
+  expect(debugSpy).toHaveBeenCalledWith('Bearer token validated');
+  expect(warnSpy).not.toHaveBeenCalled();
   expect(oidcStrategy.success).toHaveBeenCalledWith(user);
 });
 
@@ -117,7 +143,9 @@ test('authenticate should parse bearer token from authorization header array', a
 });
 
 test('authenticate should fail when authorization header array is empty', async () => {
-  oidcStrategy.verify = vi.fn((token, cb) => cb(null, null));
+  const debugSpy = vi.spyOn(oidcStrategy.log, 'debug').mockImplementation(() => {});
+  const warnSpy = vi.spyOn(oidcStrategy.log, 'warn').mockImplementation(() => {});
+  oidcStrategy.verify = vi.fn((token, cb) => cb(null, { token }));
   oidcStrategy.authenticate({
     isAuthenticated: () => false,
     headers: {
@@ -125,12 +153,16 @@ test('authenticate should fail when authorization header array is empty', async 
     },
   });
 
-  expect(oidcStrategy.verify).toHaveBeenCalledWith('', expect.any(Function));
+  expect(oidcStrategy.verify).not.toHaveBeenCalled();
+  expect(debugSpy).toHaveBeenCalledWith('No bearer token provided');
+  expect(warnSpy).not.toHaveBeenCalled();
   expect(oidcStrategy.fail).toHaveBeenCalledWith(401);
 });
 
 test('authenticate should fail when bearer token contains trailing whitespace', async () => {
-  oidcStrategy.verify = vi.fn((token, cb) => cb(null, null));
+  const debugSpy = vi.spyOn(oidcStrategy.log, 'debug').mockImplementation(() => {});
+  const warnSpy = vi.spyOn(oidcStrategy.log, 'warn').mockImplementation(() => {});
+  oidcStrategy.verify = vi.fn((token, cb) => cb(null, { token }));
   oidcStrategy.authenticate({
     isAuthenticated: () => false,
     headers: {
@@ -138,12 +170,16 @@ test('authenticate should fail when bearer token contains trailing whitespace', 
     },
   });
 
-  expect(oidcStrategy.verify).toHaveBeenCalledWith('', expect.any(Function));
+  expect(oidcStrategy.verify).not.toHaveBeenCalled();
+  expect(debugSpy).toHaveBeenCalledWith('No bearer token provided');
+  expect(warnSpy).not.toHaveBeenCalled();
   expect(oidcStrategy.fail).toHaveBeenCalledWith(401);
 });
 
 test('authenticate should fail when bearer token has extra authorization segments', async () => {
-  oidcStrategy.verify = vi.fn((token, cb) => cb(null, null));
+  const debugSpy = vi.spyOn(oidcStrategy.log, 'debug').mockImplementation(() => {});
+  const warnSpy = vi.spyOn(oidcStrategy.log, 'warn').mockImplementation(() => {});
+  oidcStrategy.verify = vi.fn((token, cb) => cb(null, { token }));
   oidcStrategy.authenticate({
     isAuthenticated: () => false,
     headers: {
@@ -151,6 +187,8 @@ test('authenticate should fail when bearer token has extra authorization segment
     },
   });
 
-  expect(oidcStrategy.verify).toHaveBeenCalledWith('', expect.any(Function));
+  expect(oidcStrategy.verify).not.toHaveBeenCalled();
+  expect(debugSpy).toHaveBeenCalledWith('No bearer token provided');
+  expect(warnSpy).not.toHaveBeenCalled();
   expect(oidcStrategy.fail).toHaveBeenCalledWith(401);
 });

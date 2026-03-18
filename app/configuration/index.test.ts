@@ -874,6 +874,12 @@ describe('getVersion', () => {
     expect(freshConfiguration.getVersion()).toBe(appPackageJson.version);
   });
 
+  test('should ignore docker placeholder DD_VERSION=unknown and fall back to package.json', async () => {
+    const freshConfiguration = await importFreshConfiguration();
+    freshConfiguration.ddEnvVars.DD_VERSION = 'unknown';
+    expect(freshConfiguration.getVersion()).toBe(appPackageJson.version);
+  });
+
   test('should reuse cached package version after first lookup', async () => {
     const freshConfiguration = await importFreshConfiguration();
     delete freshConfiguration.ddEnvVars.DD_VERSION;

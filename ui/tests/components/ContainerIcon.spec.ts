@@ -17,49 +17,49 @@ describe('ContainerIcon', () => {
     const wrapper = factory({ icon: 'sh-nginx' });
     const img = wrapper.find('img');
     expect(img.exists()).toBe(true);
-    expect(img.attributes('src')).toBe('/api/icons/selfhst/nginx');
+    expect(img.attributes('src')).toBe('/api/v1/icons/selfhst/nginx');
   });
 
   it('renders homarr proxy img for hl- prefix', () => {
     const wrapper = factory({ icon: 'hl-portainer' });
     const img = wrapper.find('img');
     expect(img.exists()).toBe(true);
-    expect(img.attributes('src')).toBe('/api/icons/homarr/portainer');
+    expect(img.attributes('src')).toBe('/api/v1/icons/homarr/portainer');
   });
 
   it('renders simple-icons proxy img for si- prefix', () => {
     const wrapper = factory({ icon: 'si-docker' });
     const img = wrapper.find('img');
     expect(img.exists()).toBe(true);
-    expect(img.attributes('src')).toBe('/api/icons/simple/docker');
+    expect(img.attributes('src')).toBe('/api/v1/icons/simple/docker');
   });
 
   it('normalizes colon-separated sh: prefix to dash', () => {
     const wrapper = factory({ icon: 'sh:z-wave-js-ui' });
     const img = wrapper.find('img');
     expect(img.exists()).toBe(true);
-    expect(img.attributes('src')).toBe('/api/icons/selfhst/z-wave-js-ui');
+    expect(img.attributes('src')).toBe('/api/v1/icons/selfhst/z-wave-js-ui');
   });
 
   it('normalizes colon-separated hl: prefix to dash', () => {
     const wrapper = factory({ icon: 'hl:portainer' });
     const img = wrapper.find('img');
     expect(img.exists()).toBe(true);
-    expect(img.attributes('src')).toBe('/api/icons/homarr/portainer');
+    expect(img.attributes('src')).toBe('/api/v1/icons/homarr/portainer');
   });
 
   it('normalizes colon-separated si: prefix to dash', () => {
     const wrapper = factory({ icon: 'si:docker' });
     const img = wrapper.find('img');
     expect(img.exists()).toBe(true);
-    expect(img.attributes('src')).toBe('/api/icons/simple/docker');
+    expect(img.attributes('src')).toBe('/api/v1/icons/simple/docker');
   });
 
   it('normalizes nested si prefixes so proxy slug never contains a colon', () => {
     const wrapper = factory({ icon: 'si-si:nextcloud' });
     const img = wrapper.find('img');
     expect(img.exists()).toBe(true);
-    expect(img.attributes('src')).toBe('/api/icons/simple/nextcloud');
+    expect(img.attributes('src')).toBe('/api/v1/icons/simple/nextcloud');
   });
 
   it('renders direct URL for http:// prefix', () => {
@@ -80,7 +80,7 @@ describe('ContainerIcon', () => {
     const wrapper = factory({ icon: 'unknown-thing' });
     const img = wrapper.find('img');
     expect(img.exists()).toBe(true);
-    expect(img.attributes('src')).toBe('/api/icons/selfhst/unknown-thing');
+    expect(img.attributes('src')).toBe('/api/v1/icons/selfhst/unknown-thing');
   });
 
   it('renders AppIcon fallback for empty icon after error', async () => {

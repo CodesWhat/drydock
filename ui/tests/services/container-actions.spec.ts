@@ -21,7 +21,7 @@ describe('Container Actions Service', () => {
 
       const result = await startContainer('abc123');
 
-      expect(fetch).toHaveBeenCalledWith('/api/containers/abc123/start', {
+      expect(fetch).toHaveBeenCalledWith('/api/v1/containers/abc123/start', {
         method: 'POST',
         credentials: 'include',
       });
@@ -62,7 +62,7 @@ describe('Container Actions Service', () => {
 
       const result = await stopContainer('abc123');
 
-      expect(fetch).toHaveBeenCalledWith('/api/containers/abc123/stop', {
+      expect(fetch).toHaveBeenCalledWith('/api/v1/containers/abc123/stop', {
         method: 'POST',
         credentials: 'include',
       });
@@ -103,7 +103,7 @@ describe('Container Actions Service', () => {
 
       const result = await restartContainer('abc123');
 
-      expect(fetch).toHaveBeenCalledWith('/api/containers/abc123/restart', {
+      expect(fetch).toHaveBeenCalledWith('/api/v1/containers/abc123/restart', {
         method: 'POST',
         credentials: 'include',
       });
@@ -144,7 +144,7 @@ describe('Container Actions Service', () => {
 
       const result = await updateContainer('abc123');
 
-      expect(fetch).toHaveBeenCalledWith('/api/containers/abc123/update', {
+      expect(fetch).toHaveBeenCalledWith('/api/v1/containers/abc123/update', {
         method: 'POST',
         credentials: 'include',
       });

@@ -1,6 +1,6 @@
 import { extractCollectionData } from '../utils/api';
 
-const BASE_URL = '/api/agents';
+const BASE_URL = '/api/v1/agents';
 
 export interface ApiAgent {
   name: string;

@@ -101,7 +101,7 @@ await replaceSecrets(ddEnvVars);
 
 export function getVersion() {
   const configuredVersion = ddEnvVars.DD_VERSION?.trim();
-  if (configuredVersion) {
+  if (configuredVersion && configuredVersion.toLowerCase() !== 'unknown') {
     return configuredVersion;
   }
 

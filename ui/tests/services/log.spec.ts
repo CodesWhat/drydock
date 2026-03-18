@@ -17,7 +17,7 @@ describe('Log Service', () => {
 
     const result = await getLog();
 
-    expect(fetchMock).toHaveBeenCalledWith('/api/log', { credentials: 'include' });
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/log', { credentials: 'include' });
     expect(result).toEqual(mockResponse);
   });
 
@@ -43,7 +43,7 @@ describe('Log Service', () => {
 
       const result = await getLogEntries();
 
-      expect(fetchMock).toHaveBeenCalledWith('/api/log/entries', { credentials: 'include' });
+      expect(fetchMock).toHaveBeenCalledWith('/api/v1/log/entries', { credentials: 'include' });
       expect(result).toEqual(mockEntries);
     });
 
@@ -56,7 +56,7 @@ describe('Log Service', () => {
       await getLogEntries({ level: 'error', tail: 50 });
 
       const calledUrl = fetchMock.mock.calls[0][0];
-      expect(calledUrl).toContain('/api/log/entries?');
+      expect(calledUrl).toContain('/api/v1/log/entries?');
       expect(calledUrl).toContain('level=error');
       expect(calledUrl).toContain('tail=50');
     });
@@ -118,7 +118,7 @@ describe('Log Service', () => {
       await getLogEntries({ agent: 'my-agent', tail: 100 });
 
       const calledUrl = fetchMock.mock.calls[0][0];
-      expect(calledUrl).toContain('/api/agents/my-agent/log/entries');
+      expect(calledUrl).toContain('/api/v1/agents/my-agent/log/entries');
       expect(calledUrl).toContain('tail=100');
     });
 
@@ -131,7 +131,7 @@ describe('Log Service', () => {
       await getLogEntries({ agent: 'agent with spaces' });
 
       const calledUrl = fetchMock.mock.calls[0][0];
-      expect(calledUrl).toContain('/api/agents/agent%20with%20spaces/log/entries');
+      expect(calledUrl).toContain('/api/v1/agents/agent%20with%20spaces/log/entries');
     });
 
     it('should fetch from server endpoint when agent is undefined', async () => {
@@ -143,7 +143,7 @@ describe('Log Service', () => {
       await getLogEntries({ agent: undefined });
 
       const calledUrl = fetchMock.mock.calls[0][0];
-      expect(calledUrl).toBe('/api/log/entries');
+      expect(calledUrl).toBe('/api/v1/log/entries');
     });
   });
 });

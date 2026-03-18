@@ -89,11 +89,11 @@ function handleGetRequest(
   rules: NotificationRuleApiItem[],
   triggers: TriggerApiItem[],
 ): Response | undefined {
-  if (request.path === '/api/triggers') {
+  if (request.path === '/api/v1/triggers') {
     return jsonResponse(triggers);
   }
 
-  if (request.path === '/api/notifications') {
+  if (request.path === '/api/v1/notifications') {
     return jsonResponse(rules);
   }
 
@@ -104,11 +104,11 @@ function handlePatchRequest(
   request: StoryMockRequest,
   rules: NotificationRuleApiItem[],
 ): Response | undefined {
-  if (!request.path.startsWith('/api/notifications/')) {
+  if (!request.path.startsWith('/api/v1/notifications/')) {
     return undefined;
   }
 
-  const id = request.path.replace('/api/notifications/', '');
+  const id = request.path.replace('/api/v1/notifications/', '');
   const index = rules.findIndex((rule) => rule.id === id);
   if (index < 0) {
     return jsonResponse({ error: 'Not found' }, 404);

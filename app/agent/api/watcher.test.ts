@@ -72,7 +72,9 @@ describe('agent API watcher', () => {
       });
       await watcherApi.watchWatcher(req, res);
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ error: 'watch failed' }));
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: 'Internal server error' }),
+      );
     });
 
     test('should return 500 with string message from non-Error objects', async () => {
@@ -142,7 +144,9 @@ describe('agent API watcher', () => {
       storeContainer.getContainer.mockReturnValue(container);
       await watcherApi.watchContainer(req, res);
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ error: 'watch failed' }));
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: 'Internal server error' }),
+      );
     });
 
     test('should stringify non-object errors when watchContainer throws', async () => {

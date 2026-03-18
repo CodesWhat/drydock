@@ -28,7 +28,7 @@ curl http://drydock:3000/api/log/entries
 
 | Parameter | Type | Description |
 | --- | --- | --- |
-| `level` | string | Filter by log level (`debug`, `info`, `warn`, `error`) |
+| `level` | string | Filter by log level (`trace`, `debug`, `info`, `warn`, `error`, `fatal`) |
 | `component` | string | Filter by component name |
 | `tail` | integer | Number of most recent entries to return |
 | `since` | integer | Unix timestamp (seconds) — only return entries after this time |

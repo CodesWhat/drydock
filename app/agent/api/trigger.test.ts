@@ -104,7 +104,9 @@ describe('agent API trigger', () => {
       });
       await triggerApi.runTriggerBatch(req, res);
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ error: 'trigger failed' }));
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: 'Error when running batch trigger docker.update' }),
+      );
     });
 
     test('should return default 500 message when trigger throws non-object error', async () => {

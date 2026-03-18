@@ -18,9 +18,7 @@ The `command` trigger lets you run arbitrary commands upon container update noti
 | `DD_TRIGGER_COMMAND_{trigger_name}_SHELL` | ⚪ | The shell to use | Any valid installed shell path | `/bin/sh` |
 | `DD_TRIGGER_COMMAND_{trigger_name}_TIMEOUT` | ⚪ | The command timeout (in ms) | Any positive integer (`0` means no timeout) | `60000` |
 
-<Callout type="info">This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration).</Callout>
-
-<Callout type="info">Update informations are passed as environment variables (see below).</Callout>
+This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration). Update information is passed as environment variables (see below).
 
 <Callout type="warn">Security: `DD_TRIGGER_COMMAND_{trigger_name}_CMD` is executed as `{shell} -c {cmd}` with drydock process privileges. This is an intentional admin-only feature configured through environment variables (not API-exposed). Use only trusted command strings and validate any interpolated values.</Callout>
 

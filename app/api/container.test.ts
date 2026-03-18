@@ -678,6 +678,7 @@ describe('Container Router', () => {
           total: 3,
           running: 1,
           stopped: 2,
+          updatesAvailable: 0,
         },
         security: {
           issues: 2,
@@ -714,6 +715,7 @@ describe('Container Router', () => {
           total: 2,
           running: 1,
           stopped: 1,
+          updatesAvailable: 0,
         },
         security: {
           issues: 1,

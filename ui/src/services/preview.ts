@@ -217,7 +217,7 @@ export function normalizePreviewPayload(payload: unknown): ContainerPreviewPaylo
 }
 
 export async function previewContainer(id: string): Promise<ContainerPreviewPayload> {
-  const response = await fetch(`/api/containers/${id}/preview`, {
+  const response = await fetch(`/api/v1/containers/${id}/preview`, {
     method: 'POST',
     credentials: 'include',
   });

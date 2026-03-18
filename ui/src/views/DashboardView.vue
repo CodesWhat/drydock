@@ -1,14 +1,21 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { type RouteLocationRaw, useRouter } from 'vue-router';
+import { useConfirmDialog } from '../composables/useConfirmDialog';
 import { ROUTES } from '../router/routes';
+import { updateContainer } from '../services/container-actions';
 import { getUsageThresholdColor, getUsageThresholdMutedColor } from '../utils/stats-thresholds';
 import { summarizeContainerResourceUsage } from '../utils/stats-summary';
+import { errorMessage } from '../utils/error';
 import { useDashboardComputed } from './dashboard/useDashboardComputed';
 import { useDashboardData } from './dashboard/useDashboardData';
 import { useDashboardWidgetOrder } from './dashboard/useDashboardWidgetOrder';
 
 const router = useRouter();
+const confirm = useConfirmDialog();
+const dashboardUpdateInProgress = ref<string | null>(null);
+const dashboardUpdateAllInProgress = ref(false);
+const dashboardUpdateError = ref<string | null>(null);
 
 function navigateTo(route: RouteLocationRaw) {
   router.push(route);
@@ -83,6 +90,59 @@ const {
   serverInfo,
   watchers,
 });
+
+const pendingUpdates = computed(() => recentUpdates.value.filter((r) => r.status === 'pending'));
+
+function confirmDashboardUpdate(row: { id: string; name: string }) {
+  confirm.require({
+    header: 'Update Container',
+    message: `Update ${row.name} now? This will apply the latest discovered image.`,
+    severity: 'warn',
+    acceptLabel: 'Update',
+    rejectLabel: 'Cancel',
+    accept: async () => {
+      dashboardUpdateInProgress.value = row.id;
+      dashboardUpdateError.value = null;
+      try {
+        await updateContainer(row.id);
+        await fetchDashboardData();
+      } catch (e: unknown) {
+        dashboardUpdateError.value = errorMessage(e, `Failed to update ${row.name}`);
+      } finally {
+        dashboardUpdateInProgress.value = null;
+      }
+    },
+  });
+}
+
+function confirmDashboardUpdateAll() {
+  confirm.require({
+    header: 'Update All Containers',
+    message: `${pendingUpdates.value.length} containers will be updated. Continue?`,
+    severity: 'warn',
+    acceptLabel: 'Update All',
+    rejectLabel: 'Cancel',
+    accept: async () => {
+      dashboardUpdateAllInProgress.value = true;
+      dashboardUpdateError.value = null;
+      try {
+        const updateResults = await Promise.allSettled(
+          pendingUpdates.value.map((row) => updateContainer(row.id)),
+        );
+        await fetchDashboardData();
+        const firstRejectedUpdate = updateResults.find((result) => result.status === 'rejected');
+        if (firstRejectedUpdate?.status === 'rejected') {
+          dashboardUpdateError.value = errorMessage(
+            firstRejectedUpdate.reason,
+            'Failed to update all containers',
+          );
+        }
+      } finally {
+        dashboardUpdateAllInProgress.value = false;
+      }
+    },
+  });
+}
 </script>
 
 <template>
@@ -156,7 +216,7 @@ const {
              :data-widget-order="widgetOrderIndex('recent-updates')"
              draggable="true"
              aria-label="Updates Available widget"
-             class="dashboard-widget xl:col-span-2 dd-rounded overflow-hidden min-w-0"
+             class="dashboard-widget xl:col-span-2 dd-rounded overflow-hidden min-w-0 flex flex-col"
              :class="{ 'opacity-60': draggedWidgetId === 'recent-updates' }"
              :style="{
                ...widgetOrderStyle('recent-updates'),
@@ -174,20 +234,46 @@ const {
                 Updates Available
               </h2>
             </div>
-            <AppButton size="none" variant="link-secondary" weight="medium" class="text-[0.6875rem]" @click="navigateTo({ path: ROUTES.CONTAINERS, query: { filterKind: 'any' } })">View all &rarr;</AppButton>
+            <div class="flex items-center gap-3">
+              <button v-if="pendingUpdates.length > 0"
+                      data-test="dashboard-update-all-btn"
+                      class="inline-flex items-center justify-center px-2 py-1 dd-rounded border text-[0.625rem] font-semibold transition-colors"
+                      :class="dashboardUpdateAllInProgress
+                        ? 'dd-text-muted cursor-not-allowed opacity-60'
+                        : 'dd-text hover:dd-bg-elevated'"
+                      :disabled="dashboardUpdateAllInProgress"
+                      @click="confirmDashboardUpdateAll()">
+                <AppIcon
+                  :name="dashboardUpdateAllInProgress ? 'spinner' : 'cloud-download'"
+                  :size="11"
+                  class="mr-1"
+                  :class="dashboardUpdateAllInProgress ? 'dd-spin' : ''" />
+                Update all
+              </button>
+              <button class="text-[0.6875rem] font-medium text-drydock-secondary hover:underline"
+                      @click="navigateTo({ path: ROUTES.CONTAINERS, query: { filterKind: 'any' } })">View all &rarr;</button>
+            </div>
           </div>
 
+          <div v-if="dashboardUpdateError"
+               data-test="dashboard-update-error"
+               class="mx-5 mt-3 px-3 py-2 text-[0.6875rem] dd-rounded"
+               :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
+            {{ dashboardUpdateError }}
+          </div>
+
+          <div class="flex-1 min-h-0 overflow-y-auto">
           <DataTable
             :columns="[
               { key: 'icon', label: '', icon: true },
               { key: 'container', label: 'Container', sortable: false },
               { key: 'version', label: 'Version', sortable: false, align: 'text-center' },
               { key: 'type', label: 'Type', sortable: false },
+              { key: 'actions', label: 'Actions', sortable: false },
             ]"
             :rows="recentUpdates"
             row-key="id"
             compact
-            max-height="340px"
           >
             <template #cell-icon="{ row }">
               <ContainerIcon :icon="row.icon" :size="28" />
@@ -256,12 +342,29 @@ const {
               </span>
             </template>
 
+            <template #cell-actions="{ row }">
+              <button v-if="row.status === 'pending'"
+                      data-test="dashboard-update-btn"
+                      class="w-7 h-7 dd-rounded-sm flex items-center justify-center transition-colors"
+                      :class="dashboardUpdateInProgress === row.id || dashboardUpdateAllInProgress
+                        ? 'dd-text-muted opacity-50 cursor-not-allowed'
+                        : 'dd-text-muted hover:dd-text-success hover:dd-bg-elevated'"
+                      :disabled="dashboardUpdateInProgress === row.id || dashboardUpdateAllInProgress"
+                      @click.stop="confirmDashboardUpdate(row)">
+                <AppIcon
+                  :name="dashboardUpdateInProgress === row.id ? 'spinner' : 'cloud-download'"
+                  :size="14"
+                  :class="dashboardUpdateInProgress === row.id ? 'dd-spin' : ''" />
+              </button>
+            </template>
+
             <template #empty>
               <div class="px-4 py-6 text-center text-[0.6875rem] dd-text-muted">
                 No updates available
               </div>
             </template>
           </DataTable>
+          </div>
         </div>
 
         <!-- Security Summary Widget (1/3) -->
