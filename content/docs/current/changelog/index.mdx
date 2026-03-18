@@ -13,6 +13,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.5] — 2026-03-17
+
+### Fixed
+
+- **Container recreate alias filtering** — Hardened Docker watcher timestamp parsing, added event handler early return for transient aliases, canonical MQTT topic naming, and stale topic cleanup for recreated containers. ([#156](https://github.com/CodesWhat/drydock/issues/156))
+- **About modal version display** — Version is now fetched dynamically from the API instead of being hardcoded, ensuring the modal always reflects the running server version. ([#167](https://github.com/CodesWhat/drydock/issues/167))
+- **Version resolution fallback** — `DD_VERSION=unknown` is now skipped so the version is correctly read from `package.json` at startup.
+
+### Security
+
+- **OIDC debug log redaction** — Sensitive OIDC parameters (`client_id`, `code_challenge`, `state`, etc.) are now redacted in debug logs. ([#168](https://github.com/CodesWhat/drydock/issues/168))
+- **Agent API error sanitization** — Error logs and responses in the agent API are sanitized to prevent leaking internal details.
+- **Registry config value redaction** — Trigger group configuration now logs keys only, not values, to prevent secret leakage.
+
+### Changed
+
+- **API versioning** — All UI fetch calls migrated from `/api/` to `/api/v1/` paths.
+- **OIDC empty bearer token log level** — Downgraded empty bearer token log from `warn` to `debug`. ([#169](https://github.com/CodesWhat/drydock/issues/169))
+
+### Chore
+
+- **QA infrastructure** — Added Portainer, slow-shutdown container, and watchevents service for end-to-end container recreate testing. ([#156](https://github.com/CodesWhat/drydock/issues/156))
+- **Coverage and types cleanup** — Coverage read retry, OpenAPI re-export, and auth types cleanup.
+- **Demo version bump** — Bumped demo package version.
+- **Alias filtering test coverage** — Added timestamp edge-case tests for Docker watcher alias filtering. ([#156](https://github.com/CodesWhat/drydock/issues/156))
+
 ## [1.4.4] — 2026-03-16
 
 ### Added
