@@ -158,3 +158,6 @@ storybook-static/
 CLAUDE.md
 .claude/
 artifacts/
+
+# Local scratch/output directory used during issue triage
+/tmp/

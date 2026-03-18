@@ -854,7 +854,6 @@ test('removeContainerSensor should clean up stale tracked topic when container i
 });
 
 test('addContainerSensor should enforce a defensive cap on tracked state topics', async () => {
-  const logInfoSpy = vi.spyOn(log, 'info').mockImplementation(() => undefined);
   const hassNoDiscovery = new Hass({
     client: mqttClientMock,
     configuration: {
@@ -866,27 +865,26 @@ test('addContainerSensor should enforce a defensive cap on tracked state topics'
     },
     log,
   });
-  vi.spyOn(hassNoDiscovery, 'updateContainerSensors').mockResolvedValue(undefined);
-
-  for (let index = 0; index <= HASS_CONTAINER_STATE_TOPIC_TRACK_LIMIT; index += 1) {
-    await hassNoDiscovery.addContainerSensor({
-      id: `container-id-${index}`,
-      name: `container-name-${index}`,
-      watcher: 'watcher-name',
-      displayIcon: 'mdi:docker',
-    });
-  }
 
   const hassWithInternalMap = hassNoDiscovery as unknown as {
     containerStateTopicById: Map<string, string>;
+    enforceContainerStateTopicTrackLimit: () => void;
   };
+  for (let index = 0; index <= HASS_CONTAINER_STATE_TOPIC_TRACK_LIMIT + 1; index += 1) {
+    hassWithInternalMap.containerStateTopicById.set(
+      `container-id-${index}`,
+      `topic/watcher-name/container-name-${index}`,
+    );
+  }
+
+  hassWithInternalMap.enforceContainerStateTopicTrackLimit();
 
   expect(hassWithInternalMap.containerStateTopicById.size).toBe(
     HASS_CONTAINER_STATE_TOPIC_TRACK_LIMIT,
   );
   expect(hassWithInternalMap.containerStateTopicById.has('container-id-0')).toBe(false);
-  expect(hassWithInternalMap.containerStateTopicById.has('container-id-1')).toBe(true);
-  logInfoSpy.mockRestore();
+  expect(hassWithInternalMap.containerStateTopicById.has('container-id-1')).toBe(false);
+  expect(hassWithInternalMap.containerStateTopicById.has('container-id-2')).toBe(true);
 });
 
 test('deregister should invoke event unregister callbacks', async () => {
