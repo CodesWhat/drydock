@@ -16,7 +16,7 @@ describe('Server Service', () => {
 
     const result = await getServer();
 
-    expect(fetch).toHaveBeenCalledWith('/api/server', { credentials: 'include' });
+    expect(fetch).toHaveBeenCalledWith('/api/v1/server', { credentials: 'include' });
     expect(result).toEqual(payload);
   });
 
@@ -39,7 +39,7 @@ describe('Server Service', () => {
 
     const result = await getSecurityRuntime();
 
-    expect(fetch).toHaveBeenCalledWith('/api/server/security/runtime', {
+    expect(fetch).toHaveBeenCalledWith('/api/v1/server/security/runtime', {
       credentials: 'include',
     });
     expect(result).toEqual(payload);

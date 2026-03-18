@@ -96,7 +96,7 @@ describe('Registry Service', () => {
 
       const registries = await getAllRegistries();
 
-      expect(fetch).toHaveBeenCalledWith('/api/registries', {
+      expect(fetch).toHaveBeenCalledWith('/api/v1/registries', {
         credentials: 'include',
       });
       expect(registries).toEqual(mockRegistries);
@@ -168,7 +168,7 @@ describe('Registry Service', () => {
 
       const result = await getRegistry({ type: 'hub', name: 'private' });
 
-      expect(fetch).toHaveBeenCalledWith('/api/registries/hub/private', {
+      expect(fetch).toHaveBeenCalledWith('/api/v1/registries/hub/private', {
         credentials: 'include',
       });
       expect(result).toEqual(mockRegistry);
@@ -195,7 +195,7 @@ describe('Registry Service', () => {
 
       const result = await getRegistry({ agent: 'edge', type: 'hub', name: 'private' });
 
-      expect(fetch).toHaveBeenCalledWith('/api/registries/hub/private/edge', {
+      expect(fetch).toHaveBeenCalledWith('/api/v1/registries/hub/private/edge', {
         credentials: 'include',
       });
       expect(result).toEqual(mockRegistry);

@@ -515,22 +515,25 @@ describe('api/container/crud', () => {
   });
 
   describe('summary and lookup handlers', () => {
-    test('returns running/stopped and security issue summary', () => {
+    test('returns running/stopped, updatesAvailable, and security issue summary', () => {
       const harness = createHarness({
         containers: [
           createContainer({
             id: 'c1',
             status: 'running',
+            updateAvailable: true,
             security: { scan: { summary: { critical: 1, high: 0 } } },
           }),
           createContainer({
             id: 'c2',
             status: 'exited',
+            updateAvailable: false,
             security: { scan: { summary: { critical: 0, high: 2 } } },
           }),
           createContainer({
             id: 'c3',
             status: 'paused',
+            updateAvailable: true,
             security: { scan: { summary: { critical: 0, high: 0 } } },
           }),
         ],
@@ -545,6 +548,7 @@ describe('api/container/crud', () => {
           total: 3,
           running: 1,
           stopped: 2,
+          updatesAvailable: 2,
         },
         security: {
           issues: 2,
@@ -572,6 +576,7 @@ describe('api/container/crud', () => {
           total: 2,
           running: 1,
           stopped: 1,
+          updatesAvailable: 0,
         },
         security: {
           issues: 0,
@@ -595,6 +600,7 @@ describe('api/container/crud', () => {
           total: 2,
           running: 1,
           stopped: 1,
+          updatesAvailable: 0,
         },
         security: {
           issues: 0,

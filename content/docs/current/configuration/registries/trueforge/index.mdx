@@ -15,8 +15,7 @@ Drydock automatically detects TrueForge registries by matching `oci.trueforge.or
 
 | Env var | Required | Description | Supported values | Default value when missing |
 | --- | :---: | --- | --- | --- |
-| `DD_REGISTRY_TRUEFORGE_{REGISTRY_NAME}_NAMESPACE` | ⚪ | TrueForge namespace (required for private images) | | |
-| `DD_REGISTRY_TRUEFORGE_{REGISTRY_NAME}_ACCOUNT` | ⚪ | TrueForge account (required for private images) | | |
+| `DD_REGISTRY_TRUEFORGE_{REGISTRY_NAME}_USERNAME` | ⚪ | TrueForge username (required for private images) | | |
 | `DD_REGISTRY_TRUEFORGE_{REGISTRY_NAME}_TOKEN` | ⚪ | TrueForge token (required for private images) | | |
 
 ## Examples
@@ -32,8 +31,7 @@ services:
     image: codeswhat/drydock
     ...
     environment:
-      - DD_REGISTRY_TRUEFORGE_PRIVATE_NAMESPACE=mynamespace
-      - DD_REGISTRY_TRUEFORGE_PRIVATE_ACCOUNT=myaccount
+      - DD_REGISTRY_TRUEFORGE_PRIVATE_USERNAME=myusername
       - DD_REGISTRY_TRUEFORGE_PRIVATE_TOKEN=xxxxx
 ```
 
@@ -41,8 +39,7 @@ services:
 <Tab value="Docker">
 ```bash
 docker run \
-  -e DD_REGISTRY_TRUEFORGE_PRIVATE_NAMESPACE="mynamespace" \
-  -e DD_REGISTRY_TRUEFORGE_PRIVATE_ACCOUNT="myaccount" \
+  -e DD_REGISTRY_TRUEFORGE_PRIVATE_USERNAME="myusername" \
   -e DD_REGISTRY_TRUEFORGE_PRIVATE_TOKEN="xxxxx" \
   ...
   codeswhat/drydock

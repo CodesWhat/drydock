@@ -13,10 +13,13 @@ class Gotify extends Trigger {
    */
   getConfigurationSchema() {
     return this.joi.object().keys({
-      url: this.joi.string().uri({
-        scheme: ['http', 'https'],
-      }),
-      token: this.joi.string(),
+      url: this.joi
+        .string()
+        .uri({
+          scheme: ['http', 'https'],
+        })
+        .required(),
+      token: this.joi.string().required(),
       priority: this.joi.number().integer().min(0),
     });
   }

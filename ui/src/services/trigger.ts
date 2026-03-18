@@ -107,7 +107,7 @@ function getTriggerProviderColor(type: string) {
 }
 
 async function getAllTriggers() {
-  const response = await fetch('/api/triggers', { credentials: 'include' });
+  const response = await fetch('/api/v1/triggers', { credentials: 'include' });
   if (!response.ok) {
     throw new Error(`Failed to get triggers: ${response.statusText}`);
   }
@@ -116,7 +116,7 @@ async function getAllTriggers() {
 }
 
 function buildTriggerDetailPath({ type, name, agent }: TriggerDetailPathOptions) {
-  const segments = ['/api/triggers'];
+  const segments = ['/api/v1/triggers'];
   segments.push(encodeURIComponent(type), encodeURIComponent(name));
   if (agent) {
     segments.push(encodeURIComponent(agent));
@@ -141,8 +141,8 @@ async function runTrigger({
   triggerAgent,
 }: RunTriggerRequest) {
   const path = triggerAgent
-    ? `/api/triggers/${encodeURIComponent(triggerType)}/${encodeURIComponent(triggerName)}/${encodeURIComponent(triggerAgent)}`
-    : `/api/triggers/${encodeURIComponent(triggerType)}/${encodeURIComponent(triggerName)}`;
+    ? `/api/v1/triggers/${encodeURIComponent(triggerType)}/${encodeURIComponent(triggerName)}/${encodeURIComponent(triggerAgent)}`
+    : `/api/v1/triggers/${encodeURIComponent(triggerType)}/${encodeURIComponent(triggerName)}`;
   const response = await fetch(path, {
     method: 'POST',
     credentials: 'include',

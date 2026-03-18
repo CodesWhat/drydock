@@ -10,6 +10,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.5] — 2026-03-17
+
+### Added
+
+- **Dashboard Update buttons** — Per-row update buttons and "Update all" button in the Updates Available dashboard widget. ([#173](https://github.com/CodesWhat/drydock/discussions/173))
+- **Getting Started guide** — New step-by-step onboarding guide covering watchers, tag filters, registries, notifications, auto-updates, safety features, and multi-host setup. ([#153](https://github.com/CodesWhat/drydock/discussions/153))
+
+### Fixed
+
+- **Container recreate alias filtering** — Hardened Docker watcher timestamp parsing, added event handler early return for transient aliases, canonical MQTT topic naming, and stale topic cleanup for recreated containers. ([#156](https://github.com/CodesWhat/drydock/issues/156))
+- **About modal version display** — Version is now fetched dynamically from the API instead of being hardcoded, ensuring the modal always reflects the running server version. ([#167](https://github.com/CodesWhat/drydock/issues/167))
+- **Version resolution fallback** — `DD_VERSION=unknown` is now skipped so the version is correctly read from `package.json` at startup.
+- **Theme circle transition origin** — The theme toggle circle animation now originates from the click point instead of the viewport center.
+- **Trigger code bugs** — Gotify URL and Apprise URL now correctly enforce `.required()` validation; Kafka `clientId` casing normalized with `clientId` kept as a deprecated compatibility alias until v1.6.0.
+
+### Security
+
+- **OIDC debug log redaction** — Sensitive OIDC parameters (`client_id`, `code_challenge`, `state`, etc.) are now redacted in debug logs. ([#168](https://github.com/CodesWhat/drydock/issues/168))
+- **Agent API error sanitization** — Error logs and responses in the agent API are sanitized to prevent leaking internal details.
+- **Registry config value redaction** — Trigger group configuration now logs keys only, not values, to prevent secret leakage.
+
+### Changed
+
+- **API versioning** — All UI fetch calls migrated from `/api/` to `/api/v1/` paths.
+- **OIDC empty bearer token log level** — Downgraded empty bearer token log from `warn` to `debug`. ([#169](https://github.com/CodesWhat/drydock/issues/169))
+
+### Documentation
+
+- **Docs audit (78 files)** — Fixed 18 doc accuracy issues, 3 code bugs, 22+ broken links, and restructured 8 pages (90 callouts → 36). Triggers overview reduced from 17 callouts to 3 with threshold reference table. Template variables expanded from 12 to 30 with example values. Docker Compose trigger now linked from triggers overview. ([#153](https://github.com/CodesWhat/drydock/discussions/153), [#172](https://github.com/CodesWhat/drydock/discussions/172))
+
+### Dependencies
+
+- **Security** — `fast-xml-parser` 5.3.8 → 5.5.6 (CVE: numeric entity expansion bypass), `next` 16.1.6 → 16.1.7 (HTTP smuggling, CSRF bypass, DoS)
+- **CI** — `step-security/harden-runner` v2.15.1 → v2.16.0, `github/codeql-action` v4.32.6 → v4.33.0
+- **App** — `@aws-sdk/client-ecr`, `@slack/web-api`, `express-rate-limit`, `fast-check`, `knip`, `nodemailer`, `undici`, `@types/node`
+- **UI** — `@iconify-json/lucide`, `knip`, `jsdom` 28 → 29
+- **Website** — `fumadocs-core`, `fumadocs-mdx`, `fumadocs-ui`, `lucide-react`, `lefthook`, `@vercel/analytics` v1 → v2, `@vercel/speed-insights` v1 → v2
+- **Demo** — `@iconify-json/lucide`, `@vitejs/plugin-vue`, `msw` 2.10 → 2.12
+- **E2E** — `@dotenvx/dotenvx`, `fast-xml-parser`, `minimatch`
+
+### Chore
+
+- **QA infrastructure** — Added Portainer, slow-shutdown container, and watchevents service for end-to-end container recreate testing. ([#156](https://github.com/CodesWhat/drydock/issues/156))
+- **Coverage and types cleanup** — Coverage read retry, OpenAPI re-export, and auth types cleanup.
+- **Demo version bump** — Bumped demo package version to 1.4.5.
+- **Alias filtering test coverage** — Added timestamp edge-case tests for Docker watcher alias filtering. ([#156](https://github.com/CodesWhat/drydock/issues/156))
+- **msw worker regenerated** — Updated `mockServiceWorker.js` for msw 2.12 (origin-based → clientId-based validation).
+
 ## [1.4.4] — 2026-03-16
 
 ### Added

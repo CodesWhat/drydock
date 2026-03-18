@@ -1129,6 +1129,26 @@ test('applyTriggerGroupDefaults should extract trigger group and apply to matchi
   expect(result.update).toBeUndefined();
 });
 
+test('applyTriggerGroupDefaults should not log raw trigger group values', () => {
+  const infoSpy = vi.spyOn(registry.testable_log, 'info');
+  const secretValue = 'super-secret-webhook-token';
+  const configurations = {
+    mock: {
+      update: { mock: 'custom' },
+    },
+    update: { threshold: secretValue },
+  };
+
+  registry.testable_applyTriggerGroupDefaults(configurations, 'triggers/providers');
+
+  const triggerGroupLog = infoSpy.mock.calls
+    .map((call) => call[0])
+    .find((message) => String(message).includes("Detected trigger group 'update'"));
+
+  expect(triggerGroupLog).toBeDefined();
+  expect(String(triggerGroupLog)).not.toContain(secretValue);
+});
+
 test('applyTriggerGroupDefaults should not override explicit trigger-level config', () => {
   const configurations = {
     mock: {

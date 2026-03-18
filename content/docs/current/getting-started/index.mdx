@@ -1,0 +1,430 @@
+---
+title: "Getting started"
+description: "A step-by-step walkthrough for configuring Drydock after your first deploy — from watching containers to notifications and auto-updates."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+import { Step, Steps } from 'fumadocs-ui/components/steps';
+
+This guide picks up where the [Quick Start](/docs/quickstart) left off. You have Drydock running, you can see containers in the UI — now what?
+
+The guide walks through each decision in order, from "what should I watch?" to "notify me on Slack" to "auto-update my containers." Skip any section that doesn't apply to your setup.
+
+<Steps>
+<Step>
+
+## Decide what to watch
+
+By default, Drydock watches **every running container** on the Docker host. That's fine for small setups, but you'll probably want to narrow it down.
+
+### Option A: Watch everything, exclude a few
+
+Add `dd.watch=false` to containers you want to ignore:
+
+```yaml
+services:
+  database:
+    image: postgres:16
+    labels:
+      - dd.watch=false  # don't monitor this one
+```
+
+### Option B: Opt-in only
+
+Set the watcher to require explicit opt-in, then label the containers you want monitored:
+
+```yaml
+# Drydock environment
+DD_WATCHER_LOCAL_WATCHBYDEFAULT=false
+```
+
+```yaml
+# Your application stack
+services:
+  my-app:
+    image: myorg/my-app:1.5.0
+    labels:
+      - dd.watch=true
+```
+
+This is useful on hosts with many infrastructure containers (databases, proxies, caches) where you only care about a few application images.
+
+**Docs:** [Watchers configuration](/docs/configuration/watchers)
+
+</Step>
+<Step>
+
+## Filter which tags matter
+
+Drydock compares your running tag against all tags in the registry. Without filters, you'll get noise — `linux-amd64` variants, nightly builds, release candidates. Tag filters solve this.
+
+### Include pattern
+
+Only match tags that look like your current naming:
+
+```yaml
+labels:
+  - dd.tag.include=^\d+\.\d+\.\d+$          # semver only: 1.2.3
+  - dd.tag.include=^\d+\.\d+\.\d+-alpine$    # semver + alpine suffix
+  - dd.tag.include=^v\d+\.\d+\.\d+$          # semver with v prefix: v1.2.3
+```
+
+### Exclude pattern
+
+Remove known noise:
+
+```yaml
+labels:
+  - dd.tag.exclude=.*-rc\d*$    # exclude release candidates
+  - dd.tag.exclude=.*-beta.*    # exclude beta tags
+```
+
+### Transform pattern
+
+Normalize tags before comparison (useful when a registry uses inconsistent naming):
+
+```yaml
+labels:
+  - "dd.tag.transform=^v(.*) => $1"   # strip leading v for comparison
+```
+
+All patterns use [RE2 syntax](https://github.com/google/re2/wiki/Syntax) (linear-time, immune to ReDoS).
+
+**Docs:** [Tag filtering](/docs/configuration/watchers#tag-filtering)
+
+</Step>
+<Step>
+
+## Connect private registries
+
+Docker Hub public images work out of the box. For private registries, add credentials:
+
+<Tabs items={["Docker Hub (private)", "GHCR", "ECR", "Self-hosted"]}>
+<Tab value="Docker Hub (private)">
+
+```yaml
+environment:
+  - DD_REGISTRY_HUB_PRIVATE_LOGIN=myuser
+  - DD_REGISTRY_HUB_PRIVATE_TOKEN=dckr_pat_xxxxx
+```
+
+</Tab>
+<Tab value="GHCR">
+```yaml
+environment:
+  - DD_REGISTRY_GHCR_PRIVATE_TOKEN=ghp_xxxxx
+```
+</Tab>
+<Tab value="ECR">
+```yaml
+environment:
+  - DD_REGISTRY_ECR_PRIVATE_ACCESSKEYID=AKIA...
+  - DD_REGISTRY_ECR_PRIVATE_SECRETACCESSKEY=xxxxx
+  - DD_REGISTRY_ECR_PRIVATE_REGION=us-east-1
+```
+</Tab>
+<Tab value="Self-hosted">
+```yaml
+environment:
+  - DD_REGISTRY_CUSTOM_MYREGISTRY_URL=https://registry.example.com
+  - DD_REGISTRY_CUSTOM_MYREGISTRY_LOGIN=myuser
+  - DD_REGISTRY_CUSTOM_MYREGISTRY_PASSWORD=xxxxx
+```
+</Tab>
+</Tabs>
+
+The registry name (e.g., `PRIVATE`, `MYREGISTRY`) is just a label — pick whatever makes sense to you. You can configure multiple registries of the same type with different names.
+
+**Docs:** [Registries configuration](/docs/configuration/registries)
+
+</Step>
+<Step>
+
+## Set up notifications
+
+Drydock can notify you when updates are available. Add one or more notification triggers:
+
+<Tabs items={["Slack", "Discord", "Email (SMTP)", "ntfy", "Other"]}>
+<Tab value="Slack">
+
+```yaml
+environment:
+  - DD_TRIGGER_SLACK_ALERTS_TOKEN=xoxb-xxxxx
+  - DD_TRIGGER_SLACK_ALERTS_CHANNEL=#docker-updates
+```
+
+</Tab>
+<Tab value="Discord">
+```yaml
+environment:
+  - DD_TRIGGER_DISCORD_ALERTS_URL=https://discord.com/api/webhooks/xxxxx
+```
+</Tab>
+<Tab value="Email (SMTP)">
+```yaml
+environment:
+  - DD_TRIGGER_SMTP_ALERTS_HOST=smtp.gmail.com
+  - DD_TRIGGER_SMTP_ALERTS_PORT=465
+  - DD_TRIGGER_SMTP_ALERTS_FROM=drydock@example.com
+  - DD_TRIGGER_SMTP_ALERTS_TO=admin@example.com
+  - DD_TRIGGER_SMTP_ALERTS_USER=drydock@example.com
+  - DD_TRIGGER_SMTP_ALERTS_PASS=xxxxx
+```
+</Tab>
+<Tab value="ntfy">
+```yaml
+environment:
+  - DD_TRIGGER_NTFY_ALERTS_TOPIC=drydock-updates
+```
+
+Uses `https://ntfy.sh` by default. Set `DD_TRIGGER_NTFY_ALERTS_URL` for a self-hosted instance.
+</Tab>
+<Tab value="Other">
+Drydock supports 20+ notification services. See the [Triggers configuration](/docs/configuration/triggers) page for all options including Telegram, Teams, Matrix, Gotify, Pushover, Apprise, IFTTT, HTTP webhooks, Kafka, MQTT, and more.
+</Tab>
+</Tabs>
+
+### Filtering by severity
+
+By default, triggers fire on every detected update. Use `THRESHOLD` to only notify on significant changes:
+
+| Threshold | Fires on |
+| --- | --- |
+| `all` (default) | Every update |
+| `major` | Major, minor, or patch semver changes (not digest-only) |
+| `minor` | Minor, patch, or prerelease changes |
+| `patch` | Patch or prerelease changes |
+| `digest` | Digest-only updates |
+
+```yaml
+environment:
+  - DD_TRIGGER_SLACK_ALERTS_TOKEN=xoxb-xxxxx
+  - DD_TRIGGER_SLACK_ALERTS_CHANNEL=#docker-updates
+  - DD_TRIGGER_SLACK_ALERTS_THRESHOLD=minor  # skip digest-only and major bumps
+```
+
+**Docs:** [Triggers configuration](/docs/configuration/triggers)
+
+</Step>
+<Step>
+
+## Enable auto-updates (optional)
+
+<Callout type="warn">Auto-updates modify running containers. Start with `DRYRUN=true` to preview what would happen before enabling real updates.</Callout>
+
+Drydock can pull new images and recreate containers automatically. The trigger type depends on how your containers are deployed:
+
+### Standalone containers (docker run)
+
+```yaml
+environment:
+  - DD_TRIGGER_DOCKER_LOCAL_PRUNE=true      # clean up old images
+  - DD_TRIGGER_DOCKER_LOCAL_DRYRUN=true     # preview only — remove when ready
+```
+
+When you click **Update** in the UI (or an auto-trigger fires), Drydock will:
+
+1. Pull the new image
+2. Rename the running container
+3. Create a new container with the original name and settings
+4. Start the new container
+5. Remove the old one (and old image if `PRUNE=true`)
+
+### Compose-managed containers
+
+```yaml
+environment:
+  - DD_TRIGGER_DOCKERCOMPOSE_MYSTACK_FILE=/compose/my-stack.yml
+  - DD_TRIGGER_DOCKERCOMPOSE_MYSTACK_DRYRUN=true  # preview only
+volumes:
+  - /path/to/my-stack/compose.yml:/compose/my-stack.yml  # must be writable
+```
+
+The compose trigger patches the image tag in your compose file and runs `docker compose up -d <service>`, preserving all compose dependencies, networks, and environment.
+
+<Callout type="warn">The compose file must be mounted **writable** (no `:ro`) — Drydock writes the updated image tag back to it.</Callout>
+
+### Both at the same time
+
+You can run both triggers simultaneously. Drydock auto-associates:
+
+- **Compose trigger** → containers with compose labels matching the configured file
+- **Docker trigger** → everything else
+
+```yaml
+environment:
+  - DD_TRIGGER_DOCKER_LOCAL_PRUNE=true
+  - DD_TRIGGER_DOCKERCOMPOSE_STACK_FILE=/compose/stack.yml
+volumes:
+  - /path/to/stack/compose.yml:/compose/stack.yml
+```
+
+**Docs:** [Docker trigger](/docs/configuration/triggers/docker) | [Docker Compose trigger](/docs/configuration/triggers/docker-compose)
+
+</Step>
+<Step>
+
+## Add safety features (recommended)
+
+Before enabling auto-updates in production, consider these safety layers:
+
+### Image backup and rollback
+
+Enabled by default when using the Docker trigger. Drydock keeps the previous image so you can one-click rollback from the UI. Configure how many backups to keep:
+
+```yaml
+environment:
+  - DD_TRIGGER_DOCKER_LOCAL_BACKUPCOUNT=3
+```
+
+### Auto-rollback on failure
+
+If a container fails its health check after an update, Drydock can automatically roll back:
+
+```yaml
+labels:
+  - dd.rollback.auto=true
+```
+
+Requires a `healthcheck` defined on the container.
+
+### Maintenance windows
+
+Restrict when auto-updates can run:
+
+```yaml
+environment:
+  - DD_WATCHER_LOCAL_MAINTENANCE_WINDOW=0 2-6 * * *   # 2am–6am daily
+  - DD_WATCHER_LOCAL_MAINTENANCE_WINDOW_TZ=America/New_York
+```
+
+Updates detected outside the window are queued and applied when it opens.
+
+### Lifecycle hooks
+
+Run commands before or after an update (database backups, cache flushes, health checks):
+
+```yaml
+labels:
+  - dd.hook.pre=docker exec mydb pg_dump -U postgres mydb > /backup/pre-update.sql
+  - dd.hook.post=curl -s http://healthcheck.example.com/ping
+```
+
+### Vulnerability scanning (Update Bouncer)
+
+Block updates that introduce critical CVEs:
+
+```yaml
+environment:
+  - DD_SECURITY_SCANNER=trivy
+  - DD_SECURITY_BLOCK_SEVERITY=CRITICAL,HIGH
+```
+
+**Docs:** [Backup & rollback](/docs/configuration/rollback) | [Lifecycle hooks](/docs/configuration/hooks) | [Update Bouncer](/docs/configuration/security)
+
+</Step>
+<Step>
+
+## Multi-host monitoring (optional)
+
+If you have containers on multiple Docker hosts, deploy Drydock agents on remote hosts that report back to the central controller:
+
+**Controller** (main instance — runs the UI and API):
+
+```yaml
+environment:
+  - DD_AGENT_CONTROLLER_TOKEN=a-secure-shared-token
+```
+
+**Agent** (remote host — lightweight, no UI):
+
+```yaml
+services:
+  drydock-agent:
+    image: codeswhat/drydock
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - DD_AGENT_MODE=agent
+      - DD_AGENT_CONTROLLER_URL=https://drydock.example.com
+      - DD_AGENT_CONTROLLER_TOKEN=a-secure-shared-token
+```
+
+Agents forward container state to the controller. Triggers (both notifications and updates) execute on the agent, allowing remote container updates.
+
+**Docs:** [Agents configuration](/docs/configuration/agents)
+
+</Step>
+</Steps>
+
+## Putting it all together
+
+Here's a complete single-host setup with notifications, auto-updates, and safety features:
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    container_name: drydock
+    depends_on:
+      socket-proxy:
+        condition: service_healthy
+    volumes:
+      - /opt/drydock/store:/store
+      - /path/to/my-stack/compose.yml:/compose/stack.yml
+    environment:
+      # Watcher
+      - DD_WATCHER_LOCAL_HOST=socket-proxy
+      - DD_WATCHER_LOCAL_PORT=2375
+      - DD_WATCHER_LOCAL_CRON=0 */6 * * *
+      - DD_WATCHER_LOCAL_MAINTENANCE_WINDOW=0 2-6 * * *
+
+      # Auth
+      - DD_AUTH_BASIC_ADMIN_USER=admin
+      - DD_AUTH_BASIC_ADMIN_HASH__FILE=/run/secrets/admin_hash
+
+      # Notifications
+      - DD_TRIGGER_SLACK_ALERTS_TOKEN=xoxb-xxxxx
+      - DD_TRIGGER_SLACK_ALERTS_CHANNEL=#docker-updates
+
+      # Auto-updates
+      - DD_TRIGGER_DOCKER_LOCAL_PRUNE=true
+      - DD_TRIGGER_DOCKERCOMPOSE_STACK_FILE=/compose/stack.yml
+
+      # Security
+      - DD_SECURITY_SCANNER=trivy
+      - DD_SECURITY_BLOCK_SEVERITY=CRITICAL,HIGH
+    ports:
+      - 3000:3000
+    secrets:
+      - admin_hash
+
+  socket-proxy:
+    image: tecnativa/docker-socket-proxy
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - CONTAINERS=1
+      - IMAGES=1
+      - EVENTS=1
+      - POST=1
+      - NETWORKS=1
+    healthcheck:
+      test: wget --spider http://localhost:2375/version || exit 1
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+secrets:
+  admin_hash:
+    file: ./secrets/admin_hash.txt
+```
+
+## What to explore next
+
+- [**Monitoring**](/docs/monitoring) — Prometheus metrics and Grafana dashboards
+- [**REST API**](/docs/api) — automate everything via the API
+- [**Webhooks**](/docs/configuration/webhooks) — trigger scans from CI/CD pipelines
+- [**FAQ**](/docs/faq) — common questions and troubleshooting

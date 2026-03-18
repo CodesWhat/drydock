@@ -32,7 +32,9 @@ describe('Notification Service', () => {
 
       const result = await getAllNotificationRules();
 
-      expect(global.fetch).toHaveBeenCalledWith('/api/notifications', { credentials: 'include' });
+      expect(global.fetch).toHaveBeenCalledWith('/api/v1/notifications', {
+        credentials: 'include',
+      });
       expect(result).toEqual(mockRules);
     });
 
@@ -88,7 +90,7 @@ describe('Notification Service', () => {
         triggers: ['smtp.ops'],
       });
 
-      expect(global.fetch).toHaveBeenCalledWith('/api/notifications/update-available', {
+      expect(global.fetch).toHaveBeenCalledWith('/api/v1/notifications/update-available', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',

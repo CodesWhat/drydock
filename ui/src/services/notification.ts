@@ -14,7 +14,7 @@ export interface NotificationRuleUpdate {
 }
 
 async function getAllNotificationRules(): Promise<NotificationRule[]> {
-  const response = await fetch('/api/notifications', { credentials: 'include' });
+  const response = await fetch('/api/v1/notifications', { credentials: 'include' });
   if (!response.ok) {
     throw new Error(`Failed to get notifications: ${response.statusText}`);
   }
@@ -26,7 +26,7 @@ async function updateNotificationRule(
   ruleId: string,
   update: NotificationRuleUpdate,
 ): Promise<NotificationRule> {
-  const response = await fetch(`/api/notifications/${ruleId}`, {
+  const response = await fetch(`/api/v1/notifications/${ruleId}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',

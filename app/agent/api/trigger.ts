@@ -5,6 +5,7 @@ import * as triggerApi from '../../api/trigger.js';
 import logger from '../../log/index.js';
 import { sanitizeLogParam } from '../../log/sanitize.js';
 import * as registry from '../../registry/index.js';
+import { getErrorMessage } from '../../util/error.js';
 
 const log = logger.child({ component: 'agent-api-trigger' });
 
@@ -62,10 +63,11 @@ export async function runTriggerBatch(req: Request, res: Response) {
     });
     await trigger.triggerBatch(sanitizedContainers);
     res.status(200).json({});
-  } catch (e: any) {
+  } catch (e) {
+    const errorMessage = getErrorMessage(e);
     log.error(
-      `Error running batch trigger ${sanitizeLogParam(name)}: ${sanitizeLogParam(e.message)}`,
+      `Error running batch trigger ${sanitizeLogParam(name)}: ${sanitizeLogParam(errorMessage)}`,
     );
-    sendErrorResponse(res, 500, e.message);
+    sendErrorResponse(res, 500, `Error when running batch trigger ${type}.${name}`);
   }
 }

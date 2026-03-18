@@ -13,6 +13,7 @@ import {
   type HassAttributePreset,
 } from './filter.js';
 import Hass from './Hass.js';
+import { getSanitizedCanonicalContainerName } from './naming.js';
 
 const containerDefaultTopic = 'dd/container';
 const hassDefaultPrefix = 'homeassistant';
@@ -28,7 +29,7 @@ function generateClientId() {
  * @return {string}
  */
 function getContainerTopic({ baseTopic, container }) {
-  const containerName = container.name.replaceAll('.', '-');
+  const containerName = getSanitizedCanonicalContainerName(container);
   return `${baseTopic}/${container.watcher}/${containerName}`;
 }
 

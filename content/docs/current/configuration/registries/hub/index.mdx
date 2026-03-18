@@ -13,7 +13,7 @@ The `hub` registry lets you configure [Docker Hub](https://hub.docker.com/) inte
 Currently, the supported credentials are:
 
 - Docker Hub auth + Docker Hub Access Token
-- Docker Base64 credentials (like in [.docker/config.json](https://docs.docker.com/engine/reference/commandline/auth/))
+- Docker Base64 credentials (like in [.docker/config.json](https://docs.docker.com/reference/cli/docker/login/))
 - Docker Hub auth + Docker Hub password (not recommended)
 
 <Callout type="warn">By default, if you don't configure any registries, drydock will configure a default one with anonymous access.
@@ -23,10 +23,10 @@ Don't forget to configure authentication if you're using [Docker Hub Private Rep
 
 | Env var | Required | Description | Supported values | Default value when missing |
 | --- | :---: | --- | --- | --- |
-| `DD_REGISTRY_HUB_{REGISTRY_NAME}_LOGIN` | ⚪ | A valid Docker Hub Login | Required with `PASSWORD` or `TOKEN` | |
-| `DD_REGISTRY_HUB_{REGISTRY_NAME}_PASSWORD` | ⚪ | A valid Docker Hub password or access token | `DD_REGISTRY_HUB_{REGISTRY_NAME}_LOGIN` must be defined | |
-| `DD_REGISTRY_HUB_{REGISTRY_NAME}_TOKEN` | ⚪ | A valid Docker Hub access token (alternative to `PASSWORD`) | `DD_REGISTRY_HUB_{REGISTRY_NAME}_LOGIN` must be defined | |
-| `DD_REGISTRY_HUB_{REGISTRY_NAME}_AUTH` | ⚪ | A valid Docker Hub Base64 Auth String | Cannot be combined with `LOGIN`/`PASSWORD`/`TOKEN` | |
+| `DD_REGISTRY_HUB_{REGISTRY_NAME}_LOGIN` | ⚪ | A valid Docker Hub Login (required with `PASSWORD` or `TOKEN`) | Docker Hub username | |
+| `DD_REGISTRY_HUB_{REGISTRY_NAME}_PASSWORD` | ⚪ | A valid Docker Hub password or access token (`LOGIN` must be defined) | Docker Hub password or [access token](https://docs.docker.com/security/access-tokens/) | |
+| `DD_REGISTRY_HUB_{REGISTRY_NAME}_TOKEN` | ⚪ | A valid Docker Hub access token, alternative to `PASSWORD` (`LOGIN` must be defined) | Docker Hub [access token](https://docs.docker.com/security/access-tokens/) | |
+| `DD_REGISTRY_HUB_{REGISTRY_NAME}_AUTH` | ⚪ | A valid Docker Hub Base64 Auth String (cannot be combined with `LOGIN`/`PASSWORD`/`TOKEN`) | Base64 encoded `username:password` string | |
 
 <Callout type="warn">Registry auth now fails closed for invalid combinations. `LOGIN` must be paired with `PASSWORD` (or `TOKEN` alias), and `AUTH` cannot be combined with `LOGIN`/`PASSWORD`/`TOKEN`.</Callout>
 

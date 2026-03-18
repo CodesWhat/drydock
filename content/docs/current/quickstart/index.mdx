@@ -90,7 +90,7 @@ docker run -d --name drydock \
 </Tab>
 </Tabs>
 
-<Callout type="info">The official image is published on Github Container Registry: `codeswhat/drydock`</Callout>
+The official image is published on Github Container Registry: `codeswhat/drydock`.
 
 <Callout type="warn">Authentication is **required by default** on fresh installs. The examples above use Basic auth with username `admin` and password `password`. See the [auth docs](/docs/configuration/authentications) for OIDC, anonymous access, and other options.</Callout>
 
@@ -125,21 +125,12 @@ docker exec -it drydock node dist/index.js config migrate --file .env --file com
 4. Open **Notifications** and tune event rules (`update-available`, `update-applied`, `update-failed`, `security-alert`, `agent-disconnect`) plus trigger assignments.
 5. Reorder dashboard widgets by drag/drop; layout persists locally and can be reset.
 
-<Callout type="info">Keyboard shortcuts: `Enter` confirms action dialogs, `Escape` cancels dialogs and closes detail panels.</Callout>
+Keyboard shortcuts: `Enter` confirms action dialogs, `Escape` cancels dialogs and closes detail panels.
 
-## Add your first trigger
+## Next steps
 
-<Callout type="info">Everything ok?
-It's time to [**add some triggers**](/docs/configuration/triggers)!</Callout>
-
-## Going deeper
-
-<Callout type="info">Need to fine configure how drydock must watch your containers?
-Take a look at the [**watcher documentation**](/docs/configuration/watchers)!</Callout>
-  
-<Callout type="info">Need to integrate other registries (ECR, GCR...)?
-Take a look at the [**registry documentation**](/docs/configuration/registries).</Callout>
-
-## Ready-to-go examples
-
-<Callout type="info">You can find here a **[complete configuration example](/docs/configuration/#complete-example)** illustrating some common drydock options.</Callout>
+- [**Getting started guide**](/docs/getting-started) — step-by-step walkthrough from watching containers to notifications and auto-updates.
+- [**Add some triggers**](/docs/configuration/triggers) to get notified or auto-update containers.
+- [**Configure watchers**](/docs/configuration/watchers) to fine-tune how drydock monitors your containers.
+- [**Integrate other registries**](/docs/configuration/registries) (ECR, GCR, GHCR, and more).
+- See a **[complete configuration example](/docs/configuration/#complete-example)** illustrating common drydock options.

@@ -16,7 +16,7 @@ describe('Store Service', () => {
 
     const result = await getStore();
 
-    expect(fetch).toHaveBeenCalledWith('/api/store', { credentials: 'include' });
+    expect(fetch).toHaveBeenCalledWith('/api/v1/store', { credentials: 'include' });
     expect(result).toEqual(payload);
   });
 

@@ -14,7 +14,7 @@ describe('audit service', () => {
 
     const result = await getAuditLog();
 
-    expect(global.fetch).toHaveBeenCalledWith('/api/audit?limit=50', { credentials: 'include' });
+    expect(global.fetch).toHaveBeenCalledWith('/api/v1/audit?limit=50', { credentials: 'include' });
     expect(result).toEqual({
       ...mockResponse,
       entries: [],

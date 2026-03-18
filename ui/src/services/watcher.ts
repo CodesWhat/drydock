@@ -21,7 +21,7 @@ function getWatcherProviderColor(type: string) {
 }
 
 async function getAllWatchers() {
-  const response = await fetch('/api/watchers', { credentials: 'include' });
+  const response = await fetch('/api/v1/watchers', { credentials: 'include' });
   if (!response.ok) {
     throw new Error(`Failed to get watchers: ${response.statusText}`);
   }
@@ -30,7 +30,7 @@ async function getAllWatchers() {
 }
 
 function buildWatcherDetailPath({ type, name, agent }: WatcherDetailPathOptions) {
-  const segments = ['/api/watchers'];
+  const segments = ['/api/v1/watchers'];
   segments.push(encodeURIComponent(type), encodeURIComponent(name));
   if (agent) {
     segments.push(encodeURIComponent(agent));

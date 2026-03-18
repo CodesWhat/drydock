@@ -283,8 +283,9 @@ export const openApiSchemas = {
           total: { type: 'integer', minimum: 0 },
           running: { type: 'integer', minimum: 0 },
           stopped: { type: 'integer', minimum: 0 },
+          updatesAvailable: { type: 'integer', minimum: 0 },
         },
-        required: ['total', 'running', 'stopped'],
+        required: ['total', 'running', 'stopped', 'updatesAvailable'],
         additionalProperties: false,
       },
       security: {

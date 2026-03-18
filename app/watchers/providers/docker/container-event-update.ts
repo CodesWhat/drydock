@@ -118,6 +118,7 @@ export async function processDockerEvent(
         `Recreated container alias persisted beyond transient window id=[${containerId}]; scheduling refresh`,
       );
       await dependencies.watchCronDebounced();
+      return;
     }
 
     const containerFound = dependencies.getContainerFromStore(containerId);

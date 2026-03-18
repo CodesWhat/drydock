@@ -14,6 +14,7 @@ services:
       - DD_LOG_FORMAT=text
       - DD_WATCHER_LOCAL_WATCHBYDEFAULT=false
       - DD_WATCHER_LOCAL_CRON=*/2 * * * *
+      - DD_WATCHER_LOCAL_WATCHEVENTS=true
       # Docker trigger (manual only — auto=false prevents auto-updating test containers)
       - DD_TRIGGER_DOCKER_LOCAL_AUTO=false
       - DD_TRIGGER_DOCKER_LOCAL_PRUNE=true
@@ -104,6 +105,23 @@ services:
       timeout: 5s
       retries: 5
       start_period: 5s
+
+  # ── Portainer (container management UI) ─────────────
+  # Used for QA testing issue #156: recreating containers via Portainer
+  # triggers Docker's transient <hex12>_<name> alias race condition.
+  # Access at http://localhost:9443 (HTTPS) or http://localhost:9000
+  portainer:
+    image: portainer/portainer-ce:2.27.5
+    container_name: portainer
+    ports:
+      - "9000:9000"
+      - "9443:9443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer_data:/data
+    restart: unless-stopped
+    labels:
+      - dd.watch=false
 
   # ── Trivy vulnerability scanner (client-server mode) ──
   trivy-server:
@@ -271,6 +289,22 @@ services:
       - dd.display.name=Log Spammer
       - dd.group=infra
 
+  # ── Slow-shutdown container (tests #156 recreate alias filtering) ───
+  # Traps SIGTERM and delays 15s before exiting, simulating large apps
+  # like Termix/Jellyfin that take time to shut down. Use with:
+  #   docker compose -f test/qa-compose.yml up -d --force-recreate slow-shutdown
+  # to reproduce the Docker transient alias race condition.
+  slow-shutdown:
+    image: busybox:1.36
+    pull_policy: never
+    container_name: slow-shutdown
+    command: ["sh", "-c", "trap 'echo SIGTERM received; sleep 15; exit 0' TERM; echo 'slow-shutdown running'; while true; do sleep 1; done"]
+    stop_grace_period: 30s
+    labels:
+      - dd.watch=true
+      - dd.display.name=Slow Shutdown
+      - dd.group=infra
+
   # ── Stopped container (tests stopped status badge) ─────
 
   # Memcached — starts then exits (shows "stopped" in container list)
@@ -282,3 +316,6 @@ services:
     labels:
       - dd.watch=true
       - dd.display.name=Memcached (Stopped)
+
+volumes:
+  portainer_data:

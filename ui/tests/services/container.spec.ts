@@ -39,7 +39,7 @@ describe('Container Service', () => {
 
       const containers = await getAllContainers();
 
-      expect(fetch).toHaveBeenCalledWith('/api/containers', {
+      expect(fetch).toHaveBeenCalledWith('/api/v1/containers', {
         credentials: 'include',
       });
       expect(containers).toEqual(mockContainers);
@@ -54,7 +54,7 @@ describe('Container Service', () => {
 
       const containers = await getAllContainers({ includeVulnerabilities: true });
 
-      expect(fetch).toHaveBeenCalledWith('/api/containers?includeVulnerabilities=true', {
+      expect(fetch).toHaveBeenCalledWith('/api/v1/containers?includeVulnerabilities=true', {
         credentials: 'include',
       });
       expect(containers).toEqual(mockContainers);
@@ -69,7 +69,7 @@ describe('Container Service', () => {
 
       const containers = await getAllContainers({ limit: 10, offset: 20 });
 
-      expect(fetch).toHaveBeenCalledWith('/api/containers?limit=10&offset=20', {
+      expect(fetch).toHaveBeenCalledWith('/api/v1/containers?limit=10&offset=20', {
         credentials: 'include',
       });
       expect(containers).toEqual(mockContainers);
@@ -128,7 +128,7 @@ describe('Container Service', () => {
 
       const containers = await getAllContainers(controller.signal);
 
-      expect(fetch).toHaveBeenCalledWith('/api/containers', {
+      expect(fetch).toHaveBeenCalledWith('/api/v1/containers', {
         credentials: 'include',
         signal: controller.signal,
       });
@@ -160,7 +160,7 @@ describe('Container Service', () => {
 
       const summary = await getContainerSummary();
 
-      expect(fetch).toHaveBeenCalledWith('/api/containers/summary', {
+      expect(fetch).toHaveBeenCalledWith('/api/v1/containers/summary', {
         credentials: 'include',
       });
       expect(summary).toEqual(mockSummary);
@@ -193,7 +193,7 @@ describe('Container Service', () => {
 
       const recentStatus = await getContainerRecentStatus();
 
-      expect(fetch).toHaveBeenCalledWith('/api/containers/recent-status', {
+      expect(fetch).toHaveBeenCalledWith('/api/v1/containers/recent-status', {
         credentials: 'include',
       });
       expect(recentStatus).toEqual(mockStatusMap);
@@ -221,7 +221,7 @@ describe('Container Service', () => {
 
       const result = await refreshAllContainers();
 
-      expect(fetch).toHaveBeenCalledWith('/api/containers/watch', {
+      expect(fetch).toHaveBeenCalledWith('/api/v1/containers/watch', {
         method: 'POST',
         credentials: 'include',
       });
@@ -251,7 +251,7 @@ describe('Container Service', () => {
 
       const result = await refreshContainer('container1');
 
-      expect(fetch).toHaveBeenCalledWith('/api/containers/container1/watch', {
+      expect(fetch).toHaveBeenCalledWith('/api/v1/containers/container1/watch', {
         method: 'POST',
         credentials: 'include',
       });
@@ -289,7 +289,7 @@ describe('Container Service', () => {
 
       const result = await deleteContainer('container1');
 
-      expect(fetch).toHaveBeenCalledWith('/api/containers/container1', {
+      expect(fetch).toHaveBeenCalledWith('/api/v1/containers/container1', {
         method: 'DELETE',
         credentials: 'include',
         headers: { 'X-DD-Confirm-Action': 'container-delete' },
@@ -322,7 +322,7 @@ describe('Container Service', () => {
 
       const triggers = await getContainerTriggers('container1');
 
-      expect(fetch).toHaveBeenCalledWith('/api/containers/container1/triggers', {
+      expect(fetch).toHaveBeenCalledWith('/api/v1/containers/container1/triggers', {
         credentials: 'include',
       });
       expect(triggers).toEqual(mockTriggers);
@@ -368,11 +368,14 @@ describe('Container Service', () => {
         triggerName: 'trigger1',
       });
 
-      expect(fetch).toHaveBeenCalledWith('/api/containers/container1/triggers/webhook/trigger1', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-      });
+      expect(fetch).toHaveBeenCalledWith(
+        '/api/v1/containers/container1/triggers/webhook/trigger1',
+        {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+        },
+      );
       expect(result).toEqual(mockResult);
     });
 
@@ -391,7 +394,7 @@ describe('Container Service', () => {
       });
 
       expect(fetch).toHaveBeenCalledWith(
-        '/api/containers/container1/triggers/webhook/trigger1/agent1',
+        '/api/v1/containers/container1/triggers/webhook/trigger1/agent1',
         {
           method: 'POST',
           credentials: 'include',
@@ -427,7 +430,7 @@ describe('Container Service', () => {
 
       const result = await updateContainerPolicy('c1', 'enable', { schedule: '0 * * * *' });
 
-      expect(fetch).toHaveBeenCalledWith('/api/containers/c1/update-policy', {
+      expect(fetch).toHaveBeenCalledWith('/api/v1/containers/c1/update-policy', {
         method: 'PATCH',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -444,7 +447,7 @@ describe('Container Service', () => {
 
       await updateContainerPolicy('c1', 'disable');
 
-      expect(fetch).toHaveBeenCalledWith('/api/containers/c1/update-policy', {
+      expect(fetch).toHaveBeenCalledWith('/api/v1/containers/c1/update-policy', {
         method: 'PATCH',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -528,7 +531,7 @@ describe('Container Service', () => {
 
       const result = await revealContainerEnv('c1');
 
-      expect(fetch).toHaveBeenCalledWith('/api/containers/c1/env/reveal', {
+      expect(fetch).toHaveBeenCalledWith('/api/v1/containers/c1/env/reveal', {
         method: 'POST',
         credentials: 'include',
       });
@@ -557,7 +560,7 @@ describe('Container Service', () => {
 
       const result = await scanContainer('c1');
 
-      expect(fetch).toHaveBeenCalledWith('/api/containers/c1/scan', {
+      expect(fetch).toHaveBeenCalledWith('/api/v1/containers/c1/scan', {
         method: 'POST',
         credentials: 'include',
       });
@@ -574,7 +577,7 @@ describe('Container Service', () => {
 
       const result = await scanContainer('c1', controller.signal);
 
-      expect(fetch).toHaveBeenCalledWith('/api/containers/c1/scan', {
+      expect(fetch).toHaveBeenCalledWith('/api/v1/containers/c1/scan', {
         method: 'POST',
         credentials: 'include',
         signal: controller.signal,
@@ -681,7 +684,7 @@ describe('Container Service', () => {
 
       const result = await getContainerLogs('container1');
 
-      expect(fetch).toHaveBeenCalledWith('/api/containers/container1/logs?tail=100', {
+      expect(fetch).toHaveBeenCalledWith('/api/v1/containers/container1/logs?tail=100', {
         credentials: 'include',
       });
       expect(result).toEqual(mockLogs);
@@ -696,7 +699,7 @@ describe('Container Service', () => {
 
       const result = await getContainerLogs('container1', 50);
 
-      expect(fetch).toHaveBeenCalledWith('/api/containers/container1/logs?tail=50', {
+      expect(fetch).toHaveBeenCalledWith('/api/v1/containers/container1/logs?tail=50', {
         credentials: 'include',
       });
       expect(result).toEqual(mockLogs);
@@ -731,7 +734,7 @@ describe('Container Service', () => {
 
       const result = await getContainerUpdateOperations('container1');
 
-      expect(fetch).toHaveBeenCalledWith('/api/containers/container1/update-operations', {
+      expect(fetch).toHaveBeenCalledWith('/api/v1/containers/container1/update-operations', {
         credentials: 'include',
       });
       expect(result).toEqual(operations);
@@ -781,7 +784,7 @@ describe('Container Service', () => {
 
       const result = await getContainerVulnerabilities('container1');
 
-      expect(fetch).toHaveBeenCalledWith('/api/containers/container1/vulnerabilities', {
+      expect(fetch).toHaveBeenCalledWith('/api/v1/containers/container1/vulnerabilities', {
         credentials: 'include',
       });
       expect(result).toEqual(mockResult);
@@ -820,7 +823,7 @@ describe('Container Service', () => {
 
       const result = await getSecurityVulnerabilityOverview();
 
-      expect(fetch).toHaveBeenCalledWith('/api/containers/security/vulnerabilities', {
+      expect(fetch).toHaveBeenCalledWith('/api/v1/containers/security/vulnerabilities', {
         credentials: 'include',
       });
       expect(result).toEqual(mockResult);
@@ -851,7 +854,7 @@ describe('Container Service', () => {
 
       const result = await getContainerSbom('container1');
 
-      expect(fetch).toHaveBeenCalledWith('/api/containers/container1/sbom?format=spdx-json', {
+      expect(fetch).toHaveBeenCalledWith('/api/v1/containers/container1/sbom?format=spdx-json', {
         credentials: 'include',
       });
       expect(result).toEqual(mockResult);
@@ -869,9 +872,12 @@ describe('Container Service', () => {
 
       const result = await getContainerSbom('container1', 'cyclonedx-json');
 
-      expect(fetch).toHaveBeenCalledWith('/api/containers/container1/sbom?format=cyclonedx-json', {
-        credentials: 'include',
-      });
+      expect(fetch).toHaveBeenCalledWith(
+        '/api/v1/containers/container1/sbom?format=cyclonedx-json',
+        {
+          credentials: 'include',
+        },
+      );
       expect(result).toEqual(mockResult);
     });
 

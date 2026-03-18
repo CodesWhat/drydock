@@ -14,10 +14,10 @@ async function installStoryMock(): Promise<void> {
 }
 
 describe('WatchersView story mock', () => {
-  it('returns watcher fixtures for GET /api/watchers', async () => {
+  it('returns watcher fixtures for GET /api/v1/watchers', async () => {
     await installStoryMock();
 
-    const response = await fetch('/api/watchers');
+    const response = await fetch('/api/v1/watchers');
     expect(response.status).toBe(200);
 
     const watchers = (await response.json()) as WatcherLike[];

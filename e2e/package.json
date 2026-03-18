@@ -27,15 +27,16 @@
   "repository": "CodesWhat/drydock",
   "license": "AGPL-3.0-only",
   "dependencies": {
-    "@cucumber/cucumber": "^12.7.0"
+    "@cucumber/cucumber": "^12.7.0",
+    "socket.io-parser": "^4.2.6"
   },
   "devDependencies": {
-    "@dotenvx/dotenvx": "1.53.0",
+    "@dotenvx/dotenvx": "1.55.1",
     "@playwright/test": "^1.58.2",
     "artillery": "2.0.30"
   },
   "overrides": {
-    "fast-xml-parser": "5.3.8",
-    "minimatch": "10.2.3"
+    "fast-xml-parser": "5.5.6",
+    "minimatch": "10.2.4"
   }
 }

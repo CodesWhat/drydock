@@ -20,7 +20,7 @@ describe('Backup Service', () => {
 
       const result = await getBackups('container-1');
 
-      expect(fetch).toHaveBeenCalledWith('/api/containers/container-1/backups', {
+      expect(fetch).toHaveBeenCalledWith('/api/v1/containers/container-1/backups', {
         credentials: 'include',
       });
       expect(result).toEqual(mockBackups);
@@ -63,7 +63,7 @@ describe('Backup Service', () => {
 
       const result = await rollback('container-1', 'backup-1');
 
-      expect(fetch).toHaveBeenCalledWith('/api/containers/container-1/rollback', {
+      expect(fetch).toHaveBeenCalledWith('/api/v1/containers/container-1/rollback', {
         method: 'POST',
         credentials: 'include',
         headers: {
@@ -84,7 +84,7 @@ describe('Backup Service', () => {
 
       const result = await rollback('container-1');
 
-      expect(fetch).toHaveBeenCalledWith('/api/containers/container-1/rollback', {
+      expect(fetch).toHaveBeenCalledWith('/api/v1/containers/container-1/rollback', {
         method: 'POST',
         credentials: 'include',
         headers: {

@@ -77,14 +77,14 @@ function installSecurityMock(data: SecurityContainerApi[]) {
       typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
     const path = raw.startsWith('http') ? new URL(raw).pathname : raw;
 
-    if (path === '/api/containers') {
+    if (path === '/api/v1/containers') {
       return new Response(JSON.stringify(data), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       });
     }
 
-    if (path === '/api/server/security/runtime') {
+    if (path === '/api/v1/server/security/runtime') {
       return new Response(
         JSON.stringify({
           checkedAt: new Date().toISOString(),

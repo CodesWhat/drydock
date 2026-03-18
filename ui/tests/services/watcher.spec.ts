@@ -38,7 +38,7 @@ describe('Watcher Service', () => {
 
     const result = await getAllWatchers();
 
-    expect(fetchMock).toHaveBeenCalledWith('/api/watchers', { credentials: 'include' });
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/watchers', { credentials: 'include' });
     expect(result).toEqual(mockWatchers);
   });
 
@@ -104,7 +104,7 @@ describe('Watcher Service', () => {
 
     const result = await getWatcher({ type: 'docker', name: 'local' });
 
-    expect(fetchMock).toHaveBeenCalledWith('/api/watchers/docker/local', {
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/watchers/docker/local', {
       credentials: 'include',
     });
     expect(result).toEqual(mockWatcher);
@@ -131,7 +131,7 @@ describe('Watcher Service', () => {
 
     const result = await getWatcher({ agent: 'edge', type: 'docker', name: 'local' });
 
-    expect(fetchMock).toHaveBeenCalledWith('/api/watchers/docker/local/edge', {
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/watchers/docker/local/edge', {
       credentials: 'include',
     });
     expect(result).toEqual(mockWatcher);

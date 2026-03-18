@@ -114,7 +114,9 @@ describe('agent API event', () => {
       expect(ackPayload).toContain('x64');
       expect(ackPayload).toContain('"cpus":8');
       expect(ackPayload).toContain('"memoryGb":16');
-      expect(ackPayload).toContain('"containers":{"total":3,"running":2,"stopped":1}');
+      expect(ackPayload).toContain(
+        '"containers":{"total":3,"running":2,"stopped":1,"updatesAvailable":0}',
+      );
       expect(ackPayload).toContain('"images":2');
     });
 
@@ -128,7 +130,9 @@ describe('agent API event', () => {
       eventApi.subscribeEvents(req, res);
 
       const ackPayload = res.write.mock.calls[0][0];
-      expect(ackPayload).toContain('"containers":{"total":3,"running":1,"stopped":2}');
+      expect(ackPayload).toContain(
+        '"containers":{"total":3,"running":1,"stopped":2,"updatesAvailable":0}',
+      );
       expect(ackPayload).toContain('"images":3');
     });
 

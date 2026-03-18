@@ -21,7 +21,7 @@ The `rocketchat` trigger lets you post image update notifications to a Rocket.Ch
 | `DD_TRIGGER_ROCKETCHAT_{trigger_name}_ALIAS` | ⚪ | Alters the sender's name shown for the message, but keeps the username as is. Requires `message-impersonate` permission, typically only present on the `bot` role. | | |
 | `DD_TRIGGER_ROCKETCHAT_{trigger_name}_AVATAR` | ⚪ | Display the sender's avatar as the provided image URL. Requires `message-impersonate` permission, typically only on the `bot` role. | | |
 | `DD_TRIGGER_ROCKETCHAT_{trigger_name}_EMOJI` | ⚪ | Display the sender's avatar as an emoji, e.g. `:smile:`. | | |
-| `DD_TRIGGER_ROCKETCHAT_{trigger_name}_PARSE_URLS` | ⚪ | Whether Rocket.Chat should generate link previews when the message text contains URLs. Enabled by default. | `true`, `false` | |
+| `DD_TRIGGER_ROCKETCHAT_{trigger_name}_PARSE_URLS` | ⚪ | Whether Rocket.Chat should generate link previews when the message text contains URLs. Default is unset (defers to Rocket.Chat server default). | `true`, `false` | |
 | `DD_TRIGGER_ROCKETCHAT_{trigger_name}_DISABLETITLE` | ⚪ | Disable title to have full control over the message formatting. | `true`, `false` | `false` |
 
 <Callout type="warn">The Rocket.Chat channel must already exist on the workspace (the trigger won't automatically create it)</Callout>

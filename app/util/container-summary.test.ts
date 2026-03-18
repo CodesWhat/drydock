@@ -15,18 +15,33 @@ describe('isContainerRunning', () => {
 });
 
 describe('getContainerStatusSummary', () => {
-  test('returns total, running, and stopped counts', () => {
+  test('returns total, running, stopped, and updatesAvailable counts', () => {
     expect(
       getContainerStatusSummary([
-        { status: 'running' },
-        { status: 'exited' },
-        { status: 'RUNNING' },
+        { status: 'running', updateAvailable: true },
+        { status: 'exited', updateAvailable: false },
+        { status: 'RUNNING', updateAvailable: true },
         {},
       ]),
     ).toEqual({
       total: 4,
       running: 2,
       stopped: 2,
+      updatesAvailable: 2,
+    });
+  });
+
+  test('returns zero updatesAvailable when no containers have updates', () => {
+    expect(
+      getContainerStatusSummary([
+        { status: 'running', updateAvailable: false },
+        { status: 'running' },
+      ]),
+    ).toEqual({
+      total: 2,
+      running: 2,
+      stopped: 0,
+      updatesAvailable: 0,
     });
   });
 });

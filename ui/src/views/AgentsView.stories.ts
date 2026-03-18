@@ -92,7 +92,7 @@ function installAgentsMock(data: AgentApiItem[]) {
     const url = raw.startsWith('http') ? new URL(raw) : new URL(raw, 'http://localhost');
     const path = url.pathname;
 
-    if (path === '/api/agents') {
+    if (path === '/api/v1/agents') {
       return new Response(JSON.stringify(data), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
