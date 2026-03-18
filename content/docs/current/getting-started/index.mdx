@@ -102,11 +102,13 @@ Docker Hub public images work out of the box. For private registries, add creden
 
 <Tabs items={["Docker Hub (private)", "GHCR", "ECR", "Self-hosted"]}>
 <Tab value="Docker Hub (private)">
+
 ```yaml
 environment:
   - DD_REGISTRY_HUB_PRIVATE_LOGIN=myuser
   - DD_REGISTRY_HUB_PRIVATE_TOKEN=dckr_pat_xxxxx
 ```
+
 </Tab>
 <Tab value="GHCR">
 ```yaml
@@ -145,11 +147,13 @@ Drydock can notify you when updates are available. Add one or more notification 
 
 <Tabs items={["Slack", "Discord", "Email (SMTP)", "ntfy", "Other"]}>
 <Tab value="Slack">
+
 ```yaml
 environment:
   - DD_TRIGGER_SLACK_ALERTS_TOKEN=xoxb-xxxxx
   - DD_TRIGGER_SLACK_ALERTS_CHANNEL=#docker-updates
 ```
+
 </Tab>
 <Tab value="Discord">
 ```yaml
@@ -186,7 +190,7 @@ Drydock supports 20+ notification services. See the [Triggers configuration](/do
 By default, triggers fire on every detected update. Use `THRESHOLD` to only notify on significant changes:
 
 | Threshold | Fires on |
-|-----------|----------|
+| --- | --- |
 | `all` (default) | Every update |
 | `major` | Major, minor, or patch semver changes (not digest-only) |
 | `minor` | Minor, patch, or prerelease changes |
@@ -220,6 +224,7 @@ environment:
 ```
 
 When you click **Update** in the UI (or an auto-trigger fires), Drydock will:
+
 1. Pull the new image
 2. Rename the running container
 3. Create a new container with the original name and settings
@@ -243,6 +248,7 @@ The compose trigger patches the image tag in your compose file and runs `docker 
 ### Both at the same time
 
 You can run both triggers simultaneously. Drydock auto-associates:
+
 - **Compose trigger** → containers with compose labels matching the configured file
 - **Docker trigger** → everything else
 
@@ -325,12 +331,14 @@ environment:
 If you have containers on multiple Docker hosts, deploy Drydock agents on remote hosts that report back to the central controller:
 
 **Controller** (main instance — runs the UI and API):
+
 ```yaml
 environment:
   - DD_AGENT_CONTROLLER_TOKEN=a-secure-shared-token
 ```
 
 **Agent** (remote host — lightweight, no UI):
+
 ```yaml
 services:
   drydock-agent:

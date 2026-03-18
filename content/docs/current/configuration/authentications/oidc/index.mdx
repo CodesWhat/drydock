@@ -33,6 +33,7 @@ The callback URL (to configure in the IDP) is built as `${DD_PUBLIC_URL}/auth/oi
 <Callout type="warn">`DD_AUTH_OIDC_{auth_name}_INSECURE=true` disables TLS certificate verification for OIDC HTTPS calls (discovery, token, userinfo, JWKS). Use only for local/dev troubleshooting.</Callout>
 
 **Notes:**
+
 - If your IdP is on a different domain and callback fails with `OIDC session is missing or expired`, check `DD_SERVER_COOKIE_SAMESITE` (server config). Default is `lax` for OIDC compatibility; `strict` can break cross-site callbacks. Use `none` only for explicit cross-site/embed cases over HTTPS.
 - If your provider uses a private/self-signed CA, the quickest container-level workaround is `NODE_EXTRA_CA_CERTS=/path/to/ca.pem`. Drydock also supports OIDC-scoped TLS settings with `DD_AUTH_OIDC_{auth_name}_CAFILE` and `DD_AUTH_OIDC_{auth_name}_INSECURE`.
 - **Redirect URL validation** — Drydock validates all OIDC authorization redirect URLs against an allowlist derived from the configured callback URL origin. This prevents open redirect attacks through crafted callback parameters. No configuration is needed.

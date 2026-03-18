@@ -40,6 +40,7 @@ The trigger will:
 This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration), but only supports the `batch` mode.
 
 **Notes:**
+
 - The env var keys for `COMPOSEFILEONCE`, `COMPOSEFILELABEL`, `RECONCILIATIONMODE`, and `DIGESTPINNING` are case-insensitive — both the lowercased form (e.g. `composefileonce`) and the camelCase form (e.g. `composeFileOnce`) are accepted.
 - Legacy compatibility: compose file label fallback `wud.compose.file` is still accepted when `dd.compose.file` is not present. Prefer `dd.compose.file` for new configs, and use `node dist/index.js config migrate` to rewrite existing labels.
 

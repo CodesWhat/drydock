@@ -17,13 +17,15 @@ DD_TRIGGER_{{ trigger_type }}_{{trigger_name }}_{{ trigger_configuration_item }}
 <Callout type="warn">Multiple triggers of the same type can be configured (for example multiple Smtp addresses).
 You just need to give them different names.</Callout>
 
-### Available triggers
+## Available triggers
 
 **Update actions:**
+
 - [**Docker**](/docs/configuration/triggers/docker) -- Update containers via the Docker Engine API
 - [**Docker Compose**](/docs/configuration/triggers/docker-compose) -- Update containers managed by Docker Compose
 
 **Messaging & notifications:**
+
 - [**Apprise**](/docs/configuration/triggers/apprise) -- Multi-provider notification relay
 - [**Command**](/docs/configuration/triggers/command) -- Execute a shell command
 - [**Discord**](/docs/configuration/triggers/discord) -- Discord webhook
@@ -62,7 +64,7 @@ All implemented triggers, in addition to their specific configuration, also supp
 ### Threshold reference
 
 | Threshold | Fires on |
-|-----------|----------|
+| --- | --- |
 | `all` | Any change (default) |
 | `major` | Major, minor, or patch semver change |
 | `major-only` | Major only |

@@ -43,6 +43,7 @@ The `docker` watcher lets you configure the Docker hosts you want to watch.
 <Callout type="warn">`DD_WATCHER_{watcher_name}_WATCHDIGEST` is deprecated and will be removed in a future release. Use the `dd.watch.digest` container label instead.</Callout>
 
 **Notes:**
+
 - If no watcher is configured, a default one named `local` will be automatically created (reading the Docker socket).
 - Multiple watchers can be configured (if you have multiple Docker hosts to watch). Just give them different names.
 - Socket configuration and host/port configuration are mutually exclusive.
