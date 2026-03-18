@@ -39,7 +39,6 @@ const coverageProviderModule = {
       onFinished: (project: unknown, environment: string) => Promise<void>;
       onDebug: ((message: string) => void) & { enabled?: boolean };
     }) => {
-      let index = 0;
       const waitForPendingWrites = async () => {
         while (provider.pendingPromises.length > 0) {
           const pendingWrites = provider.pendingPromises;
@@ -54,6 +53,7 @@ const coverageProviderModule = {
         for (const [environment, coverageByTestfiles] of Object.entries(coveragePerProject)) {
           const filenames = Object.values(coverageByTestfiles) as string[];
           const project = provider.ctx.getProjectByName(projectName);
+          let index = 0;
 
           for (const chunk of provider.toSlices(
             filenames,
