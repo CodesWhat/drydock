@@ -38,40 +38,26 @@ The `docker` watcher lets you configure the Docker hosts you want to watch.
 | `DD_WATCHER_{watcher_name}_WATCHEVENTS` | ⚪ | If drydock must monitor docker events | `true`, `false` | `true` |
 | `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_*` | ⚪ | Shared per-image defaults (image match + include/exclude/transform/link/display/trigger/lookup) | See **Image Set Presets** section below | |
 
-<Callout type="info">`WATCHALL` and `WATCHBYDEFAULT` are independent and operate at different stages.
-`WATCHALL` controls **which container states** Docker returns (running-only vs all states).
-`WATCHBYDEFAULT` controls **whether unlabeled containers are watched** — the `dd.watch` label always takes precedence when set.
-See the [behavior matrix](#watchall--watchbydefault-behavior-matrix) below for details.</Callout>
+`WATCHALL` and `WATCHBYDEFAULT` are independent and operate at different stages. `WATCHALL` controls **which container states** Docker returns (running-only vs all states). `WATCHBYDEFAULT` controls **whether unlabeled containers are watched** — the `dd.watch` label always takes precedence when set. See the [behavior matrix](#watchall--watchbydefault-behavior-matrix) below for details.
 
 <Callout type="warn">`DD_WATCHER_{watcher_name}_WATCHDIGEST` is deprecated and will be removed in a future release. Use the `dd.watch.digest` container label instead.</Callout>
 
-<Callout type="info">If no watcher is configured, a default one named `local` will be automatically created (reading the Docker socket).</Callout>
+**Notes:**
+- If no watcher is configured, a default one named `local` will be automatically created (reading the Docker socket).
+- Multiple watchers can be configured (if you have multiple Docker hosts to watch). Just give them different names.
+- Socket configuration and host/port configuration are mutually exclusive.
+- When `MAINTENANCE_WINDOW` is configured and a check is skipped outside the allowed schedule, drydock queues one pending check and runs it automatically when the next maintenance window opens.
+- Legacy compatibility: `wud.*` labels are still accepted as fallback to `dd.*`. When a fallback is used, drydock emits a one-time warning for that key and increments `dd_legacy_input_total{source="label",key="<legacy_key>"}`. To rewrite configs in place, run `node dist/index.js config migrate --dry-run` then `node dist/index.js config migrate --file <path>`.
+- If watcher logger initialization fails, drydock automatically falls back to structured stderr JSON logs and increments `dd_watcher_logger_init_failures_total{type,name}`. Alert on non-zero increases to catch degraded logging early.
 
-<Callout type="info">Multiple watchers can be configured (if you have multiple Docker hosts to watch).
-You just need to give them different names.</Callout>
-
-<Callout type="warn">Socket configuration and host/port configuration are mutually exclusive.</Callout>
-
-<Callout type="warn">If socket configuration is used, don't forget to mount the Docker socket on your drydock container.</Callout>
-
-<Callout type="warn">If host/port configuration is used, don't forget to enable the Docker remote API.
-[See dockerd documentation](https://docs.docker.com/engine/reference/commandline/dockerd/#description)</Callout>
-
-<Callout type="warn">If the Docker remote API is secured with TLS, don't forget to mount and configure the TLS certificates.
-[See dockerd documentation](https://docs.docker.com/engine/security/protect-access/#use-tls-https-to-protect-the-docker-daemon-socket)</Callout>
+<Callout type="warn">When using socket configuration, mount the Docker socket on your drydock container. When using host/port configuration, enable the [Docker remote API](https://docs.docker.com/reference/cli/dockerd/). If the remote API is secured with TLS, mount and configure the [TLS certificates](https://docs.docker.com/engine/security/protect-access/#use-tls-https-to-protect-the-docker-daemon-socket).</Callout>
 
 <Callout type="warn">Remote watcher auth (`AUTH_*`) is fail-closed by default and requires HTTPS (`PROTOCOL=https`) or TLS certificate-based connections. Set `AUTH_INSECURE=true` only if you intentionally need legacy fail-open behavior.</Callout>
 
-<Callout type="info">Legacy compatibility: `wud.*` labels are still accepted as fallback to `dd.*`. When a fallback is used, drydock emits a one-time warning for that key and increments `dd_legacy_input_total{source="label",key="<legacy_key>"}`. To rewrite configs in place, run `node dist/index.js config migrate --dry-run` then `node dist/index.js config migrate --file <path>`.</Callout>
-
-<Callout type="info">If watcher logger initialization fails, drydock automatically falls back to structured stderr JSON logs and increments `dd_watcher_logger_init_failures_total{type,name}`. Alert on non-zero increases to catch degraded logging early.</Callout>
-
-<Callout type="info">When `MAINTENANCE_WINDOW` is configured and a check is skipped outside the allowed schedule, drydock queues one pending check and runs it automatically when the next maintenance window opens.</Callout>
-
-<Callout type="warn">Watching image digests causes an extensive usage of _Docker Registry Pull API_ which is restricted by [**Quotas on the Docker Hub**](https://docs.docker.com/docker-hub/download-rate-limit/).
+<Callout type="warn">Watching image digests causes an extensive usage of _Docker Registry Pull API_ which is restricted by [**Quotas on the Docker Hub**](https://docs.docker.com/docker-hub/usage/).
 By default, drydock enables it only for **non semver** image tags.
 You can tune this behavior per container using the `dd.watch.digest` label.
-If you face [quota related errors](https://docs.docker.com/docker-hub/download-rate-limit/#how-do-i-know-my-pull-requests-are-being-limited), consider slowing down the watcher rate by adjusting the `DD_WATCHER_{watcher_name}_CRON` variable.</Callout>
+If you face [quota related errors](https://docs.docker.com/docker-hub/usage/#how-do-i-know-my-pull-requests-are-being-limited), consider slowing down the watcher rate by adjusting the `DD_WATCHER_{watcher_name}_CRON` variable.</Callout>
 
 ## Variable examples
 
@@ -292,7 +278,7 @@ services:
     restart: unless-stopped
 ```
 
-<Callout type="info">The `:ro` (read-only) flag on the Docker socket mount is omitted intentionally. The proxy's environment variables (`CONTAINERS`, `EVENTS`, etc.) control which API endpoints are exposed — that is the actual security boundary. The `:ro` flag on Unix sockets does not prevent API communication and can cause connection failures on some Linux kernels.</Callout>
+The `:ro` (read-only) flag on the Docker socket mount is omitted intentionally. The proxy's environment variables (`CONTAINERS`, `EVENTS`, etc.) control which API endpoints are exposed — that is the actual security boundary. The `:ro` flag on Unix sockets does not prevent API communication and can cause connection failures on some Linux kernels.
 
 #### Proxy permissions by feature
 
@@ -355,7 +341,7 @@ services:
       - 3000:3000
 ```
 
-<Callout type="info">When TLS certificates are provided (`CAFILE`, `CERTFILE`, `KEYFILE`), Drydock automatically uses HTTPS regardless of the `PROTOCOL` setting.</Callout>
+When TLS certificates are provided (`CAFILE`, `CERTFILE`, `KEYFILE`), Drydock automatically uses HTTPS regardless of the `PROTOCOL` setting.
 
 <Callout type="warn">Keep your client certificates secure. Mount them read-only (`:ro`) and restrict file permissions to the Drydock user.</Callout>
 
@@ -384,7 +370,7 @@ services:
       - 3000:3000
 ```
 
-<Callout type="info">The rootless socket path varies by user. Replace `1000` with your user's UID (`id -u`).</Callout>
+The rootless socket path varies by user. Replace `1000` with your user's UID (`id -u`).
 
 <Callout type="warn">Rootless Docker has some limitations: no `--privileged` containers, limited network configuration, and some storage drivers may not be available. Check the [official limitations list](https://docs.docker.com/engine/security/rootless/#known-limitations) for your use case.</Callout>
 
@@ -569,7 +555,7 @@ To fine-tune the behaviour of drydock _per container_, you can add labels on the
 | `dd.group` | ⚪ | Group name for stack/group views in the UI (falls back to `com.docker.compose.project` if not set) | Valid String | |
 | `dd.inspect.tag.path` | ⚪ | Docker inspect path used to derive a local semver tag | Slash-separated path in `docker inspect` output | |
 | `dd.registry.lookup.image` | ⚪ | Alternative image reference used for update lookups | Full image path (for example `library/traefik` or `ghcr.io/traefik/traefik`) | |
-| `dd.link.template` | ⚪ | Browsable link associated to the container version | JS string template with vars `${container}`, `${original}`, `${transformed}`, `${major}`, `${minor}`, `${patch}`, `${prerelease}` | |
+| `dd.link.template` | ⚪ | Browsable link associated to the container version | JS string template with vars `${raw}`, `${original}`, `${transformed}`, `${major}`, `${minor}`, `${patch}`, `${prerelease}` | |
 | `dd.tag.exclude` | ⚪ | Regex to exclude specific tags | Valid JavaScript Regex | |
 | `dd.tag.include` | ⚪ | Regex to include specific tags only | Valid JavaScript Regex | |
 | `dd.tag.transform` | ⚪ | Transform function to apply to the tag | `$valid_regex => $valid_string_with_placeholders` (see below) | |
@@ -585,10 +571,9 @@ To fine-tune the behaviour of drydock _per container_, you can add labels on the
 | `dd.runtime.entrypoint.origin` | ⚪ | Tracks whether the container's entrypoint was explicitly set or inherited from the image. Used during updates to decide whether to preserve the current entrypoint or let the new image defaults apply. | `explicit`, `inherited`, `unknown` | auto-detected |
 | `dd.runtime.cmd.origin` | ⚪ | Tracks whether the container's cmd was explicitly set or inherited from the image. Used during updates to decide whether to preserve the current cmd or let the new image defaults apply. | `explicit`, `inherited`, `unknown` | auto-detected |
 
-<Callout type="info">`dd.runtime.entrypoint.origin` and `dd.runtime.cmd.origin` are managed automatically by the Docker trigger during container updates. You only need to set them manually if drydock cannot detect the origin (shows `unknown`) and you want to explicitly pin or release a custom entrypoint/cmd.</Callout>
+`dd.runtime.entrypoint.origin` and `dd.runtime.cmd.origin` are managed automatically by the Docker trigger during container updates. You only need to set them manually if drydock cannot detect the origin (shows `unknown`) and you want to explicitly pin or release a custom entrypoint/cmd.
 
-<Callout type="warn">`dd.inspect.tag.path` is optional and opt-in. Use it only when your image metadata tracks the running app version reliably; some images set unrelated values.</Callout>
-<Callout type="warn">Legacy alias `dd.registry.lookup.url` is still accepted for compatibility, but prefer `dd.registry.lookup.image`.</Callout>
+<Callout type="warn">`dd.inspect.tag.path` is optional and opt-in. Use it only when your image metadata tracks the running app version reliably; some images set unrelated values. Also note that legacy alias `dd.registry.lookup.url` is still accepted for compatibility, but prefer `dd.registry.lookup.image`.</Callout>
 
 ## Label examples
 
@@ -871,7 +856,7 @@ Icons must be prefixed with:
 - `sh:` or `sh-` for [Selfh.st](https://selfh.st/icons/) (`sh:authentik`, `sh-authelia-light`...) (only works for logo available as `png`)
 - `si:` or `si-` for [Simple icons](https://simpleicons.org/) (`si:mysql`, `si-plex`...)
 
-<Callout type="info">If you want to display Fontawesome icons or Simple icons in Home-Assistant, you need to install first the [HASS-fontawesome](https://github.com/thomasloven/hass-fontawesome) and the [HASS-simpleicons](https://github.com/vigonotion/hass-simpleicons) components.</Callout>
+<Callout type="warn">The [HASS-fontawesome](https://github.com/thomasloven/hass-fontawesome) and [HASS-simpleicons](https://github.com/vigonotion/hass-simpleicons) Home Assistant integrations are deprecated and no longer maintained. Both projects recommend migrating to [hass-custom_icons](https://github.com/thomasloven/hass-custom_icons) instead.</Callout>
 
 <Tabs items={["Docker Compose (Display Name & Icon)", "Docker (Display Name & Icon)"]}>
 <Tab value="Docker Compose (Display Name & Icon)">
@@ -920,20 +905,19 @@ docker run -d --name my_important_service --label 'dd.trigger.include=smtp.gmail
 </Tab>
 </Tabs>
 
-<Callout type="info">`dd.trigger.include=smtp.gmail` is a shorthand for `dd.trigger.include=smtp.gmail:all`</Callout>
-<Callout type="info">`dd.trigger.include=update` (or `dd.trigger.exclude=update`) targets all triggers named `update`, for example `docker.update` and `discord.update`</Callout>
+- `dd.trigger.include=smtp.gmail` is a shorthand for `dd.trigger.include=smtp.gmail:all`
+- `dd.trigger.include=update` (or `dd.trigger.exclude=update`) targets all triggers named `update`, for example `docker.update` and `discord.update`
 
-<Callout type="info">Threshold `all` means that the trigger will run regardless of the nature of the change</Callout>
+**Threshold values:**
 
-<Callout type="info">Threshold `major` means that the trigger will run only if this is a `major`, `minor` or `patch` semver change</Callout>
-
-<Callout type="info">Threshold `minor` means that the trigger will run only if this is a `minor` or `patch` semver change</Callout>
-
-<Callout type="info">Threshold `patch` means that the trigger will run only if this is a `patch` semver change</Callout>
-
-<Callout type="info">Threshold `digest` means that the trigger will run only on digest updates</Callout>
-
-<Callout type="info">Any threshold ending with `-no-digest` excludes digest updates for that threshold</Callout>
+| Threshold | Behavior |
+| --- | --- |
+| `all` | Trigger runs regardless of the nature of the change |
+| `major` | Trigger runs only for `major`, `minor`, or `patch` semver changes |
+| `minor` | Trigger runs only for `minor` or `patch` semver changes |
+| `patch` | Trigger runs only for `patch` semver changes |
+| `digest` | Trigger runs only on digest updates |
+| `*-no-digest` | Any threshold ending with `-no-digest` excludes digest updates for that threshold |
 
 ## Container Runtime Details
 

@@ -37,11 +37,11 @@ The trigger will:
 | `DD_TRIGGER_DOCKERCOMPOSE_{trigger_name}_DIGESTPINNING` | ⚪ | Write digest-pinned compose image references when a digest is available | `true`, `false` | `false` |
 | `DD_TRIGGER_DOCKERCOMPOSE_{trigger_name}_COMPOSEFILEONCE` | ⚪ | Batch compose runtime refresh to one grouped pull/up pass per compose stack/file | `true`, `false` | `false` |
 
-<Callout type="info">This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration). but only supports the `batch` mode.</Callout>
+This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration), but only supports the `batch` mode.
 
-<Callout type="info">The env var keys for `COMPOSEFILEONCE`, `COMPOSEFILELABEL`, `RECONCILIATIONMODE`, and `DIGESTPINNING` are case-insensitive — both the lowercased form (e.g. `composefileonce`) and the camelCase form (e.g. `composeFileOnce`) are accepted.</Callout>
-
-<Callout type="info">Legacy compatibility: compose file label fallback `wud.compose.file` is still accepted when `dd.compose.file` is not present. Prefer `dd.compose.file` for new configs, and use `node dist/index.js config migrate` to rewrite existing labels.</Callout>
+**Notes:**
+- The env var keys for `COMPOSEFILEONCE`, `COMPOSEFILELABEL`, `RECONCILIATIONMODE`, and `DIGESTPINNING` are case-insensitive — both the lowercased form (e.g. `composefileonce`) and the camelCase form (e.g. `composeFileOnce`) are accepted.
+- Legacy compatibility: compose file label fallback `wud.compose.file` is still accepted when `dd.compose.file` is not present. Prefer `dd.compose.file` for new configs, and use `node dist/index.js config migrate` to rewrite existing labels.
 
 ## Auto-detection
 
@@ -58,7 +58,7 @@ Most Docker Compose users do not need to configure the file path at all. As long
 
 <Callout type="warn">Do not forget to mount the docker-compose.yml file in the drydock container.</Callout>
 
-<Callout type="info">The Docker Compose trigger uses the Docker Engine API directly for all runtime operations (pull, stop, recreate). The `docker compose` / `docker-compose` CLI binary is **not required** inside the drydock container.</Callout>
+The Docker Compose trigger uses the Docker Engine API directly for all runtime operations (pull, stop, recreate). The `docker compose` / `docker-compose` CLI binary is **not required** inside the drydock container.
 
 ## Tag vs digest updates
 
@@ -74,7 +74,7 @@ When a tag-based update requires a compose file change, Drydock patches Compose 
 - Comments and surrounding formatting are preserved outside that scalar value.
 - Drydock does not use global string replacement for image tags, so matching strings in other fields (for example environment values) are not rewritten.
 
-<Callout type="info">If a service uses flow-style mapping without an `image` key (for example `nginx: { restart: always }`), Drydock will not auto-insert `image`. Convert that service to block-style YAML first.</Callout>
+If a service uses flow-style mapping without an `image` key (for example `nginx: { restart: always }`), Drydock will not auto-insert `image`. Convert that service to block-style YAML first.
 
 Before persisting a compose mutation, Drydock validates the candidate file by parsing the full compose chain in-process. Invalid candidate configs are not written.
 
@@ -102,7 +102,7 @@ During an update:
 
 The compose file chain for each container is visible in the container detail view of the UI.
 
-<Callout type="info">If only one compose file is used, the chain is a single entry and the behavior is identical to the single-file case.</Callout>
+If only one compose file is used, the chain is a single entry and the behavior is identical to the single-file case.
 
 ## Troubleshooting: `permission denied` (`EACCES`)
 
@@ -134,7 +134,8 @@ services:
       - DD_TRIGGER_DOCKERCOMPOSE_EXAMPLE_FILE=/drydock/5/docker-compose.yml
 ```
 
-<Callout type="info">`COMPOSE_FILES_GID` should match the GID that owns the mounted compose files on the host.</Callout>
+`COMPOSE_FILES_GID` should match the GID that owns the mounted compose files on the host.
+
 <Callout type="warn">Do **not** mount the compose file as read-only (`:ro`) — the trigger must write updated image tags back to the file.</Callout>
 
 ## Examples
