@@ -204,16 +204,24 @@ function confirmDashboardUpdateAll() {
                 Updates Available
               </h2>
             </div>
-            <div class="flex items-center">
-              <button class="text-[0.6875rem] font-medium text-drydock-secondary hover:underline"
-                      @click="navigateTo({ path: ROUTES.CONTAINERS, query: { filterKind: 'any' } })">View all &rarr;</button>
+            <div class="flex items-center gap-3">
               <button v-if="pendingUpdates.length > 0"
                       data-test="dashboard-update-all-btn"
-                      class="text-[0.6875rem] font-medium text-drydock-secondary hover:underline ml-3"
+                      class="inline-flex items-center justify-center px-2 py-1 dd-rounded border text-[0.625rem] font-semibold transition-colors"
+                      :class="dashboardUpdateAllInProgress
+                        ? 'dd-text-muted cursor-not-allowed opacity-60'
+                        : 'dd-text hover:dd-bg-elevated'"
                       :disabled="dashboardUpdateAllInProgress"
                       @click="confirmDashboardUpdateAll()">
-                Update All ({{ pendingUpdates.length }})
+                <AppIcon
+                  :name="dashboardUpdateAllInProgress ? 'spinner' : 'cloud-download'"
+                  :size="11"
+                  class="mr-1"
+                  :class="dashboardUpdateAllInProgress ? 'dd-spin' : ''" />
+                Update all
               </button>
+              <button class="text-[0.6875rem] font-medium text-drydock-secondary hover:underline"
+                      @click="navigateTo({ path: ROUTES.CONTAINERS, query: { filterKind: 'any' } })">View all &rarr;</button>
             </div>
           </div>
 
@@ -224,7 +232,7 @@ function confirmDashboardUpdateAll() {
               { key: 'container', label: 'Container', sortable: false },
               { key: 'version', label: 'Version', sortable: false, align: 'text-center' },
               { key: 'type', label: 'Type', sortable: false },
-              { key: 'actions', label: '', sortable: false },
+              { key: 'actions', label: 'Actions', sortable: false },
             ]"
             :rows="recentUpdates"
             row-key="id"
@@ -300,10 +308,16 @@ function confirmDashboardUpdateAll() {
             <template #cell-actions="{ row }">
               <button v-if="row.status === 'pending'"
                       data-test="dashboard-update-btn"
-                      class="p-1 dd-rounded transition-colors hover:dd-bg-elevated"
+                      class="w-7 h-7 dd-rounded-sm flex items-center justify-center transition-colors"
+                      :class="dashboardUpdateInProgress === row.id || dashboardUpdateAllInProgress
+                        ? 'dd-text-muted opacity-50 cursor-not-allowed'
+                        : 'dd-text-muted hover:dd-text-success hover:dd-bg-elevated'"
                       :disabled="dashboardUpdateInProgress === row.id || dashboardUpdateAllInProgress"
                       @click.stop="confirmDashboardUpdate(row)">
-                <AppIcon name="update" :size="12" class="text-drydock-secondary" />
+                <AppIcon
+                  :name="dashboardUpdateInProgress === row.id ? 'spinner' : 'cloud-download'"
+                  :size="14"
+                  :class="dashboardUpdateInProgress === row.id ? 'dd-spin' : ''" />
               </button>
             </template>
 

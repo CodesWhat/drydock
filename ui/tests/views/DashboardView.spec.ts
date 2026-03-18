@@ -1121,7 +1121,10 @@ describe('DashboardView', () => {
       const wrapper = await mountDashboard([
         makeContainer({ updateKind: 'minor', newTag: '1.2.0' }),
       ]);
-      const recentUpdatesViewAll = wrapper.find('[data-widget-id="recent-updates"]').find('button');
+      const recentUpdatesViewAll = wrapper
+        .find('[data-widget-id="recent-updates"]')
+        .findAll('button')
+        .filter((b) => b.text().includes('View all'))[0];
       const updateBreakdownViewAll = wrapper
         .find('[data-widget-id="update-breakdown"]')
         .find('button');
