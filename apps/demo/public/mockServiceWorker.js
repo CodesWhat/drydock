@@ -7,7 +7,7 @@
  * - Please do NOT modify this file.
  */
 
-const PACKAGE_VERSION = '2.12.10';
+const PACKAGE_VERSION = '2.12.13';
 const INTEGRITY_CHECKSUM = '4db4a41e972cec1b64cc569c66952d82';
 const IS_MOCKED_RESPONSE = Symbol('isMockedResponse');
 const activeClientIds = new Set();
@@ -21,10 +21,6 @@ addEventListener('activate', (event) => {
 });
 
 addEventListener('message', async (event) => {
-  if (event.origin !== self.location.origin) {
-    return;
-  }
-
   const clientId = Reflect.get(event.source || {}, 'id');
 
   if (!clientId || !self.clients) {

@@ -1,6 +1,6 @@
 {
   "name": "drydock-app",
-  "version": "1.4.4",
+  "version": "1.4.5",
   "description": "Drydock backend — Docker container update manager",
   "engines": {
     "node": ">=24.0.0"
@@ -20,8 +20,8 @@
   "repository": "CodesWhat/drydock",
   "license": "AGPL-3.0-only",
   "dependencies": {
-    "@aws-sdk/client-ecr": "^3.1003.0",
-    "@slack/web-api": "^7.14.1",
+    "@aws-sdk/client-ecr": "^3.1011.0",
+    "@slack/web-api": "^7.15.0",
     "ajv": "^8.18.0",
     "ajv-formats": "^3.0.1",
     "apache-md5": "1.1.8",
@@ -35,7 +35,7 @@
     "dockerode": "4.0.9",
     "express": "5.2.1",
     "express-healthcheck": "0.1.0",
-    "express-rate-limit": "^8.3.0",
+    "express-rate-limit": "^8.3.1",
     "express-session": "1.19.0",
     "flat": "^6.0.1",
     "gotify-client": "0.4.2",
@@ -48,7 +48,7 @@
     "mqtt": "5.15.0",
     "nocache": "4.0.0",
     "node-cron": "4.2.1",
-    "nodemailer": "8.0.1",
+    "nodemailer": "8.0.2",
     "openid-client": "6.8.2",
     "p-limit": "^7.3.0",
     "parse-docker-image-name": "3.0.0",
@@ -63,14 +63,14 @@
     "semver": "7.7.4",
     "set-value": "4.1.0",
     "sort-es": "1.7.18",
-    "undici": "^7.22.0",
+    "undici": "^7.24.4",
     "unix-crypt-td-js": "1.1.4",
     "uuid": "^13.0.0",
     "yaml": "2.8.2"
   },
   "overrides": {
     "body-parser": "2.2.2",
-    "fast-xml-parser": "5.3.8",
+    "fast-xml-parser": "5.5.6",
     "qs": "6.15.0"
   },
   "devDependencies": {
@@ -79,15 +79,15 @@
     "@types/dockerode": "4.0.1",
     "@types/express": "^5.0.6",
     "@types/express-session": "^1.18.2",
-    "@types/node": "^25.3.5",
+    "@types/node": "^25.5.0",
     "@types/node-cron": "^3.0.11",
     "@types/nodemailer": "^7.0.11",
     "@types/passport": "^1.0.17",
     "@types/semver": "^7.7.1",
     "@types/yaml": "^1.9.7",
     "@vitest/coverage-v8": "^4.1.0",
-    "fast-check": "^4.5.3",
-    "knip": "^5.86.0",
+    "fast-check": "^4.6.0",
+    "knip": "^5.87.0",
     "nodemon": "3.1.14",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3",
