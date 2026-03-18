@@ -20,6 +20,7 @@ const HASS_LATEST_VERSION_TEMPLATE =
   '{% if value_json.update_kind_kind == "digest" %}{{ value_json.result_digest[:15] }}{% else %}{{ value_json.result_tag }}{% endif %}';
 const HASS_DEFAULT_ENTITY_PICTURE =
   'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/whale-logo.png';
+export const HASS_CONTAINER_STATE_TOPIC_TRACK_LIMIT = 10_000;
 
 interface HassClient {
   publish: (
@@ -289,7 +290,27 @@ class Hass {
     if (!containerId) {
       return;
     }
+    if (this.containerStateTopicById.has(containerId)) {
+      this.containerStateTopicById.delete(containerId);
+    }
     this.containerStateTopicById.set(containerId, stateTopic);
+    this.enforceContainerStateTopicTrackLimit();
+  }
+
+  private enforceContainerStateTopicTrackLimit() {
+    const overLimitBy = this.containerStateTopicById.size - HASS_CONTAINER_STATE_TOPIC_TRACK_LIMIT;
+    if (overLimitBy <= 0) {
+      return;
+    }
+
+    let removedEntries = 0;
+    for (const trackedContainerId of this.containerStateTopicById.keys()) {
+      this.containerStateTopicById.delete(trackedContainerId);
+      removedEntries += 1;
+      if (removedEntries >= overLimitBy) {
+        break;
+      }
+    }
   }
 
   private clearTrackedContainerStateTopic(container: { id?: unknown }) {
