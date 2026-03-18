@@ -10,7 +10,7 @@ const kafka = new Kafka();
 const configurationValid = {
   brokers: 'broker1:9000, broker2:9000',
   topic: 'drydock-container',
-  clientId: 'drydock',
+  clientid: 'drydock',
   ssl: false,
   threshold: 'all',
   mode: 'simple',
@@ -83,7 +83,7 @@ test('maskConfiguration should mask sensitive data', async () => {
   kafka.configuration = {
     brokers: 'broker1:9000, broker2:9000',
     topic: 'drydock-container',
-    clientId: 'drydock',
+    clientid: 'drydock',
     ssl: false,
     authentication: {
       type: 'PLAIN',
@@ -94,7 +94,7 @@ test('maskConfiguration should mask sensitive data', async () => {
   expect(kafka.maskConfiguration()).toEqual({
     brokers: 'broker1:9000, broker2:9000',
     topic: 'drydock-container',
-    clientId: 'drydock',
+    clientid: 'drydock',
     ssl: false,
     authentication: {
       type: 'PLAIN',
@@ -108,13 +108,13 @@ test('maskConfiguration should not fail if no auth provided', async () => {
   kafka.configuration = {
     brokers: 'broker1:9000, broker2:9000',
     topic: 'drydock-container',
-    clientId: 'drydock',
+    clientid: 'drydock',
     ssl: false,
   };
   expect(kafka.maskConfiguration()).toEqual({
     brokers: 'broker1:9000, broker2:9000',
     topic: 'drydock-container',
-    clientId: 'drydock',
+    clientid: 'drydock',
     ssl: false,
   });
 });
@@ -133,7 +133,7 @@ test('initTrigger should init kafka client', async () => {
   kafka.configuration = {
     brokers: 'broker1:9000, broker2:9000',
     topic: 'drydock-container',
-    clientId: 'drydock',
+    clientid: 'drydock',
     ssl: false,
   };
   await kafka.initTrigger();
@@ -159,7 +159,7 @@ test('initTrigger should init kafka client with auth when configured', async () 
   kafka.configuration = {
     brokers: 'broker1:9000, broker2:9000',
     topic: 'drydock-container',
-    clientId: 'drydock',
+    clientid: 'drydock',
     ssl: false,
     authentication: {
       type: 'PLAIN',
@@ -195,7 +195,7 @@ test('initTrigger should fallback to plain mechanism for unknown auth type', asy
   kafka.configuration = {
     brokers: 'broker1:9000, broker2:9000',
     topic: 'drydock-container',
-    clientId: 'drydock',
+    clientid: 'drydock',
     ssl: false,
     authentication: {
       type: 'UNKNOWN',
@@ -278,7 +278,7 @@ test('producer lifecycle should connect on init and disconnect on deregister', a
   });
   kafka.configuration = {
     brokers: 'broker1:9000, broker2:9000',
-    clientId: 'drydock',
+    clientid: 'drydock',
     ssl: false,
     topic: 'lifecycle-topic',
   };

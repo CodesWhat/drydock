@@ -62,9 +62,12 @@ class Apprise extends Trigger {
     return this.joi
       .object()
       .keys({
-        url: this.joi.string().uri({
-          scheme: ['http', 'https'],
-        }),
+        url: this.joi
+          .string()
+          .uri({
+            scheme: ['http', 'https'],
+          })
+          .required(),
         urls: this.joi.string(),
         config: this.joi.string(),
         tag: this.joi.string(),

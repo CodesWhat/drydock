@@ -16,8 +16,10 @@ The `apprise` trigger lets you send container update notifications via the [Appr
 | --------------------------------------------- | :--------------: | ------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
 | `DD_TRIGGER_APPRISE_{trigger_name}_URL` | 🔴 | The Base URL of the Apprise API | | |
 | `DD_TRIGGER_APPRISE_{trigger_name}_URLS` | ⚪ | The comma separated list of Apprise service urls | [See the list of the supported Apprise notification URLs](https://github.com/caronc/apprise#popular-notification-services) | |
-| `DD_TRIGGER_APPRISE_{trigger_name}_CONFIG` | ⚪ | The name of an Apprise yaml configuration | [See Apprise persistent configuration documentation](https://github.com/caronc/apprise/wiki/config_yaml) | |
-| `DD_TRIGGER_APPRISE_{trigger_name}_TAG` | ⚪ | The optional tags(s) to expand when using an Apprise yaml configuration | [See Apprise persistent configuration documentation](https://github.com/caronc/apprise/wiki/config_yaml) | |
+| `DD_TRIGGER_APPRISE_{trigger_name}_CONFIG` | ⚪ | The name of an Apprise yaml configuration | [See Apprise persistent configuration documentation](https://appriseit.com/getting-started/configuration/) | |
+| `DD_TRIGGER_APPRISE_{trigger_name}_TAG` | ⚪ | The optional tags(s) to expand when using an Apprise yaml configuration | [See Apprise persistent configuration documentation](https://appriseit.com/getting-started/configuration/) | |
+
+<Callout type="warn">Either `URLS` or `CONFIG` must be set, but not both. These options are mutually exclusive.</Callout>
 
 <Callout type="info">This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration).</Callout>
 
@@ -52,7 +54,7 @@ docker run \
 
 ### Use a persistent YAML configuration
 
-Declare a YAML Apprise configuration ([see here](https://github.com/caronc/apprise/wiki/config_yaml)) ; let's call it `dd.yml` for example.
+Declare a YAML Apprise configuration ([see here](https://appriseit.com/getting-started/configuration/)) ; let's call it `dd.yml` for example.
 
 ```yaml
 # dd.yml example

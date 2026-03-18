@@ -31,7 +31,7 @@ class Kafka extends Trigger {
     return this.joi.object().keys({
       brokers: this.joi.string().required(),
       topic: this.joi.string().default('drydock-container'),
-      clientId: this.joi.string().default('drydock'),
+      clientid: this.joi.string().default('drydock'),
       ssl: this.joi.boolean().default(false),
       authentication: this.joi.object({
         type: this.joi
@@ -55,7 +55,7 @@ class Kafka extends Trigger {
       ...this.configuration,
       brokers: this.configuration.brokers,
       topic: this.configuration.topic,
-      clientId: this.configuration.clientId,
+      clientid: this.configuration.clientid,
       ssl: this.configuration.ssl,
       authentication: this.configuration.authentication
         ? {
@@ -73,7 +73,7 @@ class Kafka extends Trigger {
   async initTrigger() {
     const brokers = this.configuration.brokers.split(',').map((broker) => broker.trim());
     const clientConfiguration: KafkaConfig = {
-      clientId: this.configuration.clientId,
+      clientId: this.configuration.clientid,
       brokers,
       ssl: this.configuration.ssl,
     };
