@@ -4,10 +4,13 @@ import type { Container } from '@/types/container';
 import DashboardView from '@/views/DashboardView.vue';
 import { mountWithPlugins } from '../helpers/mount';
 
-const { mockRouterPush, mockBuildDashboardContainerMetrics } = vi.hoisted(() => ({
-  mockRouterPush: vi.fn(),
-  mockBuildDashboardContainerMetrics: vi.fn(),
-}));
+const { mockRouterPush, mockBuildDashboardContainerMetrics, mockUpdateContainer } = vi.hoisted(
+  () => ({
+    mockRouterPush: vi.fn(),
+    mockBuildDashboardContainerMetrics: vi.fn(),
+    mockUpdateContainer: vi.fn(),
+  }),
+);
 
 vi.mock('vue-router', () => ({
   useRouter: () => ({ push: mockRouterPush }),
@@ -33,6 +36,10 @@ vi.mock('@/services/watcher', () => ({
 
 vi.mock('@/services/registry', () => ({
   getAllRegistries: vi.fn(),
+}));
+
+vi.mock('@/services/container-actions', () => ({
+  updateContainer: mockUpdateContainer,
 }));
 
 vi.mock('@/utils/container-mapper', () => ({
@@ -1162,6 +1169,60 @@ describe('DashboardView', () => {
       await expect(getContainerGroups()).rejects.toThrow(
         'Failed to get container groups: Bad Gateway',
       );
+    });
+  });
+
+  describe('dashboard update actions', () => {
+    const pendingContainer = makeContainer({
+      id: 'c-pending',
+      name: 'nginx',
+      newTag: '1.1.0',
+      updateKind: 'minor',
+    });
+
+    const upToDateContainer = makeContainer({
+      id: 'c-uptodate',
+      name: 'redis',
+      newTag: null,
+      updateKind: null,
+    });
+
+    it('shows Update button for containers with pending updates', async () => {
+      const wrapper = await mountDashboard(
+        [pendingContainer],
+        [],
+        {},
+        {
+          recentStatuses: { nginx: 'pending' },
+        },
+      );
+      const updateButtons = wrapper.findAll('[data-test="dashboard-update-btn"]');
+      expect(updateButtons.length).toBeGreaterThan(0);
+    });
+
+    it('does not show Update button for containers without updates', async () => {
+      const wrapper = await mountDashboard([upToDateContainer]);
+      const updateButtons = wrapper.findAll('[data-test="dashboard-update-btn"]');
+      expect(updateButtons.length).toBe(0);
+    });
+
+    it('shows Update All button when pending updates exist', async () => {
+      const wrapper = await mountDashboard(
+        [pendingContainer],
+        [],
+        {},
+        {
+          recentStatuses: { nginx: 'pending' },
+        },
+      );
+      const updateAllBtn = wrapper.find('[data-test="dashboard-update-all-btn"]');
+      expect(updateAllBtn.exists()).toBe(true);
+    });
+
+    it('does not show Update All button when no pending updates', async () => {
+      const wrapper = await mountDashboard([upToDateContainer]);
+      const updateAllBtn = wrapper.find('[data-test="dashboard-update-all-btn"]');
+      expect(updateAllBtn.exists()).toBe(false);
     });
   });
 });

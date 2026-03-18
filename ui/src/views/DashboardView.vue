@@ -1,11 +1,17 @@
 <script setup lang="ts">
+import { computed, ref } from 'vue';
 import { type RouteLocationRaw, useRouter } from 'vue-router';
+import { useConfirmDialog } from '../composables/useConfirmDialog';
 import { ROUTES } from '../router/routes';
+import { updateContainer } from '../services/container-actions';
 import { useDashboardComputed } from './dashboard/useDashboardComputed';
 import { useDashboardData } from './dashboard/useDashboardData';
 import { useDashboardWidgetOrder } from './dashboard/useDashboardWidgetOrder';
 
 const router = useRouter();
+const confirm = useConfirmDialog();
+const dashboardUpdateInProgress = ref<string | null>(null);
+const dashboardUpdateAllInProgress = ref(false);
 
 function navigateTo(route: RouteLocationRaw) {
   router.push(route);
@@ -65,6 +71,48 @@ const {
   serverInfo,
   watchers,
 });
+
+const pendingUpdates = computed(() => recentUpdates.value.filter((r) => r.status === 'pending'));
+
+function confirmDashboardUpdate(row: { id: string; name: string }) {
+  confirm.require({
+    header: 'Update Container',
+    message: `Update ${row.name} now? This will apply the latest discovered image.`,
+    severity: 'warn',
+    acceptLabel: 'Update',
+    rejectLabel: 'Cancel',
+    accept: async () => {
+      dashboardUpdateInProgress.value = row.id;
+      try {
+        await updateContainer(row.id);
+        await fetchDashboardData();
+      } finally {
+        dashboardUpdateInProgress.value = null;
+      }
+    },
+  });
+}
+
+function confirmDashboardUpdateAll() {
+  confirm.require({
+    header: 'Update All Containers',
+    message: `${pendingUpdates.value.length} containers will be updated. Continue?`,
+    severity: 'warn',
+    acceptLabel: 'Update All',
+    rejectLabel: 'Cancel',
+    accept: async () => {
+      dashboardUpdateAllInProgress.value = true;
+      try {
+        for (const row of pendingUpdates.value) {
+          await updateContainer(row.id);
+        }
+        await fetchDashboardData();
+      } finally {
+        dashboardUpdateAllInProgress.value = false;
+      }
+    },
+  });
+}
 </script>
 
 <template>
@@ -156,8 +204,17 @@ const {
                 Updates Available
               </h2>
             </div>
-            <button class="text-[0.6875rem] font-medium text-drydock-secondary hover:underline"
-                    @click="navigateTo({ path: ROUTES.CONTAINERS, query: { filterKind: 'any' } })">View all &rarr;</button>
+            <div class="flex items-center">
+              <button class="text-[0.6875rem] font-medium text-drydock-secondary hover:underline"
+                      @click="navigateTo({ path: ROUTES.CONTAINERS, query: { filterKind: 'any' } })">View all &rarr;</button>
+              <button v-if="pendingUpdates.length > 0"
+                      data-test="dashboard-update-all-btn"
+                      class="text-[0.6875rem] font-medium text-drydock-secondary hover:underline ml-3"
+                      :disabled="dashboardUpdateAllInProgress"
+                      @click="confirmDashboardUpdateAll()">
+                Update All ({{ pendingUpdates.length }})
+              </button>
+            </div>
           </div>
 
           <div class="flex-1 min-h-0 overflow-y-auto">
@@ -167,6 +224,7 @@ const {
               { key: 'container', label: 'Container', sortable: false },
               { key: 'version', label: 'Version', sortable: false, align: 'text-center' },
               { key: 'type', label: 'Type', sortable: false },
+              { key: 'actions', label: '', sortable: false },
             ]"
             :rows="recentUpdates"
             row-key="id"
@@ -237,6 +295,16 @@ const {
                    :size="12" class="mr-1" />
                 {{ row.updateKind ?? 'unknown' }}
               </span>
+            </template>
+
+            <template #cell-actions="{ row }">
+              <button v-if="row.status === 'pending'"
+                      data-test="dashboard-update-btn"
+                      class="p-1 dd-rounded transition-colors hover:dd-bg-elevated"
+                      :disabled="dashboardUpdateInProgress === row.id || dashboardUpdateAllInProgress"
+                      @click.stop="confirmDashboardUpdate(row)">
+                <AppIcon name="update" :size="12" class="text-drydock-secondary" />
+              </button>
             </template>
 
             <template #empty>
