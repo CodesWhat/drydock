@@ -138,7 +138,7 @@ const {
              :data-widget-order="widgetOrderIndex('recent-updates')"
              draggable="true"
              aria-label="Updates Available widget"
-             class="dashboard-widget xl:col-span-2 dd-rounded overflow-hidden min-w-0"
+             class="dashboard-widget xl:col-span-2 dd-rounded overflow-hidden min-w-0 flex flex-col"
              :class="{ 'opacity-60': draggedWidgetId === 'recent-updates' }"
              :style="{
                ...widgetOrderStyle('recent-updates'),
@@ -160,6 +160,7 @@ const {
                     @click="navigateTo({ path: ROUTES.CONTAINERS, query: { filterKind: 'any' } })">View all &rarr;</button>
           </div>
 
+          <div class="flex-1 min-h-0 overflow-y-auto">
           <DataTable
             :columns="[
               { key: 'icon', label: '', icon: true },
@@ -170,7 +171,6 @@ const {
             :rows="recentUpdates"
             row-key="id"
             compact
-            max-height="340px"
           >
             <template #cell-icon="{ row }">
               <ContainerIcon :icon="row.icon" :size="28" />
@@ -245,6 +245,7 @@ const {
               </div>
             </template>
           </DataTable>
+          </div>
         </div>
 
         <!-- Security Summary Widget (1/3) -->
