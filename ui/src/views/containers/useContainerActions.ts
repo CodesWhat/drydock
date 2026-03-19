@@ -209,7 +209,10 @@ async function deleteContainerState(args: {
     await args.loadContainers();
     return true;
   } catch (e: unknown) {
-    args.inputError.value = errorMessage(e, `Failed to delete ${args.name}`);
+    const msg = errorMessage(e, `Failed to delete ${args.name}`);
+    args.inputError.value = msg;
+    const toast = useToast();
+    toast.error(`Delete failed: ${args.name}`, msg);
     return false;
   } finally {
     args.actionInProgress.value = null;

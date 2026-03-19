@@ -39,7 +39,7 @@ function toneStyles(tone: ToastTone) {
 
 <template>
   <Teleport to="body">
-    <div class="fixed top-3 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2 w-[calc(100%-2rem)] max-w-lg pointer-events-none">
+    <div class="fixed top-16 left-1/2 -translate-x-1/2 z-[60] flex flex-col gap-2 w-[calc(100%-2rem)] max-w-lg pointer-events-none">
       <TransitionGroup name="toast">
         <div
           v-for="toast in toasts"
