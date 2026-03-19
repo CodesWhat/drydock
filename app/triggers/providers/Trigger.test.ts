@@ -2172,8 +2172,8 @@ describe('digest mode', () => {
       changed: true,
     });
 
-    // Simulate update applied for 'app'
-    await trigger.handleContainerUpdateAppliedEvent('app');
+    // Simulate update applied for 'app' — uses full business ID (watcher_name)
+    await trigger.handleContainerUpdateAppliedEvent('test_app');
 
     // Flush should only contain 'web'
     const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);

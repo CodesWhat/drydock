@@ -5,6 +5,7 @@ import logger from '../log/index.js';
 import { sanitizeLogParam } from '../log/sanitize.js';
 import type { Container } from '../model/container.js';
 import * as registry from '../registry/index.js';
+import Trigger from '../triggers/providers/Trigger.js';
 import { getErrorMessage } from '../util/error.js';
 import * as component from './component.js';
 import { sendErrorResponse } from './error-response.js';
@@ -159,6 +160,11 @@ export async function runTrigger(req: Request<RunTriggerParams>, res: Response) 
     };
   }
 
+  if (Trigger.isRollbackContainer(containerToTrigger)) {
+    sendErrorResponse(res, 409, 'Cannot update temporary rollback container');
+    return;
+  }
+
   try {
     log.debug(
       `Running trigger ${sanitizeLogParam(triggerType)}.${sanitizeLogParam(triggerName)} (container=${sanitizeLogParam(JSON.stringify(containerToTrigger), 500)})`,
@@ -201,6 +207,11 @@ async function runRemoteTrigger(req: Request<RunRemoteTriggerParams>, res: Respo
     return;
   }
   const containerToTrigger = validationResult.value as unknown as Container;
+
+  if (Trigger.isRollbackContainer(containerToTrigger)) {
+    sendErrorResponse(res, 409, 'Cannot update temporary rollback container');
+    return;
+  }
 
   try {
     await agentClient.runRemoteTrigger(containerToTrigger, triggerType, triggerName);

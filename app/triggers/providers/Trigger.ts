@@ -358,15 +358,10 @@ class Trigger extends Component {
   }
 
   async handleContainerUpdateAppliedEvent(containerName: string) {
-    // Evict from digest buffer — container is already updated, no need to notify
-    if (this.digestBuffer.size > 0) {
-      for (const [key, container] of this.digestBuffer) {
-        if (container.name === containerName) {
-          this.digestBuffer.delete(key);
-          this.log.debug(`Evicted ${containerName} from digest buffer (update applied)`);
-          break;
-        }
-      }
+    // Evict from digest buffer — container is already updated, no need to notify.
+    // containerName is the full business ID (watcher_name), matching the buffer key.
+    if (this.digestBuffer.delete(containerName)) {
+      this.log.debug(`Evicted ${containerName} from digest buffer (update applied)`);
     }
 
     await this.dispatchContainerForEvent(
