@@ -1,0 +1,54 @@
+---
+title: "GITEA"
+description: "The gitea registry lets you configure a self-hosted Gitea integration."
+---
+
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+![logo](/docs/assets/configuration/registries/gitea/gitea.png)
+
+The `gitea` registry lets you configure a self-hosted [Gitea](https://gitea.com) integration.
+
+## Variables
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --- | :---: | --- | --- | --- |
+| `DD_REGISTRY_GITEA_{REGISTRY_NAME}_URL` | 🔴 | Registry URL (e.g. `https://gitea.acme.com`) | | |
+| `DD_REGISTRY_GITEA_{REGISTRY_NAME}_LOGIN` | ⚪ | Gitea username | DD_REGISTRY_GITEA_\{REGISTRY_NAME\}_PASSWORD must be defined | |
+| `DD_REGISTRY_GITEA_{REGISTRY_NAME}_PASSWORD` | ⚪ | Gitea password or personal access token | DD_REGISTRY_GITEA_\{REGISTRY_NAME\}_LOGIN must be defined | |
+| `DD_REGISTRY_GITEA_{REGISTRY_NAME}_AUTH` | ⚪ | Base64-encoded `login:password` string | DD_REGISTRY_GITEA_\{REGISTRY_NAME\}_LOGIN/PASSWORD must not be defined | |
+| `DD_REGISTRY_GITEA_{REGISTRY_NAME}_CAFILE` | ⚪ | Path to custom CA certificate file | | |
+| `DD_REGISTRY_GITEA_{REGISTRY_NAME}_INSECURE` | ⚪ | Allow insecure (non-TLS) connections | `true`, `false` | `false` |
+| `DD_REGISTRY_GITEA_{REGISTRY_NAME}_CLIENTCERT` | ⚪ | Path to client certificate file for mTLS | | |
+| `DD_REGISTRY_GITEA_{REGISTRY_NAME}_CLIENTKEY` | ⚪ | Path to client key file for mTLS | DD_REGISTRY_GITEA_\{REGISTRY_NAME\}_CLIENTCERT must be defined | |
+
+## Examples
+
+### Configure
+
+<Tabs items={["Docker Compose", "Docker"]}>
+<Tab value="Docker Compose">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    environment:
+      - DD_REGISTRY_GITEA_PRIVATE_URL=https://gitea.acme.com
+      - DD_REGISTRY_GITEA_PRIVATE_LOGIN=john
+      - DD_REGISTRY_GITEA_PRIVATE_PASSWORD=doe
+```
+
+</Tab>
+<Tab value="Docker">
+```bash
+docker run \
+  -e "DD_REGISTRY_GITEA_PRIVATE_URL=https://gitea.acme.com/" \
+  -e "DD_REGISTRY_GITEA_PRIVATE_LOGIN=john" \
+  -e "DD_REGISTRY_GITEA_PRIVATE_PASSWORD=doe" \
+  ...
+  codeswhat/drydock
+```
+</Tab>
+</Tabs>

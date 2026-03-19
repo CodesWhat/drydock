@@ -1,6 +1,6 @@
 {
   "name": "drydock-ui",
-  "version": "1.4.5",
+  "version": "1.5.0",
   "description": "Drydock dashboard — Vue 3 + Tailwind CSS 4 SPA",
   "repository": "CodesWhat/drydock",
   "engines": {
@@ -29,15 +29,13 @@
   },
   "dependencies": {
     "@fontsource/ibm-plex-mono": "^5.2.7",
+    "grid-layout-plus": "^1.1.1",
     "iconify-icon": "^3.0.2",
     "tailwindcss": "^4.2.1",
     "vue": "^3.5.30",
     "vue-router": "^5.0.2"
   },
   "devDependencies": {
-    "@stryker-mutator/core": "^9.6.0",
-    "@stryker-mutator/typescript-checker": "^9.6.0",
-    "@stryker-mutator/vitest-runner": "^9.6.0",
     "@fontsource/comic-mono": "^5.2.5",
     "@fontsource/commit-mono": "^5.2.5",
     "@fontsource/inconsolata": "^5.2.7",
@@ -51,6 +49,9 @@
     "@iconify-json/tabler": "^1.2.31",
     "@storybook/vue3": "^10.2.19",
     "@storybook/vue3-vite": "^10.2.19",
+    "@stryker-mutator/core": "^9.6.0",
+    "@stryker-mutator/typescript-checker": "^9.6.0",
+    "@stryker-mutator/vitest-runner": "^9.6.0",
     "@tailwindcss/vite": "^4.2.1",
     "@types/node": "^25.5.0",
     "@vitejs/plugin-vue": "^6.0.5",

@@ -1,0 +1,46 @@
+---
+title: "Teams"
+description: "The teams trigger posts container update notifications to a Microsoft Teams incoming webhook using Adaptive Cards."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+The `teams` trigger posts container update notifications to a Microsoft Teams incoming webhook using Adaptive Cards.
+
+## Variables
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --- | :---: | --- | --- | --- |
+| `DD_TRIGGER_TEAMS_{trigger_name}_URL` | 🔴 | Incoming webhook URL | `https` URL | |
+| `DD_TRIGGER_TEAMS_{trigger_name}_CARDVERSION` | ⚪ | Adaptive Card schema version | Version string | `1.4` |
+| `DD_TRIGGER_TEAMS_{trigger_name}_DISABLETITLE` | ⚪ | Disable title to keep full message-body control | `true`, `false` | `false` |
+
+<Callout type="info">This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration).</Callout>
+
+<Callout type="info">See the [Microsoft Teams incoming webhooks documentation](https://learn.microsoft.com/en-us/microsoftteams/platform/webhooks-and-connectors/how-to/add-incoming-webhook) for endpoint setup details.</Callout>
+
+## Examples
+
+<Tabs items={["Docker Compose", "Docker"]}>
+<Tab value="Docker Compose">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    environment:
+      - DD_TRIGGER_TEAMS_LOCAL_URL=https://outlook.office.com/webhook/abc123
+```
+
+</Tab>
+<Tab value="Docker">
+```bash
+docker run \
+  -e DD_TRIGGER_TEAMS_LOCAL_URL="https://outlook.office.com/webhook/abc123" \
+  ...
+  codeswhat/drydock
+```
+</Tab>
+</Tabs>

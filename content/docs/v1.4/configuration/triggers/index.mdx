@@ -1,0 +1,220 @@
+---
+title: "Triggers"
+description: "Triggers are responsible for performing actions when a new container version is found."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+Triggers are responsible for performing actions when a new container version is found.
+  
+Triggers are enabled using environment variables.
+
+```bash
+DD_TRIGGER_{{ trigger_type }}_{{trigger_name }}_{{ trigger_configuration_item }}=XXX
+```
+
+<Callout type="warn">Multiple triggers of the same type can be configured (for example multiple Smtp addresses).
+You just need to give them different names.</Callout>
+
+### Available triggers
+
+**Update actions:**
+- [**Docker**](/docs/configuration/triggers/docker) -- Update containers via the Docker Engine API
+- [**Docker Compose**](/docs/configuration/triggers/docker-compose) -- Update containers managed by Docker Compose
+
+**Messaging & notifications:**
+- [**Apprise**](/docs/configuration/triggers/apprise) -- Multi-provider notification relay
+- [**Command**](/docs/configuration/triggers/command) -- Execute a shell command
+- [**Discord**](/docs/configuration/triggers/discord) -- Discord webhook
+- [**Google Chat**](/docs/configuration/triggers/google-chat) -- Google Chat webhook
+- [**Gotify**](/docs/configuration/triggers/gotify) -- Gotify push notification
+- [**HTTP**](/docs/configuration/triggers/http) -- Generic HTTP request
+- [**IFTTT**](/docs/configuration/triggers/ifttt) -- IFTTT webhook
+- [**Kafka**](/docs/configuration/triggers/kafka) -- Apache Kafka topic
+- [**Matrix**](/docs/configuration/triggers/matrix) -- Matrix room message
+- [**Mattermost**](/docs/configuration/triggers/mattermost) -- Mattermost webhook
+- [**MQTT**](/docs/configuration/triggers/mqtt) -- MQTT topic
+- [**ntfy**](/docs/configuration/triggers/ntfy) -- ntfy push notification
+- [**Pushover**](/docs/configuration/triggers/pushover) -- Pushover notification
+- [**Rocket.Chat**](/docs/configuration/triggers/rocketchat) -- Rocket.Chat webhook
+- [**Slack**](/docs/configuration/triggers/slack) -- Slack webhook
+- [**SMTP**](/docs/configuration/triggers/smtp) -- Email notification
+- [**Teams**](/docs/configuration/triggers/teams) -- Microsoft Teams webhook
+- [**Telegram**](/docs/configuration/triggers/telegram) -- Telegram bot message
+
+## Common trigger configuration
+
+All implemented triggers, in addition to their specific configuration, also support the following common configuration variables.
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --------------------------------------------------------- | :--------------: | ----------------------------------------------------------------------------------------------- | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DD_TRIGGER_{trigger_type}_{trigger_name}_AUTO` | ⚪ | `true` to automatically execute the trigger. `false` to manually execute it (from UI, API...) | `true`, `false` | `true` |
+| `DD_TRIGGER_{trigger_type}_{trigger_name}_BATCHTITLE` | ⚪ | The template to use to render the title of the notification (batch mode) | String template with placeholders `${count}` | `${containers.length} updates available` |
+| `DD_TRIGGER_{trigger_type}_{trigger_name}_MODE` | ⚪ | Trigger for each container update or trigger once with all available updates as a list | `simple`, `batch` | `simple` |
+| `DD_TRIGGER_{trigger_type}_{trigger_name}_ONCE` | ⚪ | Run trigger once (do not repeat previous results) | `true`, `false` | `true` |
+| `DD_TRIGGER_{trigger_type}_{trigger_name}_ORDER` | ⚪ | Trigger execution order (lower runs first) | Number | `100` |
+| `DD_TRIGGER_{trigger_type}_{trigger_name}_SIMPLEBODY` | ⚪ | The template to use to render the body of the notification | JS string template with vars `container` | `Container ${container.name} running with ${container.updateKind.kind} ${container.updateKind.localValue} can be updated to ${container.updateKind.kind} ${container.updateKind.remoteValue}${container.result && container.result.link ? "\\n" + container.result.link : ""}` |
+| `DD_TRIGGER_{trigger_type}_{trigger_name}_SIMPLETITLE` | ⚪ | The template to use to render the title of the notification (simple mode) | JS string template with vars `${containers}` | `New ${container.updateKind.kind} found for container ${container.name}` |
+| `DD_TRIGGER_{trigger_type}_{trigger_name}_THRESHOLD` | ⚪ | The threshold to reach to run the trigger | `all`, `major`, `major-only`, `minor`, `minor-only`, `patch`, `digest`, and `*-no-digest` variants (`major-no-digest`, `major-only-no-digest`, `minor-no-digest`, `minor-only-no-digest`, `patch-no-digest`) | `all` |
+| `DD_TRIGGER_{trigger_type}_{trigger_name}_RESOLVENOTIFICATIONS` | ⚪ | Auto-dismiss the notification after the container is successfully updated | `true`, `false` | `false` |
+
+### Threshold reference
+
+| Threshold | Fires on |
+|-----------|----------|
+| `all` | Any change (default) |
+| `major` | Major, minor, or patch semver change |
+| `major-only` | Major only |
+| `minor` | Any semver change that is not major (minor, patch, prerelease) |
+| `minor-only` | Minor only |
+| `patch` | Any semver change that is not major or minor (patch, prerelease) |
+| `digest` | Digest changes only |
+
+Any threshold can be suffixed with `-no-digest` to exclude digest-only updates (e.g. `major-no-digest`, `minor-only-no-digest`). Updates with an `unknown` update kind are always filtered out regardless of the threshold setting.
+
+### Notes
+
+- `RESOLVENOTIFICATIONS` is currently implemented for Gotify (auto-deletes the notification message after a successful update). Other providers can be extended to support it.
+- Some messaging triggers (Slack, Telegram, Teams, Matrix, Mattermost, Rocket.Chat, Google Chat) also support `DISABLETITLE` (default `false`) to send only the body without a title line.
+- You can set `DD_TRIGGER_{trigger_type}_THRESHOLD` to define a default threshold for all triggers of the same type, e.g. `DD_TRIGGER_NTFY_THRESHOLD=minor`.
+- Triggers are executed by ascending `ORDER`; when two triggers have the same `ORDER`, they are sorted by trigger id.
+- Triggers sharing the same trigger name (e.g. `docker.update` and `discord.update`) can share `THRESHOLD`; if exactly one threshold value is defined among them, that value is used for the others unless they override it explicitly.
+- Setting `ONCE=false` with `MODE=batch` gives a report with all pending updates on every run.
+
+## Notification Rules
+
+Notification rules control which events fire which triggers. Each rule corresponds to an event type and has an `enabled` flag and an optional list of trigger IDs.
+
+| Rule ID | Default enabled | Description |
+| --- | :---: | --- |
+| `update-available` | Yes | A container has a newer version available |
+| `update-applied` | Yes | A container was successfully updated |
+| `update-failed` | Yes | An update failed or was rolled back |
+| `security-alert` | Yes | Critical/high vulnerability detected during pre-update scan |
+| `agent-disconnect` | No | A remote agent lost its connection |
+
+**Dispatch behavior:**
+
+- **`update-available`** -- for backward compatibility, when its trigger list is empty all triggers fire (existing behavior is preserved). Once you assign specific triggers, only those fire.
+- **`update-applied`**, **`update-failed`**, **`security-alert`** -- these require explicit trigger assignments. They are enabled by default but will not fire any trigger until you add trigger IDs to their rules.
+- **`agent-disconnect`** -- disabled by default. Enable it and assign triggers to receive disconnect alerts. This event always fires regardless of the threshold setting.
+
+Rules are managed via `GET /api/notifications` and `PATCH /api/notifications/:id` (update `enabled` and/or `triggers` fields), or through the **Notifications** view in the UI.
+
+<Callout type="warn">Docker and Docker Compose triggers cannot be assigned to notification rules. These are update-action triggers (they perform container updates), not notification triggers. Only messaging/alerting triggers (Slack, SMTP, Discord, ntfy, etc.) can be assigned to rules.</Callout>
+
+## Event Types
+
+Beyond the classic `update-available` event, triggers can fire on additional events:
+
+- **`update-applied`** -- fires after a container is successfully updated by a Docker or Docker Compose trigger. Useful for audit or confirmation notifications.
+- **`update-failed`** -- fires when an update fails or is rolled back. Carries the container name and error message.
+- **`security-alert`** -- fires when the [Update Bouncer](/docs/configuration/security) detects critical or high vulnerabilities during a pre-update scan. Includes a vulnerability summary.
+- **`agent-disconnect`** -- fires when a remote agent loses its connection. This event **skips threshold checks** (always fires).
+
+<Callout type="info">To receive notifications for these events, add the desired trigger IDs to the corresponding notification rule via the API or UI.</Callout>
+
+## Template Variable Reference
+
+Template strings use `${expression}` placeholders. Drydock provides two sets of variables depending on the trigger mode.
+
+### Simple mode variables
+
+| Variable | Description | Example value |
+| --- | --- | --- |
+| `container` | The full container object | _(object)_ |
+| `container.id` | Container ID | `sha256:abc123...` |
+| `container.name` | Container name | `my-app` |
+| `container.displayName` | Display name (from `dd.display.name` label, defaults to name) | `My App` |
+| `container.displayIcon` | Display icon (from `dd.display.icon` label) | `mdi:docker` |
+| `container.status` | Container runtime status | `running` |
+| `container.watcher` | Watcher name | `local` |
+| `container.agent` | Agent name (when using distributed agents) | `remote-1` |
+| `container.image.name` | Image name | `library/nginx` |
+| `container.image.registry.name` | Registry provider name | `hub` |
+| `container.image.registry.url` | Registry URL | `https://registry-1.docker.io` |
+| `container.image.tag.value` | Current image tag | `1.24.0` |
+| `container.image.tag.semver` | Whether the tag is valid semver | `true` |
+| `container.image.digest.value` | Current image digest | `sha256:abc123...` |
+| `container.image.digest.watch` | Whether digest watching is enabled | `true` |
+| `container.image.architecture` | Image architecture | `amd64` |
+| `container.image.os` | Image OS | `linux` |
+| `container.image.created` | Image creation date | `2024-01-15T10:30:00Z` |
+| `container.updateKind.kind` | Update type: `tag`, `digest`, or `unknown` | `tag` |
+| `container.updateKind.localValue` | Current version (tag or digest) | `1.24.0` |
+| `container.updateKind.remoteValue` | New version (tag or digest) | `1.25.0` |
+| `container.updateKind.semverDiff` | Semver diff level: `major`, `minor`, `patch`, `prerelease`, or `unknown` | `minor` |
+| `container.result.tag` | New tag value from the registry | `1.25.0` |
+| `container.result.digest` | New digest value from the registry | `sha256:def456...` |
+| `container.result.created` | Creation date of the new image | `2024-02-01T08:00:00Z` |
+| `container.result.link` | Link to the release (when a link template is configured) | `https://github.com/org/repo/releases/tag/v1.25.0` |
+| `container.error.message` | Error message (when an error occurred) | `401 Unauthorized` |
+
+#### Legacy aliases (deprecated)
+
+These aliases resolve to a single container property and will be removed in v1.6.0. Use the `container.*` equivalents instead.
+
+| Legacy variable | Equivalent | Description |
+| --- | --- | --- |
+| `id` | `container.id` | Container ID |
+| `name` | `container.name` | Container name |
+| `watcher` | `container.watcher` | Watcher name |
+| `kind` | `container.updateKind.kind` | Update type |
+| `semver` | `container.updateKind.semverDiff` | Semver diff level |
+| `local` | `container.updateKind.localValue` | Current version |
+| `remote` | `container.updateKind.remoteValue` | New version |
+| `link` | `container.result.link` | Release link |
+
+### Batch mode variables
+
+| Variable | Description | Example value |
+| --- | --- | --- |
+| `containers` | Array of container objects (each with the same properties as above) | _(array)_ |
+| `containers.length` | Number of containers in the batch | `3` |
+
+#### Legacy alias (deprecated)
+
+| Legacy variable | Equivalent | Description |
+| --- | --- | --- |
+| `count` | `containers.length` | Number of containers in the batch |
+
+### Expression syntax
+
+Inside `${...}` you can use:
+
+- **Property paths** -- `container.updateKind.kind`
+- **Method calls** -- `local.substring(0, 15)` (see allowed methods below)
+- **Ternary** -- `container.result.link ? container.result.link : "no link"`
+- **Logical AND** -- `container.result && container.result.link`
+- **String concatenation** -- `"Version: " + container.updateKind.remoteValue`
+- **String and number literals** -- `"hello"`, `42`
+
+**Allowed string methods:** `substring`, `slice`, `toLowerCase`, `toUpperCase`, `trim`, `trimStart`, `trimEnd`, `replace`, `split`, `indexOf`, `lastIndexOf`, `startsWith`, `endsWith`, `includes`, `charAt`, `padStart`, `padEnd`, `repeat`, `toString`.
+
+## Examples
+
+<Tabs items={["Docker Compose", "Docker"]}>
+<Tab value="Docker Compose">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    environment:
+      - DD_TRIGGER_SMTP_GMAIL_SIMPLETITLE=Container $${container.name} can be updated
+      - DD_TRIGGER_SMTP_GMAIL_SIMPLEBODY=Container $${name} can be updated from $${local.substring(0, 15)} to $${remote.substring(0, 15)}
+```
+
+</Tab>
+<Tab value="Docker">
+```bash
+docker run \
+  -e 'DD_TRIGGER_SMTP_GMAIL_SIMPLETITLE=Container ${container.name} can be updated' \
+  -e 'DD_TRIGGER_SMTP_GMAIL_SIMPLEBODY=Container ${name} can be updated from ${local.substring(0, 15)} to ${remote.substring(0, 15)}'
+  ...
+  codeswhat/drydock
+```
+</Tab>
+</Tabs>

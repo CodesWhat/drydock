@@ -10,6 +10,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Lefthook pre-push Playwright gate** — Added `e2e-playwright` to the root pre-push pipeline so local hooks now run Cucumber E2E and Playwright QA before push.
+- **Trigger rename migration CLI support** — `config migrate` now supports `--source trigger` and rewrites legacy trigger prefixes (`DD_TRIGGER_*`, `dd.trigger.include`, `dd.trigger.exclude`) to action-prefixed aliases.
+
+## [1.5.0] — 2026-03-18
+
+### Added
+
+- **Real-time container log viewer** — WebSocket-based live log streaming from Docker containers directly in the UI. Features ANSI color rendering, automatic JSON log detection with syntax-highlighted pretty-printing, free-text and regex search with match navigation, stdout/stderr stream filtering, log level filtering for structured logs, copy to clipboard, and gzip-compressed download. Available in both the container detail panel and a dedicated full-page view at `/containers/:id/logs`. ([Phase 4.2](https://getdrydock.com/docs/configuration/logs))
+- **Diagnostic debug dump** — One-click export of redacted system state from Configuration > Diagnostics. Collects runtime metadata, component state (watchers, registries, triggers, agents), Docker API diagnostics, MQTT Home Assistant sensors, recent Docker events, store stats, and `DD_*` environment variables. Sensitive values matching `password|token|secret|key|hash` are automatically redacted. Configurable time window (1–1440 minutes). ([Phase 4.14](https://getdrydock.com/docs/api/container))
+- **Container log streaming API** — `WS /api/v1/containers/:id/logs/stream` endpoint with Docker binary stream demultiplexing, session-based authentication on WebSocket upgrade, and fixed-window rate limiting (1,000 connections per 15 minutes).
+- **Container log download API** — `GET /api/v1/containers/:id/logs` endpoint with gzip compression support, stdout/stderr filtering, configurable tail size, and timestamp-based `since` filtering.
+- **Debug dump API** — `GET /api/v1/debug/dump` endpoint with configurable `minutes` query parameter for time-windowed event collection.
+- **Copy logs to clipboard** — Copy button in the container log viewer copies all visible log entries to clipboard with timestamp, stream type, and content.
+
+### Changed
+
+- **Container log viewer upgraded to WebSocket streaming** — Replaced the previous HTTP polling-based log viewer with real-time WebSocket streaming. Logs now appear instantly as containers produce them, with no polling interval needed. The viewer retains up to 5,000 lines in a ring buffer.
+- **Container detail panel log tab sizing** — Log viewer in the slide-in detail panel and full-page view now fills the available viewport height without causing outer scrollbars. Uses proper flex layout containment instead of fixed `calc()` heights.
+- **Search match navigation** — Prev/Next search navigation buttons are now hidden by default and only appear when a search query is active, reducing toolbar clutter.
+
 ## [1.4.5] — 2026-03-17
 
 ### Added

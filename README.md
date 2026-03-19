@@ -13,7 +13,7 @@
 </div>
 
 <p align="center">
-  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.4.5-blue" alt="Version"></a>
+  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.5.0-blue" alt="Version"></a>
   <a href="https://github.com/CodesWhat/drydock/pkgs/container/drydock"><img src="https://img.shields.io/badge/GHCR-40K%2B_pulls-2ea44f?logo=github&logoColor=white" alt="GHCR pulls"></a>
   <a href="https://hub.docker.com/r/codeswhat/drydock"><img src="https://img.shields.io/docker/pulls/codeswhat/drydock?logo=docker&logoColor=white&label=Docker+Hub" alt="Docker Hub pulls"></a>
   <a href="https://quay.io/repository/codeswhat/drydock"><img src="https://img.shields.io/badge/Quay.io-image-ee0000?logo=redhat&logoColor=white" alt="Quay.io"></a>
@@ -355,7 +355,7 @@ Drop-in replacement — swap the image, restart, done. All `WUD_*` env vars and 
 | **v1.4.2** ✅ | Bug Fixes | Watcher container count fix (#155), container recreate alias filtering (#156), stale store data fix (#157), CI versioned-only images (#154), maturity badge sizing, dependency upgrades |
 | **v1.4.3** ✅ | DNS & Security | Configurable DNS result ordering for Alpine EAI_AGAIN fix (#161), Docker socket security guide, zizmor blocking in CI, scoped GitHub environments |
 | **v1.4.4** ✅ | UI Polish & Hardening | Alias dedup hardening with 30s transient window (#156), dashboard host-status for remote watchers (#155), tooltip viewport fix (#165), click-to-copy version tags (#164), Simple Icons dark mode inversion, theme switcher fix, search button polish, URL rebrand to getdrydock.com |
-| **v1.5.0** | Observability & User-Requested Features | Real-time log viewer, container resource monitoring, registry webhooks, auth endpoint telemetry/guardrails, image maturity/sort-by-age indicator, URL-driven filter/sort state, release notes in UI & notifications, smart tag suggestions, digest check deduplication, Podman setup docs |
+| **v1.5.0** ✅ | Observability & User-Requested Features | Real-time WebSocket log viewer with ANSI colors + JSON syntax highlighting, container resource monitoring, diagnostic debug dump, registry webhooks, auth endpoint telemetry/guardrails, image maturity/sort-by-age indicator, URL-driven filter/sort state, release notes in UI & notifications, smart tag suggestions, digest check deduplication, Podman setup docs |
 | **v1.5.1** | Scanner Decoupling | Backend-based scanner execution (docker/remote), Grype provider, scanner asset lifecycle |
 | **v1.6.0** | Notifications & Release Intel | Notification templates, MS Teams & Matrix triggers, remove all deprecated compatibility aliases (see [DEPRECATIONS.md](DEPRECATIONS.md)) |
 | **v1.7.0** | Smart Updates & UX | Dependency-aware ordering, clickable port links, image prune, static image monitoring, dashboard customization |

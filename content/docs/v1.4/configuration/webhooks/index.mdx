@@ -1,0 +1,148 @@
+---
+title: "Webhooks"
+description: "Trigger container watches and updates from external systems like CI/CD pipelines."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+## Overview
+
+The webhook API lets external systems trigger container watches and updates. This is useful for CI/CD integration — after pushing a new image, your pipeline can tell drydock to check for updates immediately instead of waiting for the next scheduled watch cycle.
+
+## Configuration
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --- | :---: | --- | --- | --- |
+| `DD_SERVER_WEBHOOK_ENABLED` | ⚪ | Enable webhook endpoints | `true`, `false` | `false` |
+| `DD_SERVER_WEBHOOK_TOKEN` | ⚪ | Shared Bearer token used by all webhook endpoints (fallback token) | Any string | — |
+| `DD_SERVER_WEBHOOK_TOKENS_WATCHALL` | ⚪ | Endpoint-specific token for `POST /api/webhook/watch` | Any string | — |
+| `DD_SERVER_WEBHOOK_TOKENS_WATCH` | ⚪ | Endpoint-specific token for `POST /api/webhook/watch/:containerName` | Any string | — |
+| `DD_SERVER_WEBHOOK_TOKENS_UPDATE` | ⚪ | Endpoint-specific token for `POST /api/webhook/update/:containerName` | Any string | — |
+
+<Callout type="warn">Webhooks are disabled by default. Set `DD_SERVER_WEBHOOK_ENABLED=true` and provide at least one webhook token (`DD_SERVER_WEBHOOK_TOKEN` or any `DD_SERVER_WEBHOOK_TOKENS_*` value). Requests to endpoints without a configured token are rejected.</Callout>
+
+## Endpoints
+
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| `POST` | `/api/webhook/watch` | Trigger a watch cycle on all watchers |
+| `POST` | `/api/webhook/watch/:containerName` | Watch a specific container by name |
+| `POST` | `/api/webhook/update/:containerName` | Trigger an update on a specific container |
+
+## Authentication
+
+All webhook requests require a Bearer token in the `Authorization` header:
+
+```text
+Authorization: Bearer your-token-here
+```
+
+Token selection rules:
+
+- If an endpoint-specific token (`DD_SERVER_WEBHOOK_TOKENS_*`) is set for that endpoint, it is required.
+- Otherwise, drydock falls back to `DD_SERVER_WEBHOOK_TOKEN`.
+
+## Rate limiting
+
+Webhook endpoints are rate-limited to **30 requests per 15-minute window** per client IP.
+
+## Per-container opt-out
+
+Individual containers can be excluded from webhook API calls using the `dd.webhook.enabled` label. When set to `false`, the `/api/webhook/watch/:containerName` and `/api/webhook/update/:containerName` endpoints return **403 Forbidden** for that container.
+
+```yaml
+services:
+  myapp:
+    image: myapp:latest
+    labels:
+      - dd.watch=true
+      - dd.webhook.enabled=false  # blocks webhook watch/update for this container
+```
+
+<Callout type="info">The `dd.webhook.enabled` label only affects per-container webhook endpoints. The global `POST /api/webhook/watch` endpoint (which triggers all watchers) is not affected.</Callout>
+
+<Callout type="info">Containers without this label default to `dd.webhook.enabled=true` — webhooks are allowed unless explicitly disabled.</Callout>
+
+## Audit logging
+
+All webhook calls are recorded in the [audit trail](/docs/monitoring) with action types `webhook-watch`, `webhook-watch-container`, and `webhook-update`, including success/error status and container details. A `dd_webhook_total` Prometheus counter tracks invocations by action type.
+
+## Examples
+
+### Watch all containers
+
+```bash
+curl -X POST https://drydock.example.com/api/webhook/watch \
+  -H "Authorization: Bearer your-token-here"
+```
+
+### Watch a specific container
+
+```bash
+curl -X POST https://drydock.example.com/api/webhook/watch/myapp \
+  -H "Authorization: Bearer your-token-here"
+```
+
+### Update a specific container
+
+```bash
+curl -X POST https://drydock.example.com/api/webhook/update/myapp \
+  -H "Authorization: Bearer your-token-here"
+```
+
+## CI/CD integration
+
+### GitHub Actions
+
+```yaml
+- name: Notify drydock
+  run: |
+    curl -X POST https://drydock.example.com/api/webhook/watch/myapp \
+      -H "Authorization: Bearer ${{ secrets.DRYDOCK_WEBHOOK_TOKEN }}"
+```
+
+### GitLab CI
+
+```yaml
+notify_drydock:
+  stage: deploy
+  script:
+    - curl -X POST https://drydock.example.com/api/webhook/watch/myapp
+        -H "Authorization: Bearer $DRYDOCK_WEBHOOK_TOKEN"
+```
+
+## Docker Compose example
+
+<Tabs items={["Docker Compose", "Docker"]}>
+<Tab value="Docker Compose">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    environment:
+      - DD_SERVER_WEBHOOK_ENABLED=true
+      - DD_SERVER_WEBHOOK_TOKENS_WATCHALL=my-watchall-token
+      - DD_SERVER_WEBHOOK_TOKENS_WATCH=my-watch-token
+      - DD_SERVER_WEBHOOK_TOKENS_UPDATE=my-update-token
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "3000:3000"
+```
+
+</Tab>
+<Tab value="Docker">
+```bash
+docker run -d \
+  -e DD_SERVER_WEBHOOK_ENABLED=true \
+  -e DD_SERVER_WEBHOOK_TOKENS_WATCHALL=my-watchall-token \
+  -e DD_SERVER_WEBHOOK_TOKENS_WATCH=my-watch-token \
+  -e DD_SERVER_WEBHOOK_TOKENS_UPDATE=my-update-token \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -p 3000:3000 \
+  codeswhat/drydock
+```
+</Tab>
+</Tabs>
