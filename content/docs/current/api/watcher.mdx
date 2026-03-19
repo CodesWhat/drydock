@@ -56,3 +56,11 @@ curl http://drydock:3000/api/v1/watchers/docker/local
    }
 }
 ```
+
+### Agent-scoped lookup
+
+To fetch a watcher registered on a specific agent, append the agent name:
+
+```bash
+curl http://drydock:3000/api/v1/watchers/docker/local/agent1
+```

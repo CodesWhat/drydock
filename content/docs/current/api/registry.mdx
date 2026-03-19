@@ -60,3 +60,11 @@ curl http://drydock:3000/api/v1/registries/hub/private
     }
 }
 ```
+
+### Agent-scoped lookup
+
+To fetch a registry registered on a specific agent, append the agent name:
+
+```bash
+curl http://drydock:3000/api/v1/registries/hub/private/agent1
+```

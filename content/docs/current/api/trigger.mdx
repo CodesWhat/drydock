@@ -61,6 +61,14 @@ curl http://drydock:3000/api/v1/triggers/smtp/gmail
 }
 ```
 
+### Agent-scoped lookup
+
+To fetch a trigger registered on a specific agent, append the agent name:
+
+```bash
+curl http://drydock:3000/api/v1/triggers/smtp/gmail/agent1
+```
+
 ## Running a trigger
 
 This operation lets you run a specific Trigger with simulated data.
