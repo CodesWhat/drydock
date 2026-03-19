@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Lefthook pre-push Playwright gate** — Added `e2e-playwright` to the root pre-push pipeline so local hooks now run Cucumber E2E and Playwright QA before push.
 - **Trigger rename migration CLI support** — `config migrate` now supports `--source trigger` and rewrites legacy trigger prefixes (`DD_TRIGGER_*`, `dd.trigger.include`, `dd.trigger.exclude`) to action-prefixed aliases.
 
-## [1.5.0] — 2026-03-18
+## [1.5.0] — 2026-03-19
 
 ### Added
 
@@ -25,12 +25,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Container log download API** — `GET /api/v1/containers/:id/logs` endpoint with gzip compression support, stdout/stderr filtering, configurable tail size, and timestamp-based `since` filtering.
 - **Debug dump API** — `GET /api/v1/debug/dump` endpoint with configurable `minutes` query parameter for time-windowed event collection.
 - **Copy logs to clipboard** — Copy button in the container log viewer copies all visible log entries to clipboard with timestamp, stream type, and content.
+- **Dashboard customization** — Customizable grid layout with drag-to-reorder, resize, and per-widget visibility toggles using `grid-layout-plus`. Edit mode via pencil icon in breadcrumb header. Customize panel with checkboxes and S/M/L size badges. All widgets progressively collapse content based on container height.
+- **Resource usage dashboard widget** — CPU and memory usage bars with top-N resource consumers, progressive detail at different widget sizes.
+- **Trigger environment variable aliases** — Triggers can now be configured with `DD_ACTION_*` or `DD_NOTIFICATION_*` prefixes in addition to `DD_TRIGGER_*`. All three prefixes resolve identically at startup.
 
 ### Changed
 
 - **Container log viewer upgraded to WebSocket streaming** — Replaced the previous HTTP polling-based log viewer with real-time WebSocket streaming. Logs now appear instantly as containers produce them, with no polling interval needed. The viewer retains up to 5,000 lines in a ring buffer.
 - **Container detail panel log tab sizing** — Log viewer in the slide-in detail panel and full-page view now fills the available viewport height without causing outer scrollbars. Uses proper flex layout containment instead of fixed `calc()` heights.
 - **Search match navigation** — Prev/Next search navigation buttons are now hidden by default and only appear when a search query is active, reducing toolbar clutter.
+- **UI text and margin standardization** — Consistent text sizing, view margins, and scroll container padding across all views and components.
+- **Connection lost overlay z-index** — Overlay now covers entire viewport including sidebar using CSS custom property `--z-modal`.
+- **Deprecation banner composable** — Reusable `useDeprecationBanner` composable for session and permanent dismissal of deprecation notices.
+- **Debug dump redaction patterns expanded** — Sensitive key detection now covers 14+ token patterns including `passwd`, `credential`, `apikey`, `accesskey`, `privatekey`, `bearer`, `auth`, and `login` (env-style keys only for auth/bearer/login to avoid false positives).
+
+### Fixed
+
+- **TypeScript type safety in watcher registry lookups** — Replaced unsafe `as unknown as` casts with `isDockerWatcher()` type guard for Docker watcher state lookups.
 
 ## [1.4.5] — 2026-03-17
 
@@ -952,7 +963,12 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.4.1...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/CodesWhat/drydock/compare/v1.4.5...v1.5.0
+[1.4.5]: https://github.com/CodesWhat/drydock/compare/v1.4.4...v1.4.5
+[1.4.4]: https://github.com/CodesWhat/drydock/compare/v1.4.3...v1.4.4
+[1.4.3]: https://github.com/CodesWhat/drydock/compare/v1.4.2...v1.4.3
+[1.4.2]: https://github.com/CodesWhat/drydock/compare/v1.4.1...v1.4.2
 [1.4.1]: https://github.com/CodesWhat/drydock/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/CodesWhat/drydock/compare/v1.3.9...v1.4.0
 [1.3.9]: https://github.com/CodesWhat/drydock/compare/v1.3.8...v1.3.9

@@ -323,6 +323,7 @@ Trivy-powered vulnerability scanning blocks unsafe updates before they deploy. I
 <tr><td>Semver-aware updates</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>Digest watching</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
 <tr><td>Multi-arch (amd64/arm64)</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
+<tr><td>Container log viewer</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>Actively maintained</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
 </tbody>
 </table>
@@ -355,10 +356,10 @@ Drop-in replacement — swap the image, restart, done. All `WUD_*` env vars and 
 | **v1.4.2** ✅ | Bug Fixes | Watcher container count fix (#155), container recreate alias filtering (#156), stale store data fix (#157), CI versioned-only images (#154), maturity badge sizing, dependency upgrades |
 | **v1.4.3** ✅ | DNS & Security | Configurable DNS result ordering for Alpine EAI_AGAIN fix (#161), Docker socket security guide, zizmor blocking in CI, scoped GitHub environments |
 | **v1.4.4** ✅ | UI Polish & Hardening | Alias dedup hardening with 30s transient window (#156), dashboard host-status for remote watchers (#155), tooltip viewport fix (#165), click-to-copy version tags (#164), Simple Icons dark mode inversion, theme switcher fix, search button polish, URL rebrand to getdrydock.com |
-| **v1.5.0** ✅ | Observability & User-Requested Features | Real-time WebSocket log viewer with ANSI colors + JSON syntax highlighting, container resource monitoring, diagnostic debug dump, registry webhooks, auth endpoint telemetry/guardrails, image maturity/sort-by-age indicator, URL-driven filter/sort state, release notes in UI & notifications, smart tag suggestions, digest check deduplication, Podman setup docs |
+| **v1.5.0** ✅ | Observability & User-Requested Features | Real-time WebSocket log viewer with ANSI colors + JSON syntax highlighting, dashboard customization (grid layout, drag, resize, widget visibility), container resource monitoring (CPU/memory stats + dashboard widget), diagnostic debug dump, registry webhook receiver, trigger env var aliases (`DD_ACTION_*`/`DD_NOTIFICATION_*`), auth endpoint telemetry/guardrails, UI standardization (margins, text sizes, deprecation banners) |
 | **v1.5.1** | Scanner Decoupling | Backend-based scanner execution (docker/remote), Grype provider, scanner asset lifecycle |
 | **v1.6.0** | Notifications & Release Intel | Notification templates, MS Teams & Matrix triggers, remove all deprecated compatibility aliases (see [DEPRECATIONS.md](DEPRECATIONS.md)) |
-| **v1.7.0** | Smart Updates & UX | Dependency-aware ordering, clickable port links, image prune, static image monitoring, dashboard customization |
+| **v1.7.0** | Smart Updates & UX | Dependency-aware ordering, clickable port links, image prune, static image monitoring |
 | **v1.8.0** | Fleet Management & Live Config | YAML config, live UI config panels, volume browser, parallel updates, SQLite store migration, i18n framework |
 | **v2.0.0** | Platform Expansion | Docker Swarm, Kubernetes watchers and triggers, basic GitOps |
 | **v2.1.0** | Advanced Deployment Patterns | Health check gates, canary deployments, durable self-update controller |
@@ -422,7 +423,7 @@ Drop-in replacement — swap the image, restart, done. All `WUD_*` env vars and 
 
 ### Community QA
 
-Thanks to the users who helped test v1.4.0 release candidates and reported bugs:
+Thanks to the users who helped test release candidates:
 
 [@RK62](https://github.com/RK62) &middot; [@flederohr](https://github.com/flederohr) &middot; [@rj10rd](https://github.com/rj10rd) &middot; [@larueli](https://github.com/larueli) &middot; [@Waler](https://github.com/Waler) &middot; [@ElVit](https://github.com/ElVit) &middot; [@nchieffo](https://github.com/nchieffo)
 
