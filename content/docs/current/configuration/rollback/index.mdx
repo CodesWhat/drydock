@@ -37,10 +37,12 @@ You can optionally pass a `backupId` in the request body to target a specific ba
 
 ```bash
 # Roll back to the most recent backup
-curl -X POST http://localhost:3000/api/containers/my-container-id/rollback
+curl -X POST http://localhost:3000/api/containers/my-container-id/rollback \
+  -H 'X-DD-Confirm-Action: container-rollback'
 
 # Roll back to a specific backup
 curl -X POST http://localhost:3000/api/containers/my-container-id/rollback \
+  -H 'X-DD-Confirm-Action: container-rollback' \
   -H "Content-Type: application/json" \
   -d '{"backupId": "abc123"}'
 ```

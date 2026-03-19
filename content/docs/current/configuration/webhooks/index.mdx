@@ -19,6 +19,7 @@ The webhook API lets external systems trigger container watches and updates. Thi
 | `DD_SERVER_WEBHOOK_TOKENS_WATCHALL` | ⚪ | Endpoint-specific token for `POST /api/webhook/watch` | Any string | — |
 | `DD_SERVER_WEBHOOK_TOKENS_WATCH` | ⚪ | Endpoint-specific token for `POST /api/webhook/watch/:containerName` | Any string | — |
 | `DD_SERVER_WEBHOOK_TOKENS_UPDATE` | ⚪ | Endpoint-specific token for `POST /api/webhook/update/:containerName` | Any string | — |
+| `DD_SERVER_WEBHOOK_SECRET` | ⚪ | HMAC signing secret for verifying registry webhook signatures. Required when receiving push notifications from container registries. | Any string | — |
 
 <Callout type="warn">Webhooks are disabled by default. Set `DD_SERVER_WEBHOOK_ENABLED=true` and provide at least one webhook token (`DD_SERVER_WEBHOOK_TOKEN` or any `DD_SERVER_WEBHOOK_TOKENS_*` value). Requests to endpoints without a configured token are rejected.</Callout>
 

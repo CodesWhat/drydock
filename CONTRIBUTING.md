@@ -124,14 +124,22 @@ Scope is optional. Subject line should be imperative, lowercase, no trailing per
 
 |Priority|Step|What it does|On Failure|
 |---|---|---|---|
-|0|`clean-tree`|Block push if uncommitted changes exist|Fail|
-|1|`ts-nocheck`|Rejects any `@ts-nocheck` directives|Fail|
-|2|`biome`|Biome lint and format check|Fail|
-|3|`qlty`|Full qlty lint pass (`qlty check --all`)|Fail|
-|4|`build-and-test`|Parallel build + test for both `app/` and `ui/`|Fail|
-|5|`e2e`|Cucumber E2E tests against a fresh Drydock instance|Fail|
-|6|`e2e-playwright`|Playwright E2E tests against the QA compose stack|Fail|
-|7|`zizmor`|GitHub Actions workflow linting (blocking)|Fail|
+|0|`clean-tree`|Rejects uncommitted changes (CI only sees committed state)|Fail|
+|1|`ts-nocheck`|Checks for `@ts-nocheck` directives|Fail|
+|2|`biome check`|Linting and formatting|Fail|
+|3|`qlty`|Static analysis (medium+ severity gate)|Fail|
+|4|`qlty-smells`|Code smell detection (advisory, non-blocking)|Advisory|
+|5|`build-and-test`|Parallel builds + tests WITHOUT coverage (fast pass/fail)|Fail|
+|6|`coverage`|100% threshold enforcement, writes `.coverage-gaps.json` on failure|Fail|
+|7|`e2e`|End-to-end Cucumber tests|Fail|
+|8|`e2e-playwright`|Playwright browser tests|Fail|
+|9|`zizmor`|GitHub Actions security scanning|Fail|
+
+Key details:
+
+- **`build-and-test`** runs WITHOUT coverage for fast feedback — it catches compilation and test failures quickly.
+- **`coverage`** is a SEPARATE gate so failures show clearly instead of being buried in test output.
+- When coverage fails, `.coverage-gaps.json` contains the exact files and uncovered lines. Read this file to know what to fix.
 
 ## Commit message checks
 

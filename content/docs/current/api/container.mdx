@@ -35,6 +35,11 @@ curl "http://drydock:3000/api/v1/containers?limit=25&offset=0"
 | `limit` | integer | `0` | Maximum number of containers to return (`0` means unbounded; max `200`) |
 | `offset` | integer | `0` | Number of matching containers to skip |
 | `includeVulnerabilities` | boolean | `false` | Include full vulnerability arrays in `data` |
+| `sort` | string | | Sort order: `name`, `-name`, `status`, `-status`, `age`, `-age`, `created`, `-created` (prefix `-` for descending) |
+| `status` | string | | Filter by update status: `update-available`, `up-to-date` |
+| `kind` | string | | Filter by update kind: `major`, `minor`, `patch`, `digest` |
+| `watcher` | string | | Filter by watcher name |
+| `maturity` | string | | Filter by update maturity: `hot`, `mature`, `established` |
 
 ## Get container summary
 
@@ -63,6 +68,8 @@ curl http://drydock:3000/api/v1/containers/summary
 | `containers.running` | integer | Number of running containers |
 | `containers.stopped` | integer | Number of stopped containers |
 | `security.issues` | integer | Number of containers with critical or high vulnerabilities |
+| `hotUpdates` | integer | Number of containers with updates less than 24 hours old |
+| `matureUpdates` | integer | Number of containers with updates between 24 hours and 7 days old |
 
 ## Get recent container status
 
@@ -349,7 +356,7 @@ curl "http://drydock:3000/api/v1/containers/{id}/logs?tail=1000&stdout=true&stde
 | `stdout` | boolean | `true` | Include stdout output |
 | `stderr` | boolean | `true` | Include stderr output |
 | `tail` | integer | `1000` | Number of lines to return from the end of the log |
-| `since` | integer | `0` | Unix timestamp (seconds) or ISO 8601 string — only return logs after this time |
+| `since` | string | `0` | Unix timestamp (seconds) or ISO 8601 string — only return logs after this time |
 | `timestamps` | boolean | `true` | Include timestamps in output |
 
 Returns 200 with the log text (Content-Disposition: attachment), 404 if the container is not found, or 500 on failure.
@@ -369,7 +376,7 @@ ws://drydock:3000/api/v1/containers/{id}/logs/stream?follow=true&tail=100
 | `stdout` | boolean | `true` | Include stdout output |
 | `stderr` | boolean | `true` | Include stderr output |
 | `tail` | integer | `100` | Number of initial lines to load |
-| `since` | integer | `0` | Unix timestamp (seconds) or ISO 8601 string — only stream logs after this time |
+| `since` | string | `0` | Unix timestamp (seconds) or ISO 8601 string — only stream logs after this time |
 | `follow` | boolean | `true` | Continue streaming new output (set `false` for one-shot fetch) |
 
 ### Message format
@@ -567,6 +574,53 @@ curl http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28
 | `lastError` | string | Error message (only present on failed operations) |
 
 Returns 200 with the operations array on success, or 404 if the container is not found.
+
+## Get container stats
+
+`GET /api/v1/containers/stats`
+
+Returns CPU and memory usage stats for all monitored containers.
+
+### Response
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `data` | array | Array of container stat objects |
+| `data[].id` | string | Container ID |
+| `data[].name` | string | Container name |
+| `data[].stats` | object | Latest stats snapshot |
+| `data[].stats.cpuPercent` | number | CPU usage percentage |
+| `data[].stats.memoryUsageBytes` | number | Memory usage in bytes |
+| `data[].stats.memoryLimitBytes` | number | Memory limit in bytes |
+| `data[].stats.memoryPercent` | number | Memory usage percentage |
+| `data[].stats.networkRxBytes` | number | Network bytes received |
+| `data[].stats.networkTxBytes` | number | Network bytes transmitted |
+| `data[].stats.timestamp` | string | ISO 8601 timestamp |
+
+## Get single container stats
+
+`GET /api/v1/containers/:id/stats`
+
+Returns the latest stats snapshot and history for a single container.
+
+### Response
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `data` | object | Latest stats snapshot |
+| `history` | array | Array of historical snapshots |
+
+## Stream container stats (SSE)
+
+`GET /api/v1/containers/:id/stats/stream`
+
+Server-Sent Events stream for real-time container stats. Sends `dd:container-stats` events with the latest snapshot and `dd:heartbeat` events every 15 seconds.
+
+## Get container release notes
+
+`GET /api/v1/containers/:id/release-notes`
+
+Returns GitHub release notes for the container's available update, if available.
 
 ## Delete a Container
 

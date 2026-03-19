@@ -204,8 +204,8 @@ services:
         - DD_WATCHER_MYREMOTEHOST_KEYFILE=/certs/key.pem
     volumes:
         - /my-host/my-certs/ca.pem:/certs/ca.pem:ro
-        - /my-host/my-certs/ca.pem:/certs/cert.pem:ro
-        - /my-host/my-certs/ca.pem:/certs/key.pem:ro
+        - /my-host/my-certs/cert.pem:/certs/cert.pem:ro
+        - /my-host/my-certs/key.pem:/certs/key.pem:ro
 ```
 
 </Tab>

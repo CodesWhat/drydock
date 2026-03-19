@@ -244,10 +244,12 @@ Operational notes:
 
 ### Audit timeline event coverage
 
-Use the audit API (`/api/audit`) and Audit UI view to track runtime events alongside metrics. Current event coverage includes:
+Use the audit API (`/api/v1/audit`) and Audit UI view to track runtime events alongside metrics. Current event coverage includes:
 
 - `security-alert` when security scans detect high/critical issues.
 - `agent-disconnect` when a connected agent transitions to disconnected state.
+
+See the [Audit trail API](/docs/api#audit-trail) for the complete list of action types.
 
 #### Standard process metrics
 

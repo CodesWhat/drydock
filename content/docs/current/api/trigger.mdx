@@ -14,7 +14,7 @@ This API allows to query the state of the triggers.
 This operation lets you get all the configured triggers.
 
 ```bash
-curl http://drydock:3000/api/triggers
+curl http://drydock:3000/api/v1/triggers
 
 {
     "data": [
@@ -44,7 +44,7 @@ curl http://drydock:3000/api/triggers
 This operation lets you get a specific Trigger.
 
 ```bash
-curl http://drydock:3000/api/triggers/smtp/gmail
+curl http://drydock:3000/api/v1/triggers/smtp/gmail
 
 {
   "id":"smtp.gmail",
@@ -67,7 +67,7 @@ This operation lets you run a specific Trigger with simulated data.
 
 ```bash
 export CONTAINER='{"id":"123456789","name":"container_test","watcher":"watcher_test","updateKind":{"kind":"tag","semverDiff":"patch","localValue":"1.2.3","remoteValue":"1.2.4","result":{"link":"https://my-container/release-notes/"}}}'
-curl -X POST -H "Content-Type: application/json" -d $CONTAINER http://drydock:3000/api/triggers/smtp/gmail
+curl -X POST -H "Content-Type: application/json" -d $CONTAINER http://drydock:3000/api/v1/triggers/smtp/gmail
 ```
 
 ## Running a remote trigger (agent-scoped)
@@ -77,5 +77,5 @@ The path order is `/:type/:name/:agent` (agent is the final segment).
 
 ```bash
 export CONTAINER='{"id":"123456789","name":"container_test","agent":"agent1","watcher":"remote"}'
-curl -X POST -H "Content-Type: application/json" -d $CONTAINER http://drydock:3000/api/triggers/smtp/gmail/agent1
+curl -X POST -H "Content-Type: application/json" -d $CONTAINER http://drydock:3000/api/v1/triggers/smtp/gmail/agent1
 ```
