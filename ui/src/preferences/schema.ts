@@ -24,7 +24,7 @@ export interface PreferencesSchema {
     };
     columns: string[];
   };
-  dashboard: { widgetOrder: string[] };
+  dashboard: { widgetOrder: string[]; hiddenWidgets: string[] };
   views: {
     security: { mode: ViewMode; sortField: string; sortAsc: boolean };
     audit: { mode: ViewMode };
@@ -81,6 +81,7 @@ export const DEFAULTS: PreferencesSchema = {
       'host-status',
       'update-breakdown',
     ],
+    hiddenWidgets: [],
   },
   views: {
     security: { mode: 'table', sortField: 'critical', sortAsc: false },

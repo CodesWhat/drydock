@@ -5,6 +5,7 @@ import whaleLogo from '@/assets/whale-logo.png?inline';
 import AnnouncementBanner from '@/components/AnnouncementBanner.vue';
 import NotificationBell from '@/components/NotificationBell.vue';
 import { useBreakpoints } from '@/composables/useBreakpoints';
+import { useDeprecationBanner } from '@/composables/useDeprecationBanner';
 import { useIcons } from '@/composables/useIcons';
 import { useStorageRef } from '@/composables/useStorageRef';
 import { loadRecentItems, saveRecentItems } from '@/layouts/recentStorage';
@@ -254,6 +255,7 @@ const hideLegacyHashBannerPermanently = useStorageRef<boolean>(
   false,
   (value): value is boolean => typeof value === 'boolean',
 );
+const triggerPrefixDeprecationBanner = useDeprecationBanner('dd-banner-trigger-prefix-v1');
 type SearchScope = 'all' | 'pages' | 'containers' | 'runtime' | 'config';
 type SearchPrefix = '/' | '@' | '#';
 interface SearchScopeOption {
@@ -591,11 +593,27 @@ function isLegacyBasicHash(authentication: unknown): boolean {
   return (metadata as Record<string, unknown>).usesLegacyHash === true;
 }
 
+function isLegacyTriggerPrefix(trigger: unknown): boolean {
+  if (!trigger || typeof trigger !== 'object') {
+    return false;
+  }
+  const triggerRecord = trigger as Record<string, unknown>;
+  const metadata = triggerRecord.metadata;
+  if (!metadata || typeof metadata !== 'object') {
+    return false;
+  }
+  return (metadata as Record<string, unknown>).usesLegacyPrefix === true;
+}
+
 const showLegacyHashDeprecationBanner = computed(
   () =>
     legacyHashDetected.value &&
     !hideLegacyHashBannerForSession.value &&
     !hideLegacyHashBannerPermanently.value,
+);
+
+const showTriggerPrefixDeprecationBanner = computed(
+  () => triggerPrefixDeprecationBanner.visible.value,
 );
 
 function dismissLegacyHashBannerForSession() {
@@ -623,6 +641,9 @@ async function refreshSearchResources() {
       : false;
     legacyHashDetected.value = Array.isArray(authentications)
       ? authentications.some((authentication) => isLegacyBasicHash(authentication))
+      : false;
+    triggerPrefixDeprecationBanner.detected.value = Array.isArray(triggers)
+      ? triggers.some((trigger) => isLegacyTriggerPrefix(trigger))
       : false;
     searchResourceResults.value = buildSearchIndexResults({
       agents,
@@ -1111,8 +1132,8 @@ onUnmounted(() => {
         isCollapsed ? 'sidebar-collapsed' : '',
       ]"
       :style="{
-        width: isCollapsed ? '56px' : '240px',
-        minWidth: isCollapsed ? '56px' : '240px',
+        width: isCollapsed ? 'var(--dd-layout-sidebar-collapsed-width)' : 'var(--dd-layout-sidebar-expanded-width)',
+        minWidth: isCollapsed ? 'var(--dd-layout-sidebar-collapsed-width)' : 'var(--dd-layout-sidebar-expanded-width)',
         backgroundColor: 'var(--dd-bg-sidebar)',
         overflowX: 'hidden',
       }">
@@ -1125,7 +1146,7 @@ onUnmounted(() => {
                class="h-5 w-auto shrink-0 transition-transform duration-300"
                :style="[isCollapsed ? { transform: 'scaleX(-1)' } : {}, isDark ? { filter: 'invert(1)' } : {}]" />
           <span class="sidebar-label font-bold text-sm tracking-widest dd-text"
-                style="letter-spacing:0.15em;">DRYDOCK</span>
+                style="letter-spacing: var(--dd-letter-spacing-brand);">DRYDOCK</span>
         </div>
         <AppButton size="none" variant="plain" weight="none" v-if="isMobile"
                 aria-label="Close menu"
@@ -1139,7 +1160,7 @@ onUnmounted(() => {
       <nav class="flex-1 overflow-y-auto overflow-x-hidden py-3 px-2 space-y-4">
         <div v-for="group in navGroups" :key="group.label">
           <div v-if="group.label && !isCollapsed"
-               class="px-2 mb-1 text-[0.625rem] font-semibold uppercase tracking-wider dd-text-muted">
+               class="px-2 mb-1 text-2xs font-semibold uppercase tracking-wider dd-text-muted">
             {{ group.label }}
           </div>
           <div v-else-if="group.label" class="flex justify-center py-1 w-9 mx-auto">
@@ -1150,17 +1171,16 @@ onUnmounted(() => {
                class="nav-item-wrapper relative mt-0.5"
                @click="navigateTo(item.route)">
             <div
-              class="nav-item flex items-center gap-3 dd-rounded cursor-pointer relative"
+              class="nav-item flex items-center gap-3 dd-rounded cursor-pointer relative py-[var(--dd-space-6)] px-[var(--dd-space-12)]"
               :class="[
                 route.path === item.route
                   ? 'bg-drydock-secondary/10 dark:bg-drydock-secondary/15 text-drydock-secondary'
                   : 'dd-text-secondary hover:dd-bg-elevated hover:dd-text',
-              ]"
-              style="padding: 6px 12px;">
+              ]">
               <AppIcon :name="item.icon" :size="16" class="shrink-0" style="width:20px; text-align:center;" />
-              <span class="sidebar-label text-[0.8125rem] font-medium">{{ item.label }}</span>
+              <span class="sidebar-label text-xs-plus font-medium">{{ item.label }}</span>
               <span v-if="item.badge && !isCollapsed"
-                    class="sidebar-label ml-auto badge text-[0.625rem]"
+                    class="sidebar-label ml-auto badge text-2xs"
                     :style="{
                       backgroundColor: item.badgeColor === 'red'
                         ? 'var(--dd-danger-muted)'
@@ -1174,7 +1194,7 @@ onUnmounted(() => {
                  :style="{
                    backgroundColor: 'var(--dd-bg-card)',
                    color: 'var(--dd-text)',
-                   boxShadow: 'var(--dd-shadow-sm)',
+                   boxShadow: 'var(--dd-shadow-tooltip)',
                  }">
               {{ item.label }}
             </div>
@@ -1192,8 +1212,8 @@ onUnmounted(() => {
           <AppIcon name="search" :size="12" class="shrink-0" />
           <template v-if="!isCollapsed">
             <span class="sidebar-label">Search</span>
-            <kbd class="sidebar-label ml-auto px-1.5 py-0.5 dd-rounded-sm text-[0.625rem] font-medium dd-text-secondary" style="background: var(--dd-border);">
-              <span class="text-[0.5625rem]">&#8984;</span>K
+            <kbd class="sidebar-label ml-auto px-1.5 py-0.5 dd-rounded-sm text-2xs font-medium dd-text-secondary" style="background: var(--dd-border);">
+              <span class="text-3xs">&#8984;</span>K
             </kbd>
           </template>
         </AppButton>
@@ -1240,12 +1260,13 @@ onUnmounted(() => {
             <span class="hamburger-line block w-4 h-[2px] rounded-full" style="background: var(--dd-text-muted)" />
           </AppButton>
 
-          <nav class="flex items-center gap-1.5 text-[0.8125rem]">
+          <nav class="flex items-center gap-1.5 text-xs-plus">
             <AppIcon :name="currentPageIcon" :size="16" class="leading-none dd-text-muted" />
             <AppIcon name="chevron-right" :size="13" class="leading-none dd-text-muted" />
             <span class="font-medium leading-none dd-text">
               {{ currentPageLabel }}
             </span>
+            <div id="breadcrumb-actions" class="flex items-center" />
           </nav>
         </div>
 
@@ -1271,8 +1292,8 @@ onUnmounted(() => {
             <Transition name="menu-fade">
               <div v-if="showUserMenu"
                    class="absolute right-0 top-full mt-1 min-w-[160px] py-1 dd-rounded-lg shadow-lg z-50"
-                   :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)', boxShadow: 'var(--dd-shadow-lg)' }">
-                <div class="px-3 py-1.5 text-[0.625rem] font-semibold uppercase tracking-wider dd-text-muted"
+                   :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)', boxShadow: 'var(--dd-shadow-tooltip)' }">
+                <div class="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wider dd-text-muted"
                      :style="{ borderBottom: '1px solid var(--dd-border)' }">
                   {{ currentUser?.username || 'User' }}
                 </div>
@@ -1316,7 +1337,17 @@ onUnmounted(() => {
         permanent-dismiss-label="Don't show again"
         @dismiss="dismissLegacyHashBannerForSession"
         @dismiss-permanent="dismissLegacyHashBannerPermanently">
-        Your basic authentication uses a legacy password hash format. Legacy v1.3.9 formats are deprecated and will be removed in v1.6.0. Migrate to argon2id hashing.
+      Your basic authentication uses a legacy password hash format. Legacy v1.3.9 formats are deprecated and will be removed in v1.6.0. Migrate to argon2id hashing.
+      </AnnouncementBanner>
+
+      <AnnouncementBanner
+        v-if="showTriggerPrefixDeprecationBanner"
+        data-testid="trigger-prefix-deprecation-banner"
+        title="Legacy trigger prefix detected"
+        permanent-dismiss-label="Don't show again"
+        @dismiss="triggerPrefixDeprecationBanner.dismissForSession"
+        @dismiss-permanent="triggerPrefixDeprecationBanner.dismissPermanently">
+        One or more triggers use a legacy trigger prefix. Legacy trigger prefix formats are deprecated and will be removed in v1.6.0. Rename those triggers to the current prefix format.
       </AnnouncementBanner>
 
       <!-- MAIN CONTENT -->
@@ -1330,14 +1361,14 @@ onUnmounted(() => {
     <!-- About Modal -->
     <Teleport to="body">
       <div v-if="showAbout"
-           class="fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm"
+           class="fixed inset-0 z-overlay bg-black/50 backdrop-blur-sm"
            @pointerdown.self="showAbout = false">
         <div class="flex items-start justify-center pt-[20vh] min-h-full px-4"
              @pointerdown.self="showAbout = false">
           <div role="dialog"
                aria-modal="true"
                aria-labelledby="about-dialog-title"
-               class="relative w-full max-w-[340px] dd-rounded-lg overflow-hidden shadow-2xl"
+               class="relative w-full max-w-[var(--dd-layout-about-max-width)] dd-rounded-lg overflow-hidden shadow-2xl"
                :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }">
             <AppButton size="none" variant="plain" weight="none" aria-label="Close"
                     class="absolute top-3 right-3 z-10 w-6 h-6 flex items-center justify-center dd-rounded transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
@@ -1350,8 +1381,8 @@ onUnmounted(() => {
                      :style="isDark ? { filter: 'invert(1)' } : {}" />
               </div>
               <h2 id="about-dialog-title" class="text-base font-bold dd-text">Drydock</h2>
-              <span class="text-[0.6875rem] dd-text-muted mt-0.5">Docker Container Update Manager</span>
-              <span v-if="appVersion" class="badge text-[0.625rem] font-semibold mt-2 dd-bg-elevated dd-text-secondary">v{{ appVersion }}</span>
+              <span class="text-2xs-plus dd-text-muted mt-0.5">Docker Container Update Manager</span>
+              <span v-if="appVersion" class="badge text-2xs font-semibold mt-2 dd-bg-elevated dd-text-secondary">v{{ appVersion }}</span>
             </div>
             <div class="px-6 pb-5 flex flex-col gap-2"
                  :style="{ borderTop: '1px solid var(--dd-border)' }">
@@ -1381,14 +1412,14 @@ onUnmounted(() => {
     <!-- Search Modal -->
     <Teleport to="body">
       <div v-if="showSearch"
-           class="fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm"
+           class="fixed inset-0 z-overlay bg-black/50 backdrop-blur-sm"
            @pointerdown.self="showSearch = false">
         <div class="flex items-start justify-center pt-[15vh] min-h-full px-4"
              @pointerdown.self="showSearch = false">
           <div role="dialog"
                aria-modal="true"
                aria-label="Search"
-               class="relative w-full max-w-[560px] dd-rounded-lg overflow-hidden shadow-2xl"
+               class="relative w-full max-w-[var(--dd-layout-search-max-width)] dd-rounded-lg overflow-hidden shadow-2xl"
                :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }">
             <div class="flex items-center gap-3 px-4 py-3"
                  :style="{ borderBottom: '1px solid var(--dd-border)' }">
@@ -1401,30 +1432,30 @@ onUnmounted(() => {
                      @keydown.escape="showSearch = false"
                      @keydown="handleSearchInputKeydown" />
               <span v-if="scopePrefixLabel"
-                    class="px-1.5 py-0.5 text-[0.625rem] uppercase tracking-wide font-semibold dd-rounded-sm dd-bg-elevated dd-text-secondary">
+                    class="px-1.5 py-0.5 text-2xs uppercase tracking-wide font-semibold dd-rounded-sm dd-bg-elevated dd-text-secondary">
                 {{ scopePrefixLabel }}
               </span>
-              <kbd class="px-1.5 py-0.5 dd-rounded-sm text-[0.625rem] font-medium dd-bg-elevated dd-text-muted">ESC</kbd>
+              <kbd class="px-1.5 py-0.5 dd-rounded-sm text-2xs font-medium dd-bg-elevated dd-text-muted">ESC</kbd>
             </div>
             <div class="px-3 py-2 flex items-center gap-1.5"
                  :style="{ borderBottom: '1px solid var(--dd-border)' }">
               <AppButton size="none" variant="plain" weight="none"
                 v-for="scopeOption in SEARCH_SCOPE_OPTIONS"
                 :key="scopeOption.id"
-                class="inline-flex items-center gap-1 px-2 py-1 text-[0.625rem] uppercase tracking-wide font-semibold border dd-rounded transition-colors"
+                class="inline-flex items-center gap-1 px-2 py-1 text-2xs uppercase tracking-wide font-semibold border dd-rounded transition-colors"
                 :aria-pressed="String(scopeOption.id === effectiveSearchScope)"
                 :style="searchScopeChipStyles(scopeOption.id, scopeOption.id === effectiveSearchScope)"
                 @click="applySearchScope(scopeOption.id)">
                 {{ scopeOption.label }}
-                <span class="text-[0.5625rem] opacity-80">{{ searchScopeCounts[scopeOption.id] }}</span>
+                <span class="text-3xs opacity-80">{{ searchScopeCounts[scopeOption.id] }}</span>
               </AppButton>
-              <span class="ml-auto text-[0.625rem] dd-text-muted">
+              <span class="ml-auto text-2xs dd-text-muted">
                 {{ searchResults.length }} shown
               </span>
             </div>
             <div class="max-h-[360px] overflow-y-auto py-1">
               <template v-for="(group, groupIndex) in groupedSearchResults" :key="group.id">
-                <div class="px-4 py-1.5 text-[0.625rem] font-bold uppercase tracking-[0.12em] dd-text-muted"
+                <div class="px-4 py-1.5 text-2xs font-bold uppercase tracking-[var(--dd-letter-spacing-section)] dd-text-muted"
                      :style="groupIndex > 0 ? { borderTop: '1px solid var(--dd-border)' } : {}">
                   {{ group.label }}
                 </div>
@@ -1445,7 +1476,7 @@ onUnmounted(() => {
                   </div>
                   <div class="min-w-0 flex-1">
                     <div class="text-xs font-semibold truncate dd-text">{{ result.title }}</div>
-                    <div class="text-[0.625rem] truncate dd-text-muted">{{ result.subtitle }}</div>
+                    <div class="text-2xs truncate dd-text-muted">{{ result.subtitle }}</div>
                   </div>
                   <AppIcon name="chevron-right" :size="11" class="dd-text-muted shrink-0" />
                 </AppButton>
@@ -1457,7 +1488,7 @@ onUnmounted(() => {
                 <span v-else>Type to search pages, containers, agents, triggers, watchers, and settings.</span>
               </div>
             </div>
-            <div class="px-4 py-2.5 flex items-center justify-between text-[0.625rem] dd-text-muted"
+            <div class="px-4 py-2.5 flex items-center justify-between text-2xs dd-text-muted"
                  :style="{ borderTop: '1px solid var(--dd-border)' }">
               <span>
                 <span v-if="scopePrefixLabel">Prefix scope active; use </span>
@@ -1485,8 +1516,9 @@ onUnmounted(() => {
     <Teleport to="body">
       <Transition name="menu-fade">
         <div v-if="connectionLost"
-             class="fixed inset-0 z-[200] bg-black/70 backdrop-blur-sm flex items-center justify-center">
-          <div class="w-full max-w-[320px] mx-4 dd-rounded-lg overflow-hidden shadow-2xl text-center"
+             class="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center"
+             style="z-index: var(--z-modal, 200)">
+          <div class="w-full max-w-[var(--dd-layout-overlay-max-width)] mx-4 dd-rounded-lg overflow-hidden shadow-2xl text-center"
                :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }">
             <div class="flex flex-col items-center px-6 py-8 gap-3">
               <div class="disconnect-bounce h-10 mb-1">
@@ -1494,12 +1526,12 @@ onUnmounted(() => {
                      :style="[{ transform: 'rotate(180deg) scaleX(-1)' }, isDark ? { filter: 'invert(1)' } : {}]" />
               </div>
               <h2 class="text-sm font-bold dd-text">{{ connectionOverlayTitle }}</h2>
-              <p class="text-[0.6875rem] dd-text-muted leading-relaxed">
+              <p class="text-2xs-plus dd-text-muted leading-relaxed">
                 {{ connectionOverlayMessage }}
               </p>
               <div class="flex items-center gap-2 mt-1">
                 <AppIcon name="spinner" :size="12" class="dd-spin dd-text-muted" />
-                <span class="text-[0.625rem] dd-text-muted">{{ connectionOverlayStatus }}</span>
+                <span class="text-2xs dd-text-muted">{{ connectionOverlayStatus }}</span>
               </div>
             </div>
           </div>
@@ -1518,13 +1550,13 @@ onUnmounted(() => {
   100% { left: 0; transform: scaleX(-1); }
 }
 .about-swim {
-  animation: swim 6s ease-in-out infinite;
+  animation: swim var(--dd-duration-decorative) ease-in-out infinite;
 }
 .disconnect-bounce {
-  animation: disconnect-bounce 2s ease-in-out infinite;
+  animation: disconnect-bounce var(--dd-duration-pulse) ease-in-out infinite;
 }
 @keyframes disconnect-bounce {
   0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-8px); }
+  50% { transform: translateY(var(--dd-motion-bounce-y)); }
 }
 </style>
