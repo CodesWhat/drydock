@@ -80,7 +80,12 @@ export async function runTriggerBatch(req: Request, res: Response) {
       `Error running batch trigger ${sanitizeLogParam(name)}: ${sanitizeLogParam(errorMessage ?? '')}`,
     );
     if (errorMessage) {
-      sendErrorResponse(res, 500, `Error when running batch trigger ${type}.${name}`);
+      sendErrorResponse(res, 500, {
+        message: `Error when running batch trigger ${type}.${name}`,
+        details: {
+          reason: errorMessage,
+        },
+      });
       return;
     }
     sendErrorResponse(res, 500);

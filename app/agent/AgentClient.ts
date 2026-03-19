@@ -54,6 +54,11 @@ interface AgentSsePayload {
   data?: unknown;
 }
 
+interface RemoteTriggerErrorPayload {
+  error?: unknown;
+  details?: unknown;
+}
+
 const INITIAL_SSE_RECONNECT_DELAY_MS = 1_000;
 const MAX_SSE_RECONNECT_DELAY_MS = 60_000;
 
@@ -435,6 +440,35 @@ export class AgentClient {
     }
   }
 
+  private getRemoteTriggerFailureMessage(error: unknown): string | undefined {
+    if (!error || typeof error !== 'object') {
+      return undefined;
+    }
+    const response = (error as { response?: unknown }).response;
+    if (!response || typeof response !== 'object') {
+      return undefined;
+    }
+    const data = (response as { data?: unknown }).data;
+    if (!data || typeof data !== 'object') {
+      return undefined;
+    }
+
+    const payload = data as RemoteTriggerErrorPayload;
+    const errorMessage = typeof payload.error === 'string' ? payload.error : undefined;
+    if (!errorMessage) {
+      return undefined;
+    }
+
+    const details = payload.details;
+    const reason =
+      details &&
+      typeof details === 'object' &&
+      typeof (details as { reason?: unknown }).reason === 'string'
+        ? (details as { reason: string }).reason
+        : undefined;
+    return reason ? `${errorMessage} (reason: ${reason})` : errorMessage;
+  }
+
   async runRemoteTrigger(container: Container, triggerType: string, triggerName: string) {
     try {
       this.log.debug(
@@ -446,8 +480,10 @@ export class AgentClient {
         this.axiosOptions,
       );
     } catch (error: unknown) {
-      this.log.error(`Error running remote trigger: ${sanitizeLogParam(getErrorMessage(error))}`);
-      throw error;
+      const detailedMessage = this.getRemoteTriggerFailureMessage(error);
+      const errorMessage = detailedMessage ?? getErrorMessage(error);
+      this.log.error(`Error running remote trigger: ${sanitizeLogParam(errorMessage)}`);
+      throw new Error(errorMessage);
     }
   }
 
@@ -459,10 +495,10 @@ export class AgentClient {
         this.axiosOptions,
       );
     } catch (error: unknown) {
-      this.log.error(
-        `Error running remote batch trigger: ${sanitizeLogParam(getErrorMessage(error))}`,
-      );
-      throw error;
+      const detailedMessage = this.getRemoteTriggerFailureMessage(error);
+      const errorMessage = detailedMessage ?? getErrorMessage(error);
+      this.log.error(`Error running remote batch trigger: ${sanitizeLogParam(errorMessage)}`);
+      throw new Error(errorMessage);
     }
   }
 

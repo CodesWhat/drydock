@@ -33,6 +33,11 @@ interface TriggerRequestBody extends Record<string, unknown> {
   updateKind?: TriggerUpdateKind;
 }
 
+interface ErrorResponsePayload {
+  error?: unknown;
+  details?: unknown;
+}
+
 const triggerRequestBodySchema = joi
   .object<TriggerRequestBody>({
     id: joi.string().trim().min(1).required(),
@@ -60,6 +65,45 @@ function validateTriggerRequestBody(body: unknown): {
   return {
     value: validationResult.value,
   };
+}
+
+function getRemoteErrorStatusCode(error: unknown): number | undefined {
+  if (!error || typeof error !== 'object') {
+    return undefined;
+  }
+  const response = (error as { response?: unknown }).response;
+  if (!response || typeof response !== 'object') {
+    return undefined;
+  }
+  const status = (response as { status?: unknown }).status;
+  if (typeof status !== 'number' || status < 400 || status > 599) {
+    return undefined;
+  }
+  return status;
+}
+
+function getRemoteErrorPayload(error: unknown): ErrorResponsePayload | undefined {
+  if (!error || typeof error !== 'object') {
+    return undefined;
+  }
+  const response = (error as { response?: unknown }).response;
+  if (!response || typeof response !== 'object') {
+    return undefined;
+  }
+  const data = (response as { data?: unknown }).data;
+  return data && typeof data === 'object' ? (data as ErrorResponsePayload) : undefined;
+}
+
+function getRemoteErrorMessage(error: unknown): string | undefined {
+  const payload = getRemoteErrorPayload(error);
+  return typeof payload?.error === 'string' ? payload.error : undefined;
+}
+
+function getRemoteErrorDetails(error: unknown): Record<string, unknown> | undefined {
+  const payload = getRemoteErrorPayload(error);
+  return payload?.details && typeof payload.details === 'object'
+    ? (payload.details as Record<string, unknown>)
+    : undefined;
 }
 
 /**
@@ -129,7 +173,10 @@ export async function runTrigger(req: Request<RunTriggerParams>, res: Response) 
     log.warn(
       `Error when running trigger ${sanitizeLogParam(triggerType)}.${sanitizeLogParam(triggerName)} (${sanitizeLogParam(errorMessage)})`,
     );
-    sendErrorResponse(res, 500, `Error when running trigger ${triggerType}.${triggerName}`);
+    sendErrorResponse(res, 500, {
+      message: `Error when running trigger ${triggerType}.${triggerName}`,
+      details: errorMessage ? { reason: errorMessage } : undefined,
+    });
   }
 }
 
@@ -166,11 +213,20 @@ async function runRemoteTrigger(req: Request<RunRemoteTriggerParams>, res: Respo
     log.warn(
       `Error when running remote trigger ${sanitizeLogParam(triggerType)}.${sanitizeLogParam(triggerName)} on agent ${sanitizeLogParam(agentName)} (${sanitizeLogParam(errorMessage)})`,
     );
-    sendErrorResponse(
-      res,
-      500,
-      `Error when running remote trigger ${triggerType}.${triggerName} on agent ${agentName}`,
-    );
+    const remoteStatusCode = getRemoteErrorStatusCode(e);
+    const remoteErrorMessage = getRemoteErrorMessage(e);
+    const remoteErrorDetails = getRemoteErrorDetails(e);
+    if (remoteStatusCode && remoteErrorMessage) {
+      sendErrorResponse(res, remoteStatusCode, {
+        message: remoteErrorMessage,
+        details: remoteErrorDetails,
+      });
+      return;
+    }
+    sendErrorResponse(res, 500, {
+      message: `Error when running remote trigger ${triggerType}.${triggerName} on agent ${agentName}`,
+      details: errorMessage ? { reason: errorMessage } : undefined,
+    });
   }
 }
 

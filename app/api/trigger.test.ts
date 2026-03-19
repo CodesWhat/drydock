@@ -280,6 +280,54 @@ describe('Trigger Router', () => {
       expect(mockGetErrorMessage).toHaveBeenCalledWith({ message: 'trigger failed from object' });
       expect(mockLog.warn).toHaveBeenCalledWith(expect.stringContaining('shared helper message'));
     });
+
+    test('should include error details when trigger execution fails', async () => {
+      const mockTrigger = {
+        trigger: vi.fn().mockRejectedValue(new Error('watcher not found')),
+      };
+      registry.getState.mockReturnValue({
+        trigger: { 'slack.default': mockTrigger },
+      });
+
+      const req = {
+        params: { type: 'slack', name: 'default' },
+        body: { id: 'c1' },
+      };
+      const res = createResponse();
+
+      await runTrigger(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: 'Error when running trigger slack.default',
+          details: expect.objectContaining({ reason: 'watcher not found' }),
+        }),
+      );
+    });
+
+    test('should omit trigger error details when helper returns empty message', async () => {
+      const mockTrigger = {
+        trigger: vi.fn().mockRejectedValue(new Error('hidden error')),
+      };
+      registry.getState.mockReturnValue({
+        trigger: { 'slack.default': mockTrigger },
+      });
+      mockGetErrorMessage.mockReturnValueOnce('');
+
+      const req = {
+        params: { type: 'slack', name: 'default' },
+        body: { id: 'c1' },
+      };
+      const res = createResponse();
+
+      await runTrigger(req, res);
+
+      const responsePayload = res.json.mock.calls[0][0];
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(responsePayload.error).toBe('Error when running trigger slack.default');
+      expect(responsePayload.details).toBeUndefined();
+    });
   });
 
   describe('runRemoteTrigger', () => {
@@ -412,6 +460,155 @@ describe('Trigger Router', () => {
         }),
       );
       expect(mockLog.warn).toHaveBeenCalledWith(expect.stringContaining('remote error'));
+    });
+
+    test('should return generic 500 when remote trigger throws a non-object value', async () => {
+      const mockAgentClient = {
+        runRemoteTrigger: vi.fn().mockRejectedValue('remote error as string'),
+      };
+      agent.getAgent.mockReturnValue(mockAgentClient);
+
+      const handler = getRemoteTriggerHandler();
+      const req = {
+        params: { agent: 'my-agent', type: 'slack', name: 'default' },
+        body: { id: 'c1' },
+      };
+      const res = createResponse();
+
+      await handler(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: 'Error when running remote trigger slack.default on agent my-agent',
+          details: { reason: 'remote error as string' },
+        }),
+      );
+    });
+
+    test('should omit fallback remote error details when helper returns empty message', async () => {
+      const mockAgentClient = {
+        runRemoteTrigger: vi.fn().mockRejectedValue(new Error('remote error')),
+      };
+      agent.getAgent.mockReturnValue(mockAgentClient);
+      mockGetErrorMessage.mockReturnValueOnce('');
+
+      const handler = getRemoteTriggerHandler();
+      const req = {
+        params: { agent: 'my-agent', type: 'slack', name: 'default' },
+        body: { id: 'c1' },
+      };
+      const res = createResponse();
+
+      await handler(req, res);
+
+      const responsePayload = res.json.mock.calls[0][0];
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(responsePayload.error).toBe(
+        'Error when running remote trigger slack.default on agent my-agent',
+      );
+      expect(responsePayload.details).toBeUndefined();
+    });
+
+    test('should ignore remote status codes outside the HTTP error range', async () => {
+      const mockAgentClient = {
+        runRemoteTrigger: vi.fn().mockRejectedValue({
+          message: 'transport failure',
+          response: {
+            status: 200,
+            data: {
+              error: 'Error when running trigger slack.default',
+            },
+          },
+        }),
+      };
+      agent.getAgent.mockReturnValue(mockAgentClient);
+      mockGetErrorMessage.mockReturnValueOnce('transport failure');
+
+      const handler = getRemoteTriggerHandler();
+      const req = {
+        params: { agent: 'my-agent', type: 'slack', name: 'default' },
+        body: { id: 'c1' },
+      };
+      const res = createResponse();
+
+      await handler(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: 'Error when running remote trigger slack.default on agent my-agent',
+          details: { reason: 'transport failure' },
+        }),
+      );
+    });
+
+    test('should fall back to generic error when remote payload is not an object', async () => {
+      const mockAgentClient = {
+        runRemoteTrigger: vi.fn().mockRejectedValue({
+          message: 'Request failed with status code 500',
+          response: {
+            status: 500,
+            data: 'unexpected error payload',
+          },
+        }),
+      };
+      agent.getAgent.mockReturnValue(mockAgentClient);
+      mockGetErrorMessage.mockReturnValueOnce('Request failed with status code 500');
+
+      const handler = getRemoteTriggerHandler();
+      const req = {
+        params: { agent: 'my-agent', type: 'slack', name: 'default' },
+        body: { id: 'c1' },
+      };
+      const res = createResponse();
+
+      await handler(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: 'Error when running remote trigger slack.default on agent my-agent',
+          details: { reason: 'Request failed with status code 500' },
+        }),
+      );
+    });
+
+    test('should propagate remote trigger error status and payload when available', async () => {
+      const mockAgentClient = {
+        runRemoteTrigger: vi.fn().mockRejectedValue({
+          message: 'Request failed with status code 500',
+          response: {
+            status: 500,
+            data: {
+              error: 'Error when running trigger docker.update',
+              details: {
+                reason: 'No watcher found for container c1 (docker.default)',
+              },
+            },
+          },
+        }),
+      };
+      agent.getAgent.mockReturnValue(mockAgentClient);
+
+      const handler = getRemoteTriggerHandler();
+      const req = {
+        params: { agent: 'my-agent', type: 'docker', name: 'update' },
+        body: { id: 'c1' },
+      };
+      const res = createResponse();
+
+      await handler(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: 'Error when running trigger docker.update',
+          details: {
+            reason: 'No watcher found for container c1 (docker.default)',
+          },
+        }),
+      );
     });
   });
 });
