@@ -15,6 +15,9 @@ on:
       - 'release/**'
   pull_request:
     branches: [main]
+  schedule:
+    - cron: '30 6 * * 1'  # Weekly CodeQL (Monday 06:30 UTC)
+    - cron: '0 6 * * 0'   # Weekly Fuzz (Sunday 06:00 UTC)
   merge_group:
     branches: [main]
   workflow_call:
@@ -56,6 +59,177 @@ jobs:
         uses: zizmorcore/zizmor-action@71321a20a9ded102f6e9ce5718a2fcec2c4f70d8  # v0.5.2
         with:
           token: ${{ github.token }}
+
+  codeql:
+    name: CodeQL
+    if: github.event_name == 'pull_request' || github.event_name == 'schedule'
+    needs: [zizmor]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60  # CodeQL init/autobuild/analyze can be long on cache misses
+    permissions:
+      security-events: write
+      contents: read
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [javascript-typescript]
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594  # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@b1bff81932f5cdfc8695c7752dcee935dcd061c8  # v4.33.0
+        with:
+          languages: ${{ matrix.language }}
+          config-file: ./.github/codeql/codeql-config.yml
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@b1bff81932f5cdfc8695c7752dcee935dcd061c8  # v4.33.0
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@b1bff81932f5cdfc8695c7752dcee935dcd061c8  # v4.33.0
+        with:
+          category: /language:${{ matrix.language }}
+
+  fuzz:
+    name: Fuzz
+    if: github.event_name == 'pull_request' || github.event_name == 'schedule'
+    needs: [zizmor]
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      issues: write
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@58077d3c7e43986b6b15fba718e8ea69e387dfcc  # v2.15.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f  # v6.3.0
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: app
+
+      - name: Run fuzz tests
+        id: fuzz-run
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          mkdir -p ../artifacts/fuzz
+          npx vitest run --reporter=verbose '.fuzz.test.ts' 2>&1 | tee ../artifacts/fuzz/fuzz-test.log
+        working-directory: app
+
+      - name: Summarize fuzz result
+        id: fuzz-status
+        if: always()
+        env:
+          FUZZ_OUTCOME: ${{ steps.fuzz-run.outcome }}
+        run: |
+          set -euo pipefail
+
+          if [ "${FUZZ_OUTCOME}" = "success" ]; then
+            echo "failed=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Fuzz Testing"
+              echo "- Result: PASS"
+              echo "- Log artifact: \`fuzz-log-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}\`"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          echo "failed=true" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Fuzz Testing"
+            echo "- Result: FAIL"
+            echo "- AI_ACTION_REQUIRED: inspect fuzz log artifact and failing seed/case before merge."
+            echo "- Log artifact: \`fuzz-log-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload fuzz log artifact
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: fuzz-log-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/fuzz/fuzz-test.log
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Notify via issue on unattended failure
+        if: steps.fuzz-status.outputs.failed == 'true' && github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_TITLE: "🚨 CI: Fuzz tests failing on main"
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+
+          api_headers=(
+            -H "Authorization: Bearer ${GH_TOKEN}"
+            -H "Accept: application/vnd.github+json"
+          )
+
+          issues_url="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/issues?state=open&per_page=100"
+          open_issues="$(curl -fsSL "${api_headers[@]}" "${issues_url}")"
+          existing_number="$(echo "${open_issues}" | jq -r --arg title "${ISSUE_TITLE}" '.[] | select(.title == $title and (.pull_request | not)) | .number' | head -n1)"
+
+          comment_body=$(
+            cat <<EOF
+          Fuzz job failed again.
+
+          - Workflow run: ${RUN_URL}
+          - Commit: \`${GITHUB_SHA}\`
+          - Ref: \`${GITHUB_REF}\`
+          - Log artifact: \`fuzz-log-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}\`
+          EOF
+          )
+
+          if [ -n "${existing_number}" ]; then
+            comment_url="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/issues/${existing_number}/comments"
+            curl -fsSL -X POST "${api_headers[@]}" "${comment_url}" \
+              -d "$(jq -n --arg body "${comment_body}" '{body: $body}')" >/dev/null
+            exit 0
+          fi
+
+          issue_body=$(
+            cat <<EOF
+          Fuzz tests are failing on unattended runs.
+
+          - Latest failing run: ${RUN_URL}
+          - Commit: \`${GITHUB_SHA}\`
+          - Ref: \`${GITHUB_REF}\`
+          - Log artifact: \`fuzz-log-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}\`
+
+          Keep this issue open until fuzz is green again.
+          EOF
+          )
+
+          create_url="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/issues"
+          curl -fsSL -X POST "${api_headers[@]}" "${create_url}" \
+            -d "$(jq -n --arg title "${ISSUE_TITLE}" --arg body "${issue_body}" '{title: $title, body: $body}')" >/dev/null
+
+      - name: Fail workflow on fuzz failure
+        if: steps.fuzz-status.outputs.failed == 'true'
+        run: exit 1
 
   dependency-review:
     name: Dependency Review
@@ -117,6 +291,7 @@ jobs:
 
   lint:
     name: Lint
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -178,6 +353,7 @@ jobs:
 
   test:
     name: Test & Coverage
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: ci-codecov
@@ -230,6 +406,7 @@ jobs:
 
   build:
     name: Build
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 25  # Includes UI build + QA image build/export
     permissions:
@@ -567,6 +744,7 @@ jobs:
 
   e2e:
     name: E2E Tests
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: [build]
@@ -617,6 +795,7 @@ jobs:
 
   playwright:
     name: Playwright E2E
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 25  # Browser install + QA stack startup + full UI flow tests
     needs: [build]
@@ -709,9 +888,7 @@ jobs:
     name: Load Test (Smoke)
     runs-on: ubuntu-latest
     timeout-minutes: 25  # Build+run two load profiles and artifact/report generation
-    environment: ci-artillery
     if: github.event_name == 'pull_request'
-    continue-on-error: true  # advisory until baselines stabilize for this release cycle
     needs: [build]
     permissions:
       contents: read
@@ -740,8 +917,7 @@ jobs:
         run: npm ci
         working-directory: e2e
 
-      - name: Run Artillery smoke test (advisory)
-        continue-on-error: true
+      - name: Run Artillery smoke test
         env:
           ARTILLERY_ENV: smoke
           DD_LOAD_TEST_BUILD_CACHE: gha
@@ -771,10 +947,10 @@ jobs:
           report="$(find artifacts/load-test/behavior -maxdepth 1 -name '*.json' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -n1 | cut -d' ' -f2-)"
           ./scripts/summarize-load-test-report.sh "$report" "Load Test (Behavior)"
 
-      - name: Correctness check (smoke, advisory)
+      - name: Correctness check (smoke, enforced)
         if: always()
         env:
-          DD_LOAD_TEST_CORRECTNESS_ENFORCE: 'false'
+          DD_LOAD_TEST_CORRECTNESS_ENFORCE: 'true'
           DD_LOAD_TEST_MAX_5XX: '0'
           DD_LOAD_TEST_MAX_VUSERS_FAILED: '0'
           DD_LOAD_TEST_MIN_429: '0'
@@ -803,15 +979,14 @@ jobs:
 
           baseline_report="test/load-test-baselines/ci-smoke.json"
           if [ ! -f "${baseline_report}" ]; then
-            echo "Committed smoke baseline not found at ${baseline_report}; skipping regression check."
-            echo "baseline_report=" >> "${GITHUB_OUTPUT}"
-            exit 0
+            echo "::error::Committed smoke baseline not found at ${baseline_report}."
+            exit 1
           fi
 
           echo "baseline_artifact_name=repo:${baseline_report}" >> "${GITHUB_OUTPUT}"
           echo "baseline_report=${baseline_report}" >> "${GITHUB_OUTPUT}"
 
-      - name: Regression check against committed baseline (advisory)
+      - name: Regression check against committed baseline (enforced)
         if: success()
         env:
           BASELINE_REPORT: ${{ steps.load-test-baseline.outputs.baseline_report }}
@@ -822,25 +997,19 @@ jobs:
           DD_LOAD_TEST_MAX_P95_MS: '1200'
           DD_LOAD_TEST_MAX_P99_MS: '2500'
           DD_LOAD_TEST_MIN_REQUEST_RATE: '10'
-          DD_LOAD_TEST_REGRESSION_ENFORCE: 'false'
+          DD_LOAD_TEST_REGRESSION_ENFORCE: 'true'
         run: |
           set -euo pipefail
 
           current_report="$(find artifacts/load-test/smoke -maxdepth 1 -name '*.json' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -n1 | cut -d' ' -f2-)"
           if [ -z "${current_report}" ]; then
-            {
-              echo "### Load Test Regression Gate"
-              echo "- Current smoke report not found; skipping regression check."
-            } >> "${GITHUB_STEP_SUMMARY}"
-            exit 0
+            echo "::error::Current smoke report not found; cannot run regression gate."
+            exit 1
           fi
 
           if [ -z "${BASELINE_REPORT}" ]; then
-            {
-              echo "### Load Test Regression Gate"
-              echo "- No committed smoke baseline found at \`test/load-test-baselines/ci-smoke.json\`; skipping regression check."
-            } >> "${GITHUB_STEP_SUMMARY}"
-            exit 0
+            echo "::error::Baseline report path is empty; expected committed baseline."
+            exit 1
           fi
 
           ./scripts/check-load-test-regression.sh "${current_report}" "${BASELINE_REPORT}"
@@ -867,7 +1036,6 @@ jobs:
     name: Load Test (CI)
     runs-on: ubuntu-latest
     timeout-minutes: 30  # Full enforced load/correctness gates on push
-    environment: ci-artillery
     if: github.event_name == 'push'
     needs: [build]
     permissions:

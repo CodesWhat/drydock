@@ -39,6 +39,8 @@ If Drydock restarts while an update is in progress, it automatically reconciles 
 
 This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration). It picks up the Docker configuration from the [configured Docker watchers](/docs/configuration/watchers) so it can handle updates on Local **and** Remote Docker hosts.
 
+<Callout type="warn">**Agent mode:** When using [distributed agents](/docs/configuration/agents), each agent needs its own Docker trigger configured (e.g., `DD_TRIGGER_DOCKER_LOCAL_PRUNE=true`). The `{trigger_name}` segment is required — `DD_TRIGGER_DOCKER_PRUNE=true` without a name is invalid and will not create a working trigger. The controller does **not** need Docker triggers for remote agents; agent triggers are discovered automatically during the handshake.</Callout>
+
 ## Image Backup & Rollback
 
 Every time a container is updated, Drydock automatically backs up the previous image metadata. Backups are retained per container up to the `BACKUPCOUNT` limit (default: 3), with older backups pruned automatically.

@@ -228,6 +228,33 @@ docker run \
 
 <Callout type="warn">Don't forget to mount the certificates into the container!</Callout>
 
+### Connecting via SSH
+
+Drydock does not currently support the `ssh://` protocol for remote Docker connections. The `PROTOCOL` variable only accepts `http` or `https`.
+
+If your remote Docker host is only reachable over SSH, you can use an **SSH tunnel** to forward the remote Docker socket to a local TCP port or Unix socket, then point Drydock at that forwarded endpoint:
+
+```bash
+# Forward the remote Docker socket to a local TCP port
+ssh -nNT -L 2375:/var/run/docker.sock user@remote-host
+```
+
+Then configure Drydock to connect to the forwarded port:
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    environment:
+      - DD_WATCHER_MYREMOTEHOST_HOST=host.docker.internal
+      - DD_WATCHER_MYREMOTEHOST_PORT=2375
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+```
+
+<Callout type="info">For production SSH tunneling, consider using [autossh](https://www.harding.motd.ca/autossh/) to automatically restart the tunnel if the connection drops.</Callout>
+
 ## Docker Socket Security
 
 Drydock needs to communicate with the Docker Engine API to monitor containers and (optionally) perform updates. By default this means mounting the Docker socket — which grants broad access to the host. This section covers all available approaches to secure that access, from the recommended socket proxy to remote TLS connections.
@@ -681,8 +708,8 @@ To fine-tune the behaviour of drydock _per container_, you can add labels on the
 | `dd.tag.include` | ⚪ | Regex to include specific tags only | Valid JavaScript Regex | |
 | `dd.tag.transform` | ⚪ | Transform function to apply to the tag | `$valid_regex => $valid_string_with_placeholders` (see below) | |
 | `dd.tag.family` | ⚪ | Tag family policy for semver updates | `strict` (default) or `loose` | `strict` |
-| `dd.trigger.exclude` | ⚪ | Optional list of triggers to exclude | `$trigger_1_id_or_name,$trigger_2_id_or_name:$threshold` | |
-| `dd.trigger.include` | ⚪ | Optional list of triggers to include | `$trigger_1_id_or_name,$trigger_2_id_or_name:$threshold` | |
+| `dd.trigger.exclude` | ⚪ | Exclude specific triggers from automatic execution for this container | `$trigger_1_id_or_name,$trigger_2_id_or_name:$threshold` | |
+| `dd.trigger.include` | ⚪ | Only allow specific triggers to automatically execute for this container | `$trigger_1_id_or_name,$trigger_2_id_or_name:$threshold` | |
 | `dd.watch.digest` | ⚪ | Watch this container digest | Valid Boolean | `false` |
 | `dd.watch` | ⚪ | Explicitly include or exclude this container from monitoring (overrides `WATCHBYDEFAULT`) | Valid Boolean | Inherits from `WATCHBYDEFAULT` (`true` by default) |
 | `dd.compose.file` | ⚪ | Path to the docker-compose.yml file for compose-native updates (also configurable via trigger `COMPOSEFILELABEL`) | file path | |
@@ -695,6 +722,8 @@ To fine-tune the behaviour of drydock _per container_, you can add labels on the
 `dd.runtime.entrypoint.origin` and `dd.runtime.cmd.origin` are managed automatically by the Docker trigger during container updates. You only need to set them manually if drydock cannot detect the origin (shows `unknown`) and you want to explicitly pin or release a custom entrypoint/cmd.
 
 <Callout type="warn">`dd.inspect.tag.path` is optional and opt-in. Use it only when your image metadata tracks the running app version reliably; some images set unrelated values. Also note that legacy alias `dd.registry.lookup.url` is still accepted for compatibility, but prefer `dd.registry.lookup.image`.</Callout>
+
+<Callout type="info">**`dd.trigger.include` / `dd.trigger.exclude` control automatic trigger dispatch.** These labels filter which triggers fire automatically when an update is detected (e.g., route notifications to specific Slack channels or restrict which docker trigger auto-updates this container). They match against the trigger **name** (e.g., `alerts`) or **full ID** (e.g., `smtp.alerts`). Manual updates from the UI use [agent-based matching](/docs/configuration/agents) instead — the update is routed to the agent that discovered the container.</Callout>
 
 ## Label examples
 

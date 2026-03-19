@@ -140,46 +140,83 @@ Use the auth metrics below to detect brute-force and username-enumeration activi
 - `drydock_auth_account_locked_total` gauge
 - `drydock_auth_ip_locked_total` gauge
 
-#### Recommended alert rules
+#### Prometheus alerting rules
+
+Drop the following into your Prometheus rules directory (e.g. `/etc/prometheus/rules/drydock-auth.yml`):
 
 ```yaml
 groups:
   - name: drydock-auth
     rules:
-      - alert: DrydockAuthInvalidSpike
-        expr: sum(rate(drydock_auth_login_total{provider="basic",outcome=~"invalid|locked"}[5m])) > 1
-        for: 10m
+      # High login failure rate — more than 10 failed attempts in 5 minutes
+      - alert: DrydockHighLoginFailureRate
+        expr: increase(drydock_auth_login_total{outcome=~"invalid|locked|error"}[5m]) > 10
+        for: 1m
         labels:
           severity: warning
         annotations:
-          summary: "Drydock auth invalid/locked attempts are spiking"
+          summary: "High login failure rate on Drydock"
+          description: >-
+            {{ $value | printf "%.0f" }} failed login attempts in the last 5 minutes
+            (provider={{ $labels.provider }}, outcome={{ $labels.outcome }}).
 
-      - alert: DrydockAuthUsernameEnumerationSpike
-        expr: increase(drydock_auth_username_mismatch_total[5m]) > 25
+      # Brute-force / username-enumeration detection
+      - alert: DrydockBruteForceDetected
+        expr: increase(drydock_auth_username_mismatch_total[5m]) > 5
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Possible brute-force or username enumeration"
+          description: >-
+            {{ $value | printf "%.0f" }} username mismatches in 5 minutes.
+            Attackers may be probing valid usernames.
+
+      # Active account or IP lockouts
+      - alert: DrydockActiveLockouts
+        expr: drydock_auth_account_locked_total > 0 or drydock_auth_ip_locked_total > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Active auth lockouts on Drydock"
+          description: >-
+            Locked accounts={{ $value }} (drydock_auth_account_locked_total),
+            locked IPs (drydock_auth_ip_locked_total).
+            Verify whether this is a legitimate operator lockout or an ongoing attack.
+
+      # Login latency degradation — p95 exceeds 2 seconds
+      - alert: DrydockAuthLatencyHigh
+        expr: >-
+          histogram_quantile(0.95,
+            sum by (le, provider) (rate(drydock_auth_login_duration_seconds_bucket[5m]))
+          ) > 2
         for: 5m
         labels:
           severity: warning
         annotations:
-          summary: "Potential username enumeration against /auth/login"
-
-      - alert: DrydockAuthLockoutPressure
-        expr: drydock_auth_account_locked_total > 10 or drydock_auth_ip_locked_total > 5
-        for: 10m
-        labels:
-          severity: critical
-        annotations:
-          summary: "Many auth identities are currently locked"
-
-      - alert: DrydockAuthVerificationLatencyP99High
-        expr: histogram_quantile(0.99, sum by (le, provider) (rate(drydock_auth_login_duration_seconds_bucket[5m]))) > 0.75
-        for: 10m
-        labels:
-          severity: warning
-        annotations:
-          summary: "Auth verification p99 latency is elevated"
+          summary: "Auth verification p95 latency exceeds 2 s"
+          description: >-
+            p95 login duration is {{ $value | printf "%.2f" }}s for provider={{ $labels.provider }}.
+            Possible causes: slow OIDC IdP, high bcrypt cost, resource contention.
 ```
 
-Tune thresholds from your baseline traffic and expected operator behavior.
+Tune thresholds to match your baseline traffic. A single-operator instance will rarely see 10 failures in 5 minutes under normal use; busier multi-user deployments may need higher values.
+
+#### Grafana dashboard panels
+
+Use these PromQL queries as a starting point for a Grafana dashboard row dedicated to auth observability.
+
+| Panel | Type | PromQL |
+| --- | --- | --- |
+| Login outcomes over time | Time series (stacked) | `sum by (outcome) (rate(drydock_auth_login_total[5m]))` |
+| Login failure rate by provider | Time series | `sum by (provider) (rate(drydock_auth_login_total{outcome!="success"}[5m]))` |
+| Username mismatch rate | Time series | `rate(drydock_auth_username_mismatch_total[5m])` |
+| Active lockouts | Stat / gauge | `drydock_auth_account_locked_total` and `drydock_auth_ip_locked_total` (separate stats or combined bar gauge) |
+| Login latency p50 / p95 / p99 | Time series | `histogram_quantile(0.50, sum by (le) (rate(drydock_auth_login_duration_seconds_bucket[5m])))` (repeat for `0.95` and `0.99`) |
+| Success ratio | Gauge (percent) | `sum(rate(drydock_auth_login_total{outcome="success"}[5m])) / sum(rate(drydock_auth_login_total[5m]))` |
+
+Set the "Login outcomes" panel to use the `outcome` label as the legend and color `success` green, `invalid` yellow, `locked` orange, `error` red for quick visual scanning.
 
 #### Lockout tuning guidance
 
