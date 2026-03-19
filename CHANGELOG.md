@@ -10,10 +10,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Digest notification mode** — New `MODE=digest` trigger option that accumulates update events over a configurable time window and sends a single batch notification on a cron schedule. Configure with `DD_TRIGGER_{type}_{name}_MODE=digest` and `DD_TRIGGER_{type}_{name}_DIGESTCRON=0 8 * * *` (default: daily at 8am). Works with all notification triggers (SMTP, Telegram, Slack, Pushover, etc.). ([Discussion #185](https://github.com/CodesWhat/drydock/discussions/185))
+- **Toast notifications for container action errors** — Update and delete failures now surface as visible toast notifications in the UI instead of silently failing. Toasts auto-dismiss after 6 seconds and stack below announcement banners. ([#183](https://github.com/CodesWhat/drydock/issues/183))
+- **Podman API version negotiation** — Docker watcher probes the daemon's `/version` endpoint over the Unix socket and pins Dockerode to the reported API version. Prevents `EAI_AGAIN` crashes caused by `docker-modem`'s redirect-following bug when Podman returns HTTP 301 for unversioned API paths. ([#182](https://github.com/CodesWhat/drydock/issues/182))
+
+### Fixed
+
+- **Container alias name canonicalization** — `getContainerName()` now strips Docker recreate alias prefixes (e.g. `8bf70beac570_termix` → `termix`) before the name enters the store, so all triggers (Telegram, Slack, Pushover, etc.) receive canonical names. MQTT was already fixed in v1.4.5; this extends the fix to the source. ([#156](https://github.com/CodesWhat/drydock/issues/156))
+- **Cascading -old container updates** — "Update All" batch no longer triggers updates on containers renamed with `-old-{timestamp}` suffix during a prior update. Guard added to base Trigger class (`mustTrigger`), all API endpoints (container-actions, webhook, trigger proxy), and UI batch freezes container IDs at start. ([#183](https://github.com/CodesWhat/drydock/issues/183))
+- **Remote trigger error reporting** — Agent-side trigger endpoints now return structured error details with reason field. Controller extracts and logs the actual failure message instead of bare "Request failed with status code 500". Original Axios error preserved for proxy forwarding. ([#183](https://github.com/CodesWhat/drydock/issues/183))
+- **Dashboard confirm dialog** — `ConfirmDialog` moved to global app shell so update prompts from the dashboard "Updates Available" widget appear immediately instead of requiring navigation to the Containers page. ([#184](https://github.com/CodesWhat/drydock/issues/184))
+- **Registry failures in Updates Available widget** — Containers with "check failed" status (registry errors) no longer appear in the dashboard "Updates Available" section. They remain visible on the Containers page with error indicators. ([#186](https://github.com/CodesWhat/drydock/issues/186))
+- **Digest buffer stale entry eviction** — Containers evicted from digest buffer when update-applied events fire, preventing already-updated containers from appearing in the next digest flush.
+- **Digest cron validation** — `DIGESTCRON` config validated with `cron.validate()` at registration time, failing with a clear error instead of a runtime crash.
+
 ### Changed
 
 - **Lefthook pre-push Playwright gate** — Added `e2e-playwright` to the root pre-push pipeline so local hooks now run Cucumber E2E and Playwright QA before push.
 - **Trigger rename migration CLI support** — `config migrate` now supports `--source trigger` and rewrites legacy trigger prefixes (`DD_TRIGGER_*`, `dd.trigger.include`, `dd.trigger.exclude`) to action-prefixed aliases.
+- **Centralized rollback container guard** — `-old-{timestamp}` container rejection moved from Docker trigger to base Trigger class, covering all trigger types (Docker, Dockercompose, etc.) and all entry points (auto-trigger, webhook, API).
 
 ## [1.5.0] — 2026-03-19
 
