@@ -916,6 +916,65 @@ describe('useContainerActions', () => {
     expect(mocks.updateContainer).toHaveBeenCalledWith('container-1');
   });
 
+  it('shows tag change details in update confirmation for tag updates', async () => {
+    const container = makeContainer({
+      id: 'container-1',
+      name: 'web',
+      currentTag: 'v6',
+      newTag: 'v7',
+      updateKind: 'major',
+    });
+    const { composable } = await mountActionsHarness({
+      selectedContainer: container,
+      selectedContainerId: container.id,
+      containerIdMap: { web: 'container-1' },
+    });
+
+    composable.confirmUpdate('web');
+
+    const confirmCall = mocks.confirmRequire.mock.calls[0][0] as { message: string };
+    expect(confirmCall.message).toContain(':v6');
+    expect(confirmCall.message).toContain(':v7');
+    expect(confirmCall.message).toContain('major');
+  });
+
+  it('shows digest change details in update confirmation for digest updates', async () => {
+    const container = makeContainer({
+      id: 'container-1',
+      name: 'web',
+      currentTag: 'latest',
+      newTag: 'latest',
+      updateKind: 'digest',
+    });
+    const { composable } = await mountActionsHarness({
+      selectedContainer: container,
+      selectedContainerId: container.id,
+      containerIdMap: { web: 'container-1' },
+    });
+
+    composable.confirmUpdate('web');
+
+    const confirmCall = mocks.confirmRequire.mock.calls[0][0] as { message: string };
+    expect(confirmCall.message).toContain(':latest');
+    expect(confirmCall.message).toContain('digest');
+    expect(confirmCall.message).not.toContain(':v');
+  });
+
+  it('falls back to the generic update confirmation when container details are missing', async () => {
+    const { composable } = await mountActionsHarness({
+      selectedContainer: null,
+      selectedContainerId: undefined,
+      containerIdMap: { web: 'container-1' },
+    });
+
+    composable.confirmUpdate('web');
+
+    const confirmCall = mocks.confirmRequire.mock.calls[0][0] as { message: string };
+    expect(confirmCall.message).toBe(
+      'Update web now? This will apply the latest discovered image.',
+    );
+  });
+
   it('wires rollback confirmation dialog to rollback accept handler', async () => {
     const container = makeContainer({ id: 'container-1', name: 'web' });
     const { composable } = await mountActionsHarness({

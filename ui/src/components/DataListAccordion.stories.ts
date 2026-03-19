@@ -35,23 +35,23 @@ const renderAccordion = (args: Story['args']) => ({
              :style="{ backgroundColor: item.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)' }" />
         <AppIcon name="servers" :size="12" class="dd-text-secondary" />
         <span class="text-sm font-semibold flex-1 min-w-0 truncate dd-text">{{ item.name }}</span>
-        <span class="text-[0.625rem] font-mono dd-text-muted hidden sm:inline">{{ item.endpoint }}</span>
+        <span class="text-2xs font-mono dd-text-muted hidden sm:inline">{{ item.endpoint }}</span>
       </template>
       <template #details="{ item }">
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3 mt-2">
           <div>
-            <div class="text-[0.625rem] font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">Status</div>
+            <div class="text-2xs font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">Status</div>
             <div class="text-xs font-semibold"
                  :style="{ color: item.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)' }">
               {{ item.status }}
             </div>
           </div>
           <div>
-            <div class="text-[0.625rem] font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">Containers</div>
+            <div class="text-2xs font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">Containers</div>
             <div class="text-xs dd-text">{{ item.containers }}</div>
           </div>
           <div class="sm:col-span-2">
-            <div class="text-[0.625rem] font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">Endpoint</div>
+            <div class="text-2xs font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">Endpoint</div>
             <div class="text-xs font-mono dd-text">{{ item.endpoint }}</div>
           </div>
         </div>

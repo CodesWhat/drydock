@@ -527,4 +527,93 @@ describe('AppLayout', () => {
 
     expect(wrapper.find('[data-testid="sha-hash-deprecation-banner"]').exists()).toBe(false);
   });
+
+  it('shows a trigger prefix deprecation banner when a trigger uses the legacy prefix', async () => {
+    mockGetAllTriggers.mockResolvedValue([
+      {
+        id: 'trigger.build',
+        name: 'build',
+        type: 'webhook',
+        metadata: { usesLegacyPrefix: true },
+      },
+    ]);
+
+    const wrapper = mountLayout();
+    mountedWrappers.push(wrapper);
+    await flushPromises();
+
+    const banner = wrapper.find('[data-testid="trigger-prefix-deprecation-banner"]');
+    expect(banner.exists()).toBe(true);
+    expect(banner.text()).toMatch(/legacy trigger prefix/i);
+    expect(
+      banner.find('[data-testid="trigger-prefix-deprecation-banner-dismiss-forever"]').exists(),
+    ).toBe(true);
+  });
+
+  it('supports dismissing trigger prefix deprecation banner for current session', async () => {
+    mockGetAllTriggers.mockResolvedValue([
+      {
+        id: 'trigger.build',
+        name: 'build',
+        type: 'webhook',
+        metadata: { usesLegacyPrefix: true },
+      },
+    ]);
+
+    const wrapper = mountLayout();
+    mountedWrappers.push(wrapper);
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="trigger-prefix-deprecation-banner"]').exists()).toBe(true);
+
+    await wrapper
+      .find('[data-testid="trigger-prefix-deprecation-banner-dismiss-session"]')
+      .trigger('click');
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="trigger-prefix-deprecation-banner"]').exists()).toBe(false);
+  });
+
+  it('supports permanently dismissing trigger prefix deprecation banner', async () => {
+    mockGetAllTriggers.mockResolvedValue([
+      {
+        id: 'trigger.build',
+        name: 'build',
+        type: 'webhook',
+        metadata: { usesLegacyPrefix: true },
+      },
+    ]);
+
+    const wrapper = mountLayout();
+    mountedWrappers.push(wrapper);
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="trigger-prefix-deprecation-banner"]').exists()).toBe(true);
+
+    await wrapper
+      .find('[data-testid="trigger-prefix-deprecation-banner-dismiss-forever"]')
+      .trigger('click');
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="trigger-prefix-deprecation-banner"]').exists()).toBe(false);
+    expect(localStorage.getItem('dd-banner-trigger-prefix-v1')).toBe('true');
+  });
+
+  it('does not show trigger prefix deprecation banner after permanent dismissal is persisted', async () => {
+    localStorage.setItem('dd-banner-trigger-prefix-v1', 'true');
+    mockGetAllTriggers.mockResolvedValue([
+      {
+        id: 'trigger.build',
+        name: 'build',
+        type: 'webhook',
+        metadata: { usesLegacyPrefix: true },
+      },
+    ]);
+
+    const wrapper = mountLayout();
+    mountedWrappers.push(wrapper);
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="trigger-prefix-deprecation-banner"]').exists()).toBe(false);
+  });
 });

@@ -100,4 +100,35 @@ config.global.directives = {
 
 config.global.components = {
   AppButton,
+  CopyableTag: {
+    template: '<span><slot /></span>',
+  },
 };
+
+class ResizeObserverMock {
+  callback: ResizeObserverCallback;
+
+  constructor(callback: ResizeObserverCallback) {
+    this.callback = callback;
+  }
+
+  observe() {
+    // The dashboard widgets only need the observer to exist in unit tests.
+  }
+
+  unobserve() {
+    // No-op for tests.
+  }
+
+  disconnect() {
+    // No-op for tests.
+  }
+}
+
+vi.stubGlobal('ResizeObserver', ResizeObserverMock);
+
+if (typeof document !== 'undefined' && !document.getElementById('breadcrumb-actions')) {
+  const breadcrumbActions = document.createElement('div');
+  breadcrumbActions.id = 'breadcrumb-actions';
+  document.body.appendChild(breadcrumbActions);
+}

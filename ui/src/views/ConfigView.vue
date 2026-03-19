@@ -11,6 +11,7 @@ import { type IconLibrary, iconMap, libraryLabels } from '../icons';
 import { themeFamilies } from '../theme/palettes';
 import { getAppInfos } from '../services/app';
 import { getUser } from '../services/auth';
+import { downloadDebugDump } from '../services/debug';
 import { getServer } from '../services/server';
 import { clearIconCache, getSettings, updateSettings } from '../services/settings';
 import { getStore } from '../services/store';
@@ -328,6 +329,8 @@ async function toggleInternetlessMode() {
 
 const cacheClearing = ref(false);
 const cacheCleared = ref<number | null>(null);
+const debugDumpDownloading = ref(false);
+const debugDumpError = ref('');
 
 async function handleClearIconCache() {
   settingsError.value = '';
@@ -340,6 +343,41 @@ async function handleClearIconCache() {
     settingsError.value = errorMessage(e, 'Failed to clear icon cache');
   } finally {
     cacheClearing.value = false;
+  }
+}
+
+function triggerBlobDownload(blob: Blob, filename: string): void {
+  const createObjectUrl = globalThis.URL?.createObjectURL;
+  if (typeof createObjectUrl !== 'function') {
+    throw new Error('Browser does not support file downloads');
+  }
+
+  const objectUrl = createObjectUrl(blob);
+  const link = document.createElement('a');
+  link.href = objectUrl;
+  link.download = filename;
+  link.style.display = 'none';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(objectUrl);
+}
+
+async function handleDownloadDebugDump() {
+  if (debugDumpDownloading.value) {
+    return;
+  }
+
+  debugDumpDownloading.value = true;
+  debugDumpError.value = '';
+
+  try {
+    const { blob, filename } = await downloadDebugDump();
+    triggerBlobDownload(blob, filename);
+  } catch (e: unknown) {
+    debugDumpError.value = errorMessage(e, 'Unable to download debug dump');
+  } finally {
+    debugDumpDownloading.value = false;
   }
 }
 
@@ -396,8 +434,11 @@ function handleSelectIconLibrary(library: string) {
       :settings-loading="settingsLoading"
       :cache-clearing="cacheClearing"
       :cache-cleared="cacheCleared"
+      :debug-dump-downloading="debugDumpDownloading"
+      :debug-dump-error="debugDumpError"
       @toggle-internetless-mode="toggleInternetlessMode"
       @clear-icon-cache="handleClearIconCache"
+      @download-debug-dump="handleDownloadDebugDump"
     />
 
     <ConfigAppearanceTab

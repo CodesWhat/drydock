@@ -311,9 +311,20 @@ function createConfirmHandlers(args: {
   }
 
   function confirmUpdate(name: string) {
+    const container = args.selectedContainer.value;
+    let message = `Update ${name} now? This will apply the latest discovered image.`;
+    if (container && container.currentTag && container.newTag) {
+      const isTagChange = container.updateKind !== 'digest';
+      if (isTagChange) {
+        const kind = container.updateKind ? ` (${container.updateKind})` : '';
+        message = `Update ${name}? This will change the image tag from :${container.currentTag} to :${container.newTag}${kind}.`;
+      } else {
+        message = `Update ${name}? A newer build of :${container.currentTag} is available (digest change).`;
+      }
+    }
     args.confirm.require({
       header: 'Update Container',
-      message: `Update ${name} now? This will apply the latest discovered image.`,
+      message,
       rejectLabel: 'Cancel',
       acceptLabel: 'Update',
       severity: 'warn',

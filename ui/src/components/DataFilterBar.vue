@@ -38,7 +38,7 @@ function viewModeLabel(id: string): string {
       <div class="flex items-center gap-2.5 relative">
         <!-- Filter toggle button -->
         <div v-if="!hideFilter" class="relative" v-tooltip.top="'Filters'">
-          <AppButton size="icon-sm" variant="plain" class="text-[0.6875rem]" type="button"
+          <AppButton size="icon-sm" variant="plain" class="text-2xs-plus" type="button"
                   
                   :class="showFilters || (activeFilterCount ?? 0) > 0 ? 'dd-text dd-bg-elevated' : 'dd-text-secondary hover:dd-text hover:dd-bg-elevated'"
                   aria-label="Toggle filters"
@@ -48,7 +48,7 @@ function viewModeLabel(id: string): string {
             <AppIcon name="filter" :size="13" />
           </AppButton>
           <span v-if="(activeFilterCount ?? 0) > 0"
-                class="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full text-[0.5rem] font-bold flex items-center justify-center text-white pointer-events-none"
+                class="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full text-4xs font-bold flex items-center justify-center text-white pointer-events-none"
                 style="background: var(--dd-primary);">
             {{ activeFilterCount }}
           </span>
@@ -65,7 +65,7 @@ function viewModeLabel(id: string): string {
 
         <!-- Right side: count + view mode switcher -->
         <div class="flex items-center gap-2 ml-auto">
-          <span class="text-[0.625rem] font-semibold tabular-nums shrink-0 px-2 py-1 dd-rounded dd-text-muted dd-bg-card">
+          <span class="text-2xs font-semibold tabular-nums shrink-0 px-2 py-1 dd-rounded dd-text-muted dd-bg-card">
             {{ filteredCount }}/{{ totalCount }}<template v-if="countLabel"> {{ countLabel }}</template>
           </span>
           <div class="flex items-center dd-rounded overflow-hidden"
@@ -73,7 +73,7 @@ function viewModeLabel(id: string): string {
                aria-label="View mode">
             <AppButton size="none" variant="plain" weight="none" v-for="vm in (viewModes ?? defaultViewModes)" :key="vm.id"
                     type="button"
-                    class="w-7 h-7 flex items-center justify-center text-[0.6875rem] transition-colors"
+                    class="w-7 h-7 flex items-center justify-center text-2xs-plus transition-colors"
                     :class="modelValue === vm.id ? 'dd-text dd-bg-elevated' : 'dd-text-secondary hover:dd-text hover:dd-bg-elevated'"
                     v-tooltip.top="viewModeLabel(vm.id)"
                     :aria-label="viewModeLabel(vm.id)"

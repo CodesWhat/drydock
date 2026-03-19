@@ -79,7 +79,7 @@ export const WithCustomCellsAndActions: Story = {
           </div>
         </template>
         <template #cell-status="{ row }">
-          <span class="badge text-[0.5625rem] font-bold uppercase"
+          <span class="badge text-3xs font-bold uppercase"
                 :style="{
                   backgroundColor: row.status === 'running' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
                   color: row.status === 'running' ? 'var(--dd-success)' : 'var(--dd-danger)',
@@ -88,7 +88,7 @@ export const WithCustomCellsAndActions: Story = {
           </span>
         </template>
         <template #actions="{ row }">
-          <button class="px-2 py-1 text-[0.625rem] dd-rounded dd-bg-elevated dd-text-muted hover:dd-text">
+          <button class="px-2 py-1 text-2xs dd-rounded dd-bg-elevated dd-text-muted hover:dd-text">
             Open {{ row.id }}
           </button>
         </template>

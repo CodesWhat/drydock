@@ -21,6 +21,32 @@ body {
   --dd-radius-sm: 2px; /* Small elements (badges, chips) */
   --dd-radius-lg: 4px; /* Large panels (modals, detail panels) */
   --dd-font-size: 1; /* Font size scale factor (1 = 100% = default) */
+  --dd-space-4: 4px;
+  --dd-space-6: 6px;
+  --dd-space-8: 8px;
+  --dd-space-12: 12px;
+  --dd-letter-spacing-brand: 0.15em;
+  --dd-letter-spacing-section: 0.12em;
+  --dd-letter-spacing-badge: 0.02em;
+  --dd-opacity-dim: 0.75;
+  --dd-opacity-handle-idle: 0.8;
+  --dd-motion-hover-lift-y: -2px;
+  --dd-motion-panel-enter-x: 20px;
+  --dd-motion-menu-enter-y: -4px;
+  --dd-motion-bounce-y: -8px;
+  --dd-motion-card-enter-y: 8px;
+  --dd-layout-sidebar-collapsed-width: 56px;
+  --dd-layout-sidebar-expanded-width: 240px;
+  --dd-layout-filter-max-width: 240px;
+  --dd-layout-main-viewport-offset: 96px;
+  --dd-layout-panel-width-sm: 420px;
+  --dd-layout-panel-width-md: 560px;
+  --dd-layout-panel-width-lg: 720px;
+  --dd-layout-dialog-max-width: 420px;
+  --dd-layout-dialog-min-width: 340px;
+  --dd-layout-about-max-width: 340px;
+  --dd-layout-search-max-width: 560px;
+  --dd-layout-overlay-max-width: 320px;
   --drydock-font: "IBM Plex Mono", monospace;
   background-color: var(--dd-bg);
   color: var(--dd-text);
@@ -123,6 +149,27 @@ html.dd-font-comic-mono {
   --color-drydock-secondary: var(--dd-primary);
   --color-drydock-accent: var(--dd-success);
   --font-mono: var(--drydock-font, "IBM Plex Mono", monospace);
+  --text-5xs: 0.4375rem; /* 7px */
+  --text-4xs: 0.5rem; /* 8px */
+  --text-3xs: 0.5625rem; /* 9px */
+  --text-2xs: 0.625rem; /* 10px */
+  --text-2xs-plus: 0.6875rem; /* 11px */
+  --text-xs-plus: 0.8125rem; /* 13px */
+  --text-sm-plus: 0.9375rem; /* 15px */
+  --z-overlay: 100;
+  --z-modal: 200;
+  --dd-duration-fast: 0.15s;
+  --dd-duration-standard: 0.25s;
+  --dd-duration-enter: 0.3s;
+  --dd-duration-emphasis: 0.35s;
+  --dd-duration-slow: 0.6s;
+  --dd-duration-spinner-fast: 0.8s;
+  --dd-duration-spinner: 1.5s;
+  --dd-duration-pulse: 2s;
+  --dd-duration-spinner-slow: 2.5s;
+  --dd-duration-decorative: 6s;
+  --dd-duration-short: 0.2s;
+  --dd-duration-delay: 0.05s;
 }
 
 /* Utility: apply global radius token via Tailwind-style class */
@@ -353,13 +400,13 @@ body.dd-col-resizing {
   white-space: nowrap;
   font-size: 11px;
   line-height: 1.1;
-  padding: 4px 8px;
+  padding: var(--dd-space-4) var(--dd-space-8);
   border-radius: var(--dd-radius-sm);
   border: 1px solid var(--dd-border-strong);
-  box-shadow: 0 4px 12px rgb(0 0 0 / 20%);
+  box-shadow: var(--dd-shadow-tooltip);
   background: var(--dd-bg-card);
   color: var(--dd-text);
-  transition: opacity 0.15s ease;
+  transition: opacity var(--dd-duration-fast) ease;
 }
 .dd-tooltip-popup.dd-tooltip-visible {
   opacity: 1;
@@ -379,7 +426,7 @@ body.dd-col-resizing {
 }
 ::-webkit-scrollbar-thumb {
   background: var(--dd-scrollbar);
-  border-radius: 3px;
+  border-radius: var(--dd-radius-sm);
 }
 @supports (overflow: overlay) {
   .overflow-auto {
@@ -405,29 +452,29 @@ body.dd-col-resizing {
 /* Sidebar transitions */
 .sidebar-transition {
   transition:
-    width 0.25s cubic-bezier(0.4, 0, 0.2, 1),
-    min-width 0.25s cubic-bezier(0.4, 0, 0.2, 1),
-    transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    width var(--dd-duration-standard) cubic-bezier(0.4, 0, 0.2, 1),
+    min-width var(--dd-duration-standard) cubic-bezier(0.4, 0, 0.2, 1),
+    transform var(--dd-duration-standard) cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* Nav item transitions */
 .nav-item {
   transition:
-    background-color 0.15s ease,
-    color 0.15s ease,
-    padding 0.15s ease;
+    background-color var(--dd-duration-fast) ease,
+    color var(--dd-duration-fast) ease,
+    padding var(--dd-duration-fast) ease;
 }
 
 /* Overlay backdrop */
 .sidebar-overlay {
-  transition: opacity 0.25s ease;
+  transition: opacity var(--dd-duration-standard) ease;
 }
 
 /* Fade text in sidebar */
 .sidebar-label {
   transition:
-    opacity 0.2s ease 0.05s,
-    max-width 0.2s ease;
+    opacity var(--dd-duration-short) ease var(--dd-duration-delay),
+    max-width var(--dd-duration-short) ease;
   white-space: nowrap;
   overflow: hidden;
 }
@@ -436,7 +483,7 @@ body.dd-col-resizing {
   max-width: 0;
   transition:
     opacity 0.1s ease,
-    max-width 0.15s ease;
+    max-width var(--dd-duration-fast) ease;
 }
 
 /* Stat card left border */
@@ -446,18 +493,18 @@ body.dd-col-resizing {
 
 /* Spinner speeds */
 .dd-spin {
-  animation: spin 1.5s linear infinite;
+  animation: spin var(--dd-duration-spinner) linear infinite;
 }
 .dd-spin-slow {
-  animation: spin 2.5s linear infinite;
+  animation: spin var(--dd-duration-spinner-slow) linear infinite;
 }
 .dd-spin-fast {
-  animation: spin 0.8s linear infinite;
+  animation: spin var(--dd-duration-spinner-fast) linear infinite;
 }
 
 /* Donut chart */
 .donut-ring {
-  transition: stroke-dasharray 0.6s ease;
+  transition: stroke-dasharray var(--dd-duration-slow) ease;
 }
 
 /* Badge pulse */
@@ -471,7 +518,7 @@ body.dd-col-resizing {
   }
 }
 .badge-pulse {
-  animation: pulse-badge 2s ease-in-out infinite;
+  animation: pulse-badge var(--dd-duration-pulse) ease-in-out infinite;
 }
 
 /* Tooltip for collapsed sidebar */
@@ -484,7 +531,7 @@ body.dd-col-resizing {
   white-space: nowrap;
   pointer-events: none;
   opacity: 0;
-  transition: opacity 0.15s ease;
+  transition: opacity var(--dd-duration-fast) ease;
   z-index: 1000;
 }
 .sidebar-collapsed .nav-item-wrapper:hover .nav-tooltip {
@@ -499,40 +546,40 @@ body.dd-col-resizing {
   border-radius: var(--dd-radius-sm);
   font-size: 0.6875rem;
   font-weight: 600;
-  letter-spacing: 0.02em;
+  letter-spacing: var(--dd-letter-spacing-badge);
 }
 
 /* Hamburger line */
 .hamburger-line {
   transition:
-    transform 0.2s ease,
-    opacity 0.2s ease;
+    transform var(--dd-duration-short) ease,
+    opacity var(--dd-duration-short) ease;
 }
 
 /* Search modal */
 .search-backdrop {
-  transition: opacity 0.2s ease;
+  transition: opacity var(--dd-duration-short) ease;
 }
 
 /* Container card hover */
 .container-card {
   transition:
-    transform 0.2s ease,
-    box-shadow 0.2s ease;
+    transform var(--dd-duration-short) ease,
+    box-shadow var(--dd-duration-short) ease;
 }
 .container-card:hover {
-  transform: translateY(-2px);
+  transform: translateY(var(--dd-motion-hover-lift-y));
   box-shadow: var(--dd-shadow-lg);
 }
 
 /* Detail panel inline */
 .detail-panel-inline {
-  animation: panel-slide-in 0.25s ease-out;
+  animation: panel-slide-in var(--dd-duration-standard) ease-out;
 }
 @keyframes panel-slide-in {
   from {
     opacity: 0;
-    transform: translateX(20px);
+    transform: translateX(var(--dd-motion-panel-enter-x));
   }
   to {
     opacity: 1;
@@ -566,7 +613,7 @@ html.dd-transitioning::view-transition-old(root) {
 html.dd-transitioning::view-transition-new(root) {
   z-index: 10;
   animation-name: theme-circle-reveal;
-  animation-duration: 600ms;
+  animation-duration: var(--dd-duration-slow);
   animation-timing-function: ease-out;
   animation-fill-mode: both;
 }
@@ -582,7 +629,7 @@ html.dd-transitioning::view-transition-new(root) {
 
 @supports not (clip-path: circle(0% at 50% 50%)) {
   html.dd-transitioning::view-transition-new(root) {
-    animation: theme-fade-in 600ms ease-out;
+    animation: theme-fade-in var(--dd-duration-slow) ease-out;
   }
 
   @keyframes theme-fade-in {
@@ -599,11 +646,11 @@ html.dd-transitioning::view-transition-new(root) {
 .menu-fade-enter-active,
 .menu-fade-leave-active {
   transition:
-    opacity 0.15s ease,
-    transform 0.15s ease;
+    opacity var(--dd-duration-fast) ease,
+    transform var(--dd-duration-fast) ease;
 }
 .menu-fade-enter-from,
 .menu-fade-leave-to {
   opacity: 0;
-  transform: translateY(-4px);
+  transform: translateY(var(--dd-motion-menu-enter-y));
 }

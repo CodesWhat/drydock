@@ -14,12 +14,12 @@ type ButtonWeight = 'none' | 'medium' | 'semibold' | 'bold';
 
 const sizeClasses: Record<ButtonSize, string> = {
   none: '',
-  xs: 'px-2 py-1 text-[0.625rem]',
-  compact: 'px-2 py-1.5 text-[0.625rem]',
-  sm: 'px-2.5 py-1.5 text-[0.625rem]',
-  md: 'px-3 py-1.5 text-[0.6875rem]',
+  xs: 'px-2 py-1 text-2xs',
+  compact: 'px-2 py-1.5 text-2xs',
+  sm: 'px-2.5 py-1.5 text-2xs',
+  md: 'px-3 py-1.5 text-2xs-plus',
   'icon-xs': 'inline-flex items-center justify-center w-4 h-4',
-  'icon-sm': 'inline-flex items-center justify-center w-7 h-7 text-[0.6875rem]',
+  'icon-sm': 'inline-flex items-center justify-center w-7 h-7 text-2xs-plus',
 };
 
 const variantClasses: Record<ButtonVariant, string> = {

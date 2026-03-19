@@ -236,7 +236,7 @@ onUnmounted(() => {
       <div
         v-if="!loading"
         class="w-full dd-rounded-lg overflow-hidden"
-        style="max-width: 420px; background-color: var(--dd-bg-card); box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);"
+        style="max-width: var(--dd-layout-dialog-max-width); background-color: var(--dd-bg-card); box-shadow: var(--dd-shadow-modal);"
       >
       <div class="p-8">
         <!-- Logo -->
@@ -260,7 +260,7 @@ onUnmounted(() => {
         <!-- Basic auth form -->
         <form v-if="hasBasic" @submit.prevent="handleBasicLogin" class="space-y-5">
           <div>
-            <label class="block text-[0.6875rem] font-medium uppercase tracking-wider mb-2.5 dd-text-muted">
+            <label class="block text-2xs-plus font-medium uppercase tracking-wider mb-2.5 dd-text-muted">
               Username
             </label>
             <input
@@ -275,7 +275,7 @@ onUnmounted(() => {
           </div>
 
           <div>
-            <label class="block text-[0.6875rem] font-medium uppercase tracking-wider mb-2.5 dd-text-muted">
+            <label class="block text-2xs-plus font-medium uppercase tracking-wider mb-2.5 dd-text-muted">
               Password
             </label>
             <input
@@ -306,7 +306,7 @@ onUnmounted(() => {
         <!-- OIDC separator (only if both basic and OIDC exist) -->
         <div v-if="hasBasic && oidcStrategies.length > 0" class="flex items-center gap-3 my-6">
           <div class="flex-1 h-px" style="background-color: var(--dd-border-strong);" />
-          <span class="text-[0.6875rem] dd-text-muted">or continue with</span>
+          <span class="text-2xs-plus dd-text-muted">or continue with</span>
           <div class="flex-1 h-px" style="background-color: var(--dd-border-strong);" />
         </div>
 
@@ -333,7 +333,7 @@ onUnmounted(() => {
             type="checkbox"
             class="w-3.5 h-3.5 dd-rounded-sm accent-[var(--dd-primary)]"
           />
-          <span class="text-[0.6875rem] dd-text-muted">Remember me</span>
+          <span class="text-2xs-plus dd-text-muted">Remember me</span>
         </label>
 
         <!-- No strategies available -->
@@ -356,8 +356,8 @@ onUnmounted(() => {
     <!-- Connection Lost Overlay -->
     <Transition name="fade">
       <div v-if="connectionLost"
-           class="fixed inset-0 z-[200] bg-black/70 backdrop-blur-sm flex items-center justify-center">
-        <div class="w-full max-w-[320px] mx-4 dd-rounded-lg overflow-hidden shadow-2xl text-center"
+           class="fixed inset-0 z-modal bg-black/70 backdrop-blur-sm flex items-center justify-center">
+        <div class="w-full max-w-[var(--dd-layout-overlay-max-width)] mx-4 dd-rounded-lg overflow-hidden shadow-2xl text-center"
              :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }">
           <div class="flex flex-col items-center px-6 py-8 gap-3">
             <div class="disconnect-bounce h-10 mb-1">
@@ -365,12 +365,12 @@ onUnmounted(() => {
                    :style="[{ transform: 'rotate(180deg) scaleX(-1)' }, isDark ? { filter: 'invert(1)' } : {}]" />
             </div>
             <h2 class="text-sm font-bold dd-text">Connection Lost</h2>
-            <p class="text-[0.6875rem] dd-text-muted leading-relaxed">
+            <p class="text-2xs-plus dd-text-muted leading-relaxed">
               The server is unreachable. Waiting for it to come back online...
             </p>
             <div class="flex items-center gap-2 mt-1">
               <AppIcon name="spinner" :size="12" class="dd-spin dd-text-muted" />
-              <span class="text-[0.625rem] dd-text-muted">Reconnecting</span>
+              <span class="text-2xs dd-text-muted">Reconnecting</span>
             </div>
           </div>
         </div>
@@ -381,26 +381,26 @@ onUnmounted(() => {
 
 <style scoped>
 .login-logo {
-  animation: bounce 2s ease-in-out infinite;
+  animation: bounce var(--dd-duration-pulse) ease-in-out infinite;
 }
 @keyframes bounce {
   0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-8px); }
+  50% { transform: translateY(var(--dd-motion-bounce-y)); }
 }
 .login-card-enter-active {
-  transition: opacity 0.35s ease, transform 0.35s ease;
+  transition: opacity var(--dd-duration-emphasis) ease, transform var(--dd-duration-emphasis) ease;
 }
 .login-card-enter-from {
   opacity: 0;
-  transform: translateY(8px);
+  transform: translateY(var(--dd-motion-card-enter-y));
 }
 .fade-enter-active, .fade-leave-active {
-  transition: opacity 0.3s ease;
+  transition: opacity var(--dd-duration-enter) ease;
 }
 .fade-enter-from, .fade-leave-to {
   opacity: 0;
 }
 .disconnect-bounce {
-  animation: bounce 2s ease-in-out infinite;
+  animation: bounce var(--dd-duration-pulse) ease-in-out infinite;
 }
 </style>

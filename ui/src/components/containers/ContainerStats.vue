@@ -272,17 +272,17 @@ onUnmounted(() => {
         <div
           class="h-2.5 w-2.5 rounded-full"
           :style="{ backgroundColor: streamPaused ? 'var(--dd-warning)' : 'var(--dd-success)' }" />
-        <span class="text-[0.6875rem] font-semibold dd-text-secondary">
+        <span class="text-2xs-plus font-semibold dd-text-secondary">
           {{ streamPaused ? 'Paused' : 'Live' }}
         </span>
-        <span v-if="lastHeartbeatAt" class="text-[0.625rem] dd-text-muted">
+        <span v-if="lastHeartbeatAt" class="text-2xs dd-text-muted">
           heartbeat active
         </span>
       </div>
 
       <AppButton size="none" variant="plain" weight="none"
         type="button"
-        class="px-2.5 py-1 text-[0.625rem] font-semibold dd-rounded transition-colors hover:opacity-90"
+        class="px-2.5 py-1 text-2xs font-semibold dd-rounded transition-colors hover:opacity-90"
         :style="{
           backgroundColor: streamPaused ? 'var(--dd-success-muted)' : 'var(--dd-warning-muted)',
           color: streamPaused ? 'var(--dd-success)' : 'var(--dd-warning)',
@@ -295,26 +295,26 @@ onUnmounted(() => {
 
     <div
       v-if="loading"
-      class="p-3 text-[0.6875rem] dd-rounded dd-text-muted"
+      class="p-3 text-2xs-plus dd-rounded dd-text-muted"
       :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
       Loading container stats...
     </div>
 
     <div
       v-else-if="loadError"
-      class="p-3 text-[0.6875rem] dd-rounded"
+      class="p-3 text-2xs-plus dd-rounded"
       :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
       {{ loadError }}
     </div>
 
-    <div v-else-if="!latestSnapshot" class="p-3 text-[0.6875rem] dd-rounded dd-text-muted" :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+    <div v-else-if="!latestSnapshot" class="p-3 text-2xs-plus dd-rounded dd-text-muted" :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
       Stats stream has not produced data yet.
     </div>
 
     <div v-else :class="props.compact ? 'grid grid-cols-1 gap-3' : 'grid grid-cols-1 xl:grid-cols-2 gap-3'">
       <article class="p-3 dd-rounded space-y-2" :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
         <div class="flex items-center justify-between gap-3">
-          <span class="text-[0.625rem] font-semibold uppercase tracking-wider dd-text-muted">CPU</span>
+          <span class="text-2xs font-semibold uppercase tracking-wider dd-text-muted">CPU</span>
           <span class="text-sm font-semibold dd-text" data-test="metric-cpu-value">
             {{ formatPercent(currentCpuPercent) }}
           </span>
@@ -341,12 +341,12 @@ onUnmounted(() => {
 
       <article class="p-3 dd-rounded space-y-2" :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
         <div class="flex items-center justify-between gap-3">
-          <span class="text-[0.625rem] font-semibold uppercase tracking-wider dd-text-muted">Memory</span>
+          <span class="text-2xs font-semibold uppercase tracking-wider dd-text-muted">Memory</span>
           <span class="text-sm font-semibold dd-text" data-test="metric-memory-value">
             {{ formatPercent(currentMemoryPercent) }}
           </span>
         </div>
-        <div class="text-[0.625rem] dd-text-secondary">
+        <div class="text-2xs dd-text-secondary">
           {{ formatBytes(currentMemoryUsageBytes) }} / {{ formatBytes(currentMemoryLimitBytes) }}
         </div>
         <div class="h-2 dd-rounded overflow-hidden" :style="{ backgroundColor: 'var(--dd-bg-elevated)' }">
@@ -371,8 +371,8 @@ onUnmounted(() => {
 
       <article class="p-3 dd-rounded space-y-2" :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
         <div class="flex items-center justify-between gap-3">
-          <span class="text-[0.625rem] font-semibold uppercase tracking-wider dd-text-muted">Network RX/TX</span>
-          <span class="text-[0.6875rem] font-semibold dd-text">
+          <span class="text-2xs font-semibold uppercase tracking-wider dd-text-muted">Network RX/TX</span>
+          <span class="text-2xs-plus font-semibold dd-text">
             {{ formatRate(currentNetworkRxRate) }} / {{ formatRate(currentNetworkTxRate) }}
           </span>
         </div>
@@ -398,8 +398,8 @@ onUnmounted(() => {
 
       <article class="p-3 dd-rounded space-y-2" :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
         <div class="flex items-center justify-between gap-3">
-          <span class="text-[0.625rem] font-semibold uppercase tracking-wider dd-text-muted">Block I/O</span>
-          <span class="text-[0.6875rem] font-semibold dd-text">
+          <span class="text-2xs font-semibold uppercase tracking-wider dd-text-muted">Block I/O</span>
+          <span class="text-2xs-plus font-semibold dd-text">
             {{ formatRate(currentBlockReadRate) }} / {{ formatRate(currentBlockWriteRate) }}
           </span>
         </div>

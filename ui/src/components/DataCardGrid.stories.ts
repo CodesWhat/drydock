@@ -40,10 +40,10 @@ export const Default: Story = {
         <template #card="{ item, selected }">
           <div class="px-4 py-3 flex items-start justify-between gap-3">
             <div class="min-w-0">
-              <div class="text-[0.8125rem] font-semibold truncate dd-text">{{ item.name }}</div>
-              <div class="text-[0.6875rem] mt-0.5 dd-text-muted">server: {{ item.server }}</div>
+              <div class="text-xs-plus font-semibold truncate dd-text">{{ item.name }}</div>
+              <div class="text-2xs-plus mt-0.5 dd-text-muted">server: {{ item.server }}</div>
             </div>
-            <span class="text-[0.5625rem] uppercase font-bold px-2 py-1 dd-rounded shrink-0"
+            <span class="text-3xs uppercase font-bold px-2 py-1 dd-rounded shrink-0"
                   :style="{
                     backgroundColor:
                       item.status === 'healthy'
@@ -61,10 +61,10 @@ export const Default: Story = {
               {{ item.status }}
             </span>
           </div>
-          <div class="px-4 pb-3 text-[0.6875rem] dd-text-secondary">
+          <div class="px-4 pb-3 text-2xs-plus dd-text-secondary">
             {{ item.updates }} pending update{{ item.updates === 1 ? '' : 's' }}
           </div>
-          <div class="px-4 py-2.5 mt-auto text-[0.625rem] dd-text-muted"
+          <div class="px-4 py-2.5 mt-auto text-2xs dd-text-muted"
                :style="{ borderTop: '1px solid var(--dd-border-strong)', backgroundColor: selected ? 'var(--dd-bg-elevated)' : 'var(--dd-bg-inset)' }">
             {{ selected ? 'Selected for details' : 'Click to open details' }}
           </div>

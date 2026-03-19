@@ -23,7 +23,7 @@ function fallbackTooltip(maturity: 'fresh' | 'settled' | null): string {
   <span
     v-if="props.maturity"
     class="badge uppercase font-bold inline-flex items-center gap-1"
-    :class="props.size === 'sm' ? 'px-1.5 py-0 text-[0.5625rem]' : 'text-[0.5625rem]'"
+    :class="props.size === 'sm' ? 'px-1.5 py-0 text-3xs' : 'text-3xs'"
     :style="{ backgroundColor: maturityColor(props.maturity).bg, color: maturityColor(props.maturity).text }"
     v-tooltip.top="props.tooltip ?? fallbackTooltip(props.maturity)"
     data-test="update-maturity-badge"

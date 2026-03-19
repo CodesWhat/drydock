@@ -17,7 +17,7 @@ describe('AppButton', () => {
     expect(button.classes()).toContain('transition-colors');
     expect(button.classes()).toContain('px-3');
     expect(button.classes()).toContain('py-1.5');
-    expect(button.classes()).toContain('text-[0.6875rem]');
+    expect(button.classes()).toContain('text-2xs-plus');
     expect(button.classes()).toContain('font-semibold');
     expect(button.classes()).toContain('dd-text-muted');
     expect(button.classes()).toContain('hover:dd-text');
@@ -46,7 +46,7 @@ describe('AppButton', () => {
     expect(button.attributes('data-test')).toBe('secondary-action');
     expect(button.classes()).toContain('px-2');
     expect(button.classes()).toContain('py-1');
-    expect(button.classes()).toContain('text-[0.625rem]');
+    expect(button.classes()).toContain('text-2xs');
     expect(button.classes()).toContain('font-medium');
     expect(button.classes()).toContain('dd-text-secondary');
     expect(button.classes()).toContain('hover:dd-text');

@@ -6,6 +6,7 @@ const mockGetAppInfos = vi.fn();
 const mockGetSettings = vi.fn();
 const mockUpdateSettings = vi.fn();
 const mockClearIconCache = vi.fn();
+const mockDownloadDebugDump = vi.fn();
 const mockGetUser = vi.fn();
 
 vi.mock('@/services/app', () => ({
@@ -24,6 +25,10 @@ vi.mock('@/services/settings', () => ({
   getSettings: (...args: any[]) => mockGetSettings(...args),
   updateSettings: (...args: any[]) => mockUpdateSettings(...args),
   clearIconCache: (...args: any[]) => mockClearIconCache(...args),
+}));
+
+vi.mock('@/services/debug', () => ({
+  downloadDebugDump: (...args: any[]) => mockDownloadDebugDump(...args),
 }));
 
 vi.mock('@/services/auth', () => ({
@@ -251,6 +256,10 @@ describe('ConfigView', () => {
     });
     mockGetAppInfos.mockResolvedValue({ version: '1.4.0' });
     mockGetStore.mockResolvedValue({ configuration: { path: '/store', file: 'dd.json' } });
+    mockDownloadDebugDump.mockResolvedValue({
+      blob: new Blob(['{}'], { type: 'application/json' }),
+      filename: 'drydock-debug-dump.json',
+    });
   });
 
   describe('on mount', () => {
@@ -520,6 +529,77 @@ describe('ConfigView', () => {
       await nextTick();
 
       expect(w.text()).toContain('42 cleared');
+    });
+  });
+
+  describe('debug dump download', () => {
+    const originalCreateObjectURL = URL.createObjectURL;
+    const originalRevokeObjectURL = URL.revokeObjectURL;
+    let createObjectUrlSpy: ReturnType<typeof vi.fn>;
+    let revokeObjectUrlSpy: ReturnType<typeof vi.fn>;
+
+    beforeEach(() => {
+      createObjectUrlSpy = vi.fn(() => 'blob:debug-dump');
+      revokeObjectUrlSpy = vi.fn();
+      Object.defineProperty(URL, 'createObjectURL', {
+        configurable: true,
+        writable: true,
+        value: createObjectUrlSpy,
+      });
+      Object.defineProperty(URL, 'revokeObjectURL', {
+        configurable: true,
+        writable: true,
+        value: revokeObjectUrlSpy,
+      });
+    });
+
+    afterEach(() => {
+      Object.defineProperty(URL, 'createObjectURL', {
+        configurable: true,
+        writable: true,
+        value: originalCreateObjectURL,
+      });
+      Object.defineProperty(URL, 'revokeObjectURL', {
+        configurable: true,
+        writable: true,
+        value: originalRevokeObjectURL,
+      });
+    });
+
+    it('downloads a debug dump from settings', async () => {
+      mockGetServer.mockResolvedValue({ configuration: {} });
+      mockGetSettings.mockResolvedValue({ internetlessMode: false });
+
+      const w = factory();
+      await vi.waitFor(() => expect(mockGetSettings).toHaveBeenCalled());
+      await nextTick();
+
+      const downloadButton = w.find('[data-test="download-debug-dump"]');
+      expect(downloadButton.exists()).toBe(true);
+      await downloadButton.trigger('click');
+
+      await vi.waitFor(() => {
+        expect(mockDownloadDebugDump).toHaveBeenCalledOnce();
+      });
+      expect(createObjectUrlSpy).toHaveBeenCalledTimes(1);
+      expect(revokeObjectUrlSpy).toHaveBeenCalledWith('blob:debug-dump');
+    });
+
+    it('shows debug dump download error', async () => {
+      mockGetServer.mockResolvedValue({ configuration: {} });
+      mockGetSettings.mockResolvedValue({ internetlessMode: false });
+      mockDownloadDebugDump.mockRejectedValue(new Error('debug dump unavailable'));
+
+      const w = factory();
+      await vi.waitFor(() => expect(mockGetSettings).toHaveBeenCalled());
+      await nextTick();
+
+      const downloadButton = w.find('[data-test="download-debug-dump"]');
+      await downloadButton.trigger('click');
+
+      await vi.waitFor(() => {
+        expect(w.text()).toContain('debug dump unavailable');
+      });
     });
   });
 

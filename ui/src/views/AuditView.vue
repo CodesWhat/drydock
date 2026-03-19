@@ -212,12 +212,12 @@ onMounted(fetchAudit);
 <template>
   <DataViewLayout>
     <div v-if="error"
-         class="mb-3 px-3 py-2 text-[0.6875rem] dd-rounded"
+         class="mb-3 px-3 py-2 text-2xs-plus dd-rounded"
          :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
       {{ error }}
     </div>
 
-    <div v-if="loading" class="text-[0.6875rem] dd-text-muted py-3 px-1">Loading audit log...</div>
+    <div v-if="loading" class="text-2xs-plus dd-text-muted py-3 px-1">Loading audit log...</div>
 
     <!-- Filter bar -->
     <DataFilterBar
@@ -231,14 +231,14 @@ onMounted(fetchAudit);
         <input v-model="searchQuery"
                type="text"
                placeholder="Filter by target or event..."
-               class="flex-1 min-w-[120px] max-w-[240px] px-2.5 py-1.5 dd-rounded text-[0.6875rem] font-medium outline-none dd-bg dd-text dd-placeholder" />
+               class="flex-1 min-w-[120px] max-w-[var(--dd-layout-filter-max-width)] px-2.5 py-1.5 dd-rounded text-2xs-plus font-medium outline-none dd-bg dd-text dd-placeholder" />
         <input v-model="containerFilter"
                name="container-name"
                type="text"
                placeholder="Container name..."
-               class="min-w-[140px] max-w-[220px] px-2.5 py-1.5 dd-rounded text-[0.6875rem] font-medium outline-none dd-bg dd-text dd-placeholder" />
+               class="min-w-[140px] max-w-[220px] px-2.5 py-1.5 dd-rounded text-2xs-plus font-medium outline-none dd-bg dd-text dd-placeholder" />
         <select v-model="actionFilter"
-                class="px-2.5 py-1.5 dd-rounded text-[0.6875rem] font-medium outline-none dd-bg dd-text">
+                class="px-2.5 py-1.5 dd-rounded text-2xs-plus font-medium outline-none dd-bg dd-text">
           <option value="">All events</option>
           <option v-for="a in actionTypes" :key="a" :value="a">{{ actionLabel(a) }}</option>
         </select>
@@ -246,14 +246,14 @@ onMounted(fetchAudit);
                name="from-date"
                type="date"
                aria-label="From date"
-               class="px-2.5 py-1.5 dd-rounded text-[0.6875rem] font-medium outline-none dd-bg dd-text" />
+               class="px-2.5 py-1.5 dd-rounded text-2xs-plus font-medium outline-none dd-bg dd-text" />
         <input v-model="toDateFilter"
                name="to-date"
                type="date"
                aria-label="To date"
-               class="px-2.5 py-1.5 dd-rounded text-[0.6875rem] font-medium outline-none dd-bg dd-text" />
+               class="px-2.5 py-1.5 dd-rounded text-2xs-plus font-medium outline-none dd-bg dd-text" />
         <AppButton size="none" variant="plain" weight="none" v-if="activeFilterCount > 0"
-                class="text-[0.625rem] dd-text-muted hover:dd-text transition-colors"
+                class="text-2xs dd-text-muted hover:dd-text transition-colors"
                 @click="clearFilters">
           Clear
         </AppButton>
@@ -270,30 +270,30 @@ onMounted(fetchAudit);
       @row-click="openDetail($event)"
     >
       <template #cell-timestamp="{ row }">
-        <span class="whitespace-nowrap text-[0.625rem] font-mono dd-text-secondary">{{ formatTimestamp(row.timestamp) }}</span>
+        <span class="whitespace-nowrap text-2xs font-mono dd-text-secondary">{{ formatTimestamp(row.timestamp) }}</span>
       </template>
       <template #cell-action="{ row }">
         <div class="flex items-center gap-2">
           <AppIcon :name="actionIcon(row.action)" :size="12" class="dd-text-secondary shrink-0" />
-          <span class="font-medium text-[0.6875rem] dd-text">{{ actionLabel(row.action) }}</span>
+          <span class="font-medium text-2xs-plus dd-text">{{ actionLabel(row.action) }}</span>
         </div>
       </template>
       <template #cell-containerName="{ row }">
-        <span class="font-mono text-[0.6875rem] dd-text">{{ row.containerName }}</span>
+        <span class="font-mono text-2xs-plus dd-text">{{ row.containerName }}</span>
       </template>
       <template #cell-status="{ row }">
         <AppIcon :name="row.status === 'success' ? 'check' : row.status === 'error' ? 'xmark' : 'info'" :size="13" class="shrink-0 md:!hidden"
                  :style="{ color: statusColor(row.status) }" />
-        <span class="badge text-[0.5625rem] font-bold max-md:!hidden"
+        <span class="badge text-3xs font-bold max-md:!hidden"
               :style="{ backgroundColor: statusBg(row.status), color: statusColor(row.status) }">
           {{ row.status }}
         </span>
       </template>
       <template #cell-details="{ row }">
-        <span v-if="row.fromVersion || row.toVersion" class="text-[0.625rem] font-mono dd-text-secondary whitespace-nowrap">
+        <span v-if="row.fromVersion || row.toVersion" class="text-2xs font-mono dd-text-secondary whitespace-nowrap">
           {{ row.fromVersion }}{{ row.fromVersion && row.toVersion ? ' → ' : '' }}{{ row.toVersion }}
         </span>
-        <span v-else-if="row.details" class="text-[0.625rem] dd-text-muted truncate max-w-[200px] inline-block">{{ row.details }}</span>
+        <span v-else-if="row.details" class="text-2xs dd-text-muted truncate max-w-[200px] inline-block">{{ row.details }}</span>
         <span v-else class="dd-text-muted">—</span>
       </template>
     </DataTable>
@@ -312,16 +312,16 @@ onMounted(fetchAudit);
             <AppIcon :name="actionIcon(entry.action)" :size="14" class="dd-text-secondary shrink-0 mt-0.5" />
             <div class="min-w-0">
               <div class="text-sm font-semibold truncate dd-text">{{ actionLabel(entry.action) }}</div>
-              <div class="text-[0.6875rem] truncate mt-0.5 dd-text-muted font-mono">{{ entry.containerName }}</div>
+              <div class="text-2xs-plus truncate mt-0.5 dd-text-muted font-mono">{{ entry.containerName }}</div>
             </div>
           </div>
-          <span class="badge text-[0.5625rem] font-bold shrink-0 ml-2"
+          <span class="badge text-3xs font-bold shrink-0 ml-2"
                 :style="{ backgroundColor: statusBg(entry.status), color: statusColor(entry.status) }">
             {{ entry.status }}
           </span>
         </div>
         <div class="px-4 py-3">
-          <div class="grid grid-cols-2 gap-2 text-[0.6875rem]">
+          <div class="grid grid-cols-2 gap-2 text-2xs-plus">
             <div>
               <span class="dd-text-muted">Time</span>
               <span class="ml-1 font-semibold dd-text">{{ formatTimestamp(entry.timestamp) }}</span>
@@ -334,7 +334,7 @@ onMounted(fetchAudit);
         </div>
         <div class="px-4 py-2.5 mt-auto"
              :style="{ borderTop: '1px solid var(--dd-border)', backgroundColor: 'var(--dd-bg-elevated)' }">
-          <span class="text-[0.625rem] dd-text-muted font-mono">{{ formatTimestamp(entry.timestamp) }}</span>
+          <span class="text-2xs dd-text-muted font-mono">{{ formatTimestamp(entry.timestamp) }}</span>
         </div>
       </template>
     </DataCardGrid>
@@ -351,10 +351,10 @@ onMounted(fetchAudit);
         <AppIcon :name="actionIcon(entry.action)" :size="14" class="dd-text-secondary shrink-0" />
         <div class="flex-1 min-w-0">
           <div class="text-sm font-semibold truncate dd-text">{{ actionLabel(entry.action) }}</div>
-          <div class="text-[0.625rem] font-mono dd-text-muted truncate mt-0.5">{{ entry.containerName }}</div>
+          <div class="text-2xs font-mono dd-text-muted truncate mt-0.5">{{ entry.containerName }}</div>
         </div>
-        <span class="text-[0.625rem] font-mono dd-text-muted shrink-0 hidden md:inline">{{ formatTimestamp(entry.timestamp) }}</span>
-        <span class="badge text-[0.5625rem] font-bold shrink-0"
+        <span class="text-2xs font-mono dd-text-muted shrink-0 hidden md:inline">{{ formatTimestamp(entry.timestamp) }}</span>
+        <span class="badge text-3xs font-bold shrink-0"
               :style="{ backgroundColor: statusBg(entry.status), color: statusColor(entry.status) }">
           {{ entry.status }}
         </span>
@@ -362,27 +362,27 @@ onMounted(fetchAudit);
       <template #details="{ item: entry }">
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3 mt-2">
           <div>
-            <div class="text-[0.625rem] font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">Timestamp</div>
+            <div class="text-2xs font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">Timestamp</div>
             <div class="text-xs font-mono dd-text">{{ formatTimestamp(entry.timestamp) }}</div>
           </div>
           <div>
-            <div class="text-[0.625rem] font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">{{ targetLabel(entry.action) }}</div>
+            <div class="text-2xs font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">{{ targetLabel(entry.action) }}</div>
             <div class="text-xs font-mono dd-text">{{ entry.containerName }}</div>
           </div>
           <div v-if="entry.containerImage">
-            <div class="text-[0.625rem] font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">Image</div>
+            <div class="text-2xs font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">Image</div>
             <div class="text-xs font-mono dd-text">{{ entry.containerImage }}</div>
           </div>
           <div v-if="entry.fromVersion">
-            <div class="text-[0.625rem] font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">From Version</div>
+            <div class="text-2xs font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">From Version</div>
             <div class="text-xs font-mono dd-text">{{ entry.fromVersion }}</div>
           </div>
           <div v-if="entry.toVersion">
-            <div class="text-[0.625rem] font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">To Version</div>
+            <div class="text-2xs font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">To Version</div>
             <div class="text-xs font-mono dd-text">{{ entry.toVersion }}</div>
           </div>
           <div v-if="entry.details">
-            <div class="text-[0.625rem] font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">Details</div>
+            <div class="text-2xs font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">Details</div>
             <div class="text-xs font-mono dd-text">{{ entry.details }}</div>
           </div>
         </div>
@@ -392,16 +392,16 @@ onMounted(fetchAudit);
     <!-- Pagination -->
     <div v-if="total > limit" class="flex items-center justify-between px-4 py-2.5"
          :style="{ borderTop: '1px solid var(--dd-border)' }">
-      <span class="text-[0.6875rem] dd-text-muted">
+      <span class="text-2xs-plus dd-text-muted">
         Page {{ page }} of {{ totalPages }} ({{ total }} entries)
       </span>
       <div class="flex items-center gap-1.5">
-        <AppButton size="none" variant="plain" weight="none" class="px-2.5 py-1 dd-rounded text-[0.6875rem] font-medium dd-bg dd-text disabled:opacity-40"
+        <AppButton size="none" variant="plain" weight="none" class="px-2.5 py-1 dd-rounded text-2xs-plus font-medium dd-bg dd-text disabled:opacity-40"
                 :disabled="page <= 1"
                 @click="prevPage">
           <AppIcon name="chevron-left" :size="11" />
         </AppButton>
-        <AppButton size="none" variant="plain" weight="none" class="px-2.5 py-1 dd-rounded text-[0.6875rem] font-medium dd-bg dd-text disabled:opacity-40"
+        <AppButton size="none" variant="plain" weight="none" class="px-2.5 py-1 dd-rounded text-2xs-plus font-medium dd-bg dd-text disabled:opacity-40"
                 :disabled="page >= totalPages"
                 @click="nextPage">
           <AppIcon name="chevron-right" :size="11" />
@@ -430,7 +430,7 @@ onMounted(fetchAudit);
           <div class="flex items-center gap-2.5 min-w-0">
             <AppIcon v-if="selectedEntry" :name="actionIcon(selectedEntry.action)" :size="14" class="dd-text-secondary shrink-0" />
             <span class="text-sm font-bold truncate dd-text">{{ selectedEntry ? actionLabel(selectedEntry.action) : '' }}</span>
-            <span v-if="selectedEntry" class="badge text-[0.5625rem] font-bold shrink-0"
+            <span v-if="selectedEntry" class="badge text-3xs font-bold shrink-0"
                   :style="{ backgroundColor: statusBg(selectedEntry.status), color: statusColor(selectedEntry.status) }">
               {{ selectedEntry.status }}
             </span>
@@ -438,41 +438,41 @@ onMounted(fetchAudit);
         </template>
 
         <template #subtitle>
-          <span class="text-[0.6875rem] font-mono dd-text-secondary">{{ selectedEntry?.containerName }}</span>
+          <span class="text-2xs-plus font-mono dd-text-secondary">{{ selectedEntry?.containerName }}</span>
         </template>
 
         <template v-if="selectedEntry" #default>
           <div class="p-4 space-y-5">
             <div>
-              <div class="text-[0.625rem] font-semibold uppercase tracking-wider mb-1 dd-text-muted">Timestamp</div>
+              <div class="text-2xs font-semibold uppercase tracking-wider mb-1 dd-text-muted">Timestamp</div>
               <div class="text-xs font-mono dd-text">{{ formatTimestamp(selectedEntry.timestamp) }}</div>
             </div>
             <div>
-              <div class="text-[0.625rem] font-semibold uppercase tracking-wider mb-1 dd-text-muted">Event</div>
+              <div class="text-2xs font-semibold uppercase tracking-wider mb-1 dd-text-muted">Event</div>
               <div class="text-xs font-medium dd-text">{{ actionLabel(selectedEntry.action) }}</div>
             </div>
             <div>
-              <div class="text-[0.625rem] font-semibold uppercase tracking-wider mb-1 dd-text-muted">{{ targetLabel(selectedEntry.action) }}</div>
+              <div class="text-2xs font-semibold uppercase tracking-wider mb-1 dd-text-muted">{{ targetLabel(selectedEntry.action) }}</div>
               <div class="text-xs font-mono dd-text break-all">{{ selectedEntry.containerName }}</div>
             </div>
             <div v-if="selectedEntry.containerImage">
-              <div class="text-[0.625rem] font-semibold uppercase tracking-wider mb-1 dd-text-muted">Image</div>
+              <div class="text-2xs font-semibold uppercase tracking-wider mb-1 dd-text-muted">Image</div>
               <div class="text-xs font-mono dd-text break-all">{{ selectedEntry.containerImage }}</div>
             </div>
             <div v-if="selectedEntry.fromVersion">
-              <div class="text-[0.625rem] font-semibold uppercase tracking-wider mb-1 dd-text-muted">From Version</div>
+              <div class="text-2xs font-semibold uppercase tracking-wider mb-1 dd-text-muted">From Version</div>
               <div class="text-xs font-mono dd-text break-all">{{ selectedEntry.fromVersion }}</div>
             </div>
             <div v-if="selectedEntry.toVersion">
-              <div class="text-[0.625rem] font-semibold uppercase tracking-wider mb-1 dd-text-muted">To Version</div>
+              <div class="text-2xs font-semibold uppercase tracking-wider mb-1 dd-text-muted">To Version</div>
               <div class="text-xs font-mono dd-text break-all">{{ selectedEntry.toVersion }}</div>
             </div>
             <div v-if="selectedEntry.triggerName">
-              <div class="text-[0.625rem] font-semibold uppercase tracking-wider mb-1 dd-text-muted">Trigger</div>
+              <div class="text-2xs font-semibold uppercase tracking-wider mb-1 dd-text-muted">Trigger</div>
               <div class="text-xs font-mono dd-text">{{ selectedEntry.triggerName }}</div>
             </div>
             <div v-if="selectedEntry.details">
-              <div class="text-[0.625rem] font-semibold uppercase tracking-wider mb-1 dd-text-muted">Details</div>
+              <div class="text-2xs font-semibold uppercase tracking-wider mb-1 dd-text-muted">Details</div>
               <div class="text-xs font-mono dd-text break-all">{{ selectedEntry.details }}</div>
             </div>
           </div>

@@ -112,7 +112,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="flex flex-col flex-1 min-h-0 overflow-hidden pr-2 sm:pr-[15px]">
+  <div class="flex-1 min-h-0 min-w-0 overflow-y-auto pr-2 sm:pr-[15px]">
     <ConfigLogsTab
       :log-level="appLogLevel"
       :entries="appLogEntries"

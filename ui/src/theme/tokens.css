@@ -28,8 +28,10 @@
   --dd-primary-muted: color-mix(in srgb, var(--dd-primary) 15%, transparent);
   --dd-alt-muted: color-mix(in srgb, var(--dd-alt) 15%, transparent);
   --dd-neutral-muted: color-mix(in srgb, var(--dd-neutral) 15%, transparent);
-  --dd-shadow-sm: 0 2px 8px color-mix(in srgb, #020617 30%, transparent);
-  --dd-shadow-lg: 0 8px 24px color-mix(in srgb, #020617 24%, transparent);
+  --dd-shadow-tooltip: 0 2px 8px color-mix(in srgb, #020617 30%, transparent);
+  --dd-shadow-modal: 0 8px 24px color-mix(in srgb, #020617 24%, transparent);
+  --dd-shadow-sm: var(--dd-shadow-tooltip);
+  --dd-shadow-lg: var(--dd-shadow-modal);
   --dd-shadow-inset: inset 0 8px 16px -8px color-mix(in srgb, #020617 40%, transparent);
   --dd-hover-overlay: color-mix(in srgb, var(--dd-text) 8%, transparent);
   --dd-log-text: #abb2bf;

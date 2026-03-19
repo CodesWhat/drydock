@@ -37,11 +37,14 @@ const props = defineProps<{
   settingsLoading: boolean;
   cacheClearing: boolean;
   cacheCleared: number | null;
+  debugDumpDownloading: boolean;
+  debugDumpError: string;
 }>();
 
 const emit = defineEmits<{
   (e: 'toggle-internetless-mode'): void;
   (e: 'clear-icon-cache'): void;
+  (e: 'download-debug-dump'): void;
 }>();
 </script>
 
@@ -49,7 +52,7 @@ const emit = defineEmits<{
   <div class="space-y-6">
     <div
       v-if="props.serverError"
-      class="px-3 py-2 text-[0.6875rem] dd-rounded"
+      class="px-3 py-2 text-2xs-plus dd-rounded"
       :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }"
     >
       {{ props.serverError }}
@@ -57,7 +60,7 @@ const emit = defineEmits<{
 
     <div
       v-if="props.settingsError"
-      class="px-3 py-2 text-[0.6875rem] dd-rounded"
+      class="px-3 py-2 text-2xs-plus dd-rounded"
       :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }"
     >
       {{ props.settingsError }}
@@ -77,13 +80,13 @@ const emit = defineEmits<{
           <div class="text-xs font-semibold" :style="{ color: 'var(--dd-warning)' }">
             Legacy compatibility inputs detected
           </div>
-          <p class="text-[0.6875rem] dd-text-secondary mt-1">
+          <p class="text-2xs-plus dd-text-secondary mt-1">
             Deprecated <code class="font-mono">WUD_*</code> environment variables and
             <code class="font-mono">wud.*</code> labels are still in use.
           </p>
         </div>
         <span
-          class="px-2 py-1 text-[0.625rem] font-semibold dd-rounded"
+          class="px-2 py-1 text-2xs font-semibold dd-rounded"
           :style="{
             backgroundColor: 'var(--dd-bg-card)',
             border: '1px solid var(--dd-warning)',
@@ -93,7 +96,7 @@ const emit = defineEmits<{
           {{ props.legacyInputSummary?.total }} events
         </span>
       </div>
-      <div class="mt-2 space-y-1.5 text-[0.625rem] dd-text-secondary">
+      <div class="mt-2 space-y-1.5 text-2xs dd-text-secondary">
         <div v-if="props.legacyInputSummary?.env.total">
           Env keys ({{ props.legacyInputSummary?.env.total }}):
           {{ props.legacyEnvKeysPreview }}
@@ -103,7 +106,7 @@ const emit = defineEmits<{
           {{ props.legacyLabelKeysPreview }}
         </div>
       </div>
-      <p class="mt-2 text-[0.625rem] dd-text-secondary">
+      <p class="mt-2 text-2xs dd-text-secondary">
         Run <code class="font-mono">node dist/index.js config migrate --dry-run</code> then
         <code class="font-mono">node dist/index.js config migrate --file &lt;path&gt;</code>.
         <a
@@ -140,7 +143,7 @@ const emit = defineEmits<{
             class="flex items-center justify-between py-2"
             :style="{ borderBottom: '1px solid var(--dd-border)' }"
           >
-            <span class="text-[0.6875rem] font-semibold uppercase tracking-wider dd-text-muted">{{ field.label }}</span>
+            <span class="text-2xs-plus font-semibold uppercase tracking-wider dd-text-muted">{{ field.label }}</span>
             <span class="text-xs font-medium font-mono dd-text">{{ field.value }}</span>
           </div>
         </template>
@@ -166,7 +169,7 @@ const emit = defineEmits<{
           class="flex items-center justify-between py-2"
           :style="{ borderBottom: '1px solid var(--dd-border)' }"
         >
-          <span class="text-[0.6875rem] font-semibold uppercase tracking-wider dd-text-muted">{{ field.label }}</span>
+          <span class="text-2xs-plus font-semibold uppercase tracking-wider dd-text-muted">{{ field.label }}</span>
           <span class="text-xs font-medium font-mono dd-text">{{ field.value }}</span>
         </div>
       </div>
@@ -186,7 +189,7 @@ const emit = defineEmits<{
           <h2 class="text-sm font-semibold dd-text">Webhook API</h2>
         </div>
         <span
-          class="px-2 py-1 text-[0.625rem] font-semibold uppercase tracking-wider dd-rounded"
+          class="px-2 py-1 text-2xs font-semibold uppercase tracking-wider dd-rounded"
           :style="{
             backgroundColor: props.webhookEnabled ? 'var(--dd-success-muted)' : 'var(--dd-bg-inset)',
             color: props.webhookEnabled ? 'var(--dd-success)' : 'var(--dd-text-muted)',
@@ -199,17 +202,17 @@ const emit = defineEmits<{
         </span>
       </div>
       <div class="p-5 space-y-4">
-        <p class="text-[0.6875rem] dd-text-muted">
+        <p class="text-2xs-plus dd-text-muted">
           Use these endpoints to trigger watch cycles and updates via HTTP.
           All requests require a Bearer token in the Authorization header.
         </p>
-        <p v-if="!props.webhookEnabled" class="text-[0.6875rem] dd-text-muted">
+        <p v-if="!props.webhookEnabled" class="text-2xs-plus dd-text-muted">
           Webhook API is disabled. Set <code class="font-mono">DD_SERVER_WEBHOOK_ENABLED=true</code> and
           configure at least one token (<code class="font-mono">DD_SERVER_WEBHOOK_TOKEN</code> or
           <code class="font-mono">DD_SERVER_WEBHOOK_TOKENS_*</code>) to enable it.
         </p>
         <div class="overflow-x-auto dd-rounded">
-          <table class="w-full text-left text-[0.6875rem]">
+          <table class="w-full text-left text-2xs-plus">
             <thead :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
               <tr>
                 <th class="px-3 py-2 font-semibold uppercase tracking-wider dd-text-muted">Endpoint</th>
@@ -223,7 +226,7 @@ const emit = defineEmits<{
                 :style="{ borderTop: '1px solid var(--dd-border)' }"
               >
                 <td class="px-3 py-2">
-                  <code class="text-[0.6875rem] font-mono dd-text">{{ entry.endpoint }}</code>
+                  <code class="text-2xs-plus font-mono dd-text">{{ entry.endpoint }}</code>
                 </td>
                 <td class="px-3 py-2 dd-text-secondary">{{ entry.description }}</td>
               </tr>
@@ -231,9 +234,9 @@ const emit = defineEmits<{
           </table>
         </div>
         <div>
-          <div class="text-[0.6875rem] font-semibold uppercase tracking-wider dd-text-muted mb-1.5">Example</div>
+          <div class="text-2xs-plus font-semibold uppercase tracking-wider dd-text-muted mb-1.5">Example</div>
           <pre
-            class="px-3 py-2 text-[0.6875rem] font-mono dd-rounded overflow-x-auto"
+            class="px-3 py-2 text-2xs-plus font-mono dd-rounded overflow-x-auto"
             :style="{
               backgroundColor: 'var(--dd-bg-inset)',
               color: 'var(--dd-text)',
@@ -259,7 +262,7 @@ const emit = defineEmits<{
         <div class="flex items-center justify-between">
           <div>
             <div class="text-xs font-semibold dd-text">Internetless Mode</div>
-            <div class="text-[0.625rem] dd-text-muted mt-0.5">
+            <div class="text-2xs dd-text-muted mt-0.5">
               Block all outbound requests (container icons, external fetches)
             </div>
           </div>
@@ -288,16 +291,16 @@ const emit = defineEmits<{
         <div class="flex items-center justify-between">
           <div>
             <div class="text-xs font-semibold dd-text">Cached Icons</div>
-            <div class="text-[0.625rem] dd-text-muted mt-0.5">
+            <div class="text-2xs dd-text-muted mt-0.5">
               Common icons are bundled; other icons are cached to disk on first fetch
             </div>
           </div>
           <div class="flex items-center gap-2">
-            <span v-if="props.cacheCleared !== null" class="text-[0.625rem] dd-text-success">
+            <span v-if="props.cacheCleared !== null" class="text-2xs dd-text-success">
               {{ props.cacheCleared }} cleared
             </span>
             <AppButton size="none" variant="plain" weight="none"
-              class="px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors"
+              class="px-3 py-1.5 dd-rounded text-2xs-plus font-semibold transition-colors"
               :class="props.cacheClearing ? 'opacity-50 pointer-events-none' : ''"
               :style="{
                 backgroundColor: 'var(--dd-danger-muted)',
@@ -310,6 +313,50 @@ const emit = defineEmits<{
               Clear Cache
             </AppButton>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <div
+      class="dd-rounded overflow-hidden"
+      :style="{
+        backgroundColor: 'var(--dd-bg-card)',
+      }"
+    >
+      <div
+        class="px-5 py-3.5 flex items-center gap-2"
+      >
+        <AppIcon name="download" :size="14" class="text-drydock-secondary" />
+        <h2 class="text-sm font-semibold dd-text">Diagnostics</h2>
+      </div>
+      <div class="p-5 space-y-3">
+        <div class="flex items-center justify-between gap-3">
+          <div>
+            <div class="text-xs font-semibold dd-text">Diagnostic Debug Dump</div>
+            <div class="text-2xs dd-text-muted mt-0.5">
+              Download a redacted JSON snapshot of runtime state for troubleshooting
+            </div>
+          </div>
+          <AppButton
+            data-test="download-debug-dump"
+            size="none"
+            variant="plain"
+            weight="none"
+            class="px-3 py-1.5 dd-rounded text-2xs-plus font-semibold transition-colors"
+            :class="props.debugDumpDownloading ? 'opacity-50 pointer-events-none' : ''"
+            :style="{
+              backgroundColor: 'var(--dd-bg-inset)',
+              color: 'var(--dd-text)',
+              border: '1px solid var(--dd-border-strong)',
+            }"
+            @click="emit('download-debug-dump')"
+          >
+            <AppIcon :name="props.debugDumpDownloading ? 'spinner' : 'download'" :size="10" class="mr-1" :class="props.debugDumpDownloading ? 'dd-spin' : ''" />
+            {{ props.debugDumpDownloading ? 'Preparing...' : 'Download Debug Dump' }}
+          </AppButton>
+        </div>
+        <div v-if="props.debugDumpError" class="text-2xs" :style="{ color: 'var(--dd-danger)' }">
+          {{ props.debugDumpError }}
         </div>
       </div>
     </div>

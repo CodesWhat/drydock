@@ -4,19 +4,24 @@ import type { Container } from '@/types/container';
 import ContainersView from '@/views/ContainersView.vue';
 import { mountWithPlugins } from '../helpers/mount';
 
-const { mockRoute, mockContainerActionsEnabled, mockLoadServerFeatures } = vi.hoisted(() => ({
-  mockRoute: {
-    name: 'containers',
-    path: '/containers',
-    params: {} as Record<string, unknown>,
-    query: {} as Record<string, unknown>,
-  },
-  mockContainerActionsEnabled: { value: true },
-  mockLoadServerFeatures: vi.fn().mockResolvedValue(undefined),
-}));
+const { mockRoute, mockRouterReplace, mockContainerActionsEnabled, mockLoadServerFeatures } =
+  vi.hoisted(() => ({
+    mockRoute: {
+      name: 'containers',
+      path: '/containers',
+      params: {} as Record<string, unknown>,
+      query: {} as Record<string, unknown>,
+    },
+    mockRouterReplace: vi.fn().mockResolvedValue(undefined),
+    mockContainerActionsEnabled: { value: true },
+    mockLoadServerFeatures: vi.fn().mockResolvedValue(undefined),
+  }));
 
 vi.mock('vue-router', () => ({
   useRoute: () => mockRoute,
+  useRouter: () => ({
+    replace: mockRouterReplace,
+  }),
 }));
 
 vi.mock('@/composables/useServerFeatures', () => ({
@@ -369,6 +374,7 @@ async function mountContainersView(
 describe('ContainersView', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
+    mockRouterReplace.mockResolvedValue(undefined);
     mockContainerActionsEnabled.value = true;
     mockIsMobile.value = false;
     mockWindowNarrow.value = false;
@@ -463,10 +469,26 @@ describe('ContainersView', () => {
       expect(mockFilterKind.value).toBe('all');
     });
 
-    it('resets filterKind to all when query omits filterKind', async () => {
+    it('keeps persisted filterKind when query omits filterKind', async () => {
       mockRoute.query = {};
       await mountContainersView([makeContainer()], undefined, { initialFilterKind: 'major' });
-      expect(mockFilterKind.value).toBe('all');
+      expect(mockFilterKind.value).toBe('major');
+    });
+
+    it('applies sort from route query', async () => {
+      mockRoute.query = { sort: 'status-desc' };
+      const wrapper = await mountContainersView([makeContainer()]);
+      const vm = wrapper.vm as any;
+      expect(vm.containerSortKey).toBe('status');
+      expect(vm.containerSortAsc).toBe(false);
+    });
+
+    it('applies image-age sort aliases from route query', async () => {
+      mockRoute.query = { sort: 'oldest-first' };
+      const wrapper = await mountContainersView([makeContainer()]);
+      const vm = wrapper.vm as any;
+      expect(vm.containerSortKey).toBe('imageAge');
+      expect(vm.containerSortAsc).toBe(true);
     });
 
     it('clears dropdown filters when navigating with a search query', async () => {
@@ -482,6 +504,37 @@ describe('ContainersView', () => {
       expect(mockFilterBouncer.value).toBe('all');
       expect(mockFilterServer.value).toBe('all');
       expect(mockFilterKind.value).toBe('all');
+    });
+
+    it('syncs filter/sort state to URL query params', async () => {
+      const wrapper = await mountContainersView([makeContainer()]);
+      const vm = wrapper.vm as any;
+
+      mockFilterSearch.value = 'nginx';
+      mockFilterStatus.value = 'running';
+      mockFilterRegistry.value = 'dockerhub';
+      mockFilterBouncer.value = 'safe';
+      mockFilterServer.value = 'Local';
+      mockFilterKind.value = 'major';
+      vm.groupByStack = true;
+      vm.containerSortKey = 'status';
+      vm.containerSortAsc = false;
+      await flushPromises();
+
+      expect(mockRouterReplace).toHaveBeenCalled();
+      const lastCall = mockRouterReplace.mock.calls.at(-1)?.[0];
+      expect(lastCall).toEqual({
+        query: expect.objectContaining({
+          q: 'nginx',
+          filterStatus: 'running',
+          filterRegistry: 'dockerhub',
+          filterBouncer: 'safe',
+          filterServer: 'Local',
+          filterKind: 'major',
+          groupByStack: 'true',
+          sort: 'status-desc',
+        }),
+      });
     });
   });
 
@@ -1243,6 +1296,54 @@ describe('ContainersView', () => {
         makeContainer({ name: 'nginx' }),
         makeContainer({ id: 'c2', name: 'redis' }),
         makeContainer({ id: 'c3', name: 'postgres' }),
+        makeContainer({ id: 'c4', name: 'mongo' }),
+      ];
+      const wrapper = await mountContainersView(containers);
+      const vm = wrapper.vm as any;
+
+      vm.groupByStack = true;
+      vm.groupMembershipMap = {
+        nginx: 'web-stack',
+        redis: 'web-stack',
+        postgres: 'db-stack',
+        mongo: 'db-stack',
+      };
+      await flushPromises();
+
+      const groups = vm.groupedContainers;
+      expect(groups).toHaveLength(2);
+      expect(groups[0].key).toBe('db-stack');
+      expect(groups[0].containers).toHaveLength(2);
+      expect(groups[1].key).toBe('web-stack');
+      expect(groups[1].containers).toHaveLength(2);
+    });
+
+    it('places ungrouped containers last', async () => {
+      const containers = [
+        makeContainer({ name: 'nginx' }),
+        makeContainer({ id: 'c2', name: 'redis' }),
+        makeContainer({ id: 'c3', name: 'solo' }),
+      ];
+      const wrapper = await mountContainersView(containers);
+      const vm = wrapper.vm as any;
+
+      vm.groupByStack = true;
+      vm.groupMembershipMap = { nginx: 'web-stack', redis: 'web-stack' };
+      await flushPromises();
+
+      const groups = vm.groupedContainers;
+      expect(groups).toHaveLength(2);
+      expect(groups[0].key).toBe('web-stack');
+      expect(groups[1].key).toBe('__ungrouped__');
+      expect(groups[1].name).toBeNull();
+      expect(groups[1].containers).toHaveLength(1);
+    });
+
+    it('flattens single-container stacks into ungrouped bucket', async () => {
+      const containers = [
+        makeContainer({ name: 'nginx' }),
+        makeContainer({ id: 'c2', name: 'redis' }),
+        makeContainer({ id: 'c3', name: 'postgres' }),
       ];
       const wrapper = await mountContainersView(containers);
       const vm = wrapper.vm as any;
@@ -1252,31 +1353,33 @@ describe('ContainersView', () => {
       await flushPromises();
 
       const groups = vm.groupedContainers;
+      // db-stack has only 1 container, so it should be flattened into ungrouped
       expect(groups).toHaveLength(2);
-      expect(groups[0].key).toBe('db-stack');
-      expect(groups[0].containers).toHaveLength(1);
-      expect(groups[1].key).toBe('web-stack');
-      expect(groups[1].containers).toHaveLength(2);
+      expect(groups[0].key).toBe('web-stack');
+      expect(groups[0].containers).toHaveLength(2);
+      expect(groups[1].key).toBe('__ungrouped__');
+      expect(groups[1].name).toBeNull();
+      expect(groups[1].containers).toHaveLength(1);
+      expect(groups[1].containers[0].name).toBe('postgres');
     });
 
-    it('places ungrouped containers last', async () => {
+    it('flattens all single-container stacks when none have multiple containers', async () => {
       const containers = [
         makeContainer({ name: 'nginx' }),
-        makeContainer({ id: 'c2', name: 'solo' }),
+        makeContainer({ id: 'c2', name: 'redis' }),
       ];
       const wrapper = await mountContainersView(containers);
       const vm = wrapper.vm as any;
 
       vm.groupByStack = true;
-      vm.groupMembershipMap = { nginx: 'web-stack' };
+      vm.groupMembershipMap = { nginx: 'web-stack', redis: 'db-stack' };
       await flushPromises();
 
       const groups = vm.groupedContainers;
-      expect(groups).toHaveLength(2);
-      expect(groups[0].key).toBe('web-stack');
-      expect(groups[1].key).toBe('__ungrouped__');
-      expect(groups[1].name).toBeNull();
-      expect(groups[1].containers).toHaveLength(1);
+      // Both stacks have only 1 container — all flattened into a single ungrouped bucket
+      expect(groups).toHaveLength(1);
+      expect(groups[0].key).toBe('__ungrouped__');
+      expect(groups[0].containers).toHaveLength(2);
     });
 
     it('persists toggle state to preferences', async () => {
@@ -1372,25 +1475,28 @@ describe('ContainersView', () => {
     it('tracks group update-all loading state during execution', async () => {
       const containers = [
         makeContainer({ id: 'c1', name: 'nginx', newTag: '2.0.0', updateKind: 'major' }),
+        makeContainer({ id: 'c2', name: 'redis' }),
       ];
       const wrapper = await mountContainersView(containers);
       const vm = wrapper.vm as any;
-      let resolveUpdate: ((value: unknown) => void) | undefined;
+      const resolvers: Array<(value: unknown) => void> = [];
       mockApiUpdate.mockImplementation(
         () =>
           new Promise((resolve) => {
-            resolveUpdate = resolve;
+            resolvers.push(resolve);
           }),
       );
 
       vm.groupByStack = true;
-      vm.groupMembershipMap = { nginx: 'web-stack' };
+      vm.groupMembershipMap = { nginx: 'web-stack', redis: 'web-stack' };
       await flushPromises();
 
       const pending = vm.updateAllInGroup(vm.groupedContainers[0]);
       expect(vm.groupUpdateInProgress.has('web-stack')).toBe(true);
 
-      resolveUpdate?.({});
+      for (const resolve of resolvers) {
+        resolve({});
+      }
       await pending;
 
       expect(vm.groupUpdateInProgress.has('web-stack')).toBe(false);

@@ -157,12 +157,12 @@ onMounted(async () => {
 <template>
   <DataViewLayout>
       <div v-if="error"
-           class="mb-3 px-3 py-2 text-[0.6875rem] dd-rounded"
+           class="mb-3 px-3 py-2 text-2xs-plus dd-rounded"
            :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
         {{ error }}
       </div>
 
-      <div v-if="loading" class="text-[0.6875rem] dd-text-muted py-3 px-1">Loading registries...</div>
+      <div v-if="loading" class="text-2xs-plus dd-text-muted py-3 px-1">Loading registries...</div>
 
       <!-- Filter bar -->
       <DataFilterBar
@@ -175,8 +175,8 @@ onMounted(async () => {
           <input v-model="searchQuery"
                  type="text"
                  placeholder="Filter by name or type..."
-                 class="flex-1 min-w-[120px] max-w-[240px] px-2.5 py-1.5 dd-rounded text-[0.6875rem] font-medium outline-none dd-bg dd-text dd-placeholder" />
-          <AppButton size="none" variant="text-muted" weight="medium" class="text-[0.625rem]" v-if="searchQuery"
+                 class="flex-1 min-w-[120px] max-w-[var(--dd-layout-filter-max-width)] px-2.5 py-1.5 dd-rounded text-2xs-plus font-medium outline-none dd-bg dd-text dd-placeholder" />
+          <AppButton size="none" variant="text-muted" weight="medium" class="text-2xs" v-if="searchQuery"
                   
                   @click="searchQuery = ''">
             Clear
@@ -195,21 +195,21 @@ onMounted(async () => {
           <span class="font-medium dd-text">{{ registryTypeBadge(row.type).label }}</span>
         </template>
         <template #cell-type="{ row }">
-          <span v-if="isPrivate(row)" class="badge text-[0.5625rem] font-bold max-md:!hidden"
+          <span v-if="isPrivate(row)" class="badge text-3xs font-bold max-md:!hidden"
                 :style="{ backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning)' }">
             Private
           </span>
-          <span v-else class="badge text-[0.5625rem] font-bold max-md:!hidden"
+          <span v-else class="badge text-3xs font-bold max-md:!hidden"
                 :style="{ backgroundColor: 'var(--dd-neutral-muted)', color: 'var(--dd-neutral)' }">
             Public
           </span>
-          <span v-if="isPrivate(row)" class="badge px-1.5 py-0 text-[0.5625rem] md:!hidden" style="background: var(--dd-warning-muted); color: var(--dd-warning);"><AppIcon name="lock" :size="12" /></span>
-          <span v-else class="badge px-1.5 py-0 text-[0.5625rem] md:!hidden" style="background: var(--dd-neutral-muted); color: var(--dd-neutral);"><AppIcon name="eye" :size="12" /></span>
+          <span v-if="isPrivate(row)" class="badge px-1.5 py-0 text-3xs md:!hidden" style="background: var(--dd-warning-muted); color: var(--dd-warning);"><AppIcon name="lock" :size="12" /></span>
+          <span v-else class="badge px-1.5 py-0 text-3xs md:!hidden" style="background: var(--dd-neutral-muted); color: var(--dd-neutral);"><AppIcon name="eye" :size="12" /></span>
         </template>
         <template #cell-status="{ row }">
           <AppIcon :name="row.status === 'connected' ? 'check' : row.status === 'error' ? 'xmark' : 'warning'" :size="13" class="shrink-0 md:!hidden"
                    :style="{ color: row.status === 'connected' ? 'var(--dd-success)' : row.status === 'error' ? 'var(--dd-danger)' : 'var(--dd-warning)' }" />
-          <span class="badge text-[0.5625rem] font-bold max-md:!hidden"
+          <span class="badge text-3xs font-bold max-md:!hidden"
                 :style="{
                   backgroundColor: row.status === 'connected' ? 'var(--dd-success-muted)' : row.status === 'error' ? 'var(--dd-danger-muted)' : 'var(--dd-warning-muted)',
                   color: row.status === 'connected' ? 'var(--dd-success)' : row.status === 'error' ? 'var(--dd-danger)' : 'var(--dd-warning)',
@@ -218,7 +218,7 @@ onMounted(async () => {
           </span>
         </template>
         <template #cell-url="{ row }">
-          <span class="whitespace-nowrap font-mono text-[0.625rem] dd-text-secondary">
+          <span class="whitespace-nowrap font-mono text-2xs dd-text-secondary">
             {{ resolveUrl(row) }}
           </span>
         </template>
@@ -240,15 +240,15 @@ onMounted(async () => {
           <div class="px-4 pt-4 pb-2 flex items-start justify-between">
             <div class="min-w-0">
               <div class="text-sm font-semibold truncate dd-text">{{ reg.name }}</div>
-              <div class="text-[0.625rem] truncate mt-0.5 dd-text-muted font-mono">{{ resolveUrl(reg) }}</div>
+              <div class="text-2xs truncate mt-0.5 dd-text-muted font-mono">{{ resolveUrl(reg) }}</div>
             </div>
-            <span class="badge text-[0.5625rem] uppercase font-bold shrink-0 ml-2"
+            <span class="badge text-3xs uppercase font-bold shrink-0 ml-2"
                   :style="{ backgroundColor: registryTypeBadge(reg.type).bg, color: registryTypeBadge(reg.type).text }">
               {{ registryTypeBadge(reg.type).label }}
             </span>
           </div>
           <div class="px-4 py-3">
-            <div class="grid grid-cols-2 gap-2 text-[0.6875rem]">
+            <div class="grid grid-cols-2 gap-2 text-2xs-plus">
               <div>
                 <span class="dd-text-muted">Auth</span>
                 <span class="ml-1 font-semibold" :style="{ color: isPrivate(reg) ? 'var(--dd-warning)' : 'var(--dd-text-muted)' }">
@@ -265,7 +265,7 @@ onMounted(async () => {
           </div>
           <div class="px-4 py-2.5 mt-auto"
                :style="{ borderTop: '1px solid var(--dd-border)', backgroundColor: 'var(--dd-bg-elevated)' }">
-            <span class="text-[0.625rem] dd-text-muted font-mono truncate">{{ resolveUrl(reg) }}</span>
+            <span class="text-2xs dd-text-muted font-mono truncate">{{ resolveUrl(reg) }}</span>
           </div>
         </template>
       </DataCardGrid>
@@ -277,23 +277,23 @@ onMounted(async () => {
                          :selected-key="selectedRegistry?.id"
                          @item-click="openDetail($event)">
         <template #header="{ item: reg }">
-          <span class="badge text-[0.5625rem] uppercase font-bold shrink-0"
+          <span class="badge text-3xs uppercase font-bold shrink-0"
                 :style="{ backgroundColor: registryTypeBadge(reg.type).bg, color: registryTypeBadge(reg.type).text }">
             {{ registryTypeBadge(reg.type).label }}
           </span>
           <div class="flex-1 min-w-0">
             <div class="text-sm font-semibold truncate dd-text">{{ reg.name }}</div>
-            <div class="text-[0.625rem] font-mono dd-text-muted truncate mt-0.5">{{ resolveUrl(reg) }}</div>
+            <div class="text-2xs font-mono dd-text-muted truncate mt-0.5">{{ resolveUrl(reg) }}</div>
           </div>
           <div class="flex items-center gap-3 shrink-0">
-            <span class="text-[0.6875rem] hidden md:inline font-medium" :style="{ color: isPrivate(reg) ? 'var(--dd-warning)' : 'var(--dd-text-muted)' }">
+            <span class="text-2xs-plus hidden md:inline font-medium" :style="{ color: isPrivate(reg) ? 'var(--dd-warning)' : 'var(--dd-text-muted)' }">
               {{ isPrivate(reg) ? 'Private' : 'Public' }}
             </span>
-            <span v-if="isPrivate(reg)" class="badge px-1.5 py-0 text-[0.5625rem] md:!hidden" style="background: var(--dd-warning-muted); color: var(--dd-warning);"><AppIcon name="lock" :size="12" /></span>
-            <span v-else class="badge px-1.5 py-0 text-[0.5625rem] md:!hidden" style="background: var(--dd-neutral-muted); color: var(--dd-neutral);"><AppIcon name="eye" :size="12" /></span>
+            <span v-if="isPrivate(reg)" class="badge px-1.5 py-0 text-3xs md:!hidden" style="background: var(--dd-warning-muted); color: var(--dd-warning);"><AppIcon name="lock" :size="12" /></span>
+            <span v-else class="badge px-1.5 py-0 text-3xs md:!hidden" style="background: var(--dd-neutral-muted); color: var(--dd-neutral);"><AppIcon name="eye" :size="12" /></span>
             <AppIcon :name="reg.status === 'connected' ? 'check' : 'xmark'" :size="13" class="shrink-0 md:!hidden"
                      :style="{ color: reg.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)' }" />
-            <span class="badge text-[0.5625rem] font-bold max-md:!hidden"
+            <span class="badge text-3xs font-bold max-md:!hidden"
                   :style="{
                     backgroundColor: reg.status === 'connected' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
                     color: reg.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)',
@@ -321,7 +321,7 @@ onMounted(async () => {
       >
         <template #header>
           <div class="flex items-center gap-2.5 min-w-0">
-            <span class="badge text-[0.5625rem] uppercase font-bold shrink-0"
+            <span class="badge text-3xs uppercase font-bold shrink-0"
                   :style="{ backgroundColor: selectedRegistry ? registryTypeBadge(selectedRegistry.type).bg : undefined, color: selectedRegistry ? registryTypeBadge(selectedRegistry.type).text : undefined }">
               {{ selectedRegistry ? registryTypeBadge(selectedRegistry.type).label : '' }}
             </span>
@@ -330,22 +330,22 @@ onMounted(async () => {
         </template>
 
         <template #subtitle>
-          <span class="text-[0.6875rem] font-mono dd-text-secondary">{{ selectedRegistry ? resolveUrl(selectedRegistry) : '' }}</span>
+          <span class="text-2xs-plus font-mono dd-text-secondary">{{ selectedRegistry ? resolveUrl(selectedRegistry) : '' }}</span>
         </template>
 
         <template v-if="selectedRegistry" #default>
           <div class="p-4 space-y-5">
-            <div v-if="detailLoading" class="text-[0.6875rem] dd-text-muted">Refreshing registry details...</div>
+            <div v-if="detailLoading" class="text-2xs-plus dd-text-muted">Refreshing registry details...</div>
             <div v-if="detailError"
-                 class="px-3 py-2 text-[0.6875rem] dd-rounded"
+                 class="px-3 py-2 text-2xs-plus dd-rounded"
                  :style="{ backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning)' }">
               {{ detailError }}
             </div>
 
             <!-- Status -->
             <div>
-              <div class="text-[0.625rem] font-semibold uppercase tracking-wider mb-1 dd-text-muted">Status</div>
-              <span class="badge text-[0.625rem] font-semibold"
+              <div class="text-2xs font-semibold uppercase tracking-wider mb-1 dd-text-muted">Status</div>
+              <span class="badge text-2xs font-semibold"
                     :style="{
                       backgroundColor: selectedRegistry.status === 'connected' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
                       color: selectedRegistry.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)',
@@ -356,7 +356,7 @@ onMounted(async () => {
 
             <!-- Auth type -->
             <div>
-              <div class="text-[0.625rem] font-semibold uppercase tracking-wider mb-1 dd-text-muted">Authentication</div>
+              <div class="text-2xs font-semibold uppercase tracking-wider mb-1 dd-text-muted">Authentication</div>
               <div class="flex items-center gap-1.5 text-xs">
                 <AppIcon v-if="isPrivate(selectedRegistry)" name="lock" :size="12" style="color: var(--dd-warning);" />
                 <AppIcon v-else name="eye" :size="12" class="dd-text-muted" />
@@ -366,13 +366,13 @@ onMounted(async () => {
 
             <!-- URL -->
             <div>
-              <div class="text-[0.625rem] font-semibold uppercase tracking-wider mb-1 dd-text-muted">URL</div>
+              <div class="text-2xs font-semibold uppercase tracking-wider mb-1 dd-text-muted">URL</div>
               <div class="text-xs font-mono dd-text break-all">{{ resolveUrl(selectedRegistry) }}</div>
             </div>
 
             <!-- Configuration -->
             <div v-for="(val, key) in selectedRegistry.config" :key="key">
-              <div class="text-[0.625rem] font-semibold uppercase tracking-wider mb-1 dd-text-muted">{{ key }}</div>
+              <div class="text-2xs font-semibold uppercase tracking-wider mb-1 dd-text-muted">{{ key }}</div>
               <div class="text-xs font-mono dd-text break-all">{{ val }}</div>
             </div>
           </div>

@@ -76,7 +76,7 @@ describe('DataViewLayout', () => {
     const wrapper = mount(DataViewLayout, {
       slots: { default: '<p>Scrollable</p>' },
     });
-    const scrollArea = wrapper.find('.overflow-auto');
+    const scrollArea = wrapper.find('.overflow-y-auto');
     expect(scrollArea.exists()).toBe(true);
     expect(scrollArea.text()).toContain('Scrollable');
   });
@@ -85,7 +85,7 @@ describe('DataViewLayout', () => {
     const wrapper = mount(DataViewLayout, {
       slots: { default: '<p>Content</p>' },
     });
-    const scrollArea = wrapper.find('.overflow-auto');
+    const scrollArea = wrapper.find('.overflow-y-auto');
     expect(scrollArea.classes()).toContain('sm:pr-[15px]');
   });
 

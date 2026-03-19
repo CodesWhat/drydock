@@ -37,6 +37,12 @@ describe('AnnouncementBanner', () => {
     expect(icon.props('name')).toBe('info');
   });
 
+  it('uses error styling when tone is error', () => {
+    const wrapper = factory({ tone: 'error' });
+    expect(wrapper.attributes('style')).toContain('var(--dd-danger)');
+    expect(wrapper.attributes('style')).not.toContain('var(--dd-warning)');
+  });
+
   it('renders only the session dismiss action by default', () => {
     const wrapper = factory();
     const buttons = wrapper.findAll('button');
