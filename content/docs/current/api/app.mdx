@@ -1,6 +1,6 @@
 ---
 title: "App API"
-description: "Application info and server configuration endpoints."
+description: "Application info, server configuration, and diagnostic endpoints."
 ---
 
 ## Get App information
@@ -8,11 +8,11 @@ description: "Application info and server configuration endpoints."
 Returns application name and version.
 
 ```bash
-curl http://drydock:3000/api/app
+curl http://drydock:3000/api/v1/app
 
 {
   "name":"drydock",
-  "version":"1.4.0"
+  "version":"1.5.0"
 }
 ```
 
@@ -21,7 +21,7 @@ curl http://drydock:3000/api/app
 Returns the server configuration, webhook status, and legacy input compatibility summary.
 
 ```bash
-curl http://drydock:3000/api/server
+curl http://drydock:3000/api/v1/server
 
 {
   "configuration": {
@@ -40,7 +40,7 @@ curl http://drydock:3000/api/server
 Returns the availability status of security tools (Trivy scanner, Cosign signature verification) and SBOM configuration. Use this to check whether the runtime environment has the required binaries before triggering scans.
 
 ```bash
-curl http://drydock:3000/api/server/security/runtime
+curl http://drydock:3000/api/v1/server/security/runtime
 
 {
   "checkedAt": "2024-12-01T10:00:00.000Z",
@@ -89,3 +89,36 @@ curl http://drydock:3000/api/server/security/runtime
 | `requirements` | string[] | Human-readable list of missing dependencies (empty when everything is ready) |
 
 Returns 200 on success, or 500 if the runtime check fails.
+
+## Download diagnostic debug dump
+
+Downloads a comprehensive, redacted diagnostic dump of the running drydock instance as a JSON file. Useful for troubleshooting and support requests.
+
+The dump includes runtime metadata, component state (watchers, registries, triggers, agents, containers), Docker API diagnostics, MQTT Home Assistant sensor definitions, recent Docker events, store statistics, and `DD_*` environment variable names. All values matching `password|token|secret|key|hash` are automatically redacted.
+
+```bash
+curl -O -J "http://drydock:3000/api/v1/debug/dump?minutes=30"
+```
+
+The response is a JSON attachment with a timestamped filename (e.g. `drydock-debug-dump-2026-03-18T19-33-00-000Z.json`).
+
+### Query parameters
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `minutes` | integer | `30` | How many recent minutes of event history to include (min: 1, max: 1440) |
+
+### Dump sections
+
+| Section | Contents |
+| --- | --- |
+| `metadata` | Generated timestamp, drydock version, Node.js version, uptime |
+| `state` | All registered components: containers, watchers, triggers, registries, authentications, agents |
+| `mqttHomeAssistant` | Home Assistant MQTT sensor discovery topics and definitions |
+| `dockerEvents` | Active Docker event subscriptions and recent events within the time window |
+| `aliasFiltering` | Recent container alias filter decisions |
+| `store` | LokiJS collection statistics |
+| `dockerApi` | Docker daemon version and info per watcher (connection errors captured gracefully) |
+| `environment` | All `DD_*` environment variable names with values redacted |
+
+Returns 200 with the JSON attachment on success, 401 if not authenticated, or 500 if the dump cannot be generated.

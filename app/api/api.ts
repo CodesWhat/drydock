@@ -11,6 +11,7 @@ import * as backupRouter from './backup.js';
 import * as containerRouter from './container.js';
 import * as containerActionsRouter from './container-actions.js';
 import { requireSameOriginForMutations } from './csrf.js';
+import * as debugRouter from './debug.js';
 import { sendErrorResponse } from './error-response.js';
 import * as groupRouter from './group.js';
 import * as iconsRouter from './icons.js';
@@ -93,6 +94,9 @@ export function init(): express.Router {
 
   // Mount store router
   router.use('/store', storeRouter.init());
+
+  // Mount debug dump router
+  router.use('/debug', debugRouter.init());
 
   // Mount server router
   router.use('/server', serverRouter.init());

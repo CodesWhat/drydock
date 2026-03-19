@@ -88,21 +88,50 @@ When auto fetch is active, the viewer auto-scrolls to the newest entry after eac
 
 ## Container Log Viewer
 
-Each container has a **Logs** tab in its detail expansion panel. This shows the container's stdout/stderr output directly in the UI — no need to shell into the host.
+The container log viewer provides real-time log streaming via WebSocket — logs appear instantly as the container produces them, with no polling delay. The viewer is available in two modes:
+
+- **Full-page viewer** at `/containers/:id/logs`, with a header showing the container name, image, and status.
+- **Compact mode** inside the slide-in container detail panel.
+
+A maximum of 5,000 lines are retained in the viewport buffer. Older lines are discarded as new ones arrive.
 
 ### Toolbar controls
 
 | Control | Description |
 | --- | --- |
-| **Lines** | Number of tail lines to fetch: 50, 100, or 500. |
-| **Auto fetch** | Poll for new log output at a chosen interval: Off, 2s, 5s, 10s, or 30s. |
-| **Refresh** | Manual one-shot fetch. |
+| **Pause / Resume** | Pause the live WebSocket stream; resume reconnects and continues streaming. |
+| **Unpin / Pin** | Toggle auto-scroll to newest entries. |
+| **Copy** | Copy all visible log lines to clipboard. |
+| **Download** | Download container logs as a `.log` text file (gzip-compressed if the browser supports it). |
+| **Search** | Free-text search across visible log entries. |
+| **.* Regex** | Toggle regex mode for the search field. |
+| **stdout** | Show or hide the stdout stream. |
+| **stderr** | Show or hide the stderr stream. |
+| **Tail** | Number of initial historical lines to load when the viewer opens: 100, 500, 1,000, or All. |
+| **Level** | Filter by log level. Only shown when the container emits JSON-structured logs (see below). |
+| **Prev / Next** | Navigate between search matches. Only shown when a search is active, with a match counter. |
 
-Scroll lock and resume work the same way as the application log viewer.
+### ANSI color rendering
+
+Terminal ANSI color codes are rendered correctly in the viewer — colored build output, test runners, and CLI tools display as they would in a real terminal.
+
+### JSON log detection
+
+When the viewer detects JSON-structured log lines, it automatically pretty-prints them with syntax highlighting. Keys, strings, numbers, booleans, and `null` are each distinctly colored for readability.
+
+JSON-structured logs also enable the **Level** filter in the toolbar. The viewer auto-detects the level field from common conventions: `level`, `severity`, `logLevel`, `log_level`, and `lvl`.
+
+### Stream filtering
+
+Each log line is tagged with a color-coded **stdout** or **stderr** badge. Use the stream toggle buttons in the toolbar to show or hide either stream independently.
+
+### Scroll behavior
+
+Auto-scroll follows new entries by default. Scrolling up automatically pauses auto-scroll so your reading position is preserved. Click **Pin** to jump back to the bottom and re-enable auto-scroll.
 
 ### Agent containers
 
-Container logs work for both local and remote agent containers. For agent-managed containers, drydock proxies the log request through the agent connection automatically.
+Container log streaming is available for local containers. For agent-managed containers, HTTP-based log download is available.
 
 ## Agent Log Viewer
 

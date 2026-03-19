@@ -13,6 +13,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] — 2026-03-18
+
+### Added
+
+- **Real-time container log viewer** — WebSocket-based live log streaming with ANSI color rendering, JSON syntax highlighting, regex search, stdout/stderr filtering, copy to clipboard, and gzip download. Available in detail panel and full-page view.
+- **Diagnostic debug dump** — One-click redacted system state export from Configuration > Diagnostics.
+- **Container log streaming API** — `WS /api/v1/containers/:id/logs/stream` with Docker binary stream demux, session auth, and rate limiting.
+- **Container log download API** — `GET /api/v1/containers/:id/logs` with gzip compression.
+- **Debug dump API** — `GET /api/v1/debug/dump` with configurable time-windowed event collection.
+
+### Changed
+
+- **Container log viewer upgraded to WebSocket streaming** — Replaced HTTP polling with real-time WebSocket streaming.
+- **Container detail panel log sizing** — Log viewer fills viewport height without outer scrollbars.
+- **Search match navigation** — Prev/Next buttons hidden until a search query is active.
+
 ## [1.4.5] — 2026-03-17
 
 ### Fixed
