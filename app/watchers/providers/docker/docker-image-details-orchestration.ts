@@ -360,7 +360,7 @@ function removeStaleContainerEntriesWithSameName(
       if (staleWatcherId === '') {
         return false;
       }
-      const staleWatcher = watcherRegistryState[staleWatcherId] as
+      const staleWatcher = watcherRegistryState[staleWatcherId] as unknown as
         | (DockerImageDetailsWatcher & { type?: string })
         | undefined;
       if (!staleWatcher || staleWatcher.type !== 'docker') {

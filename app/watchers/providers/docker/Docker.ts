@@ -269,7 +269,7 @@ function getContainersFromSameDockerSource(
     if (staleWatcherId === '') {
       return false;
     }
-    const staleWatcher = watcherRegistryState[staleWatcherId] as
+    const staleWatcher = watcherRegistryState[staleWatcherId] as unknown as
       | (DockerWatcherSourceProbe & { type?: string })
       | undefined;
     if (!staleWatcher || staleWatcher.type !== 'docker') {
