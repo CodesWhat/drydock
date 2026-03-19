@@ -29,7 +29,7 @@ type UnknownRecord = Record<string, unknown>;
 const RECREATED_ALIAS_PATTERN = /^([a-f0-9]{12})_(.+)$/i;
 
 interface ContainerWithNames {
-  Id?: string;
+  Id?: unknown;
   Names?: string[];
 }
 
@@ -89,7 +89,7 @@ export function getOldContainers(newContainers: Container[], containersFromTheSt
  * the leading slash. Does NOT canonicalize alias prefixes — used by alias
  * filtering which needs to detect the raw alias pattern.
  */
-export function getRawContainerName(container: ContainerWithNames): string {
+export function getRawContainerName(container: { Names?: string[] }): string {
   const names = container.Names;
   if (!names || names.length === 0) {
     return '';
