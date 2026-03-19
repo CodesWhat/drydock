@@ -1103,7 +1103,6 @@ provide(containersViewTemplateContextKey, {
 </script>
 
 <template>
-  <ConfirmDialog />
   <DataViewLayout v-if="!containerFullPage">
     <ContainersListContent />
     <template #panel>
