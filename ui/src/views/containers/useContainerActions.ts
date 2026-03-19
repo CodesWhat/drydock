@@ -1,6 +1,7 @@
 import { computed, onUnmounted, type Ref, ref, watch } from 'vue';
 import { useConfirmDialog } from '../../composables/useConfirmDialog';
 import { useServerFeatures } from '../../composables/useServerFeatures';
+import { useToast } from '../../composables/useToast';
 import {
   deleteContainer as apiDeleteContainer,
   scanContainer as apiScanContainer,
@@ -84,7 +85,10 @@ async function executeContainerActionState(args: {
     }
     return true;
   } catch (e: unknown) {
-    args.inputError.value = errorMessage(e, `Action failed for ${args.name}`);
+    const msg = errorMessage(e, `Action failed for ${args.name}`);
+    args.inputError.value = msg;
+    const toast = useToast();
+    toast.error(`Update failed: ${args.name}`, msg);
     return false;
   } finally {
     args.actionInProgress.value = null;
