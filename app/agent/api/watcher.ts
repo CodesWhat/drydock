@@ -5,7 +5,6 @@ import logger from '../../log/index.js';
 import { sanitizeLogParam } from '../../log/sanitize.js';
 import * as registry from '../../registry/index.js';
 import * as storeContainer from '../../store/container.js';
-import { getErrorMessage } from '../../util/error.js';
 
 const log = logger.child({ component: 'agent-api-watcher' });
 const INTERNAL_SERVER_ERROR_MESSAGE = 'Internal server error';
@@ -59,9 +58,9 @@ export async function watchWatcher(req: Request, res: Response) {
     const results = await watcher.watch();
     res.json(results);
   } catch (error: unknown) {
-    const message = getErrorMessage(error);
+    const message = normalizeErrorMessage(error);
     log.error(`Error watching watcher ${sanitizeLogParam(name)}: ${sanitizeLogParam(message)}`);
-    sendErrorResponse(res, 500, INTERNAL_SERVER_ERROR_MESSAGE);
+    sendErrorResponse(res, 500, error instanceof Error ? INTERNAL_SERVER_ERROR_MESSAGE : message);
   }
 }
 
@@ -90,8 +89,8 @@ export async function watchContainer(req: Request, res: Response) {
     const result = await watcher.watchContainer(container);
     res.json(result);
   } catch (error: unknown) {
-    const message = getErrorMessage(error);
+    const message = normalizeErrorMessage(error);
     log.error(`Error watching container ${sanitizeLogParam(id)}: ${sanitizeLogParam(message)}`);
-    sendErrorResponse(res, 500, INTERNAL_SERVER_ERROR_MESSAGE);
+    sendErrorResponse(res, 500, error instanceof Error ? INTERNAL_SERVER_ERROR_MESSAGE : message);
   }
 }

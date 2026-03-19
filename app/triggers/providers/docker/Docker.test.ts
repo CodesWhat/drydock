@@ -97,6 +97,11 @@ vi.mock('../../../store/update-operation.js', () => ({
     mockGetInProgressOperationByContainerName(...args),
 }));
 
+const mockSyncComposeFileTag = vi.hoisted(() => vi.fn().mockResolvedValue(false));
+vi.mock('./compose-file-sync.js', () => ({
+  syncComposeFileTag: (...args: any[]) => mockSyncComposeFileTag(...args),
+}));
+
 vi.mock('../../../registry', () => ({
   getState() {
     return {
@@ -428,6 +433,15 @@ test('getWatcher should return watcher responsible for a container', async () =>
       })
       .getId(),
   ).toEqual('docker.test');
+});
+
+test('getWatcher should throw when the watcher reference does not exist', async () => {
+  expect(() =>
+    docker.getWatcher({
+      id: 'missing-id',
+      watcher: 'missing',
+    }),
+  ).toThrowError('No watcher found for container');
 });
 
 // --- getCurrentContainer ---
@@ -3665,5 +3679,102 @@ describe('trigger self-update routing', () => {
     expect(maybeNotifySelfUpdateSpy).toHaveBeenCalled();
     expect(executeSelfUpdateSpy).toHaveBeenCalled();
     expect(executeContainerUpdateSpy).not.toHaveBeenCalled();
+  });
+});
+
+// --- compose file sync ---
+
+describe('performContainerUpdate compose file sync', () => {
+  beforeEach(() => {
+    mockSyncComposeFileTag.mockClear();
+  });
+
+  test('should call syncComposeFileTag after successful tag update', async () => {
+    const executeUpdateSpy = vi.spyOn(docker, 'executeContainerUpdate').mockResolvedValue(true);
+
+    const context = {
+      currentContainerSpec: {
+        Config: {
+          Labels: {
+            'com.docker.compose.project.config_files': '/app/docker-compose.yml',
+            'com.docker.compose.service': 'web',
+          },
+        },
+      },
+      newImage: 'myapp:v2',
+    };
+
+    const container = {
+      updateKind: { kind: 'tag', localValue: 'v1', remoteValue: 'v2' },
+    };
+
+    const logContainer = { info: vi.fn(), warn: vi.fn(), debug: vi.fn(), error: vi.fn() };
+
+    await docker.performContainerUpdate(context, container, logContainer);
+
+    expect(mockSyncComposeFileTag).toHaveBeenCalledWith({
+      labels: context.currentContainerSpec.Config.Labels,
+      newImage: 'myapp:v2',
+      logContainer,
+    });
+
+    executeUpdateSpy.mockRestore();
+  });
+
+  test('should not call syncComposeFileTag for digest updates', async () => {
+    const executeUpdateSpy = vi.spyOn(docker, 'executeContainerUpdate').mockResolvedValue(true);
+
+    const context = {
+      currentContainerSpec: {
+        Config: {
+          Labels: {
+            'com.docker.compose.project.config_files': '/app/docker-compose.yml',
+            'com.docker.compose.service': 'web',
+          },
+        },
+      },
+      newImage: 'myapp:latest',
+    };
+
+    const container = {
+      updateKind: { kind: 'digest' },
+    };
+
+    const logContainer = { info: vi.fn(), warn: vi.fn(), debug: vi.fn(), error: vi.fn() };
+
+    await docker.performContainerUpdate(context, container, logContainer);
+
+    expect(mockSyncComposeFileTag).not.toHaveBeenCalled();
+
+    executeUpdateSpy.mockRestore();
+  });
+
+  test('should not call syncComposeFileTag when update fails', async () => {
+    const executeUpdateSpy = vi.spyOn(docker, 'executeContainerUpdate').mockResolvedValue(false);
+
+    const context = {
+      currentContainerSpec: {
+        Config: {
+          Labels: {
+            'com.docker.compose.project.config_files': '/app/docker-compose.yml',
+            'com.docker.compose.service': 'web',
+          },
+        },
+      },
+      newImage: 'myapp:v2',
+    };
+
+    const container = {
+      updateKind: { kind: 'tag', localValue: 'v1', remoteValue: 'v2' },
+    };
+
+    const logContainer = { info: vi.fn(), warn: vi.fn(), debug: vi.fn(), error: vi.fn() };
+
+    const result = await docker.performContainerUpdate(context, container, logContainer);
+
+    expect(result).toBe(false);
+    expect(mockSyncComposeFileTag).not.toHaveBeenCalled();
+
+    executeUpdateSpy.mockRestore();
   });
 });

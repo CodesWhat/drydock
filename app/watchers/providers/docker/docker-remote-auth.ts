@@ -22,7 +22,7 @@ interface DockerRemoteAuthWatcher {
     host?: string;
     socket: string;
     port: number;
-    protocol?: 'http' | 'https' | 'ssh';
+    protocol?: 'http' | 'https';
     cafile?: string;
     certfile?: string;
     keyfile?: string;

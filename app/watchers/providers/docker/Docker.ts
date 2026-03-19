@@ -27,6 +27,7 @@ import {
   getWatchContainerGauge,
 } from '../../../prometheus/watcher.js';
 import type { ComponentConfiguration } from '../../../registry/Component.js';
+import * as registry from '../../../registry/index.js';
 import { failClosedAuth } from '../../../security/auth.js';
 import * as storeContainer from '../../../store/container.js';
 import { sleep } from '../../../util/sleep.js';
@@ -34,7 +35,10 @@ import { consumeFreshContainerScheduledPollSkip } from '../../registry-webhook-f
 import Watcher from '../../Watcher.js';
 import { updateContainerFromInspect as updateContainerFromInspectState } from './container-event-update.js';
 import {
+  type AliasFilterDecision,
   filterRecreatedContainerAliases,
+  getDockerWatcherRegistryId,
+  getDockerWatcherSourceKey,
   getLabel,
   getMatchingImgsetConfiguration as getMatchingImgsetConfigurationState,
   mergeConfigWithImgset,
@@ -130,7 +134,7 @@ import { filterBySegmentCount, getCurrentPrefix, getFirstDigitIndex } from './ta
 export interface DockerWatcherConfiguration extends ComponentConfiguration {
   socket: string;
   host?: string;
-  protocol?: 'http' | 'https' | 'ssh';
+  protocol?: 'http' | 'https';
   port: number;
   auth?: {
     type?: 'basic' | 'bearer' | 'oidc';
@@ -163,6 +167,8 @@ const DEBOUNCED_WATCH_CRON_MS = 5000;
 const DOCKER_EVENTS_BUFFER_MAX_BYTES = 1024 * 1024;
 const MAINTENANCE_WINDOW_QUEUE_POLL_MS = 60 * 1000;
 const SWARM_SERVICE_ID_LABEL = 'com.docker.swarm.service.id';
+const RECENT_DOCKER_EVENT_LIMIT = 1000;
+const RECENT_ALIAS_FILTER_DECISION_LIMIT = 1000;
 const joiWildcardSchema = (joi as unknown as Record<string, () => Joi.Schema>)[`a${'ny'}`].bind(
   joi,
 );
@@ -218,6 +224,62 @@ type DockerContainerInspectPayload = Parameters<typeof updateContainerFromInspec
 type DockerImageDetailsWatcher = Parameters<typeof addImageDetailsToContainerOrchestration>[0];
 type DockerImageDetailsContainer = Parameters<typeof addImageDetailsToContainerOrchestration>[1];
 
+interface DockerRecentEvent {
+  timestamp: string;
+  action?: string;
+  type?: string;
+  id?: string;
+  actorId?: string;
+}
+
+type DockerWatcherSourceProbe = {
+  name: string;
+  agent?: string;
+  configuration: Pick<DockerWatcherConfiguration, 'host' | 'socket' | 'protocol' | 'port'>;
+};
+
+function normalizeAgentValue(agent: unknown): string | undefined {
+  if (typeof agent !== 'string') {
+    return undefined;
+  }
+  return agent === '' ? undefined : agent;
+}
+
+function getContainersFromSameDockerSource(
+  currentWatcher: DockerWatcherSourceProbe,
+  containersInStore: Container[],
+) {
+  const currentWatcherSourceKey = getDockerWatcherSourceKey(currentWatcher);
+  const currentWatcherAgent = normalizeAgentValue(currentWatcher.agent);
+  const watcherRegistryState = registry.getState().watcher;
+
+  return containersInStore.filter((storedContainer) => {
+    if (normalizeAgentValue(storedContainer.agent) !== currentWatcherAgent) {
+      return false;
+    }
+
+    if (storedContainer.watcher === currentWatcher.name) {
+      return true;
+    }
+
+    const staleWatcherId = getDockerWatcherRegistryId(
+      storedContainer.watcher,
+      normalizeAgentValue(storedContainer.agent),
+    );
+    if (staleWatcherId === '') {
+      return false;
+    }
+    const staleWatcher = watcherRegistryState[staleWatcherId] as
+      | (DockerWatcherSourceProbe & { type?: string })
+      | undefined;
+    if (!staleWatcher || staleWatcher.type !== 'docker') {
+      return false;
+    }
+
+    return getDockerWatcherSourceKey(staleWatcher) === currentWatcherSourceKey;
+  });
+}
+
 /**
  * Docker Watcher Component.
  */
@@ -243,6 +305,8 @@ class Docker extends Watcher {
   public remoteAuthBlockedReason?: string;
   public isWatcherDeregistered: boolean = false;
   public isCronWatchInProgress: boolean = false;
+  public recentDockerEvents: DockerRecentEvent[] = [];
+  public recentAliasFilterDecisions: AliasFilterDecision[] = [];
 
   ensureLogger() {
     if (!this.log) {
@@ -599,6 +663,109 @@ class Docker extends Watcher {
     return sleep(ms);
   }
 
+  private appendBoundedHistoryEntry<T>(history: T[], entry: T, maxEntries: number): void {
+    history.push(entry);
+    if (history.length <= maxEntries) {
+      return;
+    }
+    history.splice(0, history.length - maxEntries);
+  }
+
+  private toEventTimestamp(rawDockerEvent: Record<string, unknown>): string {
+    const rawTimeNano = rawDockerEvent.timeNano;
+    if (typeof rawTimeNano === 'number' && Number.isFinite(rawTimeNano) && rawTimeNano > 0) {
+      return new Date(Math.trunc(rawTimeNano / 1_000_000)).toISOString();
+    }
+
+    const rawTime = rawDockerEvent.time;
+    if (typeof rawTime === 'number' && Number.isFinite(rawTime) && rawTime > 0) {
+      const timestampMs =
+        rawTime > 1_000_000_000_000 ? Math.trunc(rawTime) : Math.trunc(rawTime * 1000);
+      return new Date(timestampMs).toISOString();
+    }
+
+    return new Date().toISOString();
+  }
+
+  private recordRecentDockerEvent(dockerEvent: unknown): void {
+    if (!dockerEvent || typeof dockerEvent !== 'object') {
+      return;
+    }
+
+    const dockerEventRecord = dockerEvent as Record<string, unknown>;
+    const actor = dockerEventRecord.Actor;
+    const actorId =
+      actor &&
+      typeof actor === 'object' &&
+      typeof (actor as Record<string, unknown>).ID === 'string'
+        ? ((actor as Record<string, unknown>).ID as string)
+        : undefined;
+
+    const recentEvent: DockerRecentEvent = {
+      timestamp: this.toEventTimestamp(dockerEventRecord),
+      action:
+        typeof dockerEventRecord.Action === 'string'
+          ? dockerEventRecord.Action
+          : typeof dockerEventRecord.status === 'string'
+            ? dockerEventRecord.status
+            : undefined,
+      type:
+        typeof dockerEventRecord.Type === 'string'
+          ? dockerEventRecord.Type
+          : typeof dockerEventRecord.scope === 'string'
+            ? dockerEventRecord.scope
+            : undefined,
+      id: typeof dockerEventRecord.id === 'string' ? dockerEventRecord.id : undefined,
+      actorId,
+    };
+
+    this.appendBoundedHistoryEntry(this.recentDockerEvents, recentEvent, RECENT_DOCKER_EVENT_LIMIT);
+  }
+
+  private recordAliasFilterDecisions(decisions: AliasFilterDecision[]): void {
+    decisions.forEach((decision) => {
+      this.appendBoundedHistoryEntry(
+        this.recentAliasFilterDecisions,
+        decision,
+        RECENT_ALIAS_FILTER_DECISION_LIMIT,
+      );
+    });
+  }
+
+  getRecentDockerEvents(options: { sinceMs?: number; limit?: number } = {}): DockerRecentEvent[] {
+    const { sinceMs, limit = RECENT_DOCKER_EVENT_LIMIT } = options;
+    const filteredEvents = this.recentDockerEvents.filter((recentEvent) => {
+      if (sinceMs === undefined) {
+        return true;
+      }
+      const timestampMs = Date.parse(recentEvent.timestamp);
+      return Number.isNaN(timestampMs) ? false : timestampMs >= sinceMs;
+    });
+
+    if (!Number.isFinite(limit) || limit <= 0) {
+      return filteredEvents;
+    }
+    return filteredEvents.slice(-Math.trunc(limit));
+  }
+
+  getRecentAliasFilterDecisions(
+    options: { sinceMs?: number; limit?: number } = {},
+  ): AliasFilterDecision[] {
+    const { sinceMs, limit = RECENT_ALIAS_FILTER_DECISION_LIMIT } = options;
+    const filteredDecisions = this.recentAliasFilterDecisions.filter((decision) => {
+      if (sinceMs === undefined) {
+        return true;
+      }
+      const timestampMs = Date.parse(decision.timestamp);
+      return Number.isNaN(timestampMs) ? false : timestampMs >= sinceMs;
+    });
+
+    if (!Number.isFinite(limit) || limit <= 0) {
+      return filteredDecisions;
+    }
+    return filteredDecisions.slice(-Math.trunc(limit));
+  }
+
   async ensureRemoteAuthHeaders() {
     await ensureRemoteAuthHeadersForWatcher(this.asRemoteAuthWatcher());
   }
@@ -700,6 +867,7 @@ class Docker extends Watcher {
   }
 
   async processDockerEvent(dockerEvent: DockerEvent) {
+    this.recordRecentDockerEvent(dockerEvent);
     await processDockerEventOrchestration(this.asDockerEventsWatcher(), dockerEvent);
   }
 
@@ -871,6 +1039,7 @@ class Docker extends Watcher {
     this.ensureLogger();
     await this.ensureRemoteAuthHeaders();
     let containersFromTheStore: Container[] = [];
+    let sameSourceContainersFromTheStore: Container[] = [];
     try {
       containersFromTheStore = storeContainer.getContainers({
         watcher: this.name,
@@ -879,6 +1048,16 @@ class Docker extends Watcher {
       this.log.warn(
         `Error when trying to get the existing containers from the store (${getErrorMessage(e)})`,
       );
+    }
+    try {
+      sameSourceContainersFromTheStore = getContainersFromSameDockerSource(this, [
+        ...storeContainer.getContainers(),
+      ]);
+    } catch (e: unknown) {
+      this.log.warn(
+        `Error when trying to get same-source containers from the store (${getErrorMessage(e)})`,
+      );
+      sameSourceContainersFromTheStore = [...containersFromTheStore];
     }
     const listContainersOptions: Dockerode.ContainerListOptions = {};
     if (this.configuration.watchall) {
@@ -903,10 +1082,11 @@ class Docker extends Watcher {
         this.configuration.watchbydefault,
       ),
     );
-    const { containersToWatch, skippedContainerIds } = filterRecreatedContainerAliases(
+    const { containersToWatch, skippedContainerIds, decisions } = filterRecreatedContainerAliases(
       filteredContainers,
       containersFromTheStore,
     );
+    this.recordAliasFilterDecisions(decisions);
 
     const containerPromises = containersToWatch.map((container) =>
       this.addImageDetailsToContainer(container, {
@@ -941,6 +1121,7 @@ class Docker extends Watcher {
     try {
       await pruneOldContainers(containersToReturn, containersFromTheStore, this.dockerApi, {
         forceRemoveContainerIds: skippedContainerIds,
+        sameSourceContainersFromStore: sameSourceContainersFromTheStore,
       });
     } catch (e: unknown) {
       this.log.warn(`Error when trying to prune the old containers (${getErrorMessage(e)})`);

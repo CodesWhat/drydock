@@ -2252,6 +2252,45 @@ describe('Docker Watcher', () => {
       );
     });
 
+    test('should prefer dd.action and dd.notification aliases over legacy trigger labels', async () => {
+      const container = await setupContainerDetailTest(docker, {
+        registerConfig: {
+          imgset: {
+            homeassistant: {
+              image: 'ghcr.io/home-assistant/home-assistant',
+              tag: { include: String.raw`^\d+\.\d+\.\d+$` },
+              display: { name: 'Home Assistant', icon: 'mdi-home-assistant' },
+              link: {
+                template: 'https://www.home-assistant.io/changelogs/core-${major}${minor}${patch}',
+              },
+              trigger: { include: 'imgset.default:major' },
+            },
+          },
+        },
+        container: {
+          Image: 'ghcr.io/home-assistant/home-assistant:2026.2.1',
+          Names: ['/homeassistant'],
+          Labels: {
+            'dd.action.include': 'action.default:major',
+            'dd.notification.include': 'notification.default:major',
+            'dd.trigger.include': 'legacy.default:major',
+            'wud.trigger.include': 'wud.default:major',
+          },
+        },
+        imageDetails: {
+          Variant: 'v8',
+          RepoDigests: ['ghcr.io/home-assistant/home-assistant@sha256:abc123'],
+        },
+        parseImpl: createHaParseMock(),
+        semverValue: { major: 2026, minor: 2, patch: 1 },
+        registryId: 'ghcr',
+      });
+
+      const result = await docker.addImageDetailsToContainer(container);
+
+      expect(result.triggerInclude).toBe('action.default:major');
+    });
+
     test('should apply tagFamily from container labels', async () => {
       const container = await setupContainerDetailTest(docker, {
         container: {
@@ -3378,6 +3417,58 @@ describe('Docker Watcher', () => {
       expect(testable_getLabel({}, 'dd.display.name')).toBeUndefined();
     });
 
+    test.each([
+      {
+        aliasKey: 'dd.action.include',
+        legacyKey: 'dd.trigger.include',
+        fallbackKey: 'wud.trigger.include',
+        preferredValue: 'action-include',
+      },
+      {
+        aliasKey: 'dd.notification.exclude',
+        legacyKey: 'dd.trigger.exclude',
+        fallbackKey: 'wud.trigger.exclude',
+        preferredValue: 'notification-exclude',
+      },
+    ])('getLabel should prefer $aliasKey over $legacyKey and warn once for the legacy key', ({
+      aliasKey,
+      legacyKey,
+      fallbackKey,
+      preferredValue,
+    }) => {
+      const warnedLegacyTriggerLabels = new Set<string>();
+      const warn = vi.fn();
+      const labels = {
+        [aliasKey]: preferredValue,
+        [legacyKey]: 'legacy-value',
+        [fallbackKey]: 'legacy-fallback',
+      } as Record<string, string>;
+
+      expect(
+        testable_getLabel(labels, legacyKey, fallbackKey, {
+          warn,
+          warnedLegacyTriggerLabels,
+        }),
+      ).toBe(preferredValue);
+      expect(
+        testable_getLabel(
+          {
+            [legacyKey]: 'legacy-value',
+            [fallbackKey]: 'legacy-fallback',
+          } as Record<string, string>,
+          legacyKey,
+          fallbackKey,
+          {
+            warn,
+            warnedLegacyTriggerLabels,
+          },
+        ),
+      ).toBe('legacy-value');
+
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls[0][0]).toContain(legacyKey);
+    });
+
     test('getCurrentPrefix should return the non-numeric prefix before the first digit', () => {
       expect(testable_getCurrentPrefix('v2026.2.1')).toBe('v');
     });
@@ -3744,6 +3835,36 @@ describe('Docker Watcher', () => {
 
       expect(dockerApi.getContainer).not.toHaveBeenCalled();
       expect(storeContainer.deleteContainer).toHaveBeenCalledWith('old-1');
+    });
+
+    test('pruneOldContainers should delete stale same-name entries from same-source cross-watcher candidates', async () => {
+      const dockerApi = {
+        getContainer: vi.fn(),
+      };
+
+      await testable_pruneOldContainers(
+        [
+          {
+            id: 'new-1',
+            watcher: 'docker',
+            name: 'app',
+          },
+        ] as any,
+        [] as any,
+        dockerApi as any,
+        {
+          sameSourceContainersFromStore: [
+            {
+              id: 'old-2',
+              watcher: 'docker-alias',
+              name: 'app',
+            },
+          ],
+        },
+      );
+
+      expect(dockerApi.getContainer).not.toHaveBeenCalled();
+      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('old-2');
     });
 
     test('pruneOldContainers should treat missing watcher as an empty watcher key', async () => {

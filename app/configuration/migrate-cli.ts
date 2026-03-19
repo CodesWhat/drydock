@@ -37,8 +37,12 @@ const LEGACY_LABEL_MAPPINGS = [
 ] as const;
 
 const WATCHTOWER_LABEL_MAPPINGS = [['com.centurylinklabs.watchtower.enable', 'dd.watch']] as const;
+const TRIGGER_LABEL_MAPPINGS = [
+  ['dd.trigger.include', 'dd.action.include'],
+  ['dd.trigger.exclude', 'dd.action.exclude'],
+] as const;
 
-const SUPPORTED_MIGRATION_SOURCES = ['auto', 'wud', 'watchtower'] as const;
+const SUPPORTED_MIGRATION_SOURCES = ['auto', 'wud', 'watchtower', 'trigger'] as const;
 type MigrationSource = (typeof SUPPORTED_MIGRATION_SOURCES)[number];
 
 interface MigrateCliOptions {
@@ -81,7 +85,14 @@ const COMPILED_WATCHTOWER_LABEL_MAPPINGS = WATCHTOWER_LABEL_MAPPINGS.map(
   ([legacyLabel, newLabel]) =>
     [new RegExp(`\\b${escapeForRegExp(legacyLabel)}\\b`, 'g'), newLabel] as const,
 );
-type CompiledLabelMapping = (typeof COMPILED_WUD_LABEL_MAPPINGS)[number];
+const COMPILED_TRIGGER_LABEL_MAPPINGS = TRIGGER_LABEL_MAPPINGS.map(
+  ([legacyLabel, newLabel]) =>
+    [new RegExp(`\\b${escapeForRegExp(legacyLabel)}\\b`, 'g'), newLabel] as const,
+);
+type CompiledLabelMapping =
+  | (typeof COMPILED_WUD_LABEL_MAPPINGS)[number]
+  | (typeof COMPILED_WATCHTOWER_LABEL_MAPPINGS)[number]
+  | (typeof COMPILED_TRIGGER_LABEL_MAPPINGS)[number];
 
 function replaceWithCount(
   input: string,
@@ -161,9 +172,55 @@ function migrateWatchtowerConfigContent(content: string): MigrationResult {
   };
 }
 
+function migrateLegacyTriggerConfigContent(content: string): MigrationResult {
+  let migratedContent = content;
+  let envReplacements = 0;
+
+  // .env style or list style env vars using "="
+  for (const pattern of [
+    /^(\s*export\s+)DD_TRIGGER_([A-Z0-9_]+)(\s*=)/gm,
+    /^(\s*-\s*['"]?)DD_TRIGGER_([A-Z0-9_]+)(['"]?\s*=)/gm,
+    /^(\s*['"]?)DD_TRIGGER_([A-Z0-9_]+)(['"]?\s*=)/gm,
+  ]) {
+    const replaced = replaceWithCount(
+      migratedContent,
+      pattern,
+      (_full, prefix, suffix, separator) => `${prefix}DD_ACTION_${suffix}${separator}`,
+    );
+    migratedContent = replaced.output;
+    envReplacements += replaced.count;
+  }
+
+  // YAML map style env vars using ":"
+  const yamlMapReplacement = replaceWithCount(
+    migratedContent,
+    /^(\s*['"]?)DD_TRIGGER_([A-Z0-9_]+)(['"]?\s*:)/gm,
+    (_full, prefix, suffix, separator) => `${prefix}DD_ACTION_${suffix}${separator}`,
+  );
+  migratedContent = yamlMapReplacement.output;
+  envReplacements += yamlMapReplacement.count;
+
+  const labelReplacementResult = replaceLabelMappings(
+    migratedContent,
+    COMPILED_TRIGGER_LABEL_MAPPINGS,
+  );
+  migratedContent = labelReplacementResult.content;
+
+  return {
+    content: migratedContent,
+    envReplacements,
+    labelReplacements: labelReplacementResult.labelReplacements,
+  };
+}
+
 function parseMigrationSource(value: string): MigrationSource | null {
   const normalized = value.toLowerCase();
-  if (normalized === 'auto' || normalized === 'wud' || normalized === 'watchtower') {
+  if (
+    normalized === 'auto' ||
+    normalized === 'wud' ||
+    normalized === 'watchtower' ||
+    normalized === 'trigger'
+  ) {
     return normalized;
   }
   return null;
@@ -173,6 +230,10 @@ export function migrateLegacyConfigContent(
   content: string,
   source: MigrationSource = 'auto',
 ): MigrationResult {
+  if (source === 'trigger') {
+    return migrateLegacyTriggerConfigContent(content);
+  }
+
   if (source === 'wud') {
     return migrateWudLegacyConfigContent(content);
   }
@@ -183,10 +244,15 @@ export function migrateLegacyConfigContent(
 
   const wudResult = migrateWudLegacyConfigContent(content);
   const watchtowerResult = migrateWatchtowerConfigContent(wudResult.content);
+  const triggerResult = migrateLegacyTriggerConfigContent(watchtowerResult.content);
   return {
-    content: watchtowerResult.content,
-    envReplacements: wudResult.envReplacements + watchtowerResult.envReplacements,
-    labelReplacements: wudResult.labelReplacements + watchtowerResult.labelReplacements,
+    content: triggerResult.content,
+    envReplacements:
+      wudResult.envReplacements + watchtowerResult.envReplacements + triggerResult.envReplacements,
+    labelReplacements:
+      wudResult.labelReplacements +
+      watchtowerResult.labelReplacements +
+      triggerResult.labelReplacements,
   };
 }
 

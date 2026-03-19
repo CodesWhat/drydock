@@ -26,6 +26,7 @@ import { runHook } from '../../hooks/HookRunner.js';
 import Trigger from '../Trigger.js';
 import ContainerRuntimeConfigManager from './ContainerRuntimeConfigManager.js';
 import ContainerUpdateExecutor from './ContainerUpdateExecutor.js';
+import { syncComposeFileTag } from './compose-file-sync.js';
 import { startHealthMonitor } from './HealthMonitor.js';
 import HookExecutor from './HookExecutor.js';
 import RegistryResolver from './RegistryResolver.js';
@@ -371,7 +372,17 @@ class Docker extends Trigger {
    */
 
   getWatcher(container) {
-    return getState().watcher[`docker.${container.watcher}`];
+    const watcherId = container?.agent
+      ? `${container.agent}.docker.${container.watcher}`
+      : `docker.${container.watcher}`;
+    const watcher = getState().watcher[watcherId];
+    if (!watcher) {
+      const containerIdOrName = container?.id || container?.name || 'unknown';
+      throw new Error(
+        `No watcher found for container ${containerIdOrName} (${watcherId || 'docker.unknown'})`,
+      );
+    }
+    return watcher;
   }
 
   normalizeRegistryHost(registryUrlOrName) {
@@ -1143,7 +1154,15 @@ class Docker extends Trigger {
    * mechanics while reusing the shared lifecycle orchestrator.
    */
   async performContainerUpdate(context, container, logContainer, _runtimeContext?: unknown) {
-    return this.executeContainerUpdate(context, container, logContainer);
+    const updated = await this.executeContainerUpdate(context, container, logContainer);
+    if (updated && container.updateKind?.kind === 'tag') {
+      await syncComposeFileTag({
+        labels: context.currentContainerSpec?.Config?.Labels,
+        newImage: context.newImage,
+        logContainer,
+      });
+    }
+    return updated;
   }
 
   getRollbackConfig(container) {

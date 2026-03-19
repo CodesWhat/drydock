@@ -1,7 +1,9 @@
 import type { Container } from '../../../model/container.js';
+import * as registry from '../../../registry/index.js';
 import { detectSourceRepoFromImageMetadata } from '../../../release-notes/index.js';
 import * as storeContainer from '../../../store/container.js';
 import { parse as parseSemver, transform as transformTag } from '../../../tag/index.js';
+import { getDockerWatcherRegistryId, getDockerWatcherSourceKey } from './container-init.js';
 import {
   getContainerDisplayName,
   getContainerName,
@@ -98,8 +100,13 @@ interface ResolvedContainerConfig {
 
 interface DockerImageDetailsWatcher {
   name: string;
+  agent?: string;
   configuration: {
     watchevents: boolean;
+    host?: string;
+    socket?: string;
+    protocol?: string;
+    port?: number;
   };
   dockerApi: {
     getContainer: (id: string) => { inspect: () => Promise<DockerContainerInspectPayload> };
@@ -323,19 +330,45 @@ function warnWhenUntrackableImage(
 }
 
 function removeStaleContainerEntriesWithSameName(
-  watcherName: string,
+  watcher: DockerImageDetailsWatcher,
   containerToReturn: Container,
 ) {
   if (typeof containerToReturn.name !== 'string' || containerToReturn.name === '') {
     return;
   }
 
-  const containersWithSameName = storeContainer.getContainers({
-    watcher: watcherName,
-    name: containerToReturn.name,
-  });
+  const containersWithSameName = storeContainer.getContainers({ name: containerToReturn.name });
+  const watcherRegistryState = registry.getState().watcher;
+  const currentWatcherSourceKey = getDockerWatcherSourceKey(watcher);
+  const currentWatcherAgent = watcher.agent;
+
   containersWithSameName
     .filter((staleContainer) => staleContainer.id !== containerToReturn.id)
+    .filter((staleContainer) => staleContainer.agent === currentWatcherAgent)
+    .filter((staleContainer) => {
+      if (staleContainer.watcher === watcher.name) {
+        return true;
+      }
+
+      if (typeof staleContainer.watcher !== 'string' || staleContainer.watcher === '') {
+        return false;
+      }
+      const staleWatcherId = getDockerWatcherRegistryId(
+        staleContainer.watcher,
+        staleContainer.agent,
+      );
+      if (staleWatcherId === '') {
+        return false;
+      }
+      const staleWatcher = watcherRegistryState[staleWatcherId] as
+        | (DockerImageDetailsWatcher & { type?: string })
+        | undefined;
+      if (!staleWatcher || staleWatcher.type !== 'docker') {
+        return false;
+      }
+
+      return getDockerWatcherSourceKey(staleWatcher) === currentWatcherSourceKey;
+    })
     .forEach((staleContainer) => storeContainer.deleteContainer(staleContainer.id));
 }
 
@@ -461,7 +494,7 @@ export async function addImageDetailsToContainerOrchestration(
     updateAvailable: false,
     updateKind: { kind: 'unknown' },
   } as Container);
-  removeStaleContainerEntriesWithSameName(watcher.name, containerToReturn);
+  removeStaleContainerEntriesWithSameName(watcher, containerToReturn);
 
   return containerToReturn;
 }

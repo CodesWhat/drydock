@@ -64,6 +64,8 @@ export async function replaceSecrets(ddEnvVars: Record<string, string | undefine
 // 1. Get a copy of all dd-related env vars (DD_ primary, WUD_ legacy fallback)
 export const ddEnvVars: Record<string, string | undefined> = {};
 const mappedLegacyEnvVars = new Set<string>();
+const warnedLegacyTriggerEnvVars = new Set<string>();
+const triggerLegacyPrefixUsage = new Set<string>();
 let packageVersionCache: string | undefined;
 let packageVersionResolved = false;
 
@@ -194,6 +196,75 @@ function normalizeWatcherMaintenanceEnvAliases(
     }
   });
 }
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function mergeRecords(
+  base: Record<string, unknown>,
+  override: Record<string, unknown>,
+): Record<string, unknown> {
+  const merged: Record<string, unknown> = { ...base };
+  Object.keys(override).forEach((key) => {
+    const baseValue = merged[key];
+    const overrideValue = override[key];
+    if (isRecord(baseValue) && isRecord(overrideValue)) {
+      merged[key] = mergeRecords(baseValue, overrideValue);
+      return;
+    }
+    merged[key] = overrideValue;
+  });
+  return merged;
+}
+
+function getLegacyTriggerIdFromEnvKey(envKey: string) {
+  const envKeyUpper = envKey.toUpperCase();
+  const prefix = 'DD_TRIGGER_';
+
+  const triggerPath = envKeyUpper
+    .slice(prefix.length)
+    .split('_')
+    .map((part) => part.trim().toLowerCase())
+    .filter((part) => part.length > 0);
+
+  if (triggerPath.length < 2) {
+    return undefined;
+  }
+
+  return `${triggerPath[0]}.${triggerPath[1]}`;
+}
+
+function collectLegacyTriggerUsage() {
+  triggerLegacyPrefixUsage.clear();
+
+  Object.keys(ddEnvVars)
+    .filter((envKey) => envKey.toUpperCase().startsWith('DD_TRIGGER_'))
+    .forEach((envKey) => {
+      const envValue = ddEnvVars[envKey];
+      if (envValue === undefined) {
+        return;
+      }
+
+      const envKeyUpper = envKey.toUpperCase();
+      const legacyTriggerId = getLegacyTriggerIdFromEnvKey(envKeyUpper);
+      if (legacyTriggerId) {
+        triggerLegacyPrefixUsage.add(legacyTriggerId);
+      }
+
+      if (!warnedLegacyTriggerEnvVars.has(envKeyUpper)) {
+        warnedLegacyTriggerEnvVars.add(envKeyUpper);
+        recordLegacyInput('env', envKeyUpper);
+        logWarn(
+          `Legacy trigger environment variable "${envKeyUpper}" is deprecated and will be removed in v1.7.0. Use DD_ACTION_* or DD_NOTIFICATION_* instead.`,
+        );
+      }
+    });
+}
+
+function getTriggerConfigurationsForPrefix(prefix: string) {
+  return get(prefix, ddEnvVars) as Record<string, Record<string, unknown>>;
+}
 /**
  * Get watcher configuration.
  */
@@ -210,7 +281,19 @@ export function getWatcherConfigurations() {
  * Get trigger configurations.
  */
 export function getTriggerConfigurations() {
-  return get('dd.trigger', ddEnvVars);
+  collectLegacyTriggerUsage();
+  const legacyTriggerConfigurations = getTriggerConfigurationsForPrefix('dd.trigger');
+  const actionTriggerConfigurations = getTriggerConfigurationsForPrefix('dd.action');
+  const notificationTriggerConfigurations = getTriggerConfigurationsForPrefix('dd.notification');
+
+  return mergeRecords(
+    mergeRecords(legacyTriggerConfigurations, actionTriggerConfigurations),
+    notificationTriggerConfigurations,
+  );
+}
+
+export function usesLegacyTriggerPrefix(triggerType: string, triggerName: string) {
+  return triggerLegacyPrefixUsage.has(`${triggerType}.${triggerName}`.toLowerCase());
 }
 
 /**

@@ -1,3 +1,4 @@
+import { usesLegacyTriggerPrefix } from '../../configuration/index.js';
 import * as event from '../../event/index.js';
 import { type Container, fullName } from '../../model/container.js';
 import { getTriggerCounter } from '../../prometheus/trigger.js';
@@ -52,6 +53,7 @@ interface EventDispatchOptions extends notificationStore.NotificationRuleDispatc
 const AUTO_TRIGGER_ERROR_SUPPRESSION_WINDOW_MS = 15_000;
 const AUTO_TRIGGER_ERROR_SUPPRESSION_RETENTION_MS = AUTO_TRIGGER_ERROR_SUPPRESSION_WINDOW_MS * 4;
 const TRIGGER_RELEASE_NOTES_BODY_MAX_LENGTH = 500;
+const ACTION_TRIGGER_TYPES = new Set(['command', 'docker', 'dockercompose']);
 
 function truncateReleaseNotesBody(body: string, maxLength: number) {
   if (body.length <= maxLength) {
@@ -161,6 +163,10 @@ class Trigger extends Component {
       return 'all';
     }
     return auto.toLowerCase() as TriggerAutoMode;
+  }
+
+  private getCategory() {
+    return ACTION_TRIGGER_TYPES.has(this.type.toLowerCase()) ? 'action' : 'notification';
   }
 
   private getAutoMode() {
@@ -737,6 +743,13 @@ class Trigger extends Component {
     // do nothing by default
     this.log.warn('Cannot trigger container results; this trigger does not implement "batch" mode');
     return containersWithResult;
+  }
+
+  getMetadata(): Record<string, unknown> {
+    return {
+      category: this.getCategory(),
+      usesLegacyPrefix: usesLegacyTriggerPrefix(this.type, this.name),
+    };
   }
 
   /**

@@ -1186,3 +1186,115 @@ describe('module bootstrap env mapping', () => {
     expect(freshConfiguration.ddEnvVars.DD_TEST_BOOTSTRAP_VAR).toBe('new-value');
   });
 });
+
+describe('trigger env aliases', () => {
+  async function importFreshConfiguration() {
+    vi.resetModules();
+    return import('./index.js');
+  }
+
+  test('should merge DD_ACTION and DD_NOTIFICATION aliases with DD_TRIGGER legacy env vars', async () => {
+    const freshConfiguration = await importFreshConfiguration();
+    freshConfiguration.ddEnvVars.DD_TRIGGER_DOCKER_UPDATE_THRESHOLD = 'major';
+    freshConfiguration.ddEnvVars.DD_ACTION_DOCKER_UPDATE_THRESHOLD = 'minor';
+    freshConfiguration.ddEnvVars.DD_NOTIFICATION_SMTP_ALERT_ENABLED = 'false';
+
+    expect(freshConfiguration.getTriggerConfigurations()).toStrictEqual({
+      docker: {
+        update: {
+          threshold: 'minor',
+        },
+      },
+      smtp: {
+        alert: {
+          enabled: 'false',
+        },
+      },
+    });
+  });
+
+  test('should prefer alias values over DD_TRIGGER legacy values for the same setting', async () => {
+    const freshConfiguration = await importFreshConfiguration();
+    freshConfiguration.ddEnvVars.DD_TRIGGER_DOCKER_UPDATE_THRESHOLD = 'major';
+    freshConfiguration.ddEnvVars.DD_ACTION_DOCKER_UPDATE_THRESHOLD = 'minor';
+
+    expect(freshConfiguration.getTriggerConfigurations()).toStrictEqual({
+      docker: {
+        update: {
+          threshold: 'minor',
+        },
+      },
+    });
+  });
+
+  test('should warn once per legacy DD_TRIGGER key and record legacy env usage', async () => {
+    const freshConfiguration = await importFreshConfiguration();
+    const freshLegacyInput = await import('../prometheus/compatibility.js');
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const legacyKey = 'DD_TRIGGER_DISCORD_NOTIFY_URL';
+    freshConfiguration.ddEnvVars[legacyKey] = 'https://example.invalid/webhook';
+    freshConfiguration.ddEnvVars.DD_NOTIFICATION_DISCORD_NOTIFY_ENABLED = 'true';
+
+    const summaryBefore = freshLegacyInput.getLegacyInputSummary().env.total;
+
+    freshConfiguration.getTriggerConfigurations();
+    freshConfiguration.getTriggerConfigurations();
+
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Legacy trigger environment variable'),
+    );
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('v1.7.0'));
+    expect(freshLegacyInput.getLegacyInputSummary().env.total).toBeGreaterThan(summaryBefore);
+    expect(freshLegacyInput.getLegacyInputSummary().env.keys).toContain(legacyKey);
+
+    warnSpy.mockRestore();
+  });
+});
+
+describe('legacy trigger prefix tracking guards', () => {
+  const nonLegacyTriggerKey = 'DD_ACTION_DOCKER_UPDATE_THRESHOLD';
+  const tooFewSegmentsKey = 'DD_TRIGGER_DOCKER';
+  const undefinedValueKey = 'DD_TRIGGER_DOCKER_UPDATE_THRESHOLD';
+
+  async function importFreshConfiguration() {
+    vi.resetModules();
+    return import('./index.js');
+  }
+
+  test('should ignore non-DD_TRIGGER keys when tracking legacy prefixes', async () => {
+    const freshConfiguration = await importFreshConfiguration();
+    freshConfiguration.ddEnvVars[nonLegacyTriggerKey] = 'major';
+
+    expect(freshConfiguration.getTriggerConfigurations()).toStrictEqual({
+      docker: {
+        update: {
+          threshold: 'major',
+        },
+      },
+    });
+    expect(freshConfiguration.usesLegacyTriggerPrefix('docker', 'update')).toBe(false);
+  });
+
+  test('should ignore DD_TRIGGER keys with too few path segments when tracking legacy prefixes', async () => {
+    const freshConfiguration = await importFreshConfiguration();
+    freshConfiguration.ddEnvVars[tooFewSegmentsKey] = 'ignored';
+
+    expect(freshConfiguration.getTriggerConfigurations()).toStrictEqual({
+      docker: 'ignored',
+    });
+    expect(freshConfiguration.usesLegacyTriggerPrefix('docker', 'update')).toBe(false);
+  });
+
+  test('should ignore DD_TRIGGER keys with undefined values when tracking legacy prefixes', async () => {
+    const freshConfiguration = await importFreshConfiguration();
+    freshConfiguration.ddEnvVars[undefinedValueKey] = undefined;
+
+    expect(freshConfiguration.getTriggerConfigurations()).toStrictEqual({
+      docker: {
+        update: {},
+      },
+    });
+    expect(freshConfiguration.usesLegacyTriggerPrefix('docker', 'update')).toBe(false);
+  });
+});

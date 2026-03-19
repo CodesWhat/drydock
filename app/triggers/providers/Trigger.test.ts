@@ -1,4 +1,5 @@
 import joi from 'joi';
+import * as configuration from '../../configuration/index.js';
 import * as event from '../../event/index.js';
 import log from '../../log/index.js';
 import * as storeContainer from '../../store/container.js';
@@ -128,6 +129,31 @@ test('validateConfiguration should throw error when invalid', async () => {
   expect(() => {
     trigger.validateConfiguration(configuration);
   }).toThrowError(joi.ValidationError);
+});
+
+test('getMetadata should include trigger category for action types', () => {
+  trigger.type = 'docker';
+  trigger.name = 'update';
+
+  expect(trigger.getMetadata()).toEqual({
+    category: 'action',
+    usesLegacyPrefix: false,
+  });
+});
+
+test('getMetadata should include trigger category and legacy prefix usage for notification types', () => {
+  configuration.ddEnvVars.DD_TRIGGER_SLACK_NOTIFY_CHANNEL = 'ops';
+  configuration.getTriggerConfigurations();
+
+  trigger.type = 'slack';
+  trigger.name = 'notify';
+
+  expect(trigger.getMetadata()).toEqual({
+    category: 'notification',
+    usesLegacyPrefix: true,
+  });
+
+  delete configuration.ddEnvVars.DD_TRIGGER_SLACK_NOTIFY_CHANNEL;
 });
 
 test('init should register to container report when simple mode enabled', async () => {

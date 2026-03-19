@@ -76,12 +76,16 @@ export const wudDisplayIcon = 'wud.display.icon';
 /**
  * Optional list of triggers to include
  */
+export const ddActionInclude = 'dd.action.include';
+export const ddNotificationInclude = 'dd.notification.include';
 export const ddTriggerInclude = 'dd.trigger.include';
 export const wudTriggerInclude = 'wud.trigger.include';
 
 /**
  * Optional list of triggers to exclude
  */
+export const ddActionExclude = 'dd.action.exclude';
+export const ddNotificationExclude = 'dd.notification.exclude';
 export const ddTriggerExclude = 'dd.trigger.exclude';
 export const wudTriggerExclude = 'wud.trigger.exclude';
 

@@ -506,6 +506,54 @@ describe('Docker Watcher', () => {
     });
   });
 
+  describe('Recent event history helpers', () => {
+    test('should convert docker event timestamps from timeNano and time', () => {
+      const toEventTimestamp = (docker as any).toEventTimestamp.bind(docker);
+
+      expect(toEventTimestamp({ timeNano: 1_700_000_000_123_000_000 })).toBe(
+        new Date(1_700_000_000_123).toISOString(),
+      );
+      expect(toEventTimestamp({ time: 1_700_000_000_123 })).toBe(
+        new Date(1_700_000_000_123).toISOString(),
+      );
+      expect(toEventTimestamp({ time: 1_700 })).toBe(new Date(1_700_000).toISOString());
+    });
+
+    test('should record recent docker events with status and scope fallbacks', () => {
+      const recordRecentDockerEvent = (docker as any).recordRecentDockerEvent.bind(docker);
+
+      docker.recentDockerEvents = [];
+      recordRecentDockerEvent({
+        timeNano: 1_700_000_000_123_000_000,
+        Action: 'start',
+        Type: 'container',
+        id: 'event-1',
+        Actor: { ID: 'actor-1' },
+      });
+      recordRecentDockerEvent({
+        time: 1_700,
+        status: 'die',
+        scope: 'local',
+        id: 'event-2',
+        Actor: { ID: 'actor-2' },
+      });
+
+      expect(docker.recentDockerEvents).toHaveLength(2);
+      expect(docker.recentDockerEvents[0]).toMatchObject({
+        action: 'start',
+        type: 'container',
+        id: 'event-1',
+        actorId: 'actor-1',
+      });
+      expect(docker.recentDockerEvents[1]).toMatchObject({
+        action: 'die',
+        type: 'local',
+        id: 'event-2',
+        actorId: 'actor-2',
+      });
+    });
+  });
+
   describe('Initialization', () => {
     test('should initialize docker client with socket', async () => {
       await docker.register('watcher', 'docker', 'test', {
@@ -1807,6 +1855,58 @@ describe('Docker Watcher', () => {
       expect(testable_getLabel({}, 'dd.display.name')).toBeUndefined();
     });
 
+    test.each([
+      {
+        aliasKey: 'dd.action.include',
+        legacyKey: 'dd.trigger.include',
+        fallbackKey: 'wud.trigger.include',
+        preferredValue: 'action-include',
+      },
+      {
+        aliasKey: 'dd.notification.exclude',
+        legacyKey: 'dd.trigger.exclude',
+        fallbackKey: 'wud.trigger.exclude',
+        preferredValue: 'notification-exclude',
+      },
+    ])('getLabel should prefer $aliasKey over $legacyKey and warn once for the legacy key', ({
+      aliasKey,
+      legacyKey,
+      fallbackKey,
+      preferredValue,
+    }) => {
+      const warnedLegacyTriggerLabels = new Set<string>();
+      const warn = vi.fn();
+      const labels = {
+        [aliasKey]: preferredValue,
+        [legacyKey]: 'legacy-value',
+        [fallbackKey]: 'legacy-fallback',
+      } as Record<string, string>;
+
+      expect(
+        testable_getLabel(labels, legacyKey, fallbackKey, {
+          warn,
+          warnedLegacyTriggerLabels,
+        }),
+      ).toBe(preferredValue);
+      expect(
+        testable_getLabel(
+          {
+            [legacyKey]: 'legacy-value',
+            [fallbackKey]: 'legacy-fallback',
+          } as Record<string, string>,
+          legacyKey,
+          fallbackKey,
+          {
+            warn,
+            warnedLegacyTriggerLabels,
+          },
+        ),
+      ).toBe('legacy-value');
+
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls[0][0]).toContain(legacyKey);
+    });
+
     test('getCurrentPrefix should return the non-numeric prefix before the first digit', () => {
       expect(testable_getCurrentPrefix('v2026.2.1')).toBe('v');
     });
@@ -2342,6 +2442,36 @@ describe('Docker Watcher', () => {
 
       expect(dockerApi.getContainer).not.toHaveBeenCalled();
       expect(storeContainer.deleteContainer).toHaveBeenCalledWith('old-1');
+    });
+
+    test('pruneOldContainers should delete stale same-name entries from same-source cross-watcher candidates', async () => {
+      const dockerApi = {
+        getContainer: vi.fn(),
+      };
+
+      await testable_pruneOldContainers(
+        [
+          {
+            id: 'new-1',
+            watcher: 'docker',
+            name: 'app',
+          },
+        ] as any,
+        [] as any,
+        dockerApi as any,
+        {
+          sameSourceContainersFromStore: [
+            {
+              id: 'old-2',
+              watcher: 'docker-alias',
+              name: 'app',
+            },
+          ],
+        },
+      );
+
+      expect(dockerApi.getContainer).not.toHaveBeenCalled();
+      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('old-2');
     });
 
     test('pruneOldContainers should treat missing watcher as an empty watcher key', async () => {

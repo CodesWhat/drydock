@@ -1904,7 +1904,7 @@ class Dockercompose extends Docker {
     }
 
     const runtimeContext = options.runtimeContext || {};
-    const dockerApi = runtimeContext.dockerApi || this.getWatcher(container)?.dockerApi;
+    const dockerApi = runtimeContext.dockerApi || this.getWatcher(container).dockerApi;
     let auth = runtimeContext.auth;
     let newImage = runtimeContext.newImage;
 

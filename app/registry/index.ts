@@ -7,6 +7,7 @@ import path from 'node:path';
 import capitalize from 'capitalize';
 import logger from '../log/index.js';
 import * as securityScheduler from '../security/scheduler.js';
+import * as storeContainer from '../store/container.js';
 import * as store from '../store/index.js';
 
 const log = logger.child({ component: 'registry' });
@@ -421,6 +422,40 @@ async function registerWatchers(options: RegistrationOptions = {}) {
   }
 }
 
+function pruneOrphanedLocalContainers() {
+  const localWatcherNames = new Set(
+    Object.values(getState().watcher)
+      .filter((watcher) => !watcher.agent)
+      .map((watcher) => watcher.name)
+      .filter((watcherName): watcherName is string => typeof watcherName === 'string')
+      .map((watcherName) => watcherName.toLowerCase()),
+  );
+
+  if (localWatcherNames.size === 0) {
+    return;
+  }
+
+  const orphanedLocalContainers = storeContainer.getContainersRaw().filter((container) => {
+    if (container.agent) {
+      return false;
+    }
+    if (typeof container.watcher !== 'string') {
+      return true;
+    }
+    return !localWatcherNames.has(container.watcher.toLowerCase());
+  });
+
+  orphanedLocalContainers.forEach((container) => {
+    storeContainer.deleteContainer(container.id);
+  });
+
+  if (orphanedLocalContainers.length > 0) {
+    log.warn(
+      `Pruned ${orphanedLocalContainers.length} container entries from missing local watcher(s)`,
+    );
+  }
+}
+
 /**
  * Register triggers.
  * @param options
@@ -780,6 +815,12 @@ export async function init(options: RegistrationOptions = {}) {
 
   // Register watchers
   await registerWatchers(options);
+  try {
+    pruneOrphanedLocalContainers();
+  } catch (e: unknown) {
+    log.warn(`Unable to prune orphaned local containers (${getErrorMessage(e)})`);
+    log.debug(e);
+  }
 
   if (!options.agent) {
     // Register authentications

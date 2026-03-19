@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 
+import * as registry from '../../../registry/index.js';
 import * as storeContainer from '../../../store/container.js';
 import { addImageDetailsToContainerOrchestration } from './docker-image-details-orchestration.js';
 
@@ -579,8 +580,75 @@ describe('docker image details orchestration module', () => {
     );
 
     expect(result?.id).toBe('new-container-id');
-    expect(getContainersSpy).toHaveBeenCalledWith({ watcher: 'docker-test', name: 'service' });
+    expect(getContainersSpy).toHaveBeenCalledWith({ name: 'service' });
     expect(deleteContainerSpy).toHaveBeenCalledWith('old-container-id');
+  });
+
+  test('removes stale same-name entries from a different watcher when both watchers point to the same docker source', async () => {
+    vi.spyOn(storeContainer, 'getContainer').mockReturnValue(undefined);
+    vi.spyOn(storeContainer, 'getContainers').mockReturnValue([
+      {
+        id: 'old-container-current-watcher',
+        watcher: 'docker-test',
+        name: 'service',
+      } as any,
+      {
+        id: 'old-container-same-source-different-watcher',
+        watcher: 'docker-alias',
+        name: 'service',
+      } as any,
+    ]);
+    const deleteContainerSpy = vi
+      .spyOn(storeContainer, 'deleteContainer')
+      .mockImplementation(() => {});
+    vi.spyOn(registry, 'getState').mockReturnValue({
+      watcher: {
+        'docker.docker-test': {
+          type: 'docker',
+          name: 'docker-test',
+          configuration: {
+            host: 'socket-proxy.internal',
+            protocol: 'http',
+            port: 2375,
+            socket: '/var/run/docker.sock',
+          },
+        },
+        'docker.docker-alias': {
+          type: 'docker',
+          name: 'docker-alias',
+          configuration: {
+            host: 'socket-proxy.internal',
+            protocol: 'http',
+            port: 2375,
+            socket: '/var/run/docker.sock',
+          },
+        },
+      },
+    } as any);
+
+    const { watcher } = createWatcher({
+      configuration: {
+        watchevents: false,
+        host: 'socket-proxy.internal',
+        protocol: 'http',
+        port: 2375,
+        socket: '/var/run/docker.sock',
+      },
+    });
+
+    const result = await addImageDetailsToContainerOrchestration(
+      watcher as any,
+      createDockerSummaryContainer({
+        Id: 'new-container-id',
+        Names: ['/service'],
+      }),
+      {},
+      createHelpers() as any,
+    );
+
+    expect(result?.id).toBe('new-container-id');
+    expect(deleteContainerSpy).toHaveBeenCalledWith('old-container-current-watcher');
+    expect(deleteContainerSpy).toHaveBeenCalledWith('old-container-same-source-different-watcher');
   });
 
   test('skips same-name dedupe when the discovered container name is empty', async () => {
