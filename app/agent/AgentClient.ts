@@ -483,7 +483,7 @@ export class AgentClient {
       const detailedMessage = this.getRemoteTriggerFailureMessage(error);
       const errorMessage = detailedMessage ?? getErrorMessage(error);
       this.log.error(`Error running remote trigger: ${sanitizeLogParam(errorMessage)}`);
-      throw new Error(errorMessage);
+      throw error;
     }
   }
 
@@ -498,7 +498,7 @@ export class AgentClient {
       const detailedMessage = this.getRemoteTriggerFailureMessage(error);
       const errorMessage = detailedMessage ?? getErrorMessage(error);
       this.log.error(`Error running remote batch trigger: ${sanitizeLogParam(errorMessage)}`);
-      throw new Error(errorMessage);
+      throw error;
     }
   }
 

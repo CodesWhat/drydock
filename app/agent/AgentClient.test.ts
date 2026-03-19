@@ -787,8 +787,8 @@ describe('AgentClient', () => {
       );
     });
 
-    test('should surface remote API error details when present', async () => {
-      axios.post.mockRejectedValue({
+    test('should rethrow original error preserving response for proxy forwarding', async () => {
+      const axiosError = {
         message: 'Request failed with status code 500',
         response: {
           status: 500,
@@ -799,15 +799,21 @@ describe('AgentClient', () => {
             },
           },
         },
-      });
+      };
+      axios.post.mockRejectedValue(axiosError);
 
-      await expect(client.runRemoteTrigger({ id: 'c1' }, 'docker', 'update')).rejects.toThrow(
-        'Error when running trigger docker.update (reason: No watcher found for container c1 (docker.default))',
+      await expect(client.runRemoteTrigger({ id: 'c1' }, 'docker', 'update')).rejects.toBe(
+        axiosError,
+      );
+      // Original error is rethrown with response intact for proxy forwarding
+      expect(axiosError.response.status).toBe(500);
+      expect(axiosError.response.data.details.reason).toBe(
+        'No watcher found for container c1 (docker.default)',
       );
     });
 
-    test('should surface remote API error message when details are present without reason', async () => {
-      axios.post.mockRejectedValue({
+    test('should rethrow original error when details lack reason field', async () => {
+      const axiosError = {
         message: 'Request failed with status code 500',
         response: {
           status: 500,
@@ -816,10 +822,11 @@ describe('AgentClient', () => {
             details: { info: 'missing reason field' },
           },
         },
-      });
+      };
+      axios.post.mockRejectedValue(axiosError);
 
-      await expect(client.runRemoteTrigger({ id: 'c1' }, 'docker', 'update')).rejects.toThrow(
-        'Error when running trigger docker.update',
+      await expect(client.runRemoteTrigger({ id: 'c1' }, 'docker', 'update')).rejects.toBe(
+        axiosError,
       );
     });
 
