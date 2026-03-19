@@ -23,7 +23,11 @@ const emit = defineEmits<{
 }>();
 
 const panelDesktopWidth = computed(() =>
-  props.size === 'sm' ? '420px' : props.size === 'md' ? '560px' : '720px',
+  props.size === 'sm'
+    ? 'var(--dd-layout-panel-width-sm)'
+    : props.size === 'md'
+      ? 'var(--dd-layout-panel-width-md)'
+      : 'var(--dd-layout-panel-width-lg)',
 );
 
 function closePanel() {
@@ -60,7 +64,7 @@ onUnmounted(() => globalThis.removeEventListener('keydown', handleKeydown));
            width: isMobile ? '100%' : panelDesktopWidth,
            maxWidth: isMobile ? '100%' : 'min(calc(100vw - 32px), 920px)',
            backgroundColor: 'var(--dd-bg-card)',
-           height: isMobile ? '100vh' : 'calc(100vh - 96px)',
+           height: isMobile ? '100vh' : 'calc(100vh - var(--dd-layout-main-viewport-offset))',
            minHeight: '480px',
          }">
 
@@ -78,7 +82,7 @@ onUnmounted(() => globalThis.removeEventListener('keydown', handleKeydown));
           </AppButton>
           <AppButton size="none" variant="plain" weight="none" v-if="showSizeControls && !isMobile"
                   v-for="s in (['lg', 'md', 'sm'] as const)" :key="s"
-                  class="px-2 py-1 text-[0.625rem] font-semibold uppercase tracking-wide transition-colors"
+                  class="px-2 py-1 text-2xs font-semibold uppercase tracking-wide transition-colors"
                   :class="size === s
                     ? 'dd-bg-elevated dd-text'
                     : 'dd-text-muted hover:dd-text hover:dd-bg-elevated'"
@@ -110,7 +114,7 @@ onUnmounted(() => globalThis.removeEventListener('keydown', handleKeydown));
     <slot name="tabs" />
 
     <!-- Main scrollable content -->
-    <div class="flex-1 min-w-0 min-h-0 overflow-y-auto">
+    <div class="flex flex-col flex-1 min-w-0 min-h-0 overflow-y-auto">
       <slot />
     </div>
   </aside>

@@ -347,7 +347,7 @@ function ansiSegmentStyle(segment: AnsiTextSegment): Record<string, string> {
     style.fontWeight = '700';
   }
   if (segment.dim) {
-    style.opacity = '0.75';
+    style.opacity = 'var(--dd-opacity-dim)';
   }
 
   return style;
@@ -493,6 +493,23 @@ async function downloadLogs(): Promise<void> {
   }
 }
 
+const copySuccess = ref(false);
+
+async function copyLogs(): Promise<void> {
+  const text = visibleEntries.value
+    .map((entry) => `${entry.ts} ${entry.type.toUpperCase()} ${entry.plainLine}`)
+    .join('\n');
+  try {
+    await navigator.clipboard.writeText(text);
+    copySuccess.value = true;
+    setTimeout(() => {
+      copySuccess.value = false;
+    }, 2000);
+  } catch {
+    // Clipboard API may not be available
+  }
+}
+
 watch(searchPattern, () => {
   currentMatchIndex.value = 0;
 });
@@ -557,15 +574,15 @@ onBeforeUnmount(() => {
       <div class="flex items-center gap-2 justify-between">
         <div class="flex items-center gap-2 min-w-0">
           <AppIcon name="terminal" :size="12" class="dd-text-muted" />
-          <span class="text-[0.6875rem] font-semibold uppercase tracking-wider dd-text-muted">Container Logs</span>
-          <span class="text-[0.6875rem] font-mono text-drydock-secondary truncate">{{ props.containerName }}</span>
+          <span class="text-2xs-plus font-semibold uppercase tracking-wider dd-text-muted">Container Logs</span>
+          <span class="text-2xs-plus font-mono text-drydock-secondary truncate">{{ props.containerName }}</span>
         </div>
 
         <div class="flex items-center gap-1.5">
           <AppButton size="none" variant="plain" weight="none"
             type="button"
             data-test="container-log-toggle-pause"
-            class="px-2 py-1 dd-rounded text-[0.625rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
+            class="px-2 py-1 dd-rounded text-2xs font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
             @click="togglePause"
           >
             <span class="inline-flex items-center gap-1">
@@ -576,7 +593,7 @@ onBeforeUnmount(() => {
 
           <AppButton size="none" variant="plain" weight="none"
             type="button"
-            class="px-2 py-1 dd-rounded text-[0.625rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
+            class="px-2 py-1 dd-rounded text-2xs font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
             @click="togglePin"
           >
             {{ autoScrollPinned ? 'Unpin' : 'Pin' }}
@@ -584,8 +601,20 @@ onBeforeUnmount(() => {
 
           <AppButton size="none" variant="plain" weight="none"
             type="button"
+            data-test="container-log-copy"
+            class="px-2 py-1 dd-rounded text-2xs font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
+            @click="copyLogs"
+          >
+            <span class="inline-flex items-center gap-1">
+              <AppIcon :name="copySuccess ? 'check' : 'ph:copy'" :size="11" />
+              {{ copySuccess ? 'Copied' : 'Copy' }}
+            </span>
+          </AppButton>
+
+          <AppButton size="none" variant="plain" weight="none"
+            type="button"
             data-test="container-log-download"
-            class="px-2 py-1 dd-rounded text-[0.625rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
+            class="px-2 py-1 dd-rounded text-2xs font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
             :class="downloadInProgress ? 'opacity-50 pointer-events-none' : ''"
             @click="downloadLogs"
           >
@@ -608,7 +637,7 @@ onBeforeUnmount(() => {
             v-model="searchQuery"
             data-test="container-log-search-input"
             type="text"
-            class="w-full pl-7 pr-2 py-1.5 dd-rounded text-[0.6875rem] outline-none dd-bg dd-text dd-placeholder"
+            class="w-full pl-7 pr-2 py-1.5 dd-rounded text-2xs-plus outline-none dd-bg dd-text dd-placeholder"
             placeholder="Search logs"
           />
         </div>
@@ -616,7 +645,7 @@ onBeforeUnmount(() => {
         <AppButton size="none" variant="plain" weight="none"
           type="button"
           data-test="container-log-regex-toggle"
-          class="px-2 py-1.5 dd-rounded text-[0.625rem] font-semibold uppercase tracking-wide transition-colors"
+          class="px-2 py-1.5 dd-rounded text-2xs font-semibold uppercase tracking-wide transition-colors"
           :class="regexSearch ? 'text-drydock-secondary dd-bg-elevated' : 'dd-text-muted hover:dd-text hover:dd-bg-elevated'"
           @click="regexSearch = !regexSearch"
         >
@@ -625,7 +654,7 @@ onBeforeUnmount(() => {
 
         <AppButton size="none" variant="plain" weight="none"
           type="button"
-          class="px-2 py-1.5 dd-rounded text-[0.625rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
+          class="px-2 py-1.5 dd-rounded text-2xs font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
           :class="showStdout ? 'ring-1 ring-white/10' : ''"
           @click="showStdout = !showStdout"
         >
@@ -638,7 +667,7 @@ onBeforeUnmount(() => {
         <AppButton size="none" variant="plain" weight="none"
           type="button"
           data-test="container-log-toggle-stderr"
-          class="px-2 py-1.5 dd-rounded text-[0.625rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
+          class="px-2 py-1.5 dd-rounded text-2xs font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
           :class="showStderr ? 'ring-1 ring-white/10' : ''"
           @click="showStderr = !showStderr"
         >
@@ -650,7 +679,7 @@ onBeforeUnmount(() => {
 
         <select
           v-model="tailSize"
-          class="px-2 py-1.5 dd-rounded text-[0.625rem] font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text"
+          class="px-2 py-1.5 dd-rounded text-2xs font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text"
         >
           <option v-for="option in TAIL_OPTIONS" :key="option.label" :value="option.value">{{ option.label }}</option>
         </select>
@@ -658,38 +687,40 @@ onBeforeUnmount(() => {
         <select
           v-if="hasJsonEntries"
           v-model="levelFilter"
-          class="px-2 py-1.5 dd-rounded text-[0.625rem] font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text"
+          class="px-2 py-1.5 dd-rounded text-2xs font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text"
         >
           <option v-for="option in levelOptions" :key="option" :value="option">
             {{ option === 'all' ? 'All Levels' : option }}
           </option>
         </select>
 
-        <AppButton size="none" variant="plain" weight="none"
-          type="button"
-          data-test="container-log-prev-match"
-          class="px-2 py-1.5 dd-rounded text-[0.625rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-          :disabled="matchedEntryIds.length === 0"
-          @click="jumpToMatch('prev')"
-        >
-          Prev
-        </AppButton>
-        <AppButton size="none" variant="plain" weight="none"
-          type="button"
-          data-test="container-log-next-match"
-          class="px-2 py-1.5 dd-rounded text-[0.625rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-          :disabled="matchedEntryIds.length === 0"
-          @click="jumpToMatch('next')"
-        >
-          Next
-        </AppButton>
-        <span data-test="container-log-match-index" class="text-[0.625rem] dd-text-muted font-mono">{{ matchLabel }}</span>
+        <template v-if="searchQuery">
+          <AppButton size="none" variant="plain" weight="none"
+            type="button"
+            data-test="container-log-prev-match"
+            class="px-2 py-1.5 dd-rounded text-2xs font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
+            :disabled="matchedEntryIds.length === 0"
+            @click="jumpToMatch('prev')"
+          >
+            Prev
+          </AppButton>
+          <AppButton size="none" variant="plain" weight="none"
+            type="button"
+            data-test="container-log-next-match"
+            class="px-2 py-1.5 dd-rounded text-2xs font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
+            :disabled="matchedEntryIds.length === 0"
+            @click="jumpToMatch('next')"
+          >
+            Next
+          </AppButton>
+          <span data-test="container-log-match-index" class="text-2xs dd-text-muted font-mono">{{ matchLabel }}</span>
+        </template>
       </div>
 
-      <div v-if="searchError" class="text-[0.625rem]" style="color: var(--dd-danger)">
+      <div v-if="searchError" class="text-2xs" style="color: var(--dd-danger)">
         {{ searchError }}
       </div>
-      <div v-if="downloadError" class="text-[0.625rem]" style="color: var(--dd-danger)">
+      <div v-if="downloadError" class="text-2xs" style="color: var(--dd-danger)">
         {{ downloadError }}
       </div>
     </div>
@@ -697,10 +728,10 @@ onBeforeUnmount(() => {
     <div
       ref="logViewport"
       class="flex-1 min-h-0 overflow-auto font-mono"
-      :class="props.compact ? 'text-[0.625rem]' : 'text-[0.6875rem]'"
+      :class="props.compact ? 'text-2xs' : 'text-2xs-plus'"
       @scroll="handleLogScroll"
     >
-      <div v-if="visibleEntries.length === 0" class="px-3 py-5 text-center text-[0.6875rem] dd-text-muted">
+      <div v-if="visibleEntries.length === 0" class="px-3 py-5 text-center text-2xs-plus dd-text-muted">
         No log entries yet
       </div>
 
@@ -719,7 +750,7 @@ onBeforeUnmount(() => {
         <div class="flex items-start gap-2">
           <span class="shrink-0 tabular-nums" style="color: var(--dd-log-text-muted)">{{ entry.ts || '-' }}</span>
           <span
-            class="shrink-0 font-semibold uppercase text-[0.625rem]"
+            class="shrink-0 font-semibold uppercase text-2xs"
             :style="{ color: entry.type === 'stderr' ? 'var(--dd-danger)' : 'var(--dd-success)' }"
           >
             {{ entry.type }}
@@ -742,7 +773,7 @@ onBeforeUnmount(() => {
     </div>
 
     <div
-      class="px-3 py-1.5 flex items-center justify-between text-[0.625rem]"
+      class="px-3 py-1.5 flex items-center justify-between text-2xs"
       :style="{ borderTop: '1px solid var(--dd-log-divider)', backgroundColor: 'var(--dd-log-footer-bg)' }"
     >
       <span class="dd-text-muted font-mono">{{ visibleEntries.length }} lines</span>
