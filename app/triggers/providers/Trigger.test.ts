@@ -1,4 +1,5 @@
 import joi from 'joi';
+import mockCron from 'node-cron';
 import * as configuration from '../../configuration/index.js';
 import * as event from '../../event/index.js';
 import log from '../../log/index.js';
@@ -6,6 +7,7 @@ import * as storeContainer from '../../store/container.js';
 import * as notificationStore from '../../store/notification.js';
 import Trigger from './Trigger.js';
 
+vi.mock('node-cron');
 vi.mock('../../log');
 vi.mock('../../event');
 vi.mock('../../store/notification.js', () => ({
@@ -51,6 +53,7 @@ test('validateConfiguration should return validated configuration when valid', a
   expect(validatedConfiguration).toStrictEqual({
     ...configurationValid,
     auto: 'all',
+    digestcron: '0 8 * * *',
   });
 });
 
@@ -1971,4 +1974,172 @@ test('maskFields should mask non-empty configured values', () => {
   const masked = trigger.maskFields(['token', 'empty']);
   expect(masked.token).toBe('[REDACTED]');
   expect(masked.empty).toBe('');
+});
+
+describe('digest mode', () => {
+  const mockStop = vi.fn();
+
+  beforeEach(() => {
+    vi.mocked(mockCron.schedule).mockReturnValue({ stop: mockStop } as any);
+    vi.mocked(event.registerContainerReport).mockReturnValue(vi.fn());
+    vi.mocked(event.registerContainerUpdateApplied).mockReturnValue(vi.fn());
+    vi.mocked(event.registerContainerUpdateFailed).mockReturnValue(vi.fn());
+    vi.mocked(event.registerSecurityAlert).mockReturnValue(vi.fn());
+    vi.mocked(event.registerAgentDisconnected).mockReturnValue(vi.fn());
+  });
+
+  test('validateConfiguration should accept digest mode', () => {
+    const validated = trigger.validateConfiguration({
+      ...configurationValid,
+      mode: 'digest',
+    });
+    expect(validated.mode).toBe('digest');
+  });
+
+  test('validateConfiguration should default digestcron to 0 8 * * *', () => {
+    const validated = trigger.validateConfiguration(configurationValid);
+    expect(validated.digestcron).toBe('0 8 * * *');
+  });
+
+  test('init should schedule digest cron when mode is digest', async () => {
+    await trigger.register('trigger', 'test', 'digest-trigger', {
+      ...configurationValid,
+      mode: 'digest',
+      digestcron: '0 9 * * *',
+    });
+    trigger.init();
+
+    expect(event.registerContainerReport).toHaveBeenCalled();
+    expect(mockCron.schedule).toHaveBeenCalledWith('0 9 * * *', expect.any(Function));
+  });
+
+  test('handleContainerReportDigest should buffer containers', async () => {
+    await trigger.register('trigger', 'test', 'digest-trigger', {
+      ...configurationValid,
+      mode: 'digest',
+    });
+    trigger.init();
+
+    await trigger.handleContainerReportDigest({
+      container: {
+        id: 'c1',
+        name: 'app',
+        watcher: 'test',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      },
+      changed: true,
+    });
+
+    // Buffer should have one entry — verified via flush
+    const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+    await trigger.flushDigestBuffer();
+    expect(triggerBatchSpy).toHaveBeenCalledWith([expect.objectContaining({ name: 'app' })]);
+    triggerBatchSpy.mockRestore();
+  });
+
+  test('flushDigestBuffer should skip when buffer is empty', async () => {
+    await trigger.register('trigger', 'test', 'digest-trigger', {
+      ...configurationValid,
+      mode: 'digest',
+    });
+
+    const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+    await trigger.flushDigestBuffer();
+    expect(triggerBatchSpy).not.toHaveBeenCalled();
+    triggerBatchSpy.mockRestore();
+  });
+
+  test('flushDigestBuffer should deduplicate by keeping latest container', async () => {
+    await trigger.register('trigger', 'test', 'digest-trigger', {
+      ...configurationValid,
+      mode: 'digest',
+    });
+    trigger.init();
+
+    const report1 = {
+      container: {
+        id: 'c1',
+        name: 'app',
+        watcher: 'test',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      },
+      changed: true,
+    };
+    const report2 = {
+      container: {
+        id: 'c1',
+        name: 'app',
+        watcher: 'test',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '3.0' },
+      },
+      changed: true,
+    };
+
+    await trigger.handleContainerReportDigest(report1);
+    await trigger.handleContainerReportDigest(report2);
+
+    const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+    await trigger.flushDigestBuffer();
+    expect(triggerBatchSpy).toHaveBeenCalledTimes(1);
+    expect(triggerBatchSpy).toHaveBeenCalledWith([
+      expect.objectContaining({ updateKind: expect.objectContaining({ remoteValue: '3.0' }) }),
+    ]);
+    triggerBatchSpy.mockRestore();
+  });
+
+  test('flushDigestBuffer should clear buffer after flush', async () => {
+    await trigger.register('trigger', 'test', 'digest-trigger', {
+      ...configurationValid,
+      mode: 'digest',
+    });
+    trigger.init();
+
+    await trigger.handleContainerReportDigest({
+      container: {
+        id: 'c1',
+        name: 'app',
+        watcher: 'test',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      },
+      changed: true,
+    });
+
+    const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+    await trigger.flushDigestBuffer();
+    await trigger.flushDigestBuffer(); // second flush should be no-op
+    expect(triggerBatchSpy).toHaveBeenCalledTimes(1);
+    triggerBatchSpy.mockRestore();
+  });
+
+  test('deregisterComponent should stop digest cron and clear buffer', async () => {
+    await trigger.register('trigger', 'test', 'digest-trigger', {
+      ...configurationValid,
+      mode: 'digest',
+    });
+    trigger.init();
+
+    await trigger.handleContainerReportDigest({
+      container: {
+        id: 'c1',
+        name: 'app',
+        watcher: 'test',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      },
+      changed: true,
+    });
+
+    await trigger.deregisterComponent();
+    expect(mockStop).toHaveBeenCalled();
+
+    // Buffer should be cleared — flush should be no-op
+    const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+    await trigger.flushDigestBuffer();
+    expect(triggerBatchSpy).not.toHaveBeenCalled();
+    triggerBatchSpy.mockRestore();
+  });
 });

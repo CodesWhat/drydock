@@ -1,3 +1,4 @@
+import cron, { type ScheduledTask } from 'node-cron';
 import { usesLegacyTriggerPrefix } from '../../configuration/index.js';
 import * as event from '../../event/index.js';
 import { type Container, fullName } from '../../model/container.js';
@@ -116,6 +117,7 @@ export interface TriggerConfiguration extends ComponentConfiguration {
   simpletitle?: string;
   simplebody?: string;
   batchtitle?: string;
+  digestcron?: string;
   resolvenotifications?: boolean;
 }
 
@@ -146,6 +148,8 @@ class Trigger extends Component {
   private unregisterContainerUpdateAppliedForResolution?: () => void;
   private readonly notificationResults: Map<string, unknown> = new Map();
   private readonly autoTriggerErrorSeenAt: Map<string, number> = new Map();
+  private readonly digestBuffer: Map<string, Container> = new Map();
+  private digestCronTask?: ScheduledTask;
 
   static getSupportedThresholds() {
     return [...SUPPORTED_THRESHOLDS];
@@ -532,6 +536,62 @@ class Trigger extends Component {
     }
   }
 
+  /**
+   * Buffer a container for digest mode. Keyed by full name so the latest
+   * update for each container wins if multiple scans fire before the digest
+   * cron flushes.
+   */
+  private bufferContainerForDigest(container: Container) {
+    this.digestBuffer.set(fullName(container), container);
+    this.log.debug(
+      `Buffered ${fullName(container)} for digest (${this.digestBuffer.size} buffered)`,
+    );
+  }
+
+  /**
+   * Handle container report (digest mode — single container from simple event).
+   */
+  async handleContainerReportDigest(containerReport: ContainerReport) {
+    if (!this.isUpdateAvailableAutoTriggerEnabled()) {
+      return;
+    }
+    if (!this.shouldHandleSimpleContainerReport(containerReport)) {
+      return;
+    }
+    const { container } = containerReport;
+    if (!Trigger.isThresholdReached(container, this.getSimpleModeThreshold())) {
+      return;
+    }
+    if (!this.mustTrigger(container)) {
+      return;
+    }
+    this.bufferContainerForDigest(container);
+  }
+
+  /**
+   * Flush the digest buffer: send a single batch notification with all
+   * accumulated containers, then clear the buffer.
+   */
+  async flushDigestBuffer() {
+    if (this.digestBuffer.size === 0) {
+      this.log.debug('Digest cron fired — buffer empty, nothing to send');
+      return;
+    }
+    const containers = Array.from(this.digestBuffer.values());
+    this.digestBuffer.clear();
+    this.log.info(`Digest flush: sending ${containers.length} update(s)`);
+    let status: 'success' | 'error' = 'error';
+    try {
+      await this.triggerBatch(containers);
+      status = 'success';
+    } catch (e: unknown) {
+      this.log.warn(`Digest flush failed (${Trigger.getErrorMessage(e)})`);
+      this.log.debug(e);
+    } finally {
+      this.incrementTriggerCounter(status);
+    }
+  }
+
   isTriggerIncludedOrExcluded(containerResult: Container, trigger: string) {
     const triggerId = this.getId().toLowerCase();
     const triggers = splitAndTrimCommaSeparatedList(trigger).map((triggerToMatch) =>
@@ -604,6 +664,20 @@ class Trigger extends Component {
           },
         );
       }
+      if (this.configuration.mode?.toLowerCase() === 'digest') {
+        this.unregisterContainerReport = event.registerContainerReport(
+          async (containerReport) => this.handleContainerReportDigest(containerReport),
+          {
+            id: this.getId(),
+            order: this.configuration.order,
+          },
+        );
+        const digestCronExpression = this.configuration.digestcron ?? '0 8 * * *';
+        this.digestCronTask = cron.schedule(digestCronExpression, () => {
+          void this.flushDigestBuffer();
+        });
+        this.log.info(`Digest scheduled (${digestCronExpression})`);
+      }
 
       this.unregisterContainerUpdateAppliedForAutoDispatch = event.registerContainerUpdateApplied(
         async (containerName) => this.handleContainerUpdateAppliedEvent(containerName),
@@ -666,6 +740,10 @@ class Trigger extends Component {
     this.unregisterContainerUpdateAppliedForResolution?.();
     this.unregisterContainerUpdateAppliedForResolution = undefined;
 
+    this.digestCronTask?.stop();
+    this.digestCronTask = undefined;
+    this.digestBuffer.clear();
+
     this.autoTriggerErrorSeenAt.clear();
   }
 
@@ -687,8 +765,9 @@ class Trigger extends Component {
         .insensitive()
         .valid(...Trigger.getSupportedThresholds())
         .default('all'),
-      mode: this.joi.string().insensitive().valid('simple', 'batch').default('simple'),
+      mode: this.joi.string().insensitive().valid('simple', 'batch', 'digest').default('simple'),
       once: this.joi.boolean().default(true),
+      digestcron: this.joi.string().default('0 8 * * *'),
       simpletitle: this.joi
         .string()
         .default('New ${container.updateKind.kind} found for container ${container.name}'),

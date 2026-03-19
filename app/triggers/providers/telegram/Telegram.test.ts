@@ -28,6 +28,7 @@ const configurationValid = {
   resolvenotifications: false,
   disabletitle: false,
   messageformat: 'Markdown',
+  digestcron: '0 8 * * *',
 };
 
 beforeEach(async () => {
@@ -64,6 +65,7 @@ test('maskConfiguration should mask sensitive data', async () => {
     resolvenotifications: false,
     disabletitle: false,
     messageformat: 'Markdown',
+    digestcron: '0 8 * * *',
   });
 });
 

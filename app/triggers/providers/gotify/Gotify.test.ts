@@ -19,6 +19,7 @@ const configurationValid = {
 
   batchtitle: '${containers.length} updates available',
   resolvenotifications: false,
+  digestcron: '0 8 * * *',
 };
 
 beforeEach(async () => {
@@ -63,6 +64,7 @@ test('maskConfiguration should mask sensitive data', async () => {
     simplebody: configurationValid.simplebody,
     batchtitle: configurationValid.batchtitle,
     resolvenotifications: false,
+    digestcron: '0 8 * * *',
   });
 });
 
