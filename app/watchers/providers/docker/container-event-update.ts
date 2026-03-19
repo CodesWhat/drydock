@@ -1,6 +1,7 @@
 import type { Container } from '../../../model/container.js';
 
 import {
+  canonicalizeContainerName,
   getContainerDisplayName,
   shouldUpdateDisplayNameFromContainerName,
 } from './docker-helpers.js';
@@ -208,7 +209,8 @@ export function updateContainerFromInspect(
 ) {
   const dockerContainerInspect = containerInspect as DockerContainerInspectLike;
   const newStatus = dockerContainerInspect.State.Status;
-  const newName = (dockerContainerInspect.Name || '').replace(/^\//, '');
+  const rawName = (dockerContainerInspect.Name || '').replace(/^\//, '');
+  const newName = canonicalizeContainerName(rawName, containerFound.id);
   const oldStatus = containerFound.status;
   const oldName = containerFound.name;
   const oldDisplayName = containerFound.displayName;

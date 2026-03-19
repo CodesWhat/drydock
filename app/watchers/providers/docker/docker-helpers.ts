@@ -26,7 +26,10 @@ export interface ResolvedImgset {
 
 type UnknownRecord = Record<string, unknown>;
 
+const RECREATED_ALIAS_PATTERN = /^([a-f0-9]{12})_(.+)$/i;
+
 interface ContainerWithNames {
+  Id?: string;
   Names?: string[];
 }
 
@@ -82,14 +85,57 @@ export function getOldContainers(newContainers: Container[], containersFromTheSt
 }
 
 export function getContainerName(container: ContainerWithNames) {
-  let containerName = '';
   const names = container.Names;
-  if (names && names.length > 0) {
-    [containerName] = names;
+  if (!names || names.length === 0) {
+    return '';
   }
-  // Strip ugly forward slash
-  containerName = containerName.replace(/^\//, '');
+
+  const containerId = typeof container.Id === 'string' ? container.Id.toLowerCase() : '';
+
+  // When Docker renames a container during recreate, Names may contain both
+  // the transient alias ("/8bf70beac570_termix") and the canonical name ("/termix").
+  // Prefer the first non-alias name when the alias prefix matches the container ID.
+  if (names.length > 1 && containerId !== '') {
+    for (const raw of names) {
+      const stripped = raw.replace(/^\//, '');
+      if (!RECREATED_ALIAS_PATTERN.test(stripped)) {
+        return stripped;
+      }
+    }
+  }
+
+  // Single name (or all names are aliases) — strip alias prefix if it matches the container ID.
+  const containerName = names[0].replace(/^\//, '');
+  if (containerId !== '') {
+    const aliasMatch = containerName.match(RECREATED_ALIAS_PATTERN);
+    if (aliasMatch) {
+      const [, shortIdPrefix, baseName] = aliasMatch;
+      if (containerId.startsWith(shortIdPrefix.toLowerCase())) {
+        return baseName;
+      }
+    }
+  }
+
   return containerName;
+}
+
+/**
+ * Strip a Docker recreate alias prefix from a container name if the hex prefix
+ * matches the container ID. Used by the event-update path where Docker inspect
+ * returns a single Name rather than a Names array.
+ */
+export function canonicalizeContainerName(name: string, containerId: string): string {
+  if (containerId === '') {
+    return name;
+  }
+  const aliasMatch = name.match(RECREATED_ALIAS_PATTERN);
+  if (aliasMatch) {
+    const [, shortIdPrefix, baseName] = aliasMatch;
+    if (containerId.toLowerCase().startsWith(shortIdPrefix.toLowerCase())) {
+      return baseName;
+    }
+  }
+  return name;
 }
 
 export function getContainerDisplayName(

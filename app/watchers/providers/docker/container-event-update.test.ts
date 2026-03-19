@@ -391,6 +391,33 @@ describe('container event update helpers', () => {
     expect(updateContainer).toHaveBeenCalledWith(container);
   });
 
+  test('updateContainerFromInspect should canonicalize alias name from Docker inspect', () => {
+    const container = createMockContainer({
+      id: '8bf70beac570abcdef1234567890',
+      name: 'termix',
+    });
+    const updateContainer = vi.fn();
+    const logInfo = vi.fn();
+
+    updateContainerFromInspect(
+      container as any,
+      {
+        Name: '/8bf70beac570_termix',
+        State: { Status: 'running' },
+        Config: { Labels: {} },
+      },
+      {
+        getCustomDisplayNameFromLabels: () => undefined,
+        updateContainer,
+        logInfo,
+      },
+    );
+
+    // Name should remain canonical, not be overwritten with the alias
+    expect(container.name).toBe('termix');
+    expect(logInfo).not.toHaveBeenCalledWith(expect.stringContaining('Name changed'));
+  });
+
   test('updateContainerFromInspect applies custom display name label', () => {
     const container = createMockContainer({
       displayName: 'old-name',

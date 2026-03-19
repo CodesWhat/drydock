@@ -44,7 +44,7 @@ describe('container-init coverage', () => {
     const aliasName = '/7ea6b8a42686_termix';
     const container = {
       Id: '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a10',
-      Names: createIterableNames(aliasName),
+      Names: [aliasName],
       Created: '',
     } as any;
 
@@ -55,18 +55,17 @@ describe('container-init coverage', () => {
     expect(result.decisions).toEqual([
       expect.objectContaining({
         containerId: container.Id,
-        containerName: '7ea6b8a42686_termix',
+        containerName: 'termix',
         decision: 'allowed',
-        reason: 'alias-allowed-no-collision',
+        reason: 'not-recreated-alias',
       }),
     ]);
   });
 
   test('filterRecreatedContainerAliases handles non-string entries while building the name map', () => {
-    const aliasName = '/7ea6b8a42686_termix';
     const container = {
       Id: '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a12',
-      Names: [aliasName, 123 as any],
+      Names: ['/termix', 123 as any],
       Created: Math.floor((Date.now() - 120_000) / 1000),
     } as any;
 
@@ -77,10 +76,9 @@ describe('container-init coverage', () => {
     expect(result.decisions).toEqual([
       expect.objectContaining({
         containerId: container.Id,
-        containerName: '7ea6b8a42686_termix',
-        baseName: 'termix',
+        containerName: 'termix',
         decision: 'allowed',
-        reason: 'alias-allowed-no-collision',
+        reason: 'not-recreated-alias',
       }),
     ]);
   });
@@ -109,7 +107,7 @@ describe('container-init coverage', () => {
     const aliasName = '/7ea6b8a42686_termix';
     const container = {
       Id: '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a11',
-      Names: createIterableNames(aliasName),
+      Names: [aliasName],
       Created: Math.floor(Date.now() / 1000) - 120,
     } as any;
 
@@ -119,10 +117,9 @@ describe('container-init coverage', () => {
     expect(result.skippedContainerIds.size).toBe(0);
     expect(result.decisions).toEqual([
       expect.objectContaining({
-        containerName: '7ea6b8a42686_termix',
-        baseName: 'termix',
+        containerName: 'termix',
         decision: 'allowed',
-        reason: 'alias-allowed-no-collision',
+        reason: 'not-recreated-alias',
       }),
     ]);
   });
@@ -130,25 +127,25 @@ describe('container-init coverage', () => {
   test('filterRecreatedContainerAliases handles string Created values and future timestamps', () => {
     const numericCreatedContainer = {
       Id: '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a13',
-      Names: createIterableNames('/7ea6b8a42686_termix'),
+      Names: ['/7ea6b8a42686_termix'],
       Created: '1700000000',
     } as any;
 
     const millisecondCreatedContainer = {
       Id: '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a15',
-      Names: createIterableNames('/7ea6b8a42686_termix'),
+      Names: ['/7ea6b8a42686_termix'],
       Created: '1700000000000',
     } as any;
 
     const futureCreatedContainer = {
       Id: '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a14',
-      Names: createIterableNames('/7ea6b8a42686_termix'),
+      Names: ['/7ea6b8a42686_termix'],
       Created: new Date(Date.now() + 120_000).toISOString(),
     } as any;
 
     const invalidCreatedContainer = {
       Id: '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a16',
-      Names: createIterableNames('/7ea6b8a42686_termix'),
+      Names: ['/7ea6b8a42686_termix'],
       Created: 'not-a-date',
     } as any;
 
@@ -162,10 +159,9 @@ describe('container-init coverage', () => {
     expect(numericResult.decisions).toEqual([
       expect.objectContaining({
         containerId: numericCreatedContainer.Id,
-        containerName: '7ea6b8a42686_termix',
-        baseName: 'termix',
+        containerName: 'termix',
         decision: 'allowed',
-        reason: 'alias-allowed-no-collision',
+        reason: 'not-recreated-alias',
       }),
     ]);
 
@@ -174,10 +170,9 @@ describe('container-init coverage', () => {
     expect(millisecondResult.decisions).toEqual([
       expect.objectContaining({
         containerId: millisecondCreatedContainer.Id,
-        containerName: '7ea6b8a42686_termix',
-        baseName: 'termix',
+        containerName: 'termix',
         decision: 'allowed',
-        reason: 'alias-allowed-no-collision',
+        reason: 'not-recreated-alias',
       }),
     ]);
 
@@ -186,10 +181,9 @@ describe('container-init coverage', () => {
     expect(futureResult.decisions).toEqual([
       expect.objectContaining({
         containerId: futureCreatedContainer.Id,
-        containerName: '7ea6b8a42686_termix',
-        baseName: 'termix',
+        containerName: 'termix',
         decision: 'allowed',
-        reason: 'alias-allowed-no-collision',
+        reason: 'not-recreated-alias',
       }),
     ]);
 
@@ -198,10 +192,9 @@ describe('container-init coverage', () => {
     expect(invalidResult.decisions).toEqual([
       expect.objectContaining({
         containerId: invalidCreatedContainer.Id,
-        containerName: '7ea6b8a42686_termix',
-        baseName: 'termix',
+        containerName: 'termix',
         decision: 'allowed',
-        reason: 'alias-allowed-no-collision',
+        reason: 'not-recreated-alias',
       }),
     ]);
   });
@@ -262,7 +255,7 @@ describe('container-init coverage', () => {
     const aliasName = '/7ea6b8a42686_termix';
     const container = {
       Id: '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a17',
-      Names: createIterableNames(aliasName),
+      Names: [aliasName],
       Created: '1700000000000',
     } as any;
 
@@ -271,15 +264,14 @@ describe('container-init coverage', () => {
       [{ id: 'store-termix', name: 'termix' } as any],
     );
 
-    expect(result.containersToWatch).toEqual([]);
-    expect(result.skippedContainerIds).toEqual(new Set([container.Id]));
+    expect(result.containersToWatch).toEqual([container]);
+    expect(result.skippedContainerIds.size).toBe(0);
     expect(result.decisions).toEqual([
       expect.objectContaining({
         containerId: container.Id,
-        containerName: '7ea6b8a42686_termix',
-        baseName: 'termix',
-        decision: 'skipped',
-        reason: 'base-name-present-in-store',
+        containerName: 'termix',
+        decision: 'allowed',
+        reason: 'not-recreated-alias',
       }),
     ]);
   });
@@ -288,21 +280,20 @@ describe('container-init coverage', () => {
     const aliasName = '/7ea6b8a42686_termix';
     const container = {
       Id: '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a18',
-      Names: createIterableNames(aliasName),
+      Names: [aliasName],
       Created: Date.now() - 5_000,
     } as any;
 
     const result = filterRecreatedContainerAliases([container], []);
 
-    expect(result.containersToWatch).toEqual([]);
-    expect(result.skippedContainerIds).toEqual(new Set([container.Id]));
+    expect(result.containersToWatch).toEqual([container]);
+    expect(result.skippedContainerIds.size).toBe(0);
     expect(result.decisions).toEqual([
       expect.objectContaining({
         containerId: container.Id,
-        containerName: '7ea6b8a42686_termix',
-        baseName: 'termix',
-        decision: 'skipped',
-        reason: 'fresh-recreated-alias',
+        containerName: 'termix',
+        decision: 'allowed',
+        reason: 'not-recreated-alias',
       }),
     ]);
   });

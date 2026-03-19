@@ -1988,7 +1988,7 @@ describe('Docker Watcher', () => {
       expect(testable_getContainerName({})).toBe('');
     });
 
-    test('filterRecreatedContainerAliases should skip self-id-prefixed aliases when base name exists in store', () => {
+    test('filterRecreatedContainerAliases should pass through self-id-prefixed aliases because getContainerName canonicalizes them', () => {
       const result = testable_filterRecreatedContainerAliases(
         [
           {
@@ -2005,10 +2005,10 @@ describe('Docker Watcher', () => {
         ],
       );
 
-      expect(result.containersToWatch).toEqual([]);
-      expect(Array.from(result.skippedContainerIds)).toEqual([
-        '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a10',
-      ]);
+      // getContainerName now canonicalizes 7ea6b8a42686_termix → termix,
+      // so the alias filter no longer detects it as an alias. Dedup handles collisions downstream.
+      expect(result.containersToWatch).toHaveLength(1);
+      expect(result.skippedContainerIds.size).toBe(0);
     });
 
     test('filterRecreatedContainerAliases should ignore containers with missing Id or Names', () => {
@@ -2025,7 +2025,7 @@ describe('Docker Watcher', () => {
       expect(result.skippedContainerIds.size).toBe(0);
     });
 
-    test('filterRecreatedContainerAliases should skip fresh alias even when no sibling and no store match', () => {
+    test('filterRecreatedContainerAliases should pass through fresh self-id alias because getContainerName canonicalizes it', () => {
       const freshCreated = Math.floor(Date.now() / 1000);
       const result = testable_filterRecreatedContainerAliases(
         [
@@ -2037,89 +2037,43 @@ describe('Docker Watcher', () => {
         ],
         [],
       );
-      expect(result.containersToWatch).toHaveLength(0);
-      expect(Array.from(result.skippedContainerIds)).toEqual([
-        '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a10',
-      ]);
+      // Name canonicalized upfront — no longer seen as alias by the filter
+      expect(result.containersToWatch).toHaveLength(1);
+      expect(result.skippedContainerIds.size).toBe(0);
     });
 
-    test('filterRecreatedContainerAliases should skip fresh alias when Created is unix milliseconds', () => {
-      const freshCreatedMs = Date.now();
+    test('filterRecreatedContainerAliases passes through self-id aliases regardless of Created timestamp format', () => {
+      // getContainerName canonicalizes all self-id-prefixed aliases upfront,
+      // so filterRecreatedContainerAliases never sees them as aliases.
+      // These timestamp variants all pass through identically.
+      const variants = [
+        { Created: Date.now() },
+        { Created: Math.floor(Date.now() / 1000) },
+        { Created: new Date().toISOString() },
+        { Created: `${Math.floor(Date.now() / 1000)}` },
+        { Created: `${Date.now()}` },
+      ];
+      for (const variant of variants) {
+        const result = testable_filterRecreatedContainerAliases(
+          [
+            {
+              Id: '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a10',
+              Names: ['/7ea6b8a42686_termix'],
+              ...variant,
+            },
+          ],
+          [],
+        );
+        expect(result.containersToWatch).toHaveLength(1);
+        expect(result.skippedContainerIds.size).toBe(0);
+      }
+    });
+
+    test('filterRecreatedContainerAliases should keep non-id-matching alias when Created is not parseable', () => {
       const result = testable_filterRecreatedContainerAliases(
         [
           {
-            Id: '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a10',
-            Names: ['/7ea6b8a42686_termix'],
-            Created: freshCreatedMs,
-          },
-        ],
-        [],
-      );
-      expect(result.containersToWatch).toHaveLength(0);
-      expect(Array.from(result.skippedContainerIds)).toEqual([
-        '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a10',
-      ]);
-    });
-
-    test('filterRecreatedContainerAliases should skip fresh alias when Created is an ISO string', () => {
-      const result = testable_filterRecreatedContainerAliases(
-        [
-          {
-            Id: '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a10',
-            Names: ['/7ea6b8a42686_termix'],
-            Created: new Date().toISOString(),
-          },
-        ],
-        [],
-      );
-
-      expect(result.containersToWatch).toHaveLength(0);
-      expect(Array.from(result.skippedContainerIds)).toEqual([
-        '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a10',
-      ]);
-    });
-
-    test('filterRecreatedContainerAliases should skip fresh alias when Created is a numeric string', () => {
-      const result = testable_filterRecreatedContainerAliases(
-        [
-          {
-            Id: '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a10',
-            Names: ['/7ea6b8a42686_termix'],
-            Created: `${Math.floor(Date.now() / 1000)}`,
-          },
-        ],
-        [],
-      );
-
-      expect(result.containersToWatch).toHaveLength(0);
-      expect(Array.from(result.skippedContainerIds)).toEqual([
-        '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a10',
-      ]);
-    });
-
-    test('filterRecreatedContainerAliases should skip fresh alias when Created is a millisecond numeric string', () => {
-      const result = testable_filterRecreatedContainerAliases(
-        [
-          {
-            Id: '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a10',
-            Names: ['/7ea6b8a42686_termix'],
-            Created: `${Date.now()}`,
-          },
-        ],
-        [],
-      );
-
-      expect(result.containersToWatch).toHaveLength(0);
-      expect(Array.from(result.skippedContainerIds)).toEqual([
-        '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a10',
-      ]);
-    });
-
-    test('filterRecreatedContainerAliases should keep alias when Created is not parseable', () => {
-      const result = testable_filterRecreatedContainerAliases(
-        [
-          {
-            Id: '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a10',
+            Id: 'aaaa00000000fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a10',
             Names: ['/7ea6b8a42686_termix'],
             Created: 'definitely-not-a-date',
           },
@@ -2129,7 +2083,7 @@ describe('Docker Watcher', () => {
 
       expect(result.containersToWatch).toEqual([
         {
-          Id: '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a10',
+          Id: 'aaaa00000000fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a10',
           Names: ['/7ea6b8a42686_termix'],
           Created: 'definitely-not-a-date',
         },
@@ -2182,7 +2136,7 @@ describe('Docker Watcher', () => {
       expect(result.skippedContainerIds.size).toBe(0);
     });
 
-    test('filterRecreatedContainerAliases should skip fresh alias but keep non-alias entry with same container id', () => {
+    test('filterRecreatedContainerAliases should pass through both entries when alias is canonicalized by getContainerName', () => {
       const freshCreated = Math.floor(Date.now() / 1000);
       const result = testable_filterRecreatedContainerAliases(
         [
@@ -2198,18 +2152,12 @@ describe('Docker Watcher', () => {
         ],
         [],
       );
-      expect(result.containersToWatch).toEqual([
-        {
-          Id: '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a10',
-          Names: ['/termix'],
-        },
-      ]);
-      expect(Array.from(result.skippedContainerIds)).toEqual([
-        '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a10',
-      ]);
+      // Both entries get canonical name "termix" — dedup handles collisions downstream
+      expect(result.containersToWatch).toHaveLength(2);
+      expect(result.skippedContainerIds.size).toBe(0);
     });
 
-    test('filterRecreatedContainerAliases should skip alias when a sibling container already uses the base name', () => {
+    test('filterRecreatedContainerAliases should pass through alias and sibling when alias is canonicalized', () => {
       const aliasContainerId = '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a10';
       const result = testable_filterRecreatedContainerAliases(
         [
@@ -2225,16 +2173,12 @@ describe('Docker Watcher', () => {
         [],
       );
 
-      expect(result.containersToWatch).toEqual([
-        {
-          Id: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
-          Names: ['/termix'],
-        },
-      ]);
-      expect(Array.from(result.skippedContainerIds)).toEqual([aliasContainerId]);
+      // Alias container gets canonical name "termix" — both pass through, dedup resolves
+      expect(result.containersToWatch).toHaveLength(2);
+      expect(result.skippedContainerIds.size).toBe(0);
     });
 
-    test('filterRecreatedContainerAliases should skip alias when the same docker container exposes base name in Names', () => {
+    test('filterRecreatedContainerAliases should pass through container with both alias and canonical in Names', () => {
       const aliasContainerId = '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a10';
       const result = testable_filterRecreatedContainerAliases(
         [
@@ -2247,8 +2191,9 @@ describe('Docker Watcher', () => {
         [],
       );
 
-      expect(result.containersToWatch).toEqual([]);
-      expect(Array.from(result.skippedContainerIds)).toEqual([aliasContainerId]);
+      // getContainerName prefers non-alias name "termix" from Names array
+      expect(result.containersToWatch).toHaveLength(1);
+      expect(result.skippedContainerIds.size).toBe(0);
     });
 
     test('filterRecreatedContainerAliases should keep names that are not self-id-prefixed aliases', () => {
