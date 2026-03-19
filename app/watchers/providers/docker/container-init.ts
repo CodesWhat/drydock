@@ -10,6 +10,7 @@ import {
   getFirstConfigString,
   getImgsetSpecificity,
   getOldContainers,
+  getRawContainerName,
   getResolvedImgsetConfiguration,
   type ResolvedImgset,
 } from './docker-helpers.js';
@@ -370,7 +371,8 @@ function getRecreatedContainerBaseName(container: { Id?: unknown; Names?: string
     return undefined;
   }
 
-  const containerName = getContainerName(container);
+  // Use raw name (not canonicalized) so the alias pattern is still detectable
+  const containerName = getRawContainerName(container);
   if (containerName === '') {
     return undefined;
   }

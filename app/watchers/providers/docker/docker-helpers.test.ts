@@ -10,6 +10,7 @@ import {
   getImageForRegistryLookup,
   getImageReferenceCandidatesFromPattern,
   getInspectValueByPath,
+  getRawContainerName,
   getSemverTagFromInspectPath,
   isDigestToWatch,
   shouldUpdateDisplayNameFromContainerName,
@@ -222,6 +223,20 @@ describe('docker helper extraction module', () => {
     test('should keep non-alias names unchanged', () => {
       expect(canonicalizeContainerName('termix', '8bf70beac570abcdef1234567890')).toBe('termix');
       expect(canonicalizeContainerName('my_app', 'abcdef123456abcdef1234567890')).toBe('my_app');
+    });
+  });
+
+  describe('getRawContainerName', () => {
+    test('should return raw name without canonicalization', () => {
+      expect(getRawContainerName({ Names: ['/7ea6b8a42686_termix'] })).toBe('7ea6b8a42686_termix');
+    });
+
+    test('should return empty string for non-string first entry', () => {
+      expect(getRawContainerName({ Names: [123 as any] })).toBe('');
+    });
+
+    test('should return empty string for missing Names', () => {
+      expect(getRawContainerName({} as any)).toBe('');
     });
   });
 });

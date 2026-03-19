@@ -50,14 +50,16 @@ describe('container-init coverage', () => {
 
     const result = filterRecreatedContainerAliases([container], []);
 
+    // Alias detected, but stale (blank Created) with no sibling/store match → allowed
     expect(result.containersToWatch).toEqual([container]);
     expect(result.skippedContainerIds.size).toBe(0);
     expect(result.decisions).toEqual([
       expect.objectContaining({
         containerId: container.Id,
         containerName: 'termix',
+        baseName: 'termix',
         decision: 'allowed',
-        reason: 'not-recreated-alias',
+        reason: 'alias-allowed-no-collision',
       }),
     ]);
   });
@@ -113,13 +115,15 @@ describe('container-init coverage', () => {
 
     const result = filterRecreatedContainerAliases([container], []);
 
+    // Alias detected, stale (120s ago), no sibling/store match → allowed
     expect(result.containersToWatch).toEqual([container]);
     expect(result.skippedContainerIds.size).toBe(0);
     expect(result.decisions).toEqual([
       expect.objectContaining({
         containerName: 'termix',
+        baseName: 'termix',
         decision: 'allowed',
-        reason: 'not-recreated-alias',
+        reason: 'alias-allowed-no-collision',
       }),
     ]);
   });
@@ -154,14 +158,16 @@ describe('container-init coverage', () => {
     const futureResult = filterRecreatedContainerAliases([futureCreatedContainer], []);
     const invalidResult = filterRecreatedContainerAliases([invalidCreatedContainer], []);
 
+    // All are aliases (Id matches prefix), stale with no sibling/store match → allowed
     expect(numericResult.containersToWatch).toEqual([numericCreatedContainer]);
     expect(numericResult.skippedContainerIds.size).toBe(0);
     expect(numericResult.decisions).toEqual([
       expect.objectContaining({
         containerId: numericCreatedContainer.Id,
         containerName: 'termix',
+        baseName: 'termix',
         decision: 'allowed',
-        reason: 'not-recreated-alias',
+        reason: 'alias-allowed-no-collision',
       }),
     ]);
 
@@ -171,8 +177,9 @@ describe('container-init coverage', () => {
       expect.objectContaining({
         containerId: millisecondCreatedContainer.Id,
         containerName: 'termix',
+        baseName: 'termix',
         decision: 'allowed',
-        reason: 'not-recreated-alias',
+        reason: 'alias-allowed-no-collision',
       }),
     ]);
 
@@ -182,8 +189,9 @@ describe('container-init coverage', () => {
       expect.objectContaining({
         containerId: futureCreatedContainer.Id,
         containerName: 'termix',
+        baseName: 'termix',
         decision: 'allowed',
-        reason: 'not-recreated-alias',
+        reason: 'alias-allowed-no-collision',
       }),
     ]);
 
@@ -193,8 +201,9 @@ describe('container-init coverage', () => {
       expect.objectContaining({
         containerId: invalidCreatedContainer.Id,
         containerName: 'termix',
+        baseName: 'termix',
         decision: 'allowed',
-        reason: 'not-recreated-alias',
+        reason: 'alias-allowed-no-collision',
       }),
     ]);
   });
@@ -264,14 +273,16 @@ describe('container-init coverage', () => {
       [{ id: 'store-termix', name: 'termix' } as any],
     );
 
-    expect(result.containersToWatch).toEqual([container]);
-    expect(result.skippedContainerIds.size).toBe(0);
+    expect(result.containersToWatch).toEqual([]);
+    expect(result.skippedContainerIds.size).toBe(1);
+    expect(result.skippedContainerIds.has(container.Id)).toBe(true);
     expect(result.decisions).toEqual([
       expect.objectContaining({
         containerId: container.Id,
         containerName: 'termix',
-        decision: 'allowed',
-        reason: 'not-recreated-alias',
+        baseName: 'termix',
+        decision: 'skipped',
+        reason: 'base-name-present-in-store',
       }),
     ]);
   });
@@ -286,14 +297,16 @@ describe('container-init coverage', () => {
 
     const result = filterRecreatedContainerAliases([container], []);
 
-    expect(result.containersToWatch).toEqual([container]);
-    expect(result.skippedContainerIds.size).toBe(0);
+    expect(result.containersToWatch).toEqual([]);
+    expect(result.skippedContainerIds.size).toBe(1);
+    expect(result.skippedContainerIds.has(container.Id)).toBe(true);
     expect(result.decisions).toEqual([
       expect.objectContaining({
         containerId: container.Id,
         containerName: 'termix',
-        decision: 'allowed',
-        reason: 'not-recreated-alias',
+        baseName: 'termix',
+        decision: 'skipped',
+        reason: 'fresh-recreated-alias',
       }),
     ]);
   });

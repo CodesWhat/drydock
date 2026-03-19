@@ -3568,8 +3568,13 @@ describe('Docker Watcher', () => {
         ],
       );
 
-      expect(result.containersToWatch).toHaveLength(1);
-      expect(result.skippedContainerIds.size).toBe(0);
+      expect(result.containersToWatch).toHaveLength(0);
+      expect(result.skippedContainerIds.size).toBe(1);
+      expect(
+        result.skippedContainerIds.has(
+          '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a10',
+        ),
+      ).toBe(true);
     });
 
     test('filterRecreatedContainerAliases should ignore containers with missing Id or Names', () => {
@@ -3634,8 +3639,9 @@ describe('Docker Watcher', () => {
         [],
       );
 
-      expect(result.containersToWatch).toHaveLength(2);
-      expect(result.skippedContainerIds.size).toBe(0);
+      expect(result.containersToWatch).toHaveLength(1);
+      expect(result.skippedContainerIds.size).toBe(1);
+      expect(result.skippedContainerIds.has(aliasContainerId)).toBe(true);
     });
 
     test('filterRecreatedContainerAliases should keep names that are not self-id-prefixed aliases', () => {

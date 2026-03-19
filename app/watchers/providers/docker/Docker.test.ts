@@ -1988,7 +1988,7 @@ describe('Docker Watcher', () => {
       expect(testable_getContainerName({})).toBe('');
     });
 
-    test('filterRecreatedContainerAliases should pass through self-id-prefixed aliases because getContainerName canonicalizes them', () => {
+    test('filterRecreatedContainerAliases should skip self-id-prefixed aliases when base name exists in store', () => {
       const result = testable_filterRecreatedContainerAliases(
         [
           {
@@ -2005,10 +2005,13 @@ describe('Docker Watcher', () => {
         ],
       );
 
-      // getContainerName now canonicalizes 7ea6b8a42686_termix → termix,
-      // so the alias filter no longer detects it as an alias. Dedup handles collisions downstream.
-      expect(result.containersToWatch).toHaveLength(1);
-      expect(result.skippedContainerIds.size).toBe(0);
+      expect(result.containersToWatch).toHaveLength(0);
+      expect(result.skippedContainerIds.size).toBe(1);
+      expect(
+        result.skippedContainerIds.has(
+          '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a10',
+        ),
+      ).toBe(true);
     });
 
     test('filterRecreatedContainerAliases should ignore containers with missing Id or Names', () => {
@@ -2025,7 +2028,7 @@ describe('Docker Watcher', () => {
       expect(result.skippedContainerIds.size).toBe(0);
     });
 
-    test('filterRecreatedContainerAliases should pass through fresh self-id alias because getContainerName canonicalizes it', () => {
+    test('filterRecreatedContainerAliases should skip fresh self-id alias within transient window', () => {
       const freshCreated = Math.floor(Date.now() / 1000);
       const result = testable_filterRecreatedContainerAliases(
         [
@@ -2037,15 +2040,18 @@ describe('Docker Watcher', () => {
         ],
         [],
       );
-      // Name canonicalized upfront — no longer seen as alias by the filter
-      expect(result.containersToWatch).toHaveLength(1);
-      expect(result.skippedContainerIds.size).toBe(0);
+      expect(result.containersToWatch).toHaveLength(0);
+      expect(result.skippedContainerIds.size).toBe(1);
+      expect(
+        result.skippedContainerIds.has(
+          '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a10',
+        ),
+      ).toBe(true);
     });
 
-    test('filterRecreatedContainerAliases passes through self-id aliases regardless of Created timestamp format', () => {
-      // getContainerName canonicalizes all self-id-prefixed aliases upfront,
-      // so filterRecreatedContainerAliases never sees them as aliases.
-      // These timestamp variants all pass through identically.
+    test('filterRecreatedContainerAliases skips fresh self-id aliases regardless of Created timestamp format', () => {
+      // All these timestamp variants represent "now" and fall within the transient window,
+      // so the alias filter skips them all.
       const variants = [
         { Created: Date.now() },
         { Created: Math.floor(Date.now() / 1000) },
@@ -2064,8 +2070,8 @@ describe('Docker Watcher', () => {
           ],
           [],
         );
-        expect(result.containersToWatch).toHaveLength(1);
-        expect(result.skippedContainerIds.size).toBe(0);
+        expect(result.containersToWatch).toHaveLength(0);
+        expect(result.skippedContainerIds.size).toBe(1);
       }
     });
 
@@ -2136,7 +2142,7 @@ describe('Docker Watcher', () => {
       expect(result.skippedContainerIds.size).toBe(0);
     });
 
-    test('filterRecreatedContainerAliases should pass through both entries when alias is canonicalized by getContainerName', () => {
+    test('filterRecreatedContainerAliases should skip alias entry but keep canonical sibling with same id', () => {
       const freshCreated = Math.floor(Date.now() / 1000);
       const result = testable_filterRecreatedContainerAliases(
         [
@@ -2152,12 +2158,12 @@ describe('Docker Watcher', () => {
         ],
         [],
       );
-      // Both entries get canonical name "termix" — dedup handles collisions downstream
-      expect(result.containersToWatch).toHaveLength(2);
-      expect(result.skippedContainerIds.size).toBe(0);
+      // Alias entry is skipped (fresh + sibling has base name), canonical entry passes through
+      expect(result.containersToWatch).toHaveLength(1);
+      expect(result.skippedContainerIds.size).toBe(1);
     });
 
-    test('filterRecreatedContainerAliases should pass through alias and sibling when alias is canonicalized', () => {
+    test('filterRecreatedContainerAliases should skip alias when a sibling container already uses the base name', () => {
       const aliasContainerId = '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a10';
       const result = testable_filterRecreatedContainerAliases(
         [
@@ -2173,12 +2179,13 @@ describe('Docker Watcher', () => {
         [],
       );
 
-      // Alias container gets canonical name "termix" — both pass through, dedup resolves
-      expect(result.containersToWatch).toHaveLength(2);
-      expect(result.skippedContainerIds.size).toBe(0);
+      // Alias is skipped because sibling has the base name; sibling passes through
+      expect(result.containersToWatch).toHaveLength(1);
+      expect(result.skippedContainerIds.size).toBe(1);
+      expect(result.skippedContainerIds.has(aliasContainerId)).toBe(true);
     });
 
-    test('filterRecreatedContainerAliases should pass through container with both alias and canonical in Names', () => {
+    test('filterRecreatedContainerAliases should skip container with both alias and canonical in Names', () => {
       const aliasContainerId = '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a10';
       const result = testable_filterRecreatedContainerAliases(
         [
@@ -2191,9 +2198,10 @@ describe('Docker Watcher', () => {
         [],
       );
 
-      // getContainerName prefers non-alias name "termix" from Names array
-      expect(result.containersToWatch).toHaveLength(1);
-      expect(result.skippedContainerIds.size).toBe(0);
+      // Alias detected via raw name; container also has canonical name → skipped
+      expect(result.containersToWatch).toHaveLength(0);
+      expect(result.skippedContainerIds.size).toBe(1);
+      expect(result.skippedContainerIds.has(aliasContainerId)).toBe(true);
     });
 
     test('filterRecreatedContainerAliases should keep names that are not self-id-prefixed aliases', () => {

@@ -84,6 +84,28 @@ export function getOldContainers(newContainers: Container[], containersFromTheSt
   );
 }
 
+/**
+ * Extract the raw first name from a Docker container summary, stripping only
+ * the leading slash. Does NOT canonicalize alias prefixes — used by alias
+ * filtering which needs to detect the raw alias pattern.
+ */
+export function getRawContainerName(container: ContainerWithNames): string {
+  const names = container.Names;
+  if (!names || names.length === 0) {
+    return '';
+  }
+  const first = names[0];
+  return typeof first === 'string' ? first.replace(/^\//, '') : '';
+}
+
+/**
+ * Extract the canonical container name. Strips Docker recreate alias prefixes
+ * (e.g. `8bf70beac570_termix` → `termix`) when the hex prefix matches the
+ * container ID, so alias names never enter the store or triggers.
+ *
+ * When Names contains both an alias and the canonical name during a rename,
+ * prefers the non-alias entry.
+ */
 export function getContainerName(container: ContainerWithNames) {
   const names = container.Names;
   if (!names || names.length === 0) {
@@ -97,6 +119,9 @@ export function getContainerName(container: ContainerWithNames) {
   // Prefer the first non-alias name when the alias prefix matches the container ID.
   if (names.length > 1 && containerId !== '') {
     for (const raw of names) {
+      if (typeof raw !== 'string') {
+        continue;
+      }
       const stripped = raw.replace(/^\//, '');
       if (!RECREATED_ALIAS_PATTERN.test(stripped)) {
         return stripped;
@@ -105,8 +130,8 @@ export function getContainerName(container: ContainerWithNames) {
   }
 
   // Single name (or all names are aliases) — strip alias prefix if it matches the container ID.
-  const containerName = names[0].replace(/^\//, '');
-  if (containerId !== '') {
+  const containerName = getRawContainerName(container);
+  if (containerId !== '' && containerName !== '') {
     const aliasMatch = containerName.match(RECREATED_ALIAS_PATTERN);
     if (aliasMatch) {
       const [, shortIdPrefix, baseName] = aliasMatch;
