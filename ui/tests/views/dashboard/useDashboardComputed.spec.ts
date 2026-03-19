@@ -602,7 +602,7 @@ describe('useDashboardComputed maintenance countdown', () => {
 });
 
 describe('useDashboardComputed recent updates', () => {
-  it('prioritizes registry errors, sorts pending updates, and enforces the six-row limit', () => {
+  it('excludes registry errors and sorts pending updates by date with six-row limit', () => {
     const state = createState({
       containers: [
         makeBaseContainer({
@@ -672,21 +672,19 @@ describe('useDashboardComputed recent updates', () => {
     const rows = state.recentUpdates.value;
     const rowByName = new Map(rows.map((row) => [row.name, row]));
 
+    // Registry error containers should NOT appear (#186)
+    expect(rowByName.has('registry-error')).toBe(false);
+    expect(rowByName.has('ignore-me')).toBe(false);
+
     expect(rows).toHaveLength(6);
     expect(rows.map((row) => row.name)).toEqual([
-      'registry-error',
       'bravo',
       'alpha',
       'charlie',
       'skip-me',
       'snooze-me',
+      'no-date',
     ]);
-    expect(rowByName.get('registry-error')).toMatchObject({
-      status: 'error',
-      newVer: 'check failed',
-      registryError: 'registry auth failed',
-      running: false,
-    });
     expect(rowByName.get('bravo')).toMatchObject({ status: 'pending' });
     expect(rowByName.get('alpha')).toMatchObject({
       status: 'updated',
@@ -702,11 +700,9 @@ describe('useDashboardComputed recent updates', () => {
       status: 'snoozed',
       newVer: '8.8.8',
     });
-    expect(rowByName.has('no-date')).toBe(false);
-    expect(rowByName.has('ignore-me')).toBe(false);
   });
 
-  it('returns only registry failures when they already fill the recent update limit', () => {
+  it('returns empty list when only registry failures exist', () => {
     const containers = Array.from({ length: 8 }, (_, index) =>
       makeBaseContainer({
         id: `registry-failure-${index}`,
@@ -719,16 +715,8 @@ describe('useDashboardComputed recent updates', () => {
     const state = createState({ containers });
     const rows = state.recentUpdates.value;
 
-    expect(rows).toHaveLength(6);
-    expect(rows.every((row) => row.status === 'error')).toBe(true);
-    expect(rows.map((row) => row.name)).toEqual([
-      'registry-failure-0',
-      'registry-failure-1',
-      'registry-failure-2',
-      'registry-failure-3',
-      'registry-failure-4',
-      'registry-failure-5',
-    ]);
+    // Registry failures should not appear in Updates Available (#186)
+    expect(rows).toHaveLength(0);
   });
 
   it('selects top rows without repeatedly reading updateDetectedAt during sort', () => {

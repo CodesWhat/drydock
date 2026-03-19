@@ -579,15 +579,9 @@ function buildRecentUpdateRows(
   containers: Container[],
   recentStatusByContainer: Record<string, RecentAuditStatus>,
 ): RecentUpdateRow[] {
-  const registryFailures = containers
-    .filter((container) => !container.newTag && !!container.registryError)
-    .map(toRegistryFailureRecentUpdate);
-
-  const availablePendingSlots = Math.max(RECENT_UPDATES_LIMIT - registryFailures.length, 0);
-  if (availablePendingSlots === 0) {
-    return registryFailures.slice(0, RECENT_UPDATES_LIMIT);
-  }
-
+  // Only show containers with actual available updates — registry failures
+  // ("check failed") are surfaced elsewhere and should not appear in the
+  // "Updates Available" widget (#186).
   const topPendingUpdates: PendingRecentUpdateCandidate[] = [];
   for (const container of containers) {
     if (!isPendingRecentUpdateContainer(container)) {
@@ -597,14 +591,11 @@ function buildRecentUpdateRows(
     insertPendingRecentUpdate(
       topPendingUpdates,
       toPendingRecentUpdateCandidate(container, recentStatusByContainer),
-      availablePendingSlots,
+      RECENT_UPDATES_LIMIT,
     );
   }
 
-  return [...registryFailures, ...topPendingUpdates.map((candidate) => candidate.row)].slice(
-    0,
-    RECENT_UPDATES_LIMIT,
-  );
+  return topPendingUpdates.map((candidate) => candidate.row).slice(0, RECENT_UPDATES_LIMIT);
 }
 
 function useRecentUpdatesComputed(input: UseDashboardComputedInput) {
