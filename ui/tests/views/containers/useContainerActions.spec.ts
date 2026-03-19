@@ -482,6 +482,49 @@ describe('useContainerActions', () => {
     expect(composable.groupUpdateInProgress.value.has('group-1')).toBe(false);
   });
 
+  it('freezes grouped update ids and skips containers renamed during the batch', async () => {
+    const web = makeContainer({ id: 'container-1', name: 'web', newTag: '1.1.0', bouncer: 'safe' });
+    const api = makeContainer({ id: 'container-2', name: 'api', newTag: '2.0.0', bouncer: 'safe' });
+    const { composable, containerIdMap, containers, loadContainers } = await mountActionsHarness({
+      containers: [web, api],
+      containerIdMap: {
+        web: 'container-1',
+        api: 'container-2',
+      },
+    });
+    loadContainers.mockClear();
+
+    mocks.updateContainer.mockImplementation(async (containerId: string) => {
+      if (containerId === 'container-1') {
+        containerIdMap.value = {
+          web: 'container-1-new',
+          api: 'container-2-new',
+          'api-old-1773933154786': 'container-2',
+        };
+        containers.value = [
+          makeContainer({ id: 'container-1-new', name: 'web', newTag: null }),
+          makeContainer({
+            id: 'container-2',
+            name: 'api-old-1773933154786',
+            newTag: '2.0.0',
+            bouncer: 'safe',
+          }),
+          makeContainer({ id: 'container-2-new', name: 'api', newTag: '2.0.0', bouncer: 'safe' }),
+        ];
+      }
+      return {};
+    });
+
+    await composable.updateAllInGroup({
+      key: 'group-1',
+      containers: [web, api],
+    });
+
+    expect(mocks.updateContainer).toHaveBeenCalledTimes(1);
+    expect(mocks.updateContainer).toHaveBeenCalledWith('container-1');
+    expect(loadContainers).toHaveBeenCalledTimes(1);
+  });
+
   it('does not reload grouped containers when every update action fails', async () => {
     const c1 = makeContainer({ id: 'container-1', name: 'web', newTag: '1.1.0', bouncer: 'safe' });
     const c2 = makeContainer({

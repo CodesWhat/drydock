@@ -568,6 +568,32 @@ describe('Container Actions Router', () => {
       );
     });
 
+    test('should return 409 when target is a temporary rollback -old container', async () => {
+      const container = {
+        id: 'c1',
+        name: 'nginx-old-1773933154786',
+        image: { name: 'nginx' },
+        updateAvailable: true,
+      };
+      mockGetContainer.mockReturnValue(container);
+      const mockTriggerFn = vi.fn().mockResolvedValue(undefined);
+      const trigger = { type: 'docker', trigger: mockTriggerFn };
+      mockGetState.mockReturnValue({ trigger: { 'docker.default': trigger } });
+
+      const handler = getHandler('post', '/:id/update');
+      const req = createMockRequest({ params: { id: 'c1' } });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(409);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: expect.stringContaining('temporary rollback container'),
+        }),
+      );
+      expect(mockTriggerFn).not.toHaveBeenCalled();
+    });
+
     test('should return 404 when no docker trigger found', async () => {
       const container = {
         id: 'c1',

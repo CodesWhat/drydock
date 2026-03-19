@@ -253,9 +253,9 @@ const {
                 :style="{ backgroundColor: updateKindColor(c.updateKind).bg, color: updateKindColor(c.updateKind).text }">
             {{ c.updateKind }}
           </span>
-          <span v-else class="text-2xs dd-text-muted">&mdash;</span>
           <UpdateMaturityBadge :maturity="c.updateMaturity" :tooltip="c.updateMaturityTooltip" />
           <SuggestedTagBadge :tag="c.suggestedTag" :current-tag="c.currentTag" />
+          <span v-if="!c.updateKind && !c.updateMaturity && !(c.suggestedTag && (!c.currentTag || c.currentTag.toLowerCase() === 'latest'))" class="text-2xs dd-text-muted">&mdash;</span>
           </div>
         </template>
         <!-- Status -->

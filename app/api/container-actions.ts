@@ -23,6 +23,7 @@ const ACTION_MESSAGES = {
   stop: 'Container stopped successfully',
   restart: 'Container restarted successfully',
 };
+const OLD_ROLLBACK_CONTAINER_NAME_PATTERN = /-old-\d{10,}$/;
 
 type ContainerAction = keyof typeof ACTION_MESSAGES;
 type ContainerAuditAction = Extract<
@@ -160,6 +161,18 @@ async function updateContainer(req: Request, res: Response) {
 
   if (!container.updateAvailable) {
     sendErrorResponse(res, 400, 'No update available for this container');
+    return;
+  }
+
+  if (
+    typeof container.name === 'string' &&
+    OLD_ROLLBACK_CONTAINER_NAME_PATTERN.test(container.name)
+  ) {
+    sendErrorResponse(
+      res,
+      409,
+      'Cannot update temporary rollback container renamed with -old-{timestamp}',
+    );
     return;
   }
 

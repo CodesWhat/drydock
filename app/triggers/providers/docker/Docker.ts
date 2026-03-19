@@ -39,6 +39,7 @@ const PULL_PROGRESS_LOG_INTERVAL_MS = 2000;
 const NON_SELF_UPDATE_HEALTH_TIMEOUT_MS = 120_000;
 const NON_SELF_UPDATE_HEALTH_POLL_INTERVAL_MS = 1_000;
 const TRIGGER_BATCH_CONCURRENCY = 3;
+const OLD_ROLLBACK_CONTAINER_NAME_PATTERN = /-old-\d{10,}$/;
 const warnedLegacyTriggerLabelFallbacks = new Set<string>();
 
 type ContainerFullNameReference = {
@@ -1187,6 +1188,15 @@ class Docker extends Trigger {
    * @returns {Promise<void>}
    */
   async trigger(container, runtimeContext?: unknown) {
+    if (
+      typeof container?.name === 'string' &&
+      OLD_ROLLBACK_CONTAINER_NAME_PATTERN.test(container.name)
+    ) {
+      this.log.warn(
+        `Skipping update for temporary rollback container ${container.name} (matched -old timestamp suffix)`,
+      );
+      return;
+    }
     await this.runContainerUpdateLifecycle(container, runtimeContext);
   }
 

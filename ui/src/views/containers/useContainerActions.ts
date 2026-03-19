@@ -43,6 +43,7 @@ async function executeContainerActionState(args: {
   containerActionsEnabled: boolean;
   containerActionsDisabledReason: string;
   containerIdMap: Record<string, string>;
+  containerId?: string;
   name: string;
   actionInProgress: Ref<string | null>;
   inputError: Ref<string | null>;
@@ -60,7 +61,7 @@ async function executeContainerActionState(args: {
     args.inputError.value = args.containerActionsDisabledReason;
     return false;
   }
-  const containerId = args.containerIdMap[args.name];
+  const containerId = args.containerId ?? args.containerIdMap[args.name];
   if (!containerId || args.actionInProgress.value) {
     return false;
   }
@@ -107,13 +108,15 @@ function setGroupUpdateStateValue(
 async function updateAllInGroupState(args: {
   containerActionsEnabled: boolean;
   containerActionsDisabledReason: string;
+  containerIdMap: Record<string, string>;
+  containers: Readonly<Ref<Container[]>>;
   inputError: Ref<string | null>;
   groupUpdateInProgress: Ref<Set<string>>;
   group: ContainerActionGroup;
   executeAction: (
     name: string,
     action: (id: string) => Promise<unknown>,
-    options?: { reloadContainers?: boolean },
+    options?: { containerId?: string; reloadContainers?: boolean },
   ) => Promise<boolean>;
   loadContainers: () => Promise<void>;
 }) {
@@ -127,14 +130,35 @@ async function updateAllInGroupState(args: {
   const updatableContainers = args.group.containers.filter((container) => {
     return container.newTag && container.bouncer !== 'blocked';
   });
-  if (updatableContainers.length === 0) {
+  const frozenUpdateTargets = updatableContainers
+    .map((container) => ({
+      name: container.name,
+      containerId: args.containerIdMap[container.name],
+    }))
+    .filter(
+      (
+        target,
+      ): target is {
+        name: string;
+        containerId: string;
+      } => typeof target.containerId === 'string' && target.containerId.length > 0,
+    );
+  if (frozenUpdateTargets.length === 0) {
     return;
   }
   setGroupUpdateStateValue(args.groupUpdateInProgress, args.group.key, true);
   try {
     let updatedAny = false;
-    for (const container of updatableContainers) {
-      const updated = await args.executeAction(container.name, apiUpdateContainer, {
+    for (const target of frozenUpdateTargets) {
+      const currentContainer = args.containers.value.find(
+        (container) => container.id === target.containerId,
+      );
+      if (!currentContainer || currentContainer.name !== target.name) {
+        continue;
+      }
+
+      const updated = await args.executeAction(target.name, apiUpdateContainer, {
+        containerId: target.containerId,
         reloadContainers: false,
       });
       if (updated) {
@@ -270,7 +294,7 @@ function createConfirmHandlers(args: {
   executeAction: (
     name: string,
     action: (id: string) => Promise<unknown>,
-    options?: { reloadContainers?: boolean },
+    options?: { containerId?: string; reloadContainers?: boolean },
   ) => Promise<boolean>;
   forceUpdate: (name: string) => Promise<void>;
   deleteContainer: (name: string) => Promise<boolean>;
@@ -373,7 +397,7 @@ function createContainerActionHandlers(args: {
   executeAction: (
     name: string,
     action: (id: string) => Promise<unknown>,
-    options?: { reloadContainers?: boolean },
+    options?: { containerId?: string; reloadContainers?: boolean },
   ) => Promise<boolean>;
   applyPolicy: (
     name: string,
@@ -569,12 +593,13 @@ export function useContainerActions(input: UseContainerActionsInput) {
   async function executeAction(
     name: string,
     action: (id: string) => Promise<unknown>,
-    options?: { reloadContainers?: boolean },
+    options?: { containerId?: string; reloadContainers?: boolean },
   ) {
     return executeContainerActionState({
       containerActionsEnabled: containerActionsEnabled.value,
       containerActionsDisabledReason: containerActionsDisabledReason.value,
       containerIdMap: input.containerIdMap.value,
+      containerId: options?.containerId,
       name,
       actionInProgress,
       inputError: input.error,
@@ -594,6 +619,8 @@ export function useContainerActions(input: UseContainerActionsInput) {
     await updateAllInGroupState({
       containerActionsEnabled: containerActionsEnabled.value,
       containerActionsDisabledReason: containerActionsDisabledReason.value,
+      containerIdMap: input.containerIdMap.value,
+      containers: input.containers,
       inputError: input.error,
       groupUpdateInProgress,
       group,
