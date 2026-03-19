@@ -1027,22 +1027,14 @@ test('trigger should not throw when all is ok', async () => {
   ).resolves.toBeUndefined();
 });
 
-test('trigger should skip containers renamed with -old unix timestamp suffix', async () => {
-  const runContainerUpdateLifecycleSpy = vi.spyOn(docker, 'runContainerUpdateLifecycle');
-  const warnSpy = vi.spyOn(docker.log, 'warn');
+test('mustTrigger should reject containers renamed with -old unix timestamp suffix', () => {
+  expect(
+    docker.mustTrigger(createTriggerContainer({ name: 'container-name-old-1773933154786' })),
+  ).toBe(false);
+});
 
-  await expect(
-    docker.trigger(
-      createTriggerContainer({
-        name: 'container-name-old-1773933154786',
-      }),
-    ),
-  ).resolves.toBeUndefined();
-
-  expect(runContainerUpdateLifecycleSpy).not.toHaveBeenCalled();
-  expect(warnSpy).toHaveBeenCalledWith(
-    expect.stringContaining('Skipping update for temporary rollback container'),
-  );
+test('mustTrigger should allow containers without rollback suffix', () => {
+  expect(docker.mustTrigger(createTriggerContainer({ name: 'my-container' }))).toBe(true);
 });
 
 test('trigger should not throw in dryrun mode', async () => {

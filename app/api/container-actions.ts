@@ -6,6 +6,7 @@ import type { AuditEntry } from '../model/audit.js';
 import { getContainerActionsCounter } from '../prometheus/container-actions.js';
 import * as registry from '../registry/index.js';
 import * as storeContainer from '../store/container.js';
+import Trigger from '../triggers/providers/Trigger.js';
 import { recordAuditEvent } from './audit-events.js';
 import { findDockerTriggerForContainer, NO_DOCKER_TRIGGER_FOUND_ERROR } from './docker-trigger.js';
 import { sendErrorResponse } from './error-response.js';
@@ -23,7 +24,6 @@ const ACTION_MESSAGES = {
   stop: 'Container stopped successfully',
   restart: 'Container restarted successfully',
 };
-const OLD_ROLLBACK_CONTAINER_NAME_PATTERN = /-old-\d{10,}$/;
 
 type ContainerAction = keyof typeof ACTION_MESSAGES;
 type ContainerAuditAction = Extract<
@@ -164,10 +164,7 @@ async function updateContainer(req: Request, res: Response) {
     return;
   }
 
-  if (
-    typeof container.name === 'string' &&
-    OLD_ROLLBACK_CONTAINER_NAME_PATTERN.test(container.name)
-  ) {
+  if (Trigger.isRollbackContainer(container)) {
     sendErrorResponse(
       res,
       409,

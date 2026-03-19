@@ -13,6 +13,8 @@ import {
   SUPPORTED_THRESHOLDS,
 } from './trigger-threshold.js';
 
+const OLD_ROLLBACK_CONTAINER_NAME_PATTERN = /-old-\d{10,}$/;
+
 type SupportedThreshold = (typeof SUPPORTED_THRESHOLDS)[number];
 type TriggerAutoMode = 'all' | 'oninclude' | 'none';
 type NotificationRuleId =
@@ -625,7 +627,17 @@ class Trigger extends Component {
    * @param containerResult
    * @returns {boolean}
    */
+  static isRollbackContainer(container: { name?: unknown }): boolean {
+    return (
+      typeof container?.name === 'string' &&
+      OLD_ROLLBACK_CONTAINER_NAME_PATTERN.test(container.name)
+    );
+  }
+
   mustTrigger(containerResult: Container) {
+    if (Trigger.isRollbackContainer(containerResult)) {
+      return false;
+    }
     if (this.agent && this.agent !== containerResult.agent) {
       return false;
     }
