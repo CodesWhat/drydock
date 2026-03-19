@@ -17,7 +17,7 @@ interface StreamableResponse extends Response {
   flush?: () => void;
 }
 
-export interface StatsHandlerDependencies {
+interface StatsHandlerDependencies {
   storeContainer: StatsStoreContainerApi;
   statsCollector: Pick<
     ContainerStatsCollector,

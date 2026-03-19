@@ -10,7 +10,7 @@ import { normalizeLimitOffsetPagination } from './request-helpers.js';
 const DEFAULT_CONTAINER_SORT_MODE: ContainerSortMode = 'name';
 const DEFAULT_UI_MATURITY_THRESHOLD_DAYS = 7;
 const ESTABLISHED_UPDATE_AGE_DAYS = 30;
-export const CONTAINER_LIST_MAX_LIMIT = 200;
+const CONTAINER_LIST_MAX_LIMIT = 200;
 
 export type ContainerMaturityFilter = 'hot' | 'mature' | 'established';
 export type ContainerSortMode =
@@ -69,7 +69,7 @@ export function removeContainerListControlParams(query: Request['query']): Reque
   return filteredQuery as Request['query'];
 }
 
-export function getFirstQueryValue(value: unknown): string | undefined {
+function getFirstQueryValue(value: unknown): string | undefined {
   if (Array.isArray(value)) {
     for (const item of value) {
       if (typeof item === 'string') {
@@ -142,7 +142,7 @@ export function validateContainerListQuery(query: Request['query']): ValidatedCo
   };
 }
 
-export function getContainerUpdateAge(container: Container): number | undefined {
+function getContainerUpdateAge(container: Container): number | undefined {
   if (typeof container.updateAge === 'number' && Number.isFinite(container.updateAge)) {
     return container.updateAge;
   }

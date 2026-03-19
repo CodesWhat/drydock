@@ -101,7 +101,7 @@ type PendingContainerUpdateOperation = NonNullable<
   ReturnType<typeof updateOperationStore.getInProgressOperationByContainerName>
 >;
 
-export type ContainerUpdateExecutorDependencies = {
+type ContainerUpdateExecutorDependencies = {
   getConfiguration: () => { dryrun?: boolean; [key: string]: unknown };
   getTriggerId: () => string;
   stopContainer: (

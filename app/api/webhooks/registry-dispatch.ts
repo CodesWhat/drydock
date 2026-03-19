@@ -106,7 +106,7 @@ export function findContainersForImageReferences(
   return Array.from(matchedContainers.values());
 }
 
-export function resolveWatcherIdForContainer(container: Container): string {
+function resolveWatcherIdForContainer(container: Container): string {
   let watcherId = `docker.${container.watcher}`;
   if (container.agent) {
     watcherId = `${container.agent}.${watcherId}`;

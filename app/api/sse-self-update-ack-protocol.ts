@@ -22,7 +22,7 @@ interface PendingSelfUpdateAck {
   timeoutHandle?: ReturnType<typeof setTimeout>;
 }
 
-export interface SelfUpdateAckProtocolDependencies {
+interface SelfUpdateAckProtocolDependencies {
   clients: Set<FlushableResponse>;
   activeClientRegistry: ActiveSseClientRegistry;
   defaultAckTimeoutMs: number;

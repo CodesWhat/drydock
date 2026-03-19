@@ -22,8 +22,6 @@ import {
   type SecurityVulnerabilityOverviewResponse,
 } from './security-overview.js';
 
-export type { CrudHandlerDependencies };
-
 function getContainerSummaryHandler(context: CrudHandlerContext, _req: Request, res: Response) {
   const containers = context.getContainersFromStore({});
   const containerStatus = getContainerStatusSummary(containers);

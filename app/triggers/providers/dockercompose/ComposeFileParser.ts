@@ -64,7 +64,7 @@ function getErrorMessage(error: unknown) {
   return String(error);
 }
 
-export function parseComposeDocument(composeFileText: string) {
+function parseComposeDocument(composeFileText: string) {
   const parseDocumentOptions = {
     keepSourceTokens: true,
     maxAliasCount: YAML_MAX_ALIAS_COUNT,

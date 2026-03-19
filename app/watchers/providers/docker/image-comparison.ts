@@ -31,7 +31,7 @@ export interface ContainerWatchLogger {
   debug: (message: string) => void;
 }
 
-export function getRegistries(): Record<string, Registry> {
+function getRegistries(): Record<string, Registry> {
   return registry.getState().registry;
 }
 
@@ -52,7 +52,7 @@ export function normalizeContainer(container: Container) {
 }
 
 /** Get the Docker Registry by name. */
-export function getRegistry(registryName: string): Registry {
+function getRegistry(registryName: string): Registry {
   const registryToReturn = getRegistries()[registryName];
   if (!registryToReturn) {
     throw new Error(`Unsupported Registry ${registryName}`);

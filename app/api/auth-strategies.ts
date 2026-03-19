@@ -48,7 +48,7 @@ export function registerStrategies(app: Application): void {
   });
 }
 
-export function getUniqueStrategies(): StrategyDescription[] {
+function getUniqueStrategies(): StrategyDescription[] {
   const strategies = Object.values(registry.getState().authentication).map(
     (authentication: Authentication): StrategyDescription =>
       authentication.getStrategyDescription(),

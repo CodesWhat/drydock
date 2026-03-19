@@ -43,7 +43,7 @@ interface ContainerCollectionState {
   listeners: Set<StatsListener>;
 }
 
-export interface ContainerStatsCollectorDependencies {
+interface ContainerStatsCollectorDependencies {
   getContainerById: (id: string) => Container | undefined;
   getWatchers: () => Record<string, unknown>;
   intervalSeconds?: number;

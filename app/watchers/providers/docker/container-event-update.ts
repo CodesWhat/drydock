@@ -82,7 +82,7 @@ function isWithinRecreatedAliasTransientWindow(
   return ageMs <= RECREATED_CONTAINER_ALIAS_TRANSIENT_WINDOW_MS;
 }
 
-export interface ProcessDockerEventDependencies {
+interface ProcessDockerEventDependencies {
   watchCronDebounced: () => Promise<void>;
   ensureRemoteAuthHeaders: () => Promise<void>;
   inspectContainer: (containerId: string) => Promise<unknown>;
@@ -175,7 +175,7 @@ export async function processDockerEvent(
   }
 }
 
-export interface UpdateContainerFromInspectDependencies {
+interface UpdateContainerFromInspectDependencies {
   getCustomDisplayNameFromLabels: (labels: Record<string, string>) => string | undefined;
   updateContainer: (container: Container) => void;
   logInfo?: (message: string) => void;

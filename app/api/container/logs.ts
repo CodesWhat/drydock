@@ -40,7 +40,7 @@ interface LocalDockerLogsOptions {
   follow: boolean;
 }
 
-export interface LogHandlerDependencies {
+interface LogHandlerDependencies {
   storeContainer: LogStoreContainerApi;
   getAgent: (name: string) => AgentClient | undefined;
   getWatchers: () => Record<string, unknown>;

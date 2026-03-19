@@ -1,7 +1,7 @@
 import type Dockerode from 'dockerode';
 
 export const DOCKER_EVENTS_RECONNECT_BASE_DELAY_MS = 1000;
-export const DOCKER_EVENTS_RECONNECT_MAX_DELAY_MS = 30 * 1000;
+const DOCKER_EVENTS_RECONNECT_MAX_DELAY_MS = 30 * 1000;
 
 const DOCKER_CONTAINER_EVENT_TYPES = [
   'create',
@@ -37,12 +37,12 @@ interface DockerEventsState {
   };
 }
 
-export interface DockerEventsReconnectDependencies {
+interface DockerEventsReconnectDependencies {
   cleanupDockerEventsStream: (destroy?: boolean) => void;
   listenDockerEvents: () => Promise<void>;
 }
 
-export interface DockerEventsStreamFailureDependencies {
+interface DockerEventsStreamFailureDependencies {
   scheduleDockerEventsReconnect: (reason: string, err?: unknown) => void;
 }
 

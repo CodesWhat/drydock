@@ -111,5 +111,3 @@ export function init() {
   router.post('/', handleRegistryWebhook);
   return router;
 }
-
-export { handleRegistryWebhook };
