@@ -1986,6 +1986,7 @@ describe('digest mode', () => {
     vi.mocked(event.registerContainerUpdateFailed).mockReturnValue(vi.fn());
     vi.mocked(event.registerSecurityAlert).mockReturnValue(vi.fn());
     vi.mocked(event.registerAgentDisconnected).mockReturnValue(vi.fn());
+    vi.mocked(mockCron.validate).mockReturnValue(true);
   });
 
   test('validateConfiguration should accept digest mode', () => {
@@ -2141,5 +2142,61 @@ describe('digest mode', () => {
     await trigger.flushDigestBuffer();
     expect(triggerBatchSpy).not.toHaveBeenCalled();
     triggerBatchSpy.mockRestore();
+  });
+
+  test('handleContainerUpdateAppliedEvent should evict container from digest buffer', async () => {
+    await trigger.register('trigger', 'test', 'digest-trigger', {
+      ...configurationValid,
+      mode: 'digest',
+    });
+    trigger.init();
+
+    await trigger.handleContainerReportDigest({
+      container: {
+        id: 'c1',
+        name: 'app',
+        watcher: 'test',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      },
+      changed: true,
+    });
+    await trigger.handleContainerReportDigest({
+      container: {
+        id: 'c2',
+        name: 'web',
+        watcher: 'test',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '3.0' },
+      },
+      changed: true,
+    });
+
+    // Simulate update applied for 'app'
+    await trigger.handleContainerUpdateAppliedEvent('app');
+
+    // Flush should only contain 'web'
+    const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+    await trigger.flushDigestBuffer();
+    expect(triggerBatchSpy).toHaveBeenCalledWith([expect.objectContaining({ name: 'web' })]);
+    triggerBatchSpy.mockRestore();
+  });
+
+  test('validateConfiguration should reject invalid digestcron expression', () => {
+    vi.mocked(mockCron.validate).mockReturnValue(false);
+    expect(() =>
+      trigger.validateConfiguration({
+        ...configurationValid,
+        digestcron: 'not-a-cron',
+      }),
+    ).toThrow('digestcron must be a valid cron expression');
+  });
+
+  test('validateConfiguration should accept valid digestcron expression', () => {
+    const validated = trigger.validateConfiguration({
+      ...configurationValid,
+      digestcron: '30 6 * * 1-5',
+    });
+    expect(validated.digestcron).toBe('30 6 * * 1-5');
   });
 });

@@ -358,6 +358,17 @@ class Trigger extends Component {
   }
 
   async handleContainerUpdateAppliedEvent(containerName: string) {
+    // Evict from digest buffer — container is already updated, no need to notify
+    if (this.digestBuffer.size > 0) {
+      for (const [key, container] of this.digestBuffer) {
+        if (container.name === containerName) {
+          this.digestBuffer.delete(key);
+          this.log.debug(`Evicted ${containerName} from digest buffer (update applied)`);
+          break;
+        }
+      }
+    }
+
     await this.dispatchContainerForEvent(
       'update-applied',
       this.findContainerByBusinessId(containerName),
@@ -779,7 +790,16 @@ class Trigger extends Component {
         .default('all'),
       mode: this.joi.string().insensitive().valid('simple', 'batch', 'digest').default('simple'),
       once: this.joi.boolean().default(true),
-      digestcron: this.joi.string().default('0 8 * * *'),
+      digestcron: this.joi
+        .string()
+        .default('0 8 * * *')
+        .custom((value, helpers) => {
+          if (!cron.validate(value)) {
+            return helpers.error('string.pattern.base', { value });
+          }
+          return value;
+        })
+        .messages({ 'string.pattern.base': 'digestcron must be a valid cron expression' }),
       simpletitle: this.joi
         .string()
         .default('New ${container.updateKind.kind} found for container ${container.name}'),
