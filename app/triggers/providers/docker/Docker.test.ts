@@ -444,6 +444,53 @@ test('getWatcher should throw when the watcher reference does not exist', async 
   ).toThrowError('No watcher found for container');
 });
 
+test('getWatcher should resolve agent-prefixed watcher ids', async () => {
+  const getStateSpy = vi.spyOn(registryStore, 'getState').mockReturnValue({
+    watcher: {
+      'edge-agent.docker.test': {
+        getId: () => 'edge-agent.docker.test',
+        dockerApi: {},
+      },
+    },
+  } as any);
+
+  try {
+    expect(
+      docker.getWatcher({
+        agent: 'edge-agent',
+        watcher: 'test',
+      }),
+    ).toMatchObject({
+      getId: expect.any(Function),
+    });
+    expect(docker.getWatcher({ agent: 'edge-agent', watcher: 'test' }).getId()).toBe(
+      'edge-agent.docker.test',
+    );
+    expect(getStateSpy).toHaveBeenCalled();
+  } finally {
+    getStateSpy.mockRestore();
+  }
+});
+
+test('getWatcher should include container name when id is missing', async () => {
+  vi.spyOn(registryStore, 'getState').mockReturnValue({ watcher: {} } as any);
+
+  expect(() =>
+    docker.getWatcher({
+      name: 'named-only',
+      watcher: 'missing',
+    }),
+  ).toThrowError('No watcher found for container named-only (docker.missing)');
+});
+
+test('getWatcher should fall back to unknown when id and name are absent', async () => {
+  vi.spyOn(registryStore, 'getState').mockReturnValue({ watcher: {} } as any);
+
+  expect(() => docker.getWatcher({ watcher: 'missing' })).toThrowError(
+    'No watcher found for container unknown (docker.missing)',
+  );
+});
+
 // --- getCurrentContainer ---
 
 test('getCurrentContainer should return container from dockerApi', async () => {

@@ -378,9 +378,7 @@ class Docker extends Trigger {
     const watcher = getState().watcher[watcherId];
     if (!watcher) {
       const containerIdOrName = container?.id || container?.name || 'unknown';
-      throw new Error(
-        `No watcher found for container ${containerIdOrName} (${watcherId || 'docker.unknown'})`,
-      );
+      throw new Error(`No watcher found for container ${containerIdOrName} (${watcherId})`);
     }
     return watcher;
   }

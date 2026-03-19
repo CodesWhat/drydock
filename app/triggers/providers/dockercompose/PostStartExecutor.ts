@@ -150,7 +150,15 @@ class PostStartExecutor {
   }
 
   async resolvePostStartHooksContainer(container: { name?: string }, serviceKey: string) {
-    const watcher = this.getWatcher(container);
+    let watcher: unknown;
+    try {
+      watcher = this.getWatcher(container);
+    } catch {
+      this.getLog()?.warn?.(
+        `Skip compose post_start hooks for ${container.name} (${serviceKey}) because watcher Docker API is unavailable`,
+      );
+      return null;
+    }
     const dockerApi = this.getDockerApiFromWatcher(watcher);
     if (!dockerApi) {
       this.getLog()?.warn?.(

@@ -681,4 +681,65 @@ describe('docker image details orchestration module', () => {
     expect(getContainersSpy).not.toHaveBeenCalled();
     expect(deleteContainerSpy).not.toHaveBeenCalled();
   });
+
+  test('skips stale same-name entries with missing, blank, or non-docker watcher metadata', async () => {
+    vi.spyOn(storeContainer, 'getContainer').mockReturnValue(undefined);
+    vi.spyOn(storeContainer, 'getContainers').mockReturnValue([
+      {
+        id: 'old-container-empty-watcher',
+        watcher: '',
+        name: 'service',
+      } as any,
+      {
+        id: 'old-container-whitespace-watcher',
+        watcher: '   ',
+        name: 'service',
+      } as any,
+      {
+        id: 'old-container-non-docker',
+        watcher: 'docker-queue',
+        name: 'service',
+      } as any,
+    ]);
+    const deleteContainerSpy = vi
+      .spyOn(storeContainer, 'deleteContainer')
+      .mockImplementation(() => {});
+    vi.spyOn(registry, 'getState').mockReturnValue({
+      watcher: {
+        'docker.docker-queue': {
+          type: 'queue',
+          name: 'docker-queue',
+          configuration: {
+            host: 'socket-proxy.internal',
+            protocol: 'http',
+            port: 2375,
+            socket: '/var/run/docker.sock',
+          },
+        },
+      },
+    } as any);
+
+    const { watcher } = createWatcher({
+      configuration: {
+        watchevents: false,
+        host: 'socket-proxy.internal',
+        protocol: 'http',
+        port: 2375,
+        socket: '/var/run/docker.sock',
+      },
+    });
+
+    const result = await addImageDetailsToContainerOrchestration(
+      watcher as any,
+      createDockerSummaryContainer({
+        Id: 'new-container-id',
+        Names: ['/service'],
+      }),
+      {},
+      createHelpers() as any,
+    );
+
+    expect(result?.id).toBe('new-container-id');
+    expect(deleteContainerSpy).not.toHaveBeenCalled();
+  });
 });

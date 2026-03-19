@@ -3,7 +3,11 @@ import * as registry from '../../../registry/index.js';
 import { detectSourceRepoFromImageMetadata } from '../../../release-notes/index.js';
 import * as storeContainer from '../../../store/container.js';
 import { parse as parseSemver, transform as transformTag } from '../../../tag/index.js';
-import { getDockerWatcherRegistryId, getDockerWatcherSourceKey } from './container-init.js';
+import {
+  getDockerWatcherRegistryId,
+  getDockerWatcherSourceKey,
+  isDockerWatcher,
+} from './container-init.js';
 import {
   getContainerDisplayName,
   getContainerName,
@@ -357,13 +361,8 @@ function removeStaleContainerEntriesWithSameName(
         staleContainer.watcher,
         staleContainer.agent,
       );
-      if (staleWatcherId === '') {
-        return false;
-      }
-      const staleWatcher = watcherRegistryState[staleWatcherId] as unknown as
-        | (DockerImageDetailsWatcher & { type?: string })
-        | undefined;
-      if (!staleWatcher || staleWatcher.type !== 'docker') {
+      const staleWatcher = watcherRegistryState[staleWatcherId];
+      if (!isDockerWatcher(staleWatcher)) {
         return false;
       }
 

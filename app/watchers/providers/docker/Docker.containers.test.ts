@@ -5,6 +5,7 @@ import * as registry from '../../../registry/index.js';
 import * as storeContainer from '../../../store/container.js';
 import { mockConstructor } from '../../../test/mock-constructor.js';
 import { _resetRegistryWebhookFreshStateForTests } from '../../registry-webhook-fresh.js';
+import { getDockerWatcherRegistryId, getDockerWatcherSourceKey } from './container-init.js';
 import Docker, {
   testable_filterBySegmentCount,
   testable_filterRecreatedContainerAliases,
@@ -3699,6 +3700,45 @@ describe('Docker Watcher', () => {
       expect(testable_getImageForRegistryLookup(image)).toBe(image);
     });
 
+    test('getDockerWatcherRegistryId should normalize watcher and agent values', () => {
+      expect(getDockerWatcherRegistryId('watcher')).toBe('docker.watcher');
+      expect(getDockerWatcherRegistryId('watcher', 'agent-1')).toBe('agent-1.docker.watcher');
+      expect(getDockerWatcherRegistryId('   ', 'agent-1')).toBe('');
+    });
+
+    test('getDockerWatcherSourceKey should build tcp and socket keys with defaults', () => {
+      expect(
+        getDockerWatcherSourceKey({
+          agent: 'agent-1',
+          configuration: {
+            host: 'Docker.Example.Com',
+            protocol: 'HTTPS',
+            port: 4242,
+          },
+        } as any),
+      ).toBe('agent:agent-1|tcp:https://docker.example.com:4242');
+
+      expect(
+        getDockerWatcherSourceKey({
+          agent: '',
+          configuration: {
+            host: 'Docker.Example.Com',
+            protocol: '',
+            port: 0,
+          },
+        } as any),
+      ).toBe('agent:|tcp:http://docker.example.com:2375');
+
+      expect(
+        getDockerWatcherSourceKey({
+          agent: 'agent-2',
+          configuration: {
+            socket: '',
+          },
+        } as any),
+      ).toBe('agent:agent-2|socket:/var/run/docker.sock');
+    });
+
     test('normalizeContainer should not mutate the input container object', async () => {
       const containerModule = await import('../../../model/container.js');
       const realContainerModule = await vi.importActual<
@@ -3922,6 +3962,134 @@ describe('Docker Watcher', () => {
       expect(dockerApi.getContainer).not.toHaveBeenCalled();
       expect(storeContainer.updateContainer).not.toHaveBeenCalled();
       expect(storeContainer.deleteContainer).toHaveBeenCalledWith('alias-1');
+    });
+  });
+
+  describe('Additional Coverage - getContainers same-source filtering', () => {
+    test('should normalize a non-string watcher agent when grouping same-source containers', async () => {
+      await docker.register(
+        'watcher',
+        'docker',
+        'test',
+        {
+          socket: '/var/run/docker.sock',
+          host: 'socket-proxy.internal',
+          protocol: 'http',
+          port: 2375,
+        },
+        'agent-1',
+      );
+      docker.agent = 42 as any;
+      mockDockerApi.listContainers.mockResolvedValue([]);
+      storeContainer.getContainers.mockImplementation((query?: { watcher?: string }) =>
+        query?.watcher ? [] : [],
+      );
+      registry.getState.mockReturnValue({ watcher: {} } as any);
+
+      await docker.getContainers();
+
+      expect(registry.getState).toHaveBeenCalled();
+    });
+
+    test('should fall back to current containers when same-source lookup fails', async () => {
+      await docker.register('watcher', 'docker', 'test', {
+        socket: '/var/run/docker.sock',
+      });
+      docker.log = createMockLog(['warn']);
+      mockDockerApi.listContainers.mockResolvedValue([]);
+      storeContainer.getContainers.mockImplementation((query?: { watcher?: string }) =>
+        query?.watcher ? [] : [],
+      );
+      registry.getState.mockImplementation(() => {
+        throw new Error('Registry unavailable');
+      });
+
+      await expect(docker.getContainers()).resolves.toEqual([]);
+      expect(docker.log.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Error when trying to get same-source containers from the store'),
+      );
+    });
+
+    test('should keep same-source containers and skip invalid cross-watcher records', async () => {
+      await docker.register(
+        'watcher',
+        'docker',
+        'test',
+        {
+          socket: '/var/run/docker.sock',
+          host: 'socket-proxy.internal',
+          protocol: 'http',
+          port: 2375,
+        },
+        '',
+      );
+      mockDockerApi.listContainers.mockResolvedValue([]);
+      storeContainer.getContainers.mockImplementation((query?: { watcher?: string }) => {
+        if (query?.watcher) {
+          return [];
+        }
+
+        return [
+          {
+            id: 'same-source',
+            watcher: 'docker-same-source',
+            agent: '',
+            name: 'service',
+          },
+          {
+            id: 'empty-watcher',
+            watcher: '',
+            agent: '',
+            name: 'service',
+          },
+          {
+            id: 'whitespace-watcher',
+            watcher: '   ',
+            agent: '',
+            name: 'service',
+          },
+          {
+            id: 'non-docker-watcher',
+            watcher: 'docker-queue',
+            agent: '',
+            name: 'service',
+          },
+          {
+            id: 'different-agent',
+            watcher: 'docker-same-source',
+            agent: 'remote-agent',
+            name: 'service',
+          },
+        ] as any;
+      });
+      registry.getState.mockReturnValue({
+        watcher: {
+          'docker.docker-same-source': {
+            type: 'docker',
+            name: 'docker-same-source',
+            configuration: {
+              host: 'socket-proxy.internal',
+              protocol: 'http',
+              port: 2375,
+              socket: '/var/run/docker.sock',
+            },
+          },
+          'docker.docker-queue': {
+            type: 'queue',
+            name: 'docker-queue',
+            configuration: {
+              host: 'socket-proxy.internal',
+              protocol: 'http',
+              port: 2375,
+              socket: '/var/run/docker.sock',
+            },
+          },
+        },
+      } as any);
+
+      await docker.getContainers();
+
+      expect(storeContainer.deleteContainer).not.toHaveBeenCalled();
     });
   });
 

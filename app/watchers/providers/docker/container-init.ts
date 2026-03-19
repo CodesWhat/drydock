@@ -3,6 +3,7 @@ import log from '../../../log/index.js';
 import type { Container } from '../../../model/container.js';
 import { recordLegacyInput } from '../../../prometheus/compatibility.js';
 import * as storeContainer from '../../../store/container.js';
+import type Watcher from '../../Watcher.js';
 import {
   getContainerConfigValue,
   getContainerName,
@@ -355,6 +356,12 @@ export function getDockerWatcherSourceKey(watcher: DockerWatcherSourceLike): str
   const normalizedSocket =
     normalizeWatcherSourceStringValue(watcher.configuration?.socket) || '/var/run/docker.sock';
   return `agent:${normalizedAgent}|socket:${normalizedSocket}`;
+}
+
+export function isDockerWatcher(
+  watcher: Watcher | undefined,
+): watcher is Watcher & { type: 'docker' } {
+  return !!watcher && watcher.type === 'docker';
 }
 
 function getRecreatedContainerBaseName(container: { Id?: unknown; Names?: string[] }) {

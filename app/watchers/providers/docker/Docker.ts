@@ -41,6 +41,7 @@ import {
   getDockerWatcherSourceKey,
   getLabel,
   getMatchingImgsetConfiguration as getMatchingImgsetConfigurationState,
+  isDockerWatcher,
   mergeConfigWithImgset,
   pruneOldContainers,
   resolveLabelsFromContainer,
@@ -269,10 +270,8 @@ function getContainersFromSameDockerSource(
     if (staleWatcherId === '') {
       return false;
     }
-    const staleWatcher = watcherRegistryState[staleWatcherId] as unknown as
-      | (DockerWatcherSourceProbe & { type?: string })
-      | undefined;
-    if (!staleWatcher || staleWatcher.type !== 'docker') {
+    const staleWatcher = watcherRegistryState[staleWatcherId];
+    if (!isDockerWatcher(staleWatcher)) {
       return false;
     }
 

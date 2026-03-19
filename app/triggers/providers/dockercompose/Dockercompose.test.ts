@@ -4227,6 +4227,16 @@ describe('Dockercompose Trigger', () => {
     ).resolves.toEqual([]);
   });
 
+  test('getComposeFilesFromInspect should return empty list when watcher lookup fails', async () => {
+    vi.spyOn(trigger, 'getWatcher').mockReturnValue(null as any);
+
+    await expect(
+      trigger.getComposeFilesFromInspect({
+        name: 'nginx',
+      } as any),
+    ).resolves.toEqual([]);
+  });
+
   test('getComposeFilesFromInspect should return empty list when inspect fails', async () => {
     const inspectError = new Error('inspect failed');
     vi.spyOn(trigger, 'getWatcher').mockReturnValue({

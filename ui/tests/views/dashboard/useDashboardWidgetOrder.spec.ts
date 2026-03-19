@@ -28,6 +28,7 @@ describe('useDashboardWidgetOrder', () => {
   beforeEach(() => {
     localStorage.clear();
     preferences.dashboard.widgetOrder = [...DASHBOARD_WIDGET_IDS];
+    delete (preferences.dashboard as Record<string, unknown>).gridLayout;
   });
 
   it('hydrates from preferences and falls back to defaults for non-array values', async () => {
@@ -61,6 +62,32 @@ describe('useDashboardWidgetOrder', () => {
     const { state } = await mountWidgetOrderComposable();
 
     expect(state.hiddenWidgets.value).toEqual([]);
+  });
+
+  it('hydrates persisted grid layouts and skips invalid entries', async () => {
+    (preferences.dashboard as Record<string, unknown>).gridLayout = [
+      { i: 'host-status', x: 10, y: 11, w: 4, h: 6 },
+      null,
+      'not-a-layout-item',
+      { i: 'recent-updates', x: 1, y: 2, w: 6, h: 5 },
+    ];
+
+    const { state } = await mountWidgetOrderComposable();
+
+    expect(state.layout.value).toHaveLength(DASHBOARD_WIDGET_IDS.length);
+    expect(state.layout.value.map((item) => item.i)).toEqual(DASHBOARD_WIDGET_IDS);
+    expect(state.layout.value.find((item) => item.i === 'host-status')).toMatchObject({
+      x: 10,
+      y: 11,
+      w: 4,
+      h: 6,
+    });
+    expect(state.layout.value.find((item) => item.i === 'recent-updates')).toMatchObject({
+      x: 1,
+      y: 2,
+      w: 6,
+      h: 5,
+    });
   });
 
   it('returns explicit style ordering and uses canonical fallback index for missing ids', async () => {
