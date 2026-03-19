@@ -1,4 +1,4 @@
-export type UsageThreshold = 'healthy' | 'warning' | 'critical';
+type UsageThreshold = 'healthy' | 'warning' | 'critical';
 
 function isFiniteNumber(value: number): boolean {
   return Number.isFinite(value);

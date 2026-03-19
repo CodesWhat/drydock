@@ -14,7 +14,7 @@ export interface SampleWatcherItem {
   containers: number;
 }
 
-export interface SampleContainerRow {
+interface SampleContainerRow {
   id: string;
   name: string;
   status: 'running' | 'stopped';

@@ -239,7 +239,7 @@ describe('useDashboardWidgetOrder', () => {
     expect(state.isWidgetVisible('host-status')).toBe(true);
     expect(state.layout.value).toEqual(layoutBeforeRestore);
 
-    const reversed = [...DASHBOARD_WIDGET_IDS].reverse() as typeof DASHBOARD_WIDGET_IDS;
+    const reversed: DashboardWidgetId[] = [...DASHBOARD_WIDGET_IDS].reverse();
     state.widgetOrder.value = [...reversed];
     await nextTick();
     expect(state.layout.value.map((item) => item.i)).toEqual(reversed);

@@ -1,6 +1,6 @@
 import type { ComputedRef, Ref } from 'vue';
 
-export type RealtimeRefreshMode = 'summary' | 'full';
+type RealtimeRefreshMode = 'summary' | 'full';
 
 interface RealtimeRefreshSchedulerOptions {
   debounceMs: number;

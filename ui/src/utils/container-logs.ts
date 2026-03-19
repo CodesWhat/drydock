@@ -40,7 +40,7 @@ const COLOR_BY_CODE: Record<number, Exclude<AnsiColor, null>> = {
 function applyAnsiCode(
   code: number,
   state: {
-    color: string | null;
+    color: AnsiColor;
     bold: boolean;
     dim: boolean;
   },
@@ -77,7 +77,7 @@ function applyAnsiCode(
 export function parseAnsiSegments(input: string): AnsiTextSegment[] {
   const segments: AnsiTextSegment[] = [];
   const state = {
-    color: null as string | null,
+    color: null as AnsiColor,
     bold: false,
     dim: false,
   };

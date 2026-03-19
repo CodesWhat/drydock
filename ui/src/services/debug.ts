@@ -1,4 +1,4 @@
-export interface DebugDumpDownload {
+interface DebugDumpDownload {
   blob: Blob;
   filename: string;
 }

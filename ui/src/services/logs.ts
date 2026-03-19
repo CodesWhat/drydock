@@ -1,4 +1,4 @@
-export type LogStreamTail = number | 'all';
+type LogStreamTail = number | 'all';
 
 export interface ContainerLogFrame {
   type: 'stdout' | 'stderr';
@@ -17,7 +17,7 @@ export interface ContainerLogQuery {
   follow?: boolean;
 }
 
-export interface ContainerLogStreamConnectionOptions {
+interface ContainerLogStreamConnectionOptions {
   containerId: string;
   query?: ContainerLogQuery;
   onMessage: (frame: ContainerLogStreamFrame) => void;

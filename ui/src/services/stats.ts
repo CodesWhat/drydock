@@ -13,7 +13,7 @@ export interface ContainerStatsSnapshot {
   timestamp: string;
 }
 
-export interface ContainerStatsResponse {
+interface ContainerStatsResponse {
   data: ContainerStatsSnapshot | null;
   history: ContainerStatsSnapshot[];
 }

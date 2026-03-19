@@ -12,7 +12,7 @@ export interface WidgetLayoutItem {
   maxH?: number;
 }
 
-export interface WidgetLayoutConstraints {
+interface WidgetLayoutConstraints {
   minW: number;
   minH: number;
   maxW: number;
@@ -33,7 +33,7 @@ export const WIDGET_CONSTRAINTS: Record<DashboardWidgetId, WidgetLayoutConstrain
   'update-breakdown': { minW: 3, minH: 3, maxW: 12, maxH: 8, defaultW: 4, defaultH: 6 },
 };
 
-export const DEFAULT_LAYOUT: WidgetLayoutItem[] = [
+const DEFAULT_LAYOUT: WidgetLayoutItem[] = [
   // Row 0: stat cards (h:4 = 120px + margins)
   { i: 'stat-containers', x: 0, y: 0, w: 3, h: 4 },
   { i: 'stat-security', x: 3, y: 0, w: 3, h: 4 },

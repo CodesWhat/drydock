@@ -15,22 +15,7 @@ export const DASHBOARD_WIDGET_IDS = [
 
 export type DashboardWidgetId = (typeof DASHBOARD_WIDGET_IDS)[number];
 
-export const STAT_WIDGET_IDS: readonly DashboardWidgetId[] = [
-  'stat-containers',
-  'stat-updates',
-  'stat-security',
-  'stat-registries',
-];
-
-export const GRID_WIDGET_IDS: readonly DashboardWidgetId[] = [
-  'recent-updates',
-  'security-overview',
-  'resource-usage',
-  'host-status',
-  'update-breakdown',
-];
-
-export interface DashboardWidgetMeta {
+interface DashboardWidgetMeta {
   id: DashboardWidgetId;
   label: string;
   category: 'stat' | 'widget';

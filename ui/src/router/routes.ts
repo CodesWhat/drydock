@@ -36,5 +36,3 @@ export const ROUTES = {
   AUDIT: '/audit',
   LOGS: '/logs',
 } as const;
-
-export type RoutePath = (typeof ROUTES)[keyof typeof ROUTES];
