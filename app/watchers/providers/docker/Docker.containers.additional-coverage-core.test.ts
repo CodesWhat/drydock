@@ -1,51 +1,44 @@
-import mockParse from 'parse-docker-image-name';
-import * as event from '../../../event/index.js';
-import { fullName } from '../../../model/container.js';
-import * as mockPrometheus from '../../../prometheus/watcher.js';
-import * as registry from '../../../registry/index.js';
-import * as storeContainer from '../../../store/container.js';
-import * as mockTag from '../../../tag/index.js';
-import { getDockerWatcherRegistryId, getDockerWatcherSourceKey } from './container-init.js';
+const mockDdEnvVars = vi.hoisted(() => ({}) as Record<string, string | undefined>);
+const mockDetectSourceRepoFromImageMetadata = vi.hoisted(() => vi.fn());
+const mockResolveSourceRepoForContainer = vi.hoisted(() => vi.fn());
+const mockGetFullReleaseNotesForContainer = vi.hoisted(() => vi.fn());
+const mockToContainerReleaseNotes = vi.hoisted(() => vi.fn((notes: unknown) => notes));
+vi.mock('../../../configuration/index.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../configuration/index.js')>()),
+  ddEnvVars: mockDdEnvVars,
+}));
+vi.mock('../../../release-notes/index.js', () => ({
+  detectSourceRepoFromImageMetadata: (...args: unknown[]) =>
+    mockDetectSourceRepoFromImageMetadata(...args),
+  resolveSourceRepoForContainer: (...args: unknown[]) => mockResolveSourceRepoForContainer(...args),
+  getFullReleaseNotesForContainer: (...args: unknown[]) =>
+    mockGetFullReleaseNotesForContainer(...args),
+  toContainerReleaseNotes: (...args: unknown[]) => mockToContainerReleaseNotes(...args),
+}));
+vi.mock('dockerode');
+vi.mock('node-cron');
+vi.mock('just-debounce');
+vi.mock('../../../event');
+vi.mock('../../../store/container');
+vi.mock('../../../model/container');
+vi.mock('../../../prometheus/watcher');
+vi.mock('node:fs');
+vi.mock('axios');
+vi.mock('./maintenance.js', () => ({
+  isInMaintenanceWindow: vi.fn(() => true),
+  getNextMaintenanceWindow: vi.fn(() => undefined),
+}));
+
 import {
-  createDeviceCodeResponse,
-  createDeviceFlowConfig,
-  createDockerContainer,
-  createDockerOidcContext,
-  createDockerOidcStateAdapter,
-  createHaParseMock,
   createHarborHubRegistryState,
   createMockLog,
-  createMockLogWithChild,
-  createOidcConfig,
-  createTokenResponse,
-  mockAxios,
-  mockDdEnvVars,
-  mockDetectSourceRepoFromImageMetadata,
-  mockGetFullReleaseNotesForContainer,
-  mockResolveSourceRepoForContainer,
-  mockToContainerReleaseNotes,
   setupContainerDetailTest,
   setupDockerWatcherContainerSuite,
 } from './Docker.containers.test.helpers.js';
 import {
-  testable_filterBySegmentCount,
-  testable_filterRecreatedContainerAliases,
-  testable_getContainerDisplayName,
-  testable_getContainerName,
-  testable_getCurrentPrefix,
-  testable_getFirstDigitIndex,
-  testable_getImageForRegistryLookup,
   testable_getImageReferenceCandidatesFromPattern,
   testable_getImgsetSpecificity,
-  testable_getInspectValueByPath,
-  testable_getLabel,
-  testable_getOldContainers,
-  testable_normalizeConfigNumberValue,
-  testable_normalizeContainer,
-  testable_pruneOldContainers,
-  testable_shouldUpdateDisplayNameFromContainerName,
 } from './Docker.js';
-import * as maintenance from './maintenance.js';
 
 describe('Docker Watcher', () => {
   let docker;
@@ -53,6 +46,10 @@ describe('Docker Watcher', () => {
   let mockSchedule;
   let mockContainer;
   let mockImage;
+  // Helper-scoped mock references (populated in beforeEach)
+  let hRegistry: any;
+  let hMockTag: any;
+  let hMockParse: any;
 
   setupDockerWatcherContainerSuite((state) => {
     docker = state.docker;
@@ -61,6 +58,20 @@ describe('Docker Watcher', () => {
     mockContainer = state.mockContainer;
     mockImage = state.mockImage;
   });
+
+  beforeEach(async () => {
+    // Dynamic imports get the mocked module instances that the helpers' vi.mock
+    // created. These are the same instances that production code sees.
+    hRegistry = await import('../../../registry/index.js');
+    hMockTag = await import('../../../tag/index.js');
+    hMockParse = (await import('parse-docker-image-name')).default;
+  });
+
+  /** Set registry state on the helper-scoped mock (used by production code). */
+  function setRegistryState(state: Record<string, unknown>) {
+    const value = { registry: state };
+    hRegistry.getState.mockReturnValue(value);
+  }
 
   describe('Additional Coverage - safeRegExp', () => {
     test('should warn when includeTags regex is invalid', async () => {
@@ -72,9 +83,7 @@ describe('Docker Watcher', () => {
           digest: { watch: false },
         },
       };
-      registry.getState.mockReturnValue({
-        registry: { hub: { getTags: vi.fn().mockResolvedValue(['1.0.0', '2.0.0']) } },
-      });
+      setRegistryState({ hub: { getTags: vi.fn().mockResolvedValue(['1.0.0', '2.0.0']) } });
       const logChild = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
       const result = await docker.findNewVersion(container, logChild);
       expect(logChild.warn).toHaveBeenCalledWith(expect.stringContaining('Invalid regex pattern'));
@@ -90,10 +99,8 @@ describe('Docker Watcher', () => {
           digest: { watch: false },
         },
       };
-      registry.getState.mockReturnValue({
-        registry: { hub: { getTags: vi.fn().mockResolvedValue(['1.0.0', '2.0.0']) } },
-      });
-      mockTag.isGreater.mockReturnValue(true);
+      setRegistryState({ hub: { getTags: vi.fn().mockResolvedValue(['1.0.0', '2.0.0']) } });
+      hMockTag.isGreater.mockReturnValue(true);
       const logChild = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
       await docker.findNewVersion(container, logChild);
       expect(logChild.warn).toHaveBeenCalledWith(expect.stringContaining('Invalid regex pattern'));
@@ -109,9 +116,7 @@ describe('Docker Watcher', () => {
           digest: { watch: false },
         },
       };
-      registry.getState.mockReturnValue({
-        registry: { hub: { getTags: vi.fn().mockResolvedValue(['2.0.0']) } },
-      });
+      setRegistryState({ hub: { getTags: vi.fn().mockResolvedValue(['2.0.0']) } });
       const logChild = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
       await docker.findNewVersion(container, logChild);
       expect(logChild.warn).toHaveBeenCalledWith(
@@ -127,9 +132,7 @@ describe('Docker Watcher', () => {
           digest: { watch: false },
         },
       };
-      registry.getState.mockReturnValue({
-        registry: { hub: { getTags: vi.fn().mockResolvedValue(['latest', 'stable']) } },
-      });
+      setRegistryState({ hub: { getTags: vi.fn().mockResolvedValue(['latest', 'stable']) } });
       const logChild = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
       await docker.findNewVersion(container, logChild);
       expect(logChild.warn).toHaveBeenCalledWith(
@@ -148,9 +151,7 @@ describe('Docker Watcher', () => {
           digest: { watch: false },
         },
       };
-      registry.getState.mockReturnValue({
-        registry: { hub: { getTags: vi.fn().mockResolvedValue(['1.0.0', '2.0.0']) } },
-      });
+      setRegistryState({ hub: { getTags: vi.fn().mockResolvedValue(['1.0.0', '2.0.0']) } });
       const logChild = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
       await docker.findNewVersion(container, logChild);
       expect(logChild.warn).toHaveBeenCalledWith(
@@ -244,11 +245,12 @@ describe('Docker Watcher', () => {
           alpha: { image: 'library/nginx', display: { name: 'A' } },
         },
       });
-      mockParse.mockImplementation((v) =>
+      const parseImpl = (v) =>
         v === 'library/nginx'
           ? { path: 'library/nginx' }
-          : { domain: 'docker.io', path: 'library/nginx', tag: '1.0.0' },
-      );
+          : { domain: 'docker.io', path: 'library/nginx', tag: '1.0.0' };
+      hMockParse.mockImplementation(parseImpl);
+      hMockParse.mockImplementation(parseImpl);
       const result = docker.getMatchingImgsetConfiguration({
         path: 'library/nginx',
         domain: 'docker.io',
@@ -286,10 +288,8 @@ describe('Docker Watcher', () => {
           digest: { watch: false },
         },
       };
-      registry.getState.mockReturnValue({
-        registry: { hub: { getTags: vi.fn().mockResolvedValue(['1.0.0', '2.0.0']) } },
-      });
-      mockTag.isGreater.mockReturnValue(true);
+      setRegistryState({ hub: { getTags: vi.fn().mockResolvedValue(['1.0.0', '2.0.0']) } });
+      hMockTag.isGreater.mockReturnValue(true);
       const logChild = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
       await docker.findNewVersion(container, logChild);
       expect(logChild.warn).toHaveBeenCalledWith(expect.stringContaining('exceeds maximum length'));
@@ -305,10 +305,8 @@ describe('Docker Watcher', () => {
           digest: { watch: false },
         },
       };
-      registry.getState.mockReturnValue({
-        registry: { hub: { getTags: vi.fn().mockResolvedValue(['1.0.0', '2.0.0']) } },
-      });
-      mockTag.isGreater.mockReturnValue(true);
+      setRegistryState({ hub: { getTags: vi.fn().mockResolvedValue(['1.0.0', '2.0.0']) } });
+      hMockTag.isGreater.mockReturnValue(true);
       const logChild = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
       await docker.findNewVersion(container, logChild);
       expect(logChild.warn).toHaveBeenCalledWith(expect.stringContaining('exceeds maximum length'));
@@ -325,18 +323,16 @@ describe('Docker Watcher', () => {
         },
         includeTags: '.*',
       };
-      registry.getState.mockReturnValue({
-        registry: { hub: { getTags: vi.fn().mockResolvedValue(['latest', 'stable', '1.0.0']) } },
+      setRegistryState({
+        hub: { getTags: vi.fn().mockResolvedValue(['latest', 'stable', '1.0.0']) },
       });
-      // Make transform return 'nonnumeric' for the current tag to hit numericPart === null
-      mockTag.transform.mockImplementation((_transform, tag) =>
+      hMockTag.transform.mockImplementation((_transform, tag) =>
         tag === 'latest' ? 'nonnumeric' : tag,
       );
-      mockTag.parse.mockReturnValue({ major: 1, minor: 0, patch: 0 });
-      mockTag.isGreater.mockReturnValue(true);
+      hMockTag.parse.mockReturnValue({ major: 1, minor: 0, patch: 0 });
+      hMockTag.isGreater.mockReturnValue(true);
       const logChild = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
       await docker.findNewVersion(container, logChild);
-      // Should not crash; tags pass through
       expect(logChild.error).not.toHaveBeenCalled();
     });
   });
@@ -372,7 +368,7 @@ describe('Docker Watcher', () => {
           version: 1,
         }),
       };
-      registry.getState.mockReturnValue({ registry: { hub: mockRegistry } });
+      setRegistryState({ hub: mockRegistry });
       const mockLogChild = { error: vi.fn() };
 
       await docker.findNewVersion(container, mockLogChild);
@@ -398,7 +394,7 @@ describe('Docker Watcher', () => {
           version: 1,
         }),
       };
-      registry.getState.mockReturnValue({ registry: { hub: mockRegistry } });
+      setRegistryState({ hub: mockRegistry });
       const mockLogChild = { error: vi.fn() };
 
       await docker.findNewVersion(container, mockLogChild);
@@ -410,7 +406,6 @@ describe('Docker Watcher', () => {
   describe('Additional Coverage - getMatchingImgsetConfiguration with no image pattern', () => {
     test('should skip imgset entries without image/match key', async () => {
       await docker.register('watcher', 'docker', 'test', {});
-      // Set imgset directly to bypass Joi validation requiring image field
       docker.configuration.imgset = {
         noimage: { display: { name: 'No Image Entry' } },
       };
@@ -519,7 +514,8 @@ describe('Docker Watcher', () => {
         parsedImage: { domain: 'ghcr.io', path: 'example/service', tag: 'latest' },
         semverValue: null,
       });
-      mockTag.transform.mockImplementation((_transform, value) => value);
+      hMockTag.transform.mockImplementation((_transform, value) => value);
+      hMockTag.transform.mockImplementation((_transform, value) => value);
       const result = await docker.addImageDetailsToContainer(container);
       expect(result.image.tag.value).toBe('latest');
     });
@@ -560,7 +556,8 @@ describe('Docker Watcher', () => {
     test('should handle imgset with empty image pattern', async () => {
       await docker.register('watcher', 'docker', 'test', {});
       docker.configuration.imgset = { weird: { image: '   ' } };
-      mockParse.mockReturnValue({ path: undefined });
+      hMockParse.mockReturnValue({ path: undefined });
+      hMockParse.mockReturnValue({ path: undefined });
       const result = docker.getMatchingImgsetConfiguration({
         path: 'library/nginx',
         domain: 'docker.io',
@@ -572,7 +569,9 @@ describe('Docker Watcher', () => {
       await docker.register('watcher', 'docker', 'test', {
         imgset: { test: { image: 'library/nginx' } },
       });
-      mockParse.mockImplementation((v) => (v === 'library/nginx' ? { path: 'library/nginx' } : {}));
+      const parseImpl = (v) => (v === 'library/nginx' ? { path: 'library/nginx' } : {});
+      hMockParse.mockImplementation(parseImpl);
+      hMockParse.mockImplementation(parseImpl);
       const result = docker.getMatchingImgsetConfiguration({ path: undefined, domain: undefined });
       expect(result).toBeUndefined();
     });
@@ -582,14 +581,17 @@ describe('Docker Watcher', () => {
     });
 
     test('helper should fallback to normalized pattern when parsed pattern has no path', () => {
-      mockParse.mockReturnValue({ path: undefined });
+      hMockParse.mockReturnValue({ path: undefined });
+      hMockParse.mockReturnValue({ path: undefined });
       expect(testable_getImageReferenceCandidatesFromPattern('docker.io')).toEqual(['docker.io']);
     });
 
     test('helper should fallback to normalized pattern when parser throws', () => {
-      mockParse.mockImplementation(() => {
+      const throwImpl = () => {
         throw new Error('invalid pattern');
-      });
+      };
+      hMockParse.mockImplementation(throwImpl);
+      hMockParse.mockImplementation(throwImpl);
       expect(testable_getImageReferenceCandidatesFromPattern('INVALID[')).toEqual(['invalid[']);
     });
 
@@ -600,7 +602,8 @@ describe('Docker Watcher', () => {
     });
 
     test('helper should avoid array includes for candidate membership checks', () => {
-      mockParse.mockReturnValue({ path: 'library/nginx', domain: 'docker.io' });
+      hMockParse.mockReturnValue({ path: 'library/nginx', domain: 'docker.io' });
+      hMockParse.mockReturnValue({ path: 'library/nginx', domain: 'docker.io' });
       const includesSpy = vi.spyOn(Array.prototype, 'includes');
       const beforeCallCount = includesSpy.mock.calls.length;
       const specificity = testable_getImgsetSpecificity('library/nginx', {

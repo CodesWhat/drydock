@@ -1,30 +1,42 @@
-import mockParse from 'parse-docker-image-name';
-import * as event from '../../../event/index.js';
-import { fullName } from '../../../model/container.js';
-import * as mockPrometheus from '../../../prometheus/watcher.js';
+const mockDdEnvVars = vi.hoisted(() => ({}) as Record<string, string | undefined>);
+const mockDetectSourceRepoFromImageMetadata = vi.hoisted(() => vi.fn());
+const mockResolveSourceRepoForContainer = vi.hoisted(() => vi.fn());
+const mockGetFullReleaseNotesForContainer = vi.hoisted(() => vi.fn());
+const mockToContainerReleaseNotes = vi.hoisted(() => vi.fn((notes: unknown) => notes));
+vi.mock('../../../configuration/index.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../configuration/index.js')>()),
+  ddEnvVars: mockDdEnvVars,
+}));
+vi.mock('../../../release-notes/index.js', () => ({
+  detectSourceRepoFromImageMetadata: (...args: unknown[]) =>
+    mockDetectSourceRepoFromImageMetadata(...args),
+  resolveSourceRepoForContainer: (...args: unknown[]) => mockResolveSourceRepoForContainer(...args),
+  getFullReleaseNotesForContainer: (...args: unknown[]) =>
+    mockGetFullReleaseNotesForContainer(...args),
+  toContainerReleaseNotes: (...args: unknown[]) => mockToContainerReleaseNotes(...args),
+}));
+vi.mock('dockerode');
+vi.mock('node-cron');
+vi.mock('just-debounce');
+vi.mock('../../../event');
+vi.mock('../../../store/container.js');
+vi.mock('../../../registry/index.js');
+vi.mock('../../../model/container');
+vi.mock('../../../tag');
+vi.mock('../../../prometheus/watcher');
+vi.mock('parse-docker-image-name');
+vi.mock('node:fs');
+vi.mock('axios');
+vi.mock('./maintenance.js', () => ({
+  isInMaintenanceWindow: vi.fn(() => true),
+  getNextMaintenanceWindow: vi.fn(() => undefined),
+}));
+
 import * as registry from '../../../registry/index.js';
 import * as storeContainer from '../../../store/container.js';
-import * as mockTag from '../../../tag/index.js';
 import { getDockerWatcherRegistryId, getDockerWatcherSourceKey } from './container-init.js';
 import {
-  createDeviceCodeResponse,
-  createDeviceFlowConfig,
-  createDockerContainer,
-  createDockerOidcContext,
-  createDockerOidcStateAdapter,
-  createHaParseMock,
-  createHarborHubRegistryState,
   createMockLog,
-  createMockLogWithChild,
-  createOidcConfig,
-  createTokenResponse,
-  mockAxios,
-  mockDdEnvVars,
-  mockDetectSourceRepoFromImageMetadata,
-  mockGetFullReleaseNotesForContainer,
-  mockResolveSourceRepoForContainer,
-  mockToContainerReleaseNotes,
-  setupContainerDetailTest,
   setupDockerWatcherContainerSuite,
 } from './Docker.containers.test.helpers.js';
 import {
@@ -35,8 +47,6 @@ import {
   testable_getCurrentPrefix,
   testable_getFirstDigitIndex,
   testable_getImageForRegistryLookup,
-  testable_getImageReferenceCandidatesFromPattern,
-  testable_getImgsetSpecificity,
   testable_getInspectValueByPath,
   testable_getLabel,
   testable_getOldContainers,
@@ -45,7 +55,6 @@ import {
   testable_pruneOldContainers,
   testable_shouldUpdateDisplayNameFromContainerName,
 } from './Docker.js';
-import * as maintenance from './maintenance.js';
 
 describe('Docker Watcher', () => {
   let docker;
@@ -629,6 +638,17 @@ describe('Docker Watcher', () => {
   });
 
   describe('Additional Coverage - getContainers same-source filtering', () => {
+    // Docker.ts gets its registry/storeContainer references from a mock version
+    // created by the helpers file's runtime vi.mock() call, which differs from
+    // the test file's static import. Use dynamic imports to get the same instance.
+    let hRegistry: any;
+    let hStoreContainer: any;
+
+    beforeEach(async () => {
+      hRegistry = await import('../../../registry/index.js');
+      hStoreContainer = await import('../../../store/container.js');
+    });
+
     test('should normalize a non-string watcher agent when grouping same-source containers', async () => {
       await docker.register(
         'watcher',
@@ -644,14 +664,14 @@ describe('Docker Watcher', () => {
       );
       docker.agent = 42 as any;
       mockDockerApi.listContainers.mockResolvedValue([]);
-      storeContainer.getContainers.mockImplementation((query?: { watcher?: string }) =>
+      hStoreContainer.getContainers.mockImplementation((query?: { watcher?: string }) =>
         query?.watcher ? [] : [],
       );
-      registry.getState.mockReturnValue({ watcher: {} } as any);
+      hRegistry.getState.mockReturnValue({ watcher: {} } as any);
 
       await docker.getContainers();
 
-      expect(registry.getState).toHaveBeenCalled();
+      expect(hRegistry.getState).toHaveBeenCalled();
     });
 
     test('should fall back to current containers when same-source lookup fails', async () => {
@@ -660,10 +680,10 @@ describe('Docker Watcher', () => {
       });
       docker.log = createMockLog(['warn']);
       mockDockerApi.listContainers.mockResolvedValue([]);
-      storeContainer.getContainers.mockImplementation((query?: { watcher?: string }) =>
+      hStoreContainer.getContainers.mockImplementation((query?: { watcher?: string }) =>
         query?.watcher ? [] : [],
       );
-      registry.getState.mockImplementation(() => {
+      hRegistry.getState.mockImplementation(() => {
         throw new Error('Registry unavailable');
       });
 
@@ -687,7 +707,7 @@ describe('Docker Watcher', () => {
         '',
       );
       mockDockerApi.listContainers.mockResolvedValue([]);
-      storeContainer.getContainers.mockImplementation((query?: { watcher?: string }) => {
+      hStoreContainer.getContainers.mockImplementation((query?: { watcher?: string }) => {
         if (query?.watcher) {
           return [];
         }
@@ -725,7 +745,7 @@ describe('Docker Watcher', () => {
           },
         ] as any;
       });
-      registry.getState.mockReturnValue({
+      hRegistry.getState.mockReturnValue({
         watcher: {
           'docker.docker-same-source': {
             type: 'docker',
@@ -752,7 +772,7 @@ describe('Docker Watcher', () => {
 
       await docker.getContainers();
 
-      expect(storeContainer.deleteContainer).not.toHaveBeenCalled();
+      expect(hStoreContainer.deleteContainer).not.toHaveBeenCalled();
     });
   });
 

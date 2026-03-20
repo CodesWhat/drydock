@@ -1,26 +1,14 @@
-import { EventEmitter } from 'node:events';
 import { watch } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import yaml from 'yaml';
-import { emitContainerUpdateApplied, emitContainerUpdateFailed } from '../../../event/index.js';
 import { getState } from '../../../registry/index.js';
-import * as backupStore from '../../../store/backup.js';
-import { sleep } from '../../../util/sleep.js';
-import Dockercompose, {
-  testable_hasExplicitRegistryHost,
-  testable_normalizeImplicitLatest,
-  testable_normalizePostStartEnvironmentValue,
-  testable_normalizePostStartHooks,
-  testable_updateComposeServiceImageInText,
-} from './Dockercompose.js';
+import Dockercompose from './Dockercompose.js';
 import {
   makeCompose,
   makeContainer,
   makeDockerContainerHandle,
   makeExecMocks,
   setupDockercomposeTestContext,
-  spyOnProcessComposeHelpers,
 } from './Dockercompose.test.helpers.js';
 
 vi.mock('../../../registry', () => ({

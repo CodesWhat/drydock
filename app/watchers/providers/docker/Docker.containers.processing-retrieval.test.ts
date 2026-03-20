@@ -1,51 +1,11 @@
-import mockParse from 'parse-docker-image-name';
-import * as event from '../../../event/index.js';
-import { fullName } from '../../../model/container.js';
-import * as mockPrometheus from '../../../prometheus/watcher.js';
-import * as registry from '../../../registry/index.js';
-import * as storeContainer from '../../../store/container.js';
-import * as mockTag from '../../../tag/index.js';
-import { getDockerWatcherRegistryId, getDockerWatcherSourceKey } from './container-init.js';
 import {
-  createDeviceCodeResponse,
-  createDeviceFlowConfig,
-  createDockerContainer,
-  createDockerOidcContext,
-  createDockerOidcStateAdapter,
-  createHaParseMock,
-  createHarborHubRegistryState,
   createMockLog,
   createMockLogWithChild,
-  createOidcConfig,
-  createTokenResponse,
-  mockAxios,
-  mockDdEnvVars,
-  mockDetectSourceRepoFromImageMetadata,
   mockGetFullReleaseNotesForContainer,
   mockResolveSourceRepoForContainer,
   mockToContainerReleaseNotes,
-  setupContainerDetailTest,
   setupDockerWatcherContainerSuite,
 } from './Docker.containers.test.helpers.js';
-import {
-  testable_filterBySegmentCount,
-  testable_filterRecreatedContainerAliases,
-  testable_getContainerDisplayName,
-  testable_getContainerName,
-  testable_getCurrentPrefix,
-  testable_getFirstDigitIndex,
-  testable_getImageForRegistryLookup,
-  testable_getImageReferenceCandidatesFromPattern,
-  testable_getImgsetSpecificity,
-  testable_getInspectValueByPath,
-  testable_getLabel,
-  testable_getOldContainers,
-  testable_normalizeConfigNumberValue,
-  testable_normalizeContainer,
-  testable_pruneOldContainers,
-  testable_shouldUpdateDisplayNameFromContainerName,
-} from './Docker.js';
-import * as maintenance from './maintenance.js';
 
 describe('Docker Watcher', () => {
   let docker;
@@ -53,6 +13,8 @@ describe('Docker Watcher', () => {
   let mockSchedule;
   let mockContainer;
   let mockImage;
+  let hEvent: any;
+  let hStoreContainer: any;
 
   setupDockerWatcherContainerSuite((state) => {
     docker = state.docker;
@@ -60,6 +22,11 @@ describe('Docker Watcher', () => {
     mockSchedule = state.mockSchedule;
     mockContainer = state.mockContainer;
     mockImage = state.mockImage;
+  });
+
+  beforeEach(async () => {
+    hEvent = await import('../../../event/index.js');
+    hStoreContainer = await import('../../../store/container.js');
   });
 
   describe('Container Processing', () => {
@@ -73,7 +40,7 @@ describe('Docker Watcher', () => {
       await docker.watchContainer(container);
 
       expect(docker.findNewVersion).toHaveBeenCalledWith(container, expect.any(Object));
-      expect(event.emitContainerReport).toHaveBeenCalled();
+      expect(hEvent.emitContainerReport).toHaveBeenCalled();
     });
 
     test('should handle container processing error', async () => {
@@ -506,7 +473,7 @@ describe('Docker Watcher', () => {
 
     test('should prune old containers', async () => {
       const oldContainers = [{ id: 'old1' }, { id: 'old2' }];
-      storeContainer.getContainers.mockReturnValue(oldContainers);
+      hStoreContainer.getContainers.mockReturnValue(oldContainers);
       mockDockerApi.listContainers.mockResolvedValue([]);
       // Simulate containers no longer existing in Docker
       mockDockerApi.getContainer.mockReturnValue({
@@ -516,17 +483,17 @@ describe('Docker Watcher', () => {
       await docker.register('watcher', 'docker', 'test', {});
       await docker.getContainers();
 
-      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('old1');
-      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('old2');
+      expect(hStoreContainer.deleteContainer).toHaveBeenCalledWith('old1');
+      expect(hStoreContainer.deleteContainer).toHaveBeenCalledWith('old2');
     });
 
     test('should continue when pruneOldContainers throws during stale record cleanup', async () => {
       await docker.register('watcher', 'docker', 'test', {});
       docker.log = createMockLog(['warn']);
-      storeContainer.getContainers.mockReturnValue([
+      hStoreContainer.getContainers.mockReturnValue([
         { id: 'old1', watcher: 'test', name: 'svc' } as any,
       ]);
-      storeContainer.deleteContainer.mockImplementation(() => {
+      hStoreContainer.deleteContainer.mockImplementation(() => {
         throw new Error('Delete failed');
       });
       mockDockerApi.listContainers.mockResolvedValue([
@@ -551,7 +518,7 @@ describe('Docker Watcher', () => {
     test('should handle pruning error', async () => {
       await docker.register('watcher', 'docker', 'test', {});
       docker.log = createMockLog(['warn']);
-      storeContainer.getContainers.mockImplementationOnce(() => {
+      hStoreContainer.getContainers.mockImplementationOnce(() => {
         throw new Error('Store error');
       });
       mockDockerApi.listContainers.mockResolvedValue([]);

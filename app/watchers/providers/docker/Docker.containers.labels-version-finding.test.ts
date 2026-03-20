@@ -1,51 +1,5 @@
-import mockParse from 'parse-docker-image-name';
-import * as event from '../../../event/index.js';
-import { fullName } from '../../../model/container.js';
-import * as mockPrometheus from '../../../prometheus/watcher.js';
-import * as registry from '../../../registry/index.js';
-import * as storeContainer from '../../../store/container.js';
-import * as mockTag from '../../../tag/index.js';
-import { getDockerWatcherRegistryId, getDockerWatcherSourceKey } from './container-init.js';
-import {
-  createDeviceCodeResponse,
-  createDeviceFlowConfig,
-  createDockerContainer,
-  createDockerOidcContext,
-  createDockerOidcStateAdapter,
-  createHaParseMock,
-  createHarborHubRegistryState,
-  createMockLog,
-  createMockLogWithChild,
-  createOidcConfig,
-  createTokenResponse,
-  mockAxios,
-  mockDdEnvVars,
-  mockDetectSourceRepoFromImageMetadata,
-  mockGetFullReleaseNotesForContainer,
-  mockResolveSourceRepoForContainer,
-  mockToContainerReleaseNotes,
-  setupContainerDetailTest,
-  setupDockerWatcherContainerSuite,
-} from './Docker.containers.test.helpers.js';
-import {
-  testable_filterBySegmentCount,
-  testable_filterRecreatedContainerAliases,
-  testable_getContainerDisplayName,
-  testable_getContainerName,
-  testable_getCurrentPrefix,
-  testable_getFirstDigitIndex,
-  testable_getImageForRegistryLookup,
-  testable_getImageReferenceCandidatesFromPattern,
-  testable_getImgsetSpecificity,
-  testable_getInspectValueByPath,
-  testable_getLabel,
-  testable_getOldContainers,
-  testable_normalizeConfigNumberValue,
-  testable_normalizeContainer,
-  testable_pruneOldContainers,
-  testable_shouldUpdateDisplayNameFromContainerName,
-} from './Docker.js';
-import * as maintenance from './maintenance.js';
+import { setupDockerWatcherContainerSuite } from './Docker.containers.test.helpers.js';
+import { testable_getLabel } from './Docker.js';
 
 describe('Docker Watcher', () => {
   let docker;
@@ -53,6 +7,8 @@ describe('Docker Watcher', () => {
   let mockSchedule;
   let mockContainer;
   let mockImage;
+  let hRegistry: any;
+  let hMockTag: any;
 
   setupDockerWatcherContainerSuite((state) => {
     docker = state.docker;
@@ -60,6 +16,11 @@ describe('Docker Watcher', () => {
     mockSchedule = state.mockSchedule;
     mockContainer = state.mockContainer;
     mockImage = state.mockImage;
+  });
+
+  beforeEach(async () => {
+    hRegistry = await import('../../../registry/index.js');
+    hMockTag = await import('../../../tag/index.js');
   });
 
   describe('Dual-prefix dd.*/wud.* label support', () => {
@@ -135,8 +96,8 @@ describe('Docker Watcher', () => {
         ['dd.tag.exclude', 'wud.tag.exclude'],
         ['dd.tag.transform', 'wud.tag.transform'],
         ['dd.inspect.tag.path', 'wud.inspect.tag.path'],
-        ['dd.registry.lookup.image', 'wud.registry.lookup.image'],
-        ['dd.registry.lookup.url', 'wud.registry.lookup.url'],
+        ['dd.hRegistry.lookup.image', 'wud.hRegistry.lookup.image'],
+        ['dd.hRegistry.lookup.url', 'wud.hRegistry.lookup.url'],
         ['dd.watch.digest', 'wud.watch.digest'],
         ['dd.link.template', 'wud.link.template'],
         ['dd.display.name', 'wud.display.name'],
@@ -183,7 +144,7 @@ describe('Docker Watcher', () => {
       const mockRegistry = {
         getTags: vi.fn().mockResolvedValue(['1.0.0', '1.1.0', '2.0.0']),
       };
-      registry.getState.mockReturnValue({
+      hRegistry.getState.mockReturnValue({
         registry: { hub: mockRegistry },
       });
       const mockLogChild = { error: vi.fn() };
@@ -206,7 +167,7 @@ describe('Docker Watcher', () => {
         getTags: vi.fn().mockResolvedValue(['1.0.0']),
         getImagePublishedAt: vi.fn().mockResolvedValue('2026-03-10T10:00:00.000Z'),
       };
-      registry.getState.mockReturnValue({
+      hRegistry.getState.mockReturnValue({
         registry: { hub: mockRegistry },
       });
       const mockLogChild = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
@@ -232,7 +193,7 @@ describe('Docker Watcher', () => {
         getTags: vi.fn().mockResolvedValue([]),
         getImagePublishedAt: vi.fn().mockResolvedValue('2026-03-01T10:00:00.000Z'),
       };
-      registry.getState.mockReturnValue({
+      hRegistry.getState.mockReturnValue({
         registry: { hub: mockRegistry },
       });
       const mockLogChild = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
@@ -256,7 +217,7 @@ describe('Docker Watcher', () => {
         getTags: vi.fn().mockResolvedValue(['1.0.0']),
         getImagePublishedAt: vi.fn().mockResolvedValue(new Date('2026-03-10T10:00:00.000Z')),
       };
-      registry.getState.mockReturnValue({
+      hRegistry.getState.mockReturnValue({
         registry: { hub: mockRegistry },
       });
       const mockLogChild = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
@@ -278,7 +239,7 @@ describe('Docker Watcher', () => {
         getTags: vi.fn().mockResolvedValue(['1.0.0']),
         getImagePublishedAt: vi.fn().mockRejectedValue(new Error('metadata unavailable')),
       };
-      registry.getState.mockReturnValue({
+      hRegistry.getState.mockReturnValue({
         registry: { hub: mockRegistry },
       });
       const mockLogChild = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
@@ -303,7 +264,7 @@ describe('Docker Watcher', () => {
         getTags: vi.fn().mockResolvedValue(['1.0.0']),
         getImagePublishedAt: vi.fn().mockRejectedValue(new Error('metadata unavailable')),
       };
-      registry.getState.mockReturnValue({
+      hRegistry.getState.mockReturnValue({
         registry: { hub: mockRegistry },
       });
       const mockLogChild = { error: vi.fn(), warn: vi.fn() };
@@ -321,7 +282,7 @@ describe('Docker Watcher', () => {
           digest: { watch: false },
         },
       };
-      registry.getState.mockReturnValue({ registry: {} });
+      hRegistry.getState.mockReturnValue({ registry: {} });
       const mockLogChild = { error: vi.fn() };
 
       try {
@@ -353,7 +314,7 @@ describe('Docker Watcher', () => {
             digest: 'sha256:manifest123',
           }),
       };
-      registry.getState.mockReturnValue({
+      hRegistry.getState.mockReturnValue({
         registry: { hub: mockRegistry },
       });
       const mockLogChild = { error: vi.fn() };
@@ -383,7 +344,7 @@ describe('Docker Watcher', () => {
           version: 1,
         }),
       };
-      registry.getState.mockReturnValue({
+      hRegistry.getState.mockReturnValue({
         registry: { hub: mockRegistry },
       });
       const mockLogChild = { error: vi.fn() };
@@ -415,11 +376,11 @@ describe('Docker Watcher', () => {
             digest: 'sha256:manifest123',
           }),
       };
-      registry.getState.mockReturnValue({
+      hRegistry.getState.mockReturnValue({
         registry: { hub: mockRegistry },
       });
-      mockTag.parse.mockReturnValue({ major: 1, minor: 0, patch: 0 });
-      mockTag.isGreater.mockImplementation((t2, t1) => {
+      hMockTag.parse.mockReturnValue({ major: 1, minor: 0, patch: 0 });
+      hMockTag.isGreater.mockImplementation((t2, t1) => {
         return t2 === '2.0.0' && t1 === '1.0.0';
       });
       const mockLogChild = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
@@ -445,11 +406,11 @@ describe('Docker Watcher', () => {
       const mockRegistry = {
         getTags: vi.fn().mockResolvedValue(['v1.0.0', 'v1.1.0', 'v2.0.0-beta', 'latest']),
       };
-      registry.getState.mockReturnValue({
+      hRegistry.getState.mockReturnValue({
         registry: { hub: mockRegistry },
       });
-      mockTag.parse.mockReturnValue({ major: 1, minor: 1, patch: 0 });
-      mockTag.isGreater.mockReturnValue(true);
+      hMockTag.parse.mockReturnValue({ major: 1, minor: 1, patch: 0 });
+      hMockTag.isGreater.mockReturnValue(true);
       const mockLogChild = { error: vi.fn(), warn: vi.fn() };
 
       await docker.findNewVersion(container, mockLogChild);
@@ -473,12 +434,12 @@ describe('Docker Watcher', () => {
           '2', // 1 part, should be filtered out
         ]),
       };
-      registry.getState.mockReturnValue({
+      hRegistry.getState.mockReturnValue({
         registry: { hub: mockRegistry },
       });
 
       // Mock isGreater to return true for 1.3 > 1.2
-      mockTag.isGreater.mockImplementation((t1, t2) => {
+      hMockTag.isGreater.mockImplementation((t1, t2) => {
         if (t1 === '1.3' && t2 === '1.2') return true;
         return false;
       });
@@ -501,7 +462,7 @@ describe('Docker Watcher', () => {
       const mockRegistry = {
         getTags: vi.fn().mockResolvedValue(['20.04.1', '5.1.5', '5.1.4']),
       };
-      registry.getState.mockReturnValue({
+      hRegistry.getState.mockReturnValue({
         registry: { hub: mockRegistry },
       });
 
@@ -510,7 +471,7 @@ describe('Docker Watcher', () => {
         '5.1.5': 515,
         '20.04.1': 200401,
       };
-      mockTag.isGreater.mockImplementation(
+      hMockTag.isGreater.mockImplementation(
         (version1, version2) => rank[version1] >= rank[version2],
       );
 
@@ -531,7 +492,7 @@ describe('Docker Watcher', () => {
       const mockRegistry = {
         getTags: vi.fn().mockResolvedValue(['1.2.4', '1.2.4-ls133', '1.2.3-ls132']),
       };
-      registry.getState.mockReturnValue({
+      hRegistry.getState.mockReturnValue({
         registry: { hub: mockRegistry },
       });
 
@@ -540,7 +501,7 @@ describe('Docker Watcher', () => {
         '1.2.4-ls133': 1240,
         '1.2.4': 1241,
       };
-      mockTag.isGreater.mockImplementation(
+      hMockTag.isGreater.mockImplementation(
         (version1, version2) => rank[version1] >= rank[version2],
       );
 
@@ -561,7 +522,7 @@ describe('Docker Watcher', () => {
       const mockRegistry = {
         getTags: vi.fn().mockResolvedValue(['1.2.4', '1.2.3-ls132']),
       };
-      registry.getState.mockReturnValue({
+      hRegistry.getState.mockReturnValue({
         registry: { hub: mockRegistry },
       });
 
@@ -569,7 +530,7 @@ describe('Docker Watcher', () => {
         '1.2.3-ls132': 1230,
         '1.2.4': 1241,
       };
-      mockTag.isGreater.mockImplementation(
+      hMockTag.isGreater.mockImplementation(
         (version1, version2) => (rank[version1] || 0) > (rank[version2] || 0),
       );
 
@@ -601,7 +562,7 @@ describe('Docker Watcher', () => {
       const mockRegistry = {
         getTags: vi.fn().mockResolvedValue(['1.2.4', '1.2.3-ls132']),
       };
-      registry.getState.mockReturnValue({
+      hRegistry.getState.mockReturnValue({
         registry: { hub: mockRegistry },
       });
 
@@ -609,7 +570,7 @@ describe('Docker Watcher', () => {
         '1.2.3-ls132': 1230,
         '1.2.4': 1241,
       };
-      mockTag.isGreater.mockImplementation(
+      hMockTag.isGreater.mockImplementation(
         (version1, version2) => (rank[version1] || 0) > (rank[version2] || 0),
       );
 
@@ -631,7 +592,7 @@ describe('Docker Watcher', () => {
       const mockRegistry = {
         getTags: vi.fn().mockResolvedValue(['1.2.4', '1.2.4-ls133', '1.2.3-ls132']),
       };
-      registry.getState.mockReturnValue({
+      hRegistry.getState.mockReturnValue({
         registry: { hub: mockRegistry },
       });
 
@@ -640,7 +601,7 @@ describe('Docker Watcher', () => {
         '1.2.4-ls133': 1240,
         '1.2.4': 1241,
       };
-      mockTag.isGreater.mockImplementation(
+      hMockTag.isGreater.mockImplementation(
         (version1, version2) => rank[version1] >= rank[version2],
       );
 
@@ -662,7 +623,7 @@ describe('Docker Watcher', () => {
       const mockRegistry = {
         getTags: vi.fn().mockResolvedValue(['1.2.4', '1.2.4-ls133', '1.2.3-ls132']),
       };
-      registry.getState.mockReturnValue({
+      hRegistry.getState.mockReturnValue({
         registry: { hub: mockRegistry },
       });
 
@@ -671,7 +632,7 @@ describe('Docker Watcher', () => {
         '1.2.4-ls133': 1240,
         '1.2.4': 1241,
       };
-      mockTag.isGreater.mockImplementation(
+      hMockTag.isGreater.mockImplementation(
         (version1, version2) => rank[version1] >= rank[version2],
       );
 
@@ -695,7 +656,7 @@ describe('Docker Watcher', () => {
       const mockRegistry = {
         getTags: vi.fn().mockResolvedValue(['latest', 'v1.0.0', 'v1.1.0', 'v2.0.0', '1.2.0']),
       };
-      registry.getState.mockReturnValue({
+      hRegistry.getState.mockReturnValue({
         registry: { hub: mockRegistry },
       });
 
@@ -704,7 +665,7 @@ describe('Docker Watcher', () => {
         'v1.1.0': 110,
         'v2.0.0': 200,
       };
-      mockTag.isGreater.mockImplementation(
+      hMockTag.isGreater.mockImplementation(
         (version1, version2) => (rank[version1] || 0) > (rank[version2] || 0),
       );
 
@@ -731,7 +692,7 @@ describe('Docker Watcher', () => {
       const mockRegistry = {
         getTags: vi.fn().mockResolvedValue(['1.8.0', '1.9.0', '2.1.0']),
       };
-      registry.getState.mockReturnValue({
+      hRegistry.getState.mockReturnValue({
         registry: { hub: mockRegistry },
       });
 
@@ -741,10 +702,10 @@ describe('Docker Watcher', () => {
         '2.0.0': 200,
         '2.1.0': 210,
       };
-      mockTag.isGreater.mockImplementation(
+      hMockTag.isGreater.mockImplementation(
         (version1, version2) => rank[version1] >= rank[version2],
       );
-      mockTag.parse.mockImplementation((version) => {
+      hMockTag.parse.mockImplementation((version) => {
         const score = rank[version];
         if (!score) {
           return null;
@@ -780,7 +741,7 @@ describe('Docker Watcher', () => {
       const mockRegistry = {
         getTags: vi.fn().mockResolvedValue(['latest', 'rolling', '1.0.0', '2.0.0', '3.0.0']),
       };
-      registry.getState.mockReturnValue({
+      hRegistry.getState.mockReturnValue({
         registry: { hub: mockRegistry },
       });
 
@@ -789,10 +750,10 @@ describe('Docker Watcher', () => {
         '2.0.0': 200,
         '3.0.0': 300,
       };
-      mockTag.isGreater.mockImplementation(
+      hMockTag.isGreater.mockImplementation(
         (version1, version2) => rank[version1] >= rank[version2],
       );
-      mockTag.parse.mockImplementation((version) =>
+      hMockTag.parse.mockImplementation((version) =>
         rank[version] ? { major: 1, minor: 0, patch: 0 } : null,
       );
 
@@ -824,11 +785,11 @@ describe('Docker Watcher', () => {
       const mockRegistry = {
         getTags: vi.fn().mockResolvedValue(['latest', '1.0.0', '2.0.0']),
       };
-      registry.getState.mockReturnValue({
+      hRegistry.getState.mockReturnValue({
         registry: { hub: mockRegistry },
       });
 
-      mockTag.parse.mockReturnValue(null);
+      hMockTag.parse.mockReturnValue(null);
 
       const mockLogChild = {
         error: vi.fn(),
@@ -853,11 +814,11 @@ describe('Docker Watcher', () => {
       const mockRegistry = {
         getTags: vi.fn().mockResolvedValue(['latest', '1.27.2', '1.27.3', '1.28.0-rc.1']),
       };
-      registry.getState.mockReturnValue({
+      hRegistry.getState.mockReturnValue({
         registry: { hub: mockRegistry },
       });
 
-      mockTag.parse.mockImplementation((tag) => {
+      hMockTag.parse.mockImplementation((tag) => {
         if (tag === '1.27.2') return { major: 1, minor: 27, patch: 2, prerelease: [] };
         if (tag === '1.27.3') return { major: 1, minor: 27, patch: 3, prerelease: [] };
         if (tag === '1.28.0-rc.1') return { major: 1, minor: 28, patch: 0, prerelease: ['rc', 1] };
@@ -884,11 +845,11 @@ describe('Docker Watcher', () => {
       const mockRegistry = {
         getTags: vi.fn().mockResolvedValue(['latest', 'nightly', '1.28.0-beta']),
       };
-      registry.getState.mockReturnValue({
+      hRegistry.getState.mockReturnValue({
         registry: { hub: mockRegistry },
       });
 
-      mockTag.parse.mockImplementation((tag) => {
+      hMockTag.parse.mockImplementation((tag) => {
         if (tag === '1.28.0-beta') return { major: 1, minor: 28, patch: 0, prerelease: ['beta'] };
         return null;
       });

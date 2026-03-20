@@ -1,51 +1,9 @@
-import mockParse from 'parse-docker-image-name';
-import * as event from '../../../event/index.js';
-import { fullName } from '../../../model/container.js';
-import * as mockPrometheus from '../../../prometheus/watcher.js';
-import * as registry from '../../../registry/index.js';
-import * as storeContainer from '../../../store/container.js';
-import * as mockTag from '../../../tag/index.js';
-import { getDockerWatcherRegistryId, getDockerWatcherSourceKey } from './container-init.js';
 import {
-  createDeviceCodeResponse,
-  createDeviceFlowConfig,
-  createDockerContainer,
-  createDockerOidcContext,
-  createDockerOidcStateAdapter,
-  createHaParseMock,
-  createHarborHubRegistryState,
-  createMockLog,
   createMockLogWithChild,
-  createOidcConfig,
-  createTokenResponse,
-  mockAxios,
-  mockDdEnvVars,
-  mockDetectSourceRepoFromImageMetadata,
-  mockGetFullReleaseNotesForContainer,
-  mockResolveSourceRepoForContainer,
-  mockToContainerReleaseNotes,
-  setupContainerDetailTest,
   setupDockerWatcherContainerSuite,
 } from './Docker.containers.test.helpers.js';
-import {
-  testable_filterBySegmentCount,
-  testable_filterRecreatedContainerAliases,
-  testable_getContainerDisplayName,
-  testable_getContainerName,
-  testable_getCurrentPrefix,
-  testable_getFirstDigitIndex,
-  testable_getImageForRegistryLookup,
-  testable_getImageReferenceCandidatesFromPattern,
-  testable_getImgsetSpecificity,
-  testable_getInspectValueByPath,
-  testable_getLabel,
-  testable_getOldContainers,
-  testable_normalizeConfigNumberValue,
-  testable_normalizeContainer,
-  testable_pruneOldContainers,
-  testable_shouldUpdateDisplayNameFromContainerName,
-} from './Docker.js';
-import * as maintenance from './maintenance.js';
+
+let hStoreContainer: any;
 
 describe('Docker Watcher', () => {
   let docker;
@@ -62,17 +20,21 @@ describe('Docker Watcher', () => {
     mockImage = state.mockImage;
   });
 
+  beforeEach(async () => {
+    hStoreContainer = await import('../../../store/container.js');
+  });
+
   describe('Container Reporting', () => {
     test('should map container to report for new container', async () => {
       const container = { id: '123', name: 'test' };
       docker.log = createMockLogWithChild(['debug']);
-      storeContainer.getContainer.mockReturnValue(undefined);
-      storeContainer.insertContainer.mockReturnValue(container);
+      hStoreContainer.getContainer.mockReturnValue(undefined);
+      hStoreContainer.insertContainer.mockReturnValue(container);
 
       const result = docker.mapContainerToContainerReport(container);
 
       expect(result.changed).toBe(true);
-      expect(storeContainer.insertContainer).toHaveBeenCalledWith(container);
+      expect(hStoreContainer.insertContainer).toHaveBeenCalledWith(container);
     });
 
     test('should map container to report for existing container', async () => {
@@ -85,13 +47,13 @@ describe('Docker Watcher', () => {
         resultChanged: vi.fn().mockReturnValue(true),
       };
       docker.log = createMockLogWithChild(['debug']);
-      storeContainer.getContainer.mockReturnValue(existingContainer);
-      storeContainer.updateContainer.mockReturnValue(container);
+      hStoreContainer.getContainer.mockReturnValue(existingContainer);
+      hStoreContainer.updateContainer.mockReturnValue(container);
 
       const result = docker.mapContainerToContainerReport(container);
 
       expect(result.changed).toBe(true);
-      expect(storeContainer.updateContainer).toHaveBeenCalledWith(container);
+      expect(hStoreContainer.updateContainer).toHaveBeenCalledWith(container);
     });
 
     test('should not mark as changed when no update available', async () => {
@@ -104,8 +66,8 @@ describe('Docker Watcher', () => {
         resultChanged: vi.fn().mockReturnValue(true),
       };
       docker.log = createMockLogWithChild(['debug']);
-      storeContainer.getContainer.mockReturnValue(existingContainer);
-      storeContainer.updateContainer.mockReturnValue(container);
+      hStoreContainer.getContainer.mockReturnValue(existingContainer);
+      hStoreContainer.updateContainer.mockReturnValue(container);
 
       const result = docker.mapContainerToContainerReport(container);
 

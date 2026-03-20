@@ -1,51 +1,11 @@
-import mockParse from 'parse-docker-image-name';
-import * as event from '../../../event/index.js';
-import { fullName } from '../../../model/container.js';
-import * as mockPrometheus from '../../../prometheus/watcher.js';
-import * as registry from '../../../registry/index.js';
-import * as storeContainer from '../../../store/container.js';
-import * as mockTag from '../../../tag/index.js';
-import { getDockerWatcherRegistryId, getDockerWatcherSourceKey } from './container-init.js';
 import {
-  createDeviceCodeResponse,
-  createDeviceFlowConfig,
   createDockerContainer,
-  createDockerOidcContext,
-  createDockerOidcStateAdapter,
   createHaParseMock,
   createHarborHubRegistryState,
   createMockLog,
-  createMockLogWithChild,
-  createOidcConfig,
-  createTokenResponse,
-  mockAxios,
-  mockDdEnvVars,
-  mockDetectSourceRepoFromImageMetadata,
-  mockGetFullReleaseNotesForContainer,
-  mockResolveSourceRepoForContainer,
-  mockToContainerReleaseNotes,
   setupContainerDetailTest,
   setupDockerWatcherContainerSuite,
 } from './Docker.containers.test.helpers.js';
-import {
-  testable_filterBySegmentCount,
-  testable_filterRecreatedContainerAliases,
-  testable_getContainerDisplayName,
-  testable_getContainerName,
-  testable_getCurrentPrefix,
-  testable_getFirstDigitIndex,
-  testable_getImageForRegistryLookup,
-  testable_getImageReferenceCandidatesFromPattern,
-  testable_getImgsetSpecificity,
-  testable_getInspectValueByPath,
-  testable_getLabel,
-  testable_getOldContainers,
-  testable_normalizeConfigNumberValue,
-  testable_normalizeContainer,
-  testable_pruneOldContainers,
-  testable_shouldUpdateDisplayNameFromContainerName,
-} from './Docker.js';
-import * as maintenance from './maintenance.js';
 
 describe('Docker Watcher', () => {
   let docker;
@@ -53,6 +13,10 @@ describe('Docker Watcher', () => {
   let mockSchedule;
   let mockContainer;
   let mockImage;
+  // Helper-scoped mock references (populated in beforeEach)
+  let hMockParse: any;
+  let hStoreContainer: any;
+  let hMockTag: any;
 
   setupDockerWatcherContainerSuite((state) => {
     docker = state.docker;
@@ -60,6 +24,12 @@ describe('Docker Watcher', () => {
     mockSchedule = state.mockSchedule;
     mockContainer = state.mockContainer;
     mockImage = state.mockImage;
+  });
+
+  beforeEach(async () => {
+    hMockParse = (await import('parse-docker-image-name')).default;
+    hStoreContainer = await import('../../../store/container.js');
+    hMockTag = await import('../../../tag/index.js');
   });
 
   describe('Container Details', () => {
@@ -71,7 +41,7 @@ describe('Docker Watcher', () => {
         error: undefined,
         image: { digest: { repo: 'sha256:abc' }, id: 'image123', created: '2023-01-01' },
       };
-      storeContainer.getContainer.mockReturnValue(existingContainer);
+      hStoreContainer.getContainer.mockReturnValue(existingContainer);
       mockImage.inspect.mockResolvedValue({
         Id: 'image123',
         RepoDigests: ['nginx@sha256:abc'],
@@ -103,7 +73,7 @@ describe('Docker Watcher', () => {
           env: [{ key: 'APP_ENV', value: 'prod' }],
         },
       };
-      storeContainer.getContainer.mockReturnValue(existingContainer);
+      hStoreContainer.getContainer.mockReturnValue(existingContainer);
       mockImage.inspect.mockResolvedValue({
         Id: 'image123',
         RepoDigests: ['nginx@sha256:abc'],
@@ -143,7 +113,7 @@ describe('Docker Watcher', () => {
           env: [],
         },
       };
-      storeContainer.getContainer.mockReturnValue(existingContainer);
+      hStoreContainer.getContainer.mockReturnValue(existingContainer);
       mockContainer.inspect.mockResolvedValue({
         Config: {
           Env: ['APP_ENV=prod'],
@@ -177,7 +147,7 @@ describe('Docker Watcher', () => {
           created: '2023-01-01',
         },
       };
-      storeContainer.getContainer.mockReturnValue(existingContainer);
+      hStoreContainer.getContainer.mockReturnValue(existingContainer);
       mockImage.inspect.mockResolvedValue({
         Id: 'new-image-id',
         RepoDigests: ['nginx@sha256:newdigest'],
@@ -206,7 +176,7 @@ describe('Docker Watcher', () => {
           created: '2023-01-01',
         },
       };
-      storeContainer.getContainer.mockReturnValue(existingContainer);
+      hStoreContainer.getContainer.mockReturnValue(existingContainer);
       mockImage.inspect.mockResolvedValue({
         Id: 'new-image-id',
         RepoDigests: ['nginx@sha256:newdigest'],
@@ -234,7 +204,7 @@ describe('Docker Watcher', () => {
           created: '2023-01-01',
         },
       };
-      storeContainer.getContainer.mockReturnValue(existingContainer);
+      hStoreContainer.getContainer.mockReturnValue(existingContainer);
       mockImage.inspect.mockRejectedValue(new Error('image not found'));
 
       const result = await docker.addImageDetailsToContainer({
@@ -259,7 +229,7 @@ describe('Docker Watcher', () => {
           created: '2023-01-01',
         },
       };
-      storeContainer.getContainer.mockReturnValue(existingContainer);
+      hStoreContainer.getContainer.mockReturnValue(existingContainer);
       mockImage.inspect.mockResolvedValue({
         Id: 'same-image-id',
         RepoDigests: ['nginx@sha256:samedigest'],
@@ -290,7 +260,7 @@ describe('Docker Watcher', () => {
           created: '2023-01-01',
         },
       };
-      storeContainer.getContainer.mockReturnValue(existingContainer);
+      hStoreContainer.getContainer.mockReturnValue(existingContainer);
       mockImage.inspect.mockResolvedValue({
         Id: 'same-image-id',
         RepoDigests: ['nginx@sha256:samedigest'],
@@ -317,7 +287,7 @@ describe('Docker Watcher', () => {
           created: '2023-01-01',
         },
       };
-      storeContainer.getContainer.mockReturnValue(existingContainer);
+      hStoreContainer.getContainer.mockReturnValue(existingContainer);
       mockImage.inspect.mockResolvedValue({
         Id: 'same-image-id',
         RepoDigests: ['nginx@sha256:samedigest'],
@@ -344,7 +314,7 @@ describe('Docker Watcher', () => {
           created: '2023-01-01',
         },
       };
-      storeContainer.getContainer.mockReturnValue(existingContainer);
+      hStoreContainer.getContainer.mockReturnValue(existingContainer);
       mockImage.inspect.mockResolvedValue({
         Id: 'new-image-id',
         RepoDigests: [],
@@ -720,7 +690,7 @@ describe('Docker Watcher', () => {
         semverValue: { major: 2026, minor: 2, patch: 1, version: '2026.2.1' },
         registryId: 'ghcr',
       });
-      mockTag.transform.mockImplementation((_transform, value) => value);
+      hMockTag.transform.mockImplementation((_transform, value) => value);
 
       const result = await docker.addImageDetailsToContainer(container);
 
@@ -899,7 +869,7 @@ describe('Docker Watcher', () => {
 
       expect(result).toBeDefined();
       // Verify parse was called
-      expect(mockParse).toHaveBeenCalledWith('prom/prometheus:v3.8.0');
+      expect(hMockParse).toHaveBeenCalledWith('prom/prometheus:v3.8.0');
     });
 
     test('should fail implicit docker hub image normalization when hub registry provider is missing', async () => {
@@ -1017,7 +987,7 @@ describe('Docker Watcher', () => {
         parsedImage: { domain: 'ghcr.io', path: 'example/service', tag: 'latest' },
         semverValue: null, // will be overridden below
       });
-      mockTag.parse.mockImplementation((tag) => (tag === '2.7.5' ? { version: '2.7.5' } : null));
+      hMockTag.parse.mockImplementation((tag) => (tag === '2.7.5' ? { version: '2.7.5' } : null));
 
       const result = await docker.addImageDetailsToContainer(container);
 
