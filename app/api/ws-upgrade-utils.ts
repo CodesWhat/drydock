@@ -24,6 +24,34 @@ type IdentityAwareRateLimitKeyGenerator = NonNullable<
 type IdentityAwareRateLimitRequest = Parameters<IdentityAwareRateLimitKeyGenerator>[0];
 type IdentityAwareRateLimitResponse = Parameters<IdentityAwareRateLimitKeyGenerator>[1];
 
+/**
+ * Validates the Origin header against the Host header to prevent WebSocket CSRF.
+ * Browsers always send an Origin header on WebSocket upgrade requests, so a
+ * browser request with a mismatched Origin indicates a cross-site connection
+ * attempt. Non-browser clients (CLI tools, agents) typically omit Origin
+ * entirely, which is allowed.
+ */
+export function isOriginAllowed(request: IncomingMessage): boolean {
+  const origin = request.headers.origin;
+  if (origin === undefined) {
+    return true;
+  }
+
+  const host = request.headers.host;
+  if (!host) {
+    return false;
+  }
+
+  let originHost: string;
+  try {
+    originHost = new URL(origin).host;
+  } catch {
+    return false;
+  }
+
+  return originHost === host;
+}
+
 export function writeUpgradeError(socket: Socket, statusCode: number, message: string): void {
   if (socket.destroyed) {
     return;
@@ -73,13 +101,38 @@ export function getDefaultRateLimitKey(request: UpgradeRequest): string {
   return `ip:${ipAddress}`;
 }
 
-export function createFixedWindowRateLimiter(options: { windowMs: number; max: number }) {
-  const { windowMs, max } = options;
+const DEFAULT_CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
+
+export function createFixedWindowRateLimiter(options: {
+  windowMs: number;
+  max: number;
+  cleanupIntervalMs?: number;
+}) {
+  const { windowMs, max, cleanupIntervalMs = DEFAULT_CLEANUP_INTERVAL_MS } = options;
   const counters = new Map<string, { count: number; resetAt: number }>();
+  let lastEviction = 0;
+
+  function evictExpired(now: number): void {
+    if (now - lastEviction < windowMs) {
+      return;
+    }
+    lastEviction = now;
+    for (const [entryKey, entry] of counters) {
+      if (now >= entry.resetAt) {
+        counters.delete(entryKey);
+      }
+    }
+  }
+
+  const cleanupTimer = setInterval(() => {
+    evictExpired(Date.now());
+  }, cleanupIntervalMs);
+  cleanupTimer.unref();
 
   return {
     consume(key: string): boolean {
       const now = Date.now();
+      evictExpired(now);
       const counter = counters.get(key);
       if (!counter || now >= counter.resetAt) {
         counters.set(key, { count: 1, resetAt: now + windowMs });
@@ -90,6 +143,10 @@ export function createFixedWindowRateLimiter(options: { windowMs: number; max: n
       }
       counter.count += 1;
       return true;
+    },
+    destroy(): void {
+      clearInterval(cleanupTimer);
+      counters.clear();
     },
   };
 }

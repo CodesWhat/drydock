@@ -150,7 +150,10 @@ function persistLockoutState(): void {
       account: toPersistedRecord(accountLoginLockouts),
       ip: toPersistedRecord(ipLoginLockouts),
     };
-    fs.writeFileSync(lockoutStatePath, JSON.stringify(persistedState), 'utf8');
+    fs.writeFileSync(lockoutStatePath, JSON.stringify(persistedState), {
+      encoding: 'utf8',
+      mode: 0o600,
+    });
   } catch (error: unknown) {
     log.warn(`Unable to persist login lockout state (${getErrorMessage(error)})`);
   }

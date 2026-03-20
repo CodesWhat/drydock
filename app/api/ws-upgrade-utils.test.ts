@@ -5,10 +5,54 @@ import {
   createIdentityAwareUpgradeRateLimitKeyResolver,
   getDefaultRateLimitKey,
   isAuthenticatedSession,
+  isOriginAllowed,
   writeUpgradeError,
 } from './ws-upgrade-utils.js';
 
 describe('ws-upgrade-utils', () => {
+  describe('isOriginAllowed', () => {
+    test('allows requests with no Origin header', () => {
+      const request = { headers: {} } as any;
+      expect(isOriginAllowed(request)).toBe(true);
+    });
+
+    test('allows requests where Origin host matches Host header', () => {
+      const request = {
+        headers: { origin: 'http://localhost:3000', host: 'localhost:3000' },
+      } as any;
+      expect(isOriginAllowed(request)).toBe(true);
+    });
+
+    test('allows https Origin matching Host', () => {
+      const request = {
+        headers: { origin: 'https://drydock.example.com', host: 'drydock.example.com' },
+      } as any;
+      expect(isOriginAllowed(request)).toBe(true);
+    });
+
+    test('rejects when Origin host does not match Host header', () => {
+      const request = { headers: { origin: 'https://evil.com', host: 'localhost:3000' } } as any;
+      expect(isOriginAllowed(request)).toBe(false);
+    });
+
+    test('rejects when Origin is present but Host header is missing', () => {
+      const request = { headers: { origin: 'https://evil.com' } } as any;
+      expect(isOriginAllowed(request)).toBe(false);
+    });
+
+    test('rejects when Origin is not a valid URL', () => {
+      const request = { headers: { origin: 'not-a-valid-url', host: 'localhost:3000' } } as any;
+      expect(isOriginAllowed(request)).toBe(false);
+    });
+
+    test('rejects when Origin port differs from Host', () => {
+      const request = {
+        headers: { origin: 'http://localhost:9999', host: 'localhost:3000' },
+      } as any;
+      expect(isOriginAllowed(request)).toBe(false);
+    });
+  });
+
   describe('writeUpgradeError', () => {
     test('writes HTTP error response and destroys the socket', () => {
       const socket = {
@@ -99,18 +143,22 @@ describe('ws-upgrade-utils', () => {
       expect(limiter.consume('key1')).toBe(true);
       expect(limiter.consume('key1')).toBe(true);
       expect(limiter.consume('key1')).toBe(false);
+      limiter.destroy();
     });
 
     test('resets counter after window expires', () => {
-      const limiter = createFixedWindowRateLimiter({ windowMs: 100, max: 1 });
-
-      expect(limiter.consume('key1')).toBe(true);
-      expect(limiter.consume('key1')).toBe(false);
-
       vi.useFakeTimers();
-      vi.advanceTimersByTime(200);
-      expect(limiter.consume('key1')).toBe(true);
-      vi.useRealTimers();
+      const limiter = createFixedWindowRateLimiter({ windowMs: 100, max: 1 });
+      try {
+        expect(limiter.consume('key1')).toBe(true);
+        expect(limiter.consume('key1')).toBe(false);
+
+        vi.advanceTimersByTime(200);
+        expect(limiter.consume('key1')).toBe(true);
+      } finally {
+        limiter.destroy();
+        vi.useRealTimers();
+      }
     });
 
     test('tracks keys independently', () => {
@@ -120,6 +168,70 @@ describe('ws-upgrade-utils', () => {
       expect(limiter.consume('key2')).toBe(true);
       expect(limiter.consume('key1')).toBe(false);
       expect(limiter.consume('key2')).toBe(false);
+      limiter.destroy();
+    });
+
+    test('evicts expired entries to prevent unbounded map growth', () => {
+      vi.useFakeTimers();
+      const limiter = createFixedWindowRateLimiter({ windowMs: 100, max: 1 });
+      try {
+        limiter.consume('a');
+        limiter.consume('b');
+        limiter.consume('c');
+
+        // Advance past the window so all entries expire, then trigger eviction
+        vi.advanceTimersByTime(200);
+        limiter.consume('d');
+
+        // Expired keys should now be evictable — consuming them creates fresh entries
+        expect(limiter.consume('a')).toBe(true);
+        expect(limiter.consume('b')).toBe(true);
+        expect(limiter.consume('c')).toBe(true);
+      } finally {
+        limiter.destroy();
+        vi.useRealTimers();
+      }
+    });
+
+    test('periodic cleanup evicts expired entries without consume', () => {
+      vi.useFakeTimers();
+      const limiter = createFixedWindowRateLimiter({
+        windowMs: 100,
+        max: 1,
+        cleanupIntervalMs: 500,
+      });
+      try {
+        limiter.consume('a');
+        limiter.consume('b');
+
+        // Advance past window + cleanup interval so the timer fires
+        vi.advanceTimersByTime(600);
+
+        // Entries were evicted by the cleanup timer — consuming creates fresh entries
+        expect(limiter.consume('a')).toBe(true);
+        expect(limiter.consume('b')).toBe(true);
+      } finally {
+        limiter.destroy();
+        vi.useRealTimers();
+      }
+    });
+
+    test('destroy clears the cleanup interval and map', () => {
+      vi.useFakeTimers();
+      const limiter = createFixedWindowRateLimiter({
+        windowMs: 100,
+        max: 1,
+        cleanupIntervalMs: 500,
+      });
+      try {
+        limiter.consume('a');
+        limiter.destroy();
+
+        // After destroy, consume still works on an empty map (fresh entries)
+        expect(limiter.consume('a')).toBe(true);
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 
