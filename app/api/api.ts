@@ -57,6 +57,7 @@ export function init(): express.Router {
   router.use(apiLimiter);
 
   const mutationJsonBodyParser = express.json({
+    limit: '256kb',
     verify: (req, _res, buffer) => {
       (req as Request & { rawBody?: Buffer }).rawBody = Buffer.from(buffer);
     },

@@ -279,6 +279,16 @@ function isMaintenanceWindowOpen(watcher: unknown): boolean {
   return open === true;
 }
 
+function getWatcherName(watcher: unknown): string {
+  if (watcher && typeof watcher === 'object') {
+    const name = (watcher as Record<string, unknown>).name;
+    if (typeof name === 'string' && name.length > 0) {
+      return name;
+    }
+  }
+  return 'local';
+}
+
 function parseMaintenanceWindowAt(watcher: unknown): number | undefined {
   const configuration = getWatcherConfiguration(watcher);
   const value = configuration.maintenancenextwindow ?? configuration.maintenanceNextWindow;
@@ -320,16 +330,29 @@ function useMaintenanceComputed(input: UseDashboardComputedInput) {
     () => maintenanceWindowWatchers.value.filter(isMaintenanceWindowOpen).length,
   );
 
-  const nextMaintenanceWindowAt = computed<number | undefined>(() => {
-    const windows = maintenanceWindowWatchers.value
-      .map(parseMaintenanceWindowAt)
-      .filter((value): value is number => value !== undefined);
+  const nextMaintenanceWindowByWatcher = computed<Map<string, number>>(() => {
+    const map = new Map<string, number>();
+    for (const watcher of maintenanceWindowWatchers.value) {
+      const ts = parseMaintenanceWindowAt(watcher);
+      if (ts !== undefined) {
+        map.set(getWatcherName(watcher), ts);
+      }
+    }
+    return map;
+  });
 
-    if (windows.length === 0) {
+  const nextMaintenanceWindowAt = computed<number | undefined>(() => {
+    const map = nextMaintenanceWindowByWatcher.value;
+    if (map.size === 0) {
       return undefined;
     }
-
-    return Math.min(...windows);
+    let min = Number.POSITIVE_INFINITY;
+    for (const ts of map.values()) {
+      if (ts < min) {
+        min = ts;
+      }
+    }
+    return min;
   });
 
   const maintenanceCountdownLabel = computed(() =>
@@ -344,6 +367,7 @@ function useMaintenanceComputed(input: UseDashboardComputedInput) {
   return {
     maintenanceCountdownLabel,
     maintenanceWindowWatchers,
+    nextMaintenanceWindowByWatcher,
   };
 }
 
@@ -764,7 +788,8 @@ function useUpdateBreakdownComputed(input: UseDashboardComputedInput) {
 }
 
 export function useDashboardComputed(input: UseDashboardComputedInput) {
-  const { maintenanceCountdownLabel, maintenanceWindowWatchers } = useMaintenanceComputed(input);
+  const { maintenanceCountdownLabel, maintenanceWindowWatchers, nextMaintenanceWindowByWatcher } =
+    useMaintenanceComputed(input);
   const {
     containerMetrics,
     securityCleanArcLength,
@@ -793,6 +818,7 @@ export function useDashboardComputed(input: UseDashboardComputedInput) {
     getUpdateKindMutedColor,
     maintenanceCountdownLabel,
     maintenanceWindowWatchers,
+    nextMaintenanceWindowByWatcher,
     recentUpdates,
     securityCleanArcLength,
     securityCleanCount,

@@ -599,6 +599,72 @@ describe('useDashboardComputed maintenance countdown', () => {
 
     expect(state.maintenanceCountdownLabel.value).toBe('45m');
   });
+
+  it('exposes nextMaintenanceWindowByWatcher keyed by watcher name', () => {
+    const now = Date.parse('2026-03-01T00:00:00.000Z');
+    const thirtyMin = new Date(now + 30 * 60_000).toISOString();
+    const sixtyMin = new Date(now + 60 * 60_000).toISOString();
+    const watchers = [
+      {
+        name: 'docker-a',
+        configuration: {
+          maintenanceWindow: 'Sun 02:00-03:00 UTC',
+          maintenanceNextWindow: thirtyMin,
+        },
+      },
+      {
+        name: 'docker-b',
+        configuration: {
+          maintenanceWindow: 'Mon 04:00-05:00 UTC',
+          maintenanceNextWindow: sixtyMin,
+        },
+      },
+      {
+        name: 'no-window',
+        configuration: {},
+      },
+    ];
+    const state = createState({ watchers, maintenanceCountdownNow: now });
+    const map = state.nextMaintenanceWindowByWatcher.value;
+
+    expect(map.size).toBe(2);
+    expect(map.get('docker-a')).toBe(Date.parse(thirtyMin));
+    expect(map.get('docker-b')).toBe(Date.parse(sixtyMin));
+    expect(map.has('no-window')).toBe(false);
+  });
+
+  it('falls back to local for unnamed watchers in nextMaintenanceWindowByWatcher', () => {
+    const now = Date.parse('2026-03-01T00:00:00.000Z');
+    const ts = new Date(now + 10 * 60_000).toISOString();
+    const watchers = [
+      {
+        configuration: {
+          maintenanceWindow: 'Sun 02:00-03:00 UTC',
+          maintenanceNextWindow: ts,
+        },
+      },
+    ];
+    const state = createState({ watchers, maintenanceCountdownNow: now });
+    const map = state.nextMaintenanceWindowByWatcher.value;
+
+    expect(map.get('local')).toBe(Date.parse(ts));
+  });
+
+  it('omits watchers with invalid timestamps from nextMaintenanceWindowByWatcher', () => {
+    const watchers = [
+      {
+        name: 'bad-ts',
+        configuration: {
+          maintenanceWindow: 'Sun 02:00-03:00 UTC',
+          maintenanceNextWindow: 'not-a-date',
+        },
+      },
+    ];
+    const state = createState({ watchers });
+    const map = state.nextMaintenanceWindowByWatcher.value;
+
+    expect(map.size).toBe(0);
+  });
 });
 
 describe('useDashboardComputed recent updates', () => {

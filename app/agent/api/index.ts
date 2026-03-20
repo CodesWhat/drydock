@@ -116,7 +116,7 @@ export async function init() {
   const app = express();
   app.disable('x-powered-by');
 
-  app.use(express.json());
+  app.use(express.json({ limit: '256kb' }));
   if (configuration.cors.enabled) {
     app.use(
       cors({
