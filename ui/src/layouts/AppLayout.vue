@@ -274,7 +274,7 @@ const stackedBannerInlineStyle = {
   position: 'static',
   top: 'auto',
   left: 'auto',
-  transform: 'none',
+  translate: 'none',
   width: '100%',
   maxWidth: 'none',
 } as const;
@@ -1348,7 +1348,7 @@ onUnmounted(() => {
     </aside>
 
     <!-- MAIN AREA -->
-    <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
+    <div class="flex-1 flex flex-col min-w-0 overflow-hidden" :style="{ backgroundColor: 'var(--dd-bg-sidebar)' }">
 
       <!-- TOP BAR -->
       <header class="h-12 grid items-center px-4 shrink-0"
@@ -1423,7 +1423,7 @@ onUnmounted(() => {
 
       <div
         v-if="hasVisibleAnnouncementBanners"
-        class="fixed top-3 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-2rem)] max-w-5xl flex flex-col gap-2"
+        class="fixed top-3 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-2rem)] max-w-4xl flex flex-col gap-2"
       >
         <AnnouncementBanner
           v-if="showOidcHttpCompatibilityBanner"
@@ -1466,7 +1466,7 @@ onUnmounted(() => {
           <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">WUD_*</code>
           and
           <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">DD_TRIGGER_*</code>).
-          <span v-if="legacyEnvKeysPreview" class="block mt-1">
+          <span v-if="legacyEnvKeysPreview" class="block mt-1 truncate">
             Env keys ({{ legacyInputSummary?.env.total }}): {{ legacyEnvKeysPreview }}
           </span>
         </AnnouncementBanner>
@@ -1483,7 +1483,7 @@ onUnmounted(() => {
           <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">wud.*</code>
           instead of
           <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">dd.*</code>).
-          <span v-if="legacyLabelKeysPreview" class="block mt-1">
+          <span v-if="legacyLabelKeysPreview" class="block mt-1 truncate">
             Label keys ({{ legacyInputSummary?.label.total }}): {{ legacyLabelKeysPreview }}
           </span>
         </AnnouncementBanner>
@@ -1500,7 +1500,7 @@ onUnmounted(() => {
           <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">/api/*</code>
           to
           <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">/api/v1/*</code>.
-          <span v-if="legacyApiPathKeysPreview" class="block mt-1">
+          <span v-if="legacyApiPathKeysPreview" class="block mt-1 truncate">
             API paths ({{ legacyInputSummary?.api?.total }}): {{ legacyApiPathKeysPreview }}
           </span>
         </AnnouncementBanner>
@@ -1508,7 +1508,7 @@ onUnmounted(() => {
 
       <!-- MAIN CONTENT -->
       <main class="flex-1 min-h-0 overflow-hidden flex flex-col pl-4 pr-2 py-4 sm:pl-6 sm:pr-[9px] sm:py-6"
-            :style="{ backgroundColor: 'var(--dd-bg)' }">
+            :style="{ backgroundColor: 'var(--dd-bg)', borderTopLeftRadius: 'var(--dd-radius-lg)' }">
         <router-view />
       </main>
 
