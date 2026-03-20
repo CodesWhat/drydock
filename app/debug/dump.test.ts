@@ -650,9 +650,9 @@ describe('debug dump utilities', () => {
     expect(serializeDebugDump({ hello: 'world' })).toBe('{\n  "hello": "world"\n}\n');
   });
 
-  test('getDebugDumpFilename formats the timestamp safely for filenames', () => {
+  test('getDebugDumpFilename formats the date safely for filenames', () => {
     expect(getDebugDumpFilename(new Date('2026-03-18T12:34:56.789Z'))).toBe(
-      'drydock-debug-dump-2026-03-18T12-34-56-789Z.json',
+      'drydock-debug-dump-2026-03-18.json',
     );
   });
 });

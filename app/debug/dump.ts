@@ -333,6 +333,6 @@ export function serializeDebugDump(dump: unknown): string {
 }
 
 export function getDebugDumpFilename(now: Date = new Date()): string {
-  const timestampForFile = now.toISOString().replace(/[:.]/g, '-');
-  return `drydock-debug-dump-${timestampForFile}.json`;
+  const dateForFile = now.toISOString().slice(0, 10);
+  return `drydock-debug-dump-${dateForFile}.json`;
 }
