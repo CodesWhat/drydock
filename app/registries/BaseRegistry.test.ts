@@ -843,6 +843,277 @@ test('getImageManifestDigest should include variant and explicit digest in cache
   expect(superGetImageManifestDigestSpy).toHaveBeenCalledTimes(1);
 });
 
+test('authenticateBearerFromAuthUrl should include ECONNREFUSED in error message', async () => {
+  const { default: axios } = await import('axios');
+  const error = new Error('connect ECONNREFUSED 127.0.0.1:443');
+  (error as any).code = 'ECONNREFUSED';
+  axios.mockRejectedValue(error);
+
+  await expect(
+    baseRegistry.authenticateBearerFromAuthUrl(
+      { headers: {}, url: 'https://auth.example.com/v2/library/nginx/manifests/latest' },
+      'https://auth.example.com/token',
+      undefined,
+    ),
+  ).rejects.toThrow('token request failed (connect ECONNREFUSED 127.0.0.1:443)');
+});
+
+test('authenticateBearerFromAuthUrl should include ETIMEDOUT in error message', async () => {
+  const { default: axios } = await import('axios');
+  const error = new Error('connect ETIMEDOUT 10.0.0.1:443');
+  (error as any).code = 'ETIMEDOUT';
+  axios.mockRejectedValue(error);
+
+  await expect(
+    baseRegistry.authenticateBearerFromAuthUrl(
+      { headers: {}, url: 'https://auth.example.com/v2/library/nginx/manifests/latest' },
+      'https://auth.example.com/token',
+      undefined,
+    ),
+  ).rejects.toThrow('token request failed (connect ETIMEDOUT 10.0.0.1:443)');
+});
+
+test('authenticateBearerFromAuthUrl should include ECONNRESET in error message', async () => {
+  const { default: axios } = await import('axios');
+  const error = new Error('read ECONNRESET');
+  (error as any).code = 'ECONNRESET';
+  axios.mockRejectedValue(error);
+
+  await expect(
+    baseRegistry.authenticateBearerFromAuthUrl(
+      { headers: {}, url: 'https://auth.example.com/v2/library/nginx/manifests/latest' },
+      'https://auth.example.com/token',
+      undefined,
+    ),
+  ).rejects.toThrow('token request failed (read ECONNRESET)');
+});
+
+test('authenticateBearerFromAuthUrl should wrap 401 Unauthorized in error message', async () => {
+  const { default: axios } = await import('axios');
+  const error = new Error('Request failed with status code 401');
+  (error as any).response = { status: 401 };
+  axios.mockRejectedValue(error);
+
+  await expect(
+    baseRegistry.authenticateBearerFromAuthUrl(
+      { headers: {}, url: 'https://auth.example.com/v2/library/nginx/manifests/latest' },
+      'https://auth.example.com/token',
+      'dXNlcjpwYXNz',
+    ),
+  ).rejects.toThrow('token request failed (Request failed with status code 401)');
+});
+
+test('authenticateBearerFromAuthUrl should wrap 429 rate limit in error message', async () => {
+  const { default: axios } = await import('axios');
+  const error = new Error('Request failed with status code 429');
+  (error as any).response = { status: 429, headers: { 'retry-after': '60' } };
+  axios.mockRejectedValue(error);
+
+  await expect(
+    baseRegistry.authenticateBearerFromAuthUrl(
+      { headers: {}, url: 'https://auth.example.com/v2/library/nginx/manifests/latest' },
+      'https://auth.example.com/token',
+      undefined,
+    ),
+  ).rejects.toThrow('token request failed (Request failed with status code 429)');
+});
+
+test('authenticateBearerFromAuthUrl should wrap 502 Bad Gateway in error message', async () => {
+  const { default: axios } = await import('axios');
+  axios.mockRejectedValue(new Error('Request failed with status code 502'));
+
+  await expect(
+    baseRegistry.authenticateBearerFromAuthUrl(
+      { headers: {}, url: 'https://auth.example.com/v2/library/nginx/manifests/latest' },
+      'https://auth.example.com/token',
+      undefined,
+    ),
+  ).rejects.toThrow('token request failed (Request failed with status code 502)');
+});
+
+test('authenticateBearerFromAuthUrl should wrap 503 Service Unavailable in error message', async () => {
+  const { default: axios } = await import('axios');
+  axios.mockRejectedValue(new Error('Request failed with status code 503'));
+
+  await expect(
+    baseRegistry.authenticateBearerFromAuthUrl(
+      { headers: {}, url: 'https://auth.example.com/v2/library/nginx/manifests/latest' },
+      'https://auth.example.com/token',
+      undefined,
+    ),
+  ).rejects.toThrow('token request failed (Request failed with status code 503)');
+});
+
+test('authenticateBearerFromAuthUrl should handle non-Error rejection values', async () => {
+  const { default: axios } = await import('axios');
+  axios.mockRejectedValue('string rejection');
+
+  await expect(
+    baseRegistry.authenticateBearerFromAuthUrl(
+      { headers: {}, url: 'https://auth.example.com/v2/library/nginx/manifests/latest' },
+      'https://auth.example.com/token',
+      undefined,
+    ),
+  ).rejects.toThrow('token request failed');
+});
+
+test('authenticateBearerFromAuthUrl should handle null response data', async () => {
+  const { default: axios } = await import('axios');
+  axios.mockResolvedValue({ data: null });
+
+  await expect(
+    baseRegistry.authenticateBearerFromAuthUrl(
+      { headers: {}, url: 'https://auth.example.com/v2/library/nginx/manifests/latest' },
+      'https://auth.example.com/token',
+      undefined,
+    ),
+  ).rejects.toThrow('token endpoint response does not contain token');
+});
+
+test('authenticateBearerFromAuthUrl should handle response with empty string token', async () => {
+  const { default: axios } = await import('axios');
+  axios.mockResolvedValue({ data: { token: '' } });
+
+  await expect(
+    baseRegistry.authenticateBearerFromAuthUrl(
+      { headers: {}, url: 'https://auth.example.com/v2/library/nginx/manifests/latest' },
+      'https://auth.example.com/token',
+      undefined,
+    ),
+  ).rejects.toThrow('token endpoint response does not contain token');
+});
+
+test('authenticateBearerFromAuthUrl should handle response with whitespace-only token', async () => {
+  const { default: axios } = await import('axios');
+  axios.mockResolvedValue({ data: { token: '   ' } });
+
+  await expect(
+    baseRegistry.authenticateBearerFromAuthUrl(
+      { headers: {}, url: 'https://auth.example.com/v2/library/nginx/manifests/latest' },
+      'https://auth.example.com/token',
+      undefined,
+    ),
+  ).rejects.toThrow('token endpoint response does not contain token');
+});
+
+test('authenticateBearerFromAuthUrl should handle token refresh failure after cache expiry', async () => {
+  const { default: axios } = await import('axios');
+  vi.useFakeTimers();
+  const startedAtMs = new Date('2026-03-05T10:00:00.000Z').getTime();
+
+  try {
+    vi.setSystemTime(startedAtMs);
+    axios.mockResolvedValueOnce({ data: { token: 'initial-token' } });
+    await baseRegistry.authenticateBearerFromAuthUrl(
+      { headers: {}, url: 'https://auth.example.com/v2/library/nginx/manifests/latest' },
+      'https://auth.example.com/token',
+      'dXNlcjpwYXNz',
+    );
+
+    vi.setSystemTime(startedAtMs + REGISTRY_BEARER_TOKEN_CACHE_TTL_MS + 1);
+    axios.mockRejectedValueOnce(new Error('connect ECONNREFUSED 127.0.0.1:443'));
+
+    await expect(
+      baseRegistry.authenticateBearerFromAuthUrl(
+        { headers: {}, url: 'https://auth.example.com/v2/library/nginx/manifests/latest' },
+        'https://auth.example.com/token',
+        'dXNlcjpwYXNz',
+      ),
+    ).rejects.toThrow('token request failed (connect ECONNREFUSED 127.0.0.1:443)');
+
+    expect(axios).toHaveBeenCalledTimes(2);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('getImageManifestDigest should propagate errors through digest cache', async () => {
+  const superGetImageManifestDigestSpy = vi
+    .spyOn(Registry.prototype, 'getImageManifestDigest')
+    .mockRejectedValue(new Error('registry unavailable'));
+
+  baseRegistry.startDigestCachePollCycle();
+  const image = {
+    name: 'library/postgres',
+    tag: { value: '16' },
+    architecture: 'amd64',
+    os: 'linux',
+    registry: { url: 'docker.io' },
+  };
+
+  await expect(baseRegistry.getImageManifestDigest(image)).rejects.toThrow('registry unavailable');
+  expect(superGetImageManifestDigestSpy).toHaveBeenCalledTimes(1);
+});
+
+test('getImageManifestDigest should not cache failed lookups', async () => {
+  const superGetImageManifestDigestSpy = vi
+    .spyOn(Registry.prototype, 'getImageManifestDigest')
+    .mockRejectedValueOnce(new Error('temporary failure'))
+    .mockResolvedValueOnce({
+      digest: 'sha256:recovered',
+      created: '2026-03-10T12:00:00.000Z',
+      version: 2,
+    });
+
+  baseRegistry.startDigestCachePollCycle();
+  const image = {
+    name: 'library/postgres',
+    tag: { value: '16' },
+    architecture: 'amd64',
+    os: 'linux',
+    registry: { url: 'docker.io' },
+  };
+
+  await expect(baseRegistry.getImageManifestDigest(image)).rejects.toThrow('temporary failure');
+  const result = await baseRegistry.getImageManifestDigest(image);
+
+  expect(result.digest).toBe('sha256:recovered');
+  expect(superGetImageManifestDigestSpy).toHaveBeenCalledTimes(2);
+});
+
+test('getImageManifestDigest should clear in-flight entry after rejection', async () => {
+  let rejectDigest: (error: Error) => void;
+  vi.spyOn(Registry.prototype, 'getImageManifestDigest').mockImplementation(
+    () =>
+      new Promise((_resolve, reject) => {
+        rejectDigest = reject;
+      }),
+  );
+
+  baseRegistry.startDigestCachePollCycle();
+  const image = {
+    name: 'library/postgres',
+    tag: { value: '16' },
+    architecture: 'amd64',
+    os: 'linux',
+    registry: { url: 'docker.io' },
+  };
+
+  const lookup = baseRegistry.getImageManifestDigest(image);
+  rejectDigest(new Error('connection reset'));
+
+  await expect(lookup).rejects.toThrow('connection reset');
+
+  const inFlightMap = (
+    baseRegistry as unknown as {
+      digestManifestCacheInFlight: Map<string, unknown>;
+    }
+  ).digestManifestCacheInFlight;
+  expect(inFlightMap.size).toBe(0);
+});
+
+test('getImagePublishedAt should return undefined when getImageManifestDigest throws', async () => {
+  vi.spyOn(baseRegistry, 'getImageManifestDigest').mockRejectedValue(new Error('registry offline'));
+
+  await expect(
+    baseRegistry.getImagePublishedAt({
+      name: 'library/nginx',
+      tag: { value: 'latest' },
+      registry: { url: 'https://registry.example.com/v2' },
+    }),
+  ).rejects.toThrow('registry offline');
+});
+
 test('getImageManifestDigest should not cache responses without a digest string', async () => {
   const superGetImageManifestDigestSpy = vi
     .spyOn(Registry.prototype, 'getImageManifestDigest')
