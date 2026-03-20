@@ -1010,6 +1010,7 @@ class Docker extends Watcher {
       endDigestCachePollCycleForRegistries();
       // Dispatch event to notify stop watching
       event.emitWatcherStop(this);
+      this.lastRunAt = new Date().toISOString();
     }
   }
 

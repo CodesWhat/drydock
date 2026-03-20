@@ -72,3 +72,15 @@ test('maskConfiguration should return passed configuration when provided', () =>
   const config = { token: 'secret' };
   expect(watcher.maskConfiguration(config)).toStrictEqual(config);
 });
+
+test('getMetadata should return lastRunAt as undefined when no watch has occurred', () => {
+  const watcher = new ConcreteWatcher();
+  expect(watcher.getMetadata()).toStrictEqual({ lastRunAt: undefined });
+});
+
+test('getMetadata should return lastRunAt when set', () => {
+  const watcher = new ConcreteWatcher();
+  const now = '2026-03-20T12:00:00.000Z';
+  watcher.lastRunAt = now;
+  expect(watcher.getMetadata()).toStrictEqual({ lastRunAt: now });
+});

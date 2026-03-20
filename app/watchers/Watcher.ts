@@ -6,9 +6,16 @@ import Component from '../registry/Component.js';
  */
 abstract class Watcher extends Component {
   dockerApi?: unknown;
+  lastRunAt?: string;
 
   protected constructor() {
     super();
+  }
+
+  getMetadata(): Record<string, unknown> {
+    return {
+      lastRunAt: this.lastRunAt,
+    };
   }
 
   /**

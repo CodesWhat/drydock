@@ -545,6 +545,35 @@ describe('Docker Watcher', () => {
       expect(event.emitWatcherStop).toHaveBeenCalledWith(docker);
     });
 
+    test('should set lastRunAt after watch completes', async () => {
+      docker.getContainers = vi.fn().mockResolvedValue([]);
+      expect(docker.lastRunAt).toBeUndefined();
+
+      await docker.watch();
+
+      expect(docker.lastRunAt).toBeDefined();
+      expect(new Date(docker.lastRunAt).toISOString()).toBe(docker.lastRunAt);
+    });
+
+    test('should set lastRunAt even when watch encounters errors', async () => {
+      docker.log = createMockLog(['warn']);
+      docker.getContainers = vi.fn().mockRejectedValue(new Error('Docker unavailable'));
+
+      await docker.watch();
+
+      expect(docker.lastRunAt).toBeDefined();
+    });
+
+    test('should expose lastRunAt via getMetadata', async () => {
+      docker.getContainers = vi.fn().mockResolvedValue([]);
+
+      expect(docker.getMetadata()).toStrictEqual({ lastRunAt: undefined });
+
+      await docker.watch();
+
+      expect(docker.getMetadata().lastRunAt).toBeDefined();
+    });
+
     test('should start and end digest cache poll cycle for cache-aware registries', async () => {
       const startDigestCachePollCycle = vi.fn();
       const endDigestCachePollCycle = vi.fn();
