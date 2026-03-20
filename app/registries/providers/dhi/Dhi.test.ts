@@ -112,6 +112,38 @@ describe('DHI Registry', () => {
     );
   });
 
+  test('should propagate network errors from authenticate', async () => {
+    const { default: axios } = await import('axios');
+    axios.mockRejectedValue(new Error('connect ECONNREFUSED 127.0.0.1:443'));
+    const image = { name: 'python' };
+
+    await expect(dhi.authenticate(image, { headers: {} })).rejects.toThrow(
+      'connect ECONNREFUSED 127.0.0.1:443',
+    );
+  });
+
+  test('should propagate timeout errors from authenticate', async () => {
+    const { default: axios } = await import('axios');
+    axios.mockRejectedValue(new Error('timeout of 15000ms exceeded'));
+    const image = { name: 'python' };
+
+    await expect(dhi.authenticate(image, { headers: {} })).rejects.toThrow(
+      'timeout of 15000ms exceeded',
+    );
+  });
+
+  test('should propagate 429 rate limit errors from authenticate', async () => {
+    const { default: axios } = await import('axios');
+    const error = new Error('Request failed with status code 429');
+    (error as any).response = { status: 429 };
+    axios.mockRejectedValue(error);
+    const image = { name: 'python' };
+
+    await expect(dhi.authenticate(image, { headers: {} })).rejects.toThrow(
+      'Request failed with status code 429',
+    );
+  });
+
   test('should mask all configuration fields', async () => {
     dhi.configuration = {
       url: 'https://dhi.io',

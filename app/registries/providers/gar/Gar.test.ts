@@ -16,6 +16,10 @@ gar.configuration = {
   privatekey: TEST_PRIVATE_KEY,
 };
 
+beforeEach(() => {
+  vi.clearAllMocks();
+});
+
 test('validatedConfiguration should initialize when configuration is valid', async () => {
   expect(
     gar.validateConfiguration({
@@ -170,6 +174,70 @@ test('authenticate should throw when token response is missing token fields', as
       { headers: {} },
     ),
   ).rejects.toThrow('GAR token endpoint response does not contain token');
+});
+
+test('authenticate should propagate network errors', async () => {
+  const { default: axios } = await import('axios');
+  axios.mockRejectedValueOnce(new Error('connect ECONNREFUSED 127.0.0.1:443'));
+
+  await expect(
+    gar.authenticate(
+      {
+        name: 'project/repository/image',
+        registry: { url: 'us-central1-docker.pkg.dev' },
+      },
+      { headers: {} },
+    ),
+  ).rejects.toThrow('connect ECONNREFUSED 127.0.0.1:443');
+});
+
+test('authenticate should propagate timeout errors', async () => {
+  const { default: axios } = await import('axios');
+  axios.mockRejectedValueOnce(new Error('timeout of 15000ms exceeded'));
+
+  await expect(
+    gar.authenticate(
+      {
+        name: 'project/repository/image',
+        registry: { url: 'us-central1-docker.pkg.dev' },
+      },
+      { headers: {} },
+    ),
+  ).rejects.toThrow('timeout of 15000ms exceeded');
+});
+
+test('authenticate should propagate 429 rate limit errors', async () => {
+  const { default: axios } = await import('axios');
+  const error = new Error('Request failed with status code 429');
+  (error as any).response = { status: 429 };
+  axios.mockRejectedValueOnce(error);
+
+  await expect(
+    gar.authenticate(
+      {
+        name: 'project/repository/image',
+        registry: { url: 'us-central1-docker.pkg.dev' },
+      },
+      { headers: {} },
+    ),
+  ).rejects.toThrow('Request failed with status code 429');
+});
+
+test('authenticate should propagate 503 errors', async () => {
+  const { default: axios } = await import('axios');
+  const error = new Error('Request failed with status code 503');
+  (error as any).response = { status: 503 };
+  axios.mockRejectedValueOnce(error);
+
+  await expect(
+    gar.authenticate(
+      {
+        name: 'project/repository/image',
+        registry: { url: 'us-central1-docker.pkg.dev' },
+      },
+      { headers: {} },
+    ),
+  ).rejects.toThrow('Request failed with status code 503');
 });
 
 test('match should gracefully handle missing registry URL', async () => {
