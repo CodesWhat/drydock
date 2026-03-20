@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
 import { type RouteLocationRaw, useRouter } from 'vue-router';
 import { GridItem, GridLayout } from 'grid-layout-plus';
 import { useConfirmDialog } from '../composables/useConfirmDialog';
@@ -11,7 +11,6 @@ import DashboardHostStatusWidget from './dashboard/components/DashboardHostStatu
 import DashboardRecentUpdatesWidget from './dashboard/components/DashboardRecentUpdatesWidget.vue';
 import DashboardResourceUsageWidget from './dashboard/components/DashboardResourceUsageWidget.vue';
 import DashboardSecurityOverviewWidget from './dashboard/components/DashboardSecurityOverviewWidget.vue';
-import DashboardStatCard from './dashboard/components/DashboardStatCards.vue';
 import DashboardUpdateBreakdownWidget from './dashboard/components/DashboardUpdateBreakdownWidget.vue';
 import {
   DASHBOARD_WIDGET_META,
@@ -54,6 +53,19 @@ const {
   toggleWidgetVisibility,
   widgetOrderIndex,
 } = useDashboardWidgetOrder();
+
+// Exit edit mode on Escape key
+function onKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape' && editMode.value) {
+    editMode.value = false;
+  }
+}
+onMounted(() => {
+  window.addEventListener('keydown', onKeydown);
+});
+onUnmounted(() => {
+  window.removeEventListener('keydown', onKeydown);
+});
 
 const {
   agents,
@@ -268,9 +280,12 @@ function confirmDashboardUpdateAll() {
             :class="editMode ? 'dd-grid-edit' : ''">
 
             <!-- Stat Cards -->
-            <div
+            <component
+              :is="!editMode && statById.get(item.i as DashboardWidgetId)?.route ? 'button' : 'div'"
               v-if="isStatWidget(item.i)"
-              class="stat-card dd-rounded px-4 py-2.5 text-left cursor-default relative"
+              :type="!editMode && statById.get(item.i as DashboardWidgetId)?.route ? 'button' : undefined"
+              :aria-label="(statById.get(item.i as DashboardWidgetId)?.label ?? '') + ': ' + (statById.get(item.i as DashboardWidgetId)?.value ?? '')"
+              class="stat-card dd-rounded px-4 py-2.5 text-left cursor-default relative w-full"
               :class="[
                 editMode ? 'm-[3px] h-[calc(100%-6px)]' : 'h-full',
                 !editMode && statById.get(item.i as DashboardWidgetId)?.route ? 'cursor-pointer hover:dd-bg-elevated' : '',
@@ -295,7 +310,7 @@ function confirmDashboardUpdateAll() {
               <div v-if="statById.get(item.i as DashboardWidgetId)?.detail" class="mt-1 text-2xs font-medium dd-text-muted">
                 {{ statById.get(item.i as DashboardWidgetId)?.detail }}
               </div>
-            </div>
+            </component>
 
             <!-- Grid Widgets -->
             <DashboardRecentUpdatesWidget

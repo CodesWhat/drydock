@@ -1190,6 +1190,10 @@ describe('DashboardView', () => {
       const securityCard = statCards.find((c) => c.text().includes('Security Issues'));
       await securityCard?.trigger('click');
       expect(mockRouterPush).toHaveBeenCalledWith('/security');
+
+      const registriesCard = statCards.find((c) => c.text().includes('Registries'));
+      await registriesCard?.trigger('click');
+      expect(mockRouterPush).toHaveBeenCalledWith('/registries');
     });
 
     it('routes update view-all buttons with has-update filter', async () => {
