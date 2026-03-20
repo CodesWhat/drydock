@@ -170,6 +170,44 @@ describe('WatchersView', () => {
     expect(wrapper.text()).toContain('Failed to load watchers');
   });
 
+  it('renders lastRun from metadata.lastRunAt when present', async () => {
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    mockGetAllWatchers.mockResolvedValue([
+      {
+        id: 'watcher-alpha',
+        name: 'Alpha Watcher',
+        type: 'docker',
+        configuration: { cron: '*/5 * * * *' },
+        metadata: { lastRunAt: fiveMinutesAgo },
+      },
+    ]);
+    mockGetAllContainers.mockResolvedValue([]);
+
+    const wrapper = await mountWatchersView();
+    const table = wrapper.findComponent(dataViewStubs.DataTable);
+    const rows = table.props('rows') as Array<{ lastRun: string }>;
+
+    expect(rows[0].lastRun).toBe('5m ago');
+  });
+
+  it('renders em dash for lastRun when metadata.lastRunAt is absent', async () => {
+    mockGetAllWatchers.mockResolvedValue([
+      {
+        id: 'watcher-alpha',
+        name: 'Alpha Watcher',
+        type: 'docker',
+        configuration: { cron: '*/5 * * * *' },
+      },
+    ]);
+    mockGetAllContainers.mockResolvedValue([]);
+
+    const wrapper = await mountWatchersView();
+    const table = wrapper.findComponent(dataViewStubs.DataTable);
+    const rows = table.props('rows') as Array<{ lastRun: string }>;
+
+    expect(rows[0].lastRun).toBe('\u2014');
+  });
+
   it('clicking a row fetches watcher details from per-component endpoint', async () => {
     mockGetAllWatchers.mockResolvedValue([
       {

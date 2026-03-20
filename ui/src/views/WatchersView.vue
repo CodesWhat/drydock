@@ -6,6 +6,7 @@ import { useViewMode } from '../preferences/useViewMode';
 import { getAllContainers } from '../services/container';
 import { getAllWatchers, getWatcher } from '../services/watcher';
 import type { ApiComponent } from '../types/api';
+import { timeAgo } from '../utils/audit-helpers';
 
 const { isMobile } = useBreakpoints();
 const route = useRoute();
@@ -65,7 +66,7 @@ function mapWatcher(watcher: ApiComponent, status = 'watching') {
     status,
     containers: containerCounts.value[watcher.name] ?? 0,
     cron: watcher.configuration?.cron ?? '',
-    lastRun: '\u2014',
+    lastRun: watcher.metadata?.lastRunAt ? timeAgo(String(watcher.metadata.lastRunAt)) : '\u2014',
     config: Object.fromEntries(
       Object.entries(watcher.configuration ?? {}).sort(([a], [b]) => a.localeCompare(b)),
     ),
