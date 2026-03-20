@@ -17,6 +17,9 @@ export const CONTAINER_SORT_MODES = [
 
 export type ContainerSortMode = (typeof CONTAINER_SORT_MODES)[number];
 
+export const CONTAINER_ORDER_VALUES = ['asc', 'desc'] as const;
+export type ContainerOrderDirection = (typeof CONTAINER_ORDER_VALUES)[number];
+
 type AscendingContainerSortMode = Exclude<
   ContainerSortMode,
   '-name' | '-status' | '-age' | '-created'
@@ -28,6 +31,24 @@ export function parseContainerSortMode(sortQuery: unknown): ContainerSortMode {
     return DEFAULT_CONTAINER_SORT_MODE;
   }
   return sortValue;
+}
+
+export function resolveContainerSortMode(
+  sortQuery: unknown,
+  orderQuery: unknown,
+): ContainerSortMode {
+  const baseSortMode = parseContainerSortMode(sortQuery);
+  const orderValue = getFirstNonEmptyQueryValue(orderQuery)?.toLowerCase();
+
+  if (orderValue === 'desc') {
+    const normalizedSort = normalizeContainerSortMode(baseSortMode);
+    return `-${normalizedSort}` as ContainerSortMode;
+  }
+  if (orderValue === 'asc') {
+    return normalizeContainerSortMode(baseSortMode);
+  }
+
+  return baseSortMode;
 }
 
 function getContainerNameForSort(container: Container): string {

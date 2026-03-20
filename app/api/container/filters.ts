@@ -27,12 +27,24 @@ type AscendingContainerSortMode = Exclude<
   '-name' | '-status' | '-age' | '-created'
 >;
 
+export const CONTAINER_SORT_FIELDS = ['name', 'status', 'age', 'created'] as const;
+export type ContainerSortField = (typeof CONTAINER_SORT_FIELDS)[number];
+
+export const CONTAINER_ORDER_VALUES = ['asc', 'desc'] as const;
+export type ContainerOrderDirection = (typeof CONTAINER_ORDER_VALUES)[number];
+
 const CONTAINER_LIST_QUERY_SCHEMA = joi.object({
   sort: joi
     .string()
     .valid('name', '-name', 'status', '-status', 'age', '-age', 'created', '-created')
     .messages({
       'any.only': 'Invalid sort value',
+    }),
+  order: joi
+    .string()
+    .valid(...CONTAINER_ORDER_VALUES)
+    .messages({
+      'any.only': 'Invalid order value',
     }),
   status: joi
     .string()
@@ -50,9 +62,12 @@ const CONTAINER_LIST_QUERY_SCHEMA = joi.object({
     .messages({
       'any.only': 'Invalid status filter value',
     }),
-  kind: joi.string().valid('major', 'minor', 'patch', 'digest').messages({
-    'any.only': 'Invalid kind filter value',
-  }),
+  kind: joi
+    .string()
+    .valid('major', 'minor', 'patch', 'digest', 'watched', 'unwatched', 'all')
+    .messages({
+      'any.only': 'Invalid kind filter value',
+    }),
   watcher: joi.string().trim().min(1).messages({
     'string.empty': 'Invalid watcher filter value',
     'string.min': 'Invalid watcher filter value',
@@ -70,6 +85,7 @@ export function removeContainerListControlParams(query: Request['query']): Reque
       key === 'limit' ||
       key === 'offset' ||
       key === 'sort' ||
+      key === 'order' ||
       key === 'maturity' ||
       key === 'status' ||
       key === 'kind' ||
@@ -110,6 +126,26 @@ function parseContainerSortMode(sortQuery: unknown): ContainerSortMode {
   return sortValue;
 }
 
+export function resolveContainerSortMode(
+  sortQuery: unknown,
+  orderQuery: unknown,
+): ContainerSortMode {
+  const baseSortMode = parseContainerSortMode(sortQuery);
+  const orderValue = getFirstNonEmptyQueryValue(orderQuery)?.toLowerCase();
+
+  // If an explicit order param is provided, it overrides any prefix on the sort value
+  if (orderValue === 'desc') {
+    const normalizedSort = normalizeContainerSortMode(baseSortMode);
+    return `-${normalizedSort}` as ContainerSortMode;
+  }
+  if (orderValue === 'asc') {
+    return normalizeContainerSortMode(baseSortMode);
+  }
+
+  // No order param — use the sort value as-is (including any prefix)
+  return baseSortMode;
+}
+
 export function parseContainerMaturityFilter(
   maturityQuery: unknown,
 ): ContainerMaturityFilter | undefined {
@@ -131,10 +167,12 @@ export type ContainerRuntimeStatus =
 
 export type ContainerUpdateStatus = 'update-available' | 'up-to-date';
 
+export type ContainerWatchedKind = 'watched' | 'unwatched' | 'all';
+
 export interface ValidatedContainerListQuery {
   sortMode: ContainerSortMode;
   status?: ContainerUpdateStatus | ContainerRuntimeStatus;
-  kind?: 'major' | 'minor' | 'patch' | 'digest';
+  kind?: 'major' | 'minor' | 'patch' | 'digest' | ContainerWatchedKind;
   watcher?: string;
   maturity?: ContainerMaturityFilter;
 }
@@ -143,6 +181,7 @@ export function validateContainerListQuery(query: Request['query']): ValidatedCo
   const { value, error } = CONTAINER_LIST_QUERY_SCHEMA.validate(
     {
       sort: getFirstQueryValue(query.sort),
+      order: getFirstQueryValue(query.order),
       status: getFirstQueryValue(query.status),
       kind: getFirstQueryValue(query.kind),
       watcher: getFirstQueryValue(query.watcher),
@@ -158,7 +197,7 @@ export function validateContainerListQuery(query: Request['query']): ValidatedCo
   }
 
   return {
-    sortMode: parseContainerSortMode(value.sort),
+    sortMode: resolveContainerSortMode(value.sort, value.order),
     status: value.status,
     kind: value.kind,
     watcher: value.watcher,
@@ -398,6 +437,10 @@ export function mapContainerListStatusFilter(
   return undefined;
 }
 
+export function isContainerWatchedKind(value: unknown): value is ContainerWatchedKind {
+  return value === 'watched' || value === 'unwatched' || value === 'all';
+}
+
 export function mapContainerListKindFilter(
   kindQuery: unknown,
 ):
@@ -405,6 +448,9 @@ export function mapContainerListKindFilter(
   | { 'updateKind.semverDiff': 'major' | 'minor' | 'patch' }
   | undefined {
   const kindFilter = getFirstNonEmptyQueryValue(kindQuery);
+  if (isContainerWatchedKind(kindFilter)) {
+    return undefined;
+  }
   if (kindFilter === 'digest') {
     return { 'updateKind.kind': 'digest' };
   }
@@ -412,6 +458,28 @@ export function mapContainerListKindFilter(
     return { 'updateKind.semverDiff': kindFilter };
   }
   return undefined;
+}
+
+function isContainerExplicitlyWatched(container: Container): boolean {
+  const labels = container.labels;
+  if (!labels || typeof labels !== 'object') {
+    return false;
+  }
+  const watchLabel = labels['dd.watch'] ?? labels['wud.watch'];
+  return typeof watchLabel === 'string' && watchLabel.toLowerCase() === 'true';
+}
+
+export function applyContainerWatchedKindFilter(
+  containers: Container[],
+  kindFilter: ContainerWatchedKind | undefined,
+): Container[] {
+  if (!kindFilter || kindFilter === 'all') {
+    return containers;
+  }
+  if (kindFilter === 'watched') {
+    return containers.filter((container) => isContainerExplicitlyWatched(container));
+  }
+  return containers.filter((container) => !isContainerExplicitlyWatched(container));
 }
 
 export function normalizeContainerListPagination(query: Request['query']) {

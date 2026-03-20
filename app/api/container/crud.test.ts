@@ -807,6 +807,148 @@ describe('api/container/crud', () => {
       expect(payload.hasMore).toBe(true);
     });
 
+    test('supports order=desc to sort containers in descending order', () => {
+      const harness = createHarness({
+        containers: [
+          createContainer({ id: 'c1', name: 'alpha' }),
+          createContainer({ id: 'c2', name: 'charlie' }),
+          createContainer({ id: 'c3', name: 'bravo' }),
+        ],
+      });
+
+      const res = callGetContainers(harness.handlers, { sort: 'name', order: 'desc' });
+      const payload = res.json.mock.calls[0][0];
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(payload.data.map((container: { name: string }) => container.name)).toEqual([
+        'charlie',
+        'bravo',
+        'alpha',
+      ]);
+    });
+
+    test('supports order=asc to sort containers in ascending order', () => {
+      const harness = createHarness({
+        containers: [
+          createContainer({ id: 'c1', name: 'charlie' }),
+          createContainer({ id: 'c2', name: 'alpha' }),
+          createContainer({ id: 'c3', name: 'bravo' }),
+        ],
+      });
+
+      const res = callGetContainers(harness.handlers, { sort: 'name', order: 'asc' });
+      const payload = res.json.mock.calls[0][0];
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(payload.data.map((container: { name: string }) => container.name)).toEqual([
+        'alpha',
+        'bravo',
+        'charlie',
+      ]);
+    });
+
+    test('order=asc overrides prefix-based descending sort', () => {
+      const harness = createHarness({
+        containers: [
+          createContainer({ id: 'c1', name: 'charlie' }),
+          createContainer({ id: 'c2', name: 'alpha' }),
+          createContainer({ id: 'c3', name: 'bravo' }),
+        ],
+      });
+
+      const res = callGetContainers(harness.handlers, { sort: '-name', order: 'asc' });
+      const payload = res.json.mock.calls[0][0];
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(payload.data.map((container: { name: string }) => container.name)).toEqual([
+        'alpha',
+        'bravo',
+        'charlie',
+      ]);
+    });
+
+    test('order=desc with sort=status sorts update-available last', () => {
+      const harness = createHarness({
+        containers: [
+          createContainer({ id: 'c1', name: 'no-update', updateAvailable: false }),
+          createContainer({ id: 'c2', name: 'has-update', updateAvailable: true }),
+        ],
+      });
+
+      const res = callGetContainers(harness.handlers, { sort: 'status', order: 'desc' });
+      const payload = res.json.mock.calls[0][0];
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(payload.data.map((container: { name: string }) => container.name)).toEqual([
+        'no-update',
+        'has-update',
+      ]);
+    });
+
+    test('order param without sort defaults to name sort', () => {
+      const harness = createHarness({
+        containers: [
+          createContainer({ id: 'c1', name: 'charlie' }),
+          createContainer({ id: 'c2', name: 'alpha' }),
+          createContainer({ id: 'c3', name: 'bravo' }),
+        ],
+      });
+
+      const res = callGetContainers(harness.handlers, { order: 'desc' });
+      const payload = res.json.mock.calls[0][0];
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(payload.data.map((container: { name: string }) => container.name)).toEqual([
+        'charlie',
+        'bravo',
+        'alpha',
+      ]);
+    });
+
+    test('order param is not passed as a column filter to the store', () => {
+      const harness = createHarness({
+        containers: [createContainer({ id: 'c1', name: 'nginx' })],
+      });
+
+      callGetContainers(harness.handlers, { sort: 'name', order: 'asc' });
+
+      expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith({}, { limit: 0, offset: 0 });
+    });
+
+    test('returns 400 for invalid order value', () => {
+      const harness = createHarness({ containers: [] });
+
+      const res = callGetContainers(harness.handlers, { order: 'ascending' });
+
+      expect(res.status).toHaveBeenCalledWith(400);
+    });
+
+    test('applies sort with order before pagination', () => {
+      const harness = createHarness({
+        containers: [
+          createContainer({ id: 'c1', name: 'alpha' }),
+          createContainer({ id: 'c2', name: 'charlie' }),
+          createContainer({ id: 'c3', name: 'bravo' }),
+        ],
+      });
+
+      const res = callGetContainers(harness.handlers, {
+        sort: 'name',
+        order: 'desc',
+        limit: '2',
+        offset: '0',
+      });
+      const payload = res.json.mock.calls[0][0];
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(payload.data.map((container: { name: string }) => container.name)).toEqual([
+        'charlie',
+        'bravo',
+      ]);
+      expect(payload.total).toBe(3);
+      expect(payload.hasMore).toBe(true);
+    });
+
     test('maps status/kind/watcher filters to store query fields with AND semantics', () => {
       const harness = createHarness({
         containers: [createContainer({ id: 'c1' })],

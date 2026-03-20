@@ -1,7 +1,13 @@
 import { describe, expect, test } from 'vitest';
+import type { Container } from '../../model/container.js';
 import {
+  applyContainerWatchedKindFilter,
   isContainerRuntimeStatus,
+  isContainerWatchedKind,
+  mapContainerListKindFilter,
   mapContainerListStatusFilter,
+  removeContainerListControlParams,
+  resolveContainerSortMode,
   sortContainers,
   validateContainerListQuery,
 } from './filters.js';
@@ -184,5 +190,204 @@ describe('api/container/filters', () => {
     expect(mapContainerListStatusFilter('unknown-value')).toBeUndefined();
     expect(mapContainerListStatusFilter(undefined)).toBeUndefined();
     expect(mapContainerListStatusFilter('')).toBeUndefined();
+  });
+
+  test('resolveContainerSortMode returns ascending sort when order is asc', () => {
+    expect(resolveContainerSortMode('name', 'asc')).toBe('name');
+    expect(resolveContainerSortMode('status', 'asc')).toBe('status');
+    expect(resolveContainerSortMode('age', 'asc')).toBe('age');
+    expect(resolveContainerSortMode('created', 'asc')).toBe('created');
+  });
+
+  test('resolveContainerSortMode returns descending sort when order is desc', () => {
+    expect(resolveContainerSortMode('name', 'desc')).toBe('-name');
+    expect(resolveContainerSortMode('status', 'desc')).toBe('-status');
+    expect(resolveContainerSortMode('age', 'desc')).toBe('-age');
+    expect(resolveContainerSortMode('created', 'desc')).toBe('-created');
+  });
+
+  test('resolveContainerSortMode order=asc overrides prefix-based descending sort', () => {
+    expect(resolveContainerSortMode('-name', 'asc')).toBe('name');
+    expect(resolveContainerSortMode('-status', 'asc')).toBe('status');
+    expect(resolveContainerSortMode('-age', 'asc')).toBe('age');
+    expect(resolveContainerSortMode('-created', 'asc')).toBe('created');
+  });
+
+  test('resolveContainerSortMode order=desc overrides prefix-based ascending sort', () => {
+    expect(resolveContainerSortMode('name', 'desc')).toBe('-name');
+    expect(resolveContainerSortMode('status', 'desc')).toBe('-status');
+  });
+
+  test('resolveContainerSortMode preserves prefix when no order is given', () => {
+    expect(resolveContainerSortMode('-name', undefined)).toBe('-name');
+    expect(resolveContainerSortMode('name', undefined)).toBe('name');
+    expect(resolveContainerSortMode('-status', '')).toBe('-status');
+  });
+
+  test('resolveContainerSortMode defaults to name when sort is invalid', () => {
+    expect(resolveContainerSortMode('invalid', 'desc')).toBe('-name');
+    expect(resolveContainerSortMode(undefined, 'asc')).toBe('name');
+    expect(resolveContainerSortMode(undefined, undefined)).toBe('name');
+  });
+
+  test('validateContainerListQuery resolves sort + order into sortMode', () => {
+    expect(validateContainerListQuery({ sort: 'name', order: 'desc' } as any).sortMode).toBe(
+      '-name',
+    );
+    expect(validateContainerListQuery({ sort: 'status', order: 'asc' } as any).sortMode).toBe(
+      'status',
+    );
+    expect(validateContainerListQuery({ sort: 'age', order: 'desc' } as any).sortMode).toBe('-age');
+    expect(validateContainerListQuery({ sort: 'created', order: 'asc' } as any).sortMode).toBe(
+      'created',
+    );
+  });
+
+  test('validateContainerListQuery accepts order without sort', () => {
+    expect(validateContainerListQuery({ order: 'desc' } as any).sortMode).toBe('-name');
+    expect(validateContainerListQuery({ order: 'asc' } as any).sortMode).toBe('name');
+  });
+
+  test('validateContainerListQuery throws for invalid order value', () => {
+    expect(() => validateContainerListQuery({ order: 'ascending' } as any)).toThrow(
+      'Invalid order value',
+    );
+  });
+
+  test('removeContainerListControlParams strips order from query', () => {
+    const query = { sort: 'name', order: 'asc', name: 'nginx' } as any;
+    const result = removeContainerListControlParams(query);
+    expect(result).toEqual({ name: 'nginx' });
+    expect(result).not.toHaveProperty('sort');
+    expect(result).not.toHaveProperty('order');
+  });
+
+  test('validateContainerListQuery accepts watched kind values', () => {
+    expect(validateContainerListQuery({ kind: 'watched' } as any).kind).toBe('watched');
+    expect(validateContainerListQuery({ kind: 'unwatched' } as any).kind).toBe('unwatched');
+    expect(validateContainerListQuery({ kind: 'all' } as any).kind).toBe('all');
+  });
+
+  test('validateContainerListQuery still accepts update kind values', () => {
+    expect(validateContainerListQuery({ kind: 'major' } as any).kind).toBe('major');
+    expect(validateContainerListQuery({ kind: 'minor' } as any).kind).toBe('minor');
+    expect(validateContainerListQuery({ kind: 'patch' } as any).kind).toBe('patch');
+    expect(validateContainerListQuery({ kind: 'digest' } as any).kind).toBe('digest');
+  });
+
+  test('validateContainerListQuery throws for invalid kind values', () => {
+    expect(() => validateContainerListQuery({ kind: 'invalid-kind' } as any)).toThrow(
+      'Invalid kind filter value',
+    );
+  });
+
+  test('isContainerWatchedKind identifies watched kind values', () => {
+    expect(isContainerWatchedKind('watched')).toBe(true);
+    expect(isContainerWatchedKind('unwatched')).toBe(true);
+    expect(isContainerWatchedKind('all')).toBe(true);
+    expect(isContainerWatchedKind('major')).toBe(false);
+    expect(isContainerWatchedKind('minor')).toBe(false);
+    expect(isContainerWatchedKind('digest')).toBe(false);
+    expect(isContainerWatchedKind(undefined)).toBe(false);
+    expect(isContainerWatchedKind(null)).toBe(false);
+    expect(isContainerWatchedKind('')).toBe(false);
+  });
+
+  test('mapContainerListKindFilter returns undefined for watched kind values', () => {
+    expect(mapContainerListKindFilter('watched')).toBeUndefined();
+    expect(mapContainerListKindFilter('unwatched')).toBeUndefined();
+    expect(mapContainerListKindFilter('all')).toBeUndefined();
+  });
+
+  test('mapContainerListKindFilter still maps update kind values', () => {
+    expect(mapContainerListKindFilter('digest')).toEqual({ 'updateKind.kind': 'digest' });
+    expect(mapContainerListKindFilter('major')).toEqual({ 'updateKind.semverDiff': 'major' });
+    expect(mapContainerListKindFilter('minor')).toEqual({ 'updateKind.semverDiff': 'minor' });
+    expect(mapContainerListKindFilter('patch')).toEqual({ 'updateKind.semverDiff': 'patch' });
+  });
+
+  test('applyContainerWatchedKindFilter returns all containers when kind is all', () => {
+    const containers = [
+      { id: 'c1', labels: { 'dd.watch': 'true' } },
+      { id: 'c2', labels: {} },
+    ] as unknown as Container[];
+    expect(applyContainerWatchedKindFilter(containers, 'all').map((c) => c.id)).toEqual([
+      'c1',
+      'c2',
+    ]);
+  });
+
+  test('applyContainerWatchedKindFilter returns all containers when kind is undefined', () => {
+    const containers = [
+      { id: 'c1', labels: { 'dd.watch': 'true' } },
+      { id: 'c2', labels: {} },
+    ] as unknown as Container[];
+    expect(applyContainerWatchedKindFilter(containers, undefined).map((c) => c.id)).toEqual([
+      'c1',
+      'c2',
+    ]);
+  });
+
+  test('applyContainerWatchedKindFilter returns only watched containers when kind is watched', () => {
+    const containers = [
+      { id: 'c1', labels: { 'dd.watch': 'true' } },
+      { id: 'c2', labels: {} },
+      { id: 'c3', labels: { 'dd.watch': 'false' } },
+      { id: 'c4', labels: { 'dd.watch': 'True' } },
+    ] as unknown as Container[];
+    expect(applyContainerWatchedKindFilter(containers, 'watched').map((c) => c.id)).toEqual([
+      'c1',
+      'c4',
+    ]);
+  });
+
+  test('applyContainerWatchedKindFilter returns only unwatched containers when kind is unwatched', () => {
+    const containers = [
+      { id: 'c1', labels: { 'dd.watch': 'true' } },
+      { id: 'c2', labels: {} },
+      { id: 'c3', labels: { 'dd.watch': 'false' } },
+      { id: 'c4' },
+    ] as unknown as Container[];
+    expect(applyContainerWatchedKindFilter(containers, 'unwatched').map((c) => c.id)).toEqual([
+      'c2',
+      'c3',
+      'c4',
+    ]);
+  });
+
+  test('applyContainerWatchedKindFilter recognizes wud.watch legacy label', () => {
+    const containers = [
+      { id: 'c1', labels: { 'wud.watch': 'true' } },
+      { id: 'c2', labels: { 'wud.watch': 'false' } },
+    ] as unknown as Container[];
+    expect(applyContainerWatchedKindFilter(containers, 'watched').map((c) => c.id)).toEqual(['c1']);
+    expect(applyContainerWatchedKindFilter(containers, 'unwatched').map((c) => c.id)).toEqual([
+      'c2',
+    ]);
+  });
+
+  test('applyContainerWatchedKindFilter prefers dd.watch over wud.watch', () => {
+    const containers = [
+      { id: 'c1', labels: { 'dd.watch': 'true', 'wud.watch': 'false' } },
+      { id: 'c2', labels: { 'dd.watch': 'false', 'wud.watch': 'true' } },
+    ] as unknown as Container[];
+    expect(applyContainerWatchedKindFilter(containers, 'watched').map((c) => c.id)).toEqual(['c1']);
+    expect(applyContainerWatchedKindFilter(containers, 'unwatched').map((c) => c.id)).toEqual([
+      'c2',
+    ]);
+  });
+
+  test('applyContainerWatchedKindFilter treats containers without labels as unwatched', () => {
+    const containers = [
+      { id: 'c1' },
+      { id: 'c2', labels: undefined },
+      { id: 'c3', labels: null },
+    ] as unknown as Container[];
+    expect(applyContainerWatchedKindFilter(containers, 'watched')).toEqual([]);
+    expect(applyContainerWatchedKindFilter(containers, 'unwatched').map((c) => c.id)).toEqual([
+      'c1',
+      'c2',
+      'c3',
+    ]);
   });
 });

@@ -61,6 +61,14 @@ export function mapContainerListStatusFilter(
   return undefined;
 }
 
+export type ContainerWatchedKind = 'watched' | 'unwatched' | 'all';
+
+const WATCHED_KIND_VALUES: ReadonlySet<string> = new Set(['watched', 'unwatched', 'all']);
+
+export function isContainerWatchedKind(value: unknown): value is ContainerWatchedKind {
+  return typeof value === 'string' && WATCHED_KIND_VALUES.has(value);
+}
+
 export function mapContainerListKindFilter(
   kindQuery: unknown,
 ):
@@ -68,6 +76,9 @@ export function mapContainerListKindFilter(
   | { 'updateKind.semverDiff': 'major' | 'minor' | 'patch' }
   | undefined {
   const kindFilter = getFirstNonEmptyQueryValue(kindQuery);
+  if (isContainerWatchedKind(kindFilter)) {
+    return undefined;
+  }
   if (kindFilter === 'digest') {
     return { 'updateKind.kind': 'digest' };
   }

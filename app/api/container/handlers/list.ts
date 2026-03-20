@@ -5,7 +5,10 @@ import { buildPaginationLinks } from '../../pagination-links.js';
 import type { ContainerListResponse, CrudHandlerContext } from '../crud-context.js';
 import {
   applyContainerMaturityFilter,
+  applyContainerWatchedKindFilter,
+  type ContainerWatchedKind,
   getFirstNonEmptyQueryValue,
+  isContainerWatchedKind,
   mapContainerListKindFilter,
   mapContainerListStatusFilter,
   normalizeContainerListPagination,
@@ -53,6 +56,11 @@ export function buildContainerListResponse(
   const statusFilter = mapContainerListStatusFilter(validatedQuery.status);
   const kindFilter = mapContainerListKindFilter(validatedQuery.kind);
   const maturityFilter = parseContainerMaturityFilter(validatedQuery.maturity);
+  const watchedKindFilter: ContainerWatchedKind | undefined = isContainerWatchedKind(
+    validatedQuery.kind,
+  )
+    ? validatedQuery.kind
+    : undefined;
 
   const includeVulnerabilities = parseBooleanQueryParam(query.includeVulnerabilities, false);
   const filteredQuery = {
@@ -66,12 +74,17 @@ export function buildContainerListResponse(
   } as Request['query'];
   const pagination = normalizeContainerListPagination(query);
 
-  // Only sort and maturity require loading the full collection before pagination.
-  // status and kind are already pushed down to filteredQuery as store-level
-  // filters (updateAvailable, updateKind.*), so the store handles those
-  // efficiently without loading everything into memory first.
+  // Sort/order, maturity, and watched-kind filters require loading the full
+  // collection before pagination because they inspect in-memory properties
+  // (container labels, update age) that cannot be pushed down to the store.
+  // status and update-kind are already pushed down to filteredQuery as
+  // store-level filters (updateAvailable, updateKind.*), so the store handles
+  // those efficiently without loading everything into memory first.
   const needsFullCollection =
-    getFirstNonEmptyQueryValue(query.sort) !== undefined || maturityFilter !== undefined;
+    getFirstNonEmptyQueryValue(query.sort) !== undefined ||
+    getFirstNonEmptyQueryValue(query.order) !== undefined ||
+    maturityFilter !== undefined ||
+    (watchedKindFilter !== undefined && watchedKindFilter !== 'all');
   let pagedContainers: Container[];
   let total: number;
 
@@ -80,8 +93,12 @@ export function buildContainerListResponse(
       limit: 0,
       offset: 0,
     });
-    const maturityFilteredContainers = applyContainerMaturityFilter(
+    const watchedKindFilteredContainers = applyContainerWatchedKindFilter(
       containersToSort,
+      watchedKindFilter,
+    );
+    const maturityFilteredContainers = applyContainerMaturityFilter(
+      watchedKindFilteredContainers,
       maturityFilter,
     );
     const sortedContainers = sortContainers(maturityFilteredContainers, sortMode);
