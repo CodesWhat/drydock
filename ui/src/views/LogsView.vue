@@ -1,25 +1,20 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue';
-import {
-  LOG_AUTO_FETCH_INTERVALS,
-  useAutoFetchLogs,
-  useLogViewport,
-} from '../composables/useLogViewerBehavior';
-import { useSystemLogStream } from '../composables/useSystemLogStream';
+import { computed, onMounted, ref, watch } from 'vue';
 import ConfigLogsTab from '../components/config/ConfigLogsTab.vue';
+import { useSystemLogStream } from '../composables/useSystemLogStream';
 import { getLog, getLogEntries } from '../services/log';
+import type { SystemLogEntry } from '../services/system-log-stream';
+import type { AppLogEntry } from '../types/log-entry';
 import { errorMessage } from '../utils/error';
+import { toAppLogEntry } from '../utils/system-log-adapter';
 
-interface AppLogEntry {
+interface ApiLogEntry {
   timestamp?: string | number;
   level?: string;
   component?: string;
   msg?: string;
   message?: string;
 }
-
-const { logContainer, scrollBlocked, scrollToBottom, handleLogScroll, resumeAutoScroll } =
-  useLogViewport();
 
 const streamingEnabled = ref(true);
 const {
@@ -31,12 +26,6 @@ const {
   clear: streamClear,
 } = useSystemLogStream();
 
-const { autoFetchInterval } = useAutoFetchLogs({
-  fetchFn: refreshAppLogs,
-  scrollToBottom,
-  scrollBlocked,
-});
-
 const appLogLevel = ref('unknown');
 const appLogEntries = ref<AppLogEntry[]>([]);
 const appLogsLoading = ref(false);
@@ -44,53 +33,39 @@ const appLogsError = ref('');
 const appLogLevelFilter = ref('all');
 const appLogTail = ref(100);
 const appLogComponent = ref('');
-const appLogsLastFetched = ref('');
+
+const isStreaming = computed(() => streamingEnabled.value && streamStatus.value === 'connected');
+
+const streamAppEntries = computed<AppLogEntry[]>(() => {
+  return streamEntries.value.map((entry, index) => toAppLogEntry(entry, index + 1));
+});
 
 const displayEntries = computed<AppLogEntry[]>(() => {
   if (streamingEnabled.value) {
-    return streamEntries.value as AppLogEntry[];
+    return streamAppEntries.value;
   }
   return appLogEntries.value;
 });
 
-const isStreaming = computed(() => streamingEnabled.value && streamStatus.value === 'connected');
+function toTimestampMs(value: string | number | undefined): number {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value !== 'string') {
+    return Number.NaN;
+  }
 
-function formatLogTimestamp(timestamp: string | number | undefined): string {
-  if (timestamp === undefined || timestamp === null) {
-    return 'unknown';
-  }
-  const date = new Date(timestamp);
-  if (Number.isNaN(date.getTime())) {
-    return String(timestamp);
-  }
-  return date.toLocaleString();
+  const parsed = Date.parse(value);
+  return Number.isNaN(parsed) ? Number.NaN : parsed;
 }
 
-function formatLastFetched(iso: string): string {
-  if (streamingEnabled.value) {
-    return isStreaming.value ? 'Live' : 'Disconnected';
-  }
-  if (!iso) {
-    return 'never';
-  }
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) {
-    return 'never';
-  }
-  return date.toLocaleTimeString();
-}
-
-function logMessage(entry: AppLogEntry): string {
-  return entry.msg || entry.message || '';
-}
-
-function getLevelColor(level: string | undefined): string {
-  const value = (level || '').toLowerCase();
-  if (value === 'error') return 'var(--dd-danger)';
-  if (value === 'warn' || value === 'warning') return 'var(--dd-warning)';
-  if (value === 'info') return 'var(--dd-info)';
-  if (value === 'debug') return 'var(--dd-text-secondary)';
-  return 'var(--dd-text-secondary)';
+function toSystemLogEntry(entry: ApiLogEntry): SystemLogEntry {
+  return {
+    timestamp: toTimestampMs(entry.timestamp),
+    level: entry.level || 'info',
+    component: entry.component || '-',
+    msg: entry.msg || entry.message || '',
+  };
 }
 
 function buildStreamQuery() {
@@ -120,12 +95,13 @@ async function refreshAppLogs() {
         tail: appLogTail.value,
       }),
     ]);
+
     appLogLevel.value = logInfo?.level ?? 'unknown';
-    appLogEntries.value = Array.isArray(entries) ? entries : [];
-    appLogsLastFetched.value = new Date().toISOString();
-    if (!scrollBlocked.value) {
-      void nextTick(() => scrollToBottom());
-    }
+    appLogEntries.value = Array.isArray(entries)
+      ? entries.map((entry, index) =>
+          toAppLogEntry(toSystemLogEntry(entry as ApiLogEntry), index + 1),
+        )
+      : [];
   } catch (e: unknown) {
     appLogsError.value = errorMessage(e, 'Failed to load application logs');
     appLogEntries.value = [];
@@ -149,24 +125,17 @@ function resetLogFilters() {
   applyFilters();
 }
 
-function setAppLogContainer(element: HTMLElement | null) {
-  logContainer.value = element;
+function toggleStreamingPause() {
+  streamingEnabled.value = !streamingEnabled.value;
 }
 
 watch(streamingEnabled, (enabled) => {
   if (enabled) {
-    autoFetchInterval.value = 0;
     startStreaming();
   } else {
     streamDisconnect();
     streamClear();
     void refreshAppLogs();
-  }
-});
-
-watch(streamEntries, () => {
-  if (streamingEnabled.value && !scrollBlocked.value) {
-    void nextTick(() => scrollToBottom());
   }
 });
 
@@ -195,27 +164,16 @@ onMounted(() => {
       :error="appLogsError"
       :log-level-filter="appLogLevelFilter"
       :tail="appLogTail"
-      :auto-fetch-interval="autoFetchInterval"
       :component-filter="appLogComponent"
-      :auto-fetch-options="LOG_AUTO_FETCH_INTERVALS"
-      :scroll-blocked="scrollBlocked"
-      :last-fetched-iso="appLogsLastFetched"
-      :format-last-fetched="formatLastFetched"
-      :format-timestamp="formatLogTimestamp"
-      :message-for-entry="logMessage"
-      :level-color="getLevelColor"
       :streaming-enabled="streamingEnabled"
       :streaming-connected="isStreaming"
       @update:log-level-filter="appLogLevelFilter = $event"
       @update:tail="appLogTail = $event"
-      @update:auto-fetch-interval="autoFetchInterval = $event"
       @update:component-filter="appLogComponent = $event"
       @update:streaming-enabled="streamingEnabled = $event"
       @refresh="applyFilters"
       @reset="resetLogFilters"
-      @resume-auto-scroll="resumeAutoScroll"
-      @log-scroll="handleLogScroll"
-      @set-log-container="setAppLogContainer"
+      @toggle-pause="toggleStreamingPause"
     />
   </div>
 </template>

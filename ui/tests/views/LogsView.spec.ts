@@ -6,15 +6,14 @@ vi.mock('@/services/log', () => ({
   getLogEntries: vi.fn().mockResolvedValue([]),
 }));
 
-vi.mock('@/composables/useLogViewerBehavior', () => ({
-  LOG_AUTO_FETCH_INTERVALS: [{ label: 'Off', value: 0 }],
-  useAutoFetchLogs: () => ({ autoFetchInterval: { value: 0 } }),
-  useLogViewport: () => ({
-    logContainer: { value: null },
-    scrollBlocked: { value: false },
-    scrollToBottom: vi.fn(),
-    handleLogScroll: vi.fn(),
-    resumeAutoScroll: vi.fn(),
+vi.mock('@/composables/useSystemLogStream', () => ({
+  useSystemLogStream: () => ({
+    entries: { value: [] },
+    status: { value: 'disconnected' },
+    connect: vi.fn(),
+    disconnect: vi.fn(),
+    updateFilters: vi.fn(),
+    clear: vi.fn(),
   }),
 }));
 

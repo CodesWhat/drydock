@@ -23,11 +23,9 @@ export function useSystemLogStream(options?: {
     connection = createSystemLogStreamConnection({
       query,
       onMessage(entry) {
-        const current = entries.value;
-        if (current.length >= MAX_ENTRIES) {
-          entries.value = [...current.slice(current.length - MAX_ENTRIES + 1), entry];
-        } else {
-          entries.value = [...current, entry];
+        entries.value.push(entry);
+        if (entries.value.length > MAX_ENTRIES) {
+          entries.value.splice(0, entries.value.length - MAX_ENTRIES);
         }
       },
       onStatus(newStatus) {
