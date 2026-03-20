@@ -322,6 +322,19 @@ const agentAllColumns = [
 
 const agentVisibleColumns = ref<Set<string>>(new Set(agentAllColumns.map((c) => c.key)));
 const showAgentColumnPicker = ref(false);
+const agentColumnPickerStyle = ref<Record<string, string>>({});
+function toggleAgentColumnPicker(event: MouseEvent) {
+  showAgentColumnPicker.value = !showAgentColumnPicker.value;
+  if (showAgentColumnPicker.value) {
+    const button = event.currentTarget as HTMLElement;
+    const rect = button.getBoundingClientRect();
+    agentColumnPickerStyle.value = {
+      position: 'fixed',
+      top: `${rect.bottom + 4}px`,
+      right: `${window.innerWidth - rect.right}px`,
+    };
+  }
+}
 
 function toggleAgentColumn(key: string) {
   const col = agentAllColumns.find((c) => c.key === key);
@@ -475,15 +488,17 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
               </AppButton>
             </template>
             <template #extra-buttons>
-              <div v-if="agentViewMode === 'table'" class="relative">
+              <div v-if="agentViewMode === 'table'">
                 <AppButton size="icon-sm" variant="plain" class="text-2xs-plus" :class="showAgentColumnPicker ? 'dd-text dd-bg-elevated' : 'dd-text-secondary hover:dd-text hover:dd-bg-elevated'"
                         v-tooltip.top="'Toggle columns'"
-                        @click.stop="showAgentColumnPicker = !showAgentColumnPicker">
+                        @click.stop="toggleAgentColumnPicker">
                   <AppIcon name="config" :size="12" />
                 </AppButton>
                 <div v-if="showAgentColumnPicker" @click.stop
-                     class="absolute right-0 top-9 z-50 min-w-[160px] py-1.5 dd-rounded shadow-lg"
+                     class="min-w-[160px] py-1.5 dd-rounded shadow-lg"
                      :style="{
+                       ...agentColumnPickerStyle,
+                       zIndex: 'var(--z-popover)',
                        backgroundColor: 'var(--dd-bg-card)',
                        border: '1px solid var(--dd-border-strong)',
                        boxShadow: 'var(--dd-shadow-tooltip)',

@@ -139,9 +139,10 @@ const {
 
     <div
       v-if="showColumnPicker"
-      class="z-50 min-w-[160px] py-1.5 dd-rounded shadow-lg"
+      class="min-w-[160px] py-1.5 dd-rounded shadow-lg"
       :style="{
         ...columnPickerStyle,
+        zIndex: 'var(--z-popover)',
         backgroundColor: 'var(--dd-bg-card)',
         border: '1px solid var(--dd-border-strong)',
         boxShadow: 'var(--dd-shadow-tooltip)',

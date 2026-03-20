@@ -10,6 +10,7 @@ import { actionIcon, actionLabel, statusColor, timeAgo } from '../utils/audit-he
 const router = useRouter();
 
 const showBell = ref(false);
+const bellPanelStyle = ref<Record<string, string>>({});
 const entries = ref<AuditEntry[]>([]);
 const loading = ref(false);
 const lastSeen = useStorageRef('dd-bell-last-seen', '');
@@ -31,9 +32,16 @@ async function fetchEntries() {
   }
 }
 
-function toggle() {
+function toggle(event: MouseEvent) {
   showBell.value = !showBell.value;
   if (showBell.value) {
+    const button = event.currentTarget as HTMLElement;
+    const rect = button.getBoundingClientRect();
+    bellPanelStyle.value = {
+      position: 'fixed',
+      top: `${rect.bottom + 4}px`,
+      right: `${window.innerWidth - rect.right}px`,
+    };
     fetchEntries();
   }
 }
@@ -109,8 +117,8 @@ function isUnread(entry: AuditEntry): boolean {
     </AppButton>
     <Transition name="menu-fade">
       <div v-if="showBell"
-           class="absolute right-0 top-full mt-1 w-[calc(100vw-1rem)] max-w-[380px] dd-rounded-lg shadow-lg z-50"
-           :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)', boxShadow: 'var(--dd-shadow-tooltip)' }">
+           class="w-[calc(100vw-1rem)] max-w-[380px] dd-rounded-lg shadow-lg"
+           :style="{ ...bellPanelStyle, zIndex: 'var(--z-popover)', backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)', boxShadow: 'var(--dd-shadow-tooltip)' }">
         <!-- Header -->
         <div class="flex items-center justify-between px-3 py-2"
              :style="{ borderBottom: '1px solid var(--dd-border)' }">

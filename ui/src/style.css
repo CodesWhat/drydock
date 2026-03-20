@@ -156,6 +156,7 @@ html.dd-font-comic-mono {
   --text-2xs-plus: 0.6875rem; /* 11px */
   --text-xs-plus: 0.8125rem; /* 13px */
   --text-sm-plus: 0.9375rem; /* 15px */
+  --z-popover: 60;
   --z-overlay: 100;
   --z-modal: 200;
   --dd-duration-fast: 0.15s;

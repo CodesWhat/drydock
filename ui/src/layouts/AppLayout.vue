@@ -212,8 +212,18 @@ const staticSearchResults = computed<SearchResultItem[]>(() => {
 
 // User menu
 const showUserMenu = ref(false);
-function toggleUserMenu() {
+const userMenuStyle = ref<Record<string, string>>({});
+function toggleUserMenu(event: MouseEvent) {
   showUserMenu.value = !showUserMenu.value;
+  if (showUserMenu.value) {
+    const button = event.currentTarget as HTMLElement;
+    const rect = button.getBoundingClientRect();
+    userMenuStyle.value = {
+      position: 'fixed',
+      top: `${rect.bottom + 4}px`,
+      right: `${window.innerWidth - rect.right}px`,
+    };
+  }
 }
 function handleUserMenuClickOutside(e: PointerEvent) {
   const target = e.target as HTMLElement;
@@ -1399,8 +1409,8 @@ onUnmounted(() => {
             </AppButton>
             <Transition name="menu-fade">
               <div v-if="showUserMenu"
-                   class="absolute right-0 top-full mt-1 min-w-[160px] py-1 dd-rounded-lg shadow-lg z-50"
-                   :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)', boxShadow: 'var(--dd-shadow-tooltip)' }">
+                   class="min-w-[160px] py-1 dd-rounded-lg shadow-lg"
+                   :style="{ ...userMenuStyle, zIndex: 'var(--z-popover)', backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)', boxShadow: 'var(--dd-shadow-tooltip)' }">
                 <div class="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wider dd-text-muted"
                      :style="{ borderBottom: '1px solid var(--dd-border)' }">
                   {{ currentUser?.username || 'User' }}
