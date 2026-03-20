@@ -202,7 +202,7 @@ function confirmDashboardUpdateAll() {
   <div class="flex flex-col flex-1 min-h-0">
     <div class="flex gap-2 min-w-0 flex-1 min-h-0">
     <!-- Main dashboard content -->
-    <div class="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden pr-2 sm:pr-[15px]">
+    <div class="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden">
       <div v-if="loading" class="flex items-center justify-center py-16">
         <div class="text-sm dd-text-muted">Loading dashboard...</div>
       </div>
@@ -434,12 +434,10 @@ function confirmDashboardUpdateAll() {
   --vgl-resizer-border-color: var(--dd-text-secondary);
   --vgl-resizer-border-width: 1.5px;
   --vgl-resizer-size: 20px;
-  max-width: 100%;
-  overflow: hidden;
-  /* Remove outer margins so grid aligns flush with page edges */
+  /* Grid library adds 16px margin on all 4 outer edges.
+     Pull top and left flush — right side is already correct. */
   margin-top: -16px;
   margin-left: -16px;
-  margin-right: -16px;
 }
 
 /* Disable the initial fly-in — library sets inline transition styles */

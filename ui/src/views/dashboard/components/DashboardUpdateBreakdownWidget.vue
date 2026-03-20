@@ -34,13 +34,11 @@ onMounted(() => {
     for (const entry of entries) {
       const h = entry.contentRect.height;
       containerHeight.value = h;
-      const hasHeader = h >= 200;
-      // Full icon grid needs ~180px of content space
-      // With header (~50px): need >= 230px total
-      // Without header: need >= 180px total
-      const fullThreshold = hasHeader ? 230 : 180;
-      if (h >= fullThreshold) mode.value = 'full';
-      else if (hasHeader) mode.value = 'medium';
+      // full = header + icon grid (needs ~250px for header + cards)
+      // medium = icon grid only, no header (fits any reasonable size)
+      // compact = tiny inline row (truly tiny widgets only)
+      if (h >= 250) mode.value = 'full';
+      else if (h >= 60) mode.value = 'medium';
       else mode.value = 'compact';
     }
   });
@@ -59,8 +57,8 @@ onBeforeUnmount(() => {
     class="dashboard-widget dd-rounded overflow-hidden flex flex-col"
     :style="{ backgroundColor: 'var(--dd-bg-card)' }">
 
-    <!-- Header — shown in full and medium modes -->
-    <div v-if="mode !== 'compact'" class="shrink-0 flex items-center justify-between px-5 py-3.5" :style="{ borderBottom: '1px solid var(--dd-border)' }">
+    <!-- Header — shown in full mode only -->
+    <div v-if="mode === 'full'" class="shrink-0 flex items-center justify-between px-5 py-3.5" :style="{ borderBottom: '1px solid var(--dd-border)' }">
       <div class="flex items-center gap-2">
         <div v-if="editMode" class="drag-handle dd-drag-handle"><AppIcon name="ph:dots-six-vertical" :size="14" /></div>
         <AppIcon name="updates" :size="14" class="text-drydock-secondary" />
@@ -69,38 +67,39 @@ onBeforeUnmount(() => {
       <AppButton size="none" variant="link-secondary" weight="medium" class="text-2xs-plus" @click="handleViewAll">View all &rarr;</AppButton>
     </div>
 
-    <!-- Full mode: big icon grid with bars -->
-    <div v-if="mode === 'full'" class="flex-1 min-h-0 overflow-y-auto p-5">
+    <!-- Icon grid — shown in full and medium modes (medium = no header) -->
+    <div v-if="mode !== 'compact'" class="flex-1 min-h-0 flex items-center justify-center p-4 relative">
+      <div v-if="mode === 'medium' && editMode" class="drag-handle dd-drag-handle absolute top-2 left-2 z-10"><AppIcon name="ph:dots-six-vertical" :size="14" /></div>
       <div
         v-if="totalUpdates === 0"
         class="p-3 dd-rounded text-2xs-plus text-center dd-text-muted"
         :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
         No updates to categorize
       </div>
-      <div v-else class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div v-else class="grid grid-cols-4 gap-3 w-full">
         <div
           v-for="kind in updateBreakdownBuckets"
           :key="kind.label"
-          class="text-center p-3 dd-rounded"
+          class="text-center p-2.5 dd-rounded"
           :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-          <div class="w-9 h-9 mx-auto dd-rounded flex items-center justify-center mb-2"
+          <div class="w-8 h-8 mx-auto dd-rounded flex items-center justify-center mb-1.5"
             :style="{ backgroundColor: kind.colorMuted, color: kind.color }">
-            <AppIcon :name="kind.icon" :size="20" />
+            <AppIcon :name="kind.icon" :size="18" />
           </div>
-          <div class="text-xl font-bold dd-text">{{ kind.count }}</div>
-          <div class="text-2xs font-medium uppercase tracking-wider mt-0.5 dd-text-muted">{{ kind.label }}</div>
-          <div class="mt-2 h-1.5 dd-rounded-sm overflow-hidden" style="background: var(--dd-bg-elevated);">
+          <div class="text-lg font-bold dd-text">{{ kind.count }}</div>
+          <div class="text-3xs font-medium uppercase tracking-wider mt-0.5 dd-text-muted">{{ kind.label }}</div>
+          <div class="mt-1.5 h-1 dd-rounded-sm overflow-hidden" style="background: var(--dd-bg-elevated);">
             <div
-              class="h-full dd-rounded-sm transition-[color,background-color,border-color,opacity,transform,box-shadow]"
+              class="h-full dd-rounded-sm"
               :style="{ width: Math.max(kind.count / Math.max(totalUpdates, 1) * 100, 4) + '%', backgroundColor: kind.color }" />
           </div>
         </div>
       </div>
     </div>
 
-    <!-- Medium + Compact: inline row of counts -->
-    <div v-else class="flex items-center flex-1 min-h-0 px-4 gap-4 relative">
-      <div v-if="mode === 'compact' && editMode" class="drag-handle dd-drag-handle absolute top-2 left-2 z-10"><AppIcon name="ph:dots-six" :size="14" /></div>
+    <!-- Compact: tiny inline row for extremely small widgets -->
+    <div v-else class="flex items-center flex-1 min-h-0 px-4 gap-3 relative">
+      <div v-if="editMode" class="drag-handle dd-drag-handle absolute top-2 left-2 z-10"><AppIcon name="ph:dots-six" :size="14" /></div>
       <div
         v-for="kind in updateBreakdownBuckets"
         :key="kind.label"

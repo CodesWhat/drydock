@@ -39,13 +39,13 @@ const DEFAULT_LAYOUT: WidgetLayoutItem[] = [
   { i: 'stat-security', x: 3, y: 0, w: 3, h: 4 },
   { i: 'stat-registries', x: 6, y: 0, w: 3, h: 4 },
   { i: 'stat-updates', x: 9, y: 0, w: 3, h: 4 },
-  // Row 4: main widgets
-  { i: 'resource-usage', x: 0, y: 4, w: 4, h: 14 },
-  { i: 'security-overview', x: 4, y: 4, w: 4, h: 10 },
+  // Row 4: three-column layout
+  { i: 'resource-usage', x: 0, y: 4, w: 4, h: 12 },
+  { i: 'security-overview', x: 4, y: 4, w: 4, h: 12 },
   { i: 'host-status', x: 8, y: 4, w: 4, h: 6 },
   { i: 'update-breakdown', x: 8, y: 10, w: 4, h: 6 },
-  // Row 18: updates table full width
-  { i: 'recent-updates', x: 0, y: 18, w: 12, h: 10 },
+  // Row 16: updates table full width
+  { i: 'recent-updates', x: 0, y: 16, w: 12, h: 10 },
 ];
 
 export function applyConstraints(layout: WidgetLayoutItem[]): WidgetLayoutItem[] {
