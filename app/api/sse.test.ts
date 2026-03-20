@@ -329,12 +329,10 @@ describe('SSE Router', () => {
         expect.stringContaining('event: dd:connected\ndata: {"clientId":"'),
       );
       const connectedPayload = parseSseEventPayload(res, 'dd:connected');
-      expect(connectedPayload).toEqual(
-        expect.objectContaining({
-          clientId: expect.any(String),
-          clientToken: expect.any(String),
-        }),
-      );
+      expect(connectedPayload).toEqual({
+        clientId: expect.any(String),
+        clientToken: expect.any(String),
+      });
       expect(res.flushHeaders).toHaveBeenCalledTimes(1);
       expect(res.flush).toHaveBeenCalledTimes(1);
     });
@@ -813,12 +811,12 @@ describe('SSE Router', () => {
       await broadcastPromise;
 
       expect(jsonRes.status).toHaveBeenCalledWith(202);
-      expect(jsonRes.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          status: 'accepted',
-          operationId: 'op-ack-1',
-        }),
-      );
+      expect(jsonRes.json).toHaveBeenCalledWith({
+        status: 'accepted',
+        operationId: 'op-ack-1',
+        ackedClients: 1,
+        clientsAtEmit: 1,
+      });
       expect(sseRouter._pendingSelfUpdateAcks.has('op-ack-1')).toBe(false);
     });
 
@@ -859,12 +857,11 @@ describe('SSE Router', () => {
       ackHandler(req, jsonRes);
 
       expect(jsonRes.status).toHaveBeenCalledWith(403);
-      expect(jsonRes.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          status: 'rejected',
-          operationId: 'op-ack-invalid',
-        }),
-      );
+      expect(jsonRes.json).toHaveBeenCalledWith({
+        status: 'rejected',
+        operationId: 'op-ack-invalid',
+        reason: 'invalid-or-expired-client-token',
+      });
       expect(sseRouter._pendingSelfUpdateAcks.has('op-ack-invalid')).toBe(true);
 
       vi.advanceTimersByTime(1000);
@@ -929,12 +926,11 @@ describe('SSE Router', () => {
       ackHandler(req, jsonRes);
 
       expect(jsonRes.status).toHaveBeenCalledWith(403);
-      expect(jsonRes.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          status: 'rejected',
-          reason: 'client-not-bound-to-operation',
-        }),
-      );
+      expect(jsonRes.json).toHaveBeenCalledWith({
+        status: 'rejected',
+        operationId: 'op-timing-safe',
+        reason: 'client-not-bound-to-operation',
+      });
       expect(mockTimingSafeEqual).toHaveBeenCalled();
     });
 
@@ -949,12 +945,11 @@ describe('SSE Router', () => {
       ackHandler(req, jsonRes);
 
       expect(jsonRes.status).toHaveBeenCalledWith(202);
-      expect(jsonRes.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          status: 'ignored',
-          operationId: 'unknown-op',
-        }),
-      );
+      expect(jsonRes.json).toHaveBeenCalledWith({
+        status: 'ignored',
+        operationId: 'unknown-op',
+        reason: 'no-pending-ack',
+      });
     });
 
     test('should validate missing clientId', () => {
@@ -1008,12 +1003,11 @@ describe('SSE Router', () => {
       ackHandler(req, jsonRes);
 
       expect(jsonRes.status).toHaveBeenCalledWith(403);
-      expect(jsonRes.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          status: 'rejected',
-          reason: 'invalid-or-expired-client-token',
-        }),
-      );
+      expect(jsonRes.json).toHaveBeenCalledWith({
+        status: 'rejected',
+        operationId: 'op-unknown-client',
+        reason: 'invalid-or-expired-client-token',
+      });
       expect(sseRouter._pendingSelfUpdateAcks.has('op-unknown-client')).toBe(true);
     });
 
@@ -1041,12 +1035,11 @@ describe('SSE Router', () => {
 
       expect(mockTimingSafeEqual).toHaveBeenCalledTimes(1);
       expect(jsonRes.status).toHaveBeenCalledWith(403);
-      expect(jsonRes.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          status: 'rejected',
-          reason: 'invalid-or-expired-client-token',
-        }),
-      );
+      expect(jsonRes.json).toHaveBeenCalledWith({
+        status: 'rejected',
+        operationId: 'op-constant-time',
+        reason: 'invalid-or-expired-client-token',
+      });
     });
   });
 

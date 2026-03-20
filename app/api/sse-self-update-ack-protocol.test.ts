@@ -65,12 +65,12 @@ describe('sse-self-update-ack-protocol', () => {
     protocol.acknowledgeSelfUpdate(req, res);
 
     expect(res.status).toHaveBeenCalledWith(202);
-    expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({
-        status: 'accepted',
-        operationId: 'op-1',
-      }),
-    );
+    expect(res.json).toHaveBeenCalledWith({
+      status: 'accepted',
+      operationId: 'op-1',
+      ackedClients: 1,
+      clientsAtEmit: 1,
+    });
     await broadcastPromise;
   });
 
@@ -239,13 +239,11 @@ describe('sse-self-update-ack-protocol', () => {
     protocol.acknowledgeSelfUpdate(req, res);
 
     expect(res.status).toHaveBeenCalledWith(403);
-    expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({
-        status: 'rejected',
-        operationId: 'op-2',
-        reason: 'client-token-mismatch',
-      }),
-    );
+    expect(res.json).toHaveBeenCalledWith({
+      status: 'rejected',
+      operationId: 'op-2',
+      reason: 'client-token-mismatch',
+    });
 
     protocol.clearPendingSelfUpdateAcks();
     await broadcastPromise;
@@ -281,13 +279,11 @@ describe('sse-self-update-ack-protocol', () => {
     protocol.acknowledgeSelfUpdate(req, res);
 
     expect(res.status).toHaveBeenCalledWith(403);
-    expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({
-        status: 'rejected',
-        operationId: 'op-unbound-client',
-        reason: 'client-not-bound-to-operation',
-      }),
-    );
+    expect(res.json).toHaveBeenCalledWith({
+      status: 'rejected',
+      operationId: 'op-unbound-client',
+      reason: 'client-not-bound-to-operation',
+    });
   });
 
   test('sweep removes already-resolved pending acknowledgements', () => {

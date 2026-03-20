@@ -992,13 +992,15 @@ describe('Container Router', () => {
       const res = createResponse();
       handler({ params: { id: 'c1' } }, res);
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          status: 'not-scanned',
-          vulnerabilities: [],
-          blockingCount: 0,
-        }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        scanner: undefined,
+        scannedAt: undefined,
+        status: 'not-scanned',
+        blockSeverities: [],
+        blockingCount: 0,
+        summary: { unknown: 0, low: 0, medium: 0, high: 0, critical: 0 },
+        vulnerabilities: [],
+      });
     });
 
     test('should return scan payload when available', async () => {
@@ -1065,11 +1067,9 @@ describe('Container Router', () => {
       const res = createResponse();
       await handler({ params: { id: 'c1' }, query: { format: 'foo' } }, res);
       expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          error: expect.stringContaining('Unsupported SBOM format'),
-        }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        error: expect.stringContaining('Unsupported SBOM format'),
+      });
     });
 
     test('should return existing sbom document when available in container security state', async () => {
@@ -1093,12 +1093,14 @@ describe('Container Router', () => {
       await handler({ params: { id: 'c1' }, query: {} }, res);
       expect(mockGenerateImageSbom).not.toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          format: 'spdx-json',
-          document: { SPDXID: 'SPDXRef-DOCUMENT' },
-        }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        generator: 'trivy',
+        image: 'registry.example.com/test/app:1.2.3',
+        generatedAt: '2026-02-15T12:00:00.000Z',
+        format: 'spdx-json',
+        document: { SPDXID: 'SPDXRef-DOCUMENT' },
+        error: undefined,
+      });
     });
 
     test('should generate sbom when existing sbom is generated but lacks requested format', async () => {
@@ -1139,12 +1141,14 @@ describe('Container Router', () => {
         expect.objectContaining({ formats: ['cyclonedx-json'] }),
       );
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          format: 'cyclonedx-json',
-          document: { bomFormat: 'CycloneDX' },
-        }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        generator: 'trivy',
+        image: 'my-registry/test/app:1.2.3',
+        generatedAt: '2026-02-15T12:00:00.000Z',
+        format: 'cyclonedx-json',
+        document: { bomFormat: 'CycloneDX' },
+        error: undefined,
+      });
     });
 
     test('should generate and persist sbom when not cached', async () => {
@@ -1293,11 +1297,9 @@ describe('Container Router', () => {
       const res = createResponse();
       await handler({ params: { id: 'c1' }, query: {} }, res);
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          error: expect.stringContaining('Error generating SBOM'),
-        }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        error: expect.stringContaining('Error generating SBOM'),
+      });
     });
 
     test('should return 500 when sbom generation throws', async () => {
@@ -1457,9 +1459,7 @@ describe('Container Router', () => {
       });
       const res = await callScanContainer();
       expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: 'Security scanner is not configured' }),
-      );
+      expect(res.json).toHaveBeenCalledWith({ error: 'Security scanner is not configured' });
     });
 
     test('should return 400 when scanner is not trivy', async () => {
@@ -1472,9 +1472,7 @@ describe('Container Router', () => {
       });
       const res = await callScanContainer();
       expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: 'Security scanner is not configured' }),
-      );
+      expect(res.json).toHaveBeenCalledWith({ error: 'Security scanner is not configured' });
     });
 
     test('should scan update candidate image when updateKind is present', async () => {
@@ -2048,11 +2046,9 @@ describe('Container Router', () => {
       getServerConfiguration.mockReturnValue({ feature: { delete: true } });
       const res = await callDeleteRemoteContainer(undefined);
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          error: expect.stringContaining('Agent remote not found'),
-        }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        error: expect.stringContaining('Agent remote not found'),
+      });
     });
 
     test('should delete remote container successfully', async () => {
@@ -2081,11 +2077,9 @@ describe('Container Router', () => {
       const mockAgentObj = { deleteContainer: vi.fn().mockRejectedValue(error) };
       const res = await callDeleteRemoteContainer(mockAgentObj);
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          error: expect.stringContaining('Error deleting container on agent'),
-        }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        error: expect.stringContaining('Error deleting container on agent'),
+      });
     });
 
     test('should return 500 on non-error rejection from agent delete', async () => {
@@ -2093,11 +2087,9 @@ describe('Container Router', () => {
       const mockAgentObj = { deleteContainer: vi.fn().mockRejectedValue(null) };
       const res = await callDeleteRemoteContainer(mockAgentObj);
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          error: expect.stringContaining('unknown error'),
-        }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        error: expect.stringContaining('unknown error'),
+      });
     });
 
     test('should handle agent delete error without response', async () => {
@@ -2138,11 +2130,9 @@ describe('Container Router', () => {
       await handler({ query: {} }, res);
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          error: expect.stringContaining('watch failed'),
-        }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        error: expect.stringContaining('watch failed'),
+      });
     });
   });
 
@@ -2159,9 +2149,7 @@ describe('Container Router', () => {
         { type: 'slack', name: 'default', configuration: {} },
       ]);
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ data: expect.any(Array), total: 1 }),
-      );
+      expect(res.json).toHaveBeenCalledWith({ data: expect.any(Array), total: 1 });
     });
 
     test('should filter triggers with triggerInclude', async () => {
@@ -2233,9 +2221,7 @@ describe('Container Router', () => {
         triggerName: 'default',
       });
       expect(res.status).toHaveBeenCalledWith(404);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: 'Container not found' }),
-      );
+      expect(res.json).toHaveBeenCalledWith({ error: 'Container not found' });
     });
 
     test.each([
@@ -2252,9 +2238,7 @@ describe('Container Router', () => {
       registry.getState.mockReturnValue({ watcher: {}, trigger: {} });
       const res = await callRunTrigger({ id: 'c1', triggerType: 'slack', triggerName: 'default' });
       expect(res.status).toHaveBeenCalledWith(404);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: 'Trigger not found' }),
-      );
+      expect(res.json).toHaveBeenCalledWith({ error: 'Trigger not found' });
     });
 
     test('should run trigger successfully', async () => {
@@ -2339,9 +2323,9 @@ describe('Container Router', () => {
       registry.getState.mockReturnValue({ watcher: {}, trigger: {} });
       const res = await callWatchContainer();
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: expect.stringContaining('No provider found') }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        error: expect.stringContaining('No provider found'),
+      });
     });
 
     test('should use agent prefix for watcher id when container has agent', async () => {
@@ -2349,9 +2333,9 @@ describe('Container Router', () => {
       registry.getState.mockReturnValue({ watcher: {}, trigger: {} });
       const res = await callWatchContainer();
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: expect.stringContaining('remote.docker.local') }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        error: expect.stringContaining('remote.docker.local'),
+      });
     });
 
     test('should watch container successfully', async () => {
@@ -2706,11 +2690,9 @@ describe('Container Router', () => {
       const res = await callGetContainerLogs('c1');
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          error: expect.stringContaining('Agent remote not found'),
-        }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        error: expect.stringContaining('Agent remote not found'),
+      });
     });
 
     test('should return 500 when agent call fails', async () => {
@@ -2726,11 +2708,9 @@ describe('Container Router', () => {
       const res = await callGetContainerLogs('c1');
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          error: expect.stringContaining('Error fetching logs from agent'),
-        }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        error: expect.stringContaining('Error fetching logs from agent'),
+      });
     });
 
     test('should return 500 when watcher not found', async () => {
@@ -2744,11 +2724,9 @@ describe('Container Router', () => {
       const res = await callGetContainerLogs('c1');
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          error: expect.stringContaining('No watcher found'),
-        }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        error: expect.stringContaining('No watcher found'),
+      });
     });
 
     test('should return 500 when docker API fails', async () => {
@@ -2766,11 +2744,9 @@ describe('Container Router', () => {
       const res = await callGetContainerLogs('c1');
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          error: expect.stringContaining('Error fetching container logs'),
-        }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        error: expect.stringContaining('Error fetching container logs'),
+      });
     });
 
     test('should use first id when logs route param id is an array', async () => {
@@ -2813,9 +2789,7 @@ describe('Container Router', () => {
     test('should return 400 when no action provided', () => {
       const res = callUpdatePolicy({ id: 'c1' }, {});
       expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: 'Action is required' }),
-      );
+      expect(res.json).toHaveBeenCalledWith({ error: 'Action is required' });
     });
 
     test('should use first id when update-policy route param id is an array', () => {
@@ -2879,9 +2853,7 @@ describe('Container Router', () => {
     test('should return 400 for unknown action', () => {
       const res = callUpdatePolicy({ id: 'c1' }, { action: 'unknown-action' });
       expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: expect.stringContaining('Unknown action') }),
-      );
+      expect(res.json).toHaveBeenCalledWith({ error: expect.stringContaining('Unknown action') });
     });
 
     test('should skip current tag update', () => {
@@ -2954,9 +2926,9 @@ describe('Container Router', () => {
         { action: 'skip-current' },
       );
       expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: expect.stringContaining('No current update available') }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        error: expect.stringContaining('No current update available'),
+      });
     });
 
     test('should return 400 when no update value available', () => {
@@ -2965,9 +2937,9 @@ describe('Container Router', () => {
         { action: 'skip-current' },
       );
       expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: expect.stringContaining('No update value available') }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        error: expect.stringContaining('No update value available'),
+      });
     });
 
     test('should clear skip tags and digests', () => {
@@ -3059,9 +3031,7 @@ describe('Container Router', () => {
     ])('should return 400 when remove-skip payload is invalid: %s', (_label, body) => {
       const res = callUpdatePolicy({ id: 'c1', updatePolicy: { skipTags: ['2.0.0'] } }, body);
       expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: expect.stringContaining('remove-skip') }),
-      );
+      expect(res.json).toHaveBeenCalledWith({ error: expect.stringContaining('remove-skip') });
     });
 
     test('should snooze with default 7 days', () => {

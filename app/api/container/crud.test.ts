@@ -2744,7 +2744,7 @@ describe('api/container/crud', () => {
       );
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ id: 'c1', agent: 'agent-a' }),
+        createContainer({ id: 'c1', watcher: 'local', agent: 'agent-a' }),
       );
     });
 

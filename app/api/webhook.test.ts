@@ -163,9 +163,9 @@ describe('Webhook Router', () => {
       middleware(req, res, next);
 
       expect(res.status).toHaveBeenCalledWith(401);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: expect.stringContaining('Missing or invalid') }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        error: expect.stringContaining('Missing or invalid'),
+      });
       expect(next).not.toHaveBeenCalled();
     });
 
@@ -177,9 +177,7 @@ describe('Webhook Router', () => {
       middleware(req, res, next);
 
       expect(res.status).toHaveBeenCalledWith(401);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: expect.stringContaining('Invalid token') }),
-      );
+      expect(res.json).toHaveBeenCalledWith({ error: expect.stringContaining('Invalid token') });
       expect(next).not.toHaveBeenCalled();
     });
 
@@ -223,9 +221,7 @@ describe('Webhook Router', () => {
       middleware(req, res, next);
 
       expect(res.status).toHaveBeenCalledWith(403);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: expect.stringContaining('disabled') }),
-      );
+      expect(res.json).toHaveBeenCalledWith({ error: expect.stringContaining('disabled') });
       expect(next).not.toHaveBeenCalled();
     });
 
@@ -246,9 +242,7 @@ describe('Webhook Router', () => {
       middleware(req, res, next);
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: expect.stringContaining('misconfigured') }),
-      );
+      expect(res.json).toHaveBeenCalledWith({ error: expect.stringContaining('misconfigured') });
       expect(next).not.toHaveBeenCalled();
     });
 
@@ -398,9 +392,7 @@ describe('Webhook Router', () => {
       middleware(req, res, next);
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: expect.stringContaining('misconfigured') }),
-      );
+      expect(res.json).toHaveBeenCalledWith({ error: expect.stringContaining('misconfigured') });
       expect(next).not.toHaveBeenCalled();
     });
 
@@ -449,9 +441,7 @@ describe('Webhook Router', () => {
       middleware(req, res, next);
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: expect.stringContaining('misconfigured') }),
-      );
+      expect(res.json).toHaveBeenCalledWith({ error: expect.stringContaining('misconfigured') });
       expect(next).not.toHaveBeenCalled();
     });
   });
@@ -1024,9 +1014,9 @@ describe('Webhook Router', () => {
       await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(404);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: expect.stringContaining('No docker trigger found') }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        error: expect.stringContaining('No docker trigger found'),
+      });
     });
 
     test('should trigger update and return 200', async () => {
@@ -1253,9 +1243,9 @@ describe('Webhook Router', () => {
       await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(404);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: expect.stringContaining('No docker trigger found') }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        error: expect.stringContaining('No docker trigger found'),
+      });
     });
   });
 });
