@@ -72,6 +72,12 @@ export function useAutoFetchLogs(options: AutoFetchOptions) {
     else stopAutoFetch();
   });
 
+  // Register stopAutoFetch cleanup BEFORE the visibility listener so that
+  // onScopeDispose (which runs in reverse order) tears down the timer AFTER
+  // the visibility listener is removed — preventing a late visibilitychange
+  // event from restarting the interval during disposal.
+  onScopeDispose(() => stopAutoFetch());
+
   if (typeof document !== 'undefined') {
     const handleVisibilityChange = () => {
       if (isTabHidden()) stopAutoFetch();
@@ -80,8 +86,6 @@ export function useAutoFetchLogs(options: AutoFetchOptions) {
     document.addEventListener('visibilitychange', handleVisibilityChange);
     onScopeDispose(() => document.removeEventListener('visibilitychange', handleVisibilityChange));
   }
-
-  onScopeDispose(() => stopAutoFetch());
 
   return { autoFetchInterval };
 }

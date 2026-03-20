@@ -92,6 +92,7 @@ function createHarness() {
 
 describe('api/container/stats', () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     vi.useFakeTimers();
   });
 
@@ -214,6 +215,23 @@ describe('api/container/stats', () => {
     req.emit('aborted');
     expect(harness.unsubscribe).toHaveBeenCalledTimes(1);
     expect(releaseWatch).toHaveBeenCalledTimes(1);
+  });
+
+  test('cleanup continues when unsubscribe throws', () => {
+    const harness = createHarness();
+    const req = createRequest({ params: { id: 'c1' } });
+    const res = createResponse();
+    const releaseWatch = vi.fn();
+    harness.watch.mockReturnValue(releaseWatch);
+    harness.unsubscribe.mockImplementation(() => {
+      throw new Error('unsubscribe boom');
+    });
+
+    harness.handlers.streamContainerStats(req as any, res as any);
+    req.emit('close');
+
+    expect(harness.unsubscribe).toHaveBeenCalledOnce();
+    expect(releaseWatch).toHaveBeenCalledOnce();
   });
 
   test('returns 404 when trying to stream a missing container', () => {

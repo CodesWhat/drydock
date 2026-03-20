@@ -129,9 +129,15 @@ function createStreamContainerStatsHandler({
         return;
       }
       disconnected = true;
-      globalThis.clearInterval(heartbeatInterval);
-      unsubscribe();
-      releaseWatch();
+      try {
+        globalThis.clearInterval(heartbeatInterval);
+      } catch {}
+      try {
+        unsubscribe();
+      } catch {}
+      try {
+        releaseWatch();
+      } catch {}
     };
 
     req.on('close', cleanup);
