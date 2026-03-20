@@ -400,7 +400,7 @@ describe('ConfigView', () => {
       expect(text).toContain('3000');
     });
 
-    it('shows legacy compatibility warning banner with migration guidance', async () => {
+    it('does not render a legacy compatibility inputs card in general settings', async () => {
       mockGetServer.mockResolvedValue({
         configuration: {
           port: 3000,
@@ -424,11 +424,9 @@ describe('ConfigView', () => {
       });
 
       const text = w.text();
-      expect(text).toContain('Legacy compatibility inputs detected');
-      expect(text).toContain('WUD_SERVER_PORT');
-      expect(text).toContain('wud.watch');
-      expect(text).toContain('node dist/index.js config migrate --dry-run');
-      expect(w.find('a[href="https://getdrydock.com/docs/quickstart"]').exists()).toBe(true);
+      expect(text).not.toContain('Legacy compatibility inputs detected');
+      expect(text).not.toContain('node dist/index.js config migrate --dry-run');
+      expect(w.find('[data-testid="legacy-input-banner"]').exists()).toBe(false);
     });
   });
 

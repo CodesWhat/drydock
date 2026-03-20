@@ -13,6 +13,7 @@ const {
   mockGetEffectiveDisplayIcon,
   mockGetAllNotificationRules,
   mockGetAllRegistries,
+  mockGetServer,
   mockGetAllTriggers,
   mockGetAllWatchers,
   mockSseConnect,
@@ -30,6 +31,7 @@ const {
   mockGetEffectiveDisplayIcon: vi.fn(),
   mockGetAllNotificationRules: vi.fn(),
   mockGetAllRegistries: vi.fn(),
+  mockGetServer: vi.fn(),
   mockGetAllTriggers: vi.fn(),
   mockGetAllWatchers: vi.fn(),
   mockSseConnect: vi.fn(),
@@ -96,6 +98,10 @@ vi.mock('@/services/registry', () => ({
   getAllRegistries: (...args: unknown[]) => mockGetAllRegistries(...args),
 }));
 
+vi.mock('@/services/server', () => ({
+  getServer: (...args: unknown[]) => mockGetServer(...args),
+}));
+
 vi.mock('@/services/trigger', () => ({
   getAllTriggers: (...args: unknown[]) => mockGetAllTriggers(...args),
 }));
@@ -140,6 +146,15 @@ describe('AppLayout', () => {
     mockGetAllTriggers.mockResolvedValue([]);
     mockGetAllWatchers.mockResolvedValue([]);
     mockGetAllRegistries.mockResolvedValue([]);
+    mockGetServer.mockResolvedValue({
+      compatibility: {
+        legacyInputs: {
+          total: 0,
+          env: { total: 0, keys: [] },
+          label: { total: 0, keys: [] },
+        },
+      },
+    });
     mockGetAllAuthentications.mockResolvedValue([]);
     mockGetAllNotificationRules.mockResolvedValue([]);
     mockGetEffectiveDisplayIcon.mockReturnValue('docker');
@@ -528,92 +543,117 @@ describe('AppLayout', () => {
     expect(wrapper.find('[data-testid="sha-hash-deprecation-banner"]').exists()).toBe(false);
   });
 
-  it('shows a trigger prefix deprecation banner when a trigger uses the legacy prefix', async () => {
-    mockGetAllTriggers.mockResolvedValue([
-      {
-        id: 'trigger.build',
-        name: 'build',
-        type: 'webhook',
-        metadata: { usesLegacyPrefix: true },
+  it('shows a legacy env deprecation banner with truncated key preview', async () => {
+    mockGetServer.mockResolvedValue({
+      compatibility: {
+        legacyInputs: {
+          total: 20,
+          env: {
+            total: 20,
+            keys: [
+              'DD_TRIGGER_DOCKER_LOCAL_AUTO',
+              'DD_TRIGGER_DOCKER_LOCAL_PRUNE',
+              'DD_TRIGGER_DOCKER_LOCAL_INCLUDE',
+              'DD_TRIGGER_DOCKER_LOCAL_EXCLUDE',
+              'DD_TRIGGER_DOCKER_LOCAL_NOTIFY',
+              'DD_TRIGGER_DOCKER_LOCAL_INTERVAL',
+              'WUD_SERVER_PORT',
+              'WUD_WATCHER_LOCAL_WATCHBYDEFAULT',
+            ],
+          },
+          label: { total: 0, keys: [] },
+        },
       },
-    ]);
+    });
 
     const wrapper = mountLayout();
     mountedWrappers.push(wrapper);
     await flushPromises();
 
-    const banner = wrapper.find('[data-testid="trigger-prefix-deprecation-banner"]');
+    const banner = wrapper.find('[data-testid="legacy-env-deprecation-banner"]');
     expect(banner.exists()).toBe(true);
-    expect(banner.text()).toMatch(/legacy trigger prefix/i);
-    expect(
-      banner.find('[data-testid="trigger-prefix-deprecation-banner-dismiss-forever"]').exists(),
-    ).toBe(true);
+    expect(banner.text()).toContain('20 legacy environment variables detected');
+    expect(banner.text()).toContain('Env keys (20):');
+    expect(banner.text()).toContain('DD_TRIGGER_DOCKER_LOCAL_AUTO');
+    expect(banner.text()).toContain('(+2 more)');
   });
 
-  it('supports dismissing trigger prefix deprecation banner for current session', async () => {
-    mockGetAllTriggers.mockResolvedValue([
-      {
-        id: 'trigger.build',
-        name: 'build',
-        type: 'webhook',
-        metadata: { usesLegacyPrefix: true },
+  it('shows a legacy label deprecation banner when legacy labels are detected', async () => {
+    mockGetServer.mockResolvedValue({
+      compatibility: {
+        legacyInputs: {
+          total: 3,
+          env: { total: 0, keys: [] },
+          label: {
+            total: 3,
+            keys: ['wud.tag.include', 'wud.tag.exclude', 'wud.watch'],
+          },
+        },
       },
-    ]);
+    });
 
     const wrapper = mountLayout();
     mountedWrappers.push(wrapper);
     await flushPromises();
 
-    expect(wrapper.find('[data-testid="trigger-prefix-deprecation-banner"]').exists()).toBe(true);
+    const banner = wrapper.find('[data-testid="legacy-label-deprecation-banner"]');
+    expect(banner.exists()).toBe(true);
+    expect(banner.text()).toContain('3 legacy container labels detected');
+    expect(banner.text()).toContain('Label keys (3):');
+    expect(banner.text()).toContain('wud.watch');
+  });
+
+  it('shows a legacy API path deprecation banner when server reports API path usage', async () => {
+    mockGetServer.mockResolvedValue({
+      compatibility: {
+        legacyInputs: {
+          total: 7,
+          env: { total: 0, keys: [] },
+          label: { total: 0, keys: [] },
+          api: {
+            total: 7,
+            keys: ['/api/containers', '/api/settings'],
+          },
+        },
+      },
+    });
+
+    const wrapper = mountLayout();
+    mountedWrappers.push(wrapper);
+    await flushPromises();
+
+    const banner = wrapper.find('[data-testid="legacy-api-path-deprecation-banner"]');
+    expect(banner.exists()).toBe(true);
+    expect(banner.text()).toContain('7 legacy API paths detected');
+    expect(banner.text()).toContain('/api/containers');
+  });
+
+  it('dismisses each legacy category banner independently', async () => {
+    mockGetServer.mockResolvedValue({
+      compatibility: {
+        legacyInputs: {
+          total: 2,
+          env: { total: 1, keys: ['DD_TRIGGER_DOCKER_LOCAL_AUTO'] },
+          label: { total: 1, keys: ['wud.watch'] },
+        },
+      },
+    });
+
+    const wrapper = mountLayout();
+    mountedWrappers.push(wrapper);
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="legacy-env-deprecation-banner"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="legacy-label-deprecation-banner"]').exists()).toBe(true);
 
     await wrapper
-      .find('[data-testid="trigger-prefix-deprecation-banner-dismiss-session"]')
+      .find('[data-testid="legacy-env-deprecation-banner-dismiss-forever"]')
       .trigger('click');
     await flushPromises();
 
-    expect(wrapper.find('[data-testid="trigger-prefix-deprecation-banner"]').exists()).toBe(false);
-  });
-
-  it('supports permanently dismissing trigger prefix deprecation banner', async () => {
-    mockGetAllTriggers.mockResolvedValue([
-      {
-        id: 'trigger.build',
-        name: 'build',
-        type: 'webhook',
-        metadata: { usesLegacyPrefix: true },
-      },
-    ]);
-
-    const wrapper = mountLayout();
-    mountedWrappers.push(wrapper);
-    await flushPromises();
-
-    expect(wrapper.find('[data-testid="trigger-prefix-deprecation-banner"]').exists()).toBe(true);
-
-    await wrapper
-      .find('[data-testid="trigger-prefix-deprecation-banner-dismiss-forever"]')
-      .trigger('click');
-    await flushPromises();
-
-    expect(wrapper.find('[data-testid="trigger-prefix-deprecation-banner"]').exists()).toBe(false);
-    expect(localStorage.getItem('dd-banner-trigger-prefix-v1')).toBe('true');
-  });
-
-  it('does not show trigger prefix deprecation banner after permanent dismissal is persisted', async () => {
-    localStorage.setItem('dd-banner-trigger-prefix-v1', 'true');
-    mockGetAllTriggers.mockResolvedValue([
-      {
-        id: 'trigger.build',
-        name: 'build',
-        type: 'webhook',
-        metadata: { usesLegacyPrefix: true },
-      },
-    ]);
-
-    const wrapper = mountLayout();
-    mountedWrappers.push(wrapper);
-    await flushPromises();
-
-    expect(wrapper.find('[data-testid="trigger-prefix-deprecation-banner"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="legacy-env-deprecation-banner"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="legacy-label-deprecation-banner"]').exists()).toBe(true);
+    expect(localStorage.getItem('dd-banner-legacy-env-v1')).toBe('true');
+    expect(localStorage.getItem('dd-banner-legacy-labels-v1')).toBeNull();
   });
 });

@@ -19,6 +19,7 @@ import { getAllContainers } from '@/services/container';
 import { getEffectiveDisplayIcon } from '@/services/image-icon';
 import { getAllNotificationRules } from '@/services/notification';
 import { getAllRegistries } from '@/services/registry';
+import { getServer } from '@/services/server';
 import sseService from '@/services/sse';
 import { getAllTriggers } from '@/services/trigger';
 import { getAllWatchers } from '@/services/watcher';
@@ -255,7 +256,33 @@ const hideLegacyHashBannerPermanently = useStorageRef<boolean>(
   false,
   (value): value is boolean => typeof value === 'boolean',
 );
-const triggerPrefixDeprecationBanner = useDeprecationBanner('dd-banner-trigger-prefix-v1');
+
+interface LegacyInputSourceSummary {
+  total: number;
+  keys: string[];
+}
+
+interface LegacyInputSummary {
+  total: number;
+  env: LegacyInputSourceSummary;
+  label: LegacyInputSourceSummary;
+  api?: LegacyInputSourceSummary;
+}
+
+const LEGACY_KEY_PREVIEW_LIMIT = 6;
+const stackedBannerInlineStyle = {
+  position: 'static',
+  top: 'auto',
+  left: 'auto',
+  transform: 'none',
+  width: '100%',
+  maxWidth: 'none',
+} as const;
+const legacyInputSummary = ref<LegacyInputSummary | null>(null);
+const legacyEnvDeprecationBanner = useDeprecationBanner('dd-banner-legacy-env-v1');
+const legacyLabelDeprecationBanner = useDeprecationBanner('dd-banner-legacy-labels-v1');
+const legacyApiPathDeprecationBanner = useDeprecationBanner('dd-banner-legacy-api-paths-v1');
+
 type SearchScope = 'all' | 'pages' | 'containers' | 'runtime' | 'config';
 type SearchPrefix = '/' | '@' | '#';
 interface SearchScopeOption {
@@ -563,6 +590,74 @@ function isHttpOidcDiscovery(authentication: unknown): boolean {
   }
 }
 
+function normalizeLegacyInputSourceSummary(rawValue: unknown): LegacyInputSourceSummary {
+  const parsedTotal = Number((rawValue as { total?: unknown })?.total);
+  const parsedKeys = Array.isArray((rawValue as { keys?: unknown })?.keys)
+    ? (rawValue as { keys: unknown[] }).keys.filter(
+        (value): value is string => typeof value === 'string',
+      )
+    : [];
+  const uniqueKeys = Array.from(new Set(parsedKeys)).sort((left, right) =>
+    left.localeCompare(right),
+  );
+  const total =
+    Number.isFinite(parsedTotal) && parsedTotal >= 0
+      ? Math.max(Math.floor(parsedTotal), uniqueKeys.length)
+      : uniqueKeys.length;
+  return { total, keys: uniqueKeys };
+}
+
+function normalizeLegacyInputSummary(rawValue: unknown): LegacyInputSummary | null {
+  if (!rawValue || typeof rawValue !== 'object') {
+    return null;
+  }
+
+  const env = normalizeLegacyInputSourceSummary((rawValue as { env?: unknown }).env);
+  const label = normalizeLegacyInputSourceSummary((rawValue as { label?: unknown }).label);
+  const apiSource =
+    (rawValue as { api?: unknown }).api ??
+    (rawValue as { path?: unknown }).path ??
+    (rawValue as { paths?: unknown }).paths;
+  const api = normalizeLegacyInputSourceSummary(apiSource);
+  const parsedTotal = Number((rawValue as { total?: unknown }).total);
+  const totalFromSources = env.total + label.total + api.total;
+  const total =
+    Number.isFinite(parsedTotal) && parsedTotal >= 0
+      ? Math.max(Math.floor(parsedTotal), totalFromSources)
+      : totalFromSources;
+
+  if (total <= 0) {
+    return null;
+  }
+
+  const summary: LegacyInputSummary = { total, env, label };
+  if (api.total > 0 || api.keys.length > 0) {
+    summary.api = api;
+  }
+  return summary;
+}
+
+function summarizeLegacyKeys(keys: string[]): string {
+  if (keys.length === 0) {
+    return '';
+  }
+  const previewKeys = keys.slice(0, LEGACY_KEY_PREVIEW_LIMIT);
+  const hiddenCount = keys.length - previewKeys.length;
+  return hiddenCount > 0
+    ? `${previewKeys.join(', ')} (+${hiddenCount} more)`
+    : previewKeys.join(', ');
+}
+
+const legacyEnvKeysPreview = computed(() =>
+  summarizeLegacyKeys(legacyInputSummary.value?.env.keys ?? []),
+);
+const legacyLabelKeysPreview = computed(() =>
+  summarizeLegacyKeys(legacyInputSummary.value?.label.keys ?? []),
+);
+const legacyApiPathKeysPreview = computed(() =>
+  summarizeLegacyKeys(legacyInputSummary.value?.api?.keys ?? []),
+);
+
 const showOidcHttpCompatibilityBanner = computed(
   () =>
     oidcHttpDiscoveryDetected.value &&
@@ -593,18 +688,6 @@ function isLegacyBasicHash(authentication: unknown): boolean {
   return (metadata as Record<string, unknown>).usesLegacyHash === true;
 }
 
-function isLegacyTriggerPrefix(trigger: unknown): boolean {
-  if (!trigger || typeof trigger !== 'object') {
-    return false;
-  }
-  const triggerRecord = trigger as Record<string, unknown>;
-  const metadata = triggerRecord.metadata;
-  if (!metadata || typeof metadata !== 'object') {
-    return false;
-  }
-  return (metadata as Record<string, unknown>).usesLegacyPrefix === true;
-}
-
 const showLegacyHashDeprecationBanner = computed(
   () =>
     legacyHashDetected.value &&
@@ -612,8 +695,27 @@ const showLegacyHashDeprecationBanner = computed(
     !hideLegacyHashBannerPermanently.value,
 );
 
-const showTriggerPrefixDeprecationBanner = computed(
-  () => triggerPrefixDeprecationBanner.visible.value,
+const showLegacyEnvDeprecationBanner = computed(() => legacyEnvDeprecationBanner.visible.value);
+const showLegacyLabelDeprecationBanner = computed(() => legacyLabelDeprecationBanner.visible.value);
+const showLegacyApiPathDeprecationBanner = computed(
+  () => legacyApiPathDeprecationBanner.visible.value,
+);
+const legacyEnvBannerTitle = computed(
+  () => `${legacyInputSummary.value?.env.total ?? 0} legacy environment variables detected`,
+);
+const legacyLabelBannerTitle = computed(
+  () => `${legacyInputSummary.value?.label.total ?? 0} legacy container labels detected`,
+);
+const legacyApiPathBannerTitle = computed(
+  () => `${legacyInputSummary.value?.api?.total ?? 0} legacy API paths detected`,
+);
+const hasVisibleAnnouncementBanners = computed(
+  () =>
+    showOidcHttpCompatibilityBanner.value ||
+    showLegacyHashDeprecationBanner.value ||
+    showLegacyEnvDeprecationBanner.value ||
+    showLegacyLabelDeprecationBanner.value ||
+    showLegacyApiPathDeprecationBanner.value,
 );
 
 function dismissLegacyHashBannerForSession() {
@@ -622,6 +724,15 @@ function dismissLegacyHashBannerForSession() {
 
 function dismissLegacyHashBannerPermanently() {
   hideLegacyHashBannerPermanently.value = true;
+}
+
+async function refreshLegacyInputSummary() {
+  const serverData = await getServer().catch(() => null);
+  const summary = normalizeLegacyInputSummary(serverData?.compatibility?.legacyInputs);
+  legacyInputSummary.value = summary;
+  legacyEnvDeprecationBanner.detected.value = (summary?.env.total ?? 0) > 0;
+  legacyLabelDeprecationBanner.detected.value = (summary?.label.total ?? 0) > 0;
+  legacyApiPathDeprecationBanner.detected.value = (summary?.api?.total ?? 0) > 0;
 }
 
 async function refreshSearchResources() {
@@ -641,9 +752,6 @@ async function refreshSearchResources() {
       : false;
     legacyHashDetected.value = Array.isArray(authentications)
       ? authentications.some((authentication) => isLegacyBasicHash(authentication))
-      : false;
-    triggerPrefixDeprecationBanner.detected.value = Array.isArray(triggers)
-      ? triggers.some((trigger) => isLegacyTriggerPrefix(trigger))
       : false;
     searchResourceResults.value = buildSearchIndexResults({
       agents,
@@ -1093,9 +1201,10 @@ onMounted(async () => {
   });
   // Fetch sidebar badge data and user info
   try {
-    const [, , user, appInfos] = await Promise.all([
+    const [, , , user, appInfos] = await Promise.all([
       refreshSidebarData(),
       refreshSearchResources(),
+      refreshLegacyInputSummary(),
       getUser().catch(() => null),
       getAppInfos().catch(() => null),
     ]);
@@ -1245,8 +1354,7 @@ onUnmounted(() => {
       <header class="h-12 grid items-center px-4 shrink-0"
               style="grid-template-columns: 1fr auto 1fr;"
               :style="{
-                backgroundColor: 'var(--dd-bg)',
-                borderBottom: '1px solid var(--dd-border)',
+                backgroundColor: 'var(--dd-bg-sidebar)',
               }">
         <!-- Left: hamburger + breadcrumb -->
         <div class="flex items-center gap-3">
@@ -1313,42 +1421,90 @@ onUnmounted(() => {
         </div>
       </header>
 
-      <AnnouncementBanner
-        v-if="showOidcHttpCompatibilityBanner"
-        data-testid="oidc-http-compat-banner"
-        title="HTTP OIDC discovery detected"
-        permanent-dismiss-label="Don't show again"
-        @dismiss="dismissOidcHttpBannerForSession"
-        @dismiss-permanent="dismissOidcHttpBannerPermanently">
-        One or more OIDC providers use an insecure
-        <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">http://</code>
-        discovery URL. HTTP discovery is deprecated and will be removed in v1.6.0.
-        <a href="https://getdrydock.com/docs/configuration/authentications/oidc"
-           target="_blank"
-           rel="noopener noreferrer"
-           class="underline font-medium"
-           :style="{ color: 'var(--dd-warning)' }">Migrate your IdP to HTTPS.</a>
-      </AnnouncementBanner>
+      <div
+        v-if="hasVisibleAnnouncementBanners"
+        class="fixed top-3 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-2rem)] max-w-5xl flex flex-col gap-2"
+      >
+        <AnnouncementBanner
+          v-if="showOidcHttpCompatibilityBanner"
+          data-testid="oidc-http-compat-banner"
+          title="HTTP OIDC discovery detected"
+          permanent-dismiss-label="Don't show again"
+          :style="stackedBannerInlineStyle"
+          @dismiss="dismissOidcHttpBannerForSession"
+          @dismiss-permanent="dismissOidcHttpBannerPermanently">
+          One or more OIDC providers use an insecure
+          <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">http://</code>
+          discovery URL. HTTP discovery is deprecated and will be removed in v1.6.0.
+          <a href="https://getdrydock.com/docs/configuration/authentications/oidc"
+             target="_blank"
+             rel="noopener noreferrer"
+             class="underline font-medium"
+             :style="{ color: 'var(--dd-warning)' }">Migrate your IdP to HTTPS.</a>
+        </AnnouncementBanner>
 
-      <AnnouncementBanner
-        v-if="showLegacyHashDeprecationBanner"
-        data-testid="sha-hash-deprecation-banner"
-        title="Legacy password hash detected"
-        permanent-dismiss-label="Don't show again"
-        @dismiss="dismissLegacyHashBannerForSession"
-        @dismiss-permanent="dismissLegacyHashBannerPermanently">
-      Your basic authentication uses a legacy password hash format. Legacy v1.3.9 formats are deprecated and will be removed in v1.6.0. Migrate to argon2id hashing.
-      </AnnouncementBanner>
+        <AnnouncementBanner
+          v-if="showLegacyHashDeprecationBanner"
+          data-testid="sha-hash-deprecation-banner"
+          title="Legacy password hash detected"
+          permanent-dismiss-label="Don't show again"
+          :style="stackedBannerInlineStyle"
+          @dismiss="dismissLegacyHashBannerForSession"
+          @dismiss-permanent="dismissLegacyHashBannerPermanently">
+          Your basic authentication uses a legacy password hash format. Legacy v1.3.9 formats are deprecated and will be removed in v1.6.0. Migrate to argon2id hashing.
+        </AnnouncementBanner>
 
-      <AnnouncementBanner
-        v-if="showTriggerPrefixDeprecationBanner"
-        data-testid="trigger-prefix-deprecation-banner"
-        title="Legacy trigger prefix detected"
-        permanent-dismiss-label="Don't show again"
-        @dismiss="triggerPrefixDeprecationBanner.dismissForSession"
-        @dismiss-permanent="triggerPrefixDeprecationBanner.dismissPermanently">
-        One or more triggers use a legacy trigger prefix. Legacy trigger prefix formats are deprecated and will be removed in v1.6.0. Rename those triggers to the current prefix format.
-      </AnnouncementBanner>
+        <AnnouncementBanner
+          v-if="showLegacyEnvDeprecationBanner"
+          data-testid="legacy-env-deprecation-banner"
+          :title="legacyEnvBannerTitle"
+          permanent-dismiss-label="Don't show again"
+          :style="stackedBannerInlineStyle"
+          @dismiss="legacyEnvDeprecationBanner.dismissForSession"
+          @dismiss-permanent="legacyEnvDeprecationBanner.dismissPermanently">
+          Deprecated environment variable aliases are in use (for example
+          <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">WUD_*</code>
+          and
+          <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">DD_TRIGGER_*</code>).
+          <span v-if="legacyEnvKeysPreview" class="block mt-1">
+            Env keys ({{ legacyInputSummary?.env.total }}): {{ legacyEnvKeysPreview }}
+          </span>
+        </AnnouncementBanner>
+
+        <AnnouncementBanner
+          v-if="showLegacyLabelDeprecationBanner"
+          data-testid="legacy-label-deprecation-banner"
+          :title="legacyLabelBannerTitle"
+          permanent-dismiss-label="Don't show again"
+          :style="stackedBannerInlineStyle"
+          @dismiss="legacyLabelDeprecationBanner.dismissForSession"
+          @dismiss-permanent="legacyLabelDeprecationBanner.dismissPermanently">
+          Deprecated Docker label aliases are in use (for example
+          <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">wud.*</code>
+          instead of
+          <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">dd.*</code>).
+          <span v-if="legacyLabelKeysPreview" class="block mt-1">
+            Label keys ({{ legacyInputSummary?.label.total }}): {{ legacyLabelKeysPreview }}
+          </span>
+        </AnnouncementBanner>
+
+        <AnnouncementBanner
+          v-if="showLegacyApiPathDeprecationBanner"
+          data-testid="legacy-api-path-deprecation-banner"
+          :title="legacyApiPathBannerTitle"
+          permanent-dismiss-label="Don't show again"
+          :style="stackedBannerInlineStyle"
+          @dismiss="legacyApiPathDeprecationBanner.dismissForSession"
+          @dismiss-permanent="legacyApiPathDeprecationBanner.dismissPermanently">
+          Unversioned API paths are deprecated. Migrate from
+          <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">/api/*</code>
+          to
+          <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">/api/v1/*</code>.
+          <span v-if="legacyApiPathKeysPreview" class="block mt-1">
+            API paths ({{ legacyInputSummary?.api?.total }}): {{ legacyApiPathKeysPreview }}
+          </span>
+        </AnnouncementBanner>
+      </div>
 
       <!-- MAIN CONTENT -->
       <main class="flex-1 min-h-0 overflow-hidden flex flex-col pl-4 pr-2 py-4 sm:pl-6 sm:pr-[9px] sm:py-6"
