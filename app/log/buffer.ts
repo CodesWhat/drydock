@@ -1,9 +1,14 @@
-interface LogEntry {
+import { EventEmitter } from 'node:events';
+
+export interface LogEntry {
   timestamp: number;
   level: string;
   component: string;
   msg: string;
 }
+
+const entryEmitter = new EventEmitter();
+entryEmitter.setMaxListeners(100);
 
 const LEVEL_ORDER: Record<string, number> = {
   debug: 10,
@@ -25,6 +30,14 @@ export function addEntry(entry: LogEntry): void {
   if (count < MAX_SIZE) {
     count++;
   }
+  entryEmitter.emit('entry', entry);
+}
+
+export function onEntry(listener: (entry: LogEntry) => void): () => void {
+  entryEmitter.on('entry', listener);
+  return () => {
+    entryEmitter.off('entry', listener);
+  };
 }
 
 interface GetEntriesOptions {
@@ -56,21 +69,21 @@ function drainBuffer(): LogEntry[] {
   return readRingBuffer(buffer, start, count, MAX_SIZE);
 }
 
-function getMinLevel(level?: string): number {
+export function getMinLevel(level?: string): number {
   if (!level) {
     return 0;
   }
   return LEVEL_ORDER[level] ?? 0;
 }
 
-function meetsMinLevel(entry: LogEntry, minLevel: number): boolean {
+export function meetsMinLevel(entry: LogEntry, minLevel: number): boolean {
   if (minLevel <= 0) {
     return true;
   }
   return (LEVEL_ORDER[entry.level] ?? 0) >= minLevel;
 }
 
-function matchesComponent(entry: LogEntry, component?: string): boolean {
+export function matchesComponent(entry: LogEntry, component?: string): boolean {
   if (!component) {
     return true;
   }

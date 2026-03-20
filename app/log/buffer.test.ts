@@ -1,4 +1,11 @@
-import { addEntry, getEntries } from './buffer.js';
+import {
+  addEntry,
+  getEntries,
+  getMinLevel,
+  matchesComponent,
+  meetsMinLevel,
+  onEntry,
+} from './buffer.js';
 
 function makeEntry(overrides = {}) {
   return {
@@ -173,6 +180,91 @@ describe('Ring Buffer', () => {
       expect(results.find((e) => e.msg === 'wrap-0')).toBeUndefined();
       // Most recent entry should be present
       expect(results.find((e) => e.msg === 'wrap-1000')).toBeDefined();
+    });
+  });
+
+  describe('onEntry subscription', () => {
+    test('should emit entries to subscriber when addEntry is called', () => {
+      const listener = vi.fn();
+      const unsubscribe = onEntry(listener);
+
+      const entry = makeEntry({ msg: 'streamed-entry' });
+      addEntry(entry);
+
+      expect(listener).toHaveBeenCalledTimes(1);
+      expect(listener).toHaveBeenCalledWith(entry);
+
+      unsubscribe();
+    });
+
+    test('should stop emitting after unsubscribe is called', () => {
+      const listener = vi.fn();
+      const unsubscribe = onEntry(listener);
+
+      addEntry(makeEntry({ msg: 'before-unsub' }));
+      expect(listener).toHaveBeenCalledTimes(1);
+
+      unsubscribe();
+
+      addEntry(makeEntry({ msg: 'after-unsub' }));
+      expect(listener).toHaveBeenCalledTimes(1);
+    });
+
+    test('should support multiple subscribers independently', () => {
+      const listener1 = vi.fn();
+      const listener2 = vi.fn();
+      const unsub1 = onEntry(listener1);
+      const unsub2 = onEntry(listener2);
+
+      addEntry(makeEntry({ msg: 'multi-sub' }));
+      expect(listener1).toHaveBeenCalledTimes(1);
+      expect(listener2).toHaveBeenCalledTimes(1);
+
+      unsub1();
+
+      addEntry(makeEntry({ msg: 'after-unsub1' }));
+      expect(listener1).toHaveBeenCalledTimes(1);
+      expect(listener2).toHaveBeenCalledTimes(2);
+
+      unsub2();
+    });
+  });
+
+  describe('exported filter helpers', () => {
+    test('getMinLevel returns 0 for undefined or unknown levels', () => {
+      expect(getMinLevel(undefined)).toBe(0);
+      expect(getMinLevel('unknown')).toBe(0);
+    });
+
+    test('getMinLevel returns correct order value for known levels', () => {
+      expect(getMinLevel('debug')).toBe(10);
+      expect(getMinLevel('info')).toBe(20);
+      expect(getMinLevel('warn')).toBe(30);
+      expect(getMinLevel('error')).toBe(40);
+    });
+
+    test('meetsMinLevel returns true when minLevel is 0', () => {
+      const entry = makeEntry({ level: 'debug' });
+      expect(meetsMinLevel(entry, 0)).toBe(true);
+    });
+
+    test('meetsMinLevel filters by minimum level threshold', () => {
+      const debugEntry = makeEntry({ level: 'debug' });
+      const warnEntry = makeEntry({ level: 'warn' });
+
+      expect(meetsMinLevel(debugEntry, 30)).toBe(false);
+      expect(meetsMinLevel(warnEntry, 30)).toBe(true);
+    });
+
+    test('matchesComponent returns true when component is undefined', () => {
+      const entry = makeEntry({ component: 'anything' });
+      expect(matchesComponent(entry, undefined)).toBe(true);
+    });
+
+    test('matchesComponent checks substring match', () => {
+      const entry = makeEntry({ component: 'api-server' });
+      expect(matchesComponent(entry, 'api')).toBe(true);
+      expect(matchesComponent(entry, 'watcher')).toBe(false);
     });
   });
 });
