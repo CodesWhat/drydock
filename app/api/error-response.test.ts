@@ -1,17 +1,14 @@
-import type { Response } from 'express';
 import { describe, expect, test, vi } from 'vitest';
+import { createMockResponse } from '../test/helpers.js';
 import { sendErrorResponse } from './error-response.js';
 
-function createResponse(): Response {
-  return {
-    status: vi.fn().mockReturnThis(),
-    json: vi.fn(),
-  } as unknown as Response;
-}
-
 describe('sendErrorResponse', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   test('uses explicit message when provided', () => {
-    const res = createResponse();
+    const res = createMockResponse();
 
     sendErrorResponse(res, 400, 'Bad payload');
 
@@ -20,7 +17,7 @@ describe('sendErrorResponse', () => {
   });
 
   test('uses standard status text when message is omitted', () => {
-    const res = createResponse();
+    const res = createMockResponse();
 
     sendErrorResponse(res, 404);
 
@@ -29,7 +26,7 @@ describe('sendErrorResponse', () => {
   });
 
   test('falls back to generic message when status text is unknown', () => {
-    const res = createResponse();
+    const res = createMockResponse();
 
     sendErrorResponse(res, 799);
 
@@ -38,7 +35,7 @@ describe('sendErrorResponse', () => {
   });
 
   test('supports options object with explicit message and details', () => {
-    const res = createResponse();
+    const res = createMockResponse();
 
     sendErrorResponse(res, 422, {
       message: 'Validation failed',

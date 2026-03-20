@@ -1,4 +1,4 @@
-import type { Request, Response } from 'express';
+import { createMockRequest, createMockResponse } from '../../../test/helpers.js';
 import { createGetContainerReleaseNotesHandler } from './release-notes.js';
 
 vi.mock('../../../release-notes/index.js', () => ({
@@ -44,8 +44,8 @@ function createMockContext(overrides: Partial<CrudHandlerContext> = {}): CrudHan
 }
 
 function createMockReqRes(id = 'test-id') {
-  const req = { params: { id } } as unknown as Request;
-  const res = { status: vi.fn().mockReturnThis(), json: vi.fn() } as unknown as Response;
+  const req = createMockRequest({ params: { id } });
+  const res = createMockResponse();
   return { req, res };
 }
 

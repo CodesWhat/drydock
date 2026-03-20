@@ -13,6 +13,8 @@ interface TriggerRouteParams {
   name: string;
 }
 
+type TriggerRequest = Request<TriggerRouteParams>;
+
 function getErrorMessage(error: unknown): string | undefined {
   if (
     error &&
@@ -38,11 +40,11 @@ export function getTriggers(req: Request, res: Response) {
  * Run Remote Trigger.
  * Delegates to the common API handler but ensures no proxying happens.
  */
-export async function runTrigger(req: Request, res: Response) {
+export async function runTrigger(req: TriggerRequest, res: Response) {
   if (req.body?.agent) {
     delete req.body.agent;
   }
-  return triggerApi.runTrigger(req as unknown as Request<TriggerRouteParams>, res);
+  return triggerApi.runTrigger(req, res);
 }
 
 /**

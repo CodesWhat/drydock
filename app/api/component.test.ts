@@ -31,10 +31,6 @@ vi.mock('../registry', () => ({
 import * as registry from '../registry/index.js';
 import * as component from './component.js';
 
-function createResponse() {
-  return createMockResponse();
-}
-
 describe('Component Router', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -76,11 +72,13 @@ describe('Component Router', () => {
         configuration: { url: 'https://hub.docker.com' },
       };
       const result = component.mapComponentToItem('docker.hub', comp);
-      expect(result).toEqual(
-        expect.objectContaining({
-          configuration: { url: 'https://hub.docker.com' },
-        }),
-      );
+      expect(result).toEqual({
+        id: 'docker.hub',
+        type: 'docker',
+        name: 'hub',
+        configuration: { url: 'https://hub.docker.com' },
+        agent: undefined,
+      });
     });
 
     test('should include metadata when component has getMetadata', () => {
@@ -251,13 +249,16 @@ describe('Component Router', () => {
       const result = component.mapComponentsToList(components, 'trigger');
 
       expect(result).toEqual([
-        expect.objectContaining({
+        {
           id: 'slack.ops',
+          type: 'slack',
+          name: 'ops',
           configuration: {
             channel: '[REDACTED]',
             mode: 'simple',
           },
-        }),
+          agent: undefined,
+        },
       ]);
     });
   });
@@ -274,11 +275,17 @@ describe('Component Router', () => {
       });
 
       const req = { params: { type: 'docker', name: 'hub' } };
-      const res = createResponse();
+      const res = createMockResponse();
       component.getById(req, res, 'watcher');
 
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ id: 'docker.hub' }));
+      expect(res.json).toHaveBeenCalledWith({
+        id: 'docker.hub',
+        type: 'docker',
+        name: 'hub',
+        configuration: { url: 'hub' },
+        agent: undefined,
+      });
     });
 
     test('should return component by agent.type.name id', () => {
@@ -295,24 +302,28 @@ describe('Component Router', () => {
       const req = {
         params: { agent: 'myagent', type: 'docker', name: 'hub' },
       };
-      const res = createResponse();
+      const res = createMockResponse();
       component.getById(req, res, 'watcher');
 
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ id: 'myagent.docker.hub' }));
+      expect(res.json).toHaveBeenCalledWith({
+        id: 'myagent.docker.hub',
+        type: 'docker',
+        name: 'hub',
+        configuration: {},
+        agent: 'myagent',
+      });
     });
 
     test('should return 404 when component is not found', () => {
       registry.getState.mockReturnValue({ watcher: {} });
 
       const req = { params: { type: 'docker', name: 'missing' } };
-      const res = createResponse();
+      const res = createMockResponse();
       component.getById(req, res, 'watcher');
 
       expect(res.status).toHaveBeenCalledWith(404);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: 'Component not found' }),
-      );
+      expect(res.json).toHaveBeenCalledWith({ error: 'Component not found' });
     });
   });
 
@@ -339,12 +350,14 @@ describe('Component Router', () => {
       component.init('watcher');
       const getAllHandler = mockRouter.get.mock.calls.find((c) => c[0] === '/')[1];
 
-      const res = createResponse();
+      const res = createMockResponse();
       getAllHandler({ query: {} }, res);
 
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
-        data: [expect.objectContaining({ id: 'docker.hub' })],
+        data: [
+          { id: 'docker.hub', type: 'docker', name: 'hub', configuration: {}, agent: undefined },
+        ],
         total: 1,
         limit: 0,
         offset: 0,
@@ -364,12 +377,14 @@ describe('Component Router', () => {
       component.init('watcher');
       const getAllHandler = mockRouter.get.mock.calls.find((c) => c[0] === '/')[1];
 
-      const res = createResponse();
+      const res = createMockResponse();
       getAllHandler({ query: { limit: '1', offset: '1' } }, res);
 
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
-        data: [expect.objectContaining({ id: 'docker.beta' })],
+        data: [
+          { id: 'docker.beta', type: 'docker', name: 'beta', configuration: {}, agent: undefined },
+        ],
         total: 3,
         limit: 1,
         offset: 1,
@@ -389,15 +404,27 @@ describe('Component Router', () => {
       component.init('watcher');
       const getAllHandler = mockRouter.get.mock.calls.find((c) => c[0] === '/')[1];
 
-      const res = createResponse();
+      const res = createMockResponse();
       getAllHandler({ query: { limit: ['999', '1'], offset: '-5' } }, res);
 
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
         data: [
-          expect.objectContaining({ id: 'docker.alpha' }),
-          expect.objectContaining({ id: 'docker.beta' }),
-          expect.objectContaining({ id: 'docker.gamma' }),
+          {
+            id: 'docker.alpha',
+            type: 'docker',
+            name: 'alpha',
+            configuration: {},
+            agent: undefined,
+          },
+          { id: 'docker.beta', type: 'docker', name: 'beta', configuration: {}, agent: undefined },
+          {
+            id: 'docker.gamma',
+            type: 'docker',
+            name: 'gamma',
+            configuration: {},
+            agent: undefined,
+          },
         ],
         total: 3,
         limit: 200,
@@ -417,7 +444,7 @@ describe('Component Router', () => {
       component.init('watcher');
       const getAllHandler = mockRouter.get.mock.calls.find((c) => c[0] === '/')[1];
 
-      const res = createResponse();
+      const res = createMockResponse();
       getAllHandler({ query: { limit: '1', offset: '99' } }, res);
 
       expect(res.status).toHaveBeenCalledWith(200);
@@ -439,15 +466,23 @@ describe('Component Router', () => {
 
       component.init('watcher');
       const getAllHandler = mockRouter.get.mock.calls.find((c) => c[0] === '/')[1];
-      const resWithInvalid = createResponse();
-      const resWithUndefinedQuery = createResponse();
+      const resWithInvalid = createMockResponse();
+      const resWithUndefinedQuery = createMockResponse();
 
       getAllHandler({ query: { limit: 'oops', offset: 'oops' } }, resWithInvalid);
       getAllHandler({}, resWithUndefinedQuery);
 
       expect(resWithInvalid.status).toHaveBeenCalledWith(200);
       expect(resWithInvalid.json).toHaveBeenCalledWith({
-        data: [expect.objectContaining({ id: 'docker.alpha' })],
+        data: [
+          {
+            id: 'docker.alpha',
+            type: 'docker',
+            name: 'alpha',
+            configuration: {},
+            agent: undefined,
+          },
+        ],
         total: 1,
         limit: 0,
         offset: 0,
@@ -455,7 +490,15 @@ describe('Component Router', () => {
       });
       expect(resWithUndefinedQuery.status).toHaveBeenCalledWith(200);
       expect(resWithUndefinedQuery.json).toHaveBeenCalledWith({
-        data: [expect.objectContaining({ id: 'docker.alpha' })],
+        data: [
+          {
+            id: 'docker.alpha',
+            type: 'docker',
+            name: 'alpha',
+            configuration: {},
+            agent: undefined,
+          },
+        ],
         total: 1,
         limit: 0,
         offset: 0,
@@ -476,7 +519,7 @@ describe('Component Router', () => {
       component.init('trigger');
       const getByIdHandler = mockRouter.get.mock.calls.find((c) => c[0] === '/:type/:name')[1];
 
-      const res = createResponse();
+      const res = createMockResponse();
       getByIdHandler({ params: { type: 'docker', name: 'hub' } }, res);
 
       expect(res.status).toHaveBeenCalledWith(200);
@@ -498,7 +541,7 @@ describe('Component Router', () => {
         (c) => c[0] === '/:type/:name/:agent',
       )[1];
 
-      const res = createResponse();
+      const res = createMockResponse();
       getByIdHandler({ params: { agent: 'myagent', type: 'docker', name: 'hub' } }, res);
 
       expect(res.status).toHaveBeenCalledWith(200);

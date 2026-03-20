@@ -41,10 +41,6 @@ import * as registry from '../registry/index.js';
 import * as triggerRouter from './trigger.js';
 import { runTrigger } from './trigger.js';
 
-function createResponse() {
-  return createMockResponse();
-}
-
 function getRemoteTriggerHandler() {
   triggerRouter.init();
   const call = mockRouter.post.mock.calls.find((c) => c[0] === '/:type/:name/:agent');
@@ -73,16 +69,12 @@ describe('Trigger Router', () => {
         params: { type: 'slack', name: 'default' },
         body: undefined,
       };
-      const res = createResponse();
+      const res = createMockResponse();
 
       await runTrigger(req, res);
 
       expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          error: 'Invalid trigger request body',
-        }),
-      );
+      expect(res.json).toHaveBeenCalledWith({ error: 'Invalid trigger request body' });
     });
 
     test('should return 400 when container id is not a string', async () => {
@@ -90,16 +82,12 @@ describe('Trigger Router', () => {
         params: { type: 'slack', name: 'default' },
         body: { id: 123 },
       };
-      const res = createResponse();
+      const res = createMockResponse();
 
       await runTrigger(req, res);
 
       expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          error: 'Invalid trigger request body',
-        }),
-      );
+      expect(res.json).toHaveBeenCalledWith({ error: 'Invalid trigger request body' });
     });
 
     test('should return 400 when container has agent (remote)', async () => {
@@ -107,16 +95,14 @@ describe('Trigger Router', () => {
         params: { type: 'slack', name: 'default' },
         body: { id: 'c1', agent: 'remote-agent' },
       };
-      const res = createResponse();
+      const res = createMockResponse();
 
       await runTrigger(req, res);
 
       expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          error: expect.stringContaining('Cannot execute local trigger'),
-        }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Cannot execute local trigger slack.default on remote container remote-agent.c1',
+      });
     });
 
     test('should return 404 when trigger not found', async () => {
@@ -126,16 +112,14 @@ describe('Trigger Router', () => {
         params: { type: 'slack', name: 'default' },
         body: { id: 'c1' },
       };
-      const res = createResponse();
+      const res = createMockResponse();
 
       await runTrigger(req, res);
 
       expect(res.status).toHaveBeenCalledWith(404);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          error: expect.stringContaining('trigger not found'),
-        }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Error when running trigger slack.default (trigger not found)',
+      });
     });
 
     test('should run trigger successfully', async () => {
@@ -150,7 +134,7 @@ describe('Trigger Router', () => {
         params: { type: 'slack', name: 'default' },
         body: { id: 'c1' },
       };
-      const res = createResponse();
+      const res = createMockResponse();
 
       await runTrigger(req, res);
 
@@ -171,7 +155,7 @@ describe('Trigger Router', () => {
         params: { type: 'slack', name: 'default' },
         body: container,
       };
-      const res = createResponse();
+      const res = createMockResponse();
 
       await runTrigger(req, res);
 
@@ -203,7 +187,7 @@ describe('Trigger Router', () => {
         params: { type: 'slack', name: 'default' },
         body: container,
       };
-      const res = createResponse();
+      const res = createMockResponse();
 
       await runTrigger(req, res);
 
@@ -226,16 +210,15 @@ describe('Trigger Router', () => {
         params: { type: 'slack', name: 'default' },
         body: { id: 'c1' },
       };
-      const res = createResponse();
+      const res = createMockResponse();
 
       await runTrigger(req, res);
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          error: 'Error when running trigger slack.default',
-        }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Error when running trigger slack.default',
+        details: { reason: 'trigger failed' },
+      });
       expect(mockLog.warn).toHaveBeenCalledWith(expect.stringContaining('trigger failed'));
     });
 
@@ -251,7 +234,7 @@ describe('Trigger Router', () => {
         params: { type: 'slack', name: 'default' },
         body: { id: 'c1' },
       };
-      const res = createResponse();
+      const res = createMockResponse();
 
       await runTrigger(req, res);
 
@@ -272,7 +255,7 @@ describe('Trigger Router', () => {
         params: { type: 'slack', name: 'default' },
         body: { id: 'c1' },
       };
-      const res = createResponse();
+      const res = createMockResponse();
 
       await runTrigger(req, res);
 
@@ -293,17 +276,15 @@ describe('Trigger Router', () => {
         params: { type: 'slack', name: 'default' },
         body: { id: 'c1' },
       };
-      const res = createResponse();
+      const res = createMockResponse();
 
       await runTrigger(req, res);
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          error: 'Error when running trigger slack.default',
-          details: expect.objectContaining({ reason: 'watcher not found' }),
-        }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Error when running trigger slack.default',
+        details: { reason: 'watcher not found' },
+      });
     });
 
     test('should omit trigger error details when helper returns empty message', async () => {
@@ -319,7 +300,7 @@ describe('Trigger Router', () => {
         params: { type: 'slack', name: 'default' },
         body: { id: 'c1' },
       };
-      const res = createResponse();
+      const res = createMockResponse();
 
       await runTrigger(req, res);
 
@@ -339,16 +320,14 @@ describe('Trigger Router', () => {
         params: { agent: 'unknown', type: 'slack', name: 'default' },
         body: { id: 'c1' },
       };
-      const res = createResponse();
+      const res = createMockResponse();
 
       await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(404);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          error: expect.stringContaining('Agent unknown not found'),
-        }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Agent unknown not found',
+      });
     });
 
     test('should return 400 when no container in body', async () => {
@@ -359,16 +338,12 @@ describe('Trigger Router', () => {
         params: { agent: 'my-agent', type: 'slack', name: 'default' },
         body: undefined,
       };
-      const res = createResponse();
+      const res = createMockResponse();
 
       await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          error: 'Invalid trigger request body',
-        }),
-      );
+      expect(res.json).toHaveBeenCalledWith({ error: 'Invalid trigger request body' });
     });
 
     test('should return 400 when container has no id', async () => {
@@ -379,16 +354,12 @@ describe('Trigger Router', () => {
         params: { agent: 'my-agent', type: 'slack', name: 'default' },
         body: { name: 'test' },
       };
-      const res = createResponse();
+      const res = createMockResponse();
 
       await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          error: 'Invalid trigger request body',
-        }),
-      );
+      expect(res.json).toHaveBeenCalledWith({ error: 'Invalid trigger request body' });
     });
 
     test('should return 400 when container id is not a string', async () => {
@@ -402,16 +373,12 @@ describe('Trigger Router', () => {
         params: { agent: 'my-agent', type: 'slack', name: 'default' },
         body: { id: 123 },
       };
-      const res = createResponse();
+      const res = createMockResponse();
 
       await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          error: 'Invalid trigger request body',
-        }),
-      );
+      expect(res.json).toHaveBeenCalledWith({ error: 'Invalid trigger request body' });
       expect(mockAgentClient.runRemoteTrigger).not.toHaveBeenCalled();
     });
 
@@ -426,7 +393,7 @@ describe('Trigger Router', () => {
         params: { agent: 'my-agent', type: 'slack', name: 'default' },
         body: { id: 'c1' },
       };
-      const res = createResponse();
+      const res = createMockResponse();
 
       await handler(req, res);
 
@@ -449,16 +416,15 @@ describe('Trigger Router', () => {
         params: { agent: 'my-agent', type: 'slack', name: 'default' },
         body: { id: 'c1' },
       };
-      const res = createResponse();
+      const res = createMockResponse();
 
       await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          error: 'Error when running remote trigger slack.default on agent my-agent',
-        }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Error when running remote trigger slack.default on agent my-agent',
+        details: { reason: 'remote error' },
+      });
       expect(mockLog.warn).toHaveBeenCalledWith(expect.stringContaining('remote error'));
     });
 
@@ -473,17 +439,15 @@ describe('Trigger Router', () => {
         params: { agent: 'my-agent', type: 'slack', name: 'default' },
         body: { id: 'c1' },
       };
-      const res = createResponse();
+      const res = createMockResponse();
 
       await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          error: 'Error when running remote trigger slack.default on agent my-agent',
-          details: { reason: 'remote error as string' },
-        }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Error when running remote trigger slack.default on agent my-agent',
+        details: { reason: 'remote error as string' },
+      });
     });
 
     test('should omit fallback remote error details when helper returns empty message', async () => {
@@ -498,7 +462,7 @@ describe('Trigger Router', () => {
         params: { agent: 'my-agent', type: 'slack', name: 'default' },
         body: { id: 'c1' },
       };
-      const res = createResponse();
+      const res = createMockResponse();
 
       await handler(req, res);
 
@@ -530,17 +494,15 @@ describe('Trigger Router', () => {
         params: { agent: 'my-agent', type: 'slack', name: 'default' },
         body: { id: 'c1' },
       };
-      const res = createResponse();
+      const res = createMockResponse();
 
       await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          error: 'Error when running remote trigger slack.default on agent my-agent',
-          details: { reason: 'transport failure' },
-        }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Error when running remote trigger slack.default on agent my-agent',
+        details: { reason: 'transport failure' },
+      });
     });
 
     test('should fall back to generic error when remote payload is not an object', async () => {
@@ -561,17 +523,15 @@ describe('Trigger Router', () => {
         params: { agent: 'my-agent', type: 'slack', name: 'default' },
         body: { id: 'c1' },
       };
-      const res = createResponse();
+      const res = createMockResponse();
 
       await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          error: 'Error when running remote trigger slack.default on agent my-agent',
-          details: { reason: 'Request failed with status code 500' },
-        }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Error when running remote trigger slack.default on agent my-agent',
+        details: { reason: 'Request failed with status code 500' },
+      });
     });
 
     test('should propagate remote trigger error status and payload when available', async () => {
@@ -596,19 +556,17 @@ describe('Trigger Router', () => {
         params: { agent: 'my-agent', type: 'docker', name: 'update' },
         body: { id: 'c1' },
       };
-      const res = createResponse();
+      const res = createMockResponse();
 
       await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          error: 'Error when running trigger docker.update',
-          details: {
-            reason: 'No watcher found for container c1 (docker.default)',
-          },
-        }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Error when running trigger docker.update',
+        details: {
+          reason: 'No watcher found for container c1 (docker.default)',
+        },
+      });
     });
   });
 });
