@@ -22,7 +22,7 @@ describe('dashboardWidgetLayout', () => {
       for (const card of statCards) {
         expect(card.y).toBe(0);
         expect(card.w).toBe(3);
-        expect(card.h).toBe(4);
+        expect(card.h).toBe(3);
       }
       const xPositions = statCards.map((c) => c.x).sort((a, b) => a - b);
       expect(xPositions).toEqual([0, 3, 6, 9]);

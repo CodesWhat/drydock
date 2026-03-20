@@ -270,8 +270,9 @@ function confirmDashboardUpdateAll() {
             <!-- Stat Cards -->
             <div
               v-if="isStatWidget(item.i)"
-              class="stat-card h-full dd-rounded px-4 py-2.5 text-left cursor-default relative"
+              class="stat-card dd-rounded px-4 py-2.5 text-left cursor-default relative"
               :class="[
+                editMode ? 'm-[3px] h-[calc(100%-6px)]' : 'h-full',
                 !editMode && statById.get(item.i as DashboardWidgetId)?.route ? 'cursor-pointer hover:dd-bg-elevated' : '',
               ]"
               :style="{ backgroundColor: 'var(--dd-bg-card)' }"
