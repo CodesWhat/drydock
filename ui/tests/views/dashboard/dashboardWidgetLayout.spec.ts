@@ -3,6 +3,8 @@ import { DASHBOARD_WIDGET_IDS } from '@/views/dashboard/dashboardTypes';
 import {
   applyConstraints,
   createDefaultLayout,
+  GRID_BREAKPOINTS,
+  GRID_COLS,
   WIDGET_CONSTRAINTS,
 } from '@/views/dashboard/dashboardWidgetLayout';
 
@@ -77,6 +79,48 @@ describe('dashboardWidgetLayout', () => {
           expect(overlapsX && overlapsY, `${a.i} overlaps ${b.i}`).toBe(false);
         }
       }
+    });
+  });
+
+  describe('responsive grid constants', () => {
+    const breakpointKeys = ['xxs', 'xs', 'sm', 'md', 'lg'] as const;
+
+    test('GRID_BREAKPOINTS defines all five standard breakpoints', () => {
+      for (const key of breakpointKeys) {
+        expect(GRID_BREAKPOINTS).toHaveProperty(key);
+        expect(typeof GRID_BREAKPOINTS[key]).toBe('number');
+      }
+    });
+
+    test('GRID_COLS defines a column count for every breakpoint', () => {
+      for (const key of breakpointKeys) {
+        expect(GRID_COLS).toHaveProperty(key);
+        expect(typeof GRID_COLS[key]).toBe('number');
+        expect(GRID_COLS[key]).toBeGreaterThanOrEqual(1);
+      }
+    });
+
+    test('breakpoints are ordered ascending (xxs < xs < sm < md < lg)', () => {
+      expect(GRID_BREAKPOINTS.xxs).toBeLessThan(GRID_BREAKPOINTS.xs);
+      expect(GRID_BREAKPOINTS.xs).toBeLessThan(GRID_BREAKPOINTS.sm);
+      expect(GRID_BREAKPOINTS.sm).toBeLessThan(GRID_BREAKPOINTS.md);
+      expect(GRID_BREAKPOINTS.md).toBeLessThan(GRID_BREAKPOINTS.lg);
+    });
+
+    test('mobile breakpoints (xs, xxs) use 1 column for stacking', () => {
+      expect(GRID_COLS.xxs).toBe(1);
+      expect(GRID_COLS.xs).toBe(1);
+    });
+
+    test('desktop breakpoint (lg) uses 12 columns matching colNum', () => {
+      expect(GRID_COLS.lg).toBe(12);
+    });
+
+    test('column counts increase with breakpoint size', () => {
+      expect(GRID_COLS.xxs).toBeLessThanOrEqual(GRID_COLS.xs);
+      expect(GRID_COLS.xs).toBeLessThanOrEqual(GRID_COLS.sm);
+      expect(GRID_COLS.sm).toBeLessThanOrEqual(GRID_COLS.md);
+      expect(GRID_COLS.md).toBeLessThanOrEqual(GRID_COLS.lg);
     });
   });
 

@@ -17,7 +17,7 @@ import {
   type DashboardWidgetId,
   type RecentUpdateRow,
 } from './dashboard/dashboardTypes';
-import { WIDGET_CONSTRAINTS } from './dashboard/dashboardWidgetLayout';
+import { GRID_BREAKPOINTS, GRID_COLS, WIDGET_CONSTRAINTS } from './dashboard/dashboardWidgetLayout';
 import { useDashboardComputed } from './dashboard/useDashboardComputed';
 import { useDashboardData } from './dashboard/useDashboardData';
 import { useDashboardWidgetOrder } from './dashboard/useDashboardWidgetOrder';
@@ -250,6 +250,9 @@ function confirmDashboardUpdateAll() {
           :col-num="12"
           :row-height="30"
           :margin="[16, 16]"
+          :responsive="true"
+          :breakpoints="GRID_BREAKPOINTS"
+          :cols="GRID_COLS"
           :class="{ 'dd-grid-ready': gridReady }"
           :is-draggable="editMode"
           :is-resizable="editMode"
