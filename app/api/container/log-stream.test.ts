@@ -256,11 +256,11 @@ describe('api/container/log-stream', () => {
         Buffer.alloc(0),
       );
 
-      expect(socket.write).toHaveBeenCalledWith(expect.stringContaining('404 Not Found'));
-      expect(socket.destroy).toHaveBeenCalledTimes(1);
+      expect(socket.write).not.toHaveBeenCalled();
+      expect(socket.destroy).not.toHaveBeenCalled();
     });
 
-    test('returns 404 when upgrade url is missing or malformed', async () => {
+    test('silently returns when upgrade url is missing or malformed', async () => {
       const gateway = createContainerLogStreamGateway({
         getContainer: vi.fn(),
         getWatchers: vi.fn(() => ({})),
@@ -274,7 +274,7 @@ describe('api/container/log-stream', () => {
         socketWithoutUrl as any,
         Buffer.alloc(0),
       );
-      expect(socketWithoutUrl.write).toHaveBeenCalledWith(expect.stringContaining('404 Not Found'));
+      expect(socketWithoutUrl.write).not.toHaveBeenCalled();
 
       const socketWithDecodeError = createUpgradeSocket();
       await gateway.handleUpgrade(
@@ -282,9 +282,7 @@ describe('api/container/log-stream', () => {
         socketWithDecodeError as any,
         Buffer.alloc(0),
       );
-      expect(socketWithDecodeError.write).toHaveBeenCalledWith(
-        expect.stringContaining('404 Not Found'),
-      );
+      expect(socketWithDecodeError.write).not.toHaveBeenCalled();
 
       const socketWithInvalidUrl = createUpgradeSocket();
       await gateway.handleUpgrade(
@@ -292,9 +290,7 @@ describe('api/container/log-stream', () => {
         socketWithInvalidUrl as any,
         Buffer.alloc(0),
       );
-      expect(socketWithInvalidUrl.write).toHaveBeenCalledWith(
-        expect.stringContaining('404 Not Found'),
-      );
+      expect(socketWithInvalidUrl.write).not.toHaveBeenCalled();
     });
 
     test('returns 503 when session middleware is not configured', async () => {
@@ -1053,7 +1049,7 @@ describe('api/container/log-stream', () => {
           Buffer.alloc(0),
         );
         await new Promise((resolve) => setImmediate(resolve));
-        expect(socket.write).toHaveBeenCalledWith(expect.stringContaining('404 Not Found'));
+        expect(socket.write).not.toHaveBeenCalled();
       } finally {
         getStateSpy.mockRestore();
         getContainerSpy.mockRestore();

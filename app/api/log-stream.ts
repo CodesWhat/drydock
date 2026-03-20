@@ -175,7 +175,6 @@ export function createSystemLogStreamGateway(dependencies: SystemLogStreamGatewa
     async handleUpgrade(request: IncomingMessage, socket: Socket, head: Buffer): Promise<void> {
       const parsedRequest = parseSystemLogStreamUpgradeUrl(request.url);
       if (!parsedRequest) {
-        writeUpgradeError(socket, 404, 'Not Found');
         return;
       }
 

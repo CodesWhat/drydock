@@ -85,7 +85,7 @@ describe('api/log-stream', () => {
   });
 
   describe('createSystemLogStreamGateway', () => {
-    test('returns 404 for non-log-stream upgrade routes', async () => {
+    test('silently returns for non-log-stream upgrade routes', async () => {
       const gateway = createSystemLogStreamGateway({
         sessionMiddleware: authenticatingSessionMiddleware,
         webSocketServer: { handleUpgrade: vi.fn() },
@@ -98,11 +98,11 @@ describe('api/log-stream', () => {
         Buffer.alloc(0),
       );
 
-      expect(socket.write).toHaveBeenCalledWith(expect.stringContaining('404 Not Found'));
-      expect(socket.destroy).toHaveBeenCalledTimes(1);
+      expect(socket.write).not.toHaveBeenCalled();
+      expect(socket.destroy).not.toHaveBeenCalled();
     });
 
-    test('returns 404 when url is missing', async () => {
+    test('silently returns when url is missing', async () => {
       const gateway = createSystemLogStreamGateway({
         sessionMiddleware: authenticatingSessionMiddleware,
       });
@@ -114,10 +114,10 @@ describe('api/log-stream', () => {
         Buffer.alloc(0),
       );
 
-      expect(socket.write).toHaveBeenCalledWith(expect.stringContaining('404 Not Found'));
+      expect(socket.write).not.toHaveBeenCalled();
     });
 
-    test('returns 404 when url is malformed', async () => {
+    test('silently returns when url is malformed', async () => {
       const gateway = createSystemLogStreamGateway({
         sessionMiddleware: authenticatingSessionMiddleware,
       });
@@ -129,7 +129,7 @@ describe('api/log-stream', () => {
         Buffer.alloc(0),
       );
 
-      expect(socket.write).toHaveBeenCalledWith(expect.stringContaining('404 Not Found'));
+      expect(socket.write).not.toHaveBeenCalled();
     });
 
     test('returns 503 when session middleware is not configured', async () => {
@@ -518,7 +518,7 @@ describe('api/log-stream', () => {
       listeners[0](createUpgradeRequest('/api/v1/log/not-stream') as any, socket, Buffer.alloc(0));
       await new Promise((resolve) => setImmediate(resolve));
 
-      expect(socket.write).toHaveBeenCalledWith(expect.stringContaining('404 Not Found'));
+      expect(socket.write).not.toHaveBeenCalled();
     });
 
     test('uses getServerConfiguration when serverConfiguration is omitted', () => {

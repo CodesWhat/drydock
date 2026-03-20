@@ -404,7 +404,6 @@ export function createContainerLogStreamGateway(
     async handleUpgrade(request: IncomingMessage, socket: Socket, head: Buffer): Promise<void> {
       const parsedRequest = parseContainerIdFromUpgradeUrl(request.url);
       if (!parsedRequest) {
-        writeUpgradeError(socket, 404, 'Not Found');
         return;
       }
 
