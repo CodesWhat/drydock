@@ -11,29 +11,38 @@ interface AppLogEntry {
   message?: string;
 }
 
-const props = defineProps<{
-  logLevel: string;
-  entries: AppLogEntry[];
-  loading: boolean;
-  error: string;
-  logLevelFilter: string;
-  tail: number;
-  autoFetchInterval: number;
-  componentFilter: string;
-  autoFetchOptions: LogAutoFetchIntervalOption[];
-  scrollBlocked: boolean;
-  lastFetchedIso: string;
-  formatLastFetched: (iso: string) => string;
-  formatTimestamp: (value: string | number | undefined) => string;
-  messageForEntry: (entry: AppLogEntry) => string;
-  levelColor: (level: string | undefined) => string;
-}>();
+const props = withDefaults(
+  defineProps<{
+    logLevel: string;
+    entries: AppLogEntry[];
+    loading: boolean;
+    error: string;
+    logLevelFilter: string;
+    tail: number;
+    autoFetchInterval: number;
+    componentFilter: string;
+    autoFetchOptions: LogAutoFetchIntervalOption[];
+    scrollBlocked: boolean;
+    lastFetchedIso: string;
+    formatLastFetched: (iso: string) => string;
+    formatTimestamp: (value: string | number | undefined) => string;
+    messageForEntry: (entry: AppLogEntry) => string;
+    levelColor: (level: string | undefined) => string;
+    streamingEnabled?: boolean;
+    streamingConnected?: boolean;
+  }>(),
+  {
+    streamingEnabled: false,
+    streamingConnected: false,
+  },
+);
 
 const emit = defineEmits<{
   (e: 'update:logLevelFilter', value: string): void;
   (e: 'update:tail', value: number): void;
   (e: 'update:autoFetchInterval', value: number): void;
   (e: 'update:componentFilter', value: string): void;
+  (e: 'update:streamingEnabled', value: boolean): void;
   (e: 'refresh'): void;
   (e: 'reset'): void;
   (e: 'resume-auto-scroll'): void;
@@ -61,9 +70,21 @@ const componentFilterModel = computed({
   set: (value: string) => emit('update:componentFilter', value),
 });
 
+const streamingEnabledModel = computed({
+  get: () => props.streamingEnabled,
+  set: (value: boolean) => emit('update:streamingEnabled', value),
+});
+
 function asEntry(entry: unknown): AppLogEntry {
   return entry as AppLogEntry;
 }
+
+const showAutoScrollBanner = computed(() => {
+  if (props.streamingEnabled) {
+    return props.scrollBlocked && props.streamingConnected;
+  }
+  return props.scrollBlocked && props.autoFetchInterval > 0;
+});
 </script>
 
 <template>
@@ -90,6 +111,23 @@ function asEntry(entry: unknown): AppLogEntry {
         >
           <template #controls>
             <div class="flex flex-wrap items-center gap-2">
+              <label
+                class="flex items-center gap-1.5 px-2 py-1.5 dd-rounded text-2xs-plus font-semibold uppercase tracking-wide cursor-pointer dd-bg dd-text select-none"
+              >
+                <input
+                  type="checkbox"
+                  :checked="streamingEnabledModel"
+                  class="accent-[var(--dd-success)]"
+                  @change="streamingEnabledModel = ($event.target as HTMLInputElement).checked"
+                />
+                <span
+                  v-if="props.streamingConnected"
+                  class="inline-block w-2 h-2 rounded-full shrink-0"
+                  :style="{ backgroundColor: 'var(--dd-success)' }"
+                />
+                Live
+              </label>
+
               <select
                 v-model="logLevelFilterModel"
                 class="px-2 py-1.5 dd-rounded text-2xs-plus font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text"
@@ -112,6 +150,7 @@ function asEntry(entry: unknown): AppLogEntry {
               </select>
 
               <select
+                v-if="!props.streamingEnabled"
                 v-model.number="autoFetchIntervalModel"
                 class="px-2 py-1.5 dd-rounded text-2xs-plus font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text"
               >
@@ -157,8 +196,20 @@ function asEntry(entry: unknown): AppLogEntry {
           </template>
 
           <template #meta>
-            <div class="text-2xs dd-text-muted">
-              Last fetched: {{ props.formatLastFetched(props.lastFetchedIso) }}
+            <div class="flex items-center gap-2 text-2xs dd-text-muted">
+              <span v-if="props.streamingEnabled && props.streamingConnected" class="flex items-center gap-1">
+                <span
+                  class="inline-block w-1.5 h-1.5 rounded-full"
+                  :style="{ backgroundColor: 'var(--dd-success)' }"
+                />
+                Live
+              </span>
+              <span v-else-if="props.streamingEnabled">
+                Disconnected
+              </span>
+              <span v-else>
+                Last fetched: {{ props.formatLastFetched(props.lastFetchedIso) }}
+              </span>
             </div>
           </template>
 
@@ -178,7 +229,7 @@ function asEntry(entry: unknown): AppLogEntry {
 
           <template #footer>
             <div
-              v-if="props.scrollBlocked && props.autoFetchInterval > 0"
+              v-if="showAutoScrollBanner"
               class="flex items-center justify-between px-3 py-2 text-2xs"
               :style="{ backgroundColor: 'var(--dd-warning-muted)' }"
             >
