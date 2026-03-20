@@ -21,6 +21,7 @@ function createUpgradeSocket() {
 function createUpgradeRequest(url: string) {
   return {
     url,
+    headers: {},
     socket: {
       remoteAddress: '127.0.0.1',
     },
@@ -132,6 +133,63 @@ describe('api/log-stream', () => {
       expect(socket.write).not.toHaveBeenCalled();
     });
 
+    test('returns 403 when Origin header does not match Host', async () => {
+      const gateway = createSystemLogStreamGateway({
+        sessionMiddleware: authenticatingSessionMiddleware,
+        webSocketServer: { handleUpgrade: vi.fn() },
+      });
+      const socket = createUpgradeSocket();
+
+      await gateway.handleUpgrade(
+        {
+          url: '/api/v1/log/stream',
+          headers: { origin: 'https://evil.com', host: 'localhost:3000' },
+          socket: { remoteAddress: '127.0.0.1' },
+        } as any,
+        socket as any,
+        Buffer.alloc(0),
+      );
+
+      expect(socket.write).toHaveBeenCalledWith(expect.stringContaining('403 Forbidden'));
+      expect(socket.destroy).toHaveBeenCalledTimes(1);
+    });
+
+    test('allows upgrade when Origin matches Host', async () => {
+      const mockHandleUpgrade = vi.fn(
+        (_req: unknown, _socket: unknown, _head: unknown, callback: (ws: unknown) => void) => {
+          const closeListeners: Array<() => void> = [];
+          const ws = {
+            on: vi.fn((event: string, listener: () => void) => {
+              if (event === 'close') closeListeners.push(listener);
+            }),
+            off: vi.fn(),
+            send: vi.fn(),
+            close: vi.fn(),
+          };
+          callback(ws);
+          for (const listener of closeListeners) listener();
+        },
+      );
+      const gateway = createSystemLogStreamGateway({
+        sessionMiddleware: authenticatingSessionMiddleware,
+        webSocketServer: { handleUpgrade: mockHandleUpgrade },
+      });
+      const socket = createUpgradeSocket();
+
+      await gateway.handleUpgrade(
+        {
+          url: '/api/v1/log/stream',
+          headers: { origin: 'http://localhost:3000', host: 'localhost:3000' },
+          socket: { remoteAddress: '127.0.0.1' },
+        } as any,
+        socket as any,
+        Buffer.alloc(0),
+      );
+
+      expect(socket.write).not.toHaveBeenCalledWith(expect.stringContaining('403'));
+      expect(mockHandleUpgrade).toHaveBeenCalledTimes(1);
+    });
+
     test('returns 503 when session middleware is not configured', async () => {
       const gateway = createSystemLogStreamGateway({
         sessionMiddleware: undefined,
@@ -238,13 +296,15 @@ describe('api/log-stream', () => {
         subscribeToEntries: vi.fn(() => () => {}),
       });
 
-      await gateway.handleUpgrade(
+      const upgradePromise = gateway.handleUpgrade(
         createUpgradeRequest('/api/log/stream') as any,
         createUpgradeSocket() as any,
         Buffer.alloc(0),
       );
 
       expect(ws.send).not.toHaveBeenCalled();
+      ws.emit('close');
+      await upgradePromise;
     });
 
     test('sends backfill entries on connect', async () => {
@@ -269,7 +329,7 @@ describe('api/log-stream', () => {
         subscribeToEntries: vi.fn(() => () => {}),
       });
 
-      await gateway.handleUpgrade(
+      const upgradePromise = gateway.handleUpgrade(
         createUpgradeRequest('/api/v1/log/stream?tail=50') as any,
         createUpgradeSocket() as any,
         Buffer.alloc(0),
@@ -278,6 +338,8 @@ describe('api/log-stream', () => {
       expect(ws.send).toHaveBeenCalledTimes(2);
       expect(ws.send).toHaveBeenCalledWith(JSON.stringify(backfillEntries[0]));
       expect(ws.send).toHaveBeenCalledWith(JSON.stringify(backfillEntries[1]));
+      ws.emit('close');
+      await upgradePromise;
     });
 
     test('streams live entries that match filters', async () => {
@@ -308,7 +370,7 @@ describe('api/log-stream', () => {
         subscribeToEntries,
       });
 
-      await gateway.handleUpgrade(
+      const upgradePromise = gateway.handleUpgrade(
         createUpgradeRequest('/api/v1/log/stream?level=warn') as any,
         createUpgradeSocket() as any,
         Buffer.alloc(0),
@@ -325,6 +387,8 @@ describe('api/log-stream', () => {
       // backfill sends 0, warn should be sent, debug should be filtered
       expect(ws.send).toHaveBeenCalledTimes(1);
       expect(ws.send).toHaveBeenCalledWith(JSON.stringify(warnEntry));
+      ws.emit('close');
+      await upgradePromise;
     });
 
     test('streams live entries that match component filter', async () => {
@@ -355,7 +419,7 @@ describe('api/log-stream', () => {
         subscribeToEntries,
       });
 
-      await gateway.handleUpgrade(
+      const upgradePromise = gateway.handleUpgrade(
         createUpgradeRequest('/api/v1/log/stream?component=api') as any,
         createUpgradeSocket() as any,
         Buffer.alloc(0),
@@ -365,6 +429,8 @@ describe('api/log-stream', () => {
       capturedListener!(makeEntry({ component: 'watcher', msg: 'no-match' }));
 
       expect(ws.send).toHaveBeenCalledTimes(1);
+      ws.emit('close');
+      await upgradePromise;
     });
 
     test('unsubscribes on websocket close', async () => {
@@ -375,12 +441,8 @@ describe('api/log-stream', () => {
       ws.send = vi.fn();
       ws.close = vi.fn();
 
-      let capturedListener: ((entry: any) => void) | undefined;
       const unsubscribeFn = vi.fn();
-      const subscribeToEntries = vi.fn((listener: (entry: any) => void) => {
-        capturedListener = listener;
-        return unsubscribeFn;
-      });
+      const subscribeToEntries = vi.fn(() => unsubscribeFn);
 
       const gateway = createSystemLogStreamGateway({
         sessionMiddleware: authenticatingSessionMiddleware,
@@ -394,13 +456,14 @@ describe('api/log-stream', () => {
         subscribeToEntries,
       });
 
-      await gateway.handleUpgrade(
+      const upgradePromise = gateway.handleUpgrade(
         createUpgradeRequest('/api/v1/log/stream') as any,
         createUpgradeSocket() as any,
         Buffer.alloc(0),
       );
 
       ws.emit('close');
+      await upgradePromise;
       expect(unsubscribeFn).toHaveBeenCalledTimes(1);
 
       // Second close should not call unsubscribe again (idempotent cleanup)
@@ -431,13 +494,58 @@ describe('api/log-stream', () => {
         subscribeToEntries,
       });
 
-      await gateway.handleUpgrade(
+      const upgradePromise = gateway.handleUpgrade(
         createUpgradeRequest('/api/v1/log/stream') as any,
         createUpgradeSocket() as any,
         Buffer.alloc(0),
       );
 
       ws.emit('error', new Error('ws boom'));
+      await upgradePromise;
+      expect(unsubscribeFn).toHaveBeenCalledTimes(1);
+    });
+
+    test('unsubscribes when send throws on a closed socket', async () => {
+      const ws = new EventEmitter() as EventEmitter & {
+        send: ReturnType<typeof vi.fn>;
+        close: ReturnType<typeof vi.fn>;
+      };
+      ws.send = vi.fn();
+      ws.close = vi.fn();
+
+      let capturedListener: ((entry: any) => void) | undefined;
+      const unsubscribeFn = vi.fn();
+      const subscribeToEntries = vi.fn((listener: (entry: any) => void) => {
+        capturedListener = listener;
+        return unsubscribeFn;
+      });
+
+      const gateway = createSystemLogStreamGateway({
+        sessionMiddleware: authenticatingSessionMiddleware,
+        webSocketServer: {
+          handleUpgrade: vi.fn((_req, _socket, _head, callback: (socket: unknown) => void) =>
+            callback(ws),
+          ),
+        },
+        isRateLimited: vi.fn(() => false),
+        getBackfillEntries: vi.fn(() => []),
+        subscribeToEntries,
+      });
+
+      const upgradePromise = gateway.handleUpgrade(
+        createUpgradeRequest('/api/v1/log/stream') as any,
+        createUpgradeSocket() as any,
+        Buffer.alloc(0),
+      );
+
+      // Simulate socket closing then a late entry arriving
+      ws.send = vi.fn(() => {
+        throw new Error('WebSocket is not open');
+      });
+
+      capturedListener!(makeEntry({ level: 'info', msg: 'late message' }));
+      await upgradePromise;
+
       expect(unsubscribeFn).toHaveBeenCalledTimes(1);
     });
 
@@ -448,6 +556,7 @@ describe('api/log-stream', () => {
 
       const request = {
         url: '/api/v1/log/stream',
+        headers: {},
         socket: { remoteAddress: '127.0.0.1' },
       } as any;
 
@@ -472,7 +581,7 @@ describe('api/log-stream', () => {
       const socket = createUpgradeSocket();
 
       await gateway.handleUpgrade(
-        { url: '/api/v1/log/stream', socket: {} } as any,
+        { url: '/api/v1/log/stream', headers: {}, socket: {} } as any,
         socket as any,
         Buffer.alloc(0),
       );

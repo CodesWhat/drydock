@@ -16,6 +16,7 @@ import {
   createIdentityAwareUpgradeRateLimitKeyResolver,
   getDefaultRateLimitKey,
   isAuthenticatedSession,
+  isOriginAllowed,
   type SessionMiddleware,
   type UpgradeRequest,
   writeUpgradeError,
@@ -116,7 +117,7 @@ function streamSystemLogsToWebSocket({
   query: ParsedSystemLogStreamQuery;
   getBackfillEntries: NonNullable<SystemLogStreamGatewayDependencies['getBackfillEntries']>;
   subscribeToEntries: NonNullable<SystemLogStreamGatewayDependencies['subscribeToEntries']>;
-}): void {
+}): Promise<void> {
   const backfill = getBackfillEntries({
     level: query.level,
     component: query.component,
@@ -127,32 +128,40 @@ function streamSystemLogsToWebSocket({
   }
 
   const minLevel = getMinLevel(query.level);
-  const unsubscribe = subscribeToEntries((entry: LogEntry) => {
-    if (matchesFilter(entry, minLevel, query.component)) {
-      webSocket.send(JSON.stringify(entry));
-    }
+
+  return new Promise<void>((resolve) => {
+    const unsubscribe = subscribeToEntries((entry: LogEntry) => {
+      if (matchesFilter(entry, minLevel, query.component)) {
+        try {
+          webSocket.send(JSON.stringify(entry));
+        } catch {
+          cleanup();
+        }
+      }
+    });
+
+    let cleaned = false;
+    const cleanup = () => {
+      if (cleaned) {
+        return;
+      }
+      cleaned = true;
+      unsubscribe();
+      webSocket.off?.('close', handleClose);
+      webSocket.off?.('error', handleError);
+      resolve();
+    };
+
+    const handleClose = () => {
+      cleanup();
+    };
+    const handleError = () => {
+      cleanup();
+    };
+
+    webSocket.on('close', handleClose);
+    webSocket.on('error', handleError);
   });
-
-  let cleaned = false;
-  const cleanup = () => {
-    if (cleaned) {
-      return;
-    }
-    cleaned = true;
-    unsubscribe();
-    webSocket.off?.('close', handleClose);
-    webSocket.off?.('error', handleError);
-  };
-
-  const handleClose = () => {
-    cleanup();
-  };
-  const handleError = () => {
-    cleanup();
-  };
-
-  webSocket.on('close', handleClose);
-  webSocket.on('error', handleError);
 }
 
 export function createSystemLogStreamGateway(dependencies: SystemLogStreamGatewayDependencies) {
@@ -175,6 +184,11 @@ export function createSystemLogStreamGateway(dependencies: SystemLogStreamGatewa
     async handleUpgrade(request: IncomingMessage, socket: Socket, head: Buffer): Promise<void> {
       const parsedRequest = parseSystemLogStreamUpgradeUrl(request.url);
       if (!parsedRequest) {
+        return;
+      }
+
+      if (!isOriginAllowed(request)) {
+        writeUpgradeError(socket, 403, 'Forbidden');
         return;
       }
 
@@ -204,13 +218,12 @@ export function createSystemLogStreamGateway(dependencies: SystemLogStreamGatewa
 
       await new Promise<void>((resolve) => {
         webSocketServer.handleUpgrade(request, socket, head, (webSocket) => {
-          streamSystemLogsToWebSocket({
+          void streamSystemLogsToWebSocket({
             webSocket,
             query: parsedRequest.query,
             getBackfillEntries,
             subscribeToEntries,
-          });
-          resolve();
+          }).finally(resolve);
         });
       });
     },
@@ -226,12 +239,14 @@ export function attachSystemLogStreamWebSocketServer(options: {
   };
   sessionMiddleware?: SessionMiddleware;
   serverConfiguration?: Record<string, unknown>;
+  isRateLimited?: (key: string) => boolean;
 }) {
   const serverConfiguration =
     options.serverConfiguration ?? (getServerConfiguration() as Record<string, unknown>);
   const gateway = createSystemLogStreamGateway({
     sessionMiddleware: options.sessionMiddleware,
     getRateLimitKey: createIdentityAwareUpgradeRateLimitKeyResolver(serverConfiguration),
+    isRateLimited: options.isRateLimited,
   });
 
   options.server.on('upgrade', (request, socket, head) => {

@@ -20,6 +20,7 @@ import * as healthRouter from './health.js';
 import { attachSystemLogStreamWebSocketServer } from './log-stream.js';
 import * as prometheusRouter from './prometheus.js';
 import * as uiRouter from './ui.js';
+import { createFixedWindowRateLimiter } from './ws-upgrade-utils.js';
 
 const configuration = getServerConfiguration();
 
@@ -217,14 +218,21 @@ export async function init() {
   log.debug(`API/UI enabled => Start Http listener on port ${configuration.port}`);
   const app = createApp();
   const server = startServer(app);
+  const sharedLimiter = createFixedWindowRateLimiter({
+    windowMs: 15 * 60 * 1000,
+    max: 1000,
+  });
+  const isRateLimited = (key: string) => !sharedLimiter.consume(key);
   attachContainerLogStreamWebSocketServer({
     server,
     sessionMiddleware: auth.getSessionMiddleware?.(),
     serverConfiguration: configuration as Record<string, unknown>,
+    isRateLimited,
   });
   attachSystemLogStreamWebSocketServer({
     server,
     sessionMiddleware: auth.getSessionMiddleware?.(),
     serverConfiguration: configuration as Record<string, unknown>,
+    isRateLimited,
   });
 }

@@ -33,6 +33,7 @@ function createUpgradeSocket() {
 function createUpgradeRequest(url: string) {
   return {
     url,
+    headers: {},
     socket: {
       remoteAddress: '127.0.0.1',
     },
@@ -293,6 +294,30 @@ describe('api/container/log-stream', () => {
       expect(socketWithInvalidUrl.write).not.toHaveBeenCalled();
     });
 
+    test('returns 403 when Origin header does not match Host', async () => {
+      const gateway = createContainerLogStreamGateway({
+        getContainer: vi.fn(),
+        getWatchers: vi.fn(() => ({})),
+        sessionMiddleware: (_req: unknown, _res: unknown, next: (error?: unknown) => void) =>
+          next(),
+        webSocketServer: { handleUpgrade: vi.fn() },
+      });
+      const socket = createUpgradeSocket();
+
+      await gateway.handleUpgrade(
+        {
+          url: '/api/v1/containers/c1/logs/stream',
+          headers: { origin: 'https://evil.com', host: 'localhost:3000' },
+          socket: { remoteAddress: '127.0.0.1' },
+        } as any,
+        socket as any,
+        Buffer.alloc(0),
+      );
+
+      expect(socket.write).toHaveBeenCalledWith(expect.stringContaining('403 Forbidden'));
+      expect(socket.destroy).toHaveBeenCalledTimes(1);
+    });
+
     test('returns 503 when session middleware is not configured', async () => {
       const gateway = createContainerLogStreamGateway({
         getContainer: vi.fn(),
@@ -376,7 +401,7 @@ describe('api/container/log-stream', () => {
       });
       const socket = createUpgradeSocket();
       await gateway.handleUpgrade(
-        { url: '/api/v1/containers/c1/logs/stream', socket: {} } as any,
+        { url: '/api/v1/containers/c1/logs/stream', headers: {}, socket: {} } as any,
         socket as any,
         Buffer.alloc(0),
       );
@@ -395,7 +420,11 @@ describe('api/container/log-stream', () => {
       });
       const socket = createUpgradeSocket();
       await gateway.handleUpgrade(
-        { url: '/api/v1/containers/c1/logs/stream', socket: { remoteAddress: '   ' } } as any,
+        {
+          url: '/api/v1/containers/c1/logs/stream',
+          headers: {},
+          socket: { remoteAddress: '   ' },
+        } as any,
         socket as any,
         Buffer.alloc(0),
       );
@@ -646,6 +675,179 @@ describe('api/container/log-stream', () => {
         }),
       );
       expect(ws.close).toHaveBeenCalledWith(1000, 'Stream complete');
+    });
+
+    test('does not throw when send fails on one-shot non-readable payload', async () => {
+      const ws = new EventEmitter() as EventEmitter & {
+        send: ReturnType<typeof vi.fn>;
+        close: ReturnType<typeof vi.fn>;
+      };
+      ws.send = vi.fn(() => {
+        throw new Error('WebSocket is not open');
+      });
+      ws.close = vi.fn();
+
+      const mockDockerContainer = {
+        logs: vi.fn().mockResolvedValue(dockerFrame('2026-01-01T00:00:00.000000000Z hello\n', 1)),
+      };
+      const mockWatcher = {
+        dockerApi: {
+          getContainer: vi.fn(() => mockDockerContainer),
+        },
+      };
+
+      const gateway = createContainerLogStreamGateway({
+        getContainer: vi.fn(() => ({
+          id: 'c1',
+          name: 'my-container',
+          watcher: 'local',
+          status: 'running',
+        })),
+        getWatchers: vi.fn(() => ({
+          'docker.local': mockWatcher,
+        })),
+        sessionMiddleware: (req: any, _res: unknown, next: (error?: unknown) => void) => {
+          req.session = { passport: { user: '{"username":"alice"}' } };
+          req.sessionID = 'session-1';
+          next();
+        },
+        webSocketServer: {
+          handleUpgrade: vi.fn((_req, _socket, _head, callback: (socket: unknown) => void) =>
+            callback(ws),
+          ),
+        },
+        isRateLimited: vi.fn(() => false),
+      });
+
+      await gateway.handleUpgrade(
+        createUpgradeRequest('/api/v1/containers/c1/logs/stream?follow=false') as any,
+        createUpgradeSocket() as any,
+        Buffer.alloc(0),
+      );
+
+      // send threw but no unhandled exception; close is NOT called because send failed
+      expect(ws.close).not.toHaveBeenCalled();
+    });
+
+    test('cleans up docker stream when send throws during streaming', async () => {
+      const dockerStream = new EventEmitter() as EventEmitter & {
+        destroy: ReturnType<typeof vi.fn>;
+      };
+      dockerStream.destroy = vi.fn();
+
+      const mockDockerContainer = {
+        logs: vi.fn().mockResolvedValue(dockerStream),
+      };
+      const mockWatcher = {
+        dockerApi: {
+          getContainer: vi.fn(() => mockDockerContainer),
+        },
+      };
+
+      const ws = new EventEmitter() as EventEmitter & {
+        send: ReturnType<typeof vi.fn>;
+        close: ReturnType<typeof vi.fn>;
+      };
+      ws.send = vi.fn();
+      ws.close = vi.fn();
+
+      const gateway = createContainerLogStreamGateway({
+        getContainer: vi.fn(() => ({
+          id: 'c1',
+          name: 'my-container',
+          watcher: 'local',
+          status: 'running',
+        })),
+        getWatchers: vi.fn(() => ({
+          'docker.local': mockWatcher,
+        })),
+        sessionMiddleware: (req: any, _res: unknown, next: (error?: unknown) => void) => {
+          req.session = { passport: { user: '{"username":"alice"}' } };
+          req.sessionID = 'session-1';
+          next();
+        },
+        webSocketServer: {
+          handleUpgrade: vi.fn((_req, _socket, _head, callback: (socket: unknown) => void) =>
+            callback(ws),
+          ),
+        },
+        isRateLimited: vi.fn(() => false),
+      });
+
+      await gateway.handleUpgrade(
+        createUpgradeRequest('/api/v1/containers/c1/logs/stream') as any,
+        createUpgradeSocket() as any,
+        Buffer.alloc(0),
+      );
+
+      // Make send throw to simulate a closed socket
+      ws.send = vi.fn(() => {
+        throw new Error('WebSocket is not open');
+      });
+
+      dockerStream.emit('data', dockerFrame('2026-01-01T00:00:00.000000000Z hello\n', 1));
+
+      // cleanup should have been called — docker stream destroyed
+      expect(dockerStream.destroy).toHaveBeenCalledTimes(1);
+    });
+
+    test('does not throw when close fails during stream end', async () => {
+      const dockerStream = new EventEmitter() as EventEmitter & {
+        destroy: ReturnType<typeof vi.fn>;
+      };
+      dockerStream.destroy = vi.fn();
+
+      const mockDockerContainer = {
+        logs: vi.fn().mockResolvedValue(dockerStream),
+      };
+      const mockWatcher = {
+        dockerApi: {
+          getContainer: vi.fn(() => mockDockerContainer),
+        },
+      };
+
+      const ws = new EventEmitter() as EventEmitter & {
+        send: ReturnType<typeof vi.fn>;
+        close: ReturnType<typeof vi.fn>;
+      };
+      ws.send = vi.fn();
+      ws.close = vi.fn(() => {
+        throw new Error('WebSocket is not open');
+      });
+
+      const gateway = createContainerLogStreamGateway({
+        getContainer: vi.fn(() => ({
+          id: 'c1',
+          name: 'my-container',
+          watcher: 'local',
+          status: 'running',
+        })),
+        getWatchers: vi.fn(() => ({
+          'docker.local': mockWatcher,
+        })),
+        sessionMiddleware: (req: any, _res: unknown, next: (error?: unknown) => void) => {
+          req.session = { passport: { user: '{"username":"alice"}' } };
+          req.sessionID = 'session-1';
+          next();
+        },
+        webSocketServer: {
+          handleUpgrade: vi.fn((_req, _socket, _head, callback: (socket: unknown) => void) =>
+            callback(ws),
+          ),
+        },
+        isRateLimited: vi.fn(() => false),
+      });
+
+      await gateway.handleUpgrade(
+        createUpgradeRequest('/api/v1/containers/c1/logs/stream') as any,
+        createUpgradeSocket() as any,
+        Buffer.alloc(0),
+      );
+
+      // stream ends, close throws — should not cause unhandled exception
+      dockerStream.emit('end');
+
+      expect(dockerStream.destroy).toHaveBeenCalledTimes(1);
     });
 
     test('closes websocket with stream error and destroys docker stream', async () => {
@@ -925,6 +1127,7 @@ describe('api/container/log-stream', () => {
 
       const request = {
         url: '/api/v1/containers/c1/logs/stream',
+        headers: {},
         socket: { remoteAddress: '127.0.0.1' },
       } as any;
 

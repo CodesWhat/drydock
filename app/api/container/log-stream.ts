@@ -13,6 +13,7 @@ import {
   createIdentityAwareUpgradeRateLimitKeyResolver,
   getDefaultRateLimitKey,
   isAuthenticatedSession,
+  isOriginAllowed,
   type SessionMiddleware,
   type UpgradeRequest,
   writeUpgradeError,
@@ -321,23 +322,31 @@ async function streamContainerLogsToWebSocket({
   const demuxer = createDockerLogFrameDemuxer();
   const decoder = createDockerLogMessageDecoder();
 
-  const emitMessages = (messages: DockerLogMessage[]): void => {
+  const emitMessages = (messages: DockerLogMessage[]): boolean => {
     for (const message of messages) {
-      webSocket.send(JSON.stringify(message));
+      try {
+        webSocket.send(JSON.stringify(message));
+      } catch {
+        return false;
+      }
     }
+    return true;
   };
 
-  const emitChunk = (chunk: Buffer | string | Uint8Array): void => {
+  const emitChunk = (chunk: Buffer | string | Uint8Array): boolean => {
     const frames = demuxer.push(chunk);
     for (const frame of frames) {
-      emitMessages(decoder.push(frame));
+      if (!emitMessages(decoder.push(frame))) {
+        return false;
+      }
     }
+    return true;
   };
 
   if (!isReadableStream(dockerStream)) {
-    emitChunk(dockerStream);
-    emitMessages(decoder.flush());
-    webSocket.close(1000, 'Stream complete');
+    if (emitChunk(dockerStream) && emitMessages(decoder.flush())) {
+      webSocket.close(1000, 'Stream complete');
+    }
     return;
   }
 
@@ -356,15 +365,25 @@ async function streamContainerLogsToWebSocket({
   };
 
   const handleData = (chunk: Buffer | string | Uint8Array) => {
-    emitChunk(chunk);
+    if (!emitChunk(chunk)) {
+      cleanup();
+    }
   };
   const handleEnd = () => {
     emitMessages(decoder.flush());
-    webSocket.close(1000, 'Stream ended');
+    try {
+      webSocket.close(1000, 'Stream ended');
+    } catch {
+      /* socket already closed */
+    }
     cleanup();
   };
   const handleError = (error: unknown) => {
-    webSocket.close(1011, `Log stream error (${getErrorMessage(error)})`);
+    try {
+      webSocket.close(1011, `Log stream error (${getErrorMessage(error)})`);
+    } catch {
+      /* socket already closed */
+    }
     cleanup();
   };
   const handleWebSocketClose = () => {
@@ -404,6 +423,11 @@ export function createContainerLogStreamGateway(
     async handleUpgrade(request: IncomingMessage, socket: Socket, head: Buffer): Promise<void> {
       const parsedRequest = parseContainerIdFromUpgradeUrl(request.url);
       if (!parsedRequest) {
+        return;
+      }
+
+      if (!isOriginAllowed(request)) {
+        writeUpgradeError(socket, 403, 'Forbidden');
         return;
       }
 
@@ -456,6 +480,7 @@ export function attachContainerLogStreamWebSocketServer(options: {
   };
   sessionMiddleware?: SessionMiddleware;
   serverConfiguration?: Record<string, unknown>;
+  isRateLimited?: (key: string) => boolean;
 }) {
   const serverConfiguration =
     options.serverConfiguration ?? (getServerConfiguration() as Record<string, unknown>);
@@ -464,6 +489,7 @@ export function attachContainerLogStreamWebSocketServer(options: {
     getWatchers: () => registry.getState().watcher,
     sessionMiddleware: options.sessionMiddleware,
     getRateLimitKey: createIdentityAwareUpgradeRateLimitKeyResolver(serverConfiguration),
+    isRateLimited: options.isRateLimited,
   });
 
   options.server.on('upgrade', (request, socket, head) => {

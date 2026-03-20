@@ -44,6 +44,7 @@ const mockHelmet = vi.hoisted(() => vi.fn(() => 'helmet-middleware'));
 const mockIsInternetlessModeEnabled = vi.hoisted(() => vi.fn(() => false));
 const mockGetSessionMiddleware = vi.hoisted(() => vi.fn(() => vi.fn()));
 const mockAttachContainerLogStreamWebSocketServer = vi.hoisted(() => vi.fn());
+const mockAttachSystemLogStreamWebSocketServer = vi.hoisted(() => vi.fn());
 
 vi.mock('node:fs', () => ({
   default: mockFs,
@@ -107,6 +108,10 @@ vi.mock('./container/log-stream', () => ({
   attachContainerLogStreamWebSocketServer: mockAttachContainerLogStreamWebSocketServer,
 }));
 
+vi.mock('./log-stream', () => ({
+  attachSystemLogStreamWebSocketServer: mockAttachSystemLogStreamWebSocketServer,
+}));
+
 vi.mock('../configuration', () => ({
   getServerConfiguration: mockGetServerConfiguration,
   ddEnvVars: mockDdEnvVars,
@@ -133,6 +138,7 @@ describe('API Index', () => {
     mockGetSessionMiddleware.mockReset();
     mockGetSessionMiddleware.mockReturnValue(vi.fn());
     mockAttachContainerLogStreamWebSocketServer.mockClear();
+    mockAttachSystemLogStreamWebSocketServer.mockClear();
     Object.keys(mockDdEnvVars).forEach((key) => delete mockDdEnvVars[key]);
   });
 
@@ -172,7 +178,33 @@ describe('API Index', () => {
       server: mockHttpServer,
       sessionMiddleware: expect.any(Function),
       serverConfiguration: expect.objectContaining({ enabled: true }),
+      isRateLimited: expect.any(Function),
     });
+    expect(mockAttachSystemLogStreamWebSocketServer).toHaveBeenCalledWith({
+      server: mockHttpServer,
+      sessionMiddleware: expect.any(Function),
+      serverConfiguration: expect.objectContaining({ enabled: true }),
+      isRateLimited: expect.any(Function),
+    });
+  });
+
+  test('should share a single rate limiter across both WebSocket log stream gateways', async () => {
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {},
+      tls: {},
+    });
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    await indexRouter.init();
+
+    const containerIsRateLimited =
+      mockAttachContainerLogStreamWebSocketServer.mock.calls[0][0].isRateLimited;
+    const systemIsRateLimited =
+      mockAttachSystemLogStreamWebSocketServer.mock.calls[0][0].isRateLimited;
+    expect(containerIsRateLimited).toBe(systemIsRateLimited);
   });
 
   test('should start HTTP server when TLS is explicitly disabled', async () => {

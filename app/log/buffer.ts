@@ -8,7 +8,7 @@ export interface LogEntry {
 }
 
 const entryEmitter = new EventEmitter();
-entryEmitter.setMaxListeners(100);
+entryEmitter.setMaxListeners(0);
 
 const LEVEL_ORDER: Record<string, number> = {
   debug: 10,

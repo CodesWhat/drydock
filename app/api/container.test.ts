@@ -104,6 +104,7 @@ vi.mock('../triggers/providers/Trigger', () => ({
   default: {
     parseIncludeOrIncludeTriggerString: vi.fn((str) => ({ id: str })),
     doesReferenceMatchId: vi.fn(() => false),
+    isRollbackContainer: vi.fn(() => false),
   },
 }));
 
