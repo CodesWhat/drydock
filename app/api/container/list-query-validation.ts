@@ -12,9 +12,22 @@ const CONTAINER_LIST_QUERY_SCHEMA = joi.object({
     .messages({
       'any.only': 'Invalid sort value',
     }),
-  status: joi.string().valid('update-available', 'up-to-date').messages({
-    'any.only': 'Invalid status filter value',
-  }),
+  status: joi
+    .string()
+    .valid(
+      'update-available',
+      'up-to-date',
+      'running',
+      'stopped',
+      'exited',
+      'paused',
+      'restarting',
+      'dead',
+      'created',
+    )
+    .messages({
+      'any.only': 'Invalid status filter value',
+    }),
   kind: joi.string().valid('major', 'minor', 'patch', 'digest').messages({
     'any.only': 'Invalid kind filter value',
   }),
@@ -27,9 +40,20 @@ const CONTAINER_LIST_QUERY_SCHEMA = joi.object({
   }),
 });
 
+export type ContainerRuntimeStatus =
+  | 'running'
+  | 'stopped'
+  | 'exited'
+  | 'paused'
+  | 'restarting'
+  | 'dead'
+  | 'created';
+
+export type ContainerUpdateStatus = 'update-available' | 'up-to-date';
+
 export interface ValidatedContainerListQuery {
   sortMode: ContainerSortMode;
-  status?: 'update-available' | 'up-to-date';
+  status?: ContainerUpdateStatus | ContainerRuntimeStatus;
   kind?: 'major' | 'minor' | 'patch' | 'digest';
   watcher?: string;
   maturity?: ContainerMaturityFilter;

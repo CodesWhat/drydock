@@ -847,6 +847,47 @@ describe('api/container/crud', () => {
       );
     });
 
+    test('maps status=running to runtime status store filter', () => {
+      const harness = createHarness({
+        containers: [createContainer({ id: 'c1', status: 'running' })],
+      });
+
+      callGetContainers(harness.handlers, {
+        status: 'running',
+      });
+
+      expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith(
+        {
+          status: 'running',
+        },
+        { limit: 0, offset: 0 },
+      );
+    });
+
+    test.each([
+      'running',
+      'stopped',
+      'exited',
+      'paused',
+      'restarting',
+      'dead',
+      'created',
+    ])('accepts Docker runtime status=%s as a valid filter', (runtimeStatus) => {
+      const harness = createHarness({
+        containers: [createContainer({ id: 'c1', status: runtimeStatus })],
+      });
+
+      const res = callGetContainers(harness.handlers, {
+        status: runtimeStatus,
+      });
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith(
+        { status: runtimeStatus },
+        { limit: 0, offset: 0 },
+      );
+    });
+
     test('maps kind=digest to updateKind.kind filter', () => {
       const harness = createHarness({
         containers: [createContainer({ id: 'c1' })],
@@ -965,7 +1006,7 @@ describe('api/container/crud', () => {
 
     test.each([
       [{ sort: 'latest-first' }, 'Invalid sort value'],
-      [{ status: 'running' }, 'Invalid status filter value'],
+      [{ status: 'active' }, 'Invalid status filter value'],
       [{ kind: 'prerelease' }, 'Invalid kind filter value'],
       [{ watcher: '   ' }, 'Invalid watcher filter value'],
       [{ maturity: 'fresh' }, 'Invalid maturity filter value'],

@@ -34,9 +34,22 @@ const CONTAINER_LIST_QUERY_SCHEMA = joi.object({
     .messages({
       'any.only': 'Invalid sort value',
     }),
-  status: joi.string().valid('update-available', 'up-to-date').messages({
-    'any.only': 'Invalid status filter value',
-  }),
+  status: joi
+    .string()
+    .valid(
+      'update-available',
+      'up-to-date',
+      'running',
+      'stopped',
+      'exited',
+      'paused',
+      'restarting',
+      'dead',
+      'created',
+    )
+    .messages({
+      'any.only': 'Invalid status filter value',
+    }),
   kind: joi.string().valid('major', 'minor', 'patch', 'digest').messages({
     'any.only': 'Invalid kind filter value',
   }),
@@ -107,9 +120,20 @@ export function parseContainerMaturityFilter(
   return undefined;
 }
 
+export type ContainerRuntimeStatus =
+  | 'running'
+  | 'stopped'
+  | 'exited'
+  | 'paused'
+  | 'restarting'
+  | 'dead'
+  | 'created';
+
+export type ContainerUpdateStatus = 'update-available' | 'up-to-date';
+
 export interface ValidatedContainerListQuery {
   sortMode: ContainerSortMode;
-  status?: 'update-available' | 'up-to-date';
+  status?: ContainerUpdateStatus | ContainerRuntimeStatus;
   kind?: 'major' | 'minor' | 'patch' | 'digest';
   watcher?: string;
   maturity?: ContainerMaturityFilter;
@@ -339,13 +363,37 @@ export function sortContainers(containers: Container[], sortMode: ContainerSortM
   return containersSorted;
 }
 
-export function mapContainerListStatusFilter(statusQuery: unknown): boolean | undefined {
+const RUNTIME_STATUS_VALUES: ReadonlySet<string> = new Set([
+  'running',
+  'stopped',
+  'exited',
+  'paused',
+  'restarting',
+  'dead',
+  'created',
+]);
+
+export function isContainerRuntimeStatus(value: unknown): value is ContainerRuntimeStatus {
+  return typeof value === 'string' && RUNTIME_STATUS_VALUES.has(value);
+}
+
+export interface ContainerListStatusFilter {
+  updateAvailable?: boolean;
+  runtimeStatus?: ContainerRuntimeStatus;
+}
+
+export function mapContainerListStatusFilter(
+  statusQuery: unknown,
+): ContainerListStatusFilter | undefined {
   const statusFilter = getFirstNonEmptyQueryValue(statusQuery);
   if (statusFilter === 'update-available') {
-    return true;
+    return { updateAvailable: true };
   }
   if (statusFilter === 'up-to-date') {
-    return false;
+    return { updateAvailable: false };
+  }
+  if (isContainerRuntimeStatus(statusFilter)) {
+    return { runtimeStatus: statusFilter };
   }
   return undefined;
 }

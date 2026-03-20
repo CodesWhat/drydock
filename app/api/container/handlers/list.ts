@@ -58,7 +58,10 @@ export function buildContainerListResponse(
   const filteredQuery = {
     ...(removeContainerListControlParams(query) as Record<string, unknown>),
     ...(kindFilter || {}),
-    ...(statusFilter === undefined ? {} : { updateAvailable: statusFilter }),
+    ...(statusFilter?.updateAvailable !== undefined
+      ? { updateAvailable: statusFilter.updateAvailable }
+      : {}),
+    ...(statusFilter?.runtimeStatus ? { status: statusFilter.runtimeStatus } : {}),
     ...(validatedQuery.watcher ? { watcher: validatedQuery.watcher } : {}),
   } as Request['query'];
   const pagination = normalizeContainerListPagination(query);

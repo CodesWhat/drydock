@@ -21,13 +21,42 @@ export function removeContainerListControlParams(query: Request['query']): Reque
   return filteredQuery as Request['query'];
 }
 
-export function mapContainerListStatusFilter(statusQuery: unknown): boolean | undefined {
+type ContainerRuntimeStatus =
+  | 'running'
+  | 'stopped'
+  | 'exited'
+  | 'paused'
+  | 'restarting'
+  | 'dead'
+  | 'created';
+
+const RUNTIME_STATUS_VALUES: ReadonlySet<string> = new Set([
+  'running',
+  'stopped',
+  'exited',
+  'paused',
+  'restarting',
+  'dead',
+  'created',
+]);
+
+export interface ContainerListStatusFilter {
+  updateAvailable?: boolean;
+  runtimeStatus?: ContainerRuntimeStatus;
+}
+
+export function mapContainerListStatusFilter(
+  statusQuery: unknown,
+): ContainerListStatusFilter | undefined {
   const statusFilter = getFirstNonEmptyQueryValue(statusQuery);
   if (statusFilter === 'update-available') {
-    return true;
+    return { updateAvailable: true };
   }
   if (statusFilter === 'up-to-date') {
-    return false;
+    return { updateAvailable: false };
+  }
+  if (typeof statusFilter === 'string' && RUNTIME_STATUS_VALUES.has(statusFilter)) {
+    return { runtimeStatus: statusFilter as ContainerRuntimeStatus };
   }
   return undefined;
 }

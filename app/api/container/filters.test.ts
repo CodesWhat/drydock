@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'vitest';
-import { sortContainers, validateContainerListQuery } from './filters.js';
+import {
+  isContainerRuntimeStatus,
+  mapContainerListStatusFilter,
+  sortContainers,
+  validateContainerListQuery,
+} from './filters.js';
 
 describe('api/container/filters', () => {
   test('normalizes -status sort mode before sorting', () => {
@@ -119,5 +124,65 @@ describe('api/container/filters', () => {
     expect(() => validateContainerListQuery({ sort: 'invalid-sort' } as any)).toThrow(
       'Invalid sort value',
     );
+  });
+
+  test('validateContainerListQuery accepts update status values', () => {
+    expect(validateContainerListQuery({ status: 'update-available' } as any).status).toBe(
+      'update-available',
+    );
+    expect(validateContainerListQuery({ status: 'up-to-date' } as any).status).toBe('up-to-date');
+  });
+
+  test('validateContainerListQuery accepts Docker runtime status values', () => {
+    const runtimeStatuses = [
+      'running',
+      'stopped',
+      'exited',
+      'paused',
+      'restarting',
+      'dead',
+      'created',
+    ];
+    for (const status of runtimeStatuses) {
+      expect(validateContainerListQuery({ status } as any).status).toBe(status);
+    }
+  });
+
+  test('validateContainerListQuery throws for invalid status values', () => {
+    expect(() => validateContainerListQuery({ status: 'active' } as any)).toThrow(
+      'Invalid status filter value',
+    );
+  });
+
+  test('isContainerRuntimeStatus identifies runtime status values', () => {
+    expect(isContainerRuntimeStatus('running')).toBe(true);
+    expect(isContainerRuntimeStatus('stopped')).toBe(true);
+    expect(isContainerRuntimeStatus('exited')).toBe(true);
+    expect(isContainerRuntimeStatus('paused')).toBe(true);
+    expect(isContainerRuntimeStatus('restarting')).toBe(true);
+    expect(isContainerRuntimeStatus('dead')).toBe(true);
+    expect(isContainerRuntimeStatus('created')).toBe(true);
+    expect(isContainerRuntimeStatus('update-available')).toBe(false);
+    expect(isContainerRuntimeStatus('up-to-date')).toBe(false);
+    expect(isContainerRuntimeStatus('active')).toBe(false);
+    expect(isContainerRuntimeStatus(undefined)).toBe(false);
+    expect(isContainerRuntimeStatus(null)).toBe(false);
+  });
+
+  test('mapContainerListStatusFilter maps update status to updateAvailable', () => {
+    expect(mapContainerListStatusFilter('update-available')).toEqual({ updateAvailable: true });
+    expect(mapContainerListStatusFilter('up-to-date')).toEqual({ updateAvailable: false });
+  });
+
+  test('mapContainerListStatusFilter maps runtime status to runtimeStatus', () => {
+    expect(mapContainerListStatusFilter('running')).toEqual({ runtimeStatus: 'running' });
+    expect(mapContainerListStatusFilter('exited')).toEqual({ runtimeStatus: 'exited' });
+    expect(mapContainerListStatusFilter('stopped')).toEqual({ runtimeStatus: 'stopped' });
+  });
+
+  test('mapContainerListStatusFilter returns undefined for unknown values', () => {
+    expect(mapContainerListStatusFilter('unknown-value')).toBeUndefined();
+    expect(mapContainerListStatusFilter(undefined)).toBeUndefined();
+    expect(mapContainerListStatusFilter('')).toBeUndefined();
   });
 });
