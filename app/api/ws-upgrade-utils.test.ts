@@ -10,6 +10,10 @@ import {
 } from './ws-upgrade-utils.js';
 
 describe('ws-upgrade-utils', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   describe('isOriginAllowed', () => {
     test('allows requests with no Origin header', () => {
       const request = { headers: {} } as any;
@@ -32,6 +36,34 @@ describe('ws-upgrade-utils', () => {
 
     test('rejects when Origin host does not match Host header', () => {
       const request = { headers: { origin: 'https://evil.com', host: 'localhost:3000' } } as any;
+      expect(isOriginAllowed(request)).toBe(false);
+    });
+
+    test('rejects when Origin is missing required subdomain', () => {
+      const request = {
+        headers: { origin: 'https://example.com', host: 'api.example.com' },
+      } as any;
+      expect(isOriginAllowed(request)).toBe(false);
+    });
+
+    test('allows matching IPv6 Origin and Host headers', () => {
+      const request = {
+        headers: { origin: 'http://[::1]:3000', host: '[::1]:3000' },
+      } as any;
+      expect(isOriginAllowed(request)).toBe(true);
+    });
+
+    test('allows case-insensitive Origin and Host header matches', () => {
+      const request = {
+        headers: { origin: 'https://DryDock.Example.COM', host: 'drydock.example.com' },
+      } as any;
+      expect(isOriginAllowed(request)).toBe(true);
+    });
+
+    test('rejects protocol-relative Origin values', () => {
+      const request = {
+        headers: { origin: '//localhost:3000', host: 'localhost:3000' },
+      } as any;
       expect(isOriginAllowed(request)).toBe(false);
     });
 
@@ -216,6 +248,36 @@ describe('ws-upgrade-utils', () => {
       }
     });
 
+    test('rejects new keys when maxEntries cap is reached', () => {
+      const limiter = createFixedWindowRateLimiter({ windowMs: 60000, max: 10, maxEntries: 3 });
+
+      expect(limiter.consume('a')).toBe(true);
+      expect(limiter.consume('b')).toBe(true);
+      expect(limiter.consume('c')).toBe(true);
+      // Map is full — new key is rejected
+      expect(limiter.consume('d')).toBe(false);
+      // Existing keys still work
+      expect(limiter.consume('a')).toBe(true);
+      limiter.destroy();
+    });
+
+    test('allows new keys after maxEntries cap clears via expiry', () => {
+      vi.useFakeTimers();
+      const limiter = createFixedWindowRateLimiter({ windowMs: 100, max: 10, maxEntries: 2 });
+      try {
+        expect(limiter.consume('a')).toBe(true);
+        expect(limiter.consume('b')).toBe(true);
+        expect(limiter.consume('c')).toBe(false);
+
+        vi.advanceTimersByTime(200);
+        // After expiry, eviction frees space
+        expect(limiter.consume('c')).toBe(true);
+      } finally {
+        limiter.destroy();
+        vi.useRealTimers();
+      }
+    });
+
     test('destroy clears the cleanup interval and map', () => {
       vi.useFakeTimers();
       const limiter = createFixedWindowRateLimiter({
@@ -273,6 +335,30 @@ describe('ws-upgrade-utils', () => {
 
         const request = { socket: { remoteAddress: '10.0.0.1' } } as any;
         expect(resolver(request, true)).toBe('ip:10.0.0.1');
+      } finally {
+        createKeySpy.mockRestore();
+      }
+    });
+
+    test('normalizes non-boolean authenticated values to unauthenticated', () => {
+      const createKeySpy = vi
+        .spyOn(rateLimitKey, 'createAuthenticatedRouteRateLimitKeyGenerator')
+        .mockReturnValue((request: any) =>
+          request.isAuthenticated?.() ? 'authenticated-key' : 'anonymous-key',
+        );
+
+      try {
+        const resolver = createIdentityAwareUpgradeRateLimitKeyResolver({
+          ratelimit: { identitykeying: true },
+        });
+
+        const request = {
+          socket: { remoteAddress: '10.0.0.1' },
+          session: { passport: { user: 'alice' } },
+          sessionID: 'sess-abc',
+        } as any;
+
+        expect(resolver(request, 'truthy-value' as unknown as boolean)).toBe('anonymous-key');
       } finally {
         createKeySpy.mockRestore();
       }

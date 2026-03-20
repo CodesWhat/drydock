@@ -103,12 +103,20 @@ export function getDefaultRateLimitKey(request: UpgradeRequest): string {
 
 const DEFAULT_CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
 
+const DEFAULT_MAX_ENTRIES = 10_000;
+
 export function createFixedWindowRateLimiter(options: {
   windowMs: number;
   max: number;
   cleanupIntervalMs?: number;
+  maxEntries?: number;
 }) {
-  const { windowMs, max, cleanupIntervalMs = DEFAULT_CLEANUP_INTERVAL_MS } = options;
+  const {
+    windowMs,
+    max,
+    cleanupIntervalMs = DEFAULT_CLEANUP_INTERVAL_MS,
+    maxEntries = DEFAULT_MAX_ENTRIES,
+  } = options;
   const counters = new Map<string, { count: number; resetAt: number }>();
   let lastEviction = 0;
 
@@ -135,6 +143,9 @@ export function createFixedWindowRateLimiter(options: {
       evictExpired(now);
       const counter = counters.get(key);
       if (!counter || now >= counter.resetAt) {
+        if (counters.size >= maxEntries) {
+          return false;
+        }
         counters.set(key, { count: 1, resetAt: now + windowMs });
         return true;
       }
