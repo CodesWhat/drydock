@@ -17,6 +17,7 @@ import * as auth from './auth.js';
 import { attachContainerLogStreamWebSocketServer } from './container/log-stream.js';
 import { sendErrorResponse } from './error-response.js';
 import * as healthRouter from './health.js';
+import { attachSystemLogStreamWebSocketServer } from './log-stream.js';
 import * as prometheusRouter from './prometheus.js';
 import * as uiRouter from './ui.js';
 
@@ -217,6 +218,11 @@ export async function init() {
   const app = createApp();
   const server = startServer(app);
   attachContainerLogStreamWebSocketServer({
+    server,
+    sessionMiddleware: auth.getSessionMiddleware?.(),
+    serverConfiguration: configuration as Record<string, unknown>,
+  });
+  attachSystemLogStreamWebSocketServer({
     server,
     sessionMiddleware: auth.getSessionMiddleware?.(),
     serverConfiguration: configuration as Record<string, unknown>,
