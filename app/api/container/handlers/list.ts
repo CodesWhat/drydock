@@ -62,15 +62,17 @@ export function buildContainerListResponse(
     ...(validatedQuery.watcher ? { watcher: validatedQuery.watcher } : {}),
   } as Request['query'];
   const pagination = normalizeContainerListPagination(query);
-  const hasAdvancedQuery =
-    getFirstNonEmptyQueryValue(query.sort) !== undefined ||
-    getFirstNonEmptyQueryValue(query.status) !== undefined ||
-    getFirstNonEmptyQueryValue(query.kind) !== undefined ||
-    maturityFilter !== undefined;
+
+  // Only sort and maturity require loading the full collection before pagination.
+  // status and kind are already pushed down to filteredQuery as store-level
+  // filters (updateAvailable, updateKind.*), so the store handles those
+  // efficiently without loading everything into memory first.
+  const needsFullCollection =
+    getFirstNonEmptyQueryValue(query.sort) !== undefined || maturityFilter !== undefined;
   let pagedContainers: Container[];
   let total: number;
 
-  if (hasAdvancedQuery) {
+  if (needsFullCollection) {
     const containersToSort = context.getContainersFromStore(filteredQuery, {
       limit: 0,
       offset: 0,

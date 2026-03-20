@@ -279,16 +279,17 @@ describe('api/container/crud', () => {
       const res = callGetContainerSummary(handlers);
 
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          containers: expect.objectContaining({
-            total: 1,
-            running: 1,
-            stopped: 0,
-          }),
-          security: { issues: 0 },
-        }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        containers: {
+          total: 1,
+          running: 1,
+          stopped: 0,
+          updatesAvailable: 0,
+        },
+        security: { issues: 0 },
+        hotUpdates: 0,
+        matureUpdates: 0,
+      });
     });
   });
 
@@ -328,15 +329,17 @@ describe('api/container/crud', () => {
       const res = callGetContainers(harness.handlers);
 
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: [
-            expect.objectContaining({
-              result: expect.objectContaining({ suggestedTag: '1.27.3' }),
-            }),
-          ],
-        }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        data: [
+          expect.objectContaining({
+            result: expect.objectContaining({ suggestedTag: '1.27.3' }),
+          }),
+        ],
+        total: 1,
+        limit: 0,
+        offset: 0,
+        hasMore: false,
+      });
     });
 
     test('normalizes negative/invalid pagination to zero and returns all results', () => {
@@ -815,6 +818,8 @@ describe('api/container/crud', () => {
         watcher: 'local',
       });
 
+      // status and kind are pushed down as store-level filters, so pagination
+      // is forwarded to the store (fast path) instead of loading everything.
       expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith(
         {
           updateAvailable: true,
@@ -857,6 +862,67 @@ describe('api/container/crud', () => {
         },
         { limit: 0, offset: 0 },
       );
+    });
+
+    test('status/kind filters use store-level pagination without full-collection load', () => {
+      const containers = Array.from({ length: 20 }, (_, i) =>
+        createContainer({
+          id: `c${i + 1}`,
+          name: `container-${String(i + 1).padStart(2, '0')}`,
+          updateAvailable: true,
+          updateKind: { semverDiff: 'major', kind: 'tag' },
+        }),
+      );
+      const harness = createHarness({ containers });
+
+      const res = callGetContainers(harness.handlers, {
+        status: 'update-available',
+        kind: 'major',
+        limit: '5',
+        offset: '0',
+      });
+
+      // Should forward pagination to the store (fast path) since status
+      // and kind are store-level filters — no full-collection load needed.
+      expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith(
+        { updateAvailable: true, 'updateKind.semverDiff': 'major' },
+        { limit: 5, offset: 0 },
+      );
+      // Should use getContainerCountFromStore for total instead of
+      // loading all containers just to count them.
+      expect(harness.deps.getContainerCountFromStore).toHaveBeenCalledWith({
+        updateAvailable: true,
+        'updateKind.semverDiff': 'major',
+      });
+      const payload = res.json.mock.calls[0][0];
+      expect(payload.data).toHaveLength(5);
+      expect(payload.total).toBe(20);
+      expect(payload.hasMore).toBe(true);
+    });
+
+    test('status filter with sort still requires full-collection load', () => {
+      const containers = Array.from({ length: 10 }, (_, i) =>
+        createContainer({
+          id: `c${i + 1}`,
+          name: `container-${i + 1}`,
+          updateAvailable: true,
+        }),
+      );
+      const harness = createHarness({ containers });
+
+      callGetContainers(harness.handlers, {
+        status: 'update-available',
+        sort: 'status',
+        limit: '3',
+      });
+
+      // Sort requires full collection for correct pagination order
+      expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith(
+        { updateAvailable: true },
+        { limit: 0, offset: 0 },
+      );
+      // Should NOT call getContainerCountFromStore — total comes from the sorted array
+      expect(harness.deps.getContainerCountFromStore).not.toHaveBeenCalled();
     });
 
     test('filters by update maturity buckets', () => {
@@ -1342,12 +1408,17 @@ describe('api/container/crud', () => {
       const res = callGetContainerSummary(harness.handlers);
 
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          hotUpdates: 1,
-          matureUpdates: 2,
-        }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        containers: {
+          total: 4,
+          running: 4,
+          stopped: 0,
+          updatesAvailable: 3,
+        },
+        security: { issues: 0 },
+        hotUpdates: 1,
+        matureUpdates: 2,
+      });
     });
 
     test('returns aggregated vulnerabilities grouped by image for the security view', () => {
@@ -1486,12 +1557,22 @@ describe('api/container/crud', () => {
 
       expect(harness.deps.getContainerCountFromStore).toHaveBeenCalledWith({});
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          totalContainers: 42,
-          scannedContainers: 1,
-        }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        totalContainers: 42,
+        scannedContainers: 1,
+        latestScannedAt: '2026-02-01T10:00:00.000Z',
+        total: 0,
+        limit: 0,
+        offset: 0,
+        hasMore: false,
+        images: [
+          {
+            image: 'nginx',
+            containerIds: ['c1'],
+            vulnerabilities: [],
+          },
+        ],
+      });
     });
 
     test('supports limit/offset pagination for aggregated vulnerabilities', () => {
@@ -2077,15 +2158,13 @@ describe('api/container/crud', () => {
       });
 
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: [{ id: 'op-2' }, { id: 'op-3' }],
-          total: 3,
-          limit: 0,
-          offset: 1,
-          hasMore: false,
-        }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        data: [{ id: 'op-2' }, { id: 'op-3' }],
+        total: 3,
+        limit: 0,
+        offset: 1,
+        hasMore: false,
+      });
     });
 
     test('returns 404 for update-operation lookup when container is missing', () => {
@@ -2123,15 +2202,13 @@ describe('api/container/crud', () => {
       const res = await callGetContainerReleaseNotes(harness.handlers, 'c1');
 
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          title: 'Release 2.0.0',
-          body: 'Full release notes body',
-          url: 'https://github.com/acme/service/releases/tag/v2.0.0',
-          publishedAt: '2026-03-01T00:00:00.000Z',
-          provider: 'github',
-        }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        title: 'Release 2.0.0',
+        body: 'Full release notes body',
+        url: 'https://github.com/acme/service/releases/tag/v2.0.0',
+        publishedAt: '2026-03-01T00:00:00.000Z',
+        provider: 'github',
+      });
     });
 
     test('returns 404 when container is missing', async () => {
