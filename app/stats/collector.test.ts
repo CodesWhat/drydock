@@ -12,6 +12,9 @@ function createMockStatsStream() {
       listeners.set(event, handlers);
       return stream;
     }),
+    removeAllListeners: vi.fn(() => {
+      listeners.clear();
+    }),
     destroy: vi.fn(),
     emit(event: string, payload?: unknown) {
       for (const handler of listeners.get(event) ?? []) {
@@ -271,23 +274,54 @@ describe('stats/collector', () => {
   test('handles error/close/end stream lifecycle events', async () => {
     const harness = createHarness();
     const release = harness.collector.watch('c1');
-    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(0);
     expect(harness.stats).toHaveBeenCalledTimes(1);
 
+    // Error triggers cleanup + restart — listeners are removed before new stream starts
     harness.stream.emit('error', new Error('stream-error'));
-    await Promise.resolve();
-    await Promise.resolve();
+    expect(harness.stream.removeAllListeners).toHaveBeenCalledTimes(1);
+    expect(harness.stream.destroy).toHaveBeenCalledTimes(1);
 
+    // Let restart's startStream resolve (re-attaches listeners to same mock stream)
+    await vi.advanceTimersByTimeAsync(0);
+    expect(harness.stats).toHaveBeenCalledTimes(2);
+
+    // close triggers another restart (new listeners were attached on restart)
     harness.stream.emit('close');
-    await Promise.resolve();
-    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(harness.stats).toHaveBeenCalledTimes(3);
 
+    // end triggers another restart
     harness.stream.emit('end');
-    await Promise.resolve();
-    await Promise.resolve();
-    expect(harness.stats.mock.calls.length).toBeGreaterThanOrEqual(2);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(harness.stats).toHaveBeenCalledTimes(4);
 
     release();
+  });
+
+  test('removes listeners from old stream before restarting on error', async () => {
+    const harness = createHarness();
+    harness.collector.watch('c1');
+    await Promise.resolve();
+
+    expect(harness.stream.removeAllListeners).not.toHaveBeenCalled();
+
+    harness.stream.emit('error', new Error('disconnect'));
+    await Promise.resolve();
+
+    expect(harness.stream.removeAllListeners).toHaveBeenCalledTimes(1);
+    expect(harness.stream.destroy).toHaveBeenCalledTimes(1);
+  });
+
+  test('removes listeners from stream on release', async () => {
+    const harness = createHarness();
+    const release = harness.collector.watch('c1');
+    await Promise.resolve();
+
+    release();
+
+    expect(harness.stream.removeAllListeners).toHaveBeenCalledTimes(1);
+    expect(harness.stream.destroy).toHaveBeenCalledTimes(1);
   });
 
   test('returns empty history for unknown containers', () => {

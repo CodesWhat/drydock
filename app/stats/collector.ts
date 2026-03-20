@@ -15,6 +15,7 @@ const REST_TOUCH_TTL_MULTIPLIER = 3;
 
 interface DockerStatsStream {
   on: (event: string, listener: (payload?: unknown) => void) => unknown;
+  removeAllListeners?: () => void;
   destroy?: () => void;
 }
 
@@ -162,8 +163,7 @@ function getOrCreateState(
 }
 
 function stopCollection(state: ContainerCollectionState): void {
-  state.stream?.destroy?.();
-  state.stream = undefined;
+  detachStream(state);
 }
 
 function emitSnapshot(state: ContainerCollectionState, snapshot: ContainerStatsSnapshot): void {
@@ -232,12 +232,21 @@ function shouldStartCollection(state: ContainerCollectionState): boolean {
   return state.watchCount > 0 && !state.stream && !state.startPromise;
 }
 
+function detachStream(state: ContainerCollectionState): void {
+  const { stream } = state;
+  if (stream) {
+    stream.removeAllListeners?.();
+    stream.destroy?.();
+    state.stream = undefined;
+  }
+}
+
 function restartCollection(
   runtime: CollectorRuntime,
   containerId: string,
   state: ContainerCollectionState,
 ): void {
-  state.stream = undefined;
+  detachStream(state);
   void startCollection(runtime, containerId, state);
 }
 
