@@ -701,7 +701,7 @@ describe('DashboardView', () => {
       expect(rows[0].text()).toContain('redis');
     });
 
-    it('surfaces registry check failures in recent updates', async () => {
+    it('does not include registry check failures in recent updates', async () => {
       const containers = [
         makeContainer({
           id: 'c1',
@@ -721,9 +721,10 @@ describe('DashboardView', () => {
       const widget = wrapper.find('[data-widget-id="recent-updates"]');
       const rows = widget.findAll('tbody tr').filter((r) => !r.attributes('aria-hidden'));
       const errorRow = rows.find((r) => r.text().includes('registry-fail'));
+      const pendingRow = rows.find((r) => r.text().includes('has-update'));
 
-      expect(errorRow).toBeDefined();
-      expect(errorRow!.text()).toContain('Registry request failed: unauthorized');
+      expect(errorRow).toBeUndefined();
+      expect(pendingRow).toBeDefined();
     });
 
     it('renders release notes links when available in recent updates rows', async () => {

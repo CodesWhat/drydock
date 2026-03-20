@@ -63,12 +63,15 @@ function toneStyles(tone: ToastTone) {
               {{ toast.body }}
             </p>
           </div>
-          <button
+          <AppButton
+            size="none"
+            variant="plain"
+            weight="none"
             class="shrink-0 mt-0.5 cursor-pointer"
             :style="{ color: toneStyles(toast.tone).text }"
             @click="dismissToast(toast.id)">
             <AppIcon name="xmark" :size="12" />
-          </button>
+          </AppButton>
         </div>
       </TransitionGroup>
     </div>

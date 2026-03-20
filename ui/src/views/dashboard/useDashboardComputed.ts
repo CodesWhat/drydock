@@ -533,22 +533,6 @@ function useStatsComputed(
   });
 }
 
-function toRegistryFailureRecentUpdate(container: Container): RecentUpdateRow {
-  return {
-    id: container.id,
-    name: container.name,
-    image: container.image,
-    icon: container.icon,
-    oldVer: container.currentTag,
-    newVer: 'check failed',
-    releaseLink: undefined,
-    status: 'error',
-    updateKind: null,
-    running: container.status === 'running',
-    registryError: container.registryError,
-  };
-}
-
 function isPendingRecentUpdateContainer(container: Container): boolean {
   return !!container.newTag || !!container.updatePolicyState;
 }

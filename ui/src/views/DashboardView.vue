@@ -202,7 +202,7 @@ function confirmDashboardUpdateAll() {
   <div class="flex flex-col flex-1 min-h-0">
     <div class="flex gap-2 min-w-0 flex-1 min-h-0">
     <!-- Main dashboard content -->
-    <div class="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden">
+    <div class="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden sm:pr-[15px]">
       <div v-if="loading" class="flex items-center justify-center py-16">
         <div class="text-sm dd-text-muted">Loading dashboard...</div>
       </div>
