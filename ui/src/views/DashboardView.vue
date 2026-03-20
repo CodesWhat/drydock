@@ -455,7 +455,7 @@ function confirmDashboardUpdateAll() {
 }
 
 /* Grid item content fills its cell */
-.dd-grid-item > div {
+.dd-grid-item > div:not(.stat-card) {
   height: 100%;
   overflow: hidden;
 }
