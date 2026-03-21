@@ -51,14 +51,13 @@ The `docker` watcher lets you configure the Docker hosts you want to watch.
 - Legacy compatibility: `wud.*` labels are still accepted as fallback to `dd.*`. When a fallback is used, drydock emits a one-time warning for that key and increments `dd_legacy_input_total{source="label",key="<legacy_key>"}`. To rewrite configs in place, run `node dist/index.js config migrate --dry-run` then `node dist/index.js config migrate --file <path>`.
 - If watcher logger initialization fails, drydock automatically falls back to structured stderr JSON logs and increments `dd_watcher_logger_init_failures_total{type,name}`. Alert on non-zero increases to catch degraded logging early.
 
-<Callout type="warn">When using socket configuration, mount the Docker socket on your drydock container. When using host/port configuration, enable the [Docker remote API](https://docs.docker.com/reference/cli/dockerd/). If the remote API is secured with TLS, mount and configure the [TLS certificates](https://docs.docker.com/engine/security/protect-access/#use-tls-https-to-protect-the-docker-daemon-socket).</Callout>
+<Callout type="warn">
+**Before you start — important watcher caveats:**
 
-<Callout type="warn">Remote watcher auth (`AUTH_*`) is fail-closed by default and requires HTTPS (`PROTOCOL=https`) or TLS certificate-based connections. Set `AUTH_INSECURE=true` only if you intentionally need legacy fail-open behavior.</Callout>
-
-<Callout type="warn">Watching image digests causes an extensive usage of _Docker Registry Pull API_ which is restricted by [**Quotas on the Docker Hub**](https://docs.docker.com/docker-hub/usage/).
-By default, drydock enables it only for **non semver** image tags.
-You can tune this behavior per container using the `dd.watch.digest` label.
-If you face [quota related errors](https://docs.docker.com/docker-hub/usage/#how-do-i-know-my-pull-requests-are-being-limited), consider slowing down the watcher rate by adjusting the `DD_WATCHER_{watcher_name}_CRON` variable.</Callout>
+- **Socket vs remote API** — When using socket configuration, mount the Docker socket on your drydock container. When using host/port configuration, enable the [Docker remote API](https://docs.docker.com/reference/cli/dockerd/). If the remote API is secured with TLS, mount and configure the [TLS certificates](https://docs.docker.com/engine/security/protect-access/#use-tls-https-to-protect-the-docker-daemon-socket).
+- **Remote auth is fail-closed** — Remote watcher auth (`AUTH_*`) requires HTTPS (`PROTOCOL=https`) or TLS certificate-based connections by default. Set `AUTH_INSECURE=true` only if you intentionally need legacy fail-open behavior.
+- **Digest watching and Hub quotas** — Watching image digests causes extensive usage of the _Docker Registry Pull API_, which is restricted by [**Quotas on the Docker Hub**](https://docs.docker.com/docker-hub/usage/). By default, drydock enables it only for **non semver** image tags. You can tune this behavior per container using the `dd.watch.digest` label. If you face [quota related errors](https://docs.docker.com/docker-hub/usage/#how-do-i-know-my-pull-requests-are-being-limited), consider slowing down the watcher rate by adjusting the `DD_WATCHER_{watcher_name}_CRON` variable.
+</Callout>
 
 ## Variable examples
 
@@ -494,9 +493,12 @@ Use Podman's host socket path, but mount it inside the Drydock container at `/va
 - **Rootful Podman socket:** `sudo systemctl enable --now podman.socket`
 - **Rootless Podman socket:** `systemctl --user enable --now podman.socket`
 
-<Callout type="warn">**Production rootless deployments:** You **must** run `loginctl enable-linger <user>` so the user systemd instance (and all rootless containers) survives logout. Without it, Podman containers stop when the user session ends.</Callout>
+<Callout type="warn">
+**Choosing rootful vs rootless:**
 
-<Callout type="info">**Rootful vs rootless:** Rootless Podman is recommended for production because it runs the entire container stack without root privileges. Use rootful only when you need privileged ports (&lt;1024) or specific kernel features.</Callout>
+- **Rootless is recommended** for production because it runs the entire container stack without root privileges. Use rootful only when you need privileged ports (&lt;1024) or specific kernel features.
+- **Rootless requires lingering sessions** — You **must** run `loginctl enable-linger <user>` so the user systemd instance (and all rootless containers) survives logout. Without it, Podman containers stop when the user session ends.
+</Callout>
 
 <Tabs items={["Podman Rootful (Direct Socket)", "Podman Rootless (Direct Socket)", "Podman + Socket Proxy"]}>
 <Tab value="Podman Rootful (Direct Socket)">
@@ -570,11 +572,13 @@ services:
 </Tab>
 </Tabs>
 
-<Callout type="info">For rootless Podman with socket proxy, set `SOCKET_PATH=${XDG_RUNTIME_DIR}/podman/podman.sock` and mount the same host path into the proxy container.</Callout>
+<Callout type="warn">
+**Podman socket proxy notes:**
 
-<Callout type="warn">Some users have reported intermittent `503` errors when using `tecnativa/docker-socket-proxy` with Podman ([tecnativa/docker-socket-proxy#66](https://github.com/Tecnativa/docker-socket-proxy/issues/66)). If you experience this, prefer direct socket mount over the proxy — the direct mount examples above are the most reliable option with Podman.</Callout>
-
-<Callout type="info">**Docker Compose trigger compatibility:** The Docker Compose trigger (`DD_TRIGGER_DOCKERCOMPOSE_*`) works with Podman — it inherits the socket connection from your watcher configuration. No additional Podman-specific trigger settings are needed.</Callout>
+- **Rootless proxy path** — For rootless Podman with socket proxy, set `SOCKET_PATH=${XDG_RUNTIME_DIR}/podman/podman.sock` and mount the same host path into the proxy container.
+- **503 errors** — Some users have reported intermittent `503` errors when using `tecnativa/docker-socket-proxy` with Podman ([tecnativa/docker-socket-proxy#66](https://github.com/Tecnativa/docker-socket-proxy/issues/66)). If you experience this, prefer direct socket mount over the proxy — the direct mount examples above are the most reliable option with Podman.
+- **Docker Compose trigger compatibility** — The Docker Compose trigger (`DD_TRIGGER_DOCKERCOMPOSE_*`) works with Podman — it inherits the socket connection from your watcher configuration. No additional Podman-specific trigger settings are needed.
+</Callout>
 
 #### Known limitations and tested versions
 
