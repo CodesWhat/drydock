@@ -172,6 +172,15 @@ describe('docker helper extraction module', () => {
     ).toBe('termix');
   });
 
+  test('getContainerName should skip non-string entries when scanning multi-name aliases', () => {
+    expect(
+      getContainerName({
+        Id: '8bf70beac570abcdef1234567890',
+        Names: [123 as any, '/termix'],
+      }),
+    ).toBe('termix');
+  });
+
   test('getContainerName should strip alias prefix from single-entry Names when ID matches', () => {
     expect(
       getContainerName({
@@ -192,6 +201,15 @@ describe('docker helper extraction module', () => {
 
   test('getContainerName should keep alias name when no container ID is available', () => {
     expect(getContainerName({ Names: ['/8bf70beac570_termix'] })).toBe('8bf70beac570_termix');
+  });
+
+  test('getContainerName should skip non-string entries in Names when finding canonical name', () => {
+    expect(
+      getContainerName({
+        Id: '8bf70beac570abcdef1234567890',
+        Names: [123 as any, '/termix'],
+      }),
+    ).toBe('termix');
   });
 
   test('getContainerName should not strip non-alias names that happen to contain underscores', () => {

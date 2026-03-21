@@ -1019,6 +1019,27 @@ describe('Webhook Router', () => {
       });
     });
 
+    test('should return 409 when update targets a temporary rollback container', async () => {
+      const container = { name: 'my-nginx-old-1234567890', image: { name: 'nginx' } };
+      mockGetContainers.mockReturnValue([container]);
+      const mockTrigger = vi.fn().mockResolvedValue(undefined);
+      mockGetState.mockReturnValue({
+        watcher: {},
+        trigger: { 'docker.default': { type: 'docker', trigger: mockTrigger } },
+      });
+
+      const handler = getHandler('post', '/update/:containerName');
+      const req = createMockRequest({ params: { containerName: 'my-nginx-old-1234567890' } });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(409);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Cannot update temporary rollback container',
+      });
+      expect(mockTrigger).not.toHaveBeenCalled();
+    });
+
     test('should trigger update and return 200', async () => {
       const container = { name: 'my-nginx', image: { name: 'nginx' } };
       mockGetContainers.mockReturnValue([container]);

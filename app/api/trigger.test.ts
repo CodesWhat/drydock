@@ -198,6 +198,29 @@ describe('Trigger Router', () => {
       );
     });
 
+    test('should return 409 when local trigger targets a temporary rollback container', async () => {
+      const mockTrigger = {
+        trigger: vi.fn().mockResolvedValue(undefined),
+      };
+      registry.getState.mockReturnValue({
+        trigger: { 'slack.default': mockTrigger },
+      });
+
+      const req = {
+        params: { type: 'slack', name: 'default' },
+        body: { id: 'c1', name: 'app-old-1234567890' },
+      };
+      const res = createMockResponse();
+
+      await runTrigger(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(409);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Cannot update temporary rollback container',
+      });
+      expect(mockTrigger.trigger).not.toHaveBeenCalled();
+    });
+
     test('should return 500 when trigger throws', async () => {
       const mockTrigger = {
         trigger: vi.fn().mockRejectedValue(new Error('trigger failed')),
@@ -403,6 +426,28 @@ describe('Trigger Router', () => {
         'default',
       );
       expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    test('should return 409 when remote trigger targets a temporary rollback container', async () => {
+      const mockAgentClient = {
+        runRemoteTrigger: vi.fn().mockResolvedValue(undefined),
+      };
+      agent.getAgent.mockReturnValue(mockAgentClient);
+
+      const handler = getRemoteTriggerHandler();
+      const req = {
+        params: { agent: 'my-agent', type: 'slack', name: 'default' },
+        body: { id: 'c1', name: 'app-old-1234567890' },
+      };
+      const res = createMockResponse();
+
+      await handler(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(409);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Cannot update temporary rollback container',
+      });
+      expect(mockAgentClient.runRemoteTrigger).not.toHaveBeenCalled();
     });
 
     test('should return 500 when remote trigger throws', async () => {

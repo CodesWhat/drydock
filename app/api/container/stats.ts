@@ -1,7 +1,9 @@
 import type { Request, Response } from 'express';
+import logger from '../../log/index.js';
 import type { Container } from '../../model/container.js';
 import type { ContainerStatsCollector } from '../../stats/collector.js';
 import { STATS_STREAM_HEARTBEAT_INTERVAL_MS } from '../../stats/config.js';
+import { getErrorMessage } from '../../util/error.js';
 import { sendErrorResponse } from '../error-response.js';
 import { getPathParamValue } from './request-helpers.js';
 
@@ -99,6 +101,7 @@ function createStreamContainerStatsHandler({
     if (!container) {
       return;
     }
+    const log = logger.child({ component: 'container-stats' });
 
     const streamResponse = res as StreamableResponse;
     streamResponse.writeHead(200, {
@@ -131,13 +134,25 @@ function createStreamContainerStatsHandler({
       disconnected = true;
       try {
         globalThis.clearInterval(heartbeatInterval);
-      } catch {}
+      } catch (error: unknown) {
+        log.debug(
+          `Failed to clear stats stream heartbeat interval for ${container.id} (${getErrorMessage(error)})`,
+        );
+      }
       try {
         unsubscribe();
-      } catch {}
+      } catch (error: unknown) {
+        log.debug(
+          `Failed to unsubscribe stats stream listener for ${container.id} (${getErrorMessage(error)})`,
+        );
+      }
       try {
         releaseWatch();
-      } catch {}
+      } catch (error: unknown) {
+        log.debug(
+          `Failed to release stats stream watch for ${container.id} (${getErrorMessage(error)})`,
+        );
+      }
     };
 
     req.on('close', cleanup);

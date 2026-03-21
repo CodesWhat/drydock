@@ -977,6 +977,127 @@ describe('Docker Watcher', () => {
       expect(result.image.tag.value).toBe('unknown');
     });
 
+    test('should resolve digest-only image without container name (falsy containerName branch)', async () => {
+      const container = await setupContainerDetailTest(docker, {
+        container: {
+          Image: 'sha256:abcdef123456',
+          Names: [],
+        },
+        imageDetails: { RepoTags: [], RepoDigests: [] },
+        parsedImage: { path: 'sha256:abcdef123456', tag: 'unknown' },
+        validateImpl: (c) => c,
+      });
+
+      const result = await docker.addImageDetailsToContainer(container);
+
+      expect(result).toBeDefined();
+      expect(result.image.tag.value).toBe('unknown');
+    });
+
+    test('should resolve digest-only image with RepoDigests containing @ separator', async () => {
+      const container = await setupContainerDetailTest(docker, {
+        container: {
+          Image: 'sha256:deadbeef7890',
+          Names: ['/myapp'],
+        },
+        imageDetails: {
+          RepoTags: [],
+          RepoDigests: ['registry.example.com/myapp@sha256:deadbeef7890abcdef'],
+        },
+        parseImpl: (value) => {
+          if (value === 'registry.example.com/myapp') {
+            return { domain: 'registry.example.com', path: 'myapp' };
+          }
+          return { domain: 'docker.io', path: 'library/nginx', tag: '1.0.0' };
+        },
+        validateImpl: (c) => c,
+      });
+
+      const result = await docker.addImageDetailsToContainer(container);
+
+      expect(result).toBeDefined();
+      expect(result.image.name).toBe('myapp');
+      expect(result.image.tag.value).toBe('sha256:deadbeef7890abcdef');
+    });
+
+    test('should resolve digest-only image with RepoDigests lacking @ separator', async () => {
+      const container = await setupContainerDetailTest(docker, {
+        container: {
+          Image: 'sha256:cafebabe1234',
+          Names: ['/oddimage'],
+        },
+        imageDetails: {
+          RepoTags: [],
+          RepoDigests: ['no-at-sign-here'],
+        },
+        parsedImage: { path: 'sha256:cafebabe1234', tag: 'unknown' },
+        validateImpl: (c) => c,
+      });
+
+      const result = await docker.addImageDetailsToContainer(container);
+
+      expect(result).toBeDefined();
+      expect(result.image.tag.value).toBe('unknown');
+    });
+
+    test('should warn without a container name prefix when digest-only image has no names', async () => {
+      const container = await setupContainerDetailTest(docker, {
+        container: {
+          Image: 'sha256:abcdef123456',
+          Names: [],
+        },
+        imageDetails: { RepoTags: [], RepoDigests: [] },
+        parsedImage: { path: 'sha256:abcdef123456', tag: 'unknown' },
+        validateImpl: (c) => c,
+      });
+      docker.log = createMockLog(['warn', 'info', 'debug']);
+
+      const result = await docker.addImageDetailsToContainer(container);
+
+      expect(result).toBeDefined();
+      expect(docker.log.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Cannot get a reliable tag for this image'),
+      );
+    });
+
+    test('should fall back when repo digest is malformed and missing "@"', async () => {
+      const container = await setupContainerDetailTest(docker, {
+        container: {
+          Image: 'sha256:abcdef123456',
+          Names: ['/test'],
+        },
+        imageDetails: {
+          RepoTags: [],
+          RepoDigests: ['malformed-digest'],
+        },
+        validateImpl: (c) => c,
+      });
+
+      const result = await docker.addImageDetailsToContainer(container);
+
+      expect(result).toBeDefined();
+      expect(result.image.tag.value).toBe('unknown');
+    });
+
+    test('should prefix fallback digest when raw name does not start with sha256:', async () => {
+      const container = await setupContainerDetailTest(docker, {
+        container: {
+          Image: 'repo@sha256:abcdef123456',
+          Names: ['/test'],
+        },
+        imageDetails: {
+          RepoTags: [],
+          RepoDigests: ['malformed-digest'],
+        },
+        validateImpl: (c) => c,
+      });
+
+      const result = await docker.addImageDetailsToContainer(container);
+
+      expect(result).toBeDefined();
+      expect(result.image.tag.value).toBe('unknown');
+    });
+
     test('should warn for non-semver without digest watching', async () => {
       const container = await setupContainerDetailTest(docker, {
         container: {

@@ -1047,6 +1047,26 @@ describe('api/container/crud', () => {
       );
     });
 
+    test('kind=all keeps store-level pagination path without watched-kind in-memory filtering', () => {
+      const harness = createHarness({
+        containers: [
+          createContainer({ id: 'c1', name: 'watched', watch: true }),
+          createContainer({ id: 'c2', name: 'unwatched', watch: false }),
+        ],
+      });
+
+      const res = callGetContainers(harness.handlers, {
+        kind: 'all',
+        limit: '1',
+        offset: '0',
+      });
+
+      expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith({}, { limit: 1, offset: 0 });
+      expect(harness.deps.getContainerCountFromStore).toHaveBeenCalledWith({});
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json.mock.calls[0][0].total).toBe(2);
+    });
+
     test('status/kind filters use store-level pagination without full-collection load', () => {
       const containers = Array.from({ length: 20 }, (_, i) =>
         createContainer({

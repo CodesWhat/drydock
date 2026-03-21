@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
+import logger from '../../log/index.js';
 import { createStatsHandlers } from './stats.js';
 
 function createResponse() {
@@ -232,6 +233,43 @@ describe('api/container/stats', () => {
 
     expect(harness.unsubscribe).toHaveBeenCalledOnce();
     expect(releaseWatch).toHaveBeenCalledOnce();
+  });
+
+  test('cleanup logs debug messages when cleanup steps throw', () => {
+    const harness = createHarness();
+    const req = createRequest({ params: { id: 'c1' } });
+    const res = createResponse();
+    const debug = vi.fn();
+    const childSpy = vi.spyOn(logger, 'child').mockReturnValue({ debug } as any);
+    const clearIntervalSpy = vi.spyOn(globalThis, 'clearInterval').mockImplementation(() => {
+      throw new Error('clear interval boom');
+    });
+    const releaseWatch = vi.fn(() => {
+      throw new Error('release watch boom');
+    });
+    harness.watch.mockReturnValue(releaseWatch);
+    harness.unsubscribe.mockImplementation(() => {
+      throw new Error('unsubscribe boom');
+    });
+
+    try {
+      harness.handlers.streamContainerStats(req as any, res as any);
+      req.emit('close');
+    } finally {
+      clearIntervalSpy.mockRestore();
+      childSpy.mockRestore();
+    }
+
+    expect(debug).toHaveBeenCalledTimes(3);
+    expect(debug).toHaveBeenCalledWith(
+      expect.stringContaining('Failed to clear stats stream heartbeat interval for c1'),
+    );
+    expect(debug).toHaveBeenCalledWith(
+      expect.stringContaining('Failed to unsubscribe stats stream listener for c1'),
+    );
+    expect(debug).toHaveBeenCalledWith(
+      expect.stringContaining('Failed to release stats stream watch for c1'),
+    );
   });
 
   test('returns 404 when trying to stream a missing container', () => {

@@ -128,6 +128,30 @@ describe('container-init coverage', () => {
     ]);
   });
 
+  test('filterRecreatedContainerAliases falls back to getContainerName when Names is array-like but not an array', () => {
+    const aliasName = '/7ea6b8a42686_termix';
+    const container = {
+      Id: '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a1f',
+      // Non-array shape exercises fallback name-map path and current-name guard.
+      Names: { 0: aliasName, length: 1 },
+      Created: Math.floor((Date.now() - 120_000) / 1000),
+    } as any;
+
+    const result = filterRecreatedContainerAliases([container], []);
+
+    expect(result.containersToWatch).toEqual([container]);
+    expect(result.skippedContainerIds.size).toBe(0);
+    expect(result.decisions).toEqual([
+      expect.objectContaining({
+        containerId: container.Id,
+        containerName: 'termix',
+        baseName: 'termix',
+        decision: 'allowed',
+        reason: 'alias-allowed-no-collision',
+      }),
+    ]);
+  });
+
   test('filterRecreatedContainerAliases handles string Created values and future timestamps', () => {
     const numericCreatedContainer = {
       Id: '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a13',
@@ -258,6 +282,34 @@ describe('container-init coverage', () => {
         displayName: 'A',
       }),
     );
+  });
+
+  test('filterRecreatedContainerAliases handles non-array Names via fallback getContainerName (lines 459, 494)', () => {
+    // Names is array-like (has indexed access and length) but NOT a real Array.
+    // This exercises:
+    //   - buildDockerContainerNameToIds line 459: normalizedContainerNames.push(fallbackName)
+    //   - hasCurrentContainerWithName line 494: !Array.isArray(Names) → return false
+    const arrayLikeNames = { 0: '/7ea6b8a42686_termix', length: 1 } as any;
+    const container = {
+      Id: '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a19',
+      Names: arrayLikeNames,
+      Created: '1700000000',
+    } as any;
+
+    const result = filterRecreatedContainerAliases([container], []);
+
+    // Alias detected, stale, no sibling/store match → allowed
+    expect(result.containersToWatch).toEqual([container]);
+    expect(result.skippedContainerIds.size).toBe(0);
+    expect(result.decisions).toEqual([
+      expect.objectContaining({
+        containerId: container.Id,
+        containerName: 'termix',
+        baseName: 'termix',
+        decision: 'allowed',
+        reason: 'alias-allowed-no-collision',
+      }),
+    ]);
   });
 
   test('filterRecreatedContainerAliases skips aliases when the base name already exists in store', () => {

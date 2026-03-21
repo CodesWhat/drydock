@@ -2039,6 +2039,108 @@ describe('digest mode', () => {
     triggerBatchSpy.mockRestore();
   });
 
+  test('handleContainerReportDigest should return early when auto trigger is disabled', async () => {
+    await trigger.register('trigger', 'test', 'digest-trigger', {
+      ...configurationValid,
+      mode: 'digest',
+    });
+    trigger.init();
+    notificationStore.isTriggerEnabledForRule.mockReturnValue(false);
+
+    const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+    await trigger.handleContainerReportDigest({
+      container: {
+        id: 'c1',
+        name: 'app',
+        watcher: 'test',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      },
+      changed: true,
+    });
+    await trigger.flushDigestBuffer();
+
+    expect(triggerBatchSpy).not.toHaveBeenCalled();
+    triggerBatchSpy.mockRestore();
+  });
+
+  test('handleContainerReportDigest should return early when report is not eligible for simple handling', async () => {
+    await trigger.register('trigger', 'test', 'digest-trigger', {
+      ...configurationValid,
+      mode: 'digest',
+    });
+    trigger.init();
+
+    const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+    await trigger.handleContainerReportDigest({
+      container: {
+        id: 'c1',
+        name: 'app',
+        watcher: 'test',
+        updateAvailable: false,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      },
+      changed: false,
+    });
+    await trigger.flushDigestBuffer();
+
+    expect(triggerBatchSpy).not.toHaveBeenCalled();
+    triggerBatchSpy.mockRestore();
+  });
+
+  test('handleContainerReportDigest should return early when threshold is not reached', async () => {
+    await trigger.register('trigger', 'test', 'digest-trigger', {
+      ...configurationValid,
+      mode: 'digest',
+    });
+    trigger.init();
+    const thresholdSpy = vi.spyOn(Trigger, 'isThresholdReached').mockReturnValue(false);
+
+    try {
+      const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+      await trigger.handleContainerReportDigest({
+        container: {
+          id: 'c1',
+          name: 'app',
+          watcher: 'test',
+          updateAvailable: true,
+          updateKind: { kind: 'digest', localValue: 'sha256:1', remoteValue: 'sha256:2' },
+        },
+        changed: true,
+      });
+      await trigger.flushDigestBuffer();
+
+      expect(triggerBatchSpy).not.toHaveBeenCalled();
+      triggerBatchSpy.mockRestore();
+    } finally {
+      thresholdSpy.mockRestore();
+    }
+  });
+
+  test('handleContainerReportDigest should return early when mustTrigger rejects the container', async () => {
+    await trigger.register('trigger', 'test', 'digest-trigger', {
+      ...configurationValid,
+      mode: 'digest',
+    });
+    trigger.init();
+
+    const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+    await trigger.handleContainerReportDigest({
+      container: {
+        id: 'c1',
+        name: 'app-old-1234567890',
+        watcher: 'test',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      },
+      changed: true,
+    });
+    await trigger.flushDigestBuffer();
+
+    expect(triggerBatchSpy).not.toHaveBeenCalled();
+    triggerBatchSpy.mockRestore();
+  });
+
   test('flushDigestBuffer should skip when buffer is empty', async () => {
     await trigger.register('trigger', 'test', 'digest-trigger', {
       ...configurationValid,
@@ -2254,5 +2356,47 @@ describe('digest mode', () => {
     cronCallback();
     expect(flushSpy).toHaveBeenCalled();
     flushSpy.mockRestore();
+  });
+
+  test('digest mode report listener callback should forward report to digest handler', async () => {
+    await trigger.register('trigger', 'test', 'digest-trigger', {
+      ...configurationValid,
+      mode: 'digest',
+    });
+    trigger.init();
+
+    const reportCallback = vi.mocked(event.registerContainerReport).mock.calls[0]?.[0];
+    expect(reportCallback).toBeDefined();
+
+    const digestHandlerSpy = vi
+      .spyOn(trigger, 'handleContainerReportDigest')
+      .mockResolvedValue(undefined);
+    const report = {
+      container: {
+        id: 'c42',
+        name: 'api',
+        watcher: 'test',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      },
+      changed: true,
+    };
+
+    await reportCallback?.(report as any);
+
+    expect(digestHandlerSpy).toHaveBeenCalledWith(report);
+    digestHandlerSpy.mockRestore();
+  });
+
+  test('init should fall back to default digest cron when digestcron is missing at runtime', async () => {
+    trigger.configuration = {
+      ...configurationValid,
+      auto: 'all',
+      mode: 'digest',
+      digestcron: undefined as unknown as string,
+    };
+    await trigger.init();
+
+    expect(mockCron.schedule).toHaveBeenCalledWith('0 8 * * *', expect.any(Function));
   });
 });

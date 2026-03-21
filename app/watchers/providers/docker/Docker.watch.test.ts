@@ -751,6 +751,28 @@ describe('Docker Watcher', () => {
       }
     });
 
+    test('should use container id fallback in image-detail warning when docker names are missing', async () => {
+      mockDockerApi.listContainers.mockResolvedValue([
+        {
+          Id: '1234567890abcdef',
+          Labels: { 'dd.watch': 'true' },
+          Names: undefined,
+        },
+      ]);
+      docker.addImageDetailsToContainer = vi
+        .fn()
+        .mockRejectedValue(new Error('Image inspect failed'));
+      await docker.register('watcher', 'docker', 'test', { watchbydefault: true });
+      docker.log = createMockLog(['warn', 'info', 'debug']);
+
+      const result = await docker.getContainers();
+
+      expect(docker.log.warn).toHaveBeenCalledWith(
+        expect.stringContaining('1234567890ab: Failed to fetch image detail'),
+      );
+      expect(result).toHaveLength(0);
+    });
+
     test('should skip maintenance counter increment when counter is unavailable', async () => {
       await docker.register('watcher', 'docker', 'test', {
         cron: '0 * * * *',

@@ -207,6 +207,23 @@ describe('API Index', () => {
     expect(containerIsRateLimited).toBe(systemIsRateLimited);
   });
 
+  test('isRateLimited callback should execute and report allowed traffic for a fresh key', async () => {
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {},
+      tls: {},
+    });
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    await indexRouter.init();
+
+    const isRateLimited =
+      mockAttachContainerLogStreamWebSocketServer.mock.calls[0][0].isRateLimited;
+    expect(isRateLimited('127.0.0.1')).toBe(false);
+  });
+
   test('should start HTTP server when TLS is explicitly disabled', async () => {
     mockGetServerConfiguration.mockReturnValue({
       enabled: true,
