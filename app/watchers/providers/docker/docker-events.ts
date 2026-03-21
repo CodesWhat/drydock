@@ -85,8 +85,13 @@ function logReconnectScheduled(
 ) {
   const reconnectErrorMessage = getErrorMessage(err);
   const errorMessage = reconnectErrorMessage ? ` (${reconnectErrorMessage})` : '';
-  if (state.log && typeof state.log.warn === 'function') {
-    state.log.warn(
+  // First reconnect is expected (proxy timeout, network blip) — log as info.
+  // Subsequent attempts indicate a real problem — escalate to warn.
+  const isFirstAttempt = state.dockerEventsReconnectAttempt <= 1;
+  const logFn = isFirstAttempt ? state.log?.info : state.log?.warn;
+  if (logFn) {
+    logFn.call(
+      state.log,
       `Docker event stream ${reason}${errorMessage}; reconnect attempt #${state.dockerEventsReconnectAttempt} in ${reconnectDelayMs}ms`,
     );
   }
