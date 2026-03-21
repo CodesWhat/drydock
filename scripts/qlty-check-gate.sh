@@ -11,7 +11,7 @@ changed | all) ;;
 	;;
 esac
 
-cmd=(qlty check --no-progress --summary --fail-level medium)
+cmd=(qlty check --no-progress --fail-level medium)
 
 if [ "$mode" = "all" ]; then
 	cmd+=(--all)
