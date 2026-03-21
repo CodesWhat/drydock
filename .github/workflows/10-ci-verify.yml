@@ -61,7 +61,7 @@ jobs:
 
   codeql:
     name: CodeQL
-    if: github.event_name == 'pull_request' || github.event_name == 'schedule'
+    if: github.event_name == 'pull_request' || github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     needs: [zizmor]
     runs-on: ubuntu-latest
     timeout-minutes: 60  # CodeQL init/autobuild/analyze can be long on cache misses
@@ -101,7 +101,7 @@ jobs:
 
   fuzz:
     name: Fuzz
-    if: github.event_name == 'pull_request' || github.event_name == 'schedule'
+    if: github.event_name == 'pull_request' || github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     needs: [zizmor]
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -1151,7 +1151,7 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    needs: [zizmor, dependency-review, lint, test, build, e2e, playwright, load-test-ci]
+    needs: [zizmor, dependency-review, lint, test, build, e2e, playwright, load-test-ci, codeql, fuzz]
     permissions:
       contents: write
 
