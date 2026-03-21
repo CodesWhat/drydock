@@ -608,15 +608,11 @@ html.dd-transitioning::view-transition-new(root) {
 
 html.dd-transitioning::view-transition-old(root) {
   z-index: 1;
-  opacity: 1;
 }
 
 html.dd-transitioning::view-transition-new(root) {
-  z-index: 10;
-  animation-name: theme-circle-reveal;
-  animation-duration: var(--dd-duration-slow);
-  animation-timing-function: ease-out;
-  animation-fill-mode: both;
+  z-index: 9999;
+  animation: theme-circle-reveal 0.4s ease-in-out;
 }
 
 @keyframes theme-circle-reveal {
