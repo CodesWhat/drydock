@@ -164,6 +164,48 @@ describe('vitest coverage provider', () => {
     );
   });
 
+  test('should read coverage from in-memory fallback when temp file disappears', async () => {
+    writeFileMock.mockResolvedValue(undefined);
+    mkdirMock.mockResolvedValue(undefined);
+    readFileMock.mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
+
+    const project = { name: 'app' };
+    const onFinished = vi.fn(async () => {});
+    const onFileRead = vi.fn();
+    const onDebug = (() => {}) as ((message: string) => void) & { enabled?: boolean };
+
+    getProviderMock.mockResolvedValue({
+      pendingPromises: [],
+      coverageFiles: new Map(),
+      coverageFilesDirectory: '/tmp/coverage/.tmp',
+      ctx: {
+        getProjectByName: vi.fn(() => project),
+      },
+      options: {
+        processingConcurrency: 1,
+      },
+      toSlices: (filenames: string[]) => filenames.map((filename) => [filename]),
+    });
+
+    const coverageProvider = await import('./vitest.coverage-provider.js');
+    const provider = await coverageProvider.default.getProvider();
+
+    provider.onAfterSuiteRun({
+      coverage: { result: [{ url: 'file:///app.ts' }] },
+      environment: 'node',
+      projectName: 'app',
+      testFiles: ['app.test.ts'],
+    });
+
+    await Promise.all(provider.pendingPromises);
+
+    await provider.readCoverageFiles({ onFileRead, onFinished, onDebug });
+
+    expect(onFileRead).toHaveBeenCalledWith({ result: [{ url: 'file:///app.ts' }] });
+    expect(readFileMock).not.toHaveBeenCalled();
+    expect(onFinished).toHaveBeenCalledWith(project, 'node');
+  });
+
   test('clean should re-isolate the temp directory before delegating to the base provider', async () => {
     const cleanMock = vi.fn(async () => {});
     getProviderMock.mockResolvedValue({

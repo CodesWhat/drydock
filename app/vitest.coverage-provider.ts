@@ -18,6 +18,11 @@ const sleep = (durationMs: number): Promise<void> =>
     setTimeout(resolve, durationMs);
   });
 
+// In-memory fallback for coverage data. If the temp file disappears before the
+// read phase (e.g. OS tmpdir cleanup, vitest internal clean-up race), the data
+// is still available here.  Keyed by the same filename used on disk.
+const coveragePayloads = new Map<string, string>();
+
 async function readCoverageFileWithRetry(filename: string): Promise<string> {
   for (let attempt = 1; attempt <= COVERAGE_READ_RETRY_MAX_ATTEMPTS; attempt += 1) {
     try {
@@ -86,6 +91,7 @@ const coverageProviderModule = {
     provider.clean = async (clean = true) => {
       assignIsolatedCoverageDirectory();
       writeErrors.length = 0;
+      coveragePayloads.clear();
 
       if (originalClean) {
         await originalClean(clean);
@@ -129,12 +135,13 @@ const coverageProviderModule = {
       coverageByProject[environment] ??= {};
       coverageByProject[environment][testFileKey] = filename;
 
+      const json = JSON.stringify(coverage);
+      coveragePayloads.set(filename, json);
+
       // Attach a catch handler immediately to avoid unhandled rejections from async writes.
-      const pendingWrite = writeCoverageFileWithRetry(filename, JSON.stringify(coverage)).catch(
-        (error: unknown) => {
-          writeErrors.push(error);
-        },
-      );
+      const pendingWrite = writeCoverageFileWithRetry(filename, json).catch((error: unknown) => {
+        writeErrors.push(error);
+      });
       provider.pendingPromises.push(pendingWrite);
     };
 
@@ -187,7 +194,10 @@ const coverageProviderModule = {
             }
             await Promise.all(
               chunk.map(async (filename: string) => {
-                const contents = await readCoverageFileWithRetry(filename);
+                let contents: string | undefined = coveragePayloads.get(filename);
+                if (contents === undefined) {
+                  contents = await readCoverageFileWithRetry(filename);
+                }
                 onFileRead(JSON.parse(contents));
               }),
             );
