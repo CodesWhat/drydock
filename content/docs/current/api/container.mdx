@@ -365,7 +365,7 @@ Returns 200 with the log text (Content-Disposition: attachment), 404 if the cont
 
 Opens a WebSocket connection for real-time container log streaming. The server demultiplexes Docker's binary stream format and sends individual JSON frames.
 
-```
+```text
 ws://drydock:3000/api/v1/containers/{id}/logs/stream?follow=true&tail=100
 ```
 

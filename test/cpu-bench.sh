@@ -15,7 +15,7 @@ set -euo pipefail
 WARMUP=${1:-180}
 MEASURE=${2:-60}
 INTERVAL=${3:-2}
-CONTAINERS="cpu-hc-curl cpu-hc-node cpu-hc-none"
+CONTAINERS="cpu-hc-curl cpu-hc-node cpu-hc-curl-10s cpu-hc-node-10s cpu-hc-none"
 TMPFILE=$(mktemp)
 trap 'rm -f "$TMPFILE"' EXIT
 
@@ -29,11 +29,11 @@ echo ""
 
 # Verify all containers are running
 for c in $CONTAINERS; do
-  if ! docker inspect --format='{{.State.Running}}' "$c" 2>/dev/null | grep -q true; then
-    echo "ERROR: Container $c is not running."
-    echo "Run: docker compose -f test/cpu-bench-compose.yml up -d"
-    exit 1
-  fi
+	if ! docker inspect --format='{{.State.Running}}' "$c" 2>/dev/null | grep -q true; then
+		echo "ERROR: Container $c is not running."
+		echo "Run: docker compose -f test/cpu-bench-compose.yml up -d"
+		exit 1
+	fi
 done
 
 echo "All containers running. Warming up for ${WARMUP}s..."
@@ -44,18 +44,19 @@ echo "Collecting CPU samples for ${MEASURE}s (every ${INTERVAL}s)..."
 echo ""
 
 # Collect samples to temp file: "container_name cpu_percent"
-> "$TMPFILE"
+true >"$TMPFILE"
 ELAPSED=0
 while [ "$ELAPSED" -lt "$MEASURE" ]; do
-  docker stats --no-stream --format '{{.Name}} {{.CPUPerc}}' $CONTAINERS 2>/dev/null | while IFS=' ' read -r name cpu_pct; do
-    cpu_val=${cpu_pct%\%}
-    echo "$name $cpu_val" >> "$TMPFILE"
-  done
+	# shellcheck disable=SC2086
+	docker stats --no-stream --format '{{.Name}} {{.CPUPerc}}' $CONTAINERS 2>/dev/null | while IFS=' ' read -r name cpu_pct; do
+		cpu_val=${cpu_pct%\%}
+		echo "$name $cpu_val" >>"$TMPFILE"
+	done
 
-  ELAPSED=$((ELAPSED + INTERVAL))
-  if [ "$ELAPSED" -lt "$MEASURE" ]; then
-    sleep "$INTERVAL"
-  fi
+	ELAPSED=$((ELAPSED + INTERVAL))
+	if [ "$ELAPSED" -lt "$MEASURE" ]; then
+		sleep "$INTERVAL"
+	fi
 done
 
 # Compute and display results
@@ -67,7 +68,7 @@ printf "%-20s %10s %10s %10s %10s\n" "Container" "Avg CPU%" "Min CPU%" "Max CPU%
 printf "%-20s %10s %10s %10s %10s\n" "--------------------" "----------" "----------" "----------" "----------"
 
 for c in $CONTAINERS; do
-  RESULT=$(grep "^$c " "$TMPFILE" | awk '
+	RESULT=$(grep "^$c " "$TMPFILE" | awk '
     BEGIN { sum=0; count=0; min=9999; max=0 }
     {
       sum += $2; count++
@@ -79,12 +80,14 @@ for c in $CONTAINERS; do
       else printf "N/A N/A N/A 0"
     }
   ')
-  read -r avg mn mx cnt <<< "$RESULT"
-  printf "%-20s %9s%% %9s%% %9s%% %10s\n" "$c" "$avg" "$mn" "$mx" "$cnt"
+	read -r avg mn mx cnt <<<"$RESULT"
+	printf "%-20s %9s%% %9s%% %9s%% %10s\n" "$c" "$avg" "$mn" "$mx" "$cnt"
 done
 
 echo ""
 echo "Legend:"
-echo "  cpu-hc-curl  = Dockerfile built-in curl healthcheck (30s)"
-echo "  cpu-hc-node  = node -e healthcheck override (30s)"
-echo "  cpu-hc-none  = healthcheck disabled (true idle baseline)"
+echo "  cpu-hc-curl     = curl healthcheck (30s interval)"
+echo "  cpu-hc-node     = node -e healthcheck (30s interval)"
+echo "  cpu-hc-curl-10s = curl healthcheck (10s interval)"
+echo "  cpu-hc-node-10s = node -e healthcheck (10s interval)"
+echo "  cpu-hc-none     = healthcheck disabled (true idle baseline)"
