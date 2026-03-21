@@ -7,6 +7,9 @@ run-name: >-
   }}
 
 on:
+  push:
+    branches:
+      - main
   branch_protection_rule:
   schedule:
     - cron: '0 6 * * 1'  # Weekly on Monday at 06:00 UTC
