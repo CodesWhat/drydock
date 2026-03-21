@@ -1,6 +1,7 @@
 import { expect, type Page, test } from '@playwright/test';
 import {
   clickSidebarNavItem,
+  dismissAnnouncementBanners,
   ensureSidebarExpanded,
   registerServerAvailabilityCheck,
 } from './helpers/test-helpers';
@@ -13,24 +14,26 @@ async function ensureFilterInputVisible(page: Page, placeholder: string) {
     return input;
   }
 
-  await page.getByRole('button', { name: 'Toggle filters' }).click();
-  await expect(input).toBeVisible();
+  await dismissAnnouncementBanners(page);
+  await page.locator('main').getByRole('button', { name: 'Toggle filters' }).click({ force: true });
+  await expect(input).toBeVisible({ timeout: 10_000 });
   return input;
 }
 
 test.describe('Config and management views', () => {
   test('config tabs support URL deep-links', async ({ page }) => {
     await page.goto('/config?tab=appearance');
+    await dismissAnnouncementBanners(page);
     await expect(page).toHaveURL(/\/config\?tab=appearance/);
     await expect(page.locator('main')).toContainText('Color Theme');
 
-    await page.getByRole('button', { name: 'Profile' }).click();
+    await page.locator('main').getByRole('button', { name: 'Profile' }).click({ force: true });
     await expect(page).toHaveURL(/\/config\?tab=profile/);
     await expect(page.locator('main')).toContainText(
       /Active Sessions|Loading profile|Failed to load profile/i,
     );
 
-    await page.getByRole('button', { name: 'General' }).click();
+    await page.locator('main').getByRole('button', { name: 'General' }).click({ force: true });
     await expect(page).toHaveURL(/\/config\?tab=general/);
   });
 
@@ -38,6 +41,7 @@ test.describe('Config and management views', () => {
     page,
   }) => {
     await page.goto('/registries');
+    await dismissAnnouncementBanners(page);
     await ensureSidebarExpanded(page);
 
     await clickSidebarNavItem(page, 'Triggers');

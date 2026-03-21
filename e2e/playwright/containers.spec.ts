@@ -1,5 +1,9 @@
 import { expect, type Locator, type Page, test } from '@playwright/test';
-import { escapeRegExp, registerServerAvailabilityCheck } from './helpers/test-helpers';
+import {
+  dismissAnnouncementBanners,
+  escapeRegExp,
+  registerServerAvailabilityCheck,
+} from './helpers/test-helpers';
 
 registerServerAvailabilityCheck(test);
 
@@ -14,6 +18,7 @@ const KNOWN_CONTAINER_NAMES = [
 
 async function openContainersView(page: Page): Promise<void> {
   await page.goto('/containers');
+  await dismissAnnouncementBanners(page);
   await expect(page.getByRole('button', { name: 'Table view' })).toBeVisible({ timeout: 30_000 });
 }
 
@@ -29,6 +34,7 @@ async function showFilterPanel(page: Page): Promise<void> {
   if (await searchInput.isVisible().catch(() => false)) {
     return;
   }
+  await dismissAnnouncementBanners(page);
   await page.getByRole('button', { name: 'Toggle filters' }).click();
   await expect(searchInput).toBeVisible();
 }
@@ -92,6 +98,7 @@ test.describe('Containers', () => {
   test('stack grouping and search filtering narrow the container list', async ({ page }) => {
     await openContainersView(page);
     await switchToCardsView(page);
+    await dismissAnnouncementBanners(page);
 
     const allCards = page.getByRole('button', { name: /Select / });
     const initialCount = await allCards.count();

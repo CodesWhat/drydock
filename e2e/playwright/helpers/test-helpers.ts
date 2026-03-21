@@ -109,7 +109,18 @@ async function ensureSidebarExpanded(page: Page): Promise<void> {
   }
 }
 
+async function dismissAnnouncementBanners(page: Page): Promise<void> {
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const dismissButton = page.locator('[data-testid$="-dismiss-session"]').first();
+    if (!(await dismissButton.isVisible().catch(() => false))) {
+      return;
+    }
+    await dismissButton.click();
+  }
+}
+
 async function clickSidebarNavItem(page: Page, label: string): Promise<void> {
+  await dismissAnnouncementBanners(page);
   const item = page.locator('aside .nav-item').filter({ hasText: label }).first();
   await expect(item).toBeVisible();
   await item.click();
@@ -122,6 +133,7 @@ function escapeRegExp(value: string): string {
 export {
   checkServerAvailability,
   clickSidebarNavItem,
+  dismissAnnouncementBanners,
   ensureSidebarExpanded,
   escapeRegExp,
   getCredentials,
