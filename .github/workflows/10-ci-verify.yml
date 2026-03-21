@@ -413,7 +413,7 @@ jobs:
     name: Build
     if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
-    timeout-minutes: 25  # Includes UI build + QA image build/export
+    timeout-minutes: 35  # Includes UI build + single-arch QA image + multi-arch smoke build
     permissions:
       contents: read
 
@@ -458,6 +458,19 @@ jobs:
           load: true
           tags: drydock:dev
           build-args: DD_VERSION=ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Set up QEMU (multi-arch smoke build)
+        uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a  # v4.0.0
+
+      - name: Docker build (multi-arch smoke)
+        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294  # v7.0.0
+        with:
+          context: .
+          push: false
+          platforms: linux/amd64,linux/arm64
+          build-args: DD_VERSION=ci-multiarch-smoke
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
