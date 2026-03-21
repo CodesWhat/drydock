@@ -27,12 +27,14 @@ test.describe('Config and management views', () => {
     await expect(page).toHaveURL(/\/config\?tab=appearance/);
     await expect(page.locator('main')).toContainText('Color Theme');
 
+    await dismissAnnouncementBanners(page);
     await page.locator('main').getByRole('button', { name: 'Profile' }).click({ force: true });
     await expect(page).toHaveURL(/\/config\?tab=profile/);
     await expect(page.locator('main')).toContainText(
       /Active Sessions|Loading profile|Failed to load profile/i,
     );
 
+    await dismissAnnouncementBanners(page);
     await page.locator('main').getByRole('button', { name: 'General' }).click({ force: true });
     await expect(page).toHaveURL(/\/config\?tab=general/);
   });
