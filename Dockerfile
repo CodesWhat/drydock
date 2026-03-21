@@ -12,13 +12,12 @@ ENV WORKDIR=/home/node/app
 ENV DD_LOG_FORMAT=text
 ENV DD_VERSION=$DD_VERSION
 
-HEALTHCHECK --interval=30s --timeout=5s CMD ["sh", "-c", "if [ -n \"$DD_SERVER_ENABLED\" ] && [ \"$DD_SERVER_ENABLED\" != 'true' ]; then exit 0; fi; if [ \"$DD_SERVER_TLS_ENABLED\" = 'true' ]; then curl --fail --insecure https://localhost:${DD_SERVER_PORT:-3000}/health || exit 1; else curl --fail http://localhost:${DD_SERVER_PORT:-3000}/health || exit 1; fi"]
+HEALTHCHECK --interval=30s --timeout=5s CMD ["sh", "-c", "if [ -n \"$DD_SERVER_ENABLED\" ] && [ \"$DD_SERVER_ENABLED\" != 'true' ]; then exit 0; fi; /bin/healthcheck ${DD_SERVER_PORT:-3000}"]
 
 # Install system packages, trivy, and cosign
 # hadolint ignore=DL3018,DL3028,DL4006
 RUN apk add --no-cache \
     bash \
-    curl \
     git \
     jq \
     openssl \
@@ -28,6 +27,12 @@ RUN apk add --no-cache \
     && apk add --no-cache --repository=https://dl-cdn.alpinelinux.org/alpine/edge/testing cosign trivy \
     && apk upgrade --no-cache zlib \
     && mkdir /store && chown node:node /store
+
+# Build stage for healthcheck binary (~65KB static binary)
+FROM alpine:3.21 AS healthcheck-build
+RUN apk add --no-cache gcc musl-dev
+COPY healthcheck.c /src/healthcheck.c
+RUN gcc -Os -static -s -o /bin/healthcheck /src/healthcheck.c
 
 # Build stage for backend app
 FROM base AS app-build
@@ -64,9 +69,11 @@ FROM base AS release
 ENV DD_LOG_FORMAT=json
 
 # Remove unnecessary network utilities (busybox symlinks) and npm to reduce attack surface.
-# curl is kept for the HEALTHCHECK probe; npm is only needed during build stages.
-RUN rm -f /usr/bin/wget /usr/bin/nc \
+RUN rm -f /usr/bin/wget /usr/bin/nc /usr/bin/curl \
     && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
+
+# Copy healthcheck binary (65KB static, replaces curl for HEALTHCHECK probe)
+COPY --from=healthcheck-build /bin/healthcheck /bin/healthcheck
 
 # Default entrypoint
 COPY --chmod=755 Docker.entrypoint.sh /usr/bin/entrypoint.sh
