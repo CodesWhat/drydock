@@ -168,7 +168,7 @@ services:
   # Icon uses colon separator with nested prefix (tests Fix 03 + Fix 06)
   nginx-hooked:
     image: nginx:1.25.5
-    pull_policy: never
+    pull_policy: missing
     container_name: drydock-playwright-nginx-hooked
     labels:
       - dd.watch=true
@@ -183,7 +183,7 @@ services:
   # Icon uses colon separator (tests Fix 06)
   redis-cache:
     image: redis:7.2.0
-    pull_policy: never
+    pull_policy: missing
     container_name: drydock-playwright-redis-cache
     labels:
       - dd.watch=true
@@ -195,7 +195,7 @@ services:
   # Icon uses dash separator (standard format — baseline comparison)
   traefik-proxy:
     image: traefik:v3.0.0
-    pull_policy: never
+    pull_policy: missing
     container_name: drydock-playwright-traefik-proxy
     labels:
       - dd.watch=true
@@ -209,7 +209,7 @@ services:
   # LSCR/GHCR public image (tests anonymous token exchange)
   lscr-nginx:
     image: ghcr.io/linuxserver/nginx:1.26.2
-    pull_policy: never
+    pull_policy: missing
     container_name: drydock-playwright-lscr-nginx
     labels:
       - dd.watch=true
@@ -219,7 +219,7 @@ services:
   # PostgreSQL ungrouped (tests ungrouped container)
   postgres-db:
     image: postgres:16.0
-    pull_policy: never
+    pull_policy: missing
     container_name: drydock-playwright-postgres-db
     environment:
       - POSTGRES_PASSWORD=testpass
@@ -230,7 +230,7 @@ services:
   # Mongo — old version with update (tests another registry + more data)
   mongo-db:
     image: mongo:7.0.0
-    pull_policy: never
+    pull_policy: missing
     container_name: drydock-playwright-mongo-db
     labels:
       - dd.watch=true
@@ -281,7 +281,7 @@ services:
   # Busybox printing a line every 5s — populates dashboard container log
   log-spammer:
     image: busybox:1.36
-    pull_policy: never
+    pull_policy: missing
     container_name: drydock-playwright-log-spammer
     command: ["sh", "-c", "i=0; while true; do i=$((i+1)); echo \"[$$i] drydock-playwright-qa heartbeat $(date -u +%H:%M:%S)\"; sleep 5; done"]
     labels:
@@ -296,7 +296,7 @@ services:
   # to reproduce the Docker transient alias race condition.
   slow-shutdown:
     image: busybox:1.36
-    pull_policy: never
+    pull_policy: missing
     container_name: drydock-playwright-slow-shutdown
     command: ["sh", "-c", "trap 'echo SIGTERM received; sleep 15; exit 0' TERM; echo 'slow-shutdown running'; while true; do sleep 1; done"]
     stop_grace_period: 30s
@@ -310,7 +310,7 @@ services:
   # Memcached — starts then exits (shows "stopped" in container list)
   memcached-stopped:
     image: memcached:1.6.0
-    pull_policy: never
+    pull_policy: missing
     container_name: drydock-playwright-memcached-stopped
     command: ["sh", "-c", "exit 0"]
     labels:

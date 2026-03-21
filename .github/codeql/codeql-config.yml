@@ -1,3 +1,4 @@
+---
 name: drydock CodeQL config
 
 paths-ignore:
@@ -9,14 +10,12 @@ queries:
   - uses: ./.github/codeql/custom-queries
 
 query-filters:
-  - exclude:
-      id: js/clear-text-logging
-  # Exclude the built-in log-injection query; our custom-queries pack provides
-  # a replacement that recognises sanitizeLogParam() as a taint barrier.
+  # Replaced by .github/codeql/custom-queries/LogInjection.ql
+  # (same upstream flow module with an added sanitizeLogParam() barrier).
   - exclude:
       id: js/log-injection
-  # Exclude the built-in http-to-file-access query; our custom-queries pack
-  # provides a replacement that recognises validateFetchedIconPayload() as a
-  # taint barrier after payload validation.
+  # Replaced by .github/codeql/custom-queries/HttpToFileAccess.ql
+  # (same upstream flow module with an added
+  # validateFetchedIconPayload() barrier).
   - exclude:
       id: js/http-to-file-access

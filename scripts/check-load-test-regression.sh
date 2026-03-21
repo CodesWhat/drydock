@@ -40,9 +40,42 @@ is_true() {
 	esac
 }
 
+is_false() {
+	local normalized
+	normalized="$(printf "%s" "${1}" | tr '[:upper:]' '[:lower:]')"
+	case "${normalized}" in
+	0 | false | no | off)
+		return 0
+		;;
+	*)
+		return 1
+		;;
+	esac
+}
+
 is_number() {
 	local value="$1"
 	[[ ${value} =~ ^[0-9]+([.][0-9]+)?$ ]]
+}
+
+validate_enforcement_mode() {
+	if is_true "${DD_LOAD_TEST_REGRESSION_ENFORCE}" || is_false "${DD_LOAD_TEST_REGRESSION_ENFORCE}"; then
+		return 0
+	fi
+
+	summary "### Load Test Regression Gate"
+	summary "- Invalid DD_LOAD_TEST_REGRESSION_ENFORCE value: \`${DD_LOAD_TEST_REGRESSION_ENFORCE}\` (expected true/false)."
+	exit 2
+}
+
+exit_with_gate_status() {
+	local reason="$1"
+	if is_true "${DD_LOAD_TEST_REGRESSION_ENFORCE}"; then
+		summary "- Regression status: FAIL (enforced, ${reason})"
+		exit 1
+	fi
+	summary "- Regression status: WARN (advisory, ${reason})"
+	exit 0
 }
 
 load_metric() {
@@ -97,16 +130,18 @@ is_less_than() {
   }'
 }
 
+validate_enforcement_mode
+
 if [ ! -f "${CURRENT_REPORT}" ]; then
 	summary "### Load Test Regression Gate"
 	summary "- Current report not found: \`${CURRENT_REPORT}\`"
-	exit 0
+	exit_with_gate_status "missing current report"
 fi
 
 if [ ! -f "${BASELINE_REPORT}" ]; then
 	summary "### Load Test Regression Gate"
 	summary "- Baseline report not found: \`${BASELINE_REPORT}\`"
-	exit 0
+	exit_with_gate_status "missing baseline report"
 fi
 
 current_p95="$(load_metric "${CURRENT_REPORT}" '.aggregate.summaries["http.response_time"].p95')"
@@ -124,7 +159,7 @@ for metric_name in current_p95 current_p99 current_rate baseline_p95 baseline_p9
 		summary "- Missing or non-numeric metric: \`${metric_name}\` from reports."
 		summary "- Current report: \`${CURRENT_REPORT}\`"
 		summary "- Baseline report: \`${BASELINE_REPORT}\`"
-		exit 0
+		exit_with_gate_status "missing or non-numeric metric"
 	fi
 done
 
@@ -149,10 +184,10 @@ rate_decrease_pct="$(percent_decrease "${current_rate}" "${baseline_rate}")"
 
 if [ "${p95_increase_pct}" = "nan" ] || [ "${p99_increase_pct}" = "nan" ] || [ "${rate_decrease_pct}" = "nan" ]; then
 	summary "### Load Test Regression Gate"
-	summary "- Baseline metrics are zero or invalid; skipping regression check."
+	summary "- Baseline metrics are zero or invalid; cannot evaluate regression."
 	summary "- Current report: \`${CURRENT_REPORT}\`"
 	summary "- Baseline report: \`${BASELINE_REPORT}\`"
-	exit 0
+	exit_with_gate_status "invalid baseline metrics"
 fi
 
 p95_pct_regressed=false

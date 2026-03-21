@@ -6,8 +6,12 @@ echo "🐳 Setting up test containers for local e2e tests..."
 
 # Login to private registries (if credentials available)
 if [ -n "${GITLAB_TOKEN:-}" ]; then
-	# shellcheck disable=SC2153 # GITLAB_USERNAME is an env var, not a typo of GITHUB_USERNAME
-	docker login registry.gitlab.com -u "$GITLAB_USERNAME" -p "$GITLAB_TOKEN"
+	gitlab_username="${GITLAB_USERNAME:-}"
+	if [ -n "$gitlab_username" ]; then
+		docker login registry.gitlab.com -u "$gitlab_username" -p "$GITLAB_TOKEN"
+	else
+		echo "⚠️  Skipping GitLab login (GITLAB_TOKEN set but GITLAB_USERNAME missing)"
+	fi
 fi
 
 # Pull nginx as a test image
@@ -58,8 +62,11 @@ fi
 run_test_container gitlab_test --label "$LABEL_WATCH" --label 'dd.tag.include=^v16\.[01]\.0$' registry.gitlab.com/gitlab-org/gitlab-runner:v16.0.0
 
 # HUB
-# shellcheck disable=SC2016 # drydock resolves ${major}/${minor}/${patch} placeholders at runtime.
-run_test_container hub_homeassistant_202161 --label "$LABEL_WATCH" --label 'dd.tag.include=^\d+\.\d+.\d+$' --label 'dd.link.template=https://github.com/home-assistant/core/releases/tag/${major}.${minor}.${patch}' homeassistant/home-assistant:2021.6.1
+run_test_container hub_homeassistant_202161 \
+	--label "$LABEL_WATCH" \
+	--label 'dd.tag.include=^\d+\.\d+.\d+$' \
+	--label 'dd.link.template=https://github.com/home-assistant/core/releases/tag/'"\${major}.\${minor}.\${patch}" \
+	homeassistant/home-assistant:2021.6.1
 run_test_container hub_homeassistant_latest --label "$LABEL_WATCH" --label 'dd.watch.digest=true' --label 'dd.tag.include=^latest$' homeassistant/home-assistant
 run_test_container hub_nginx_120 --label "$LABEL_WATCH" --label 'dd.tag.include=^\d+\.\d+-alpine$' nginx:1.20-alpine
 run_test_container hub_nginx_latest --label "$LABEL_WATCH" --label 'dd.watch.digest=true' --label 'dd.tag.include=^latest$' nginx

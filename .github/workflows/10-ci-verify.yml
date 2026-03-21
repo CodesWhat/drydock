@@ -326,13 +326,8 @@ jobs:
       - name: Setup Qlty
         uses: qltysh/qlty-action/install@a19242102d17e497f437d7466aa01b528537e899  # v2.2.0
 
-      - name: Qlty check (all plugins)
-        uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08  # v3.0.2
-        with:
-          timeout_minutes: 8
-          max_attempts: 3
-          retry_on: any
-          command: ./scripts/qlty-check-gate.sh all
+      - name: Qlty check (all plugins, enforced)
+        run: ./scripts/qlty-check-gate.sh all
 
       - name: Qlty smells report (advisory)
         run: |
@@ -931,6 +926,7 @@ jobs:
         working-directory: e2e
 
       - name: Run Artillery smoke test
+        id: run-load-test-smoke
         env:
           ARTILLERY_ENV: smoke
           DD_LOAD_TEST_BUILD_CACHE: gha
@@ -984,7 +980,7 @@ jobs:
 
       - name: Resolve committed load test baseline
         id: load-test-baseline
-        if: success()
+        if: ${{ always() && steps.run-load-test-smoke.conclusion == 'success' }}
         run: |
           set -euo pipefail
 
@@ -998,7 +994,7 @@ jobs:
           echo "baseline_report=${baseline_report}" >> "${GITHUB_OUTPUT}"
 
       - name: Regression check against committed baseline (enforced)
-        if: success()
+        if: ${{ always() && steps.run-load-test-smoke.conclusion == 'success' }}
         env:
           BASELINE_REPORT: ${{ steps.load-test-baseline.outputs.baseline_report }}
           DD_LOAD_TEST_BASELINE_ARTIFACT_NAME: ${{ steps.load-test-baseline.outputs.baseline_artifact_name }}
@@ -1011,6 +1007,11 @@ jobs:
           DD_LOAD_TEST_REGRESSION_ENFORCE: 'true'
         run: |
           set -euo pipefail
+
+          if [ "${DD_LOAD_TEST_REGRESSION_ENFORCE:-}" != "true" ]; then
+            echo "::error::Regression gate misconfigured: DD_LOAD_TEST_REGRESSION_ENFORCE must be true in enforced mode."
+            exit 1
+          fi
 
           current_report="$(find artifacts/load-test/smoke -maxdepth 1 -name '*.json' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -n1 | cut -d' ' -f2-)"
           if [ -z "${current_report}" ]; then
@@ -1077,6 +1078,7 @@ jobs:
         working-directory: e2e
 
       - name: Run Artillery load test
+        id: run-load-test-ci
         env:
           ARTILLERY_ENV: ci
           DD_LOAD_TEST_BUILD_CACHE: gha
@@ -1126,6 +1128,54 @@ jobs:
         run: |
           report="$(find artifacts/load-test/behavior -maxdepth 1 -name '*.json' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -n1 | cut -d' ' -f2-)"
           ./scripts/check-load-test-correctness.sh "$report" "Load Test Correctness (Behavior)"
+
+      - name: Resolve committed load test baseline (ci)
+        id: load-test-baseline-ci
+        if: ${{ always() && steps.run-load-test-ci.conclusion == 'success' }}
+        run: |
+          set -euo pipefail
+
+          baseline_report="test/load-test-baselines/ci-smoke.json"
+          if [ ! -f "${baseline_report}" ]; then
+            echo "::error::Committed baseline not found at ${baseline_report}."
+            exit 1
+          fi
+
+          echo "baseline_artifact_name=repo:${baseline_report}" >> "${GITHUB_OUTPUT}"
+          echo "baseline_report=${baseline_report}" >> "${GITHUB_OUTPUT}"
+
+      - name: Regression check against committed baseline (ci, enforced)
+        if: ${{ always() && steps.run-load-test-ci.conclusion == 'success' }}
+        env:
+          BASELINE_REPORT: ${{ steps.load-test-baseline-ci.outputs.baseline_report }}
+          DD_LOAD_TEST_BASELINE_ARTIFACT_NAME: ${{ steps.load-test-baseline-ci.outputs.baseline_artifact_name }}
+          DD_LOAD_TEST_MAX_P95_INCREASE_PCT: '20'
+          DD_LOAD_TEST_MAX_P99_INCREASE_PCT: '25'
+          DD_LOAD_TEST_MAX_RATE_DECREASE_PCT: '15'
+          DD_LOAD_TEST_MAX_P95_MS: '1200'
+          DD_LOAD_TEST_MAX_P99_MS: '2500'
+          DD_LOAD_TEST_MIN_REQUEST_RATE: '10'
+          DD_LOAD_TEST_REGRESSION_ENFORCE: 'true'
+        run: |
+          set -euo pipefail
+
+          if [ "${DD_LOAD_TEST_REGRESSION_ENFORCE:-}" != "true" ]; then
+            echo "::error::Regression gate misconfigured: DD_LOAD_TEST_REGRESSION_ENFORCE must be true in enforced mode."
+            exit 1
+          fi
+
+          current_report="$(find artifacts/load-test/ci -maxdepth 1 -name '*.json' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -n1 | cut -d' ' -f2-)"
+          if [ -z "${current_report}" ]; then
+            echo "::error::Current CI report not found; cannot run regression gate."
+            exit 1
+          fi
+
+          if [ -z "${BASELINE_REPORT}" ]; then
+            echo "::error::Baseline report path is empty; expected committed baseline."
+            exit 1
+          fi
+
+          ./scripts/check-load-test-regression.sh "${current_report}" "${BASELINE_REPORT}"
 
       - name: Upload load test artifact (ci)
         if: always()

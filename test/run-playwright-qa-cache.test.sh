@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# shellcheck disable=SC2016
 set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -9,12 +8,7 @@ TARGET_SCRIPT="$REPO_ROOT/scripts/run-playwright-qa.sh"
 make_mock_binary() {
 	local path="$1"
 	local name="$2"
-	local body="$3"
-	cat >"$path/$name" <<SCRIPT
-#!/usr/bin/env bash
-set -euo pipefail
-$body
-SCRIPT
+	cat >"$path/$name"
 	chmod +x "$path/$name"
 }
 
@@ -37,32 +31,50 @@ run_case() {
 	export MOCK_IMAGE_CREATED="$image_created"
 	export MOCK_COMMIT_EPOCH="$commit_epoch"
 
-	make_mock_binary "$mock_bin" docker '
-	echo "docker $*" >> "$MOCK_LOG"
-	if [[ "${1:-}" == "image" && "${2:-}" == "inspect" ]]; then
-		if [[ "$MOCK_IMAGE_EXISTS" != "1" ]]; then
-			exit 1
-		fi
-		if [[ "$*" == *"--format"* ]]; then
-			printf "%s\n" "$MOCK_IMAGE_CREATED"
-		fi
-		exit 0
+	make_mock_binary "$mock_bin" docker <<'SCRIPT'
+#!/usr/bin/env bash
+set -euo pipefail
+echo "docker $*" >> "$MOCK_LOG"
+if [[ "${1:-}" == "image" && "${2:-}" == "inspect" ]]; then
+	if [[ "$MOCK_IMAGE_EXISTS" != "1" ]]; then
+		exit 1
+	fi
+	if [[ "$*" == *"--format"* ]]; then
+		printf "%s\n" "$MOCK_IMAGE_CREATED"
 	fi
 	exit 0
-	'
+fi
+exit 0
+SCRIPT
 
-	make_mock_binary "$mock_bin" git '
-	if [[ "${1:-}" == "-C" && "${3:-}" == "log" && "${4:-}" == "-1" && "${5:-}" == "--format=%ct" ]]; then
-		printf "%s\n" "$MOCK_COMMIT_EPOCH"
-		exit 0
-	fi
-	echo "unexpected git args: $*" >&2
-	exit 1
-	'
+	make_mock_binary "$mock_bin" git <<'SCRIPT'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${1:-}" == "-C" && "${3:-}" == "log" && "${4:-}" == "-1" && "${5:-}" == "--format=%ct" ]]; then
+	printf "%s\n" "$MOCK_COMMIT_EPOCH"
+	exit 0
+fi
+echo "unexpected git args: $*" >&2
+exit 1
+SCRIPT
 
-	make_mock_binary "$mock_bin" curl 'exit 0'
-	make_mock_binary "$mock_bin" npm 'exit 0'
-	make_mock_binary "$mock_bin" sleep 'exit 0'
+	make_mock_binary "$mock_bin" curl <<'SCRIPT'
+#!/usr/bin/env bash
+set -euo pipefail
+exit 0
+SCRIPT
+
+	make_mock_binary "$mock_bin" npm <<'SCRIPT'
+#!/usr/bin/env bash
+set -euo pipefail
+exit 0
+SCRIPT
+
+	make_mock_binary "$mock_bin" sleep <<'SCRIPT'
+#!/usr/bin/env bash
+set -euo pipefail
+exit 0
+SCRIPT
 
 	if ! PATH="$mock_bin:$PATH" DD_PLAYWRIGHT_PORT=0 DD_PLAYWRIGHT_RESTART_COLIMA=false bash "$TARGET_SCRIPT" >/dev/null 2>&1; then
 		echo "case '$case_name' failed to execute test target" >&2

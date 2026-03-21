@@ -1,8 +1,8 @@
-name: "🧬 Mutation Testing"
+name: "🧬 Mutation Testing (Advisory)"
 run-name: >-
   ${{
-    github.event_name == 'schedule' && '🧬 Mutation — Weekly schedule' ||
-    format('🧬 Mutation — Manual by {0}', github.actor)
+    github.event_name == 'schedule' && '🧬 Mutation (Advisory) — Weekly schedule' ||
+    format('🧬 Mutation (Advisory) — Manual by {0}', github.actor)
   }}
 
 on:
@@ -19,10 +19,10 @@ concurrency:
 
 jobs:
   stryker:
-    name: "Stryker (${{ matrix.package }})"
+    name: "Stryker Advisory (${{ matrix.package }})"
     runs-on: ubuntu-latest
     timeout-minutes: 60  # Mutation testing is intentionally expensive; cap runaway mutants
-    continue-on-error: true  # advisory while mutation baseline matures
+    continue-on-error: true  # advisory while mutation baseline and thresholds mature
     strategy:
       fail-fast: false
       matrix:
@@ -56,6 +56,16 @@ jobs:
       - name: Run Stryker
         run: npm run test:mutation
         working-directory: ${{ matrix.package }}
+
+      - name: Summarize advisory mode
+        if: always()
+        run: |
+          {
+            echo "### Mutation Testing (Advisory)"
+            echo "- Mode: ADVISORY (non-blocking)."
+            echo "- Reason: mutation baseline and passing thresholds are still being calibrated for \`${{ matrix.package }}\`."
+            echo "- Promotion criteria to blocking: agreed threshold policy with stable CI variance."
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload mutation report
         if: always()
