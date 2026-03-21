@@ -53,8 +53,23 @@ wait_for_docker_engine() {
 	exit 1
 }
 
+remove_stale_playwright_containers() {
+	local stale
+	stale=$(docker ps -a --filter "name=drydock-playwright-" --format '{{.Names}}' || true)
+	if [[ -z $stale ]]; then
+		return
+	fi
+
+	echo "🧹 Removing stale Playwright containers..."
+	while IFS= read -r name; do
+		[[ -z $name ]] && continue
+		docker rm -f "$name" >/dev/null 2>&1 || true
+	done <<<"$stale"
+}
+
 restart_colima
 wait_for_docker_engine
+remove_stale_playwright_containers
 
 if ! is_port_available "$DD_PLAYWRIGHT_PORT"; then
 	echo "❌ DD_PLAYWRIGHT_PORT=$DD_PLAYWRIGHT_PORT is already in use."
