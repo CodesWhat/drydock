@@ -1,16 +1,13 @@
-# CPU idle benchmark: healthcheck comparison (curl vs node vs none)
+# CPU idle benchmark: healthcheck comparison (binary vs curl vs node vs none)
 #
 # Tests the CPU impact of different healthcheck strategies.
-# All three use the same drydock:dev image with identical config.
 #
 # Usage:
-#   docker build -t drydock:dev .
 #   docker compose -f test/cpu-bench-compose.yml up -d
 #   ./test/cpu-bench.sh              # runs 3-minute warmup + 60s measurement
 #   docker compose -f test/cpu-bench-compose.yml down
 
 x-drydock-common: &drydock-common
-  image: codeswhat/drydock:latest
   user: root
   volumes:
     - /var/run/docker.sock:/var/run/docker.sock
@@ -25,15 +22,27 @@ x-drydock-common: &drydock-common
     - DD_SESSION_SECRET=bench
 
 services:
-  # Baseline: Dockerfile's built-in curl healthcheck (30s interval)
+  # Static healthcheck binary (65KB, 0.6ms per check)
+  hc-binary:
+    <<: *drydock-common
+    image: drydock:hc-bench
+    container_name: cpu-hc-binary
+    healthcheck:
+      test: ["CMD", "/bin/healthcheck", "3000"]
+      interval: 30s
+      timeout: 5s
+
+  # curl healthcheck (258KB, 2ms per check)
   hc-curl:
     <<: *drydock-common
+    image: codeswhat/drydock:latest
     container_name: cpu-hc-curl
     # Uses the HEALTHCHECK from the Dockerfile (curl-based, 30s interval)
 
-  # Node.js healthcheck: spawns a full node process each time
+  # Node.js healthcheck (119MB runtime, 23ms per check)
   hc-node:
     <<: *drydock-common
+    image: codeswhat/drydock:latest
     container_name: cpu-hc-node
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health', r => { process.exit(r.statusCode === 200 ? 0 : 1) }).on('error', () => process.exit(1))"]
@@ -43,6 +52,7 @@ services:
   # No healthcheck: true idle baseline
   hc-none:
     <<: *drydock-common
+    image: codeswhat/drydock:latest
     container_name: cpu-hc-none
     healthcheck:
       test: ["CMD", "true"]

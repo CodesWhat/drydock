@@ -15,7 +15,7 @@ set -euo pipefail
 WARMUP=${1:-180}
 MEASURE=${2:-60}
 INTERVAL=${3:-2}
-CONTAINERS="cpu-hc-curl cpu-hc-node cpu-hc-curl-10s cpu-hc-node-10s cpu-hc-none"
+CONTAINERS="cpu-hc-binary cpu-hc-curl cpu-hc-node cpu-hc-none"
 TMPFILE=$(mktemp)
 trap 'rm -f "$TMPFILE"' EXIT
 
@@ -86,8 +86,7 @@ done
 
 echo ""
 echo "Legend:"
-echo "  cpu-hc-curl     = curl healthcheck (30s interval)"
-echo "  cpu-hc-node     = node -e healthcheck (30s interval)"
-echo "  cpu-hc-curl-10s = curl healthcheck (10s interval)"
-echo "  cpu-hc-node-10s = node -e healthcheck (10s interval)"
-echo "  cpu-hc-none     = healthcheck disabled (true idle baseline)"
+echo "  cpu-hc-binary = static C binary healthcheck (30s interval)"
+echo "  cpu-hc-curl   = curl healthcheck (30s interval)"
+echo "  cpu-hc-node   = node -e healthcheck (30s interval)"
+echo "  cpu-hc-none   = healthcheck disabled (true idle baseline)"
