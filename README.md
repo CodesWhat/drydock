@@ -416,12 +416,8 @@ Drop-in replacement — swap the image, restart, done. All `WUD_*` env vars and 
 <a id="star-history"></a>
 
 <div align="center">
-  <a href="https://www.star-history.com/#CodesWhat/drydock&type=timeline&legend=top-left">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=CodesWhat/drydock&type=timeline&theme=dark&legend=top-left" />
-      <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=CodesWhat/drydock&type=timeline&legend=top-left" />
-      <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=CodesWhat/drydock&type=timeline&legend=top-left" />
-    </picture>
+  <a href="https://star-history.com/#CodesWhat/drydock&Date">
+    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=CodesWhat/drydock&type=Date" />
   </a>
 </div>
 
