@@ -1,5 +1,4 @@
 import log from '../../../log/index.js';
-import * as backupStore from '../../../store/backup';
 import {
   configurationValid,
   createMockLog,
@@ -505,6 +504,7 @@ describe('additional docker trigger coverage', () => {
   });
 
   test('cleanupOldImages should skip tag pruning when tag is retained for rollback', async () => {
+    const backupStore = await import('../../../store/backup.js');
     docker.configuration.prune = true;
     vi.mocked(backupStore.getBackupsByName).mockReturnValue([
       {

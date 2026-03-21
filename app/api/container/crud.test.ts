@@ -1297,22 +1297,29 @@ describe('api/container/crud', () => {
     });
 
     test('excludes containers without resolvable age when applying maturity filters', () => {
-      const harness = createHarness({
-        containers: [
-          createContainer({
-            id: 'c-no-age',
-          }),
-          createContainer({
-            id: 'c-hot',
-            firstSeenAt: '2026-03-14T00:00:00.000Z',
-          }),
-        ],
-      });
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-03-15T00:00:00.000Z'));
 
-      const res = callGetContainers(harness.handlers, { maturity: 'hot' });
-      const payload = res.json.mock.calls[0][0];
+      try {
+        const harness = createHarness({
+          containers: [
+            createContainer({
+              id: 'c-no-age',
+            }),
+            createContainer({
+              id: 'c-hot',
+              firstSeenAt: '2026-03-14T00:00:00.000Z',
+            }),
+          ],
+        });
 
-      expect(payload.data.map((container: { id: string }) => container.id)).toEqual(['c-hot']);
+        const res = callGetContainers(harness.handlers, { maturity: 'hot' });
+        const payload = res.json.mock.calls[0][0];
+
+        expect(payload.data.map((container: { id: string }) => container.id)).toEqual(['c-hot']);
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     test('uses watcher/name/id fallbacks when sorting by age with equal ages', () => {

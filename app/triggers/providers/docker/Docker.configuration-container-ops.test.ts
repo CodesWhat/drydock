@@ -1,12 +1,15 @@
 import joi from 'joi';
 import log from '../../../log/index.js';
-import * as registryStore from '../../../registry';
 import {
   configurationValid,
+  createDefaultRegistryState,
   createMockLog,
   docker,
+  getDockerTestMocks,
   registerCommonDockerBeforeEach,
 } from './Docker.test.helpers.js';
+
+const { mockGetState } = getDockerTestMocks();
 
 registerCommonDockerBeforeEach();
 
@@ -48,35 +51,31 @@ test('getWatcher should throw when the watcher reference does not exist', async 
 });
 
 test('getWatcher should resolve agent-prefixed watcher ids', async () => {
-  const getStateSpy = vi.spyOn(registryStore, 'getState').mockReturnValue({
+  mockGetState.mockReturnValue({
     watcher: {
       'edge-agent.docker.test': {
         getId: () => 'edge-agent.docker.test',
         dockerApi: {},
       },
     },
-  } as any);
+  });
 
-  try {
-    expect(
-      docker.getWatcher({
-        agent: 'edge-agent',
-        watcher: 'test',
-      }),
-    ).toMatchObject({
-      getId: expect.any(Function),
-    });
-    expect(docker.getWatcher({ agent: 'edge-agent', watcher: 'test' }).getId()).toBe(
-      'edge-agent.docker.test',
-    );
-    expect(getStateSpy).toHaveBeenCalled();
-  } finally {
-    getStateSpy.mockRestore();
-  }
+  expect(
+    docker.getWatcher({
+      agent: 'edge-agent',
+      watcher: 'test',
+    }),
+  ).toMatchObject({
+    getId: expect.any(Function),
+  });
+  expect(docker.getWatcher({ agent: 'edge-agent', watcher: 'test' }).getId()).toBe(
+    'edge-agent.docker.test',
+  );
+  expect(mockGetState).toHaveBeenCalled();
 });
 
 test('getWatcher should include container name when id is missing', async () => {
-  vi.spyOn(registryStore, 'getState').mockReturnValue({ watcher: {} } as any);
+  mockGetState.mockReturnValue({ watcher: {} });
 
   expect(() =>
     docker.getWatcher({
@@ -87,7 +86,7 @@ test('getWatcher should include container name when id is missing', async () => 
 });
 
 test('getWatcher should fall back to unknown when id and name are absent', async () => {
-  vi.spyOn(registryStore, 'getState').mockReturnValue({ watcher: {} } as any);
+  mockGetState.mockReturnValue({ watcher: {} });
 
   expect(() => docker.getWatcher({ watcher: 'missing' })).toThrowError(
     'No watcher found for container unknown (docker.missing)',

@@ -71,4 +71,14 @@ describe('toAppLogEntry', () => {
     expect(adapted.timestamp).toBe('-');
     expect(adapted.level).toBeNull();
   });
+
+  it('uses "-" timestamp when finite number produces an invalid Date', () => {
+    const entry = makeSystemLogEntry({
+      timestamp: 8.64e15 + 1,
+    });
+
+    const adapted = toAppLogEntry(entry, 10);
+
+    expect(adapted.timestamp).toBe('-');
+  });
 });

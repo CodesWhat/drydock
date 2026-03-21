@@ -174,7 +174,7 @@ export function createIdentityAwareUpgradeRateLimitKeyResolver(
 
   return (request: UpgradeRequest, authenticated: boolean) => {
     request.ip = request.socket.remoteAddress;
-    request.isAuthenticated = () => authenticated;
+    request.isAuthenticated = () => authenticated === true;
     const generatedKey = identityAwareRateLimitKeyGenerator(
       request as unknown as IdentityAwareRateLimitRequest,
       {} as IdentityAwareRateLimitResponse,

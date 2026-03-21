@@ -1,5 +1,4 @@
 import log from '../../../log/index.js';
-import * as registryStore from '../../../registry';
 import {
   configurationValid,
   createEchoNormalizeRegistry,
@@ -147,6 +146,7 @@ test('trigger should throw an explicit error when registry manager is unknown', 
 });
 
 test('trigger should throw an explicit error when registry manager is misconfigured', async () => {
+  const registryStore = await import('../../../registry/index.js');
   const baseState = registryStore.getState();
   vi.spyOn(registryStore, 'getState').mockReturnValue({
     ...baseState,

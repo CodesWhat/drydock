@@ -497,7 +497,7 @@ describe('Docker Watcher', () => {
         expect(docker.dockerEventsReconnectDelayMs).toBe(1000);
 
         eventHandlers.error(new Error('Stream dropped'));
-        expect(docker.log.warn).toHaveBeenCalledWith(
+        expect(docker.log.info).toHaveBeenCalledWith(
           expect.stringContaining('reconnect attempt #1'),
         );
         expect(docker.dockerEventsReconnectTimeout).toBeDefined();
@@ -816,13 +816,13 @@ describe('Docker Watcher', () => {
         });
         docker.configuration.watchevents = true;
         docker.isDockerEventsListenerActive = true;
-        docker.log = createMockLog(['warn', 'debug']);
+        docker.log = createMockLog(['warn', 'debug', 'info']);
         docker.processDockerEventPayload = vi.fn().mockResolvedValue(false);
         docker.dockerEventsBuffer = 'a'.repeat(1024 * 1024 - 10);
 
         await docker.onDockerEvent(Buffer.from('{"Action":"create","id":"overflow"}'));
 
-        expect(docker.log.warn).toHaveBeenCalledWith(expect.stringContaining('buffer overflow'));
+        expect(docker.log.info).toHaveBeenCalledWith(expect.stringContaining('buffer overflow'));
         expect(docker.dockerEventsReconnectAttempt).toBe(1);
         expect(docker.dockerEventsReconnectTimeout).toBeDefined();
         expect(docker.dockerEventsBuffer).toBe('');

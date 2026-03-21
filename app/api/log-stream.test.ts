@@ -302,6 +302,7 @@ describe('api/log-stream', () => {
         Buffer.alloc(0),
       );
 
+      await new Promise((resolve) => setImmediate(resolve));
       expect(ws.send).not.toHaveBeenCalled();
       ws.emit('close');
       await upgradePromise;
@@ -335,6 +336,7 @@ describe('api/log-stream', () => {
         Buffer.alloc(0),
       );
 
+      await new Promise((resolve) => setImmediate(resolve));
       expect(ws.send).toHaveBeenCalledTimes(2);
       expect(ws.send).toHaveBeenCalledWith(JSON.stringify(backfillEntries[0]));
       expect(ws.send).toHaveBeenCalledWith(JSON.stringify(backfillEntries[1]));
@@ -376,6 +378,7 @@ describe('api/log-stream', () => {
         Buffer.alloc(0),
       );
 
+      await new Promise((resolve) => setImmediate(resolve));
       expect(capturedListener).toBeDefined();
 
       const warnEntry = makeEntry({ level: 'warn', msg: 'should-pass' });
@@ -425,6 +428,7 @@ describe('api/log-stream', () => {
         Buffer.alloc(0),
       );
 
+      await new Promise((resolve) => setImmediate(resolve));
       capturedListener!(makeEntry({ component: 'api-server', msg: 'match' }));
       capturedListener!(makeEntry({ component: 'watcher', msg: 'no-match' }));
 
@@ -462,6 +466,7 @@ describe('api/log-stream', () => {
         Buffer.alloc(0),
       );
 
+      await new Promise((resolve) => setImmediate(resolve));
       ws.emit('close');
       await upgradePromise;
       expect(unsubscribeFn).toHaveBeenCalledTimes(1);
@@ -500,6 +505,7 @@ describe('api/log-stream', () => {
         Buffer.alloc(0),
       );
 
+      await new Promise((resolve) => setImmediate(resolve));
       ws.emit('error', new Error('ws boom'));
       await upgradePromise;
       expect(unsubscribeFn).toHaveBeenCalledTimes(1);
@@ -537,6 +543,8 @@ describe('api/log-stream', () => {
         createUpgradeSocket() as any,
         Buffer.alloc(0),
       );
+
+      await new Promise((resolve) => setImmediate(resolve));
 
       // Simulate socket closing then a late entry arriving
       ws.send = vi.fn(() => {

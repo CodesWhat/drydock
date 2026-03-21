@@ -102,93 +102,97 @@ vi.mock('./compose-file-sync.js', () => ({
   syncComposeFileTag: (...args: any[]) => mockSyncComposeFileTag(...args),
 }));
 
+const mockGetState = vi.hoisted(() => vi.fn());
 vi.mock('../../../registry', () => ({
-  getState() {
-    return {
-      watcher: {
-        'docker.test': {
-          getId: () => 'docker.test',
-          watch: () => Promise.resolve(),
-          dockerApi: {
-            getContainer: (id) => {
-              if (id === '123456789') {
-                return Promise.resolve({
-                  inspect: () =>
-                    Promise.resolve({
-                      Name: '/container-name',
-                      Id: '123456798',
-                      State: {
-                        Running: true,
-                      },
-                      NetworkSettings: {
-                        Networks: {
-                          test: {
-                            Aliases: ['9708fc7b44f2', 'test'],
-                          },
+  getState: (...args: any[]) => mockGetState(...args),
+}));
+
+/** Default registry state used by the Docker trigger test suite */
+export function createDefaultRegistryState() {
+  return {
+    watcher: {
+      'docker.test': {
+        getId: () => 'docker.test',
+        watch: () => Promise.resolve(),
+        dockerApi: {
+          getContainer: (id) => {
+            if (id === '123456789') {
+              return Promise.resolve({
+                inspect: () =>
+                  Promise.resolve({
+                    Name: '/container-name',
+                    Id: '123456798',
+                    State: {
+                      Running: true,
+                    },
+                    NetworkSettings: {
+                      Networks: {
+                        test: {
+                          Aliases: ['9708fc7b44f2', 'test'],
                         },
                       },
-                    }),
-                  stop: () => Promise.resolve(),
-                  remove: () => Promise.resolve(),
-                  start: () => Promise.resolve(),
-                  rename: () => Promise.resolve(),
-                });
-              }
-              return Promise.reject(new Error('Error when getting container'));
-            },
-            createContainer: (container) => {
-              if (container.name === 'container-name') {
-                return Promise.resolve({
-                  start: () => Promise.resolve(),
-                  inspect: () =>
-                    Promise.resolve({
-                      Id: 'new-container-id',
-                      State: { Health: { Status: 'healthy' } },
-                    }),
-                  stop: () => Promise.resolve(),
-                  remove: () => Promise.resolve(),
-                });
-              }
-              return Promise.reject(new Error('Error when creating container'));
-            },
-            pull: (image) => {
-              if (image === 'test/test:1.2.3' || image === 'my-registry/test/test:4.5.6') {
-                return Promise.resolve();
-              }
-              return Promise.reject(new Error('Error when pulling image'));
-            },
-            getImage: (image) =>
-              Promise.resolve({
-                remove: () => {
-                  if (image === 'test/test:1.2.3') {
-                    return Promise.resolve();
-                  }
-                  return Promise.reject(new Error('Error when removing image'));
-                },
-              }),
-            modem: {
-              followProgress: (pullStream, res) => res(),
-            },
+                    },
+                  }),
+                stop: () => Promise.resolve(),
+                remove: () => Promise.resolve(),
+                start: () => Promise.resolve(),
+                rename: () => Promise.resolve(),
+              });
+            }
+            return Promise.reject(new Error('Error when getting container'));
+          },
+          createContainer: (container) => {
+            if (container.name === 'container-name') {
+              return Promise.resolve({
+                start: () => Promise.resolve(),
+                inspect: () =>
+                  Promise.resolve({
+                    Id: 'new-container-id',
+                    State: { Health: { Status: 'healthy' } },
+                  }),
+                stop: () => Promise.resolve(),
+                remove: () => Promise.resolve(),
+              });
+            }
+            return Promise.reject(new Error('Error when creating container'));
+          },
+          pull: (image) => {
+            if (image === 'test/test:1.2.3' || image === 'my-registry/test/test:4.5.6') {
+              return Promise.resolve();
+            }
+            return Promise.reject(new Error('Error when pulling image'));
+          },
+          getImage: (image) =>
+            Promise.resolve({
+              remove: () => {
+                if (image === 'test/test:1.2.3') {
+                  return Promise.resolve();
+                }
+                return Promise.reject(new Error('Error when removing image'));
+              },
+            }),
+          modem: {
+            followProgress: (pullStream, res) => res(),
           },
         },
       },
-      registry: {
-        hub: {
-          getAuthPull: async () => undefined,
-          normalizeImage: (image) => ({
-            ...image,
-            registry: {
-              ...(image.registry || {}),
-              name: 'hub',
-            },
-          }),
-          getImageFullName: (image, tagOrDigest) =>
-            `${image.registry.url}/${image.name}:${tagOrDigest}`,
-        },
+    },
+    registry: {
+      hub: {
+        getAuthPull: async () => undefined,
+        normalizeImage: (image) => ({
+          ...image,
+          registry: {
+            ...(image.registry || {}),
+            name: 'hub',
+          },
+        }),
+        getImageFullName: (image, tagOrDigest) =>
+          `${image.registry.url}/${image.name}:${tagOrDigest}`,
       },
-    };
-  },
-}));
+    },
+  };
+}
 
 // --- Shared factories and helpers ---
 
@@ -360,6 +364,7 @@ export function createMockLog(...methods) {
 export function registerCommonDockerBeforeEach() {
   beforeEach(async () => {
     vi.resetAllMocks();
+    mockGetState.mockImplementation(createDefaultRegistryState);
     docker.configuration = configurationValid;
     docker.log = log;
     mockGetSecurityConfiguration.mockReturnValue({
@@ -411,6 +416,7 @@ export function registerCommonDockerBeforeEach() {
 
 export function getDockerTestMocks() {
   return {
+    mockGetState,
     mockGetSecurityConfiguration,
     mockScanImageForVulnerabilities,
     mockVerifyImageSignature,

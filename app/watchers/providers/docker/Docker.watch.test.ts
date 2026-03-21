@@ -743,7 +743,7 @@ describe('Docker Watcher', () => {
         const result = await docker.getContainers();
 
         expect(docker.log.warn).toHaveBeenCalledWith(
-          expect.stringContaining('Failed to fetch image detail for container 1: [object Object]'),
+          expect.stringContaining('test1: Failed to fetch image detail ([object Object])'),
         );
         expect(result).toEqual([{ message: '' }]);
       } finally {
