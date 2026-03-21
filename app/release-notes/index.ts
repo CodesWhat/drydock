@@ -23,6 +23,15 @@ type CacheEntry<T> = {
   value: T;
 };
 
+type CacheLookup<T> =
+  | {
+      found: false;
+    }
+  | {
+      found: true;
+      value: T;
+    };
+
 const releaseNotesCache = new Map<string, CacheEntry<ReleaseNotes | null>>();
 const sourceRepoCache = new Map<string, CacheEntry<string | null>>();
 const providers: ReleaseNotesProviderClient[] = [new GithubProvider()];
@@ -49,13 +58,16 @@ function pruneExpiredCache<T>(cache: Map<string, CacheEntry<T>>) {
   }
 }
 
-function getCacheValue<T>(cache: Map<string, CacheEntry<T>>, cacheKey: string) {
+function getCacheValue<T>(cache: Map<string, CacheEntry<T>>, cacheKey: string): CacheLookup<T> {
   pruneExpiredCache(cache);
   const cacheEntry = cache.get(cacheKey);
   if (!cacheEntry) {
-    return undefined;
+    return { found: false };
   }
-  return cacheEntry.value;
+  return {
+    found: true,
+    value: cacheEntry.value,
+  };
 }
 
 function setCacheValue<T>(
@@ -266,8 +278,8 @@ export async function resolveSourceRepoForContainer(container: Container) {
 
   const cacheKey = getSourceRepoCacheKey(imageName, tag);
   const sourceRepoFromCache = getCacheValue(sourceRepoCache, cacheKey);
-  if (sourceRepoFromCache !== undefined) {
-    return sourceRepoFromCache || undefined;
+  if (sourceRepoFromCache.found) {
+    return sourceRepoFromCache.value ?? undefined;
   }
 
   const sourceRepo = await lookupSourceRepoFromDockerHubTagMetadata(imageName, tag);
@@ -303,8 +315,8 @@ async function getReleaseNotesForSourceRepo(sourceRepo: string, tag: string) {
 
   const cacheKey = getReleaseNotesCacheKey(provider.id, sourceRepo, tag);
   const releaseNotesFromCache = getCacheValue(releaseNotesCache, cacheKey);
-  if (releaseNotesFromCache !== undefined) {
-    return releaseNotesFromCache || undefined;
+  if (releaseNotesFromCache.found) {
+    return releaseNotesFromCache.value ?? undefined;
   }
 
   const releaseNotes = await provider.fetchByTag(sourceRepo, tag, getGithubToken());

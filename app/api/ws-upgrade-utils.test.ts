@@ -203,7 +203,7 @@ describe('ws-upgrade-utils', () => {
       limiter.destroy();
     });
 
-    test('evicts expired entries to prevent unbounded map growth', () => {
+    test('lazily expires entries when keys are accessed again', () => {
       vi.useFakeTimers();
       const limiter = createFixedWindowRateLimiter({ windowMs: 100, max: 1 });
       try {
@@ -211,11 +211,10 @@ describe('ws-upgrade-utils', () => {
         limiter.consume('b');
         limiter.consume('c');
 
-        // Advance past the window so all entries expire, then trigger eviction
+        // Advance past the window so all entries expire.
         vi.advanceTimersByTime(200);
-        limiter.consume('d');
 
-        // Expired keys should now be evictable — consuming them creates fresh entries
+        // Accessing each key lazily clears expiry and starts a new window.
         expect(limiter.consume('a')).toBe(true);
         expect(limiter.consume('b')).toBe(true);
         expect(limiter.consume('c')).toBe(true);
@@ -261,17 +260,69 @@ describe('ws-upgrade-utils', () => {
       limiter.destroy();
     });
 
-    test('allows new keys after maxEntries cap clears via expiry', () => {
+    test('does not sweep unrelated expired keys during consume', () => {
       vi.useFakeTimers();
-      const limiter = createFixedWindowRateLimiter({ windowMs: 100, max: 10, maxEntries: 2 });
+      const limiter = createFixedWindowRateLimiter({
+        windowMs: 100,
+        max: 10,
+        maxEntries: 2,
+        cleanupIntervalMs: 10_000,
+      });
+      try {
+        expect(limiter.consume('a')).toBe(true);
+        expect(limiter.consume('b')).toBe(true);
+
+        vi.advanceTimersByTime(200);
+        // Consuming "a" refreshes only that key. "b" remains stale and still occupies capacity.
+        expect(limiter.consume('a')).toBe(true);
+        expect(limiter.consume('c')).toBe(false);
+      } finally {
+        limiter.destroy();
+        vi.useRealTimers();
+      }
+    });
+
+    test('allows new keys after maxEntries cap clears via periodic cleanup', () => {
+      vi.useFakeTimers();
+      const limiter = createFixedWindowRateLimiter({
+        windowMs: 100,
+        max: 10,
+        maxEntries: 2,
+        cleanupIntervalMs: 50,
+      });
       try {
         expect(limiter.consume('a')).toBe(true);
         expect(limiter.consume('b')).toBe(true);
         expect(limiter.consume('c')).toBe(false);
 
         vi.advanceTimersByTime(200);
-        // After expiry, eviction frees space
+        // Periodic cleanup evicts expired keys and frees space for new keys.
         expect(limiter.consume('c')).toBe(true);
+      } finally {
+        limiter.destroy();
+        vi.useRealTimers();
+      }
+    });
+
+    test('periodic cleanup keeps non-expired entries while removing expired ones', () => {
+      vi.useFakeTimers();
+      const limiter = createFixedWindowRateLimiter({
+        windowMs: 1000,
+        max: 1,
+        maxEntries: 2,
+        cleanupIntervalMs: 1000,
+      });
+      try {
+        // t=0
+        expect(limiter.consume('a')).toBe(true);
+        // t=500
+        vi.advanceTimersByTime(500);
+        expect(limiter.consume('b')).toBe(true);
+        // t=1000, eviction runs: a expires, b remains
+        vi.advanceTimersByTime(500);
+        expect(limiter.consume('c')).toBe(true);
+        // b was not evicted, so it is still at max=1 for the current window
+        expect(limiter.consume('b')).toBe(false);
       } finally {
         limiter.destroy();
         vi.useRealTimers();

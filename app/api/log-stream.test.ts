@@ -511,6 +511,46 @@ describe('api/log-stream', () => {
       expect(unsubscribeFn).toHaveBeenCalledTimes(1);
     });
 
+    test('cleanup remains idempotent when close/error fire multiple times', async () => {
+      const ws = new EventEmitter() as EventEmitter & {
+        send: ReturnType<typeof vi.fn>;
+        close: ReturnType<typeof vi.fn>;
+        off: ReturnType<typeof vi.fn>;
+      };
+      ws.send = vi.fn();
+      ws.close = vi.fn();
+      // Keep listeners registered so repeated events re-enter cleanup.
+      ws.off = vi.fn();
+
+      const unsubscribeFn = vi.fn();
+      const subscribeToEntries = vi.fn(() => unsubscribeFn);
+
+      const gateway = createSystemLogStreamGateway({
+        sessionMiddleware: authenticatingSessionMiddleware,
+        webSocketServer: {
+          handleUpgrade: vi.fn((_req, _socket, _head, callback: (socket: unknown) => void) =>
+            callback(ws),
+          ),
+        },
+        isRateLimited: vi.fn(() => false),
+        getBackfillEntries: vi.fn(() => []),
+        subscribeToEntries,
+      });
+
+      const upgradePromise = gateway.handleUpgrade(
+        createUpgradeRequest('/api/v1/log/stream') as any,
+        createUpgradeSocket() as any,
+        Buffer.alloc(0),
+      );
+
+      await new Promise((resolve) => setImmediate(resolve));
+      ws.emit('close');
+      ws.emit('error', new Error('late error'));
+      await upgradePromise;
+
+      expect(unsubscribeFn).toHaveBeenCalledTimes(1);
+    });
+
     test('unsubscribes when send throws on a closed socket', async () => {
       const ws = new EventEmitter() as EventEmitter & {
         send: ReturnType<typeof vi.fn>;

@@ -118,18 +118,25 @@ export function createFixedWindowRateLimiter(options: {
     maxEntries = DEFAULT_MAX_ENTRIES,
   } = options;
   const counters = new Map<string, { count: number; resetAt: number }>();
-  let lastEviction = 0;
 
   function evictExpired(now: number): void {
-    if (now - lastEviction < windowMs) {
-      return;
-    }
-    lastEviction = now;
     for (const [entryKey, entry] of counters) {
       if (now >= entry.resetAt) {
         counters.delete(entryKey);
       }
     }
+  }
+
+  function getActiveCounter(key: string, now: number) {
+    const counter = counters.get(key);
+    if (!counter) {
+      return undefined;
+    }
+    if (now >= counter.resetAt) {
+      counters.delete(key);
+      return undefined;
+    }
+    return counter;
   }
 
   const cleanupTimer = setInterval(() => {
@@ -140,9 +147,8 @@ export function createFixedWindowRateLimiter(options: {
   return {
     consume(key: string): boolean {
       const now = Date.now();
-      evictExpired(now);
-      const counter = counters.get(key);
-      if (!counter || now >= counter.resetAt) {
+      const counter = getActiveCounter(key, now);
+      if (!counter) {
         if (counters.size >= maxEntries) {
           return false;
         }
