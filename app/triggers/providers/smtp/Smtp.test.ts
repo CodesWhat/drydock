@@ -267,6 +267,53 @@ test('trigger should format mail as expected', async () => {
   );
 });
 
+test('trigger should format agent disconnect mail without container update wording', async () => {
+  smtp.configuration = configurationValid;
+  smtp.transporter = {
+    sendMail: (conf) => conf,
+  };
+  const response = await smtp.trigger({
+    id: 'agent-servicevault',
+    name: 'servicevault',
+    displayName: 'servicevault',
+    displayIcon: 'mdi:server-network-off',
+    status: 'disconnected',
+    watcher: 'agent',
+    image: {
+      id: 'agent-servicevault',
+      registry: {
+        name: 'agent',
+        url: 'agent://servicevault',
+      },
+      name: 'servicevault',
+      tag: {
+        value: 'disconnected',
+        semver: false,
+      },
+      digest: {
+        watch: false,
+      },
+      architecture: 'unknown',
+      os: 'unknown',
+    },
+    error: {
+      message: 'SSE connection lost',
+    },
+    updateAvailable: false,
+    updateKind: {
+      kind: 'unknown',
+    },
+    notificationEvent: {
+      kind: 'agent-disconnect',
+      agentName: 'servicevault',
+      reason: 'SSE connection lost',
+    },
+  } as any);
+
+  expect(response.subject).toBe('Agent servicevault disconnected');
+  expect(response.text).toBe('Agent servicevault disconnected: SSE connection lost');
+});
+
 test('triggerBatch should format mail as expected', async () => {
   smtp.configuration = configurationValid;
   smtp.transporter = {

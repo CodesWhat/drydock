@@ -347,8 +347,10 @@ function warnLegacyTemplateVars(template: string, legacyVars: string[], replacem
  */
 export function renderSimple(template: string, container: Container): string {
   if (template) warnLegacyTemplateVars(template, LEGACY_SIMPLE_VARS, 'container');
+  const event = Reflect.get(new Object(container), 'notificationEvent');
   const vars: TemplateVars = {
     container,
+    event: event && typeof event === 'object' ? event : {},
     releaseNotes: container.result?.releaseNotes,
     suggestedTag: container.result?.suggestedTag ?? container.result?.tag ?? '',
     // Deprecated vars for backward compatibility

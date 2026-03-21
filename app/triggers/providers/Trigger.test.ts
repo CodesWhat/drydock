@@ -1012,6 +1012,195 @@ test('renderSimpleBody should replace placeholders when template is a customized
   ).toEqual('Watcher DUMMY reports container container-name available update');
 });
 
+test('renderSimpleTitle should use dedicated template for agent disconnect events', () => {
+  const container = {
+    id: 'agent-servicevault',
+    name: 'servicevault',
+    watcher: 'agent',
+    status: 'disconnected',
+    image: {
+      id: 'agent-servicevault',
+      registry: {
+        name: 'agent',
+        url: 'agent://servicevault',
+      },
+      name: 'servicevault',
+      tag: {
+        value: 'disconnected',
+        semver: false,
+      },
+      digest: {
+        watch: false,
+      },
+      architecture: 'unknown',
+      os: 'unknown',
+    },
+    updateAvailable: false,
+    updateKind: {
+      kind: 'unknown',
+    },
+    notificationEvent: {
+      kind: 'agent-disconnect',
+      agentName: 'servicevault',
+      reason: 'SSE connection lost',
+    },
+  } as any;
+
+  expect(trigger.renderSimpleTitle(container)).toBe('Agent servicevault disconnected');
+});
+
+test('renderSimpleBody should use dedicated template for agent disconnect events', () => {
+  const container = {
+    id: 'agent-servicevault',
+    name: 'servicevault',
+    watcher: 'agent',
+    status: 'disconnected',
+    image: {
+      id: 'agent-servicevault',
+      registry: {
+        name: 'agent',
+        url: 'agent://servicevault',
+      },
+      name: 'servicevault',
+      tag: {
+        value: 'disconnected',
+        semver: false,
+      },
+      digest: {
+        watch: false,
+      },
+      architecture: 'unknown',
+      os: 'unknown',
+    },
+    updateAvailable: false,
+    updateKind: {
+      kind: 'unknown',
+    },
+    notificationEvent: {
+      kind: 'agent-disconnect',
+      agentName: 'servicevault',
+      reason: 'SSE connection lost',
+    },
+  } as any;
+
+  expect(trigger.renderSimpleBody(container)).toBe(
+    'Agent servicevault disconnected: SSE connection lost',
+  );
+});
+
+test('renderSimpleBody should omit the reason suffix for agent disconnect events without a reason', () => {
+  const container = {
+    id: 'agent-servicevault',
+    name: 'servicevault',
+    watcher: 'agent',
+    status: 'disconnected',
+    image: {
+      id: 'agent-servicevault',
+      registry: {
+        name: 'agent',
+        url: 'agent://servicevault',
+      },
+      name: 'servicevault',
+      tag: {
+        value: 'disconnected',
+        semver: false,
+      },
+      digest: {
+        watch: false,
+      },
+      architecture: 'unknown',
+      os: 'unknown',
+    },
+    updateAvailable: false,
+    updateKind: {
+      kind: 'unknown',
+    },
+    notificationEvent: {
+      kind: 'agent-disconnect',
+      agentName: 'servicevault',
+    },
+  } as any;
+
+  expect(trigger.renderSimpleBody(container)).toBe('Agent servicevault disconnected');
+});
+
+test('renderSimpleTitle should fall back to the standard template for unsupported notification events', () => {
+  const container = {
+    id: 'container-servicevault',
+    name: 'servicevault',
+    watcher: 'agent',
+    status: 'running',
+    image: {
+      id: 'container-servicevault',
+      registry: {
+        name: 'agent',
+        url: 'agent://servicevault',
+      },
+      name: 'servicevault',
+      tag: {
+        value: '1.0.0',
+        semver: false,
+      },
+      digest: {
+        watch: false,
+      },
+      architecture: 'unknown',
+      os: 'unknown',
+    },
+    updateAvailable: true,
+    updateKind: {
+      kind: 'tag',
+    },
+    notificationEvent: {
+      kind: 'security-alert',
+      agentName: 'servicevault',
+    },
+  } as any;
+
+  expect(trigger.renderSimpleTitle(container)).toBe('New tag found for container servicevault');
+});
+
+test('renderSimpleBody should fall back to the standard template when agent disconnect metadata is invalid', () => {
+  const container = {
+    id: 'container-servicevault',
+    name: 'servicevault',
+    watcher: 'agent',
+    status: 'running',
+    image: {
+      id: 'container-servicevault',
+      registry: {
+        name: 'agent',
+        url: 'agent://servicevault',
+      },
+      name: 'servicevault',
+      tag: {
+        value: '1.0.0',
+        semver: false,
+      },
+      digest: {
+        watch: false,
+      },
+      architecture: 'unknown',
+      os: 'unknown',
+    },
+    updateAvailable: true,
+    updateKind: {
+      kind: 'tag',
+      localValue: '1.0.0',
+      remoteValue: '2.0.0',
+    },
+    notificationEvent: {
+      kind: 'agent-disconnect',
+      agentName: '',
+      reason: 'SSE connection lost',
+    },
+  } as any;
+
+  expect(trigger.renderSimpleBody(container)).toBe(
+    'Container servicevault running with tag 1.0.0 can be updated to tag 2.0.0',
+  );
+});
+
 test('renderSimpleBody should evaluate js functions when template is a customized one', async () => {
   trigger.configuration.simplebody =
     'Container ${name} update from ${local.substring(0, 15)} to ${remote.substring(0, 15)}';
@@ -1511,11 +1700,16 @@ test('handleAgentDisconnectedEvent should bypass threshold filtering', async () 
       name: 'edge-a',
       watcher: 'agent',
       status: 'disconnected',
+      notificationEvent: {
+        kind: 'agent-disconnect',
+        agentName: 'edge-a',
+        reason: 'disconnected',
+      },
     }),
   );
 });
 
-test('handleAgentDisconnectedEvent should use disconnected fallback values when reason is missing', async () => {
+test('handleAgentDisconnectedEvent should omit agent disconnect reason when it is missing', async () => {
   const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
 
   await trigger.handleAgentDisconnectedEvent({
@@ -1524,13 +1718,35 @@ test('handleAgentDisconnectedEvent should use disconnected fallback values when 
 
   expect(triggerSpy).toHaveBeenCalledWith(
     expect.objectContaining({
-      updateKind: expect.objectContaining({
-        localValue: 'disconnected',
-        remoteValue: 'disconnected',
-      }),
+      notificationEvent: {
+        kind: 'agent-disconnect',
+        agentName: 'edge-a',
+      },
       error: undefined,
     }),
   );
+});
+
+test('handleAgentDisconnectedEvent should use simple dispatch even when trigger mode is batch', async () => {
+  trigger.configuration.mode = 'batch';
+  const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+  const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+
+  await trigger.handleAgentDisconnectedEvent({
+    agentName: 'edge-a',
+    reason: 'SSE connection lost',
+  });
+
+  expect(triggerSpy).toHaveBeenCalledWith(
+    expect.objectContaining({
+      notificationEvent: {
+        kind: 'agent-disconnect',
+        agentName: 'edge-a',
+        reason: 'SSE connection lost',
+      },
+    }),
+  );
+  expect(triggerBatchSpy).not.toHaveBeenCalled();
 });
 
 test('dispatchContainerForEvent should fallback to all threshold when threshold is undefined', async () => {

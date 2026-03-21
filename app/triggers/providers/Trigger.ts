@@ -49,6 +49,12 @@ interface AgentDisconnectedPayload {
   reason?: string;
 }
 
+interface TriggerNotificationEvent {
+  kind: 'agent-disconnect';
+  agentName: string;
+  reason?: string;
+}
+
 interface EventDispatchOptions extends notificationStore.NotificationRuleDispatchOptions {
   skipThreshold?: boolean;
 }
@@ -57,6 +63,9 @@ const AUTO_TRIGGER_ERROR_SUPPRESSION_WINDOW_MS = 15_000;
 const AUTO_TRIGGER_ERROR_SUPPRESSION_RETENTION_MS = AUTO_TRIGGER_ERROR_SUPPRESSION_WINDOW_MS * 4;
 const TRIGGER_RELEASE_NOTES_BODY_MAX_LENGTH = 500;
 const ACTION_TRIGGER_TYPES = new Set(['command', 'docker', 'dockercompose']);
+const AGENT_DISCONNECT_SIMPLE_TITLE_TEMPLATE = 'Agent ${event.agentName} disconnected';
+const AGENT_DISCONNECT_SIMPLE_BODY_TEMPLATE =
+  'Agent ${event.agentName} disconnected${event.reason ? ": " + event.reason : ""}';
 
 function truncateReleaseNotesBody(body: string, maxLength: number) {
   if (body.length <= maxLength) {
@@ -92,16 +101,42 @@ function buildAgentDisconnectedContainer(agentName: string, reason?: string): Co
     },
     updateAvailable: false,
     updateKind: {
-      kind: 'tag',
-      localValue: reason || 'disconnected',
-      remoteValue: reason || 'disconnected',
-      semverDiff: 'patch',
+      kind: 'unknown',
+      semverDiff: 'unknown',
     },
     error: reason
       ? {
           message: reason,
         }
       : undefined,
+    notificationEvent: {
+      kind: 'agent-disconnect',
+      agentName,
+      reason,
+    },
+  } as Container;
+}
+
+function getNotificationEvent(container: Container): TriggerNotificationEvent | undefined {
+  const notificationEvent = Reflect.get(new Object(container), 'notificationEvent');
+  if (!notificationEvent || typeof notificationEvent !== 'object') {
+    return undefined;
+  }
+
+  if (Reflect.get(new Object(notificationEvent), 'kind') !== 'agent-disconnect') {
+    return undefined;
+  }
+
+  const agentName = Reflect.get(new Object(notificationEvent), 'agentName');
+  const reason = Reflect.get(new Object(notificationEvent), 'reason');
+  if (typeof agentName !== 'string' || agentName.length === 0) {
+    return undefined;
+  }
+
+  return {
+    kind: 'agent-disconnect',
+    agentName,
+    reason: typeof reason === 'string' && reason.length > 0 ? reason : undefined,
   };
 }
 
@@ -341,7 +376,10 @@ class Trigger extends Component {
     }
 
     try {
-      if (this.configuration.mode?.toLowerCase() === 'batch') {
+      const shouldUseBatchMode =
+        this.configuration.mode?.toLowerCase() === 'batch' &&
+        getNotificationEvent(container)?.kind !== 'agent-disconnect';
+      if (shouldUseBatchMode) {
         await this.triggerBatch([container]);
       } else {
         await this.trigger(container);
@@ -969,7 +1007,11 @@ class Trigger extends Component {
    * @returns {*}
    */
   renderSimpleTitle(container: Container) {
-    return renderSimple(this.configuration.simpletitle ?? '', this.getTemplateContainer(container));
+    const template =
+      getNotificationEvent(container)?.kind === 'agent-disconnect'
+        ? AGENT_DISCONNECT_SIMPLE_TITLE_TEMPLATE
+        : (this.configuration.simpletitle ?? '');
+    return renderSimple(template, this.getTemplateContainer(container));
   }
 
   /**
@@ -978,7 +1020,11 @@ class Trigger extends Component {
    * @returns {*}
    */
   renderSimpleBody(container: Container) {
-    return renderSimple(this.configuration.simplebody ?? '', this.getTemplateContainer(container));
+    const template =
+      getNotificationEvent(container)?.kind === 'agent-disconnect'
+        ? AGENT_DISCONNECT_SIMPLE_BODY_TEMPLATE
+        : (this.configuration.simplebody ?? '');
+    return renderSimple(template, this.getTemplateContainer(container));
   }
 
   /**
