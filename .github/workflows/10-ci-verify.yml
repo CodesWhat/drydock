@@ -650,7 +650,7 @@ jobs:
         continue-on-error: true
         uses: projectdiscovery/nuclei-action@32a91c0da7be14c07b0ade6c14fa0f6e78d97c9c  # v3.1.0
         with:
-          version: latest
+          version: v3.7.1
           args: -u http://localhost:3333 -as -severity medium,high,critical -json-export artifacts/dast/nuclei-report.json -silent
 
       - name: Enforce Nuclei severity gate (medium+)
