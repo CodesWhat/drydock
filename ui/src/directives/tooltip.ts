@@ -82,8 +82,8 @@ function showTooltip(el: HTMLElement, state: TooltipState) {
   // Position after the element is in the DOM so we can measure it
   positionTooltip(el, tip);
 
-  // Force reflow before adding visible class for CSS transition
-  tip.offsetHeight; // eslint-disable-line @typescript-eslint/no-unused-expressions
+  // Force a layout read before adding visible class for CSS transition.
+  tip.getBoundingClientRect();
   tip.classList.add('dd-tooltip-visible');
 }
 

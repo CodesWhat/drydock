@@ -1,4 +1,3 @@
-/* biome-ignore-all lint/correctness/noUnknownTypeSelector: view-transition pseudo-elements use (root) selector */
 @import "tailwindcss";
 @import "@fontsource/ibm-plex-mono/300.css";
 @import "@fontsource/ibm-plex-mono/400.css";
@@ -600,17 +599,17 @@ select {
 }
 
 /* ── View Transition: Circular Reveal (theme switch only) ── */
-html.dd-transitioning::view-transition-old(root),
-html.dd-transitioning::view-transition-new(root) {
+html.dd-transitioning::view-transition-old(*),
+html.dd-transitioning::view-transition-new(*) {
   animation: none;
   mix-blend-mode: normal;
 }
 
-html.dd-transitioning::view-transition-old(root) {
+html.dd-transitioning::view-transition-old(*) {
   z-index: 1;
 }
 
-html.dd-transitioning::view-transition-new(root) {
+html.dd-transitioning::view-transition-new(*) {
   z-index: 9999;
   animation: theme-circle-reveal 0.4s ease-in-out;
 }
@@ -625,7 +624,7 @@ html.dd-transitioning::view-transition-new(root) {
 }
 
 @supports not (clip-path: circle(0% at 50% 50%)) {
-  html.dd-transitioning::view-transition-new(root) {
+  html.dd-transitioning::view-transition-new(*) {
     animation: theme-fade-in var(--dd-duration-slow) ease-out;
   }
 
