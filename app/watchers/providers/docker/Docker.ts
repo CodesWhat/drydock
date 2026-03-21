@@ -203,6 +203,7 @@ interface DockerContainerSummaryWithLabels extends DockerContainerSummaryLike {
 
 interface DockerImageInspectPayloadLike {
   RepoTags?: string[];
+  RepoDigests?: string[];
   [key: string]: unknown;
 }
 
@@ -1270,11 +1271,33 @@ class Docker extends Watcher {
       if (!imageRecord.RepoTags || imageRecord.RepoTags.length === 0) {
         this.ensureLogger();
         this.log.warn(`Cannot get a reliable tag for this image [${imageNameToParse}]`);
-        return undefined;
+        return this.resolveDigestOnlyImage(imageRecord, imageNameToParse);
       }
       [imageNameToParse] = imageRecord.RepoTags;
     }
     return parse(imageNameToParse);
+  }
+
+  /**
+   * Build a parsed image reference for a digest-only image (no RepoTags).
+   * Uses RepoDigests to extract the image name when available, otherwise
+   * falls back to a minimal representation so the container remains visible.
+   */
+  private resolveDigestOnlyImage(imageRecord: DockerImageInspectPayloadLike, rawName: string) {
+    if (imageRecord.RepoDigests && imageRecord.RepoDigests.length > 0) {
+      const repoDigest = imageRecord.RepoDigests[0];
+      const atIndex = repoDigest.indexOf('@');
+      if (atIndex > 0) {
+        const imageRef = repoDigest.substring(0, atIndex);
+        const parsed = parse(imageRef);
+        // Use the sha256 digest as the tag since no tag is available
+        const digest = repoDigest.substring(atIndex + 1);
+        return { ...parsed, tag: digest };
+      }
+    }
+    // No useful metadata at all — use a truncated digest as the tag
+    const digest = rawName.startsWith('sha256:') ? rawName : `sha256:${rawName}`;
+    return { path: digest, tag: 'unknown' };
   }
 
   private resolveTagName(

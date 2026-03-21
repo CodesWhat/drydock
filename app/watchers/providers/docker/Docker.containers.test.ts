@@ -2656,21 +2656,47 @@ describe('Docker Watcher', () => {
       expect(result).toBeDefined();
     });
 
-    test('should handle container with no repo tags', async () => {
-      await docker.register('watcher', 'docker', 'test', {});
-      docker.log = createMockLog(['warn']);
-      const container = createDockerContainer({
-        Image: 'sha256:abcdef123456',
-        Names: ['/test'],
+    test('should handle container with no repo tags but with repo digests', async () => {
+      const container = await setupContainerDetailTest(docker, {
+        container: {
+          Image: 'sha256:abcdef123456',
+          Names: ['/test'],
+        },
+        imageDetails: {
+          RepoTags: [],
+          RepoDigests: ['portainer/agent@sha256:abcdef123456'],
+        },
+        parseImpl: (value) => {
+          if (value === 'portainer/agent') {
+            return { domain: 'docker.io', path: 'portainer/agent' };
+          }
+          return { domain: 'docker.io', path: 'library/nginx', tag: '1.0.0' };
+        },
+        validateImpl: (c) => c,
       });
-      mockImage.inspect.mockResolvedValue({ RepoTags: [] });
 
       const result = await docker.addImageDetailsToContainer(container);
 
-      expect(docker.log.warn).toHaveBeenCalledWith(
-        expect.stringContaining('Cannot get a reliable tag'),
-      );
-      expect(result).toBeUndefined();
+      expect(result).toBeDefined();
+      expect(result.image.name).toBe('portainer/agent');
+      expect(result.image.tag.value).toBe('sha256:abcdef123456');
+    });
+
+    test('should handle container with no repo tags and no repo digests', async () => {
+      const container = await setupContainerDetailTest(docker, {
+        container: {
+          Image: 'sha256:abcdef123456',
+          Names: ['/test'],
+        },
+        imageDetails: { RepoTags: [], RepoDigests: [] },
+        parsedImage: { path: 'sha256:abcdef123456', tag: 'unknown' },
+        validateImpl: (c) => c,
+      });
+
+      const result = await docker.addImageDetailsToContainer(container);
+
+      expect(result).toBeDefined();
+      expect(result.image.tag.value).toBe('unknown');
     });
 
     test('should warn for non-semver without digest watching', async () => {
