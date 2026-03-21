@@ -52,13 +52,13 @@
 
 - [📖 Documentation](https://getdrydock.com/docs)
 - [🚀 Quick Start](#quick-start)
+- [🆕 Recent Updates](#recent-updates)
 - [📸 Screenshots & Live Demo](#screenshots)
 - [✨ Features](#features)
 - [🔌 Supported Integrations](#supported-integrations)
 - [⚖️ Feature Comparison](#feature-comparison)
 - [🔄 Migration](#migration)
 - [🗺️ Roadmap](#roadmap)
-- [📖 Documentation](#documentation)
 - [⭐ Star History](#star-history)
 - [🔧 Built With](#built-with)
 - [🤝 Community QA](#community-qa)
@@ -142,6 +142,15 @@ See the [Quick Start guide](https://getdrydock.com/docs/quickstart) for Docker C
 
 <hr>
 
+<h2 align="center" id="recent-updates">🆕 Recent Updates</h2>
+
+- **Digest notifications for triggers** — Batch update events with `MODE=digest` and configurable `DIGESTCRON`.
+- **System log WebSocket streaming** — Live system logs in the UI with backend WebSocket streaming support.
+- **Richer container list API controls** — `sort`/`order`, watched-kind filtering (`kind=watched|unwatched|all`), runtime status filtering, and maturity filtering.
+- **Watcher run visibility** — Watcher metadata now includes `lastRunAt`, shown in the UI as a relative timestamp.
+
+<hr>
+
 <h2 align="center" id="screenshots">📸 Screenshots & Live Demo</h2>
 
 <table>
@@ -219,11 +228,25 @@ Start, stop, restart, and update containers from the UI or API with feature-flag
 </td>
 <td align="center" width="33%">
 <h3>Webhook API</h3>
-Token-authenticated HTTP endpoints with per-endpoint token support for CI/CD integration to trigger watch cycles and updates
+Token-authenticated CI/CD endpoints for watch/update actions plus signed registry webhook ingestion for push events
 </td>
 <td align="center" width="33%">
 <h3>Container Grouping</h3>
 Smart stack detection via compose project or labels with collapsible groups and batch-update
+</td>
+</tr>
+<tr>
+<td align="center" width="33%">
+<h3>Digest Notifications</h3>
+Batch update events over a schedule with trigger `MODE=digest` and configurable digest cron windows
+</td>
+<td align="center" width="33%">
+<h3>System Log Streaming</h3>
+Real-time WebSocket system log view in the UI with shared log viewer components
+</td>
+<td align="center" width="33%">
+<h3>Advanced List API</h3>
+Container list supports queryable sort/order, watched-kind, runtime status, watcher, and maturity filters
 </td>
 </tr>
 <tr>
@@ -272,7 +295,7 @@ Apprise · Command · Discord · Docker · Docker Compose · Google Chat · Goti
 
 Anonymous (opt-in via `DD_ANONYMOUS_AUTH_CONFIRM=true`) · Basic (username + password hash) · OIDC (Authelia, Auth0, Authentik). All auth flows fail closed by default.
 
-API note: `POST /api/containers/:id/env/reveal` is currently scoped to authentication only (no per-container RBAC yet), so any authenticated user is treated as a trusted operator for secret reveal actions.
+API note: `POST /api/v1/containers/:id/env/reveal` is currently scoped to authentication only (no per-container RBAC yet), so any authenticated user is treated as a trusted operator for secret reveal actions. The unversioned `/api/containers/:id/env/reveal` alias remains available during the API-version transition.
 
 OpenAPI note: machine-readable API docs are available at `GET /api/v1/openapi.json` (canonical) and `GET /api/openapi.json` (compatibility alias during transition).
 
