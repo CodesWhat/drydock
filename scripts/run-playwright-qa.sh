@@ -55,7 +55,12 @@ wait_for_docker_engine() {
 
 remove_stale_playwright_containers() {
 	local stale
-	stale=$(docker ps -a --filter "name=drydock-playwright-" --format '{{.Names}}' || true)
+	stale=$(
+		{
+			docker ps -a --filter "name=drydock-playwright-" --format '{{.Names}}' || true
+			docker ps -a --filter "label=com.docker.compose.project.config_files=$COMPOSE_FILE" --format '{{.Names}}' || true
+		} | awk 'NF' | sort -u
+	)
 	if [[ -z $stale ]]; then
 		return
 	fi

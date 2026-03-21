@@ -112,7 +112,7 @@ services:
   # Access at http://localhost:9443 (HTTPS) or http://localhost:9000
   portainer:
     image: portainer/portainer-ce:2.27.5
-    container_name: portainer
+    container_name: drydock-playwright-portainer
     ports:
       - "9000:9000"
       - "9443:9443"
@@ -297,7 +297,7 @@ services:
   slow-shutdown:
     image: busybox:1.36
     pull_policy: never
-    container_name: slow-shutdown
+    container_name: drydock-playwright-slow-shutdown
     command: ["sh", "-c", "trap 'echo SIGTERM received; sleep 15; exit 0' TERM; echo 'slow-shutdown running'; while true; do sleep 1; done"]
     stop_grace_period: 30s
     labels:
