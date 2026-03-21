@@ -12,26 +12,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Digest notification mode** — New `MODE=digest` trigger option that accumulates update events over a configurable time window and sends a single batch notification on a cron schedule. Configure with `DD_TRIGGER_{type}_{name}_MODE=digest` and `DD_TRIGGER_{type}_{name}_DIGESTCRON=0 8 * * *` (default: daily at 8am). Works with all notification triggers (SMTP, Telegram, Slack, Pushover, etc.). ([Discussion #185](https://github.com/CodesWhat/drydock/discussions/185))
-- **Toast notifications for container action errors** — Update and delete failures now surface as visible toast notifications in the UI instead of silently failing. Toasts auto-dismiss after 6 seconds and stack below announcement banners. ([#183](https://github.com/CodesWhat/drydock/issues/183))
 - **Podman API version negotiation** — Docker watcher probes the daemon's `/version` endpoint over the Unix socket and pins Dockerode to the reported API version. Prevents `EAI_AGAIN` crashes caused by `docker-modem`'s redirect-following bug when Podman returns HTTP 301 for unversioned API paths. ([#182](https://github.com/CodesWhat/drydock/issues/182))
-- **System log live streaming in UI** — Added end-to-end WebSocket support for system logs (`/api/v1/log/stream`) with new UI service/composable and live log view integration.
-- **Watcher run-time visibility in UI** — Watcher metadata now exposes `lastRunAt`, and UI surfaces it as a relative timestamp.
-- **Shared log viewer primitives** — Added reusable `AppLogViewer` building blocks, JSON tokenizer/search utilities, and full-page container detail tab components for consistent log UX.
 
 ### Fixed
 
-- **Container alias name canonicalization** — `getContainerName()` now strips Docker recreate alias prefixes (e.g. `8bf70beac570_termix` → `termix`) before the name enters the store, so all triggers (Telegram, Slack, Pushover, etc.) receive canonical names. MQTT was already fixed in v1.4.5; this extends the fix to the source. ([#156](https://github.com/CodesWhat/drydock/issues/156))
-- **Cascading -old container updates** — "Update All" batch no longer triggers updates on containers renamed with `-old-{timestamp}` suffix during a prior update. Guard added to base Trigger class (`mustTrigger`), all API endpoints (container-actions, webhook, trigger proxy), and UI batch freezes container IDs at start. ([#183](https://github.com/CodesWhat/drydock/issues/183))
-- **Remote trigger error reporting** — Agent-side trigger endpoints now return structured error details with reason field. Controller extracts and logs the actual failure message instead of bare "Request failed with status code 500". Original Axios error preserved for proxy forwarding. ([#183](https://github.com/CodesWhat/drydock/issues/183))
-- **Dashboard confirm dialog** — `ConfirmDialog` moved to global app shell so update prompts from the dashboard "Updates Available" widget appear immediately instead of requiring navigation to the Containers page. ([#184](https://github.com/CodesWhat/drydock/issues/184))
-- **Registry failures in Updates Available widget** — Containers with "check failed" status (registry errors) no longer appear in the dashboard "Updates Available" section. They remain visible on the Containers page with error indicators. ([#186](https://github.com/CodesWhat/drydock/issues/186))
 - **Digest buffer stale entry eviction** — Containers evicted from digest buffer when update-applied events fire, preventing already-updated containers from appearing in the next digest flush.
-- **Digest cron validation** — `DIGESTCRON` config validated with `cron.validate()` at registration time, failing with a clear error instead of a runtime crash.
-- **Container list runtime status filtering** — Container list API now accepts Docker runtime statuses (`running`, `stopped`, `paused`, etc.) in `status` filtering.
-- **Digest-only image visibility** — Watchers no longer silently drop containers with digest-only image references.
-- **Debug dump filename normalization** — Debug exports now use date-only `.json` filenames.
-- **WebSocket robustness fixes** — Prevented writes on closed sockets, fixed non-matching upgrade URL pass-through behavior, and eliminated stats-collector listener leaks across restart cycles.
 - **Rate-limiter memory safety** — Fixed-window limiter now enforces a hard `maxEntries` cap to prevent unbounded growth.
 - **UI interaction polish** — Fixed agent column picker positioning, dashboard mobile stacking, Escape-key dashboard edit exit behavior, popover z-index/positioning, and transition/outline rendering regressions.
 
@@ -77,6 +62,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Dashboard customization** — Customizable grid layout with drag-to-reorder, resize, and per-widget visibility toggles using `grid-layout-plus`. Edit mode via pencil icon in breadcrumb header. Customize panel with checkboxes and S/M/L size badges. All widgets progressively collapse content based on container height.
 - **Resource usage dashboard widget** — CPU and memory usage bars with top-N resource consumers, progressive detail at different widget sizes.
 - **Trigger environment variable aliases** — Triggers can now be configured with `DD_ACTION_*` or `DD_NOTIFICATION_*` prefixes in addition to `DD_TRIGGER_*`. All three prefixes resolve identically at startup.
+- **Digest notification mode** — New `MODE=digest` trigger option that accumulates update events over a configurable time window and sends a single batch notification on a cron schedule. Configure with `DD_TRIGGER_{type}_{name}_MODE=digest` and `DD_TRIGGER_{type}_{name}_DIGESTCRON=0 8 * * *` (default: daily at 8am). Works with all notification triggers (SMTP, Telegram, Slack, Pushover, etc.). ([Discussion #185](https://github.com/CodesWhat/drydock/discussions/185))
+- **Toast notifications for container action errors** — Update and delete failures now surface as visible toast notifications in the UI instead of silently failing. Toasts auto-dismiss after 6 seconds and stack below announcement banners. ([#183](https://github.com/CodesWhat/drydock/issues/183))
+- **System log live streaming in UI** — Added end-to-end WebSocket support for system logs (`/api/v1/log/stream`) with new UI service/composable and live log view integration.
+- **Watcher run-time visibility in UI** — Watcher metadata now exposes `lastRunAt`, and UI surfaces it as a relative timestamp.
+- **Shared log viewer primitives** — Added reusable `AppLogViewer` building blocks, JSON tokenizer/search utilities, and full-page container detail tab components for consistent log UX.
 
 ### Changed
 
@@ -91,6 +81,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **TypeScript type safety in watcher registry lookups** — Replaced unsafe `as unknown as` casts with `isDockerWatcher()` type guard for Docker watcher state lookups.
+- **Container alias name canonicalization** — `getContainerName()` now strips Docker recreate alias prefixes (e.g. `8bf70beac570_termix` → `termix`) before the name enters the store, so all triggers (Telegram, Slack, Pushover, etc.) receive canonical names. MQTT was already fixed in v1.4.5; this extends the fix to the source. ([#156](https://github.com/CodesWhat/drydock/issues/156))
+- **Cascading -old container updates** — "Update All" batch no longer triggers updates on containers renamed with `-old-{timestamp}` suffix during a prior update. Guard added to base Trigger class (`mustTrigger`), all API endpoints (container-actions, webhook, trigger proxy), and UI batch freezes container IDs at start. ([#183](https://github.com/CodesWhat/drydock/issues/183))
+- **Remote trigger error reporting** — Agent-side trigger endpoints now return structured error details with reason field. Controller extracts and logs the actual failure message instead of bare "Request failed with status code 500". Original Axios error preserved for proxy forwarding. ([#183](https://github.com/CodesWhat/drydock/issues/183))
+- **Dashboard confirm dialog** — `ConfirmDialog` moved to global app shell so update prompts from the dashboard "Updates Available" widget appear immediately instead of requiring navigation to the Containers page. ([#184](https://github.com/CodesWhat/drydock/issues/184))
+- **Registry failures in Updates Available widget** — Containers with "check failed" status (registry errors) no longer appear in the dashboard "Updates Available" section. They remain visible on the Containers page with error indicators. ([#186](https://github.com/CodesWhat/drydock/issues/186))
+- **Digest cron validation** — `DIGESTCRON` config validated with `cron.validate()` at registration time, failing with a clear error instead of a runtime crash.
+- **Container list runtime status filtering** — Container list API now accepts Docker runtime statuses (`running`, `stopped`, `paused`, etc.) in `status` filtering.
+- **Digest-only image visibility** — Watchers no longer silently drop containers with digest-only image references.
+- **Debug dump filename normalization** — Debug exports now use date-only `.json` filenames.
+- **WebSocket robustness fixes** — Prevented writes on closed sockets, fixed non-matching upgrade URL pass-through behavior, and eliminated stats-collector listener leaks across restart cycles.
 
 ## [1.4.5] — 2026-03-17
 
