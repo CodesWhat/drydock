@@ -662,7 +662,7 @@ jobs:
           set -euo pipefail
 
           report="artifacts/dast/nuclei-report.json"
-          scan_outcome="${SCAN_OUTCOME}"
+          scan_outcome="${SCAN_OUTCOME}"  # shellcheck: SC2153 — assigned via env: block above
 
           if [ ! -f "${report}" ]; then
             echo "Nuclei did not produce a JSON report."
@@ -1217,9 +1217,11 @@ jobs:
             exit 0
           fi
 
-          echo "should_tag=true" >> "$GITHUB_OUTPUT"
-          echo "release_level=${release_level}" >> "$GITHUB_OUTPUT"
-          echo "release_tag=${release_tag}" >> "$GITHUB_OUTPUT"
+          {
+            echo "should_tag=true"
+            echo "release_level=${release_level}"
+            echo "release_tag=${release_tag}"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Create and push release tag
         if: steps.compute.outputs.should_tag == 'true'
