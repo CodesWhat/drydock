@@ -331,7 +331,7 @@ function toggleAgentColumnPicker(event: MouseEvent) {
     agentColumnPickerStyle.value = {
       position: 'fixed',
       top: `${rect.bottom + 4}px`,
-      right: `${window.innerWidth - rect.right}px`,
+      left: `${rect.left}px`,
     };
   }
 }
@@ -494,28 +494,30 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
                         @click.stop="toggleAgentColumnPicker">
                   <AppIcon name="config" :size="12" />
                 </AppButton>
-                <div v-if="showAgentColumnPicker" @click.stop
-                     class="min-w-[160px] py-1.5 dd-rounded shadow-lg"
-                     :style="{
-                       ...agentColumnPickerStyle,
-                       zIndex: 'var(--z-popover)',
-                       backgroundColor: 'var(--dd-bg-card)',
-                       border: '1px solid var(--dd-border-strong)',
-                       boxShadow: 'var(--dd-shadow-tooltip)',
-                     }">
-                  <div class="px-3 py-1 text-3xs font-bold uppercase tracking-wider dd-text-muted">Columns</div>
-                  <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2" v-for="col in agentAllColumns" :key="col.key"
-                          
-                          :class="col.required ? 'dd-text-muted cursor-not-allowed' : 'dd-text'"
-                          @click="toggleAgentColumn(col.key)">
-                    <AppIcon :name="agentVisibleColumns.has(col.key) ? 'check' : 'square'" :size="10"
-                             :style="agentVisibleColumns.has(col.key) ? { color: 'var(--dd-primary)' } : {}" />
-                    {{ col.label }}
-                  </AppButton>
-                </div>
               </div>
             </template>
           </DataFilterBar>
+
+          <!-- Column picker popover (rendered outside DataFilterBar to avoid overflow clipping) -->
+          <div v-if="showAgentColumnPicker" @click.stop
+               class="min-w-[160px] py-1.5 dd-rounded shadow-lg"
+               :style="{
+                 ...agentColumnPickerStyle,
+                 zIndex: 'var(--z-popover)',
+                 backgroundColor: 'var(--dd-bg-card)',
+                 border: '1px solid var(--dd-border-strong)',
+                 boxShadow: 'var(--dd-shadow-tooltip)',
+               }">
+            <div class="px-3 py-1 text-3xs font-bold uppercase tracking-wider dd-text-muted">Columns</div>
+            <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2" v-for="col in agentAllColumns" :key="col.key"
+
+                    :class="col.required ? 'dd-text-muted cursor-not-allowed' : 'dd-text'"
+                    @click="toggleAgentColumn(col.key)">
+              <AppIcon :name="agentVisibleColumns.has(col.key) ? 'check' : 'square'" :size="10"
+                       :style="agentVisibleColumns.has(col.key) ? { color: 'var(--dd-primary)' } : {}" />
+              {{ col.label }}
+            </AppButton>
+          </div>
 
           <!-- Table view -->
           <DataTable v-if="agentViewMode === 'table' && !loading"
