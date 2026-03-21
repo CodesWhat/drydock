@@ -2,7 +2,6 @@ import joi from 'joi';
 import log from '../../../log/index.js';
 import {
   configurationValid,
-  createDefaultRegistryState,
   createMockLog,
   docker,
   getDockerTestMocks,

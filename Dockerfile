@@ -30,6 +30,7 @@ RUN apk add --no-cache \
 
 # Build stage for healthcheck binary (~65KB static binary)
 FROM alpine:3.21 AS healthcheck-build
+# hadolint ignore=DL3018
 RUN apk add --no-cache gcc musl-dev
 COPY healthcheck.c /src/healthcheck.c
 RUN gcc -Os -static -s -o /bin/healthcheck /src/healthcheck.c
