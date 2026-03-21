@@ -7,15 +7,32 @@ import { Callout } from 'fumadocs-ui/components/callout';
 import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 
 Triggers are responsible for performing actions when a new container version is found.
-  
+
 Triggers are enabled using environment variables.
 
 ```bash
-DD_TRIGGER_{{ trigger_type }}_{{trigger_name }}_{{ trigger_configuration_item }}=XXX
+DD_ACTION_{{ trigger_type }}_{{ trigger_name }}_{{ trigger_configuration_item }}=XXX
+DD_NOTIFICATION_{{ trigger_type }}_{{ trigger_name }}_{{ trigger_configuration_item }}=XXX
 ```
 
 <Callout type="warn">Multiple triggers of the same type can be configured (for example multiple Smtp addresses).
 You just need to give them different names.</Callout>
+
+### Environment variable prefixes
+
+Three prefixes are supported for trigger configuration:
+
+| Prefix | Status | Example |
+| --- | --- | --- |
+| `DD_ACTION_*` | **Current** | `DD_ACTION_SLACK_MYSLACK_URL=https://...` |
+| `DD_NOTIFICATION_*` | **Current** | `DD_NOTIFICATION_SMTP_GMAIL_HOST=smtp.gmail.com` |
+| `DD_TRIGGER_*` | **Deprecated** (removal in v1.7.0) | `DD_TRIGGER_SLACK_MYSLACK_URL=https://...` |
+
+All three prefixes are interchangeable -- they configure the same triggers. Use whichever reads best for your use case: `DD_ACTION_*` for update-action triggers (Docker, Docker Compose) and `DD_NOTIFICATION_*` for messaging triggers (Slack, SMTP, Discord, etc.), or use either for any trigger type.
+
+When the same trigger property is set under multiple prefixes, the merge priority is `DD_NOTIFICATION_*` > `DD_ACTION_*` > `DD_TRIGGER_*` (highest wins).
+
+<Callout type="info">A built-in migration CLI can rewrite your config files from `DD_TRIGGER_*` to `DD_ACTION_*` automatically: `drydock config migrate --source trigger`. Use `--dry-run` to preview changes before applying.</Callout>
 
 ## Available triggers
 
@@ -47,7 +64,7 @@ You just need to give them different names.</Callout>
 
 ## Common trigger configuration
 
-All implemented triggers, in addition to their specific configuration, also support the following common configuration variables.
+All implemented triggers, in addition to their specific configuration, also support the following common configuration variables. The table uses the `DD_TRIGGER_*` prefix for brevity, but `DD_ACTION_*` and `DD_NOTIFICATION_*` work identically (see [Environment variable prefixes](#environment-variable-prefixes) above).
 
 | Env var | Required | Description | Supported values | Default value when missing |
 | --------------------------------------------------------- | :--------------: | ----------------------------------------------------------------------------------------------- | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

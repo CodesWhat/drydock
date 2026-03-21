@@ -89,9 +89,53 @@ Select a preset in **Config > Appearance**. The choice is persisted in localStor
 
 ## Dashboard
 
-The dashboard displays 4 stat cards: **Containers**, **Updates**, **Security**, and **Registries**. Cards are drag-reorderable and the layout is persisted in localStorage.
+The dashboard is built on a fully customizable responsive grid layout powered by `grid-layout-plus`. It contains two categories of widget:
 
-Update and security stats are color-coded based on severity ratio.
+- **Stat cards** — Containers, Updates Available, Security Issues, Registries
+- **Detail widgets** — Recent Updates, Security Overview, Resource Usage, Host Status, Update Breakdown
+
+### Edit mode
+
+Click the **pencil icon** in the breadcrumb header (or press **Escape** to exit) to enter edit mode. While in edit mode:
+
+- **Drag to reorder** — grab any widget by its drag handle and move it to a new position in the grid.
+- **Resize** — drag the bottom-right resize handle to make a widget larger or smaller. Each widget enforces its own minimum and maximum size constraints.
+- **Widget visibility** — a sidebar panel lists every widget with a checkbox. Toggle any widget on or off.
+- **Reset to Default** — a button at the bottom of the sidebar restores the original layout, order, and visibility.
+
+All changes (position, size, order, visibility) are persisted in localStorage and survive page reloads.
+
+### Responsive breakpoints
+
+The grid adapts to the viewport width:
+
+| Breakpoint | Min width | Columns |
+| --- | --- | --- |
+| `lg` | 1024 px | 12 |
+| `md` | 768 px | 6 |
+| `sm` | 640 px | 2 |
+| `xs` / `xxs` | 480 px / 0 px | 1 |
+
+### Widget progressive collapse
+
+Detail widgets use a `ResizeObserver` to detect their rendered height and progressively hide content as the widget shrinks:
+
+- **Headers** hide below ~200 px height.
+- **List items** reduce from 5 to 3, 2, 1, or 0 rows as space decreases.
+- **Donut charts and breakdowns** switch between full and compact layouts.
+
+This means you can resize a widget to a compact size and it will still display meaningful data instead of overflowing.
+
+### Resource Usage widget
+
+The Resource Usage widget shows live CPU and memory utilization for all watched containers:
+
+- **Aggregate bars** — total CPU % and memory usage / limit with color-coded progress bars (green, amber, red based on usage thresholds).
+- **Top CPU / Top Memory** — ranked lists of the highest-consuming containers, progressively collapsed based on widget height.
+
+### Stat cards
+
+Update and security stat cards are color-coded based on severity ratio. Clicking a stat card navigates to the corresponding view.
 
 ## View Modes
 
