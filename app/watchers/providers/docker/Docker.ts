@@ -1111,7 +1111,7 @@ class Docker extends Watcher {
       }).catch((error: unknown) => {
         const errorMessage = getErrorMessage(error);
         this.log.warn(
-          `${fullName(container)}: Failed to fetch image detail (${errorMessage || `${error}`})`,
+          `${container.Names?.[0]?.replace(/^\//, '') || container.Id?.substring(0, 12)}: Failed to fetch image detail (${errorMessage || `${error}`})`,
         );
         return error;
       }),

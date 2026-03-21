@@ -32,6 +32,7 @@ interface DockerEventsState {
   dockerEventsStream?: DockerEventsStream;
   dockerEventsBuffer: string;
   log?: {
+    info?: (message: string) => void;
     warn?: (message: string) => void;
     debug?: (message: string) => void;
   };

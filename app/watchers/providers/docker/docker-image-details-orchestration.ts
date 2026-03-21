@@ -138,6 +138,7 @@ interface DockerImageDetailsHelpers {
   resolveImageName: (
     imageName: string,
     image: DockerImageInspectPayload,
+    containerName?: string,
   ) => ParsedDockerImageReference | undefined;
   resolveTagName: (
     parsedImage: ParsedDockerImageReference,
