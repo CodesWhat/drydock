@@ -1,6 +1,6 @@
 ---
 title: "Log API"
-description: "API endpoints for log configuration and log entries."
+description: "API endpoints for application log configuration, buffered log entries, and real-time system log streaming."
 ---
 
 ## Get Log configuration
@@ -47,6 +47,44 @@ curl "http://drydock:3000/api/v1/log/entries?level=error&tail=50"
   }
 ]
 ```
+
+## Stream application logs (WebSocket)
+
+Streams system log entries over WebSocket. The server first sends a filtered backfill from the in-memory buffer, then pushes new entries in real time.
+
+- Canonical endpoint: `WS /api/v1/log/stream`
+- Compatibility alias: `WS /api/log/stream`
+
+### Query parameters
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `level` | string | Minimum level filter (`debug`, `trace`, `info`, `warn`, `error`, `fatal`) |
+| `component` | string | Substring filter for component name |
+| `tail` | integer | Number of historical entries to backfill on connect (default: `100`) |
+
+### Example
+
+```text
+ws://drydock:3000/api/v1/log/stream?tail=100&level=warn&component=api
+```
+
+Example frame payload:
+
+```json
+{
+  "timestamp": 1771262400000,
+  "level": "warn",
+  "component": "api:websocket",
+  "msg": "Client disconnected"
+}
+```
+
+### Authentication and limits
+
+- Requires an authenticated session (cookie-based auth).
+- WebSocket upgrade origin checks must pass.
+- Connection attempts are rate-limited (1,000 upgrades per 15-minute window per identity/IP key).
 
 ## Get agent log entries
 

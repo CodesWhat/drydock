@@ -266,7 +266,7 @@ Drydock log behavior is controlled by environment variables:
 | `DD_LOG_BUFFER_ENABLED` | `true`, `false` | `true` |
 
 The official image defaults to `DD_LOG_FORMAT=json` for structured output suitable for log aggregators like Elasticsearch or Loki. Set `DD_LOG_FORMAT=text` if you prefer pretty logs.
-Set `DD_LOG_BUFFER_ENABLED=false` to disable the in-memory application log ring buffer used by `/api/log/entries` and the UI log viewer.
+Set `DD_LOG_BUFFER_ENABLED=false` to disable the in-memory application log ring buffer used by `/api/v1/log/entries` and the UI log viewer.
 See [Logs](/docs/configuration/logs) for examples.
 
 ## Trivy or Cosign not found errors
@@ -276,7 +276,7 @@ Since v1.4.0, drydock ships a **single image** that bundles both Trivy and Cosig
 Verify tool availability at runtime via the API:
 
 ```bash
-curl http://drydock:3000/api/server/security/runtime
+curl http://drydock:3000/api/v1/server/security/runtime
 ```
 
 If you build a custom image, ensure Trivy and Cosign are installed in your Dockerfile. See [Security](/docs/configuration/security) for scanning configuration.

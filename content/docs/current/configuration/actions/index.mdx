@@ -13,11 +13,11 @@ Drydock provides direct container management actions through both the UI and API
 
 | Action | API endpoint | Description |
 | --- | --- | --- |
-| **Start** | `POST /api/containers/:id/start` | Start a stopped container |
-| **Stop** | `POST /api/containers/:id/stop` | Stop a running container |
-| **Restart** | `POST /api/containers/:id/restart` | Restart a container |
-| **Update** | `POST /api/containers/:id/update` | Pull new image and recreate container |
-| **Delete** | `DELETE /api/containers/:id` | Remove container from drydock tracking |
+| **Start** | `POST /api/v1/containers/:id/start` | Start a stopped container |
+| **Stop** | `POST /api/v1/containers/:id/stop` | Stop a running container |
+| **Restart** | `POST /api/v1/containers/:id/restart` | Restart a container |
+| **Update** | `POST /api/v1/containers/:id/update` | Pull new image and recreate container |
+| **Delete** | `DELETE /api/v1/containers/:id` | Remove container from drydock tracking |
 
 ## Feature flags
 
@@ -48,7 +48,7 @@ See [Lifecycle Hooks](/docs/configuration/hooks) and [Backup & Rollback](/docs/c
 
 Before updating, you can preview what will change using the dry-run endpoint:
 
-`POST /api/containers/:id/preview`
+`POST /api/v1/containers/:id/preview`
 
 This returns the proposed changes without executing them.
 

@@ -36,8 +36,9 @@ curl "http://drydock:3000/api/v1/containers?limit=25&offset=0"
 | `offset` | integer | `0` | Number of matching containers to skip |
 | `includeVulnerabilities` | boolean | `false` | Include full vulnerability arrays in `data` |
 | `sort` | string | | Sort order: `name`, `-name`, `status`, `-status`, `age`, `-age`, `created`, `-created` (prefix `-` for descending) |
-| `status` | string | | Filter by update status: `update-available`, `up-to-date` |
-| `kind` | string | | Filter by update kind: `major`, `minor`, `patch`, `digest` |
+| `order` | string | | Optional sort direction override: `asc` or `desc` |
+| `status` | string | | Filter by update/runtime status: `update-available`, `up-to-date`, `running`, `stopped`, `exited`, `paused`, `restarting`, `dead`, `created` |
+| `kind` | string | | Filter by update kind or watched state: `major`, `minor`, `patch`, `digest`, `watched`, `unwatched`, `all` |
 | `watcher` | string | | Filter by watcher name |
 | `maturity` | string | | Filter by update maturity: `hot`, `mature`, `established` |
 

@@ -62,7 +62,7 @@ If the header is missing or does not match the expected token, the API responds 
 | [App](/docs/api/app) | `GET /api/v1/app`, `GET /api/v1/server` | Application info, server configuration, security runtime |
 | [Containers](/docs/api/container) | `GET /api/v1/containers`, `POST`, `PATCH`, `DELETE` | Container state, actions, update policy, security |
 | [Agents](/docs/api/agent) | `GET /api/v1/agents` | Remote agent status and logs |
-| [Logs](/docs/api/log) | `GET /api/v1/log` | Application log entries |
+| [Logs](/docs/api/log) | `GET /api/v1/log`, `GET /api/v1/log/entries`, `WS /api/v1/log/stream` | Application logger config, buffered entries, and live stream |
 | [Registries](/docs/api/registry) | `GET /api/v1/registries` | Registry configurations |
 | [Store](/docs/api/store) | `GET /api/v1/store` | Data store info |
 | [Triggers](/docs/api/trigger) | `GET /api/v1/triggers` | Trigger configurations |
@@ -79,6 +79,7 @@ If the header is missing or does not match the expected token, the API responds 
 | `/api/v1/audit` | `GET` | [Audit trail](#audit-trail) (paginated, filterable by action/container/date) |
 | `/api/v1/notifications` | `GET`, `PATCH /:id` | [Notification rules](#notification-rules) (per-event enable/disable and trigger assignments) |
 | `/api/v1/settings` | `GET`, `PATCH` | [UI settings](#settings) (internetless mode; `PUT` compatibility alias is deprecated) |
+| `/api/v1/log/stream` | `WS` | [System log stream](/docs/api/log#stream-application-logs-websocket) with level/component filters |
 | `/api/v1/server` | `GET` | Server configuration and compatibility info (see [App API](/docs/api/app)) |
 | `/api/v1/server/security/runtime` | `GET` | Security tools availability (see [App API](/docs/api/app)) |
 | `/api/v1/containers/groups` | `GET` | [Container groups](#container-groups) (by stack/compose project) |

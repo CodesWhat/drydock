@@ -104,7 +104,7 @@ Notification rules control which events fire which triggers. Each rule correspon
 - **`update-applied`**, **`update-failed`**, **`security-alert`** -- these require explicit trigger assignments. They are enabled by default but will not fire any trigger until you add trigger IDs to their rules.
 - **`agent-disconnect`** -- disabled by default. Enable it and assign triggers to receive disconnect alerts. This event always fires regardless of the threshold setting.
 
-Rules are managed via `GET /api/notifications` and `PATCH /api/notifications/:id` (update `enabled` and/or `triggers` fields), or through the **Notifications** view in the UI.
+Rules are managed via `GET /api/v1/notifications` and `PATCH /api/v1/notifications/:id` (update `enabled` and/or `triggers` fields), or through the **Notifications** view in the UI.
 
 <Callout type="warn">Docker and Docker Compose triggers cannot be assigned to notification rules. These are update-action triggers (they perform container updates), not notification triggers. Only messaging/alerting triggers (Slack, SMTP, Discord, ntfy, etc.) can be assigned to rules.</Callout>
 
