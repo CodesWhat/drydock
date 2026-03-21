@@ -79,7 +79,7 @@ describe('AppLogViewer', () => {
       statusLabel: 'Connected',
     });
 
-    expect(wrapper.get('[data-test="app-log-viewer"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test="app-log-viewer"]').exists()).toBe(true);
     expect(wrapper.text()).toContain('Nothing to show');
     expect(wrapper.text()).toContain('42 lines');
     expect(wrapper.text()).toContain('Connected');
