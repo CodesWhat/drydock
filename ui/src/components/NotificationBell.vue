@@ -116,7 +116,7 @@ function isUnread(entry: AuditEntry): boolean {
       </span>
     </AppButton>
     <Transition name="menu-fade">
-      <div v-if="showBell"
+      <div v-if="showBell" data-test="notification-dropdown"
            class="w-[calc(100vw-1rem)] max-w-[380px] dd-rounded-lg shadow-lg"
            :style="{ ...bellPanelStyle, zIndex: 'var(--z-popover)', backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)', boxShadow: 'var(--dd-shadow-tooltip)' }">
         <!-- Header -->
