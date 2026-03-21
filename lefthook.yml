@@ -60,7 +60,7 @@ pre-push:
       priority: 2
       timeout: 30s
     qlty:
-      run: CI=1 qlty check --all --no-progress </dev/null
+      run: ./scripts/qlty-check-gate.sh all
       priority: 3
       timeout: 4m
 
