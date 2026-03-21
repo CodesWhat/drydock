@@ -58,6 +58,38 @@ describe('useLogSearch', () => {
     expect(search.matchedEntryIds.value).toEqual([]);
   });
 
+  it('falls back to null error when regex construction fails in plain-text mode', () => {
+    const visibleEntries = ref<SearchEntry[]>([makeEntry(1, '2026-03-15T00:00:00Z', 'alpha')]);
+    const search = useLogSearch({
+      visibleEntries: computed(() => visibleEntries.value),
+      lineElements: new Map(),
+      searchTextForEntry: (entry) => entry.plainLine,
+    });
+
+    const originalRegExp = globalThis.RegExp;
+    Object.defineProperty(globalThis, 'RegExp', {
+      value: (() => {
+        throw new Error('forced-regex-failure');
+      }) as unknown as RegExpConstructor,
+      configurable: true,
+      writable: true,
+    });
+
+    try {
+      search.regexSearch.value = false;
+      search.searchQuery.value = 'alpha';
+      expect(search.searchPattern.value).toBeNull();
+      expect(search.searchError.value).toBeNull();
+      expect(search.matchedEntryIds.value).toEqual([]);
+    } finally {
+      Object.defineProperty(globalThis, 'RegExp', {
+        value: originalRegExp,
+        configurable: true,
+        writable: true,
+      });
+    }
+  });
+
   it('navigates matches in both directions and scrolls to active match', async () => {
     const visibleEntries = ref<SearchEntry[]>([
       makeEntry(1, '2026-03-15T00:00:00Z', 'alpha'),
@@ -153,5 +185,66 @@ describe('useLogSearch', () => {
     await nextTick();
     expect(search.currentMatchEntryId.value).toBeNull();
     expect(search.matchLabel.value).toBe('0 / 0');
+  });
+
+  it('uses the first match when current match index is out of range', async () => {
+    const visibleEntries = ref<SearchEntry[]>([
+      makeEntry(1, '2026-03-15T00:00:00Z', 'alpha'),
+      makeEntry(2, '2026-03-15T00:00:01Z', 'alpha-2'),
+    ]);
+    const search = useLogSearch({
+      visibleEntries: computed(() => visibleEntries.value),
+      lineElements: new Map(),
+    });
+
+    search.searchQuery.value = 'alpha';
+    await nextTick();
+
+    search.currentMatchIndex.value = -1;
+    expect(search.currentMatchEntryId.value).toBe(1);
+
+    search.currentMatchIndex.value = 9;
+    expect(search.currentMatchEntryId.value).toBe(1);
+  });
+
+  it('returns null when a matched entry id is missing at runtime', async () => {
+    const visibleEntries = ref<SearchEntry[]>([
+      {
+        id: undefined as unknown as number,
+        timestamp: '2026-03-15T00:00:00Z',
+        plainLine: 'alpha',
+      },
+    ]);
+    const search = useLogSearch({
+      visibleEntries: computed(() => visibleEntries.value),
+      lineElements: new Map(),
+    });
+
+    search.searchQuery.value = 'alpha';
+    await nextTick();
+
+    expect(search.matchedEntryIds.value).toEqual([undefined]);
+    expect(search.currentMatchEntryId.value).toBeNull();
+  });
+
+  it('no-ops jump navigation when there are no matches', () => {
+    const visibleEntries = ref<SearchEntry[]>([
+      makeEntry(1, '2026-03-15T00:00:00Z', 'alpha'),
+      makeEntry(2, '2026-03-15T00:00:01Z', 'beta'),
+    ]);
+
+    const search = useLogSearch({
+      visibleEntries: computed(() => visibleEntries.value),
+      lineElements: new Map(),
+    });
+
+    expect(search.matchedEntryIds.value).toEqual([]);
+    expect(search.currentMatchIndex.value).toBe(0);
+
+    search.jumpToMatch('next');
+    search.jumpToMatch('prev');
+
+    expect(search.currentMatchIndex.value).toBe(0);
+    expect(search.currentMatchEntryId.value).toBeNull();
   });
 });
