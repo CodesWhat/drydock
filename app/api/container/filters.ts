@@ -1,18 +1,14 @@
 import type { Request } from 'express';
 import joi from 'joi';
 import type { Container } from '../../model/container.js';
-import {
-  maturityMinAgeDaysToMilliseconds,
-  resolveMaturityMinAgeDays,
-} from '../../model/maturity-policy.js';
+import type { ContainerMaturityFilter } from './maturity-filter.js';
 import { normalizeLimitOffsetPagination } from './request-helpers.js';
+import type { ContainerWatchedKind } from './watched-kind-filter.js';
+import { isContainerWatchedKind } from './watched-kind-filter.js';
 
 const DEFAULT_CONTAINER_SORT_MODE: ContainerSortMode = 'name';
-const DEFAULT_UI_MATURITY_THRESHOLD_DAYS = 7;
-const ESTABLISHED_UPDATE_AGE_DAYS = 30;
 const CONTAINER_LIST_MAX_LIMIT = 200;
 
-export type ContainerMaturityFilter = 'hot' | 'mature' | 'established';
 export type ContainerSortMode =
   | 'name'
   | '-name'
@@ -32,6 +28,16 @@ export type ContainerSortField = (typeof CONTAINER_SORT_FIELDS)[number];
 
 export const CONTAINER_ORDER_VALUES = ['asc', 'desc'] as const;
 export type ContainerOrderDirection = (typeof CONTAINER_ORDER_VALUES)[number];
+
+export {
+  applyContainerMaturityFilter,
+  parseContainerMaturityFilter,
+} from './maturity-filter.js';
+export {
+  applyContainerWatchedKindFilter,
+  isContainerWatchedKind,
+} from './watched-kind-filter.js';
+export type { ContainerMaturityFilter, ContainerWatchedKind };
 
 const CONTAINER_LIST_QUERY_SCHEMA = joi.object({
   sort: joi
@@ -146,16 +152,6 @@ export function resolveContainerSortMode(
   return baseSortMode;
 }
 
-export function parseContainerMaturityFilter(
-  maturityQuery: unknown,
-): ContainerMaturityFilter | undefined {
-  const normalized = getFirstNonEmptyQueryValue(maturityQuery)?.toLowerCase();
-  if (normalized === 'hot' || normalized === 'mature' || normalized === 'established') {
-    return normalized;
-  }
-  return undefined;
-}
-
 export type ContainerRuntimeStatus =
   | 'running'
   | 'stopped'
@@ -166,8 +162,6 @@ export type ContainerRuntimeStatus =
   | 'created';
 
 export type ContainerUpdateStatus = 'update-available' | 'up-to-date';
-
-export type ContainerWatchedKind = 'watched' | 'unwatched' | 'all';
 
 export interface ValidatedContainerListQuery {
   sortMode: ContainerSortMode;
@@ -227,44 +221,6 @@ function getContainerUpdateAge(container: Container): number | undefined {
   return startedAtMs === undefined ? undefined : Math.max(0, Date.now() - startedAtMs);
 }
 
-function resolveUiMaturityThresholdDays(): number {
-  return resolveMaturityMinAgeDays(
-    process.env.DD_UI_MATURITY_THRESHOLD_DAYS,
-    DEFAULT_UI_MATURITY_THRESHOLD_DAYS,
-  );
-}
-
-function getContainerMaturityLevel(container: Container): ContainerMaturityFilter | undefined {
-  if (
-    container.updateMaturityLevel === 'hot' ||
-    container.updateMaturityLevel === 'mature' ||
-    container.updateMaturityLevel === 'established'
-  ) {
-    return container.updateMaturityLevel;
-  }
-
-  const updateAge = getContainerUpdateAge(container);
-  if (updateAge === undefined) {
-    return undefined;
-  }
-  if (updateAge >= maturityMinAgeDaysToMilliseconds(ESTABLISHED_UPDATE_AGE_DAYS)) {
-    return 'established';
-  }
-  return updateAge >= maturityMinAgeDaysToMilliseconds(resolveUiMaturityThresholdDays())
-    ? 'mature'
-    : 'hot';
-}
-
-export function applyContainerMaturityFilter(
-  containers: Container[],
-  maturityFilter: ContainerMaturityFilter | undefined,
-): Container[] {
-  if (!maturityFilter) {
-    return containers;
-  }
-  return containers.filter((container) => getContainerMaturityLevel(container) === maturityFilter);
-}
-
 function getContainerNameForSort(container: Container): string {
   return typeof container.name === 'string' ? container.name : '';
 }
@@ -278,10 +234,17 @@ function getContainerWatcherForSort(container: Container): string {
 }
 
 function sortContainersByAge(containers: Container[]): Container[] {
-  const containersSorted = [...containers];
-  containersSorted.sort((leftContainer, rightContainer) => {
-    const leftAge = getContainerUpdateAge(leftContainer);
-    const rightAge = getContainerUpdateAge(rightContainer);
+  const containersWithAge = containers.map((container) => ({
+    container,
+    age: getContainerUpdateAge(container),
+    sortName: `${getContainerWatcherForSort(container)}.${getContainerNameForSort(
+      container,
+    )}.${getContainerIdForSort(container)}`,
+  }));
+
+  containersWithAge.sort((leftContainer, rightContainer) => {
+    const leftAge = leftContainer.age;
+    const rightAge = rightContainer.age;
     if (leftAge !== undefined && rightAge !== undefined && leftAge !== rightAge) {
       return rightAge - leftAge;
     }
@@ -291,15 +254,9 @@ function sortContainersByAge(containers: Container[]): Container[] {
     if (leftAge === undefined && rightAge !== undefined) {
       return 1;
     }
-    const leftName = `${getContainerWatcherForSort(leftContainer)}.${getContainerNameForSort(
-      leftContainer,
-    )}.${getContainerIdForSort(leftContainer)}`;
-    const rightName = `${getContainerWatcherForSort(rightContainer)}.${getContainerNameForSort(
-      rightContainer,
-    )}.${getContainerIdForSort(rightContainer)}`;
-    return leftName.localeCompare(rightName);
+    return leftContainer.sortName.localeCompare(rightContainer.sortName);
   });
-  return containersSorted;
+  return containersWithAge.map(({ container }) => container);
 }
 
 function sortContainersByStatus(containers: Container[]): Container[] {
@@ -316,29 +273,32 @@ function sortContainersByStatus(containers: Container[]): Container[] {
 }
 
 function sortContainersByCreatedDate(containers: Container[]): Container[] {
-  const containersSorted = [...containers];
-  containersSorted.sort((leftContainer, rightContainer) => {
-    const leftCreatedAtMs = Date.parse(leftContainer.image?.created || '');
-    const rightCreatedAtMs = Date.parse(rightContainer.image?.created || '');
-    const leftHasValidCreatedAt = Number.isFinite(leftCreatedAtMs);
-    const rightHasValidCreatedAt = Number.isFinite(rightCreatedAtMs);
+  const containersWithCreatedDate = containers.map((container) => {
+    const createdAtMs = Date.parse(container.image?.created || '');
+    return {
+      container,
+      createdAtMs,
+      hasValidCreatedAt: Number.isFinite(createdAtMs),
+      sortName: getContainerNameForSort(container),
+    };
+  });
+
+  containersWithCreatedDate.sort((leftContainer, rightContainer) => {
+    const leftHasValidCreatedAt = leftContainer.hasValidCreatedAt;
+    const rightHasValidCreatedAt = rightContainer.hasValidCreatedAt;
 
     if (leftHasValidCreatedAt && rightHasValidCreatedAt) {
-      if (leftCreatedAtMs !== rightCreatedAtMs) {
-        return leftCreatedAtMs - rightCreatedAtMs;
+      if (leftContainer.createdAtMs !== rightContainer.createdAtMs) {
+        return leftContainer.createdAtMs - rightContainer.createdAtMs;
       }
-      return getContainerNameForSort(leftContainer).localeCompare(
-        getContainerNameForSort(rightContainer),
-      );
+      return leftContainer.sortName.localeCompare(rightContainer.sortName);
     }
     if (leftHasValidCreatedAt !== rightHasValidCreatedAt) {
       return leftHasValidCreatedAt ? -1 : 1;
     }
-    return getContainerNameForSort(leftContainer).localeCompare(
-      getContainerNameForSort(rightContainer),
-    );
+    return leftContainer.sortName.localeCompare(rightContainer.sortName);
   });
-  return containersSorted;
+  return containersWithCreatedDate.map(({ container }) => container);
 }
 
 function sortContainersByName(containers: Container[]): Container[] {
@@ -437,10 +397,6 @@ export function mapContainerListStatusFilter(
   return undefined;
 }
 
-export function isContainerWatchedKind(value: unknown): value is ContainerWatchedKind {
-  return value === 'watched' || value === 'unwatched' || value === 'all';
-}
-
 export function mapContainerListKindFilter(
   kindQuery: unknown,
 ):
@@ -458,28 +414,6 @@ export function mapContainerListKindFilter(
     return { 'updateKind.semverDiff': kindFilter };
   }
   return undefined;
-}
-
-function isContainerExplicitlyWatched(container: Container): boolean {
-  const labels = container.labels;
-  if (!labels || typeof labels !== 'object') {
-    return false;
-  }
-  const watchLabel = labels['dd.watch'] ?? labels['wud.watch'];
-  return typeof watchLabel === 'string' && watchLabel.toLowerCase() === 'true';
-}
-
-export function applyContainerWatchedKindFilter(
-  containers: Container[],
-  kindFilter: ContainerWatchedKind | undefined,
-): Container[] {
-  if (!kindFilter || kindFilter === 'all') {
-    return containers;
-  }
-  if (kindFilter === 'watched') {
-    return containers.filter((container) => isContainerExplicitlyWatched(container));
-  }
-  return containers.filter((container) => !isContainerExplicitlyWatched(container));
 }
 
 export function normalizeContainerListPagination(query: Request['query']) {

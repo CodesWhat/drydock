@@ -1,6 +1,7 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 import type { Container } from '../../model/container.js';
 import {
+  applyContainerMaturityFilter,
   applyContainerWatchedKindFilter,
   isContainerRuntimeStatus,
   isContainerWatchedKind,
@@ -35,6 +36,64 @@ describe('api/container/filters', () => {
     );
 
     expect(sorted.map((container) => container.id)).toEqual(['c2', 'c1']);
+  });
+
+  test('computes update age once per container when sorting by age', () => {
+    const parseSpy = vi.spyOn(Date, 'parse');
+    const containers = Array.from({ length: 12 }, (_, index) => ({
+      id: `c${index + 1}`,
+      name: `container-${index + 1}`,
+      firstSeenAt: `2024-01-${String(index + 1).padStart(2, '0')}T00:00:00.000Z`,
+    }));
+
+    try {
+      sortContainers(containers as any, 'age');
+      expect(parseSpy).toHaveBeenCalledTimes(containers.length * 3);
+    } finally {
+      parseSpy.mockRestore();
+    }
+  });
+
+  test('computes created timestamps once per container when sorting by created', () => {
+    const parseSpy = vi.spyOn(Date, 'parse');
+    const containers = Array.from({ length: 12 }, (_, index) => ({
+      id: `c${index + 1}`,
+      name: `container-${index + 1}`,
+      image: { created: `2024-01-${String(index + 1).padStart(2, '0')}T00:00:00.000Z` },
+    }));
+
+    try {
+      sortContainers(containers as any, 'created');
+      expect(parseSpy).toHaveBeenCalledTimes(containers.length);
+    } finally {
+      parseSpy.mockRestore();
+    }
+  });
+
+  test('reads UI maturity threshold once when applying maturity filter', () => {
+    const originalEnv = process.env;
+    let thresholdReads = 0;
+    const proxiedEnv = new Proxy(originalEnv, {
+      get(target, property, receiver) {
+        if (property === 'DD_UI_MATURITY_THRESHOLD_DAYS') {
+          thresholdReads++;
+        }
+        return Reflect.get(target, property, receiver);
+      },
+    });
+    process.env = proxiedEnv as NodeJS.ProcessEnv;
+    const containers = Array.from({ length: 12 }, (_, index) => ({
+      id: `c${index + 1}`,
+      name: `container-${index + 1}`,
+      updateAge: 0,
+    }));
+
+    try {
+      applyContainerMaturityFilter(containers as any, 'hot');
+      expect(thresholdReads).toBe(1);
+    } finally {
+      process.env = originalEnv;
+    }
   });
 
   test('normalizes -created sort mode before sorting', () => {
