@@ -51,27 +51,32 @@ export function resolveContainerSortMode(
   return baseSortMode;
 }
 
-function getContainerNameForSort(container: Container): string {
+export function getContainerNameForSort(container: Container): string {
   return typeof container.name === 'string' ? container.name : '';
 }
 
-function getContainerIdForSort(container: Container): string {
+export function getContainerIdForSort(container: Container): string {
   return typeof container.id === 'string' ? container.id : '';
 }
 
-function getContainerWatcherForSort(container: Container): string {
+export function getContainerWatcherForSort(container: Container): string {
   return typeof container.watcher === 'string' ? container.watcher : '';
 }
 
 function sortContainersByAge(containers: Container[]): Container[] {
   const ageMap = new Map<Container, number | undefined>();
+  const nameMap = new Map<Container, string>();
   for (const container of containers) {
     ageMap.set(container, getContainerUpdateAge(container));
+    nameMap.set(
+      container,
+      `${getContainerWatcherForSort(container)}.${getContainerNameForSort(container)}.${getContainerIdForSort(container)}`,
+    );
   }
-  const containersSorted = [...containers];
-  containersSorted.sort((leftContainer, rightContainer) => {
-    const leftAge = ageMap.get(leftContainer);
-    const rightAge = ageMap.get(rightContainer);
+  const sorted = [...containers];
+  sorted.sort((left, right) => {
+    const leftAge = ageMap.get(left);
+    const rightAge = ageMap.get(right);
     if (leftAge !== undefined && rightAge !== undefined && leftAge !== rightAge) {
       return rightAge - leftAge;
     }
@@ -81,15 +86,9 @@ function sortContainersByAge(containers: Container[]): Container[] {
     if (leftAge === undefined && rightAge !== undefined) {
       return 1;
     }
-    const leftName = `${getContainerWatcherForSort(leftContainer)}.${getContainerNameForSort(
-      leftContainer,
-    )}.${getContainerIdForSort(leftContainer)}`;
-    const rightName = `${getContainerWatcherForSort(rightContainer)}.${getContainerNameForSort(
-      rightContainer,
-    )}.${getContainerIdForSort(rightContainer)}`;
-    return leftName.localeCompare(rightName);
+    return (nameMap.get(left) as string).localeCompare(nameMap.get(right) as string);
   });
-  return containersSorted;
+  return sorted;
 }
 
 function sortContainersByStatus(containers: Container[]): Container[] {
@@ -147,7 +146,7 @@ function sortContainersByName(containers: Container[]): Container[] {
   return containersSorted;
 }
 
-function isContainerSortMode(value: string): value is ContainerSortMode {
+export function isContainerSortMode(value: string): value is ContainerSortMode {
   return (
     value === 'name' ||
     value === '-name' ||
@@ -160,7 +159,9 @@ function isContainerSortMode(value: string): value is ContainerSortMode {
   );
 }
 
-function normalizeContainerSortMode(sortMode: ContainerSortMode): AscendingContainerSortMode {
+export function normalizeContainerSortMode(
+  sortMode: ContainerSortMode,
+): AscendingContainerSortMode {
   if (sortMode === '-name') {
     return 'name';
   }

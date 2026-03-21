@@ -1,8 +1,8 @@
 import type { Request } from 'express';
 import joi from 'joi';
-import type { Container } from '../../model/container.js';
 import type { ContainerMaturityFilter } from './maturity-filter.js';
 import { normalizeLimitOffsetPagination } from './request-helpers.js';
+import { isContainerSortMode, normalizeContainerSortMode } from './sorting.js';
 import type { ContainerWatchedKind } from './watched-kind-filter.js';
 import { isContainerWatchedKind } from './watched-kind-filter.js';
 
@@ -18,10 +18,6 @@ export type ContainerSortMode =
   | '-age'
   | 'created'
   | '-created';
-type AscendingContainerSortMode = Exclude<
-  ContainerSortMode,
-  '-name' | '-status' | '-age' | '-created'
->;
 
 export const CONTAINER_SORT_FIELDS = ['name', 'status', 'age', 'created'] as const;
 export type ContainerSortField = (typeof CONTAINER_SORT_FIELDS)[number];
@@ -199,168 +195,7 @@ export function validateContainerListQuery(query: Request['query']): ValidatedCo
   };
 }
 
-function getContainerUpdateAge(container: Container): number | undefined {
-  if (typeof container.updateAge === 'number' && Number.isFinite(container.updateAge)) {
-    return container.updateAge;
-  }
-
-  const firstSeenAtMs = Date.parse(container.firstSeenAt || '');
-  const publishedAtMs = Date.parse(container.result?.publishedAt || '');
-  const updateDetectedAtMs = Date.parse(container.updateDetectedAt || '');
-  let startedAtMs: number | undefined;
-  if (Number.isFinite(firstSeenAtMs) && Number.isFinite(publishedAtMs)) {
-    startedAtMs = Math.min(firstSeenAtMs, publishedAtMs);
-  } else if (Number.isFinite(firstSeenAtMs)) {
-    startedAtMs = firstSeenAtMs;
-  } else if (Number.isFinite(publishedAtMs)) {
-    startedAtMs = publishedAtMs;
-  } else if (Number.isFinite(updateDetectedAtMs)) {
-    startedAtMs = updateDetectedAtMs;
-  }
-
-  return startedAtMs === undefined ? undefined : Math.max(0, Date.now() - startedAtMs);
-}
-
-function getContainerNameForSort(container: Container): string {
-  return typeof container.name === 'string' ? container.name : '';
-}
-
-function getContainerIdForSort(container: Container): string {
-  return typeof container.id === 'string' ? container.id : '';
-}
-
-function getContainerWatcherForSort(container: Container): string {
-  return typeof container.watcher === 'string' ? container.watcher : '';
-}
-
-function sortContainersByAge(containers: Container[]): Container[] {
-  const containersWithAge = containers.map((container) => ({
-    container,
-    age: getContainerUpdateAge(container),
-    sortName: `${getContainerWatcherForSort(container)}.${getContainerNameForSort(
-      container,
-    )}.${getContainerIdForSort(container)}`,
-  }));
-
-  containersWithAge.sort((leftContainer, rightContainer) => {
-    const leftAge = leftContainer.age;
-    const rightAge = rightContainer.age;
-    if (leftAge !== undefined && rightAge !== undefined && leftAge !== rightAge) {
-      return rightAge - leftAge;
-    }
-    if (leftAge !== undefined && rightAge === undefined) {
-      return -1;
-    }
-    if (leftAge === undefined && rightAge !== undefined) {
-      return 1;
-    }
-    return leftContainer.sortName.localeCompare(rightContainer.sortName);
-  });
-  return containersWithAge.map(({ container }) => container);
-}
-
-function sortContainersByStatus(containers: Container[]): Container[] {
-  const containersSorted = [...containers];
-  containersSorted.sort((leftContainer, rightContainer) => {
-    if (leftContainer.updateAvailable !== rightContainer.updateAvailable) {
-      return leftContainer.updateAvailable ? -1 : 1;
-    }
-    return getContainerNameForSort(leftContainer).localeCompare(
-      getContainerNameForSort(rightContainer),
-    );
-  });
-  return containersSorted;
-}
-
-function sortContainersByCreatedDate(containers: Container[]): Container[] {
-  const containersWithCreatedDate = containers.map((container) => {
-    const createdAtMs = Date.parse(container.image?.created || '');
-    return {
-      container,
-      createdAtMs,
-      hasValidCreatedAt: Number.isFinite(createdAtMs),
-      sortName: getContainerNameForSort(container),
-    };
-  });
-
-  containersWithCreatedDate.sort((leftContainer, rightContainer) => {
-    const leftHasValidCreatedAt = leftContainer.hasValidCreatedAt;
-    const rightHasValidCreatedAt = rightContainer.hasValidCreatedAt;
-
-    if (leftHasValidCreatedAt && rightHasValidCreatedAt) {
-      if (leftContainer.createdAtMs !== rightContainer.createdAtMs) {
-        return leftContainer.createdAtMs - rightContainer.createdAtMs;
-      }
-      return leftContainer.sortName.localeCompare(rightContainer.sortName);
-    }
-    if (leftHasValidCreatedAt !== rightHasValidCreatedAt) {
-      return leftHasValidCreatedAt ? -1 : 1;
-    }
-    return leftContainer.sortName.localeCompare(rightContainer.sortName);
-  });
-  return containersWithCreatedDate.map(({ container }) => container);
-}
-
-function sortContainersByName(containers: Container[]): Container[] {
-  const containersSorted = [...containers];
-  containersSorted.sort((leftContainer, rightContainer) => {
-    const nameCompare = getContainerNameForSort(leftContainer).localeCompare(
-      getContainerNameForSort(rightContainer),
-    );
-    return nameCompare;
-  });
-  return containersSorted;
-}
-
-function isContainerSortMode(value: string): value is ContainerSortMode {
-  return (
-    value === 'name' ||
-    value === '-name' ||
-    value === 'status' ||
-    value === '-status' ||
-    value === 'age' ||
-    value === '-age' ||
-    value === 'created' ||
-    value === '-created'
-  );
-}
-
-function normalizeContainerSortMode(sortMode: ContainerSortMode): AscendingContainerSortMode {
-  if (sortMode === '-name') {
-    return 'name';
-  }
-  if (sortMode === '-status') {
-    return 'status';
-  }
-  if (sortMode === '-age') {
-    return 'age';
-  }
-  if (sortMode === '-created') {
-    return 'created';
-  }
-  return sortMode;
-}
-
-export function sortContainers(containers: Container[], sortMode: ContainerSortMode): Container[] {
-  const isDescending = sortMode.startsWith('-');
-  const normalizedSortMode = normalizeContainerSortMode(sortMode);
-
-  let containersSorted: Container[];
-  if (normalizedSortMode === 'status') {
-    containersSorted = sortContainersByStatus(containers);
-  } else if (normalizedSortMode === 'age') {
-    containersSorted = sortContainersByAge(containers);
-  } else if (normalizedSortMode === 'created') {
-    containersSorted = sortContainersByCreatedDate(containers);
-  } else {
-    containersSorted = sortContainersByName(containers);
-  }
-
-  if (isDescending) {
-    containersSorted.reverse();
-  }
-  return containersSorted;
-}
+export { sortContainers } from './sorting.js';
 
 const RUNTIME_STATUS_VALUES: ReadonlySet<string> = new Set([
   'running',
