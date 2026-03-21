@@ -659,6 +659,7 @@ jobs:
         env:
           SCAN_OUTCOME: ${{ steps.nuclei_scan.outcome }}
         run: |
+          # shellcheck disable=SC2153
           set -euo pipefail
 
           report="artifacts/dast/nuclei-report.json"
@@ -1217,9 +1218,11 @@ jobs:
             exit 0
           fi
 
-          echo "should_tag=true" >> "$GITHUB_OUTPUT"
-          echo "release_level=${release_level}" >> "$GITHUB_OUTPUT"
-          echo "release_tag=${release_tag}" >> "$GITHUB_OUTPUT"
+          {
+            echo "should_tag=true"
+            echo "release_level=${release_level}"
+            echo "release_tag=${release_tag}"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Create and push release tag
         if: steps.compute.outputs.should_tag == 'true'
