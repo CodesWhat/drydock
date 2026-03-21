@@ -501,6 +501,43 @@ describe('stats/collector', () => {
     releaseThrow();
   });
 
+  test('detaches stream when listener attachment throws mid-way', async () => {
+    let callCount = 0;
+    const stream = {
+      on: vi.fn(() => {
+        callCount += 1;
+        if (callCount === 2) {
+          throw new Error('stream destroyed');
+        }
+        return stream;
+      }),
+      removeAllListeners: vi.fn(),
+      destroy: vi.fn(),
+    };
+    const collector = createContainerStatsCollector({
+      getContainerById: () => ({ id: 'c1', name: 'web', watcher: 'local' }) as any,
+      getWatchers: () => ({
+        'docker.local': {
+          dockerApi: {
+            getContainer: () => ({ stats: vi.fn(async () => stream) }),
+          },
+        },
+      }),
+      intervalSeconds: 10,
+      historySize: 3,
+      now: () => Date.now(),
+    });
+
+    const release = collector.watch('c1');
+    await Promise.resolve();
+
+    // First .on() succeeded, second threw — stream should be cleaned up
+    expect(stream.removeAllListeners).toHaveBeenCalledTimes(1);
+    expect(stream.destroy).toHaveBeenCalledTimes(1);
+
+    release();
+  });
+
   test('uses default configuration fallbacks and avoids duplicate start while pending', async () => {
     const previousInterval = process.env.DD_STATS_INTERVAL;
     const previousHistory = process.env.DD_STATS_HISTORY_SIZE;

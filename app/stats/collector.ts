@@ -297,19 +297,26 @@ function attachStreamListeners(
 ): void {
   state.stream = stream;
 
-  stream.on('data', (chunk: unknown) => {
-    handleStatsChunk(runtime, containerId, state, chunk);
-  });
-  stream.on('error', (error: unknown) => {
-    log.warn(`Docker stats stream error for ${containerId} (${getErrorMessage(error)})`);
-    restartCollection(runtime, containerId, state);
-  });
-  stream.on('close', () => {
-    restartCollection(runtime, containerId, state);
-  });
-  stream.on('end', () => {
-    restartCollection(runtime, containerId, state);
-  });
+  try {
+    stream.on('data', (chunk: unknown) => {
+      handleStatsChunk(runtime, containerId, state, chunk);
+    });
+    stream.on('error', (error: unknown) => {
+      log.warn(`Docker stats stream error for ${containerId} (${getErrorMessage(error)})`);
+      restartCollection(runtime, containerId, state);
+    });
+    stream.on('close', () => {
+      restartCollection(runtime, containerId, state);
+    });
+    stream.on('end', () => {
+      restartCollection(runtime, containerId, state);
+    });
+  } catch (error: unknown) {
+    log.warn(
+      `Failed to attach stats stream listeners for ${containerId} (${getErrorMessage(error)})`,
+    );
+    detachStream(state);
+  }
 }
 
 async function startStream(
