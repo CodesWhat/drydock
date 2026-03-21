@@ -399,7 +399,7 @@ export async function addImageDetailsToContainerOrchestration(
 
   const image = await inspectImageForContainer(watcher, containerId, container.Image);
 
-  const parsedImage = helpers.resolveImageName(container.Image, image);
+  const parsedImage = helpers.resolveImageName(container.Image, image, dockerContainerName);
   if (!parsedImage) {
     return undefined;
   }

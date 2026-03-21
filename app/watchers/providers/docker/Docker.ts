@@ -1000,7 +1000,9 @@ class Docker extends Watcher {
           return containerReport.value;
         }
         const message = getErrorMessage(containerReport.reason);
-        this.log.warn(`Error when processing some containers (${message})`);
+        this.log.warn(
+          `Error when processing container ${fullName(containers[index])} (${message})`,
+        );
         const fallbackContainerReport = buildFallbackContainerReport(containers[index], message);
         event.emitContainerReport(fallbackContainerReport);
         return fallbackContainerReport;
@@ -1109,7 +1111,7 @@ class Docker extends Watcher {
       }).catch((error: unknown) => {
         const errorMessage = getErrorMessage(error);
         this.log.warn(
-          `Failed to fetch image detail for container ${container.Id}: ${errorMessage || `${error}`}`,
+          `${fullName(container)}: Failed to fetch image detail (${errorMessage || `${error}`})`,
         );
         return error;
       }),
@@ -1241,8 +1243,8 @@ class Docker extends Watcher {
         resolveLabelsFromContainer,
         mergeConfigWithImgset,
         normalizeContainer,
-        resolveImageName: (imageName: string, image: unknown) =>
-          this.resolveImageName(imageName, image),
+        resolveImageName: (imageName: string, image: unknown, containerName?: string) =>
+          this.resolveImageName(imageName, image, containerName),
         resolveTagName: (
           parsedImage: ParsedImageReferenceLike,
           image: unknown,
@@ -1264,13 +1266,16 @@ class Docker extends Watcher {
     );
   }
 
-  private resolveImageName(imageName: string, image: unknown) {
+  private resolveImageName(imageName: string, image: unknown, containerName?: string) {
     const imageRecord = image as DockerImageInspectPayloadLike;
     let imageNameToParse = imageName;
     if (imageNameToParse.includes('sha256:')) {
       if (!imageRecord.RepoTags || imageRecord.RepoTags.length === 0) {
         this.ensureLogger();
-        this.log.warn(`Cannot get a reliable tag for this image [${imageNameToParse}]`);
+        const namePrefix = containerName ? `${containerName}: ` : '';
+        this.log.warn(
+          `${namePrefix}Cannot get a reliable tag for this image [${imageNameToParse}]`,
+        );
         return this.resolveDigestOnlyImage(imageRecord, imageNameToParse);
       }
       [imageNameToParse] = imageRecord.RepoTags;
