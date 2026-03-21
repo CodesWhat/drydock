@@ -260,22 +260,24 @@ describe('ws-upgrade-utils', () => {
       limiter.destroy();
     });
 
-    test('does not sweep unrelated expired keys during consume', () => {
+    test('cap-triggered sweep evicts stale entries when map is full', () => {
       vi.useFakeTimers();
       const limiter = createFixedWindowRateLimiter({
         windowMs: 100,
         max: 10,
         maxEntries: 2,
         cleanupIntervalMs: 10_000,
+        sweepEvery: 999_999,
       });
       try {
         expect(limiter.consume('a')).toBe(true);
         expect(limiter.consume('b')).toBe(true);
 
         vi.advanceTimersByTime(200);
-        // Consuming "a" refreshes only that key. "b" remains stale and still occupies capacity.
+        // Consuming "a" refreshes that key (lazy per-key expiry). "b" is stale.
         expect(limiter.consume('a')).toBe(true);
-        expect(limiter.consume('c')).toBe(false);
+        // Map is full (a + stale b), but cap-triggered sweep evicts b and allows c.
+        expect(limiter.consume('c')).toBe(true);
       } finally {
         limiter.destroy();
         vi.useRealTimers();
@@ -326,6 +328,75 @@ describe('ws-upgrade-utils', () => {
       } finally {
         limiter.destroy();
         vi.useRealTimers();
+      }
+    });
+
+    test('sweepEvery triggers proactive eviction of stale entries', () => {
+      vi.useFakeTimers();
+      const limiter = createFixedWindowRateLimiter({
+        windowMs: 100,
+        max: 1,
+        cleanupIntervalMs: 999_999,
+        sweepEvery: 3,
+      });
+      try {
+        // t=0: add a, b (calls 1-2)
+        expect(limiter.consume('a')).toBe(true);
+        expect(limiter.consume('b')).toBe(true);
+
+        // t=200: both entries expire
+        vi.advanceTimersByTime(200);
+
+        // Call 3 (3 % 3 === 0): proactive sweep evicts stale a and b.
+        // c is then added to a clean map.
+        expect(limiter.consume('c')).toBe(true);
+        // c is active, second consume hits max=1
+        expect(limiter.consume('c')).toBe(false);
+      } finally {
+        limiter.destroy();
+        vi.useRealTimers();
+      }
+    });
+
+    test('sweep on maxEntries cap frees space before rejecting', () => {
+      vi.useFakeTimers();
+      const limiter = createFixedWindowRateLimiter({
+        windowMs: 100,
+        max: 1,
+        maxEntries: 2,
+        cleanupIntervalMs: 999_999,
+        sweepEvery: 999_999, // disable periodic sweep
+      });
+      try {
+        expect(limiter.consume('a')).toBe(true);
+        expect(limiter.consume('b')).toBe(true);
+
+        // Map is full, new key would be rejected
+        vi.advanceTimersByTime(200);
+
+        // Without cap-triggered sweep this would be false — stale entries block new keys.
+        // With cap-triggered sweep, expired a and b are evicted first.
+        expect(limiter.consume('c')).toBe(true);
+      } finally {
+        limiter.destroy();
+        vi.useRealTimers();
+      }
+    });
+
+    test('sweep on cap does not help when all entries are still active', () => {
+      const limiter = createFixedWindowRateLimiter({
+        windowMs: 60_000,
+        max: 10,
+        maxEntries: 2,
+        sweepEvery: 999_999,
+      });
+      try {
+        expect(limiter.consume('a')).toBe(true);
+        expect(limiter.consume('b')).toBe(true);
+        // Map full with active entries — sweep finds nothing to evict
+        expect(limiter.consume('c')).toBe(false);
+      } finally {
+        limiter.destroy();
       }
     });
 

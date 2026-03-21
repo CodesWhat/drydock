@@ -105,19 +105,24 @@ const DEFAULT_CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
 
 const DEFAULT_MAX_ENTRIES = 10_000;
 
+const DEFAULT_SWEEP_EVERY = 100;
+
 export function createFixedWindowRateLimiter(options: {
   windowMs: number;
   max: number;
   cleanupIntervalMs?: number;
   maxEntries?: number;
+  sweepEvery?: number;
 }) {
   const {
     windowMs,
     max,
     cleanupIntervalMs = DEFAULT_CLEANUP_INTERVAL_MS,
     maxEntries = DEFAULT_MAX_ENTRIES,
+    sweepEvery = DEFAULT_SWEEP_EVERY,
   } = options;
   const counters = new Map<string, { count: number; resetAt: number }>();
+  let consumeCount = 0;
 
   function evictExpired(now: number): void {
     for (const [entryKey, entry] of counters) {
@@ -147,10 +152,17 @@ export function createFixedWindowRateLimiter(options: {
   return {
     consume(key: string): boolean {
       const now = Date.now();
+      consumeCount += 1;
+      if (consumeCount % sweepEvery === 0) {
+        evictExpired(now);
+      }
       const counter = getActiveCounter(key, now);
       if (!counter) {
         if (counters.size >= maxEntries) {
-          return false;
+          evictExpired(now);
+          if (counters.size >= maxEntries) {
+            return false;
+          }
         }
         counters.set(key, { count: 1, resetAt: now + windowMs });
         return true;
