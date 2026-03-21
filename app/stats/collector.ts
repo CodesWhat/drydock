@@ -71,6 +71,7 @@ interface CollectorRuntime {
   clearTimeoutFn: typeof globalThis.clearTimeout;
   restTouchTtlMs: number;
   states: Map<string, ContainerCollectionState>;
+  lastStateSweepAtMs: number;
 }
 
 interface ResolvedStatsTarget {
@@ -137,6 +138,7 @@ function createCollectorRuntime(
     clearTimeoutFn,
     restTouchTtlMs,
     states: new Map<string, ContainerCollectionState>(),
+    lastStateSweepAtMs: Number.NEGATIVE_INFINITY,
   };
 }
 
@@ -160,6 +162,43 @@ function getOrCreateState(
   const nextState = createCollectionState(runtime.historySize);
   runtime.states.set(containerId, nextState);
   return nextState;
+}
+
+function isStateInactive(state: ContainerCollectionState): boolean {
+  return (
+    state.watchCount === 0 &&
+    !state.stream &&
+    !state.startPromise &&
+    !state.restTouchRelease &&
+    !state.restTouchTimeout &&
+    state.listeners.size === 0
+  );
+}
+
+function pruneContainerStateIfMissing(
+  runtime: CollectorRuntime,
+  containerId: string,
+  state: ContainerCollectionState,
+): void {
+  if (!isStateInactive(state)) {
+    return;
+  }
+  if (runtime.dependencies.getContainerById(containerId)) {
+    return;
+  }
+  runtime.states.delete(containerId);
+}
+
+function sweepDeletedInactiveStates(runtime: CollectorRuntime): void {
+  const nowMs = runtime.now();
+  if (nowMs - runtime.lastStateSweepAtMs < runtime.restTouchTtlMs) {
+    return;
+  }
+  runtime.lastStateSweepAtMs = nowMs;
+
+  for (const [containerId, state] of runtime.states) {
+    pruneContainerStateIfMissing(runtime, containerId, state);
+  }
 }
 
 function stopCollection(state: ContainerCollectionState): void {
@@ -291,6 +330,11 @@ async function startStream(
     if (!isDockerStatsStream(stream)) {
       return;
     }
+    if (state.watchCount === 0) {
+      stream.removeAllListeners?.();
+      stream.destroy?.();
+      return;
+    }
     attachStreamListeners(runtime, containerId, state, stream);
   } catch (error: unknown) {
     log.warn(`Failed to start Docker stats stream for ${containerId} (${getErrorMessage(error)})`);
@@ -311,10 +355,15 @@ async function startCollection(
     await state.startPromise;
   } finally {
     state.startPromise = undefined;
+    pruneContainerStateIfMissing(runtime, containerId, state);
   }
 }
 
-function createWatchRelease(state: ContainerCollectionState): () => void {
+function createWatchRelease(
+  runtime: CollectorRuntime,
+  containerId: string,
+  state: ContainerCollectionState,
+): () => void {
   let released = false;
 
   return () => {
@@ -326,17 +375,20 @@ function createWatchRelease(state: ContainerCollectionState): () => void {
     if (state.watchCount === 0) {
       stopCollection(state);
     }
+    pruneContainerStateIfMissing(runtime, containerId, state);
   };
 }
 
 function watchContainer(runtime: CollectorRuntime, containerId: string): () => void {
+  sweepDeletedInactiveStates(runtime);
   const state = getOrCreateState(runtime, containerId);
   state.watchCount += 1;
   void startCollection(runtime, containerId, state);
-  return createWatchRelease(state);
+  return createWatchRelease(runtime, containerId, state);
 }
 
 function touchContainer(runtime: CollectorRuntime, containerId: string): void {
+  sweepDeletedInactiveStates(runtime);
   const state = getOrCreateState(runtime, containerId);
   if (!state.restTouchRelease) {
     state.restTouchRelease = watchContainer(runtime, containerId);
@@ -359,11 +411,13 @@ function subscribeToContainer(
   containerId: string,
   listener: StatsListener,
 ): () => void {
+  sweepDeletedInactiveStates(runtime);
   const state = getOrCreateState(runtime, containerId);
   state.listeners.add(listener);
 
   return () => {
     state.listeners.delete(listener);
+    pruneContainerStateIfMissing(runtime, containerId, state);
   };
 }
 
@@ -371,10 +425,22 @@ function getLatest(
   runtime: CollectorRuntime,
   containerId: string,
 ): ContainerStatsSnapshot | undefined {
+  sweepDeletedInactiveStates(runtime);
+  const state = runtime.states.get(containerId);
+  if (!state) {
+    return undefined;
+  }
+  pruneContainerStateIfMissing(runtime, containerId, state);
   return runtime.states.get(containerId)?.latest;
 }
 
 function getHistory(runtime: CollectorRuntime, containerId: string): ContainerStatsSnapshot[] {
+  sweepDeletedInactiveStates(runtime);
+  const state = runtime.states.get(containerId);
+  if (!state) {
+    return [];
+  }
+  pruneContainerStateIfMissing(runtime, containerId, state);
   return runtime.states.get(containerId)?.history.toArray() ?? [];
 }
 

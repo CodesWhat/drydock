@@ -124,6 +124,40 @@ describe('stats/collector', () => {
     expect(harness.stream.destroy).toHaveBeenCalledTimes(1);
   });
 
+  test('does not attach listeners when watch is released before async start resolves', async () => {
+    const stream = createMockStatsStream();
+    let resolveStats: ((value: typeof stream) => void) | undefined;
+    const stats = vi.fn(
+      () =>
+        new Promise<typeof stream>((resolve) => {
+          resolveStats = resolve;
+        }),
+    );
+    const collector = createContainerStatsCollector({
+      getContainerById: () => ({ id: 'c1', name: 'web', watcher: 'local' }) as any,
+      getWatchers: () => ({
+        'docker.local': {
+          dockerApi: {
+            getContainer: () => ({ stats }),
+          },
+        },
+      }),
+      intervalSeconds: 10,
+      historySize: 3,
+      now: () => Date.now(),
+    });
+
+    const release = collector.watch('c1');
+    expect(stats).toHaveBeenCalledTimes(1);
+
+    release();
+    resolveStats?.(stream);
+    await Promise.resolve();
+
+    expect(stream.on).not.toHaveBeenCalled();
+    expect(stream.destroy).toHaveBeenCalledTimes(1);
+  });
+
   test('collects snapshots, throttles by interval, and notifies subscribers', async () => {
     const harness = createHarness();
     const onSnapshot = vi.fn();
@@ -322,6 +356,67 @@ describe('stats/collector', () => {
 
     expect(harness.stream.removeAllListeners).toHaveBeenCalledTimes(1);
     expect(harness.stream.destroy).toHaveBeenCalledTimes(1);
+  });
+
+  test('drops collected state after container deletion once watch is released', async () => {
+    const harness = createHarness();
+    const release = harness.collector.watch('c1');
+    await Promise.resolve();
+
+    harness.emitStats(100, 1000);
+    expect(harness.collector.getLatest('c1')).toEqual(
+      expect.objectContaining({
+        containerId: 'c1',
+      }),
+    );
+    expect(harness.collector.getHistory('c1')).toHaveLength(1);
+
+    harness.getContainer.mockReturnValue(undefined);
+    release();
+    await Promise.resolve();
+
+    expect(harness.collector.getLatest('c1')).toBeUndefined();
+    expect(harness.collector.getHistory('c1')).toEqual([]);
+  });
+
+  test('sweep prunes inactive states for deleted containers on subsequent call', async () => {
+    const harness = createHarness();
+    const release = harness.collector.watch('c1');
+    await vi.advanceTimersByTimeAsync(0);
+
+    // Emit at least one snapshot so getLatest returns data while container exists
+    harness.emitStats(100, 1000);
+    expect(harness.collector.getLatest('c1')).toBeDefined();
+
+    // Release while container still exists — state goes inactive but stays in the map
+    release();
+
+    // Container is now deleted
+    harness.getContainer.mockReturnValue(undefined);
+
+    // Advance past the sweep threshold (restTouchTtlMs = 30s for 10s interval)
+    harness.advanceNowByMs(31_000);
+
+    // Any call that triggers sweepDeletedInactiveStates will iterate the map
+    // and prune the inactive state for the deleted container
+    expect(harness.collector.getLatest('c1')).toBeUndefined();
+  });
+
+  test('getHistory returns empty array when state is pruned during the call', async () => {
+    const harness = createHarness();
+    const release = harness.collector.watch('c1');
+    await vi.advanceTimersByTimeAsync(0);
+
+    harness.emitStats(100, 1000);
+    expect(harness.collector.getHistory('c1')).toHaveLength(1);
+
+    // Release while container still exists — state inactive but not pruned
+    release();
+
+    // Container deleted — next getHistory prunes state mid-call
+    harness.getContainer.mockReturnValue(undefined);
+
+    expect(harness.collector.getHistory('c1')).toEqual([]);
   });
 
   test('returns empty history for unknown containers', () => {
