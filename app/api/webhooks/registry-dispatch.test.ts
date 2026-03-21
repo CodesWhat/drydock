@@ -1,3 +1,17 @@
+import { sanitizeLogParam } from '../../log/sanitize.js';
+
+const { mockLogWarn } = vi.hoisted(() => ({
+  mockLogWarn: vi.fn(),
+}));
+
+vi.mock('../../log/index.js', () => ({
+  default: {
+    child: () => ({
+      warn: mockLogWarn,
+    }),
+  },
+}));
+
 import {
   findContainersForImageReferences,
   runRegistryWebhookDispatch,
@@ -171,6 +185,10 @@ describe('findContainersForImageReferences', () => {
 });
 
 describe('runRegistryWebhookDispatch', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   test('triggers immediate checks and marks fresh containers for scheduled poll skip', async () => {
     const containerOne = createContainer({ id: 'one', watcher: 'local' });
     const containerTwo = createContainer({
@@ -240,5 +258,39 @@ describe('runRegistryWebhookDispatch', () => {
       checksFailed: 0,
       watchersMissing: 1,
     });
+  });
+
+  test('logs details when triggering an immediate check fails', async () => {
+    const container = createContainer({
+      id: 'one\nid',
+      watcher: 'local\nwatcher',
+    });
+    const markFresh = vi.fn();
+    const rawErrorMessage = 'daemon offline\nfatal';
+    const watcher = {
+      watchContainer: vi.fn().mockRejectedValue(new Error(rawErrorMessage)),
+    };
+    const watcherId = `docker.${container.watcher}`;
+
+    const result = await runRegistryWebhookDispatch({
+      references: [{ image: 'library/nginx', tag: 'latest' }],
+      containers: [container as any],
+      watchers: {
+        [watcherId]: watcher as any,
+      },
+      markContainerFresh: markFresh,
+    });
+
+    expect(result).toStrictEqual({
+      referencesMatched: 1,
+      containersMatched: 1,
+      checksTriggered: 0,
+      checksFailed: 1,
+      watchersMissing: 0,
+    });
+    expect(markFresh).not.toHaveBeenCalled();
+    expect(mockLogWarn).toHaveBeenCalledWith(
+      `Error triggering immediate registry webhook check for container ${sanitizeLogParam(container.id)} via watcher ${sanitizeLogParam(watcherId)} (${sanitizeLogParam(rawErrorMessage)})`,
+    );
   });
 });

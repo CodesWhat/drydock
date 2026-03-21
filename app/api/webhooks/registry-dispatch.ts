@@ -1,4 +1,7 @@
+import logger from '../../log/index.js';
+import { sanitizeLogParam } from '../../log/sanitize.js';
 import type { Container } from '../../model/container.js';
+import { getErrorMessage } from '../../util/error.js';
 import { getImageReferenceCandidatesFromPattern } from '../../watchers/providers/docker/docker-helpers.js';
 import type { RegistryWebhookReference } from './parsers/types.js';
 
@@ -20,6 +23,8 @@ interface RunRegistryWebhookDispatchInput {
   watchers: Record<string, RegistryWebhookWatcher>;
   markContainerFresh: (containerId: string) => void;
 }
+
+const log = logger.child({ component: 'api.webhooks.registry-dispatch' });
 
 function normalizeHost(value: unknown): string | undefined {
   if (typeof value !== 'string' || value.trim() === '') {
@@ -128,7 +133,8 @@ export async function runRegistryWebhookDispatch({
 
   await Promise.all(
     matchingContainers.map(async (container) => {
-      const watcher = watchers[resolveWatcherIdForContainer(container)];
+      const watcherId = resolveWatcherIdForContainer(container);
+      const watcher = watchers[watcherId];
       if (!watcher || typeof watcher.watchContainer !== 'function') {
         watchersMissing += 1;
         return;
@@ -138,8 +144,15 @@ export async function runRegistryWebhookDispatch({
         await watcher.watchContainer(container);
         checksTriggered += 1;
         markContainerFresh(container.id);
-      } catch {
+      } catch (error) {
         checksFailed += 1;
+        log.warn(
+          `Error triggering immediate registry webhook check for container ${sanitizeLogParam(
+            container.id,
+          )} via watcher ${sanitizeLogParam(watcherId)} (${sanitizeLogParam(
+            getErrorMessage(error),
+          )})`,
+        );
       }
     }),
   );

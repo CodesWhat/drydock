@@ -5,6 +5,17 @@ export function asRecord(value: unknown): Record<string, unknown> | undefined {
   return value as Record<string, unknown>;
 }
 
+export function toEventList(payload: unknown): Record<string, unknown>[] {
+  if (Array.isArray(payload)) {
+    return payload
+      .filter((entry) => entry && typeof entry === 'object')
+      .map((entry) => entry as Record<string, unknown>);
+  }
+
+  const record = asRecord(payload);
+  return record ? [record] : [];
+}
+
 export function asNonEmptyString(value: unknown): string | undefined {
   if (typeof value !== 'string') {
     return undefined;

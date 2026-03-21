@@ -1,16 +1,5 @@
-import { asNonEmptyString, asRecord, splitSubjectImageAndTag } from './shared.js';
+import { asNonEmptyString, asRecord, splitSubjectImageAndTag, toEventList } from './shared.js';
 import type { RegistryWebhookReference } from './types.js';
-
-function toEventList(payload: unknown): Record<string, unknown>[] {
-  if (Array.isArray(payload)) {
-    return payload
-      .filter((entry) => entry && typeof entry === 'object')
-      .map((entry) => entry as Record<string, unknown>);
-  }
-
-  const record = asRecord(payload);
-  return record ? [record] : [];
-}
 
 export function parseAcrWebhookPayload(payload: unknown): RegistryWebhookReference[] {
   const events = toEventList(payload);
