@@ -245,6 +245,9 @@ const roadmap = [
       "Release notes in UI",
       "Smart tag suggestion for latest containers",
       "Digest check deduplication",
+      "Dashboard customization",
+      "Resource usage dashboard widget",
+      "Trigger environment variable aliases (DD_ACTION_*/DD_NOTIFICATION_*)",
     ],
   },
   {
@@ -281,7 +284,6 @@ const roadmap = [
       "Clickable port links",
       "Image prune from UI",
       "Static image monitoring",
-      "Dashboard customization",
     ],
   },
   {
