@@ -15,7 +15,15 @@ async function ensureFilterInputVisible(page: Page, placeholder: string) {
   }
 
   await dismissAnnouncementBanners(page);
-  await page.locator('main').getByRole('button', { name: 'Toggle filters' }).click({ force: true });
+  const toggleButtons = page.locator('main').getByRole('button', { name: 'Toggle filters' });
+  const toggleCount = await toggleButtons.count();
+  for (let index = 0; index < toggleCount; index += 1) {
+    await toggleButtons.nth(index).click({ force: true });
+    if (await input.isVisible().catch(() => false)) {
+      break;
+    }
+  }
+
   await expect(input).toBeVisible({ timeout: 10_000 });
   return input;
 }
