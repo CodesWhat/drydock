@@ -475,7 +475,7 @@ If you only need monitoring (no auto-updates), a read-only socket proxy configur
 
 Podman works with Drydock through Podman's Docker-compatible API socket.
 
-<Callout type="warn">This section is documentation-only compatibility guidance for v1.5. Full Podman support (runtime auto-detection and a dedicated CI test matrix) is planned for **Phase 10.4**.</Callout>
+<Callout type="info">Podman compatibility is supported in current releases. Drydock negotiates against the daemon API version and is most reliable with direct socket mounts.</Callout>
 
 <Callout type="info">Background and user reports: [GitHub issue #152](https://github.com/CodesWhat/drydock/issues/152).</Callout>
 
@@ -581,8 +581,8 @@ services:
 | Topic | Status |
 | --- | --- |
 | Tested Podman version | `5.6.0` on Rocky Linux `9.7` (issue [#152](https://github.com/CodesWhat/drydock/issues/152)) |
-| Runtime auto-detection | Not implemented yet (planned in Phase 10.4) |
-| CI coverage | No dedicated Podman CI matrix yet (planned in Phase 10.4) |
+| API version handling | Drydock probes daemon compatibility and pins client API behavior for Podman/Docker socket endpoints |
+| CI coverage | No dedicated Podman CI matrix yet |
 | Rootless networking | Can differ from Docker bridge behavior; see [Podman FAQ](/docs/faq#podman-rootless-networking-limitations) |
 | SELinux (RHEL/Rocky/Fedora) | Socket mounts need `:Z` flag; see [SELinux FAQ](/docs/faq#selinux-blocks-podman-socket-access-permission-denied) |
 | `podman-compose` networking | Pod-based networking breaks service-name DNS; use `podman compose` instead; see [FAQ](/docs/faq#podman-compose-vs-podman-compose-networking) |
@@ -1091,3 +1091,20 @@ The container model includes additional fields useful for understanding update s
 ## Docker Event Stream
 
 The watcher monitors Docker events (container create, destroy, start, stop, etc.) in real time. If the event stream disconnects, drydock automatically reconnects with exponential backoff starting at 1 second and capping at 30 seconds.
+
+When using third-party socket proxies, periodic reconnects can be expected: many proxies close idle long-lived HTTP connections after their configured timeout. In logs this often appears as:
+
+`Docker event stream error (aborted); reconnect attempt #1 in 1000ms`
+
+followed by:
+
+`Listening to docker events`
+
+If reconnect succeeds immediately and monitoring continues, this is usually benign.
+
+### Reduce proxy-timeout reconnect churn
+
+1. Increase your proxy idle timeout (for example, linuxserver socket-proxy `TIMEOUT=86400s`).
+2. Prefer direct socket mount when your environment allows it.
+3. If your proxy supports endpoint-specific behavior, exempt Docker `/events` streams from idle timeout.
+4. As a workaround, run a lightweight heartbeat job/container that keeps the proxy connection path active.

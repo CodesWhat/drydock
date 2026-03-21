@@ -31,7 +31,9 @@ curl http://drydock:3000/api/v1/log/entries
 | `level` | string | Filter by log level (`trace`, `debug`, `info`, `warn`, `error`, `fatal`) |
 | `component` | string | Filter by component name |
 | `tail` | integer | Number of most recent entries to return |
-| `since` | integer | Unix timestamp (seconds) — only return entries after this time |
+| `since` | integer | Unix timestamp (milliseconds) — only return entries after this time |
+
+Invalid `level` or `component` values return `400 Bad Request`.
 
 ### Example
 
@@ -40,7 +42,7 @@ curl "http://drydock:3000/api/v1/log/entries?level=error&tail=50"
 
 [
   {
-    "timestamp": "2026-02-16T12:00:00.000Z",
+    "timestamp": 1771243200000,
     "level": "error",
     "component": "registry:hub",
     "msg": "Rate limit exceeded"

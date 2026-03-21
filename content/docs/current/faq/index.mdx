@@ -47,6 +47,27 @@ services:
 
 Drydock automatically retries with exponential backoff (1s → 30s max) and will recover once the proxy becomes available, but the health check prevents unnecessary retries during startup.
 
+## Docker event stream "aborted" reconnects every few minutes
+
+If you see periodic messages like:
+
+`Docker event stream error (aborted); reconnect attempt #1 in 1000ms`
+
+followed by:
+
+`Listening to docker events`
+
+this is commonly caused by proxy idle timeout, not a hard failure. Docker events use a long-lived stream, and third-party socket proxies often close idle streams after `TIMEOUT`.
+
+Common fixes:
+
+1. Increase proxy timeout (for example `TIMEOUT=86400s` on linuxserver socket-proxy).
+2. Prefer direct socket mount over proxy where possible.
+3. Use a proxy that supports exempting `/events` from idle timeout.
+4. Optional workaround: run a lightweight heartbeat container/job to reduce idle disconnects.
+
+<Callout type="info">A single reconnect that immediately recovers is expected in many proxy setups. Repeated reconnect failures (not recovering) indicate a real connectivity issue.</Callout>
+
 ## SELinux blocks Podman socket access (Permission denied)
 
 On RHEL, Rocky Linux, Fedora, and CentOS with SELinux enforcing, you may see `permission denied` or `EACCES` when Drydock tries to connect to the Podman socket. This is caused by SELinux denying the container access to the host socket file.
