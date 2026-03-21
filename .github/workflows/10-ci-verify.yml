@@ -659,15 +659,13 @@ jobs:
         env:
           SCAN_OUTCOME: ${{ steps.nuclei_scan.outcome }}
         run: |
-          # shellcheck disable=SC2153
           set -euo pipefail
 
           report="artifacts/dast/nuclei-report.json"
-          scan_outcome="${SCAN_OUTCOME}"
 
           if [ ! -f "${report}" ]; then
             echo "Nuclei did not produce a JSON report."
-            if [ "${scan_outcome}" != "success" ]; then
+            if [ "${SCAN_OUTCOME}" != "success" ]; then
               echo "Nuclei action failed before report generation."
               exit 1
             fi
@@ -676,7 +674,7 @@ jobs:
 
           if [ ! -s "${report}" ]; then
             echo "No medium+ findings detected."
-            if [ "${scan_outcome}" != "success" ]; then
+            if [ "${SCAN_OUTCOME}" != "success" ]; then
               echo "Nuclei action did not succeed."
               exit 1
             fi
@@ -686,7 +684,7 @@ jobs:
           finding_count="$(jq -s '[.[] | (if type == "array" then .[] else . end) | select(((.info.severity // .severity // "") | ascii_downcase | test("^(medium|high|critical)$")))] | length' "${report}")"
           echo "Medium+ findings: ${finding_count}"
 
-          if [ "${scan_outcome}" != "success" ]; then
+          if [ "${SCAN_OUTCOME}" != "success" ]; then
             echo "Nuclei action did not complete successfully."
             exit 1
           fi
