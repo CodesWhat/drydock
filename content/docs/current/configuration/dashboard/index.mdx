@@ -1,0 +1,98 @@
+---
+title: "Dashboard"
+description: "Customize the Drydock dashboard layout, widgets, and real-time monitoring views."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+The dashboard is the landing page after login. It provides a real-time overview of your containers, updates, security posture, and host status through a customizable grid of widgets.
+
+## Widgets
+
+The dashboard contains **9 widgets** in two categories:
+
+### Stat cards
+
+Compact single-metric tiles displayed across the top row.
+
+| Widget | Shows | Click navigates to |
+| --- | --- | --- |
+| **Containers** | Total count with running / stopped breakdown | `/containers` |
+| **Updates Available** | Pending updates with new / mature split | `/containers?filterKind=any` |
+| **Security Issues** | Vulnerability count across scanned images | `/security` |
+| **Registries** | Number of configured registries | `/registries` |
+
+Stat cards are color-coded — green when healthy, amber or red as the severity ratio increases.
+
+### Detail widgets
+
+Larger panels that visualize trends and breakdowns.
+
+| Widget | Shows |
+| --- | --- |
+| **Recent Updates** | Top 6 pending container updates with update/skip action buttons. Includes an "Update All" batch button when pending updates exist. Registry failures are excluded. |
+| **Security Overview** | Donut chart of clean / issues / not-scanned images, a 2×2 severity grid (critical / high / medium / low), and a list of the top 5 vulnerabilities. |
+| **Resource Usage** | Live CPU and memory utilization. Aggregate progress bars (green < 60%, amber 60–85%, red > 85%) plus ranked lists of the top 5 consumers by CPU and memory. |
+| **Host Status** | Agent and watcher connectivity. Shows each host's connection status (green = connected, red = disconnected), address, and running / total container count. |
+| **Update Breakdown** | Four-column grid showing major, minor, patch, and digest update counts with color-coded pills and proportional progress bars. |
+
+All detail widgets use a `ResizeObserver` to detect their rendered height and progressively collapse content as the widget shrinks — headers hide below ~200 px, list items reduce from 5 to 3 to 1, and charts switch between full and compact layouts. This means a widget resized to a compact size still displays meaningful data instead of overflowing.
+
+## Customizing the layout
+
+### Edit mode
+
+Click the **pencil icon** in the breadcrumb header to enter edit mode. Press **Escape** or click the **X** button to exit.
+
+While in edit mode, interactive widget content is disabled and three controls become available:
+
+- **Drag to reorder** — grab the 6-dot drag handle on any widget and move it to a new position.
+- **Resize** — drag the handle at the bottom-right corner of a widget. Each widget enforces minimum and maximum size constraints.
+- **Widget visibility** — a sidebar panel slides in from the right listing every widget with a checkbox. Toggle any widget on or off. Size capability badges (S / M / L) indicate how each widget can be resized.
+- **Reset to Default** — a button at the bottom of the sidebar restores the original layout, order, and visibility.
+
+All changes are saved automatically to `localStorage` and persist across page reloads.
+
+### Default layout
+
+Out of the box the dashboard arranges widgets in this order:
+
+| Row | Widgets |
+| --- | --- |
+| Top | Containers, Updates Available, Security Issues, Registries (stat cards, 3 columns each) |
+| Middle | Resource Usage (4 col), Security Overview (4 col), Host Status (4 col) |
+| Middle–lower | Update Breakdown (below Host Status) |
+| Bottom | Recent Updates (full 12-column width) |
+
+### Responsive breakpoints
+
+The grid adapts to the viewport width:
+
+| Breakpoint | Min width | Columns |
+| --- | --- | --- |
+| `lg` | 1024 px | 12 |
+| `md` | 768 px | 6 |
+| `sm` | 640 px | 2 |
+| `xs` / `xxs` | 480 px / 0 px | 1 |
+
+On narrow screens stat cards stack vertically and detail widgets fill the full width.
+
+## Real-time updates
+
+The dashboard refreshes automatically via SSE events from the server:
+
+- **Container change** — triggers a quick summary refresh (debounced to 1 second).
+- **Security scan completed** — triggers a full data refresh.
+- **SSE reconnected** — triggers a full data refresh after a connection drop.
+
+No polling is required. When the browser tab is hidden, refresh events are deferred until the tab becomes visible again.
+
+## Persistence
+
+Dashboard preferences are stored under the `dd-preferences` key in the browser's `localStorage`:
+
+- **Widget order** — the sequence widgets appear in the grid.
+- **Hidden widgets** — which widgets are toggled off.
+- **Grid layout** — each widget's position (x, y) and size (width, height).
+
+<Callout type="info">Dashboard preferences are per-browser. They are not synced across devices or shared between users.</Callout>
