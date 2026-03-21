@@ -600,9 +600,6 @@ select {
 }
 
 /* ── View Transition: Circular Reveal (theme switch only) ── */
-/* NOTE: A minor flicker at the sidebar edge during the circular reveal
-   is a known browser compositing artifact with View Transitions API +
-   clip-path + overflow:hidden boundaries. Not fixable via CSS. */
 html.dd-transitioning::view-transition-old(root),
 html.dd-transitioning::view-transition-new(root) {
   animation: none;
