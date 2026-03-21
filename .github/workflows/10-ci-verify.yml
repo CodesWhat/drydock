@@ -407,6 +407,7 @@ jobs:
   build:
     name: Build
     if: github.event_name != 'schedule'
+    needs: [lint, test]
     runs-on: ubuntu-latest
     timeout-minutes: 35  # Includes UI build + single-arch QA image + multi-arch smoke build
     permissions:
