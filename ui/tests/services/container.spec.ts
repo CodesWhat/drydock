@@ -910,7 +910,7 @@ describe('Container Service', () => {
       } as any);
 
       const result = await getContainerReleaseNotes('c1');
-      expect(fetch).toHaveBeenCalledWith('/api/containers/c1/release-notes', {
+      expect(fetch).toHaveBeenCalledWith('/api/v1/containers/c1/release-notes', {
         credentials: 'include',
       });
       expect(result).toEqual(mockNotes);

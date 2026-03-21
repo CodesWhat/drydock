@@ -346,7 +346,7 @@ async function scanContainer(containerId: string, signal?: AbortSignal) {
 }
 
 async function getContainerReleaseNotes(containerId: string) {
-  const response = await fetch(`/api/containers/${containerId}/release-notes`, {
+  const response = await fetch(`/api/v1/containers/${containerId}/release-notes`, {
     credentials: 'include',
   });
   if (response.status === 404) {
