@@ -8,6 +8,12 @@ import type {
   RecentAuditStatus,
 } from '@/views/dashboard/dashboardTypes';
 import { useDashboardComputed } from '@/views/dashboard/useDashboardComputed';
+import { getWatcherConfiguration } from '@/views/dashboard/watcherConfiguration';
+
+vi.mock('@/views/dashboard/watcherConfiguration', async (importOriginal) => {
+  const original = await importOriginal<typeof import('@/views/dashboard/watcherConfiguration')>();
+  return { getWatcherConfiguration: vi.fn(original.getWatcherConfiguration) };
+});
 
 function makeContainer(
   id: number,
@@ -664,6 +670,161 @@ describe('useDashboardComputed maintenance countdown', () => {
     const map = state.nextMaintenanceWindowByWatcher.value;
 
     expect(map.size).toBe(0);
+  });
+
+  it('falls back to local key when watcher name is an empty string', () => {
+    const now = Date.parse('2026-03-01T00:00:00.000Z');
+    const ts = new Date(now + 20 * 60_000).toISOString();
+    const watchers = [
+      {
+        name: '',
+        configuration: {
+          maintenanceWindow: 'Sun 02:00-03:00 UTC',
+          maintenanceNextWindow: ts,
+        },
+      },
+    ];
+    const state = createState({ watchers, maintenanceCountdownNow: now });
+    const map = state.nextMaintenanceWindowByWatcher.value;
+
+    expect(map.get('local')).toBe(Date.parse(ts));
+  });
+
+  it('defaults watcher name to local when a non-object entry leaks into the filtered list', () => {
+    const now = Date.parse('2026-03-01T00:00:00.000Z');
+    const ts = new Date(now + 25 * 60_000).toISOString();
+    const watchers = [
+      {
+        name: 'docker-a',
+        configuration: {
+          maintenanceWindow: 'Sun 02:00-03:00 UTC',
+          maintenanceNextWindow: ts,
+        },
+      },
+    ];
+    const state = createState({ watchers, maintenanceCountdownNow: now });
+
+    // Force the filtered maintenance-window watcher list to be computed and cached.
+    const cached = state.maintenanceWindowWatchers.value;
+
+    // Inject a non-object entry into the cached array to exercise the defensive
+    // guard in getWatcherName (line 283 else-branch).
+    cached.push(null as unknown as never);
+
+    // Access nextMaintenanceWindowByWatcher for the first time so Vue computes
+    // it using the (now mutated) cached maintenanceWindowWatchers array.
+    const map = state.nextMaintenanceWindowByWatcher.value;
+
+    // The valid watcher should still appear; the null entry is safely ignored
+    // because parseMaintenanceWindowAt returns undefined for non-objects.
+    expect(map.get('docker-a')).toBe(Date.parse(ts));
+    expect(map.has('local')).toBe(false);
+  });
+
+  it('falls back to local when getWatcherName receives a non-object watcher with a parseable timestamp', () => {
+    const now = Date.parse('2026-03-01T00:00:00.000Z');
+    const ts = new Date(now + 40 * 60_000).toISOString();
+    const nonObjectWatcher = 42;
+    const watchers = [
+      {
+        name: 'docker-a',
+        configuration: {
+          maintenanceWindow: 'Sun 02:00-03:00 UTC',
+          maintenanceNextWindow: ts,
+        },
+      },
+    ];
+    const state = createState({ watchers, maintenanceCountdownNow: now });
+
+    // Cache the maintenanceWindowWatchers computed, then inject a non-object
+    // entry that has getWatcherConfiguration mocked to return a valid timestamp.
+    const cached = state.maintenanceWindowWatchers.value;
+    cached.push(nonObjectWatcher as unknown as never);
+
+    // Make getWatcherConfiguration return a configuration with a parseable
+    // timestamp for the non-object entry so getWatcherName is actually reached.
+    const mockedGetConfig = vi.mocked(getWatcherConfiguration);
+    const originalImpl = mockedGetConfig.getMockImplementation()!;
+    mockedGetConfig.mockImplementation((w: unknown) => {
+      if (w === nonObjectWatcher) {
+        return { maintenanceNextWindow: ts } as ReturnType<typeof getWatcherConfiguration>;
+      }
+      return originalImpl(w);
+    });
+
+    const map = state.nextMaintenanceWindowByWatcher.value;
+
+    expect(map.get('docker-a')).toBe(Date.parse(ts));
+    // The non-object watcher falls back to 'local' in getWatcherName.
+    expect(map.get('local')).toBe(Date.parse(ts));
+
+    mockedGetConfig.mockImplementation(originalImpl);
+  });
+
+  it('picks the earliest next window across multiple watchers for the countdown', () => {
+    const now = Date.parse('2026-03-01T00:00:00.000Z');
+    const earlyTs = new Date(now + 15 * 60_000).toISOString();
+    const lateTs = new Date(now + 90 * 60_000).toISOString();
+    const watchers = [
+      {
+        name: 'watcher-early',
+        configuration: {
+          maintenanceWindow: 'Sun 02:00-03:00 UTC',
+          maintenanceNextWindow: earlyTs,
+        },
+      },
+      {
+        name: 'watcher-late',
+        configuration: {
+          maintenanceWindow: 'Mon 04:00-05:00 UTC',
+          maintenanceNextWindow: lateTs,
+        },
+      },
+    ];
+    const state = createState({ watchers, maintenanceCountdownNow: now });
+
+    expect(state.maintenanceCountdownLabel.value).toBe('15m');
+    expect(state.nextMaintenanceWindowByWatcher.value.size).toBe(2);
+  });
+
+  it('skips non-minimum timestamps in the min-reduction loop when finding next window', () => {
+    const now = Date.parse('2026-03-01T00:00:00.000Z');
+    const earliest = new Date(now + 10 * 60_000).toISOString();
+    const middle = new Date(now + 30 * 60_000).toISOString();
+    const latest = new Date(now + 60 * 60_000).toISOString();
+    const watchers = [
+      {
+        name: 'watcher-first',
+        configuration: {
+          maintenanceWindow: 'Sun 02:00-03:00 UTC',
+          maintenanceNextWindow: earliest,
+        },
+      },
+      {
+        name: 'watcher-second',
+        configuration: {
+          maintenanceWindow: 'Mon 04:00-05:00 UTC',
+          maintenanceNextWindow: middle,
+        },
+      },
+      {
+        name: 'watcher-third',
+        configuration: {
+          maintenanceWindow: 'Tue 06:00-07:00 UTC',
+          maintenanceNextWindow: latest,
+        },
+      },
+    ];
+    const state = createState({ watchers, maintenanceCountdownNow: now });
+
+    // The earliest timestamp should be selected as the countdown target.
+    // The second and third entries exercise the ts < min false branch.
+    expect(state.maintenanceCountdownLabel.value).toBe('10m');
+    const map = state.nextMaintenanceWindowByWatcher.value;
+    expect(map.size).toBe(3);
+    expect(map.get('watcher-first')).toBe(Date.parse(earliest));
+    expect(map.get('watcher-second')).toBe(Date.parse(middle));
+    expect(map.get('watcher-third')).toBe(Date.parse(latest));
   });
 });
 

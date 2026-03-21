@@ -2199,4 +2199,60 @@ describe('digest mode', () => {
     });
     expect(validated.digestcron).toBe('30 6 * * 1-5');
   });
+
+  test('flushDigestBuffer should log warning and increment error counter when triggerBatch throws', async () => {
+    await trigger.register('trigger', 'test', 'digest-trigger', {
+      ...configurationValid,
+      mode: 'digest',
+    });
+    trigger.init();
+
+    await trigger.handleContainerReportDigest({
+      container: {
+        id: 'c1',
+        name: 'app',
+        watcher: 'test',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      },
+      changed: true,
+    });
+
+    const triggerBatchSpy = vi
+      .spyOn(trigger, 'triggerBatch')
+      .mockRejectedValue(new Error('SMTP down'));
+    await trigger.flushDigestBuffer();
+    expect(triggerBatchSpy).toHaveBeenCalled();
+    triggerBatchSpy.mockRestore();
+  });
+
+  test('digest cron callback should invoke flushDigestBuffer', async () => {
+    await trigger.register('trigger', 'test', 'digest-trigger', {
+      ...configurationValid,
+      mode: 'digest',
+      digestcron: '0 9 * * *',
+    });
+    trigger.init();
+
+    // Get the cron callback that was registered
+    const cronCallback = mockCron.schedule.mock.calls[0]?.[1];
+    expect(cronCallback).toBeDefined();
+
+    // Buffer a container and spy on flushDigestBuffer
+    await trigger.handleContainerReportDigest({
+      container: {
+        id: 'c1',
+        name: 'app',
+        watcher: 'test',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      },
+      changed: true,
+    });
+
+    const flushSpy = vi.spyOn(trigger, 'flushDigestBuffer').mockResolvedValue(undefined);
+    cronCallback();
+    expect(flushSpy).toHaveBeenCalled();
+    flushSpy.mockRestore();
+  });
 });

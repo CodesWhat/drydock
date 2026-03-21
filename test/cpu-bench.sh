@@ -15,7 +15,7 @@ set -euo pipefail
 WARMUP=${1:-180}
 MEASURE=${2:-60}
 INTERVAL=${3:-2}
-CONTAINERS="cpu-hc-binary cpu-hc-curl cpu-hc-node cpu-hc-none"
+CONTAINERS="cpu-dd-140 cpu-dd-145 cpu-dd-145-node cpu-dd-150"
 TMPFILE=$(mktemp)
 trap 'rm -f "$TMPFILE"' EXIT
 
@@ -86,7 +86,7 @@ done
 
 echo ""
 echo "Legend:"
-echo "  cpu-hc-binary = static C binary healthcheck (30s interval)"
-echo "  cpu-hc-curl   = curl healthcheck (30s interval)"
-echo "  cpu-hc-node   = node -e healthcheck (30s interval)"
-echo "  cpu-hc-none   = healthcheck disabled (true idle baseline)"
+echo "  cpu-dd-140      = v1.4.0 (curl healthcheck)"
+echo "  cpu-dd-145      = v1.4.5 (curl healthcheck)"
+echo "  cpu-dd-145-node = v1.4.5 (node -e healthcheck, simulates user override)"
+echo "  cpu-dd-150      = v1.5.0-dev (static C binary healthcheck)"
