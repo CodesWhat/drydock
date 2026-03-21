@@ -26,7 +26,6 @@ const coverageConfig: CustomCoverageConfig = {
     '**/node_modules/**',
     '**/dist/**',
     '**/coverage/**',
-    '**/package.json',
     '**/*.d.ts',
     '**/*.typecheck.ts',
     '**/auth-types.ts',

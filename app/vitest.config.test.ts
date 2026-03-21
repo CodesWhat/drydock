@@ -8,7 +8,6 @@ describe('vitest coverage configuration', () => {
       '**/node_modules/**',
       '**/dist/**',
       '**/coverage/**',
-      '**/package.json',
       '**/*.d.ts',
       '**/*.typecheck.ts',
       '**/auth-types.ts',

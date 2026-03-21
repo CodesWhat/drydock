@@ -2850,9 +2850,8 @@ describe('isDigestToWatch Logic', () => {
     });
 
     const containerModule = await import('../../../model/container.js');
-    const validateContainer = containerModule.validate;
-    // @ts-expect-error
-    validateContainer.mockImplementation((c) => c);
+    const validateContainer = vi.mocked(containerModule.validate);
+    validateContainer.mockImplementation((c) => c as ReturnType<typeof containerModule.validate>);
 
     return container;
   };
