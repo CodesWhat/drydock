@@ -29,7 +29,7 @@
     "socket.io-parser": "^4.2.6"
   },
   "devDependencies": {
-    "@dotenvx/dotenvx": "1.55.1",
+    "@dotenvx/dotenvx": "1.57.1",
     "@playwright/test": "^1.58.2",
     "artillery": "2.0.30"
   },

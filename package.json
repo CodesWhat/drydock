@@ -6,7 +6,7 @@
     "node": ">=24.0.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.4.7",
-    "lefthook": "^2.1.1"
+    "@biomejs/biome": "^2.4.8",
+    "lefthook": "^2.1.4"
   }
 }
