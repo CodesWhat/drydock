@@ -532,7 +532,8 @@ export const openApiPaths = {
       summary: 'Get Prometheus metrics',
       operationId: 'getPrometheusMetrics',
       description:
-        'By default this endpoint requires authentication. It can be exposed without auth when DD_SERVER_METRICS_AUTH=false.',
+        'Returns Prometheus metrics. Auth modes: (1) bearer token via DD_SERVER_METRICS_TOKEN (recommended for Prometheus scrapers), (2) session/basic auth fallback when no token is set, (3) no auth when DD_SERVER_METRICS_AUTH=false.',
+      security: [{ metricsBearerAuth: [] }, { sessionAuth: [] }, {}],
       responses: {
         200: {
           description: 'Prometheus metrics text',
