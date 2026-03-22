@@ -220,10 +220,18 @@ function isStrictFamilyMatch(
     return false;
   }
 
-  return candidateShape.numericSegments.every(
-    (segment, index) =>
-      !(!hasLeadingZero(referenceShape.numericSegments[index]) && hasLeadingZero(segment)),
-  );
+  // For CalVer-style tags (major >= 1000, e.g. 2025.11.1), relax the
+  // leading-zero check so zero-padded months like '02' are accepted.
+  const majorValue = Number.parseInt(referenceShape.numericSegments[0], 10);
+  const isCalVer = !Number.isNaN(majorValue) && majorValue >= 1000;
+
+  return candidateShape.numericSegments.every((segment, index) => {
+    if (!hasLeadingZero(segment)) return true;
+    if (hasLeadingZero(referenceShape.numericSegments[index])) return true;
+    // Candidate has a leading zero but reference doesn't.
+    // Only allow this for CalVer tags where zero-padded months are normal.
+    return isCalVer;
+  });
 }
 
 function hasExpectedPrefix(tag: string, currentPrefix: string): boolean {

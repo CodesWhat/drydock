@@ -50,6 +50,55 @@ describe('docker tag candidates module', () => {
     expect(log.warn).toHaveBeenCalledWith(expect.stringContaining('dd.tag.family=loose'));
   });
 
+  test('allows CalVer tags with zero-padded months through strict family filter (#202)', () => {
+    const container = createContainer({
+      image: {
+        tag: {
+          value: '2025.11.1',
+          semver: true,
+        },
+      },
+      tagFamily: 'strict',
+    });
+    const log = {
+      warn: vi.fn(),
+      debug: vi.fn(),
+    };
+
+    const result = getTagCandidates(
+      container,
+      ['2025.11.1', '2026.02.0', '2026.01.0', '2025.09.3'],
+      log,
+    );
+
+    expect(result.tags).toContain('2026.02.0');
+    expect(result.tags).toContain('2026.01.0');
+    expect(log.warn).not.toHaveBeenCalled();
+  });
+
+  test('still rejects zero-padded tags for non-CalVer semver in strict mode', () => {
+    const container = createContainer({
+      image: {
+        tag: {
+          value: '5.1.4',
+          semver: true,
+        },
+      },
+      tagFamily: 'strict',
+    });
+    const log = {
+      warn: vi.fn(),
+      debug: vi.fn(),
+    };
+
+    // '20.04.1' has a leading zero in '04' but reference major is 5 (not CalVer).
+    // Should be rejected as a cross-family jump.
+    const result = getTagCandidates(container, ['5.1.4', '20.04.1', '5.1.5'], log);
+
+    expect(result.tags).not.toContain('20.04.1');
+    expect(result.tags).toContain('5.1.5');
+  });
+
   test('allows include-filter recovery for semver image outside include regex', () => {
     const container = createContainer({
       image: {
