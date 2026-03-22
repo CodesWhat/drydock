@@ -17,9 +17,8 @@
     "test:setup": "dotenvx run -- ../scripts/setup-test-containers.sh",
     "test:start-drydock": "dotenvx run -- ../scripts/start-drydock.sh",
     "test:cleanup": "../scripts/cleanup-test-containers.sh",
-    "load:smoke": "ARTILLERY_ENV=smoke ../scripts/run-load-test.sh",
-    "load:behavior": "ARTILLERY_FILE=./test/test-behavior.yml ARTILLERY_ENV=behavior ../scripts/run-load-test.sh",
     "load:ci": "ARTILLERY_ENV=ci ../scripts/run-load-test.sh",
+    "load:behavior": "ARTILLERY_FILE=./test/test-behavior.yml ARTILLERY_ENV=behavior ../scripts/run-load-test.sh",
     "load:stress": "ARTILLERY_ENV=stress ../scripts/run-load-test.sh",
     "load:rate-limit": "ARTILLERY_FILE=./test/test-rate-limit.yml ARTILLERY_ENV=ratelimit ../scripts/run-load-test.sh"
   },

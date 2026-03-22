@@ -19,7 +19,7 @@ npm run test:cleanup   # Clean up test containers
 ## Load Tests
 
 ```bash
-npm run load:smoke       # Quick smoke test
+npm run load:ci          # CI load test (default)
 npm run load:behavior    # Behavioral test suite
 npm run load:stress      # Stress test
 npm run load:rate-limit  # Rate limit verification

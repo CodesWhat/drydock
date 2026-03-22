@@ -1,0 +1,18 @@
+{
+  "meta": {
+    "source": "committed-baseline",
+    "description": "Reference CI baseline for regression checks. Matches ci profile (arrivalRate 2-6 req/s, 40s duration).",
+    "updated_at": "2026-03-22"
+  },
+  "aggregate": {
+    "summaries": {
+      "http.response_time": {
+        "p95": 300.0,
+        "p99": 500.0
+      }
+    },
+    "rates": {
+      "http.request_rate": 5.0
+    }
+  }
+}

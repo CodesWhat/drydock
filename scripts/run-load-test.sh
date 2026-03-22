@@ -91,7 +91,7 @@ fi
 
 if is_port_in_use "${DD_LOAD_TEST_PORT}"; then
 	echo "Port ${DD_LOAD_TEST_PORT} is already in use; choose a free port."
-	echo "Example: DD_LOAD_TEST_PORT=3800 DD_LOAD_TEST_TARGET=http://127.0.0.1:3800 npm run load:smoke"
+	echo "Example: DD_LOAD_TEST_PORT=3800 DD_LOAD_TEST_TARGET=http://127.0.0.1:3800 npm run load:ci"
 	exit 1
 fi
 

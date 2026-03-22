@@ -6,8 +6,7 @@ Load-test scenarios live in `test/test.yml`, `test/test-behavior.yml`, and `test
 
 ### Profiles
 
-- `smoke`: low traffic sanity check (used for pull requests)
-- `ci`: moderate traffic regression profile (used for push and enforced gates, optimized for faster CI runtime)
+- `ci`: default CI profile for regression and correctness gates (arrivalRate 2-6 req/s, 40s duration)
 - `behavior`: feature-behavior profile for SSE reconnect, log routes, and write-path checks
 - `stress`: higher traffic profile for manual pressure testing
 - `ratelimit`: focused burst profile that validates `429` behavior for scan endpoint limits
@@ -18,7 +17,7 @@ From repo root:
 
 ```bash
 ./scripts/run-load-test.sh
-ARTILLERY_ENV=smoke ./scripts/run-load-test.sh
+ARTILLERY_ENV=ci ./scripts/run-load-test.sh
 ARTILLERY_FILE=./test/test-behavior.yml ARTILLERY_ENV=behavior ./scripts/run-load-test.sh
 ARTILLERY_ENV=stress ./scripts/run-load-test.sh
 ARTILLERY_FILE=./test/test-rate-limit.yml ARTILLERY_ENV=ratelimit ./scripts/run-load-test.sh
@@ -40,9 +39,8 @@ Summarize a saved JSON report (including status mix + slow endpoints):
 From `e2e/`:
 
 ```bash
-npm run load:smoke
-npm run load:behavior
 npm run load:ci
+npm run load:behavior
 npm run load:stress
 npm run load:rate-limit
 ```
@@ -56,8 +54,8 @@ npm run load:rate-limit
 - The rate-limit profile resolves `containerId` through `test/load-test.processor.cjs` before measured requests so scan endpoint p95/p99 is not skewed by `/api/containers/watch` setup latency.
 - In CI, the workflow enables Buildx + GHA cache to speed repeated image builds.
 - CI uploads Artillery JSON reports as workflow artifacts and posts a short p95/p99/request-rate summary in the job summary.
-- PR smoke and push CI load-test jobs both perform a regression check against the committed baseline at `test/load-test-baselines/ci-smoke.json`.
+- The push CI load-test job performs a regression check against the committed baseline at `test/load-test-baselines/ci.json`.
 - Regression gate is enforced with both drift and absolute thresholds: `p95 <= +20%` and `<= 1200ms`, `p99 <= +25%` and `<= 2500ms`, `request_rate >= -15%` and `>= 10 req/s`.
 - You can run the same check locally with `./scripts/check-load-test-regression.sh <current.json> <baseline.json>`.
 - Correctness checks (5xx, failed VUs, and optional 429 bounds) are handled by `./scripts/check-load-test-correctness.sh <report.json> "<title>"`.
-- Load-test correctness gates are enforced for both PR smoke and push CI profiles.
+- Load-test correctness gates are enforced for the CI profile.
