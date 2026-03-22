@@ -53,34 +53,35 @@ describe('useDetailPanel', () => {
   });
 
   describe('panelFlex', () => {
-    it('should return 420px basis for sm', () => {
+    it('should return sm token basis for sm', () => {
       const { panelFlex } = useDetailPanel();
-      expect(panelFlex.value).toBe('0 0 420px');
+      expect(panelFlex.value).toBe('0 0 var(--dd-layout-panel-width-sm)');
     });
 
-    it('should return 560px basis for md', () => {
+    it('should return md token basis for md', () => {
       const { panelSize, panelFlex } = useDetailPanel();
       panelSize.value = 'md';
-      expect(panelFlex.value).toBe('0 0 560px');
+      expect(panelFlex.value).toBe('0 0 var(--dd-layout-panel-width-md)');
     });
 
-    it('should return 720px basis for lg', () => {
+    it('should return lg token basis for lg', () => {
       const { panelSize, panelFlex } = useDetailPanel();
       panelSize.value = 'lg';
-      expect(panelFlex.value).toBe('0 0 720px');
+      expect(panelFlex.value).toBe('0 0 var(--dd-layout-panel-width-lg)');
     });
   });
 
   describe('detailTabs', () => {
-    it('should have 5 tabs', () => {
+    it('should have 6 tabs', () => {
       const { detailTabs } = useDetailPanel();
-      expect(detailTabs).toHaveLength(5);
+      expect(detailTabs).toHaveLength(6);
     });
 
     it('should have correct tab ids', () => {
       const { detailTabs } = useDetailPanel();
       expect(detailTabs.map((t) => t.id)).toEqual([
         'overview',
+        'stats',
         'logs',
         'environment',
         'labels',

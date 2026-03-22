@@ -11,12 +11,12 @@
     "build": "npm run sync:docs && next build --webpack",
     "start": "next start",
     "sync:docs": "node scripts/sync-docs.mjs",
-    "lint": "qlty check --filter biome --no-progress .",
-    "lint:fix": "qlty check --fix --filter biome --no-progress .",
-    "format": "qlty fmt --filter biome --no-progress .",
-    "format:check": "qlty check --filter biome --no-progress .",
-    "check": "qlty check --filter biome --no-progress .",
-    "check:fix": "qlty check --fix --filter biome --no-progress .",
+    "lint": "biome check .",
+    "lint:fix": "biome check --fix .",
+    "format": "biome format --write .",
+    "format:check": "biome check .",
+    "check": "biome check .",
+    "check:fix": "biome check --fix .",
     "type-check": "tsc --noEmit",
     "vercel-build": "npm run build",
     "postinstall": "npm run sync:docs && fumadocs-mdx"
@@ -38,6 +38,7 @@
     "tailwind-merge": "^3.5.0"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.4.7",
     "@tailwindcss/postcss": "^4.2.1",
     "@types/node": "^25.5.0",
     "@types/react": "^19.2.14",

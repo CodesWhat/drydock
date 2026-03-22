@@ -78,7 +78,7 @@ function handleFontSizeInput(event: Event) {
       </div>
       <div class="p-4">
         <div class="grid grid-cols-2 gap-3">
-          <button
+          <AppButton size="none" variant="plain" weight="none"
             v-for="fam in props.themeFamilies"
             :key="fam.id"
             class="dd-rounded p-3 text-left transition-[color,background-color,border-color,opacity,transform,box-shadow] border"
@@ -104,10 +104,10 @@ function handleFontSizeInput(event: Event) {
                 {{ fam.label }}
               </span>
             </div>
-            <div class="text-[0.625rem] dd-text-muted">
+            <div class="text-2xs dd-text-muted">
               {{ fam.description }}
             </div>
-          </button>
+          </AppButton>
         </div>
       </div>
     </div>
@@ -125,7 +125,7 @@ function handleFontSizeInput(event: Event) {
       </div>
       <div class="p-5">
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          <button
+          <AppButton size="none" variant="plain" weight="none"
             v-for="font in props.fontOptions"
             :key="font.id"
             class="flex items-center gap-3 px-4 py-3 dd-rounded text-left transition-colors border"
@@ -142,7 +142,7 @@ function handleFontSizeInput(event: Event) {
             <div class="flex-1 min-w-0">
               <div class="flex items-center gap-1.5">
                 <span
-                  class="text-[0.8125rem] font-semibold truncate"
+                  class="text-xs-plus font-semibold truncate"
                   :style="props.isFontLoaded(font.id) ? { fontFamily: font.family } : {}"
                   :class="props.activeFont === font.id ? 'text-drydock-secondary' : 'dd-text'"
                 >
@@ -150,14 +150,14 @@ function handleFontSizeInput(event: Event) {
                 </span>
                 <span
                   v-if="font.bundled"
-                  class="text-[0.5rem] font-bold uppercase tracking-wider dd-text-muted px-1 py-0.5 dd-rounded-sm"
+                  class="text-4xs font-bold uppercase tracking-wider dd-text-muted px-1 py-0.5 dd-rounded-sm"
                   :style="{ backgroundColor: 'var(--dd-bg-elevated)' }"
                 >
                   default
                 </span>
               </div>
               <div
-                class="text-[0.625rem] mt-0.5 truncate dd-text-muted"
+                class="text-2xs mt-0.5 truncate dd-text-muted"
                 :style="props.isFontLoaded(font.id) ? { fontFamily: font.family } : {}"
               >
                 The quick brown fox jumps over the lazy dog
@@ -169,7 +169,7 @@ function handleFontSizeInput(event: Event) {
               :size="14"
               class="text-drydock-secondary shrink-0"
             />
-          </button>
+          </AppButton>
         </div>
       </div>
     </div>
@@ -187,7 +187,7 @@ function handleFontSizeInput(event: Event) {
       </div>
       <div class="p-5">
         <div class="flex items-center gap-4">
-          <span class="text-[0.625rem] dd-text-muted font-semibold">A</span>
+          <span class="text-2xs dd-text-muted font-semibold">A</span>
           <input
             type="range"
             min="0.8"
@@ -200,7 +200,7 @@ function handleFontSizeInput(event: Event) {
           />
           <span class="text-base dd-text-muted font-semibold">A</span>
         </div>
-        <div class="text-center mt-2 text-[0.6875rem] dd-text-muted">
+        <div class="text-center mt-2 text-2xs-plus dd-text-muted">
           {{ Math.round(props.fontSize * 100) }}%
         </div>
       </div>
@@ -219,7 +219,7 @@ function handleFontSizeInput(event: Event) {
       </div>
       <div class="p-5">
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-          <button
+          <AppButton size="none" variant="plain" weight="none"
             v-for="(label, lib) in props.libraryLabels"
             :key="lib"
             class="flex items-center gap-3 px-4 py-3 dd-rounded text-left transition-colors border"
@@ -247,14 +247,14 @@ function handleFontSizeInput(event: Event) {
               <div class="text-xs font-semibold" :class="props.iconLibrary === lib ? 'text-drydock-secondary' : 'dd-text'">
                 {{ label }}
               </div>
-              <div class="text-[0.625rem] dd-text-muted">
+              <div class="text-2xs dd-text-muted">
                 {{ lib }}
               </div>
             </div>
             <div v-if="props.iconLibrary === lib" class="ml-auto shrink-0">
               <AppIcon name="check" :size="14" class="text-drydock-secondary" />
             </div>
-          </button>
+          </AppButton>
         </div>
       </div>
     </div>
@@ -285,7 +285,7 @@ function handleFontSizeInput(event: Event) {
           />
           <AppIcon name="dashboard" :size="20" class="dd-text-muted" />
         </div>
-        <div class="text-center mt-2 text-[0.6875rem] dd-text-muted">
+        <div class="text-center mt-2 text-2xs-plus dd-text-muted">
           {{ Math.round(props.iconScale * 100) }}%
         </div>
       </div>
@@ -304,7 +304,7 @@ function handleFontSizeInput(event: Event) {
       </div>
       <div class="p-5">
         <div class="grid grid-cols-5 gap-2">
-          <button
+          <AppButton size="none" variant="plain" weight="none"
             v-for="p in props.radiusPresets"
             :key="p.id"
             class="flex flex-col items-center gap-2 px-3 py-3 dd-rounded transition-colors"
@@ -321,12 +321,12 @@ function handleFontSizeInput(event: Event) {
               :style="{ borderRadius: p.md + 'px', backgroundColor: props.activeRadius === p.id ? 'var(--dd-primary-muted)' : 'transparent' }"
             />
             <div
-              class="text-[0.6875rem] font-semibold"
+              class="text-2xs-plus font-semibold"
               :class="props.activeRadius === p.id ? 'text-drydock-secondary' : 'dd-text'"
             >
               {{ p.label }}
             </div>
-          </button>
+          </AppButton>
         </div>
       </div>
     </div>

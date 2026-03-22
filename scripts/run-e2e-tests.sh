@@ -14,7 +14,7 @@ acquire_lock() {
 		# Recover stale locks from dead processes.
 		if [ -f "$LOCK_DIR/pid" ]; then
 			lock_pid=$(cat "$LOCK_DIR/pid" 2>/dev/null || true)
-			if [ -n "${lock_pid:-}" ] && ! kill -0 "$lock_pid" 2>/dev/null; then
+			if [ -n "${lock_pid:-}" ] && [[ $lock_pid =~ ^[0-9]+$ ]] && ! ps -p "$lock_pid" >/dev/null 2>&1; then
 				rm -rf "$LOCK_DIR"
 				continue
 			fi
@@ -58,8 +58,8 @@ acquire_lock
 # Start drydock (uses random port to avoid conflicts)
 "$SCRIPT_DIR/start-drydock.sh"
 
-# Query the assigned port from the running container
-E2E_PORT=$(docker port drydock 3000/tcp | head -1 | cut -d: -f2)
+# Query the assigned port from the running container (works for IPv4 and IPv6 outputs)
+E2E_PORT=$(docker port drydock 3000/tcp | head -n1 | awk -F: '{print $NF}')
 echo "🔌 Drydock available on port $E2E_PORT"
 
 # Run e2e tests with the dynamically assigned port

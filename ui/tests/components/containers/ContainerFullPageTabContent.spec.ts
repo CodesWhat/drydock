@@ -385,6 +385,11 @@ function mountComponent() {
   return mount(ContainerFullPageTabContent, {
     global: {
       stubs: {
+        ContainerLogs: {
+          template:
+            '<div data-test="container-logs-stub" :data-id="containerId" :data-name="containerName" :data-compact="compact ? `true` : `false`">{{ containerName }}</div>',
+          props: ['containerId', 'containerName', 'compact'],
+        },
         AppIcon: {
           template: '<span class="app-icon-stub" />',
           props: ['name', 'size'],
@@ -855,32 +860,16 @@ describe('ContainerFullPageTabContent', () => {
     expect(errorWrapper.text()).toContain('SBOM refresh failed');
   });
 
-  it('renders logs tab branches and log controls', async () => {
+  it('renders logs tab with the real-time log viewer component', () => {
     activeDetailTab.value = 'logs';
-    containerAutoFetchInterval.value = 5;
-    containerScrollBlocked.value = true;
-    mockGetContainerLogs.mockReturnValue([
-      '2026-03-13T00:00:00Z [error] broken',
-      '2026-03-13T00:00:01Z [warn] attention',
-      '2026-03-13T00:00:02Z plain message',
-    ]);
+    selectedContainer.value = makeContainer({ id: 'container-99', name: 'api' });
 
     const wrapper = mountComponent();
-    expect(wrapper.text()).toContain('Container Logs');
-    expect(wrapper.text()).toContain('3 lines');
-    expect(wrapper.text()).toContain('Auto-scroll paused');
-
-    const logViewport = wrapper.find('div[style*="max-height: calc(100vh - 320px)"]');
-    expect(logViewport.exists()).toBe(true);
-    await logViewport.trigger('scroll');
-    expect(mockContainerHandleLogScroll).toHaveBeenCalledTimes(1);
-
-    await findButtonByText(wrapper, 'Resume')?.trigger('click');
-    expect(mockContainerResumeAutoScroll).toHaveBeenCalledTimes(1);
-
-    containerScrollBlocked.value = false;
-    await nextTick();
-    expect(wrapper.text()).not.toContain('Auto-scroll paused');
+    const logsStub = wrapper.find('[data-test="container-logs-stub"]');
+    expect(logsStub.exists()).toBe(true);
+    expect(logsStub.attributes('data-id')).toBe('container-99');
+    expect(logsStub.attributes('data-name')).toBe('api');
+    expect(logsStub.attributes('data-compact')).toBe('false');
   });
 
   it('renders environment sensitive-value reveal flows including cache and hide', async () => {
@@ -1052,7 +1041,7 @@ describe('ContainerFullPageTabContent', () => {
     expect(mockRevealContainerEnv).toHaveBeenCalledTimes(1);
   });
 
-  it('updates select and input models for sbom, logs, snooze date, and maturity mode controls', async () => {
+  it('updates select and input models for sbom, snooze date, and maturity mode controls', async () => {
     activeDetailTab.value = 'overview';
     const wrapper = mountComponent();
 
@@ -1062,15 +1051,6 @@ describe('ContainerFullPageTabContent', () => {
     expect(sbomSelect).toBeDefined();
     await sbomSelect?.setValue('cyclonedx-json');
     expect(selectedSbomFormat.value).toBe('cyclonedx-json');
-
-    activeDetailTab.value = 'logs';
-    await nextTick();
-    const logsSelect = wrapper
-      .findAll('select')
-      .find((select) => select.find('option[value="5"]').exists());
-    expect(logsSelect).toBeDefined();
-    await logsSelect?.setValue('5');
-    expect(containerAutoFetchInterval.value).toBe(5);
 
     activeDetailTab.value = 'actions';
     await nextTick();

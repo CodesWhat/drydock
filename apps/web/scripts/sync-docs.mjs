@@ -12,7 +12,8 @@ const targetDir = join(webRoot, "content", "docs");
 
 // Version definitions — order matters (first = default/active tab)
 const versions = [
-  { slug: "v1.4", source: "current", title: "v1.4 (RC)" },
+  { slug: "v1.5", source: "current", title: "v1.5" },
+  { slug: "v1.4", source: "v1.4", title: "v1.4" },
   { slug: "v1.3", source: "v1.3", title: "v1.3" },
 ];
 
@@ -28,7 +29,7 @@ description: "All notable changes to this project will be documented in this fil
 
 const body = changelogMd.replace(/^# Changelog\n/, "");
 
-// Write changelog into the current (v1.4) source dir so it gets copied
+// Write changelog into the current (v1.5) source dir so it gets copied
 const changelogDir = join(repoRoot, "content", "docs", "current", "changelog");
 mkdirSync(changelogDir, { recursive: true });
 writeFileSync(join(changelogDir, "index.mdx"), `${frontmatter}\n${body}`);

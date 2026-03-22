@@ -2,6 +2,14 @@ import axios from 'axios';
 import { getOutboundHttpTimeoutMs } from '../../../configuration/runtime-defaults.js';
 import Trigger from '../Trigger.js';
 
+type MattermostMessageBody = {
+  text: string;
+  channel?: string;
+  username?: string;
+  icon_emoji?: string;
+  icon_url?: string;
+};
+
 /**
  * Mattermost Trigger implementation
  */
@@ -52,7 +60,7 @@ class Mattermost extends Trigger {
   }
 
   buildMessageBody(text) {
-    const body: any = { text };
+    const body: MattermostMessageBody = { text };
     if (this.configuration.channel) {
       body.channel = this.configuration.channel;
     }

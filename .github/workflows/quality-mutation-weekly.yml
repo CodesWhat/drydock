@@ -1,0 +1,85 @@
+name: "🧬 Mutation Testing"
+run-name: >-
+  ${{
+    github.event_name == 'schedule' && '🧬 Mutation Testing — Weekly schedule' ||
+    format('🧬 Mutation Testing — Manual by {0}', github.actor)
+  }}
+
+# Keep mutation testing out of the push/PR fast path.
+# This workflow is a weekly/manual quality signal used to find weak assertions,
+# dead code, and refactor candidates after merges land on the integration branch.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '15 6 * * 2'  # Weekly on Tuesday at 06:15 UTC
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mutation-testing-${{ github.workflow }}
+  cancel-in-progress: true
+
+jobs:
+  stryker:
+    name: "Stryker Advisory (${{ matrix.package }})"
+    runs-on: ubuntu-latest
+    timeout-minutes: 60  # Mutation testing is intentionally expensive; cap runaway mutants
+    continue-on-error: true  # advisory by policy; review results, then file focused follow-up work
+    env:
+      STRYKER_DASHBOARD_API_KEY: ${{ secrets.STRYKER_DASHBOARD_API_KEY }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - package: app
+            lockfile: app/package-lock.json
+          - package: ui
+            lockfile: ui/package-lock.json
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594  # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f  # v6.3.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: ${{ matrix.package }}
+
+      - name: Run Stryker
+        run: npm run test:mutation
+        working-directory: ${{ matrix.package }}
+
+      - name: Summarize advisory mode
+        if: always()
+        run: |
+          {
+            echo "### Mutation Testing"
+            echo "- Mode: ADVISORY (non-blocking)."
+            echo "- Trigger policy: weekly schedule plus manual dispatch only; not part of push or PR CI."
+            echo "- Expected use: review surviving mutants and initial dry-run failures, then create focused follow-up work for real test gaps or brittle logic."
+            echo "- Dashboard publish: enabled automatically when STRYKER_DASHBOARD_API_KEY is configured in GitHub Actions secrets."
+            echo "- Merge policy: do not block merges on mutation score."
+            echo "- Promotion criteria to stricter enforcement: clean dry-runs in every package, stable CI variance, and explicit team agreement."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload mutation report
+        if: always()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7.0.0
+        with:
+          name: mutation-report-${{ matrix.package }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ matrix.package }}/reports/mutation
+          if-no-files-found: warn
+          retention-days: 14

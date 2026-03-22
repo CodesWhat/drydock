@@ -17,6 +17,7 @@
 import { getEffectiveDisplayIcon } from '../services/image-icon';
 import type {
   Container,
+  ContainerReleaseNotes,
   ContainerSecurityDelta,
   ContainerSecuritySummary,
 } from '../types/container';
@@ -31,6 +32,7 @@ import { formatUpdateAge, getUpdateMaturity } from './update-maturity';
 interface ApiContainerImage {
   name?: unknown;
   variant?: unknown;
+  created?: unknown;
   registry?: {
     name?: unknown;
     url?: unknown;
@@ -44,11 +46,21 @@ interface ApiContainerImage {
   } | null;
 }
 
+interface ApiContainerReleaseNotes {
+  title?: unknown;
+  body?: unknown;
+  url?: unknown;
+  publishedAt?: unknown;
+  provider?: unknown;
+}
+
 interface ApiContainerResult {
   tag?: unknown;
+  suggestedTag?: unknown;
   digest?: unknown;
   link?: unknown;
   noUpdateReason?: unknown;
+  releaseNotes?: ApiContainerReleaseNotes | null;
 }
 
 interface ApiContainerUpdateKind {
@@ -122,6 +134,7 @@ export interface ApiContainerInput {
   transformTags?: unknown;
   triggerInclude?: unknown;
   triggerExclude?: unknown;
+  sourceRepo?: unknown;
   error?: { message?: unknown } | null;
   ports?: unknown;
   volumes?: unknown;
@@ -252,7 +265,7 @@ function deriveBouncer(apiContainer: ApiContainerInput): BouncerStatus {
   return deriveBouncerFromScan(getSecurityScan(apiContainer, 'scan'));
 }
 
-/** Derive whether a container has any persisted security scan result. */
+/** Derive whether a container has a persisted security scan result. */
 function deriveSecurityScanState(apiContainer: ApiContainerInput): 'scanned' | 'not-scanned' {
   return deriveSecurityScanStateFromScan(getSecurityScan(apiContainer, 'scan'));
 }
@@ -270,7 +283,7 @@ function deriveUpdateBouncer(apiContainer: ApiContainerInput): BouncerStatus | u
   return deriveBouncerFromScan(updateScan);
 }
 
-/** Derive whether a container has any persisted update security scan result. */
+/** Derive whether a container has a persisted update security scan result. */
 function deriveUpdateSecurityScanState(
   apiContainer: ApiContainerInput,
 ): 'scanned' | 'not-scanned' | undefined {
@@ -341,6 +354,14 @@ function deriveReleaseLink(apiContainer: ApiContainerInput): string | undefined 
   if (!trimmed) return undefined;
   if (!/^https?:\/\//i.test(trimmed)) return undefined;
   return trimmed;
+}
+
+function deriveImageCreated(apiContainer: ApiContainerInput): string | undefined {
+  const value = asNonEmptyString(apiContainer.image?.created);
+  if (!value) return undefined;
+  const parsedAt = Date.parse(value);
+  if (Number.isNaN(parsedAt)) return undefined;
+  return new Date(parsedAt).toISOString();
 }
 
 function deriveUpdateDetectedAt(apiContainer: ApiContainerInput): string | undefined {
@@ -512,6 +533,19 @@ function deriveRuntimeDetails(
   };
 }
 
+/** Derive inline release notes summary from API result. */
+function deriveReleaseNotes(apiContainer: ApiContainerInput): ContainerReleaseNotes | null {
+  const rn = apiContainer.result?.releaseNotes;
+  if (!rn || typeof rn !== 'object') return null;
+  const title = asNonEmptyString(rn.title);
+  const body = asNonEmptyString(rn.body);
+  const url = asNonEmptyString(rn.url);
+  const publishedAt = asNonEmptyString(rn.publishedAt);
+  const provider = asNonEmptyString(rn.provider);
+  if (!title || !body || !url || !publishedAt || !provider) return null;
+  return { title, body, url, publishedAt, provider };
+}
+
 /** Map a single API container to the UI Container type. */
 export function mapApiContainer(apiContainer: ApiContainerInput): Container {
   const runtimeDetails = deriveRuntimeDetails(apiContainer);
@@ -536,6 +570,9 @@ export function mapApiContainer(apiContainer: ApiContainerInput): Container {
     imageVariant: asNonEmptyString(apiContainer.image?.variant),
     imageDigestWatch: asOptionalBoolean(apiContainer.image?.digest?.watch),
     imageTagSemver: asOptionalBoolean(apiContainer.image?.tag?.semver),
+    suggestedTag: asNonEmptyString(apiContainer.result?.suggestedTag),
+    sourceRepo: asNonEmptyString(apiContainer.sourceRepo),
+    releaseNotes: deriveReleaseNotes(apiContainer),
     releaseLink: deriveReleaseLink(apiContainer),
     updateDetectedAt: deriveUpdateDetectedAt(apiContainer),
     updateMaturity: getUpdateMaturity(
@@ -562,6 +599,7 @@ export function mapApiContainer(apiContainer: ApiContainerInput): Container {
     updateSecurityScanState: deriveUpdateSecurityScanState(apiContainer),
     updateSecuritySummary: updateSummary,
     securityDelta: computeSecurityDelta(currentSummary, updateSummary),
+    imageCreated: deriveImageCreated(apiContainer),
     server: deriveServer(apiContainer),
     includeTags: asNonEmptyString(apiContainer.includeTags),
     excludeTags: asNonEmptyString(apiContainer.excludeTags),

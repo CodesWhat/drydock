@@ -1,6 +1,13 @@
 import type { Container } from '../../../model/container.js';
+import * as registry from '../../../registry/index.js';
+import { detectSourceRepoFromImageMetadata } from '../../../release-notes/index.js';
 import * as storeContainer from '../../../store/container.js';
 import { parse as parseSemver, transform as transformTag } from '../../../tag/index.js';
+import {
+  getDockerWatcherRegistryId,
+  getDockerWatcherSourceKey,
+  isDockerWatcher,
+} from './container-init.js';
 import {
   getContainerDisplayName,
   getContainerName,
@@ -53,6 +60,9 @@ interface DockerImageInspectPayload {
   Os?: string;
   Variant?: string;
   Created?: string;
+  Config?: {
+    Labels?: Record<string, string>;
+  };
   [key: string]: unknown;
 }
 
@@ -94,8 +104,13 @@ interface ResolvedContainerConfig {
 
 interface DockerImageDetailsWatcher {
   name: string;
+  agent?: string;
   configuration: {
     watchevents: boolean;
+    host?: string;
+    socket?: string;
+    protocol?: string;
+    port?: number;
   };
   dockerApi: {
     getContainer: (id: string) => { inspect: () => Promise<DockerContainerInspectPayload> };
@@ -123,6 +138,7 @@ interface DockerImageDetailsHelpers {
   resolveImageName: (
     imageName: string,
     image: DockerImageInspectPayload,
+    containerName?: string,
   ) => ParsedDockerImageReference | undefined;
   resolveTagName: (
     parsedImage: ParsedDockerImageReference,
@@ -138,7 +154,7 @@ interface DockerImageDetailsHelpers {
 
 type RuntimeDetails = ReturnType<typeof getRuntimeDetailsFromContainerSummary>;
 
-function getErrorMessage(error: unknown) {
+function getErrorMessage(error: unknown): string {
   if (error instanceof Error) {
     return error.message;
   }
@@ -278,8 +294,10 @@ async function inspectImageForContainer(
   try {
     await watcher.ensureRemoteAuthHeaders();
     return await watcher.dockerApi.getImage(imageName).inspect();
-  } catch (e: unknown) {
-    throw new Error(`Unable to inspect image for container ${containerId}: ${getErrorMessage(e)}`);
+  } catch (error: unknown) {
+    throw new Error(
+      `Unable to inspect image for container ${containerId}: ${getErrorMessage(error)}`,
+    );
   }
 }
 
@@ -317,19 +335,40 @@ function warnWhenUntrackableImage(
 }
 
 function removeStaleContainerEntriesWithSameName(
-  watcherName: string,
+  watcher: DockerImageDetailsWatcher,
   containerToReturn: Container,
 ) {
   if (typeof containerToReturn.name !== 'string' || containerToReturn.name === '') {
     return;
   }
 
-  const containersWithSameName = storeContainer.getContainers({
-    watcher: watcherName,
-    name: containerToReturn.name,
-  });
+  const containersWithSameName = storeContainer.getContainers({ name: containerToReturn.name });
+  const watcherRegistryState = registry.getState().watcher;
+  const currentWatcherSourceKey = getDockerWatcherSourceKey(watcher);
+  const currentWatcherAgent = watcher.agent;
+
   containersWithSameName
     .filter((staleContainer) => staleContainer.id !== containerToReturn.id)
+    .filter((staleContainer) => staleContainer.agent === currentWatcherAgent)
+    .filter((staleContainer) => {
+      if (staleContainer.watcher === watcher.name) {
+        return true;
+      }
+
+      if (typeof staleContainer.watcher !== 'string' || staleContainer.watcher === '') {
+        return false;
+      }
+      const staleWatcherId = getDockerWatcherRegistryId(
+        staleContainer.watcher,
+        staleContainer.agent,
+      );
+      const staleWatcher = watcherRegistryState[staleWatcherId];
+      if (!isDockerWatcher(staleWatcher)) {
+        return false;
+      }
+
+      return getDockerWatcherSourceKey(staleWatcher) === currentWatcherSourceKey;
+    })
     .forEach((staleContainer) => storeContainer.deleteContainer(staleContainer.id));
 }
 
@@ -361,7 +400,7 @@ export async function addImageDetailsToContainerOrchestration(
 
   const image = await inspectImageForContainer(watcher, containerId, container.Image);
 
-  const parsedImage = helpers.resolveImageName(container.Image, image);
+  const parsedImage = helpers.resolveImageName(container.Image, image, dockerContainerName);
   if (!parsedImage) {
     return undefined;
   }
@@ -442,6 +481,12 @@ export async function addImageDetailsToContainerOrchestration(
       created: image.Created,
     },
     labels: containerLabels,
+    sourceRepo: detectSourceRepoFromImageMetadata({
+      containerLabels,
+      imageLabels: image.Config?.Labels,
+      imageRegistryDomain: parsedImage.domain,
+      imagePath: parsedImage.path,
+    }),
     details: runtimeDetails,
     result: {
       tag: tagName,
@@ -449,7 +494,7 @@ export async function addImageDetailsToContainerOrchestration(
     updateAvailable: false,
     updateKind: { kind: 'unknown' },
   } as Container);
-  removeStaleContainerEntriesWithSameName(watcher.name, containerToReturn);
+  removeStaleContainerEntriesWithSameName(watcher, containerToReturn);
 
   return containerToReturn;
 }

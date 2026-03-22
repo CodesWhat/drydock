@@ -3,7 +3,7 @@ export const MATURITY_MIN_AGE_DAYS_MIN = 1;
 export const MATURITY_MIN_AGE_DAYS_MAX = 365;
 export const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
-export type MaturityMode = 'all' | 'mature';
+type MaturityMode = 'all' | 'mature';
 
 export function normalizeMaturityMode(value: unknown): MaturityMode | undefined {
   if (typeof value !== 'string') {

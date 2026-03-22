@@ -111,6 +111,32 @@ Legacy `WUD_*` environment variables are accepted as fallbacks for their `DD_*` 
 
 ---
 
+### Legacy trigger prefix inputs (`DD_TRIGGER_*`, `dd.trigger.*`)
+
+| | |
+| --- | --- |
+| **Deprecated in** | v1.5.0 |
+| **Removed in** | v1.7.0 |
+| **Affects** | Trigger configs using `DD_TRIGGER_*` env vars and container labels `dd.trigger.include` / `dd.trigger.exclude` |
+
+Legacy trigger prefixes are accepted as compatibility aliases while the trigger taxonomy moves to action/notification prefixes.
+
+**Migration:** Prefer `DD_ACTION_*` / `DD_NOTIFICATION_*` and `dd.action.*` / `dd.notification.*`.
+
+The migration CLI can rewrite legacy trigger prefixes for you:
+
+```bash
+# Preview changes
+node dist/index.js config migrate --source trigger --dry-run
+
+# Apply to specific files
+node dist/index.js config migrate --source trigger --file .env --file compose.yaml
+```
+
+The CLI rewrites legacy trigger keys to action-prefixed aliases by default (`DD_ACTION_*`, `dd.action.*`), which remain fully compatible.
+
+---
+
 ### `DD_WATCHER_{name}_WATCHDIGEST` environment variable
 
 | | |

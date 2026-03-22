@@ -18,6 +18,29 @@ type SelfUpdateControllerConfig = {
   pollIntervalMs: number;
 };
 
+type ErrorWithStatusCode = {
+  statusCode?: number;
+  status?: number;
+};
+
+type ContainerInspectState = {
+  State?: {
+    Running?: boolean;
+    Health?: {
+      Status?: string;
+    };
+  };
+  Name?: string;
+};
+
+function getErrorStatusCode(error: unknown): number | undefined {
+  if (typeof error !== 'object' || error === null) {
+    return undefined;
+  }
+  const errorWithStatusCode = error as ErrorWithStatusCode;
+  return errorWithStatusCode.statusCode ?? errorWithStatusCode.status;
+}
+
 function getRequiredEnv(name: string): string {
   const value = process.env[name];
   if (!value || value.trim() === '') {
@@ -47,8 +70,8 @@ function readConfigFromEnv(): SelfUpdateControllerConfig {
   };
 }
 
-function isContainerAlreadyStoppedError(error: any): boolean {
-  const statusCode = error?.statusCode ?? error?.status;
+function isContainerAlreadyStoppedError(error: unknown): boolean {
+  const statusCode = getErrorStatusCode(error);
   if (statusCode === 304) {
     return true;
   }
@@ -56,8 +79,8 @@ function isContainerAlreadyStoppedError(error: any): boolean {
   return message.includes('is not running') || message.includes('already stopped');
 }
 
-function isContainerAlreadyStartedError(error: any): boolean {
-  const statusCode = error?.statusCode ?? error?.status;
+function isContainerAlreadyStartedError(error: unknown): boolean {
+  const statusCode = getErrorStatusCode(error);
   if (statusCode === 304) {
     return true;
   }
@@ -65,8 +88,8 @@ function isContainerAlreadyStartedError(error: any): boolean {
   return message.includes('already started');
 }
 
-function hasHealthcheck(containerInspect: any): boolean {
-  return Boolean(containerInspect?.State?.Health);
+function hasHealthcheck(containerInspect: ContainerInspectState): boolean {
+  return Boolean(containerInspect.State?.Health);
 }
 
 function normalizeContainerName(name: string | undefined): string {
@@ -105,11 +128,10 @@ class SelfUpdateController {
 
   logState(state: string, details?: string): void {
     const suffix = details ? ` - ${details}` : '';
-    // eslint-disable-next-line no-console
-    console.log(`[self-update:${this.config.opId}] ${state}${suffix}`);
+    globalThis.console.log(`[self-update:${this.config.opId}] ${state}${suffix}`);
   }
 
-  async inspectContainer(containerId: string): Promise<any> {
+  async inspectContainer(containerId: string): Promise<ContainerInspectState> {
     return this.docker.getContainer(containerId).inspect();
   }
 
@@ -118,7 +140,7 @@ class SelfUpdateController {
     const oldContainer = this.docker.getContainer(this.config.oldContainerId);
     try {
       await oldContainer.stop();
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (!isContainerAlreadyStoppedError(error)) {
         throw error;
       }
@@ -146,7 +168,7 @@ class SelfUpdateController {
     const newContainer = this.docker.getContainer(this.config.newContainerId);
     try {
       await newContainer.start();
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (!isContainerAlreadyStartedError(error)) {
         throw error;
       }
@@ -213,7 +235,7 @@ class SelfUpdateController {
     await oldContainer.rename({ name: this.config.oldContainerName });
   }
 
-  async rollback(error: any): Promise<never> {
+  async rollback(error: unknown): Promise<never> {
     const reason = getErrorMessage(error, String(error));
     const oldContainer = this.docker.getContainer(this.config.oldContainerId);
     const newContainer = this.docker.getContainer(this.config.newContainerId);
@@ -221,7 +243,7 @@ class SelfUpdateController {
     try {
       this.logState('CLEANUP_CANDIDATE');
       await newContainer.remove({ force: true });
-    } catch (cleanupError: any) {
+    } catch (cleanupError: unknown) {
       this.logState(
         'CLEANUP_CANDIDATE_FAILED',
         getErrorMessage(cleanupError, String(cleanupError)),
@@ -230,7 +252,7 @@ class SelfUpdateController {
 
     try {
       await this.restoreOldContainerName(oldContainer);
-    } catch (restoreNameError: any) {
+    } catch (restoreNameError: unknown) {
       this.logState(
         'ROLLBACK_RESTORE_NAME_FAILED',
         getErrorMessage(restoreNameError, String(restoreNameError)),
@@ -240,7 +262,7 @@ class SelfUpdateController {
     this.logState('ROLLBACK_START_OLD', reason);
     try {
       await oldContainer.start();
-    } catch (rollbackError: any) {
+    } catch (rollbackError: unknown) {
       if (!isContainerAlreadyStartedError(rollbackError)) {
         this.logState(
           'ROLLBACK_START_OLD_FAILED',
@@ -265,7 +287,7 @@ class SelfUpdateController {
       await this.waitNewContainerRunning();
       await this.waitNewContainerHealthy();
       await this.commitUpdate();
-    } catch (error: any) {
+    } catch (error: unknown) {
       await this.rollback(error);
     }
   }
@@ -282,9 +304,10 @@ export async function runSelfUpdateControllerEntrypoint(
 ): Promise<void> {
   try {
     await runner();
-  } catch (error: any) {
-    // eslint-disable-next-line no-console
-    console.error(`[self-update] controller failed: ${getErrorMessage(error, String(error))}`);
+  } catch (error: unknown) {
+    globalThis.console.error(
+      `[self-update] controller failed: ${getErrorMessage(error, String(error))}`,
+    );
     process.exitCode = 1;
   }
 }

@@ -16,9 +16,10 @@ The webhook API lets external systems trigger container watches and updates. Thi
 | --- | :---: | --- | --- | --- |
 | `DD_SERVER_WEBHOOK_ENABLED` | ⚪ | Enable webhook endpoints | `true`, `false` | `false` |
 | `DD_SERVER_WEBHOOK_TOKEN` | ⚪ | Shared Bearer token used by all webhook endpoints (fallback token) | Any string | — |
-| `DD_SERVER_WEBHOOK_TOKENS_WATCHALL` | ⚪ | Endpoint-specific token for `POST /api/webhook/watch` | Any string | — |
-| `DD_SERVER_WEBHOOK_TOKENS_WATCH` | ⚪ | Endpoint-specific token for `POST /api/webhook/watch/:containerName` | Any string | — |
-| `DD_SERVER_WEBHOOK_TOKENS_UPDATE` | ⚪ | Endpoint-specific token for `POST /api/webhook/update/:containerName` | Any string | — |
+| `DD_SERVER_WEBHOOK_TOKENS_WATCHALL` | ⚪ | Endpoint-specific token for `POST /api/v1/webhook/watch` | Any string | — |
+| `DD_SERVER_WEBHOOK_TOKENS_WATCH` | ⚪ | Endpoint-specific token for `POST /api/v1/webhook/watch/:containerName` | Any string | — |
+| `DD_SERVER_WEBHOOK_TOKENS_UPDATE` | ⚪ | Endpoint-specific token for `POST /api/v1/webhook/update/:containerName` | Any string | — |
+| `DD_SERVER_WEBHOOK_SECRET` | ⚪ | HMAC signing secret for verifying registry webhook signatures. Required when receiving push notifications from container registries. | Any string | — |
 
 <Callout type="warn">Webhooks are disabled by default. Set `DD_SERVER_WEBHOOK_ENABLED=true` and provide at least one webhook token (`DD_SERVER_WEBHOOK_TOKEN` or any `DD_SERVER_WEBHOOK_TOKENS_*` value). Requests to endpoints without a configured token are rejected.</Callout>
 
@@ -26,9 +27,10 @@ The webhook API lets external systems trigger container watches and updates. Thi
 
 | Method | Endpoint | Description |
 | --- | --- | --- |
-| `POST` | `/api/webhook/watch` | Trigger a watch cycle on all watchers |
-| `POST` | `/api/webhook/watch/:containerName` | Watch a specific container by name |
-| `POST` | `/api/webhook/update/:containerName` | Trigger an update on a specific container |
+| `POST` | `/api/v1/webhook/watch` | Trigger a watch cycle on all watchers |
+| `POST` | `/api/v1/webhook/watch/:containerName` | Watch a specific container by name |
+| `POST` | `/api/v1/webhook/update/:containerName` | Trigger an update on a specific container |
+| `POST` | `/api/v1/webhooks/registry` | Receive signed registry push events and trigger targeted checks |
 
 ## Authentication
 
@@ -43,13 +45,18 @@ Token selection rules:
 - If an endpoint-specific token (`DD_SERVER_WEBHOOK_TOKENS_*`) is set for that endpoint, it is required.
 - Otherwise, drydock falls back to `DD_SERVER_WEBHOOK_TOKEN`.
 
+<Callout type="info">`/api/v1/webhooks/registry` uses HMAC signature validation (not Bearer token auth). Supported signature headers include `x-registry-signature`, `x-hub-signature-256`, `x-quay-signature`, `x-harbor-signature`, `x-ms-signature`, and `x-drydock-signature`.</Callout>
+
 ## Rate limiting
 
-Webhook endpoints are rate-limited to **30 requests per 15-minute window** per client IP.
+Webhook endpoints are rate-limited per client IP:
+
+- `POST /api/v1/webhook/*`: **30 requests per 15-minute window**
+- `POST /api/v1/webhooks/registry`: **60 requests per 15-minute window**
 
 ## Per-container opt-out
 
-Individual containers can be excluded from webhook API calls using the `dd.webhook.enabled` label. When set to `false`, the `/api/webhook/watch/:containerName` and `/api/webhook/update/:containerName` endpoints return **403 Forbidden** for that container.
+Individual containers can be excluded from webhook API calls using the `dd.webhook.enabled` label. When set to `false`, the `/api/v1/webhook/watch/:containerName` and `/api/v1/webhook/update/:containerName` endpoints return **403 Forbidden** for that container.
 
 ```yaml
 services:
@@ -60,7 +67,7 @@ services:
       - dd.webhook.enabled=false  # blocks webhook watch/update for this container
 ```
 
-<Callout type="info">The `dd.webhook.enabled` label only affects per-container webhook endpoints. The global `POST /api/webhook/watch` endpoint (which triggers all watchers) is not affected.</Callout>
+<Callout type="info">The `dd.webhook.enabled` label only affects per-container webhook endpoints. The global `POST /api/v1/webhook/watch` endpoint (which triggers all watchers) and `POST /api/v1/webhooks/registry` are not affected.</Callout>
 
 <Callout type="info">Containers without this label default to `dd.webhook.enabled=true` — webhooks are allowed unless explicitly disabled.</Callout>
 
@@ -73,22 +80,31 @@ All webhook calls are recorded in the [audit trail](/docs/monitoring) with actio
 ### Watch all containers
 
 ```bash
-curl -X POST https://drydock.example.com/api/webhook/watch \
+curl -X POST https://drydock.example.com/api/v1/webhook/watch \
   -H "Authorization: Bearer your-token-here"
 ```
 
 ### Watch a specific container
 
 ```bash
-curl -X POST https://drydock.example.com/api/webhook/watch/myapp \
+curl -X POST https://drydock.example.com/api/v1/webhook/watch/myapp \
   -H "Authorization: Bearer your-token-here"
 ```
 
 ### Update a specific container
 
 ```bash
-curl -X POST https://drydock.example.com/api/webhook/update/myapp \
+curl -X POST https://drydock.example.com/api/v1/webhook/update/myapp \
   -H "Authorization: Bearer your-token-here"
+```
+
+### Registry push webhook (signed)
+
+```bash
+curl -X POST https://drydock.example.com/api/v1/webhooks/registry \
+  -H "Content-Type: application/json" \
+  -H "x-registry-signature: sha256=<hmac-of-raw-body>" \
+  -d '{"events":[{"action":"push"}]}'
 ```
 
 ## CI/CD integration
@@ -98,7 +114,7 @@ curl -X POST https://drydock.example.com/api/webhook/update/myapp \
 ```yaml
 - name: Notify drydock
   run: |
-    curl -X POST https://drydock.example.com/api/webhook/watch/myapp \
+    curl -X POST https://drydock.example.com/api/v1/webhook/watch/myapp \
       -H "Authorization: Bearer ${{ secrets.DRYDOCK_WEBHOOK_TOKEN }}"
 ```
 
@@ -108,8 +124,8 @@ curl -X POST https://drydock.example.com/api/webhook/update/myapp \
 notify_drydock:
   stage: deploy
   script:
-    - curl -X POST https://drydock.example.com/api/webhook/watch/myapp
-        -H "Authorization: Bearer $DRYDOCK_WEBHOOK_TOKEN"
+    - curl -X POST https://drydock.example.com/api/v1/webhook/watch/myapp \
+      -H "Authorization: Bearer $DRYDOCK_WEBHOOK_TOKEN"
 ```
 
 ## Docker Compose example

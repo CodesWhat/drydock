@@ -52,39 +52,46 @@ If the header is missing or does not match the expected token, the API responds 
 
 | Endpoint | Method | Required header |
 | --- | --- | --- |
-| `/api/containers/:id/rollback` | `POST` | `X-DD-Confirm-Action: container-rollback` |
-| `/api/containers/:id` | `DELETE` | `X-DD-Confirm-Action: container-delete` |
+| `/api/v1/containers/:id/rollback` | `POST` | `X-DD-Confirm-Action: container-rollback` |
+| `/api/v1/containers/:id` | `DELETE` | `X-DD-Confirm-Action: container-delete` |
 
 ## Endpoint overview
 
 | Category | Endpoints | Description |
 | --- | --- | --- |
-| [App](/docs/api/app) | `GET /api/app`, `GET /api/server` | Application info, server configuration, security runtime |
-| [Containers](/docs/api/container) | `GET /api/containers`, `POST`, `PATCH`, `DELETE` | Container state, actions, update policy, security |
-| [Agents](/docs/api/agent) | `GET /api/agents` | Remote agent status and logs |
-| [Logs](/docs/api/log) | `GET /api/log` | Application log entries |
-| [Registries](/docs/api/registry) | `GET /api/registries` | Registry configurations |
-| [Store](/docs/api/store) | `GET /api/store` | Data store info |
-| [Triggers](/docs/api/trigger) | `GET /api/triggers` | Trigger configurations |
-| [Watchers](/docs/api/watcher) | `GET /api/watchers` | Watcher configurations |
+| [App](/docs/api/app) | `GET /api/v1/app`, `GET /api/v1/server` | Application info, server configuration, security runtime |
+| [Containers](/docs/api/container) | `GET /api/v1/containers`, `POST`, `PATCH`, `DELETE` | Container state, actions, update policy, security |
+| [Agents](/docs/api/agent) | `GET /api/v1/agents` | Remote agent status and logs |
+| [Logs](/docs/api/log) | `GET /api/v1/log`, `GET /api/v1/log/entries`, `WS /api/v1/log/stream` | Application logger config, buffered entries, and live stream |
+| [Registries](/docs/api/registry) | `GET /api/v1/registries` | Registry configurations |
+| [Store](/docs/api/store) | `GET /api/v1/store` | Data store info |
+| [Triggers](/docs/api/trigger) | `GET /api/v1/triggers` | Trigger configurations |
+| [Watchers](/docs/api/watcher) | `GET /api/v1/watchers` | Watcher configurations |
 
 ### Additional endpoints
 
 | Endpoint | Method | Description |
 | --- | --- | --- |
-| `/api/openapi.json` | `GET` | [OpenAPI 3.1.0 specification](#openapi) (machine-readable API docs) |
+| `/api/v1/openapi.json` | `GET` | [OpenAPI 3.1.0 specification](#openapi) (machine-readable API docs) |
 | `/health` | `GET` | Health check (returns 200 when healthy) |
 | `/metrics` | `GET` | Prometheus metrics (optional auth via `DD_SERVER_METRICS_AUTH`) |
-| `/api/events/ui` | `GET` | [Server-Sent Events](#server-sent-events-sse) for real-time UI updates |
-| `/api/audit` | `GET` | [Audit trail](#audit-trail) (paginated, filterable by action/container/date) |
-| `/api/notifications` | `GET`, `PATCH /:id` | [Notification rules](#notification-rules) (per-event enable/disable and trigger assignments) |
-| `/api/settings` | `GET`, `PATCH` | [UI settings](#settings) (internetless mode; `PUT` compatibility alias is deprecated) |
-| `/api/server` | `GET` | Server configuration and compatibility info (see [App API](/docs/api/app)) |
-| `/api/server/security/runtime` | `GET` | Security tools availability (see [App API](/docs/api/app)) |
-| `/api/containers/groups` | `GET` | [Container groups](#container-groups) (by stack/compose project) |
-| `/api/webhook/watch` | `POST` | [Webhook](/docs/configuration/webhooks) — trigger watch on all containers |
-| `/api/webhook/watch/:containerName` | `POST` | [Webhook](/docs/configuration/webhooks) — watch specific container |
-| `/api/webhook/update/:containerName` | `POST` | [Webhook](/docs/configuration/webhooks) — update specific container |
+| `/api/v1/events/ui` | `GET` | [Server-Sent Events](#server-sent-events-sse) for real-time UI updates |
+| `/api/v1/audit` | `GET` | [Audit trail](#audit-trail) (paginated, filterable by action/container/date) |
+| `/api/v1/notifications` | `GET`, `PATCH /:id` | [Notification rules](#notification-rules) (per-event enable/disable and trigger assignments) |
+| `/api/v1/settings` | `GET`, `PATCH` | [UI settings](#settings) (internetless mode; `PUT` compatibility alias is deprecated) |
+| `/api/v1/log/stream` | `WS` | [System log stream](/docs/api/log#stream-application-logs-websocket) with level/component filters |
+| `/api/v1/server` | `GET` | Server configuration and compatibility info (see [App API](/docs/api/app)) |
+| `/api/v1/server/security/runtime` | `GET` | Security tools availability (see [App API](/docs/api/app)) |
+| `/api/v1/containers/groups` | `GET` | [Container groups](#container-groups) (by stack/compose project) |
+| `/api/v1/containers/stats` | `GET` | Container CPU and memory usage stats (see [Container API](/docs/api/container)) |
+| `/api/v1/containers/:id/stats` | `GET` | Single container stats snapshot and history (see [Container API](/docs/api/container)) |
+| `/api/v1/containers/:id/stats/stream` | `GET` | SSE stream for real-time container stats (see [Container API](/docs/api/container)) |
+| `/api/v1/containers/:id/release-notes` | `GET` | GitHub release notes for a container's available update (see [Container API](/docs/api/container)) |
+| `/api/v1/icons/:source/:name` | `GET` | Proxy and cache registry icon images |
+| `/api/v1/auth/status` | `GET` | Authentication status check |
+| `/api/v1/webhook/watch` | `POST` | [Webhook](/docs/configuration/webhooks) — trigger watch on all containers |
+| `/api/v1/webhook/watch/:containerName` | `POST` | [Webhook](/docs/configuration/webhooks) — watch specific container |
+| `/api/v1/webhook/update/:containerName` | `POST` | [Webhook](/docs/configuration/webhooks) — update specific container |
 
 <Callout type="info">See each sub-page for detailed request/response examples.</Callout>
 
@@ -99,7 +106,7 @@ Notification rules control which events trigger notifications and which triggers
 ### Get all notification rules
 
 ```bash
-curl http://drydock:3000/api/notifications
+curl http://drydock:3000/api/v1/notifications
 
 {
   "data": [
@@ -160,7 +167,7 @@ curl http://drydock:3000/api/notifications
 Update the `enabled` status and/or `triggers` list for a rule. Only the fields you include are changed.
 
 ```bash
-curl -X PATCH http://drydock:3000/api/notifications/update-available \
+curl -X PATCH http://drydock:3000/api/v1/notifications/update-available \
   -H 'Content-Type: application/json' \
   -d '{"enabled": true, "triggers": ["slack.alerts", "ntfy.one"]}'
 ```
@@ -174,7 +181,7 @@ Returns paginated audit log entries for container lifecycle events, updates, rol
 ### Get audit entries
 
 ```bash
-curl "http://drydock:3000/api/audit?offset=0&limit=25&action=update-applied&container=homeassistant"
+curl "http://drydock:3000/api/v1/audit?offset=0&limit=25&action=update-applied&container=homeassistant"
 
 {
   "data": [
@@ -215,12 +222,12 @@ curl "http://drydock:3000/api/audit?offset=0&limit=25&action=update-applied&cont
 
 ## Server-Sent Events (SSE)
 
-The `/api/events/ui` endpoint provides real-time push notifications to the UI via Server-Sent Events.
+The `/api/v1/events/ui` endpoint provides real-time push notifications to the UI via Server-Sent Events.
 
 ### Connect
 
 ```bash
-curl -N -H "Accept: text/event-stream" http://drydock:3000/api/events/ui
+curl -N -H "Accept: text/event-stream" http://drydock:3000/api/v1/events/ui
 ```
 
 Connection limits: max 10 per IP, max 10 per session. Returns 429 when exceeded.
@@ -245,7 +252,7 @@ Connection limits: max 10 per IP, max 10 per session. Returns 429 when exceeded.
 When a `dd:self-update` event has `requiresAck: true`, the UI must POST an acknowledgment before the timeout expires. The `clientId` and `clientToken` are provided in the initial `dd:connected` event.
 
 ```bash
-curl -X POST http://drydock:3000/api/events/ui/self-update/op-abc123/ack \
+curl -X POST http://drydock:3000/api/v1/events/ui/self-update/op-abc123/ack \
   -H 'Content-Type: application/json' \
   -d '{"clientId": "client-1", "clientToken": "tok-xyz"}'
 ```
@@ -271,7 +278,7 @@ Persistent UI preferences stored in the drydock database.
 ### Get settings
 
 ```bash
-curl http://drydock:3000/api/settings
+curl http://drydock:3000/api/v1/settings
 
 {
   "internetlessMode": false
@@ -281,7 +288,7 @@ curl http://drydock:3000/api/settings
 ### Update settings
 
 ```bash
-curl -X PATCH http://drydock:3000/api/settings \
+curl -X PATCH http://drydock:3000/api/v1/settings \
   -H 'Content-Type: application/json' \
   -d '{"internetlessMode": true}'
 
@@ -294,14 +301,14 @@ curl -X PATCH http://drydock:3000/api/settings \
 | --- | --- | --- | --- |
 | `internetlessMode` | boolean | `false` | When enabled, disables registry icon lookups and other external requests |
 
-Returns 200 with the updated settings, or 400 if the body is invalid. `PUT /api/settings` is still accepted as a temporary compatibility alias but is deprecated.
+Returns 200 with the updated settings, or 400 if the body is invalid. `PUT /api/v1/settings` is still accepted as a temporary compatibility alias but is deprecated.
 
 ## Container groups
 
 Returns containers grouped by stack or group label. Group priority: `dd.group` > `wud.group` > `com.docker.compose.project` > ungrouped.
 
 ```bash
-curl http://drydock:3000/api/containers/groups
+curl http://drydock:3000/api/v1/containers/groups
 
 {
   "data": [
@@ -410,7 +417,7 @@ curl -X POST http://drydock:3000/auth/remember \
 Machine-readable API documentation is available as an OpenAPI 3.1.0 specification.
 
 ```bash
-curl http://drydock:3000/api/openapi.json
+curl http://drydock:3000/api/v1/openapi.json
 ```
 
 The spec covers all API endpoints with request/response schemas. You can import the URL into tools like Swagger UI, Redoc, or Postman for interactive exploration.

@@ -135,6 +135,19 @@ export const containerPaths = {
       },
     },
   },
+  '/api/containers/stats': {
+    get: {
+      tags: ['Containers'],
+      summary: 'Get latest resource metric snapshot for all containers',
+      operationId: 'getAllContainerStats',
+      responses: {
+        200: jsonResponse('Container resource metrics summary', {
+          $ref: '#/components/schemas/ContainerStatsSummaryResponse',
+        }),
+        401: errorResponse('Authentication required'),
+      },
+    },
+  },
   '/api/containers/recent-status': {
     get: {
       tags: ['Containers'],
@@ -213,6 +226,41 @@ export const containerPaths = {
       },
     },
   },
+  '/api/containers/{id}/stats': {
+    get: {
+      tags: ['Containers'],
+      summary: 'Get latest resource metrics for a single container',
+      operationId: 'getContainerStats',
+      parameters: [containerIdPathParam],
+      responses: {
+        200: jsonResponse('Container resource metrics', {
+          $ref: '#/components/schemas/ContainerStatsResponse',
+        }),
+        401: errorResponse('Authentication required'),
+        404: errorResponse('Container not found'),
+      },
+    },
+  },
+  '/api/containers/{id}/stats/stream': {
+    get: {
+      tags: ['Containers'],
+      summary: 'Stream live resource metrics for a single container via SSE',
+      operationId: 'streamContainerStats',
+      parameters: [containerIdPathParam],
+      responses: {
+        200: {
+          description: 'SSE stream',
+          content: {
+            'text/event-stream': {
+              schema: { type: 'string' },
+            },
+          },
+        },
+        401: errorResponse('Authentication required'),
+        404: errorResponse('Container not found'),
+      },
+    },
+  },
   '/api/containers/{id}': {
     get: {
       tags: ['Containers'],
@@ -239,6 +287,21 @@ export const containerPaths = {
         403: errorResponse('Delete feature disabled'),
         404: errorResponse('Container not found'),
         500: errorResponse('Delete operation failed'),
+      },
+    },
+  },
+  '/api/containers/{id}/release-notes': {
+    get: {
+      tags: ['Containers'],
+      summary: 'Get full release notes for the current update target',
+      operationId: 'getContainerReleaseNotes',
+      parameters: [containerIdPathParam],
+      responses: {
+        200: jsonResponse('Release notes', {
+          $ref: '#/components/schemas/ReleaseNotesResource',
+        }),
+        401: errorResponse('Authentication required'),
+        404: errorResponse('Release notes not available'),
       },
     },
   },
@@ -440,10 +503,22 @@ export const containerPaths = {
   '/api/containers/{id}/logs': {
     get: {
       tags: ['Logs'],
-      summary: 'Get container logs',
+      summary: 'Download container logs',
       operationId: 'getContainerLogs',
       parameters: [
         containerIdPathParam,
+        {
+          name: 'stdout',
+          in: 'query',
+          required: false,
+          schema: { type: 'boolean' },
+        },
+        {
+          name: 'stderr',
+          in: 'query',
+          required: false,
+          schema: { type: 'boolean' },
+        },
         {
           name: 'tail',
           in: 'query',
@@ -454,19 +529,29 @@ export const containerPaths = {
           name: 'since',
           in: 'query',
           required: false,
-          schema: { type: 'integer', minimum: 0 },
-        },
-        {
-          name: 'timestamps',
-          in: 'query',
-          required: false,
-          schema: { type: 'boolean' },
+          schema: {
+            oneOf: [
+              { type: 'integer', minimum: 0 },
+              { type: 'string', format: 'date-time' },
+            ],
+          },
         },
       ],
       responses: {
-        200: jsonResponse('Container logs', {
-          $ref: '#/components/schemas/ContainerLogsResponse',
-        }),
+        200: {
+          description: 'Container logs download',
+          content: {
+            'text/plain': {
+              schema: { type: 'string' },
+            },
+          },
+          headers: {
+            'Content-Disposition': {
+              description: 'Attachment filename',
+              schema: { type: 'string' },
+            },
+          },
+        },
         401: errorResponse('Authentication required'),
         404: errorResponse('Container not found'),
         500: errorResponse('Unable to fetch logs'),

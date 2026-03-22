@@ -7,7 +7,7 @@ Load-test scenarios live in `test/test.yml`, `test/test-behavior.yml`, and `test
 ### Profiles
 
 - `smoke`: low traffic sanity check (used for pull requests)
-- `ci`: moderate traffic regression profile (used for push, advisory, optimized for faster CI runtime)
+- `ci`: moderate traffic regression profile (used for push and enforced gates, optimized for faster CI runtime)
 - `behavior`: feature-behavior profile for SSE reconnect, log routes, and write-path checks
 - `stress`: higher traffic profile for manual pressure testing
 - `ratelimit`: focused burst profile that validates `429` behavior for scan endpoint limits
@@ -56,9 +56,8 @@ npm run load:rate-limit
 - The rate-limit profile resolves `containerId` through `test/load-test.processor.cjs` before measured requests so scan endpoint p95/p99 is not skewed by `/api/containers/watch` setup latency.
 - In CI, the workflow enables Buildx + GHA cache to speed repeated image builds.
 - CI uploads Artillery JSON reports as workflow artifacts and posts a short p95/p99/request-rate summary in the job summary.
-- PR smoke CI also performs a regression check against the latest non-expired `load-test-ci` artifact from `main`.
-- Regression check defaults to advisory mode with drift thresholds: `p95 <= +20%`, `p99 <= +25%`, `request_rate >= -15%`.
-- To enforce the gate, set `DD_LOAD_TEST_REGRESSION_ENFORCE=true` in the CI step environment.
+- PR smoke and push CI load-test jobs both perform a regression check against the committed baseline at `test/load-test-baselines/ci-smoke.json`.
+- Regression gate is enforced with both drift and absolute thresholds: `p95 <= +20%` and `<= 1200ms`, `p99 <= +25%` and `<= 2500ms`, `request_rate >= -15%` and `>= 10 req/s`.
 - You can run the same check locally with `./scripts/check-load-test-regression.sh <current.json> <baseline.json>`.
 - Correctness checks (5xx, failed VUs, and optional 429 bounds) are handled by `./scripts/check-load-test-correctness.sh <report.json> "<title>"`.
-- Staged enforcement: pull requests run load-test checks in advisory mode; push runs enforce correctness checks while regression drift stays advisory.
+- Load-test correctness gates are enforced for both PR smoke and push CI profiles.

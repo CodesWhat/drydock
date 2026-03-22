@@ -10,7 +10,7 @@ class Gitlab extends BaseRegistry {
    * Get the Gitlab configuration schema.
    * @returns {*}
    */
-  getConfigurationSchema() {
+  getConfigurationSchema(): import('joi').Schema {
     return this.joi.object().keys({
       url: this.joi.string().uri().default('https://registry.gitlab.com'),
       authurl: this.joi.string().uri().default('https://gitlab.com'),

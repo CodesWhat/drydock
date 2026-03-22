@@ -1,5 +1,5 @@
 import { HttpResponse, http } from 'msw';
 
 export const authenticationHandlers = [
-  http.get('/api/authentications', () => HttpResponse.json({ data: [] })),
+  http.get('/api/v1/authentications', () => HttpResponse.json({ data: [] })),
 ];

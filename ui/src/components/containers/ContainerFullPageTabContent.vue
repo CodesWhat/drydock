@@ -1,7 +1,18 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue';
+import AppButton from '../AppButton.vue';
+import ContainerLogs from './ContainerLogs.vue';
+import ContainerStats from './ContainerStats.vue';
+import UpdateMaturityBadge from './UpdateMaturityBadge.vue';
+import SuggestedTagBadge from './SuggestedTagBadge.vue';
+import ReleaseNotesLink from './ReleaseNotesLink.vue';
 import { revealContainerEnv } from '../../services/container';
+import { errorMessage } from '../../utils/error';
 import { useContainersViewTemplateContext } from './containersViewTemplateContext';
+
+interface RevealEnvResponse {
+  env?: Array<{ key: string; value: string }>;
+}
 
 const revealedEnvCache = reactive(new Map<string, Map<string, string>>());
 const revealedKeys = reactive(new Set<string>());
@@ -27,14 +38,15 @@ async function toggleReveal(containerId: string, key: string) {
 
   envRevealLoading.value = true;
   try {
-    const result = await revealContainerEnv(containerId);
+    const result: RevealEnvResponse = await revealContainerEnv(containerId);
     const envMap = new Map<string, string>();
     for (const entry of result.env || []) {
       envMap.set(entry.key, entry.value);
     }
     revealedEnvCache.set(containerId, envMap);
     revealedKeys.add(cacheKey);
-  } catch {
+  } catch (error: unknown) {
+    void errorMessage(error);
     // silently fail — user can retry
   } finally {
     envRevealLoading.value = false;
@@ -76,13 +88,6 @@ const {
   sbomDocument,
   sbomComponentCount,
   sbomGeneratedAt,
-  LOG_AUTO_FETCH_INTERVALS,
-  containerAutoFetchInterval,
-  getContainerLogs,
-  containerLogRef,
-  containerHandleLogScroll,
-  containerScrollBlocked,
-  containerResumeAutoScroll,
   previewLoading,
   runContainerPreview,
   actionInProgress,
@@ -144,7 +149,11 @@ const {
 
 <template>
       <!-- Full-page tab content -->
-      <div class="flex-1 overflow-y-auto min-h-0" data-test="container-full-page-tab-content">
+      <div
+        class="flex-1 min-h-0"
+        :class="activeDetailTab === 'logs' ? 'flex flex-col overflow-hidden' : 'overflow-y-auto'"
+        data-test="container-full-page-tab-content"
+      >
 
         <!-- Overview tab (full page) -->
         <div v-if="activeDetailTab === 'overview'" class="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -153,8 +162,8 @@ const {
                :style="{ backgroundColor: 'var(--dd-bg-card)' }">
             <div class="px-4 py-3 flex items-center gap-2">
               <AppIcon name="network" :size="12" class="dd-text-muted" />
-              <span class="text-[0.6875rem] font-semibold uppercase tracking-wider dd-text-muted">Ports</span>
-              <span class="badge text-[0.5625rem] ml-auto dd-bg-elevated dd-text-muted">{{ selectedContainer.details.ports.length }}</span>
+              <span class="text-2xs-plus font-semibold uppercase tracking-wider dd-text-muted">Ports</span>
+              <span class="badge text-3xs ml-auto dd-bg-elevated dd-text-muted">{{ selectedContainer.details.ports.length }}</span>
             </div>
             <div class="p-4">
               <div v-if="selectedContainer.details.ports.length > 0" class="space-y-1.5">
@@ -165,7 +174,7 @@ const {
                   <span class="dd-text">{{ port }}</span>
                 </div>
               </div>
-              <p v-else class="text-[0.6875rem] dd-text-muted italic">No ports exposed</p>
+              <p v-else class="text-2xs-plus dd-text-muted italic">No ports exposed</p>
             </div>
           </div>
 
@@ -174,8 +183,8 @@ const {
                :style="{ backgroundColor: 'var(--dd-bg-card)' }">
             <div class="px-4 py-3 flex items-center gap-2">
               <AppIcon name="hard-drive" :size="12" class="dd-text-muted" />
-              <span class="text-[0.6875rem] font-semibold uppercase tracking-wider dd-text-muted">Volumes</span>
-              <span class="badge text-[0.5625rem] ml-auto dd-bg-elevated dd-text-muted">{{ selectedContainer.details.volumes.length }}</span>
+              <span class="text-2xs-plus font-semibold uppercase tracking-wider dd-text-muted">Volumes</span>
+              <span class="badge text-3xs ml-auto dd-bg-elevated dd-text-muted">{{ selectedContainer.details.volumes.length }}</span>
             </div>
             <div class="p-4">
               <div v-if="selectedContainer.details.volumes.length > 0" class="space-y-1.5">
@@ -186,7 +195,7 @@ const {
                   <span class="truncate dd-text">{{ vol }}</span>
                 </div>
               </div>
-              <p v-else class="text-[0.6875rem] dd-text-muted italic">No volumes mounted</p>
+              <p v-else class="text-2xs-plus dd-text-muted italic">No volumes mounted</p>
             </div>
           </div>
 
@@ -196,8 +205,8 @@ const {
                :style="{ backgroundColor: 'var(--dd-bg-card)' }">
             <div class="px-4 py-3 flex items-center gap-2">
               <AppIcon name="stack" :size="12" class="dd-text-muted" />
-              <span class="text-[0.6875rem] font-semibold uppercase tracking-wider dd-text-muted">Compose Files</span>
-              <span class="badge text-[0.5625rem] ml-auto dd-bg-elevated dd-text-muted">{{ selectedComposePaths.length }}</span>
+              <span class="text-2xs-plus font-semibold uppercase tracking-wider dd-text-muted">Compose Files</span>
+              <span class="badge text-3xs ml-auto dd-bg-elevated dd-text-muted">{{ selectedComposePaths.length }}</span>
             </div>
             <div class="p-4">
               <div class="space-y-1.5">
@@ -207,7 +216,7 @@ const {
                   class="flex items-center gap-2 px-3 py-2 dd-rounded text-xs font-mono"
                   :style="{ backgroundColor: 'var(--dd-bg-inset)' }"
                 >
-                  <span v-if="selectedComposePaths.length > 1" class="text-[0.5625rem] dd-text-muted">#{{ index + 1 }}</span>
+                  <span v-if="selectedComposePaths.length > 1" class="text-3xs dd-text-muted">#{{ index + 1 }}</span>
                   <span class="truncate dd-text">{{ composePath }}</span>
                 </div>
               </div>
@@ -219,7 +228,7 @@ const {
                :style="{ backgroundColor: 'var(--dd-bg-card)' }">
             <div class="px-4 py-3 flex items-center gap-2">
               <AppIcon name="updates" :size="12" class="dd-text-muted" />
-              <span class="text-[0.6875rem] font-semibold uppercase tracking-wider dd-text-muted">Version</span>
+              <span class="text-2xs-plus font-semibold uppercase tracking-wider dd-text-muted">Version</span>
             </div>
             <div class="p-4 space-y-3">
               <div class="flex items-center gap-3 px-3 py-2 dd-rounded text-xs font-mono"
@@ -231,7 +240,7 @@ const {
                    :style="{ backgroundColor: 'var(--dd-success-muted)' }">
                 <span style="color: var(--dd-success);">Latest:</span>
                 <CopyableTag :tag="selectedContainer.newTag!" class="font-bold" style="color: var(--dd-success);">{{ selectedContainer.newTag }}</CopyableTag>
-                <span class="badge text-[0.5625rem]"
+                <span class="badge text-3xs"
                       :style="{ backgroundColor: updateKindColor(selectedContainer.updateKind).bg, color: updateKindColor(selectedContainer.updateKind).text }">
                   {{ selectedContainer.updateKind }}
                 </span>
@@ -249,42 +258,37 @@ const {
                 <AppIcon name="warning" :size="12" class="shrink-0 mt-0.5" style="color: var(--dd-warning);" />
                 <span class="flex-1 min-w-0 whitespace-normal break-words" style="color: var(--dd-warning);">{{ selectedContainer.noUpdateReason }}</span>
               </div>
-              <a
-                v-if="selectedContainer.releaseLink"
-                :href="selectedContainer.releaseLink"
-                target="_blank"
-                rel="noopener noreferrer"
-                class="inline-flex items-center text-xs underline hover:no-underline"
-                style="color: var(--dd-info);"
-              >
-                Release notes
-              </a>
+              <div v-if="selectedContainer.updateKind || selectedContainer.updateMaturity || selectedContainer.suggestedTag" class="flex items-center gap-1.5 flex-wrap">
+                <UpdateMaturityBadge :maturity="selectedContainer.updateMaturity" :tooltip="selectedContainer.updateMaturityTooltip" />
+                <SuggestedTagBadge :tag="selectedContainer.suggestedTag" :current-tag="selectedContainer.currentTag" />
+              </div>
+              <ReleaseNotesLink :release-notes="selectedContainer.releaseNotes" :release-link="selectedContainer.releaseLink" />
               <div class="pt-1 space-y-1.5">
-                <div class="text-[0.625rem] font-semibold uppercase tracking-wider dd-text-muted">Tag Filters</div>
-                <div class="flex items-start gap-2 px-3 py-2 dd-rounded text-[0.6875rem]"
+                <div class="text-2xs font-semibold uppercase tracking-wider dd-text-muted">Tag Filters</div>
+                <div class="flex items-start gap-2 px-3 py-2 dd-rounded text-2xs-plus"
                      :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
                   <span class="dd-text-secondary shrink-0">Include:</span>
                   <span class="font-mono dd-text break-all">{{ selectedContainer.includeTags || 'Not set' }}</span>
                 </div>
-                <div class="flex items-start gap-2 px-3 py-2 dd-rounded text-[0.6875rem]"
+                <div class="flex items-start gap-2 px-3 py-2 dd-rounded text-2xs-plus"
                      :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
                   <span class="dd-text-secondary shrink-0">Exclude:</span>
                   <span class="font-mono dd-text break-all">{{ selectedContainer.excludeTags || 'Not set' }}</span>
                 </div>
-                <div class="flex items-start gap-2 px-3 py-2 dd-rounded text-[0.6875rem]"
+                <div class="flex items-start gap-2 px-3 py-2 dd-rounded text-2xs-plus"
                      :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
                   <span class="dd-text-secondary shrink-0">Transform:</span>
                   <span class="font-mono dd-text break-all">{{ selectedContainer.transformTags || 'Not set' }}</span>
                 </div>
               </div>
               <div class="pt-1 space-y-1.5">
-                <div class="text-[0.625rem] font-semibold uppercase tracking-wider dd-text-muted">Trigger Filters</div>
-                <div class="flex items-start gap-2 px-3 py-2 dd-rounded text-[0.6875rem]"
+                <div class="text-2xs font-semibold uppercase tracking-wider dd-text-muted">Trigger Filters</div>
+                <div class="flex items-start gap-2 px-3 py-2 dd-rounded text-2xs-plus"
                      :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
                   <span class="dd-text-secondary shrink-0">Include:</span>
                   <span class="font-mono dd-text break-all">{{ selectedContainer.triggerInclude || 'Not set' }}</span>
                 </div>
-                <div class="flex items-start gap-2 px-3 py-2 dd-rounded text-[0.6875rem]"
+                <div class="flex items-start gap-2 px-3 py-2 dd-rounded text-2xs-plus"
                      :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
                   <span class="dd-text-secondary shrink-0">Exclude:</span>
                   <span class="font-mono dd-text break-all">{{ selectedContainer.triggerExclude || 'Not set' }}</span>
@@ -298,12 +302,12 @@ const {
                :style="{ backgroundColor: 'var(--dd-bg-card)' }">
             <div class="px-4 py-3 flex items-center gap-2">
               <AppIcon name="registries" :size="12" class="dd-text-muted" />
-              <span class="text-[0.6875rem] font-semibold uppercase tracking-wider dd-text-muted">Registry</span>
+              <span class="text-2xs-plus font-semibold uppercase tracking-wider dd-text-muted">Registry</span>
             </div>
             <div class="p-4">
               <div class="flex items-center gap-3 px-3 py-2 dd-rounded text-xs"
                    :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-                <span class="badge text-[0.5625rem] uppercase font-bold"
+                <span class="badge text-3xs uppercase font-bold"
                       :style="{ backgroundColor: registryColorBg(selectedContainer.registry), color: registryColorText(selectedContainer.registry) }">
                   {{ registryLabel(selectedContainer.registry, selectedContainer.registryUrl, selectedContainer.registryName) }}
                 </span>
@@ -323,13 +327,13 @@ const {
                :style="{ backgroundColor: 'var(--dd-bg-card)' }">
             <div class="px-4 py-3 flex items-center gap-2">
               <AppIcon name="terminal" :size="12" class="dd-text-muted" />
-              <span class="text-[0.6875rem] font-semibold uppercase tracking-wider dd-text-muted">Runtime Process</span>
+              <span class="text-2xs-plus font-semibold uppercase tracking-wider dd-text-muted">Runtime Process</span>
             </div>
             <div class="p-4 space-y-2">
               <div class="flex items-center justify-between gap-3 px-3 py-2 dd-rounded text-xs"
                    :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
                 <span class="dd-text-secondary">Entrypoint</span>
-                <span class="badge text-[0.625rem] font-bold uppercase"
+                <span class="badge text-2xs font-bold uppercase"
                       :style="runtimeOriginStyle(selectedRuntimeOrigins.entrypoint)">
                   {{ runtimeOriginLabel(selectedRuntimeOrigins.entrypoint) }}
                 </span>
@@ -337,7 +341,7 @@ const {
               <div class="flex items-center justify-between gap-3 px-3 py-2 dd-rounded text-xs"
                    :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
                 <span class="dd-text-secondary">Cmd</span>
-                <span class="badge text-[0.625rem] font-bold uppercase"
+                <span class="badge text-2xs font-bold uppercase"
                       :style="runtimeOriginStyle(selectedRuntimeOrigins.cmd)">
                   {{ runtimeOriginLabel(selectedRuntimeOrigins.cmd) }}
                 </span>
@@ -358,7 +362,7 @@ const {
                :style="{ backgroundColor: 'var(--dd-bg-card)' }">
             <div class="px-4 py-3 flex items-center gap-2">
               <AppIcon name="triggers" :size="12" class="dd-text-muted" />
-              <span class="text-[0.6875rem] font-semibold uppercase tracking-wider dd-text-muted">Lifecycle Hooks</span>
+              <span class="text-2xs-plus font-semibold uppercase tracking-wider dd-text-muted">Lifecycle Hooks</span>
             </div>
             <div class="p-4 space-y-2">
               <div class="flex items-start justify-between gap-3 px-3 py-2 dd-rounded text-xs"
@@ -400,7 +404,7 @@ const {
                :style="{ backgroundColor: 'var(--dd-bg-card)' }">
             <div class="px-4 py-3 flex items-center gap-2">
               <AppIcon name="recent-updates" :size="12" class="dd-text-muted" />
-              <span class="text-[0.6875rem] font-semibold uppercase tracking-wider dd-text-muted">Auto-Rollback</span>
+              <span class="text-2xs-plus font-semibold uppercase tracking-wider dd-text-muted">Auto-Rollback</span>
             </div>
             <div class="p-4 space-y-2">
               <div class="flex items-center justify-between gap-3 px-3 py-2 dd-rounded text-xs"
@@ -426,13 +430,11 @@ const {
                :style="{ backgroundColor: 'var(--dd-bg-card)' }">
             <div class="px-4 py-3 flex items-center gap-2">
               <AppIcon name="security" :size="12" class="dd-text-muted" />
-              <span class="text-[0.6875rem] font-semibold uppercase tracking-wider dd-text-muted">Security</span>
-              <button class="ml-auto px-2 py-1 dd-rounded text-[0.625rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-
-                      :disabled="detailVulnerabilityLoading || detailSbomLoading"
+              <span class="text-2xs-plus font-semibold uppercase tracking-wider dd-text-muted">Security</span>
+              <AppButton size="xs" class="ml-auto" :disabled="detailVulnerabilityLoading || detailSbomLoading"
                       @click="loadDetailSecurityData">
                 {{ detailVulnerabilityLoading || detailSbomLoading ? 'Refreshing...' : 'Refresh' }}
-              </button>
+              </AppButton>
             </div>
             <div class="p-4 space-y-3">
               <div v-if="detailVulnerabilityLoading"
@@ -446,20 +448,20 @@ const {
                 {{ detailVulnerabilityError }}
               </div>
               <template v-else>
-                <div class="flex items-center gap-2 flex-wrap text-[0.6875rem]">
-                  <span class="badge text-[0.625rem] font-bold"
+                <div class="flex items-center gap-2 flex-wrap text-2xs-plus">
+                  <span class="badge text-2xs font-bold"
                         :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
                     critical {{ vulnerabilitySummary.critical }}
                   </span>
-                  <span class="badge text-[0.625rem] font-bold"
+                  <span class="badge text-2xs font-bold"
                         :style="{ backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning)' }">
                     high {{ vulnerabilitySummary.high }}
                   </span>
-                  <span class="badge text-[0.625rem] font-bold"
+                  <span class="badge text-2xs font-bold"
                         :style="{ backgroundColor: 'var(--dd-caution-muted)', color: 'var(--dd-caution)' }">
                     medium {{ vulnerabilitySummary.medium }}
                   </span>
-                  <span class="badge text-[0.625rem] font-bold"
+                  <span class="badge text-2xs font-bold"
                         :style="{ backgroundColor: 'var(--dd-info-muted)', color: 'var(--dd-info)' }">
                     low {{ vulnerabilitySummary.low }}
                   </span>
@@ -467,9 +469,9 @@ const {
                 </div>
                 <div v-if="vulnerabilityPreview.length > 0" class="space-y-1.5">
                   <div v-for="vulnerability in vulnerabilityPreview" :key="vulnerability.id"
-                       class="flex items-center gap-2 px-3 py-2 dd-rounded text-[0.6875rem]"
+                       class="flex items-center gap-2 px-3 py-2 dd-rounded text-2xs-plus"
                        :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-                    <span class="badge text-[0.5625rem] font-bold uppercase"
+                    <span class="badge text-3xs font-bold uppercase"
                           :style="{
                             backgroundColor: severityStyle(normalizeSeverity(vulnerability.severity)).bg,
                             color: severityStyle(normalizeSeverity(vulnerability.severity)).text,
@@ -487,16 +489,14 @@ const {
                    :style="{ borderTop: '1px solid var(--dd-border)' }">
                 <div class="flex items-center gap-2">
                   <select v-model="selectedSbomFormat"
-                          class="px-2 py-1 dd-rounded text-[0.625rem] font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text">
+                          class="px-2 py-1 dd-rounded text-2xs font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text">
                     <option value="spdx-json">spdx-json</option>
                     <option value="cyclonedx-json">cyclonedx-json</option>
                   </select>
-                  <button class="px-2 py-1 dd-rounded text-[0.625rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-    
-                          :disabled="detailSbomLoading"
+                  <AppButton size="xs" :disabled="detailSbomLoading"
                           @click="loadDetailSbom">
                     {{ detailSbomLoading ? 'Loading SBOM...' : 'Refresh SBOM' }}
-                  </button>
+                  </AppButton>
                 </div>
                 <div v-if="detailSbomError"
                      class="px-3 py-2 dd-rounded text-xs"
@@ -509,7 +509,7 @@ const {
                   Loading SBOM document...
                 </div>
                 <div v-else-if="sbomDocument"
-                     class="px-3 py-2 dd-rounded text-[0.6875rem] space-y-1"
+                     class="px-3 py-2 dd-rounded text-2xs-plus space-y-1"
                      :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
                   <div class="dd-text-muted">
                     format:
@@ -530,51 +530,17 @@ const {
           </div>
         </div>
 
+        <div v-if="activeDetailTab === 'stats'">
+          <ContainerStats :container-id="selectedContainer.id" />
+        </div>
+
         <!-- Logs tab (full page) -->
-        <div v-if="activeDetailTab === 'logs'">
-          <div class="dd-rounded overflow-hidden"
-               :style="{ backgroundColor: 'var(--dd-bg-code)' }">
-            <div class="px-4 py-3 flex items-center justify-between"
-                 style="border-bottom: 1px solid var(--dd-log-divider);">
-              <div class="flex items-center gap-2">
-                <AppIcon name="terminal" :size="11" :style="{ color: 'var(--dd-log-text-muted)' }" />
-                <span class="text-[0.6875rem] font-semibold uppercase tracking-wider" style="color: var(--dd-log-text-muted);">
-                  Container Logs
-                </span>
-                <span class="text-[0.6875rem] font-mono" style="color: var(--dd-primary);">{{ selectedContainer.name }}</span>
-              </div>
-              <div class="flex items-center gap-2">
-                <select v-model.number="containerAutoFetchInterval"
-                        class="px-1.5 py-1 dd-rounded text-[0.625rem] font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text">
-                  <option v-for="opt in LOG_AUTO_FETCH_INTERVALS" :key="opt.value" :value="opt.value">
-                    {{ opt.label }}
-                  </option>
-                </select>
-                <span class="text-[0.625rem] font-mono" style="color: var(--dd-log-text-muted);">
-                  {{ getContainerLogs(selectedContainer.name).length }} lines
-                </span>
-              </div>
-            </div>
-            <div ref="containerLogRef" class="overflow-y-auto p-1" style="max-height: calc(100vh - 320px);"
-                 @scroll="containerHandleLogScroll">
-              <div v-for="(line, i) in getContainerLogs(selectedContainer.name)" :key="i"
-                   class="px-3 py-0.5 font-mono text-[0.6875rem] leading-relaxed whitespace-pre hover:bg-white/[0.02]"
-                   :style="{ borderBottom: i < getContainerLogs(selectedContainer.name).length - 1 ? '1px solid var(--dd-log-line)' : 'none' }">
-                <span style="color: var(--dd-log-text-muted);">{{ line.substring(0, 24) }}</span>
-                <span :style="{ color: line.includes('[error]') || line.includes('[crit]') || line.includes('[emerg]') ? 'var(--dd-danger)' : line.includes('[warn]') || line.includes('[hint]') ? 'var(--dd-warning)' : 'var(--dd-log-text)' }">{{ line.substring(24) }}</span>
-              </div>
-            </div>
-            <div v-if="containerScrollBlocked && containerAutoFetchInterval > 0"
-                 class="flex items-center justify-between px-3 py-1.5 text-[0.625rem]"
-                 style="border-top: 1px solid var(--dd-log-divider);">
-              <span class="font-semibold" style="color: var(--dd-warning);">Auto-scroll paused</span>
-              <button class="px-2 py-0.5 dd-rounded text-[0.625rem] font-semibold"
-                      :style="{ backgroundColor: 'var(--dd-warning)', color: 'var(--dd-bg)' }"
-                      @click="containerResumeAutoScroll">
-                Resume
-              </button>
-            </div>
-          </div>
+        <div v-if="activeDetailTab === 'logs'" class="flex flex-col flex-1 min-h-0 overflow-hidden">
+          <ContainerLogs
+            class="flex-1 min-h-0"
+            :container-id="selectedContainer.id"
+            :container-name="selectedContainer.name"
+          />
         </div>
 
         <!-- Environment tab (full page) -->
@@ -583,8 +549,8 @@ const {
                :style="{ backgroundColor: 'var(--dd-bg-card)' }">
             <div class="px-4 py-3 flex items-center gap-2">
               <AppIcon name="config" :size="12" class="dd-text-muted" />
-              <span class="text-[0.6875rem] font-semibold uppercase tracking-wider dd-text-muted">Environment Variables</span>
-              <span class="badge text-[0.5625rem] ml-auto dd-bg-elevated dd-text-muted">{{ selectedContainer.details.env.length }}</span>
+              <span class="text-2xs-plus font-semibold uppercase tracking-wider dd-text-muted">Environment Variables</span>
+              <span class="badge text-3xs ml-auto dd-bg-elevated dd-text-muted">{{ selectedContainer.details.env.length }}</span>
             </div>
             <div class="p-4">
               <div v-if="selectedContainer.details.env.length > 0" class="space-y-1.5">
@@ -597,11 +563,11 @@ const {
                   <template v-else>
                     <span v-if="getRevealedValue(selectedContainer.id, e.key)" class="truncate dd-text">{{ getRevealedValue(selectedContainer.id, e.key) }}</span>
                     <span v-else class="truncate dd-text-muted">&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;</span>
-                    <button class="shrink-0 p-0.5 dd-text-muted hover:dd-text transition-colors"
+                    <AppButton size="none" variant="plain" weight="none" class="shrink-0 p-0.5 dd-text-muted hover:dd-text transition-colors"
                             :disabled="envRevealLoading"
                             @click="toggleReveal(selectedContainer.id, e.key)">
                       <AppIcon :name="getRevealedValue(selectedContainer.id, e.key) ? 'eye-slash' : 'eye'" :size="11" />
-                    </button>
+                    </AppButton>
                   </template>
                 </div>
               </div>
@@ -612,8 +578,8 @@ const {
                :style="{ backgroundColor: 'var(--dd-bg-card)' }">
             <div class="px-4 py-3 flex items-center gap-2">
               <AppIcon name="hard-drive" :size="12" class="dd-text-muted" />
-              <span class="text-[0.6875rem] font-semibold uppercase tracking-wider dd-text-muted">Volumes</span>
-              <span class="badge text-[0.5625rem] ml-auto dd-bg-elevated dd-text-muted">{{ selectedContainer.details.volumes.length }}</span>
+              <span class="text-2xs-plus font-semibold uppercase tracking-wider dd-text-muted">Volumes</span>
+              <span class="badge text-3xs ml-auto dd-bg-elevated dd-text-muted">{{ selectedContainer.details.volumes.length }}</span>
             </div>
             <div class="p-4">
               <div v-if="selectedContainer.details.volumes.length > 0" class="space-y-1.5">
@@ -635,13 +601,13 @@ const {
                :style="{ backgroundColor: 'var(--dd-bg-card)' }">
             <div class="px-4 py-3 flex items-center gap-2">
               <AppIcon name="containers" :size="12" class="dd-text-muted" />
-              <span class="text-[0.6875rem] font-semibold uppercase tracking-wider dd-text-muted">Labels</span>
-              <span class="badge text-[0.5625rem] ml-auto dd-bg-elevated dd-text-muted">{{ selectedContainer.details.labels.length }}</span>
+              <span class="text-2xs-plus font-semibold uppercase tracking-wider dd-text-muted">Labels</span>
+              <span class="badge text-3xs ml-auto dd-bg-elevated dd-text-muted">{{ selectedContainer.details.labels.length }}</span>
             </div>
             <div class="p-4">
               <div v-if="selectedContainer.details.labels.length > 0" class="flex flex-wrap gap-2">
                 <span v-for="label in selectedContainer.details.labels" :key="label"
-                      class="badge text-[0.6875rem] font-semibold px-3 py-1.5"
+                      class="badge text-2xs-plus font-semibold px-3 py-1.5"
                       :style="{
                         backgroundColor: 'var(--dd-neutral-muted)',
                         color: 'var(--dd-text-secondary)',
@@ -661,89 +627,72 @@ const {
                  :style="{ backgroundColor: 'var(--dd-bg-card)' }">
               <div class="px-4 py-3 flex items-center gap-2">
                 <AppIcon name="updates" :size="12" class="dd-text-muted" />
-                <span class="text-[0.6875rem] font-semibold uppercase tracking-wider dd-text-muted">Update Workflow</span>
+                <span class="text-2xs-plus font-semibold uppercase tracking-wider dd-text-muted">Update Workflow</span>
               </div>
               <div class="p-4 space-y-4">
                 <!-- Actions group -->
                 <div>
-                  <div class="text-[0.5625rem] uppercase tracking-wider mb-1.5 dd-text-muted">Actions</div>
+                  <div class="text-3xs uppercase tracking-wider mb-1.5 dd-text-muted">Actions</div>
                   <div class="flex flex-wrap gap-2">
-                    <button class="px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-      
-                            :disabled="previewLoading"
+                    <AppButton size="md" :disabled="previewLoading"
                             @click="runContainerPreview">
                       {{ previewLoading ? 'Previewing...' : 'Preview Update' }}
-                    </button>
-                    <button v-if="selectedContainer.bouncer === 'blocked'"
-                            class="px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors"
-                            :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)', border: '1px solid var(--dd-danger)' }"
+                    </AppButton>
+                    <AppButton v-if="selectedContainer.bouncer === 'blocked'" size="md" variant="plain" :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)', border: '1px solid var(--dd-danger)' }"
                             :disabled="actionInProgress === selectedContainer.name"
                             @click="confirmForceUpdate(selectedContainer.name)">
                       <AppIcon name="lock" :size="10" class="mr-1 inline" />Force Update
-                    </button>
-                    <button v-else
-                            class="px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-      
+                    </AppButton>
+                    <AppButton v-else
+                            size="md"
                             :disabled="!selectedContainer.newTag || actionInProgress === selectedContainer.name"
                             @click="confirmUpdate(selectedContainer.name)">
                       Update Now
-                    </button>
-                    <button class="px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-      
-                            :disabled="actionInProgress === selectedContainer.name"
+                    </AppButton>
+                    <AppButton size="md" :disabled="actionInProgress === selectedContainer.name"
                             @click="scanContainer(selectedContainer.name)">
                       Scan Now
-                    </button>
+                    </AppButton>
                   </div>
                 </div>
                 <!-- Skip & Snooze group -->
                 <div>
-                  <div class="text-[0.5625rem] uppercase tracking-wider mb-1.5 dd-text-muted">Skip & Snooze</div>
+                  <div class="text-3xs uppercase tracking-wider mb-1.5 dd-text-muted">Skip & Snooze</div>
                   <div class="flex flex-wrap gap-2">
-                    <button class="px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-      
-                            :disabled="!selectedContainer.newTag || policyInProgress !== null"
+                    <AppButton size="md" :disabled="!selectedContainer.newTag || policyInProgress !== null"
                             @click="skipCurrentForSelected">
                       Skip This Update
-                    </button>
-                    <button class="px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-      
-                            :disabled="policyInProgress !== null"
+                    </AppButton>
+                    <AppButton size="md" :disabled="policyInProgress !== null"
                             @click="snoozeSelected(1)">
                       Snooze 1d
-                    </button>
-                    <button class="px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-      
-                            :disabled="policyInProgress !== null"
+                    </AppButton>
+                    <AppButton size="md" :disabled="policyInProgress !== null"
                             @click="snoozeSelected(7)">
                       Snooze 7d
-                    </button>
+                    </AppButton>
                     <input
                       v-model="snoozeDateInput"
                       type="date"
-                      class="px-2.5 py-1.5 dd-rounded text-[0.6875rem] outline-none dd-bg dd-text"
+                      class="px-2.5 py-1.5 dd-rounded text-2xs-plus outline-none dd-bg dd-text"
                       :disabled="policyInProgress !== null" />
-                    <button class="px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-      
-                            :disabled="!snoozeDateInput || policyInProgress !== null"
+                    <AppButton size="md" :disabled="!snoozeDateInput || policyInProgress !== null"
                             @click="snoozeSelectedUntilDate">
                       Snooze Until
-                    </button>
-                    <button class="px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-      
-                            :disabled="!selectedSnoozeUntil || policyInProgress !== null"
+                    </AppButton>
+                    <AppButton size="md" :disabled="!selectedSnoozeUntil || policyInProgress !== null"
                             @click="unsnoozeSelected">
                       Unsnooze
-                    </button>
+                    </AppButton>
                   </div>
                 </div>
                 <!-- Maturity group -->
                 <div>
-                  <div class="text-[0.5625rem] uppercase tracking-wider mb-1.5 dd-text-muted">Maturity</div>
+                  <div class="text-3xs uppercase tracking-wider mb-1.5 dd-text-muted">Maturity</div>
                   <div class="flex flex-wrap gap-2 items-center">
                     <select
                       v-model="maturityModeInput"
-                      class="px-2.5 py-1.5 dd-rounded text-[0.6875rem] outline-none dd-bg dd-text"
+                      class="px-2.5 py-1.5 dd-rounded text-2xs-plus outline-none dd-bg dd-text"
                       :disabled="policyInProgress !== null"
                     >
                       <option value="all">Allow New + Mature</option>
@@ -754,40 +703,34 @@ const {
                       type="number"
                       min="1"
                       max="365"
-                      class="w-[104px] px-2.5 py-1.5 dd-rounded text-[0.6875rem] outline-none dd-bg dd-text"
+                      class="w-[104px] px-2.5 py-1.5 dd-rounded text-2xs-plus outline-none dd-bg dd-text"
                       :disabled="policyInProgress !== null"
                     />
-                    <button class="px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-                            :disabled="policyInProgress !== null"
+                    <AppButton size="md" :disabled="policyInProgress !== null"
                             @click="setMaturityPolicySelected(maturityModeInput)">
                       Apply Maturity
-                    </button>
-                    <button class="px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-                            :disabled="!selectedHasMaturityPolicy || policyInProgress !== null"
+                    </AppButton>
+                    <AppButton size="md" :disabled="!selectedHasMaturityPolicy || policyInProgress !== null"
                             @click="clearMaturityPolicySelected">
                       Clear Maturity
-                    </button>
+                    </AppButton>
                   </div>
                 </div>
                 <!-- Reset group -->
                 <div>
-                  <div class="text-[0.5625rem] uppercase tracking-wider mb-1.5 dd-text-muted">Reset</div>
+                  <div class="text-3xs uppercase tracking-wider mb-1.5 dd-text-muted">Reset</div>
                   <div class="flex flex-wrap gap-2">
-                    <button class="px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-      
-                            :disabled="selectedSkipTags.length === 0 && selectedSkipDigests.length === 0"
+                    <AppButton size="md" :disabled="selectedSkipTags.length === 0 && selectedSkipDigests.length === 0"
                             @click="clearSkipsSelected">
                       Clear Skips
-                    </button>
-                    <button class="px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-      
-                            :disabled="Object.keys(selectedUpdatePolicy).length === 0"
+                    </AppButton>
+                    <AppButton size="md" :disabled="Object.keys(selectedUpdatePolicy).length === 0"
                             @click="clearPolicySelected">
                       Clear Policy
-                    </button>
+                    </AppButton>
                   </div>
                 </div>
-                <div class="space-y-1 text-[0.6875rem] dd-text-muted">
+                <div class="space-y-1 text-2xs-plus dd-text-muted">
                   <div v-if="selectedSnoozeUntil">
                     Snoozed until:
                     <span class="dd-text">{{ formatTimestamp(selectedSnoozeUntil) }}</span>
@@ -802,14 +745,14 @@ const {
                     Skipped tags:
                     <div class="mt-1 flex flex-wrap gap-1.5">
                       <span v-for="tag in selectedSkipTags" :key="`skip-tag-full-${tag}`"
-                            class="inline-flex items-center gap-1.5 px-2 py-1 dd-rounded text-[0.6875rem] font-mono"
+                            class="inline-flex items-center gap-1.5 px-2 py-1 dd-rounded text-2xs-plus font-mono"
                             :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
                         <span class="dd-text">{{ tag }}</span>
-                        <button class="inline-flex items-center justify-center w-4 h-4 dd-rounded-sm transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
+                        <AppButton size="none" variant="plain" weight="none" class="inline-flex items-center justify-center w-4 h-4 dd-rounded-sm transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
                                 :disabled="policyInProgress !== null"
                                 @click="removeSkipTagSelected(tag)">
                           <AppIcon name="xmark" :size="9" />
-                        </button>
+                        </AppButton>
                       </span>
                     </div>
                   </div>
@@ -817,14 +760,14 @@ const {
                     Skipped digests:
                     <div class="mt-1 flex flex-wrap gap-1.5">
                       <span v-for="digest in selectedSkipDigests" :key="`skip-digest-full-${digest}`"
-                            class="inline-flex items-center gap-1.5 px-2 py-1 dd-rounded text-[0.6875rem] font-mono"
+                            class="inline-flex items-center gap-1.5 px-2 py-1 dd-rounded text-2xs-plus font-mono"
                             :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
                         <span class="dd-text">{{ digest }}</span>
-                        <button class="inline-flex items-center justify-center w-4 h-4 dd-rounded-sm transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
+                        <AppButton size="none" variant="plain" weight="none" class="inline-flex items-center justify-center w-4 h-4 dd-rounded-sm transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
                                 :disabled="policyInProgress !== null"
                                 @click="removeSkipDigestSelected(digest)">
                           <AppIcon name="xmark" :size="9" />
-                        </button>
+                        </AppButton>
                       </span>
                     </div>
                   </div>
@@ -833,8 +776,8 @@ const {
                     No active update policy.
                   </div>
                 </div>
-                <p v-if="policyMessage" class="text-[0.6875rem]" style="color: var(--dd-success);">{{ policyMessage }}</p>
-                <p v-if="policyError" class="text-[0.6875rem]" style="color: var(--dd-danger);">{{ policyError }}</p>
+                <p v-if="policyMessage" class="text-2xs-plus" style="color: var(--dd-success);">{{ policyMessage }}</p>
+                <p v-if="policyError" class="text-2xs-plus" style="color: var(--dd-danger);">{{ policyError }}</p>
               </div>
             </div>
 
@@ -842,7 +785,7 @@ const {
                  :style="{ backgroundColor: 'var(--dd-bg-card)' }">
               <div class="px-4 py-3 flex items-center gap-2">
                 <AppIcon name="info" :size="12" class="dd-text-muted" />
-                <span class="text-[0.6875rem] font-semibold uppercase tracking-wider dd-text-muted">Preview</span>
+                <span class="text-2xs-plus font-semibold uppercase tracking-wider dd-text-muted">Preview</span>
               </div>
               <div class="p-4 space-y-2 text-xs">
                 <div v-if="previewLoading" class="dd-text-muted">Generating preview...</div>
@@ -878,7 +821,7 @@ const {
                     </div>
                     <div v-if="detailComposePreview?.patch" class="dd-text-muted">
                       Patch preview:
-                      <pre class="mt-1 p-2 dd-rounded whitespace-pre-wrap break-all text-[0.6875rem] dd-text font-mono"
+                      <pre class="mt-1 p-2 dd-rounded whitespace-pre-wrap break-all text-2xs-plus dd-text font-mono"
                            :style="{ backgroundColor: 'var(--dd-bg-inset)' }">{{ detailComposePreview.patch }}</pre>
                     </div>
                   </template>
@@ -886,7 +829,7 @@ const {
                 <div v-else class="dd-text-muted italic">
                   Run a preview to inspect the planned update operations.
                 </div>
-                <p v-if="previewError" class="text-[0.6875rem]" style="color: var(--dd-danger);">{{ previewError }}</p>
+                <p v-if="previewError" class="text-2xs-plus" style="color: var(--dd-danger);">{{ previewError }}</p>
               </div>
             </div>
           </div>
@@ -896,7 +839,7 @@ const {
                  :style="{ backgroundColor: 'var(--dd-bg-card)' }">
               <div class="px-4 py-3 flex items-center gap-2">
                 <AppIcon name="triggers" :size="12" class="dd-text-muted" />
-                <span class="text-[0.6875rem] font-semibold uppercase tracking-wider dd-text-muted">Associated Triggers</span>
+                <span class="text-2xs-plus font-semibold uppercase tracking-wider dd-text-muted">Associated Triggers</span>
               </div>
               <div class="p-4 space-y-2">
                 <div v-if="triggersLoading" class="text-xs dd-text-muted">Loading triggers...</div>
@@ -906,19 +849,17 @@ const {
                        :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
                     <div class="min-w-0">
                       <div class="text-xs font-semibold dd-text truncate">{{ trigger.type }}.{{ trigger.name }}</div>
-                      <div v-if="trigger.agent" class="text-[0.6875rem] dd-text-muted">agent: {{ trigger.agent }}</div>
+                      <div v-if="trigger.agent" class="text-2xs-plus dd-text-muted">agent: {{ trigger.agent }}</div>
                     </div>
-                    <button class="px-2.5 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-      
-                            :disabled="triggerRunInProgress !== null"
+                    <AppButton size="md" :disabled="triggerRunInProgress !== null"
                             @click="runAssociatedTrigger(trigger)">
                       {{ triggerRunInProgress === getTriggerKey(trigger) ? 'Running...' : 'Run' }}
-                    </button>
+                    </AppButton>
                   </div>
                 </div>
                 <p v-else class="text-xs dd-text-muted italic">No triggers associated with this container</p>
-                <p v-if="triggerMessage" class="text-[0.6875rem]" style="color: var(--dd-success);">{{ triggerMessage }}</p>
-                <p v-if="triggerError" class="text-[0.6875rem]" style="color: var(--dd-danger);">{{ triggerError }}</p>
+                <p v-if="triggerMessage" class="text-2xs-plus" style="color: var(--dd-success);">{{ triggerMessage }}</p>
+                <p v-if="triggerError" class="text-2xs-plus" style="color: var(--dd-danger);">{{ triggerError }}</p>
               </div>
             </div>
 
@@ -926,16 +867,14 @@ const {
                  :style="{ backgroundColor: 'var(--dd-bg-card)' }">
               <div class="px-4 py-3 flex items-center gap-2">
                 <AppIcon name="recent-updates" :size="12" class="dd-text-muted" />
-                <span class="text-[0.6875rem] font-semibold uppercase tracking-wider dd-text-muted">Backups &amp; Rollback</span>
+                <span class="text-2xs-plus font-semibold uppercase tracking-wider dd-text-muted">Backups &amp; Rollback</span>
               </div>
               <div class="p-4 space-y-2">
                 <div>
-                  <button class="px-2.5 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-    
-                          :disabled="backupsLoading || detailBackups.length === 0 || rollbackInProgress !== null"
+                  <AppButton size="md" :disabled="backupsLoading || detailBackups.length === 0 || rollbackInProgress !== null"
                           @click="confirmRollback()">
                     {{ rollbackInProgress === 'latest' ? 'Rolling back...' : 'Rollback Latest' }}
-                  </button>
+                  </AppButton>
                 </div>
                 <div v-if="backupsLoading" class="text-xs dd-text-muted">Loading backups...</div>
                 <div v-else-if="detailBackups.length > 0" class="space-y-2">
@@ -944,19 +883,17 @@ const {
                        :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
                     <div class="min-w-0">
                       <div class="text-xs font-semibold dd-text font-mono truncate">{{ backup.imageName }}:{{ backup.imageTag }}</div>
-                      <div class="text-[0.6875rem] dd-text-muted">{{ formatTimestamp(backup.timestamp) }}</div>
+                      <div class="text-2xs-plus dd-text-muted">{{ formatTimestamp(backup.timestamp) }}</div>
                     </div>
-                    <button class="px-2.5 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-      
-                            :disabled="rollbackInProgress !== null"
+                    <AppButton size="md" :disabled="rollbackInProgress !== null"
                             @click="confirmRollback(backup.id)">
                       {{ rollbackInProgress === backup.id ? 'Rolling...' : 'Use' }}
-                    </button>
+                    </AppButton>
                   </div>
                 </div>
                 <p v-else class="text-xs dd-text-muted italic">No backups available yet</p>
-                <p v-if="rollbackMessage" class="text-[0.6875rem]" style="color: var(--dd-success);">{{ rollbackMessage }}</p>
-                <p v-if="rollbackError" class="text-[0.6875rem]" style="color: var(--dd-danger);">{{ rollbackError }}</p>
+                <p v-if="rollbackMessage" class="text-2xs-plus" style="color: var(--dd-success);">{{ rollbackMessage }}</p>
+                <p v-if="rollbackError" class="text-2xs-plus" style="color: var(--dd-danger);">{{ rollbackError }}</p>
               </div>
             </div>
 
@@ -964,7 +901,7 @@ const {
                  :style="{ backgroundColor: 'var(--dd-bg-card)' }">
               <div class="px-4 py-3 flex items-center gap-2">
                 <AppIcon name="audit" :size="12" class="dd-text-muted" />
-                <span class="text-[0.6875rem] font-semibold uppercase tracking-wider dd-text-muted">Update Operation History</span>
+                <span class="text-2xs-plus font-semibold uppercase tracking-wider dd-text-muted">Update Operation History</span>
               </div>
               <div class="p-4 space-y-2">
                 <div v-if="updateOperationsLoading" class="text-xs dd-text-muted">Loading operation history...</div>
@@ -973,8 +910,8 @@ const {
                        class="space-y-1.5 px-3 py-2 dd-rounded"
                        :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
                     <div class="flex items-center justify-between gap-3">
-                      <div class="text-[0.6875rem] font-mono dd-text-muted truncate">{{ operation.id }}</div>
-                      <span class="badge text-[0.625rem] font-semibold uppercase"
+                      <div class="text-2xs-plus font-mono dd-text-muted truncate">{{ operation.id }}</div>
+                      <span class="badge text-2xs font-semibold uppercase"
                             :style="getOperationStatusStyle(operation.status)">
                         {{ formatOperationStatus(operation.status) }}
                       </span>
@@ -996,13 +933,13 @@ const {
                       Last error:
                       <span class="dd-text">{{ operation.lastError }}</span>
                     </div>
-                    <div class="text-[0.6875rem] dd-text-muted">
+                    <div class="text-2xs-plus dd-text-muted">
                       {{ formatTimestamp(operation.updatedAt || operation.createdAt) }}
                     </div>
                   </div>
                 </div>
                 <p v-else class="text-xs dd-text-muted italic">No update operations recorded yet</p>
-                <p v-if="updateOperationsError" class="text-[0.6875rem]" style="color: var(--dd-danger);">{{ updateOperationsError }}</p>
+                <p v-if="updateOperationsError" class="text-2xs-plus" style="color: var(--dd-danger);">{{ updateOperationsError }}</p>
               </div>
             </div>
           </div>

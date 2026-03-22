@@ -107,13 +107,15 @@ class Telegram extends Trigger {
   }
 
   bold(text) {
-    return this.configuration.messageformat.toLowerCase() === 'markdown'
+    return (this.configuration.messageformat as string).toLowerCase() === 'markdown'
       ? `*${escapeMarkdown(text)}*`
       : `<b>${escapeHtml(text)}</b>`;
   }
 
   getParseMode() {
-    return this.configuration.messageformat.toLowerCase() === 'markdown' ? 'MarkdownV2' : 'HTML';
+    return (this.configuration.messageformat as string).toLowerCase() === 'markdown'
+      ? 'MarkdownV2'
+      : 'HTML';
   }
 }
 

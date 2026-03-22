@@ -1,6 +1,5 @@
 export {};
 
-/* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
     AppIcon: typeof import('./src/components/AppIcon.vue')['default'];

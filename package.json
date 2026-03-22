@@ -1,8 +1,12 @@
 {
+  "scripts": {
+    "prepare": "lefthook install"
+  },
   "engines": {
     "node": ">=24.0.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.4.7"
+    "@biomejs/biome": "^2.4.7",
+    "lefthook": "^2.1.1"
   }
 }

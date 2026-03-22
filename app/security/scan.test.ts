@@ -970,6 +970,39 @@ test('scanImageForVulnerabilities catch should handle error with no message prop
   expect(result.error).toBe('Unknown security scan error');
 });
 
+test('scanImageForVulnerabilities catch should stringify non-string truthy message fields', async () => {
+  childProcessControl.execFileImpl = () => {
+    throw { message: { reason: 'malformed output' } };
+  };
+
+  const result = await scanImageForVulnerabilities({ image: 'img:test' });
+
+  expect(result.status).toBe('error');
+  expect(result.error).toBe('[object Object]');
+});
+
+test('scanImageForVulnerabilities catch should use fallback when thrown object has no message', async () => {
+  childProcessControl.execFileImpl = () => {
+    throw {};
+  };
+
+  const result = await scanImageForVulnerabilities({ image: 'img:test' });
+
+  expect(result.status).toBe('error');
+  expect(result.error).toBe('Unknown security scan error');
+});
+
+test('scanImageForVulnerabilities catch should use fallback when thrown object has an empty message', async () => {
+  childProcessControl.execFileImpl = () => {
+    throw { message: '' };
+  };
+
+  const result = await scanImageForVulnerabilities({ image: 'img:test' });
+
+  expect(result.status).toBe('error');
+  expect(result.error).toBe('Unknown security scan error');
+});
+
 test('verifyImageSignature catch should handle error with no message property', async () => {
   childProcessControl.execFileImpl = () => {
     throw 'bare string';

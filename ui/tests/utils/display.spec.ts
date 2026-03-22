@@ -5,6 +5,7 @@ import {
   registryColorText,
   registryLabel,
   serverBadgeColor,
+  suggestedTagColor,
   updateKindColor,
 } from '@/utils/display';
 
@@ -171,6 +172,15 @@ describe('display utilities', () => {
 
     it('returns transparent for null', () => {
       expect(maturityColor(null)).toEqual({ bg: 'transparent', text: 'transparent' });
+    });
+  });
+
+  describe('suggestedTagColor', () => {
+    it('returns alt colors', () => {
+      expect(suggestedTagColor()).toEqual({
+        bg: 'var(--dd-alt-muted)',
+        text: 'var(--dd-alt)',
+      });
     });
   });
 });

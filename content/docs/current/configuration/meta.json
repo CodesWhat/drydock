@@ -4,6 +4,7 @@
     "index",
     "actions",
     "agents",
+    "dashboard",
     "authentications",
     "dns",
     "hooks",

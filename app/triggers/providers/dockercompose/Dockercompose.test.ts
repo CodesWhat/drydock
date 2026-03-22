@@ -2381,6 +2381,16 @@ describe('Dockercompose Trigger', () => {
     expect(mockLog.error).toHaveBeenCalledWith(expect.stringContaining('write failed'));
   });
 
+  test('writeComposeFile should stringify non-object write failures in logs', async () => {
+    fs.writeFile.mockRejectedValueOnce(42);
+
+    await expect(trigger.writeComposeFile('/opt/drydock/test/compose.yml', 'data')).rejects.toBe(
+      42,
+    );
+
+    expect(mockLog.error).toHaveBeenCalledWith(expect.stringContaining('(42)'));
+  });
+
   test('writeComposeFile should write atomically through temp file + rename under lock', async () => {
     await trigger.writeComposeFile('/opt/drydock/test/compose.yml', 'data');
 
@@ -2456,6 +2466,18 @@ describe('Dockercompose Trigger', () => {
     await expect(
       trigger.writeComposeFileAtomic('/opt/drydock/test/compose.yml', 'data'),
     ).rejects.toThrow('EACCES');
+
+    expect(fs.rename).toHaveBeenCalledTimes(1);
+  });
+
+  test('writeComposeFileAtomic should not retry when rename error code is non-string', async () => {
+    const malformedCodeError: any = new Error('rename failed');
+    malformedCodeError.code = 123;
+    fs.rename.mockRejectedValueOnce(malformedCodeError);
+
+    await expect(
+      trigger.writeComposeFileAtomic('/opt/drydock/test/compose.yml', 'data'),
+    ).rejects.toThrow('rename failed');
 
     expect(fs.rename).toHaveBeenCalledTimes(1);
   });
@@ -4109,7 +4131,7 @@ describe('Dockercompose Trigger', () => {
     // Backup pruning
     expect(backupStore.pruneOldBackups).toHaveBeenCalledWith('nginx', undefined);
     // Update applied event
-    expect(emitContainerUpdateApplied).toHaveBeenCalledWith('test_nginx');
+    expect(emitContainerUpdateApplied).toHaveBeenCalledWith('local_nginx');
   });
 
   test('processComposeFile should run security scanning but skip post-update lifecycle in dryrun mode', async () => {
@@ -4156,7 +4178,7 @@ describe('Dockercompose Trigger', () => {
 
     expect(emitContainerUpdateApplied).not.toHaveBeenCalled();
     expect(emitContainerUpdateFailed).toHaveBeenCalledWith({
-      containerName: 'test_nginx',
+      containerName: 'local_nginx',
       error: 'compose pull failed',
     });
   });
@@ -4197,6 +4219,16 @@ describe('Dockercompose Trigger', () => {
 
   test('getComposeFilesFromInspect should return empty list when watcher has no docker api', async () => {
     vi.spyOn(trigger, 'getWatcher').mockReturnValue({} as any);
+
+    await expect(
+      trigger.getComposeFilesFromInspect({
+        name: 'nginx',
+      } as any),
+    ).resolves.toEqual([]);
+  });
+
+  test('getComposeFilesFromInspect should return empty list when watcher lookup fails', async () => {
+    vi.spyOn(trigger, 'getWatcher').mockReturnValue(null as any);
 
     await expect(
       trigger.getComposeFilesFromInspect({

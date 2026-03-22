@@ -223,6 +223,19 @@ describe('Auth Router', () => {
     });
   });
 
+  describe('getSessionMiddleware', () => {
+    test('returns the initialized session middleware', () => {
+      const app = createApp();
+      registry.getState.mockReturnValue({
+        authentication: {},
+      });
+
+      auth.init(app);
+
+      expect(auth.getSessionMiddleware()).toBe('session-middleware');
+    });
+  });
+
   describe('requireAuthentication', () => {
     test('should call next when user is authenticated', () => {
       const req = { isAuthenticated: vi.fn(() => true) };
@@ -741,11 +754,10 @@ describe('Auth Router', () => {
 
         vi.advanceTimersByTime(1000);
 
-        expect(mockFs.writeFileSync).toHaveBeenCalledWith(
-          LOCKOUT_STATE_PATH,
-          expect.any(String),
-          'utf8',
-        );
+        expect(mockFs.writeFileSync).toHaveBeenCalledWith(LOCKOUT_STATE_PATH, expect.any(String), {
+          encoding: 'utf8',
+          mode: 0o600,
+        });
         const persistedState = JSON.parse(lockoutStateFiles.get(LOCKOUT_STATE_PATH) ?? '{}');
         expect(persistedState.account['persist-user']).toEqual(
           expect.objectContaining({

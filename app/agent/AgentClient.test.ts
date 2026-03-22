@@ -747,6 +747,89 @@ describe('AgentClient', () => {
       );
     });
 
+    test('should stringify non-object remote trigger failures', async () => {
+      axios.post.mockRejectedValue('trigger failed as string');
+
+      await expect(client.runRemoteTrigger({ id: 'c1' }, 'docker', 'update')).rejects.toThrow(
+        'trigger failed as string',
+      );
+    });
+
+    test('should fall back to generic error message when remote payload is not an object', async () => {
+      axios.post.mockRejectedValue({
+        message: 'Request failed with status code 500',
+        response: {
+          status: 500,
+          data: 'unexpected response shape',
+        },
+      });
+
+      await expect(client.runRemoteTrigger({ id: 'c1' }, 'docker', 'update')).rejects.toThrow(
+        'Request failed with status code 500',
+      );
+    });
+
+    test('should fall back to transport error message when remote payload has no error field', async () => {
+      axios.post.mockRejectedValue({
+        message: 'Request failed with status code 500',
+        response: {
+          status: 500,
+          data: {
+            details: {
+              reason: 'No watcher found',
+            },
+          },
+        },
+      });
+
+      await expect(client.runRemoteTrigger({ id: 'c1' }, 'docker', 'update')).rejects.toThrow(
+        'Request failed with status code 500',
+      );
+    });
+
+    test('should rethrow original error preserving response for proxy forwarding', async () => {
+      const axiosError = {
+        message: 'Request failed with status code 500',
+        response: {
+          status: 500,
+          data: {
+            error: 'Error when running trigger docker.update',
+            details: {
+              reason: 'No watcher found for container c1 (docker.default)',
+            },
+          },
+        },
+      };
+      axios.post.mockRejectedValue(axiosError);
+
+      await expect(client.runRemoteTrigger({ id: 'c1' }, 'docker', 'update')).rejects.toBe(
+        axiosError,
+      );
+      // Original error is rethrown with response intact for proxy forwarding
+      expect(axiosError.response.status).toBe(500);
+      expect(axiosError.response.data.details.reason).toBe(
+        'No watcher found for container c1 (docker.default)',
+      );
+    });
+
+    test('should rethrow original error when details lack reason field', async () => {
+      const axiosError = {
+        message: 'Request failed with status code 500',
+        response: {
+          status: 500,
+          data: {
+            error: 'Error when running trigger docker.update',
+            details: { info: 'missing reason field' },
+          },
+        },
+      };
+      axios.post.mockRejectedValue(axiosError);
+
+      await expect(client.runRemoteTrigger({ id: 'c1' }, 'docker', 'update')).rejects.toBe(
+        axiosError,
+      );
+    });
+
     test('should encode path segments to prevent SSRF', async () => {
       axios.post.mockResolvedValue({ data: {} });
       await client.runRemoteTrigger({ id: 'c1' }, '../admin', '../../etc/passwd');

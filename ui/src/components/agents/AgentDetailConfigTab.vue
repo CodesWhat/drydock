@@ -18,7 +18,7 @@ const props = defineProps<{
       class="flex items-center justify-between px-3 py-2 dd-rounded"
       :style="{ backgroundColor: 'var(--dd-bg-inset)' }"
     >
-      <span class="text-[0.625rem] font-semibold uppercase tracking-wider dd-text-muted">{{ field.label }}</span>
+      <span class="text-2xs font-semibold uppercase tracking-wider dd-text-muted">{{ field.label }}</span>
       <span class="text-xs font-mono" :class="field.muted ? 'dd-text-muted' : 'dd-text'">{{ field.value }}</span>
     </div>
   </div>

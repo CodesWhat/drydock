@@ -137,6 +137,65 @@ describe('Docker Hub Registry', () => {
     expect(result.headers.Authorization).toBe('Bearer public-token');
   });
 
+  test('should fetch published date from Docker Hub tag metadata', async () => {
+    const { default: axios } = await import('axios');
+    axios.mockResolvedValue({ data: { last_updated: '2026-03-01T12:34:56.000Z' } });
+
+    const publishedAt = await hub.getImagePublishedAt(
+      { name: 'library/nginx', tag: { value: 'latest' } },
+      '1.26.0',
+    );
+
+    expect(axios).toHaveBeenCalledWith({
+      method: 'GET',
+      url: 'https://hub.docker.com/v2/repositories/library/nginx/tags/1.26.0',
+      headers: {
+        Accept: 'application/json',
+      },
+    });
+    expect(publishedAt).toBe('2026-03-01T12:34:56.000Z');
+  });
+
+  test('should return undefined when Docker Hub tag metadata has no last_updated', async () => {
+    const { default: axios } = await import('axios');
+    axios.mockResolvedValue({ data: {} });
+
+    const publishedAt = await hub.getImagePublishedAt({
+      name: 'library/nginx',
+      tag: { value: 'latest' },
+    });
+
+    expect(publishedAt).toBeUndefined();
+  });
+
+  test('should return undefined when Docker Hub image name or tag is missing', async () => {
+    const { default: axios } = await import('axios');
+
+    const missingName = await hub.getImagePublishedAt({
+      tag: { value: 'latest' },
+    } as any);
+    const missingTag = await hub.getImagePublishedAt({
+      name: 'library/nginx',
+      tag: { value: '' },
+    });
+
+    expect(missingName).toBeUndefined();
+    expect(missingTag).toBeUndefined();
+    expect(axios).not.toHaveBeenCalled();
+  });
+
+  test('should return undefined when Docker Hub last_updated is not a valid date', async () => {
+    const { default: axios } = await import('axios');
+    axios.mockResolvedValue({ data: { last_updated: 'invalid-date' } });
+
+    const publishedAt = await hub.getImagePublishedAt({
+      name: 'library/nginx',
+      tag: { value: 'latest' },
+    });
+
+    expect(publishedAt).toBeUndefined();
+  });
+
   test('should validate string configuration', async () => {
     expect(() => hub.validateConfiguration('')).not.toThrow();
     expect(() => hub.validateConfiguration('some-string')).toThrow();
@@ -185,6 +244,82 @@ describe('Docker Hub Registry', () => {
 
     await expect(hub.authenticate(image, requestOptions)).rejects.toThrow(
       'Docker Hub token endpoint response does not contain token',
+    );
+  });
+
+  test('should propagate network errors from authenticate', async () => {
+    const { default: axios } = await import('axios');
+    axios.mockRejectedValue(new Error('connect ECONNREFUSED 127.0.0.1:443'));
+    const image = { name: 'library/nginx' };
+
+    await expect(hub.authenticate(image, { headers: {} })).rejects.toThrow(
+      'connect ECONNREFUSED 127.0.0.1:443',
+    );
+  });
+
+  test('should propagate timeout errors from authenticate', async () => {
+    const { default: axios } = await import('axios');
+    axios.mockRejectedValue(new Error('timeout of 15000ms exceeded'));
+    const image = { name: 'library/nginx' };
+
+    await expect(hub.authenticate(image, { headers: {} })).rejects.toThrow(
+      'timeout of 15000ms exceeded',
+    );
+  });
+
+  test('should propagate 401 errors from authenticate', async () => {
+    const { default: axios } = await import('axios');
+    const error = new Error('Request failed with status code 401');
+    (error as any).response = { status: 401 };
+    axios.mockRejectedValue(error);
+    const image = { name: 'library/nginx' };
+
+    await expect(hub.authenticate(image, { headers: {} })).rejects.toThrow(
+      'Request failed with status code 401',
+    );
+  });
+
+  test('should propagate 429 rate limit errors from authenticate', async () => {
+    const { default: axios } = await import('axios');
+    const error = new Error('Request failed with status code 429');
+    (error as any).response = { status: 429 };
+    axios.mockRejectedValue(error);
+    const image = { name: 'library/nginx' };
+
+    await expect(hub.authenticate(image, { headers: {} })).rejects.toThrow(
+      'Request failed with status code 429',
+    );
+  });
+
+  test('should propagate network errors from getImagePublishedAt', async () => {
+    const { default: axios } = await import('axios');
+    axios.mockRejectedValue(new Error('connect ETIMEDOUT 10.0.0.1:443'));
+    const image = { name: 'library/nginx', tag: { value: 'latest' } };
+
+    await expect(hub.getImagePublishedAt(image)).rejects.toThrow('connect ETIMEDOUT 10.0.0.1:443');
+  });
+
+  test('should propagate 404 errors from getImagePublishedAt', async () => {
+    const { default: axios } = await import('axios');
+    const error = new Error('Request failed with status code 404');
+    (error as any).response = { status: 404 };
+    axios.mockRejectedValue(error);
+    const image = { name: 'library/nginx', tag: { value: 'nonexistent' } };
+
+    await expect(hub.getImagePublishedAt(image)).rejects.toThrow(
+      'Request failed with status code 404',
+    );
+  });
+
+  test('should propagate 429 rate limit errors from getImagePublishedAt', async () => {
+    const { default: axios } = await import('axios');
+    const error = new Error('Request failed with status code 429');
+    (error as any).response = { status: 429 };
+    axios.mockRejectedValue(error);
+    const image = { name: 'library/nginx', tag: { value: 'latest' } };
+
+    await expect(hub.getImagePublishedAt(image)).rejects.toThrow(
+      'Request failed with status code 429',
     );
   });
 });

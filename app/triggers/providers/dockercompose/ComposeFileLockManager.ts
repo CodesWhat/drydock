@@ -2,6 +2,7 @@ import { watch } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { resolveConfiguredPath } from '../../../runtime/paths.js';
+import { getErrorMessage } from '../../../util/error.js';
 
 const COMPOSE_FILE_LOCK_SUFFIX = '.drydock.lock';
 const COMPOSE_FILE_LOCK_MAX_WAIT_MS = 10_000;
@@ -9,6 +10,14 @@ const COMPOSE_FILE_LOCK_STALE_MS = 120_000;
 
 export interface ComposeFileLockManagerOptions {
   getLog?: () => { warn?: (message: string) => void } | undefined;
+}
+
+interface ErrorWithCode {
+  code?: unknown;
+}
+
+function hasErrorCode(error: unknown, code: string): boolean {
+  return !!error && typeof error === 'object' && (error as ErrorWithCode).code === code;
 }
 
 /**
@@ -80,8 +89,8 @@ export class ComposeFileLockManager {
         await this.tryCreateComposeFileLock(lockFilePath);
         this._composeFileLocksHeld.add(filePath);
         return lockFilePath;
-      } catch (e: any) {
-        if (e?.code !== 'EEXIST') {
+      } catch (e: unknown) {
+        if (!hasErrorCode(e, 'EEXIST')) {
           throw e;
         }
         const staleLockReleased = await this.maybeReleaseStaleComposeFileLock(lockFilePath);
@@ -101,9 +110,9 @@ export class ComposeFileLockManager {
     this._composeFileLocksHeld.delete(filePath);
     try {
       await fs.unlink(lockFilePath);
-    } catch (e: any) {
-      if (e?.code !== 'ENOENT') {
-        this.warn(`Could not remove compose file lock ${lockFilePath} (${e.message})`);
+    } catch (e: unknown) {
+      if (!hasErrorCode(e, 'ENOENT')) {
+        this.warn(`Could not remove compose file lock ${lockFilePath} (${getErrorMessage(e)})`);
       }
     }
   }
@@ -130,11 +139,11 @@ export class ComposeFileLockManager {
       await fs.unlink(lockFilePath);
       this.warn(`Removed stale compose file lock ${lockFilePath}`);
       return true;
-    } catch (e: any) {
-      if (e?.code === 'ENOENT') {
+    } catch (e: unknown) {
+      if (hasErrorCode(e, 'ENOENT')) {
         return true;
       }
-      this.warn(`Could not inspect compose file lock ${lockFilePath} (${e.message})`);
+      this.warn(`Could not inspect compose file lock ${lockFilePath} (${getErrorMessage(e)})`);
       return false;
     }
   }

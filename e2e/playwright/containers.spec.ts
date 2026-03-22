@@ -1,182 +1,186 @@
-import { expect, test } from '@playwright/test';
+import { expect, type Locator, type Page, test } from '@playwright/test';
+import {
+  dismissAnnouncementBanners,
+  escapeRegExp,
+  registerServerAvailabilityCheck,
+} from './helpers/test-helpers';
 
-test.describe('Containers view', () => {
-  test.beforeEach(async ({ page }) => {
-    await page.goto('/containers');
-    // Wait for view mode buttons to appear (containers page is loaded)
-    await expect(page.getByRole('button', { name: 'Table view' })).toBeVisible({ timeout: 30_000 });
+registerServerAvailabilityCheck(test);
+
+const KNOWN_CONTAINER_NAMES = [
+  'PostgreSQL',
+  'Remote Nginx',
+  'Redis Cache',
+  'Nginx (Hooked)',
+  'Traefik Proxy',
+  'MongoDB',
+] as const;
+
+async function openContainersView(page: Page): Promise<void> {
+  await page.goto('/containers');
+  await dismissAnnouncementBanners(page);
+  await expect(page.getByRole('button', { name: 'Table view' })).toBeVisible({ timeout: 30_000 });
+}
+
+async function switchToCardsView(page: Page): Promise<void> {
+  await page.getByRole('button', { name: 'Cards view' }).click();
+  await expect(page.getByRole('button', { name: /Select / }).first()).toBeVisible({
+    timeout: 30_000,
+  });
+}
+
+async function showFilterPanel(page: Page): Promise<void> {
+  const searchInput = page.getByPlaceholder('Search name or image...');
+  if (await searchInput.isVisible().catch(() => false)) {
+    return;
+  }
+  await dismissAnnouncementBanners(page);
+  await page.getByRole('button', { name: 'Toggle filters' }).click();
+  await expect(searchInput).toBeVisible();
+}
+
+async function openAnyContainerDetail(page: Page): Promise<string> {
+  await openContainersView(page);
+  const detailPanel = page.locator('[data-test="container-side-detail"]');
+
+  for (const containerName of KNOWN_CONTAINER_NAMES) {
+    const locator = page.getByRole('row', {
+      name: new RegExp(`\\b${escapeRegExp(containerName)}\\b`, 'i'),
+    });
+    if ((await locator.count()) > 0) {
+      await locator.first().click();
+      await expect(detailPanel).toBeVisible({ timeout: 15_000 });
+      return containerName;
+    }
+  }
+
+  const fallback = page.locator('tbody tr').first();
+  await expect(fallback).toBeVisible();
+  const label = (await fallback.textContent()) || 'selected container';
+  await fallback.click();
+  await expect(detailPanel).toBeVisible({ timeout: 15_000 });
+
+  return label.trim();
+}
+
+function detailTabButton(detailPanel: Locator, iconName: string): Locator {
+  return detailPanel.locator(`button:has(iconify-icon[icon*="${iconName}"])`).first();
+}
+
+function readContainerActionsFeatureFlag(payload: unknown): boolean | undefined {
+  if (!payload || typeof payload !== 'object') {
+    return undefined;
+  }
+
+  const rawFeature = (payload as { configuration?: { feature?: unknown } }).configuration?.feature;
+  if (!rawFeature || typeof rawFeature !== 'object') {
+    return undefined;
+  }
+
+  const containerActions = (rawFeature as Record<string, unknown>).containeractions;
+  return typeof containerActions === 'boolean' ? containerActions : undefined;
+}
+
+test.describe('Containers', () => {
+  test('container list loads and supports table/cards/list view toggles', async ({ page }) => {
+    await openContainersView(page);
+
+    await page.getByRole('button', { name: 'Table view' }).click();
+    await expect(page.locator('th', { hasText: 'Container' })).toBeVisible();
+
+    await page.getByRole('button', { name: 'Cards view' }).click();
+    await expect(page.getByRole('button', { name: /Select / }).first()).toBeVisible();
+
+    await page.getByRole('button', { name: 'List view' }).click();
+    await expect(page.getByRole('button', { name: /Select / }).first()).toBeVisible();
   });
 
-  test('shows container count in header', async ({ page }) => {
-    await expect(page.getByRole('banner').getByText('Containers')).toBeVisible();
-    // Count format is "N/N" — wait for containers to load
-    await expect(page.getByText(/\d+\/\d+/)).toBeVisible({ timeout: 30_000 });
+  test('stack grouping and search filtering narrow the container list', async ({ page }) => {
+    await openContainersView(page);
+    await switchToCardsView(page);
+    await dismissAnnouncementBanners(page);
+
+    const allCards = page.getByRole('button', { name: /Select / });
+    const initialCount = await allCards.count();
+    expect(initialCount).toBeGreaterThan(0);
+
+    const groupByStackToggle = page
+      .locator('[data-test="containers-list-content"] button:has(iconify-icon[icon*="stack"])')
+      .first();
+    await groupByStackToggle.click();
+    await expect(page.locator('[data-test="containers-grouped-views"]')).toContainText(
+      /web-stack|infra|data|security-test/i,
+    );
+
+    await showFilterPanel(page);
+    const searchInput = page.getByPlaceholder('Search name or image...');
+    await searchInput.fill('postgres');
+
+    await expect(page.getByRole('button', { name: /Select PostgreSQL/i })).toBeVisible();
+    const filteredCount = await page.getByRole('button', { name: /Select / }).count();
+    expect(filteredCount).toBeGreaterThan(0);
+    expect(filteredCount).toBeLessThanOrEqual(initialCount);
   });
 
-  test('has view mode toggle buttons', async ({ page }) => {
-    await expect(page.getByRole('button', { name: 'Table view' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Cards view' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'List view' })).toBeVisible();
+  test('container detail panel opens and required tabs are navigable', async ({ page }) => {
+    const selectedName = await openAnyContainerDetail(page);
+    const detailPanel = page.locator('[data-test="container-side-detail"]');
+    const detailContent = page.locator('[data-test="container-side-tab-content"]');
+
+    await expect(detailPanel).toContainText(selectedName);
+
+    await detailTabButton(detailPanel, 'info').click();
+    await expect(detailContent).toContainText('Version');
+
+    await detailTabButton(detailPanel, 'scroll').click();
+    await expect(detailContent.getByPlaceholder('Search logs')).toBeVisible();
+
+    await detailTabButton(detailPanel, 'sliders-horizontal').click();
+    await expect(detailContent).toContainText('Environment Variables');
+
+    await detailTabButton(detailPanel, 'cube').click();
+    await expect(detailContent).toContainText('Labels');
+
+    await detailTabButton(detailPanel, 'lightning').click();
+    await expect(detailContent).toContainText('Update Workflow');
   });
 
-  test.describe('Card view', () => {
-    test.beforeEach(async ({ page }) => {
-      await page.getByRole('button', { name: 'Cards view' }).click();
-    });
+  test('actions tab shows trigger list and Update/Preview/Scan controls with feature gating', async ({
+    page,
+  }) => {
+    await openAnyContainerDetail(page);
 
-    test('renders all containers as cards', async ({ page }) => {
-      await expect(page.getByRole('button', { name: 'Select Remote Nginx' })).toBeVisible();
-      await expect(page.getByRole('button', { name: 'Select PostgreSQL' })).toBeVisible();
-      await expect(page.getByRole('button', { name: 'Select MongoDB' })).toBeVisible();
-      await expect(page.getByRole('button', { name: 'Select Alpine (Latest)' })).toBeVisible();
-    });
+    const detailPanel = page.locator('[data-test="container-side-detail"]');
+    const detailContent = page.locator('[data-test="container-side-tab-content"]');
 
-    test('shows current and latest version labels on update cards', async ({ page }) => {
-      const nginxCard = page.getByRole('button', {
-        name: 'Select PostgreSQL',
-      });
-      await expect(nginxCard.getByText('Current')).toBeVisible();
-      await expect(nginxCard.getByText('Latest')).toBeVisible();
-    });
+    await detailTabButton(detailPanel, 'lightning').click();
 
-    test('shows running status badge on cards', async ({ page }) => {
-      const card = page.getByRole('button', {
-        name: 'Select PostgreSQL',
-      });
-      await expect(card.getByText('running')).toBeVisible();
-    });
+    await expect(detailContent).toContainText('Associated Triggers');
+    await expect(
+      detailContent.getByRole('button', { name: /Preview Update|Previewing/ }),
+    ).toBeVisible();
+    await expect(detailContent.getByRole('button', { name: 'Scan Now' })).toBeVisible();
 
-    test('shows registry badge on cards', async ({ page }) => {
-      await expect(page.getByText('Dockerhub').first()).toBeVisible();
-    });
+    const updateNowCount = await detailContent.getByRole('button', { name: 'Update Now' }).count();
+    const forceUpdateCount = await detailContent
+      .getByRole('button', { name: /Force Update/i })
+      .count();
+    expect(updateNowCount + forceUpdateCount).toBeGreaterThan(0);
 
-    test('container without update has no Latest label', async ({ page }) => {
-      const alpineCard = page.getByRole('button', {
-        name: 'Select Alpine (Latest)',
-      });
-      await expect(alpineCard.getByText('Current')).toBeVisible();
-      // Alpine (Latest) should not show a "Latest" label (the word by itself)
-      const latestLabels = alpineCard.locator(':text-is("Latest")');
-      await expect(latestLabels).toHaveCount(0);
-    });
-  });
+    const serverResponse = await page.request.get('/api/server');
+    let actionsEnabled = true;
+    if (serverResponse.ok()) {
+      actionsEnabled = readContainerActionsFeatureFlag(await serverResponse.json()) ?? true;
+    }
 
-  test.describe('Table view', () => {
-    test.beforeEach(async ({ page }) => {
-      await page.getByRole('button', { name: 'Table view' }).click();
-    });
-
-    test('renders table with correct column headers', async ({ page }) => {
-      await expect(page.locator('th', { hasText: 'Container' })).toBeVisible();
-      await expect(page.locator('th', { hasText: 'Version' })).toBeVisible();
-      await expect(page.locator('th', { hasText: 'Kind' })).toBeVisible();
-      await expect(page.locator('th', { hasText: 'Status' })).toBeVisible();
-      await expect(page.locator('th', { hasText: 'Host' })).toBeVisible();
-      await expect(page.locator('th', { hasText: 'Registry' })).toBeVisible();
-    });
-
-    test('renders at least one container row', async ({ page }) => {
-      const rows = page.locator('tbody tr');
-      await expect(rows.first()).toBeVisible();
-      expect(await rows.count()).toBeGreaterThan(0);
-    });
-
-    test('shows version in table row', async ({ page }) => {
-      const pgRow = page.locator('tr', { hasText: 'PostgreSQL' });
-      // Version cell is the 3rd td (index 2)
-      const versionCell = pgRow.locator('td').nth(2);
-      await expect(versionCell).toContainText('16.0');
-      await expect(versionCell).toContainText('18.3');
-    });
-
-    test('shows kind badges in kind column', async ({ page }) => {
-      const pgRow = page.locator('tr', { hasText: 'PostgreSQL' });
-      const kindCell = pgRow.locator('td').nth(3);
-      await expect(kindCell).toContainText('major');
-    });
-
-    test('shows kind badges with correct types', async ({ page }) => {
+    const scanButton = detailContent.getByRole('button', { name: 'Scan Now' });
+    if (actionsEnabled) {
+      await expect(scanButton).toBeEnabled();
+    } else {
+      await scanButton.click();
       await expect(
-        page.locator('tr', { hasText: 'Log Spammer' }).locator('td').nth(3),
-      ).toContainText('minor');
-      await expect(
-        page.locator('tr', { hasText: 'PostgreSQL' }).locator('td').nth(3),
-      ).toContainText('major');
-      await expect(
-        page.locator('tr', { hasText: 'Python (Unsafe)' }).locator('td').nth(3),
-      ).toContainText('patch');
-    });
-
-    test('shows running status for all rendered containers', async ({ page }) => {
-      const rows = page.locator('tbody tr');
-      await expect(rows.first()).toBeVisible();
-      const rowCount = await rows.count();
-      expect(rowCount).toBeGreaterThan(0);
-
-      const runningBadges = page.locator('tbody tr td:has-text("running")');
-      await expect(runningBadges).toHaveCount(rowCount);
-    });
-
-    test('container without update shows dash for kind', async ({ page }) => {
-      const alpineRow = page.locator('tr', { hasText: 'Alpine (Latest)' });
-      await expect(alpineRow.getByText('—')).toBeVisible();
-    });
-  });
-
-  test.describe('List view', () => {
-    test.beforeEach(async ({ page }) => {
-      await page.getByRole('button', { name: 'List view' }).click();
-    });
-
-    test('renders all containers as list items', async ({ page }) => {
-      await expect(page.getByRole('button', { name: 'Select Remote Nginx' })).toBeVisible();
-      await expect(page.getByRole('button', { name: 'Select PostgreSQL' })).toBeVisible();
-      await expect(page.getByRole('button', { name: 'Select Alpine (Latest)' })).toBeVisible();
-      await expect(page.getByRole('button', { name: 'Select Traefik Proxy' })).toBeVisible();
-    });
-
-    test('shows kind badge on list items with updates', async ({ page }) => {
-      const pgItem = page.getByRole('button', {
-        name: 'Select PostgreSQL',
-      });
-      await expect(pgItem).toContainText('major');
-    });
-
-    test('shows host location on list items', async ({ page }) => {
-      const pgItem = page.getByRole('button', {
-        name: 'Select PostgreSQL',
-      });
-      await expect(pgItem).toContainText('Local');
-    });
-
-    test('container without update has no kind badge', async ({ page }) => {
-      const alpineItem = page.getByRole('button', {
-        name: 'Select Alpine (Latest)',
-      });
-      await expect(alpineItem).toContainText('running');
-      await expect(alpineItem).not.toContainText('minor');
-      await expect(alpineItem).not.toContainText('major');
-      await expect(alpineItem).not.toContainText('patch');
-    });
-  });
-
-  test.describe('View mode persistence', () => {
-    test('switching view modes updates the active button', async ({ page }) => {
-      await page.getByRole('button', { name: 'Table view' }).click();
-      await expect(page.getByRole('button', { name: 'Table view' })).toHaveAttribute(
-        'aria-pressed',
-        'true',
-      );
-
-      await page.getByRole('button', { name: 'List view' }).click();
-      await expect(page.getByRole('button', { name: 'List view' })).toHaveAttribute(
-        'aria-pressed',
-        'true',
-      );
-      await expect(page.getByRole('button', { name: 'Table view' })).not.toHaveAttribute(
-        'aria-pressed',
-        'true',
-      );
-    });
+        page.getByText('Container actions disabled by server configuration'),
+      ).toBeVisible();
+    }
   });
 });

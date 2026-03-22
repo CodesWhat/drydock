@@ -1,0 +1,42 @@
+---
+title: "Storage"
+description: "Persist drydock state by mounting /store as a volume."
+---
+
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+If you want the state to persist after the container removal, you need to mount  ```/store``` as a volume.
+
+## Variables
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --- | :---: | --- | --- | --- |
+| `DD_STORE_PATH` | ⚪ | Directory where the database file is stored | directory path | `/store` |
+| `DD_STORE_FILE` | ⚪ | Database filename | filename | `dd.json` |
+| `DD_UPDATE_OPERATION_MAX_ENTRIES` | ⚪ | Max update/rollback operation records to retain (oldest pruned when exceeded) | integer (`>0`) | `500` |
+| `DD_UPDATE_OPERATION_RETENTION_DAYS` | ⚪ | Days to retain update operation records before pruning | integer (`>0`) | `30` |
+
+## Examples
+
+<Tabs items={["Docker Compose", "Docker"]}>
+<Tab value="Docker Compose">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    volumes:
+      - /path-on-my-host:/store
+```
+
+</Tab>
+<Tab value="Docker">
+```bash
+docker run \
+  -v /path-on-my-host:/store
+  ...
+  codeswhat/drydock
+```
+</Tab>
+</Tabs>

@@ -14,7 +14,7 @@ This API allows to query the state of the registries.
 This operation lets you get all the configured registries.
 
 ```bash
-curl http://drydock:3000/api/registries
+curl http://drydock:3000/api/v1/registries
 
 {
     "data": [
@@ -49,7 +49,7 @@ curl http://drydock:3000/api/registries
 This operation lets you get a specific Registry.
 
 ```bash
-curl http://drydock:3000/api/registries/hub/private
+curl http://drydock:3000/api/v1/registries/hub/private
 
 {
     "id": "hub.private",
@@ -59,4 +59,12 @@ curl http://drydock:3000/api/registries/hub/private
         "auth": "dXNlcm5hbWU6cGFzc3dvcmQ="
     }
 }
+```
+
+### Agent-scoped lookup
+
+To fetch a registry registered on a specific agent, append the agent name:
+
+```bash
+curl http://drydock:3000/api/v1/registries/hub/private/agent1
 ```

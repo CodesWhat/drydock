@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import type { Container } from '../../model/container.js';
+import Trigger from '../../triggers/providers/Trigger.js';
 import type { ApiComponent } from '../component.js';
 import { isTriggerCompatibleWithContainer } from '../docker-trigger.js';
 import { sendErrorResponse } from '../error-response.js';
@@ -33,7 +34,7 @@ interface TriggerStaticApi {
   doesReferenceMatchId: (triggerReference: string, triggerId: string) => boolean;
 }
 
-export interface TriggerHandlerDependencies {
+interface TriggerHandlerDependencies {
   storeContainer: TriggerStoreContainerApi;
   mapComponentsToList: (components: Record<string, TriggerRuntimeComponent>) => ApiComponent[];
   getTriggers: () => Record<string, TriggerRuntimeComponent>;
@@ -197,6 +198,11 @@ function createRunTriggerHandler({
     const triggerToRun = getTriggers()[triggerId];
     if (!triggerToRun) {
       sendErrorResponse(res, 404, 'Trigger not found');
+      return;
+    }
+
+    if (Trigger.isRollbackContainer(containerToTrigger)) {
+      sendErrorResponse(res, 409, 'Cannot update temporary rollback container');
       return;
     }
 

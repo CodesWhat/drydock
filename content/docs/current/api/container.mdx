@@ -10,7 +10,7 @@ This API allows to query the state of the watched containers.
 This operation lets you get all the watched containers.
 
 ```bash
-curl "http://drydock:3000/api/containers?limit=25&offset=0"
+curl "http://drydock:3000/api/v1/containers?limit=25&offset=0"
 
 {
   "data": [
@@ -35,13 +35,19 @@ curl "http://drydock:3000/api/containers?limit=25&offset=0"
 | `limit` | integer | `0` | Maximum number of containers to return (`0` means unbounded; max `200`) |
 | `offset` | integer | `0` | Number of matching containers to skip |
 | `includeVulnerabilities` | boolean | `false` | Include full vulnerability arrays in `data` |
+| `sort` | string | | Sort order: `name`, `-name`, `status`, `-status`, `age`, `-age`, `created`, `-created` (prefix `-` for descending) |
+| `order` | string | | Optional sort direction override: `asc` or `desc` |
+| `status` | string | | Filter by update/runtime status: `update-available`, `up-to-date`, `running`, `stopped`, `exited`, `paused`, `restarting`, `dead`, `created` |
+| `kind` | string | | Filter by update kind or watched state: `major`, `minor`, `patch`, `digest`, `watched`, `unwatched`, `all` |
+| `watcher` | string | | Filter by watcher name |
+| `maturity` | string | | Filter by update maturity: `hot`, `mature`, `established` |
 
 ## Get container summary
 
 Returns a lightweight summary of container and security counts, used by the dashboard sidebar.
 
 ```bash
-curl http://drydock:3000/api/containers/summary
+curl http://drydock:3000/api/v1/containers/summary
 
 {
   "containers": {
@@ -63,13 +69,15 @@ curl http://drydock:3000/api/containers/summary
 | `containers.running` | integer | Number of running containers |
 | `containers.stopped` | integer | Number of stopped containers |
 | `security.issues` | integer | Number of containers with critical or high vulnerabilities |
+| `hotUpdates` | integer | Number of containers with updates less than 24 hours old |
+| `matureUpdates` | integer | Number of containers with updates between 24 hours and 7 days old |
 
 ## Get recent container status
 
 Returns a map of container names to their most recent update status, derived from the last 100 audit log entries. Used by the dashboard to show status badges on containers.
 
 ```bash
-curl http://drydock:3000/api/containers/recent-status
+curl http://drydock:3000/api/v1/containers/recent-status
 
 {
   "statuses": {
@@ -92,7 +100,7 @@ curl http://drydock:3000/api/containers/recent-status
 This operation triggers a manual watch on all containers.
 
 ```bash
-curl -X POST http://drydock:3000/api/containers/watch
+curl -X POST http://drydock:3000/api/v1/containers/watch
 
 {
   "data": [{
@@ -135,7 +143,7 @@ curl -X POST http://drydock:3000/api/containers/watch
 This operation lets you get a container by id.
 
 ```bash
-curl http://drydock:3000/api/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816
+curl http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816
 
 {
   "id":"31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816",
@@ -172,7 +180,7 @@ curl http://drydock:3000/api/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32
 This operation lets you get the list of triggers associated to the container.
 
 ```bash
-curl http://drydock:3000/api/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/triggers
+curl http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/triggers
 
 {
   "data": [
@@ -201,7 +209,7 @@ curl http://drydock:3000/api/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32
 This operation triggers a manual watch on a container.
 
 ```bash
-curl -X POST http://drydock:3000/api/containers/ca0edc3fb0b4647963629bdfccbb3ccfa352184b45a9b4145832000c2878dd72/watch
+curl -X POST http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/watch
 
 {
   "id":"31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816",
@@ -238,13 +246,13 @@ curl -X POST http://drydock:3000/api/containers/ca0edc3fb0b4647963629bdfccbb3ccf
 This operation lets you manually run a trigger on the container.
 
 ```bash
-curl -X POST http://drydock:3000/api/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/triggers/ntfy/one
+curl -X POST http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/triggers/ntfy/one
 ```
 
 For containers managed by a remote agent, use the 4-segment variant to route the trigger through the agent:
 
 ```bash
-curl -X POST http://drydock:3000/api/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/triggers/ntfy/one/agent1
+curl -X POST http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/triggers/ntfy/one/agent1
 ```
 
 ## Update a container
@@ -254,7 +262,7 @@ This operation triggers a direct container update — pulling the new image, sto
 Returns 200 with the updated container on success, 400 if no update is available, 403 if container actions are disabled, 404 if the container or Docker trigger is not found, or 500 on update failure.
 
 ```bash
-curl -X POST http://drydock:3000/api/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/update
+curl -X POST http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/update
 ```
 
 ## Update container update policy (skip/snooze)
@@ -269,27 +277,27 @@ This operation lets you control per-container update suppression policy (stored 
 - `clear`: remove all update policy
 
 ```bash
-curl -X PATCH http://drydock:3000/api/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/update-policy \
+curl -X PATCH http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/update-policy \
   -H 'Content-Type: application/json' \
   -d '{"action":"skip-current"}'
 ```
 
 ```bash
 # Remove a single skipped tag
-curl -X PATCH http://drydock:3000/api/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/update-policy \
+curl -X PATCH http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/update-policy \
   -H 'Content-Type: application/json' \
   -d '{"action":"remove-skip","kind":"tag","value":"1.2.3"}'
 ```
 
 ```bash
 # Remove a single skipped digest
-curl -X PATCH http://drydock:3000/api/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/update-policy \
+curl -X PATCH http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/update-policy \
   -H 'Content-Type: application/json' \
   -d '{"action":"remove-skip","kind":"digest","value":"sha256:abc123..."}'
 ```
 
 ```bash
-curl -X PATCH http://drydock:3000/api/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/update-policy \
+curl -X PATCH http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/update-policy \
   -H 'Content-Type: application/json' \
   -d '{"action":"snooze","days":7}'
 ```
@@ -300,7 +308,7 @@ This operation returns pre-aggregated vulnerability data grouped by image across
 Used by the Security view to display vulnerability summaries without loading every container individually.
 
 ```bash
-curl http://drydock:3000/api/containers/security/vulnerabilities
+curl http://drydock:3000/api/v1/containers/security/vulnerabilities
 ```
 
 The response includes total and scanned container counts, the latest scan timestamp, and an `images` array where each entry groups vulnerabilities by image name with container IDs and an optional update severity summary.
@@ -311,7 +319,7 @@ This operation returns the latest persisted vulnerability scan (safe-pull gate r
 When no scan was run yet, it returns `status: "not-scanned"` with an empty result set.
 
 ```bash
-curl http://drydock:3000/api/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/vulnerabilities
+curl http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/vulnerabilities
 ```
 
 ## Run an on-demand security scan
@@ -321,7 +329,7 @@ This operation triggers a vulnerability scan, optional signature verification, a
 Requires `DD_SECURITY_SCANNER=trivy` to be configured.
 
 ```bash
-curl -X POST http://drydock:3000/api/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/scan
+curl -X POST http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/scan
 ```
 
 Returns 200 with the updated container on success, 400 if security scanner is not configured, 404 if the container is not found, or 500 on scan failure.
@@ -331,26 +339,81 @@ Returns 200 with the updated container on success, 400 if security scanner is no
 This operation returns the latest SBOM document for a container in the requested format.
 
 ```bash
-curl http://drydock:3000/api/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/sbom?format=spdx-json
+curl http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/sbom?format=spdx-json
 ```
 
-## Get container logs
+## Download container logs
 
-Returns stdout/stderr output from a container. For agent-managed containers, the request is proxied through the agent connection.
+Returns stdout/stderr output from a container as a downloadable text file. Supports gzip compression via `Accept-Encoding: gzip` header. For agent-managed containers, the request is proxied through the agent connection.
 
 ```bash
-curl "http://drydock:3000/api/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/logs?tail=100"
+curl "http://drydock:3000/api/v1/containers/{id}/logs?tail=1000&stdout=true&stderr=true"
 ```
 
 ### Query parameters
 
 | Parameter | Type | Default | Description |
 | --- | --- | --- | --- |
-| `tail` | integer | 100 | Number of lines to return from the end of the log |
-| `since` | integer | 0 | Unix timestamp (seconds) — only return logs after this time |
-| `timestamps` | boolean | true | Include timestamps in output |
+| `stdout` | boolean | `true` | Include stdout output |
+| `stderr` | boolean | `true` | Include stderr output |
+| `tail` | integer | `1000` | Number of lines to return from the end of the log |
+| `since` | string | `0` | Unix timestamp (seconds) or ISO 8601 string — only return logs after this time |
+| `timestamps` | boolean | `true` | Include timestamps in output |
 
-Returns 200 with `{ "logs": "..." }` on success, 404 if the container is not found, or 500 on failure.
+Returns 200 with the log text (Content-Disposition: attachment), 404 if the container is not found, or 500 on failure.
+
+## Stream container logs (WebSocket)
+
+Opens a WebSocket connection for real-time container log streaming. The server demultiplexes Docker's binary stream format and sends individual JSON frames.
+
+```text
+ws://drydock:3000/api/v1/containers/{id}/logs/stream?follow=true&tail=100
+```
+
+### Query parameters
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `stdout` | boolean | `true` | Include stdout output |
+| `stderr` | boolean | `true` | Include stderr output |
+| `tail` | integer | `100` | Number of initial lines to load |
+| `since` | string | `0` | Unix timestamp (seconds) or ISO 8601 string — only stream logs after this time |
+| `follow` | boolean | `true` | Continue streaming new output (set `false` for one-shot fetch) |
+
+### Message format
+
+Each WebSocket message is a JSON object:
+
+```json
+{
+  "type": "stdout",
+  "ts": "2026-03-18T19:18:38.485902360Z",
+  "line": "Server started on port 3000"
+}
+```
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `type` | string | `stdout` or `stderr` |
+| `ts` | string | ISO 8601 timestamp from Docker |
+| `line` | string | Log line content (may contain ANSI escape codes) |
+
+### Close codes
+
+| Code | Meaning |
+| --- | --- |
+| `1000` | Normal close (stream ended or client disconnect) |
+| `4001` | Container is not running |
+| `4004` | Container not found |
+| `1011` | Watcher unavailable or stream error |
+
+### Authentication
+
+WebSocket upgrade requests require a valid session cookie. Unauthenticated requests receive HTTP 401 during the upgrade handshake.
+
+### Rate limiting
+
+WebSocket connections are rate-limited to 1,000 connections per 15-minute window per client IP (or per authenticated user when identity-aware rate limiting is enabled).
 
 ## Reveal container environment variables
 
@@ -359,7 +422,7 @@ Returns the full (unredacted) runtime environment variables for a container. Env
 Rate-limited to 10 requests per minute.
 
 ```bash
-curl -X POST http://drydock:3000/api/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/env/reveal
+curl -X POST http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/env/reveal
 
 {
   "env": [
@@ -386,7 +449,7 @@ Container action auth model: `/start`, `/stop`, `/restart`, and `/update` are au
 This operation starts a stopped container. Requires `DD_SERVER_FEATURE_CONTAINERACTIONS` to be enabled.
 
 ```bash
-curl -X POST http://drydock:3000/api/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/start
+curl -X POST http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/start
 ```
 
 ## Stop a container
@@ -394,7 +457,7 @@ curl -X POST http://drydock:3000/api/containers/31a61a8305ef1fc9a71fa4f20a68d7ec
 This operation stops a running container. Requires `DD_SERVER_FEATURE_CONTAINERACTIONS` to be enabled.
 
 ```bash
-curl -X POST http://drydock:3000/api/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/stop
+curl -X POST http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/stop
 ```
 
 ## Restart a container
@@ -402,7 +465,7 @@ curl -X POST http://drydock:3000/api/containers/31a61a8305ef1fc9a71fa4f20a68d7ec
 This operation restarts a container. Requires `DD_SERVER_FEATURE_CONTAINERACTIONS` to be enabled.
 
 ```bash
-curl -X POST http://drydock:3000/api/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/restart
+curl -X POST http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/restart
 ```
 
 ## Preview an update
@@ -410,7 +473,7 @@ curl -X POST http://drydock:3000/api/containers/31a61a8305ef1fc9a71fa4f20a68d7ec
 This operation returns a dry-run preview of what an update would change, without executing it.
 
 ```bash
-curl -X POST http://drydock:3000/api/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/preview
+curl -X POST http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/preview
 ```
 
 ## Get container backups
@@ -418,7 +481,7 @@ curl -X POST http://drydock:3000/api/containers/31a61a8305ef1fc9a71fa4f20a68d7ec
 This operation returns all image backups for a container, sorted by most recent first.
 
 ```bash
-curl http://drydock:3000/api/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/backups
+curl http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/backups
 
 {
   "data": [
@@ -443,7 +506,7 @@ This operation rolls back a container to a previously backed-up image. If no `ba
 Rollback is destructive and requires explicit confirmation via `X-DD-Confirm-Action: container-rollback`.
 
 ```bash
-curl -X POST http://drydock:3000/api/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/rollback \
+curl -X POST http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/rollback \
   -H 'X-DD-Confirm-Action: container-rollback' \
   -H 'Content-Type: application/json' \
   -d '{"backupId": "abc123"}'
@@ -456,7 +519,7 @@ Returns 200 on success, 404 if the container/backup/trigger is not found, or 428
 Returns the persisted update and rollback operation history for a container, sorted by most recent first. Each entry tracks the full lifecycle of an update (phases, status, versions, rollback reason if applicable).
 
 ```bash
-curl http://drydock:3000/api/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/update-operations
+curl http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/update-operations
 
 {
   "data": [
@@ -513,13 +576,60 @@ curl http://drydock:3000/api/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32
 
 Returns 200 with the operations array on success, or 404 if the container is not found.
 
+## Get container stats
+
+`GET /api/v1/containers/stats`
+
+Returns CPU and memory usage stats for all monitored containers.
+
+### Response
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `data` | array | Array of container stat objects |
+| `data[].id` | string | Container ID |
+| `data[].name` | string | Container name |
+| `data[].stats` | object | Latest stats snapshot |
+| `data[].stats.cpuPercent` | number | CPU usage percentage |
+| `data[].stats.memoryUsageBytes` | number | Memory usage in bytes |
+| `data[].stats.memoryLimitBytes` | number | Memory limit in bytes |
+| `data[].stats.memoryPercent` | number | Memory usage percentage |
+| `data[].stats.networkRxBytes` | number | Network bytes received |
+| `data[].stats.networkTxBytes` | number | Network bytes transmitted |
+| `data[].stats.timestamp` | string | ISO 8601 timestamp |
+
+## Get single container stats
+
+`GET /api/v1/containers/:id/stats`
+
+Returns the latest stats snapshot and history for a single container.
+
+### Response
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `data` | object | Latest stats snapshot |
+| `history` | array | Array of historical snapshots |
+
+## Stream container stats (SSE)
+
+`GET /api/v1/containers/:id/stats/stream`
+
+Server-Sent Events stream for real-time container stats. Sends `dd:container-stats` events with the latest snapshot and `dd:heartbeat` events every 15 seconds.
+
+## Get container release notes
+
+`GET /api/v1/containers/:id/release-notes`
+
+Returns GitHub release notes for the container's available update, if available.
+
 ## Delete a Container
 
 This operation lets you delete a container by id. Requires `DD_SERVER_FEATURE_DELETE` to be enabled.
 Delete is destructive and requires explicit confirmation via `X-DD-Confirm-Action: container-delete`.
 
 ```bash
-curl -X DELETE http://drydock:3000/api/containers/ca0edc3fb0b4647963629bdfccbb3ccfa352184b45a9b4145832000c2878dd72 \
+curl -X DELETE http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816 \
   -H 'X-DD-Confirm-Action: container-delete'
 ```
 

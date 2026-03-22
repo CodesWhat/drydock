@@ -11,7 +11,9 @@ describe('OpenAPI document', () => {
     expect(openApiDocument.openapi).toBe('3.1.0');
     expect(openApiDocument.info.version).toBe(appPackageJson.version);
     expect(openApiDocument.paths['/api/openapi.json']?.get).toBeDefined();
+    expect(openApiDocument.paths['/api/debug/dump']?.get).toBeDefined();
     expect(openApiDocument.paths['/api/containers/{id}/scan']?.post).toBeDefined();
+    expect(openApiDocument.paths['/api/containers/{id}/stats']?.get).toBeDefined();
     expect(openApiDocument.paths['/api/webhook/watch']?.post).toBeDefined();
     expect(openApiDocument.paths['/auth/login']?.post).toBeDefined();
   });

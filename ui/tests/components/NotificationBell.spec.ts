@@ -40,7 +40,7 @@ const transitionStub = {
 const mountedWrappers: ReturnType<typeof mount>[] = [];
 
 function findDropdown(wrapper: ReturnType<typeof mount>) {
-  return wrapper.find('.notification-bell-wrapper div.absolute');
+  return wrapper.find('[data-test="notification-dropdown"]');
 }
 
 function findEntryRows(wrapper: ReturnType<typeof mount>) {

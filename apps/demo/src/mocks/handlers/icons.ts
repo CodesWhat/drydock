@@ -37,7 +37,7 @@ async function tryFetch(url: string): Promise<Response | null> {
 }
 
 export const iconHandlers = [
-  http.get('/api/icons/:provider/:slug', async ({ params }) => {
+  http.get('/api/v1/icons/:provider/:slug', async ({ params }) => {
     const provider = params.provider as string;
     const slug = (params.slug as string).replace(/\.(png|svg)$/i, '');
 
@@ -76,5 +76,5 @@ export const iconHandlers = [
     });
   }),
 
-  http.delete('/api/icons/cache', () => HttpResponse.json({ cleared: 0 })),
+  http.delete('/api/v1/icons/cache', () => HttpResponse.json({ cleared: 0 })),
 ];

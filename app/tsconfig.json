@@ -15,5 +15,13 @@
     "resolveJsonModule": true
   },
   "include": ["./**/*"],
-  "exclude": ["node_modules", "dist", "coverage", "**/*.test.ts", "**/*.spec.ts", "test"]
+  "exclude": [
+    "node_modules",
+    "dist",
+    "coverage",
+    "**/*.test.ts",
+    "**/*.test.helpers.ts",
+    "**/*.spec.ts",
+    "test"
+  ]
 }

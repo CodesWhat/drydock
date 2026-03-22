@@ -8,6 +8,15 @@ export interface ComponentConfiguration {
   [key: string]: any;
 }
 
+type ConfigurationSchemaValidationResult = {
+  error?: unknown;
+  value?: unknown;
+};
+
+type ComponentConfigurationSchema = {
+  validate?: (configuration: ComponentConfiguration) => ConfigurationSchemaValidationResult;
+};
+
 /**
  * Base Component Class.
  */
@@ -92,10 +101,10 @@ class Component {
       typeof schema?.validate === 'function'
         ? schema.validate(configuration)
         : { value: configuration };
-    if ((schemaValidated as any).error) {
-      throw (schemaValidated as any).error;
+    if (schemaValidated.error) {
+      throw schemaValidated.error;
     }
-    return (schemaValidated as any).value ? (schemaValidated as any).value : {};
+    return schemaValidated.value ? (schemaValidated.value as ComponentConfiguration) : {};
   }
 
   /**
@@ -103,7 +112,7 @@ class Component {
    * Can be overridden by the component implementation class
    * @returns {*}
    */
-  getConfigurationSchema(): any {
+  getConfigurationSchema(): ComponentConfigurationSchema {
     return this.joi.object();
   }
 

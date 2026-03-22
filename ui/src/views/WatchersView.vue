@@ -1,14 +1,23 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { useBreakpoints } from '../composables/useBreakpoints';
 import { useViewMode } from '../preferences/useViewMode';
 import { getAllContainers } from '../services/container';
 import { getAllWatchers, getWatcher } from '../services/watcher';
 import type { ApiComponent } from '../types/api';
+import { ROUTES } from '../router/routes';
+import { timeAgo } from '../utils/audit-helpers';
+
+function watcherServerName(name: unknown): string {
+  const s = String(name || '');
+  if (s === 'local') return 'Local';
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
 
 const { isMobile } = useBreakpoints();
 const route = useRoute();
+const router = useRouter();
 const watchersViewMode = useViewMode('watchers');
 const selectedWatcher = ref<Record<string, unknown> | null>(null);
 const detailOpen = ref(false);
@@ -65,7 +74,7 @@ function mapWatcher(watcher: ApiComponent, status = 'watching') {
     status,
     containers: containerCounts.value[watcher.name] ?? 0,
     cron: watcher.configuration?.cron ?? '',
-    lastRun: '\u2014',
+    lastRun: watcher.metadata?.lastRunAt ? timeAgo(String(watcher.metadata.lastRunAt)) : '\u2014',
     config: Object.fromEntries(
       Object.entries(watcher.configuration ?? {}).sort(([a], [b]) => a.localeCompare(b)),
     ),
@@ -138,12 +147,12 @@ onMounted(async () => {
 <template>
   <DataViewLayout>
     <div v-if="error"
-         class="mb-3 px-3 py-2 text-[0.6875rem] dd-rounded"
+         class="mb-3 px-3 py-2 text-2xs-plus dd-rounded"
          :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
       {{ error }}
     </div>
 
-    <div v-if="loading" class="text-[0.6875rem] dd-text-muted py-3 px-1">Loading watchers...</div>
+    <div v-if="loading" class="text-2xs-plus dd-text-muted py-3 px-1">Loading watchers...</div>
 
     <!-- Filter bar -->
     <DataFilterBar
@@ -157,12 +166,12 @@ onMounted(async () => {
         <input v-model="searchQuery"
                type="text"
                placeholder="Filter by name..."
-               class="flex-1 min-w-[120px] max-w-[240px] px-2.5 py-1.5 dd-rounded text-[0.6875rem] font-medium outline-none dd-bg dd-text dd-placeholder" />
-        <button v-if="searchQuery"
-                class="text-[0.625rem] dd-text-muted hover:dd-text transition-colors"
+               class="flex-1 min-w-[120px] max-w-[var(--dd-layout-filter-max-width)] px-2.5 py-1.5 dd-rounded text-2xs-plus font-medium outline-none dd-bg dd-text dd-placeholder" />
+        <AppButton size="none" variant="text-muted" weight="medium" class="text-2xs" v-if="searchQuery"
+                
                 @click="searchQuery = ''">
           Clear
-        </button>
+        </AppButton>
       </template>
     </DataFilterBar>
 
@@ -185,7 +194,7 @@ onMounted(async () => {
       <template #cell-status="{ row }">
         <AppIcon :name="row.status === 'watching' ? 'watchers' : 'pause'" :size="13" class="shrink-0 md:!hidden"
                  :style="{ color: watcherStatusColor(row.status) }" />
-        <span class="badge text-[0.5625rem] font-bold max-md:!hidden"
+        <span class="badge text-3xs font-bold max-md:!hidden"
               :style="{
                 backgroundColor: row.status === 'watching' ? 'var(--dd-success-muted)' : 'var(--dd-warning-muted)',
                 color: row.status === 'watching' ? 'var(--dd-success)' : 'var(--dd-warning)',
@@ -197,7 +206,7 @@ onMounted(async () => {
         <span class="dd-text-secondary">{{ row.containers }}</span>
       </template>
       <template #cell-cron="{ row }">
-        <span class="font-mono text-[0.625rem] dd-text-secondary">{{ row.cron }}</span>
+        <span class="font-mono text-2xs dd-text-secondary">{{ row.cron }}</span>
       </template>
       <template #cell-lastRun="{ row }">
         <span class="dd-text-muted">{{ row.lastRun }}</span>
@@ -218,13 +227,13 @@ onMounted(async () => {
             <div class="w-2.5 h-2.5 rounded-full shrink-0 mt-1"
                  :style="{ backgroundColor: watcherStatusColor(watcher.status) }" />
             <div class="min-w-0">
-              <div class="text-[0.9375rem] font-semibold truncate dd-text">{{ watcher.name }}</div>
-              <div class="text-[0.6875rem] truncate mt-0.5 dd-text-muted font-mono">{{ watcher.cron }}</div>
+              <div class="text-sm-plus font-semibold truncate dd-text">{{ watcher.name }}</div>
+              <div class="text-2xs-plus truncate mt-0.5 dd-text-muted font-mono">{{ watcher.cron }}</div>
             </div>
           </div>
           <AppIcon :name="watcher.status === 'watching' ? 'watchers' : 'pause'" :size="13" class="shrink-0 ml-2 md:!hidden"
                    :style="{ color: watcherStatusColor(watcher.status) }" />
-          <span class="badge text-[0.5625rem] uppercase font-bold shrink-0 ml-2 max-md:!hidden"
+          <span class="badge text-3xs uppercase font-bold shrink-0 ml-2 max-md:!hidden"
                 :style="{
                   backgroundColor: watcher.status === 'watching' ? 'var(--dd-success-muted)' : 'var(--dd-warning-muted)',
                   color: watcher.status === 'watching' ? 'var(--dd-success)' : 'var(--dd-warning)',
@@ -233,7 +242,7 @@ onMounted(async () => {
           </span>
         </div>
         <div class="px-4 py-3">
-          <div class="grid grid-cols-2 gap-2 text-[0.6875rem]">
+          <div class="grid grid-cols-2 gap-2 text-2xs-plus">
             <div>
               <span class="dd-text-muted">Containers</span>
               <span class="ml-1 font-semibold dd-text">{{ watcher.containers }}</span>
@@ -246,7 +255,7 @@ onMounted(async () => {
         </div>
         <div class="px-4 py-2.5 mt-auto"
              :style="{ borderTop: '1px solid var(--dd-border)', backgroundColor: 'var(--dd-bg-elevated)' }">
-          <span class="text-[0.625rem] dd-text-muted">{{ watcher.containers }} containers watched</span>
+          <span class="text-2xs dd-text-muted">{{ watcher.containers }} containers watched</span>
         </div>
       </template>
     </DataCardGrid>
@@ -266,7 +275,7 @@ onMounted(async () => {
         <span class="text-sm font-semibold flex-1 min-w-0 truncate dd-text">{{ watcher.name }}</span>
         <AppIcon :name="watcher.status === 'watching' ? 'watchers' : 'pause'" :size="13" class="shrink-0 md:!hidden"
                  :style="{ color: watcherStatusColor(watcher.status) }" />
-        <span class="badge text-[0.5625rem] uppercase font-bold shrink-0 max-md:!hidden"
+        <span class="badge text-3xs uppercase font-bold shrink-0 max-md:!hidden"
               :style="{
                 backgroundColor: watcher.status === 'watching' ? 'var(--dd-success-muted)' : 'var(--dd-warning-muted)',
                 color: watcher.status === 'watching' ? 'var(--dd-success)' : 'var(--dd-warning)',
@@ -274,7 +283,7 @@ onMounted(async () => {
           {{ watcher.status }}
         </span>
         <span v-if="watcher.config.maintenanceWindow"
-              class="badge text-[0.5625rem] uppercase font-bold shrink-0"
+              class="badge text-3xs uppercase font-bold shrink-0"
               :style="{ backgroundColor: 'var(--dd-alt-muted)', color: 'var(--dd-alt)' }">
           Maint
         </span>
@@ -282,19 +291,19 @@ onMounted(async () => {
       <template #details="{ item: watcher }">
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3 mt-2">
           <div>
-            <div class="text-[0.625rem] font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">Cron</div>
+            <div class="text-2xs font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">Cron</div>
             <div class="text-xs font-mono dd-text">{{ watcher.cron }}</div>
           </div>
           <div>
-            <div class="text-[0.625rem] font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">Last Run</div>
+            <div class="text-2xs font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">Last Run</div>
             <div class="text-xs font-mono dd-text">{{ watcher.lastRun }}</div>
           </div>
           <div>
-            <div class="text-[0.625rem] font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">Containers Watched</div>
+            <div class="text-2xs font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">Containers Watched</div>
             <div class="text-xs font-mono dd-text">{{ watcher.containers }}</div>
           </div>
           <div v-for="(val, key) in watcher.config" :key="key">
-            <div class="text-[0.625rem] font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">{{ key }}</div>
+            <div class="text-2xs font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">{{ key }}</div>
             <div class="text-xs font-mono dd-text">{{ val }}</div>
           </div>
         </div>
@@ -321,7 +330,7 @@ onMounted(async () => {
         <template #header>
           <div class="flex items-center gap-2.5 min-w-0">
             <span class="text-sm font-bold truncate dd-text">{{ selectedWatcher?.name }}</span>
-            <span v-if="selectedWatcher" class="badge text-[0.5625rem] font-bold shrink-0"
+            <span v-if="selectedWatcher" class="badge text-3xs font-bold shrink-0"
                   :style="{
                     backgroundColor: selectedWatcher.status === 'watching' ? 'var(--dd-success-muted)' : 'var(--dd-warning-muted)',
                     color: selectedWatcher.status === 'watching' ? 'var(--dd-success)' : 'var(--dd-warning)',
@@ -332,32 +341,42 @@ onMounted(async () => {
         </template>
 
         <template #subtitle>
-          <span class="text-[0.6875rem] font-mono dd-text-secondary">{{ selectedWatcher?.type }}</span>
+          <span class="text-2xs-plus font-mono dd-text-secondary">{{ selectedWatcher?.type }}</span>
         </template>
 
         <template v-if="selectedWatcher" #default>
           <div class="p-4 space-y-5">
-            <div v-if="detailLoading" class="text-[0.6875rem] dd-text-muted">Refreshing watcher details...</div>
+            <div v-if="detailLoading" class="text-2xs-plus dd-text-muted">Refreshing watcher details...</div>
             <div v-if="detailError"
-                 class="px-3 py-2 text-[0.6875rem] dd-rounded"
+                 class="px-3 py-2 text-2xs-plus dd-rounded"
                  :style="{ backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning)' }">
               {{ detailError }}
             </div>
 
             <div>
-              <div class="text-[0.625rem] font-semibold uppercase tracking-wider mb-1 dd-text-muted">Containers</div>
+              <div class="text-2xs font-semibold uppercase tracking-wider mb-1 dd-text-muted">Containers</div>
               <div class="text-lg font-bold dd-text">{{ selectedWatcher.containers }}</div>
+              <AppButton
+                v-if="selectedWatcher.containers > 0"
+                size="none"
+                variant="plain"
+                weight="none"
+                class="mt-1 inline-flex items-center gap-1 text-2xs-plus font-medium transition-colors text-drydock-secondary hover:text-drydock-secondary-hover"
+                @click="router.push({ path: ROUTES.CONTAINERS, query: { filterServer: watcherServerName(selectedWatcher.name) } })">
+                <AppIcon name="arrow-right" :size="10" />
+                View containers
+              </AppButton>
             </div>
             <div>
-              <div class="text-[0.625rem] font-semibold uppercase tracking-wider mb-1 dd-text-muted">Schedule</div>
+              <div class="text-2xs font-semibold uppercase tracking-wider mb-1 dd-text-muted">Schedule</div>
               <div class="text-xs font-mono dd-text">{{ selectedWatcher.cron || '\u2014' }}</div>
             </div>
             <div>
-              <div class="text-[0.625rem] font-semibold uppercase tracking-wider mb-1 dd-text-muted">Last Run</div>
+              <div class="text-2xs font-semibold uppercase tracking-wider mb-1 dd-text-muted">Last Run</div>
               <div class="text-xs dd-text">{{ selectedWatcher.lastRun }}</div>
             </div>
             <div v-for="(val, key) in selectedWatcher.config" :key="key">
-              <div class="text-[0.625rem] font-semibold uppercase tracking-wider mb-1 dd-text-muted">{{ key }}</div>
+              <div class="text-2xs font-semibold uppercase tracking-wider mb-1 dd-text-muted">{{ key }}</div>
               <div class="text-xs font-mono dd-text break-all">{{ val }}</div>
             </div>
           </div>

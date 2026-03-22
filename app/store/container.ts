@@ -22,14 +22,22 @@ const containersQueryCacheParsedEntries = new Map<string, Array<readonly [string
 const DEFAULT_CACHE_MAX_ENTRIES = getDefaultCacheMaxEntries();
 
 // Security state cache: keyed by "{watcher}_{name}" to survive container recreation
-const securityStateCache = new Map();
 const DEFAULT_CONTAINERS_QUERY_CACHE_MAX_ENTRIES = DEFAULT_CACHE_MAX_ENTRIES;
 const DEFAULT_SECURITY_STATE_CACHE_TTL_MS = 15 * 60 * 1000;
 const DEFAULT_SECURITY_STATE_CACHE_MAX_ENTRIES = DEFAULT_CACHE_MAX_ENTRIES;
 const SECURITY_STATE_CACHE_PRUNE_SCAN_BUDGET = 10;
 const CONTAINER_COLLECTION_INDICES = ['data.watcher', 'data.status', 'data.updateAvailable'];
 const UNSAFE_QUERY_PATH_SEGMENTS = new Set(['__proto__', 'prototype', 'constructor']);
-let securityStateCachePruneIterator: IterableIterator<[string, any]> | undefined;
+
+type SecurityStateCacheEntry = {
+  security: unknown;
+  expiresAt: number;
+};
+
+const securityStateCache = new Map<string, SecurityStateCacheEntry>();
+let securityStateCachePruneIterator:
+  | IterableIterator<[string, SecurityStateCacheEntry]>
+  | undefined;
 
 interface ContainerListPaginationOptions {
   limit?: number;
@@ -461,15 +469,23 @@ export function clearAllCachedSecurityState() {
 }
 
 function getUpdateDetectedAt(containerCurrent, containerNext) {
+  return getUpdateLifecycleTimestamp(containerCurrent, containerNext, 'updateDetectedAt');
+}
+
+function getFirstSeenAt(containerCurrent, containerNext) {
+  return getUpdateLifecycleTimestamp(containerCurrent, containerNext, 'firstSeenAt');
+}
+
+function getUpdateLifecycleTimestamp(containerCurrent, containerNext, timestampField) {
   if (!containerNext.updateAvailable) {
     return undefined;
   }
 
   if (
-    typeof containerNext.updateDetectedAt === 'string' &&
-    containerNext.updateDetectedAt.length > 0
+    typeof containerNext[timestampField] === 'string' &&
+    containerNext[timestampField].length > 0
   ) {
-    return containerNext.updateDetectedAt;
+    return containerNext[timestampField];
   }
 
   if (!containerCurrent) {
@@ -485,10 +501,10 @@ function getUpdateDetectedAt(containerCurrent, containerNext) {
   }
 
   if (
-    typeof containerCurrent.updateDetectedAt === 'string' &&
-    containerCurrent.updateDetectedAt.length > 0
+    typeof containerCurrent[timestampField] === 'string' &&
+    containerCurrent[timestampField].length > 0
   ) {
-    return containerCurrent.updateDetectedAt;
+    return containerCurrent[timestampField];
   }
 
   return new Date().toISOString();
@@ -517,6 +533,7 @@ export function insertContainer(container) {
   }
   const containerToSave = validateContainer(container);
   containerToSave.updateDetectedAt = getUpdateDetectedAt(undefined, containerToSave);
+  containerToSave.firstSeenAt = getFirstSeenAt(undefined, containerToSave);
   containers.insert({
     data: containerToSave,
   });
@@ -557,6 +574,7 @@ export function updateContainer(container) {
   };
   const containerToReturn = validateContainer(containerMerged);
   containerToReturn.updateDetectedAt = getUpdateDetectedAt(containerCurrent, containerToReturn);
+  containerToReturn.firstSeenAt = getFirstSeenAt(containerCurrent, containerToReturn);
 
   if (containerCurrentDoc && typeof containers?.update === 'function') {
     containerCurrentDoc.data = containerToReturn;
@@ -708,7 +726,10 @@ export function _resetContainerStoreStateForTests() {
   securityStateCachePruneIterator = undefined;
 }
 
-export function _setSecurityStateCacheEntryForTests(cacheKey: string, entry: any) {
+export function _setSecurityStateCacheEntryForTests(
+  cacheKey: string,
+  entry: SecurityStateCacheEntry,
+) {
   securityStateCache.set(cacheKey, entry);
 }
 

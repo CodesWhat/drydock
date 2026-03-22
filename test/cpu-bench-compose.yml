@@ -1,50 +1,71 @@
-# CPU idle benchmark: WUD latest vs Drydock 1.3.9 vs Drydock 1.4.0
+# CPU idle benchmark: version comparison (1.4.0 vs 1.4.5 vs 1.5.0-dev)
 #
-# All configured identically where possible:
-# - cron-only (hourly), no watchbydefault
-# - Drydock 1.4.0 uses optimization toggles
+# Simulates constrained hardware (Pi 4-class) via cpus + memory limits.
 #
 # Usage:
 #   docker compose -f test/cpu-bench-compose.yml up -d
-#   sleep 180   # let containers settle for 3 minutes
-#   docker stats --no-stream cpu-wud-latest cpu-drydock-139 cpu-drydock-140
+#   ./test/cpu-bench.sh              # runs warmup + measurement
+#   docker compose -f test/cpu-bench-compose.yml down
+
+x-common-env: &common-env
+  - DD_RUN_AS_ROOT=true
+  - DD_ALLOW_INSECURE_ROOT=true
+  - DD_LOG_FORMAT=json
+  - DD_WATCHER_LOCAL_WATCHBYDEFAULT=false
+  - DD_WATCHER_LOCAL_CRON=0 * * * *
+  - DD_WATCHER_LOCAL_WATCHEVENTS=false
+  - DD_LOG_BUFFER_ENABLED=false
+  - DD_SESSION_SECRET=bench
+
+x-constraints: &constraints
+  cpus: 0.5
+  mem_limit: 256m
 
 services:
-  wud-latest:
-    image: ghcr.io/getwud/wud:latest
-    container_name: cpu-wud-latest
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-    environment:
-      - WUD_WATCHER_LOCAL_WATCHBYDEFAULT=false
-      - WUD_WATCHER_LOCAL_CRON=0 * * * *
-
-  drydock-139:
-    image: codeswhat/drydock:1.3.9
-    container_name: cpu-drydock-139
-    user: root
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-    environment:
-      - DD_RUN_AS_ROOT=true
-      - DD_ALLOW_INSECURE_ROOT=true
-      - DD_LOG_FORMAT=json
-      - DD_WATCHER_LOCAL_WATCHBYDEFAULT=false
-      - DD_WATCHER_LOCAL_CRON=0 * * * *
-      - DD_SESSION_SECRET=bench-139
-
+  # v1.4.0: curl healthcheck, first release with idle CPU optimizations
   drydock-140:
     image: codeswhat/drydock:1.4.0
-    container_name: cpu-drydock-140
+    container_name: cpu-dd-140
     user: root
+    <<: *constraints
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-    environment:
-      - DD_RUN_AS_ROOT=true
-      - DD_ALLOW_INSECURE_ROOT=true
-      - DD_LOG_FORMAT=json
-      - DD_WATCHER_LOCAL_WATCHBYDEFAULT=false
-      - DD_WATCHER_LOCAL_CRON=0 * * * *
-      - DD_WATCHER_LOCAL_WATCHEVENTS=false
-      - DD_LOG_BUFFER_ENABLED=false
-      - DD_SESSION_SECRET=bench-140
+    environment: *common-env
+
+  # v1.4.5: curl healthcheck, latest stable
+  drydock-145:
+    image: codeswhat/drydock:1.4.5
+    container_name: cpu-dd-145
+    user: root
+    <<: *constraints
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment: *common-env
+
+  # v1.4.5 with node healthcheck (simulates what nchieffo is doing)
+  drydock-145-node:
+    image: codeswhat/drydock:1.4.5
+    container_name: cpu-dd-145-node
+    user: root
+    <<: *constraints
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment: *common-env
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health', r => { process.exit(r.statusCode === 200 ? 0 : 1) }).on('error', () => process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+
+  # v1.5.0-dev: static C binary healthcheck, curl removed
+  drydock-150:
+    image: drydock:hc-bench
+    container_name: cpu-dd-150
+    user: root
+    <<: *constraints
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment: *common-env
+    healthcheck:
+      test: ["CMD", "/bin/healthcheck", "3000"]
+      interval: 30s
+      timeout: 5s

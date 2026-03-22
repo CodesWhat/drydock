@@ -76,6 +76,23 @@ describe('agent API watcher', () => {
         expect.objectContaining({ error: 'Internal server error' }),
       );
     });
+
+    test('should return 500 with string message from non-Error objects', async () => {
+      req.params = { type: 'docker', name: 'local' };
+      const mockWatcher = {
+        watch: vi.fn().mockRejectedValue({ message: 'watch failed as plain object' }),
+      };
+      registry.getState.mockReturnValue({
+        watcher: { 'docker.local': mockWatcher },
+      });
+
+      await watcherApi.watchWatcher(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: 'watch failed as plain object' }),
+      );
+    });
   });
 
   describe('watchContainer', () => {
@@ -130,6 +147,23 @@ describe('agent API watcher', () => {
       expect(res.json).toHaveBeenCalledWith(
         expect.objectContaining({ error: 'Internal server error' }),
       );
+    });
+
+    test('should stringify non-object errors when watchContainer throws', async () => {
+      req.params = { type: 'docker', name: 'local', id: 'c1' };
+      const container = { id: 'c1', name: 'test' };
+      const mockWatcher = {
+        watchContainer: vi.fn().mockRejectedValue(42),
+      };
+      registry.getState.mockReturnValue({
+        watcher: { 'docker.local': mockWatcher },
+      });
+      storeContainer.getContainer.mockReturnValue(container);
+
+      await watcherApi.watchContainer(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ error: '42' }));
     });
   });
 });

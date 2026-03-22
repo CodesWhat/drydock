@@ -1,0 +1,174 @@
+---
+title: "Docker-Compose"
+description: "The dockercompose trigger lets you update docker-compose.yml files & replace existing containers with their updated versions."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+![logo](/docs/assets/configuration/triggers/docker-compose/docker-compose.png)
+
+The `dockercompose` trigger lets you update docker-compose.yml files & replace existing containers with their updated versions.
+
+The trigger will:
+
+- Update the related docker-compose.yml file
+- Clone the existing container specification
+- Pull the new image
+- Stop the existing container
+- Remove the existing container
+- Create the new container
+- Start the new container (if the previous one was running)
+- Run `post_start` hooks declared on the updated service (if any)
+- Remove the previous image (optionally)
+
+## Variables
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --- | :---: | --- | --- | --- |
+| `DD_TRIGGER_DOCKERCOMPOSE_{trigger_name}_FILE` | ⚪ | The docker-compose.yml file location or directory (can also be set per container via the `dd.compose.file` label). When a directory is given, Drydock probes for `compose.yaml`, `compose.yml`, `docker-compose.yaml`, and `docker-compose.yml` in order. | | |
+| `DD_TRIGGER_DOCKERCOMPOSE_{trigger_name}_BACKUP` | ⚪ | Backup the docker-compose.yml file as `.back` before updating? | `true`, `false` | `false` |
+| `DD_TRIGGER_DOCKERCOMPOSE_{trigger_name}_PRUNE` | ⚪ | If the old image must be pruned after upgrade | `true`, `false` | `false` |
+| `DD_TRIGGER_DOCKERCOMPOSE_{trigger_name}_DRYRUN` | ⚪ | When enabled, only pull the new image ahead of time | `true`, `false` | `false` |
+| `DD_TRIGGER_DOCKERCOMPOSE_{trigger_name}_BACKUPCOUNT` | ⚪ | Number of image backups to retain per container | Integer | `3` |
+| `DD_TRIGGER_DOCKERCOMPOSE_{trigger_name}_AUTOREMOVETIMEOUT` | ⚪ | Wait timeout for container auto-removal (ms) | Integer | `10000` |
+| `DD_TRIGGER_DOCKERCOMPOSE_{trigger_name}_COMPOSEFILELABEL` | ⚪ | Container label name used to locate the compose file per container | Label name | `dd.compose.file` |
+| `DD_TRIGGER_DOCKERCOMPOSE_{trigger_name}_RECONCILIATIONMODE` | ⚪ | Compose/runtime reconciliation mode before lifecycle (`warn`, `block`, or `off`) | `warn`, `block`, `off` | `warn` |
+| `DD_TRIGGER_DOCKERCOMPOSE_{trigger_name}_DIGESTPINNING` | ⚪ | Write digest-pinned compose image references when a digest is available | `true`, `false` | `false` |
+| `DD_TRIGGER_DOCKERCOMPOSE_{trigger_name}_COMPOSEFILEONCE` | ⚪ | Batch compose runtime refresh to one grouped pull/up pass per compose stack/file | `true`, `false` | `false` |
+
+This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration), but only supports the `batch` mode.
+
+**Notes:**
+
+- The env var keys for `COMPOSEFILEONCE`, `COMPOSEFILELABEL`, `RECONCILIATIONMODE`, and `DIGESTPINNING` are case-insensitive — both the lowercased form (e.g. `composefileonce`) and the camelCase form (e.g. `composeFileOnce`) are accepted.
+- Legacy compatibility: compose file label fallback `wud.compose.file` is still accepted when `dd.compose.file` is not present. Prefer `dd.compose.file` for new configs, and use `node dist/index.js config migrate` to rewrite existing labels.
+
+## Auto-detection
+
+When no explicit `FILE` env var or `dd.compose.file` label is set, Drydock auto-detects the compose file path for each container. The detection chain is evaluated in order, and the first match wins:
+
+1. **`dd.compose.file` label** (or legacy `wud.compose.file`) on the container.
+2. **`com.docker.compose.project.config_files`** Docker label — set automatically by Docker Compose on every container it creates.
+3. **Docker inspect fallback** — re-reads the `config_files` label from the Docker inspect API (covers containers whose labels were not available at watcher sync time).
+4. **Trigger-level `FILE` configuration** — the `DD_TRIGGER_DOCKERCOMPOSE_{trigger_name}_FILE` env var, used as a last resort default.
+
+Most Docker Compose users do not need to configure the file path at all. As long as containers were started with `docker compose up`, the `config_files` label is present and Drydock resolves the path automatically.
+
+<Callout type="warn">This trigger will only work with locally watched containers.</Callout>
+
+<Callout type="warn">Do not forget to mount the docker-compose.yml file in the drydock container.</Callout>
+
+The Docker Compose trigger uses the Docker Engine API directly for all runtime operations (pull, stop, recreate). The `docker compose` / `docker-compose` CLI binary is **not required** inside the drydock container.
+
+## Tag vs digest updates
+
+For **tag-based updates**, the trigger patches the compose file with the new tag and then recreates the container. For **digest-only updates** (same tag, new digest), the compose file is left unchanged and only the container runtime is refreshed (pull new image, stop/remove old container, recreate with new image).
+
+When `DIGESTPINNING=true`, compose mutations use digest references (`image@sha256:...`) when a digest is available.
+
+## Compose file patch behavior
+
+When a tag-based update requires a compose file change, Drydock patches Compose content in a service-scoped way:
+
+- Only the target `services.<service>.image` value is edited.
+- Comments and surrounding formatting are preserved outside that scalar value.
+- Drydock does not use global string replacement for image tags, so matching strings in other fields (for example environment values) are not rewritten.
+
+If a service uses flow-style mapping without an `image` key (for example `nginx: { restart: always }`), Drydock will not auto-insert `image`. Convert that service to block-style YAML first.
+
+Before persisting a compose mutation, Drydock validates the candidate file by parsing the full compose chain in-process. Invalid candidate configs are not written.
+
+## Reconciliation behavior
+
+Before lifecycle execution, Drydock checks the running container image against the compose-declared image for the target service.
+
+- `RECONCILIATIONMODE=warn` (default): log a reconciliation warning and continue.
+- `RECONCILIATIONMODE=block`: fail the update before write/runtime steps.
+- `RECONCILIATIONMODE=off`: skip reconciliation checks.
+
+## Compose-file-once mode
+
+When `COMPOSEFILEONCE=true` and multiple services in the same compose stack/file require runtime refresh, Drydock performs one runtime refresh per unique service and skips repeated refreshes for subsequent containers sharing the same service in that batch.
+
+## Multi-file compose chains
+
+When a container was started with multiple compose files (e.g. `docker-compose.yml` + `docker-compose.override.yml`), Drydock detects the full file chain from the `com.docker.compose.project.config_files` label.
+
+During an update:
+
+1. Drydock searches every file in the chain to find which one declares the target service's `image` key.
+2. The last file in the chain that contains the service definition and is writable is selected as the update target. This matches Docker Compose override semantics where later files take precedence.
+3. All files in the chain are parsed in-process for validation before and after any mutation.
+
+The compose file chain for each container is visible in the container detail view of the UI.
+
+If only one compose file is used, the chain is a single entry and the behavior is identical to the single-file case.
+
+## Troubleshooting: `permission denied` (`EACCES`)
+
+If logs show an error like:
+
+```text
+EACCES: permission denied, access '/drydock/.../docker-compose.yml'
+```
+
+the mounted compose file (or parent directory) is not writable by the Drydock process. This trigger needs read and write access to update image tags in the compose file.
+
+Ways to fix:
+
+- Grant read and write access on the mounted path for the user/group used by the Drydock container.
+- Add the host group that owns the compose files with `group_add` so Drydock can read and write them.
+- Break-glass workaround (less secure): set both `DD_RUN_AS_ROOT=true` and `DD_ALLOW_INSECURE_ROOT=true`; setting only `DD_RUN_AS_ROOT=true` fails closed at startup.
+
+Example using `group_add`:
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    group_add:
+      - "${COMPOSE_FILES_GID}"
+    volumes:
+      - /var/lib/docker/volumes/portainer_data/_data/compose:/drydock
+    environment:
+      - DD_TRIGGER_DOCKERCOMPOSE_EXAMPLE_FILE=/drydock/5/docker-compose.yml
+```
+
+`COMPOSE_FILES_GID` should match the GID that owns the mounted compose files on the host.
+
+<Callout type="warn">Do **not** mount the compose file as read-only (`:ro`) — the trigger must write updated image tags back to the file.</Callout>
+
+## Examples
+
+<Tabs items={["Docker Compose", "Docker", "Label"]}>
+<Tab value="Docker Compose">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    volumes:
+    - /etc/my-services/docker-compose.yml:/drydock/docker-compose.yml
+    environment:
+      - DD_TRIGGER_DOCKERCOMPOSE_EXAMPLE_FILE=/drydock/docker-compose.yml
+```
+
+</Tab>
+<Tab value="Docker">
+```bash
+docker run \
+  -v /etc/my-services/docker-compose.yml:/drydock/docker-compose.yml
+  -e "DD_TRIGGER_DOCKERCOMPOSE_EXAMPLE_FILE=/drydock/docker-compose.yml" \
+  ...
+  codeswhat/drydock
+```
+</Tab>
+<Tab value="Label">
+```yaml
+labels:
+  dd.compose.file: "/my/path/docker-compose.yaml"
+```
+</Tab>
+</Tabs>

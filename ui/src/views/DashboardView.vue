@@ -1,10 +1,23 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
 import { type RouteLocationRaw, useRouter } from 'vue-router';
+import { GridItem, GridLayout } from 'grid-layout-plus';
 import { useConfirmDialog } from '../composables/useConfirmDialog';
 import { ROUTES } from '../router/routes';
 import { updateContainer } from '../services/container-actions';
 import { errorMessage } from '../utils/error';
+import { summarizeContainerResourceUsage } from '../utils/stats-summary';
+import DashboardHostStatusWidget from './dashboard/components/DashboardHostStatusWidget.vue';
+import DashboardRecentUpdatesWidget from './dashboard/components/DashboardRecentUpdatesWidget.vue';
+import DashboardResourceUsageWidget from './dashboard/components/DashboardResourceUsageWidget.vue';
+import DashboardSecurityOverviewWidget from './dashboard/components/DashboardSecurityOverviewWidget.vue';
+import DashboardUpdateBreakdownWidget from './dashboard/components/DashboardUpdateBreakdownWidget.vue';
+import {
+  DASHBOARD_WIDGET_META,
+  type DashboardWidgetId,
+  type RecentUpdateRow,
+} from './dashboard/dashboardTypes';
+import { GRID_BREAKPOINTS, GRID_COLS, WIDGET_CONSTRAINTS } from './dashboard/dashboardWidgetLayout';
 import { useDashboardComputed } from './dashboard/useDashboardComputed';
 import { useDashboardData } from './dashboard/useDashboardData';
 import { useDashboardWidgetOrder } from './dashboard/useDashboardWidgetOrder';
@@ -19,19 +32,45 @@ function navigateTo(route: RouteLocationRaw) {
   router.push(route);
 }
 
+// Delay enabling grid transitions to prevent fly-in on initial load
+const gridReady = ref(false);
+onMounted(() => {
+  setTimeout(() => {
+    gridReady.value = true;
+  }, 300);
+});
+
 const {
-  draggedWidgetId,
   onWidgetDragEnd,
   onWidgetDragOver,
   onWidgetDragStart,
   onWidgetDrop,
+  editMode,
+  isWidgetVisible,
+  layout,
+  resetAll,
+  toggleEditMode,
+  toggleWidgetVisibility,
   widgetOrderIndex,
-  widgetOrderStyle,
 } = useDashboardWidgetOrder();
+
+// Exit edit mode on Escape key
+function onKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape' && editMode.value) {
+    editMode.value = false;
+  }
+}
+onMounted(() => {
+  window.addEventListener('keydown', onKeydown);
+});
+onUnmounted(() => {
+  window.removeEventListener('keydown', onKeydown);
+});
 
 const {
   agents,
   containerSummary,
+  containerStats,
   containers,
   error,
   fetchDashboardData,
@@ -42,6 +81,8 @@ const {
   serverInfo,
   watchers,
 } = useDashboardData();
+
+const resourceUsage = computed(() => summarizeContainerResourceUsage(containerStats.value));
 
 const {
   DONUT_CIRCUMFERENCE,
@@ -76,7 +117,48 @@ const {
 
 const pendingUpdates = computed(() => recentUpdates.value.filter((r) => r.status === 'pending'));
 
-function confirmDashboardUpdate(row: { id: string; name: string }) {
+// Stat card data lookup by widget id
+const statById = computed(() => {
+  const map = new Map<string, (typeof stats.value)[number]>();
+  for (const s of stats.value) map.set(s.id, s);
+  return map;
+});
+
+// Widget metadata for customize panel
+const allWidgetMeta = DASHBOARD_WIDGET_META;
+
+function widgetSizes(id: DashboardWidgetId): string[] {
+  const meta = DASHBOARD_WIDGET_META.find((w) => w.id === id);
+  if (!meta) return ['M'];
+  if (meta.category === 'stat') return ['S'];
+  const sizes: string[] = [];
+  // Can it shrink to compact/stat-card size?
+  if (meta.minW <= 3 && meta.minH <= 4) sizes.push('S');
+  // Standard widget
+  sizes.push('M');
+  // Can it stretch wide?
+  if (meta.canStretch || meta.maxW >= 8) sizes.push('L');
+  return sizes;
+}
+
+function sizeColor(size: string): { bg: string; fg: string } {
+  if (size === 'S') return { bg: 'var(--dd-info-muted)', fg: 'var(--dd-info)' };
+  if (size === 'L') return { bg: 'var(--dd-warning-muted)', fg: 'var(--dd-warning)' };
+  return { bg: 'var(--dd-neutral-muted)', fg: 'var(--dd-neutral)' };
+}
+
+function handleStatClick(id: DashboardWidgetId) {
+  if (editMode.value) return;
+  const route = statById.value.get(id)?.route;
+  if (route) navigateTo(route);
+}
+
+// Check if a widget is a stat card
+function isStatWidget(id: string): boolean {
+  return id.startsWith('stat-');
+}
+
+function confirmDashboardUpdate(row: Pick<RecentUpdateRow, 'id' | 'name'>) {
   confirm.require({
     header: 'Update Container',
     message: `Update ${row.name} now? This will apply the latest discovered image.`,
@@ -129,500 +211,366 @@ function confirmDashboardUpdateAll() {
 </script>
 
 <template>
-  <div class="flex-1 min-h-0 min-w-0 overflow-y-auto pr-2 sm:pr-[15px]">
-      <!-- LOADING STATE -->
+  <div class="flex flex-col flex-1 min-h-0">
+    <div class="flex gap-2 min-w-0 flex-1 min-h-0">
+    <!-- Main dashboard content -->
+    <div class="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden sm:pr-[15px]">
       <div v-if="loading" class="flex items-center justify-center py-16">
         <div class="text-sm dd-text-muted">Loading dashboard...</div>
       </div>
 
-      <!-- ERROR STATE -->
       <div v-else-if="error" class="flex flex-col items-center justify-center py-16">
         <div class="text-sm font-medium dd-text-danger mb-2">Failed to load dashboard</div>
         <div class="text-xs dd-text-muted">{{ error }}</div>
-        <button
-          class="mt-4 px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors dd-bg-elevated dd-text hover:opacity-90"
+        <AppButton
+          size="none" variant="plain" weight="none"
+          class="mt-4 px-3 py-1.5 dd-rounded text-2xs-plus font-semibold transition-colors dd-bg-elevated dd-text hover:opacity-90"
           @click="fetchDashboardData">
           Retry
-        </button>
+        </AppButton>
       </div>
 
       <template v-else>
-      <!-- STAT CARDS -->
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-        <component
-          :is="stat.route ? 'button' : 'div'"
-          v-for="stat in stats"
-          :key="stat.id"
-          :data-widget-id="stat.id"
-          :data-widget-order="widgetOrderIndex(stat.id)"
-          draggable="true"
-          :aria-label="stat.label + ': ' + stat.value"
-          :type="stat.route ? 'button' : undefined"
-          class="stat-card dd-rounded p-4 text-left w-full"
-          :class="[
-            stat.route ? 'cursor-pointer transition-colors hover:dd-bg-elevated' : '',
-            { 'opacity-60': draggedWidgetId === stat.id },
-          ]"
-          :style="{
-            ...widgetOrderStyle(stat.id),
-            backgroundColor: 'var(--dd-bg-card)',
-          }"
-          @click="stat.route && navigateTo(stat.route)"
-          @dragstart="onWidgetDragStart(stat.id, $event)"
-          @dragover="onWidgetDragOver(stat.id, $event)"
-          @drop="onWidgetDrop(stat.id, $event)"
-          @dragend="onWidgetDragEnd">
-          <div class="flex items-center justify-between mb-2">
-            <span class="text-[0.6875rem] font-medium uppercase tracking-wider dd-text-muted">
-              {{ stat.label }}
-            </span>
-            <div class="w-9 h-9 dd-rounded flex items-center justify-center"
-                 :style="{ backgroundColor: stat.colorMuted, color: stat.color }">
-              <AppIcon :name="stat.icon" :size="20" />
-            </div>
-          </div>
-          <div class="text-2xl font-bold dd-text">
-            {{ stat.value }}
-          </div>
-          <div v-if="stat.detail" class="mt-1 text-[0.625rem] font-medium dd-text-muted">
-            {{ stat.detail }}
-          </div>
-        </component>
-      </div>
+        <!-- Pencil icon teleported to breadcrumb header -->
+        <Teleport to="#breadcrumb-actions">
+          <AppButton
+            size="none" variant="plain" weight="none"
+            data-test="dashboard-edit-toggle"
+            class="ml-2 flex items-center justify-center w-6 h-6 dd-rounded transition-colors"
+            :class="editMode ? 'dd-bg-elevated dd-text' : 'dd-text-muted hover:dd-text hover:dd-bg-elevated'"
+            v-tooltip="editMode ? 'Done customizing' : 'Customize dashboard'"
+            @click="toggleEditMode">
+            <AppIcon :name="editMode ? 'check' : 'ph:pencil-simple'" :size="13" />
+          </AppButton>
+        </Teleport>
 
-      <!-- WIDGET GRID -->
-      <div class="grid grid-cols-1 xl:grid-cols-3 gap-4 min-w-0">
+        <!-- Grid Layout -->
+        <GridLayout
+          v-model:layout="layout"
+          :col-num="12"
+          :row-height="30"
+          :margin="[16, 16]"
+          :responsive="true"
+          :breakpoints="GRID_BREAKPOINTS"
+          :cols="GRID_COLS"
+          :class="{ 'dd-grid-ready': gridReady }"
+          :is-draggable="editMode"
+          :is-resizable="editMode"
+          :vertical-compact="true"
+          :use-css-transforms="true">
+          <GridItem
+            v-for="item in layout"
+            v-show="isWidgetVisible(item.i as DashboardWidgetId)"
+            :key="item.i"
+            :data-widget-id="item.i"
+            :data-widget-order="widgetOrderIndex(item.i as DashboardWidgetId)"
+            :draggable="editMode"
+            :x="item.x"
+            :y="item.y"
+            :w="item.w"
+            :h="item.h"
+            :i="item.i"
+            :min-w="WIDGET_CONSTRAINTS[item.i as DashboardWidgetId]?.minW ?? 2"
+            :min-h="WIDGET_CONSTRAINTS[item.i as DashboardWidgetId]?.minH ?? 2"
+            :max-w="WIDGET_CONSTRAINTS[item.i as DashboardWidgetId]?.maxW ?? 12"
+            :max-h="WIDGET_CONSTRAINTS[item.i as DashboardWidgetId]?.maxH ?? 20"
+            drag-ignore-from="input, textarea, button, a, select, .no-drag"
+            class="dd-grid-item"
+            @dragstart="onWidgetDragStart(item.i as DashboardWidgetId, $event)"
+            @dragover="onWidgetDragOver(item.i as DashboardWidgetId, $event)"
+            @drop="onWidgetDrop(item.i as DashboardWidgetId, $event)"
+            @dragend="onWidgetDragEnd"
+            :class="editMode ? 'dd-grid-edit' : ''">
 
-        <!-- Recent Updates Widget (2/3) -->
-        <div
-             data-widget-id="recent-updates"
-             :data-widget-order="widgetOrderIndex('recent-updates')"
-             draggable="true"
-             aria-label="Updates Available widget"
-             class="dashboard-widget xl:col-span-2 dd-rounded overflow-hidden min-w-0 flex flex-col"
-             :class="{ 'opacity-60': draggedWidgetId === 'recent-updates' }"
-             :style="{
-               ...widgetOrderStyle('recent-updates'),
-               backgroundColor: 'var(--dd-bg-card)',
-             }"
-             @dragstart="onWidgetDragStart('recent-updates', $event)"
-             @dragover="onWidgetDragOver('recent-updates', $event)"
-             @drop="onWidgetDrop('recent-updates', $event)"
-             @dragend="onWidgetDragEnd">
-          <div class="flex items-center justify-between px-5 py-3.5"
-               :style="{ borderBottom: '1px solid var(--dd-border)' }">
-            <div class="flex items-center gap-2">
-              <AppIcon name="recent-updates" :size="14" class="text-drydock-secondary" />
-              <h2 class="text-xs font-semibold dd-text">
-                Updates Available
-              </h2>
-            </div>
-            <div class="flex items-center gap-3">
-              <button v-if="pendingUpdates.length > 0"
-                      data-test="dashboard-update-all-btn"
-                      class="inline-flex items-center justify-center px-2 py-1 dd-rounded border text-[0.625rem] font-semibold transition-colors"
-                      :class="dashboardUpdateAllInProgress
-                        ? 'dd-text-muted cursor-not-allowed opacity-60'
-                        : 'dd-text hover:dd-bg-elevated'"
-                      :disabled="dashboardUpdateAllInProgress"
-                      @click="confirmDashboardUpdateAll()">
-                <AppIcon
-                  :name="dashboardUpdateAllInProgress ? 'spinner' : 'cloud-download'"
-                  :size="11"
-                  class="mr-1"
-                  :class="dashboardUpdateAllInProgress ? 'dd-spin' : ''" />
-                Update all
-              </button>
-              <button class="text-[0.6875rem] font-medium text-drydock-secondary hover:underline"
-                      @click="navigateTo({ path: ROUTES.CONTAINERS, query: { filterKind: 'any' } })">View all &rarr;</button>
-            </div>
-          </div>
-
-          <div v-if="dashboardUpdateError"
-               data-test="dashboard-update-error"
-               class="mx-5 mt-3 px-3 py-2 text-[0.6875rem] dd-rounded"
-               :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
-            {{ dashboardUpdateError }}
-          </div>
-
-          <div class="flex-1 min-h-0 overflow-y-auto">
-          <DataTable
-            :columns="[
-              { key: 'icon', label: '', icon: true },
-              { key: 'container', label: 'Container', sortable: false },
-              { key: 'version', label: 'Version', sortable: false, align: 'text-center' },
-              { key: 'type', label: 'Type', sortable: false },
-              { key: 'actions', label: 'Actions', sortable: false },
-            ]"
-            :rows="recentUpdates"
-            row-key="id"
-            compact
-          >
-            <template #cell-icon="{ row }">
-              <ContainerIcon :icon="row.icon" :size="28" />
-            </template>
-
-            <template #cell-container="{ row }">
-              <div class="font-medium dd-text leading-tight">{{ row.name }}</div>
-              <div class="text-[0.625rem] dd-text-muted mt-0.5 truncate">{{ row.image }}</div>
-              <div v-if="row.registryError" class="text-[0.625rem] mt-0.5 truncate" style="color: var(--dd-danger);">
-                {{ row.registryError }}
+            <!-- Stat Cards -->
+            <component
+              :is="!editMode && statById.get(item.i as DashboardWidgetId)?.route ? 'button' : 'div'"
+              v-if="isStatWidget(item.i)"
+              :type="!editMode && statById.get(item.i as DashboardWidgetId)?.route ? 'button' : undefined"
+              :aria-label="(statById.get(item.i as DashboardWidgetId)?.label ?? '') + ': ' + (statById.get(item.i as DashboardWidgetId)?.value ?? '')"
+              class="stat-card dd-rounded px-4 py-2.5 text-left cursor-default relative w-full"
+              :class="[
+                editMode ? 'm-[3px] h-[calc(100%-6px)]' : 'h-full',
+                !editMode && statById.get(item.i as DashboardWidgetId)?.route ? 'cursor-pointer hover:dd-bg-elevated' : '',
+              ]"
+              :style="{ backgroundColor: 'var(--dd-bg-card)' }"
+              @click="handleStatClick(item.i as DashboardWidgetId)">
+              <div v-if="editMode" class="drag-handle dd-drag-handle absolute top-1.5 left-1/2 -translate-x-1/2 z-10">
+                <AppIcon name="ph:dots-six" :size="14" />
               </div>
-              <a
-                v-if="row.releaseLink"
-                :href="row.releaseLink"
-                target="_blank"
-                rel="noopener noreferrer"
-                class="text-[0.625rem] mt-0.5 inline-flex underline hover:no-underline"
-                style="color: var(--dd-info);"
-              >
-                Release notes
-              </a>
-            </template>
-
-            <template #cell-version="{ row }">
-              <!-- Desktop: horizontal old → new -->
-              <div class="hidden sm:flex items-center justify-center gap-1.5 min-w-0">
-                <CopyableTag :tag="row.oldVer" class="text-[0.6875rem] dd-text-secondary truncate max-w-[100px]">
-                  {{ row.oldVer }}
-                </CopyableTag>
-                <AppIcon name="arrow-right" :size="8" class="dd-text-muted shrink-0" />
-                <CopyableTag :tag="row.newVer" class="text-[0.6875rem] font-semibold truncate max-w-[120px]"
-                      :style="{ color: getUpdateKindColor(row.updateKind) }">
-                  {{ row.newVer }}
-                </CopyableTag>
-              </div>
-              <!-- Mobile: stacked old ↓ new -->
-              <div class="flex sm:hidden flex-col items-start gap-0.5 min-w-0">
-                <CopyableTag :tag="row.oldVer" class="text-[0.5625rem] dd-text-secondary break-all leading-tight">
-                  {{ row.oldVer }}
-                </CopyableTag>
-                <CopyableTag :tag="row.newVer" class="text-[0.5625rem] font-semibold break-all leading-tight"
-                      :style="{ color: getUpdateKindColor(row.updateKind) }">
-                  {{ row.newVer }}
-                </CopyableTag>
-              </div>
-            </template>
-
-            <template #cell-type="{ row }">
-              <!-- Mobile: icon-only badge -->
-              <span class="badge px-1.5 py-0 text-[0.5625rem] sm:!hidden"
-                    :style="{
-                      backgroundColor: getUpdateKindMutedColor(row.updateKind),
-                      color: getUpdateKindColor(row.updateKind),
-                    }">
-                <AppIcon :name="getUpdateKindIcon(row.updateKind)" :size="12" />
-              </span>
-              <!-- Desktop: icon + text badge -->
-              <span class="badge max-sm:!hidden"
-                    :style="{
-                      backgroundColor: getUpdateKindMutedColor(row.updateKind),
-                      color: getUpdateKindColor(row.updateKind),
-                    }">
-                <AppIcon :name="getUpdateKindIcon(row.updateKind)"
-                   :size="12" class="mr-1" />
-                {{ row.updateKind ?? 'unknown' }}
-              </span>
-            </template>
-
-            <template #cell-actions="{ row }">
-              <button v-if="row.status === 'pending'"
-                      data-test="dashboard-update-btn"
-                      class="w-7 h-7 dd-rounded-sm flex items-center justify-center transition-colors"
-                      :class="dashboardUpdateInProgress === row.id || dashboardUpdateAllInProgress
-                        ? 'dd-text-muted opacity-50 cursor-not-allowed'
-                        : 'dd-text-muted hover:dd-text-success hover:dd-bg-elevated'"
-                      :disabled="dashboardUpdateInProgress === row.id || dashboardUpdateAllInProgress"
-                      @click.stop="confirmDashboardUpdate(row)">
-                <AppIcon
-                  :name="dashboardUpdateInProgress === row.id ? 'spinner' : 'cloud-download'"
-                  :size="14"
-                  :class="dashboardUpdateInProgress === row.id ? 'dd-spin' : ''" />
-              </button>
-            </template>
-
-            <template #empty>
-              <div class="px-4 py-6 text-center text-[0.6875rem] dd-text-muted">
-                No updates available
-              </div>
-            </template>
-          </DataTable>
-          </div>
-        </div>
-
-        <!-- Security Summary Widget (1/3) -->
-        <div
-             data-widget-id="security-overview"
-             :data-widget-order="widgetOrderIndex('security-overview')"
-             draggable="true"
-             aria-label="Security Overview widget"
-             class="dashboard-widget dd-rounded overflow-hidden"
-             :class="{ 'opacity-60': draggedWidgetId === 'security-overview' }"
-             :style="{
-               ...widgetOrderStyle('security-overview'),
-               backgroundColor: 'var(--dd-bg-card)',
-             }"
-             @dragstart="onWidgetDragStart('security-overview', $event)"
-             @dragover="onWidgetDragOver('security-overview', $event)"
-             @drop="onWidgetDrop('security-overview', $event)"
-             @dragend="onWidgetDragEnd">
-          <div class="flex items-center justify-between px-5 py-3.5"
-               :style="{ borderBottom: '1px solid var(--dd-border)' }">
-            <div class="flex items-center gap-2">
-              <AppIcon name="security" :size="14" class="text-drydock-accent" />
-              <h2 class="text-xs font-semibold dd-text">
-                Security Overview
-              </h2>
-            </div>
-            <button class="text-[0.6875rem] font-medium text-drydock-secondary hover:underline"
-                    @click="navigateTo(ROUTES.SECURITY)">View all &rarr;</button>
-          </div>
-
-          <div class="p-5">
-            <!-- Donut chart -->
-            <div class="flex items-center justify-center mb-5">
-              <div class="relative" style="width: 140px; height: 140px;">
-                <svg viewBox="0 0 120 120" class="w-full h-full" style="transform: rotate(-90deg);">
-                  <circle cx="60" cy="60" r="48" fill="none"
-                          stroke="var(--dd-border-strong)" stroke-width="14" />
-                  <circle cx="60" cy="60" r="48" fill="none" stroke="var(--dd-success)" stroke-width="14"
-                          stroke-linecap="round" class="donut-ring"
-                          :stroke-dasharray="securityCleanArcLength + ' ' + DONUT_CIRCUMFERENCE" />
-                  <circle v-if="securityIssueCount > 0" cx="60" cy="60" r="48" fill="none" stroke="var(--dd-danger)" stroke-width="14"
-                          stroke-linecap="round" class="donut-ring"
-                          :stroke-dasharray="securityIssueArcLength + ' ' + DONUT_CIRCUMFERENCE"
-                          :stroke-dashoffset="-securityCleanArcLength" />
-                  <circle v-if="securityNotScannedCount > 0" cx="60" cy="60" r="48" fill="none" stroke="var(--dd-neutral)" stroke-width="14"
-                          stroke-linecap="round" class="donut-ring"
-                          :stroke-dasharray="securityNotScannedArcLength + ' ' + DONUT_CIRCUMFERENCE"
-                          :stroke-dashoffset="-(securityCleanArcLength + securityIssueArcLength)" />
-                </svg>
-                <div class="absolute inset-0 flex flex-col items-center justify-center">
-                  <span class="text-xl font-bold dd-text">{{ securityTotalCount }}</span>
-                  <span class="text-[0.625rem] dd-text-muted">images</span>
-                </div>
-              </div>
-            </div>
-
-            <!-- Legend -->
-            <div class="flex justify-center gap-5 mb-5">
-              <div class="flex items-center gap-1.5">
-                <div class="w-2.5 h-2.5 rounded-full" style="background:var(--dd-success);" />
-                <span class="text-[0.6875rem] dd-text-secondary">{{ securityCleanCount }} Clean</span>
-              </div>
-              <div v-if="securityIssueCount > 0" class="flex items-center gap-1.5">
-                <div class="w-2.5 h-2.5 rounded-full" style="background:var(--dd-danger);" />
-                <span class="text-[0.6875rem] dd-text-secondary">{{ securityIssueCount }} Issues</span>
-              </div>
-              <div v-if="securityNotScannedCount > 0" class="flex items-center gap-1.5">
-                <div class="w-2.5 h-2.5 rounded-full" style="background:var(--dd-neutral);" />
-                <span class="text-[0.6875rem] dd-text-secondary">
-                  {{ securityNotScannedCount }} Not Scanned
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-2xs-plus font-medium uppercase tracking-wider dd-text-muted">
+                  {{ statById.get(item.i as DashboardWidgetId)?.label }}
                 </span>
+                <div class="w-9 h-9 dd-rounded flex items-center justify-center"
+                     :style="{ backgroundColor: statById.get(item.i as DashboardWidgetId)?.colorMuted, color: statById.get(item.i as DashboardWidgetId)?.color }">
+                  <AppIcon :name="statById.get(item.i as DashboardWidgetId)?.icon ?? 'dashboard'" :size="20" />
+                </div>
               </div>
-            </div>
+              <div class="text-2xl font-bold dd-text">
+                {{ statById.get(item.i as DashboardWidgetId)?.value }}
+              </div>
+              <div v-if="statById.get(item.i as DashboardWidgetId)?.detail" class="mt-1 text-2xs font-medium dd-text-muted">
+                {{ statById.get(item.i as DashboardWidgetId)?.detail }}
+              </div>
+            </component>
 
-            <div v-if="showSecuritySeverityBreakdown"
-                 data-test="security-severity-breakdown"
-                 class="mb-5">
-              <div class="text-[0.625rem] font-semibold uppercase tracking-wider mb-2 dd-text-muted">
-                Severity Breakdown
-              </div>
-              <div class="grid grid-cols-2 gap-2">
-                <div class="flex items-center justify-between px-2 py-1.5 dd-rounded"
-                     :style="{ backgroundColor: 'var(--dd-danger-muted)' }">
-                  <span class="text-[0.625rem] font-semibold" style="color: var(--dd-danger);">
-                    {{ securitySeverityTotals.critical }} Critical
-                  </span>
-                </div>
-                <div class="flex items-center justify-between px-2 py-1.5 dd-rounded"
-                     :style="{ backgroundColor: 'var(--dd-warning-muted)' }">
-                  <span class="text-[0.625rem] font-semibold" style="color: var(--dd-warning);">
-                    {{ securitySeverityTotals.high }} High
-                  </span>
-                </div>
-                <div class="flex items-center justify-between px-2 py-1.5 dd-rounded"
-                     :style="{ backgroundColor: 'var(--dd-caution-muted)' }">
-                  <span class="text-[0.625rem] font-semibold" style="color: var(--dd-caution);">
-                    {{ securitySeverityTotals.medium }} Medium
-                  </span>
-                </div>
-                <div class="flex items-center justify-between px-2 py-1.5 dd-rounded"
-                     :style="{ backgroundColor: 'var(--dd-info-muted)' }">
-                  <span class="text-[0.625rem] font-semibold" style="color: var(--dd-info);">
-                    {{ securitySeverityTotals.low }} Low
-                  </span>
-                </div>
-              </div>
-            </div>
+            <!-- Grid Widgets -->
+            <DashboardRecentUpdatesWidget
+              v-else-if="item.i === 'recent-updates'"
+              class="h-full"
+              :recent-updates="recentUpdates"
+              :pending-updates-count="pendingUpdates.length"
+              :dashboard-update-error="dashboardUpdateError"
+              :dashboard-update-in-progress="dashboardUpdateInProgress"
+              :dashboard-update-all-in-progress="dashboardUpdateAllInProgress"
+              :get-update-kind-color="getUpdateKindColor"
+              :get-update-kind-icon="getUpdateKindIcon"
+              :get-update-kind-muted-color="getUpdateKindMutedColor"
+              :edit-mode="editMode"
+              @confirm-update="confirmDashboardUpdate"
+              @confirm-update-all="confirmDashboardUpdateAll"
+              @view-all="navigateTo({ path: ROUTES.CONTAINERS, query: { filterKind: 'any' } })" />
 
-            <div class="mb-4" :style="{ borderTop: '1px solid var(--dd-border)' }" />
+            <DashboardSecurityOverviewWidget
+              v-else-if="item.i === 'security-overview'"
+              class="h-full"
+              :donut-circumference="DONUT_CIRCUMFERENCE"
+              :security-clean-arc-length="securityCleanArcLength"
+              :security-clean-count="securityCleanCount"
+              :security-issue-arc-length="securityIssueArcLength"
+              :security-issue-count="securityIssueCount"
+              :security-not-scanned-arc-length="securityNotScannedArcLength"
+              :security-not-scanned-count="securityNotScannedCount"
+              :security-severity-totals="securitySeverityTotals"
+              :security-total-count="securityTotalCount"
+              :show-security-severity-breakdown="showSecuritySeverityBreakdown"
+              :vulnerabilities="vulnerabilities"
+              :edit-mode="editMode"
+              @view-all="navigateTo(ROUTES.SECURITY)" />
 
-            <!-- Top vulnerabilities -->
-            <div class="text-[0.625rem] font-semibold uppercase tracking-wider mb-3 dd-text-muted">
-              Top Vulnerabilities
-            </div>
-            <div class="space-y-2.5 overflow-y-auto max-h-[200px]">
-              <div v-for="vuln in vulnerabilities" :key="vuln.id"
-                   class="flex items-start gap-3 p-2.5 dd-rounded"
-                   :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-                <div class="shrink-0 mt-0.5">
-                  <span class="badge px-1.5 py-0 text-[0.5625rem] md:!hidden"
-                        :style="{
-                          backgroundColor: vuln.severity === 'CRITICAL'
-                            ? 'var(--dd-danger-muted)'
-                            : 'var(--dd-warning-muted)',
-                          color: vuln.severity === 'CRITICAL' ? 'var(--dd-danger)' : 'var(--dd-warning)',
-                        }">
-                    <AppIcon :name="vuln.severity === 'CRITICAL' ? 'warning' : 'chevrons-up'" :size="12" />
-                  </span>
-                  <span class="badge text-[0.5625rem] max-md:!hidden"
-                        :style="{
-                          backgroundColor: vuln.severity === 'CRITICAL'
-                            ? 'var(--dd-danger-muted)'
-                            : 'var(--dd-warning-muted)',
-                          color: vuln.severity === 'CRITICAL' ? 'var(--dd-danger)' : 'var(--dd-warning)',
-                        }">
-                    {{ vuln.severity }}
-                  </span>
-                </div>
-                <div class="flex-1 min-w-0">
-                  <div class="text-[0.6875rem] font-semibold truncate dd-text">
-                    {{ vuln.id }}
-                  </div>
-                  <div class="text-[0.625rem] mt-0.5 truncate dd-text-muted">
-                    {{ vuln.package }} &middot; {{ vuln.image }}
-                  </div>
-                </div>
-              </div>
-              <div v-if="vulnerabilities.length === 0"
-                   class="p-2.5 dd-rounded text-[0.6875rem] text-center dd-text-muted"
-                   :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-                No vulnerabilities reported
-              </div>
-            </div>
-          </div>
+            <DashboardResourceUsageWidget
+              v-else-if="item.i === 'resource-usage'"
+              class="h-full"
+              :resource-usage="resourceUsage"
+              :edit-mode="editMode"
+              @view-all="navigateTo(ROUTES.CONTAINERS)" />
+
+            <DashboardHostStatusWidget
+              v-else-if="item.i === 'host-status'"
+              class="h-full"
+              :servers="servers"
+              :edit-mode="editMode"
+              @view-all="navigateTo(ROUTES.SERVERS)" />
+
+            <DashboardUpdateBreakdownWidget
+              v-else-if="item.i === 'update-breakdown'"
+              class="h-full"
+              :total-updates="totalUpdates"
+              :update-breakdown-buckets="updateBreakdownBuckets"
+              :edit-mode="editMode"
+              @view-all="navigateTo({ path: ROUTES.CONTAINERS, query: { filterKind: 'any' } })" />
+          </GridItem>
+        </GridLayout>
+      </template>
+    </div>
+
+    <!-- Customize panel -->
+    <aside
+      v-if="editMode"
+      class="shrink-0 flex flex-col dd-rounded overflow-hidden sticky top-0 mr-2"
+      :style="{
+        width: 'var(--dd-layout-sidebar-expanded-width)',
+        minWidth: 'var(--dd-layout-sidebar-expanded-width)',
+        backgroundColor: 'var(--dd-bg-card)',
+        height: 'calc(100vh - var(--dd-layout-main-viewport-offset))',
+      }">
+      <div class="shrink-0 px-4 py-3 flex items-center justify-between"
+           :style="{ borderBottom: '1px solid var(--dd-border)' }">
+        <div class="flex items-center gap-2">
+          <AppIcon name="ph:pencil-simple" :size="12" class="dd-text-muted" />
+          <span class="text-2xs-plus font-semibold dd-text">Widgets</span>
         </div>
+        <AppButton
+          size="none" variant="plain" weight="none" aria-label="Close panel"
+          class="flex items-center justify-center w-6 h-6 dd-rounded transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
+          @click="toggleEditMode">
+          <AppIcon name="xmark" :size="12" />
+        </AppButton>
+      </div>
 
-        <!-- Host Status Widget (1/3) -->
-        <div
-             data-widget-id="host-status"
-             :data-widget-order="widgetOrderIndex('host-status')"
-             draggable="true"
-             aria-label="Host Status widget"
-             class="dashboard-widget dd-rounded overflow-hidden"
-             :class="{ 'opacity-60': draggedWidgetId === 'host-status' }"
-             :style="{
-               ...widgetOrderStyle('host-status'),
-               backgroundColor: 'var(--dd-bg-card)',
-             }"
-             @dragstart="onWidgetDragStart('host-status', $event)"
-             @dragover="onWidgetDragOver('host-status', $event)"
-             @drop="onWidgetDrop('host-status', $event)"
-             @dragend="onWidgetDragEnd">
-          <div class="flex items-center justify-between px-5 py-3.5"
-               :style="{ borderBottom: '1px solid var(--dd-border)' }">
-            <div class="flex items-center gap-2">
-              <AppIcon name="servers" :size="14" class="text-drydock-secondary" />
-              <h2 class="text-sm font-semibold dd-text">
-                Host Status
-              </h2>
-            </div>
-            <button class="text-[0.6875rem] font-medium text-drydock-secondary hover:underline"
-                    @click="navigateTo(ROUTES.SERVERS)">View all &rarr;</button>
-          </div>
+      <div class="flex-1 overflow-y-auto p-3 space-y-1">
+        <label
+          v-for="widget in allWidgetMeta"
+          :key="widget.id"
+          class="flex items-center gap-2.5 px-2.5 py-1.5 dd-rounded cursor-pointer transition-colors hover:dd-bg-elevated">
+          <input
+            type="checkbox"
+            :checked="isWidgetVisible(widget.id)"
+            class="shrink-0 w-3.5 h-3.5 dd-rounded-sm cursor-pointer"
+            @change="toggleWidgetVisibility(widget.id)" />
+          <span class="flex-1 text-2xs-plus dd-text">{{ widget.label }}</span>
+          <span class="shrink-0 flex items-center gap-0.5">
+            <span
+              v-for="size in widgetSizes(widget.id)"
+              :key="size"
+              class="px-1 py-0.5 dd-rounded text-4xs font-bold uppercase tracking-wider"
+              :style="{ backgroundColor: sizeColor(size).bg, color: sizeColor(size).fg }">
+              {{ size }}
+            </span>
+          </span>
+        </label>
 
-          <div class="p-4 space-y-3">
-            <div v-for="server in servers" :key="server.name"
-                 class="flex items-center gap-3 p-3 dd-rounded cursor-pointer transition-colors hover:dd-bg-elevated"
-                 :style="{ backgroundColor: 'var(--dd-bg-inset)' }"
-                 @click="navigateTo(ROUTES.SERVERS)">
-              <span class="badge px-1.5 py-0 text-[0.5625rem] max-md:!hidden"
-                    :style="{
-                      backgroundColor: server.status === 'connected' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
-                      color: server.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)',
-                    }">
-                <AppIcon :name="server.status === 'connected' ? 'check' : 'xmark'" :size="12" />
-              </span>
-              <div class="flex-1 min-w-0">
-                <div class="text-xs font-semibold truncate dd-text">{{ server.name }}</div>
-                <div v-if="server.host" class="text-[0.625rem] font-mono dd-text-muted truncate mt-0.5">
-                  {{ server.host }}
-                </div>
-                <div class="text-[0.625rem] dd-text-muted">{{ server.containers.running }}/{{ server.containers.total }} containers</div>
-              </div>
-              <span class="badge px-1.5 py-0 text-[0.5625rem] md:!hidden"
-                    :style="{
-                      backgroundColor: server.status === 'connected' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
-                      color: server.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)',
-                    }">
-                <AppIcon :name="server.status === 'connected' ? 'check' : 'xmark'" :size="12" />
-              </span>
-              <span class="badge text-[0.5625rem] uppercase font-bold max-md:!hidden"
-                    :style="{
-                      backgroundColor: server.status === 'connected' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
-                      color: server.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)',
-                    }">
-                {{ server.statusLabel ?? server.status }}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Update Breakdown Widget (2/3) -->
-        <div
-             data-widget-id="update-breakdown"
-             :data-widget-order="widgetOrderIndex('update-breakdown')"
-             draggable="true"
-             aria-label="Update Breakdown widget"
-             class="dashboard-widget xl:col-span-2 dd-rounded overflow-hidden"
-             :class="{ 'opacity-60': draggedWidgetId === 'update-breakdown' }"
-             :style="{
-               ...widgetOrderStyle('update-breakdown'),
-               backgroundColor: 'var(--dd-bg-card)',
-             }"
-             @dragstart="onWidgetDragStart('update-breakdown', $event)"
-             @dragover="onWidgetDragOver('update-breakdown', $event)"
-             @drop="onWidgetDrop('update-breakdown', $event)"
-             @dragend="onWidgetDragEnd">
-          <div class="flex items-center justify-between px-5 py-3.5"
-               :style="{ borderBottom: '1px solid var(--dd-border)' }">
-            <div class="flex items-center gap-2">
-              <AppIcon name="updates" :size="14" class="text-drydock-secondary" />
-              <h2 class="text-sm font-semibold dd-text">
-                Update Breakdown
-              </h2>
-            </div>
-            <button class="text-[0.6875rem] font-medium text-drydock-secondary hover:underline"
-                    @click="navigateTo({ path: ROUTES.CONTAINERS, query: { filterKind: 'any' } })">View all &rarr;</button>
-          </div>
-
-          <div class="p-5">
-            <div v-if="totalUpdates === 0"
-                 class="p-3 dd-rounded text-[0.6875rem] text-center dd-text-muted"
-                 :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-              No updates to categorize
-            </div>
-            <div v-else class="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              <div v-for="kind in updateBreakdownBuckets" :key="kind.label"
-                   class="text-center p-3 dd-rounded"
-                   :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-                <div class="w-9 h-9 mx-auto dd-rounded flex items-center justify-center mb-2"
-                     :style="{ backgroundColor: kind.colorMuted, color: kind.color }">
-                  <AppIcon :name="kind.icon" :size="20" />
-                </div>
-                <div class="text-xl font-bold dd-text">{{ kind.count }}</div>
-                <div class="text-[0.625rem] font-medium uppercase tracking-wider mt-0.5 dd-text-muted">{{ kind.label }}</div>
-                <!-- Mini bar -->
-                <div class="mt-2 h-1.5 dd-rounded-sm overflow-hidden" style="background: var(--dd-bg-elevated);">
-                  <div class="h-full dd-rounded-sm transition-[color,background-color,border-color,opacity,transform,box-shadow]"
-                       :style="{ width: Math.max(kind.count / Math.max(totalUpdates, 1) * 100, 4) + '%', backgroundColor: kind.color }" />
-                </div>
-              </div>
-            </div>
-          </div>
+        <div class="pt-3 mt-2" :style="{ borderTop: '1px solid var(--dd-border)' }">
+          <AppButton
+            size="none" variant="plain" weight="none"
+            class="w-full px-2.5 py-1.5 dd-rounded text-2xs font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated text-center"
+            @click="resetAll">
+            Reset to Default
+          </AppButton>
         </div>
       </div>
-      </template>
+    </aside>
+    </div>
   </div>
 </template>
+
+<style>
+/*
+ * grid-layout-plus overrides
+ *
+ * The library exposes CSS custom properties on .vgl-layout for theming.
+ * We set those instead of using !important where possible.
+ * The 3 remaining !important declarations override inline transition
+ * styles that the library sets via JS during mount and drag — there
+ * is no custom property for these.
+ */
+
+/* Theme the library's built-in placeholder and resizer via its CSS vars */
+.vgl-layout {
+  --vgl-placeholder-bg: var(--dd-success);
+  --vgl-placeholder-opacity: 15%;
+  --vgl-resizer-border-color: var(--dd-text-secondary);
+  --vgl-resizer-border-width: 1.5px;
+  --vgl-resizer-size: 20px;
+  /* Grid library adds 16px margin on all 4 outer edges.
+     Pull top and left flush — right side is already correct. */
+  margin-top: -16px;
+  margin-left: -16px;
+}
+
+/* Disable the initial fly-in — library sets inline transition styles */
+.vgl-layout:not(.dd-grid-ready) {
+  transition: none !important;
+}
+
+.vgl-layout:not(.dd-grid-ready) .vgl-item {
+  transition: none !important;
+}
+
+.vgl-item--dragging {
+  transition: none !important;
+}
+
+/* Grid item content fills its cell */
+.dd-grid-item > div:not(.stat-card) {
+  height: 100%;
+  overflow: hidden;
+}
+
+.dd-grid-item .dashboard-widget {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Edit mode — dashed outline + grab cursor, disable interactive content */
+.dd-grid-edit {
+  outline: 2px dashed var(--dd-border-strong);
+  outline-offset: -2px;
+  border-radius: var(--dd-radius);
+  cursor: grab;
+}
+
+.dd-grid-edit:active {
+  cursor: grabbing;
+}
+
+/* Block ALL clicks on card content in edit mode — only drag handles and resize work */
+.dd-grid-edit > * {
+  pointer-events: none;
+}
+
+/* Re-enable pointer events on drag handles so they can be grabbed */
+.dd-grid-edit .drag-handle {
+  pointer-events: auto;
+}
+
+/* Re-enable pointer events on resize handle */
+.dd-grid-edit .vgl-item__resizer {
+  pointer-events: auto;
+}
+
+/* Drag handle pill */
+.dd-drag-handle {
+  cursor: grab;
+  color: var(--dd-neutral);
+  background: var(--dd-neutral-muted);
+  border-radius: var(--dd-radius);
+  padding: 2px 6px;
+  opacity: 0.8;
+  transition: opacity 150ms ease, background-color 150ms ease, color 150ms ease;
+}
+
+.dd-grid-edit:hover .dd-drag-handle,
+.dd-drag-handle:hover {
+  opacity: 1;
+  color: var(--dd-text);
+  background: var(--dd-border-strong);
+}
+
+.dd-drag-handle:active {
+  cursor: grabbing;
+}
+
+/* Resize handle pill — matches drag handle style */
+.vgl-item .vgl-item__resizer {
+  opacity: 0;
+  cursor: se-resize;
+  background-color: var(--dd-neutral-muted);
+  border-radius: var(--dd-radius);
+  right: 6px;
+  bottom: 6px;
+  transition: opacity 150ms ease, background-color 150ms ease;
+}
+
+.vgl-item .vgl-item__resizer::before {
+  border-color: var(--dd-neutral);
+  width: 7px;
+  height: 7px;
+  border-width: 0;
+  border-right-width: 1.5px;
+  border-bottom-width: 1.5px;
+  inset: auto 4px 4px auto;
+}
+
+.dd-grid-edit.vgl-item .vgl-item__resizer {
+  opacity: var(--dd-opacity-handle-idle);
+}
+
+/* Card hover darkens both handles */
+.dd-grid-edit.vgl-item:hover .vgl-item__resizer {
+  opacity: 1;
+  background-color: var(--dd-border-strong);
+}
+
+.dd-grid-edit.vgl-item:hover .vgl-item__resizer::before {
+  border-color: var(--dd-text);
+}
+
+/* Placeholder border during drag/resize */
+.vgl-item--placeholder {
+  border-radius: var(--dd-radius);
+  border: 2px dashed var(--dd-success);
+}
+</style>

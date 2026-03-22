@@ -11,6 +11,7 @@ import { type IconLibrary, iconMap, libraryLabels } from '../icons';
 import { themeFamilies } from '../theme/palettes';
 import { getAppInfos } from '../services/app';
 import { getUser } from '../services/auth';
+import { downloadDebugDump } from '../services/debug';
 import { getServer } from '../services/server';
 import { clearIconCache, getSettings, updateSettings } from '../services/settings';
 import { getStore } from '../services/store';
@@ -119,73 +120,6 @@ const internetlessMode = ref(false);
 const settingsLoading = ref(false);
 const settingsError = ref('');
 
-interface LegacyInputSourceSummary {
-  total: number;
-  keys: string[];
-}
-
-interface LegacyInputSummary {
-  total: number;
-  env: LegacyInputSourceSummary;
-  label: LegacyInputSourceSummary;
-}
-
-const LEGACY_KEY_PREVIEW_LIMIT = 6;
-const legacyInputSummary = ref<LegacyInputSummary | null>(null);
-const hasLegacyCompatibilityInputs = computed(() => (legacyInputSummary.value?.total ?? 0) > 0);
-const legacyEnvKeysPreview = computed(() =>
-  summarizeLegacyKeys(legacyInputSummary.value?.env.keys ?? []),
-);
-const legacyLabelKeysPreview = computed(() =>
-  summarizeLegacyKeys(legacyInputSummary.value?.label.keys ?? []),
-);
-
-function normalizeLegacyInputSourceSummary(rawValue: unknown): LegacyInputSourceSummary {
-  const parsedTotal = Number((rawValue as { total?: unknown })?.total);
-  const parsedKeys = Array.isArray((rawValue as { keys?: unknown })?.keys)
-    ? (rawValue as { keys: unknown[] }).keys.filter(
-        (value): value is string => typeof value === 'string',
-      )
-    : [];
-  const uniqueKeys = Array.from(new Set(parsedKeys)).sort((a, b) => a.localeCompare(b));
-  const total =
-    Number.isFinite(parsedTotal) && parsedTotal >= 0
-      ? Math.max(Math.floor(parsedTotal), uniqueKeys.length)
-      : uniqueKeys.length;
-  return { total, keys: uniqueKeys };
-}
-
-function normalizeLegacyInputSummary(rawValue: unknown): LegacyInputSummary | null {
-  if (!rawValue || typeof rawValue !== 'object') {
-    return null;
-  }
-  const env = normalizeLegacyInputSourceSummary((rawValue as { env?: unknown }).env);
-  const label = normalizeLegacyInputSourceSummary((rawValue as { label?: unknown }).label);
-  const parsedTotal = Number((rawValue as { total?: unknown }).total);
-  const totalFromKeys = env.total + label.total;
-  const total =
-    Number.isFinite(parsedTotal) && parsedTotal >= 0
-      ? Math.max(Math.floor(parsedTotal), totalFromKeys)
-      : totalFromKeys;
-
-  if (total <= 0) {
-    return null;
-  }
-
-  return { total, env, label };
-}
-
-function summarizeLegacyKeys(keys: string[]): string {
-  if (keys.length === 0) {
-    return '';
-  }
-  const previewKeys = keys.slice(0, LEGACY_KEY_PREVIEW_LIMIT);
-  const hiddenCount = keys.length - previewKeys.length;
-  return hiddenCount > 0
-    ? `${previewKeys.join(', ')} (+${hiddenCount} more)`
-    : previewKeys.join(', ');
-}
-
 // Profile state
 interface ProfileData {
   username: string;
@@ -248,7 +182,6 @@ async function loadGeneralSettingsData() {
       getSettings().catch(() => null),
     ]);
     const config = serverData?.configuration ?? {};
-    legacyInputSummary.value = normalizeLegacyInputSummary(serverData?.compatibility?.legacyInputs);
     const storeConfig = storeData?.configuration ?? {};
     webhookEnabled.value = Boolean(config.webhook?.enabled);
     const fields = [
@@ -274,7 +207,6 @@ async function loadGeneralSettingsData() {
     }
   } catch (e: unknown) {
     serverError.value = errorMessage(e, 'Failed to load server info');
-    legacyInputSummary.value = null;
     webhookEnabled.value = false;
     serverFields.value = [{ label: 'Error', value: 'Failed to load server info' }];
   } finally {
@@ -328,6 +260,8 @@ async function toggleInternetlessMode() {
 
 const cacheClearing = ref(false);
 const cacheCleared = ref<number | null>(null);
+const debugDumpDownloading = ref(false);
+const debugDumpError = ref('');
 
 async function handleClearIconCache() {
   settingsError.value = '';
@@ -340,6 +274,41 @@ async function handleClearIconCache() {
     settingsError.value = errorMessage(e, 'Failed to clear icon cache');
   } finally {
     cacheClearing.value = false;
+  }
+}
+
+function triggerBlobDownload(blob: Blob, filename: string): void {
+  const createObjectUrl = globalThis.URL?.createObjectURL;
+  if (typeof createObjectUrl !== 'function') {
+    throw new Error('Browser does not support file downloads');
+  }
+
+  const objectUrl = createObjectUrl(blob);
+  const link = document.createElement('a');
+  link.href = objectUrl;
+  link.download = filename;
+  link.style.display = 'none';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(objectUrl);
+}
+
+async function handleDownloadDebugDump() {
+  if (debugDumpDownloading.value) {
+    return;
+  }
+
+  debugDumpDownloading.value = true;
+  debugDumpError.value = '';
+
+  try {
+    const { blob, filename } = await downloadDebugDump();
+    triggerBlobDownload(blob, filename);
+  } catch (e: unknown) {
+    debugDumpError.value = errorMessage(e, 'Unable to download debug dump');
+  } finally {
+    debugDumpDownloading.value = false;
   }
 }
 
@@ -362,7 +331,7 @@ function handleSelectIconLibrary(library: string) {
 <template>
   <DataViewLayout>
     <div class="flex gap-1 mb-6" :style="{ borderBottom: '1px solid var(--dd-border)' }">
-      <button
+      <AppButton size="none" variant="plain" weight="none"
         v-for="tab in settingsTabs"
         :key="tab.id"
         class="px-4 py-2.5 text-xs font-semibold transition-colors relative"
@@ -375,7 +344,7 @@ function handleSelectIconLibrary(library: string) {
           v-if="activeSettingsTab === tab.id"
           class="absolute bottom-0 left-0 right-0 h-[2px] bg-drydock-secondary rounded-t-full"
         />
-      </button>
+      </AppButton>
     </div>
 
     <ConfigGeneralTab
@@ -383,10 +352,6 @@ function handleSelectIconLibrary(library: string) {
       :loading="loading"
       :server-error="serverError"
       :settings-error="settingsError"
-      :has-legacy-compatibility-inputs="hasLegacyCompatibilityInputs"
-      :legacy-input-summary="legacyInputSummary"
-      :legacy-env-keys-preview="legacyEnvKeysPreview"
-      :legacy-label-keys-preview="legacyLabelKeysPreview"
       :server-fields="serverFields"
       :store-fields="storeFields"
       :webhook-enabled="webhookEnabled"
@@ -396,8 +361,11 @@ function handleSelectIconLibrary(library: string) {
       :settings-loading="settingsLoading"
       :cache-clearing="cacheClearing"
       :cache-cleared="cacheCleared"
+      :debug-dump-downloading="debugDumpDownloading"
+      :debug-dump-error="debugDumpError"
       @toggle-internetless-mode="toggleInternetlessMode"
       @clear-icon-cache="handleClearIconCache"
+      @download-debug-dump="handleDownloadDebugDump"
     />
 
     <ConfigAppearanceTab

@@ -24,7 +24,7 @@ export interface PreferencesSchema {
     };
     columns: string[];
   };
-  dashboard: { widgetOrder: string[] };
+  dashboard: { widgetOrder: string[]; hiddenWidgets: string[] };
   views: {
     security: { mode: ViewMode; sortField: string; sortAsc: boolean };
     audit: { mode: ViewMode };
@@ -57,7 +57,17 @@ export const DEFAULTS: PreferencesSchema = {
       server: 'all',
       kind: 'all',
     },
-    columns: ['icon', 'name', 'version', 'kind', 'status', 'bouncer', 'server', 'registry'],
+    columns: [
+      'icon',
+      'name',
+      'version',
+      'kind',
+      'status',
+      'bouncer',
+      'imageAge',
+      'server',
+      'registry',
+    ],
   },
   dashboard: {
     widgetOrder: [
@@ -67,9 +77,11 @@ export const DEFAULTS: PreferencesSchema = {
       'stat-registries',
       'recent-updates',
       'security-overview',
+      'resource-usage',
       'host-status',
       'update-breakdown',
     ],
+    hiddenWidgets: [],
   },
   views: {
     security: { mode: 'table', sortField: 'critical', sortAsc: false },

@@ -24,7 +24,7 @@ const {
 </script>
 
 <template>
-  <div data-test="container-full-page-detail" class="flex flex-col flex-1 min-h-0 pr-2 sm:pr-[15px]">
+  <div data-test="container-full-page-detail" class="flex flex-col flex-1 min-h-0 overflow-hidden pr-2 sm:pr-[15px]">
     <div
       class="shrink-0 mb-4 dd-rounded overflow-hidden"
       :style="{
@@ -32,12 +32,12 @@ const {
       }">
       <div class="px-5 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div class="flex items-center gap-4 min-w-0">
-          <button
-            class="flex items-center gap-2 px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated shrink-0"
+          <AppButton size="none" variant="plain" weight="none"
+            class="flex items-center gap-2 px-3 py-1.5 dd-rounded text-2xs-plus font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated shrink-0"
             @click="closeFullPage">
             <AppIcon name="arrow-left" :size="11" />
             Back
-          </button>
+          </AppButton>
           <div class="flex items-center gap-3 min-w-0">
             <div
               class="w-3 h-3 rounded-full shrink-0"
@@ -47,11 +47,11 @@ const {
                 {{ selectedContainer.name }}
               </h1>
               <div class="flex items-center gap-2 mt-0.5 flex-wrap">
-                <span class="text-[0.6875rem] sm:text-xs font-mono dd-text-secondary truncate max-w-[180px] sm:max-w-none">
+                <span class="text-2xs-plus sm:text-xs font-mono dd-text-secondary truncate max-w-[180px] sm:max-w-none">
                   {{ selectedContainer.image }}:{{ selectedContainer.currentTag }}
                 </span>
                 <span
-                  class="badge text-[0.5625rem]"
+                  class="badge text-3xs"
                   :style="{
                     backgroundColor:
                       selectedContainer.status === 'running'
@@ -62,7 +62,7 @@ const {
                   {{ selectedContainer.status }}
                 </span>
                 <span
-                  class="badge text-[0.5625rem] uppercase font-bold max-sm:hidden"
+                  class="badge text-3xs uppercase font-bold max-sm:hidden"
                   :style="{
                     backgroundColor: registryColorBg(selectedContainer.registry),
                     color: registryColorText(selectedContainer.registry),
@@ -77,7 +77,7 @@ const {
                 </span>
                 <span
                   v-if="selectedContainer.newTag"
-                  class="badge text-[0.5625rem] max-sm:hidden"
+                  class="badge text-3xs max-sm:hidden"
                   :style="{
                     backgroundColor: updateKindColor(selectedContainer.updateKind).bg,
                     color: updateKindColor(selectedContainer.updateKind).text,
@@ -89,9 +89,9 @@ const {
           </div>
         </div>
         <div class="flex items-center gap-2 shrink-0">
-          <button
+          <AppButton size="none" variant="plain" weight="none"
             v-if="selectedContainer.status === 'running'"
-            class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors"
+            class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-2xs-plus font-semibold transition-colors"
             :class="actionInProgress === selectedContainer.name ? 'opacity-50 cursor-not-allowed' : ''"
             :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)', border: '1px solid var(--dd-danger)' }"
             :disabled="actionInProgress === selectedContainer.name"
@@ -99,10 +99,10 @@ const {
             @click="confirmStop(selectedContainer.name)">
             <AppIcon :name="actionInProgress === selectedContainer.name ? 'spinner' : 'stop'" :size="12" :class="actionInProgress === selectedContainer.name ? 'dd-spin' : ''" />
             Stop
-          </button>
-          <button
+          </AppButton>
+          <AppButton size="none" variant="plain" weight="none"
             v-else
-            class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors"
+            class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-2xs-plus font-semibold transition-colors"
             :class="actionInProgress === selectedContainer.name ? 'opacity-50 cursor-not-allowed' : ''"
             :style="{ backgroundColor: 'var(--dd-success-muted)', color: 'var(--dd-success)', border: '1px solid var(--dd-success)' }"
             :disabled="actionInProgress === selectedContainer.name"
@@ -110,28 +110,28 @@ const {
             @click="startContainer(selectedContainer.name)">
             <AppIcon :name="actionInProgress === selectedContainer.name ? 'spinner' : 'play'" :size="12" :class="actionInProgress === selectedContainer.name ? 'dd-spin' : ''" />
             Start
-          </button>
-          <button
-            class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors"
+          </AppButton>
+          <AppButton size="none" variant="plain" weight="none"
+            class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-2xs-plus font-semibold transition-colors"
             :class="actionInProgress === selectedContainer.name ? 'opacity-50 cursor-not-allowed' : 'dd-text-muted hover:dd-text'"
             :disabled="actionInProgress === selectedContainer.name"
             aria-label="Restart container"
             @click="confirmRestart(selectedContainer.name)">
             <AppIcon :name="actionInProgress === selectedContainer.name ? 'spinner' : 'restart'" :size="12" :class="actionInProgress === selectedContainer.name ? 'dd-spin' : ''" />
             Restart
-          </button>
-          <button
-            class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors"
+          </AppButton>
+          <AppButton size="none" variant="plain" weight="none"
+            class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-2xs-plus font-semibold transition-colors"
             :class="actionInProgress === selectedContainer.name ? 'opacity-50 cursor-not-allowed' : 'dd-text-muted hover:dd-text'"
             :disabled="actionInProgress === selectedContainer.name"
             aria-label="Scan container"
             @click="scanContainer(selectedContainer.name)">
             <AppIcon :name="actionInProgress === selectedContainer.name ? 'spinner' : 'security'" :size="12" :class="actionInProgress === selectedContainer.name ? 'dd-spin' : ''" />
             Scan
-          </button>
-          <button
+          </AppButton>
+          <AppButton size="none" variant="plain" weight="none"
             v-if="selectedContainer.newTag && selectedContainer.bouncer === 'blocked'"
-            class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[0.6875rem] font-bold transition-colors"
+            class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-2xs-plus font-bold transition-colors"
             :class="actionInProgress === selectedContainer.name ? 'opacity-50 cursor-not-allowed' : ''"
             :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)', border: '1px solid var(--dd-danger)' }"
             :disabled="actionInProgress === selectedContainer.name"
@@ -139,10 +139,10 @@ const {
             @click="confirmForceUpdate(selectedContainer.name)">
             <AppIcon name="lock" :size="12" />
             Blocked
-          </button>
-          <button
+          </AppButton>
+          <AppButton size="none" variant="plain" weight="none"
             v-else-if="selectedContainer.newTag"
-            class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[0.6875rem] font-bold transition-colors"
+            class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-2xs-plus font-bold transition-colors"
             :class="actionInProgress === selectedContainer.name ? 'opacity-50 cursor-not-allowed' : ''"
             :style="{ backgroundColor: 'var(--dd-success-muted)', color: 'var(--dd-success)', border: '1px solid var(--dd-success)' }"
             :disabled="actionInProgress === selectedContainer.name"
@@ -150,9 +150,9 @@ const {
             @click="confirmUpdate(selectedContainer.name)">
             <AppIcon :name="actionInProgress === selectedContainer.name ? 'spinner' : 'cloud-download'" :size="12" :class="actionInProgress === selectedContainer.name ? 'dd-spin' : ''" />
             Update
-          </button>
-          <button
-            class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors"
+          </AppButton>
+          <AppButton size="none" variant="plain" weight="none"
+            class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-2xs-plus font-semibold transition-colors"
             :class="actionInProgress === selectedContainer.name ? 'opacity-50 cursor-not-allowed' : ''"
             :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)', border: '1px solid var(--dd-danger)' }"
             :disabled="actionInProgress === selectedContainer.name"
@@ -160,12 +160,12 @@ const {
             @click="confirmDelete(selectedContainer.name)">
             <AppIcon :name="actionInProgress === selectedContainer.name ? 'spinner' : 'trash'" :size="12" :class="actionInProgress === selectedContainer.name ? 'dd-spin' : ''" />
             Delete
-          </button>
+          </AppButton>
         </div>
       </div>
 
       <div class="flex overflow-x-auto scrollbar-hide px-5 gap-1" :style="{ borderTop: '1px solid var(--dd-border)' }">
-        <button
+        <AppButton size="none" variant="plain" weight="none"
           v-for="tab in detailTabs"
           :key="tab.id"
           class="whitespace-nowrap shrink-0 px-4 py-3 text-xs font-medium transition-colors relative"
@@ -176,7 +176,7 @@ const {
           <div
             v-if="activeDetailTab === tab.id"
             class="absolute bottom-0 left-0 right-0 h-[2px] bg-drydock-secondary rounded-t-full" />
-        </button>
+        </AppButton>
       </div>
     </div>
 
@@ -186,9 +186,9 @@ const {
       :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)', border: '1px solid var(--dd-danger)' }">
       <AppIcon name="warning" :size="14" class="shrink-0" />
       <span class="min-w-0 break-words">{{ error }}</span>
-      <button class="ml-auto shrink-0 hover:opacity-70 transition-opacity" aria-label="Dismiss error" @click="error = null">
+      <AppButton size="none" variant="plain" weight="none" class="ml-auto shrink-0 hover:opacity-70 transition-opacity" aria-label="Dismiss error" @click="error = null">
         <AppIcon name="x" :size="12" />
-      </button>
+      </AppButton>
     </div>
 
     <ContainerFullPageTabContent />

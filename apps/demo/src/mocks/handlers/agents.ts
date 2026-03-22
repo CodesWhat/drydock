@@ -35,11 +35,11 @@ function buildAgentLogEntries(specs: AgentLogEntrySpec[]) {
 }
 
 export const agentHandlers = [
-  http.get('/api/agents', () => HttpResponse.json({ data: agents })),
-  http.get('/api/agents/:name/log', () =>
+  http.get('/api/v1/agents', () => HttpResponse.json({ data: agents })),
+  http.get('/api/v1/agents/:name/log', () =>
     HttpResponse.json({ entries: buildAgentLogEntries(agentLogSummarySpecs) }),
   ),
-  http.get('/api/agents/:name/log/entries', () =>
+  http.get('/api/v1/agents/:name/log/entries', () =>
     HttpResponse.json({ entries: buildAgentLogEntries(agentLogDetailSpecs) }),
   ),
 ];

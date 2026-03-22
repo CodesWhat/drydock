@@ -1,6 +1,7 @@
 import {
   actionIcon,
   actionLabel,
+  imageAge,
   statusBg,
   statusColor,
   targetLabel,
@@ -165,6 +166,55 @@ describe('audit-helpers', () => {
     it('returns 6d ago at boundary', () => {
       const sixDays = new Date(Date.now() - 6 * 86_400_000).toISOString();
       expect(timeAgo(sixDays)).toBe('6d ago');
+    });
+  });
+
+  describe('imageAge', () => {
+    it('returns em dash for undefined', () => {
+      expect(imageAge(undefined)).toBe('\u2014');
+    });
+
+    it('returns em dash for invalid date', () => {
+      expect(imageAge('not-a-date')).toBe('\u2014');
+    });
+
+    it('returns "now" for future timestamps', () => {
+      const future = new Date(Date.now() + 60_000).toISOString();
+      expect(imageAge(future)).toBe('now');
+    });
+
+    it('returns minutes for recent images', () => {
+      const fiveMinAgo = new Date(Date.now() - 5 * 60_000).toISOString();
+      expect(imageAge(fiveMinAgo)).toBe('5m');
+    });
+
+    it('returns hours', () => {
+      const threeHrsAgo = new Date(Date.now() - 3 * 3_600_000).toISOString();
+      expect(imageAge(threeHrsAgo)).toBe('3h');
+    });
+
+    it('returns days for under 2 weeks', () => {
+      const tenDays = new Date(Date.now() - 10 * 86_400_000).toISOString();
+      expect(imageAge(tenDays)).toBe('10d');
+    });
+
+    it('returns weeks for 14-59 days', () => {
+      const thirtyDays = new Date(Date.now() - 30 * 86_400_000).toISOString();
+      expect(imageAge(thirtyDays)).toBe('4w');
+    });
+
+    it('returns months for 60-364 days', () => {
+      const ninetyDays = new Date(Date.now() - 90 * 86_400_000).toISOString();
+      expect(imageAge(ninetyDays)).toBe('2mo');
+    });
+
+    it('returns years for 365+ days', () => {
+      const twoYears = new Date(Date.now() - 730 * 86_400_000).toISOString();
+      expect(imageAge(twoYears)).toBe('1y');
+    });
+
+    it('returns em dash for empty string', () => {
+      expect(imageAge('')).toBe('\u2014');
     });
   });
 });

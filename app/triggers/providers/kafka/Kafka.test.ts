@@ -15,7 +15,7 @@ const configurationValid = {
   threshold: 'all',
   mode: 'simple',
   once: true,
-  auto: true,
+  auto: 'all',
   order: 100,
   simpletitle: 'New ${container.updateKind.kind} found for container ${container.name}',
 
@@ -24,6 +24,7 @@ const configurationValid = {
 
   batchtitle: '${containers.length} updates available',
   resolvenotifications: false,
+  digestcron: '0 8 * * *',
 };
 
 beforeEach(async () => {

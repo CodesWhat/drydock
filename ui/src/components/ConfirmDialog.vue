@@ -50,22 +50,22 @@ onUnmounted(() => globalThis.removeEventListener('keydown', handleKeydown));
   <Teleport to="body">
     <Transition name="confirm-fade">
       <div v-if="visible && current"
-           class="fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm flex items-start justify-center pt-[20vh]"
+           class="fixed inset-0 z-overlay bg-black/50 backdrop-blur-sm flex items-start justify-center pt-[20vh]"
            @pointerdown.self="dismiss">
-        <div class="relative w-full max-w-[420px] min-w-[340px] mx-4 dd-rounded-lg overflow-hidden"
+        <div class="relative w-full max-w-[var(--dd-layout-dialog-max-width)] min-w-[var(--dd-layout-dialog-min-width)] mx-4 dd-rounded-lg overflow-hidden"
              role="dialog"
              aria-modal="true"
              :aria-labelledby="dialogTitleId"
              :aria-describedby="dialogDescriptionId"
-             :style="{
-               backgroundColor: 'var(--dd-bg-card)',
-               border: '1px solid var(--dd-border-strong)',
-               boxShadow: '0 16px 48px rgba(0, 0, 0, 0.3)',
-             }">
+               :style="{
+                 backgroundColor: 'var(--dd-bg-card)',
+                 border: '1px solid var(--dd-border-strong)',
+                 boxShadow: 'var(--dd-shadow-modal)',
+               }">
           <!-- Header -->
           <div class="px-5 pt-4 pb-3"
                :style="{ borderBottom: '1px solid var(--dd-border)' }">
-            <span :id="dialogTitleId" class="text-[0.8125rem] font-semibold dd-text">{{ current.header }}</span>
+            <span :id="dialogTitleId" class="text-xs-plus font-semibold dd-text">{{ current.header }}</span>
           </div>
 
           <!-- Body -->
@@ -75,8 +75,8 @@ onUnmounted(() => globalThis.removeEventListener('keydown', handleKeydown));
 
           <!-- Footer -->
           <div class="px-5 pt-3 pb-4.5 flex items-center justify-end gap-2.5">
-            <button
-              class="px-4 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors cursor-pointer"
+            <AppButton size="none" variant="plain" weight="none"
+              class="px-4 py-1.5 dd-rounded text-2xs-plus font-semibold transition-colors cursor-pointer"
               :aria-label="current.rejectLabel || 'Cancel'"
               :style="{
                 backgroundColor: 'var(--dd-bg-inset)',
@@ -85,9 +85,9 @@ onUnmounted(() => globalThis.removeEventListener('keydown', handleKeydown));
               }"
               @click="reject">
               {{ current.rejectLabel || 'Cancel' }}
-            </button>
-            <button
-              class="px-4 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors flex items-center gap-1.5 cursor-pointer"
+            </AppButton>
+            <AppButton size="none" variant="plain" weight="none"
+              class="px-4 py-1.5 dd-rounded text-2xs-plus font-semibold transition-colors flex items-center gap-1.5 cursor-pointer"
               :aria-label="current.acceptLabel || 'Confirm'"
               :style="current.severity === 'danger'
                 ? {
@@ -102,7 +102,7 @@ onUnmounted(() => globalThis.removeEventListener('keydown', handleKeydown));
                   }"
               @click="accept">
               {{ current.acceptLabel || 'Confirm' }}
-            </button>
+            </AppButton>
           </div>
         </div>
       </div>
@@ -113,7 +113,7 @@ onUnmounted(() => globalThis.removeEventListener('keydown', handleKeydown));
 <style scoped>
 .confirm-fade-enter-active,
 .confirm-fade-leave-active {
-  transition: opacity 0.15s ease;
+  transition: opacity var(--dd-duration-fast) ease;
 }
 .confirm-fade-enter-from,
 .confirm-fade-leave-to {

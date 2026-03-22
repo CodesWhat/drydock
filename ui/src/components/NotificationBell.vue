@@ -10,6 +10,7 @@ import { actionIcon, actionLabel, statusColor, timeAgo } from '../utils/audit-he
 const router = useRouter();
 
 const showBell = ref(false);
+const bellPanelStyle = ref<Record<string, string>>({});
 const entries = ref<AuditEntry[]>([]);
 const loading = ref(false);
 const lastSeen = useStorageRef('dd-bell-last-seen', '');
@@ -31,9 +32,16 @@ async function fetchEntries() {
   }
 }
 
-function toggle() {
+function toggle(event: MouseEvent) {
   showBell.value = !showBell.value;
   if (showBell.value) {
+    const button = event.currentTarget as HTMLElement;
+    const rect = button.getBoundingClientRect();
+    bellPanelStyle.value = {
+      position: 'fixed',
+      top: `${rect.bottom + 4}px`,
+      right: `${window.innerWidth - rect.right}px`,
+    };
     fetchEntries();
   }
 }
@@ -96,41 +104,41 @@ function isUnread(entry: AuditEntry): boolean {
 
 <template>
   <div class="relative notification-bell-wrapper">
-    <button aria-label="Notifications"
+    <AppButton size="none" variant="plain" weight="none" aria-label="Notifications"
             :aria-expanded="String(showBell)"
             class="relative flex items-center justify-center w-8 h-8 dd-rounded transition-colors dd-text-secondary hover:dd-bg-elevated hover:dd-text"
             @click="toggle">
       <AppIcon name="notifications" :size="18" />
       <span v-if="unreadCount > 0"
-            class="badge-pulse absolute -top-0.5 -right-0.5 w-4 h-4 flex items-center justify-center rounded-full text-[0.5625rem] font-bold text-white"
+            class="badge-pulse absolute -top-0.5 -right-0.5 w-4 h-4 flex items-center justify-center rounded-full text-3xs font-bold text-white"
             style="background: var(--dd-danger);">
         {{ unreadCount > 9 ? '9+' : unreadCount }}
       </span>
-    </button>
+    </AppButton>
     <Transition name="menu-fade">
-      <div v-if="showBell"
-           class="absolute right-0 top-full mt-1 w-[calc(100vw-1rem)] max-w-[380px] dd-rounded-lg shadow-lg z-50"
-           :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)', boxShadow: 'var(--dd-shadow-lg)' }">
+      <div v-if="showBell" data-test="notification-dropdown"
+           class="w-[calc(100vw-1rem)] max-w-[380px] dd-rounded-lg shadow-lg"
+           :style="{ ...bellPanelStyle, zIndex: 'var(--z-popover)', backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)', boxShadow: 'var(--dd-shadow-tooltip)' }">
         <!-- Header -->
         <div class="flex items-center justify-between px-3 py-2"
              :style="{ borderBottom: '1px solid var(--dd-border)' }">
-          <span class="text-[0.6875rem] font-semibold uppercase tracking-wider dd-text-muted">Notifications</span>
-          <button v-if="unreadCount > 0"
-                  class="text-[0.625rem] font-medium dd-text-secondary hover:dd-text transition-colors"
+          <span class="text-2xs-plus font-semibold uppercase tracking-wider dd-text-muted">Notifications</span>
+          <AppButton size="none" variant="plain" weight="none" v-if="unreadCount > 0"
+                  class="text-2xs font-medium dd-text-secondary hover:dd-text transition-colors"
                   @click="markAllRead">
             Mark all read
-          </button>
+          </AppButton>
         </div>
 
         <!-- Scrollable list -->
         <div class="max-h-[400px] overflow-y-auto">
-          <div v-if="loading && entries.length === 0" class="px-3 py-6 text-center text-[0.6875rem] dd-text-muted">
+          <div v-if="loading && entries.length === 0" class="px-3 py-6 text-center text-2xs-plus dd-text-muted">
             Loading...
           </div>
-          <div v-else-if="entries.length === 0" class="px-3 py-6 text-center text-[0.6875rem] dd-text-muted">
+          <div v-else-if="entries.length === 0" class="px-3 py-6 text-center text-2xs-plus dd-text-muted">
             No notifications yet
           </div>
-          <button v-for="entry in entries"
+          <AppButton size="none" variant="plain" weight="none" v-for="entry in entries"
                   :key="entry.id"
                   class="w-full text-left px-3 py-2 flex items-start gap-2.5 transition-colors hover:dd-bg-elevated"
                   :style="{ borderBottom: '1px solid var(--dd-border)' }"
@@ -140,29 +148,29 @@ function isUnread(entry: AuditEntry): boolean {
                      class="shrink-0 mt-0.5"
                      :style="{ color: statusColor(entry.status) }" />
             <div class="flex-1 min-w-0">
-              <div class="text-[0.6875rem] truncate dd-text"
+              <div class="text-2xs-plus truncate dd-text"
                    :class="{ 'font-bold': isUnread(entry), 'font-medium': !isUnread(entry) }">
                 {{ actionLabel(entry.action) }}
               </div>
-              <div class="text-[0.625rem] truncate dd-text-muted font-mono mt-0.5">
+              <div class="text-2xs truncate dd-text-muted font-mono mt-0.5">
                 {{ entry.containerName }}
               </div>
-              <div v-if="versionSummary(entry)" class="text-[0.625rem] dd-text-secondary font-mono mt-0.5">
+              <div v-if="versionSummary(entry)" class="text-2xs dd-text-secondary font-mono mt-0.5">
                 {{ versionSummary(entry) }}
               </div>
             </div>
-            <span class="text-[0.625rem] dd-text-muted whitespace-nowrap shrink-0 mt-0.5">
+            <span class="text-2xs dd-text-muted whitespace-nowrap shrink-0 mt-0.5">
               {{ timeAgo(entry.timestamp) }}
             </span>
-          </button>
+          </AppButton>
         </div>
 
         <!-- Footer -->
-        <button class="w-full text-center px-3 py-2 text-[0.6875rem] font-medium dd-text-secondary hover:dd-text transition-colors"
+        <AppButton size="none" variant="plain" weight="none" class="w-full text-center px-3 py-2 text-2xs-plus font-medium dd-text-secondary hover:dd-text transition-colors"
                 :style="{ borderTop: '1px solid var(--dd-border)' }"
                 @click="viewAll">
           View all
-        </button>
+        </AppButton>
       </div>
     </Transition>
   </div>

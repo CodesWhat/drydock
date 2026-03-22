@@ -5,6 +5,7 @@ import whaleLogo from '@/assets/whale-logo.png?inline';
 import AnnouncementBanner from '@/components/AnnouncementBanner.vue';
 import NotificationBell from '@/components/NotificationBell.vue';
 import { useBreakpoints } from '@/composables/useBreakpoints';
+import { useDeprecationBanner } from '@/composables/useDeprecationBanner';
 import { useIcons } from '@/composables/useIcons';
 import { useStorageRef } from '@/composables/useStorageRef';
 import { loadRecentItems, saveRecentItems } from '@/layouts/recentStorage';
@@ -18,6 +19,7 @@ import { getAllContainers } from '@/services/container';
 import { getEffectiveDisplayIcon } from '@/services/image-icon';
 import { getAllNotificationRules } from '@/services/notification';
 import { getAllRegistries } from '@/services/registry';
+import { getServer } from '@/services/server';
 import sseService from '@/services/sse';
 import { getAllTriggers } from '@/services/trigger';
 import { getAllWatchers } from '@/services/watcher';
@@ -52,7 +54,7 @@ watch(isMobile, (val) => {
   if (!val) isMobileMenuOpen.value = false;
 });
 
-// Close mobile menu on any route change (safety net for non-sidebar navigation)
+// Close mobile menu on route changes (safety net for non-sidebar navigation)
 watch(
   () => route.path,
   () => {
@@ -210,8 +212,18 @@ const staticSearchResults = computed<SearchResultItem[]>(() => {
 
 // User menu
 const showUserMenu = ref(false);
-function toggleUserMenu() {
+const userMenuStyle = ref<Record<string, string>>({});
+function toggleUserMenu(event: MouseEvent) {
   showUserMenu.value = !showUserMenu.value;
+  if (showUserMenu.value) {
+    const button = event.currentTarget as HTMLElement;
+    const rect = button.getBoundingClientRect();
+    userMenuStyle.value = {
+      position: 'fixed',
+      top: `${rect.bottom + 4}px`,
+      right: `${window.innerWidth - rect.right}px`,
+    };
+  }
 }
 function handleUserMenuClickOutside(e: PointerEvent) {
   const target = e.target as HTMLElement;
@@ -254,6 +266,33 @@ const hideLegacyHashBannerPermanently = useStorageRef<boolean>(
   false,
   (value): value is boolean => typeof value === 'boolean',
 );
+
+interface LegacyInputSourceSummary {
+  total: number;
+  keys: string[];
+}
+
+interface LegacyInputSummary {
+  total: number;
+  env: LegacyInputSourceSummary;
+  label: LegacyInputSourceSummary;
+  api?: LegacyInputSourceSummary;
+}
+
+const LEGACY_KEY_PREVIEW_LIMIT = 6;
+const stackedBannerInlineStyle = {
+  position: 'static',
+  top: 'auto',
+  left: 'auto',
+  translate: 'none',
+  width: '100%',
+  maxWidth: 'none',
+} as const;
+const legacyInputSummary = ref<LegacyInputSummary | null>(null);
+const legacyEnvDeprecationBanner = useDeprecationBanner('dd-banner-legacy-env-v1');
+const legacyLabelDeprecationBanner = useDeprecationBanner('dd-banner-legacy-labels-v1');
+const legacyApiPathDeprecationBanner = useDeprecationBanner('dd-banner-legacy-api-paths-v1');
+
 type SearchScope = 'all' | 'pages' | 'containers' | 'runtime' | 'config';
 type SearchPrefix = '/' | '@' | '#';
 interface SearchScopeOption {
@@ -561,6 +600,74 @@ function isHttpOidcDiscovery(authentication: unknown): boolean {
   }
 }
 
+function normalizeLegacyInputSourceSummary(rawValue: unknown): LegacyInputSourceSummary {
+  const parsedTotal = Number((rawValue as { total?: unknown })?.total);
+  const parsedKeys = Array.isArray((rawValue as { keys?: unknown })?.keys)
+    ? (rawValue as { keys: unknown[] }).keys.filter(
+        (value): value is string => typeof value === 'string',
+      )
+    : [];
+  const uniqueKeys = Array.from(new Set(parsedKeys)).sort((left, right) =>
+    left.localeCompare(right),
+  );
+  const total =
+    Number.isFinite(parsedTotal) && parsedTotal >= 0
+      ? Math.max(Math.floor(parsedTotal), uniqueKeys.length)
+      : uniqueKeys.length;
+  return { total, keys: uniqueKeys };
+}
+
+function normalizeLegacyInputSummary(rawValue: unknown): LegacyInputSummary | null {
+  if (!rawValue || typeof rawValue !== 'object') {
+    return null;
+  }
+
+  const env = normalizeLegacyInputSourceSummary((rawValue as { env?: unknown }).env);
+  const label = normalizeLegacyInputSourceSummary((rawValue as { label?: unknown }).label);
+  const apiSource =
+    (rawValue as { api?: unknown }).api ??
+    (rawValue as { path?: unknown }).path ??
+    (rawValue as { paths?: unknown }).paths;
+  const api = normalizeLegacyInputSourceSummary(apiSource);
+  const parsedTotal = Number((rawValue as { total?: unknown }).total);
+  const totalFromSources = env.total + label.total + api.total;
+  const total =
+    Number.isFinite(parsedTotal) && parsedTotal >= 0
+      ? Math.max(Math.floor(parsedTotal), totalFromSources)
+      : totalFromSources;
+
+  if (total <= 0) {
+    return null;
+  }
+
+  const summary: LegacyInputSummary = { total, env, label };
+  if (api.total > 0 || api.keys.length > 0) {
+    summary.api = api;
+  }
+  return summary;
+}
+
+function summarizeLegacyKeys(keys: string[]): string {
+  if (keys.length === 0) {
+    return '';
+  }
+  const previewKeys = keys.slice(0, LEGACY_KEY_PREVIEW_LIMIT);
+  const hiddenCount = keys.length - previewKeys.length;
+  return hiddenCount > 0
+    ? `${previewKeys.join(', ')} (+${hiddenCount} more)`
+    : previewKeys.join(', ');
+}
+
+const legacyEnvKeysPreview = computed(() =>
+  summarizeLegacyKeys(legacyInputSummary.value?.env.keys ?? []),
+);
+const legacyLabelKeysPreview = computed(() =>
+  summarizeLegacyKeys(legacyInputSummary.value?.label.keys ?? []),
+);
+const legacyApiPathKeysPreview = computed(() =>
+  summarizeLegacyKeys(legacyInputSummary.value?.api?.keys ?? []),
+);
+
 const showOidcHttpCompatibilityBanner = computed(
   () =>
     oidcHttpDiscoveryDetected.value &&
@@ -598,12 +705,44 @@ const showLegacyHashDeprecationBanner = computed(
     !hideLegacyHashBannerPermanently.value,
 );
 
+const showLegacyEnvDeprecationBanner = computed(() => legacyEnvDeprecationBanner.visible.value);
+const showLegacyLabelDeprecationBanner = computed(() => legacyLabelDeprecationBanner.visible.value);
+const showLegacyApiPathDeprecationBanner = computed(
+  () => legacyApiPathDeprecationBanner.visible.value,
+);
+const legacyEnvBannerTitle = computed(
+  () => `${legacyInputSummary.value?.env.total ?? 0} legacy environment variables detected`,
+);
+const legacyLabelBannerTitle = computed(
+  () => `${legacyInputSummary.value?.label.total ?? 0} legacy container labels detected`,
+);
+const legacyApiPathBannerTitle = computed(
+  () => `${legacyInputSummary.value?.api?.total ?? 0} legacy API paths detected`,
+);
+const hasVisibleAnnouncementBanners = computed(
+  () =>
+    showOidcHttpCompatibilityBanner.value ||
+    showLegacyHashDeprecationBanner.value ||
+    showLegacyEnvDeprecationBanner.value ||
+    showLegacyLabelDeprecationBanner.value ||
+    showLegacyApiPathDeprecationBanner.value,
+);
+
 function dismissLegacyHashBannerForSession() {
   hideLegacyHashBannerForSession.value = true;
 }
 
 function dismissLegacyHashBannerPermanently() {
   hideLegacyHashBannerPermanently.value = true;
+}
+
+async function refreshLegacyInputSummary() {
+  const serverData = await getServer().catch(() => null);
+  const summary = normalizeLegacyInputSummary(serverData?.compatibility?.legacyInputs);
+  legacyInputSummary.value = summary;
+  legacyEnvDeprecationBanner.detected.value = (summary?.env.total ?? 0) > 0;
+  legacyLabelDeprecationBanner.detected.value = (summary?.label.total ?? 0) > 0;
+  legacyApiPathDeprecationBanner.detected.value = (summary?.api?.total ?? 0) > 0;
 }
 
 async function refreshSearchResources() {
@@ -1072,9 +1211,10 @@ onMounted(async () => {
   });
   // Fetch sidebar badge data and user info
   try {
-    const [, , user, appInfos] = await Promise.all([
+    const [, , , user, appInfos] = await Promise.all([
       refreshSidebarData(),
       refreshSearchResources(),
+      refreshLegacyInputSummary(),
       getUser().catch(() => null),
       getAppInfos().catch(() => null),
     ]);
@@ -1094,7 +1234,7 @@ onUnmounted(() => {
 
 <template>
   <div :class="[isDark ? 'dark' : 'light']"
-       class="h-dvh flex overflow-hidden font-mono"
+       class="h-dvh flex overflow-clip font-mono"
        :style="{ background: 'var(--dd-bg)' }">
 
     <!-- Mobile overlay -->
@@ -1111,10 +1251,10 @@ onUnmounted(() => {
         isCollapsed ? 'sidebar-collapsed' : '',
       ]"
       :style="{
-        width: isCollapsed ? '56px' : '240px',
-        minWidth: isCollapsed ? '56px' : '240px',
+        width: isCollapsed ? 'var(--dd-layout-sidebar-collapsed-width)' : 'var(--dd-layout-sidebar-expanded-width)',
+        minWidth: isCollapsed ? 'var(--dd-layout-sidebar-collapsed-width)' : 'var(--dd-layout-sidebar-expanded-width)',
         backgroundColor: 'var(--dd-bg-sidebar)',
-        overflowX: 'hidden',
+        overflowX: 'clip',
       }">
 
       <!-- Logo -->
@@ -1125,21 +1265,21 @@ onUnmounted(() => {
                class="h-5 w-auto shrink-0 transition-transform duration-300"
                :style="[isCollapsed ? { transform: 'scaleX(-1)' } : {}, isDark ? { filter: 'invert(1)' } : {}]" />
           <span class="sidebar-label font-bold text-sm tracking-widest dd-text"
-                style="letter-spacing:0.15em;">DRYDOCK</span>
+                style="letter-spacing: var(--dd-letter-spacing-brand);">DRYDOCK</span>
         </div>
-        <button v-if="isMobile"
+        <AppButton size="none" variant="plain" weight="none" v-if="isMobile"
                 aria-label="Close menu"
                 class="p-1 dd-text-muted hover:dd-text transition-colors"
                 @click="isMobileMenuOpen = false">
           <AppIcon name="close" :size="14" />
-        </button>
+        </AppButton>
       </div>
 
       <!-- Nav groups -->
       <nav class="flex-1 overflow-y-auto overflow-x-hidden py-3 px-2 space-y-4">
         <div v-for="group in navGroups" :key="group.label">
           <div v-if="group.label && !isCollapsed"
-               class="px-2 mb-1 text-[0.625rem] font-semibold uppercase tracking-wider dd-text-muted">
+               class="px-2 mb-1 text-2xs font-semibold uppercase tracking-wider dd-text-muted">
             {{ group.label }}
           </div>
           <div v-else-if="group.label" class="flex justify-center py-1 w-9 mx-auto">
@@ -1150,17 +1290,16 @@ onUnmounted(() => {
                class="nav-item-wrapper relative mt-0.5"
                @click="navigateTo(item.route)">
             <div
-              class="nav-item flex items-center gap-3 dd-rounded cursor-pointer relative"
+              class="nav-item flex items-center gap-3 dd-rounded cursor-pointer relative py-[var(--dd-space-6)] px-[var(--dd-space-12)]"
               :class="[
                 route.path === item.route
                   ? 'bg-drydock-secondary/10 dark:bg-drydock-secondary/15 text-drydock-secondary'
                   : 'dd-text-secondary hover:dd-bg-elevated hover:dd-text',
-              ]"
-              style="padding: 6px 12px;">
+              ]">
               <AppIcon :name="item.icon" :size="16" class="shrink-0" style="width:20px; text-align:center;" />
-              <span class="sidebar-label text-[0.8125rem] font-medium">{{ item.label }}</span>
+              <span class="sidebar-label text-xs-plus font-medium">{{ item.label }}</span>
               <span v-if="item.badge && !isCollapsed"
-                    class="sidebar-label ml-auto badge text-[0.625rem]"
+                    class="sidebar-label ml-auto badge text-2xs"
                     :style="{
                       backgroundColor: item.badgeColor === 'red'
                         ? 'var(--dd-danger-muted)'
@@ -1174,7 +1313,7 @@ onUnmounted(() => {
                  :style="{
                    backgroundColor: 'var(--dd-bg-card)',
                    color: 'var(--dd-text)',
-                   boxShadow: 'var(--dd-shadow-sm)',
+                   boxShadow: 'var(--dd-shadow-tooltip)',
                  }">
               {{ item.label }}
             </div>
@@ -1184,7 +1323,7 @@ onUnmounted(() => {
 
       <!-- Sidebar search -->
       <div class="shrink-0 pt-3 pb-3" :class="isCollapsed ? 'px-2' : 'px-3'">
-        <button aria-label="Search"
+        <AppButton size="none" variant="plain" weight="none" aria-label="Search"
                 class="w-full flex items-center dd-rounded text-xs transition-colors dd-bg-card dd-text-secondary hover:dd-bg-elevated hover:dd-text"
                 :class="isCollapsed ? 'justify-center py-2.5' : 'gap-2 px-3 py-2'"
                 :style="{ border: 'none' }"
@@ -1192,45 +1331,44 @@ onUnmounted(() => {
           <AppIcon name="search" :size="12" class="shrink-0" />
           <template v-if="!isCollapsed">
             <span class="sidebar-label">Search</span>
-            <kbd class="sidebar-label ml-auto px-1.5 py-0.5 dd-rounded-sm text-[0.625rem] font-medium dd-text-secondary" style="background: var(--dd-border);">
-              <span class="text-[0.5625rem]">&#8984;</span>K
+            <kbd class="sidebar-label ml-auto px-1.5 py-0.5 dd-rounded-sm text-2xs font-medium dd-text-secondary" style="background: var(--dd-border);">
+              <span class="text-3xs">&#8984;</span>K
             </kbd>
           </template>
-        </button>
+        </AppButton>
       </div>
 
       <!-- Sidebar footer -->
       <div class="shrink-0 px-3 py-2.5 flex items-center gap-1"
            :class="isCollapsed ? 'flex-col' : 'flex-row justify-between'">
-        <button aria-label="About Drydock"
+        <AppButton size="none" variant="plain" weight="none" aria-label="About Drydock"
                 class="flex items-center justify-center w-7 h-7 dd-rounded text-xs transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
                 v-tooltip.top="'About Drydock'"
                 @click="showAbout = true">
           <AppIcon name="info" :size="14" />
-        </button>
-        <button v-if="!isMobile"
+        </AppButton>
+        <AppButton size="none" variant="plain" weight="none" v-if="!isMobile"
                 :aria-label="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
                 class="flex items-center justify-center w-7 h-7 dd-rounded text-xs transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
                 v-tooltip.top="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
                 @click="sidebarCollapsed = !sidebarCollapsed">
           <AppIcon :name="sidebarCollapsed ? 'sidebar-expand' : 'sidebar-collapse'" :size="14" />
-        </button>
+        </AppButton>
       </div>
     </aside>
 
     <!-- MAIN AREA -->
-    <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
+    <div class="flex-1 flex flex-col min-w-0 overflow-hidden" :style="{ backgroundColor: 'var(--dd-bg-sidebar)' }">
 
       <!-- TOP BAR -->
       <header class="h-12 grid items-center px-4 shrink-0"
               style="grid-template-columns: 1fr auto 1fr;"
               :style="{
-                backgroundColor: 'var(--dd-bg)',
-                borderBottom: '1px solid var(--dd-border)',
+                backgroundColor: 'var(--dd-bg-sidebar)',
               }">
         <!-- Left: hamburger + breadcrumb -->
         <div class="flex items-center gap-3">
-          <button v-if="isMobile"
+          <AppButton size="none" variant="plain" weight="none" v-if="isMobile"
                   aria-label="Toggle menu"
                   :aria-expanded="String(isMobileMenuOpen)"
                   class="flex flex-col items-center justify-center w-8 h-8 gap-1 rounded-md transition-colors hover:dd-bg-elevated"
@@ -1238,14 +1376,15 @@ onUnmounted(() => {
             <span class="hamburger-line block w-4 h-[2px] rounded-full" style="background: var(--dd-text-muted)" />
             <span class="hamburger-line block w-4 h-[2px] rounded-full" style="background: var(--dd-text-muted)" />
             <span class="hamburger-line block w-4 h-[2px] rounded-full" style="background: var(--dd-text-muted)" />
-          </button>
+          </AppButton>
 
-          <nav class="flex items-center gap-1.5 text-[0.8125rem]">
+          <nav class="flex items-center gap-1.5 text-xs-plus">
             <AppIcon :name="currentPageIcon" :size="16" class="leading-none dd-text-muted" />
             <AppIcon name="chevron-right" :size="13" class="leading-none dd-text-muted" />
             <span class="font-medium leading-none dd-text">
               {{ currentPageLabel }}
             </span>
+            <div id="breadcrumb-actions" class="flex items-center" />
           </nav>
         </div>
 
@@ -1258,7 +1397,7 @@ onUnmounted(() => {
           <NotificationBell />
 
           <div class="relative user-menu-wrapper">
-            <button aria-label="User menu"
+            <AppButton size="none" variant="plain" weight="none" aria-label="User menu"
                     :aria-expanded="String(showUserMenu)"
                     class="flex items-center gap-2 dd-rounded px-1.5 py-1 transition-colors hover:dd-bg-elevated"
                     @click="toggleUserMenu">
@@ -1267,63 +1406,119 @@ onUnmounted(() => {
                 {{ userInitials }}
               </div>
               <AppIcon name="chevron-down" :size="12" class="dd-text-muted" />
-            </button>
+            </AppButton>
             <Transition name="menu-fade">
               <div v-if="showUserMenu"
-                   class="absolute right-0 top-full mt-1 min-w-[160px] py-1 dd-rounded-lg shadow-lg z-50"
-                   :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)', boxShadow: 'var(--dd-shadow-lg)' }">
-                <div class="px-3 py-1.5 text-[0.625rem] font-semibold uppercase tracking-wider dd-text-muted"
+                   class="min-w-[160px] py-1 dd-rounded-lg shadow-lg"
+                   :style="{ ...userMenuStyle, zIndex: 'var(--z-popover)', backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)', boxShadow: 'var(--dd-shadow-tooltip)' }">
+                <div class="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wider dd-text-muted"
                      :style="{ borderBottom: '1px solid var(--dd-border)' }">
                   {{ currentUser?.username || 'User' }}
                 </div>
-                <button class="w-full text-left px-3 py-1.5 text-[0.6875rem] font-medium transition-colors flex items-center gap-2 dd-text hover:dd-bg-elevated"
-                        @click="showUserMenu = false; router.push({ path: ROUTES.CONFIG, query: { tab: 'profile' } })">
+                <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text" @click="showUserMenu = false; router.push({ path: ROUTES.CONFIG, query: { tab: 'profile' } })">
                   <AppIcon name="user" :size="11" class="dd-text-muted" />
                   Profile
-                </button>
+                </AppButton>
                 <div class="my-0.5" :style="{ borderTop: '1px solid var(--dd-border)' }" />
-                <button class="w-full text-left px-3 py-1.5 text-[0.6875rem] font-medium transition-colors flex items-center gap-2 hover:dd-bg-elevated"
-                        style="color: var(--dd-danger);"
+                <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2" style="color: var(--dd-danger);"
                         @click="handleSignOut">
                   <AppIcon name="sign-out" :size="11" />
                   Sign out
-                </button>
+                </AppButton>
               </div>
             </Transition>
           </div>
         </div>
       </header>
 
-      <AnnouncementBanner
-        v-if="showOidcHttpCompatibilityBanner"
-        data-testid="oidc-http-compat-banner"
-        title="HTTP OIDC discovery detected"
-        permanent-dismiss-label="Don't show again"
-        @dismiss="dismissOidcHttpBannerForSession"
-        @dismiss-permanent="dismissOidcHttpBannerPermanently">
-        One or more OIDC providers use an insecure
-        <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">http://</code>
-        discovery URL. HTTP discovery is deprecated and will be removed in v1.6.0.
-        <a href="https://getdrydock.com/docs/configuration/authentications/oidc"
-           target="_blank"
-           rel="noopener noreferrer"
-           class="underline font-medium"
-           :style="{ color: 'var(--dd-warning)' }">Migrate your IdP to HTTPS.</a>
-      </AnnouncementBanner>
+      <div
+        v-if="hasVisibleAnnouncementBanners"
+        class="fixed top-3 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-2rem)] max-w-4xl flex flex-col gap-2"
+      >
+        <AnnouncementBanner
+          v-if="showOidcHttpCompatibilityBanner"
+          data-testid="oidc-http-compat-banner"
+          title="HTTP OIDC discovery detected"
+          permanent-dismiss-label="Don't show again"
+          :style="stackedBannerInlineStyle"
+          @dismiss="dismissOidcHttpBannerForSession"
+          @dismiss-permanent="dismissOidcHttpBannerPermanently">
+          One or more OIDC providers use an insecure
+          <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">http://</code>
+          discovery URL. HTTP discovery is deprecated and will be removed in v1.6.0.
+          <a href="https://getdrydock.com/docs/configuration/authentications/oidc"
+             target="_blank"
+             rel="noopener noreferrer"
+             class="underline font-medium"
+             :style="{ color: 'var(--dd-warning)' }">Migrate your IdP to HTTPS.</a>
+        </AnnouncementBanner>
 
-      <AnnouncementBanner
-        v-if="showLegacyHashDeprecationBanner"
-        data-testid="sha-hash-deprecation-banner"
-        title="Legacy password hash detected"
-        permanent-dismiss-label="Don't show again"
-        @dismiss="dismissLegacyHashBannerForSession"
-        @dismiss-permanent="dismissLegacyHashBannerPermanently">
-        Your basic authentication uses a legacy password hash format. Legacy v1.3.9 formats are deprecated and will be removed in v1.6.0. Migrate to argon2id hashing.
-      </AnnouncementBanner>
+        <AnnouncementBanner
+          v-if="showLegacyHashDeprecationBanner"
+          data-testid="sha-hash-deprecation-banner"
+          title="Legacy password hash detected"
+          permanent-dismiss-label="Don't show again"
+          :style="stackedBannerInlineStyle"
+          @dismiss="dismissLegacyHashBannerForSession"
+          @dismiss-permanent="dismissLegacyHashBannerPermanently">
+          Your basic authentication uses a legacy password hash format. Legacy v1.3.9 formats are deprecated and will be removed in v1.6.0. Migrate to argon2id hashing.
+        </AnnouncementBanner>
+
+        <AnnouncementBanner
+          v-if="showLegacyEnvDeprecationBanner"
+          data-testid="legacy-env-deprecation-banner"
+          :title="legacyEnvBannerTitle"
+          permanent-dismiss-label="Don't show again"
+          :style="stackedBannerInlineStyle"
+          @dismiss="legacyEnvDeprecationBanner.dismissForSession"
+          @dismiss-permanent="legacyEnvDeprecationBanner.dismissPermanently">
+          Deprecated environment variable aliases are in use (for example
+          <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">WUD_*</code>
+          and
+          <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">DD_TRIGGER_*</code>).
+          <span v-if="legacyEnvKeysPreview" class="block mt-1 truncate">
+            Env keys ({{ legacyInputSummary?.env.total }}): {{ legacyEnvKeysPreview }}
+          </span>
+        </AnnouncementBanner>
+
+        <AnnouncementBanner
+          v-if="showLegacyLabelDeprecationBanner"
+          data-testid="legacy-label-deprecation-banner"
+          :title="legacyLabelBannerTitle"
+          permanent-dismiss-label="Don't show again"
+          :style="stackedBannerInlineStyle"
+          @dismiss="legacyLabelDeprecationBanner.dismissForSession"
+          @dismiss-permanent="legacyLabelDeprecationBanner.dismissPermanently">
+          Deprecated Docker label aliases are in use (for example
+          <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">wud.*</code>
+          instead of
+          <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">dd.*</code>).
+          <span v-if="legacyLabelKeysPreview" class="block mt-1 truncate">
+            Label keys ({{ legacyInputSummary?.label.total }}): {{ legacyLabelKeysPreview }}
+          </span>
+        </AnnouncementBanner>
+
+        <AnnouncementBanner
+          v-if="showLegacyApiPathDeprecationBanner"
+          data-testid="legacy-api-path-deprecation-banner"
+          :title="legacyApiPathBannerTitle"
+          permanent-dismiss-label="Don't show again"
+          :style="stackedBannerInlineStyle"
+          @dismiss="legacyApiPathDeprecationBanner.dismissForSession"
+          @dismiss-permanent="legacyApiPathDeprecationBanner.dismissPermanently">
+          Unversioned API paths are deprecated. Migrate from
+          <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">/api/*</code>
+          to
+          <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">/api/v1/*</code>.
+          <span v-if="legacyApiPathKeysPreview" class="block mt-1 truncate">
+            API paths ({{ legacyInputSummary?.api?.total }}): {{ legacyApiPathKeysPreview }}
+          </span>
+        </AnnouncementBanner>
+      </div>
 
       <!-- MAIN CONTENT -->
-      <main class="flex-1 min-h-0 overflow-hidden flex flex-col pl-4 pr-2 py-4 sm:pl-6 sm:pr-[9px] sm:py-6"
-            :style="{ backgroundColor: 'var(--dd-bg)' }">
+      <main class="flex-1 min-h-0 overflow-clip flex flex-col pl-4 pr-2 py-4 sm:pl-6 sm:pr-[9px] sm:py-6"
+            :style="{ backgroundColor: 'var(--dd-bg)', borderTopLeftRadius: 'var(--dd-radius-lg)' }">
         <router-view />
       </main>
 
@@ -1332,28 +1527,28 @@ onUnmounted(() => {
     <!-- About Modal -->
     <Teleport to="body">
       <div v-if="showAbout"
-           class="fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm"
+           class="fixed inset-0 z-overlay bg-black/50 backdrop-blur-sm"
            @pointerdown.self="showAbout = false">
         <div class="flex items-start justify-center pt-[20vh] min-h-full px-4"
              @pointerdown.self="showAbout = false">
           <div role="dialog"
                aria-modal="true"
                aria-labelledby="about-dialog-title"
-               class="relative w-full max-w-[340px] dd-rounded-lg overflow-hidden shadow-2xl"
+               class="relative w-full max-w-[var(--dd-layout-about-max-width)] dd-rounded-lg overflow-hidden shadow-2xl"
                :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }">
-            <button aria-label="Close"
+            <AppButton size="none" variant="plain" weight="none" aria-label="Close"
                     class="absolute top-3 right-3 z-10 w-6 h-6 flex items-center justify-center dd-rounded transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
                     @click="showAbout = false">
               <AppIcon name="xmark" :size="12" />
-            </button>
+            </AppButton>
             <div class="flex flex-col items-center pt-6 pb-4 px-6">
               <div class="-mx-6 w-[calc(100%+3rem)] h-12 mb-3 relative pointer-events-none">
                 <img :src="whaleLogo" alt="Drydock" class="h-10 w-[65px] absolute top-1 about-swim"
                      :style="isDark ? { filter: 'invert(1)' } : {}" />
               </div>
               <h2 id="about-dialog-title" class="text-base font-bold dd-text">Drydock</h2>
-              <span class="text-[0.6875rem] dd-text-muted mt-0.5">Docker Container Update Manager</span>
-              <span v-if="appVersion" class="badge text-[0.625rem] font-semibold mt-2 dd-bg-elevated dd-text-secondary">v{{ appVersion }}</span>
+              <span class="text-2xs-plus dd-text-muted mt-0.5">Docker Container Update Manager</span>
+              <span v-if="appVersion" class="badge text-2xs font-semibold mt-2 dd-bg-elevated dd-text-secondary">v{{ appVersion }}</span>
             </div>
             <div class="px-6 pb-5 flex flex-col gap-2"
                  :style="{ borderTop: '1px solid var(--dd-border)' }">
@@ -1383,14 +1578,14 @@ onUnmounted(() => {
     <!-- Search Modal -->
     <Teleport to="body">
       <div v-if="showSearch"
-           class="fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm"
+           class="fixed inset-0 z-overlay bg-black/50 backdrop-blur-sm"
            @pointerdown.self="showSearch = false">
         <div class="flex items-start justify-center pt-[15vh] min-h-full px-4"
              @pointerdown.self="showSearch = false">
           <div role="dialog"
                aria-modal="true"
                aria-label="Search"
-               class="relative w-full max-w-[560px] dd-rounded-lg overflow-hidden shadow-2xl"
+               class="relative w-full max-w-[var(--dd-layout-search-max-width)] dd-rounded-lg overflow-hidden shadow-2xl"
                :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }">
             <div class="flex items-center gap-3 px-4 py-3"
                  :style="{ borderBottom: '1px solid var(--dd-border)' }">
@@ -1403,34 +1598,34 @@ onUnmounted(() => {
                      @keydown.escape="showSearch = false"
                      @keydown="handleSearchInputKeydown" />
               <span v-if="scopePrefixLabel"
-                    class="px-1.5 py-0.5 text-[0.625rem] uppercase tracking-wide font-semibold dd-rounded-sm dd-bg-elevated dd-text-secondary">
+                    class="px-1.5 py-0.5 text-2xs uppercase tracking-wide font-semibold dd-rounded-sm dd-bg-elevated dd-text-secondary">
                 {{ scopePrefixLabel }}
               </span>
-              <kbd class="px-1.5 py-0.5 dd-rounded-sm text-[0.625rem] font-medium dd-bg-elevated dd-text-muted">ESC</kbd>
+              <kbd class="px-1.5 py-0.5 dd-rounded-sm text-2xs font-medium dd-bg-elevated dd-text-muted">ESC</kbd>
             </div>
             <div class="px-3 py-2 flex items-center gap-1.5"
                  :style="{ borderBottom: '1px solid var(--dd-border)' }">
-              <button
+              <AppButton size="none" variant="plain" weight="none"
                 v-for="scopeOption in SEARCH_SCOPE_OPTIONS"
                 :key="scopeOption.id"
-                class="inline-flex items-center gap-1 px-2 py-1 text-[0.625rem] uppercase tracking-wide font-semibold border dd-rounded transition-colors"
+                class="inline-flex items-center gap-1 px-2 py-1 text-2xs uppercase tracking-wide font-semibold border dd-rounded transition-colors"
                 :aria-pressed="String(scopeOption.id === effectiveSearchScope)"
                 :style="searchScopeChipStyles(scopeOption.id, scopeOption.id === effectiveSearchScope)"
                 @click="applySearchScope(scopeOption.id)">
                 {{ scopeOption.label }}
-                <span class="text-[0.5625rem] opacity-80">{{ searchScopeCounts[scopeOption.id] }}</span>
-              </button>
-              <span class="ml-auto text-[0.625rem] dd-text-muted">
+                <span class="text-3xs opacity-80">{{ searchScopeCounts[scopeOption.id] }}</span>
+              </AppButton>
+              <span class="ml-auto text-2xs dd-text-muted">
                 {{ searchResults.length }} shown
               </span>
             </div>
             <div class="max-h-[360px] overflow-y-auto py-1">
               <template v-for="(group, groupIndex) in groupedSearchResults" :key="group.id">
-                <div class="px-4 py-1.5 text-[0.625rem] font-bold uppercase tracking-[0.12em] dd-text-muted"
+                <div class="px-4 py-1.5 text-2xs font-bold uppercase tracking-[var(--dd-letter-spacing-section)] dd-text-muted"
                      :style="groupIndex > 0 ? { borderTop: '1px solid var(--dd-border)' } : {}">
                   {{ group.label }}
                 </div>
-                <button
+                <AppButton size="none" variant="plain" weight="none"
                   v-for="result in group.items"
                   :key="result.id"
                   class="w-full px-4 py-2.5 text-left flex items-center gap-3 transition-colors"
@@ -1447,10 +1642,10 @@ onUnmounted(() => {
                   </div>
                   <div class="min-w-0 flex-1">
                     <div class="text-xs font-semibold truncate dd-text">{{ result.title }}</div>
-                    <div class="text-[0.625rem] truncate dd-text-muted">{{ result.subtitle }}</div>
+                    <div class="text-2xs truncate dd-text-muted">{{ result.subtitle }}</div>
                   </div>
                   <AppIcon name="chevron-right" :size="11" class="dd-text-muted shrink-0" />
-                </button>
+                </AppButton>
               </template>
               <div v-if="searchResults.length === 0"
                    class="px-4 py-6 text-center text-xs dd-text-muted">
@@ -1459,7 +1654,7 @@ onUnmounted(() => {
                 <span v-else>Type to search pages, containers, agents, triggers, watchers, and settings.</span>
               </div>
             </div>
-            <div class="px-4 py-2.5 flex items-center justify-between text-[0.625rem] dd-text-muted"
+            <div class="px-4 py-2.5 flex items-center justify-between text-2xs dd-text-muted"
                  :style="{ borderTop: '1px solid var(--dd-border)' }">
               <span>
                 <span v-if="scopePrefixLabel">Prefix scope active; use </span>
@@ -1487,8 +1682,9 @@ onUnmounted(() => {
     <Teleport to="body">
       <Transition name="menu-fade">
         <div v-if="connectionLost"
-             class="fixed inset-0 z-[200] bg-black/70 backdrop-blur-sm flex items-center justify-center">
-          <div class="w-full max-w-[320px] mx-4 dd-rounded-lg overflow-hidden shadow-2xl text-center"
+             class="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center"
+             style="z-index: var(--z-modal, 200)">
+          <div class="w-full max-w-[var(--dd-layout-overlay-max-width)] mx-4 dd-rounded-lg overflow-hidden shadow-2xl text-center"
                :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }">
             <div class="flex flex-col items-center px-6 py-8 gap-3">
               <div class="disconnect-bounce h-10 mb-1">
@@ -1496,12 +1692,12 @@ onUnmounted(() => {
                      :style="[{ transform: 'rotate(180deg) scaleX(-1)' }, isDark ? { filter: 'invert(1)' } : {}]" />
               </div>
               <h2 class="text-sm font-bold dd-text">{{ connectionOverlayTitle }}</h2>
-              <p class="text-[0.6875rem] dd-text-muted leading-relaxed">
+              <p class="text-2xs-plus dd-text-muted leading-relaxed">
                 {{ connectionOverlayMessage }}
               </p>
               <div class="flex items-center gap-2 mt-1">
                 <AppIcon name="spinner" :size="12" class="dd-spin dd-text-muted" />
-                <span class="text-[0.625rem] dd-text-muted">{{ connectionOverlayStatus }}</span>
+                <span class="text-2xs dd-text-muted">{{ connectionOverlayStatus }}</span>
               </div>
             </div>
           </div>
@@ -1520,13 +1716,13 @@ onUnmounted(() => {
   100% { left: 0; transform: scaleX(-1); }
 }
 .about-swim {
-  animation: swim 6s ease-in-out infinite;
+  animation: swim var(--dd-duration-decorative) ease-in-out infinite;
 }
 .disconnect-bounce {
-  animation: disconnect-bounce 2s ease-in-out infinite;
+  animation: disconnect-bounce var(--dd-duration-pulse) ease-in-out infinite;
 }
 @keyframes disconnect-bounce {
   0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-8px); }
+  50% { transform: translateY(var(--dd-motion-bounce-y)); }
 }
 </style>

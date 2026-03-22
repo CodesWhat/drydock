@@ -6,7 +6,7 @@ export const genericArraySchema = {
 export const emptyObjectSchema = { type: 'object', additionalProperties: false };
 type JsonSchema = { $ref: string } | Record<string, unknown>;
 
-export const jsonContent = (schema: JsonSchema) => ({
+const jsonContent = (schema: JsonSchema) => ({
   'application/json': { schema },
 });
 

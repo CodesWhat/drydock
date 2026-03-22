@@ -1,0 +1,256 @@
+name: "Snyk Paid Scans"
+run-name: >-
+  ${{
+    github.event_name == 'schedule' && 'Snyk Paid Scans — Weekly run' ||
+    format('Snyk Paid Scans — Manual by {0}', github.actor)
+  }}
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '15 7 * * 1'  # Weekly on Monday at 07:15 UTC
+
+permissions:
+  contents: read
+
+concurrency:
+  group: snyk-paid-${{ github.workflow }}
+  cancel-in-progress: true
+
+env:
+  SNYK_CLI_VERSION: '1.1303.1'
+  SNYK_QUOTA_CONFIG_PATH: scripts/snyk-quota-config.json
+  SNYK_CONTAINER_IMAGE: drydock:snyk
+
+jobs:
+  prepare:
+    name: Prepare Snyk Context
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: ci-security
+    outputs:
+      has_token: ${{ steps.token.outputs.has_token }}
+      is_default_branch: ${{ steps.token.outputs.is_default_branch }}
+    steps:
+      - name: Check Snyk token availability
+        id: token
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          CURRENT_REF: ${{ github.ref }}
+        run: |
+          if [ -n "${SNYK_TOKEN:-}" ]; then
+            echo "has_token=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_token=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          if [ "$CURRENT_REF" = "refs/heads/$DEFAULT_BRANCH" ]; then
+            echo "is_default_branch=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_default_branch=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  quota-plan:
+    name: Snyk Quota Plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [prepare]
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594  # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Validate monthly quota plan
+        id: quota
+        run: |
+          set -euo pipefail
+          node scripts/snyk-quota-plan.mjs --config "${SNYK_QUOTA_CONFIG_PATH}" > quota.json
+          cat quota.json
+
+      - name: Attach quota summary
+        run: |
+          {
+            echo "### Snyk Quota Plan"
+            cat quota.json
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  open-source:
+    name: Snyk Open Source
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: ci-security
+    needs: [prepare, quota-plan]
+    if: ${{ needs.quota-plan.result == 'success' && needs.prepare.outputs.has_token == 'true' && needs.prepare.outputs.is_default_branch == 'true' }}
+    env:
+      SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594  # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f  # v6.3.0
+        with:
+          node-version: 24
+
+      - name: Install Snyk CLI
+        run: npm install -g "snyk@${SNYK_CLI_VERSION}"
+
+      - name: Run Snyk Open Source scans
+        run: |
+          set -euo pipefail
+          ./scripts/snyk-deps-gate.sh --file=package-lock.json --package-manager=npm
+          ./scripts/snyk-deps-gate.sh --file=app/package-lock.json --package-manager=npm
+          ./scripts/snyk-deps-gate.sh --file=ui/package-lock.json --package-manager=npm
+          ./scripts/snyk-deps-gate.sh --file=e2e/package-lock.json --package-manager=npm
+
+  code:
+    name: Snyk Code
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: ci-security
+    needs: [prepare, quota-plan]
+    if: ${{ needs.quota-plan.result == 'success' && needs.prepare.outputs.has_token == 'true' && needs.prepare.outputs.is_default_branch == 'true' }}
+    env:
+      SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+      SNYK_CODE_ENFORCE: "true"
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594  # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f  # v6.3.0
+        with:
+          node-version: 24
+
+      - name: Install Snyk CLI
+        run: npm install -g "snyk@${SNYK_CLI_VERSION}"
+
+      - name: Run Snyk Code scan
+        run: ./scripts/snyk-code-gate.sh
+
+  container:
+    name: Snyk Container
+    runs-on: ubuntu-latest
+    timeout-minutes: 30  # Includes Docker image build before scan
+    environment: ci-security
+    needs: [prepare, quota-plan]
+    if: ${{ needs.quota-plan.result == 'success' && needs.prepare.outputs.has_token == 'true' && needs.prepare.outputs.is_default_branch == 'true' }}
+    env:
+      SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594  # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f  # v6.3.0
+        with:
+          node-version: 24
+
+      - name: Install Snyk CLI
+        run: npm install -g "snyk@${SNYK_CLI_VERSION}"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd  # v4.0.0
+
+      - name: Build image for container scan (cached)
+        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294  # v7.0.0
+        with:
+          context: .
+          push: false
+          load: true
+          tags: ${{ env.SNYK_CONTAINER_IMAGE }}
+          build-args: DD_VERSION=snyk
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Run Snyk Container scan
+        run: ./scripts/snyk-container-gate.sh "${SNYK_CONTAINER_IMAGE}" --file=Dockerfile
+
+  iac:
+    name: Snyk IaC
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: ci-security
+    needs: [prepare, quota-plan]
+    if: ${{ needs.quota-plan.result == 'success' && needs.prepare.outputs.has_token == 'true' && needs.prepare.outputs.is_default_branch == 'true' }}
+    env:
+      SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594  # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f  # v6.3.0
+        with:
+          node-version: 24
+
+      - name: Install Snyk CLI
+        run: npm install -g "snyk@${SNYK_CLI_VERSION}"
+
+      - name: Run Snyk IaC scan
+        run: ./scripts/snyk-iac-gate.sh .
+
+  skipped:
+    name: Snyk Scans Skipped
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [prepare, quota-plan]
+    if: ${{ always() && (needs.quota-plan.result != 'success' || needs.prepare.outputs.has_token != 'true' || needs.prepare.outputs.is_default_branch != 'true') }}
+    steps:
+      - name: Explain skip reason(s)
+        env:
+          HAS_TOKEN: ${{ needs.prepare.outputs.has_token }}
+          IS_DEFAULT_BRANCH: ${{ needs.prepare.outputs.is_default_branch }}
+          QUOTA_PLAN_RESULT: ${{ needs.quota-plan.result }}
+        run: |
+          {
+            echo "### Snyk scans skipped"
+            if [ "$HAS_TOKEN" != "true" ]; then
+              echo "- Reason: \`SNYK_TOKEN\` secret is not configured."
+            fi
+            if [ "$IS_DEFAULT_BRANCH" != "true" ]; then
+              echo "- Reason: this workflow only runs paid scans on the default branch to protect quotas."
+            fi
+            if [ "$QUOTA_PLAN_RESULT" != "success" ]; then
+              echo "- Reason: quota plan validation failed (\`quota-plan\` job result: \`$QUOTA_PLAN_RESULT\`)."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

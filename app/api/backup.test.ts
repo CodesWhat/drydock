@@ -201,9 +201,9 @@ describe('Backup Router', () => {
       await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(404);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: expect.stringContaining('No backups found') }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        error: expect.stringContaining('No backups found'),
+      });
     });
 
     test('should return 404 when backupId does not exist', async () => {
@@ -252,9 +252,9 @@ describe('Backup Router', () => {
       await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(404);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: expect.stringContaining('No docker trigger found') }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        error: expect.stringContaining('No docker trigger found'),
+      });
     });
 
     test('should rollback successfully', async () => {
@@ -298,12 +298,10 @@ describe('Backup Router', () => {
       expect(mockTrigger.stopAndRemoveContainer).toHaveBeenCalled();
       expect(mockTrigger.recreateContainer).toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          message: 'Container rolled back successfully',
-          backup: latestBackup,
-        }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        message: 'Container rolled back successfully',
+        backup: latestBackup,
+      });
     });
 
     test('should rollback successfully with a dockercompose trigger', async () => {
@@ -347,12 +345,10 @@ describe('Backup Router', () => {
       expect(composeTrigger.stopAndRemoveContainer).toHaveBeenCalled();
       expect(composeTrigger.recreateContainer).toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          message: 'Container rolled back successfully',
-          backup: latestBackup,
-        }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        message: 'Container rolled back successfully',
+        backup: latestBackup,
+      });
     });
 
     test('should rollback successfully when a valid backupId is provided', async () => {
@@ -398,12 +394,10 @@ describe('Backup Router', () => {
       expect(mockTrigger.stopAndRemoveContainer).toHaveBeenCalled();
       expect(mockTrigger.recreateContainer).toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          message: 'Container rolled back successfully',
-          backup: selectedBackup,
-        }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        message: 'Container rolled back successfully',
+        backup: selectedBackup,
+      });
     });
 
     test('should return 500 when current container cannot be found in Docker', async () => {

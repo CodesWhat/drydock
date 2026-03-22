@@ -165,6 +165,28 @@ describe('Agent API index', () => {
       await expect(init()).rejects.toThrow('Error reading secret file');
     });
 
+    test('should handle non-object secret file read errors', async () => {
+      process.env.DD_AGENT_SECRET_FILE = '/nonexistent';
+      const fs = await import('node:fs');
+      fs.default.readFileSync.mockImplementation(() => {
+        throw 'ENOENT';
+      });
+
+      await expect(init()).rejects.toThrow('Error reading secret file: undefined');
+      expect(mockLog.error).toHaveBeenCalledWith('Error reading secret file: ');
+    });
+
+    test('should stringify symbol secret file read messages in thrown error', async () => {
+      process.env.DD_AGENT_SECRET_FILE = '/nonexistent';
+      const fs = await import('node:fs');
+      fs.default.readFileSync.mockImplementation(() => {
+        throw { message: Symbol('boom') };
+      });
+
+      await expect(init()).rejects.toThrow('Error reading secret file: Symbol(boom)');
+      expect(mockLog.error).toHaveBeenCalledWith('Error reading secret file: Symbol(boom)');
+    });
+
     test('should sanitize secret file read errors before logging', async () => {
       process.env.DD_AGENT_SECRET_FILE = '/nonexistent';
       const fs = await import('node:fs');

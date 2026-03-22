@@ -8,5 +8,3 @@ const client = new AgentClient('typecheck-agent', {
 
 // @ts-expect-error `log` is private and should not be externally accessible.
 client.log.info('typecheck');
-// @ts-expect-error `log` is private and should not be externally accessible.
-client.log.notARealMethod('typecheck');

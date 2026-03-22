@@ -7,15 +7,32 @@ import { Callout } from 'fumadocs-ui/components/callout';
 import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 
 Triggers are responsible for performing actions when a new container version is found.
-  
+
 Triggers are enabled using environment variables.
 
 ```bash
-DD_TRIGGER_{{ trigger_type }}_{{trigger_name }}_{{ trigger_configuration_item }}=XXX
+DD_ACTION_{{ trigger_type }}_{{ trigger_name }}_{{ trigger_configuration_item }}=XXX
+DD_NOTIFICATION_{{ trigger_type }}_{{ trigger_name }}_{{ trigger_configuration_item }}=XXX
 ```
 
 <Callout type="warn">Multiple triggers of the same type can be configured (for example multiple Smtp addresses).
 You just need to give them different names.</Callout>
+
+## Environment variable prefixes
+
+Three prefixes are supported for trigger configuration:
+
+| Prefix | Status | Example |
+| --- | --- | --- |
+| `DD_ACTION_*` | **Current** | `DD_ACTION_SLACK_MYSLACK_URL=https://...` |
+| `DD_NOTIFICATION_*` | **Current** | `DD_NOTIFICATION_SMTP_GMAIL_HOST=smtp.gmail.com` |
+| `DD_TRIGGER_*` | **Deprecated** (removal in v1.7.0) | `DD_TRIGGER_SLACK_MYSLACK_URL=https://...` |
+
+All three prefixes are interchangeable -- they configure the same triggers. Use whichever reads best for your use case: `DD_ACTION_*` for update-action triggers (Docker, Docker Compose) and `DD_NOTIFICATION_*` for messaging triggers (Slack, SMTP, Discord, etc.), or use either for any trigger type.
+
+When the same trigger property is set under multiple prefixes, the merge priority is `DD_NOTIFICATION_*` > `DD_ACTION_*` > `DD_TRIGGER_*` (highest wins).
+
+<Callout type="info">A built-in migration CLI can rewrite your config files from `DD_TRIGGER_*` to `DD_ACTION_*` automatically: `drydock config migrate --source trigger`. Use `--dry-run` to preview changes before applying.</Callout>
 
 ## Available triggers
 
@@ -47,13 +64,14 @@ You just need to give them different names.</Callout>
 
 ## Common trigger configuration
 
-All implemented triggers, in addition to their specific configuration, also support the following common configuration variables.
+All implemented triggers, in addition to their specific configuration, also support the following common configuration variables. The table uses the `DD_TRIGGER_*` prefix for brevity, but `DD_ACTION_*` and `DD_NOTIFICATION_*` work identically (see [Environment variable prefixes](#environment-variable-prefixes) above).
 
 | Env var | Required | Description | Supported values | Default value when missing |
 | --------------------------------------------------------- | :--------------: | ----------------------------------------------------------------------------------------------- | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `DD_TRIGGER_{trigger_type}_{trigger_name}_AUTO` | ⚪ | `true` to automatically execute the trigger. `false` to manually execute it (from UI, API...) | `true`, `false` | `true` |
 | `DD_TRIGGER_{trigger_type}_{trigger_name}_BATCHTITLE` | ⚪ | The template to use to render the title of the notification (batch mode) | String template with placeholders `${count}` | `${containers.length} updates available` |
-| `DD_TRIGGER_{trigger_type}_{trigger_name}_MODE` | ⚪ | Trigger for each container update or trigger once with all available updates as a list | `simple`, `batch` | `simple` |
+| `DD_TRIGGER_{trigger_type}_{trigger_name}_MODE` | ⚪ | Trigger for each container update, trigger once with all available updates as a list, or accumulate updates and send on a schedule | `simple`, `batch`, `digest` | `simple` |
+| `DD_TRIGGER_{trigger_type}_{trigger_name}_DIGESTCRON` | ⚪ | Cron schedule for digest mode flush (only used when `MODE=digest`) | Cron expression | `0 8 * * *` |
 | `DD_TRIGGER_{trigger_type}_{trigger_name}_ONCE` | ⚪ | Run trigger once (do not repeat previous results) | `true`, `false` | `true` |
 | `DD_TRIGGER_{trigger_type}_{trigger_name}_ORDER` | ⚪ | Trigger execution order (lower runs first) | Number | `100` |
 | `DD_TRIGGER_{trigger_type}_{trigger_name}_SIMPLEBODY` | ⚪ | The template to use to render the body of the notification | JS string template with vars `container` | `Container ${container.name} running with ${container.updateKind.kind} ${container.updateKind.localValue} can be updated to ${container.updateKind.kind} ${container.updateKind.remoteValue}${container.result && container.result.link ? "\\n" + container.result.link : ""}` |
@@ -83,6 +101,7 @@ Any threshold can be suffixed with `-no-digest` to exclude digest-only updates (
 - Triggers are executed by ascending `ORDER`; when two triggers have the same `ORDER`, they are sorted by trigger id.
 - Triggers sharing the same trigger name (e.g. `docker.update` and `discord.update`) can share `THRESHOLD`; if exactly one threshold value is defined among them, that value is used for the others unless they override it explicitly.
 - Setting `ONCE=false` with `MODE=batch` gives a report with all pending updates on every run.
+- `MODE=digest` accumulates update events in an in-memory buffer and flushes them as a single batch notification on the `DIGESTCRON` schedule. If the same container has multiple updates within the window, only the latest is included. Containers that are updated before the digest fires are automatically evicted from the buffer. Useful for daily email digests: `DD_TRIGGER_SMTP_GMAIL_MODE=digest` + `DD_TRIGGER_SMTP_GMAIL_DIGESTCRON=0 8 * * *`.
 
 ## Notification Rules
 
@@ -102,7 +121,7 @@ Notification rules control which events fire which triggers. Each rule correspon
 - **`update-applied`**, **`update-failed`**, **`security-alert`** -- these require explicit trigger assignments. They are enabled by default but will not fire any trigger until you add trigger IDs to their rules.
 - **`agent-disconnect`** -- disabled by default. Enable it and assign triggers to receive disconnect alerts. This event always fires regardless of the threshold setting.
 
-Rules are managed via `GET /api/notifications` and `PATCH /api/notifications/:id` (update `enabled` and/or `triggers` fields), or through the **Notifications** view in the UI.
+Rules are managed via `GET /api/v1/notifications` and `PATCH /api/v1/notifications/:id` (update `enabled` and/or `triggers` fields), or through the **Notifications** view in the UI.
 
 <Callout type="warn">Docker and Docker Compose triggers cannot be assigned to notification rules. These are update-action triggers (they perform container updates), not notification triggers. Only messaging/alerting triggers (Slack, SMTP, Discord, ntfy, etc.) can be assigned to rules.</Callout>
 

@@ -1,7 +1,9 @@
 import { type Ref, ref } from 'vue';
+import { useToast } from '../../composables/useToast';
 import { getBackups, rollback } from '../../services/backup';
 import { getContainerUpdateOperations as fetchContainerUpdateOperations } from '../../services/container';
 import { errorMessage } from '../../utils/error';
+import { loadContainerDetailListState } from './loadContainerDetailListState';
 
 interface UseContainerBackupsInput {
   selectedContainerId: Readonly<Ref<string | undefined>>;
@@ -68,31 +70,6 @@ export function getOperationStatusStyle(status: unknown) {
   };
 }
 
-async function loadContainerDetailListState(args: {
-  containerId: string | undefined;
-  loading: Ref<boolean>;
-  error: Ref<string | null>;
-  value: Ref<Record<string, unknown>[]>;
-  loader: (containerId: string) => Promise<unknown[]>;
-  failureMessage: string;
-}) {
-  if (!args.containerId) {
-    args.value.value = [];
-    return;
-  }
-
-  args.loading.value = true;
-  args.error.value = null;
-  try {
-    args.value.value = (await args.loader(args.containerId)) as Record<string, unknown>[];
-  } catch (e: unknown) {
-    args.value.value = [];
-    args.error.value = errorMessage(e, args.failureMessage);
-  } finally {
-    args.loading.value = false;
-  }
-}
-
 async function loadDetailUpdateOperationsState(args: {
   containerId: string | undefined;
   detailUpdateOperations: Ref<Record<string, unknown>[]>;
@@ -146,9 +123,12 @@ async function rollbackToBackupState(args: {
   args.rollbackError.value = null;
   try {
     await rollback(args.containerId, args.backupId);
-    args.rollbackMessage.value = args.backupId
+    const successMessage = args.backupId
       ? 'Rollback completed from selected backup'
       : 'Rollback completed from latest backup';
+    args.rollbackMessage.value = successMessage;
+    const toast = useToast();
+    toast.success(successMessage);
     args.skippedUpdates.value.delete(args.selectedContainerName || '');
     await args.loadContainers();
     await Promise.all([args.loadDetailBackups(), args.loadDetailUpdateOperations()]);

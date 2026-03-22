@@ -1,4 +1,5 @@
 import BaseRegistry from '../../BaseRegistry.js';
+import type { RegistryTagsList } from '../../Registry.js';
 
 /**
  * Quay.io Registry integration.
@@ -59,7 +60,7 @@ class Quay extends BaseRegistry {
   }
 
   /**
-   * Return Base64 credentials if any.
+   * Return Base64 credentials when configured.
    * @returns {string|undefined|*}
    */
   getAuthCredentials() {
@@ -99,7 +100,7 @@ class Quay extends BaseRegistry {
         nextOrLast = `&last=${lastRegex[1]}`;
       }
     }
-    return this.callRegistry({
+    return this.callRegistry<RegistryTagsList>({
       image,
       url: `${image.registry.url}/${image.name}/tags/list?n=${itemsPerPage}${nextOrLast}`,
       resolveWithFullResponse: true,

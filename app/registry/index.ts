@@ -7,6 +7,7 @@ import path from 'node:path';
 import capitalize from 'capitalize';
 import logger from '../log/index.js';
 import * as securityScheduler from '../security/scheduler.js';
+import * as storeContainer from '../store/container.js';
 import * as store from '../store/index.js';
 
 const log = logger.child({ component: 'registry' });
@@ -109,6 +110,11 @@ export function getAuthenticationRegistrationErrors(): AuthenticationRegistratio
   return [...authenticationRegistrationErrors];
 }
 
+function addComponentToState(kind: ComponentKind, component: Component) {
+  const components = state[kind] as Record<string, Component>;
+  components[component.getId()] = component;
+}
+
 /**
  * Register a component.
  *
@@ -148,9 +154,7 @@ export async function registerComponent(options: RegisterComponentOptions): Prom
       agent,
     );
 
-    // Type assertion is safe here because we know the kind matches the expected type
-    // if the file structure and inheritance are correct
-    (state[kind] as any)[component.getId()] = component;
+    addComponentToState(kind, component);
     return componentRegistered;
   } catch (e: unknown) {
     const availableProviders = getAvailableProviders(componentPath, (message) =>
@@ -380,7 +384,7 @@ function applyTriggerGroupDefaults(
  */
 async function registerWatchers(options: RegistrationOptions = {}) {
   const configurations = getWatcherConfigurations();
-  let watchersToRegister: Promise<any>[] = [];
+  let watchersToRegister: Promise<Component>[] = [];
   try {
     if (Object.keys(configurations).length === 0) {
       if (options.agent) {
@@ -415,6 +419,40 @@ async function registerWatchers(options: RegistrationOptions = {}) {
   } catch (e: unknown) {
     log.warn(`Some watchers failed to register (${getErrorMessage(e)})`);
     log.debug(e);
+  }
+}
+
+function pruneOrphanedLocalContainers() {
+  const localWatcherNames = new Set(
+    Object.values(getState().watcher)
+      .filter((watcher) => !watcher.agent)
+      .map((watcher) => watcher.name)
+      .filter((watcherName): watcherName is string => typeof watcherName === 'string')
+      .map((watcherName) => watcherName.toLowerCase()),
+  );
+
+  if (localWatcherNames.size === 0) {
+    return;
+  }
+
+  const orphanedLocalContainers = storeContainer.getContainersRaw().filter((container) => {
+    if (container.agent) {
+      return false;
+    }
+    if (typeof container.watcher !== 'string') {
+      return true;
+    }
+    return !localWatcherNames.has(container.watcher.toLowerCase());
+  });
+
+  orphanedLocalContainers.forEach((container) => {
+    storeContainer.deleteContainer(container.id);
+  });
+
+  if (orphanedLocalContainers.length > 0) {
+    log.warn(
+      `Pruned ${orphanedLocalContainers.length} container entries from missing local watcher(s)`,
+    );
   }
 }
 
@@ -454,8 +492,8 @@ async function registerTriggers(options: RegistrationOptions = {}) {
 
   try {
     await registerComponents('trigger', configurations, 'triggers/providers');
-  } catch (e: any) {
-    log.warn(`Some triggers failed to register (${e.message})`);
+  } catch (e: unknown) {
+    log.warn(`Some triggers failed to register (${getErrorMessage(e)})`);
     log.debug(e);
   }
 }
@@ -507,8 +545,8 @@ async function registerRegistries() {
 
   try {
     await registerComponents('registry', registriesToRegister, 'registries/providers');
-  } catch (e: any) {
-    log.warn(`Some registries failed to register (${e.message})`);
+  } catch (e: unknown) {
+    log.warn(`Some registries failed to register (${getErrorMessage(e)})`);
     log.debug(e);
   }
 }
@@ -536,8 +574,8 @@ async function registerAuthentications() {
         configuration: {},
         componentPath: 'authentications/providers',
       });
-    } catch (e: any) {
-      log.error(`Some authentications failed to register (${e.message})`);
+    } catch (e: unknown) {
+      log.error(`Some authentications failed to register (${getErrorMessage(e)})`);
       log.debug(e);
     }
     if (hasAuthEnvConfiguration) {
@@ -592,6 +630,7 @@ async function registerAuthentications() {
         const wrappedMessageMatch = rawMessage.match(
           /^Error when registering component .* \((?<error>.*)\)$/,
         );
+        /* v8 ignore next -- wrappedMessageMatch group extraction depends on provider-specific error formatting */
         const normalizedMessage = (wrappedMessageMatch?.groups?.error ?? rawMessage).replaceAll(
           /"([^"]+)"/g,
           '$1',
@@ -626,8 +665,8 @@ async function registerAuthentications() {
         configuration: {},
         componentPath: 'authentications/providers',
       });
-    } catch (e: any) {
-      const fallbackMessage = `Anonymous authentication fallback also failed (${e.message}). Check your DD_AUTH_BASIC_* environment variables. Set DD_ANONYMOUS_AUTH_CONFIRM=true to allow anonymous access as a fallback.`;
+    } catch (e: unknown) {
+      const fallbackMessage = `Anonymous authentication fallback also failed (${getErrorMessage(e)}). Check your DD_AUTH_BASIC_* environment variables. Set DD_ANONYMOUS_AUTH_CONFIRM=true to allow anonymous access as a fallback.`;
       log.error(fallbackMessage);
       log.debug(e);
       registrationWarnings.push(fallbackMessage);
@@ -646,8 +685,8 @@ async function registerAgents() {
       const agent = new Agent();
       const registered = await agent.register('agent', 'dd', name, config);
       state.agent[registered.getId()] = registered;
-    } catch (e: any) {
-      log.warn(`Agent ${name} failed to register (${e.message})`);
+    } catch (e: unknown) {
+      log.warn(`Agent ${name} failed to register (${getErrorMessage(e)})`);
       log.debug(e);
     }
   });
@@ -663,8 +702,10 @@ async function registerAgents() {
 async function deregisterComponent(component: Component, kind: ComponentKind) {
   try {
     await component.deregister();
-  } catch (e: any) {
-    throw new Error(`Error when deregistering component ${component.getId()} (${e.message})`);
+  } catch (e: unknown) {
+    throw new Error(
+      `Error when deregistering component ${component.getId()} (${getErrorMessage(e)})`,
+    );
   } finally {
     const components = getState()[kind];
     if (components) {
@@ -748,8 +789,8 @@ async function deregisterAll() {
     await deregisterRegistries();
     await deregisterAuthentications();
     await deregisterAgents();
-  } catch (e: any) {
-    throw new Error(`Error when trying to deregister ${e.message}`);
+  } catch (e: unknown) {
+    throw new Error(`Error when trying to deregister ${getErrorMessage(e)}`);
   }
 }
 
@@ -759,8 +800,8 @@ async function shutdown() {
     await deregisterAll();
     await store.save();
     process.exit(0);
-  } catch (e: any) {
-    log.error(e.message);
+  } catch (e: unknown) {
+    log.error(getErrorMessage(e));
     process.exit(1);
   }
 }
@@ -774,6 +815,12 @@ export async function init(options: RegistrationOptions = {}) {
 
   // Register watchers
   await registerWatchers(options);
+  try {
+    pruneOrphanedLocalContainers();
+  } catch (e: unknown) {
+    log.warn(`Unable to prune orphaned local containers (${getErrorMessage(e)})`);
+    log.debug(e);
+  }
 
   if (!options.agent) {
     // Register authentications

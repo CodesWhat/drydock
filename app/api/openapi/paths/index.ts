@@ -229,6 +229,40 @@ export const openApiPaths = {
       },
     },
   },
+  '/api/debug/dump': {
+    get: {
+      tags: ['System'],
+      summary: 'Download diagnostic debug dump',
+      operationId: 'downloadDebugDump',
+      parameters: [
+        {
+          name: 'minutes',
+          in: 'query',
+          required: false,
+          description: 'How many recent minutes of event history to include',
+          schema: { type: 'integer', minimum: 1, maximum: 1440, default: 30 },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'Redacted diagnostic dump JSON attachment',
+          headers: {
+            'Content-Disposition': {
+              description: 'Attachment filename for the exported dump',
+              schema: { type: 'string' },
+            },
+          },
+          content: {
+            'application/json': {
+              schema: { ...genericObjectSchema },
+            },
+          },
+        },
+        401: errorResponse('Authentication required'),
+        500: errorResponse('Unable to generate debug dump'),
+      },
+    },
+  },
   '/api/server': {
     get: {
       tags: ['System'],

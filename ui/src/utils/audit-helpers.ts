@@ -83,3 +83,24 @@ export function timeAgo(isoString: string): string {
   ];
   return `${months[d.getMonth()]} ${d.getDate()}`;
 }
+
+/** Format an ISO timestamp as a compact relative age string (e.g. "3d", "2w", "5mo", "1y"). */
+export function imageAge(isoString: string | undefined): string {
+  if (!isoString) return '\u2014';
+  const then = new Date(isoString).getTime();
+  if (Number.isNaN(then)) return '\u2014';
+  const diffMs = Date.now() - then;
+  if (diffMs < 0) return 'now';
+  const diffMin = Math.floor(diffMs / 60_000);
+  if (diffMin < 60) return `${Math.max(1, diffMin)}m`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h`;
+  const diffDay = Math.floor(diffHr / 24);
+  if (diffDay < 14) return `${diffDay}d`;
+  const diffWeek = Math.floor(diffDay / 7);
+  if (diffDay < 60) return `${diffWeek}w`;
+  const diffMonth = Math.floor(diffDay / 30.44);
+  if (diffMonth < 12) return `${diffMonth}mo`;
+  const diffYear = Math.floor(diffDay / 365.25);
+  return `${diffYear}y`;
+}

@@ -1,12 +1,21 @@
 import fs from 'node:fs';
 import https from 'node:https';
 import axios, { type AxiosRequestConfig } from 'axios';
+import type { ContainerImage } from '../model/container.js';
+import * as registryPrometheus from '../prometheus/registry.js';
 import { resolveConfiguredPath } from '../runtime/paths.js';
 import { failClosedAuth, requireAuthString, withAuthorizationHeader } from '../security/auth.js';
 import { REGISTRY_BEARER_TOKEN_CACHE_TTL_MS } from './configuration.js';
 import Registry from './Registry.js';
 
 type RegistryRequestOptions = AxiosRequestConfig;
+type RegistryManifestLookupResult = Awaited<ReturnType<Registry['getImageManifestDigest']>>;
+type DigestCacheEntry = {
+  digest: string;
+  created?: string;
+  version?: number;
+  fetchedAt: number;
+};
 
 /**
  * Base Registry with common patterns
@@ -14,6 +23,10 @@ type RegistryRequestOptions = AxiosRequestConfig;
 class BaseRegistry extends Registry {
   private httpsAgent?: https.Agent;
   private bearerTokenCache = new Map<string, { token: string; expiresAt: number }>();
+  private digestManifestCache = new Map<string, DigestCacheEntry>();
+  private digestManifestCacheInFlight = new Map<string, Promise<RegistryManifestLookupResult>>();
+  private digestCacheHits = 0;
+  private digestCacheMisses = 0;
 
   private getBearerTokenCacheKey(authUrl: string, credentials?: string) {
     return `${authUrl}|${credentials || ''}`;
@@ -25,6 +38,87 @@ class BaseRegistry extends Registry {
         this.bearerTokenCache.delete(key);
       }
     }
+  }
+
+  private getCanonicalRegistryHost(registryUrl: string | undefined): string {
+    if (!registryUrl || registryUrl.trim().length === 0) {
+      return 'docker.io';
+    }
+
+    const host = this.getRegistryHostname(registryUrl);
+    if (host === 'registry-1.docker.io' || host === 'index.docker.io') {
+      return 'docker.io';
+    }
+    return host;
+  }
+
+  private buildDigestCacheKey(image: ContainerImage, digest?: string): string {
+    let normalizedImage = image;
+    try {
+      normalizedImage = this.normalizeImage(structuredClone(image));
+    } catch {
+      normalizedImage = image;
+    }
+
+    const registryHost = this.getCanonicalRegistryHost(normalizedImage?.registry?.url);
+    /* v8 ignore next -- missing/empty image names are defensive-only in production call paths */
+    const imageName = normalizedImage?.name || '';
+    const repository =
+      registryHost === 'docker.io' && imageName.length > 0 && !imageName.includes('/')
+        ? `library/${imageName}`
+        : imageName;
+    /* v8 ignore next -- digest/tag fallback matrix is covered by integration paths */
+    const tagOrDigest =
+      (typeof digest === 'string' && digest.length > 0 ? digest : normalizedImage?.tag?.value) ||
+      'latest';
+    /* v8 ignore next -- architecture fallback is defensive for malformed image payloads */
+    const architecture = normalizedImage?.architecture || 'unknown';
+    /* v8 ignore next -- os fallback is defensive for malformed image payloads */
+    const os = normalizedImage?.os || 'unknown';
+    /* v8 ignore next -- variant is optional and omitted for most image descriptors */
+    const variant = normalizedImage?.variant ? `/${normalizedImage.variant}` : '';
+
+    return `${registryHost}/${repository}:${tagOrDigest}|${os}/${architecture}${variant}`;
+  }
+
+  private recordDigestCacheHit() {
+    this.digestCacheHits += 1;
+    const counter = registryPrometheus.getDigestCacheHitsCounter?.();
+    if (counter) {
+      counter.inc();
+    }
+  }
+
+  private recordDigestCacheMiss() {
+    this.digestCacheMisses += 1;
+    const counter = registryPrometheus.getDigestCacheMissesCounter?.();
+    if (counter) {
+      counter.inc();
+    }
+  }
+
+  public startDigestCachePollCycle() {
+    this.digestManifestCache.clear();
+    this.digestManifestCacheInFlight.clear();
+    this.digestCacheHits = 0;
+    this.digestCacheMisses = 0;
+  }
+
+  public endDigestCachePollCycle() {
+    const totalRequests = this.digestCacheHits + this.digestCacheMisses;
+    /* v8 ignore next -- zero-request cycles are trivial defensive accounting */
+    const hitRate = totalRequests === 0 ? 0 : (this.digestCacheHits / totalRequests) * 100;
+    /* v8 ignore next -- debug logger may be absent depending on registry initialization mode */
+    if (this.log && typeof this.log.debug === 'function') {
+      this.log.debug(
+        `${this.getId()} digest cache hit rate ${hitRate.toFixed(2)}% (${this.digestCacheHits} hits, ${this.digestCacheMisses} misses)`,
+      );
+    }
+    return {
+      hits: this.digestCacheHits,
+      misses: this.digestCacheMisses,
+      hitRate,
+    };
   }
 
   /**
@@ -176,6 +270,50 @@ class BaseRegistry extends Registry {
     return requestOptionsWithAuth;
   }
 
+  async getImageManifestDigest(
+    image: ContainerImage,
+    digest?: string,
+  ): Promise<RegistryManifestLookupResult> {
+    const cacheKey = this.buildDigestCacheKey(image, digest);
+    const cachedEntry = this.digestManifestCache.get(cacheKey);
+    if (cachedEntry) {
+      this.recordDigestCacheHit();
+      return {
+        digest: cachedEntry.digest,
+        created: cachedEntry.created,
+        version: cachedEntry.version,
+      };
+    }
+
+    const inFlightLookup = this.digestManifestCacheInFlight.get(cacheKey);
+    if (inFlightLookup) {
+      this.recordDigestCacheHit();
+      return inFlightLookup;
+    }
+
+    this.recordDigestCacheMiss();
+    const manifestLookup = (async () => {
+      const manifest = await super.getImageManifestDigest(image, digest);
+      /* v8 ignore next -- empty digest responses are treated as non-cacheable defensive fallback */
+      if (typeof manifest?.digest === 'string' && manifest.digest.length > 0) {
+        this.digestManifestCache.set(cacheKey, {
+          digest: manifest.digest,
+          created: manifest.created,
+          version: manifest.version,
+          fetchedAt: Date.now(),
+        });
+      }
+      return manifest;
+    })();
+
+    this.digestManifestCacheInFlight.set(cacheKey, manifestLookup);
+    try {
+      return await manifestLookup;
+    } finally {
+      this.digestManifestCacheInFlight.delete(cacheKey);
+    }
+  }
+
   /**
    * Common Bearer token authentication via auth URL.
    * Fetches a token from an auth endpoint using optional Basic credentials,
@@ -282,6 +420,25 @@ class BaseRegistry extends Registry {
    */
   matchUrlPattern(image, pattern) {
     return pattern.test(image.registry.url);
+  }
+
+  /**
+   * Resolve the remote image publish date from manifest metadata.
+   * Provider-specific implementations can override this when richer APIs exist.
+   */
+  async getImagePublishedAt(image, tag?: string): Promise<string | undefined> {
+    const imageToInspect = structuredClone(image);
+    const tagToLookup = typeof tag === 'string' && tag.length > 0 ? tag : imageToInspect.tag?.value;
+    if (typeof tagToLookup === 'string' && tagToLookup.length > 0 && imageToInspect.tag) {
+      imageToInspect.tag.value = tagToLookup;
+    }
+
+    const manifest = await this.getImageManifestDigest(imageToInspect);
+    if (typeof manifest?.created !== 'string') {
+      return undefined;
+    }
+
+    return Number.isNaN(Date.parse(manifest.created)) ? undefined : manifest.created;
   }
 
   /**

@@ -1,0 +1,84 @@
+---
+title: "Authentication"
+description: "drydock requires authentication by default on fresh installs."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+Since v1.4.0, drydock **requires authentication on fresh installs**. If no auth strategy is configured and no explicit anonymous opt-in is present, all API calls return `401 Unauthorized`.
+
+You can enable 1 or multiple authentication strategies using `DD_AUTH_*` env vars.
+
+<Callout type="warn">Please pay attention that all API routes & all UI views will be authenticated.</Callout>
+<Callout type="info">For OIDC setups, session-cookie policy is controlled by `DD_SERVER_COOKIE_SAMESITE` in [server configuration](/docs/configuration/server). Default `lax` works for most IdP callback flows.</Callout>
+
+## Login lockout controls
+
+To limit brute-force attempts on `POST /auth/login`, drydock tracks failed logins per account and per client IP and can temporarily lock access when thresholds are exceeded. Per-account controls use `DD_AUTH_ACCOUNT_LOCKOUT_*`; per-IP controls use `DD_AUTH_IP_LOCKOUT_*`.
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --- | :---: | --- | --- | --- |
+| `DD_AUTH_ACCOUNT_LOCKOUT_MAX_ATTEMPTS` | ⚪ | Max failed login attempts per account before temporary lockout | Positive integer (`> 0`) | `5` |
+| `DD_AUTH_IP_LOCKOUT_MAX_ATTEMPTS` | ⚪ | Max failed login attempts per client IP before temporary lockout | Positive integer (`> 0`) | `25` |
+| `DD_AUTH_LOCKOUT_WINDOW_MS` | ⚪ | Rolling window (milliseconds) used to count failed login attempts | Positive integer (`> 0`) | `900000` |
+| `DD_AUTH_LOCKOUT_DURATION_MS` | ⚪ | Lockout duration (milliseconds) once a threshold is reached | Positive integer (`> 0`) | `900000` |
+
+If a lockout value is missing or invalid, drydock falls back to the corresponding default.
+
+Currently, the following strategies are supported:
+
+- [**Basic**](/docs/configuration/authentications/basic)
+- [**Openid Connect**](/docs/configuration/authentications/oidc)
+
+## Anonymous access
+
+On previous versions of drydock (and upstream WUD), the dashboard was accessible without any login. Starting with v1.4.0, anonymous access must be explicitly opted into on fresh installs.
+
+### `DD_ANONYMOUS_AUTH_CONFIRM`
+
+Set `DD_ANONYMOUS_AUTH_CONFIRM=true` to explicitly allow anonymous (unauthenticated) access to the dashboard and API.
+
+`DD_AUTH_ANONYMOUS_CONFIRM=true` is also accepted as an alias. `DD_ANONYMOUS_AUTH_CONFIRM` is the canonical name.
+
+```yaml
+environment:
+  - DD_ANONYMOUS_AUTH_CONFIRM=true
+```
+
+### Behavior matrix
+
+| Scenario | Result |
+| --- | --- |
+| Fresh install, no auth configured, no `DD_ANONYMOUS_AUTH_CONFIRM` | Fails closed — all API calls return `401` |
+| Fresh install, `DD_ANONYMOUS_AUTH_CONFIRM=true` | Anonymous access allowed |
+| Upgrade from v1.3.x, no auth configured | Anonymous access allowed with a warning logged at startup |
+| Upgrade from v1.3.x, `DD_ANONYMOUS_AUTH_CONFIRM=true` | Anonymous access allowed, no warning |
+
+Drydock detects an upgrade by the presence of an existing store file (`/store/dd.json`). If the file exists, the install is treated as an upgrade; if it does not, it is treated as a fresh install.
+
+### Upgrading from v1.3.x
+
+<Callout type="warn">If you are upgrading from v1.3.x and have no authentication configured, drydock will **not** lock you out. Anonymous access continues to work, but a warning is logged at startup urging you to configure authentication or set `DD_ANONYMOUS_AUTH_CONFIRM=true` to acknowledge the risk and silence the warning.</Callout>
+
+To resolve the warning, either:
+
+1. **Configure authentication** — set `DD_AUTH_BASIC_<name>_USER` and `DD_AUTH_BASIC_<name>_HASH` (or use [OIDC](/docs/configuration/authentications/oidc)).
+2. **Explicitly opt in to anonymous access** — set `DD_ANONYMOUS_AUTH_CONFIRM=true`.
+
+## Fail-closed auth enforcement
+
+<Callout type="warn">Since v1.4.0, drydock enforces **fail-closed** authentication across registries, triggers, and the Docker entrypoint. If auth is configured and fails, drydock raises an error instead of silently falling back to anonymous or unauthenticated access.</Callout>
+
+This affects three areas:
+
+- **Registry bearer-token flows** — When a token exchange endpoint returns an error (network failure, invalid credentials, expired token), the registry call fails immediately. In older versions (and upstream WUD), this would silently fall through to anonymous access, which could cause missed updates on private images or confusing inconsistencies between authenticated and unauthenticated results.
+- **HTTP trigger auth** — If an HTTP trigger specifies an unsupported auth type, the trigger errors instead of sending an unauthenticated request.
+- **Docker entrypoint root mode** — Running as root requires both `DD_RUN_AS_ROOT=true` **and** `DD_ALLOW_INSECURE_ROOT=true`. Setting only one flag fails closed at startup. See [Docker Socket Security](/docs/configuration/watchers#docker-socket-security).
+
+If you are upgrading from WUD or an earlier drydock version and see new auth errors, verify that your credentials are valid and that outbound HTTPS to the token endpoint is not blocked. The errors are intentional — they surface problems that were previously hidden.
+
+## Remember me
+
+The login form includes a **Remember me** checkbox. When checked, the session cookie is extended to **30 days** so the browser stays logged in across restarts. When unchecked, the cookie expires when the browser is closed (default session lifetime is 7 days).
+
+Remember-me works with both Basic and OIDC authentication strategies. The preference is stored server-side in the authenticated session via `POST /auth/remember`.

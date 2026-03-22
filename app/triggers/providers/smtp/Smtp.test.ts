@@ -15,7 +15,7 @@ const configurationValid = {
   threshold: 'all',
   mode: 'simple',
   once: true,
-  auto: true,
+  auto: 'all',
   order: 100,
   simpletitle: 'New ${container.updateKind.kind} found for container ${container.name}',
 
@@ -24,6 +24,7 @@ const configurationValid = {
 
   batchtitle: '${containers.length} updates available',
   resolvenotifications: false,
+  digestcron: '0 8 * * *',
 };
 
 test('validateConfiguration should return validated configuration when valid', async () => {
@@ -264,6 +265,53 @@ test('trigger should format mail as expected', async () => {
   expect(response.text).toEqual(
     'Container homeassistant running with tag 1.0.0 can be updated to tag 2.0.0\nhttps://test-2.0.0/changelog',
   );
+});
+
+test('trigger should format agent disconnect mail without container update wording', async () => {
+  smtp.configuration = configurationValid;
+  smtp.transporter = {
+    sendMail: (conf) => conf,
+  };
+  const response = await smtp.trigger({
+    id: 'agent-servicevault',
+    name: 'servicevault',
+    displayName: 'servicevault',
+    displayIcon: 'mdi:server-network-off',
+    status: 'disconnected',
+    watcher: 'agent',
+    image: {
+      id: 'agent-servicevault',
+      registry: {
+        name: 'agent',
+        url: 'agent://servicevault',
+      },
+      name: 'servicevault',
+      tag: {
+        value: 'disconnected',
+        semver: false,
+      },
+      digest: {
+        watch: false,
+      },
+      architecture: 'unknown',
+      os: 'unknown',
+    },
+    error: {
+      message: 'SSE connection lost',
+    },
+    updateAvailable: false,
+    updateKind: {
+      kind: 'unknown',
+    },
+    notificationEvent: {
+      kind: 'agent-disconnect',
+      agentName: 'servicevault',
+      reason: 'SSE connection lost',
+    },
+  } as any);
+
+  expect(response.subject).toBe('Agent servicevault disconnected');
+  expect(response.text).toBe('Agent servicevault disconnected: SSE connection lost');
 });
 
 test('triggerBatch should format mail as expected', async () => {

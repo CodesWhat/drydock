@@ -1,13 +1,7 @@
-import type { NextFunction, Request, Response } from 'express';
+import type { NextFunction, Request } from 'express';
 import { describe, expect, test, vi } from 'vitest';
+import { createMockResponse } from '../test/helpers.js';
 import { requireJsonContentTypeForMutations, shouldParseJsonBody } from './json-content-type.js';
-
-function createResponse(): Response {
-  return {
-    status: vi.fn().mockReturnThis(),
-    json: vi.fn(),
-  } as unknown as Response;
-}
 
 function createRequest(overrides: Partial<Request>): Request {
   return {
@@ -19,6 +13,10 @@ function createRequest(overrides: Partial<Request>): Request {
 }
 
 describe('json content-type middleware', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   test('shouldParseJsonBody returns true only for mutation methods', () => {
     expect(shouldParseJsonBody('POST')).toBe(true);
     expect(shouldParseJsonBody('PUT')).toBe(true);
@@ -28,7 +26,7 @@ describe('json content-type middleware', () => {
 
   test('allows non-mutation requests without checking content type', () => {
     const req = createRequest({ method: 'GET' });
-    const res = createResponse();
+    const res = createMockResponse();
     const next = vi.fn() as NextFunction;
 
     requireJsonContentTypeForMutations(req, res, next);
@@ -42,7 +40,7 @@ describe('json content-type middleware', () => {
       headers: { 'content-length': 'abc' },
       is: vi.fn(() => false),
     });
-    const res = createResponse();
+    const res = createMockResponse();
     const next = vi.fn() as NextFunction;
 
     requireJsonContentTypeForMutations(req, res, next);
@@ -56,7 +54,7 @@ describe('json content-type middleware', () => {
     const req = createRequest({
       headers: { 'content-length': '   ' },
     });
-    const res = createResponse();
+    const res = createMockResponse();
     const next = vi.fn() as NextFunction;
 
     requireJsonContentTypeForMutations(req, res, next);
@@ -70,7 +68,7 @@ describe('json content-type middleware', () => {
       headers: { 'transfer-encoding': ['chunked', 'gzip'] },
       is: vi.fn(() => false),
     });
-    const res = createResponse();
+    const res = createMockResponse();
     const next = vi.fn() as NextFunction;
 
     requireJsonContentTypeForMutations(req, res, next);
@@ -84,7 +82,7 @@ describe('json content-type middleware', () => {
     const req = createRequest({
       headers: { 'transfer-encoding': '   ' },
     });
-    const res = createResponse();
+    const res = createMockResponse();
     const next = vi.fn() as NextFunction;
 
     requireJsonContentTypeForMutations(req, res, next);
@@ -98,7 +96,7 @@ describe('json content-type middleware', () => {
       headers: { 'content-length': '2' },
       is: vi.fn(() => true),
     });
-    const res = createResponse();
+    const res = createMockResponse();
     const next = vi.fn() as NextFunction;
 
     requireJsonContentTypeForMutations(req, res, next);

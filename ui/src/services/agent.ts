@@ -2,7 +2,7 @@ import { extractCollectionData } from '../utils/api';
 
 const BASE_URL = '/api/v1/agents';
 
-export interface ApiAgent {
+interface ApiAgent {
   name: string;
   connected: boolean;
   host?: string;

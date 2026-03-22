@@ -17,6 +17,16 @@ function isOffline(): boolean {
 }
 
 export const authHandlers = [
+  http.get('/api/v1/auth/status', () => {
+    if (isOffline()) {
+      return HttpResponse.error();
+    }
+    return HttpResponse.json({
+      providers: [{ type: 'basic', name: 'basic' }],
+      errors: [],
+    });
+  }),
+
   http.get('/auth/user', () => {
     if (isOffline()) {
       return new HttpResponse(null, { status: 401 });

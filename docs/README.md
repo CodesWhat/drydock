@@ -6,7 +6,12 @@ The published documentation is available at **[getdrydock.com/docs](https://getd
 
 Documentation content is now versioned at:
 
-- `/content/docs/current` (`1.4`, stable)
-- `/content/docs/v1.3` (previous stable)
+- `/content/docs/current` (`v1.5`, active release docs)
+- `/content/docs/v1.4` (previous stable docs)
+- `/content/docs/v1.3` (legacy docs)
 
-The site/docs app lives in `/apps/web` and reads from `/content/docs/current`.
+The site/docs app lives in `/apps/web` and uses `npm run sync:docs` to copy:
+
+- `current -> apps/web/content/docs/v1.5`
+- `v1.4 -> apps/web/content/docs/v1.4`
+- `v1.3 -> apps/web/content/docs/v1.3`

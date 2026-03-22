@@ -29,10 +29,6 @@ import * as registry from '../registry/index.js';
 import * as storeContainer from '../store/container.js';
 import * as previewRouter from './preview.js';
 
-function createResponse() {
-  return createMockResponse();
-}
-
 function getHandler(method, path) {
   previewRouter.init();
   const call = mockRouter[method].mock.calls.find((c) => c[0] === path);
@@ -41,7 +37,7 @@ function getHandler(method, path) {
 
 async function callPreview(id = 'c1') {
   const handler = getHandler('post', '/:id/preview');
-  const res = createResponse();
+  const res = createMockResponse();
   await handler({ params: { id } }, res);
   return res;
 }
@@ -72,9 +68,9 @@ describe('Preview Router', () => {
       registry.getState.mockReturnValue({ trigger: {} });
       const res = await callPreview();
       expect(res.status).toHaveBeenCalledWith(404);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: expect.stringContaining('No docker trigger found') }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        error: expect.stringContaining('No docker trigger found'),
+      });
     });
 
     test('should return 404 when triggers exist but none are docker type', async () => {

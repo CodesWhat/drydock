@@ -2,14 +2,14 @@ import { HttpResponse, http } from 'msw';
 import { logEntries } from '../data/logs';
 
 export const logHandlers = [
-  http.get('/api/log', () =>
+  http.get('/api/v1/log', () =>
     HttpResponse.json({
       level: 'info',
       transports: ['console'],
     }),
   ),
 
-  http.get('/api/log/entries', ({ request }) => {
+  http.get('/api/v1/log/entries', ({ request }) => {
     const url = new URL(request.url);
     const level = url.searchParams.get('level');
     const component = url.searchParams.get('component');

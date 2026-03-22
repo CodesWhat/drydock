@@ -6,6 +6,7 @@ import * as openidClientLibrary from 'openid-client';
 import { Agent } from 'undici';
 import { v4 as uuid } from 'uuid';
 import { ddEnvVars, getPublicUrl, getServerConfiguration } from '../../../configuration/index.js';
+import { observeAuthLoginDuration, recordAuthLogin } from '../../../prometheus/auth.js';
 import { resolveConfiguredPath } from '../../../runtime/paths.js';
 import { getErrorMessage } from '../../../util/error.js';
 import { enforceConcurrentSessionLimit } from '../../../util/session-limit.js';
@@ -134,6 +135,10 @@ function normalizePathname(pathname: string): string {
 
 function toEndpointKey(url: URL): string {
   return `${url.origin}${normalizePathname(url.pathname)}`;
+}
+
+function getElapsedSeconds(startedAt: bigint): number {
+  return Number(process.hrtime.bigint() - startedAt) / 1_000_000_000;
 }
 
 function createPendingChecksRecord(): OidcPendingChecks {
@@ -436,7 +441,7 @@ class Oidc extends Authentication {
     this.logoutUrl = this.configuration.logouturl;
     try {
       this.logoutUrl = openidClient.buildEndSessionUrl(this.client).href;
-    } catch (e) {
+    } catch (e: unknown) {
       this.log.warn(` End session url is not supported (${getErrorMessage(e)})`);
     }
   }
@@ -578,7 +583,7 @@ class Oidc extends Authentication {
       } else {
         await persistOidcChecks();
       }
-    } catch (e) {
+    } catch (e: unknown) {
       this.log.warn(`Unable to persist OIDC session checks (${getErrorMessage(e)})`);
       res.status(500).json({ error: 'Unable to initialize OIDC session' });
       return;
@@ -590,6 +595,7 @@ class Oidc extends Authentication {
   }
 
   async callback(req: OidcCallbackRequest, res: Response): Promise<void> {
+    const loginVerificationStartedAt = process.hrtime.bigint();
     try {
       this.log.debug('Validate callback data');
       const openidClient = await this.getOpenIdClient();
@@ -597,6 +603,7 @@ class Oidc extends Authentication {
       await reloadSessionIfPossible(req.session);
       const callbackData = this.validateCallbackData(req, res, sessionKey);
       if (!callbackData) {
+        this.recordLoginMetrics('invalid', loginVerificationStartedAt);
         return;
       }
 
@@ -630,9 +637,10 @@ class Oidc extends Authentication {
         currentSessionId: req.sessionID,
       });
 
-      this.completePassportLogin(req, res, user);
-    } catch (err) {
+      this.completePassportLogin(req, res, user, loginVerificationStartedAt);
+    } catch (err: unknown) {
       this.log.warn(`Error when logging the user [${getErrorMessage(err)}]`);
+      this.recordLoginMetrics('error', loginVerificationStartedAt);
       res.status(401).json({ error: 'Authentication failed' });
     }
   }
@@ -780,11 +788,13 @@ class Oidc extends Authentication {
     req: OidcCallbackRequest,
     res: Response,
     user: OidcAuthenticatedUser,
+    loginVerificationStartedAt: bigint,
   ): void {
     this.log.debug('Perform passport login');
     req.login(user, (err) => {
       if (err) {
         this.log.warn(`Error when logging the user [${getErrorMessage(err)}]`);
+        this.recordLoginMetrics('error', loginVerificationStartedAt);
         this.respondAuthenticationError(res, 'Authentication failed');
         return;
       }
@@ -792,18 +802,27 @@ class Oidc extends Authentication {
       // Apply remember-me preference stored before OIDC redirect
       this.applyRememberMePreference(req.session);
       this.log.debug('User authenticated => redirect to app');
+      this.recordLoginMetrics('success', loginVerificationStartedAt);
       res.redirect(getPublicUrl(req) || '/');
     });
   }
 
   async verify(accessToken: string, done: OidcVerifyDone): Promise<void> {
+    const verifyStartedAt = process.hrtime.bigint();
     try {
       const user = await this.getUserFromAccessToken(accessToken);
+      this.recordLoginMetrics('success', verifyStartedAt);
       done(null, user);
-    } catch (e) {
+    } catch (e: unknown) {
       this.log.warn(`Error when validating the user access token (${getErrorMessage(e)})`);
+      this.recordLoginMetrics('invalid', verifyStartedAt);
       done(null, false);
     }
+  }
+
+  recordLoginMetrics(outcome: 'success' | 'invalid' | 'locked' | 'error', startedAt: bigint): void {
+    recordAuthLogin(outcome, 'oidc');
+    observeAuthLoginDuration(outcome, 'oidc', getElapsedSeconds(startedAt));
   }
 
   async getUserFromAccessToken(accessToken: string): Promise<OidcAuthenticatedUser> {

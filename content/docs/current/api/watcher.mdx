@@ -14,7 +14,7 @@ This API allows to query the state of the watchers.
 This operation lets you get all the configured watchers.
 
 ```bash
-curl http://drydock:3000/api/watchers
+curl http://drydock:3000/api/v1/watchers
 
 {
    "data": [
@@ -27,6 +27,9 @@ curl http://drydock:3000/api/watchers
          "port":2375,
          "cron":"0 * * * *",
          "watchbydefault":true
+      },
+      "metadata": {
+         "lastRunAt": "2026-03-20T21:44:11.782Z"
       }
       }
    ],
@@ -37,12 +40,25 @@ curl http://drydock:3000/api/watchers
 }
 ```
 
+### Response fields
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | Fully qualified watcher ID (for example `docker.local`) |
+| `type` | string | Watcher provider type |
+| `name` | string | Watcher name |
+| `configuration` | object | Watcher configuration (masked/safe for API output) |
+| `agent` | string \| undefined | Agent name when watcher is agent-scoped |
+| `metadata.lastRunAt` | string \| undefined | ISO-8601 timestamp of the most recent completed watch cycle |
+
+`metadata.lastRunAt` is populated after at least one watch run has completed.
+
 ## Get a Watcher by id
 
 This operation lets you get a specific Watcher.
 
 ```bash
-curl http://drydock:3000/api/watchers/docker/local
+curl http://drydock:3000/api/v1/watchers/docker/local
 
 {
    "id":"docker.local",
@@ -53,6 +69,17 @@ curl http://drydock:3000/api/watchers/docker/local
       "port":2375,
       "cron":"0 * * * *",
       "watchbydefault":true
+   },
+   "metadata":{
+      "lastRunAt":"2026-03-20T21:44:11.782Z"
    }
 }
+```
+
+### Agent-scoped lookup
+
+To fetch a watcher registered on a specific agent, append the agent name:
+
+```bash
+curl http://drydock:3000/api/v1/watchers/docker/local/agent1
 ```

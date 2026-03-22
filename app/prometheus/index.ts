@@ -6,6 +6,7 @@ const log = logger.child({ component: 'prometheus' });
 
 import { getPrometheusConfiguration } from '../configuration/index.js';
 import * as audit from './audit.js';
+import * as auth from './auth.js';
 import * as compatibility from './compatibility.js';
 import * as container from './container.js';
 import * as containerActions from './container-actions.js';
@@ -32,6 +33,7 @@ export function init() {
   trigger.init();
   watcher.init();
   audit.init();
+  auth.init();
   containerActions.init();
   webhook.init();
   rollback.init();

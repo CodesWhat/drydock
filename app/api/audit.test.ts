@@ -138,7 +138,16 @@ describe('Audit Router', () => {
       skip: 0,
       limit: 50,
     });
-    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ offset: 0 }));
+    expect(res.json).toHaveBeenCalledWith({
+      data: [],
+      total: 0,
+      limit: 50,
+      offset: 0,
+      hasMore: false,
+      _links: {
+        self: '/api/audit?limit=50&offset=0',
+      },
+    });
   });
 
   test('should clamp limit to maximum of 200', () => {

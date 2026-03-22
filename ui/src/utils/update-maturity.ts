@@ -1,7 +1,7 @@
 /** Update maturity classification based on how long an update has been available. */
 import { daysToMs, MS_PER_DAY } from './maturity-policy';
 
-export type UpdateMaturity = 'fresh' | 'settled' | null;
+type UpdateMaturity = 'fresh' | 'settled' | null;
 
 const DEFAULT_MATURITY_THRESHOLD_MS = daysToMs(7);
 

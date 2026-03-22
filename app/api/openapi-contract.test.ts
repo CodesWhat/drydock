@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module';
-import type { Response } from 'express';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import { createMockResponse } from '../test/helpers.js';
 import { sendErrorResponse } from './error-response.js';
 import { openApiDocument } from './openapi.js';
 import { validateOpenApiJsonResponse } from './openapi-contract.js';
@@ -66,10 +66,7 @@ describe('validateOpenApiJsonResponse', () => {
       { schemas: structuredClone(originalSchemas) },
     );
 
-    const response = {
-      status: vi.fn().mockReturnThis(),
-      json: vi.fn(),
-    } as unknown as Response;
+    const response = createMockResponse();
 
     sendErrorResponse(response, 400, 'Bad payload');
 

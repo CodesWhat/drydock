@@ -10,6 +10,7 @@ import type { Container, ContainerReport } from '../model/container.js';
 import * as registry from '../registry/index.js';
 import { resolveConfiguredPath } from '../runtime/paths.js';
 import * as storeContainer from '../store/container.js';
+import { getErrorMessage } from '../util/error.js';
 
 export interface AgentClientConfig {
   host: string;
@@ -30,6 +31,32 @@ interface AgentClientRuntimeInfo {
   lastSeen?: string;
   logLevel?: string;
   pollInterval?: string;
+}
+
+interface AgentComponentDescriptor {
+  type: string;
+  name: string;
+  configuration: Record<string, unknown>;
+}
+
+interface AgentRuntimeAckPayload {
+  version?: unknown;
+  os?: unknown;
+  arch?: unknown;
+  cpus?: unknown;
+  memoryGb?: unknown;
+  uptimeSeconds?: unknown;
+  lastSeen?: unknown;
+}
+
+interface AgentSsePayload {
+  type?: unknown;
+  data?: unknown;
+}
+
+interface RemoteTriggerErrorPayload {
+  error?: unknown;
+  details?: unknown;
 }
 
 const INITIAL_SSE_RECONNECT_DELAY_MS = 1_000;
@@ -141,7 +168,7 @@ export class AgentClient {
   }
 
   private pruneOldContainers(newContainers: Container[], watcher?: string) {
-    const query: any = { agent: this.name };
+    const query: Record<string, unknown> = { agent: this.name };
     if (watcher) {
       query.watcher = watcher;
     }
@@ -158,7 +185,10 @@ export class AgentClient {
     });
   }
 
-  private async registerAgentComponents(kind: 'watcher' | 'trigger', remoteComponents: any[]) {
+  private async registerAgentComponents(
+    kind: 'watcher' | 'trigger',
+    remoteComponents: AgentComponentDescriptor[],
+  ) {
     for (const remoteComponent of remoteComponents) {
       this.log.debug(`Registering agent ${kind} ${remoteComponent.type}.${remoteComponent.name}`);
       await registry.registerComponent({
@@ -186,37 +216,37 @@ export class AgentClient {
     }
     this.pruneOldContainers(containers);
 
-    // Unregister any existing components for this agent
+    // Unregister existing components for this agent
     await registry.deregisterAgentComponents(this.name);
 
     // Fetch and register watchers
     try {
-      const responseWatchers = await axios.get<any[]>(
+      const responseWatchers = await axios.get<AgentComponentDescriptor[]>(
         `${this.baseUrl}/api/watchers`,
         this.axiosOptions,
       );
       await this.registerAgentComponents('watcher', responseWatchers.data);
-    } catch (e: any) {
-      this.log.warn(`Failed to fetch/register watchers: ${e.message}`);
+    } catch (error: unknown) {
+      this.log.warn(`Failed to fetch/register watchers: ${getErrorMessage(error)}`);
     }
 
     // Fetch and register triggers
     try {
-      const responseTriggers = await axios.get<any[]>(
+      const responseTriggers = await axios.get<AgentComponentDescriptor[]>(
         `${this.baseUrl}/api/triggers`,
         this.axiosOptions,
       );
       await this.registerAgentComponents('trigger', responseTriggers.data);
-    } catch (e: any) {
-      this.log.warn(`Failed to fetch/register triggers: ${e.message}`);
+    } catch (error: unknown) {
+      this.log.warn(`Failed to fetch/register triggers: ${getErrorMessage(error)}`);
     }
 
     this.isConnected = true;
     if (!wasConnected) {
       void emitAgentConnected({
         agentName: this.name,
-      }).catch((e: any) => {
-        this.log.debug(`Failed to emit agent connected event (${e.message})`);
+      }).catch((error: unknown) => {
+        this.log.debug(`Failed to emit agent connected event (${getErrorMessage(error)})`);
       });
     }
   }
@@ -278,8 +308,8 @@ export class AgentClient {
       void emitAgentDisconnected({
         agentName: this.name,
         reason: 'SSE connection lost',
-      }).catch((e: any) => {
-        this.log.debug(`Failed to emit agent disconnected event (${e.message})`);
+      }).catch((error: unknown) => {
+        this.log.debug(`Failed to emit agent disconnected event (${getErrorMessage(error)})`);
       });
     }
     this.reconnectTimer = setTimeout(() => {
@@ -293,12 +323,12 @@ export class AgentClient {
       return;
     }
     try {
-      const payload = JSON.parse(line.substring(6));
+      const payload = JSON.parse(line.substring(6)) as AgentSsePayload;
       if (payload.type && payload.data) {
-        this.handleEvent(payload.type, payload.data);
+        this.handleEvent(payload.type as string, payload.data);
       }
-    } catch (e: any) {
-      this.log.warn(`Error parsing SSE data: ${e.message}`);
+    } catch (error: unknown) {
+      this.log.warn(`Error parsing SSE data: ${getErrorMessage(error)}`);
     }
   }
 
@@ -348,47 +378,52 @@ export class AgentClient {
         this.reconnectAttempts = 0;
         this.attachStreamHandlers(response.data);
       })
-      .catch((e) => {
-        this.log.error(`SSE Connection failed: ${e.message}. Retrying...`);
+      .catch((error: unknown) => {
+        this.log.error(`SSE Connection failed: ${getErrorMessage(error)}. Retrying...`);
         this.scheduleReconnect();
       });
   }
 
-  private buildRuntimeInfoFromAck(data: any): AgentClientRuntimeInfo {
+  private buildRuntimeInfoFromAck(data: unknown): AgentClientRuntimeInfo {
+    const runtimeData = data as AgentRuntimeAckPayload;
     return {
       ...this.info,
-      version: typeof data?.version === 'string' ? data.version : this.info.version,
-      os: typeof data?.os === 'string' ? data.os : this.info.os,
-      arch: typeof data?.arch === 'string' ? data.arch : this.info.arch,
-      cpus: Number.isFinite(data?.cpus) ? Number(data.cpus) : this.info.cpus,
-      memoryGb: Number.isFinite(data?.memoryGb) ? Number(data.memoryGb) : this.info.memoryGb,
-      uptimeSeconds: Number.isFinite(data?.uptimeSeconds)
-        ? Number(data.uptimeSeconds)
+      version: typeof runtimeData?.version === 'string' ? runtimeData.version : this.info.version,
+      os: typeof runtimeData?.os === 'string' ? runtimeData.os : this.info.os,
+      arch: typeof runtimeData?.arch === 'string' ? runtimeData.arch : this.info.arch,
+      cpus: Number.isFinite(runtimeData?.cpus) ? Number(runtimeData.cpus) : this.info.cpus,
+      memoryGb: Number.isFinite(runtimeData?.memoryGb)
+        ? Number(runtimeData.memoryGb)
+        : this.info.memoryGb,
+      uptimeSeconds: Number.isFinite(runtimeData?.uptimeSeconds)
+        ? Number(runtimeData.uptimeSeconds)
         : this.info.uptimeSeconds,
       lastSeen:
-        typeof data?.lastSeen === 'string' && data.lastSeen
-          ? data.lastSeen
+        typeof runtimeData?.lastSeen === 'string' && runtimeData.lastSeen
+          ? runtimeData.lastSeen
           : new Date().toISOString(),
     };
   }
 
-  private handleAckEvent(data: any) {
+  private handleAckEvent(data: unknown) {
     this.info = this.buildRuntimeInfoFromAck(data);
-    this.log.info(`Agent ${this.name} connected (version: ${data.version})`);
-    void this.handshake().catch((e: any) => {
-      this.log.error(`Handshake failed after dd:ack: ${e.message}`);
+    const ackData = data as AgentRuntimeAckPayload;
+    this.log.info(`Agent ${this.name} connected (version: ${ackData.version})`);
+    void this.handshake().catch((error: unknown) => {
+      this.log.error(`Handshake failed after dd:ack: ${getErrorMessage(error)}`);
     });
   }
 
-  private async handleContainerChangeEvent(data: any) {
+  private async handleContainerChangeEvent(data: unknown) {
     await this.processContainer(data as Container);
   }
 
-  private handleContainerRemovedEvent(data: any) {
-    storeContainer.deleteContainer(data.id);
+  private handleContainerRemovedEvent(data: unknown) {
+    const removedContainerData = data as { id: string };
+    storeContainer.deleteContainer(removedContainerData.id);
   }
 
-  async handleEvent(eventName: string, data: any) {
+  async handleEvent(eventName: string, data: unknown) {
     switch (eventName) {
       case 'dd:ack':
         this.handleAckEvent(data);
@@ -405,6 +440,35 @@ export class AgentClient {
     }
   }
 
+  private getRemoteTriggerFailureMessage(error: unknown): string | undefined {
+    if (!error || typeof error !== 'object') {
+      return undefined;
+    }
+    const response = (error as { response?: unknown }).response;
+    if (!response || typeof response !== 'object') {
+      return undefined;
+    }
+    const data = (response as { data?: unknown }).data;
+    if (!data || typeof data !== 'object') {
+      return undefined;
+    }
+
+    const payload = data as RemoteTriggerErrorPayload;
+    const errorMessage = typeof payload.error === 'string' ? payload.error : undefined;
+    if (!errorMessage) {
+      return undefined;
+    }
+
+    const details = payload.details;
+    const reason =
+      details &&
+      typeof details === 'object' &&
+      typeof (details as { reason?: unknown }).reason === 'string'
+        ? (details as { reason: string }).reason
+        : undefined;
+    return reason ? `${errorMessage} (reason: ${reason})` : errorMessage;
+  }
+
   async runRemoteTrigger(container: Container, triggerType: string, triggerName: string) {
     try {
       this.log.debug(
@@ -415,9 +479,11 @@ export class AgentClient {
         container,
         this.axiosOptions,
       );
-    } catch (e: any) {
-      this.log.error(`Error running remote trigger: ${sanitizeLogParam(e.message)}`);
-      throw e;
+    } catch (error: unknown) {
+      const detailedMessage = this.getRemoteTriggerFailureMessage(error);
+      const errorMessage = detailedMessage ?? getErrorMessage(error);
+      this.log.error(`Error running remote trigger: ${sanitizeLogParam(errorMessage)}`);
+      throw error;
     }
   }
 
@@ -428,9 +494,11 @@ export class AgentClient {
         containers,
         this.axiosOptions,
       );
-    } catch (e: any) {
-      this.log.error(`Error running remote batch trigger: ${sanitizeLogParam(e.message)}`);
-      throw e;
+    } catch (error: unknown) {
+      const detailedMessage = this.getRemoteTriggerFailureMessage(error);
+      const errorMessage = detailedMessage ?? getErrorMessage(error);
+      this.log.error(`Error running remote batch trigger: ${sanitizeLogParam(errorMessage)}`);
+      throw error;
     }
   }
 
@@ -448,9 +516,9 @@ export class AgentClient {
       const requestUrl = query ? `${logEntriesUrl}?${query}` : logEntriesUrl;
       const response = await axios.get(requestUrl, this.axiosOptions);
       return response.data;
-    } catch (e: any) {
-      this.log.error(`Error fetching log entries from agent: ${e.message}`);
-      throw e;
+    } catch (error: unknown) {
+      this.log.error(`Error fetching log entries from agent: ${getErrorMessage(error)}`);
+      throw error;
     }
   }
 
@@ -464,9 +532,9 @@ export class AgentClient {
         this.axiosOptions,
       );
       return response.data;
-    } catch (e: any) {
-      this.log.error(`Error fetching container logs from agent: ${e.message}`);
-      throw e;
+    } catch (error: unknown) {
+      this.log.error(`Error fetching container logs from agent: ${getErrorMessage(error)}`);
+      throw error;
     }
   }
 
@@ -477,9 +545,9 @@ export class AgentClient {
         `${this.baseUrl}/api/containers/${encodeURIComponent(containerId)}`,
         this.axiosOptions,
       );
-    } catch (e: any) {
-      this.log.error(`Error deleting container on agent: ${e.message}`);
-      throw e;
+    } catch (error: unknown) {
+      this.log.error(`Error deleting container on agent: ${getErrorMessage(error)}`);
+      throw error;
     }
   }
 
@@ -497,9 +565,9 @@ export class AgentClient {
       const containers = reports.map((report) => report.container);
       this.pruneOldContainers(containers, watcherName);
       return reports;
-    } catch (e: any) {
-      this.log.error(`Error watching on agent: ${sanitizeLogParam(e.message)}`);
-      throw e;
+    } catch (error: unknown) {
+      this.log.error(`Error watching on agent: ${sanitizeLogParam(getErrorMessage(error))}`);
+      throw error;
     }
   }
 
@@ -515,9 +583,11 @@ export class AgentClient {
       // Process the result (registry check, store update)
       await this.processContainer(report.container);
       return report;
-    } catch (e: any) {
-      this.log.error(`Error watching container ${container.name} on agent: ${e.message}`);
-      throw e;
+    } catch (error: unknown) {
+      this.log.error(
+        `Error watching container ${container.name} on agent: ${getErrorMessage(error)}`,
+      );
+      throw error;
     }
   }
 }

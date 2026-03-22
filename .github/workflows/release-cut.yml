@@ -1,0 +1,209 @@
+name: "Release Cut"
+run-name: "Release Cut — manual by ${{ github.actor }}"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: release-cut
+  cancel-in-progress: false
+
+env:
+  CI_VERIFY_WORKFLOW_FILE: ci-verify.yml
+
+jobs:
+  cut:
+    name: Cut Tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 20  # Includes CI-success polling for target SHA before tagging
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594  # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Resolve target SHA
+        id: target
+        run: |
+          set -euo pipefail
+          sha="$(git rev-parse HEAD)"
+          echo "sha=${sha}" >> "$GITHUB_OUTPUT"
+          echo "Target SHA: ${sha}"
+
+      - name: Resolve CI workflow reference
+        id: ci_workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          workflow_url="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/workflows/${CI_VERIFY_WORKFLOW_FILE}"
+          workflow_json="$(curl -fsSL \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "${workflow_url}")"
+
+          workflow_id="$(echo "${workflow_json}" | jq -r '.id // empty')"
+          workflow_name="$(echo "${workflow_json}" | jq -r '.name // empty')"
+          workflow_path="$(echo "${workflow_json}" | jq -r '.path // empty')"
+          if [ -z "${workflow_id}" ] || [ -z "${workflow_path}" ]; then
+            echo "::error::Failed to resolve workflow metadata for ${CI_VERIFY_WORKFLOW_FILE}."
+            exit 1
+          fi
+
+          {
+            echo "id=${workflow_id}"
+            echo "name=${workflow_name}"
+            echo "path=${workflow_path}"
+          } >> "$GITHUB_OUTPUT"
+          echo "Using CI verification workflow: ${workflow_name} (${workflow_path}, id=${workflow_id})"
+
+      - name: Verify successful branch CI on target SHA
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CI_WORKFLOW_ID: ${{ steps.ci_workflow.outputs.id }}
+          CI_WORKFLOW_NAME: ${{ steps.ci_workflow.outputs.name }}
+          TARGET_SHA: ${{ steps.target.outputs.sha }}
+        run: |
+          set -euo pipefail
+
+          max_attempts=20
+          sleep_seconds=15
+
+          for attempt in $(seq 1 "${max_attempts}"); do
+            runs_url="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/workflows/${CI_WORKFLOW_ID}/runs?head_sha=${TARGET_SHA}&event=push&per_page=50"
+            runs_json="$(curl -fsSL \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              "${runs_url}")"
+
+            successful_runs="$(echo "${runs_json}" | jq '[.workflow_runs[] | select(.conclusion == "success" and ((.head_branch // "") | length > 0))] | length')"
+            in_progress_runs="$(echo "${runs_json}" | jq '[.workflow_runs[] | select(.status != "completed" and ((.head_branch // "") | length > 0))] | length')"
+            completed_runs="$(echo "${runs_json}" | jq '[.workflow_runs[] | select(.status == "completed" and ((.head_branch // "") | length > 0))] | length')"
+
+            if [ "${successful_runs}" -gt 0 ]; then
+              echo "Found successful ${CI_WORKFLOW_NAME} branch push run for ${TARGET_SHA}."
+              exit 0
+            fi
+
+            if [ "${completed_runs}" -gt 0 ] && [ "${in_progress_runs}" -eq 0 ]; then
+              echo "::error::${CI_WORKFLOW_NAME} branch push runs for ${TARGET_SHA} completed without success."
+              echo "${runs_json}" | jq '.workflow_runs[] | select((.head_branch // "") | length > 0) | {id, status, conclusion, head_branch, html_url}'
+              exit 1
+            fi
+
+            echo "Attempt ${attempt}/${max_attempts}: waiting for successful ${CI_WORKFLOW_NAME} branch push run on ${TARGET_SHA}..."
+            sleep "${sleep_seconds}"
+          done
+
+          echo "::error::Timed out waiting for successful ${CI_WORKFLOW_NAME} branch push run on ${TARGET_SHA}."
+          exit 1
+
+      - name: Find latest release tag
+        id: base
+        run: |
+          set -euo pipefail
+          latest_tag="$(git tag --list 'v*' --sort=-v:refname | head -n1)"
+          if [ -z "${latest_tag}" ]; then
+            latest_tag="v0.0.0"
+          fi
+
+          echo "latest_tag=${latest_tag}" >> "$GITHUB_OUTPUT"
+          echo "current_version=${latest_tag#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Compute next version
+        id: next
+        env:
+          BUMP: auto
+          CURRENT_VERSION: ${{ steps.base.outputs.current_version }}
+          LATEST_TAG: ${{ steps.base.outputs.latest_tag }}
+          TARGET_SHA: ${{ steps.target.outputs.sha }}
+        run: |
+          set -euo pipefail
+
+          if [ "${BUMP}" = "auto" ] && [ "${LATEST_TAG}" = "v0.0.0" ]; then
+            release_level="patch"
+            next_version="0.0.1"
+          else
+            mapfile -t vars < <(node scripts/release-next-version.mjs \
+              --current "${CURRENT_VERSION}" \
+              --bump "${BUMP}" \
+              --from "${LATEST_TAG}" \
+              --to "${TARGET_SHA}")
+
+            for kv in "${vars[@]}"; do
+              key="${kv%%=*}"
+              value="${kv#*=}"
+              case "${key}" in
+                release_level) release_level="${value}" ;;
+                next_version) next_version="${value}" ;;
+              esac
+            done
+          fi
+
+          release_tag="v${next_version}"
+          if git rev-parse -q --verify "refs/tags/${release_tag}" >/dev/null; then
+            echo "::error::Tag already exists: ${release_tag}"
+            exit 1
+          fi
+
+          {
+            echo "release_level=${release_level}"
+            echo "next_version=${next_version}"
+            echo "release_tag=${release_tag}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Validate CHANGELOG entry for release tag
+        env:
+          RELEASE_TAG: ${{ steps.next.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+          entry_file="$(mktemp)"
+
+          node scripts/extract-changelog-entry.mjs --version "${RELEASE_TAG}" --file CHANGELOG.md > "${entry_file}"
+
+          if ! awk 'NR > 1 && NF { found = 1; exit } END { exit found ? 0 : 1 }' "${entry_file}"; then
+            echo "::error::CHANGELOG entry for ${RELEASE_TAG} is empty. Add release notes under the heading before cutting a tag."
+            exit 1
+          fi
+
+          echo "Validated CHANGELOG entry for ${RELEASE_TAG}."
+
+      - name: Create and push release tag
+        env:
+          RELEASE_TAG: ${{ steps.next.outputs.release_tag }}
+          TARGET_SHA: ${{ steps.target.outputs.sha }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git tag -a "${RELEASE_TAG}" "${TARGET_SHA}" -m "release: ${RELEASE_TAG}"
+          git push origin "${RELEASE_TAG}"
+
+      - name: Release summary
+        env:
+          TARGET_SHA: ${{ steps.target.outputs.sha }}
+          RELEASE_LEVEL: ${{ steps.next.outputs.release_level }}
+          NEXT_VERSION: ${{ steps.next.outputs.next_version }}
+          RELEASE_TAG: ${{ steps.next.outputs.release_tag }}
+        run: |
+          {
+            echo "### Release Cut Summary"
+            echo "- Target SHA: \`${TARGET_SHA}\`"
+            echo "- Bump level: \`${RELEASE_LEVEL}\`"
+            echo "- Next version: \`${NEXT_VERSION}\`"
+            echo "- Tag: \`${RELEASE_TAG}\`"
+            echo "- Docker build tag format: \`${NEXT_VERSION}-b###\` (generated in release workflow)"
+            echo "- Nightly-ready format: \`vX.Y.Z-nightly.YYYYMMDD.N\`"
+          } >> "$GITHUB_STEP_SUMMARY"

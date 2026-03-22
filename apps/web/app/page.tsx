@@ -231,12 +231,13 @@ const roadmap = [
     version: "v1.5.0",
     title: "Observability & User-Requested Features",
     emoji: "\u{26A1}",
-    status: "next" as const,
+    status: "released" as const,
     dotColor:
-      "border-amber-500 bg-amber-50 text-amber-600 dark:border-amber-400 dark:bg-amber-950 dark:text-amber-400",
+      "border-emerald-500 bg-emerald-500 text-white dark:border-emerald-400 dark:bg-emerald-400 dark:text-neutral-900",
     items: [
-      "Real-time log viewer",
+      "Real-time WebSocket log viewer with ANSI colors + JSON syntax highlighting",
       "Container resource monitoring",
+      "Diagnostic debug dump with automatic redaction",
       "Registry webhook receiver",
       "Auth endpoint telemetry & guardrails",
       "Image maturity / sort-by-age indicator",
@@ -244,15 +245,18 @@ const roadmap = [
       "Release notes in UI",
       "Smart tag suggestion for latest containers",
       "Digest check deduplication",
+      "Dashboard customization",
+      "Resource usage dashboard widget",
+      "Trigger environment variable aliases (DD_ACTION_*/DD_NOTIFICATION_*)",
     ],
   },
   {
     version: "v1.5.1",
     title: "Scanner Decoupling",
     emoji: "\u{1F50C}",
-    status: "planned" as const,
+    status: "next" as const,
     dotColor:
-      "border-amber-400 bg-amber-50 text-amber-500 dark:border-amber-500 dark:bg-amber-950 dark:text-amber-400",
+      "border-amber-500 bg-amber-50 text-amber-600 dark:border-amber-400 dark:bg-amber-950 dark:text-amber-400",
     items: [
       "Backend-based scanner execution (docker/remote)",
       "Grype scanner provider",
@@ -280,7 +284,6 @@ const roadmap = [
       "Clickable port links",
       "Image prune from UI",
       "Static image monitoring",
-      "Dashboard customization",
     ],
   },
   {
@@ -440,7 +443,7 @@ export default function Home() {
 
               {/* Version Badge */}
               <Badge variant="secondary" className="mb-6 px-4 py-1.5 text-sm font-medium">
-                v1.4.1 &middot; Open Source
+                v1.5.0 &middot; Open Source
               </Badge>
 
               {/* Heading */}
@@ -485,7 +488,7 @@ export default function Home() {
                     rel="noopener noreferrer"
                   >
                     <img
-                      src="https://img.shields.io/badge/GHCR-30K%2B_pulls-2ea44f?logo=github&logoColor=white"
+                      src="https://img.shields.io/badge/GHCR-40K%2B_pulls-2ea44f?logo=github&logoColor=white"
                       alt="GHCR pulls"
                     />
                   </a>

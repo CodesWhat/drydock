@@ -195,31 +195,31 @@ describe('DetailPanel', () => {
   });
 
   describe('panel width style', () => {
-    it('uses 420px basis for sm size', () => {
+    it('uses sm width token for sm size', () => {
       const w = factory({ size: 'sm' });
       const style = w.find('aside').attributes('style');
-      expect(style).toContain('flex: 0 0 420px');
-      expect(style).toContain('width: 420px');
+      expect(style).toContain('flex: 0 0 var(--dd-layout-panel-width-sm)');
+      expect(style).toContain('width: var(--dd-layout-panel-width-sm)');
     });
 
-    it('uses 560px basis for md size', () => {
+    it('uses md width token for md size', () => {
       const w = factory({ size: 'md' });
       const style = w.find('aside').attributes('style');
-      expect(style).toContain('flex: 0 0 560px');
-      expect(style).toContain('width: 560px');
+      expect(style).toContain('flex: 0 0 var(--dd-layout-panel-width-md)');
+      expect(style).toContain('width: var(--dd-layout-panel-width-md)');
     });
 
-    it('uses 720px basis for lg size', () => {
+    it('uses lg width token for lg size', () => {
       const w = factory({ size: 'lg' });
       const style = w.find('aside').attributes('style');
-      expect(style).toContain('flex: 0 0 720px');
-      expect(style).toContain('width: 720px');
+      expect(style).toContain('flex: 0 0 var(--dd-layout-panel-width-lg)');
+      expect(style).toContain('width: var(--dd-layout-panel-width-lg)');
     });
 
     it('does not set flex on mobile', () => {
       const w = factory({ isMobile: true, size: 'md' });
       const style = w.find('aside').attributes('style') ?? '';
-      expect(style).not.toContain('flex: 0 0 560px');
+      expect(style).not.toContain('flex: 0 0 var(--dd-layout-panel-width-md)');
       expect(style).toContain('width: 100%');
     });
   });

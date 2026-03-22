@@ -26,11 +26,13 @@ The `oidc` authentication lets you protect drydock access using the [Openid Conn
 
 The callback URL (to configure in the IDP) is built as `${DD_PUBLIC_URL}/auth/oidc/${auth_name}/cb`.
 
-<Callout type="warn">`DD_PUBLIC_URL` is **required** when OIDC is configured. Without it, the OIDC provider will fail to register at startup and the login page will show "No authentication methods configured". Check startup logs for the exact error.</Callout>
+<Callout type="warn">
+**OIDC configuration requirements:**
 
-<Callout type="warn">`http://` OIDC discovery URLs are deprecated and will be removed in v1.6.0. When the discovery URL uses `http:`, drydock passes `allowInsecureRequests` to the OIDC client. Migrate your IdP to HTTPS before upgrading.</Callout>
-
-<Callout type="warn">`DD_AUTH_OIDC_{auth_name}_INSECURE=true` disables TLS certificate verification for OIDC HTTPS calls (discovery, token, userinfo, JWKS). Use only for local/dev troubleshooting.</Callout>
+- **`DD_PUBLIC_URL` is required** — Without it, the OIDC provider will fail to register at startup and the login page will show "No authentication methods configured". Check startup logs for the exact error.
+- **HTTP discovery is deprecated** — `http://` OIDC discovery URLs will be removed in v1.6.0. When the discovery URL uses `http:`, drydock passes `allowInsecureRequests` to the OIDC client. Migrate your IdP to HTTPS before upgrading.
+- **`INSECURE` is for dev only** — `DD_AUTH_OIDC_{auth_name}_INSECURE=true` disables TLS certificate verification for OIDC HTTPS calls (discovery, token, userinfo, JWKS). Use only for local/dev troubleshooting.
+</Callout>
 
 **Notes:**
 

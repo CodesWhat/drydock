@@ -111,6 +111,46 @@ labels:
     expect(migrated.labelReplacements).toBe(1);
   });
 
+  test('migrates legacy trigger env vars and labels to action-prefixed aliases', () => {
+    const content = `
+DD_TRIGGER_DOCKER_UPDATE_ENABLED=true
+export DD_TRIGGER_SLACK_NOTIFY_URL=https://hooks.example.com
+  - DD_TRIGGER_COMMAND_HOOK_ENABLED=false
+DD_TRIGGER_TEAMS_ALERT_ENABLED: "true"
+labels:
+  - dd.trigger.include=docker.update:major,slack.notify:minor
+  dd.trigger.exclude: "smtp.alert"
+`;
+
+    const migrated = migrateLegacyConfigContent(content, 'trigger');
+
+    expect(migrated.content).toContain('DD_ACTION_DOCKER_UPDATE_ENABLED=true');
+    expect(migrated.content).toContain(
+      'export DD_ACTION_SLACK_NOTIFY_URL=https://hooks.example.com',
+    );
+    expect(migrated.content).toContain('- DD_ACTION_COMMAND_HOOK_ENABLED=false');
+    expect(migrated.content).toContain('DD_ACTION_TEAMS_ALERT_ENABLED: "true"');
+    expect(migrated.content).toContain('dd.action.include=docker.update:major,slack.notify:minor');
+    expect(migrated.content).toContain('dd.action.exclude: "smtp.alert"');
+    expect(migrated.envReplacements).toBe(4);
+    expect(migrated.labelReplacements).toBe(2);
+  });
+
+  test('auto source chains WUD trigger labels into action-prefixed aliases', () => {
+    const content = `
+labels:
+  - wud.trigger.include=slack.notify:major
+  - wud.trigger.exclude=smtp.alert
+`;
+
+    const migrated = migrateLegacyConfigContent(content, 'auto');
+
+    expect(migrated.content).toContain('- dd.action.include=slack.notify:major');
+    expect(migrated.content).toContain('- dd.action.exclude=smtp.alert');
+    expect(migrated.envReplacements).toBe(0);
+    expect(migrated.labelReplacements).toBe(4);
+  });
+
   test('avoids partial label matches', () => {
     const content = `
 labels:
@@ -485,6 +525,40 @@ describe('runConfigMigrateCommandIfRequested', () => {
       expect(result).toBe(0);
       expect(migrated).toContain('WUD_SERVER_HOST: localhost');
       expect(migrated).toContain('dd.watch=true');
+      expect(collector.out.join('\n')).toContain('UPDATED');
+    });
+  });
+
+  test('supports trigger-only migration source', () => {
+    withTempDir((tempDir) => {
+      const composePath = path.join(tempDir, 'compose.yaml');
+      fs.writeFileSync(
+        composePath,
+        [
+          'services:',
+          '  app:',
+          '    environment:',
+          '      DD_TRIGGER_SLACK_NOTIFY_URL: https://hooks.example.com',
+          '    labels:',
+          '      - dd.trigger.include=slack.notify:major',
+          '',
+        ].join('\n'),
+        'utf-8',
+      );
+
+      const collector = createIoCollector();
+      const result = runConfigMigrateCommandIfRequested(
+        ['config', 'migrate', '--source', 'trigger', '--file', 'compose.yaml'],
+        {
+          cwd: tempDir,
+          io: collector.io,
+        },
+      );
+
+      const migrated = fs.readFileSync(composePath, 'utf-8');
+      expect(result).toBe(0);
+      expect(migrated).toContain('DD_ACTION_SLACK_NOTIFY_URL: https://hooks.example.com');
+      expect(migrated).toContain('dd.action.include=slack.notify:major');
       expect(collector.out.join('\n')).toContain('UPDATED');
     });
   });

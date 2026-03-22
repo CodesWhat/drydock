@@ -10,6 +10,88 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Podman API version negotiation** — Docker watcher probes the daemon's `/version` endpoint over the Unix socket and pins Dockerode to the reported API version. Prevents `EAI_AGAIN` crashes caused by `docker-modem`'s redirect-following bug when Podman returns HTTP 301 for unversioned API paths. ([#182](https://github.com/CodesWhat/drydock/issues/182))
+
+### Fixed
+
+- **Digest buffer stale entry eviction** — Containers evicted from digest buffer when update-applied events fire, preventing already-updated containers from appearing in the next digest flush.
+- **Rate-limiter memory safety** — Fixed-window limiter now enforces a hard `maxEntries` cap to prevent unbounded growth.
+- **UI interaction polish** — Fixed agent column picker positioning, dashboard mobile stacking, Escape-key dashboard edit exit behavior, popover z-index/positioning, and transition/outline rendering regressions.
+
+### Changed
+
+- **Lefthook pre-push Playwright gate** — Added `e2e-playwright` to the root pre-push pipeline so local hooks now run Cucumber E2E and Playwright QA before push.
+- **Trigger rename migration CLI support** — `config migrate` now supports `--source trigger` and rewrites legacy trigger prefixes (`DD_TRIGGER_*`, `dd.trigger.include`, `dd.trigger.exclude`) to action-prefixed aliases.
+- **Centralized rollback container guard** — `-old-{timestamp}` container rejection moved from Docker trigger to base Trigger class, covering all trigger types (Docker, Dockercompose, etc.) and all entry points (auto-trigger, webhook, API).
+- **Container list query internals modularized** — Extracted and tightened query-validation logic and split related tests by concern for better maintainability.
+- **Container list filtering performance** — Status/kind filters now avoid unnecessary full-collection loads, and in-memory age/created sorting now precomputes parse/age values per container instead of per comparator invocation.
+- **Maturity and watched-kind concerns extracted** — Split monolithic container filter logic into focused modules (`maturity-filter.ts`, `watched-kind-filter.ts`) while preserving `filters.ts` exports for compatibility.
+- **Canonical v1 API alignment in UI/demo paths** — UI release-notes fetch now uses `/api/v1/containers/:id/release-notes`, and demo MSW handlers were aligned to `/api/v1/*` with added mock coverage for auth-status, debug-dump, container stats, and container action/preview endpoints.
+- **Healthcheck execution path optimized** — Replaced curl-based healthcheck execution with a static C binary for lower runtime overhead.
+- **Watcher event logging noise reduced** — First event-stream reconnect downgraded from `warn` to `info`, with richer container-name context for warn/error logs.
+- **CodeQL/Scorecard action pin correction** — Security workflows now use the valid `github/codeql-action` v4.33.0 commit pin (`b1bff819...`) for `init`, `autobuild`, `analyze`, and `upload-sarif`, avoiding orphaned/imposter commit verification failures.
+
+### Security
+
+- **WebSocket origin and lockout hardening** — Added stricter WebSocket origin validation and safer lockout file-permission handling.
+
+### Dependencies
+
+- **`fast-xml-parser` upgraded to 5.5.7** — Updated app/e2e dependency versions to address the CVE-2026-33349 advisory.
+
+### Testing
+
+- **Coverage and stability expansion** — Added/updated tests for WebSocket log streaming, auth lockout flows, registry provider error paths, webhook payload bounds, release-notes/digest lifecycle, and dashboard layout defaults; refactored large trigger/watcher suites for clearer ownership and lower flake risk.
+
+### Documentation
+
+- **Guide/API endpoint synchronization** — Updated current docs and guides to consistently use canonical `/api/v1/*` paths (actions, rollback, security, self-update, triggers, webhooks, FAQ, updates), and expanded container list API docs to include `order`, runtime `status` values, and watched-kind filtering (`watched`, `unwatched`, `all`).
+
+## [1.5.0] — 2026-03-19
+
+### Added
+
+- **Real-time container log viewer** — WebSocket-based live log streaming from Docker containers directly in the UI. Features ANSI color rendering, automatic JSON log detection with syntax-highlighted pretty-printing, free-text and regex search with match navigation, stdout/stderr stream filtering, log level filtering for structured logs, copy to clipboard, and gzip-compressed download. Available in both the container detail panel and a dedicated full-page view at `/containers/:id/logs`. ([Phase 4.2](https://getdrydock.com/docs/configuration/logs))
+- **Diagnostic debug dump** — One-click export of redacted system state from Configuration > Diagnostics. Collects runtime metadata, component state (watchers, registries, triggers, agents), Docker API diagnostics, MQTT Home Assistant sensors, recent Docker events, store stats, and `DD_*` environment variables. Sensitive values matching `password|token|secret|key|hash` are automatically redacted. Configurable time window (1–1440 minutes). ([Phase 4.14](https://getdrydock.com/docs/api/container))
+- **Container log streaming API** — `WS /api/v1/containers/:id/logs/stream` endpoint with Docker binary stream demultiplexing, session-based authentication on WebSocket upgrade, and fixed-window rate limiting (1,000 connections per 15 minutes).
+- **Container log download API** — `GET /api/v1/containers/:id/logs` endpoint with gzip compression support, stdout/stderr filtering, configurable tail size, and timestamp-based `since` filtering.
+- **Debug dump API** — `GET /api/v1/debug/dump` endpoint with configurable `minutes` query parameter for time-windowed event collection.
+- **Copy logs to clipboard** — Copy button in the container log viewer copies all visible log entries to clipboard with timestamp, stream type, and content.
+- **Dashboard customization** — Customizable grid layout with drag-to-reorder, resize, and per-widget visibility toggles using `grid-layout-plus`. Edit mode via pencil icon in breadcrumb header. Customize panel with checkboxes and S/M/L size badges. All widgets progressively collapse content based on container height.
+- **Resource usage dashboard widget** — CPU and memory usage bars with top-N resource consumers, progressive detail at different widget sizes.
+- **Trigger environment variable aliases** — Triggers can now be configured with `DD_ACTION_*` or `DD_NOTIFICATION_*` prefixes in addition to `DD_TRIGGER_*`. All three prefixes resolve identically at startup.
+- **Digest notification mode** — New `MODE=digest` trigger option that accumulates update events over a configurable time window and sends a single batch notification on a cron schedule. Configure with `DD_TRIGGER_{type}_{name}_MODE=digest` and `DD_TRIGGER_{type}_{name}_DIGESTCRON=0 8 * * *` (default: daily at 8am). Works with all notification triggers (SMTP, Telegram, Slack, Pushover, etc.). ([Discussion #185](https://github.com/CodesWhat/drydock/discussions/185))
+- **Toast notifications for container action errors** — Update and delete failures now surface as visible toast notifications in the UI instead of silently failing. Toasts auto-dismiss after 6 seconds and stack below announcement banners. ([#183](https://github.com/CodesWhat/drydock/issues/183))
+- **System log live streaming in UI** — Added end-to-end WebSocket support for system logs (`/api/v1/log/stream`) with new UI service/composable and live log view integration.
+- **Watcher run-time visibility in UI** — Watcher metadata now exposes `lastRunAt`, and UI surfaces it as a relative timestamp.
+- **Shared log viewer primitives** — Added reusable `AppLogViewer` building blocks, JSON tokenizer/search utilities, and full-page container detail tab components for consistent log UX.
+
+### Changed
+
+- **Container log viewer upgraded to WebSocket streaming** — Replaced the previous HTTP polling-based log viewer with real-time WebSocket streaming. Logs now appear instantly as containers produce them, with no polling interval needed. The viewer retains up to 5,000 lines in a ring buffer.
+- **Container detail panel log tab sizing** — Log viewer in the slide-in detail panel and full-page view now fills the available viewport height without causing outer scrollbars. Uses proper flex layout containment instead of fixed `calc()` heights.
+- **Search match navigation** — Prev/Next search navigation buttons are now hidden by default and only appear when a search query is active, reducing toolbar clutter.
+- **UI text and margin standardization** — Consistent text sizing, view margins, and scroll container padding across all views and components.
+- **Connection lost overlay z-index** — Overlay now covers entire viewport including sidebar using CSS custom property `--z-modal`.
+- **Deprecation banner composable** — Reusable `useDeprecationBanner` composable for session and permanent dismissal of deprecation notices.
+- **Debug dump redaction patterns expanded** — Sensitive key detection now covers 14+ token patterns including `passwd`, `credential`, `apikey`, `accesskey`, `privatekey`, `bearer`, `auth`, and `login` (env-style keys only for auth/bearer/login to avoid false positives).
+
+### Fixed
+
+- **TypeScript type safety in watcher registry lookups** — Replaced unsafe `as unknown as` casts with `isDockerWatcher()` type guard for Docker watcher state lookups.
+- **Container alias name canonicalization** — `getContainerName()` now strips Docker recreate alias prefixes (e.g. `8bf70beac570_termix` → `termix`) before the name enters the store, so all triggers (Telegram, Slack, Pushover, etc.) receive canonical names. MQTT was already fixed in v1.4.5; this extends the fix to the source. ([#156](https://github.com/CodesWhat/drydock/issues/156))
+- **Cascading -old container updates** — "Update All" batch no longer triggers updates on containers renamed with `-old-{timestamp}` suffix during a prior update. Guard added to base Trigger class (`mustTrigger`), all API endpoints (container-actions, webhook, trigger proxy), and UI batch freezes container IDs at start. ([#183](https://github.com/CodesWhat/drydock/issues/183))
+- **Remote trigger error reporting** — Agent-side trigger endpoints now return structured error details with reason field. Controller extracts and logs the actual failure message instead of bare "Request failed with status code 500". Original Axios error preserved for proxy forwarding. ([#183](https://github.com/CodesWhat/drydock/issues/183))
+- **Dashboard confirm dialog** — `ConfirmDialog` moved to global app shell so update prompts from the dashboard "Updates Available" widget appear immediately instead of requiring navigation to the Containers page. ([#184](https://github.com/CodesWhat/drydock/issues/184))
+- **Registry failures in Updates Available widget** — Containers with "check failed" status (registry errors) no longer appear in the dashboard "Updates Available" section. They remain visible on the Containers page with error indicators. ([#186](https://github.com/CodesWhat/drydock/issues/186))
+- **Digest cron validation** — `DIGESTCRON` config validated with `cron.validate()` at registration time, failing with a clear error instead of a runtime crash.
+- **Container list runtime status filtering** — Container list API now accepts Docker runtime statuses (`running`, `stopped`, `paused`, etc.) in `status` filtering.
+- **Digest-only image visibility** — Watchers no longer silently drop containers with digest-only image references.
+- **Debug dump filename normalization** — Debug exports now use date-only `.json` filenames.
+- **WebSocket robustness fixes** — Prevented writes on closed sockets, fixed non-matching upgrade URL pass-through behavior, and eliminated stats-collector listener leaks across restart cycles.
+
 ## [1.4.5] — 2026-03-17
 
 ### Added
@@ -105,6 +187,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Update-operations pagination** — `GET /api/containers/:id/update-operations` now supports `limit` and `offset` query parameters with `_links` navigation, matching the existing container list pagination pattern.
 - **Periodic audit log pruning** — Audit store now runs a background timer (hourly, unref'd) to prune stale entries even with low insert volume, in addition to the existing insert-count-based pruning.
+- **Container release notes enrichment** — Watch cycles now enrich update candidates with GitHub release metadata (`result.releaseNotes` and `result.releaseLink`), and full notes are available via `GET /api/containers/:id/release-notes`.
+- **Container list sort and filter query params** — `GET /api/containers` now supports `sort` (`name`, `status`, `age`, `created`, with optional `-` prefix for descending), plus `status`, `kind`, `watcher`, and `maturity` filters.
+- **Update age and maturity API signals** — Container payloads now track `updateAge` and support maturity states (`hot`, `mature`, `established`) for filtering and policy workflows.
+- **Suggested semver tag hints** — Containers tracked on non-semver tags such as `latest` now expose `result.suggestedTag` to surface the best semver target.
+- **`oninclude` trigger auto mode** — Trigger `auto` now supports `oninclude`, which only auto-runs for containers explicitly matched by include labels. ([#160](https://github.com/CodesWhat/drydock/issues/160))
+- **Container runtime observability APIs** — Added `/api/containers/stats`, `/api/containers/:id/stats`, and `/api/containers/:id/stats/stream` for resource telemetry, plus richer per-container runtime snapshots.
+- **Real-time container log streaming** — Added WebSocket streaming at `/api/v1/containers/:id/logs/stream` with `stdout`/`stderr`, `tail`, `since`, and `follow` controls.
+- **Container logs and runtime stats panels** — Container detail views now include dedicated live Logs and Runtime Stats tabs (including full-page logs route support).
+- **Signed registry webhook receiver** — Added `POST /api/webhooks/registry` with HMAC signature verification and provider-specific payload parsing for registry push events.
+- **Auth lockout Prometheus observability** — Added Prometheus metrics for login success/failure and lockout activity.
 
 ### Changed
 
@@ -114,10 +206,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Decompose useContainerActions** — Split the 1200-line composable into focused modules: `useContainerBackups`, `useContainerPolicy`, `useContainerPreview`, and `useContainerTriggers`.
 - **Registry error handling** — Replaced `catch (e: any)` with `catch (e: unknown)` and `getErrorMessage(e)` in component registration and trigger/watcher startup.
 - **E2E test resilience** — Container row count assertions now use `toBeGreaterThan(0)` instead of hardcoded counts, preventing false failures when the QA environment has a different number of containers.
+- **Registry digest cache dedup per poll cycle** — Digest cache lookups now deduplicate repeated requests within a single poll cycle, reducing redundant registry calls and improving metric accuracy.
 - **Extract runtime config evaluation context type** — Consolidated scattered runtime field evaluation parameters into a typed `ClonedRuntimeFieldEvaluationContext` interface for trigger providers.
 - **Argon2 hash parsing type safety** — Extracted `Argon2Parameters` interface, parameter key type guard, and PHC parameter parsing into a reusable function for improved type safety.
 - **Extract agent client initialization methods** — Extracted URL parsing, HTTPS detection, protocol validation, and TLS configuration from monolithic constructor into focused private methods.
 - **Extract shared self-hosted registry config schema** — Deduplicated the registry configuration schema (url, login, password, auth, cafile, insecure, clientcert, clientkey) into a reusable helper shared by Custom and SelfHostedBasic registry providers.
+
+### Documentation
+
+- **Podman docs expansion** — Added Podman setup/compatibility guidance plus SELinux, `podman-compose`, and production notes in watcher and FAQ docs.
+- **Docs site URL rebrand** — Replaced `drydock.codeswhat.com` links with `getdrydock.com` across docs pages, sitemap/robots metadata, and website copy.
 
 ### Fixed
 
@@ -914,7 +1012,12 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.4.1...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/CodesWhat/drydock/compare/v1.4.5...v1.5.0
+[1.4.5]: https://github.com/CodesWhat/drydock/compare/v1.4.4...v1.4.5
+[1.4.4]: https://github.com/CodesWhat/drydock/compare/v1.4.3...v1.4.4
+[1.4.3]: https://github.com/CodesWhat/drydock/compare/v1.4.2...v1.4.3
+[1.4.2]: https://github.com/CodesWhat/drydock/compare/v1.4.1...v1.4.2
 [1.4.1]: https://github.com/CodesWhat/drydock/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/CodesWhat/drydock/compare/v1.3.9...v1.4.0
 [1.3.9]: https://github.com/CodesWhat/drydock/compare/v1.3.8...v1.3.9

@@ -1,5 +1,36 @@
 import TriggerPipelineError from './TriggerPipelineError.js';
 
+type RegistryState = Record<PropertyKey, unknown>;
+
+type RegistryManagerCandidate = {
+  getAuthPull?: (...args: unknown[]) => unknown;
+  getImageFullName?: (...args: unknown[]) => unknown;
+  normalizeImage?: (...args: unknown[]) => unknown;
+  match?: (...args: unknown[]) => unknown;
+  getId?: (...args: unknown[]) => unknown;
+};
+
+type RegistryCompatibilityOptions = {
+  requireNormalizeImage?: boolean;
+};
+
+type RegistryLookupOptions = {
+  source?: string;
+  registryName?: unknown;
+  requiredMethods?: string[];
+  requireNormalizeImage?: boolean;
+};
+
+type RegistryResolveOptions = {
+  allowAnonymousFallback?: boolean;
+  requireNormalizeImage?: boolean;
+  registryName?: unknown;
+};
+
+function toPropertyKey(value: unknown): PropertyKey {
+  return typeof value === 'symbol' ? value : String(value);
+}
+
 class RegistryResolver {
   normalizeRegistryHost(registryUrlOrName) {
     if (typeof registryUrlOrName !== 'string') {
@@ -75,18 +106,19 @@ class RegistryResolver {
     return candidates;
   }
 
-  isRegistryManagerCompatible(registry, options: Record<string, any> = {}) {
+  isRegistryManagerCompatible(registry, options: RegistryCompatibilityOptions = {}) {
     const { requireNormalizeImage = false } = options;
     if (!registry || typeof registry !== 'object') {
       return false;
     }
-    if (typeof registry.getAuthPull !== 'function') {
+    const registryCandidate = registry as RegistryManagerCandidate;
+    if (typeof registryCandidate.getAuthPull !== 'function') {
       return false;
     }
-    if (typeof registry.getImageFullName !== 'function') {
+    if (typeof registryCandidate.getImageFullName !== 'function') {
       return false;
     }
-    if (requireNormalizeImage && typeof registry.normalizeImage !== 'function') {
+    if (requireNormalizeImage && typeof registryCandidate.normalizeImage !== 'function') {
       return false;
     }
     return true;
@@ -157,7 +189,7 @@ class RegistryResolver {
     return requiredMethods;
   }
 
-  ensureCompatibleRegistryManager(registryManager, options: Record<string, any> = {}) {
+  ensureCompatibleRegistryManager(registryManager, options: RegistryLookupOptions = {}) {
     const {
       source = 'unknown',
       registryName,
@@ -187,12 +219,12 @@ class RegistryResolver {
   }
 
   findRegistryManagerByName(
-    registryState: Record<string, any> = {},
-    options: Record<string, any> = {},
+    registryState: RegistryState = {},
+    options: RegistryLookupOptions = {},
   ) {
     const { registryName, requiredMethods = [], requireNormalizeImage = false } = options;
 
-    return this.ensureCompatibleRegistryManager(registryState[registryName], {
+    return this.ensureCompatibleRegistryManager(registryState[toPropertyKey(registryName)], {
       source: 'lookup by name',
       registryName,
       requiredMethods,
@@ -200,15 +232,19 @@ class RegistryResolver {
     });
   }
 
-  findRegistryManagerByImageCandidate(registryState: Record<string, any> = {}, imageCandidate) {
+  findRegistryManagerByImageCandidate(registryState: RegistryState = {}, imageCandidate) {
     for (const registryManager of Object.values(registryState)) {
-      if (typeof registryManager?.match !== 'function') {
+      if (!registryManager || typeof registryManager !== 'object') {
+        continue;
+      }
+      const registryManagerCandidate = registryManager as RegistryManagerCandidate;
+      if (typeof registryManagerCandidate.match !== 'function') {
         continue;
       }
 
       try {
-        if (registryManager.match(imageCandidate)) {
-          return registryManager;
+        if (registryManagerCandidate.match(imageCandidate)) {
+          return registryManagerCandidate;
         }
       } catch {
         // Ignore matcher errors and continue checking other registries.
@@ -221,8 +257,8 @@ class RegistryResolver {
   findRegistryManagerByImageMatch(
     container,
     logContainer,
-    registryState: Record<string, any> = {},
-    options: Record<string, any> = {},
+    registryState: RegistryState = {},
+    options: RegistryLookupOptions = {},
   ) {
     const { registryName, requiredMethods = [], requireNormalizeImage = false } = options;
     const lookupCandidates = this.buildRegistryLookupCandidates(container?.image);
@@ -251,7 +287,7 @@ class RegistryResolver {
     return undefined;
   }
 
-  createUnsupportedRegistryManagerError(registryState: Record<string, any> = {}, registryName) {
+  createUnsupportedRegistryManagerError(registryState: RegistryState = {}, registryName) {
     const knownRegistries = Object.keys(registryState);
     const knownRegistriesAsString =
       knownRegistries.length > 0 ? knownRegistries.join(', ') : 'none';
@@ -268,8 +304,8 @@ class RegistryResolver {
   resolveRegistryManager(
     container,
     logContainer,
-    registryState: Record<string, any> = {},
-    options: Record<string, any> = {},
+    registryState: RegistryState = {},
+    options: RegistryResolveOptions = {},
   ) {
     const {
       allowAnonymousFallback = false,

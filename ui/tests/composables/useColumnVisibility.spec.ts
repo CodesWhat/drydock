@@ -31,6 +31,7 @@ describe('useColumnVisibility', () => {
       'kind',
       'status',
       'bouncer',
+      'imageAge',
       'server',
       'registry',
     ]);

@@ -20,6 +20,7 @@ import { getWatcherConfiguration } from './watcherConfiguration';
 
 const DONUT_CIRCUMFERENCE = 301.6;
 const RECENT_UPDATES_LIMIT = 6;
+const FILTER_KIND_ANY = 'ANY'.toLowerCase();
 
 const UPDATE_BREAKDOWN_BUCKETS: ReadonlyArray<Omit<UpdateBreakdownBucket, 'count'>> = [
   {
@@ -278,6 +279,16 @@ function isMaintenanceWindowOpen(watcher: unknown): boolean {
   return open === true;
 }
 
+function getWatcherName(watcher: unknown): string {
+  if (watcher && typeof watcher === 'object') {
+    const name = (watcher as Record<string, unknown>).name;
+    if (typeof name === 'string' && name.length > 0) {
+      return name;
+    }
+  }
+  return 'local';
+}
+
 function parseMaintenanceWindowAt(watcher: unknown): number | undefined {
   const configuration = getWatcherConfiguration(watcher);
   const value = configuration.maintenancenextwindow ?? configuration.maintenanceNextWindow;
@@ -319,16 +330,29 @@ function useMaintenanceComputed(input: UseDashboardComputedInput) {
     () => maintenanceWindowWatchers.value.filter(isMaintenanceWindowOpen).length,
   );
 
-  const nextMaintenanceWindowAt = computed<number | undefined>(() => {
-    const windows = maintenanceWindowWatchers.value
-      .map(parseMaintenanceWindowAt)
-      .filter((value): value is number => value !== undefined);
+  const nextMaintenanceWindowByWatcher = computed<Map<string, number>>(() => {
+    const map = new Map<string, number>();
+    for (const watcher of maintenanceWindowWatchers.value) {
+      const ts = parseMaintenanceWindowAt(watcher);
+      if (ts !== undefined) {
+        map.set(getWatcherName(watcher), ts);
+      }
+    }
+    return map;
+  });
 
-    if (windows.length === 0) {
+  const nextMaintenanceWindowAt = computed<number | undefined>(() => {
+    const map = nextMaintenanceWindowByWatcher.value;
+    if (map.size === 0) {
       return undefined;
     }
-
-    return Math.min(...windows);
+    let min = Number.POSITIVE_INFINITY;
+    for (const ts of map.values()) {
+      if (ts < min) {
+        min = ts;
+      }
+    }
+    return min;
   });
 
   const maintenanceCountdownLabel = computed(() =>
@@ -343,6 +367,7 @@ function useMaintenanceComputed(input: UseDashboardComputedInput) {
   return {
     maintenanceCountdownLabel,
     maintenanceWindowWatchers,
+    nextMaintenanceWindowByWatcher,
   };
 }
 
@@ -504,7 +529,7 @@ function useStatsComputed(
         icon: 'updates',
         color: updatesStatColor,
         colorMuted: updatesStatMutedColor,
-        route: { path: ROUTES.CONTAINERS, query: { filterKind: 'any' } },
+        route: { path: ROUTES.CONTAINERS, query: { filterKind: FILTER_KIND_ANY } },
         detail:
           freshUpdates > 0
             ? `${freshUpdates} new · ${updatesAvailable - freshUpdates} mature`
@@ -530,22 +555,6 @@ function useStatsComputed(
       },
     ];
   });
-}
-
-function toRegistryFailureRecentUpdate(container: Container): RecentUpdateRow {
-  return {
-    id: container.id,
-    name: container.name,
-    image: container.image,
-    icon: container.icon,
-    oldVer: container.currentTag,
-    newVer: 'check failed',
-    releaseLink: undefined,
-    status: 'error',
-    updateKind: null,
-    running: container.status === 'running',
-    registryError: container.registryError,
-  };
 }
 
 function isPendingRecentUpdateContainer(container: Container): boolean {
@@ -578,15 +587,9 @@ function buildRecentUpdateRows(
   containers: Container[],
   recentStatusByContainer: Record<string, RecentAuditStatus>,
 ): RecentUpdateRow[] {
-  const registryFailures = containers
-    .filter((container) => !container.newTag && !!container.registryError)
-    .map(toRegistryFailureRecentUpdate);
-
-  const availablePendingSlots = Math.max(RECENT_UPDATES_LIMIT - registryFailures.length, 0);
-  if (availablePendingSlots === 0) {
-    return registryFailures.slice(0, RECENT_UPDATES_LIMIT);
-  }
-
+  // Only show containers with actual available updates — registry failures
+  // ("check failed") are surfaced elsewhere and should not appear in the
+  // "Updates Available" widget (#186).
   const topPendingUpdates: PendingRecentUpdateCandidate[] = [];
   for (const container of containers) {
     if (!isPendingRecentUpdateContainer(container)) {
@@ -596,14 +599,11 @@ function buildRecentUpdateRows(
     insertPendingRecentUpdate(
       topPendingUpdates,
       toPendingRecentUpdateCandidate(container, recentStatusByContainer),
-      availablePendingSlots,
+      RECENT_UPDATES_LIMIT,
     );
   }
 
-  return [...registryFailures, ...topPendingUpdates.map((candidate) => candidate.row)].slice(
-    0,
-    RECENT_UPDATES_LIMIT,
-  );
+  return topPendingUpdates.map((candidate) => candidate.row).slice(0, RECENT_UPDATES_LIMIT);
 }
 
 function useRecentUpdatesComputed(input: UseDashboardComputedInput) {
@@ -788,7 +788,8 @@ function useUpdateBreakdownComputed(input: UseDashboardComputedInput) {
 }
 
 export function useDashboardComputed(input: UseDashboardComputedInput) {
-  const { maintenanceCountdownLabel, maintenanceWindowWatchers } = useMaintenanceComputed(input);
+  const { maintenanceCountdownLabel, maintenanceWindowWatchers, nextMaintenanceWindowByWatcher } =
+    useMaintenanceComputed(input);
   const {
     containerMetrics,
     securityCleanArcLength,
@@ -817,6 +818,7 @@ export function useDashboardComputed(input: UseDashboardComputedInput) {
     getUpdateKindMutedColor,
     maintenanceCountdownLabel,
     maintenanceWindowWatchers,
+    nextMaintenanceWindowByWatcher,
     recentUpdates,
     securityCleanArcLength,
     securityCleanCount,

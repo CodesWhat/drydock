@@ -13,8 +13,8 @@
 </div>
 
 <p align="center">
-  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.4.5-blue" alt="Version"></a>
-  <a href="https://github.com/CodesWhat/drydock/pkgs/container/drydock"><img src="https://img.shields.io/badge/GHCR-40K%2B_pulls-2ea44f?logo=github&logoColor=white" alt="GHCR pulls"></a>
+  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.5.0-blue" alt="Version"></a>
+  <a href="https://github.com/CodesWhat/drydock/pkgs/container/drydock"><img src="https://img.shields.io/badge/GHCR-45K%2B_pulls-2ea44f?logo=github&logoColor=white" alt="GHCR pulls"></a>
   <a href="https://hub.docker.com/r/codeswhat/drydock"><img src="https://img.shields.io/docker/pulls/codeswhat/drydock?logo=docker&logoColor=white&label=Docker+Hub" alt="Docker Hub pulls"></a>
   <a href="https://quay.io/repository/codeswhat/drydock"><img src="https://img.shields.io/badge/Quay.io-image-ee0000?logo=redhat&logoColor=white" alt="Quay.io"></a>
   <br>
@@ -37,11 +37,12 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/CodesWhat/drydock/actions/workflows/ci.yml"><img src="https://github.com/CodesWhat/drydock/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
+  <a href="https://github.com/CodesWhat/drydock/actions/workflows/ci-verify.yml"><img src="https://github.com/CodesWhat/drydock/actions/workflows/ci-verify.yml/badge.svg?branch=main" alt="CI"></a>
   <a href="https://www.bestpractices.dev/projects/11915"><img src="https://www.bestpractices.dev/projects/11915/badge" alt="OpenSSF Best Practices"></a>
   <a href="https://securityscorecards.dev/viewer/?uri=github.com/CodesWhat/drydock"><img src="https://img.shields.io/ossf-scorecard/github.com/CodesWhat/drydock?label=openssf+scorecard&style=flat" alt="OpenSSF Scorecard"></a>
   <br>
   <a href="https://app.codecov.io/gh/CodesWhat/drydock"><img src="https://codecov.io/gh/CodesWhat/drydock/graph/badge.svg?token=b90d4863-46c5-40d2-bf00-f6e4a79c8656" alt="Codecov"></a>
+  <a href="https://dashboard.stryker-mutator.io/reports/github.com/CodesWhat/drydock/main"><img src="https://img.shields.io/endpoint?style=flat&url=https%3A%2F%2Fbadge-api.stryker-mutator.io%2Fgithub.com%2FCodesWhat%2Fdrydock%2Fmain" alt="Mutation testing"></a>
   <a href="https://qlty.sh/gh/CodesWhat/projects/drydock"><img src="https://qlty.sh/gh/CodesWhat/projects/drydock/maintainability.svg" alt="Maintainability"></a>
   <a href="https://snyk.io/test/github/CodesWhat/drydock?targetFile=app/package.json"><img src="https://snyk.io/test/github/CodesWhat/drydock/badge.svg?targetFile=app/package.json" alt="Snyk"></a>
 </p>
@@ -52,13 +53,13 @@
 
 - [📖 Documentation](https://getdrydock.com/docs)
 - [🚀 Quick Start](#quick-start)
+- [🆕 Recent Updates](#recent-updates)
 - [📸 Screenshots & Live Demo](#screenshots)
 - [✨ Features](#features)
 - [🔌 Supported Integrations](#supported-integrations)
 - [⚖️ Feature Comparison](#feature-comparison)
 - [🔄 Migration](#migration)
 - [🗺️ Roadmap](#roadmap)
-- [📖 Documentation](#documentation)
 - [⭐ Star History](#star-history)
 - [🔧 Built With](#built-with)
 - [🤝 Community QA](#community-qa)
@@ -142,6 +143,15 @@ See the [Quick Start guide](https://getdrydock.com/docs/quickstart) for Docker C
 
 <hr>
 
+<h2 align="center" id="recent-updates">🆕 Recent Updates</h2>
+
+- **Digest notifications for triggers** — Batch update events with `MODE=digest` and configurable `DIGESTCRON`.
+- **System log WebSocket streaming** — Live system logs in the UI with backend WebSocket streaming support.
+- **Richer container list API controls** — `sort`/`order`, watched-kind filtering (`kind=watched|unwatched|all`), runtime status filtering, and maturity filtering.
+- **Watcher run visibility** — Watcher metadata now includes `lastRunAt`, shown in the UI as a relative timestamp.
+
+<hr>
+
 <h2 align="center" id="screenshots">📸 Screenshots & Live Demo</h2>
 
 <table>
@@ -219,11 +229,25 @@ Start, stop, restart, and update containers from the UI or API with feature-flag
 </td>
 <td align="center" width="33%">
 <h3>Webhook API</h3>
-Token-authenticated HTTP endpoints with per-endpoint token support for CI/CD integration to trigger watch cycles and updates
+Token-authenticated CI/CD endpoints for watch/update actions plus signed registry webhook ingestion for push events
 </td>
 <td align="center" width="33%">
 <h3>Container Grouping</h3>
 Smart stack detection via compose project or labels with collapsible groups and batch-update
+</td>
+</tr>
+<tr>
+<td align="center" width="33%">
+<h3>Digest Notifications</h3>
+Batch update events over a schedule with trigger `MODE=digest` and configurable digest cron windows
+</td>
+<td align="center" width="33%">
+<h3>System Log Streaming</h3>
+Real-time WebSocket system log view in the UI with shared log viewer components
+</td>
+<td align="center" width="33%">
+<h3>Advanced List API</h3>
+Container list supports queryable sort/order, watched-kind, runtime status, watcher, and maturity filters
 </td>
 </tr>
 <tr>
@@ -272,7 +296,7 @@ Apprise · Command · Discord · Docker · Docker Compose · Google Chat · Goti
 
 Anonymous (opt-in via `DD_ANONYMOUS_AUTH_CONFIRM=true`) · Basic (username + password hash) · OIDC (Authelia, Auth0, Authentik). All auth flows fail closed by default.
 
-API note: `POST /api/containers/:id/env/reveal` is currently scoped to authentication only (no per-container RBAC yet), so any authenticated user is treated as a trusted operator for secret reveal actions.
+API note: `POST /api/v1/containers/:id/env/reveal` is currently scoped to authentication only (no per-container RBAC yet), so any authenticated user is treated as a trusted operator for secret reveal actions. The unversioned `/api/containers/:id/env/reveal` alias remains available during the API-version transition.
 
 OpenAPI note: machine-readable API docs are available at `GET /api/v1/openapi.json` (canonical) and `GET /api/openapi.json` (compatibility alias during transition).
 
@@ -323,6 +347,7 @@ Trivy-powered vulnerability scanning blocks unsafe updates before they deploy. I
 <tr><td>Semver-aware updates</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>Digest watching</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
 <tr><td>Multi-arch (amd64/arm64)</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
+<tr><td>Container log viewer</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>Actively maintained</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
 </tbody>
 </table>
@@ -355,10 +380,10 @@ Drop-in replacement — swap the image, restart, done. All `WUD_*` env vars and 
 | **v1.4.2** ✅ | Bug Fixes | Watcher container count fix (#155), container recreate alias filtering (#156), stale store data fix (#157), CI versioned-only images (#154), maturity badge sizing, dependency upgrades |
 | **v1.4.3** ✅ | DNS & Security | Configurable DNS result ordering for Alpine EAI_AGAIN fix (#161), Docker socket security guide, zizmor blocking in CI, scoped GitHub environments |
 | **v1.4.4** ✅ | UI Polish & Hardening | Alias dedup hardening with 30s transient window (#156), dashboard host-status for remote watchers (#155), tooltip viewport fix (#165), click-to-copy version tags (#164), Simple Icons dark mode inversion, theme switcher fix, search button polish, URL rebrand to getdrydock.com |
-| **v1.5.0** | Observability & User-Requested Features | Real-time log viewer, container resource monitoring, registry webhooks, auth endpoint telemetry/guardrails, image maturity/sort-by-age indicator, URL-driven filter/sort state, release notes in UI & notifications, smart tag suggestions, digest check deduplication, Podman setup docs |
+| **v1.5.0** ✅ | Observability & User-Requested Features | Real-time WebSocket log viewer with ANSI colors + JSON syntax highlighting, dashboard customization (grid layout, drag, resize, widget visibility), container resource monitoring (CPU/memory stats + dashboard widget), diagnostic debug dump, registry webhook receiver, trigger env var aliases (`DD_ACTION_*`/`DD_NOTIFICATION_*`), auth endpoint telemetry/guardrails, UI standardization (margins, text sizes, deprecation banners) |
 | **v1.5.1** | Scanner Decoupling | Backend-based scanner execution (docker/remote), Grype provider, scanner asset lifecycle |
 | **v1.6.0** | Notifications & Release Intel | Notification templates, MS Teams & Matrix triggers, remove all deprecated compatibility aliases (see [DEPRECATIONS.md](DEPRECATIONS.md)) |
-| **v1.7.0** | Smart Updates & UX | Dependency-aware ordering, clickable port links, image prune, static image monitoring, dashboard customization |
+| **v1.7.0** | Smart Updates & UX | Dependency-aware ordering, clickable port links, image prune, static image monitoring |
 | **v1.8.0** | Fleet Management & Live Config | YAML config, live UI config panels, volume browser, parallel updates, SQLite store migration, i18n framework |
 | **v2.0.0** | Platform Expansion | Docker Swarm, Kubernetes watchers and triggers, basic GitOps |
 | **v2.1.0** | Advanced Deployment Patterns | Health check gates, canary deployments, durable self-update controller |
@@ -392,12 +417,8 @@ Drop-in replacement — swap the image, restart, done. All `WUD_*` env vars and 
 <a id="star-history"></a>
 
 <div align="center">
-  <a href="https://www.star-history.com/#CodesWhat/drydock&type=timeline&legend=top-left">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=CodesWhat/drydock&type=timeline&theme=dark&legend=top-left" />
-      <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=CodesWhat/drydock&type=timeline&legend=top-left" />
-      <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=CodesWhat/drydock&type=timeline&legend=top-left" />
-    </picture>
+  <a href="https://star-history.com/#CodesWhat/drydock&Date">
+    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=CodesWhat/drydock&type=Date" />
   </a>
 </div>
 
@@ -422,9 +443,9 @@ Drop-in replacement — swap the image, restart, done. All `WUD_*` env vars and 
 
 ### Community QA
 
-Thanks to the users who helped test v1.4.0 release candidates and reported bugs:
+Thanks to the users who helped test v1.4.0 and v1.5.0 release candidates and reported bugs:
 
-[@RK62](https://github.com/RK62) &middot; [@flederohr](https://github.com/flederohr) &middot; [@rj10rd](https://github.com/rj10rd) &middot; [@larueli](https://github.com/larueli) &middot; [@Waler](https://github.com/Waler) &middot; [@ElVit](https://github.com/ElVit) &middot; [@nchieffo](https://github.com/nchieffo)
+[@RK62](https://github.com/RK62) &middot; [@flederohr](https://github.com/flederohr) &middot; [@rj10rd](https://github.com/rj10rd) &middot; [@larueli](https://github.com/larueli) &middot; [@Waler](https://github.com/Waler) &middot; [@ElVit](https://github.com/ElVit) &middot; [@nchieffo](https://github.com/nchieffo) &middot; [@begunfx](https://github.com/begunfx) &middot; [@Ra72xx](https://github.com/Ra72xx)
 
 ---
 

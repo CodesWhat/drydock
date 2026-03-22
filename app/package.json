@@ -1,6 +1,6 @@
 {
   "name": "drydock-app",
-  "version": "1.4.5",
+  "version": "1.5.0",
   "description": "Drydock backend — Docker container update manager",
   "engines": {
     "node": ">=24.0.0"
@@ -14,6 +14,7 @@
     "lint:fix": "biome check --fix .",
     "lint": "biome check .",
     "test": "\"$npm_node_execpath\" -e \"const major = Number(process.versions.node.split('.')[0]); if (!Number.isInteger(major) || major < 24) { console.error('Drydock backend tests require Node.js >=24. Current: ' + process.version); process.exit(1); }\" && \"$npm_node_execpath\" ./node_modules/vitest/vitest.mjs run --coverage --maxWorkers=1 --fileParallelism=false",
+    "test:mutation": "stryker run",
     "knip": "knip"
   },
   "author": "CodesWhat",
@@ -66,14 +67,18 @@
     "undici": "^7.24.4",
     "unix-crypt-td-js": "1.1.4",
     "uuid": "^13.0.0",
+    "ws": "^8.19.0",
     "yaml": "2.8.2"
   },
   "overrides": {
     "body-parser": "2.2.2",
-    "fast-xml-parser": "5.5.6",
+    "fast-xml-parser": "5.5.7",
     "qs": "6.15.0"
   },
   "devDependencies": {
+    "@stryker-mutator/core": "^9.6.0",
+    "@stryker-mutator/typescript-checker": "^9.6.0",
+    "@stryker-mutator/vitest-runner": "^9.6.0",
     "@fast-check/vitest": "^0.3.0",
     "@types/cors": "^2.8.19",
     "@types/dockerode": "4.0.1",

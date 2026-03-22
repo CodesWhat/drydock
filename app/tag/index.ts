@@ -79,6 +79,24 @@ interface SafeRegex {
   exec(s: string): RegExpMatchArray | null;
 }
 
+interface ErrorWithMessage {
+  message: unknown;
+}
+
+function hasMessage(error: unknown): error is ErrorWithMessage {
+  return typeof error === 'object' && error !== null && 'message' in error;
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (hasMessage(error) && typeof error.message === 'string') {
+    return error.message;
+  }
+  return String(error);
+}
+
 /**
  * Safely compile a user-supplied regex pattern.
  * Returns null (and logs a warning) when the pattern is invalid.
@@ -103,8 +121,8 @@ function safeRegExp(pattern: string): SafeRegex | null {
         return result;
       },
     };
-  } catch (e: any) {
-    log.warn(`Invalid regex pattern "${pattern}": ${e.message}`);
+  } catch (e: unknown) {
+    log.warn(`Invalid regex pattern "${pattern}": ${getErrorMessage(e)}`);
     return null;
   }
 }

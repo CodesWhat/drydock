@@ -1,4 +1,5 @@
 import { performance } from 'node:perf_hooks';
+import { RE2JS } from 're2js';
 import { describe, expect, test, vi } from 'vitest';
 
 import {
@@ -141,6 +142,42 @@ describe('docker tag candidates module', () => {
     );
 
     expect(filtered).toEqual(inputTags);
+  });
+
+  test('reports error message from non-Error object with string message property', () => {
+    const compileSpy = vi.spyOn(RE2JS, 'compile').mockImplementation(() => {
+      throw { message: 'custom compile failure' };
+    });
+    const log = { warn: vi.fn(), debug: vi.fn() };
+
+    getTagCandidates(createContainer({ includeTags: 'anything' }), ['1.0.1'], log);
+
+    expect(log.warn).toHaveBeenCalledWith(expect.stringContaining('custom compile failure'));
+    compileSpy.mockRestore();
+  });
+
+  test('falls back to String(error) for thrown non-Error primitive', () => {
+    const compileSpy = vi.spyOn(RE2JS, 'compile').mockImplementation(() => {
+      throw 42;
+    });
+    const log = { warn: vi.fn(), debug: vi.fn() };
+
+    getTagCandidates(createContainer({ includeTags: 'anything' }), ['1.0.1'], log);
+
+    expect(log.warn).toHaveBeenCalledWith(expect.stringContaining('42'));
+    compileSpy.mockRestore();
+  });
+
+  test('stringifies object errors when the message field is not a string', () => {
+    const compileSpy = vi.spyOn(RE2JS, 'compile').mockImplementation(() => {
+      throw { message: { reason: 'custom compile failure' } };
+    });
+    const log = { warn: vi.fn(), debug: vi.fn() };
+
+    getTagCandidates(createContainer({ includeTags: 'anything' }), ['1.0.1'], log);
+
+    expect(log.warn).toHaveBeenCalledWith(expect.stringContaining('[object Object]'));
+    compileSpy.mockRestore();
   });
 
   test('processes large tag lists within lightweight runtime budget', () => {

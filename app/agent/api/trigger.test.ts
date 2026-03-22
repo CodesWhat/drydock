@@ -108,5 +108,23 @@ describe('agent API trigger', () => {
         expect.objectContaining({ error: 'Error when running batch trigger docker.update' }),
       );
     });
+
+    test('should return default 500 message when trigger throws non-object error', async () => {
+      req.params = { type: 'docker', name: 'update' };
+      req.body = [{ id: 'c1' }];
+      const mockTrigger = {
+        triggerBatch: vi.fn().mockRejectedValue(42),
+      };
+      registry.getState.mockReturnValue({
+        trigger: { 'docker.update': mockTrigger },
+      });
+
+      await triggerApi.runTriggerBatch(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: 'Internal Server Error' }),
+      );
+    });
   });
 });

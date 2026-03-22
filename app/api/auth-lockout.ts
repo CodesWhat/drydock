@@ -3,6 +3,11 @@ import path from 'node:path';
 import type { NextFunction, Response } from 'express';
 import passport from 'passport';
 import log from '../log/index.js';
+import {
+  recordAuthLogin,
+  setAuthAccountLockedTotal,
+  setAuthIpLockedTotal,
+} from '../prometheus/auth.js';
 import * as store from '../store/index.js';
 import { getErrorMessage } from '../util/error.js';
 import { recordLoginAuditEvent } from './auth-audit.js';
@@ -62,6 +67,21 @@ const ipLoginLockouts = new Map<string, LoginLockoutEntry>();
 let maintenanceTimer: ReturnType<typeof setInterval> | undefined;
 let persistTimer: ReturnType<typeof setTimeout> | undefined;
 let persistenceInitialized = false;
+
+function countActiveLockouts(lockouts: Map<string, LoginLockoutEntry>, now: number): number {
+  let activeLockouts = 0;
+  lockouts.forEach((entry) => {
+    if (entry.lockedUntil > now) {
+      activeLockouts += 1;
+    }
+  });
+  return activeLockouts;
+}
+
+function updateLockoutGaugeTotals(now = Date.now()): void {
+  setAuthAccountLockedTotal(countActiveLockouts(accountLoginLockouts, now));
+  setAuthIpLockedTotal(countActiveLockouts(ipLoginLockouts, now));
+}
 
 function parsePositiveIntegerEnv(name: string, fallback: number): number {
   const raw = process.env[name];
@@ -130,7 +150,10 @@ function persistLockoutState(): void {
       account: toPersistedRecord(accountLoginLockouts),
       ip: toPersistedRecord(ipLoginLockouts),
     };
-    fs.writeFileSync(lockoutStatePath, JSON.stringify(persistedState), 'utf8');
+    fs.writeFileSync(lockoutStatePath, JSON.stringify(persistedState), {
+      encoding: 'utf8',
+      mode: 0o600,
+    });
   } catch (error: unknown) {
     log.warn(`Unable to persist login lockout state (${getErrorMessage(error)})`);
   }
@@ -176,6 +199,7 @@ function loadPersistedLockoutState(): void {
     const persistedState = parsedState as Partial<PersistedLoginLockoutState>;
     hydrateLockoutMap(accountLoginLockouts, persistedState.account, accountLockoutPolicy);
     hydrateLockoutMap(ipLoginLockouts, persistedState.ip, ipLockoutPolicy);
+    updateLockoutGaugeTotals();
   } catch (error: unknown) {
     log.warn(`Unable to load login lockout state (${getErrorMessage(error)})`);
   }
@@ -193,14 +217,17 @@ function pruneAndPersistIfChanged(): void {
   ) {
     scheduleLockoutStatePersist();
   }
+  updateLockoutGaugeTotals(now);
 }
 
 export function initializeLoginLockoutState(): void {
   if (persistenceInitialized) {
+    updateLockoutGaugeTotals();
     return;
   }
   persistenceInitialized = true;
   loadPersistedLockoutState();
+  updateLockoutGaugeTotals();
   maintenanceTimer = setInterval(() => {
     pruneAndPersistIfChanged();
   }, lockoutPruneIntervalMs);
@@ -288,6 +315,7 @@ function getLockoutUntil(
     if (now - entry.lastAttemptAt > policy.windowMs) {
       lockouts.delete(key);
       scheduleLockoutStatePersist();
+      updateLockoutGaugeTotals(now);
     }
     return undefined;
   }
@@ -316,6 +344,7 @@ function registerFailedLoginAttempt(
       lastAttemptAt: now,
     });
     scheduleLockoutStatePersist();
+    updateLockoutGaugeTotals(now);
     return undefined;
   }
 
@@ -327,6 +356,7 @@ function registerFailedLoginAttempt(
 
   lockouts.set(key, existingEntry);
   scheduleLockoutStatePersist();
+  updateLockoutGaugeTotals(now);
   return existingEntry.lockedUntil > now ? existingEntry.lockedUntil : undefined;
 }
 
@@ -339,6 +369,7 @@ function clearLoginLockout(
   }
   if (lockouts.delete(key)) {
     scheduleLockoutStatePersist();
+    updateLockoutGaugeTotals();
   }
 }
 
@@ -364,6 +395,7 @@ function sendLockoutResponse(
 ): void {
   const retryAfterSeconds = Math.max(1, Math.ceil((lockoutUntil - now) / 1000));
   setRetryAfterHeader(res, retryAfterSeconds);
+  recordAuthLogin('locked', 'basic');
   recordLoginAuditEvent(
     req,
     'error',
@@ -466,4 +498,6 @@ export function resetLoginLockoutStateForTests(): void {
     persistTimer = undefined;
   }
   persistenceInitialized = false;
+  setAuthAccountLockedTotal(0);
+  setAuthIpLockedTotal(0);
 }

@@ -20,7 +20,7 @@ export function applyRememberMe(req: AuthRequest): void {
 
 /**
  * Store the "remember me" preference in the session.
- * Called before any auth flow (basic or OIDC redirect).
+ * Called before each auth flow (basic or OIDC redirect).
  * @param req
  * @param res
  */

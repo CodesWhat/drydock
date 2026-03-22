@@ -23,10 +23,15 @@ const viewLoaders = {
   notifications: () => import('../views/NotificationsView.vue'),
   audit: () => import('../views/AuditView.vue'),
   logs: () => import('../views/LogsView.vue'),
+  containerLogs: () => import('../views/ContainerLogsView.vue'),
 };
 
-function createLazyRoute(path: string, name: keyof typeof viewLoaders): RouteRecordRaw {
-  return { path, name, component: viewLoaders[name] };
+function createLazyRoute(
+  path: string,
+  viewName: keyof typeof viewLoaders,
+  routeName: string = viewName,
+): RouteRecordRaw {
+  return { path, name: routeName, component: viewLoaders[viewName] };
 }
 
 const routes: RouteRecordRaw[] = [
@@ -37,6 +42,7 @@ const routes: RouteRecordRaw[] = [
     children: [
       createLazyRoute('', 'dashboard'),
       createLazyRoute(ROUTES.CONTAINERS, 'containers'),
+      createLazyRoute(ROUTES.CONTAINER_LOGS, 'containerLogs', 'container-logs'),
       createLazyRoute(ROUTES.SECURITY, 'security'),
       createLazyRoute(ROUTES.SERVERS, 'servers'),
       createLazyRoute(ROUTES.CONFIG, 'config'),

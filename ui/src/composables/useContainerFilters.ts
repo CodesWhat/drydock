@@ -23,7 +23,15 @@ interface PersistedFilterRefs {
   kind: Ref<string>;
 }
 
-function getPersistedFilterValues(filters: PersistedFilterRefs) {
+interface PersistedFilterValues {
+  status: string;
+  registry: string;
+  bouncer: string;
+  server: string;
+  kind: string;
+}
+
+function getPersistedFilterValues(filters: PersistedFilterRefs): PersistedFilterValues {
   return {
     status: filters.status.value,
     registry: filters.registry.value,
@@ -33,7 +41,7 @@ function getPersistedFilterValues(filters: PersistedFilterRefs) {
   };
 }
 
-function persistFilterValues(values: ReturnType<typeof getPersistedFilterValues>): void {
+function persistFilterValues(values: PersistedFilterValues): void {
   preferences.containers.filters.status = values.status;
   preferences.containers.filters.registry = values.registry;
   preferences.containers.filters.bouncer = values.bouncer;
@@ -86,7 +94,7 @@ function matchesContainerFilters(container: Container, criteria: ContainerFilter
   return CONTAINER_FILTER_MATCHERS.every((matcher) => matcher(container, criteria));
 }
 
-export function useContainerFilters(containers: { value: Container[] }) {
+export function useContainerFilters(containers: Ref<Container[]>) {
   const filterSearch = ref('');
   const filterStatus = ref(preferences.containers.filters.status);
   const filterRegistry = ref(preferences.containers.filters.registry);
@@ -94,7 +102,7 @@ export function useContainerFilters(containers: { value: Container[] }) {
   const filterServer = ref(preferences.containers.filters.server);
   const filterKind = ref(preferences.containers.filters.kind);
   const showFilters = ref(false);
-  const persistedFilterRefs = {
+  const persistedFilterRefs: PersistedFilterRefs = {
     status: filterStatus,
     registry: filterRegistry,
     bouncer: filterBouncer,

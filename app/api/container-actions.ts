@@ -6,6 +6,7 @@ import type { AuditEntry } from '../model/audit.js';
 import { getContainerActionsCounter } from '../prometheus/container-actions.js';
 import * as registry from '../registry/index.js';
 import * as storeContainer from '../store/container.js';
+import Trigger from '../triggers/providers/Trigger.js';
 import { recordAuditEvent } from './audit-events.js';
 import { findDockerTriggerForContainer, NO_DOCKER_TRIGGER_FOUND_ERROR } from './docker-trigger.js';
 import { sendErrorResponse } from './error-response.js';
@@ -47,8 +48,8 @@ type DockerWatcher = {
  * Execute a container action (start, stop, restart).
  *
  * Security note: these action endpoints are intentionally authentication-gated
- * only. In current single-operator deployments, any authenticated user can
- * start, stop, or restart any container. Fine-grained RBAC is planned for a
+ * only. In current single-operator deployments, all authenticated users can
+ * start, stop, or restart containers. Fine-grained RBAC is planned for a
  * future enterprise access release.
  */
 async function executeAction(
@@ -160,6 +161,15 @@ async function updateContainer(req: Request, res: Response) {
 
   if (!container.updateAvailable) {
     sendErrorResponse(res, 400, 'No update available for this container');
+    return;
+  }
+
+  if (Trigger.isRollbackContainer(container)) {
+    sendErrorResponse(
+      res,
+      409,
+      'Cannot update temporary rollback container renamed with -old-{timestamp}',
+    );
     return;
   }
 

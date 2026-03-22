@@ -25,6 +25,14 @@ export interface ContainerSecurityDelta {
   newHigh: number;
 }
 
+export interface ContainerReleaseNotes {
+  title: string;
+  body: string;
+  url: string;
+  publishedAt: string;
+  provider: string;
+}
+
 export interface Container {
   id: string;
   name: string;
@@ -37,6 +45,9 @@ export interface Container {
   imageDigestWatch?: boolean;
   imageTagSemver?: boolean;
   releaseLink?: string;
+  suggestedTag?: string;
+  sourceRepo?: string;
+  releaseNotes?: ContainerReleaseNotes | null;
   status: 'running' | 'stopped';
   registry: 'dockerhub' | 'ghcr' | 'custom';
   registryName?: string;
@@ -56,6 +67,7 @@ export interface Container {
   updateSecurityScanState?: 'scanned' | 'not-scanned';
   updateSecuritySummary?: ContainerSecuritySummary;
   securityDelta?: ContainerSecurityDelta;
+  imageCreated?: string;
   server: string;
   includeTags?: string;
   excludeTags?: string;

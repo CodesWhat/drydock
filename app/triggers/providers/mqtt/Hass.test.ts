@@ -813,9 +813,6 @@ test('addContainerSensor should not duplicate stale topic when it matches curren
 
   // The stale alias topic should be removed, the canonical published
   const publishCalls = mqttClientMock.publish.mock.calls;
-  const discoveryTopics = publishCalls
-    .filter(([topic]) => topic.startsWith('homeassistant/'))
-    .map(([topic]) => topic);
   // canonical topic should appear exactly once as a non-empty publish
   const canonicalPublishes = publishCalls.filter(
     ([topic, payload]) =>
