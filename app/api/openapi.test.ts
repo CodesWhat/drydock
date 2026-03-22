@@ -18,14 +18,25 @@ describe('OpenAPI document', () => {
     expect(openApiDocument.paths['/auth/login']?.post).toBeDefined();
   });
 
-  test('should define session and webhook security schemes', () => {
+  test('should define session, webhook, and metrics bearer security schemes', () => {
     expect(openApiDocument.components.securitySchemes.sessionAuth).toBeDefined();
     expect(openApiDocument.components.securitySchemes.webhookBearerAuth).toBeDefined();
+    expect(openApiDocument.components.securitySchemes.metricsBearerAuth).toBeDefined();
+    expect(openApiDocument.components.securitySchemes.metricsBearerAuth.type).toBe('http');
+    expect(openApiDocument.components.securitySchemes.metricsBearerAuth.scheme).toBe('bearer');
   });
 
   test('should keep webhook endpoints protected by bearer auth in the spec', () => {
     expect(openApiDocument.paths['/api/webhook/watch']?.post?.security).toStrictEqual([
       { webhookBearerAuth: [] },
+    ]);
+  });
+
+  test('should declare /metrics with bearer token, session, and anonymous security alternatives', () => {
+    expect(openApiDocument.paths['/metrics']?.get?.security).toStrictEqual([
+      { metricsBearerAuth: [] },
+      { sessionAuth: [] },
+      {},
     ]);
   });
 

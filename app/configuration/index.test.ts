@@ -273,6 +273,7 @@ test('getStoreConfiguration should return configured store', async () => {
 test('getServerConfiguration should return configured api (new vars)', async () => {
   configuration.ddEnvVars.DD_SERVER_PORT = '4000';
   delete configuration.ddEnvVars.DD_SERVER_METRICS_AUTH;
+  delete configuration.ddEnvVars.DD_SERVER_METRICS_TOKEN;
   expect(configuration.getServerConfiguration()).toStrictEqual({
     cookie: {},
     compression: {},
@@ -305,6 +306,7 @@ test('getServerConfiguration should allow disabling metrics auth', async () => {
     },
     metrics: {
       auth: false,
+      token: '',
     },
     port: 3000,
     session: {},
@@ -312,6 +314,18 @@ test('getServerConfiguration should allow disabling metrics auth', async () => {
     trustproxy: false,
     ui: {},
   });
+  delete configuration.ddEnvVars.DD_SERVER_METRICS_AUTH;
+});
+
+test('getServerConfiguration should parse DD_SERVER_METRICS_TOKEN', async () => {
+  delete configuration.ddEnvVars.DD_SERVER_PORT;
+  configuration.ddEnvVars.DD_SERVER_METRICS_TOKEN = 'my-prom-token';
+  const config = configuration.getServerConfiguration();
+  expect(config.metrics).toStrictEqual({
+    auth: true,
+    token: 'my-prom-token',
+  });
+  delete configuration.ddEnvVars.DD_SERVER_METRICS_TOKEN;
 });
 
 test('getServerConfiguration should allow disabling the UI router', async () => {

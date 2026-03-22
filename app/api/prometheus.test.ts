@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 vi.mock('express', () => ({
   default: {
     Router: vi.fn(() => ({
@@ -82,5 +84,110 @@ describe('Prometheus Router', () => {
     expect(response.status).toHaveBeenCalledWith(200);
     expect(response.type).toHaveBeenCalledWith('text');
     expect(response.send).toHaveBeenCalledWith('metrics-output');
+  });
+
+  describe('bearer token auth (DD_SERVER_METRICS_TOKEN)', () => {
+    const testToken = 'my-secret-metrics-token';
+
+    beforeEach(() => {
+      getServerConfiguration.mockReturnValue({
+        metrics: {
+          auth: true,
+          token: testToken,
+        },
+      });
+    });
+
+    test('should use bearer token middleware when token is configured', () => {
+      const router = prometheusRouter.init();
+
+      expect(passport.authenticate).not.toHaveBeenCalled();
+      expect(router.use).toHaveBeenCalledWith(prometheusRouter.authenticateMetricsToken);
+    });
+
+    test('should return 200 for valid bearer token', () => {
+      const req = { headers: { authorization: `Bearer ${testToken}` } };
+      const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const next = vi.fn();
+
+      prometheusRouter.authenticateMetricsToken(req, res, next);
+
+      expect(next).toHaveBeenCalled();
+      expect(res.status).not.toHaveBeenCalled();
+    });
+
+    test('should return 401 for invalid bearer token', () => {
+      const req = { headers: { authorization: 'Bearer wrong-token' } };
+      const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const next = vi.fn();
+
+      prometheusRouter.authenticateMetricsToken(req, res, next);
+
+      expect(next).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(401);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Unauthorized' });
+    });
+
+    test('should return 401 when authorization header is missing', () => {
+      const req = { headers: {} };
+      const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const next = vi.fn();
+
+      prometheusRouter.authenticateMetricsToken(req, res, next);
+
+      expect(next).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(401);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Unauthorized' });
+    });
+
+    test('should accept lowercase "bearer" scheme (RFC 7235)', () => {
+      const req = { headers: { authorization: `bearer ${testToken}` } };
+      const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const next = vi.fn();
+
+      prometheusRouter.authenticateMetricsToken(req, res, next);
+
+      expect(next).toHaveBeenCalled();
+      expect(res.status).not.toHaveBeenCalled();
+    });
+
+    test('should return 401 for wrong auth scheme', () => {
+      const req = { headers: { authorization: `Basic ${testToken}` } };
+      const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const next = vi.fn();
+
+      prometheusRouter.authenticateMetricsToken(req, res, next);
+
+      expect(next).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(401);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Unauthorized' });
+    });
+
+    test('should fall back to passport auth when token is empty string', () => {
+      getServerConfiguration.mockReturnValue({
+        metrics: {
+          auth: true,
+          token: '',
+        },
+      });
+
+      const router = prometheusRouter.init();
+
+      expect(passport.authenticate).toHaveBeenCalledWith(['basic.default']);
+      expect(router.use).toHaveBeenCalledWith('auth-middleware');
+    });
+
+    test('should use timing-safe comparison to prevent timing attacks', () => {
+      // Verify that different-length tokens don't cause crashes or bypass.
+      // The SHA-256 hash normalization ensures buffers are always the same length.
+      const req = { headers: { authorization: 'Bearer x' } };
+      const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const next = vi.fn();
+
+      prometheusRouter.authenticateMetricsToken(req, res, next);
+
+      expect(next).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(401);
+    });
   });
 });
