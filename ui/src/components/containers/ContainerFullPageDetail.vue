@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import AppBadge from '@/components/AppBadge.vue';
+import AppTabBar from '@/components/AppTabBar.vue';
+import StatusDot from '@/components/StatusDot.vue';
 import ContainerFullPageTabContent from './ContainerFullPageTabContent.vue';
 import { useContainersViewTemplateContext } from './containersViewTemplateContext';
 
@@ -39,9 +42,9 @@ const {
             Back
           </AppButton>
           <div class="flex items-center gap-3 min-w-0">
-            <div
-              class="w-3 h-3 rounded-full shrink-0"
-              :style="{ backgroundColor: selectedContainer.status === 'running' ? 'var(--dd-success)' : 'var(--dd-danger)' }" />
+            <StatusDot
+              :status="selectedContainer.status === 'running' ? 'running' : 'stopped'"
+              size="lg" />
             <div class="min-w-0">
               <h1 class="text-base sm:text-lg font-bold truncate dd-text">
                 {{ selectedContainer.name }}
@@ -50,23 +53,18 @@ const {
                 <span class="text-2xs-plus sm:text-xs font-mono dd-text-secondary truncate max-w-[180px] sm:max-w-none">
                   {{ selectedContainer.image }}:{{ selectedContainer.currentTag }}
                 </span>
-                <span
-                  class="badge text-3xs"
-                  :style="{
-                    backgroundColor:
-                      selectedContainer.status === 'running'
-                        ? 'var(--dd-success-muted)'
-                        : 'var(--dd-danger-muted)',
-                    color: selectedContainer.status === 'running' ? 'var(--dd-success)' : 'var(--dd-danger)',
-                  }">
+                <AppBadge
+                  :tone="selectedContainer.status === 'running' ? 'success' : 'danger'"
+                  size="xs">
                   {{ selectedContainer.status }}
-                </span>
-                <span
-                  class="badge text-3xs uppercase font-bold max-sm:hidden"
-                  :style="{
-                    backgroundColor: registryColorBg(selectedContainer.registry),
-                    color: registryColorText(selectedContainer.registry),
-                  }">
+                </AppBadge>
+                <AppBadge
+                  size="xs"
+                  :custom="{
+                    bg: registryColorBg(selectedContainer.registry),
+                    text: registryColorText(selectedContainer.registry),
+                  }"
+                  class="max-sm:hidden">
                   {{
                     registryLabel(
                       selectedContainer.registry,
@@ -74,16 +72,17 @@ const {
                       selectedContainer.registryName,
                     )
                   }}
-                </span>
-                <span
+                </AppBadge>
+                <AppBadge
                   v-if="selectedContainer.newTag"
-                  class="badge text-3xs max-sm:hidden"
-                  :style="{
-                    backgroundColor: updateKindColor(selectedContainer.updateKind).bg,
-                    color: updateKindColor(selectedContainer.updateKind).text,
-                  }">
+                  size="xs"
+                  :custom="{
+                    bg: updateKindColor(selectedContainer.updateKind).bg,
+                    text: updateKindColor(selectedContainer.updateKind).text,
+                  }"
+                  class="max-sm:hidden">
                   {{ selectedContainer.updateKind }} update: {{ selectedContainer.newTag }}
-                </span>
+                </AppBadge>
               </div>
             </div>
           </div>
@@ -164,19 +163,11 @@ const {
         </div>
       </div>
 
-      <div class="flex overflow-x-auto scrollbar-hide px-5 gap-1" :style="{ borderTop: '1px solid var(--dd-border)' }">
-        <AppButton size="none" variant="plain" weight="none"
-          v-for="tab in detailTabs"
-          :key="tab.id"
-          class="whitespace-nowrap shrink-0 px-4 py-3 text-xs font-medium transition-colors relative"
-          :class="activeDetailTab === tab.id ? 'text-drydock-secondary' : 'dd-text-muted hover:dd-text'"
-          @click="activeDetailTab = tab.id">
-          <AppIcon :name="tab.icon" :size="12" class="mr-1.5" />
-          {{ tab.label }}
-          <div
-            v-if="activeDetailTab === tab.id"
-            class="absolute bottom-0 left-0 right-0 h-[2px] bg-drydock-secondary rounded-t-full" />
-        </AppButton>
+      <div class="px-5">
+        <AppTabBar
+          :tabs="detailTabs"
+          :model-value="activeDetailTab"
+          @update:model-value="activeDetailTab = $event" />
       </div>
     </div>
 

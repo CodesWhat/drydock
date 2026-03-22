@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import AppBadge from '../AppBadge.vue';
+import AppIconButton from '../AppIconButton.vue';
 import { useContainersViewTemplateContext } from './containersViewTemplateContext';
 import { getContainerViewKey } from '../../utils/container-view-key';
 import { imageAge } from '../../utils/audit-helpers';
@@ -73,11 +75,10 @@ const {
           <AppIcon :name="collapsedGroups.has(group.key) ? 'chevron-right' : 'chevron-down'" :size="10" class="dd-text-muted shrink-0" />
           <AppIcon name="stack" :size="12" class="dd-text-muted shrink-0" />
           <span class="text-xs font-semibold dd-text">{{ group.name ?? 'Ungrouped' }}</span>
-          <span class="badge text-3xs font-bold dd-bg-elevated dd-text-muted">{{ group.containerCount }}</span>
-          <span v-if="group.updatesAvailable > 0" class="badge text-3xs font-bold"
-                :style="{ backgroundColor: 'var(--dd-success-muted)', color: 'var(--dd-success)' }">
+          <AppBadge size="xs" :custom="{ bg: 'var(--dd-bg-elevated)', text: 'var(--dd-text-muted)' }">{{ group.containerCount }}</AppBadge>
+          <AppBadge v-if="group.updatesAvailable > 0" tone="success" size="xs">
             {{ group.updatesAvailable }} update{{ group.updatesAvailable === 1 ? '' : 's' }}
-          </span>
+          </AppBadge>
           <AppButton size="none" variant="plain" weight="none"
             v-if="group.updatableCount > 0 || !containerActionsEnabled"
             class="ml-auto inline-flex items-center justify-center px-2 py-1 dd-rounded border text-2xs font-semibold transition-colors"
@@ -142,62 +143,53 @@ const {
                   <span class="truncate max-w-[130px]">{{ c.noUpdateReason }}</span>
                 </span>
                 <div class="flex items-center gap-1.5 ml-auto shrink-0">
-                <span v-if="c.updateKind" class="badge px-1.5 py-0 text-3xs"
-                      :style="{ backgroundColor: updateKindColor(c.updateKind).bg, color: updateKindColor(c.updateKind).text }"
+                <AppBadge v-if="c.updateKind" size="xs" :custom="{ bg: updateKindColor(c.updateKind).bg, text: updateKindColor(c.updateKind).text }"
+                      class="px-1.5 py-0"
                       v-tooltip.top="tt(c.updateKind)">
                   <AppIcon :name="c.updateKind === 'major' ? 'chevrons-up' : c.updateKind === 'minor' ? 'chevron-up' : c.updateKind === 'patch' ? 'hashtag' : 'fingerprint'" :size="12" />
-                </span>
+                </AppBadge>
                 <UpdateMaturityBadge :maturity="c.updateMaturity" :tooltip="c.updateMaturityTooltip" size="sm" />
                 <SuggestedTagBadge :tag="c.suggestedTag" :current-tag="c.currentTag" />
-                <span v-if="c.bouncer === 'blocked'" class="badge px-1.5 py-0 text-3xs"
-                      style="background: var(--dd-danger-muted); color: var(--dd-danger);"
+                <AppBadge v-if="c.bouncer === 'blocked'" tone="danger" size="xs" class="px-1.5 py-0"
                       v-tooltip.top="tt('Blocked')">
                   <AppIcon name="blocked" :size="12" />
-                </span>
-                <span v-else-if="c.bouncer !== 'safe'" class="badge px-1.5 py-0 text-3xs"
-                      style="background: var(--dd-warning-muted); color: var(--dd-warning);"
+                </AppBadge>
+                <AppBadge v-else-if="c.bouncer !== 'safe'" tone="warning" size="xs" class="px-1.5 py-0"
                       v-tooltip.top="tt(c.bouncer)">
                   <AppIcon name="warning" :size="12" />
-                </span>
-                <span v-if="hasRegistryError(c)" class="badge px-1.5 py-0 text-3xs"
-                      style="background: var(--dd-danger-muted); color: var(--dd-danger);"
+                </AppBadge>
+                <AppBadge v-if="hasRegistryError(c)" tone="danger" size="xs" class="px-1.5 py-0"
                       aria-label="Registry error"
                       v-tooltip.top="tt(registryErrorTooltip(c))">
                   <AppIcon name="warning" :size="12" />
-                </span>
-                <span v-if="getContainerListPolicyState(c.name).snoozed"
-                      class="badge px-1.5 py-0 text-3xs"
-                      style="background: var(--dd-info-muted); color: var(--dd-info);"
+                </AppBadge>
+                <AppBadge v-if="getContainerListPolicyState(c.name).snoozed"
+                      tone="info" size="xs" class="px-1.5 py-0"
                       aria-label="Snoozed updates"
                       v-tooltip.top="tt(containerPolicyTooltip(c.name, 'snoozed'))">
                   <AppIcon name="pause" :size="12" />
-                </span>
-                <span v-if="getContainerListPolicyState(c.name).skipped"
-                      class="badge px-1.5 py-0 text-3xs"
-                      style="background: var(--dd-warning-muted); color: var(--dd-warning);"
+                </AppBadge>
+                <AppBadge v-if="getContainerListPolicyState(c.name).skipped"
+                      tone="warning" size="xs" class="px-1.5 py-0"
                       aria-label="Skipped updates"
                       v-tooltip.top="tt(containerPolicyTooltip(c.name, 'skipped'))">
                   <AppIcon name="skip-forward" :size="12" />
-                </span>
-                <span v-if="getContainerListPolicyState(c.name).maturityBlocked"
-                      class="badge px-1.5 py-0 text-3xs"
-                      style="background: var(--dd-primary-muted); color: var(--dd-primary);"
+                </AppBadge>
+                <AppBadge v-if="getContainerListPolicyState(c.name).maturityBlocked"
+                      tone="primary" size="xs" class="px-1.5 py-0"
                       aria-label="Maturity-blocked updates"
                       v-tooltip.top="tt(containerPolicyTooltip(c.name, 'maturity'))">
                   <AppIcon name="clock" :size="12" />
-                </span>
-                <span class="badge px-1.5 py-0 text-3xs"
-                      :style="{
-                        backgroundColor: c.status === 'running' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
-                        color: c.status === 'running' ? 'var(--dd-success)' : 'var(--dd-danger)',
-                      }"
+                </AppBadge>
+                <AppBadge size="xs" class="px-1.5 py-0"
+                      :tone="c.status === 'running' ? 'success' : 'danger'"
                       v-tooltip.top="tt(c.status)">
                   <AppIcon :name="c.status === 'running' ? 'play' : 'stop'" :size="12" />
-                </span>
-                <span class="badge px-1.5 py-0 text-3xs"
-                      :style="{ backgroundColor: serverBadgeColor(c.server).bg, color: serverBadgeColor(c.server).text }">
+                </AppBadge>
+                <AppBadge size="xs" class="px-1.5 py-0"
+                      :custom="{ bg: serverBadgeColor(c.server).bg, text: serverBadgeColor(c.server).text }">
                   <AppIcon :name="parseServer(c.server).name === 'Local' ? 'home' : 'remote'" :size="12" />
-                </span>
+                </AppBadge>
                 </div>
               </div>
           </div>
@@ -249,10 +241,9 @@ const {
         <!-- Kind badge -->
         <template #cell-kind="{ row: c }">
           <div class="inline-flex items-center gap-1">
-          <span v-if="c.updateKind" class="badge text-3xs uppercase font-bold"
-                :style="{ backgroundColor: updateKindColor(c.updateKind).bg, color: updateKindColor(c.updateKind).text }">
+          <AppBadge v-if="c.updateKind" size="xs" :custom="{ bg: updateKindColor(c.updateKind).bg, text: updateKindColor(c.updateKind).text }">
             {{ c.updateKind }}
-          </span>
+          </AppBadge>
           <UpdateMaturityBadge :maturity="c.updateMaturity" :tooltip="c.updateMaturityTooltip" />
           <SuggestedTagBadge :tag="c.suggestedTag" :current-tag="c.currentTag" />
           <span v-if="!c.updateKind && !c.updateMaturity && !(c.suggestedTag && (!c.currentTag || c.currentTag.toLowerCase() === 'latest'))" class="text-2xs dd-text-muted">&mdash;</span>
@@ -262,13 +253,9 @@ const {
         <template #cell-status="{ row: c }">
           <AppIcon :name="c.status === 'running' ? 'play' : 'stop'" :size="13" class="shrink-0 md:!hidden"
                    :style="{ color: c.status === 'running' ? 'var(--dd-success)' : 'var(--dd-danger)' }" />
-          <span class="badge text-3xs font-bold max-md:!hidden"
-                :style="{
-                  backgroundColor: c.status === 'running' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
-                  color: c.status === 'running' ? 'var(--dd-success)' : 'var(--dd-danger)',
-                }">
+          <AppBadge class="max-md:!hidden" size="xs" :tone="c.status === 'running' ? 'success' : 'danger'">
             {{ c.status }}
-          </span>
+          </AppBadge>
         </template>
         <!-- Bouncer icon -->
         <template #cell-bouncer="{ row: c }">
@@ -289,18 +276,16 @@ const {
         </template>
         <!-- Server -->
         <template #cell-server="{ row: c }">
-          <span class="badge text-3xs font-bold"
-                :style="{ backgroundColor: serverBadgeColor(c.server).bg, color: serverBadgeColor(c.server).text }">
+          <AppBadge size="xs" :custom="{ bg: serverBadgeColor(c.server).bg, text: serverBadgeColor(c.server).text }">
             {{ c.server }}
-          </span>
+          </AppBadge>
         </template>
         <!-- Registry badge -->
         <template #cell-registry="{ row: c }">
           <div class="inline-flex items-center justify-center gap-1.5">
-            <span class="badge text-3xs uppercase tracking-wide font-bold"
-                  :style="{ backgroundColor: registryColorBg(c.registry), color: registryColorText(c.registry) }">
+            <AppBadge size="xs" :custom="{ bg: registryColorBg(c.registry), text: registryColorText(c.registry) }">
               {{ registryLabel(c.registry, c.registryUrl, c.registryName) }}
-            </span>
+            </AppBadge>
             <span v-if="hasRegistryError(c)"
                   class="inline-flex items-center justify-center"
                   style="color: var(--dd-danger);"
@@ -315,54 +300,43 @@ const {
           <template v-if="!containerActionsEnabled">
             <div class="flex items-center justify-end gap-2">
               <span class="text-2xs dd-text-muted">Actions disabled</span>
-              <AppButton size="none" variant="plain" weight="none"
-                class="w-8 h-8 dd-rounded flex items-center justify-center cursor-not-allowed dd-text-muted opacity-60"
+              <AppIconButton icon="lock" size="sm" variant="muted"
+                class="cursor-not-allowed opacity-60"
                 :disabled="true"
-                v-tooltip.top="tt(containerActionsDisabledReason)"
-                @click.stop
-              >
-                <AppIcon name="lock" :size="13" />
-              </AppButton>
+                :tooltip="tt(containerActionsDisabledReason)"
+                @click.stop />
             </div>
           </template>
           <!-- Icon-style actions (compact) -->
           <template v-else-if="tableActionStyle === 'icons'">
             <div class="flex items-center justify-end gap-0.5">
-              <AppButton size="none" variant="plain" weight="none" v-if="c.newTag && c.bouncer === 'blocked'"
-                      class="w-8 h-8 dd-rounded flex items-center justify-center transition-[color,background-color,border-color,opacity,transform,box-shadow] cursor-not-allowed dd-text-muted opacity-50"
-                      v-tooltip.top="tt('Blocked by Bouncer')" @click.stop>
-                <AppIcon name="lock" :size="13" />
-              </AppButton>
-              <AppButton size="none" variant="plain" weight="none" v-else-if="c.newTag"
-                      class="w-8 h-8 dd-rounded flex items-center justify-center transition-[color,background-color,border-color,opacity,transform,box-shadow]"
-                      :class="actionInProgress === c.name ? 'dd-text-muted opacity-50 cursor-not-allowed' : 'dd-text-muted hover:dd-text-success hover:dd-bg-hover hover:scale-110 active:scale-95'"
+              <AppIconButton v-if="c.newTag && c.bouncer === 'blocked'" icon="lock" size="sm" variant="muted"
+                      class="cursor-not-allowed opacity-50"
+                      :disabled="true"
+                      :tooltip="tt('Blocked by Bouncer')" @click.stop />
+              <AppIconButton v-else-if="c.newTag" icon="cloud-download" size="sm" variant="muted"
+                      class="transition-[color,background-color,border-color,opacity,transform,box-shadow]"
+                      :class="actionInProgress === c.name ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-success hover:dd-bg-hover hover:scale-110 active:scale-95'"
                       :disabled="actionInProgress === c.name"
-                      v-tooltip.top="tt('Update')" @click.stop="confirmUpdate(c.name)">
-                <AppIcon name="cloud-download" :size="16" />
-              </AppButton>
-              <AppButton size="none" variant="plain" weight="none" v-else-if="c.status === 'running'"
-                      class="w-8 h-8 dd-rounded flex items-center justify-center transition-[color,background-color,border-color,opacity,transform,box-shadow]"
-                      :class="actionInProgress === c.name ? 'dd-text-muted opacity-50 cursor-not-allowed' : 'dd-text-muted hover:dd-text-danger hover:dd-bg-hover hover:scale-110 active:scale-95'"
+                      :tooltip="tt('Update')" @click.stop="confirmUpdate(c.name)" />
+              <AppIconButton v-else-if="c.status === 'running'" icon="stop" size="sm" variant="muted"
+                      class="transition-[color,background-color,border-color,opacity,transform,box-shadow]"
+                      :class="actionInProgress === c.name ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-danger hover:dd-bg-hover hover:scale-110 active:scale-95'"
                       :disabled="actionInProgress === c.name"
-                      v-tooltip.top="tt('Stop')" @click.stop="confirmStop(c.name)">
-                <AppIcon name="stop" :size="14" />
-              </AppButton>
-              <AppButton size="none" variant="plain" weight="none" v-else
-                      class="w-8 h-8 dd-rounded flex items-center justify-center transition-[color,background-color,border-color,opacity,transform,box-shadow]"
-                      :class="actionInProgress === c.name ? 'dd-text-muted opacity-50 cursor-not-allowed' : 'dd-text-muted hover:dd-text-success hover:dd-bg-hover hover:scale-110 active:scale-95'"
+                      :tooltip="tt('Stop')" @click.stop="confirmStop(c.name)" />
+              <AppIconButton v-else icon="play" size="sm" variant="muted"
+                      class="transition-[color,background-color,border-color,opacity,transform,box-shadow]"
+                      :class="actionInProgress === c.name ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-success hover:dd-bg-hover hover:scale-110 active:scale-95'"
                       :disabled="actionInProgress === c.name"
-                      v-tooltip.top="tt('Start')" @click.stop="startContainer(c.name)">
-                <AppIcon name="play" :size="14" />
-              </AppButton>
-              <AppButton size="none" variant="plain" weight="none" class="w-8 h-8 dd-rounded flex items-center justify-center transition-[color,background-color,border-color,opacity,transform,box-shadow]"
+                      :tooltip="tt('Start')" @click.stop="startContainer(c.name)" />
+              <AppIconButton icon="more" size="sm" variant="muted"
+                      class="transition-[color,background-color,border-color,opacity,transform,box-shadow]"
                       :class="[
-                        actionInProgress === c.name ? 'dd-text-muted opacity-50 cursor-not-allowed' : 'dd-text-muted hover:dd-text hover:dd-bg-hover hover:scale-110 active:scale-95',
+                        actionInProgress === c.name ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text hover:dd-bg-hover hover:scale-110 active:scale-95',
                         openActionsMenu === c.name && actionInProgress !== c.name ? 'dd-bg-elevated dd-text' : '',
                       ]"
                       :disabled="actionInProgress === c.name"
-                      v-tooltip.top="tt('More')" @click.stop="toggleActionsMenu(c.name, $event)">
-                <AppIcon name="more" :size="13" />
-              </AppButton>
+                      :tooltip="tt('More')" @click.stop="toggleActionsMenu(c.name, $event)" />
             </div>
           </template>
           <!-- Button-style actions (full) -->
@@ -511,10 +485,9 @@ const {
               </div>
             </div>
             <div class="flex items-center gap-1.5 shrink-0 ml-2">
-              <span class="badge text-3xs uppercase tracking-wide font-bold"
-                    :style="{ backgroundColor: registryColorBg(c.registry), color: registryColorText(c.registry) }">
+              <AppBadge size="xs" :custom="{ bg: registryColorBg(c.registry), text: registryColorText(c.registry) }">
                 {{ registryLabel(c.registry, c.registryUrl, c.registryName) }}
-              </span>
+              </AppBadge>
               <span v-if="hasRegistryError(c)"
                     class="inline-flex items-center justify-center"
                     style="color: var(--dd-danger);"
@@ -609,58 +582,42 @@ const {
                  borderTop: '1px solid var(--dd-border)',
                  backgroundColor: 'var(--dd-bg-elevated)',
                }">
-            <span class="badge px-1.5 py-0 text-3xs md:!hidden"
-                  :style="{ backgroundColor: c.status === 'running' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)', color: c.status === 'running' ? 'var(--dd-success)' : 'var(--dd-danger)' }">
+            <AppBadge class="px-1.5 py-0 md:!hidden" size="xs" :tone="c.status === 'running' ? 'success' : 'danger'">
               <AppIcon :name="c.status === 'running' ? 'play' : 'stop'" :size="12" />
-            </span>
-            <span class="badge text-3xs font-bold max-md:!hidden"
-                  :style="{ backgroundColor: c.status === 'running' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)', color: c.status === 'running' ? 'var(--dd-success)' : 'var(--dd-danger)' }">
+            </AppBadge>
+            <AppBadge class="max-md:!hidden" size="xs" :tone="c.status === 'running' ? 'success' : 'danger'">
               {{ c.status }}
-            </span>
+            </AppBadge>
             <div class="flex items-center gap-1.5">
               <template v-if="containerActionsEnabled">
-                <AppButton size="icon-sm" variant="plain" class="dd-rounded-sm" v-if="c.status === 'running'"
-                        
-                        :class="actionInProgress === c.name ? 'dd-text-muted opacity-50 cursor-not-allowed' : 'dd-text-muted hover:dd-text-danger hover:dd-bg-elevated'"
+                <AppIconButton v-if="c.status === 'running'" icon="stop" size="xs" variant="muted"
+                        :class="actionInProgress === c.name ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-danger hover:dd-bg-elevated'"
                         :disabled="actionInProgress === c.name"
-                        v-tooltip.top="tt('Stop')" @click.stop="confirmStop(c.name)">
-                  <AppIcon name="stop" :size="14" />
-                </AppButton>
-                <AppButton size="icon-sm" variant="plain" class="dd-rounded-sm" v-else
-                        
-                        :class="actionInProgress === c.name ? 'dd-text-muted opacity-50 cursor-not-allowed' : 'dd-text-muted hover:dd-text-success hover:dd-bg-elevated'"
+                        :tooltip="tt('Stop')" @click.stop="confirmStop(c.name)" />
+                <AppIconButton v-else icon="play" size="xs" variant="muted"
+                        :class="actionInProgress === c.name ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-success hover:dd-bg-elevated'"
                         :disabled="actionInProgress === c.name"
-                        v-tooltip.top="tt('Start')" @click.stop="startContainer(c.name)">
-                  <AppIcon name="play" :size="14" />
-                </AppButton>
-                <AppButton size="icon-sm" variant="plain" class="dd-rounded-sm" :class="actionInProgress === c.name ? 'dd-text-muted opacity-50 cursor-not-allowed' : 'dd-text-muted hover:dd-text hover:dd-bg-elevated'"
+                        :tooltip="tt('Start')" @click.stop="startContainer(c.name)" />
+                <AppIconButton icon="restart" size="xs" variant="muted"
+                        :class="actionInProgress === c.name ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text hover:dd-bg-elevated'"
                         :disabled="actionInProgress === c.name"
-                        v-tooltip.top="tt('Restart')" @click.stop="confirmRestart(c.name)">
-                  <AppIcon name="restart" :size="14" />
-                </AppButton>
-                <AppButton size="icon-sm" variant="plain" class="dd-rounded-sm" :class="actionInProgress === c.name ? 'dd-text-muted opacity-50 cursor-not-allowed' : 'dd-text-muted hover:dd-text-secondary hover:dd-bg-elevated'"
+                        :tooltip="tt('Restart')" @click.stop="confirmRestart(c.name)" />
+                <AppIconButton icon="security" size="xs" variant="muted"
+                        :class="actionInProgress === c.name ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-secondary hover:dd-bg-elevated'"
                         :disabled="actionInProgress === c.name"
-                        v-tooltip.top="tt('Scan')" @click.stop="scanContainer(c.name)">
-                  <AppIcon name="security" :size="14" />
-                </AppButton>
-                <AppButton size="icon-sm" variant="plain" class="dd-rounded-sm" v-if="c.newTag"
-                        
-                        :class="actionInProgress === c.name ? 'dd-text-muted opacity-50 cursor-not-allowed' : 'dd-text-muted hover:dd-text-success hover:dd-bg-elevated'"
+                        :tooltip="tt('Scan')" @click.stop="scanContainer(c.name)" />
+                <AppIconButton v-if="c.newTag" icon="cloud-download" size="xs" variant="muted"
+                        :class="actionInProgress === c.name ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-success hover:dd-bg-elevated'"
                         :disabled="actionInProgress === c.name"
-                        v-tooltip.top="tt('Update')" @click.stop="confirmUpdate(c.name)">
-                  <AppIcon name="cloud-download" :size="14" />
-                </AppButton>
+                        :tooltip="tt('Update')" @click.stop="confirmUpdate(c.name)" />
               </template>
               <template v-else>
                 <span class="text-2xs dd-text-muted">Actions disabled</span>
-                <AppButton size="none" variant="plain" weight="none"
-                  class="w-7 h-7 dd-rounded-sm flex items-center justify-center cursor-not-allowed dd-text-muted opacity-60"
+                <AppIconButton icon="lock" size="xs" variant="muted"
+                  class="cursor-not-allowed opacity-60"
                   :disabled="true"
-                  v-tooltip.top="tt(containerActionsDisabledReason)"
-                  @click.stop
-                >
-                  <AppIcon name="lock" :size="14" />
-                </AppButton>
+                  :tooltip="tt(containerActionsDisabledReason)"
+                  @click.stop />
               </template>
             </div>
           </div>
@@ -690,25 +647,21 @@ const {
           </div>
           <div class="flex items-center gap-1.5 shrink-0">
             <!-- Update kind: icon on mobile, badge on desktop -->
-            <span v-if="c.updateKind" class="badge px-1.5 py-0 text-3xs md:!hidden"
-                  :style="{ backgroundColor: updateKindColor(c.updateKind).bg, color: updateKindColor(c.updateKind).text }">
+            <AppBadge v-if="c.updateKind" size="xs" class="px-1.5 py-0 md:!hidden"
+                  :custom="{ bg: updateKindColor(c.updateKind).bg, text: updateKindColor(c.updateKind).text }">
               <AppIcon :name="c.updateKind === 'major' ? 'chevrons-up' : c.updateKind === 'minor' ? 'chevron-up' : c.updateKind === 'patch' ? 'hashtag' : 'fingerprint'" :size="12" />
-            </span>
-            <span v-if="c.updateKind" class="badge text-3xs uppercase font-bold max-md:!hidden"
-                  :style="{ backgroundColor: updateKindColor(c.updateKind).bg, color: updateKindColor(c.updateKind).text }">
+            </AppBadge>
+            <AppBadge v-if="c.updateKind" size="xs" class="max-md:!hidden"
+                  :custom="{ bg: updateKindColor(c.updateKind).bg, text: updateKindColor(c.updateKind).text }">
               {{ c.updateKind }}
-            </span>
+            </AppBadge>
             <UpdateMaturityBadge :maturity="c.updateMaturity" :tooltip="c.updateMaturityTooltip" />
             <!-- Status: icon on mobile, badge on desktop -->
             <AppIcon :name="c.status === 'running' ? 'play' : 'stop'" :size="13" class="shrink-0 md:!hidden"
                      :style="{ color: c.status === 'running' ? 'var(--dd-success)' : 'var(--dd-danger)' }" />
-            <span class="badge text-3xs font-bold max-md:!hidden"
-                  :style="{
-                    backgroundColor: c.status === 'running' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
-                    color: c.status === 'running' ? 'var(--dd-success)' : 'var(--dd-danger)',
-                  }">
+            <AppBadge class="max-md:!hidden" size="xs" :tone="c.status === 'running' ? 'success' : 'danger'">
               {{ c.status }}
-            </span>
+            </AppBadge>
             <span v-if="hasRegistryError(c)"
                   class="inline-flex items-center justify-center"
                   style="color: var(--dd-danger);"
@@ -738,16 +691,14 @@ const {
               <AppIcon name="clock" :size="12" />
             </span>
             <!-- Bouncer: icon in badge -->
-            <span v-if="c.bouncer === 'blocked'" class="badge px-1.5 py-0 text-3xs"
-                  style="background: var(--dd-danger-muted); color: var(--dd-danger);">
+            <AppBadge v-if="c.bouncer === 'blocked'" tone="danger" size="xs" class="px-1.5 py-0">
               <AppIcon name="blocked" :size="12" />
-            </span>
+            </AppBadge>
             <!-- Server: icon on mobile, badge on desktop -->
             <AppIcon :name="parseServer(c.server).name === 'Local' ? 'home' : 'remote'" :size="12" class="shrink-0 dd-text-muted md:!hidden" />
-            <span class="badge text-5xs font-bold max-md:!hidden"
-                  :style="{ backgroundColor: serverBadgeColor(c.server).bg, color: serverBadgeColor(c.server).text }">
+            <AppBadge class="max-md:!hidden" size="xs" :custom="{ bg: serverBadgeColor(c.server).bg, text: serverBadgeColor(c.server).text }">
               {{ parseServer(c.server).name }}
-            </span>
+            </AppBadge>
           </div>
         </template>
       </DataListAccordion>

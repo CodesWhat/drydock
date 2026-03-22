@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AppIconButton from '../AppIconButton.vue';
 import ContainersGroupedViews from './ContainersGroupedViews.vue';
 import {
   type ContainersViewTemplateContext,
@@ -109,31 +110,23 @@ const {
       </template>
       <template #extra-buttons>
         <div v-if="containerViewMode === 'table'">
-          <AppButton size="icon-sm" variant="plain" class="text-2xs-plus"
-            
-            :class="showColumnPicker ? 'dd-text dd-bg-elevated' : 'dd-text-secondary hover:dd-text hover:dd-bg-elevated'"
-            v-tooltip.top="tt('Toggle columns')"
-            @click.stop="toggleColumnPicker($event)">
-            <AppIcon name="config" :size="12" />
-          </AppButton>
+          <AppIconButton icon="config" size="xs" variant="secondary"
+            :class="showColumnPicker ? 'dd-text dd-bg-elevated' : ''"
+            :tooltip="tt('Toggle columns')"
+            @click.stop="toggleColumnPicker($event)" />
         </div>
       </template>
       <template #left>
-        <AppButton size="icon-sm" variant="plain" class="text-2xs-plus"
-          
-          :class="groupByStack ? 'dd-text dd-bg-elevated' : 'dd-text-secondary hover:dd-text hover:dd-bg-elevated'"
-          v-tooltip.top="tt('Group by stack')"
-          @click="groupByStack = !groupByStack">
-          <AppIcon name="stack" :size="13" />
-        </AppButton>
-        <AppButton size="icon-sm" variant="plain" class="text-2xs-plus"
-          
-          :class="rechecking ? 'dd-text-muted cursor-wait' : 'dd-text-secondary hover:dd-text hover:dd-bg-elevated'"
+        <AppIconButton icon="stack" size="xs" variant="secondary"
+          :class="groupByStack ? 'dd-text dd-bg-elevated' : ''"
+          :tooltip="tt('Group by stack')"
+          @click="groupByStack = !groupByStack" />
+        <AppIconButton icon="restart" size="xs" variant="secondary"
+          :class="rechecking ? 'dd-text-muted cursor-wait' : ''"
           :disabled="rechecking"
-          v-tooltip.top="tt('Recheck for updates')"
-          @click="recheckAll">
-          <AppIcon name="restart" :size="13" :class="{ 'animate-spin': rechecking }" />
-        </AppButton>
+          :loading="rechecking"
+          :tooltip="tt('Recheck for updates')"
+          @click="recheckAll" />
       </template>
     </DataFilterBar>
 

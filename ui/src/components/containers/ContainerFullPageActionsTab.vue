@@ -67,7 +67,7 @@ const {
             :style="{ backgroundColor: 'var(--dd-bg-card)' }">
         <div class="px-4 py-3 flex items-center gap-2">
           <AppIcon name="updates" :size="12" class="dd-text-muted" />
-          <span class="text-2xs-plus font-semibold uppercase tracking-wider dd-text-muted">Update Workflow</span>
+          <span class="dd-text-label dd-text-muted">Update Workflow</span>
         </div>
         <div class="p-4 space-y-4">
           <!-- Actions group -->
@@ -225,7 +225,7 @@ const {
             :style="{ backgroundColor: 'var(--dd-bg-card)' }">
         <div class="px-4 py-3 flex items-center gap-2">
           <AppIcon name="info" :size="12" class="dd-text-muted" />
-          <span class="text-2xs-plus font-semibold uppercase tracking-wider dd-text-muted">Preview</span>
+          <span class="dd-text-label dd-text-muted">Preview</span>
         </div>
         <div class="p-4 space-y-2 text-xs">
           <div v-if="previewLoading" class="dd-text-muted">Generating preview...</div>
@@ -279,7 +279,7 @@ const {
             :style="{ backgroundColor: 'var(--dd-bg-card)' }">
         <div class="px-4 py-3 flex items-center gap-2">
           <AppIcon name="triggers" :size="12" class="dd-text-muted" />
-          <span class="text-2xs-plus font-semibold uppercase tracking-wider dd-text-muted">Associated Triggers</span>
+          <span class="dd-text-label dd-text-muted">Associated Triggers</span>
         </div>
         <div class="p-4 space-y-2">
           <div v-if="triggersLoading" class="text-xs dd-text-muted">Loading triggers...</div>
@@ -307,7 +307,7 @@ const {
             :style="{ backgroundColor: 'var(--dd-bg-card)' }">
         <div class="px-4 py-3 flex items-center gap-2">
           <AppIcon name="recent-updates" :size="12" class="dd-text-muted" />
-          <span class="text-2xs-plus font-semibold uppercase tracking-wider dd-text-muted">Backups &amp; Rollback</span>
+          <span class="dd-text-label dd-text-muted">Backups &amp; Rollback</span>
         </div>
         <div class="p-4 space-y-2">
           <div>
@@ -341,7 +341,7 @@ const {
             :style="{ backgroundColor: 'var(--dd-bg-card)' }">
         <div class="px-4 py-3 flex items-center gap-2">
           <AppIcon name="audit" :size="12" class="dd-text-muted" />
-          <span class="text-2xs-plus font-semibold uppercase tracking-wider dd-text-muted">Update Operation History</span>
+          <span class="dd-text-label dd-text-muted">Update Operation History</span>
         </div>
         <div class="p-4 space-y-2">
           <div v-if="updateOperationsLoading" class="text-xs dd-text-muted">Loading operation history...</div>
