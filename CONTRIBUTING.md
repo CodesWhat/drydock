@@ -160,7 +160,25 @@ Snyk paid products are intentionally separated from the PR/push fast path:
 - Container
 - IaC
 
-They run via `.github/workflows/70-security-snyk.yml` on a weekly cadence (plus manual dispatch on the default branch) so free scanners (Qlty plugins, CodeQL, Scorecard, fuzz) can catch most issues continuously without burning paid monthly test quotas.
+They run via `.github/workflows/security-snyk-weekly.yml` on a weekly cadence (plus manual dispatch on the default branch) so free scanners (Qlty plugins, CodeQL, Scorecard, fuzz) can catch most issues continuously without burning paid monthly test quotas.
+
+## Mutation testing
+
+Stryker mutation testing is intentionally separate from push/PR CI:
+
+- Workflow: `.github/workflows/quality-mutation-weekly.yml`
+- Cadence: weekly on the default branch plus manual dispatch when you want a deeper read on a risky area
+- Policy: advisory only, never a required merge gate
+- Scope: `app/` and `ui/` each run their own `npm run test:mutation`
+
+Use mutation results as a quality signal, not a score-chasing exercise:
+
+- First make sure the package passes a Stryker dry run; if the initial test run fails, fix that before reading survivor output
+- Review the HTML artifact/report for surviving mutants in high-risk or high-churn code first
+- Turn real survivors into focused follow-up work: stronger assertions, missing edge-case tests, simpler control flow, or dead-code removal
+- Do not add brittle implementation-detail assertions just to raise the mutation score
+- Equivalent/noise mutants are acceptable to defer when the cost of killing them outweighs the value
+- For sensitive modules, prefer targeted local runs before or after a PR rather than broad repo-wide mutation runs
 
 ## Documentation
 

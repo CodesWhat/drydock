@@ -153,6 +153,9 @@ ui/public/fonts/
 # Canonical docs are versioned at content/docs/*
 apps/web/content/docs/
 
+# Stryker mutation testing sandboxes
+.stryker-tmp/
+
 # Storybook build output
 storybook-static/
 

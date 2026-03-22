@@ -1,3 +1,5 @@
+const dashboardReporterEnabled = Boolean(process.env.STRYKER_DASHBOARD_API_KEY);
+
 /** @type {import('@stryker-mutator/api/core').PartialStrykerOptions} */
 const config = {
   mutate: [
@@ -13,10 +15,19 @@ const config = {
   checkers: ['typescript'],
   tsconfigFile: 'tsconfig.json',
   coverageAnalysis: 'off',
-  reporters: ['clear-text', 'progress', 'html'],
+  reporters: ['clear-text', 'progress', 'html', ...(dashboardReporterEnabled ? ['dashboard'] : [])],
   htmlReporter: {
     fileName: 'reports/mutation/html/index.html',
   },
+  ...(dashboardReporterEnabled
+    ? {
+        dashboard: {
+          project: 'github.com/CodesWhat/drydock',
+          module: 'app',
+          reportType: 'full',
+        },
+      }
+    : {}),
   vitest: {
     configFile: 'vitest.config.ts',
   },
