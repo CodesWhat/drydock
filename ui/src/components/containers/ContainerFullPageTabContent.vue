@@ -258,9 +258,14 @@ const {
                 <AppIcon name="warning" :size="12" class="shrink-0 mt-0.5" style="color: var(--dd-warning);" />
                 <span class="flex-1 min-w-0 whitespace-normal break-words" style="color: var(--dd-warning);">{{ selectedContainer.noUpdateReason }}</span>
               </div>
-              <div v-if="selectedContainer.updateKind || selectedContainer.updateMaturity || selectedContainer.suggestedTag" class="flex items-center gap-1.5 flex-wrap">
+              <div v-if="selectedContainer.updateKind || selectedContainer.updateMaturity || selectedContainer.suggestedTag || (selectedContainer.tagPrecision === 'floating' && !selectedContainer.imageDigestWatch)" class="flex items-center gap-1.5 flex-wrap">
                 <UpdateMaturityBadge :maturity="selectedContainer.updateMaturity" :tooltip="selectedContainer.updateMaturityTooltip" />
                 <SuggestedTagBadge :tag="selectedContainer.suggestedTag" :current-tag="selectedContainer.currentTag" />
+                <span v-if="selectedContainer.tagPrecision === 'floating' && !selectedContainer.imageDigestWatch"
+                      v-tooltip.top="'This tag may be updated in-place by the registry. Enable dd.watch.digest=true or use a full semver tag for complete update detection.'"
+                      class="cursor-help">
+                  <AppBadge tone="caution" size="xs">floating tag</AppBadge>
+                </span>
               </div>
               <ReleaseNotesLink :release-notes="selectedContainer.releaseNotes" :release-link="selectedContainer.releaseLink" />
               <div class="pt-1 space-y-1.5">

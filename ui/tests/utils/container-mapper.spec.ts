@@ -862,6 +862,37 @@ describe('container-mapper', () => {
       expect(c.imageTagSemver).toBe(true);
     });
 
+    it('maps tagPrecision when present in API response', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          image: {
+            registry: { name: 'hub', url: 'https://registry-1.docker.io' },
+            name: 'nginx',
+            tag: { value: 'latest', tagPrecision: 'floating' },
+          },
+        }),
+      );
+      expect(c.tagPrecision).toBe('floating');
+    });
+
+    it('maps tagPrecision as specific when set', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          image: {
+            registry: { name: 'hub', url: 'https://registry-1.docker.io' },
+            name: 'nginx',
+            tag: { value: '1.25.3', tagPrecision: 'specific' },
+          },
+        }),
+      );
+      expect(c.tagPrecision).toBe('specific');
+    });
+
+    it('leaves tagPrecision undefined when not present', () => {
+      const c = mapApiContainer(makeApiContainer());
+      expect(c.tagPrecision).toBeUndefined();
+    });
+
     it('handles labels with empty values', () => {
       const c = mapApiContainer(
         makeApiContainer({

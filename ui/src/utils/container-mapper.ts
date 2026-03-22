@@ -570,6 +570,10 @@ export function mapApiContainer(apiContainer: ApiContainerInput): Container {
     imageVariant: asNonEmptyString(apiContainer.image?.variant),
     imageDigestWatch: asOptionalBoolean(apiContainer.image?.digest?.watch),
     imageTagSemver: asOptionalBoolean(apiContainer.image?.tag?.semver),
+    tagPrecision: (apiContainer.image?.tag as any)?.tagPrecision as
+      | 'specific'
+      | 'floating'
+      | undefined,
     suggestedTag: asNonEmptyString(apiContainer.result?.suggestedTag),
     sourceRepo: asNonEmptyString(apiContainer.sourceRepo),
     releaseNotes: deriveReleaseNotes(apiContainer),

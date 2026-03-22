@@ -44,6 +44,7 @@ export interface Container {
   imageVariant?: string;
   imageDigestWatch?: boolean;
   imageTagSemver?: boolean;
+  tagPrecision?: 'specific' | 'floating';
   releaseLink?: string;
   suggestedTag?: string;
   sourceRepo?: string;
