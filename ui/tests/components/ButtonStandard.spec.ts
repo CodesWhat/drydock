@@ -6,6 +6,8 @@ const SRC_DIR = join(process.cwd(), 'src');
 
 const ALLOWED_RAW_BUTTON_FILES = new Set([
   'src/components/AppButton.vue',
+  'src/components/AppIconButton.vue',
+  'src/components/AppTabBar.vue',
   'src/components/ThemeToggle.vue',
   'src/components/ToggleSwitch.vue',
 ]);

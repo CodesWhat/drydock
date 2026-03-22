@@ -69,8 +69,8 @@ describe('AppButton', () => {
     expect(button.classes()).toContain('inline-flex');
     expect(button.classes()).toContain('items-center');
     expect(button.classes()).toContain('justify-center');
-    expect(button.classes()).toContain('w-4');
-    expect(button.classes()).toContain('h-4');
+    expect(button.classes()).toContain('w-9');
+    expect(button.classes()).toContain('h-9');
     expect(button.classes()).not.toContain('dd-text-muted');
   });
 
