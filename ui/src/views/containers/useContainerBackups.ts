@@ -123,11 +123,12 @@ async function rollbackToBackupState(args: {
   args.rollbackError.value = null;
   try {
     await rollback(args.containerId, args.backupId);
-    args.rollbackMessage.value = args.backupId
+    const successMessage = args.backupId
       ? 'Rollback completed from selected backup'
       : 'Rollback completed from latest backup';
+    args.rollbackMessage.value = successMessage;
     const toast = useToast();
-    toast.success(args.rollbackMessage.value ?? 'Rollback completed');
+    toast.success(successMessage);
     args.skippedUpdates.value.delete(args.selectedContainerName || '');
     await args.loadContainers();
     await Promise.all([args.loadDetailBackups(), args.loadDetailUpdateOperations()]);
