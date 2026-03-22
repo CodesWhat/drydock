@@ -1,7 +1,16 @@
 <script setup lang="ts">
 import { computed, useAttrs } from 'vue';
 
-type ButtonSize = 'none' | 'xs' | 'compact' | 'sm' | 'md' | 'icon-xs' | 'icon-sm';
+type ButtonSize =
+  | 'none'
+  | 'xs'
+  | 'compact'
+  | 'sm'
+  | 'md'
+  | 'icon-xs'
+  | 'icon-sm'
+  | 'icon-md'
+  | 'icon-lg';
 type ButtonVariant =
   | 'muted'
   | 'secondary'
@@ -18,8 +27,10 @@ const sizeClasses: Record<ButtonSize, string> = {
   compact: 'px-2 py-1.5 text-2xs',
   sm: 'px-2.5 py-1.5 text-2xs',
   md: 'px-3 py-1.5 text-2xs-plus',
-  'icon-xs': 'inline-flex items-center justify-center w-4 h-4',
-  'icon-sm': 'inline-flex items-center justify-center w-7 h-7 text-2xs-plus',
+  'icon-xs': 'inline-flex items-center justify-center w-9 h-9',
+  'icon-sm': 'inline-flex items-center justify-center w-10 h-10 text-2xs-plus',
+  'icon-md': 'inline-flex items-center justify-center w-11 h-11 text-2xs-plus',
+  'icon-lg': 'inline-flex items-center justify-center w-12 h-12 text-2xs-plus',
 };
 
 const variantClasses: Record<ButtonVariant, string> = {
