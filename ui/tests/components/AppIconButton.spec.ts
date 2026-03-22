@@ -163,7 +163,7 @@ describe('AppIconButton', () => {
     const button = wrapper.get('button');
     expect(button.classes()).toContain('opacity-40');
     expect(button.classes()).toContain('cursor-not-allowed');
-    expect(button.classes()).toContain('pointer-events-none');
+    expect(button.classes()).not.toContain('pointer-events-none');
     expect(button.attributes('disabled')).toBeDefined();
   });
 
@@ -172,7 +172,6 @@ describe('AppIconButton', () => {
     const button = wrapper.get('button');
     expect(button.classes()).not.toContain('opacity-40');
     expect(button.classes()).not.toContain('cursor-not-allowed');
-    expect(button.classes()).not.toContain('pointer-events-none');
   });
 
   // 8. aria-label from ariaLabel prop

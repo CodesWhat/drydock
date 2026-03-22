@@ -32,11 +32,10 @@ describe('OpenAPI document', () => {
     ]);
   });
 
-  test('should declare /metrics with bearer token, session, and anonymous security alternatives', () => {
+  test('should declare /metrics with bearer token and session security alternatives', () => {
     expect(openApiDocument.paths['/metrics']?.get?.security).toStrictEqual([
       { metricsBearerAuth: [] },
       { sessionAuth: [] },
-      {},
     ]);
   });
 

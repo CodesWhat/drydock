@@ -164,15 +164,20 @@ describe('AppTabBar', () => {
     expect(labelSpan).toHaveLength(0);
   });
 
-  it('iconOnly mode shows tooltip on tabs', () => {
+  it('iconOnly mode sets aria-label on tabs for assistive tech', () => {
     const wrapper = factory({ iconOnly: true });
     const buttons = wrapper.findAll('button');
 
-    expect(buttons.length).toBeGreaterThan(0);
-    // Tooltip directive is stubbed — we verify it was applied by checking
-    // the component renders without error with the directive in place.
-    // The v-tooltip binding receives tab.label when iconOnly is true.
-    expect(wrapper.html()).toBeTruthy();
+    expect(buttons[0].attributes('aria-label')).toBe('Overview');
+    expect(buttons[1].attributes('aria-label')).toBe('Actions');
+    expect(buttons[2].attributes('aria-label')).toBe('Logs');
+  });
+
+  it('non-iconOnly mode does not set aria-label on tabs', () => {
+    const wrapper = factory({ iconOnly: false });
+    const buttons = wrapper.findAll('button');
+
+    expect(buttons[0].attributes('aria-label')).toBeUndefined();
   });
 
   it('icon has mr-1.5 class when not in iconOnly mode', () => {

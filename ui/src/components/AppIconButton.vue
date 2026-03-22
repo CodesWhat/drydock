@@ -57,7 +57,7 @@ const buttonClasses = computed(() => [
   'inline-flex items-center justify-center dd-rounded transition-colors',
   sizeClasses[props.size],
   variantClasses[props.variant],
-  props.disabled ? 'opacity-40 cursor-not-allowed pointer-events-none' : '',
+  props.disabled ? 'opacity-40 cursor-not-allowed' : '',
 ]);
 </script>
 

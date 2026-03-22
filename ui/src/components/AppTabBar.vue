@@ -47,6 +47,7 @@ const countStyle = {
       :key="tab.id"
       type="button"
       :disabled="tab.disabled"
+      :aria-label="iconOnly ? tab.label : undefined"
       v-tooltip="iconOnly ? tab.label : undefined"
       class="relative transition-colors"
       :class="[
