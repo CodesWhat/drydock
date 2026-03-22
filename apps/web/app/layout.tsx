@@ -3,6 +3,7 @@ import { SpeedInsights } from "@vercel/speed-insights/next";
 import { RootProvider } from "fumadocs-ui/provider/next";
 import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
+import { AnnouncementBanner } from "@/components/announcement-banner";
 import "./globals.css";
 
 const ibmPlexSans = IBM_Plex_Sans({
@@ -104,6 +105,9 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-title" content="Drydock" />
       </head>
       <body className={`${ibmPlexSans.className} ${ibmPlexMono.variable}`}>
+        <AnnouncementBanner id="trivy-march-2026" href="/security/trivy-supply-chain-march-2026">
+          Security Advisory: Trivy supply chain compromise — Drydock is not affected. Read more
+        </AnnouncementBanner>
         <RootProvider>{children}</RootProvider>
         <Analytics />
         <SpeedInsights />
