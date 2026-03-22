@@ -12,7 +12,7 @@ const props = withDefaults(
     variant?: IconButtonVariant;
     disabled?: boolean;
     loading?: boolean;
-    tooltip?: string;
+    tooltip?: string | Record<string, unknown>;
     ariaLabel?: string;
   }>(),
   {
@@ -66,7 +66,7 @@ const buttonClasses = computed(() => [
     v-bind="attrs"
     v-tooltip="tooltip"
     type="button"
-    :aria-label="ariaLabel || tooltip"
+    :aria-label="ariaLabel || (typeof tooltip === 'string' ? tooltip : undefined)"
     :disabled="disabled"
     :class="buttonClasses"
   >

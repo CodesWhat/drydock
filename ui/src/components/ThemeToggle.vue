@@ -21,7 +21,7 @@ const variants = [
 
 const expanded = ref(false);
 
-const cellSize = computed(() => (props.size === 'md' ? 32 : 32));
+const cellSize = computed(() => (props.size === 'md' ? 40 : 36));
 const iconSize = computed(() => (props.size === 'md' ? 14 : 15));
 
 const activeIndex = computed(() => variants.findIndex((v) => v.id === themeVariant.value));
