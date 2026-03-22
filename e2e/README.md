@@ -22,5 +22,4 @@ npm run test:cleanup   # Clean up test containers
 npm run load:ci          # CI load test (default)
 npm run load:behavior    # Behavioral test suite
 npm run load:stress      # Stress test
-npm run load:rate-limit  # Rate limit verification
 ```

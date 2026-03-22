@@ -2,14 +2,13 @@
 
 ## Load Testing (Artillery)
 
-Load-test scenarios live in `test/test.yml`, `test/test-behavior.yml`, and `test/test-rate-limit.yml` and run against the stack in `test/ci-compose.yml`.
+Load-test scenarios live in `test/test.yml` and `test/test-behavior.yml` and run against the stack in `test/ci-compose.yml`.
 
 ### Profiles
 
 - `ci`: default CI profile for regression and correctness gates (arrivalRate 2-6 req/s, 40s duration)
 - `behavior`: feature-behavior profile for SSE reconnect, log routes, and write-path checks
 - `stress`: higher traffic profile for manual pressure testing
-- `ratelimit`: focused burst profile that validates `429` behavior for scan endpoint limits
 
 ### Local commands
 
@@ -20,7 +19,6 @@ From repo root:
 ARTILLERY_ENV=ci ./scripts/run-load-test.sh
 ARTILLERY_FILE=./test/test-behavior.yml ARTILLERY_ENV=behavior ./scripts/run-load-test.sh
 ARTILLERY_ENV=stress ./scripts/run-load-test.sh
-ARTILLERY_FILE=./test/test-rate-limit.yml ARTILLERY_ENV=ratelimit ./scripts/run-load-test.sh
 DD_LOAD_TEST_PORT=3333 ./scripts/run-load-test.sh
 ```
 
@@ -42,7 +40,6 @@ From `e2e/`:
 npm run load:ci
 npm run load:behavior
 npm run load:stress
-npm run load:rate-limit
 ```
 
 ### Notes
@@ -51,7 +48,6 @@ npm run load:rate-limit
 - If not available, it falls back to an explicit pinned `npx` version.
 - The load-test stack is isolated via a dedicated Compose project name to avoid collisions with other local test stacks.
 - The runner auto-selects a free random host port when `DD_LOAD_TEST_PORT` is not set.
-- The rate-limit profile resolves `containerId` through `test/load-test.processor.cjs` before measured requests so scan endpoint p95/p99 is not skewed by `/api/containers/watch` setup latency.
 - In CI, the workflow enables Buildx + GHA cache to speed repeated image builds.
 - CI uploads Artillery JSON reports as workflow artifacts and posts a short p95/p99/request-rate summary in the job summary.
 - The push CI load-test job performs a regression check against the committed baseline at `test/load-test-baselines/ci.json`.
