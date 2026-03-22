@@ -10,44 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-
-- **Podman API version negotiation** — Docker watcher probes the daemon's `/version` endpoint over the Unix socket and pins Dockerode to the reported API version. Prevents `EAI_AGAIN` crashes caused by `docker-modem`'s redirect-following bug when Podman returns HTTP 301 for unversioned API paths. ([#182](https://github.com/CodesWhat/drydock/issues/182))
-
-### Fixed
-
-- **Digest buffer stale entry eviction** — Containers evicted from digest buffer when update-applied events fire, preventing already-updated containers from appearing in the next digest flush.
-- **Rate-limiter memory safety** — Fixed-window limiter now enforces a hard `maxEntries` cap to prevent unbounded growth.
-- **UI interaction polish** — Fixed agent column picker positioning, dashboard mobile stacking, Escape-key dashboard edit exit behavior, popover z-index/positioning, and transition/outline rendering regressions.
-
-### Changed
-
-- **Lefthook pre-push Playwright gate** — Added `e2e-playwright` to the root pre-push pipeline so local hooks now run Cucumber E2E and Playwright QA before push.
-- **Trigger rename migration CLI support** — `config migrate` now supports `--source trigger` and rewrites legacy trigger prefixes (`DD_TRIGGER_*`, `dd.trigger.include`, `dd.trigger.exclude`) to action-prefixed aliases.
-- **Centralized rollback container guard** — `-old-{timestamp}` container rejection moved from Docker trigger to base Trigger class, covering all trigger types (Docker, Dockercompose, etc.) and all entry points (auto-trigger, webhook, API).
-- **Container list query internals modularized** — Extracted and tightened query-validation logic and split related tests by concern for better maintainability.
-- **Container list filtering performance** — Status/kind filters now avoid unnecessary full-collection loads, and in-memory age/created sorting now precomputes parse/age values per container instead of per comparator invocation.
-- **Maturity and watched-kind concerns extracted** — Split monolithic container filter logic into focused modules (`maturity-filter.ts`, `watched-kind-filter.ts`) while preserving `filters.ts` exports for compatibility.
-- **Canonical v1 API alignment in UI/demo paths** — UI release-notes fetch now uses `/api/v1/containers/:id/release-notes`, and demo MSW handlers were aligned to `/api/v1/*` with added mock coverage for auth-status, debug-dump, container stats, and container action/preview endpoints.
-- **Healthcheck execution path optimized** — Replaced curl-based healthcheck execution with a static C binary for lower runtime overhead.
-- **Watcher event logging noise reduced** — First event-stream reconnect downgraded from `warn` to `info`, with richer container-name context for warn/error logs.
-- **CodeQL/Scorecard action pin correction** — Security workflows now use the valid `github/codeql-action` v4.33.0 commit pin (`b1bff819...`) for `init`, `autobuild`, `analyze`, and `upload-sarif`, avoiding orphaned/imposter commit verification failures.
-
-### Security
-
-- **WebSocket origin and lockout hardening** — Added stricter WebSocket origin validation and safer lockout file-permission handling.
-
-### Dependencies
-
-- **`fast-xml-parser` upgraded to 5.5.7** — Updated app/e2e dependency versions to address the CVE-2026-33349 advisory.
-
-### Testing
-
-- **Coverage and stability expansion** — Added/updated tests for WebSocket log streaming, auth lockout flows, registry provider error paths, webhook payload bounds, release-notes/digest lifecycle, and dashboard layout defaults; refactored large trigger/watcher suites for clearer ownership and lower flake risk.
-
-### Documentation
-
-- **Guide/API endpoint synchronization** — Updated current docs and guides to consistently use canonical `/api/v1/*` paths (actions, rollback, security, self-update, triggers, webhooks, FAQ, updates), and expanded container list API docs to include `order`, runtime `status` values, and watched-kind filtering (`watched`, `unwatched`, `all`).
+_No unreleased changes._
 
 ## [1.5.0] — 2026-03-19
 
@@ -63,7 +26,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Resource usage dashboard widget** — CPU and memory usage bars with top-N resource consumers, progressive detail at different widget sizes.
 - **Trigger environment variable aliases** — Triggers can now be configured with `DD_ACTION_*` or `DD_NOTIFICATION_*` prefixes in addition to `DD_TRIGGER_*`. All three prefixes resolve identically at startup.
 - **Digest notification mode** — New `MODE=digest` trigger option that accumulates update events over a configurable time window and sends a single batch notification on a cron schedule. Configure with `DD_TRIGGER_{type}_{name}_MODE=digest` and `DD_TRIGGER_{type}_{name}_DIGESTCRON=0 8 * * *` (default: daily at 8am). Works with all notification triggers (SMTP, Telegram, Slack, Pushover, etc.). ([Discussion #185](https://github.com/CodesWhat/drydock/discussions/185))
-- **Toast notifications for container action errors** — Update and delete failures now surface as visible toast notifications in the UI instead of silently failing. Toasts auto-dismiss after 6 seconds and stack below announcement banners. ([#183](https://github.com/CodesWhat/drydock/issues/183))
+- **Toast notifications for all container actions** — Every container action (update, start, stop, restart, scan, delete, group update, rollback, trigger run) now shows a success toast. Error toasts for failures. Toasts auto-dismiss after 6 seconds. ([#183](https://github.com/CodesWhat/drydock/issues/183), [#193](https://github.com/CodesWhat/drydock/discussions/193))
+- **"View containers" navigation from Watchers and Agents** — Detail panels now include a button that navigates directly to the container list filtered by the selected host. ([#194](https://github.com/CodesWhat/drydock/discussions/194))
+- **Podman API version negotiation** — Docker watcher probes the daemon's `/version` endpoint over the Unix socket and pins Dockerode to the reported API version. Prevents `EAI_AGAIN` crashes caused by `docker-modem`'s redirect-following bug when Podman returns HTTP 301 for unversioned API paths. ([#182](https://github.com/CodesWhat/drydock/issues/182))
 - **System log live streaming in UI** — Added end-to-end WebSocket support for system logs (`/api/v1/log/stream`) with new UI service/composable and live log view integration.
 - **Watcher run-time visibility in UI** — Watcher metadata now exposes `lastRunAt`, and UI surfaces it as a relative timestamp.
 - **Shared log viewer primitives** — Added reusable `AppLogViewer` building blocks, JSON tokenizer/search utilities, and full-page container detail tab components for consistent log UX.
@@ -77,6 +42,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Connection lost overlay z-index** — Overlay now covers entire viewport including sidebar using CSS custom property `--z-modal`.
 - **Deprecation banner composable** — Reusable `useDeprecationBanner` composable for session and permanent dismissal of deprecation notices.
 - **Debug dump redaction patterns expanded** — Sensitive key detection now covers 14+ token patterns including `passwd`, `credential`, `apikey`, `accesskey`, `privatekey`, `bearer`, `auth`, and `login` (env-style keys only for auth/bearer/login to avoid false positives).
+- **Lefthook pre-push Playwright gate** — Added `e2e-playwright` to the root pre-push pipeline so local hooks now run Cucumber E2E and Playwright QA before push.
+- **Trigger rename migration CLI support** — `config migrate` now supports `--source trigger` and rewrites legacy trigger prefixes (`DD_TRIGGER_*`, `dd.trigger.include`, `dd.trigger.exclude`) to action-prefixed aliases.
+- **Centralized rollback container guard** — `-old-{timestamp}` container rejection moved from Docker trigger to base Trigger class, covering all trigger types.
+- **Container list query internals modularized** — Extracted query-validation logic and split tests by concern.
+- **Container list filtering performance** — Status/kind filters avoid unnecessary full-collection loads; age/created sorting precomputes values.
+- **Healthcheck execution path optimized** — Replaced curl-based healthcheck with a static C binary.
+- **Watcher event logging noise reduced** — First event-stream reconnect downgraded from `warn` to `info`.
+- **CI workflows renamed** — Dropped numeric prefixes from workflow filenames for clarity.
+- **Smoke load test profile removed** — Replaced with the ci profile for meaningful regression detection.
 
 ### Fixed
 
@@ -86,11 +60,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Remote trigger error reporting** — Agent-side trigger endpoints now return structured error details with reason field. Controller extracts and logs the actual failure message instead of bare "Request failed with status code 500". Original Axios error preserved for proxy forwarding. ([#183](https://github.com/CodesWhat/drydock/issues/183))
 - **Dashboard confirm dialog** — `ConfirmDialog` moved to global app shell so update prompts from the dashboard "Updates Available" widget appear immediately instead of requiring navigation to the Containers page. ([#184](https://github.com/CodesWhat/drydock/issues/184))
 - **Registry failures in Updates Available widget** — Containers with "check failed" status (registry errors) no longer appear in the dashboard "Updates Available" section. They remain visible on the Containers page with error indicators. ([#186](https://github.com/CodesWhat/drydock/issues/186))
+- **Digest buffer stale entry eviction** — Containers evicted from digest buffer when update-applied events fire, preventing already-updated containers from appearing in the next digest flush.
+- **Rate-limiter memory safety** — Fixed-window limiter now enforces a hard `maxEntries` cap to prevent unbounded growth.
+- **UI interaction polish** — Fixed agent column picker positioning ([#187](https://github.com/CodesWhat/drydock/issues/187)), dashboard mobile stacking, Escape-key dashboard edit exit, popover z-index/positioning.
+- **Watcher "Last Run" display** — Watchers page now shows relative timestamps for last run. ([#189](https://github.com/CodesWhat/drydock/issues/189))
+- **Duplicate containers after recreate** — Three-layer deduplication filtering prevents alias containers from entering the store during Docker recreate cycles. ([#180](https://github.com/CodesWhat/drydock/issues/180))
+- **Agent disconnect notification template** — Agent disconnect events now use a dedicated notification template instead of being rendered as container updates. ([#195](https://github.com/CodesWhat/drydock/issues/195))
+- **Digest-only image visibility** — Watchers no longer silently drop containers with digest-only image references (e.g. Portainer agent). ([#192](https://github.com/CodesWhat/drydock/issues/192))
 - **Digest cron validation** — `DIGESTCRON` config validated with `cron.validate()` at registration time, failing with a clear error instead of a runtime crash.
 - **Container list runtime status filtering** — Container list API now accepts Docker runtime statuses (`running`, `stopped`, `paused`, etc.) in `status` filtering.
-- **Digest-only image visibility** — Watchers no longer silently drop containers with digest-only image references.
 - **Debug dump filename normalization** — Debug exports now use date-only `.json` filenames.
 - **WebSocket robustness fixes** — Prevented writes on closed sockets, fixed non-matching upgrade URL pass-through behavior, and eliminated stats-collector listener leaks across restart cycles.
+
+### Security
+
+- **WebSocket origin and lockout hardening** — Added stricter WebSocket origin validation and safer lockout file-permission handling.
+
+### Dependencies
+
+- **`fast-xml-parser` upgraded to 5.5.7** — Updated app/e2e dependency versions to address the CVE-2026-33349 advisory.
+
+### Testing
+
+- **Coverage and stability expansion** — Added/updated tests for WebSocket log streaming, auth lockout flows, registry provider error paths, webhook payload bounds, release-notes/digest lifecycle, and dashboard layout defaults; refactored large trigger/watcher suites for clearer ownership and lower flake risk.
+
+### Documentation
+
+- **Guide/API endpoint synchronization** — Updated current docs and guides to consistently use canonical `/api/v1/*` paths, expanded container list API docs, and added dashboard customization guide.
 
 ## [1.4.5] — 2026-03-17
 
