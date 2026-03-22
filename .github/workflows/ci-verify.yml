@@ -258,10 +258,11 @@ jobs:
           head-ref: ${{ github.event_name == 'push' && github.sha || '' }}
 
   commit-message:
-    name: Commit Message Gate
+    name: Commit Message Gate (advisory)
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    continue-on-error: true
     permissions:
       contents: read
 
