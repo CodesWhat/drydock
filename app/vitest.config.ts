@@ -64,7 +64,7 @@ export default defineConfig({
     environment: 'node',
     // Coverage writes can race with clean-up; keep file execution serial.
     fileParallelism: false,
-    exclude: ['**/node_modules/**', '**/dist/**'],
+    exclude: ['**/node_modules/**', '**/dist/**', '**/.stryker-tmp/**'],
     server: {
       deps: {
         inline: ['openid-client', 'oauth4webapi', 'jose'],
