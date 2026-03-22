@@ -10,6 +10,8 @@ import {
 } from '@/views/containers/useContainerActions';
 
 const mocks = vi.hoisted(() => ({
+  toastSuccess: vi.fn(),
+  toastError: vi.fn(),
   confirmRequire: vi.fn(),
   getBackups: vi.fn(),
   rollback: vi.fn(),
@@ -57,6 +59,18 @@ vi.mock('@/services/container-actions', () => ({
 
 vi.mock('@/services/preview', () => ({
   previewContainer: mocks.previewContainer,
+}));
+
+vi.mock('@/composables/useToast', () => ({
+  useToast: () => ({
+    success: mocks.toastSuccess,
+    error: mocks.toastError,
+    warning: vi.fn(),
+    info: vi.fn(),
+    toasts: { value: [] },
+    addToast: vi.fn(),
+    dismissToast: vi.fn(),
+  }),
 }));
 
 vi.mock('@/composables/useServerFeatures', () => ({
@@ -238,6 +252,7 @@ describe('useContainerActions', () => {
     expect(mocks.getBackups).toHaveBeenCalledTimes(1);
     expect(mocks.getContainerUpdateOperations).toHaveBeenCalledTimes(1);
     expect(composable.triggerRunInProgress.value).toBeNull();
+    expect(mocks.toastSuccess).toHaveBeenCalledWith('Trigger ran: agent-1.slack.notify');
   });
 
   it('guards trigger execution without a selected id and reports trigger run failures', async () => {
@@ -280,6 +295,7 @@ describe('useContainerActions', () => {
     expect(loadContainers).toHaveBeenCalledTimes(1);
     expect(mocks.getBackups).toHaveBeenCalledTimes(1);
     expect(mocks.getContainerUpdateOperations).toHaveBeenCalledTimes(1);
+    expect(mocks.toastSuccess).toHaveBeenCalledWith('Rollback completed from selected backup');
   });
 
   it('updates skip policy for selected container and tracks skipped updates', async () => {
@@ -319,6 +335,8 @@ describe('useContainerActions', () => {
 
     expect(mocks.updateContainer).toHaveBeenCalledWith('container-1');
     expect(mocks.scanContainer).toHaveBeenCalledWith('container-1');
+    expect(mocks.toastSuccess).toHaveBeenCalledWith('Updated: web');
+    expect(mocks.toastSuccess).toHaveBeenCalledWith('Scan triggered: web');
 
     mocks.updateContainer.mockClear();
     mocks.scanContainer.mockClear();
@@ -441,6 +459,7 @@ describe('useContainerActions', () => {
     expect(closeFullPage).toHaveBeenCalledTimes(1);
     expect(closePanel).toHaveBeenCalledTimes(1);
     expect(loadContainers).toHaveBeenCalledTimes(1);
+    expect(mocks.toastSuccess).toHaveBeenCalledWith('Deleted: web');
   });
 
   it('updates all eligible containers in a group and reloads once after the batch', async () => {
@@ -480,6 +499,7 @@ describe('useContainerActions', () => {
     expect(mocks.updateContainer).toHaveBeenNthCalledWith(2, 'container-2');
     expect(loadContainers).toHaveBeenCalledTimes(1);
     expect(composable.groupUpdateInProgress.value.has('group-1')).toBe(false);
+    expect(mocks.toastSuccess).toHaveBeenCalledWith('Updated 2 containers in group-1');
   });
 
   it('freezes grouped update ids and skips containers renamed during the batch', async () => {
@@ -551,6 +571,8 @@ describe('useContainerActions', () => {
     expect(mocks.updateContainer).toHaveBeenCalledTimes(2);
     expect(loadContainers).not.toHaveBeenCalled();
     expect(composable.groupUpdateInProgress.value.has('group-1')).toBe(false);
+    expect(mocks.toastSuccess).not.toHaveBeenCalled();
+    expect(mocks.toastError).toHaveBeenCalledTimes(2);
   });
 
   it('tracks pending actions and polls until container reappears', async () => {
@@ -617,11 +639,13 @@ describe('useContainerActions', () => {
 
     expect(composable.actionInProgress.value).toBeNull();
     expect(error.value).toBe('start failed');
+    expect(mocks.toastError).toHaveBeenCalledWith('Update failed: web', 'start failed');
 
     // subsequent successful action clears the error
     mocks.startContainer.mockResolvedValueOnce({ message: 'ok' });
     await composable.startContainer('web');
     expect(error.value).toBeNull();
+    expect(mocks.toastSuccess).toHaveBeenCalledWith('Started: web');
   });
 
   it('builds skipped-policy tooltip fallback and pluralized variants', async () => {
@@ -934,6 +958,9 @@ describe('useContainerActions', () => {
     expect(mocks.restartContainer).toHaveBeenCalledWith('container-1');
     expect(mocks.updateContainerPolicy).toHaveBeenCalledWith('container-1', 'clear', {});
     expect(mocks.updateContainer).toHaveBeenCalledWith('container-1');
+    expect(mocks.toastSuccess).toHaveBeenCalledWith('Stopped: web');
+    expect(mocks.toastSuccess).toHaveBeenCalledWith('Restarted: web');
+    expect(mocks.toastSuccess).toHaveBeenCalledWith('Force updated: web');
   });
 
   it('wires update confirmation dialog to update accept handler', async () => {
@@ -957,6 +984,7 @@ describe('useContainerActions', () => {
 
     await confirmCall.accept?.();
     expect(mocks.updateContainer).toHaveBeenCalledWith('container-1');
+    expect(mocks.toastSuccess).toHaveBeenCalledWith('Updated: web');
   });
 
   it('shows tag change details in update confirmation for tag updates', async () => {
@@ -1320,6 +1348,7 @@ describe('useContainerActions', () => {
     mocks.rollback.mockResolvedValueOnce({});
     await composable.rollbackToBackup();
     expect(composable.rollbackMessage.value).toBe('Rollback completed from latest backup');
+    expect(mocks.toastSuccess).toHaveBeenCalledWith('Rollback completed from latest backup');
   });
 
   it('covers policy-action guards, failures, and action variants', async () => {
@@ -1517,6 +1546,7 @@ describe('useContainerActions', () => {
 
     await composable.startContainer('web');
     expect(mocks.startContainer).toHaveBeenCalledWith('container-1');
+    expect(mocks.toastSuccess).toHaveBeenCalledWith('Started: web');
     expect(mocks.getContainerTriggers).toHaveBeenCalledTimes(1);
     expect(mocks.getBackups).toHaveBeenCalledTimes(1);
     expect(mocks.getContainerUpdateOperations).toHaveBeenCalledTimes(1);
@@ -1596,6 +1626,7 @@ describe('useContainerActions', () => {
     const failedResult = await confirmOptions.accept?.();
     expect(failedResult).toBe(false);
     expect(error.value).toBe('delete failed');
+    expect(mocks.toastError).toHaveBeenCalledWith('Delete failed: web', 'delete failed');
   });
 
   it('deletes non-selected containers without closing the selected detail views', async () => {
@@ -1618,6 +1649,7 @@ describe('useContainerActions', () => {
     expect(closeFullPage).not.toHaveBeenCalled();
     expect(closePanel).not.toHaveBeenCalled();
     expect(loadContainers).toHaveBeenCalledTimes(1);
+    expect(mocks.toastSuccess).toHaveBeenCalledWith('Deleted: web');
   });
 
   it('skips overlapping poll cycles when a pending-action poll is still in flight', async () => {

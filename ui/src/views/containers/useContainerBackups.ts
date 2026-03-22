@@ -1,4 +1,5 @@
 import { type Ref, ref } from 'vue';
+import { useToast } from '../../composables/useToast';
 import { getBackups, rollback } from '../../services/backup';
 import { getContainerUpdateOperations as fetchContainerUpdateOperations } from '../../services/container';
 import { errorMessage } from '../../utils/error';
@@ -125,6 +126,8 @@ async function rollbackToBackupState(args: {
     args.rollbackMessage.value = args.backupId
       ? 'Rollback completed from selected backup'
       : 'Rollback completed from latest backup';
+    const toast = useToast();
+    toast.success(args.rollbackMessage.value ?? 'Rollback completed');
     args.skippedUpdates.value.delete(args.selectedContainerName || '');
     await args.loadContainers();
     await Promise.all([args.loadDetailBackups(), args.loadDetailUpdateOperations()]);

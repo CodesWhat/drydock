@@ -1,4 +1,5 @@
 import { type Ref, ref } from 'vue';
+import { useToast } from '../../composables/useToast';
 import { getContainerTriggers, runTrigger as runContainerTrigger } from '../../services/container';
 import type { ApiContainerTrigger } from '../../types/api';
 import { errorMessage } from '../../utils/error';
@@ -51,6 +52,8 @@ async function runAssociatedTriggerState(args: {
       triggerAgent: args.trigger.agent,
     });
     args.triggerMessage.value = `Trigger ${triggerKey} ran successfully`;
+    const toast = useToast();
+    toast.success(`Trigger ran: ${triggerKey}`);
     await args.loadContainers();
     await args.refreshActionTabData();
   } catch (e: unknown) {

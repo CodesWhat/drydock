@@ -57,6 +57,7 @@ async function executeContainerActionState(args: {
   selectedContainerName: string | undefined;
   activeDetailTab: string;
   refreshActionTabData: () => Promise<void>;
+  successMessage?: string;
 }): Promise<boolean> {
   if (!args.containerActionsEnabled) {
     args.inputError.value = args.containerActionsDisabledReason;
@@ -82,6 +83,10 @@ async function executeContainerActionState(args: {
     }
     if (args.selectedContainerName === args.name && args.activeDetailTab === 'actions') {
       await args.refreshActionTabData();
+    }
+    if (args.successMessage) {
+      const toast = useToast();
+      toast.success(args.successMessage);
     }
     return true;
   } catch (e: unknown) {
@@ -120,7 +125,7 @@ async function updateAllInGroupState(args: {
   executeAction: (
     name: string,
     action: (id: string) => Promise<unknown>,
-    options?: { containerId?: string; reloadContainers?: boolean },
+    options?: { containerId?: string; reloadContainers?: boolean; successMessage?: string },
   ) => Promise<boolean>;
   loadContainers: () => Promise<void>;
 }) {
@@ -171,6 +176,9 @@ async function updateAllInGroupState(args: {
     }
     if (updatedAny) {
       await args.loadContainers();
+      const toast = useToast();
+      const count = frozenUpdateTargets.length;
+      toast.success(`Updated ${count} container${count === 1 ? '' : 's'} in ${args.group.key}`);
     }
   } finally {
     setGroupUpdateStateValue(args.groupUpdateInProgress, args.group.key, false);
@@ -207,6 +215,8 @@ async function deleteContainerState(args: {
       args.closePanel();
     }
     await args.loadContainers();
+    const toast = useToast();
+    toast.success(`Deleted: ${args.name}`);
     return true;
   } catch (e: unknown) {
     const msg = errorMessage(e, `Failed to delete ${args.name}`);
@@ -301,7 +311,7 @@ function createConfirmHandlers(args: {
   executeAction: (
     name: string,
     action: (id: string) => Promise<unknown>,
-    options?: { containerId?: string; reloadContainers?: boolean },
+    options?: { containerId?: string; reloadContainers?: boolean; successMessage?: string },
   ) => Promise<boolean>;
   forceUpdate: (name: string) => Promise<void>;
   deleteContainer: (name: string) => Promise<boolean>;
@@ -315,7 +325,10 @@ function createConfirmHandlers(args: {
       rejectLabel: 'Cancel',
       acceptLabel: 'Stop',
       severity: 'danger',
-      accept: () => args.executeAction(name, apiStopContainer) as unknown as Promise<void>,
+      accept: () =>
+        args.executeAction(name, apiStopContainer, {
+          successMessage: `Stopped: ${name}`,
+        }) as unknown as Promise<void>,
     });
   }
 
@@ -326,7 +339,10 @@ function createConfirmHandlers(args: {
       rejectLabel: 'Cancel',
       acceptLabel: 'Restart',
       severity: 'warn',
-      accept: () => args.executeAction(name, apiRestartContainer) as unknown as Promise<void>,
+      accept: () =>
+        args.executeAction(name, apiRestartContainer, {
+          successMessage: `Restarted: ${name}`,
+        }) as unknown as Promise<void>,
     });
   }
 
@@ -359,7 +375,10 @@ function createConfirmHandlers(args: {
       rejectLabel: 'Cancel',
       acceptLabel: 'Update',
       severity: 'warn',
-      accept: () => args.executeAction(name, apiUpdateContainer) as unknown as Promise<void>,
+      accept: () =>
+        args.executeAction(name, apiUpdateContainer, {
+          successMessage: `Updated: ${name}`,
+        }) as unknown as Promise<void>,
     });
   }
 
@@ -404,7 +423,7 @@ function createContainerActionHandlers(args: {
   executeAction: (
     name: string,
     action: (id: string) => Promise<unknown>,
-    options?: { containerId?: string; reloadContainers?: boolean },
+    options?: { containerId?: string; reloadContainers?: boolean; successMessage?: string },
   ) => Promise<boolean>;
   applyPolicy: (
     name: string,
@@ -418,15 +437,17 @@ function createContainerActionHandlers(args: {
   refreshActionTabData: () => Promise<void>;
 }) {
   async function startContainer(name: string) {
-    await args.executeAction(name, apiStartContainer);
+    await args.executeAction(name, apiStartContainer, { successMessage: `Started: ${name}` });
   }
 
   async function updateContainer(name: string) {
-    await args.executeAction(name, apiUpdateContainer);
+    await args.executeAction(name, apiUpdateContainer, { successMessage: `Updated: ${name}` });
   }
 
   async function scanContainer(name: string) {
-    await args.executeAction(name, apiScanContainer);
+    await args.executeAction(name, apiScanContainer, {
+      successMessage: `Scan triggered: ${name}`,
+    });
   }
 
   async function skipUpdate(name: string) {
@@ -446,7 +467,9 @@ function createContainerActionHandlers(args: {
 
   async function forceUpdate(name: string) {
     await args.applyPolicy(name, 'clear', {}, `Cleared update policy for ${name}`);
-    await args.executeAction(name, apiUpdateContainer);
+    await args.executeAction(name, apiUpdateContainer, {
+      successMessage: `Force updated: ${name}`,
+    });
   }
 
   return {
@@ -600,7 +623,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
   async function executeAction(
     name: string,
     action: (id: string) => Promise<unknown>,
-    options?: { containerId?: string; reloadContainers?: boolean },
+    options?: { containerId?: string; reloadContainers?: boolean; successMessage?: string },
   ) {
     return executeContainerActionState({
       containerActionsEnabled: containerActionsEnabled.value,
@@ -619,6 +642,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
       selectedContainerName: input.selectedContainer.value?.name,
       activeDetailTab: input.activeDetailTab.value,
       refreshActionTabData,
+      successMessage: options?.successMessage,
     });
   }
 
