@@ -1,5 +1,5 @@
-name: "🚀 Release From Tag"
-run-name: "🚀 Release From Tag — ${{ github.ref_name }}"
+name: "🚀 Release: From Tag"
+run-name: "🚀 Release: From Tag — ${{ github.ref_name }}"
 
 on:
   push:
@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   verify-ci:
-    name: Verify Prior CI Success
+    name: "✅ Release: Verify Prior CI Success"
     runs-on: ubuntu-latest
     timeout-minutes: 20  # Poll loop waits for prior branch CI status on tag SHA
     permissions:
@@ -132,7 +132,7 @@ jobs:
           exit 1
 
   release:
-    name: Docker Build & Push
+    name: "🚀 Release: Docker Build & Push"
     runs-on: ubuntu-latest
     timeout-minutes: 120  # Multi-arch build, signing, attestations, and release upload
     environment: release-publish

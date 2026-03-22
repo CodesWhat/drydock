@@ -1,8 +1,8 @@
-name: "🧬 Mutation Testing"
+name: "🧬 Quality: Mutation Testing"
 run-name: >-
   ${{
-    github.event_name == 'schedule' && '🧬 Mutation Testing — Weekly schedule' ||
-    format('🧬 Mutation Testing — Manual by {0}', github.actor)
+    github.event_name == 'schedule' && '🧬 Quality: Mutation Testing — Weekly schedule' ||
+    format('🧬 Quality: Mutation Testing — Manual by {0}', github.actor)
   }}
 
 # Keep mutation testing out of the push/PR fast path.
@@ -22,7 +22,7 @@ concurrency:
 
 jobs:
   stryker:
-    name: "Stryker Advisory (${{ matrix.package }})"
+    name: "🧬 Quality: Stryker Advisory (${{ matrix.package }})"
     runs-on: ubuntu-latest
     environment: mutation
     timeout-minutes: 60  # Mutation testing is intentionally expensive; cap runaway mutants

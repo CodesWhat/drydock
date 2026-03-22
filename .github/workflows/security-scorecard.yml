@@ -1,9 +1,9 @@
-name: "OpenSSF Scorecard"
+name: "🛡️ Security: OpenSSF Scorecard"
 run-name: >-
   ${{
-    github.event_name == 'branch_protection_rule' && 'OpenSSF Scorecard — Branch protection changed' ||
-    github.event_name == 'schedule' && 'OpenSSF Scorecard — Weekly schedule' ||
-    format('OpenSSF Scorecard — {0}', github.ref_name)
+    github.event_name == 'branch_protection_rule' && '🛡️ Security: OpenSSF Scorecard — Branch protection changed' ||
+    github.event_name == 'schedule' && '🛡️ Security: OpenSSF Scorecard — Weekly schedule' ||
+    format('🛡️ Security: OpenSSF Scorecard — {0}', github.ref_name)
   }}
 
 on:
@@ -18,7 +18,7 @@ permissions: read-all
 
 jobs:
   analysis:
-    name: Scorecard analysis
+    name: "🛡️ Security: Scorecard Analysis"
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:

@@ -1,8 +1,8 @@
-name: "Snyk Paid Scans"
+name: "🛡️ Security: Snyk Paid Scans"
 run-name: >-
   ${{
-    github.event_name == 'schedule' && 'Snyk Paid Scans — Weekly run' ||
-    format('Snyk Paid Scans — Manual by {0}', github.actor)
+    github.event_name == 'schedule' && '🛡️ Security: Snyk Paid Scans — Weekly run' ||
+    format('🛡️ Security: Snyk Paid Scans — Manual by {0}', github.actor)
   }}
 
 on:
@@ -24,7 +24,7 @@ env:
 
 jobs:
   prepare:
-    name: Prepare Snyk Context
+    name: "🛠️ Security: Prepare Snyk Context"
     runs-on: ubuntu-latest
     timeout-minutes: 5
     environment: ci-security
@@ -52,7 +52,7 @@ jobs:
           fi
 
   quota-plan:
-    name: Snyk Quota Plan
+    name: "📊 Security: Snyk Quota Plan"
     runs-on: ubuntu-latest
     timeout-minutes: 5
     needs: [prepare]
@@ -82,7 +82,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   open-source:
-    name: Snyk Open Source
+    name: "📦 Security: Snyk Open Source"
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: ci-security
@@ -119,7 +119,7 @@ jobs:
           ./scripts/snyk-deps-gate.sh --file=e2e/package-lock.json --package-manager=npm
 
   code:
-    name: Snyk Code
+    name: "🧠 Security: Snyk Code"
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: ci-security
@@ -152,7 +152,7 @@ jobs:
         run: ./scripts/snyk-code-gate.sh
 
   container:
-    name: Snyk Container
+    name: "🐳 Security: Snyk Container"
     runs-on: ubuntu-latest
     timeout-minutes: 30  # Includes Docker image build before scan
     environment: ci-security
@@ -198,7 +198,7 @@ jobs:
         run: ./scripts/snyk-container-gate.sh "${SNYK_CONTAINER_IMAGE}" --file=Dockerfile
 
   iac:
-    name: Snyk IaC
+    name: "🏗️ Security: Snyk IaC"
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: ci-security
@@ -230,7 +230,7 @@ jobs:
         run: ./scripts/snyk-iac-gate.sh .
 
   skipped:
-    name: Snyk Scans Skipped
+    name: "⏭️ Security: Snyk Scans Skipped"
     runs-on: ubuntu-latest
     timeout-minutes: 5
     needs: [prepare, quota-plan]
