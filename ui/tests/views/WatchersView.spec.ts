@@ -11,6 +11,7 @@ const { mockRoute } = vi.hoisted(() => ({
 
 vi.mock('vue-router', () => ({
   useRoute: () => mockRoute,
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
 }));
 
 vi.mock('@/composables/useBreakpoints', () => ({

@@ -1,15 +1,17 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { useBreakpoints } from '../composables/useBreakpoints';
 import { useViewMode } from '../preferences/useViewMode';
 import { getAllContainers } from '../services/container';
 import { getAllWatchers, getWatcher } from '../services/watcher';
 import type { ApiComponent } from '../types/api';
+import { ROUTES } from '../router/routes';
 import { timeAgo } from '../utils/audit-helpers';
 
 const { isMobile } = useBreakpoints();
 const route = useRoute();
+const router = useRouter();
 const watchersViewMode = useViewMode('watchers');
 const selectedWatcher = ref<Record<string, unknown> | null>(null);
 const detailOpen = ref(false);
@@ -348,6 +350,16 @@ onMounted(async () => {
             <div>
               <div class="text-2xs font-semibold uppercase tracking-wider mb-1 dd-text-muted">Containers</div>
               <div class="text-lg font-bold dd-text">{{ selectedWatcher.containers }}</div>
+              <AppButton
+                v-if="selectedWatcher.containers > 0"
+                size="none"
+                variant="plain"
+                weight="none"
+                class="mt-1 inline-flex items-center gap-1 text-2xs-plus font-medium transition-colors text-drydock-secondary hover:text-drydock-secondary-hover"
+                @click="router.push({ path: ROUTES.CONTAINERS, query: { filterServer: String(selectedWatcher.name) } })">
+                <AppIcon name="arrow-right" :size="10" />
+                View containers
+              </AppButton>
             </div>
             <div>
               <div class="text-2xs font-semibold uppercase tracking-wider mb-1 dd-text-muted">Schedule</div>

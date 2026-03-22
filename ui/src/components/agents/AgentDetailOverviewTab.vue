@@ -20,6 +20,8 @@ const props = defineProps<{
   resourceFields: AgentDetailField[];
   systemFields: AgentDetailField[];
 }>();
+
+defineEmits<{ 'view-containers': [] }>();
 </script>
 
 <template>
@@ -83,6 +85,16 @@ const props = defineProps<{
           </div>
         </div>
       </div>
+      <AppButton
+        v-if="props.agent.containers.total > 0"
+        size="none"
+        variant="plain"
+        weight="none"
+        class="mt-2 inline-flex items-center gap-1 text-2xs-plus font-medium transition-colors text-drydock-secondary hover:text-drydock-secondary-hover"
+        @click="$emit('view-containers')">
+        <AppIcon name="arrow-right" :size="10" />
+        View containers
+      </AppButton>
     </div>
 
     <div>

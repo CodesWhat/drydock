@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
+import { ROUTES } from '../router/routes';
 import AgentDetailConfigTab from '../components/agents/AgentDetailConfigTab.vue';
 import AgentDetailLogsTab from '../components/agents/AgentDetailLogsTab.vue';
 import AgentDetailOverviewTab from '../components/agents/AgentDetailOverviewTab.vue';
@@ -45,6 +46,7 @@ interface AgentLog {
 
 const { isMobile, windowNarrow: isCompact } = useBreakpoints();
 const route = useRoute();
+const router = useRouter();
 let activeAgentStatusListener: EventListener | null = null;
 
 const loading = ref(true);
@@ -787,6 +789,7 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
               :agent="selectedAgent"
               :resource-fields="getResourceFields(selectedAgent)"
               :system-fields="getSystemFields(selectedAgent)"
+              @view-containers="router.push({ path: ROUTES.CONTAINERS, query: { filterServer: selectedAgent.name } })"
             />
 
             <AgentDetailLogsTab
