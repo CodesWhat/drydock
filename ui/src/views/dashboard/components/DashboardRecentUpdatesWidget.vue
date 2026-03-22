@@ -203,7 +203,7 @@ watchEffect(() => {
           </template>
 
           <template #cell-actions="{ row }">
-            <div class="flex justify-center">
+            <div class="flex justify-center w-full">
             <AppButton
               v-if="row.status === 'pending'"
               data-test="dashboard-update-btn"
