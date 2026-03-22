@@ -81,7 +81,7 @@ watchEffect(() => {
     <!-- Header — hides when compact -->
     <div v-if="showHeader" class="shrink-0 flex items-center justify-between px-5 py-3.5" :style="{ borderBottom: '1px solid var(--dd-border)' }">
       <div class="flex items-center gap-2">
-        <div v-if="editMode" class="drag-handle dd-drag-handle"><AppIcon name="ph:dots-six-vertical" :size="14" /></div>
+        <div v-if="editMode" class="drag-handle dd-drag-handle" v-tooltip.top="'Drag to reorder'"><AppIcon name="ph:dots-six-vertical" :size="14" /></div>
         <AppIcon name="recent-updates" :size="14" class="text-drydock-secondary" />
         <h2 class="dd-text-heading-section dd-text">
           Updates Available
@@ -185,6 +185,7 @@ watchEffect(() => {
 
           <template #cell-type="{ row }">
             <AppBadge
+              v-tooltip.top="row.updateKind ?? 'unknown'"
               size="xs"
               class="px-1.5 py-0 sm:!hidden"
               :custom="{
@@ -194,6 +195,7 @@ watchEffect(() => {
               <AppIcon :name="getUpdateKindIcon(row.updateKind)" :size="12" />
             </AppBadge>
             <AppBadge
+              v-tooltip.top="row.updateKind ?? 'unknown'"
               size="sm"
               class="max-sm:!hidden"
               :custom="{
@@ -239,7 +241,7 @@ watchEffect(() => {
 
     <!-- Compact: inline summary -->
     <div v-else class="flex-1 min-h-0 flex flex-col items-center justify-center p-4">
-      <div v-if="editMode" class="drag-handle dd-drag-handle mb-2"><AppIcon name="ph:dots-six" :size="14" /></div>
+      <div v-if="editMode" class="drag-handle dd-drag-handle mb-2" v-tooltip.top="'Drag to reorder'"><AppIcon name="ph:dots-six" :size="14" /></div>
       <div class="flex items-center gap-2 cursor-pointer" @click="handleViewAll">
         <AppIcon name="recent-updates" :size="16" class="text-drydock-secondary" />
         <span class="text-xs font-semibold dd-text">{{ pendingUpdatesCount }} update{{ pendingUpdatesCount === 1 ? '' : 's' }} available</span>

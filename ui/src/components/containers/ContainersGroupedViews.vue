@@ -115,7 +115,7 @@ const {
                  @row-click="selectContainer($event)">
         <!-- Container icon (own column) -->
         <template #cell-icon="{ row: c }">
-          <AppIcon v-if="c._pending || actionInProgress === c.name" name="spinner" :size="14" class="dd-spin dd-text-muted" />
+          <AppIcon v-if="c._pending || actionInProgress === c.name" name="spinner" :size="14" class="dd-spin dd-text-muted" v-tooltip.top="tt('Action in progress')" />
           <ContainerIcon v-else :icon="c.icon" :size="20" />
         </template>
 
@@ -187,7 +187,8 @@ const {
                   <AppIcon :name="c.status === 'running' ? 'play' : 'stop'" :size="12" />
                 </AppBadge>
                 <AppBadge size="xs" class="px-1.5 py-0"
-                      :custom="{ bg: serverBadgeColor(c.server).bg, text: serverBadgeColor(c.server).text }">
+                      :custom="{ bg: serverBadgeColor(c.server).bg, text: serverBadgeColor(c.server).text }"
+                      v-tooltip.top="tt(c.server)">
                   <AppIcon :name="parseServer(c.server).name === 'Local' ? 'home' : 'remote'" :size="12" />
                 </AppBadge>
                 </div>
@@ -252,7 +253,8 @@ const {
         <!-- Status -->
         <template #cell-status="{ row: c }">
           <AppIcon :name="c.status === 'running' ? 'play' : 'stop'" :size="13" class="shrink-0 md:!hidden"
-                   :style="{ color: c.status === 'running' ? 'var(--dd-success)' : 'var(--dd-danger)' }" />
+                   :style="{ color: c.status === 'running' ? 'var(--dd-success)' : 'var(--dd-danger)' }"
+                   v-tooltip.top="tt(c.status)" />
           <AppBadge class="max-md:!hidden" size="xs" :tone="c.status === 'running' ? 'success' : 'danger'">
             {{ c.status }}
           </AppBadge>

@@ -55,7 +55,7 @@ watchEffect(() => {
     <!-- Header — full mode only -->
     <div v-if="mode === 'full'" class="shrink-0 flex items-center justify-between px-5 py-3.5" :style="{ borderBottom: '1px solid var(--dd-border)' }">
       <div class="flex items-center gap-2">
-        <div v-if="editMode" class="drag-handle dd-drag-handle"><AppIcon name="ph:dots-six-vertical" :size="14" /></div>
+        <div v-if="editMode" class="drag-handle dd-drag-handle" v-tooltip.top="'Drag to reorder'"><AppIcon name="ph:dots-six-vertical" :size="14" /></div>
         <AppIcon name="servers" :size="14" class="text-drydock-secondary" />
         <h2 class="dd-text-heading-section dd-text">Host Status</h2>
       </div>
@@ -71,6 +71,7 @@ watchEffect(() => {
         :style="{ backgroundColor: 'var(--dd-bg-inset)' }"
         @click="handleViewAll">
         <AppBadge
+          v-tooltip.top="server.status === 'connected' ? 'Connected' : 'Disconnected'"
           size="xs"
           class="px-1.5 py-0"
           :tone="server.status === 'connected' ? 'success' : 'danger'">
@@ -91,7 +92,7 @@ watchEffect(() => {
 
     <!-- Compact mode: horizontal cards, horizontal scroll -->
     <div v-else class="flex-1 min-h-0 overflow-x-auto overflow-y-hidden p-4 relative">
-      <div v-if="editMode" class="drag-handle dd-drag-handle absolute top-2 left-2 z-10"><AppIcon name="ph:dots-six" :size="14" /></div>
+      <div v-if="editMode" class="drag-handle dd-drag-handle absolute top-2 left-2 z-10" v-tooltip.top="'Drag to reorder'"><AppIcon name="ph:dots-six" :size="14" /></div>
       <div class="flex gap-3 h-full" :class="servers.length <= 3 ? 'justify-center' : ''">
         <div
           v-for="server in servers"
@@ -100,6 +101,7 @@ watchEffect(() => {
           :style="{ backgroundColor: 'var(--dd-bg-inset)' }"
           @click="handleViewAll">
           <span
+            v-tooltip.top="server.status === 'connected' ? 'Connected' : 'Disconnected'"
             class="w-7 h-7 dd-rounded flex items-center justify-center"
             :style="{
               backgroundColor: server.status === 'connected' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',

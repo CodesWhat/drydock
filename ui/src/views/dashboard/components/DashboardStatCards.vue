@@ -64,7 +64,7 @@ useDraggable(gridRef, () => props.statOrder, {
       ]"
       :style="{ backgroundColor: 'var(--dd-bg-card)' }"
       @click="handleNavigate(statById.get(item.id)?.route)">
-      <div v-if="editMode" class="drag-handle dd-drag-handle flex items-center justify-center -mt-1 mb-1">
+      <div v-if="editMode" class="drag-handle dd-drag-handle flex items-center justify-center -mt-1 mb-1" v-tooltip.top="'Drag to reorder'">
         <AppIcon name="ph:dots-six" :size="14" />
       </div>
       <div class="flex items-center justify-between mb-2">

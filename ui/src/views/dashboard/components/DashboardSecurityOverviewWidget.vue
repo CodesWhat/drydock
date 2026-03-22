@@ -88,7 +88,7 @@ watchEffect(() => {
     <!-- Header — hides when very small -->
     <div v-if="showHeader" class="shrink-0 flex items-center justify-between px-5 py-3.5" :style="{ borderBottom: '1px solid var(--dd-border)' }">
       <div class="flex items-center gap-2">
-        <div v-if="editMode" class="drag-handle dd-drag-handle"><AppIcon name="ph:dots-six-vertical" :size="14" /></div>
+        <div v-if="editMode" class="drag-handle dd-drag-handle" v-tooltip.top="'Drag to reorder'"><AppIcon name="ph:dots-six-vertical" :size="14" /></div>
         <AppIcon name="security" :size="14" class="text-drydock-accent" />
         <h2 class="dd-text-heading-section dd-text">Security Overview</h2>
       </div>
@@ -97,7 +97,7 @@ watchEffect(() => {
 
     <div class="flex-1 min-h-0 overflow-y-auto overscroll-contain p-5 flex flex-col items-center justify-center relative">
       <!-- Drag handle when header is hidden — pinned top-left -->
-      <div v-if="!showHeader && editMode" class="drag-handle dd-drag-handle absolute top-2 left-2 z-10"><AppIcon name="ph:dots-six" :size="14" /></div>
+      <div v-if="!showHeader && editMode" class="drag-handle dd-drag-handle absolute top-2 left-2 z-10" v-tooltip.top="'Drag to reorder'"><AppIcon name="ph:dots-six" :size="14" /></div>
 
       <!-- Donut chart — always visible -->
       <div class="flex items-center justify-center" :class="showLegend ? 'mb-5' : ''">

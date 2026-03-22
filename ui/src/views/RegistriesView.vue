@@ -199,11 +199,12 @@ onMounted(async () => {
         <template #cell-type="{ row }">
           <AppBadge v-if="isPrivate(row)" tone="warning" size="xs" class="max-md:!hidden">Private</AppBadge>
           <AppBadge v-else tone="neutral" size="xs" class="max-md:!hidden">Public</AppBadge>
-          <AppBadge v-if="isPrivate(row)" tone="warning" size="xs" class="px-1.5 py-0 md:!hidden"><AppIcon name="lock" :size="12" /></AppBadge>
-          <AppBadge v-else tone="neutral" size="xs" class="px-1.5 py-0 md:!hidden"><AppIcon name="eye" :size="12" /></AppBadge>
+          <AppBadge v-if="isPrivate(row)" v-tooltip.top="'Private'" tone="warning" size="xs" class="px-1.5 py-0 md:!hidden"><AppIcon name="lock" :size="12" /></AppBadge>
+          <AppBadge v-else v-tooltip.top="'Public'" tone="neutral" size="xs" class="px-1.5 py-0 md:!hidden"><AppIcon name="eye" :size="12" /></AppBadge>
         </template>
         <template #cell-status="{ row }">
           <AppIcon :name="row.status === 'connected' ? 'check' : row.status === 'error' ? 'xmark' : 'warning'" :size="13" class="shrink-0 md:!hidden"
+                   v-tooltip.top="row.status"
                    :style="{ color: row.status === 'connected' ? 'var(--dd-success)' : row.status === 'error' ? 'var(--dd-danger)' : 'var(--dd-warning)' }" />
           <AppBadge :tone="row.status === 'connected' ? 'success' : row.status === 'error' ? 'danger' : 'warning'" size="xs" class="max-md:!hidden">
             {{ row.status }}
@@ -279,9 +280,10 @@ onMounted(async () => {
             <span class="text-2xs-plus hidden md:inline font-medium" :style="{ color: isPrivate(reg) ? 'var(--dd-warning)' : 'var(--dd-text-muted)' }">
               {{ isPrivate(reg) ? 'Private' : 'Public' }}
             </span>
-            <AppBadge v-if="isPrivate(reg)" tone="warning" size="xs" class="px-1.5 py-0 md:!hidden"><AppIcon name="lock" :size="12" /></AppBadge>
-            <AppBadge v-else tone="neutral" size="xs" class="px-1.5 py-0 md:!hidden"><AppIcon name="eye" :size="12" /></AppBadge>
+            <AppBadge v-if="isPrivate(reg)" v-tooltip.top="'Private'" tone="warning" size="xs" class="px-1.5 py-0 md:!hidden"><AppIcon name="lock" :size="12" /></AppBadge>
+            <AppBadge v-else v-tooltip.top="'Public'" tone="neutral" size="xs" class="px-1.5 py-0 md:!hidden"><AppIcon name="eye" :size="12" /></AppBadge>
             <AppIcon :name="reg.status === 'connected' ? 'check' : 'xmark'" :size="13" class="shrink-0 md:!hidden"
+                     v-tooltip.top="reg.status"
                      :style="{ color: reg.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)' }" />
             <AppBadge :tone="reg.status === 'connected' ? 'success' : 'danger'" size="xs" class="max-md:!hidden">
               {{ reg.status }}

@@ -195,6 +195,7 @@ onMounted(async () => {
       </template>
       <template #cell-status="{ row }">
         <AppIcon :name="row.status === 'watching' ? 'watchers' : 'pause'" :size="13" class="shrink-0 md:!hidden"
+                 v-tooltip.top="row.status === 'watching' ? 'Watching' : 'Paused'"
                  :style="{ color: watcherStatusColor(row.status) }" />
         <AppBadge :tone="row.status === 'watching' ? 'success' : 'warning'" size="xs" class="max-md:!hidden">
           {{ row.status }}
@@ -229,6 +230,7 @@ onMounted(async () => {
             </div>
           </div>
           <AppIcon :name="watcher.status === 'watching' ? 'watchers' : 'pause'" :size="13" class="shrink-0 ml-2 md:!hidden"
+                   v-tooltip.top="watcher.status === 'watching' ? 'Watching' : 'Paused'"
                    :style="{ color: watcherStatusColor(watcher.status) }" />
           <AppBadge :tone="watcher.status === 'watching' ? 'success' : 'warning'" size="xs" class="shrink-0 ml-2 max-md:!hidden">
             {{ watcher.status }}
@@ -266,6 +268,7 @@ onMounted(async () => {
         <AppIcon name="watchers" :size="14" class="dd-text-secondary" />
         <span class="text-sm font-semibold flex-1 min-w-0 truncate dd-text">{{ watcher.name }}</span>
         <AppIcon :name="watcher.status === 'watching' ? 'watchers' : 'pause'" :size="13" class="shrink-0 md:!hidden"
+                 v-tooltip.top="watcher.status === 'watching' ? 'Watching' : 'Paused'"
                  :style="{ color: watcherStatusColor(watcher.status) }" />
         <AppBadge :tone="watcher.status === 'watching' ? 'success' : 'warning'" size="xs" class="shrink-0 max-md:!hidden">
           {{ watcher.status }}

@@ -78,7 +78,7 @@ watchEffect(() => {
     <!-- Header — hides when compact -->
     <div v-if="showHeader" class="shrink-0 flex items-center justify-between px-5 py-3.5" :style="{ borderBottom: '1px solid var(--dd-border)' }">
       <div class="flex items-center gap-2">
-        <div v-if="editMode" class="drag-handle dd-drag-handle"><AppIcon name="ph:dots-six-vertical" :size="14" /></div>
+        <div v-if="editMode" class="drag-handle dd-drag-handle" v-tooltip.top="'Drag to reorder'"><AppIcon name="ph:dots-six-vertical" :size="14" /></div>
         <AppIcon name="uptime" :size="14" class="text-drydock-secondary" />
         <h2 class="dd-text-heading-section dd-text">
           Resource Usage
@@ -89,7 +89,7 @@ watchEffect(() => {
 
     <div class="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 space-y-4 relative">
       <!-- Drag handle when header is hidden — pinned top-left -->
-      <div v-if="!showHeader && editMode" class="drag-handle dd-drag-handle absolute top-2 left-2 z-10"><AppIcon name="ph:dots-six" :size="14" /></div>
+      <div v-if="!showHeader && editMode" class="drag-handle dd-drag-handle absolute top-2 left-2 z-10" v-tooltip.top="'Drag to reorder'"><AppIcon name="ph:dots-six" :size="14" /></div>
 
       <div>
         <div v-if="showHeader" class="dd-text-label mb-2 dd-text-muted">

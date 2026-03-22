@@ -285,7 +285,8 @@ onMounted(fetchAudit);
       </template>
       <template #cell-status="{ row }">
         <AppIcon :name="row.status === 'success' ? 'check' : row.status === 'error' ? 'xmark' : 'info'" :size="13" class="shrink-0 md:!hidden"
-                 :style="{ color: statusColor(row.status) }" />
+                 :style="{ color: statusColor(row.status) }"
+                 v-tooltip.top="row.status" />
         <AppBadge :custom="{ bg: statusBg(row.status), text: statusColor(row.status) }" size="xs" class="max-md:!hidden">
           {{ row.status }}
         </AppBadge>
@@ -379,11 +380,13 @@ onMounted(fetchAudit);
       <div class="flex items-center gap-1.5">
         <AppButton size="none" variant="plain" weight="none" class="px-2.5 py-1 dd-rounded text-2xs-plus font-medium dd-bg dd-text disabled:opacity-40"
                 :disabled="page <= 1"
+                v-tooltip.top="'Previous page'"
                 @click="prevPage">
           <AppIcon name="chevron-left" :size="11" />
         </AppButton>
         <AppButton size="none" variant="plain" weight="none" class="px-2.5 py-1 dd-rounded text-2xs-plus font-medium dd-bg dd-text disabled:opacity-40"
                 :disabled="page >= totalPages"
+                v-tooltip.top="'Next page'"
                 @click="nextPage">
           <AppIcon name="chevron-right" :size="11" />
         </AppButton>

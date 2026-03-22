@@ -284,7 +284,7 @@ onUnmounted(() => {
                     ]"
                     :disabled="scanning || runtimeLoading || !scannerReady"
                     @click="scanAllContainers">
-              <AppIcon name="restart" :size="11" :class="{ 'animate-spin': scanning }" />
+              <AppIcon name="restart" :size="11" :class="{ 'animate-spin': scanning }" v-tooltip.top="scanning ? 'Scanning...' : undefined" />
               <span v-if="!isCompact">Scan Now</span>
             </AppButton>
           </span>
@@ -306,7 +306,8 @@ onUnmounted(() => {
         <template #cell-image="{ row }">
           <div class="flex items-center gap-2 min-w-0">
             <AppIcon :name="severityIcon(highestSeverity(row))" :size="13" class="shrink-0 md:!hidden"
-                     :style="{ color: severityColor(highestSeverity(row)).text }" />
+                     :style="{ color: severityColor(highestSeverity(row)).text }"
+                     v-tooltip.top="highestSeverity(row)" />
             <span class="font-medium dd-text truncate">{{ row.image }}</span>
             <AppBadge v-if="row.delta && row.delta.fixed > 0 && row.delta.new === 0"
                   tone="success" size="xs" class="px-1.5 py-0 shrink-0"
@@ -391,7 +392,8 @@ onUnmounted(() => {
               <div class="text-2xs mt-0.5 dd-text-muted">{{ summary.total }} vulnerabilities</div>
             </div>
             <AppIcon :name="severityIcon(highestSeverity(summary))" :size="16" class="shrink-0 ml-2"
-                     :style="{ color: severityColor(highestSeverity(summary)).text }" />
+                     :style="{ color: severityColor(highestSeverity(summary)).text }"
+                     v-tooltip.top="highestSeverity(summary)" />
           </div>
           <div class="px-4 py-3">
             <div class="flex items-center gap-1.5 flex-wrap">
@@ -458,7 +460,8 @@ onUnmounted(() => {
                          @item-click="openDetail($event)">
         <template #header="{ item: summary }">
           <AppIcon :name="severityIcon(highestSeverity(summary))" :size="13" class="shrink-0"
-                   :style="{ color: severityColor(highestSeverity(summary)).text }" />
+                   :style="{ color: severityColor(highestSeverity(summary)).text }"
+                   v-tooltip.top="highestSeverity(summary)" />
           <div class="flex-1 min-w-0">
             <div class="text-sm font-semibold truncate dd-text">{{ summary.image }}</div>
             <div class="text-2xs dd-text-muted mt-0.5">{{ summary.total }} vulnerabilities</div>

@@ -236,6 +236,7 @@ onMounted(async () => {
       </template>
       <template #cell-status="{ row }">
         <AppIcon :name="row.status === 'active' ? 'check' : 'xmark'" :size="13" class="shrink-0 md:!hidden"
+                 v-tooltip.top="row.status === 'active' ? 'Active' : 'Inactive'"
                  :style="{ color: row.status === 'active' ? 'var(--dd-success)' : 'var(--dd-danger)' }" />
         <AppBadge :tone="row.status === 'active' ? 'success' : 'danger'" size="xs" class="max-md:!hidden">
           {{ row.status }}
@@ -275,6 +276,7 @@ onMounted(async () => {
              :style="{ borderTop: '1px solid var(--dd-border)', backgroundColor: 'var(--dd-bg-elevated)' }">
           <div class="flex items-center justify-between">
             <AppIcon :name="item.status === 'active' ? 'check' : 'xmark'" :size="13" class="shrink-0 md:!hidden"
+                     v-tooltip.top="item.status === 'active' ? 'Active' : 'Inactive'"
                      :style="{ color: item.status === 'active' ? 'var(--dd-success)' : 'var(--dd-danger)' }" />
             <AppBadge :tone="item.status === 'active' ? 'success' : 'danger'" size="xs" class="max-md:!hidden">
               {{ item.status }}
@@ -285,7 +287,8 @@ onMounted(async () => {
                       : 'linear-gradient(135deg, var(--dd-primary), var(--dd-info))' }"
                     :disabled="testingTrigger !== null"
                     @click.stop="testTrigger(item)">
-              <AppIcon :name="testingTrigger === item.id ? 'pending' : testResult?.id === item.id ? (testResult.success ? 'check' : 'xmark') : 'play'" :size="11" />
+              <AppIcon :name="testingTrigger === item.id ? 'pending' : testResult?.id === item.id ? (testResult.success ? 'check' : 'xmark') : 'play'" :size="11"
+                       v-tooltip.top="testingTrigger === item.id ? 'Testing...' : testResult?.id === item.id ? (testResult.success ? 'Test passed' : 'Test failed') : 'Run test'" />
               {{ testingTrigger === item.id ? 'Testing...' : testResult?.id === item.id ? (testResult.success ? 'Sent!' : 'Failed') : 'Test' }}
             </AppButton>
           </div>
@@ -326,7 +329,8 @@ onMounted(async () => {
                     boxShadow: 'var(--dd-shadow-sm)' }"
                   :disabled="testingTrigger !== null"
                   @click.stop="testTrigger(item)">
-            <AppIcon :name="testingTrigger === item.id ? 'pending' : testResult?.id === item.id ? (testResult.success ? 'check' : 'xmark') : 'play'" :size="10" />
+            <AppIcon :name="testingTrigger === item.id ? 'pending' : testResult?.id === item.id ? (testResult.success ? 'check' : 'xmark') : 'play'" :size="10"
+                     v-tooltip.top="testingTrigger === item.id ? 'Testing...' : testResult?.id === item.id ? (testResult.success ? 'Test passed' : 'Test failed') : 'Run test'" />
             {{ testingTrigger === item.id ? 'Testing...' : testResult?.id === item.id ? (testResult.success ? 'Sent!' : 'Failed') : 'Test' }}
           </AppButton>
           <p v-if="testError?.id === item.id" class="mt-2 text-2xs break-words" style="color: var(--dd-danger);">
@@ -391,7 +395,8 @@ onMounted(async () => {
                         boxShadow: 'var(--dd-shadow-sm)' }"
                       :disabled="testingTrigger !== null"
                       @click.stop="testTrigger(selectedTrigger)">
-                <AppIcon :name="testingTrigger === selectedTrigger.id ? 'pending' : testResult?.id === selectedTrigger.id ? (testResult.success ? 'check' : 'xmark') : 'play'" :size="11" />
+                <AppIcon :name="testingTrigger === selectedTrigger.id ? 'pending' : testResult?.id === selectedTrigger.id ? (testResult.success ? 'check' : 'xmark') : 'play'" :size="11"
+                         v-tooltip.top="testingTrigger === selectedTrigger.id ? 'Testing...' : testResult?.id === selectedTrigger.id ? (testResult.success ? 'Test passed' : 'Test failed') : 'Run test'" />
                 {{ testingTrigger === selectedTrigger.id ? 'Testing...' : testResult?.id === selectedTrigger.id ? (testResult.success ? 'Sent!' : 'Failed') : 'Test Trigger' }}
               </AppButton>
               <p v-if="testError?.id === selectedTrigger.id"

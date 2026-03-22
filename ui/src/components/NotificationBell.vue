@@ -109,6 +109,7 @@ function isUnread(entry: AuditEntry): boolean {
             icon="notifications"
             size="sm"
             variant="secondary"
+            tooltip="Notifications"
             aria-label="Notifications"
             :aria-expanded="String(showBell)"
             class="relative"
