@@ -187,6 +187,11 @@ describe('AppIconButton', () => {
     expect(wrapper.get('button').attributes('aria-label')).toBe('Edit record');
   });
 
+  it('does not use object tooltip for aria-label', () => {
+    const wrapper = mountButton({ tooltip: { content: 'Edit', placement: 'top' } as any });
+    expect(wrapper.get('button').attributes('aria-label')).toBeUndefined();
+  });
+
   it('prefers ariaLabel over tooltip for aria-label', () => {
     const wrapper = mountButton({
       ariaLabel: 'Custom label',

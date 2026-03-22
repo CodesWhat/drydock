@@ -64,15 +64,15 @@ describe('ThemeToggle', () => {
   it('is collapsed by default showing only the active icon width', () => {
     const wrapper = factory();
     const toggle = wrapper.find('.theme-toggle');
-    // Collapsed to one cell width (32px)
-    expect(toggle.attributes('style')).toContain('width: 32px');
+    // Collapsed to one cell width (36px for sm default)
+    expect(toggle.attributes('style')).toContain('width: 36px');
   });
 
   it('translates to show the active icon when collapsed', () => {
     mockThemeVariant.value = 'dark'; // index 2
     const wrapper = factory();
     const inner = wrapper.find('.theme-toggle-track');
-    expect(inner.attributes('style')).toContain('translateX(-64px)');
+    expect(inner.attributes('style')).toContain('translateX(-72px)');
   });
 
   it('translates to index 0 when light is active', () => {
@@ -85,8 +85,8 @@ describe('ThemeToggle', () => {
   it('expands on mouseenter', async () => {
     const wrapper = factory();
     await wrapper.find('.theme-toggle').trigger('mouseenter');
-    // Expanded to full width (3 * 32 = 96px)
-    expect(wrapper.find('.theme-toggle').attributes('style')).toContain('width: 96px');
+    // Expanded to full width (3 * 36 = 108px)
+    expect(wrapper.find('.theme-toggle').attributes('style')).toContain('width: 108px');
   });
 
   it('resets translation on expand', async () => {
@@ -101,7 +101,7 @@ describe('ThemeToggle', () => {
     const wrapper = factory();
     await wrapper.find('.theme-toggle').trigger('mouseenter');
     await wrapper.find('.theme-toggle').trigger('mouseleave');
-    expect(wrapper.find('.theme-toggle').attributes('style')).toContain('width: 32px');
+    expect(wrapper.find('.theme-toggle').attributes('style')).toContain('width: 36px');
   });
 
   it('calls transitionTheme when clicking an inactive variant', async () => {
@@ -116,14 +116,14 @@ describe('ThemeToggle', () => {
     const wrapper = factory();
     await wrapper.find('.theme-toggle').trigger('mouseenter');
     await wrapper.findAll('button')[0].trigger('click');
-    expect(wrapper.find('.theme-toggle').attributes('style')).toContain('width: 32px');
+    expect(wrapper.find('.theme-toggle').attributes('style')).toContain('width: 36px');
   });
 
   it('toggles expanded when clicking the active icon', async () => {
     mockThemeVariant.value = 'dark';
     const wrapper = factory();
     await wrapper.findAll('button')[2].trigger('click'); // Dark (active)
-    expect(wrapper.find('.theme-toggle').attributes('style')).toContain('width: 96px');
+    expect(wrapper.find('.theme-toggle').attributes('style')).toContain('width: 108px');
   });
 
   it('uses sm dimensions by default', () => {
@@ -141,15 +141,15 @@ describe('ThemeToggle', () => {
   it('uses sm cell size on buttons', () => {
     const wrapper = factory();
     const btn = wrapper.find('button');
-    expect(btn.attributes('style')).toContain('width: 32px');
-    expect(btn.attributes('style')).toContain('height: 32px');
+    expect(btn.attributes('style')).toContain('width: 36px');
+    expect(btn.attributes('style')).toContain('height: 36px');
   });
 
   it('uses md cell size on buttons', () => {
     const wrapper = factory({ size: 'md' });
     const btn = wrapper.find('button');
-    expect(btn.attributes('style')).toContain('width: 32px');
-    expect(btn.attributes('style')).toContain('height: 32px');
+    expect(btn.attributes('style')).toContain('width: 40px');
+    expect(btn.attributes('style')).toContain('height: 40px');
   });
 
   it('exposes aria labels and pressed state on variant buttons', () => {

@@ -687,12 +687,13 @@ describe('ContainersGroupedViews', () => {
     mocked.context = context;
 
     const wrapper = mountSubject();
-    const tableLock = wrapper
-      .findAll('button.w-8.h-8')
-      .find((button) => button.attributes('disabled') !== undefined);
-    expect(tableLock).toBeDefined();
-    (tableLock!.element as HTMLButtonElement).disabled = false;
-    await tableLock!.trigger('click');
+    const tableLockBtns = wrapper
+      .findAll('button[disabled]')
+      .filter((b) => b.classes().includes('w-10') || b.classes().includes('w-8'));
+    const tableLockBtn = tableLockBtns[0];
+    expect(tableLockBtn).toBeDefined();
+    (tableLockBtn!.element as HTMLButtonElement).disabled = false;
+    await tableLockBtn!.trigger('click');
   });
 
   it('covers compact table badge branches across kind/maturity/policy/status variants', async () => {
@@ -890,12 +891,13 @@ describe('ContainersGroupedViews', () => {
     refs.containerActionsEnabled.value = false;
     refs.actionInProgress.value = null;
     await nextTick();
-    const cardLock = wrapper
-      .findAll('button.w-7.h-7')
-      .find((button) => button.attributes('disabled') !== undefined);
-    expect(cardLock).toBeDefined();
-    (cardLock!.element as HTMLButtonElement).disabled = false;
-    await cardLock!.trigger('click');
+    const cardLockButtons = wrapper
+      .findAll('button[disabled]')
+      .filter((b) => b.classes().includes('w-9') || b.classes().includes('w-7'));
+    const cardLockBtn = cardLockButtons[0];
+    expect(cardLockBtn).toBeDefined();
+    (cardLockBtn!.element as HTMLButtonElement).disabled = false;
+    await cardLockBtn!.trigger('click');
 
     refs.containerViewMode.value = 'list';
     refs.containerActionsEnabled.value = true;
