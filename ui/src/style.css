@@ -215,6 +215,73 @@ html.dd-font-comic-mono {
   color: var(--dd-text-muted);
 }
 
+/* ─── Semantic typography ─── */
+@utility dd-text-body {
+  font-size: var(--text-2xs-plus); /* 11px — primary body text */
+}
+@utility dd-text-body-sm {
+  font-size: var(--text-2xs); /* 10px — secondary/compact body */
+}
+@utility dd-text-caption {
+  font-size: var(--text-2xs); /* 10px */
+  color: var(--dd-text-muted);
+}
+@utility dd-text-label {
+  font-size: var(--text-2xs); /* 10px */
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+@utility dd-text-badge {
+  font-size: var(--text-3xs); /* 9px */
+  font-weight: 700;
+  text-transform: uppercase;
+}
+@utility dd-text-badge-lg {
+  font-size: var(--text-2xs); /* 10px */
+  font-weight: 600;
+}
+@utility dd-text-value {
+  font-size: var(--text-xs); /* 12px */
+  font-family: var(--font-mono);
+}
+@utility dd-text-value-sm {
+  font-size: var(--text-2xs-plus); /* 11px */
+  font-family: var(--font-mono);
+}
+@utility dd-text-code {
+  font-size: var(--text-2xs); /* 10px */
+  font-family: var(--font-mono);
+}
+@utility dd-text-heading-section {
+  font-size: var(--text-sm); /* 14px */
+  font-weight: 600;
+}
+@utility dd-text-heading-panel {
+  font-size: var(--text-sm); /* 14px */
+  font-weight: 700;
+}
+@utility dd-text-heading-page {
+  font-size: var(--text-base); /* 16px */
+  font-weight: 700;
+}
+@utility dd-text-nav {
+  font-size: var(--text-xs); /* 12px */
+  font-weight: 500;
+}
+@utility dd-text-tab {
+  font-size: var(--text-2xs-plus); /* 11px */
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+@utility dd-text-column {
+  font-size: var(--text-2xs); /* 10px */
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
 /* Border */
 .dd-border {
   border-color: var(--dd-border);
