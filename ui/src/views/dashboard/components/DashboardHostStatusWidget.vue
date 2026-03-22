@@ -62,7 +62,7 @@ watchEffect(() => {
     </div>
 
     <!-- Full mode: wide rows, vertical scroll -->
-    <div v-if="mode === 'full'" class="flex-1 min-h-0 overflow-y-auto p-4 space-y-3">
+    <div v-if="mode === 'full'" class="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 space-y-3">
       <div
         v-for="server in servers"
         :key="server.name"
