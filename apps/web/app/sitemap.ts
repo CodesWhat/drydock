@@ -55,6 +55,12 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: 0.9,
     },
     ...comparePages,
+    {
+      url: `${baseUrl}/security/trivy-supply-chain-march-2026`,
+      lastModified: new Date("2026-03-22"),
+      changeFrequency: "yearly" as const,
+      priority: 0.6,
+    },
     ...docPages,
   ];
 }

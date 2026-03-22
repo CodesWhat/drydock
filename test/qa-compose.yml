@@ -125,7 +125,7 @@ services:
 
   # ── Trivy vulnerability scanner (client-server mode) ──
   trivy-server:
-    image: aquasec/trivy:latest
+    image: aquasec/trivy:0.69.3
     container_name: drydock-playwright-trivy-server
     command: ["server", "--listen", "0.0.0.0:4954"]
     expose:
