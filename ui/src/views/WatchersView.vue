@@ -9,6 +9,12 @@ import type { ApiComponent } from '../types/api';
 import { ROUTES } from '../router/routes';
 import { timeAgo } from '../utils/audit-helpers';
 
+function watcherServerName(name: unknown): string {
+  const s = String(name || '');
+  if (s === 'local') return 'Local';
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
 const { isMobile } = useBreakpoints();
 const route = useRoute();
 const router = useRouter();
@@ -356,7 +362,7 @@ onMounted(async () => {
                 variant="plain"
                 weight="none"
                 class="mt-1 inline-flex items-center gap-1 text-2xs-plus font-medium transition-colors text-drydock-secondary hover:text-drydock-secondary-hover"
-                @click="router.push({ path: ROUTES.CONTAINERS, query: { filterServer: String(selectedWatcher.name) } })">
+                @click="router.push({ path: ROUTES.CONTAINERS, query: { filterServer: watcherServerName(selectedWatcher.name) } })">
                 <AppIcon name="arrow-right" :size="10" />
                 View containers
               </AppButton>
