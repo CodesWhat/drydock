@@ -1,8 +1,8 @@
 import { createMDX } from "fumadocs-mdx/next";
 
 const withMDX = createMDX();
-const docsCurrentVersion = "v1.4";
-const docsVersionPrefixes = "v1\\.4(?:/|$)|v1\\.3(?:/|$)";
+const docsCurrentVersion = "v1.5";
+const docsVersionPrefixes = "v1\\.5(?:/|$)|v1\\.4(?:/|$)|v1\\.3(?:/|$)";
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {

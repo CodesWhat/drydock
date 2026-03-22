@@ -352,7 +352,7 @@ Trivy-powered vulnerability scanning blocks unsafe updates before they deploy. I
 </tbody>
 </table>
 
-> Data based on publicly available documentation as of February 2026.
+> Data based on publicly available documentation as of March 2026.
 > Contributions welcome if any information is inaccurate.
 
 </details>
