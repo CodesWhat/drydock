@@ -76,6 +76,26 @@ describe('docker tag candidates module', () => {
     expect(log.warn).not.toHaveBeenCalled();
   });
 
+  test('allows CalVer upgrade when both reference and candidate have zero-padded segments', () => {
+    const container = createContainer({
+      image: {
+        tag: {
+          value: '2025.01.3',
+          semver: true,
+        },
+      },
+      tagFamily: 'strict',
+    });
+    const log = {
+      warn: vi.fn(),
+      debug: vi.fn(),
+    };
+
+    const result = getTagCandidates(container, ['2025.01.3', '2025.02.0'], log);
+
+    expect(result.tags).toContain('2025.02.0');
+  });
+
   test('still rejects zero-padded tags for non-CalVer semver in strict mode', () => {
     const container = createContainer({
       image: {
