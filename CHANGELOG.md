@@ -70,6 +70,7 @@ _No unreleased changes._
 - **Digest cron validation** — `DIGESTCRON` config validated with `cron.validate()` at registration time, failing with a clear error instead of a runtime crash.
 - **Container list runtime status filtering** — Container list API now accepts Docker runtime statuses (`running`, `stopped`, `paused`, etc.) in `status` filtering.
 - **Debug dump filename normalization** — Debug exports now use date-only `.json` filenames.
+- **Dashboard widget mobile scroll** — Added `overscroll-contain` to all scrollable dashboard widgets so touch scrolling stays within the widget instead of scrolling the page. ([#200](https://github.com/CodesWhat/drydock/issues/200))
 - **WebSocket robustness fixes** — Prevented writes on closed sockets, fixed non-matching upgrade URL pass-through behavior, and eliminated stats-collector listener leaks across restart cycles.
 
 ### Security
