@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue';
+import AppBadge from '../components/AppBadge.vue';
 import ScanProgressBanner from '../components/ScanProgressBanner.vue';
 import SecurityEmptyState from '../components/SecurityEmptyState.vue';
+import StatusDot from '../components/StatusDot.vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
 import { useSbomDetail } from '../composables/useSbomDetail';
 import { useScanProgress } from '../composables/useScanProgress';
@@ -243,34 +245,31 @@ onUnmounted(() => {
         <template #left>
           <template v-if="runtimeStatus">
             <!-- Compact: single combined badge -->
-            <span v-if="isCompact"
-                  class="badge text-3xs font-bold uppercase cursor-default flex items-center gap-1"
-                  :style="{ backgroundColor: statusBadgeTone(runtimeStatus.scanner.status).bg, color: statusBadgeTone(runtimeStatus.scanner.status).text }"
+            <AppBadge v-if="isCompact"
+                  :custom="{ bg: statusBadgeTone(runtimeStatus.scanner.status).bg, text: statusBadgeTone(runtimeStatus.scanner.status).text }"
+                  size="xs" class="cursor-default flex items-center gap-1"
                   v-tooltip.top="`Trivy: ${runtimeStatus.scanner.message} · Cosign: ${runtimeStatus.signature.message} · SBOM: ${runtimeStatus.sbom.enabled ? 'enabled' : 'disabled'}`">
-              <span class="w-1.5 h-1.5 rounded-full" :style="{ backgroundColor: statusBadgeTone(runtimeStatus.scanner.status).text }" />
-              <span class="w-1.5 h-1.5 rounded-full" :style="{ backgroundColor: statusBadgeTone(runtimeStatus.signature.status).text }" />
-              <span class="w-1.5 h-1.5 rounded-full" :style="{ backgroundColor: runtimeStatus.sbom.enabled ? 'var(--dd-info)' : 'var(--dd-neutral)' }" />
-            </span>
+              <StatusDot :color="statusBadgeTone(runtimeStatus.scanner.status).text" size="sm" />
+              <StatusDot :color="statusBadgeTone(runtimeStatus.signature.status).text" size="sm" />
+              <StatusDot :color="runtimeStatus.sbom.enabled ? 'var(--dd-info)' : 'var(--dd-neutral)'" size="sm" />
+            </AppBadge>
             <!-- Full: individual badges -->
             <template v-else>
-              <span class="badge text-3xs font-bold uppercase cursor-default"
-                    :style="{ backgroundColor: statusBadgeTone(runtimeStatus.scanner.status).bg, color: statusBadgeTone(runtimeStatus.scanner.status).text }"
+              <AppBadge :custom="{ bg: statusBadgeTone(runtimeStatus.scanner.status).bg, text: statusBadgeTone(runtimeStatus.scanner.status).text }"
+                    size="xs" class="cursor-default"
                     v-tooltip.top="runtimeStatus.scanner.message + (runtimeStatus.scanner.server ? ' · server: ' + runtimeStatus.scanner.server : '')">
                 trivy
-              </span>
-              <span class="badge text-3xs font-bold uppercase cursor-default"
-                    :style="{ backgroundColor: statusBadgeTone(runtimeStatus.signature.status).bg, color: statusBadgeTone(runtimeStatus.signature.status).text }"
+              </AppBadge>
+              <AppBadge :custom="{ bg: statusBadgeTone(runtimeStatus.signature.status).bg, text: statusBadgeTone(runtimeStatus.signature.status).text }"
+                    size="xs" class="cursor-default"
                     v-tooltip.top="runtimeStatus.signature.message">
                 cosign
-              </span>
-              <span class="badge text-3xs font-bold uppercase cursor-default"
-                    :style="{
-                      backgroundColor: runtimeStatus.sbom.enabled ? 'var(--dd-info-muted)' : 'var(--dd-neutral-muted)',
-                      color: runtimeStatus.sbom.enabled ? 'var(--dd-info)' : 'var(--dd-neutral)',
-                    }"
+              </AppBadge>
+              <AppBadge :tone="runtimeStatus.sbom.enabled ? 'info' : 'neutral'"
+                    size="xs" class="cursor-default"
                     v-tooltip.top="runtimeStatus.sbom.enabled ? 'SBOM generation enabled (' + runtimeStatus.sbom.formats.join(', ') + ')' : 'SBOM generation disabled'">
                 sbom
-              </span>
+              </AppBadge>
             </template>
           </template>
         </template>
@@ -309,52 +308,45 @@ onUnmounted(() => {
             <AppIcon :name="severityIcon(highestSeverity(row))" :size="13" class="shrink-0 md:!hidden"
                      :style="{ color: severityColor(highestSeverity(row)).text }" />
             <span class="font-medium dd-text truncate">{{ row.image }}</span>
-            <span v-if="row.delta && row.delta.fixed > 0 && row.delta.new === 0"
-                  class="badge text-4xs font-bold px-1.5 py-0 shrink-0"
-                  :style="{ backgroundColor: 'var(--dd-success-muted)', color: 'var(--dd-success)' }"
+            <AppBadge v-if="row.delta && row.delta.fixed > 0 && row.delta.new === 0"
+                  tone="success" size="xs" class="px-1.5 py-0 shrink-0"
                   v-tooltip.top="`Update fixes ${row.delta.fixed} vulnerability${row.delta.fixed !== 1 ? 'ies' : 'y'}`">
               <AppIcon name="trending-down" :size="9" class="mr-0.5" />{{ row.delta.fixed }} fixed
-            </span>
-            <span v-else-if="row.delta && row.delta.new > 0 && row.delta.fixed === 0"
-                  class="badge text-4xs font-bold px-1.5 py-0 shrink-0"
-                  :style="{ backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning)' }"
+            </AppBadge>
+            <AppBadge v-else-if="row.delta && row.delta.new > 0 && row.delta.fixed === 0"
+                  tone="warning" size="xs" class="px-1.5 py-0 shrink-0"
                   v-tooltip.top="`Update introduces ${row.delta.new} new vulnerability${row.delta.new !== 1 ? 'ies' : 'y'}`">
               <AppIcon name="trending-up" :size="9" class="mr-0.5" />{{ row.delta.new }} new
-            </span>
-            <span v-else-if="row.delta && (row.delta.fixed > 0 || row.delta.new > 0)"
-                  class="badge text-4xs font-bold px-1.5 py-0 shrink-0"
-                  :style="{ backgroundColor: 'var(--dd-caution-muted)', color: 'var(--dd-caution)' }"
+            </AppBadge>
+            <AppBadge v-else-if="row.delta && (row.delta.fixed > 0 || row.delta.new > 0)"
+                  tone="caution" size="xs" class="px-1.5 py-0 shrink-0"
                   v-tooltip.top="`Update: ${row.delta.fixed} fixed, ${row.delta.new} new`">
               {{ row.delta.fixed }} fixed, {{ row.delta.new }} new
-            </span>
+            </AppBadge>
           </div>
         </template>
         <template #cell-critical="{ row }">
-          <span v-if="row.critical > 0" class="badge text-3xs font-bold"
-                :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
+          <AppBadge v-if="row.critical > 0" tone="danger" size="xs">
             {{ row.critical }}
-          </span>
+          </AppBadge>
           <span v-else class="text-2xs dd-text-muted">&mdash;</span>
         </template>
         <template #cell-high="{ row }">
-          <span v-if="row.high > 0" class="badge text-3xs font-bold"
-                :style="{ backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning)' }">
+          <AppBadge v-if="row.high > 0" tone="warning" size="xs">
             {{ row.high }}
-          </span>
+          </AppBadge>
           <span v-else class="text-2xs dd-text-muted">&mdash;</span>
         </template>
         <template #cell-medium="{ row }">
-          <span v-if="row.medium > 0" class="badge text-3xs font-bold"
-                :style="{ backgroundColor: 'var(--dd-caution-muted)', color: 'var(--dd-caution)' }">
+          <AppBadge v-if="row.medium > 0" tone="caution" size="xs">
             {{ row.medium }}
-          </span>
+          </AppBadge>
           <span v-else class="text-2xs dd-text-muted">&mdash;</span>
         </template>
         <template #cell-low="{ row }">
-          <span v-if="row.low > 0" class="badge text-3xs font-bold"
-                :style="{ backgroundColor: 'var(--dd-info-muted)', color: 'var(--dd-info)' }">
+          <AppBadge v-if="row.low > 0" tone="info" size="xs">
             {{ row.low }}
-          </span>
+          </AppBadge>
           <span v-else class="text-2xs dd-text-muted">&mdash;</span>
         </template>
         <template #cell-fixable="{ row }">
@@ -403,37 +395,29 @@ onUnmounted(() => {
           </div>
           <div class="px-4 py-3">
             <div class="flex items-center gap-1.5 flex-wrap">
-              <span v-if="summary.critical > 0" class="badge text-3xs font-bold"
-                    :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
+              <AppBadge v-if="summary.critical > 0" tone="danger" size="xs">
                 {{ summary.critical }} Critical
-              </span>
-              <span v-if="summary.high > 0" class="badge text-3xs font-bold"
-                    :style="{ backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning)' }">
+              </AppBadge>
+              <AppBadge v-if="summary.high > 0" tone="warning" size="xs">
                 {{ summary.high }} High
-              </span>
-              <span v-if="summary.medium > 0" class="badge text-3xs font-bold"
-                    :style="{ backgroundColor: 'var(--dd-caution-muted)', color: 'var(--dd-caution)' }">
+              </AppBadge>
+              <AppBadge v-if="summary.medium > 0" tone="caution" size="xs">
                 {{ summary.medium }} Medium
-              </span>
-              <span v-if="summary.low > 0" class="badge text-3xs font-bold"
-                    :style="{ backgroundColor: 'var(--dd-info-muted)', color: 'var(--dd-info)' }">
+              </AppBadge>
+              <AppBadge v-if="summary.low > 0" tone="info" size="xs">
                 {{ summary.low }} Low
-              </span>
+              </AppBadge>
             </div>
           </div>
           <div v-if="summary.delta && (summary.delta.fixed > 0 || summary.delta.new > 0)"
                class="px-4 py-2 flex items-center gap-1.5"
                :style="{ borderTop: '1px solid var(--dd-border)' }">
-            <span v-if="summary.delta.fixed > 0"
-                  class="badge text-4xs font-bold px-1.5 py-0"
-                  :style="{ backgroundColor: 'var(--dd-success-muted)', color: 'var(--dd-success)' }">
+            <AppBadge v-if="summary.delta.fixed > 0" tone="success" size="xs" class="px-1.5 py-0">
               {{ summary.delta.fixed }} fixed
-            </span>
-            <span v-if="summary.delta.new > 0"
-                  class="badge text-4xs font-bold px-1.5 py-0"
-                  :style="{ backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning)' }">
+            </AppBadge>
+            <AppBadge v-if="summary.delta.new > 0" tone="warning" size="xs" class="px-1.5 py-0">
               {{ summary.delta.new }} new
-            </span>
+            </AppBadge>
             <span class="text-3xs dd-text-muted ml-auto">vs update</span>
           </div>
           <div class="px-4 py-2.5 flex items-center justify-between mt-auto"
@@ -480,28 +464,23 @@ onUnmounted(() => {
             <div class="text-2xs dd-text-muted mt-0.5">{{ summary.total }} vulnerabilities</div>
           </div>
           <div class="flex items-center gap-1.5 shrink-0">
-            <span v-if="summary.critical > 0" class="badge text-4xs font-bold px-1.5 py-0"
-                  :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
+            <AppBadge v-if="summary.critical > 0" tone="danger" size="xs" class="px-1.5 py-0">
               {{ summary.critical }}C
-            </span>
-            <span v-if="summary.high > 0" class="badge text-4xs font-bold px-1.5 py-0"
-                  :style="{ backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning)' }">
+            </AppBadge>
+            <AppBadge v-if="summary.high > 0" tone="warning" size="xs" class="px-1.5 py-0">
               {{ summary.high }}H
-            </span>
-            <span v-if="summary.fixable > 0" class="badge text-4xs font-bold px-1.5 py-0"
-                  :style="{ backgroundColor: 'var(--dd-success-muted)', color: 'var(--dd-success)' }">
+            </AppBadge>
+            <AppBadge v-if="summary.fixable > 0" tone="success" size="xs" class="px-1.5 py-0">
               {{ summary.fixable }} fix
-            </span>
-            <span v-if="summary.delta && summary.delta.fixed > 0 && summary.delta.new === 0"
-                  class="badge text-4xs font-bold px-1.5 py-0"
-                  :style="{ backgroundColor: 'var(--dd-success-muted)', color: 'var(--dd-success)' }">
+            </AppBadge>
+            <AppBadge v-if="summary.delta && summary.delta.fixed > 0 && summary.delta.new === 0"
+                  tone="success" size="xs" class="px-1.5 py-0">
               {{ summary.delta.fixed }} fixed
-            </span>
-            <span v-else-if="summary.delta && summary.delta.new > 0"
-                  class="badge text-4xs font-bold px-1.5 py-0"
-                  :style="{ backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning)' }">
+            </AppBadge>
+            <AppBadge v-else-if="summary.delta && summary.delta.new > 0"
+                  tone="warning" size="xs" class="px-1.5 py-0">
               {{ summary.delta.new }} new
-            </span>
+            </AppBadge>
           </div>
         </template>
       </DataListAccordion>
@@ -541,22 +520,18 @@ onUnmounted(() => {
 
         <template #subtitle>
           <div class="flex items-center gap-2 flex-wrap">
-            <span v-if="selectedImage?.critical" class="badge text-3xs font-bold"
-                  :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
+            <AppBadge v-if="selectedImage?.critical" tone="danger" size="xs">
               {{ selectedImage.critical }} Critical
-            </span>
-            <span v-if="selectedImage?.high" class="badge text-3xs font-bold"
-                  :style="{ backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning)' }">
+            </AppBadge>
+            <AppBadge v-if="selectedImage?.high" tone="warning" size="xs">
               {{ selectedImage.high }} High
-            </span>
-            <span v-if="selectedImage?.medium" class="badge text-3xs font-bold"
-                  :style="{ backgroundColor: 'var(--dd-caution-muted)', color: 'var(--dd-caution)' }">
+            </AppBadge>
+            <AppBadge v-if="selectedImage?.medium" tone="caution" size="xs">
               {{ selectedImage.medium }} Medium
-            </span>
-            <span v-if="selectedImage?.low" class="badge text-3xs font-bold"
-                  :style="{ backgroundColor: 'var(--dd-info-muted)', color: 'var(--dd-info)' }">
+            </AppBadge>
+            <AppBadge v-if="selectedImage?.low" tone="info" size="xs">
               {{ selectedImage.low }} Low
-            </span>
+            </AppBadge>
             <span class="text-2xs dd-text-muted ml-auto">{{ selectedImage?.total }} total</span>
           </div>
         </template>
@@ -569,20 +544,18 @@ onUnmounted(() => {
               <div class="flex items-center gap-2 mb-1.5">
                 <AppIcon :name="severityIcon(vuln.severity)" :size="12"
                          :style="{ color: severityColor(vuln.severity).text }" />
-                <span class="badge text-4xs uppercase font-bold"
-                      :style="{ backgroundColor: severityColor(vuln.severity).bg, color: severityColor(vuln.severity).text }">
+                <AppBadge :custom="{ bg: severityColor(vuln.severity).bg, text: severityColor(vuln.severity).text }" size="xs" class="px-1.5 py-0">
                   {{ vuln.severity }}
-                </span>
+                </AppBadge>
                 <span class="font-mono text-2xs-plus font-semibold dd-text truncate">{{ vuln.id }}</span>
               </div>
               <div class="flex items-center gap-2 text-2xs-plus ml-5">
                 <span class="font-medium dd-text">{{ vuln.package }}</span>
                 <span class="dd-text-muted">{{ vuln.version }}</span>
-                <span v-if="vuln.fixedIn" class="ml-auto badge text-4xs font-bold px-1.5 py-0"
-                      style="background: var(--dd-success-muted); color: var(--dd-success);">
+                <AppBadge v-if="vuln.fixedIn" tone="success" size="xs" class="ml-auto px-1.5 py-0">
                   <AppIcon name="check" :size="9" class="mr-0.5" />
                   {{ vuln.fixedIn }}
-                </span>
+                </AppBadge>
                 <span v-else class="ml-auto text-2xs dd-text-muted">No fix</span>
               </div>
               <div

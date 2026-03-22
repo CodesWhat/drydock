@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
-import { useBreakpoints } from '../composables/useBreakpoints';
+import AppBadge from '../components/AppBadge.vue';
 import ToggleSwitch from '../components/ToggleSwitch.vue';
+import { useBreakpoints } from '../composables/useBreakpoints';
 import { useViewMode } from '../preferences/useViewMode';
 import type { NotificationRule, NotificationRuleUpdate } from '../services/notification';
 import { getAllNotificationRules, updateNotificationRule } from '../services/notification';
@@ -341,11 +342,10 @@ onMounted(async () => {
       </template>
       <template #cell-triggers="{ row }">
         <div class="flex flex-wrap gap-1 justify-end">
-          <span v-for="triggerId in row.triggers" :key="triggerId"
-                class="badge text-3xs font-semibold"
-                :style="{ backgroundColor: 'var(--dd-neutral-muted)', color: 'var(--dd-text-secondary)' }">
+          <AppBadge v-for="triggerId in row.triggers" :key="triggerId"
+                    :custom="{ bg: 'var(--dd-neutral-muted)', text: 'var(--dd-text-secondary)' }" size="xs" :uppercase="false">
             {{ triggerNameById(triggerId) }}
-          </span>
+          </AppBadge>
           <span v-if="row.triggers.length === 0" class="text-2xs italic dd-text-muted">None</span>
         </div>
       </template>
@@ -383,11 +383,10 @@ onMounted(async () => {
         </div>
         <div class="px-4 py-2.5 flex flex-wrap gap-1.5 mt-auto"
              :style="{ borderTop: '1px solid var(--dd-border)', backgroundColor: 'var(--dd-bg-elevated)' }">
-          <span v-for="triggerId in notif.triggers" :key="triggerId"
-                class="badge text-3xs font-semibold"
-                :style="{ backgroundColor: 'var(--dd-neutral-muted)', color: 'var(--dd-text-secondary)' }">
+          <AppBadge v-for="triggerId in notif.triggers" :key="triggerId"
+                    :custom="{ bg: 'var(--dd-neutral-muted)', text: 'var(--dd-text-secondary)' }" size="xs" :uppercase="false">
             {{ triggerNameById(triggerId) }}
-          </span>
+          </AppBadge>
           <span v-if="notif.triggers.length === 0" class="text-2xs italic dd-text-muted">
             No triggers
           </span>
@@ -415,11 +414,10 @@ onMounted(async () => {
         />
         <span class="text-sm font-semibold flex-1 min-w-0 truncate dd-text">{{ notif.name }}</span>
         <div class="flex flex-wrap gap-1.5 shrink-0 max-w-[320px] justify-end">
-          <span v-for="triggerId in notif.triggers" :key="triggerId"
-                class="badge text-3xs font-semibold"
-                :style="{ backgroundColor: 'var(--dd-neutral-muted)', color: 'var(--dd-text-secondary)' }">
+          <AppBadge v-for="triggerId in notif.triggers" :key="triggerId"
+                    :custom="{ bg: 'var(--dd-neutral-muted)', text: 'var(--dd-text-secondary)' }" size="xs" :uppercase="false">
             {{ triggerNameById(triggerId) }}
-          </span>
+          </AppBadge>
           <span v-if="notif.triggers.length === 0" class="text-2xs italic dd-text-muted">No triggers</span>
         </div>
       </template>
@@ -450,14 +448,9 @@ onMounted(async () => {
         </template>
 
         <template #subtitle>
-          <span v-if="selectedRule"
-                class="badge text-3xs font-bold"
-                :style="{
-                  backgroundColor: selectedRule.enabled ? 'var(--dd-success-muted)' : 'var(--dd-neutral-muted)',
-                  color: selectedRule.enabled ? 'var(--dd-success)' : 'var(--dd-neutral)',
-                }">
+          <AppBadge v-if="selectedRule" :tone="selectedRule.enabled ? 'success' : 'neutral'" size="xs">
             {{ selectedRule.enabled ? 'enabled' : 'disabled' }}
-          </span>
+          </AppBadge>
           <span v-if="selectedRule" class="text-2xs font-mono dd-text-muted">{{ selectedRule.id }}</span>
         </template>
 
@@ -500,10 +493,9 @@ onMounted(async () => {
                     <div class="text-xs font-semibold truncate dd-text">{{ trigger.name }}</div>
                     <div class="text-2xs font-mono dd-text-muted">{{ trigger.id }}</div>
                   </div>
-                  <span class="badge text-3xs uppercase font-bold shrink-0"
-                        :style="{ backgroundColor: triggerTypeBadge(trigger.type).bg, color: triggerTypeBadge(trigger.type).text }">
+                  <AppBadge :custom="{ bg: triggerTypeBadge(trigger.type).bg, text: triggerTypeBadge(trigger.type).text }" size="xs" class="shrink-0">
                     {{ triggerTypeBadge(trigger.type).label }}
-                  </span>
+                  </AppBadge>
                 </label>
               </div>
             </div>

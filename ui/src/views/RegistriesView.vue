@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
+import AppBadge from '@/components/AppBadge.vue';
+import DetailField from '@/components/DetailField.vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
 import { useViewMode } from '../preferences/useViewMode';
 import { getAllRegistries, getRegistry } from '../services/registry';
@@ -195,27 +197,17 @@ onMounted(async () => {
           <span class="font-medium dd-text">{{ registryTypeBadge(row.type).label }}</span>
         </template>
         <template #cell-type="{ row }">
-          <span v-if="isPrivate(row)" class="badge text-3xs font-bold max-md:!hidden"
-                :style="{ backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning)' }">
-            Private
-          </span>
-          <span v-else class="badge text-3xs font-bold max-md:!hidden"
-                :style="{ backgroundColor: 'var(--dd-neutral-muted)', color: 'var(--dd-neutral)' }">
-            Public
-          </span>
-          <span v-if="isPrivate(row)" class="badge px-1.5 py-0 text-3xs md:!hidden" style="background: var(--dd-warning-muted); color: var(--dd-warning);"><AppIcon name="lock" :size="12" /></span>
-          <span v-else class="badge px-1.5 py-0 text-3xs md:!hidden" style="background: var(--dd-neutral-muted); color: var(--dd-neutral);"><AppIcon name="eye" :size="12" /></span>
+          <AppBadge v-if="isPrivate(row)" tone="warning" size="xs" class="max-md:!hidden">Private</AppBadge>
+          <AppBadge v-else tone="neutral" size="xs" class="max-md:!hidden">Public</AppBadge>
+          <AppBadge v-if="isPrivate(row)" tone="warning" size="xs" class="px-1.5 py-0 md:!hidden"><AppIcon name="lock" :size="12" /></AppBadge>
+          <AppBadge v-else tone="neutral" size="xs" class="px-1.5 py-0 md:!hidden"><AppIcon name="eye" :size="12" /></AppBadge>
         </template>
         <template #cell-status="{ row }">
           <AppIcon :name="row.status === 'connected' ? 'check' : row.status === 'error' ? 'xmark' : 'warning'" :size="13" class="shrink-0 md:!hidden"
                    :style="{ color: row.status === 'connected' ? 'var(--dd-success)' : row.status === 'error' ? 'var(--dd-danger)' : 'var(--dd-warning)' }" />
-          <span class="badge text-3xs font-bold max-md:!hidden"
-                :style="{
-                  backgroundColor: row.status === 'connected' ? 'var(--dd-success-muted)' : row.status === 'error' ? 'var(--dd-danger-muted)' : 'var(--dd-warning-muted)',
-                  color: row.status === 'connected' ? 'var(--dd-success)' : row.status === 'error' ? 'var(--dd-danger)' : 'var(--dd-warning)',
-                }">
+          <AppBadge :tone="row.status === 'connected' ? 'success' : row.status === 'error' ? 'danger' : 'warning'" size="xs" class="max-md:!hidden">
             {{ row.status }}
-          </span>
+          </AppBadge>
         </template>
         <template #cell-url="{ row }">
           <span class="whitespace-nowrap font-mono text-2xs dd-text-secondary">
@@ -242,10 +234,9 @@ onMounted(async () => {
               <div class="text-sm font-semibold truncate dd-text">{{ reg.name }}</div>
               <div class="text-2xs truncate mt-0.5 dd-text-muted font-mono">{{ resolveUrl(reg) }}</div>
             </div>
-            <span class="badge text-3xs uppercase font-bold shrink-0 ml-2"
-                  :style="{ backgroundColor: registryTypeBadge(reg.type).bg, color: registryTypeBadge(reg.type).text }">
+            <AppBadge :custom="{ bg: registryTypeBadge(reg.type).bg, text: registryTypeBadge(reg.type).text }" size="xs" class="shrink-0 ml-2">
               {{ registryTypeBadge(reg.type).label }}
-            </span>
+            </AppBadge>
           </div>
           <div class="px-4 py-3">
             <div class="grid grid-cols-2 gap-2 text-2xs-plus">
@@ -277,10 +268,9 @@ onMounted(async () => {
                          :selected-key="selectedRegistry?.id"
                          @item-click="openDetail($event)">
         <template #header="{ item: reg }">
-          <span class="badge text-3xs uppercase font-bold shrink-0"
-                :style="{ backgroundColor: registryTypeBadge(reg.type).bg, color: registryTypeBadge(reg.type).text }">
+          <AppBadge :custom="{ bg: registryTypeBadge(reg.type).bg, text: registryTypeBadge(reg.type).text }" size="xs" class="shrink-0">
             {{ registryTypeBadge(reg.type).label }}
-          </span>
+          </AppBadge>
           <div class="flex-1 min-w-0">
             <div class="text-sm font-semibold truncate dd-text">{{ reg.name }}</div>
             <div class="text-2xs font-mono dd-text-muted truncate mt-0.5">{{ resolveUrl(reg) }}</div>
@@ -289,17 +279,13 @@ onMounted(async () => {
             <span class="text-2xs-plus hidden md:inline font-medium" :style="{ color: isPrivate(reg) ? 'var(--dd-warning)' : 'var(--dd-text-muted)' }">
               {{ isPrivate(reg) ? 'Private' : 'Public' }}
             </span>
-            <span v-if="isPrivate(reg)" class="badge px-1.5 py-0 text-3xs md:!hidden" style="background: var(--dd-warning-muted); color: var(--dd-warning);"><AppIcon name="lock" :size="12" /></span>
-            <span v-else class="badge px-1.5 py-0 text-3xs md:!hidden" style="background: var(--dd-neutral-muted); color: var(--dd-neutral);"><AppIcon name="eye" :size="12" /></span>
+            <AppBadge v-if="isPrivate(reg)" tone="warning" size="xs" class="px-1.5 py-0 md:!hidden"><AppIcon name="lock" :size="12" /></AppBadge>
+            <AppBadge v-else tone="neutral" size="xs" class="px-1.5 py-0 md:!hidden"><AppIcon name="eye" :size="12" /></AppBadge>
             <AppIcon :name="reg.status === 'connected' ? 'check' : 'xmark'" :size="13" class="shrink-0 md:!hidden"
                      :style="{ color: reg.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)' }" />
-            <span class="badge text-3xs font-bold max-md:!hidden"
-                  :style="{
-                    backgroundColor: reg.status === 'connected' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
-                    color: reg.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)',
-                  }">
+            <AppBadge :tone="reg.status === 'connected' ? 'success' : 'danger'" size="xs" class="max-md:!hidden">
               {{ reg.status }}
-            </span>
+            </AppBadge>
           </div>
         </template>
       </DataListAccordion>
@@ -321,10 +307,9 @@ onMounted(async () => {
       >
         <template #header>
           <div class="flex items-center gap-2.5 min-w-0">
-            <span class="badge text-3xs uppercase font-bold shrink-0"
-                  :style="{ backgroundColor: selectedRegistry ? registryTypeBadge(selectedRegistry.type).bg : undefined, color: selectedRegistry ? registryTypeBadge(selectedRegistry.type).text : undefined }">
-              {{ selectedRegistry ? registryTypeBadge(selectedRegistry.type).label : '' }}
-            </span>
+            <AppBadge v-if="selectedRegistry" :custom="{ bg: registryTypeBadge(selectedRegistry.type).bg, text: registryTypeBadge(selectedRegistry.type).text }" size="xs" class="shrink-0">
+              {{ registryTypeBadge(selectedRegistry.type).label }}
+            </AppBadge>
             <span class="text-sm font-bold truncate dd-text">{{ selectedRegistry?.name }}</span>
           </div>
         </template>
@@ -343,38 +328,26 @@ onMounted(async () => {
             </div>
 
             <!-- Status -->
-            <div>
-              <div class="text-2xs font-semibold uppercase tracking-wider mb-1 dd-text-muted">Status</div>
-              <span class="badge text-2xs font-semibold"
-                    :style="{
-                      backgroundColor: selectedRegistry.status === 'connected' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
-                      color: selectedRegistry.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)',
-                    }">
+            <DetailField label="Status">
+              <AppBadge :tone="selectedRegistry.status === 'connected' ? 'success' : 'danger'" size="sm">
                 {{ selectedRegistry.status }}
-              </span>
-            </div>
+              </AppBadge>
+            </DetailField>
 
             <!-- Auth type -->
-            <div>
-              <div class="text-2xs font-semibold uppercase tracking-wider mb-1 dd-text-muted">Authentication</div>
+            <DetailField label="Authentication">
               <div class="flex items-center gap-1.5 text-xs">
                 <AppIcon v-if="isPrivate(selectedRegistry)" name="lock" :size="12" style="color: var(--dd-warning);" />
                 <AppIcon v-else name="eye" :size="12" class="dd-text-muted" />
                 <span class="dd-text font-medium">{{ isPrivate(selectedRegistry) ? 'Private' : 'Public' }}</span>
               </div>
-            </div>
+            </DetailField>
 
             <!-- URL -->
-            <div>
-              <div class="text-2xs font-semibold uppercase tracking-wider mb-1 dd-text-muted">URL</div>
-              <div class="text-xs font-mono dd-text break-all">{{ resolveUrl(selectedRegistry) }}</div>
-            </div>
+            <DetailField label="URL" mono>{{ resolveUrl(selectedRegistry) }}</DetailField>
 
             <!-- Configuration -->
-            <div v-for="(val, key) in selectedRegistry.config" :key="key">
-              <div class="text-2xs font-semibold uppercase tracking-wider mb-1 dd-text-muted">{{ key }}</div>
-              <div class="text-xs font-mono dd-text break-all">{{ val }}</div>
-            </div>
+            <DetailField v-for="(val, key) in selectedRegistry.config" :key="key" :label="String(key)" mono>{{ val }}</DetailField>
           </div>
         </template>
       </DetailPanel>

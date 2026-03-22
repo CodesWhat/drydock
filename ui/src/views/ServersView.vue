@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
+import AppBadge from '@/components/AppBadge.vue';
+import DetailField from '@/components/DetailField.vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
 import { useViewMode } from '../preferences/useViewMode';
 import { getAgents } from '../services/agent';
@@ -47,13 +49,6 @@ function openDetail(server: ServerEntry) {
 function closeDetail() {
   detailOpen.value = false;
   selectedServer.value = null;
-}
-
-function statusColor(status: string) {
-  return status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)';
-}
-function statusBg(status: string) {
-  return status === 'connected' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)';
 }
 
 const tableColumns = [
@@ -227,14 +222,12 @@ onMounted(fetchServers);
             <span class="font-mono text-2xs dd-text-secondary">{{ row.host }}</span>
           </template>
           <template #cell-status="{ row }">
-            <span class="badge px-1.5 py-0 text-3xs md:!hidden"
-                  :style="{ backgroundColor: statusBg(row.status), color: statusColor(row.status) }">
+            <AppBadge :tone="row.status === 'connected' ? 'success' : 'danger'" size="xs" class="px-1.5 py-0 md:!hidden">
               <AppIcon :name="row.status === 'connected' ? 'check' : 'xmark'" :size="12" />
-            </span>
-            <span class="badge text-3xs font-bold uppercase max-md:!hidden"
-                  :style="{ backgroundColor: statusBg(row.status), color: statusColor(row.status) }">
+            </AppBadge>
+            <AppBadge :tone="row.status === 'connected' ? 'success' : 'danger'" size="xs" class="max-md:!hidden">
               {{ row.status }}
-            </span>
+            </AppBadge>
           </template>
           <template #cell-containers="{ row }">
             <div class="flex items-center justify-center gap-2">
@@ -268,14 +261,12 @@ onMounted(fetchServers);
                   <div class="text-2xs-plus truncate mt-0.5 dd-text-muted font-mono">{{ server.host }}</div>
                 </div>
               </div>
-              <span class="badge px-1.5 py-0 text-3xs shrink-0 ml-2 md:!hidden"
-                    :style="{ backgroundColor: statusBg(server.status), color: statusColor(server.status) }">
+              <AppBadge :tone="server.status === 'connected' ? 'success' : 'danger'" size="xs" class="px-1.5 py-0 shrink-0 ml-2 md:!hidden">
                 <AppIcon :name="server.status === 'connected' ? 'check' : 'xmark'" :size="12" />
-              </span>
-              <span class="badge text-3xs uppercase font-bold shrink-0 ml-2 max-md:!hidden"
-                    :style="{ backgroundColor: statusBg(server.status), color: statusColor(server.status) }">
+              </AppBadge>
+              <AppBadge :tone="server.status === 'connected' ? 'success' : 'danger'" size="xs" class="shrink-0 ml-2 max-md:!hidden">
                 {{ server.status }}
-              </span>
+              </AppBadge>
             </div>
             <div class="px-4 py-3">
               <div class="grid grid-cols-2 gap-2 text-2xs-plus">
@@ -333,10 +324,9 @@ onMounted(fetchServers);
                     :class="server.status === 'connected' ? 'dd-text-muted' : 'dd-text-danger'">
                 {{ server.lastSeen }}
               </span>
-              <span class="badge text-3xs uppercase font-bold hidden md:inline-flex"
-                    :style="{ backgroundColor: statusBg(server.status), color: statusColor(server.status) }">
+              <AppBadge :tone="server.status === 'connected' ? 'success' : 'danger'" size="xs" class="hidden md:inline-flex">
                 {{ server.status }}
-              </span>
+              </AppBadge>
             </div>
           </template>
         </DataListAccordion>
@@ -362,13 +352,9 @@ onMounted(fetchServers);
         <template #header>
           <div class="flex items-center gap-2.5 min-w-0">
             <span class="text-sm font-bold truncate dd-text">{{ selectedServer?.name }}</span>
-            <span class="badge text-3xs uppercase font-bold shrink-0"
-                  :style="{
-                    backgroundColor: selectedServer ? statusBg(selectedServer.status) : undefined,
-                    color: selectedServer ? statusColor(selectedServer.status) : undefined,
-                  }">
-              {{ selectedServer?.status }}
-            </span>
+            <AppBadge v-if="selectedServer" :tone="selectedServer.status === 'connected' ? 'success' : 'danger'" size="xs" class="shrink-0">
+              {{ selectedServer.status }}
+            </AppBadge>
           </div>
         </template>
 
@@ -379,8 +365,7 @@ onMounted(fetchServers);
         <template v-if="selectedServer" #default>
           <div class="p-4 space-y-5">
             <!-- Containers -->
-            <div>
-              <div class="text-2xs font-semibold uppercase tracking-wider mb-1 dd-text-muted">Containers</div>
+            <DetailField label="Containers">
               <div class="flex items-baseline gap-3 mt-1">
                 <span class="text-lg font-bold dd-text">{{ selectedServer.containers.total }}</span>
                 <span class="text-2xs-plus font-medium" :style="{ color: 'var(--dd-success)' }">
@@ -391,22 +376,18 @@ onMounted(fetchServers);
                   {{ selectedServer.containers.stopped }} stopped
                 </span>
               </div>
-            </div>
+            </DetailField>
 
             <!-- Images -->
-            <div>
-              <div class="text-2xs font-semibold uppercase tracking-wider mb-1 dd-text-muted">Images</div>
-              <div class="text-xs font-mono dd-text">{{ selectedServer.images }}</div>
-            </div>
+            <DetailField label="Images" mono>{{ selectedServer.images }}</DetailField>
 
             <!-- Last Seen -->
-            <div>
-              <div class="text-2xs font-semibold uppercase tracking-wider mb-1 dd-text-muted">Last Seen</div>
+            <DetailField label="Last Seen">
               <div class="text-xs font-medium"
                    :class="selectedServer.status === 'connected' ? 'dd-text' : 'dd-text-danger'">
                 {{ selectedServer.lastSeen }}
               </div>
-            </div>
+            </DetailField>
 
             <!-- Actions -->
             <div class="pt-2 flex gap-2"

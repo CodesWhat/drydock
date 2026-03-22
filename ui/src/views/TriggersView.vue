@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
+import AppBadge from '@/components/AppBadge.vue';
+import DetailField from '@/components/DetailField.vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
 import { useViewMode } from '../preferences/useViewMode';
 import { getAllTriggers, getTrigger, runTrigger } from '../services/trigger';
@@ -228,21 +230,16 @@ onMounted(async () => {
         <span class="font-medium dd-text">{{ row.name }}</span>
       </template>
       <template #cell-type="{ row }">
-        <span class="badge text-3xs uppercase font-bold"
-              :style="{ backgroundColor: triggerTypeBadge(row.type).bg, color: triggerTypeBadge(row.type).text }">
+        <AppBadge :custom="{ bg: triggerTypeBadge(row.type).bg, text: triggerTypeBadge(row.type).text }" size="xs">
           {{ triggerTypeBadge(row.type).label }}
-        </span>
+        </AppBadge>
       </template>
       <template #cell-status="{ row }">
         <AppIcon :name="row.status === 'active' ? 'check' : 'xmark'" :size="13" class="shrink-0 md:!hidden"
                  :style="{ color: row.status === 'active' ? 'var(--dd-success)' : 'var(--dd-danger)' }" />
-        <span class="badge text-3xs font-bold max-md:!hidden"
-              :style="{
-                backgroundColor: row.status === 'active' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
-                color: row.status === 'active' ? 'var(--dd-success)' : 'var(--dd-danger)',
-              }">
+        <AppBadge :tone="row.status === 'active' ? 'success' : 'danger'" size="xs" class="max-md:!hidden">
           {{ row.status }}
-        </span>
+        </AppBadge>
       </template>
       <template #empty>
         <EmptyState icon="triggers" message="No triggers match your filters" show-clear @clear="clearFilters" />
@@ -262,10 +259,9 @@ onMounted(async () => {
           <div class="min-w-0">
             <div class="text-sm-plus font-semibold truncate dd-text">{{ item.name }}</div>
           </div>
-          <span class="badge text-3xs uppercase font-bold shrink-0 ml-2"
-                :style="{ backgroundColor: triggerTypeBadge(item.type).bg, color: triggerTypeBadge(item.type).text }">
+          <AppBadge :custom="{ bg: triggerTypeBadge(item.type).bg, text: triggerTypeBadge(item.type).text }" size="xs" class="shrink-0 ml-2">
             {{ triggerTypeBadge(item.type).label }}
-          </span>
+          </AppBadge>
         </div>
         <div class="px-4 py-3">
           <div class="grid grid-cols-1 gap-2 text-2xs-plus">
@@ -280,13 +276,9 @@ onMounted(async () => {
           <div class="flex items-center justify-between">
             <AppIcon :name="item.status === 'active' ? 'check' : 'xmark'" :size="13" class="shrink-0 md:!hidden"
                      :style="{ color: item.status === 'active' ? 'var(--dd-success)' : 'var(--dd-danger)' }" />
-            <span class="badge text-3xs font-bold max-md:!hidden"
-                  :style="{
-                    backgroundColor: item.status === 'active' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
-                    color: item.status === 'active' ? 'var(--dd-success)' : 'var(--dd-danger)',
-                  }">
+            <AppBadge :tone="item.status === 'active' ? 'success' : 'danger'" size="xs" class="max-md:!hidden">
               {{ item.status }}
-            </span>
+            </AppBadge>
             <AppButton size="none" variant="plain" weight="none" class="inline-flex items-center gap-1 px-2 py-1 dd-rounded text-2xs font-bold transition-[color,background-color,border-color,opacity,transform,box-shadow] text-white"
                     :style="{ background: testResult?.id === item.id
                       ? (testResult.success ? 'var(--dd-success)' : 'var(--dd-danger)')
@@ -315,25 +307,16 @@ onMounted(async () => {
       <template #header="{ item }">
         <AppIcon name="triggers" :size="14" class="dd-text-secondary" />
         <span class="text-sm font-semibold flex-1 min-w-0 truncate dd-text">{{ item.name }}</span>
-        <span class="badge text-3xs uppercase font-bold shrink-0"
-              :style="{ backgroundColor: triggerTypeBadge(item.type).bg, color: triggerTypeBadge(item.type).text }">
+        <AppBadge :custom="{ bg: triggerTypeBadge(item.type).bg, text: triggerTypeBadge(item.type).text }" size="xs" class="shrink-0">
           {{ triggerTypeBadge(item.type).label }}
-        </span>
+        </AppBadge>
       </template>
       <template #details="{ item }">
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3 mt-2">
-          <div v-for="(val, key) in item.config" :key="key">
-            <div class="text-2xs font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">{{ key }}</div>
-            <div class="text-xs font-mono dd-text">{{ val }}</div>
-          </div>
-          <div>
-            <div class="text-2xs font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">Status</div>
-            <span class="badge text-2xs font-semibold"
-                  :style="{
-                    backgroundColor: item.status === 'active' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
-                    color: item.status === 'active' ? 'var(--dd-success)' : 'var(--dd-danger)',
-                  }">{{ item.status }}</span>
-          </div>
+          <DetailField v-for="(val, key) in item.config" :key="key" :label="String(key)" compact mono>{{ val }}</DetailField>
+          <DetailField label="Status" compact>
+            <AppBadge :tone="item.status === 'active' ? 'success' : 'danger'" size="sm">{{ item.status }}</AppBadge>
+          </DetailField>
         </div>
         <div class="mt-4 pt-3" :style="{ borderTop: '1px solid var(--dd-border)' }">
           <AppButton size="none" variant="plain" weight="none" class="inline-flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-2xs-plus font-bold tracking-wide transition-[color,background-color,border-color,opacity,transform,box-shadow] text-white"
@@ -373,21 +356,16 @@ onMounted(async () => {
         <template #header>
           <div class="flex items-center gap-2.5 min-w-0">
             <span class="text-sm font-bold truncate dd-text">{{ selectedTrigger?.name }}</span>
-            <span v-if="selectedTrigger" class="badge text-3xs uppercase font-bold shrink-0"
-                  :style="{ backgroundColor: triggerTypeBadge(selectedTrigger.type).bg, color: triggerTypeBadge(selectedTrigger.type).text }">
+            <AppBadge v-if="selectedTrigger" :custom="{ bg: triggerTypeBadge(selectedTrigger.type).bg, text: triggerTypeBadge(selectedTrigger.type).text }" size="xs" class="shrink-0">
               {{ triggerTypeBadge(selectedTrigger.type).label }}
-            </span>
+            </AppBadge>
           </div>
         </template>
 
         <template #subtitle>
-          <span v-if="selectedTrigger" class="badge text-3xs font-bold"
-                :style="{
-                  backgroundColor: selectedTrigger.status === 'active' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
-                  color: selectedTrigger.status === 'active' ? 'var(--dd-success)' : 'var(--dd-danger)',
-                }">
+          <AppBadge v-if="selectedTrigger" :tone="selectedTrigger.status === 'active' ? 'success' : 'danger'" size="xs">
             {{ selectedTrigger.status }}
-          </span>
+          </AppBadge>
         </template>
 
         <template v-if="selectedTrigger" #default>
@@ -399,10 +377,7 @@ onMounted(async () => {
               {{ detailError }}
             </div>
 
-            <div v-for="(val, key) in selectedTrigger.config" :key="key">
-              <div class="text-2xs font-semibold uppercase tracking-wider mb-1 dd-text-muted">{{ key }}</div>
-              <div class="text-xs font-mono dd-text break-all">{{ val }}</div>
-            </div>
+            <DetailField v-for="(val, key) in selectedTrigger.config" :key="key" :label="String(key)" mono>{{ val }}</DetailField>
             <div v-if="Object.keys(selectedTrigger.config).length === 0">
               <div class="text-2xs-plus dd-text-muted">No configuration properties</div>
             </div>

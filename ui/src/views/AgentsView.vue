@@ -5,6 +5,10 @@ import { ROUTES } from '../router/routes';
 import AgentDetailConfigTab from '../components/agents/AgentDetailConfigTab.vue';
 import AgentDetailLogsTab from '../components/agents/AgentDetailLogsTab.vue';
 import AgentDetailOverviewTab from '../components/agents/AgentDetailOverviewTab.vue';
+import AppBadge from '../components/AppBadge.vue';
+import AppTabBar from '../components/AppTabBar.vue';
+import DetailField from '../components/DetailField.vue';
+import StatusDot from '../components/StatusDot.vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
 import { preferences } from '../preferences/store';
 import { usePreference } from '../preferences/usePreference';
@@ -534,20 +538,15 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
                      @row-click="selectAgent($event)">
             <template #cell-name="{ row }">
               <div class="flex items-start gap-2 min-w-0">
-                <div class="w-2 h-2 rounded-full shrink-0 mt-1.5"
-                     :style="{ backgroundColor: row.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)' }" />
+                <StatusDot :status="row.status" size="md" class="mt-1.5" />
                 <div class="min-w-0 flex-1">
                   <div class="font-medium truncate dd-text">{{ row.name }}</div>
                   <div class="text-2xs mt-0.5 truncate dd-text-muted">{{ row.host }}</div>
                   <!-- Compact mode: folded badge row -->
                   <div v-if="isCompact" class="flex items-center gap-1.5 mt-1.5">
-                    <span class="badge px-1.5 py-0 text-3xs hidden md:inline-flex"
-                          :style="{
-                            backgroundColor: row.status === 'connected' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
-                            color: row.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)',
-                          }">
+                    <AppBadge :tone="row.status === 'connected' ? 'success' : 'danger'" size="xs" class="px-1.5 py-0 hidden md:inline-flex">
                       {{ row.status }}
-                    </span>
+                    </AppBadge>
                     <span class="text-3xs dd-text-secondary">
                       {{ row.containers.running }}/{{ row.containers.total }}
                     </span>
@@ -557,13 +556,9 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
               </div>
             </template>
             <template #cell-status="{ row }">
-              <span class="badge text-3xs font-bold hidden md:inline-flex"
-                    :style="{
-                      backgroundColor: row.status === 'connected' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
-                      color: row.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)',
-                    }">
+              <AppBadge :tone="row.status === 'connected' ? 'success' : 'danger'" size="xs" class="hidden md:inline-flex">
                 {{ row.status }}
-              </span>
+              </AppBadge>
             </template>
             <template #cell-containers="{ row }">
               <span class="font-bold" style="color: var(--dd-success);">{{ row.containers.running }}</span>
@@ -604,20 +599,15 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
               <!-- Card header -->
               <div class="px-4 pt-4 pb-2 flex items-start justify-between">
                 <div class="flex items-center gap-2.5 min-w-0">
-                  <div class="w-2.5 h-2.5 rounded-full shrink-0 mt-1"
-                       :style="{ backgroundColor: agent.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)' }" />
+                  <StatusDot :status="agent.status" size="lg" class="mt-1" />
                   <div class="min-w-0">
                     <div class="text-sm-plus font-semibold truncate dd-text">{{ agent.name }}</div>
                     <div class="text-2xs-plus truncate mt-0.5 dd-text-muted">{{ agent.host }}</div>
                   </div>
                 </div>
-                <span class="badge text-3xs uppercase tracking-wide font-bold shrink-0 ml-2 hidden md:inline-flex"
-                      :style="{
-                        backgroundColor: agent.status === 'connected' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
-                        color: agent.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)',
-                      }">
+                <AppBadge :tone="agent.status === 'connected' ? 'success' : 'danger'" size="xs" class="tracking-wide shrink-0 ml-2 hidden md:inline-flex">
                   {{ agent.status }}
-                </span>
+                </AppBadge>
               </div>
               <!-- Card body -->
               <div class="px-4 py-3">
@@ -667,20 +657,15 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
                              item-key="id"
                              :selected-key="selectedAgent?.id ?? null">
             <template #header="{ item: agent }">
-              <div class="w-2.5 h-2.5 rounded-full shrink-0"
-                   :style="{ backgroundColor: agent.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)' }" />
+              <StatusDot :status="agent.status" size="lg" />
               <div class="min-w-0 flex-1">
                 <div class="text-sm font-semibold truncate dd-text">{{ agent.name }}</div>
                 <div class="text-2xs mt-0.5 truncate dd-text-muted">{{ agent.host }}</div>
               </div>
               <div class="flex items-center gap-1.5 shrink-0">
-                <span class="badge text-3xs font-bold hidden md:inline-flex"
-                      :style="{
-                        backgroundColor: agent.status === 'connected' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
-                        color: agent.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)',
-                      }">
+                <AppBadge :tone="agent.status === 'connected' ? 'success' : 'danger'" size="xs" class="hidden md:inline-flex">
                   {{ agent.status }}
-                </span>
+                </AppBadge>
                 <span class="text-2xs dd-text-secondary">
                   {{ agent.containers.running }}/{{ agent.containers.total }}
                 </span>
@@ -689,35 +674,27 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
             </template>
             <template #details="{ item: agent }">
               <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-3 mt-2">
-                <div>
-                  <div class="text-2xs font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">Docker</div>
-                  <div class="text-xs font-mono" :class="agent.dockerVersion ? 'dd-text' : 'dd-text-muted'">{{ agent.dockerVersion ?? '—' }}</div>
-                </div>
-                <div>
-                  <div class="text-2xs font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">OS</div>
-                  <div class="text-xs" :class="agent.os ? 'dd-text' : 'dd-text-muted'">{{ agent.os ?? '—' }}</div>
-                </div>
-                <div>
-                  <div class="text-2xs font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">Architecture</div>
-                  <div class="text-xs" :class="agent.arch ? 'dd-text' : 'dd-text-muted'">{{ agent.arch ?? '—' }}</div>
-                </div>
-                <div>
-                  <div class="text-2xs font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">Version</div>
-                  <div class="text-xs font-mono" :class="agent.version ? 'dd-text' : 'dd-text-muted'">{{ agent.version ? `v${agent.version}` : '—' }}</div>
-                </div>
-                <div>
-                  <div class="text-2xs font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">Uptime</div>
-                  <div class="text-xs" :class="agent.uptime ? 'dd-text' : 'dd-text-muted'">{{ agent.uptime ?? '—' }}</div>
-                </div>
-                <div>
-                  <div class="text-2xs font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">Containers</div>
-                  <div class="text-xs dd-text">
-                    <span class="font-bold" style="color: var(--dd-success);">{{ agent.containers.running }}</span>
-                    <span class="dd-text-muted"> running / </span>
-                    <span>{{ agent.containers.total }}</span>
-                    <span class="dd-text-muted"> total</span>
-                  </div>
-                </div>
+                <DetailField label="Docker" mono compact>
+                  <span :class="agent.dockerVersion ? '' : 'dd-text-muted'">{{ agent.dockerVersion ?? '—' }}</span>
+                </DetailField>
+                <DetailField label="OS" compact>
+                  <span :class="agent.os ? '' : 'dd-text-muted'">{{ agent.os ?? '—' }}</span>
+                </DetailField>
+                <DetailField label="Architecture" compact>
+                  <span :class="agent.arch ? '' : 'dd-text-muted'">{{ agent.arch ?? '—' }}</span>
+                </DetailField>
+                <DetailField label="Version" mono compact>
+                  <span :class="agent.version ? '' : 'dd-text-muted'">{{ agent.version ? `v${agent.version}` : '—' }}</span>
+                </DetailField>
+                <DetailField label="Uptime" compact>
+                  <span :class="agent.uptime ? '' : 'dd-text-muted'">{{ agent.uptime ?? '—' }}</span>
+                </DetailField>
+                <DetailField label="Containers" compact>
+                  <span class="font-bold" style="color: var(--dd-success);">{{ agent.containers.running }}</span>
+                  <span class="dd-text-muted"> running / </span>
+                  <span>{{ agent.containers.total }}</span>
+                  <span class="dd-text-muted"> total</span>
+                </DetailField>
               </div>
               <!-- Action buttons -->
               <div class="mt-4 pt-3 flex items-center gap-2" :style="{ borderTop: '1px solid var(--dd-border)' }">
@@ -748,16 +725,11 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
           @update:open="agentPanelOpen = $event; if (!$event) selectedAgent = null">
           <template #header>
             <div class="flex items-center gap-2.5 min-w-0">
-              <div class="w-2.5 h-2.5 rounded-full shrink-0"
-                   :style="{ backgroundColor: selectedAgent?.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)' }" />
+              <StatusDot :status="selectedAgent?.status === 'connected' ? 'connected' : 'disconnected'" size="lg" />
               <span class="text-sm font-bold truncate dd-text">{{ selectedAgent?.name }}</span>
-              <span class="badge text-3xs uppercase font-bold shrink-0"
-                    :style="{
-                      backgroundColor: selectedAgent?.status === 'connected' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
-                      color: selectedAgent?.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)',
-                    }">
+              <AppBadge :tone="selectedAgent?.status === 'connected' ? 'success' : 'danger'" size="xs" class="shrink-0">
                 {{ selectedAgent?.status }}
-              </span>
+              </AppBadge>
             </div>
           </template>
 
@@ -766,20 +738,11 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
           </template>
 
           <template #tabs>
-            <div class="shrink-0 flex px-4 gap-1"
-                 :style="{ borderBottom: '1px solid var(--dd-border)' }">
-              <AppButton size="none" variant="plain" weight="none" v-for="tab in agentDetailTabs" :key="tab.id"
-                      class="px-3 py-2.5 text-2xs-plus font-medium transition-colors relative"
-                      :class="agentDetailTab === tab.id
-                        ? 'text-drydock-secondary'
-                        : 'dd-text-muted hover:dd-text'"
-                      @click="agentDetailTab = tab.id">
-                <AppIcon :name="tab.icon" :size="12" class="mr-1" />
-                {{ tab.label }}
-                <div v-if="agentDetailTab === tab.id"
-                     class="absolute bottom-0 left-0 right-0 h-[2px] bg-drydock-secondary rounded-t-full" />
-              </AppButton>
-            </div>
+            <AppTabBar
+              :tabs="agentDetailTabs"
+              :model-value="agentDetailTab"
+              @update:model-value="agentDetailTab = $event"
+            />
           </template>
 
           <!-- Tab content -->

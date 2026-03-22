@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
+import AppBadge from '../components/AppBadge.vue';
+import DetailField from '../components/DetailField.vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
 import { useViewMode } from '../preferences/useViewMode';
 import { getAuditLog } from '../services/audit';
@@ -284,10 +286,9 @@ onMounted(fetchAudit);
       <template #cell-status="{ row }">
         <AppIcon :name="row.status === 'success' ? 'check' : row.status === 'error' ? 'xmark' : 'info'" :size="13" class="shrink-0 md:!hidden"
                  :style="{ color: statusColor(row.status) }" />
-        <span class="badge text-3xs font-bold max-md:!hidden"
-              :style="{ backgroundColor: statusBg(row.status), color: statusColor(row.status) }">
+        <AppBadge :custom="{ bg: statusBg(row.status), text: statusColor(row.status) }" size="xs" class="max-md:!hidden">
           {{ row.status }}
-        </span>
+        </AppBadge>
       </template>
       <template #cell-details="{ row }">
         <span v-if="row.fromVersion || row.toVersion" class="text-2xs font-mono dd-text-secondary whitespace-nowrap">
@@ -315,10 +316,9 @@ onMounted(fetchAudit);
               <div class="text-2xs-plus truncate mt-0.5 dd-text-muted font-mono">{{ entry.containerName }}</div>
             </div>
           </div>
-          <span class="badge text-3xs font-bold shrink-0 ml-2"
-                :style="{ backgroundColor: statusBg(entry.status), color: statusColor(entry.status) }">
+          <AppBadge :custom="{ bg: statusBg(entry.status), text: statusColor(entry.status) }" size="xs" class="shrink-0 ml-2">
             {{ entry.status }}
-          </span>
+          </AppBadge>
         </div>
         <div class="px-4 py-3">
           <div class="grid grid-cols-2 gap-2 text-2xs-plus">
@@ -354,37 +354,18 @@ onMounted(fetchAudit);
           <div class="text-2xs font-mono dd-text-muted truncate mt-0.5">{{ entry.containerName }}</div>
         </div>
         <span class="text-2xs font-mono dd-text-muted shrink-0 hidden md:inline">{{ formatTimestamp(entry.timestamp) }}</span>
-        <span class="badge text-3xs font-bold shrink-0"
-              :style="{ backgroundColor: statusBg(entry.status), color: statusColor(entry.status) }">
+        <AppBadge :custom="{ bg: statusBg(entry.status), text: statusColor(entry.status) }" size="xs" class="shrink-0">
           {{ entry.status }}
-        </span>
+        </AppBadge>
       </template>
       <template #details="{ item: entry }">
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3 mt-2">
-          <div>
-            <div class="text-2xs font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">Timestamp</div>
-            <div class="text-xs font-mono dd-text">{{ formatTimestamp(entry.timestamp) }}</div>
-          </div>
-          <div>
-            <div class="text-2xs font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">{{ targetLabel(entry.action) }}</div>
-            <div class="text-xs font-mono dd-text">{{ entry.containerName }}</div>
-          </div>
-          <div v-if="entry.containerImage">
-            <div class="text-2xs font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">Image</div>
-            <div class="text-xs font-mono dd-text">{{ entry.containerImage }}</div>
-          </div>
-          <div v-if="entry.fromVersion">
-            <div class="text-2xs font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">From Version</div>
-            <div class="text-xs font-mono dd-text">{{ entry.fromVersion }}</div>
-          </div>
-          <div v-if="entry.toVersion">
-            <div class="text-2xs font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">To Version</div>
-            <div class="text-xs font-mono dd-text">{{ entry.toVersion }}</div>
-          </div>
-          <div v-if="entry.details">
-            <div class="text-2xs font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">Details</div>
-            <div class="text-xs font-mono dd-text">{{ entry.details }}</div>
-          </div>
+          <DetailField label="Timestamp" mono compact>{{ formatTimestamp(entry.timestamp) }}</DetailField>
+          <DetailField :label="targetLabel(entry.action)" mono compact>{{ entry.containerName }}</DetailField>
+          <DetailField v-if="entry.containerImage" label="Image" mono compact>{{ entry.containerImage }}</DetailField>
+          <DetailField v-if="entry.fromVersion" label="From Version" mono compact>{{ entry.fromVersion }}</DetailField>
+          <DetailField v-if="entry.toVersion" label="To Version" mono compact>{{ entry.toVersion }}</DetailField>
+          <DetailField v-if="entry.details" label="Details" mono compact>{{ entry.details }}</DetailField>
         </div>
       </template>
     </DataListAccordion>
@@ -430,10 +411,9 @@ onMounted(fetchAudit);
           <div class="flex items-center gap-2.5 min-w-0">
             <AppIcon v-if="selectedEntry" :name="actionIcon(selectedEntry.action)" :size="14" class="dd-text-secondary shrink-0" />
             <span class="text-sm font-bold truncate dd-text">{{ selectedEntry ? actionLabel(selectedEntry.action) : '' }}</span>
-            <span v-if="selectedEntry" class="badge text-3xs font-bold shrink-0"
-                  :style="{ backgroundColor: statusBg(selectedEntry.status), color: statusColor(selectedEntry.status) }">
+            <AppBadge v-if="selectedEntry" :custom="{ bg: statusBg(selectedEntry.status), text: statusColor(selectedEntry.status) }" size="xs" class="shrink-0">
               {{ selectedEntry.status }}
-            </span>
+            </AppBadge>
           </div>
         </template>
 
@@ -443,38 +423,26 @@ onMounted(fetchAudit);
 
         <template v-if="selectedEntry" #default>
           <div class="p-4 space-y-5">
-            <div>
-              <div class="text-2xs font-semibold uppercase tracking-wider mb-1 dd-text-muted">Timestamp</div>
-              <div class="text-xs font-mono dd-text">{{ formatTimestamp(selectedEntry.timestamp) }}</div>
-            </div>
-            <div>
-              <div class="text-2xs font-semibold uppercase tracking-wider mb-1 dd-text-muted">Event</div>
-              <div class="text-xs font-medium dd-text">{{ actionLabel(selectedEntry.action) }}</div>
-            </div>
-            <div>
-              <div class="text-2xs font-semibold uppercase tracking-wider mb-1 dd-text-muted">{{ targetLabel(selectedEntry.action) }}</div>
-              <div class="text-xs font-mono dd-text break-all">{{ selectedEntry.containerName }}</div>
-            </div>
-            <div v-if="selectedEntry.containerImage">
-              <div class="text-2xs font-semibold uppercase tracking-wider mb-1 dd-text-muted">Image</div>
-              <div class="text-xs font-mono dd-text break-all">{{ selectedEntry.containerImage }}</div>
-            </div>
-            <div v-if="selectedEntry.fromVersion">
-              <div class="text-2xs font-semibold uppercase tracking-wider mb-1 dd-text-muted">From Version</div>
-              <div class="text-xs font-mono dd-text break-all">{{ selectedEntry.fromVersion }}</div>
-            </div>
-            <div v-if="selectedEntry.toVersion">
-              <div class="text-2xs font-semibold uppercase tracking-wider mb-1 dd-text-muted">To Version</div>
-              <div class="text-xs font-mono dd-text break-all">{{ selectedEntry.toVersion }}</div>
-            </div>
-            <div v-if="selectedEntry.triggerName">
-              <div class="text-2xs font-semibold uppercase tracking-wider mb-1 dd-text-muted">Trigger</div>
-              <div class="text-xs font-mono dd-text">{{ selectedEntry.triggerName }}</div>
-            </div>
-            <div v-if="selectedEntry.details">
-              <div class="text-2xs font-semibold uppercase tracking-wider mb-1 dd-text-muted">Details</div>
-              <div class="text-xs font-mono dd-text break-all">{{ selectedEntry.details }}</div>
-            </div>
+            <DetailField label="Timestamp" mono>{{ formatTimestamp(selectedEntry.timestamp) }}</DetailField>
+            <DetailField label="Event">
+              <span class="font-medium">{{ actionLabel(selectedEntry.action) }}</span>
+            </DetailField>
+            <DetailField :label="targetLabel(selectedEntry.action)" mono>
+              <span class="break-all">{{ selectedEntry.containerName }}</span>
+            </DetailField>
+            <DetailField v-if="selectedEntry.containerImage" label="Image" mono>
+              <span class="break-all">{{ selectedEntry.containerImage }}</span>
+            </DetailField>
+            <DetailField v-if="selectedEntry.fromVersion" label="From Version" mono>
+              <span class="break-all">{{ selectedEntry.fromVersion }}</span>
+            </DetailField>
+            <DetailField v-if="selectedEntry.toVersion" label="To Version" mono>
+              <span class="break-all">{{ selectedEntry.toVersion }}</span>
+            </DetailField>
+            <DetailField v-if="selectedEntry.triggerName" label="Trigger" mono>{{ selectedEntry.triggerName }}</DetailField>
+            <DetailField v-if="selectedEntry.details" label="Details" mono>
+              <span class="break-all">{{ selectedEntry.details }}</span>
+            </DetailField>
           </div>
         </template>
       </DetailPanel>
