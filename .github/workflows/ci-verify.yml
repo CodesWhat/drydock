@@ -1,11 +1,11 @@
 name: "🔬 CI Verify"
 run-name: >-
   ${{
-    github.event_name == 'pull_request' && format('✅ CI — PR #{0}: {1}', github.event.pull_request.number, github.event.pull_request.title) ||
-    github.event_name == 'push' && format('✅ CI — {0}', github.event.head_commit.message) ||
-    github.event_name == 'merge_group' && format('✅ CI — Merge Queue: {0}', github.ref_name) ||
-    github.event_name == 'workflow_call' && format('✅ CI — workflow_call ({0})', github.sha) ||
-    format('✅ CI — {0}', github.ref_name)
+    github.event_name == 'pull_request' && format('🔬 CI Verify — PR #{0}: {1}', github.event.pull_request.number, github.event.pull_request.title) ||
+    github.event_name == 'push' && format('🔬 CI Verify — {0}', github.event.head_commit.message) ||
+    github.event_name == 'merge_group' && format('🔬 CI Verify — Merge Queue: {0}', github.ref_name) ||
+    github.event_name == 'workflow_call' && format('🔬 CI Verify — workflow_call ({0})', github.sha) ||
+    format('🔬 CI Verify — {0}', github.ref_name)
   }}
 
 on:
@@ -60,7 +60,7 @@ jobs:
           token: ${{ github.token }}
 
   codeql:
-    name: CodeQL
+    name: "🛡️ CodeQL"
     if: github.event_name == 'pull_request' || github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     needs: [zizmor]
     runs-on: ubuntu-latest
@@ -100,7 +100,7 @@ jobs:
           category: /language:${{ matrix.language }}
 
   fuzz:
-    name: Fuzz
+    name: "🎯 Fuzz Testing"
     if: github.event_name == 'pull_request' || github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     needs: [zizmor]
     runs-on: ubuntu-latest

@@ -1,10 +1,13 @@
-name: "🧬 Mutation Testing (Advisory)"
+name: "🧬 Mutation Testing"
 run-name: >-
   ${{
-    github.event_name == 'schedule' && '🧬 Mutation (Advisory) — Weekly schedule' ||
-    format('🧬 Mutation (Advisory) — Manual by {0}', github.actor)
+    github.event_name == 'schedule' && '🧬 Mutation Testing — Weekly schedule' ||
+    format('🧬 Mutation Testing — Manual by {0}', github.actor)
   }}
 
+# Keep mutation testing out of the push/PR fast path.
+# This workflow is a weekly/manual quality signal used to find weak assertions,
+# dead code, and refactor candidates after merges land on the integration branch.
 on:
   workflow_dispatch:
   schedule:
@@ -22,7 +25,9 @@ jobs:
     name: "Stryker Advisory (${{ matrix.package }})"
     runs-on: ubuntu-latest
     timeout-minutes: 60  # Mutation testing is intentionally expensive; cap runaway mutants
-    continue-on-error: true  # advisory while mutation baseline and thresholds mature
+    continue-on-error: true  # advisory by policy; review results, then file focused follow-up work
+    env:
+      STRYKER_DASHBOARD_API_KEY: ${{ secrets.STRYKER_DASHBOARD_API_KEY }}
     strategy:
       fail-fast: false
       matrix:
@@ -61,10 +66,13 @@ jobs:
         if: always()
         run: |
           {
-            echo "### Mutation Testing (Advisory)"
+            echo "### Mutation Testing"
             echo "- Mode: ADVISORY (non-blocking)."
-            echo "- Reason: mutation baseline and passing thresholds are still being calibrated for \`${{ matrix.package }}\`."
-            echo "- Promotion criteria to blocking: agreed threshold policy with stable CI variance."
+            echo "- Trigger policy: weekly schedule plus manual dispatch only; not part of push or PR CI."
+            echo "- Expected use: review surviving mutants and initial dry-run failures, then create focused follow-up work for real test gaps or brittle logic."
+            echo "- Dashboard publish: enabled automatically when STRYKER_DASHBOARD_API_KEY is configured in GitHub Actions secrets."
+            echo "- Merge policy: do not block merges on mutation score."
+            echo "- Promotion criteria to stricter enforcement: clean dry-runs in every package, stable CI variance, and explicit team agreement."
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload mutation report

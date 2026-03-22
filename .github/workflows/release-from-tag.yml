@@ -1,5 +1,5 @@
 name: "🚀 Release From Tag"
-run-name: "🚀 Release — ${{ github.ref_name }}"
+run-name: "🚀 Release From Tag — ${{ github.ref_name }}"
 
 on:
   push:
@@ -9,7 +9,7 @@ permissions: read-all
 
 env:
   DOCKER_PLATFORMS: linux/amd64,linux/arm64
-  CI_VERIFY_WORKFLOW_FILE: 10-ci-verify.yml
+  CI_VERIFY_WORKFLOW_FILE: ci-verify.yml
 
 concurrency:
   group: release-from-tag-${{ github.ref }}
@@ -297,7 +297,7 @@ jobs:
           TAGS: ${{ steps.meta.outputs.tags }}
         run: |
           set -euo pipefail
-          identity_regex="^https://github.com/${GITHUB_REPOSITORY}/.github/workflows/30-release-from-tag.yml@refs/tags/.+$"
+          identity_regex="^https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release-from-tag.yml@refs/tags/.+$"
           issuer="https://token.actions.githubusercontent.com"
 
           images=()
@@ -388,7 +388,7 @@ jobs:
         run: |
           set -euo pipefail
           artifact="dist/drydock-${RELEASE_TAG}.tar.gz"
-          identity_regex="^https://github.com/${GITHUB_REPOSITORY}/.github/workflows/30-release-from-tag.yml@refs/tags/.+$"
+          identity_regex="^https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release-from-tag.yml@refs/tags/.+$"
           issuer="https://token.actions.githubusercontent.com"
 
           cosign verify-blob \

@@ -1,5 +1,5 @@
-name: "🏷️ Release Cut"
-run-name: "🏷️ Release Cut — manual by ${{ github.actor }}"
+name: "Release Cut"
+run-name: "Release Cut — manual by ${{ github.actor }}"
 
 on:
   workflow_dispatch:
@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  CI_VERIFY_WORKFLOW_FILE: 10-ci-verify.yml
+  CI_VERIFY_WORKFLOW_FILE: ci-verify.yml
 
 jobs:
   cut:

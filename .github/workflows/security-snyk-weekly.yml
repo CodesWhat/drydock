@@ -1,8 +1,8 @@
-name: "💳 Snyk Paid Scans"
+name: "Snyk Paid Scans"
 run-name: >-
   ${{
-    github.event_name == 'schedule' && '💳 Snyk — Weekly paid scans' ||
-    format('💳 Snyk — Manual by {0}', github.actor)
+    github.event_name == 'schedule' && 'Snyk Paid Scans — Weekly run' ||
+    format('Snyk Paid Scans — Manual by {0}', github.actor)
   }}
 
 on:

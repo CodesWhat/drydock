@@ -1,9 +1,9 @@
-name: "🛡️ OpenSSF Scorecard"
+name: "OpenSSF Scorecard"
 run-name: >-
   ${{
-    github.event_name == 'branch_protection_rule' && '🛡️ Scorecard — Branch protection changed' ||
-    github.event_name == 'schedule' && '🛡️ Scorecard — Weekly schedule' ||
-    format('🛡️ Scorecard — {0}', github.ref_name)
+    github.event_name == 'branch_protection_rule' && 'OpenSSF Scorecard — Branch protection changed' ||
+    github.event_name == 'schedule' && 'OpenSSF Scorecard — Weekly schedule' ||
+    format('OpenSSF Scorecard — {0}', github.ref_name)
   }}
 
 on:
