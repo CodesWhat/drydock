@@ -53,13 +53,35 @@ drydock exposes various metrics that [Prometheus](https://prometheus.io/) can sc
 
 The metrics are exposed at [/metrics](http://localhost:3000/metrics).
 
-By default, `/metrics` requires authentication when API auth is enabled.  
-To expose metrics without app authentication (for local Prometheus scrapes), set:
+#### Authentication modes
 
-```yaml
-environment:
-  - DD_SERVER_METRICS_AUTH=false
-```
+The `/metrics` endpoint supports three authentication modes, evaluated in order:
+
+1. **Bearer token (recommended for Prometheus)** — Set `DD_SERVER_METRICS_TOKEN` to a secret string. Prometheus sends it via `Authorization: Bearer <token>`. This is the recommended approach because it decouples metrics scraping from session/login auth.
+
+   ```yaml
+   environment:
+     - DD_SERVER_METRICS_TOKEN=my-secret-metrics-token
+   ```
+
+   Configure your Prometheus scrape job:
+
+   ```yaml
+   scrape_configs:
+     - job_name: drydock
+       bearer_token: my-secret-metrics-token
+       static_configs:
+         - targets: ['drydock:3000']
+   ```
+
+2. **Session / basic auth fallback** — When no `DD_SERVER_METRICS_TOKEN` is set and `DD_SERVER_METRICS_AUTH` is not `false`, the endpoint falls back to the same session/basic auth used by the rest of the API.
+
+3. **No auth** — Set `DD_SERVER_METRICS_AUTH=false` to expose metrics without any authentication (suitable for isolated networks):
+
+   ```yaml
+   environment:
+     - DD_SERVER_METRICS_AUTH=false
+   ```
 
 ### Metrics
 

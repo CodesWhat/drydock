@@ -10,7 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_No unreleased changes._
+### Added
+
+- **Bearer token auth for `/metrics` endpoint** — Set `DD_SERVER_METRICS_TOKEN` to authenticate Prometheus scrapers via `Authorization: Bearer <token>` without requiring session/basic auth. Uses SHA-256 hashing with timing-safe comparison. Three auth modes: (1) bearer token when token is set, (2) session/basic auth fallback, (3) no auth when `DD_SERVER_METRICS_AUTH=false`.
 
 ## [1.5.0] — 2026-03-19
 

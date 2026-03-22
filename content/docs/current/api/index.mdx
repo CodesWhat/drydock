@@ -74,7 +74,7 @@ If the header is missing or does not match the expected token, the API responds 
 | --- | --- | --- |
 | `/api/v1/openapi.json` | `GET` | [OpenAPI 3.1.0 specification](#openapi) (machine-readable API docs) |
 | `/health` | `GET` | Health check (returns 200 when healthy) |
-| `/metrics` | `GET` | Prometheus metrics (optional auth via `DD_SERVER_METRICS_AUTH`) |
+| `/metrics` | `GET` | Prometheus metrics (bearer token via `DD_SERVER_METRICS_TOKEN`, session auth fallback, or no auth via `DD_SERVER_METRICS_AUTH=false`) |
 | `/api/v1/events/ui` | `GET` | [Server-Sent Events](#server-sent-events-sse) for real-time UI updates |
 | `/api/v1/audit` | `GET` | [Audit trail](#audit-trail) (paginated, filterable by action/container/date) |
 | `/api/v1/notifications` | `GET`, `PATCH /:id` | [Notification rules](#notification-rules) (per-event enable/disable and trigger assignments) |
