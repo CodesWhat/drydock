@@ -30,15 +30,6 @@ vi.mock('../../../prometheus/compatibility.js', () => ({
   recordLegacyInput: vi.fn(),
 }));
 
-function createIterableNames(name: string) {
-  return {
-    length: 1,
-    [Symbol.iterator]: function* () {
-      yield name;
-    },
-  };
-}
-
 describe('container-init coverage', () => {
   test('filterRecreatedContainerAliases covers blank Created and non-array Names fallback', () => {
     const aliasName = '/7ea6b8a42686_termix';

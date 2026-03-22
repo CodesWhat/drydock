@@ -117,7 +117,7 @@ describe('useSystemLogStream', () => {
   it('disconnects and clears entries', () => {
     const scope = effectScope();
     scope.run(() => {
-      const { entries, status, connect, disconnect } = useSystemLogStream({
+      const { status, connect, disconnect } = useSystemLogStream({
         webSocketFactory: (url) => new MockWebSocket(url) as unknown as WebSocket,
         location: mockLocation,
       });

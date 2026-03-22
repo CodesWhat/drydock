@@ -24,6 +24,7 @@ jobs:
   stryker:
     name: "Stryker Advisory (${{ matrix.package }})"
     runs-on: ubuntu-latest
+    environment: mutation
     timeout-minutes: 60  # Mutation testing is intentionally expensive; cap runaway mutants
     continue-on-error: true  # advisory by policy; review results, then file focused follow-up work
     env:

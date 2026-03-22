@@ -1488,7 +1488,7 @@ class Dockercompose extends Docker {
     );
 
     if (containersByComposeFile.size === 0) {
-      this.log.warn('No containers matched an' + 'y compose file for this trigger');
+      this.log.warn('No containers matched any compose file for this trigger');
     }
 
     // Process each compose file group

@@ -53,7 +53,7 @@ class BaseRegistry extends Registry {
   }
 
   private buildDigestCacheKey(image: ContainerImage, digest?: string): string {
-    let normalizedImage = image;
+    let normalizedImage: ContainerImage;
     try {
       normalizedImage = this.normalizeImage(structuredClone(image));
     } catch {

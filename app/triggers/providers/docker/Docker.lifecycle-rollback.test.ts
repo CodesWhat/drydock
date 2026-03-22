@@ -13,7 +13,6 @@ registerCommonDockerBeforeEach();
 const {
   mockAuditCounterInc,
   mockGetInProgressOperationByContainerName,
-  mockGetRollbackCounter,
   mockInsertAudit,
   mockRollbackCounterInc,
   mockRunHook,
