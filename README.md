@@ -1,3 +1,6 @@
+> [!IMPORTANT]
+> **Trivy Supply Chain Compromise (GHSA-69fq-xp46-6x23):** Drydock is **not affected**. We do not use the compromised GitHub Actions, the bundled Trivy binary is pinned to a safe version (v0.69.3), and all CI actions are SHA-pinned. No compromised code was ever pulled or shipped. [Full advisory &rarr;](https://getdrydock.com/security/trivy-supply-chain-march-2026)
+
 <div align="center">
 
 <picture>

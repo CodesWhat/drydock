@@ -25,7 +25,8 @@ RUN apk add --no-cache \
     su-exec \
     tini \
     tzdata \
-    && apk add --no-cache --repository=https://dl-cdn.alpinelinux.org/alpine/edge/testing cosign trivy \
+    && apk add --no-cache cosign \
+    && apk add --no-cache --repository=https://dl-cdn.alpinelinux.org/alpine/edge/testing trivy=0.69.3-r1 \
     && apk upgrade --no-cache zlib \
     && mkdir /store && chown node:node /store
 
