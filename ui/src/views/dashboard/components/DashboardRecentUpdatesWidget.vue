@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watchEffect } from 'vue';
+import AppBadge from '@/components/AppBadge.vue';
 import type { RecentUpdateRow, UpdateKind } from '../dashboardTypes';
 
 const UPDATE_TABLE_COLUMNS = [
@@ -82,7 +83,7 @@ watchEffect(() => {
       <div class="flex items-center gap-2">
         <div v-if="editMode" class="drag-handle dd-drag-handle"><AppIcon name="ph:dots-six-vertical" :size="14" /></div>
         <AppIcon name="recent-updates" :size="14" class="text-drydock-secondary" />
-        <h2 class="text-xs font-semibold dd-text">
+        <h2 class="dd-text-heading-section dd-text">
           Updates Available
         </h2>
       </div>
@@ -183,23 +184,25 @@ watchEffect(() => {
           </template>
 
           <template #cell-type="{ row }">
-            <span
-              class="badge px-1.5 py-0 text-3xs sm:!hidden"
-              :style="{
-                backgroundColor: getUpdateKindMutedColor(row.updateKind),
-                color: getUpdateKindColor(row.updateKind),
+            <AppBadge
+              size="xs"
+              class="px-1.5 py-0 sm:!hidden"
+              :custom="{
+                bg: getUpdateKindMutedColor(row.updateKind),
+                text: getUpdateKindColor(row.updateKind),
               }">
               <AppIcon :name="getUpdateKindIcon(row.updateKind)" :size="12" />
-            </span>
-            <span
-              class="badge max-sm:!hidden"
-              :style="{
-                backgroundColor: getUpdateKindMutedColor(row.updateKind),
-                color: getUpdateKindColor(row.updateKind),
+            </AppBadge>
+            <AppBadge
+              size="sm"
+              class="max-sm:!hidden"
+              :custom="{
+                bg: getUpdateKindMutedColor(row.updateKind),
+                text: getUpdateKindColor(row.updateKind),
               }">
               <AppIcon :name="getUpdateKindIcon(row.updateKind)" :size="12" class="mr-1" />
               {{ row.updateKind ?? 'unknown' }}
-            </span>
+            </AppBadge>
           </template>
 
           <template #cell-actions="{ row }">
@@ -240,12 +243,12 @@ watchEffect(() => {
       <div class="flex items-center gap-2 cursor-pointer" @click="handleViewAll">
         <AppIcon name="recent-updates" :size="16" class="text-drydock-secondary" />
         <span class="text-xs font-semibold dd-text">{{ pendingUpdatesCount }} update{{ pendingUpdatesCount === 1 ? '' : 's' }} available</span>
-        <span
+        <AppBadge
           v-if="pendingUpdatesCount > 0"
-          class="badge text-3xs font-bold"
-          :style="{ backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning)' }">
+          tone="warning"
+          size="xs">
           {{ pendingUpdatesCount }}
-        </span>
+        </AppBadge>
       </div>
     </div>
   </div>

@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue';
+import AppBadge from '@/components/AppBadge.vue';
+import StatusDot from '@/components/StatusDot.vue';
 
 interface SecuritySeverityTotals {
   critical: number;
@@ -88,7 +90,7 @@ watchEffect(() => {
       <div class="flex items-center gap-2">
         <div v-if="editMode" class="drag-handle dd-drag-handle"><AppIcon name="ph:dots-six-vertical" :size="14" /></div>
         <AppIcon name="security" :size="14" class="text-drydock-accent" />
-        <h2 class="text-xs font-semibold dd-text">Security Overview</h2>
+        <h2 class="dd-text-heading-section dd-text">Security Overview</h2>
       </div>
       <AppButton size="none" variant="link-secondary" weight="medium" class="text-2xs-plus" @click="handleViewAll">View all &rarr;</AppButton>
     </div>
@@ -124,22 +126,22 @@ watchEffect(() => {
       <!-- Legend -->
       <div v-if="showLegend" class="flex justify-center gap-5" :class="showBreakdown ? 'mb-5' : ''">
         <div class="flex items-center gap-1.5">
-          <div class="w-2.5 h-2.5 rounded-full" style="background:var(--dd-success);" />
+          <StatusDot color="var(--dd-success)" size="lg" />
           <span class="text-2xs-plus dd-text-secondary">{{ securityCleanCount }} Clean</span>
         </div>
         <div v-if="securityIssueCount > 0" class="flex items-center gap-1.5">
-          <div class="w-2.5 h-2.5 rounded-full" style="background:var(--dd-danger);" />
+          <StatusDot color="var(--dd-danger)" size="lg" />
           <span class="text-2xs-plus dd-text-secondary">{{ securityIssueCount }} Issues</span>
         </div>
         <div v-if="securityNotScannedCount > 0" class="flex items-center gap-1.5">
-          <div class="w-2.5 h-2.5 rounded-full" style="background:var(--dd-neutral);" />
+          <StatusDot color="var(--dd-neutral)" size="lg" />
           <span class="text-2xs-plus dd-text-secondary">{{ securityNotScannedCount }} Not Scanned</span>
         </div>
       </div>
 
       <!-- Severity breakdown -->
       <div v-if="showBreakdown && showSecuritySeverityBreakdown" data-test="security-severity-breakdown" class="w-full mb-5">
-        <div class="text-2xs font-semibold uppercase tracking-wider mb-2 dd-text-muted">Severity Breakdown</div>
+        <div class="dd-text-label mb-2 dd-text-muted">Severity Breakdown</div>
         <div class="grid grid-cols-2 gap-2">
           <div class="flex items-center justify-between px-2 py-1.5 dd-rounded" :style="{ backgroundColor: 'var(--dd-danger-muted)' }">
             <span class="text-2xs font-semibold" style="color: var(--dd-danger);">{{ securitySeverityTotals.critical }} Critical</span>
@@ -159,19 +161,17 @@ watchEffect(() => {
       <!-- Top Vulnerabilities -->
       <template v-if="showVulns">
         <div class="w-full mb-4" :style="{ borderTop: '1px solid var(--dd-border)' }" />
-        <div class="w-full text-2xs font-semibold uppercase tracking-wider mb-3 dd-text-muted">Top Vulnerabilities</div>
+        <div class="w-full dd-text-label mb-3 dd-text-muted">Top Vulnerabilities</div>
         <div class="w-full space-y-2.5 overflow-y-auto max-h-[200px]">
           <div v-for="vuln in vulnerabilities" :key="vuln.id"
             class="flex items-start gap-3 p-2.5 dd-rounded"
             :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
             <div class="shrink-0 mt-0.5">
-              <span class="badge text-3xs"
-                :style="{
-                  backgroundColor: vuln.severity === 'CRITICAL' ? 'var(--dd-danger-muted)' : 'var(--dd-warning-muted)',
-                  color: vuln.severity === 'CRITICAL' ? 'var(--dd-danger)' : 'var(--dd-warning)',
-                }">
+              <AppBadge
+                size="xs"
+                :tone="vuln.severity === 'CRITICAL' ? 'danger' : 'warning'">
                 {{ vuln.severity }}
-              </span>
+              </AppBadge>
             </div>
             <div class="flex-1 min-w-0">
               <div class="text-2xs-plus font-semibold truncate dd-text">{{ vuln.id }}</div>

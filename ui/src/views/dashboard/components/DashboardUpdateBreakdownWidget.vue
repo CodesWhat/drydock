@@ -62,7 +62,7 @@ onBeforeUnmount(() => {
       <div class="flex items-center gap-2">
         <div v-if="editMode" class="drag-handle dd-drag-handle"><AppIcon name="ph:dots-six-vertical" :size="14" /></div>
         <AppIcon name="updates" :size="14" class="text-drydock-secondary" />
-        <h2 class="text-sm font-semibold dd-text">Update Breakdown</h2>
+        <h2 class="dd-text-heading-section dd-text">Update Breakdown</h2>
       </div>
       <AppButton size="none" variant="link-secondary" weight="medium" class="text-2xs-plus" @click="handleViewAll">View all &rarr;</AppButton>
     </div>

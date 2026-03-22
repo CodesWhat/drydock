@@ -2,6 +2,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
 import { type RouteLocationRaw, useRouter } from 'vue-router';
 import { GridItem, GridLayout } from 'grid-layout-plus';
+import AppIconButton from '@/components/AppIconButton.vue';
 import { useConfirmDialog } from '../composables/useConfirmDialog';
 import { ROUTES } from '../router/routes';
 import { updateContainer } from '../services/container-actions';
@@ -233,15 +234,14 @@ function confirmDashboardUpdateAll() {
       <template v-else>
         <!-- Pencil icon teleported to breadcrumb header -->
         <Teleport to="#breadcrumb-actions">
-          <AppButton
-            size="none" variant="plain" weight="none"
+          <AppIconButton
             data-test="dashboard-edit-toggle"
-            class="ml-2 flex items-center justify-center w-6 h-6 dd-rounded transition-colors"
-            :class="editMode ? 'dd-bg-elevated dd-text' : 'dd-text-muted hover:dd-text hover:dd-bg-elevated'"
-            v-tooltip="editMode ? 'Done customizing' : 'Customize dashboard'"
-            @click="toggleEditMode">
-            <AppIcon :name="editMode ? 'check' : 'ph:pencil-simple'" :size="13" />
-          </AppButton>
+            :icon="editMode ? 'check' : 'ph:pencil-simple'"
+            size="xs"
+            :variant="editMode ? 'plain' : 'muted'"
+            :class="editMode ? 'dd-bg-elevated dd-text ml-2' : 'ml-2'"
+            :tooltip="editMode ? 'Done customizing' : 'Customize dashboard'"
+            @click="toggleEditMode" />
         </Teleport>
 
         <!-- Grid Layout -->
@@ -391,12 +391,12 @@ function confirmDashboardUpdateAll() {
           <AppIcon name="ph:pencil-simple" :size="12" class="dd-text-muted" />
           <span class="text-2xs-plus font-semibold dd-text">Widgets</span>
         </div>
-        <AppButton
-          size="none" variant="plain" weight="none" aria-label="Close panel"
-          class="flex items-center justify-center w-6 h-6 dd-rounded transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-          @click="toggleEditMode">
-          <AppIcon name="xmark" :size="12" />
-        </AppButton>
+        <AppIconButton
+          icon="xmark"
+          size="xs"
+          variant="muted"
+          aria-label="Close panel"
+          @click="toggleEditMode" />
       </div>
 
       <div class="flex-1 overflow-y-auto p-3 space-y-1">

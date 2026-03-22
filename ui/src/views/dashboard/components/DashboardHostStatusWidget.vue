@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watchEffect } from 'vue';
+import AppBadge from '@/components/AppBadge.vue';
 import type { DashboardServerRow } from '../dashboardTypes';
 
 interface Props {
@@ -56,7 +57,7 @@ watchEffect(() => {
       <div class="flex items-center gap-2">
         <div v-if="editMode" class="drag-handle dd-drag-handle"><AppIcon name="ph:dots-six-vertical" :size="14" /></div>
         <AppIcon name="servers" :size="14" class="text-drydock-secondary" />
-        <h2 class="text-sm font-semibold dd-text">Host Status</h2>
+        <h2 class="dd-text-heading-section dd-text">Host Status</h2>
       </div>
       <AppButton size="none" variant="link-secondary" weight="medium" class="text-2xs-plus" @click="handleViewAll">View all &rarr;</AppButton>
     </div>
@@ -69,27 +70,22 @@ watchEffect(() => {
         class="flex items-center gap-3 p-3 dd-rounded cursor-pointer transition-colors hover:dd-bg-elevated"
         :style="{ backgroundColor: 'var(--dd-bg-inset)' }"
         @click="handleViewAll">
-        <span
-          class="badge px-1.5 py-0 text-3xs"
-          :style="{
-            backgroundColor: server.status === 'connected' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
-            color: server.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)',
-          }">
+        <AppBadge
+          size="xs"
+          class="px-1.5 py-0"
+          :tone="server.status === 'connected' ? 'success' : 'danger'">
           <AppIcon :name="server.status === 'connected' ? 'check' : 'xmark'" :size="12" />
-        </span>
+        </AppBadge>
         <div class="flex-1 min-w-0">
           <div class="text-xs font-semibold truncate dd-text">{{ server.name }}</div>
           <div v-if="server.host" class="text-2xs font-mono dd-text-muted truncate mt-0.5">{{ server.host }}</div>
           <div class="text-2xs dd-text-muted">{{ server.containers.running }}/{{ server.containers.total }} containers</div>
         </div>
-        <span
-          class="badge text-3xs uppercase font-bold"
-          :style="{
-            backgroundColor: server.status === 'connected' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
-            color: server.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)',
-          }">
+        <AppBadge
+          size="xs"
+          :tone="server.status === 'connected' ? 'success' : 'danger'">
           {{ server.statusLabel ?? server.status }}
-        </span>
+        </AppBadge>
       </div>
     </div>
 

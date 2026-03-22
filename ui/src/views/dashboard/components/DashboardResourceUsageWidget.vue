@@ -80,7 +80,7 @@ watchEffect(() => {
       <div class="flex items-center gap-2">
         <div v-if="editMode" class="drag-handle dd-drag-handle"><AppIcon name="ph:dots-six-vertical" :size="14" /></div>
         <AppIcon name="uptime" :size="14" class="text-drydock-secondary" />
-        <h2 class="text-sm font-semibold dd-text">
+        <h2 class="dd-text-heading-section dd-text">
           Resource Usage
         </h2>
       </div>
@@ -92,7 +92,7 @@ watchEffect(() => {
       <div v-if="!showHeader && editMode" class="drag-handle dd-drag-handle absolute top-2 left-2 z-10"><AppIcon name="ph:dots-six" :size="14" /></div>
 
       <div>
-        <div v-if="showHeader" class="text-2xs font-semibold uppercase tracking-wider mb-2 dd-text-muted">
+        <div v-if="showHeader" class="dd-text-label mb-2 dd-text-muted">
           Total Usage ({{ resourceUsage.watchedContainers }} watched)
         </div>
         <div class="space-y-2">
@@ -132,7 +132,7 @@ watchEffect(() => {
 
       <div v-if="topListLimit > 0" class="grid grid-cols-1 gap-3">
         <div>
-          <div class="text-2xs font-semibold uppercase tracking-wider mb-2 dd-text-muted">
+          <div class="dd-text-label mb-2 dd-text-muted">
             Top CPU
           </div>
           <div class="space-y-1.5">
@@ -158,7 +158,7 @@ watchEffect(() => {
         </div>
 
         <div>
-          <div class="text-2xs font-semibold uppercase tracking-wider mb-2 dd-text-muted">
+          <div class="dd-text-label mb-2 dd-text-muted">
             Top Memory
           </div>
           <div class="space-y-1.5">
