@@ -100,8 +100,24 @@ describe('docker helper extraction module', () => {
   });
 
   test('keeps digest-watch defaults and display-name update rule behavior', () => {
-    expect(isDigestToWatch(undefined as any, { domain: 'docker.io' }, false)).toBe(false);
-    expect(isDigestToWatch(undefined as any, { domain: 'ghcr.io' }, false)).toBe(true);
+    // Non-semver floating tags: Docker Hub stays opt-in, non-Hub defaults to watch
+    expect(isDigestToWatch(undefined as any, { domain: 'docker.io' }, false, 'floating')).toBe(
+      false,
+    );
+    expect(isDigestToWatch(undefined as any, { domain: 'ghcr.io' }, false, 'floating')).toBe(true);
+
+    // Specific semver releases: digest watching disabled regardless of registry
+    expect(isDigestToWatch(undefined as any, { domain: 'ghcr.io' }, true, 'specific')).toBe(false);
+    expect(isDigestToWatch(undefined as any, { domain: 'docker.io' }, true, 'specific')).toBe(
+      false,
+    );
+
+    // Floating semver aliases (v3, 1.4): Docker Hub stays opt-in, non-Hub defaults to watch
+    expect(isDigestToWatch(undefined as any, { domain: 'ghcr.io' }, true, 'floating')).toBe(true);
+    expect(isDigestToWatch(undefined as any, { domain: 'docker.io' }, true, 'floating')).toBe(
+      false,
+    );
+
     expect(shouldUpdateDisplayNameFromContainerName('new', 'old', 'old')).toBe(true);
     expect(shouldUpdateDisplayNameFromContainerName('new', 'old', 'custom')).toBe(false);
   });

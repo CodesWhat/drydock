@@ -5,6 +5,8 @@ import type { Container, ContainerImage } from '../../../model/container.js';
 import { parse as parseSemver, transform as transformTag } from '../../../tag/index.js';
 import { getErrorMessage as getSharedErrorMessage } from '../../../util/error.js';
 
+export type TagPrecision = 'specific' | 'floating';
+
 const UNKNOWN_CONTAINER_PROCESSING_ERROR = 'Unexpected container processing error';
 
 export interface ResolvedImgset {
@@ -422,12 +424,14 @@ export function isContainerToWatch(watchLabelValue: string, watchByDefault: bool
  * @param {string} watchDigestLabelValue - the value of dd.watch.digest label
  * @param {object} parsedImage - object containing at least `domain` property
  * @param {boolean} isSemver - true if the current image tag is a semver tag
+ * @param {TagPrecision} tagPrecision - whether the tag is specific or floating
  * @returns {boolean}
  */
 export function isDigestToWatch(
   watchDigestLabelValue: string,
   parsedImage: ParsedImageLike,
   isSemver: boolean,
+  tagPrecision: TagPrecision,
 ) {
   const domain = parsedImage.domain;
   const isDockerHub =
@@ -443,10 +447,13 @@ export function isDigestToWatch(
     return shouldWatch;
   }
 
-  if (isSemver) {
+  // Specific semver releases (1.4.5) — immutable, no digest watching needed
+  if (isSemver && tagPrecision === 'specific') {
     return false;
   }
 
+  // Floating tags (v3, 1, 1.4, latest, stable)
+  // Docker Hub stays opt-in because of its documented pull/abuse throttling.
   return !isDockerHub;
 }
 

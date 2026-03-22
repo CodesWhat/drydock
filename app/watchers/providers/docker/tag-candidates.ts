@@ -127,7 +127,7 @@ function hasLeadingZero(value: string): boolean {
   return value.length > 1 && value.startsWith('0');
 }
 
-interface NumericTagShape {
+export interface NumericTagShape {
   prefix: string;
   numericSegments: string[];
   suffix: string;
@@ -165,7 +165,7 @@ function getNumericTagShapeFromTransformedTag(transformedTag: string): NumericTa
   };
 }
 
-function getNumericTagShape(
+export function getNumericTagShape(
   tag: string,
   transformTags: string | undefined,
 ): NumericTagShape | null {

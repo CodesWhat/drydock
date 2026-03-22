@@ -15,6 +15,7 @@ import {
   isDigestToWatch,
   type ResolvedImgset,
   shouldUpdateDisplayNameFromContainerName,
+  type TagPrecision,
 } from './docker-helpers.js';
 import {
   areRuntimeDetailsEqual,
@@ -23,6 +24,18 @@ import {
   mergeRuntimeDetails,
   normalizeRuntimeDetails,
 } from './runtime-details.js';
+import { getNumericTagShape } from './tag-candidates.js';
+
+function classifyTagPrecision(
+  tag: string,
+  transformTags: string | undefined,
+  parsedTag: unknown,
+): TagPrecision {
+  if (!parsedTag) return 'floating';
+  const shape = getNumericTagShape(tag, transformTags);
+  if (!shape) return 'floating';
+  return shape.numericSegments.length >= 3 ? 'specific' : 'floating';
+}
 
 export interface ContainerLabelOverrides {
   includeTags?: string;
@@ -323,15 +336,26 @@ function warnWhenUntrackableImage(
   dockerContainerName: string,
   isSemver: boolean,
   watchDigest: boolean,
+  tagPrecision: TagPrecision,
 ) {
-  if (isSemver || watchDigest) {
+  if (watchDigest) {
     return;
   }
 
-  watcher.ensureLogger();
-  watcher.log.warn(
-    `Image is not a semver and digest watching is disabled so drydock won't report any update for container "${dockerContainerName}". Please review the configuration to enable digest watching for this container or exclude this container from being watched`,
-  );
+  if (isSemver && tagPrecision === 'floating') {
+    watcher.ensureLogger();
+    watcher.log.warn(
+      `Tag for container "${dockerContainerName}" looks like a floating version alias (e.g. v3, 1.4). Digest watching is disabled so in-place updates won't be detected. Set dd.watch.digest=true or use a full semver tag (e.g. 1.4.5)`,
+    );
+    return;
+  }
+
+  if (!isSemver) {
+    watcher.ensureLogger();
+    watcher.log.warn(
+      `Image is not a semver and digest watching is disabled so drydock won't report any update for container "${dockerContainerName}". Please review the configuration to enable digest watching for this container or exclude this container from being watched`,
+    );
+  }
 }
 
 function removeStaleContainerEntriesWithSameName(
@@ -431,14 +455,24 @@ export async function addImageDetailsToContainerOrchestration(
   );
 
   const isSemver = parseSemver(transformTag(resolvedConfig.transformTags, tagName)) != null;
-  const watchDigest = isDigestToWatch(resolvedConfig.watchDigest, parsedImage, isSemver);
+  const tagPrecision = classifyTagPrecision(
+    tagName,
+    resolvedConfig.transformTags,
+    parseSemver(transformTag(resolvedConfig.transformTags, tagName)),
+  );
+  const watchDigest = isDigestToWatch(
+    resolvedConfig.watchDigest,
+    parsedImage,
+    isSemver,
+    tagPrecision,
+  );
   const repoDigest = getRepoDigest(image);
   const runtimeDetails = await resolveRuntimeDetailsForDiscoveredContainer(
     watcher,
     containerId,
     runtimeDetailsFromSummary,
   );
-  warnWhenUntrackableImage(watcher, dockerContainerName, isSemver, watchDigest);
+  warnWhenUntrackableImage(watcher, dockerContainerName, isSemver, watchDigest, tagPrecision);
 
   const containerToReturn = helpers.normalizeContainer({
     id: containerId,
@@ -469,6 +503,7 @@ export async function addImageDetailsToContainerOrchestration(
       tag: {
         value: tagName,
         semver: isSemver,
+        tagPrecision,
       },
       digest: {
         watch: watchDigest,

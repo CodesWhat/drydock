@@ -31,6 +31,7 @@ export interface ContainerImage {
   tag: {
     value: string;
     semver: boolean;
+    tagPrecision?: 'specific' | 'floating';
   };
   digest: {
     watch: boolean;
@@ -243,6 +244,7 @@ const schema = joi.object({
         .object({
           value: joi.string().min(1).required(),
           semver: joi.boolean().default(false),
+          tagPrecision: joi.string().valid('specific', 'floating'),
         })
         .required(),
       digest: joi
