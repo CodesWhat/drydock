@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { disableIconifyApi } from '../boot/icons';
 import { type FontId, fontOptions, useFont } from '../composables/useFont';
 import { useIcons } from '../composables/useIcons';
+import AppTabBar from '../components/AppTabBar.vue';
 import ConfigAppearanceTab from '../components/config/ConfigAppearanceTab.vue';
 import ConfigGeneralTab from '../components/config/ConfigGeneralTab.vue';
 import ConfigProfileTab from '../components/config/ConfigProfileTab.vue';
@@ -330,22 +331,12 @@ function handleSelectIconLibrary(library: string) {
 
 <template>
   <DataViewLayout>
-    <div class="flex gap-1 mb-6" :style="{ borderBottom: '1px solid var(--dd-border)' }">
-      <AppButton size="none" variant="plain" weight="none"
-        v-for="tab in settingsTabs"
-        :key="tab.id"
-        class="px-4 py-2.5 text-xs font-semibold transition-colors relative"
-        :class="activeSettingsTab === tab.id ? 'text-drydock-secondary' : 'dd-text-muted hover:dd-text'"
-        @click="router.replace({ query: { tab: tab.id } })"
-      >
-        <AppIcon :name="tab.icon" :size="12" class="mr-1.5" />
-        {{ tab.label }}
-        <div
-          v-if="activeSettingsTab === tab.id"
-          class="absolute bottom-0 left-0 right-0 h-[2px] bg-drydock-secondary rounded-t-full"
-        />
-      </AppButton>
-    </div>
+    <AppTabBar
+      :tabs="settingsTabs"
+      :model-value="activeSettingsTab"
+      class="mb-6"
+      @update:model-value="router.replace({ query: { tab: $event } })"
+    />
 
     <ConfigGeneralTab
       v-if="activeSettingsTab === 'general'"

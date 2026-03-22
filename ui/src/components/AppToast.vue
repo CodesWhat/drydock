@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useToast, type ToastTone } from '@/composables/useToast';
+import AppIconButton from '@/components/AppIconButton.vue';
 
 const { toasts, dismissToast } = useToast();
 
@@ -63,15 +64,15 @@ function toneStyles(tone: ToastTone) {
               {{ toast.body }}
             </p>
           </div>
-          <AppButton
-            size="none"
+          <AppIconButton
+            icon="xmark"
+            size="xs"
             variant="plain"
-            weight="none"
-            class="shrink-0 mt-0.5 cursor-pointer"
+            class="shrink-0 mt-0.5"
             :style="{ color: toneStyles(toast.tone).text }"
-            @click="dismissToast(toast.id)">
-            <AppIcon name="xmark" :size="12" />
-          </AppButton>
+            aria-label="Dismiss"
+            @click="dismissToast(toast.id)"
+          />
         </div>
       </TransitionGroup>
     </div>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
+import AppIconButton from '@/components/AppIconButton.vue';
 import { ROUTES } from '../router/routes';
 import { useStorageRef } from '../composables/useStorageRef';
 import { getAuditLog } from '../services/audit';
@@ -104,17 +105,20 @@ function isUnread(entry: AuditEntry): boolean {
 
 <template>
   <div class="relative notification-bell-wrapper">
-    <AppButton size="none" variant="plain" weight="none" aria-label="Notifications"
+    <AppIconButton
+            icon="notifications"
+            size="sm"
+            variant="secondary"
+            aria-label="Notifications"
             :aria-expanded="String(showBell)"
-            class="relative flex items-center justify-center w-8 h-8 dd-rounded transition-colors dd-text-secondary hover:dd-bg-elevated hover:dd-text"
-            @click="toggle">
-      <AppIcon name="notifications" :size="18" />
-      <span v-if="unreadCount > 0"
-            class="badge-pulse absolute -top-0.5 -right-0.5 w-4 h-4 flex items-center justify-center rounded-full text-3xs font-bold text-white"
-            style="background: var(--dd-danger);">
-        {{ unreadCount > 9 ? '9+' : unreadCount }}
-      </span>
-    </AppButton>
+            class="relative"
+            @click="toggle"
+    />
+    <span v-if="unreadCount > 0"
+          class="badge-pulse absolute -top-0.5 -right-0.5 w-4 h-4 flex items-center justify-center rounded-full text-3xs font-bold text-white pointer-events-none"
+          style="background: var(--dd-danger);">
+      {{ unreadCount > 9 ? '9+' : unreadCount }}
+    </span>
     <Transition name="menu-fade">
       <div v-if="showBell" data-test="notification-dropdown"
            class="w-[calc(100vw-1rem)] max-w-[380px] dd-rounded-lg shadow-lg"

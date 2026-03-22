@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import AppBadge from '@/components/AppBadge.vue';
+
 interface InfoField {
   label: string;
   value: string;
@@ -61,7 +63,7 @@ const emit = defineEmits<{
         class="px-5 py-3.5 flex items-center gap-2"
       >
         <AppIcon name="settings" :size="14" class="text-drydock-secondary" />
-        <h2 class="text-sm font-semibold dd-text">Application</h2>
+        <h2 class="dd-text-heading-section dd-text">Application</h2>
       </div>
       <div class="p-5 space-y-4">
         <div v-if="props.loading" class="flex items-center justify-center gap-2 text-xs dd-text-muted py-4">
@@ -92,7 +94,7 @@ const emit = defineEmits<{
         class="px-5 py-3.5 flex items-center gap-2"
       >
         <AppIcon name="server" :size="14" class="text-drydock-secondary" />
-        <h2 class="text-sm font-semibold dd-text">Store</h2>
+        <h2 class="dd-text-heading-section dd-text">Store</h2>
       </div>
       <div class="p-5 space-y-4">
         <div
@@ -118,20 +120,11 @@ const emit = defineEmits<{
       >
         <div class="flex items-center gap-2">
           <AppIcon name="bolt" :size="14" class="text-drydock-secondary" />
-          <h2 class="text-sm font-semibold dd-text">Webhook API</h2>
+          <h2 class="dd-text-heading-section dd-text">Webhook API</h2>
         </div>
-        <span
-          class="px-2 py-1 text-2xs font-semibold uppercase tracking-wider dd-rounded"
-          :style="{
-            backgroundColor: props.webhookEnabled ? 'var(--dd-success-muted)' : 'var(--dd-bg-inset)',
-            color: props.webhookEnabled ? 'var(--dd-success)' : 'var(--dd-text-muted)',
-            border: props.webhookEnabled
-              ? '1px solid var(--dd-success)'
-              : '1px solid var(--dd-border-strong)',
-          }"
-        >
+        <AppBadge :tone="props.webhookEnabled ? 'success' : 'neutral'">
           {{ props.webhookEnabled ? 'Enabled' : 'Disabled' }}
-        </span>
+        </AppBadge>
       </div>
       <div class="p-5 space-y-4">
         <p class="text-2xs-plus dd-text-muted">
@@ -188,7 +181,7 @@ const emit = defineEmits<{
         class="px-5 py-3.5 flex items-center gap-2"
       >
         <AppIcon name="globe" :size="14" class="text-drydock-secondary" />
-        <h2 class="text-sm font-semibold dd-text">Network</h2>
+        <h2 class="dd-text-heading-section dd-text">Network</h2>
       </div>
       <div class="p-5">
         <div class="flex items-center justify-between">
@@ -217,7 +210,7 @@ const emit = defineEmits<{
         class="px-5 py-3.5 flex items-center gap-2"
       >
         <AppIcon name="containers" :size="14" class="text-drydock-secondary" />
-        <h2 class="text-sm font-semibold dd-text">Container Icon Cache</h2>
+        <h2 class="dd-text-heading-section dd-text">Container Icon Cache</h2>
       </div>
       <div class="p-5">
         <div class="flex items-center justify-between">
@@ -259,7 +252,7 @@ const emit = defineEmits<{
         class="px-5 py-3.5 flex items-center gap-2"
       >
         <AppIcon name="download" :size="14" class="text-drydock-secondary" />
-        <h2 class="text-sm font-semibold dd-text">Diagnostics</h2>
+        <h2 class="dd-text-heading-section dd-text">Diagnostics</h2>
       </div>
       <div class="p-5 space-y-3">
         <div class="flex items-center justify-between gap-3">

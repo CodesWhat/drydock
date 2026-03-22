@@ -74,7 +74,7 @@ function handleFontSizeInput(event: Event) {
     >
       <div class="flex items-center gap-2 px-5 py-3" :style="{ borderBottom: '1px solid var(--dd-border)' }">
         <AppIcon name="settings" :size="14" class="text-drydock-secondary" />
-        <h2 class="text-sm font-semibold dd-text">Color Theme</h2>
+        <h2 class="dd-text-heading-section dd-text">Color Theme</h2>
       </div>
       <div class="p-4">
         <div class="grid grid-cols-2 gap-3">
@@ -121,7 +121,7 @@ function handleFontSizeInput(event: Event) {
     >
       <div class="px-5 py-3.5 flex items-center gap-2" :style="{ borderBottom: '1px solid var(--dd-border)' }">
         <AppIcon name="terminal" :size="14" class="text-drydock-secondary" />
-        <h2 class="text-sm font-semibold dd-text">Font Family</h2>
+        <h2 class="dd-text-heading-section dd-text">Font Family</h2>
       </div>
       <div class="p-5">
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -183,7 +183,7 @@ function handleFontSizeInput(event: Event) {
     >
       <div class="px-5 py-3.5 flex items-center gap-2" :style="{ borderBottom: '1px solid var(--dd-border)' }">
         <AppIcon name="settings" :size="14" class="text-drydock-secondary" />
-        <h2 class="text-sm font-semibold dd-text">Font Size</h2>
+        <h2 class="dd-text-heading-section dd-text">Font Size</h2>
       </div>
       <div class="p-5">
         <div class="flex items-center gap-4">
@@ -215,7 +215,7 @@ function handleFontSizeInput(event: Event) {
     >
       <div class="px-5 py-3.5 flex items-center gap-2" :style="{ borderBottom: '1px solid var(--dd-border)' }">
         <AppIcon name="dashboard" :size="14" class="text-drydock-secondary" />
-        <h2 class="text-sm font-semibold dd-text">Icon Library</h2>
+        <h2 class="dd-text-heading-section dd-text">Icon Library</h2>
       </div>
       <div class="p-5">
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
@@ -268,7 +268,7 @@ function handleFontSizeInput(event: Event) {
     >
       <div class="px-5 py-3.5 flex items-center gap-2" :style="{ borderBottom: '1px solid var(--dd-border)' }">
         <AppIcon name="containers" :size="14" class="text-drydock-secondary" />
-        <h2 class="text-sm font-semibold dd-text">Icon Size</h2>
+        <h2 class="dd-text-heading-section dd-text">Icon Size</h2>
       </div>
       <div class="p-5">
         <div class="flex items-center gap-4">
@@ -300,7 +300,7 @@ function handleFontSizeInput(event: Event) {
         class="px-5 py-3.5 flex items-center gap-2"
       >
         <AppIcon name="settings" :size="14" class="text-drydock-secondary" />
-        <h2 class="text-sm font-semibold dd-text">Border Radius</h2>
+        <h2 class="dd-text-heading-section dd-text">Border Radius</h2>
       </div>
       <div class="p-5">
         <div class="grid grid-cols-5 gap-2">

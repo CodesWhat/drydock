@@ -3,6 +3,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import whaleLogo from '@/assets/whale-logo.png?inline';
 import AnnouncementBanner from '@/components/AnnouncementBanner.vue';
+import AppIconButton from '@/components/AppIconButton.vue';
 import NotificationBell from '@/components/NotificationBell.vue';
 import { useBreakpoints } from '@/composables/useBreakpoints';
 import { useDeprecationBanner } from '@/composables/useDeprecationBanner';
@@ -1267,12 +1268,13 @@ onUnmounted(() => {
           <span class="sidebar-label font-bold text-sm tracking-widest dd-text"
                 style="letter-spacing: var(--dd-letter-spacing-brand);">DRYDOCK</span>
         </div>
-        <AppButton size="none" variant="plain" weight="none" v-if="isMobile"
+        <AppIconButton v-if="isMobile"
+                icon="xmark"
+                size="xs"
+                variant="muted"
                 aria-label="Close menu"
-                class="p-1 dd-text-muted hover:dd-text transition-colors"
-                @click="isMobileMenuOpen = false">
-          <AppIcon name="close" :size="14" />
-        </AppButton>
+                @click="isMobileMenuOpen = false"
+        />
       </div>
 
       <!-- Nav groups -->
@@ -1341,19 +1343,22 @@ onUnmounted(() => {
       <!-- Sidebar footer -->
       <div class="shrink-0 px-3 py-2.5 flex items-center gap-1"
            :class="isCollapsed ? 'flex-col' : 'flex-row justify-between'">
-        <AppButton size="none" variant="plain" weight="none" aria-label="About Drydock"
-                class="flex items-center justify-center w-7 h-7 dd-rounded text-xs transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-                v-tooltip.top="'About Drydock'"
-                @click="showAbout = true">
-          <AppIcon name="info" :size="14" />
-        </AppButton>
-        <AppButton size="none" variant="plain" weight="none" v-if="!isMobile"
+        <AppIconButton
+                icon="info"
+                size="xs"
+                variant="muted"
+                tooltip="About Drydock"
+                aria-label="About Drydock"
+                @click="showAbout = true"
+        />
+        <AppIconButton v-if="!isMobile"
+                :icon="sidebarCollapsed ? 'sidebar-expand' : 'sidebar-collapse'"
+                size="xs"
+                variant="muted"
+                :tooltip="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
                 :aria-label="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
-                class="flex items-center justify-center w-7 h-7 dd-rounded text-xs transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-                v-tooltip.top="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
-                @click="sidebarCollapsed = !sidebarCollapsed">
-          <AppIcon :name="sidebarCollapsed ? 'sidebar-expand' : 'sidebar-collapse'" :size="14" />
-        </AppButton>
+                @click="sidebarCollapsed = !sidebarCollapsed"
+        />
       </div>
     </aside>
 
@@ -1536,11 +1541,14 @@ onUnmounted(() => {
                aria-labelledby="about-dialog-title"
                class="relative w-full max-w-[var(--dd-layout-about-max-width)] dd-rounded-lg overflow-hidden shadow-2xl"
                :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }">
-            <AppButton size="none" variant="plain" weight="none" aria-label="Close"
-                    class="absolute top-3 right-3 z-10 w-6 h-6 flex items-center justify-center dd-rounded transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-                    @click="showAbout = false">
-              <AppIcon name="xmark" :size="12" />
-            </AppButton>
+            <AppIconButton
+                    icon="xmark"
+                    size="xs"
+                    variant="muted"
+                    aria-label="Close"
+                    class="absolute top-3 right-3 z-10"
+                    @click="showAbout = false"
+            />
             <div class="flex flex-col items-center pt-6 pb-4 px-6">
               <div class="-mx-6 w-[calc(100%+3rem)] h-12 mb-3 relative pointer-events-none">
                 <img :src="whaleLogo" alt="Drydock" class="h-10 w-[65px] absolute top-1 about-swim"

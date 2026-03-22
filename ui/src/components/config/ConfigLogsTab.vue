@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
+import StatusDot from '@/components/StatusDot.vue';
 import AppLogViewer from '../AppLogViewer.vue';
 import type { AppLogEntry } from '../../types/log-entry';
 
@@ -131,10 +132,10 @@ function togglePin() {
                 class="accent-[var(--dd-success)]"
                 @change="streamingEnabledModel = ($event.target as HTMLInputElement).checked"
               />
-              <span
+              <StatusDot
                 v-if="props.streamingConnected"
-                class="inline-block w-2 h-2 rounded-full shrink-0"
-                :style="{ backgroundColor: 'var(--dd-success)' }"
+                status="connected"
+                size="md"
               />
               Live
             </label>

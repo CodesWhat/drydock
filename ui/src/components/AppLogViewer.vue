@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import StatusDot from '@/components/StatusDot.vue';
 import { useLogSearch } from '../composables/useLogSearch';
 import type { AppLogEntry } from '../types/log-entry';
 import type { AnsiColor, AnsiTextSegment } from '../utils/container-logs';
@@ -443,7 +444,7 @@ async function copyLogs(): Promise<void> {
       </div>
 
       <div class="flex items-center gap-1.5">
-        <div class="w-2 h-2 rounded-full" :style="{ backgroundColor: props.statusColor }" />
+        <StatusDot :color="props.statusColor" size="md" />
         <span class="font-semibold" :style="{ color: props.statusColor }">
           {{ props.statusLabel }}
         </span>
