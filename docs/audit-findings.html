@@ -165,25 +165,25 @@
   </div>
 
   <!-- Round 1 closed items -->
-  <div class="card" data-status="fixed" data-files="10-ci-verify.yml" data-concern="efficiency">
+  <div class="card" data-status="fixed" data-files="ci-verify.yml" data-concern="efficiency">
     <div class="card-row">
       <div class="card-content">
         <div class="card-title">Redundant Docker builds across jobs</div>
         <div class="card-body">Playwright, DAST, load tests each rebuilt the image. ~3-5 min wasted/run.</div>
         <div class="card-detail"><em>Fix:</em> Build job exports QA image as artifact. Consumers download + load.</div>
-        <div class="card-footer">H2 &middot; 10-ci-verify.yml</div>
+        <div class="card-footer">H2 &middot; ci-verify.yml</div>
       </div>
       <div class="card-actions"><span class="status status-fixed"><span class="dot dot-fixed"></span> Closed</span></div>
     </div>
   </div>
 
-  <div class="card" data-status="fixed" data-files="10-ci-verify.yml" data-concern="efficiency">
+  <div class="card" data-status="fixed" data-files="ci-verify.yml" data-concern="efficiency">
     <div class="card-row">
       <div class="card-content">
         <div class="card-title">Qlty plugin downloads on every run</div>
         <div class="card-body">~30s wasted per run, no caching.</div>
         <div class="card-detail"><em>Fix:</em> <code>actions/cache</code> keyed to <code>qlty.toml</code> hash.</div>
-        <div class="card-footer">M10 &middot; 10-ci-verify.yml</div>
+        <div class="card-footer">M10 &middot; ci-verify.yml</div>
       </div>
       <div class="card-actions"><span class="status status-fixed"><span class="dot dot-fixed"></span> Closed</span></div>
     </div>
@@ -201,13 +201,13 @@
     </div>
   </div>
 
-  <div class="card" data-status="fixed" data-files="70-security-snyk.yml" data-concern="efficiency">
+  <div class="card" data-status="fixed" data-files="security-snyk-weekly.yml" data-concern="efficiency">
     <div class="card-row">
       <div class="card-content">
         <div class="card-title">Snyk container scan rebuilt image from scratch</div>
         <div class="card-body">Weekly scan built without cache. ~5-10 min redundant.</div>
         <div class="card-detail"><em>Fix:</em> Buildx + GHA cache.</div>
-        <div class="card-footer">70-security-snyk.yml</div>
+        <div class="card-footer">security-snyk-weekly.yml</div>
       </div>
       <div class="card-actions"><span class="status status-fixed"><span class="dot dot-fixed"></span> Closed</span></div>
     </div>
@@ -220,13 +220,13 @@
     <button type="button" class="copy-group-btn" onclick="copyConcern('observability')">Copy open</button>
   </div>
 
-  <div class="card" data-status="open" data-files="10-ci-verify.yml" data-concern="observability">
+  <div class="card" data-status="open" data-files="ci-verify.yml" data-concern="observability">
     <div class="card-row">
       <div class="card-content">
         <div class="card-title">DAST findings not in job summary</div>
         <div class="card-body">ZAP and Nuclei upload report artifacts but don't add anything to <code>GITHUB_STEP_SUMMARY</code>. Other jobs (lint, test, load) all write summaries.</div>
         <div class="card-detail"><em>Fix:</em> Add summary step after each DAST scan: finding count + severity breakdown + link to artifact.</div>
-        <div class="card-footer">10-ci-verify.yml (dast-zap-baseline, dast-nuclei jobs)</div>
+        <div class="card-footer">ci-verify.yml (dast-zap-baseline, dast-nuclei jobs)</div>
       </div>
       <div class="card-actions">
         <span class="severity sev-low">low</span>
@@ -264,7 +264,7 @@
     </div>
   </div>
 
-  <div class="card" data-status="fixed" data-files="10-ci-verify.yml" data-concern="observability">
+  <div class="card" data-status="fixed" data-files="ci-verify.yml" data-concern="observability">
     <div class="card-row">
       <div class="card-content">
         <div class="card-title">Dependency review only on PRs</div>
@@ -308,23 +308,23 @@
     </div>
   </div>
 
-  <div class="card" data-status="fixed" data-files="70-security-snyk.yml" data-concern="observability">
+  <div class="card" data-status="fixed" data-files="security-snyk-weekly.yml" data-concern="observability">
     <div class="card-row">
       <div class="card-content">
         <div class="card-title">Snyk CLI version pinned inline in 4 places</div>
         <div class="card-detail"><em>Fix:</em> Single workflow-level env var.</div>
-        <div class="card-footer">70-security-snyk.yml</div>
+        <div class="card-footer">security-snyk-weekly.yml</div>
       </div>
       <div class="card-actions"><span class="status status-fixed"><span class="dot dot-fixed"></span> Closed</span></div>
     </div>
   </div>
 
-  <div class="card" data-status="fixed" data-files="10-ci-verify.yml" data-concern="observability">
+  <div class="card" data-status="fixed" data-files="ci-verify.yml" data-concern="observability">
     <div class="card-row">
       <div class="card-content">
         <div class="card-title">Load test baselines via fragile API search</div>
         <div class="card-detail"><em>Fix:</em> Committed baseline file at <code>test/load-test-baselines/ci-smoke.json</code>.</div>
-        <div class="card-footer">10-ci-verify.yml</div>
+        <div class="card-footer">ci-verify.yml</div>
       </div>
       <div class="card-actions"><span class="status status-fixed"><span class="dot dot-fixed"></span> Closed</span></div>
     </div>
@@ -349,7 +349,7 @@
   </div>
 
   <!-- All round 1 closed -->
-  <div class="card" data-status="fixed" data-files="30-release-from-tag.yml" data-concern="release">
+  <div class="card" data-status="fixed" data-files="release-from-tag.yml" data-concern="release">
     <div class="card-row">
       <div class="card-content">
         <div class="card-title">Auto-tag re-ran full CI recursively</div>
@@ -360,7 +360,7 @@
     </div>
   </div>
 
-  <div class="card" data-status="fixed" data-files="20-release-cut.yml,30-release-from-tag.yml" data-concern="release">
+  <div class="card" data-status="fixed" data-files="release-cut.yml,release-from-tag.yml" data-concern="release">
     <div class="card-row">
       <div class="card-content">
         <div class="card-title">Release cut didn't verify prior CI</div>
@@ -371,7 +371,7 @@
     </div>
   </div>
 
-  <div class="card" data-status="fixed" data-files="30-release-from-tag.yml" data-concern="release">
+  <div class="card" data-status="fixed" data-files="release-from-tag.yml" data-concern="release">
     <div class="card-row">
       <div class="card-content">
         <div class="card-title">Release retry rebuilt from scratch</div>
@@ -382,7 +382,7 @@
     </div>
   </div>
 
-  <div class="card" data-status="fixed" data-files="20-release-cut.yml" data-concern="release">
+  <div class="card" data-status="fixed" data-files="release-cut.yml" data-concern="release">
     <div class="card-row">
       <div class="card-content">
         <div class="card-title">CHANGELOG entry validation before release</div>
@@ -393,7 +393,7 @@
     </div>
   </div>
 
-  <div class="card" data-status="fixed" data-files="30-release-from-tag.yml" data-concern="release">
+  <div class="card" data-status="fixed" data-files="release-from-tag.yml" data-concern="release">
     <div class="card-row">
       <div class="card-content">
         <div class="card-title">package.json version must match tag</div>
@@ -404,7 +404,7 @@
     </div>
   </div>
 
-  <div class="card" data-status="fixed" data-files="20-release-cut.yml,30-release-from-tag.yml" data-concern="release">
+  <div class="card" data-status="fixed" data-files="release-cut.yml,release-from-tag.yml" data-concern="release">
     <div class="card-row">
       <div class="card-content">
         <div class="card-title">Workflow filename hardcoded in release polling</div>
@@ -423,7 +423,7 @@
   </div>
 
   <!-- All round 1 closed -->
-  <div class="card" data-status="fixed" data-files="10-ci-verify.yml,lefthook.yml" data-concern="gates">
+  <div class="card" data-status="fixed" data-files="ci-verify.yml,lefthook.yml" data-concern="gates">
     <div class="card-row">
       <div class="card-content">
         <div class="card-title">Zizmor was non-blocking</div>
@@ -434,7 +434,7 @@
     </div>
   </div>
 
-  <div class="card" data-status="fixed" data-files="70-security-snyk.yml" data-concern="gates">
+  <div class="card" data-status="fixed" data-files="security-snyk-weekly.yml" data-concern="gates">
     <div class="card-row">
       <div class="card-content">
         <div class="card-title">Snyk quota gate didn't block scan jobs</div>
@@ -445,7 +445,7 @@
     </div>
   </div>
 
-  <div class="card" data-status="fixed" data-files="70-security-snyk.yml" data-concern="gates">
+  <div class="card" data-status="fixed" data-files="security-snyk-weekly.yml" data-concern="gates">
     <div class="card-row">
       <div class="card-content">
         <div class="card-title">Snyk Code had continue-on-error</div>
@@ -489,12 +489,12 @@
     </div>
   </div>
 
-  <div class="card" data-status="fixed" data-files="10-ci-verify.yml,validate-commit-range.mjs" data-concern="gates">
+  <div class="card" data-status="fixed" data-files="ci-verify.yml,validate-commit-range.mjs" data-concern="gates">
     <div class="card-row">
       <div class="card-content">
         <div class="card-title">Commit message validation missing from CI</div>
         <div class="card-detail"><em>Fix:</em> PR commit range validator + required status check.</div>
-        <div class="card-footer">10-ci-verify.yml + validate-commit-range.mjs</div>
+        <div class="card-footer">ci-verify.yml + validate-commit-range.mjs</div>
       </div>
       <div class="card-actions"><span class="status status-fixed"><span class="dot dot-fixed"></span> Closed</span></div>
     </div>
@@ -512,7 +512,7 @@
       <div class="card-content">
         <div class="card-title">Snyk quota limits hardcoded in script</div>
         <div class="card-detail"><em>Fix:</em> Single config file <code>snyk-quota-config.json</code>.</div>
-        <div class="card-footer">70-security-snyk.yml + scripts/</div>
+        <div class="card-footer">security-snyk-weekly.yml + scripts/</div>
       </div>
       <div class="card-actions"><span class="status status-fixed"><span class="dot dot-fixed"></span> Closed</span></div>
     </div>
