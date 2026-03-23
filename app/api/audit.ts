@@ -11,6 +11,7 @@ type AuditEntriesQuery = {
   skip: number;
   limit: number;
   action?: string;
+  actions?: string[];
   container?: string;
   from?: string;
   to?: string;
@@ -64,6 +65,19 @@ function getAuditEntries(req: Request, res: Response) {
     return;
   }
 
+  const actionsParam = getQueryStringValue(req.query.actions);
+  let validatedActions: string[] | undefined;
+  if (actionsParam) {
+    const actionsList = actionsParam.split(',').filter((a) => a.length > 0);
+    for (const a of actionsList) {
+      if (!SAFE_AUDIT_FILTER_PATTERN.test(a)) {
+        sendErrorResponse(res, 400, 'Invalid actions query parameter');
+        return;
+      }
+    }
+    validatedActions = actionsList.length > 0 ? actionsList : undefined;
+  }
+
   const container = getValidatedAuditFilter(req.query.container);
   if (container === null) {
     sendErrorResponse(res, 400, 'Invalid container query parameter');
@@ -73,6 +87,9 @@ function getAuditEntries(req: Request, res: Response) {
   const query: AuditEntriesQuery = { skip, limit };
   if (action) {
     query.action = action;
+  }
+  if (validatedActions) {
+    query.actions = validatedActions;
   }
   if (container) {
     query.container = container;

@@ -79,10 +79,19 @@ describe('NotificationBell', () => {
     expect(wrapper.find('button[aria-label="Notifications"]').exists()).toBe(true);
   });
 
-  it('fetches entries on mount', async () => {
+  it('fetches entries on mount with actionable action filter', async () => {
     factory();
     await flushPromises();
-    expect(mockGetAuditLog).toHaveBeenCalledWith({ limit: 20 });
+    expect(mockGetAuditLog).toHaveBeenCalledWith({
+      limit: 20,
+      actions: [
+        'update-available',
+        'update-applied',
+        'update-failed',
+        'security-alert',
+        'agent-disconnect',
+      ],
+    });
   });
 
   it('shows badge with unread count when no lastSeen', async () => {
@@ -142,12 +151,21 @@ describe('NotificationBell', () => {
     expect(findDropdown(wrapper).exists()).toBe(false);
   });
 
-  it('refetches on open', async () => {
+  it('refetches on open with actionable action filter', async () => {
     const wrapper = factory();
     await flushPromises();
     mockGetAuditLog.mockClear();
     await openBell(wrapper);
-    expect(mockGetAuditLog).toHaveBeenCalledWith({ limit: 20 });
+    expect(mockGetAuditLog).toHaveBeenCalledWith({
+      limit: 20,
+      actions: [
+        'update-available',
+        'update-applied',
+        'update-failed',
+        'security-alert',
+        'agent-disconnect',
+      ],
+    });
   });
 
   it('renders entry rows with correct action labels', async () => {

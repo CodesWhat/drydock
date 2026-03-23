@@ -10,6 +10,14 @@ import { actionIcon, actionLabel, statusColor, timeAgo } from '../utils/audit-he
 
 const router = useRouter();
 
+const BELL_ACTIONS = [
+  'update-available',
+  'update-applied',
+  'update-failed',
+  'security-alert',
+  'agent-disconnect',
+];
+
 const showBell = ref(false);
 const bellPanelStyle = ref<Record<string, string>>({});
 const entries = ref<AuditEntry[]>([]);
@@ -24,7 +32,7 @@ const unreadCount = computed(() => {
 async function fetchEntries() {
   loading.value = true;
   try {
-    const data = await getAuditLog({ limit: 20 });
+    const data = await getAuditLog({ limit: 20, actions: BELL_ACTIONS });
     entries.value = data.entries ?? [];
   } catch {
     // Silently fail — bell is non-critical.
