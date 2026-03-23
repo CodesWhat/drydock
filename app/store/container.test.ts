@@ -127,6 +127,7 @@ test('updateContainer should use collection update when available for existing c
   const existingContainer = {
     data: createContainerFixture({
       id: 'container-update-with-update-method',
+      status: 'running',
     }),
   };
   const collection = {
@@ -145,6 +146,7 @@ test('updateContainer should use collection update when available for existing c
   };
   const containerToSave = createContainerFixture({
     id: 'container-update-with-update-method',
+    status: 'stopped',
   });
   const spyEvent = vi.spyOn(event, 'emitContainerUpdated');
   container.createCollections(db);
@@ -2240,4 +2242,108 @@ test('getValueByPath helper should reject unsafe and invalid traversal paths', (
     container._getValueByPathForTests({ safe: { value: 'ok' } }, '__proto__.polluted'),
   ).toBeUndefined();
   expect(container._getValueByPathForTests({ name: 'plain-string' }, 'name.value')).toBeUndefined();
+});
+
+describe('hasContainerChanged', () => {
+  test('should return false for identical containers', () => {
+    const a = createContainerFixture();
+    const b = createContainerFixture();
+    expect(container.hasContainerChanged(a, b)).toBe(false);
+  });
+
+  test('should return true when updateAvailable changes', () => {
+    const a = createContainerFixture({ updateAvailable: false });
+    const b = createContainerFixture({ updateAvailable: true });
+    expect(container.hasContainerChanged(a, b)).toBe(true);
+  });
+
+  test('should return true when result.tag changes', () => {
+    const a = createContainerFixture({ result: { tag: '1.0.0' } });
+    const b = createContainerFixture({ result: { tag: '2.0.0' } });
+    expect(container.hasContainerChanged(a, b)).toBe(true);
+  });
+
+  test('should return true when result.digest changes', () => {
+    const a = createContainerFixture({ result: { tag: 'v1', digest: 'sha256:aaa' } });
+    const b = createContainerFixture({ result: { tag: 'v1', digest: 'sha256:bbb' } });
+    expect(container.hasContainerChanged(a, b)).toBe(true);
+  });
+
+  test('should return true when status changes', () => {
+    const a = createContainerFixture({ status: 'running' });
+    const b = createContainerFixture({ status: 'stopped' });
+    expect(container.hasContainerChanged(a, b)).toBe(true);
+  });
+
+  test('should return true when error appears', () => {
+    const a = createContainerFixture();
+    const b = createContainerFixture({ error: { message: 'connection refused' } });
+    expect(container.hasContainerChanged(a, b)).toBe(true);
+  });
+
+  test('should return true when error is cleared', () => {
+    const a = createContainerFixture({ error: { message: 'connection refused' } });
+    const b = createContainerFixture();
+    expect(container.hasContainerChanged(a, b)).toBe(true);
+  });
+
+  test('should return true when image.tag.value changes', () => {
+    const a = createContainerFixture();
+    const imageB = {
+      ...createContainerFixture().image,
+      tag: { value: 'new-version', semver: false },
+    };
+    const b = createContainerFixture({ image: imageB });
+    expect(container.hasContainerChanged(a, b)).toBe(true);
+  });
+
+  test('should return true when security state changes', () => {
+    const a = createContainerFixture({ security: undefined });
+    const b = createContainerFixture({
+      security: { scan: { scanner: 'trivy', status: 'passed' } },
+    });
+    expect(container.hasContainerChanged(a, b)).toBe(true);
+  });
+
+  test('should return false when only timestamp-like metadata differs', () => {
+    const a = createContainerFixture({ updateDetectedAt: '2024-01-01T00:00:00Z' });
+    const b = createContainerFixture({ updateDetectedAt: '2024-12-31T23:59:59Z' });
+    expect(container.hasContainerChanged(a, b)).toBe(false);
+  });
+});
+
+test('updateContainer should not emit when container data is unchanged', async () => {
+  const existingContainer = {
+    data: createContainerFixture({
+      id: 'unchanged-container',
+      status: 'running',
+      updateAvailable: false,
+    }),
+  };
+  const collection = {
+    findOne: () => existingContainer,
+    update: vi.fn(),
+    insert: vi.fn(),
+    chain: vi.fn(() => ({
+      find: () => ({
+        remove: () => ({}),
+      }),
+    })),
+  };
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => null,
+  };
+  const containerToSave = createContainerFixture({
+    id: 'unchanged-container',
+    status: 'running',
+    updateAvailable: false,
+  });
+  const spyEvent = vi.spyOn(event, 'emitContainerUpdated');
+  container.createCollections(db);
+
+  container.updateContainer(containerToSave);
+
+  expect(collection.update).toHaveBeenCalledTimes(1);
+  expect(spyEvent).not.toHaveBeenCalled();
 });

@@ -468,6 +468,39 @@ export function clearAllCachedSecurityState() {
   securityStateCachePruneIterator = undefined;
 }
 
+/**
+ * Check whether meaningful container state changed between the existing record
+ * and the incoming update.  Returns false when nothing actionable changed
+ * (e.g. same data re-polled with only LokiJS timestamp metadata differing).
+ */
+export function hasContainerChanged(
+  existing: container.Container,
+  incoming: container.Container,
+): boolean {
+  if (existing.updateAvailable !== incoming.updateAvailable) {
+    return true;
+  }
+  if (existing.result?.tag !== incoming.result?.tag) {
+    return true;
+  }
+  if (existing.result?.digest !== incoming.result?.digest) {
+    return true;
+  }
+  if (existing.status !== incoming.status) {
+    return true;
+  }
+  if (existing.error?.message !== incoming.error?.message) {
+    return true;
+  }
+  if (existing.image?.tag?.value !== incoming.image?.tag?.value) {
+    return true;
+  }
+  if (JSON.stringify(existing.security) !== JSON.stringify(incoming.security)) {
+    return true;
+  }
+  return false;
+}
+
 function getUpdateDetectedAt(containerCurrent, containerNext) {
   return getUpdateLifecycleTimestamp(containerCurrent, containerNext, 'updateDetectedAt');
 }
@@ -594,10 +627,12 @@ export function updateContainer(container) {
     });
   }
   invalidateContainersCacheForMutation(containerCurrent, containerToReturn);
-  const containerUpdatedEventPayload: ContainerLifecycleEventPayload = redactContainerRuntimeEnv({
-    ...containerToReturn,
-  });
-  emitContainerUpdated(containerUpdatedEventPayload);
+  if (!containerCurrent || hasContainerChanged(containerCurrent, containerToReturn)) {
+    const containerUpdatedEventPayload: ContainerLifecycleEventPayload = redactContainerRuntimeEnv({
+      ...containerToReturn,
+    });
+    emitContainerUpdated(containerUpdatedEventPayload);
+  }
   return containerToReturn;
 }
 
