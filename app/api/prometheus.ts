@@ -12,6 +12,11 @@ import * as auth from './auth.js';
  * @type {Router}
  */
 const router = express.Router();
+let expectedMetricsTokenHash: Buffer | null = null;
+
+function hashMetricsToken(token: string): Buffer {
+  return createHash('sha256').update(token, 'utf8').digest();
+}
 
 /**
  * Return Prometheus Metrics as String.
@@ -31,18 +36,18 @@ async function outputMetrics(req: Request, res: Response) {
  */
 export function authenticateMetricsToken(req: Request, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.toLowerCase().startsWith('bearer ')) {
+  if (
+    !authHeader ||
+    !authHeader.toLowerCase().startsWith('bearer ') ||
+    expectedMetricsTokenHash == null
+  ) {
     res.status(401).json({ error: 'Unauthorized' });
     return;
   }
 
-  const configuration = getServerConfiguration();
-  const configuredToken = configuration.metrics?.token;
   const token = authHeader.slice(7);
-
-  const tokenHash = createHash('sha256').update(token, 'utf8').digest();
-  const expectedHash = createHash('sha256').update(configuredToken, 'utf8').digest();
-  if (!timingSafeEqual(tokenHash, expectedHash)) {
+  const tokenHash = hashMetricsToken(token);
+  if (!timingSafeEqual(tokenHash, expectedMetricsTokenHash)) {
     res.status(401).json({ error: 'Unauthorized' });
     return;
   }
@@ -57,9 +62,11 @@ export function authenticateMetricsToken(req: Request, res: Response, next: Next
 export function init() {
   const configuration = getServerConfiguration();
   router.use(nocache());
+  expectedMetricsTokenHash = null;
 
   const metricsToken = configuration.metrics?.token;
   if (typeof metricsToken === 'string' && metricsToken.length > 0) {
+    expectedMetricsTokenHash = hashMetricsToken(metricsToken);
     // Bearer token auth takes priority when DD_SERVER_METRICS_TOKEN is set
     router.use(authenticateMetricsToken);
   } else if (configuration.metrics?.auth !== false) {

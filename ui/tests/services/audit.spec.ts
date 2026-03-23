@@ -58,6 +58,34 @@ describe('audit service', () => {
     expect(calledUrl).toContain('to=2026-01-31');
   });
 
+  it('appends actions query parameter when actions are provided', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ data: [], total: 0 }),
+    });
+
+    await getAuditLog({
+      actions: ['update-found', 'update-applied'],
+    });
+
+    const calledUrl = (global.fetch as any).mock.calls[0][0];
+    expect(calledUrl).toContain('actions=update-found%2Cupdate-applied');
+  });
+
+  it('omits actions query parameter when actions are empty', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ data: [], total: 0 }),
+    });
+
+    await getAuditLog({
+      actions: [],
+    });
+
+    const calledUrl = (global.fetch as any).mock.calls[0][0];
+    expect(calledUrl).toBe('/api/v1/audit?limit=50');
+  });
+
   it('prefers explicit offset over page-derived offset', async () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,

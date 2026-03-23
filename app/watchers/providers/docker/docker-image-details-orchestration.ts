@@ -26,6 +26,8 @@ import {
 } from './runtime-details.js';
 import { getNumericTagShape } from './tag-candidates.js';
 
+const MIN_SPECIFIC_SEGMENTS = 3;
+
 function classifyTagPrecision(
   tag: string,
   transformTags: string | undefined,
@@ -34,7 +36,7 @@ function classifyTagPrecision(
   if (!parsedTag) return 'floating';
   const shape = getNumericTagShape(tag, transformTags);
   if (!shape) return 'floating';
-  return shape.numericSegments.length >= 3 ? 'specific' : 'floating';
+  return shape.numericSegments.length >= MIN_SPECIFIC_SEGMENTS ? 'specific' : 'floating';
 }
 
 export interface ContainerLabelOverrides {
@@ -454,12 +456,10 @@ export async function addImageDetailsToContainerOrchestration(
     containerId,
   );
 
-  const isSemver = parseSemver(transformTag(resolvedConfig.transformTags, tagName)) != null;
-  const tagPrecision = classifyTagPrecision(
-    tagName,
-    resolvedConfig.transformTags,
-    parseSemver(transformTag(resolvedConfig.transformTags, tagName)),
-  );
+  const transformedTag = transformTag(resolvedConfig.transformTags, tagName);
+  const parsedTag = parseSemver(transformedTag);
+  const isSemver = parsedTag != null;
+  const tagPrecision = classifyTagPrecision(tagName, resolvedConfig.transformTags, parsedTag);
   const watchDigest = isDigestToWatch(
     resolvedConfig.watchDigest,
     parsedImage,
@@ -533,3 +533,8 @@ export async function addImageDetailsToContainerOrchestration(
 
   return containerToReturn;
 }
+
+export {
+  classifyTagPrecision as testable_classifyTagPrecision,
+  getNumericTagShape as testable_getNumericTagShape,
+};

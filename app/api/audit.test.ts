@@ -329,6 +329,23 @@ describe('Audit Router', () => {
     });
   });
 
+  test('should ignore actions parameter containing only commas', () => {
+    auditRouter.init();
+    const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/')[1];
+
+    mockGetAuditEntries.mockReturnValue({ entries: [], total: 0 });
+
+    const req = createMockRequest({ query: { actions: ',,,' } });
+    const res = createMockResponse();
+
+    handler(req, res);
+
+    expect(mockGetAuditEntries).toHaveBeenCalledWith({
+      skip: 0,
+      limit: 50,
+    });
+  });
+
   test('should prefer action over actions when both provided', () => {
     auditRouter.init();
     const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/')[1];

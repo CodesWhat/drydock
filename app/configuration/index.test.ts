@@ -319,11 +319,22 @@ test('getServerConfiguration should allow disabling metrics auth', async () => {
 
 test('getServerConfiguration should parse DD_SERVER_METRICS_TOKEN', async () => {
   delete configuration.ddEnvVars.DD_SERVER_PORT;
-  configuration.ddEnvVars.DD_SERVER_METRICS_TOKEN = 'my-prom-token';
+  configuration.ddEnvVars.DD_SERVER_METRICS_TOKEN = 'my-prom-metrics-token';
   const config = configuration.getServerConfiguration();
   expect(config.metrics).toStrictEqual({
     auth: true,
-    token: 'my-prom-token',
+    token: 'my-prom-metrics-token',
+  });
+  delete configuration.ddEnvVars.DD_SERVER_METRICS_TOKEN;
+});
+
+test('getServerConfiguration should allow DD_SERVER_METRICS_TOKEN to be empty', async () => {
+  delete configuration.ddEnvVars.DD_SERVER_PORT;
+  configuration.ddEnvVars.DD_SERVER_METRICS_TOKEN = '';
+  const config = configuration.getServerConfiguration();
+  expect(config.metrics).toStrictEqual({
+    auth: true,
+    token: '',
   });
   delete configuration.ddEnvVars.DD_SERVER_METRICS_TOKEN;
 });
@@ -940,6 +951,12 @@ describe('getServerConfiguration errors', () => {
     configuration.ddEnvVars.DD_SERVER_SESSION_MAXCONCURRENTSESSIONS = '0';
     expect(() => configuration.getServerConfiguration()).toThrow();
     delete configuration.ddEnvVars.DD_SERVER_SESSION_MAXCONCURRENTSESSIONS;
+  });
+
+  test('should throw when metrics token is shorter than 16 characters', () => {
+    configuration.ddEnvVars.DD_SERVER_METRICS_TOKEN = 'short-token';
+    expect(() => configuration.getServerConfiguration()).toThrow();
+    delete configuration.ddEnvVars.DD_SERVER_METRICS_TOKEN;
   });
 
   test('should fallback to defaults when nested server config is null', () => {

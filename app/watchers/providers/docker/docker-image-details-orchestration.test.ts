@@ -2,7 +2,11 @@ import { afterEach, describe, expect, test, vi } from 'vitest';
 
 import * as registry from '../../../registry/index.js';
 import * as storeContainer from '../../../store/container.js';
-import { addImageDetailsToContainerOrchestration } from './docker-image-details-orchestration.js';
+import {
+  addImageDetailsToContainerOrchestration,
+  testable_classifyTagPrecision,
+  testable_getNumericTagShape,
+} from './docker-image-details-orchestration.js';
 
 function createDockerSummaryContainer(overrides: Record<string, any> = {}) {
   return {
@@ -94,6 +98,39 @@ afterEach(() => {
 });
 
 describe('docker image details orchestration module', () => {
+  test('testable_getNumericTagShape derives numeric segment counts across tag formats', () => {
+    expect(testable_getNumericTagShape('1.2.3', undefined)).toMatchObject({
+      prefix: '',
+      numericSegments: ['1', '2', '3'],
+      suffix: '',
+    });
+    expect(testable_getNumericTagShape('v3', undefined)).toMatchObject({
+      prefix: 'v',
+      numericSegments: ['3'],
+      suffix: '',
+    });
+    expect(testable_getNumericTagShape('1.4-alpine', undefined)).toMatchObject({
+      prefix: '',
+      numericSegments: ['1', '4'],
+      suffix: '-alpine',
+    });
+    expect(testable_getNumericTagShape('v2.0.1-alpine', '^v(.*) => $1')).toMatchObject({
+      prefix: '',
+      numericSegments: ['2', '0', '1'],
+      suffix: '-alpine',
+    });
+    expect(testable_getNumericTagShape('latest', undefined)).toBeNull();
+  });
+
+  test('testable_classifyTagPrecision distinguishes specific releases from floating aliases', () => {
+    expect(testable_classifyTagPrecision('1.2.3', undefined, {})).toBe('specific');
+    expect(testable_classifyTagPrecision('1.4', undefined, {})).toBe('floating');
+    expect(testable_classifyTagPrecision('v3', undefined, {})).toBe('floating');
+    expect(testable_classifyTagPrecision('latest', undefined, {})).toBe('floating');
+    expect(testable_classifyTagPrecision('v2.0.1-alpine', '^v(.*) => $1', {})).toBe('specific');
+    expect(testable_classifyTagPrecision('1.2.3', undefined, null)).toBe('floating');
+  });
+
   test('refreshes runtime and image details for containers already present in store', async () => {
     const containerInStore = {
       id: 'container-1',

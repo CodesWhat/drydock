@@ -404,7 +404,7 @@ export function getServerConfiguration() {
     metrics: joi
       .object({
         auth: joi.boolean().default(true),
-        token: joi.string().allow('').default(''),
+        token: joi.string().min(16).allow('').default(''),
       })
       .default({}),
   });

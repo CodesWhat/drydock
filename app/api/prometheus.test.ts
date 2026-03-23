@@ -98,6 +98,17 @@ describe('Prometheus Router', () => {
       });
     });
 
+    function initMetricsTokenAuth(token = testToken) {
+      getServerConfiguration.mockReturnValue({
+        metrics: {
+          auth: true,
+          token,
+        },
+      });
+
+      prometheusRouter.init();
+    }
+
     test('should use bearer token middleware when token is configured', () => {
       const router = prometheusRouter.init();
 
@@ -106,6 +117,7 @@ describe('Prometheus Router', () => {
     });
 
     test('should return 200 for valid bearer token', () => {
+      initMetricsTokenAuth();
       const req = { headers: { authorization: `Bearer ${testToken}` } };
       const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
       const next = vi.fn();
@@ -117,6 +129,7 @@ describe('Prometheus Router', () => {
     });
 
     test('should return 401 for invalid bearer token', () => {
+      initMetricsTokenAuth();
       const req = { headers: { authorization: 'Bearer wrong-token' } };
       const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
       const next = vi.fn();
@@ -129,6 +142,7 @@ describe('Prometheus Router', () => {
     });
 
     test('should return 401 when authorization header is missing', () => {
+      initMetricsTokenAuth();
       const req = { headers: {} };
       const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
       const next = vi.fn();
@@ -141,6 +155,7 @@ describe('Prometheus Router', () => {
     });
 
     test('should accept lowercase "bearer" scheme (RFC 7235)', () => {
+      initMetricsTokenAuth();
       const req = { headers: { authorization: `bearer ${testToken}` } };
       const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
       const next = vi.fn();
@@ -152,6 +167,7 @@ describe('Prometheus Router', () => {
     });
 
     test('should return 401 for wrong auth scheme', () => {
+      initMetricsTokenAuth();
       const req = { headers: { authorization: `Basic ${testToken}` } };
       const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
       const next = vi.fn();
@@ -178,6 +194,7 @@ describe('Prometheus Router', () => {
     });
 
     test('should use timing-safe comparison to prevent timing attacks', () => {
+      initMetricsTokenAuth();
       // Verify that different-length tokens don't cause crashes or bypass.
       // The SHA-256 hash normalization ensures buffers are always the same length.
       const req = { headers: { authorization: 'Bearer x' } };
@@ -188,6 +205,36 @@ describe('Prometheus Router', () => {
 
       expect(next).not.toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(401);
+    });
+
+    test('should keep using the expected token hash computed during init', () => {
+      const initialToken = 'initial-token';
+      const rotatedToken = 'rotated-token';
+
+      initMetricsTokenAuth(initialToken);
+
+      getServerConfiguration.mockReturnValue({
+        metrics: {
+          auth: true,
+          token: rotatedToken,
+        },
+      });
+
+      const initialReq = { headers: { authorization: `Bearer ${initialToken}` } };
+      const initialRes = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const initialNext = vi.fn();
+      prometheusRouter.authenticateMetricsToken(initialReq, initialRes, initialNext);
+
+      const rotatedReq = { headers: { authorization: `Bearer ${rotatedToken}` } };
+      const rotatedRes = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const rotatedNext = vi.fn();
+      prometheusRouter.authenticateMetricsToken(rotatedReq, rotatedRes, rotatedNext);
+
+      expect(initialNext).toHaveBeenCalled();
+      expect(initialRes.status).not.toHaveBeenCalled();
+      expect(rotatedNext).not.toHaveBeenCalled();
+      expect(rotatedRes.status).toHaveBeenCalledWith(401);
+      expect(rotatedRes.json).toHaveBeenCalledWith({ error: 'Unauthorized' });
     });
   });
 });

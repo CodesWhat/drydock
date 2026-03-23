@@ -178,6 +178,65 @@ test('model should accept sourceRepo and releaseNotes metadata', async () => {
   });
 });
 
+test.each([
+  'specific',
+  'floating',
+] as const)('model should accept image.tag.tagPrecision=%s', (tagPrecision) => {
+  const containerValidated = container.validate({
+    id: `container-tag-precision-${tagPrecision}`,
+    name: 'test',
+    watcher: 'test',
+    image: {
+      id: `image-tag-precision-${tagPrecision}`,
+      registry: {
+        name: 'hub',
+        url: 'https://hub',
+      },
+      name: 'organization/image',
+      tag: {
+        value: tagPrecision === 'specific' ? '1.2.3' : 'latest',
+        semver: tagPrecision === 'specific',
+        tagPrecision,
+      },
+      digest: {
+        watch: false,
+      },
+      architecture: 'arch',
+      os: 'os',
+    },
+  });
+
+  expect(containerValidated.image.tag.tagPrecision).toBe(tagPrecision);
+});
+
+test('model should reject invalid image.tag.tagPrecision values', () => {
+  expect(() =>
+    container.validate({
+      id: 'container-tag-precision-invalid',
+      name: 'test',
+      watcher: 'test',
+      image: {
+        id: 'image-tag-precision-invalid',
+        registry: {
+          name: 'hub',
+          url: 'https://hub',
+        },
+        name: 'organization/image',
+        tag: {
+          value: 'latest',
+          semver: false,
+          tagPrecision: 'alias',
+        },
+        digest: {
+          watch: false,
+        },
+        architecture: 'arch',
+        os: 'os',
+      },
+    }),
+  ).toThrow();
+});
+
 test('model should not be validated when invalid', async () => {
   expect(() => {
     container.validate({});
