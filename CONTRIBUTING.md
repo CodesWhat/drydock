@@ -78,7 +78,7 @@ You don't need to run the full test suite, coverage gates, or e2e tests locally.
 
 Drydock is a Docker container update manager with a dynamic component registry:
 
-```
+```text
 app/                        # Backend (TypeScript, Express, LokiJS)
 ├── watchers/providers/     # Monitor containers (Docker socket)
 ├── registries/providers/   # Query image registries (23 providers)
@@ -101,7 +101,7 @@ e2e/                        # End-to-end tests (Cucumber + Playwright)
 
 **Component registry pattern:** Components are loaded dynamically from environment variables:
 
-```
+```text
 DD_REGISTRY_GHCR_PRIVATE_TOKEN=xxx  →  loads registries/providers/ghcr/Ghcr.ts
 DD_TRIGGER_SLACK_MYSLACK_TOKEN=xxx  →  loads triggers/providers/slack/Slack.ts
 DD_WATCHER_LOCAL_SOCKET=xxx         →  loads watchers/providers/docker/Docker.ts

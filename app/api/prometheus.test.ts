@@ -1,5 +1,3 @@
-import { createHash } from 'node:crypto';
-
 vi.mock('express', () => ({
   default: {
     Router: vi.fn(() => ({
