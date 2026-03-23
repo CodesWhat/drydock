@@ -99,7 +99,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          max_attempts=40
+          max_attempts=80
           sleep_seconds=15
 
           for attempt in $(seq 1 "${max_attempts}"); do
