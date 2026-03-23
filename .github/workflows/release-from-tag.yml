@@ -423,18 +423,23 @@ jobs:
           set -euo pipefail
           notes_path="dist/release-notes-${RELEASE_TAG}.md"
 
-          # Stable and RC releases require a CHANGELOG entry
+          # Try exact version first, then fall back to [Unreleased] for pre-releases
           entry_path="$(mktemp)"
           missing_heading="## [${RELEASE_TAG#v}] - YYYY-MM-DD"
           if ! node scripts/extract-changelog-entry.mjs --version "${RELEASE_TAG}" --file CHANGELOG.md > "${entry_path}"; then
-            rm -f "${entry_path}" "${notes_path}"
-            echo "::error::Release notes generation failed: CHANGELOG entry missing for ${RELEASE_TAG}. Add heading '${missing_heading}' and retry release."
-            {
-              echo "### Release Notes Generation"
-              echo "- Result: FAIL"
-              echo "- AI_ACTION_REQUIRED: Add CHANGELOG entry for \`${RELEASE_TAG}\` using heading \`${missing_heading}\`, then re-run release."
-            } >> "${GITHUB_STEP_SUMMARY}"
-            exit 1
+            # For pre-releases (rc, beta, alpha), try [Unreleased] as fallback
+            if [[ "${RELEASE_TAG}" == *-* ]] && node scripts/extract-changelog-entry.mjs --version "Unreleased" --file CHANGELOG.md > "${entry_path}" 2>/dev/null; then
+              echo "Using [Unreleased] changelog section for pre-release ${RELEASE_TAG}."
+            else
+              rm -f "${entry_path}" "${notes_path}"
+              echo "::error::Release notes generation failed: CHANGELOG entry missing for ${RELEASE_TAG}. Add heading '${missing_heading}' and retry release."
+              {
+                echo "### Release Notes Generation"
+                echo "- Result: FAIL"
+                echo "- AI_ACTION_REQUIRED: Add CHANGELOG entry for \`${RELEASE_TAG}\` using heading \`${missing_heading}\`, then re-run release."
+              } >> "${GITHUB_STEP_SUMMARY}"
+              exit 1
+            fi
           fi
           {
             echo "# ${RELEASE_TAG}"
