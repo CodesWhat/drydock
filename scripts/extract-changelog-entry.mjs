@@ -47,14 +47,17 @@ export function extractChangelogEntry(changelog, version) {
     );
   }
 
-  const strictHeadingRegex = new RegExp(
-    `^##\\s+\\[${escapeRegExp(normalizedVersion)}\\]\\s+-\\s+\\d{4}-\\d{2}-\\d{2}\\s*$`,
-    'u',
-  );
-  if (!strictHeadingRegex.test(startMatch[0])) {
-    throw new Error(
-      `Invalid changelog heading for version ${normalizedVersion}. Expected heading format: ## [${normalizedVersion}] - YYYY-MM-DD.`,
+  // Skip date format validation for [Unreleased] heading
+  if (normalizedVersion.toLowerCase() !== 'unreleased') {
+    const strictHeadingRegex = new RegExp(
+      `^##\\s+\\[${escapeRegExp(normalizedVersion)}\\]\\s+-\\s+\\d{4}-\\d{2}-\\d{2}\\s*$`,
+      'u',
     );
+    if (!strictHeadingRegex.test(startMatch[0])) {
+      throw new Error(
+        `Invalid changelog heading for version ${normalizedVersion}. Expected heading format: ## [${normalizedVersion}] - YYYY-MM-DD.`,
+      );
+    }
   }
 
   const startIndex = startMatch.index;
