@@ -19,7 +19,7 @@ import type {
 import { getWatcherConfiguration } from './watcherConfiguration';
 
 const DONUT_CIRCUMFERENCE = 301.6;
-const RECENT_UPDATES_LIMIT = 6;
+
 const FILTER_KIND_ANY = 'ANY'.toLowerCase();
 
 const UPDATE_BREAKDOWN_BUCKETS: ReadonlyArray<Omit<UpdateBreakdownBucket, 'count'>> = [
@@ -205,32 +205,6 @@ function comparePendingRecentUpdates(
     return byDetectedAt;
   }
   return left.row.name.localeCompare(right.row.name);
-}
-
-function insertPendingRecentUpdate(
-  topPendingUpdates: PendingRecentUpdateCandidate[],
-  candidate: PendingRecentUpdateCandidate,
-  maxItems: number,
-) {
-  let insertAt = -1;
-  for (let index = 0; index < topPendingUpdates.length; index += 1) {
-    if (comparePendingRecentUpdates(candidate, topPendingUpdates[index]) < 0) {
-      insertAt = index;
-      break;
-    }
-  }
-
-  if (insertAt === -1) {
-    if (topPendingUpdates.length < maxItems) {
-      topPendingUpdates.push(candidate);
-    }
-    return;
-  }
-
-  topPendingUpdates.splice(insertAt, 0, candidate);
-  if (topPendingUpdates.length > maxItems) {
-    topPendingUpdates.pop();
-  }
 }
 
 function formatAgentHost(agent: DashboardAgent): string | undefined {
@@ -590,20 +564,17 @@ function buildRecentUpdateRows(
   // Only show containers with actual available updates — registry failures
   // ("check failed") are surfaced elsewhere and should not appear in the
   // "Updates Available" widget (#186).
-  const topPendingUpdates: PendingRecentUpdateCandidate[] = [];
+  const candidates: PendingRecentUpdateCandidate[] = [];
   for (const container of containers) {
     if (!isPendingRecentUpdateContainer(container)) {
       continue;
     }
 
-    insertPendingRecentUpdate(
-      topPendingUpdates,
-      toPendingRecentUpdateCandidate(container, recentStatusByContainer),
-      RECENT_UPDATES_LIMIT,
-    );
+    candidates.push(toPendingRecentUpdateCandidate(container, recentStatusByContainer));
   }
 
-  return topPendingUpdates.map((candidate) => candidate.row).slice(0, RECENT_UPDATES_LIMIT);
+  candidates.sort(comparePendingRecentUpdates);
+  return candidates.map((candidate) => candidate.row);
 }
 
 function useRecentUpdatesComputed(input: UseDashboardComputedInput) {

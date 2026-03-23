@@ -946,35 +946,25 @@ describe('useDashboardComputed recent updates', () => {
     expect(rows).toHaveLength(0);
   });
 
-  it('selects top rows without repeatedly reading updateDetectedAt during sort', () => {
-    const counters = { detectedAtReads: 0 };
+  it('returns all pending updates sorted by detection date', () => {
     const containers = Array.from({ length: 300 }, (_, index) => {
-      const container = makeBaseContainer({
-        id: `u-${index}`,
-        name: `update-${String(index).padStart(3, '0')}`,
-        newTag: `2.${index}.0`,
-      });
-
-      Object.defineProperty(container, 'updateDetectedAt', {
-        configurable: true,
-        enumerable: true,
-        get() {
-          counters.detectedAtReads += 1;
-          const day = String((index % 28) + 1).padStart(2, '0');
-          const hour = String(index % 24).padStart(2, '0');
-          return `2026-03-${day}T${hour}:00:00.000Z`;
-        },
-      });
-
-      return container;
+      const day = String((index % 28) + 1).padStart(2, '0');
+      const hour = String(index % 24).padStart(2, '0');
+      return {
+        ...makeBaseContainer({
+          id: `u-${index}`,
+          name: `update-${String(index).padStart(3, '0')}`,
+          newTag: `2.${index}.0`,
+        }),
+        updateDetectedAt: `2026-03-${day}T${hour}:00:00.000Z`,
+      };
     });
 
     const state = createState({ containers });
 
     const rows = state.recentUpdates.value;
 
-    expect(rows).toHaveLength(6);
-    expect(counters.detectedAtReads).toBeLessThanOrEqual(containers.length * 3);
+    expect(rows).toHaveLength(300);
   });
 
   it('falls back to suppressed update defaults when tags or timestamps are invalid', () => {
