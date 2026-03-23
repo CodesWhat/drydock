@@ -13,7 +13,14 @@ function factory(props: Record<string, any> = {}, slots: Record<string, any> = {
     },
     slots,
     global: {
-      stubs: { AppIcon: { template: '<span class="app-icon-stub" />' } },
+      stubs: {
+        AppIcon: { template: '<span class="app-icon-stub" />' },
+        AppIconButton: {
+          props: ['icon', 'variant', 'tooltip', 'ariaLabel'],
+          template:
+            '<button class="app-icon-button-stub" :data-icon="icon" :data-variant="variant" :aria-label="ariaLabel"><slot /></button>',
+        },
+      },
       directives: { tooltip: {} },
     },
   });
@@ -30,7 +37,14 @@ function factoryWithTooltip(props: Record<string, any> = {}, slots: Record<strin
     },
     slots,
     global: {
-      stubs: { AppIcon: { template: '<span class="app-icon-stub" />' } },
+      stubs: {
+        AppIcon: { template: '<span class="app-icon-stub" />' },
+        AppIconButton: {
+          props: ['icon', 'variant', 'tooltip', 'ariaLabel'],
+          template:
+            '<button class="app-icon-button-stub" :data-icon="icon" :data-variant="variant" :aria-label="ariaLabel"><slot /></button>',
+        },
+      },
       directives: { tooltip: tooltipDirective },
     },
   });
@@ -57,6 +71,14 @@ describe('DataFilterBar', () => {
   });
 
   describe('filter toggle', () => {
+    it('renders the filter toggle as an AppIconButton', () => {
+      const w = factory();
+      const filterBtn = w.find('.app-icon-button-stub[aria-label="Toggle filters"]');
+      expect(filterBtn.exists()).toBe(true);
+      expect(filterBtn.attributes('data-icon')).toBe('filter');
+      expect(filterBtn.attributes('data-variant')).toBe('plain');
+    });
+
     it('renders filter button when hideFilter is not set', () => {
       const w = factory();
       const filterBtn = w.find('button[aria-label="Toggle filters"]');

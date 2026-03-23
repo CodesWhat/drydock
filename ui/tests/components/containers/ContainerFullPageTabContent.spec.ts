@@ -860,6 +860,40 @@ describe('ContainerFullPageTabContent', () => {
     expect(errorWrapper.text()).toContain('SBOM refresh failed');
   });
 
+  it('shows floating tag badge in overview when tag precision is floating and digest watch is disabled', () => {
+    activeDetailTab.value = 'overview';
+    selectedContainer.value = makeContainer({
+      newTag: undefined,
+      tagPrecision: 'floating',
+      imageDigestWatch: false,
+    });
+
+    const wrapper = mountComponent();
+
+    expect(wrapper.find('[data-test="floating-tag-badge"]').exists()).toBe(true);
+  });
+
+  it('hides floating tag badge in overview when tag is specific or digest watch is enabled', async () => {
+    activeDetailTab.value = 'overview';
+    selectedContainer.value = makeContainer({
+      newTag: undefined,
+      tagPrecision: 'specific',
+      imageDigestWatch: false,
+    });
+
+    const wrapper = mountComponent();
+    expect(wrapper.find('[data-test="floating-tag-badge"]').exists()).toBe(false);
+
+    selectedContainer.value = makeContainer({
+      newTag: undefined,
+      tagPrecision: 'floating',
+      imageDigestWatch: true,
+    });
+    await nextTick();
+
+    expect(wrapper.find('[data-test="floating-tag-badge"]').exists()).toBe(false);
+  });
+
   it('renders logs tab with the real-time log viewer component', () => {
     activeDetailTab.value = 'logs';
     selectedContainer.value = makeContainer({ id: 'container-99', name: 'api' });

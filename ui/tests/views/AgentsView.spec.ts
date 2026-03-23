@@ -69,7 +69,16 @@ function makeAgent(overrides: Record<string, any> = {}) {
 
 async function mountAgentsView() {
   const wrapper = mountWithPlugins(AgentsView, {
-    global: { stubs: dataViewStubs },
+    global: {
+      stubs: {
+        ...dataViewStubs,
+        AppIconButton: {
+          props: ['icon', 'variant', 'tooltip', 'ariaLabel'],
+          template:
+            '<button class="app-icon-button-stub" :data-icon="icon" :data-variant="variant" :aria-label="ariaLabel"><slot /></button>',
+        },
+      },
+    },
   });
   mountedWrappers.push(wrapper);
   await flushPromises();
@@ -136,6 +145,15 @@ describe('AgentsView', () => {
 
     expect(wrapper.text()).toContain('boom');
     expect(wrapper.find('.data-table').attributes('data-row-count')).toBe('0');
+  });
+
+  it('renders the table column picker as an AppIconButton', async () => {
+    const wrapper = await mountAgentsView();
+
+    const columnPicker = wrapper.find('.app-icon-button-stub[aria-label="Toggle columns"]');
+    expect(columnPicker.exists()).toBe(true);
+    expect(columnPicker.attributes('data-icon')).toBe('config');
+    expect(columnPicker.attributes('data-variant')).toBe('plain');
   });
 
   it('refreshes agents when agent status SSE event is received', async () => {

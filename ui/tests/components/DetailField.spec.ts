@@ -19,7 +19,7 @@ describe('DetailField', () => {
       slots: { default: '<span class="custom">v1.2.3</span>' },
     });
 
-    const valueDiv = wrapper.get('.dd-text-body');
+    const valueDiv = wrapper.get('.text-2xs-plus');
     expect(valueDiv.get('.custom').text()).toBe('v1.2.3');
   });
 
@@ -35,14 +35,14 @@ describe('DetailField', () => {
     expect(labelDiv.classes()).toContain('dd-text-label');
   });
 
-  it('value div uses dd-text-body class', () => {
+  it('value div uses text-2xs-plus class', () => {
     const wrapper = mount(DetailField, {
       props: { label: 'Status' },
       slots: { default: 'running' },
     });
 
-    const valueDiv = wrapper.get('.dd-text-body');
-    expect(valueDiv.classes()).toContain('dd-text-body');
+    const valueDiv = wrapper.get('.text-2xs-plus');
+    expect(valueDiv.classes()).toContain('text-2xs-plus');
   });
 
   it('applies mb-0.5 when compact is true', () => {
@@ -73,7 +73,7 @@ describe('DetailField', () => {
       slots: { default: 'abc123def' },
     });
 
-    const valueDiv = wrapper.get('.dd-text-body');
+    const valueDiv = wrapper.get('.text-2xs-plus');
     expect(valueDiv.classes()).toContain('font-mono');
   });
 
@@ -87,7 +87,7 @@ describe('DetailField', () => {
     expect(labelDiv.classes()).toContain('mb-1');
     expect(labelDiv.classes()).not.toContain('mb-0.5');
 
-    const valueDiv = wrapper.get('.dd-text-body');
+    const valueDiv = wrapper.get('.text-2xs-plus');
     expect(valueDiv.classes()).not.toContain('font-mono');
   });
 });

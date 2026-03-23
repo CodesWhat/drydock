@@ -103,4 +103,28 @@ describe('ContainerSideDetail', () => {
     expect(panelAfter.attributes('style')).toContain('flex: 0 0 var(--dd-layout-panel-width-md)');
     expect(panelAfter.attributes('style')).toContain('width: var(--dd-layout-panel-width-md)');
   });
+
+  it('renders the selected container name with direct heading utility classes', () => {
+    const wrapper = mount(ContainerSideDetail, {
+      global: {
+        components: {
+          DetailPanel,
+        },
+        stubs: {
+          AppIcon: { template: '<span class="app-icon-stub" />' },
+          ContainerSideTabContent: { template: '<div class="side-tab-content-stub" />' },
+        },
+        directives: {
+          tooltip: {},
+        },
+      },
+    });
+
+    const title = wrapper
+      .findAll('span')
+      .find((candidate) => candidate.text().trim() === selectedContainer.value.name);
+    expect(title).toBeDefined();
+    expect(title?.classes()).toContain('text-sm');
+    expect(title?.classes()).toContain('font-bold');
+  });
 });
