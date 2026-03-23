@@ -6,6 +6,7 @@ import ContainerLogs from './ContainerLogs.vue';
 import ContainerStats from './ContainerStats.vue';
 import UpdateMaturityBadge from './UpdateMaturityBadge.vue';
 import SuggestedTagBadge from './SuggestedTagBadge.vue';
+import FloatingTagBadge from './FloatingTagBadge.vue';
 import ReleaseNotesLink from './ReleaseNotesLink.vue';
 import { revealContainerEnv } from '../../services/container';
 import { errorMessage } from '../../utils/error';
@@ -261,11 +262,10 @@ const {
               <div v-if="selectedContainer.updateKind || selectedContainer.updateMaturity || selectedContainer.suggestedTag || (selectedContainer.tagPrecision === 'floating' && !selectedContainer.imageDigestWatch)" class="flex items-center gap-1.5 flex-wrap">
                 <UpdateMaturityBadge :maturity="selectedContainer.updateMaturity" :tooltip="selectedContainer.updateMaturityTooltip" />
                 <SuggestedTagBadge :tag="selectedContainer.suggestedTag" :current-tag="selectedContainer.currentTag" />
-                <span v-if="selectedContainer.tagPrecision === 'floating' && !selectedContainer.imageDigestWatch"
-                      v-tooltip.top="'This tag may be updated in-place by the registry. Enable dd.watch.digest=true or use a full semver tag for complete update detection.'"
-                      class="cursor-help">
-                  <AppBadge tone="caution" size="xs">floating tag</AppBadge>
-                </span>
+                <FloatingTagBadge
+                  :tag-precision="selectedContainer.tagPrecision"
+                  :image-digest-watch="selectedContainer.imageDigestWatch"
+                />
               </div>
               <ReleaseNotesLink :release-notes="selectedContainer.releaseNotes" :release-link="selectedContainer.releaseLink" />
               <div class="pt-1 space-y-1.5">

@@ -559,6 +559,7 @@ export function mapApiContainer(apiContainer: ApiContainerInput): Container {
   const currentTag = asNonEmptyString(apiContainer.image?.tag?.value) ?? 'latest';
   const currentSummary = deriveSecuritySummary(apiContainer);
   const updateSummary = deriveUpdateSecuritySummary(apiContainer);
+  const detectedAt = deriveUpdateDetectedAt(apiContainer);
 
   return {
     id,
@@ -576,15 +577,9 @@ export function mapApiContainer(apiContainer: ApiContainerInput): Container {
     sourceRepo: asNonEmptyString(apiContainer.sourceRepo),
     releaseNotes: deriveReleaseNotes(apiContainer),
     releaseLink: deriveReleaseLink(apiContainer),
-    updateDetectedAt: deriveUpdateDetectedAt(apiContainer),
-    updateMaturity: getUpdateMaturity(
-      deriveUpdateDetectedAt(apiContainer),
-      !!apiContainer.updateAvailable,
-    ),
-    updateMaturityTooltip: formatUpdateAge(
-      deriveUpdateDetectedAt(apiContainer),
-      !!apiContainer.updateAvailable,
-    ),
+    updateDetectedAt: detectedAt,
+    updateMaturity: getUpdateMaturity(detectedAt, !!apiContainer.updateAvailable),
+    updateMaturityTooltip: formatUpdateAge(detectedAt, !!apiContainer.updateAvailable),
     updatePolicyState,
     suppressedUpdateTag: deriveSuppressedUpdateTag(apiContainer, updatePolicyState),
     status: apiContainer.status === 'running' ? 'running' : 'stopped',

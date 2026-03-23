@@ -495,11 +495,11 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
             </template>
             <template #extra-buttons>
               <div v-if="agentViewMode === 'table'">
-                <AppButton size="icon-sm" variant="plain" class="text-2xs-plus" :class="showAgentColumnPicker ? 'dd-text dd-bg-elevated' : 'dd-text-secondary hover:dd-text hover:dd-bg-elevated'"
+                <AppIconButton icon="config" size="sm" variant="plain" class="text-2xs-plus"
+                        :class="showAgentColumnPicker ? 'dd-text dd-bg-elevated' : 'dd-text-secondary hover:dd-text hover:dd-bg-elevated'"
+                        aria-label="Toggle columns"
                         v-tooltip.top="'Toggle columns'"
-                        @click.stop="toggleAgentColumnPicker">
-                  <AppIcon name="config" :size="12" />
-                </AppButton>
+                        @click.stop="toggleAgentColumnPicker" />
               </div>
             </template>
           </DataFilterBar>

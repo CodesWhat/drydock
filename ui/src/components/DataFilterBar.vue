@@ -38,15 +38,12 @@ function viewModeLabel(id: string): string {
       <div class="flex items-center gap-2.5 relative">
         <!-- Filter toggle button -->
         <div v-if="!hideFilter" class="relative" v-tooltip.top="'Filters'">
-          <AppButton size="icon-sm" variant="plain" class="text-2xs-plus" type="button"
-                  
+          <AppIconButton icon="filter" size="sm" variant="plain" class="text-2xs-plus"
                   :class="showFilters || (activeFilterCount ?? 0) > 0 ? 'dd-text dd-bg-elevated' : 'dd-text-secondary hover:dd-text hover:dd-bg-elevated'"
                   aria-label="Toggle filters"
                   :aria-expanded="String(showFilters)"
                   :aria-controls="filterPanelId"
-                  @click.stop="emit('update:showFilters', !showFilters)">
-            <AppIcon name="filter" :size="13" />
-          </AppButton>
+                  @click.stop="emit('update:showFilters', !showFilters)" />
           <span v-if="(activeFilterCount ?? 0) > 0"
                 class="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full text-4xs font-bold flex items-center justify-center text-white pointer-events-none"
                 style="background: var(--dd-primary);">

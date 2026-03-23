@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import AppBadge from '../AppBadge.vue';
 import AppIconButton from '../AppIconButton.vue';
 import { useContainersViewTemplateContext } from './containersViewTemplateContext';
@@ -55,6 +56,11 @@ const {
   filterSearch,
   clearFilters,
 } = useContainersViewTemplateContext();
+
+const openActionsContainer = computed(
+  () =>
+    displayContainers.value.find((container) => container.name === openActionsMenu.value) ?? null,
+);
 </script>
 
 <template>
@@ -404,67 +410,6 @@ const {
         </template>
       </DataTable>
 
-      <!-- Actions dropdown (teleported to body so it renders in all view modes) -->
-      <Teleport to="body">
-        <template v-for="c in displayContainers" :key="'menu-' + getContainerViewKey(c)">
-          <div v-if="containerActionsEnabled && openActionsMenu === c.name"
-               class="z-modal min-w-[160px] py-1 dd-rounded shadow-lg"
-               :style="{
-                 ...actionsMenuStyle,
-                 backgroundColor: 'var(--dd-bg-card)',
-                 border: '1px solid var(--dd-border-strong)',
-                 boxShadow: 'var(--dd-shadow-tooltip)',
-               }"
-               @click.stop>
-            <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text" v-if="c.status === 'running'" 
-                    @click="closeActionsMenu(); confirmStop(c.name)">
-              <AppIcon name="stop" :size="12" class="w-3 text-center inline-flex justify-center" :style="{ color: 'var(--dd-danger)' }" />
-              Stop
-            </AppButton>
-            <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text" v-else 
-                    @click="closeActionsMenu(); startContainer(c.name)">
-              <AppIcon name="play" :size="12" class="w-3 text-center inline-flex justify-center" :style="{ color: 'var(--dd-success)' }" />
-              Start
-            </AppButton>
-            <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text" @click="closeActionsMenu(); confirmRestart(c.name)">
-              <AppIcon name="restart" :size="12" class="w-3 text-center inline-flex justify-center dd-text-muted" />
-              Restart
-            </AppButton>
-            <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text" @click="closeActionsMenu(); scanContainer(c.name)">
-              <AppIcon name="security" :size="12" class="w-3 text-center inline-flex justify-center" :style="{ color: 'var(--dd-secondary)' }" />
-              Scan
-            </AppButton>
-            <!-- Force update for blocked containers (even without newTag) -->
-            <template v-if="c.bouncer === 'blocked' && !c.newTag">
-              <div class="my-1" :style="{ borderTop: '1px solid var(--dd-border)' }" />
-              <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text" @click="closeActionsMenu(); confirmForceUpdate(c.name)">
-                <AppIcon name="bolt" :size="12" class="w-3 text-center inline-flex justify-center" :style="{ color: 'var(--dd-warning)' }" />
-                Force update
-              </AppButton>
-            </template>
-            <template v-if="c.newTag">
-              <div class="my-1" :style="{ borderTop: '1px solid var(--dd-border)' }" />
-              <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text" v-if="c.bouncer === 'blocked'"
-                      
-                      @click="closeActionsMenu(); confirmForceUpdate(c.name)">
-                <AppIcon name="bolt" :size="12" class="w-3 text-center inline-flex justify-center" :style="{ color: 'var(--dd-warning)' }" />
-                Force update
-              </AppButton>
-              <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text" @click="skipUpdate(c.name); closeActionsMenu()">
-                <AppIcon name="skip-forward" :size="12" class="w-3 text-center inline-flex justify-center dd-text-muted" />
-                Skip this update
-              </AppButton>
-            </template>
-            <div class="my-1" :style="{ borderTop: '1px solid var(--dd-border)' }" />
-            <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2" style="color: var(--dd-danger);"
-                    @click="closeActionsMenu(); confirmDelete(c.name)">
-              <AppIcon name="trash" :size="12" class="w-3 text-center inline-flex justify-center" />
-              Delete
-            </AppButton>
-          </div>
-        </template>
-      </Teleport>
-
       <!-- CONTAINER CARD GRID -->
       <DataCardGrid v-if="containerViewMode === 'cards'"
                     :items="group.containers"
@@ -708,6 +653,64 @@ const {
         </div><!-- /group body -->
       </template><!-- /v-for group -->
       </template><!-- /filteredContainers.length > 0 -->
+
+      <!-- Actions dropdown (teleported to body so it renders in all view modes) -->
+      <Teleport to="body">
+        <div v-if="containerActionsEnabled && openActionsContainer"
+             class="z-modal min-w-[160px] py-1 dd-rounded shadow-lg"
+             :style="{
+               ...actionsMenuStyle,
+               backgroundColor: 'var(--dd-bg-card)',
+               border: '1px solid var(--dd-border-strong)',
+               boxShadow: 'var(--dd-shadow-tooltip)',
+             }"
+             @click.stop>
+          <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text" v-if="openActionsContainer.status === 'running'"
+                  @click="confirmStop(openActionsContainer.name); closeActionsMenu()">
+            <AppIcon name="stop" :size="12" class="w-3 text-center inline-flex justify-center" :style="{ color: 'var(--dd-danger)' }" />
+            Stop
+          </AppButton>
+          <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text" v-else
+                  @click="startContainer(openActionsContainer.name); closeActionsMenu()">
+            <AppIcon name="play" :size="12" class="w-3 text-center inline-flex justify-center" :style="{ color: 'var(--dd-success)' }" />
+            Start
+          </AppButton>
+          <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text" @click="confirmRestart(openActionsContainer.name); closeActionsMenu()">
+            <AppIcon name="restart" :size="12" class="w-3 text-center inline-flex justify-center dd-text-muted" />
+            Restart
+          </AppButton>
+          <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text" @click="scanContainer(openActionsContainer.name); closeActionsMenu()">
+            <AppIcon name="security" :size="12" class="w-3 text-center inline-flex justify-center" :style="{ color: 'var(--dd-secondary)' }" />
+            Scan
+          </AppButton>
+          <!-- Force update for blocked containers (even without newTag) -->
+          <template v-if="openActionsContainer.bouncer === 'blocked' && !openActionsContainer.newTag">
+            <div class="my-1" :style="{ borderTop: '1px solid var(--dd-border)' }" />
+            <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text" @click="confirmForceUpdate(openActionsContainer.name); closeActionsMenu()">
+              <AppIcon name="bolt" :size="12" class="w-3 text-center inline-flex justify-center" :style="{ color: 'var(--dd-warning)' }" />
+              Force update
+            </AppButton>
+          </template>
+          <template v-if="openActionsContainer.newTag">
+            <div class="my-1" :style="{ borderTop: '1px solid var(--dd-border)' }" />
+            <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text" v-if="openActionsContainer.bouncer === 'blocked'"
+                    @click="confirmForceUpdate(openActionsContainer.name); closeActionsMenu()">
+              <AppIcon name="bolt" :size="12" class="w-3 text-center inline-flex justify-center" :style="{ color: 'var(--dd-warning)' }" />
+              Force update
+            </AppButton>
+            <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text" @click="skipUpdate(openActionsContainer.name); closeActionsMenu()">
+              <AppIcon name="skip-forward" :size="12" class="w-3 text-center inline-flex justify-center dd-text-muted" />
+              Skip this update
+            </AppButton>
+          </template>
+          <div class="my-1" :style="{ borderTop: '1px solid var(--dd-border)' }" />
+          <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2" style="color: var(--dd-danger);"
+                  @click="confirmDelete(openActionsContainer.name); closeActionsMenu()">
+            <AppIcon name="trash" :size="12" class="w-3 text-center inline-flex justify-center" />
+            Delete
+          </AppButton>
+        </div>
+      </Teleport>
 
       <!-- EMPTY STATE -->
       <EmptyState v-if="filteredContainers.length === 0"

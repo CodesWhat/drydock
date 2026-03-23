@@ -16,7 +16,7 @@ const props = withDefaults(defineProps<Props>(), {
     <div class="dd-text-label" :class="props.compact ? 'mb-0.5' : 'mb-1'" style="color: var(--dd-text-muted)">
       {{ props.label }}
     </div>
-    <div class="dd-text-body" :class="[props.mono && 'font-mono']" style="color: var(--dd-text)">
+    <div class="text-2xs-plus" :class="[props.mono && 'font-mono']" style="color: var(--dd-text)">
       <slot />
     </div>
   </div>

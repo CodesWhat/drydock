@@ -100,7 +100,7 @@ const {
           <StatusDot
             :status="selectedContainer.status === 'running' ? 'running' : 'stopped'"
             size="lg" />
-          <span class="dd-text-heading-panel truncate dd-text">
+          <span class="text-sm font-bold truncate dd-text">
             {{ selectedContainer.name }}
           </span>
         </div>
