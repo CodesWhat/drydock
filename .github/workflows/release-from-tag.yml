@@ -99,8 +99,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          max_attempts=80
-          sleep_seconds=15
+          max_attempts=25
+          sleep_seconds=60
 
           for attempt in $(seq 1 "${max_attempts}"); do
             runs_url="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/workflows/${CI_WORKFLOW_ID}/runs?head_sha=${GITHUB_SHA}&event=push&per_page=50"
