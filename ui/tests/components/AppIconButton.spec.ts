@@ -60,6 +60,19 @@ describe('AppIconButton', () => {
     expect(button.classes()).toContain('h-10');
   });
 
+  it('applies toolbar size classes (w-7 h-7)', () => {
+    const wrapper = mountButton({ size: 'toolbar' });
+    const button = wrapper.get('button');
+    expect(button.classes()).toContain('w-7');
+    expect(button.classes()).toContain('h-7');
+  });
+
+  it('passes icon size 13 for toolbar', () => {
+    const wrapper = mountButton({ size: 'toolbar' });
+    const icon = wrapper.findComponent(AppIcon);
+    expect(icon.props('size')).toBe(13);
+  });
+
   it('applies md size classes (w-11 h-11)', () => {
     const wrapper = mountButton({ size: 'md' });
     const button = wrapper.get('button');

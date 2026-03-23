@@ -110,18 +110,18 @@ const {
       </template>
       <template #extra-buttons>
         <div v-if="containerViewMode === 'table'">
-          <AppIconButton icon="config" size="xs" variant="secondary"
+          <AppIconButton icon="config" size="toolbar" variant="secondary"
             :class="showColumnPicker ? 'dd-text dd-bg-elevated' : ''"
             :tooltip="tt('Toggle columns')"
             @click.stop="toggleColumnPicker($event)" />
         </div>
       </template>
       <template #left>
-        <AppIconButton icon="stack" size="xs" variant="secondary"
+        <AppIconButton icon="stack" size="toolbar" variant="secondary"
           :class="groupByStack ? 'dd-text dd-bg-elevated' : ''"
           :tooltip="tt('Group by stack')"
           @click="groupByStack = !groupByStack" />
-        <AppIconButton icon="restart" size="xs" variant="secondary"
+        <AppIconButton icon="restart" size="toolbar" variant="secondary"
           :class="rechecking ? 'dd-text-muted cursor-wait' : ''"
           :disabled="rechecking"
           :loading="rechecking"

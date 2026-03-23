@@ -284,7 +284,7 @@ async function copyLogs(): Promise<void> {
 
 <template>
   <div
-    class="dd-rounded overflow-hidden flex flex-col min-h-0"
+    class="dd-rounded overflow-hidden flex flex-col min-h-0 flex-1"
     :style="{ backgroundColor: 'var(--dd-bg-code)' }"
     data-test="app-log-viewer"
   >
@@ -345,7 +345,8 @@ async function copyLogs(): Promise<void> {
             v-model="searchQuery"
             data-test="container-log-search-input"
             type="text"
-            class="w-full pl-7 pr-2 py-1.5 dd-rounded text-2xs-plus outline-none dd-bg dd-text dd-placeholder"
+            class="w-full pl-7 pr-2 py-1.5 dd-rounded text-2xs-plus outline-none dd-text dd-placeholder"
+            style="background-color: var(--dd-log-footer-bg)"
             placeholder="Search logs"
           />
         </div>
@@ -410,7 +411,6 @@ async function copyLogs(): Promise<void> {
           isMatchedEntry(entry.id) ? 'ring-1 ring-drydock-secondary/50' : '',
           isCurrentMatch(entry.id) ? 'bg-drydock-secondary/10' : '',
         ]"
-        :style="{ borderBottom: '1px solid var(--dd-log-line)' }"
       >
         <div class="flex items-start gap-2">
           <span v-if="props.showLineNumbers" class="shrink-0 tabular-nums dd-text-muted">{{ index + 1 }}</span>

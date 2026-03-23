@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import ScanProgressText from './ScanProgressText.vue';
+
 withDefaults(
   defineProps<{
     hasVulnerabilityData: boolean;

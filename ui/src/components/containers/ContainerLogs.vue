@@ -252,7 +252,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div data-test="container-logs" class="min-h-0 flex flex-col">
+  <div data-test="container-logs" class="min-h-0 flex flex-col flex-1">
     <AppLogViewer
       :entries="visibleEntries"
       :compact="props.compact"

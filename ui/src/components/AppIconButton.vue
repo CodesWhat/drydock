@@ -2,7 +2,7 @@
 import { computed, useAttrs } from 'vue';
 import AppIcon from './AppIcon.vue';
 
-type IconButtonSize = 'xs' | 'sm' | 'md' | 'lg';
+type IconButtonSize = 'toolbar' | 'xs' | 'sm' | 'md' | 'lg';
 type IconButtonVariant = 'muted' | 'secondary' | 'danger' | 'success' | 'plain';
 
 const props = withDefaults(
@@ -30,6 +30,7 @@ defineOptions({
 const attrs = useAttrs();
 
 const sizeClasses: Record<IconButtonSize, string> = {
+  toolbar: 'w-7 h-7',
   xs: 'w-9 h-9',
   sm: 'w-10 h-10',
   md: 'w-11 h-11',
@@ -37,6 +38,7 @@ const sizeClasses: Record<IconButtonSize, string> = {
 };
 
 const iconSizes: Record<IconButtonSize, number> = {
+  toolbar: 13,
   xs: 14,
   sm: 16,
   md: 18,

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import AppIconButton from './AppIconButton.vue';
+
 defineProps<{
   modelValue: string;
   filteredCount: number;
@@ -38,7 +40,7 @@ function viewModeLabel(id: string): string {
       <div class="flex items-center gap-2.5 relative">
         <!-- Filter toggle button -->
         <div v-if="!hideFilter" class="relative" v-tooltip.top="'Filters'">
-          <AppIconButton icon="filter" size="sm" variant="plain" class="text-2xs-plus"
+          <AppIconButton icon="filter" size="toolbar" variant="plain" class="text-2xs-plus"
                   :class="showFilters || (activeFilterCount ?? 0) > 0 ? 'dd-text dd-bg-elevated' : 'dd-text-secondary hover:dd-text hover:dd-bg-elevated'"
                   aria-label="Toggle filters"
                   :aria-expanded="String(showFilters)"

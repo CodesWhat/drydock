@@ -7,6 +7,7 @@ import AgentDetailLogsTab from '../components/agents/AgentDetailLogsTab.vue';
 import AgentDetailOverviewTab from '../components/agents/AgentDetailOverviewTab.vue';
 import AppBadge from '../components/AppBadge.vue';
 import AppTabBar from '../components/AppTabBar.vue';
+import AppIconButton from '../components/AppIconButton.vue';
 import DetailField from '../components/DetailField.vue';
 import StatusDot from '../components/StatusDot.vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
