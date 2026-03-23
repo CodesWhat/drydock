@@ -13,6 +13,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Bearer token auth for `/metrics` endpoint** — Set `DD_SERVER_METRICS_TOKEN` to authenticate Prometheus scrapers via `Authorization: Bearer <token>` without requiring session/basic auth. Uses SHA-256 hashing with timing-safe comparison. Three auth modes: (1) bearer token when token is set, (2) session/basic auth fallback, (3) no auth when `DD_SERVER_METRICS_AUTH=false`.
+- **Design system components** — Added shared UI building blocks: `AppIconButton` (icon-only button with WCAG 2.5.8 touch targets), `AppBadge` (tone-based badge with size/uppercase/dot props), `StatusDot` (semantic status indicator), `DetailField` (label+value pair), and `AppTabBar` (v-model tab bar with icons, counts, compact mode). Migrated dashboard, container, settings, layout, and config views to use the new components. ([Discussion #199](https://github.com/CodesWhat/drydock/discussions/199))
+- **Floating tag detection and UI indicator** — New `tagPrecision` classifier (`specific` | `floating`) detects mutable version aliases (e.g. `v3`, `1.4`) and auto-enables digest watching on non-Docker Hub registries. Container detail views show a caution badge when a floating tag is detected without digest watching enabled. ([Discussion #178](https://github.com/CodesWhat/drydock/discussions/178))
+- **Notification bell action filtering** — Audit log endpoint now supports an `actions` query parameter for comma-separated event type filtering. `NotificationBell` uses this to fetch only actionable alert types instead of the full audit log.
+- **Semantic typography utility classes** — Added `dd-text-label`, `dd-text-body`, `dd-text-heading-panel`, and related Tailwind utility classes for consistent text sizing across views.
+
+### Changed
+
+- **Container-update event deduplication** — Added `hasContainerChanged()` to detect meaningful state differences between existing and incoming container records. Suppresses redundant SSE `container-updated` events when a poll cycle returns identical data.
+- **Log viewer layout improvements** — Log entries now use `white-space: nowrap` for single-line scannable output (horizontal scroll for overflow), row alignment changed to `items-center` for consistent baselines, and the terminal has a `min-h-[300px]` floor. Log viewer fills container height with `flex-1`, removed line separators, and added dark background on search input.
+- **AppIconButton toolbar size** — Added `toolbar` size variant (w-7 h-7, 13px icon) for dense filter bars.
+
+### Fixed
+
+- **CalVer zero-padded month in strict family filter** — Tags like `2026.02.0` were rejected when the current tag was `2025.11.1` because zero-padded single digits (`01`–`09`) were treated as a family mismatch. Normal in CalVer month fields. ([#202](https://github.com/CodesWhat/drydock/issues/202))
+- **Dashboard updates widget 6-item cap** — Removed hard-coded `RECENT_UPDATES_LIMIT` that silently dropped entries beyond 6 in the Updates Available widget. The scroll container was already in place. ([#208](https://github.com/CodesWhat/drydock/issues/208))
+- **Disabled tooltip regression** — Restored pointer events on disabled `AppIconButton` so tooltips still explain why actions are unavailable (regressed lock button explanations in grouped views).
+- **AppTabBar accessibility** — Added `aria-label` in `iconOnly` mode so tabs are identifiable to assistive technology when visible labels are hidden.
+- **OpenAPI `/metrics` security spec** — Removed anonymous `{}` from security alternatives; runtime requires auth by default, spec should not advertise otherwise.
+- **Missing filter icon in DataFilterBar** — Restored `AppIconButton` import that was silently swallowed by Vue, making the filter icon invisible on all pages.
+- **Missing component imports** — Added missing imports in `SecurityEmptyState` and `AgentsView` that were silently dropped.
+- **tagPrecision mapper type safety** — Removed `as any` cast from tagPrecision container mapper.
+- **AppIconButton tooltip type** — Widened tooltip prop type and fixed ThemeToggle dead branch.
+
+### Accessibility
+
+- **Tooltip audit** — Added `v-tooltip` to interactive elements and status indicators missing tooltip hints: status dots (watchers, registries, triggers, audit, security), drag handles on dashboard widgets, icon-only badges (registry private/public), NotificationBell button, pagination and test buttons, and spinner/action-in-progress indicators. ([Discussion #199](https://github.com/CodesWhat/drydock/discussions/199))
+
+### Security
+
+- **Trivy supply chain advisory** — Published advisory page and site banner for Trivy supply chain compromise. Pinned Trivy versions and corrected advisory details.
+
+### Dependencies
+
+- **Vite 7.3 upgraded to 8.0** — Migrated to Vite 8.0 with Rolldown bundler.
+- **Patch/minor dependency bumps** — Updated all patch/minor dependencies and upgraded knip to v6.
+- **`fast-xml-parser` patched for CVE-2026-33349** — Additional patch on top of the v1.5.0 upgrade.
 
 ## [1.5.0] — 2026-03-19
 
