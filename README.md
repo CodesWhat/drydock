@@ -148,10 +148,12 @@ See the [Quick Start guide](https://getdrydock.com/docs/quickstart) for Docker C
 
 <h2 align="center" id="recent-updates">🆕 Recent Updates</h2>
 
-- **Digest notifications for triggers** — Batch update events with `MODE=digest` and configurable `DIGESTCRON`.
-- **System log WebSocket streaming** — Live system logs in the UI with backend WebSocket streaming support.
-- **Richer container list API controls** — `sort`/`order`, watched-kind filtering (`kind=watched|unwatched|all`), runtime status filtering, and maturity filtering.
-- **Watcher run visibility** — Watcher metadata now includes `lastRunAt`, shown in the UI as a relative timestamp.
+- **Real-time container log viewer** — WebSocket-based live log streaming with ANSI color rendering, JSON syntax highlighting, regex search, and gzip download.
+- **Dashboard customization** — Drag-to-reorder, resize, and per-widget visibility toggles with a dedicated edit mode.
+- **Resource monitoring widget** — CPU and memory usage bars with top-N resource consumers on the dashboard.
+- **Diagnostic debug dump** — One-click redacted system state export from Configuration > Diagnostics.
+- **Digest notifications** — Batch update events with `MODE=digest` and configurable `DIGESTCRON`.
+- **Trigger env var aliases** — Triggers accept `DD_ACTION_*` or `DD_NOTIFICATION_*` prefixes alongside `DD_TRIGGER_*`.
 
 <hr>
 
@@ -385,9 +387,9 @@ Drop-in replacement — swap the image, restart, done. All `WUD_*` env vars and 
 | **v1.4.4** ✅ | UI Polish & Hardening | Alias dedup hardening with 30s transient window (#156), dashboard host-status for remote watchers (#155), tooltip viewport fix (#165), click-to-copy version tags (#164), Simple Icons dark mode inversion, theme switcher fix, search button polish, URL rebrand to getdrydock.com |
 | **v1.5.0** ✅ | Observability & User-Requested Features | Real-time WebSocket log viewer with ANSI colors + JSON syntax highlighting, dashboard customization (grid layout, drag, resize, widget visibility), container resource monitoring (CPU/memory stats + dashboard widget), diagnostic debug dump, registry webhook receiver, trigger env var aliases (`DD_ACTION_*`/`DD_NOTIFICATION_*`), auth endpoint telemetry/guardrails, UI standardization (margins, text sizes, deprecation banners) |
 | **v1.5.1** | Scanner Decoupling | Backend-based scanner execution (docker/remote), Grype provider, scanner asset lifecycle |
-| **v1.6.0** | Notifications & Release Intel | Notification templates, MS Teams & Matrix triggers, remove all deprecated compatibility aliases (see [DEPRECATIONS.md](DEPRECATIONS.md)) |
-| **v1.7.0** | Smart Updates & UX | Dependency-aware ordering, clickable port links, image prune, static image monitoring |
-| **v1.8.0** | Fleet Management & Live Config | YAML config, live UI config panels, volume browser, parallel updates, SQLite store migration, i18n framework |
+| **v1.6.0** | Notifications & Release Intel | Notification templates, release notes in notifications, MS Teams & Matrix triggers, notification preferences UI, remove all deprecated compatibility aliases (see [DEPRECATIONS.md](DEPRECATIONS.md)) |
+| **v1.7.0** | Smart Updates & UX | Dependency-aware ordering, clickable port links, image prune, static image monitoring, image maturity indicator, keyboard shortcuts, container uptime display, PWA support |
+| **v1.8.0** | Fleet Management & Live Config | YAML config, live UI config panels, volume browser, parallel updates, SQLite store migration, i18n framework + Crowdin integration |
 | **v2.0.0** | Platform Expansion | Docker Swarm, Kubernetes watchers and triggers, basic GitOps |
 | **v2.1.0** | Advanced Deployment Patterns | Health check gates, canary deployments, durable self-update controller |
 | **v2.2.0** | Container Operations | Web terminal, file browser, image building, basic Podman support |
