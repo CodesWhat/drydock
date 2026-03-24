@@ -245,6 +245,9 @@ async function refreshStoredContainerImageFields(
   imageName: string,
   containerInStore: Container,
 ) {
+  if (!imageName) {
+    return;
+  }
   try {
     const currentImage = await watcher.dockerApi.getImage(imageName).inspect();
     const freshDigestRepo = getRepoDigest(currentImage);
@@ -410,6 +413,14 @@ export async function addImageDetailsToContainerOrchestration(
   const containerId = container.Id;
   const containerLabels: Record<string, string> = container.Labels || {};
   const dockerContainerName = getContainerName(container);
+
+  // Podman pod infra containers have an empty Image field — skip them
+  // to avoid broken API paths like /images//json that trigger 301 crashes
+  // in docker-modem's redirect handler (see GitHub issue #182).
+  if (!container.Image) {
+    return undefined;
+  }
+
   const runtimeDetailsFromSummary = getRuntimeDetailsFromContainerSummary(container);
 
   // Is container already in store? Refresh volatile image fields, then return it

@@ -131,6 +131,22 @@ describe('docker image details orchestration module', () => {
     expect(testable_classifyTagPrecision('1.2.3', undefined, null)).toBe('floating');
   });
 
+  test('returns undefined for containers with empty Image (Podman pod infra)', async () => {
+    const { watcher } = createWatcher();
+    const container = createDockerSummaryContainer({ Image: '' });
+    const helpers = createHelpers();
+
+    const result = await addImageDetailsToContainerOrchestration(
+      watcher as any,
+      container,
+      {},
+      helpers as any,
+    );
+
+    expect(result).toBeUndefined();
+    expect(watcher.dockerApi.getImage).not.toHaveBeenCalled();
+  });
+
   test('refreshes runtime and image details for containers already present in store', async () => {
     const containerInStore = {
       id: 'container-1',
