@@ -95,7 +95,7 @@ watchEffect(() => {
       <AppButton size="none" variant="link-secondary" weight="medium" class="text-2xs-plus" @click="handleViewAll">View all &rarr;</AppButton>
     </div>
 
-    <div class="flex-1 min-h-0 overflow-y-auto overscroll-contain dd-scroll-stable p-5 flex flex-col items-center justify-center relative">
+    <div class="flex-1 min-h-0 overflow-hidden p-5 flex flex-col items-center justify-center relative">
       <!-- Drag handle when header is hidden — pinned top-left -->
       <div v-if="!showHeader && editMode" class="drag-handle dd-drag-handle absolute top-2 left-2 z-10" v-tooltip.top="'Drag to reorder'"><AppIcon name="ph:dots-six" :size="14" /></div>
 
