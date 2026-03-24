@@ -141,6 +141,41 @@ describe('Docker Watcher', () => {
     });
   });
 
+  describe('Digest-only images skip version comparison', () => {
+    test('should skip version check when tag is sha256 digest', async () => {
+      const container = {
+        image: {
+          registry: { name: 'hub' },
+          tag: { value: 'sha256:abc123def456', semver: false },
+          digest: { watch: false },
+        },
+      };
+      setRegistryState({ hub: { getTags: vi.fn().mockResolvedValue([]) } });
+      const logChild = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
+      const result = await docker.findNewVersion(container, logChild);
+      expect(result.tag).toBe('sha256:abc123def456');
+      expect(result.noUpdateReason).toBe('Running by digest — no tag to compare');
+      expect(logChild.debug).toHaveBeenCalledWith(
+        'Digest-only image — no tag available for version comparison',
+      );
+    });
+
+    test('should skip version check when tag is unknown', async () => {
+      const container = {
+        image: {
+          registry: { name: 'hub' },
+          tag: { value: 'unknown', semver: false },
+          digest: { watch: false },
+        },
+      };
+      setRegistryState({ hub: { getTags: vi.fn().mockResolvedValue([]) } });
+      const logChild = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
+      const result = await docker.findNewVersion(container, logChild);
+      expect(result.tag).toBe('unknown');
+      expect(result.noUpdateReason).toBe('Running by digest — no tag to compare');
+    });
+  });
+
   describe('Additional Coverage - getTagCandidates empty', () => {
     test('should warn when no tags after include filter', async () => {
       const container = {

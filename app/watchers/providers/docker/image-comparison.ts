@@ -105,6 +105,14 @@ export async function findNewVersion(
 
   const result: ContainerResult = { tag: container.image.tag.value };
 
+  // Digest-only images have no tag to compare — skip version checking entirely
+  const currentTag = container.image.tag.value;
+  if (currentTag.startsWith('sha256:') || currentTag === 'unknown') {
+    logContainer.debug('Digest-only image — no tag available for version comparison');
+    result.noUpdateReason = 'Running by digest — no tag to compare';
+    return result;
+  }
+
   // Get all available tags
   const tags = await registryProvider.getTags(container.image);
 
