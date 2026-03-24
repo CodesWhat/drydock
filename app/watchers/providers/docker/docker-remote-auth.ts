@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import Dockerode from 'dockerode';
 import { resolveConfiguredPath } from '../../../runtime/paths.js';
+import { disableSocketRedirects } from './disable-socket-redirects.js';
 import { getErrorMessage } from './docker-helpers.js';
 import type { MutableOidcState, OidcContext, OidcRemoteAuthConfiguration } from './oidc.js';
 import {
@@ -101,6 +102,9 @@ export async function initWatcherWithRemoteAuth(watcher: DockerRemoteAuthWatcher
     }
   }
   watcher.dockerApi = new Dockerode(options);
+  if (!watcher.configuration.host) {
+    disableSocketRedirects(watcher.dockerApi);
+  }
 }
 
 export async function ensureRemoteAuthHeadersForWatcher(

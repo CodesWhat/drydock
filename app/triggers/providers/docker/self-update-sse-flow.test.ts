@@ -5,6 +5,9 @@ const mockDockerodeCtor = vi.hoisted(() => vi.fn());
 vi.mock('dockerode', () => ({
   default: mockDockerodeCtor,
 }));
+vi.mock('../../../watchers/providers/docker/disable-socket-redirects.js', () => ({
+  disableSocketRedirects: vi.fn(),
+}));
 vi.mock('../../../watchers/providers/docker/socket-version-probe.js', () => ({
   probeSocketApiVersion: vi.fn().mockResolvedValue(undefined),
 }));

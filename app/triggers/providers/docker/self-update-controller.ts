@@ -2,6 +2,7 @@ import Dockerode from 'dockerode';
 import { getErrorMessage } from '../../../util/error.js';
 import { toPositiveInteger } from '../../../util/parse.js';
 import { sleep } from '../../../util/sleep.js';
+import { disableSocketRedirects } from '../../../watchers/providers/docker/disable-socket-redirects.js';
 import { probeSocketApiVersion } from '../../../watchers/providers/docker/socket-version-probe.js';
 import {
   SELF_UPDATE_HEALTH_TIMEOUT_MS,
@@ -302,7 +303,9 @@ export async function runSelfUpdateController(): Promise<void> {
   if (apiVersion) {
     dockerOpts.version = `v${apiVersion}`;
   }
-  const controller = new SelfUpdateController(config, new Dockerode(dockerOpts));
+  const docker = new Dockerode(dockerOpts);
+  disableSocketRedirects(docker);
+  const controller = new SelfUpdateController(config, docker);
   await controller.run();
 }
 
