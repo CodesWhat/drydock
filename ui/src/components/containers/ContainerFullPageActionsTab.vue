@@ -74,7 +74,7 @@ const {
           <div>
             <div class="text-3xs uppercase tracking-wider mb-1.5 dd-text-muted">Actions</div>
             <div class="flex flex-wrap gap-2">
-              <AppButton size="md" :disabled="previewLoading"
+              <AppButton size="md" variant="outlined" :disabled="previewLoading"
                       @click="runContainerPreview">
                 {{ previewLoading ? 'Previewing...' : 'Preview Update' }}
               </AppButton>
@@ -89,7 +89,7 @@ const {
                       @click="confirmUpdate(selectedContainer.name)">
                 Update Now
               </AppButton>
-              <AppButton size="md" :disabled="actionInProgress === selectedContainer.name"
+              <AppButton size="md" variant="outlined" :disabled="actionInProgress === selectedContainer.name"
                       @click="scanContainer(selectedContainer.name)">
                 Scan Now
               </AppButton>
@@ -99,15 +99,15 @@ const {
           <div>
             <div class="text-3xs uppercase tracking-wider mb-1.5 dd-text-muted">Skip & Snooze</div>
             <div class="flex flex-wrap gap-2">
-              <AppButton size="md" :disabled="!selectedContainer.newTag || policyInProgress !== null"
+              <AppButton size="md" variant="outlined" :disabled="!selectedContainer.newTag || policyInProgress !== null"
                       @click="skipCurrentForSelected">
                 Skip This Update
               </AppButton>
-              <AppButton size="md" :disabled="policyInProgress !== null"
+              <AppButton size="md" variant="outlined" :disabled="policyInProgress !== null"
                       @click="snoozeSelected(1)">
                 Snooze 1d
               </AppButton>
-              <AppButton size="md" :disabled="policyInProgress !== null"
+              <AppButton size="md" variant="outlined" :disabled="policyInProgress !== null"
                       @click="snoozeSelected(7)">
                 Snooze 7d
               </AppButton>
@@ -116,11 +116,11 @@ const {
                 type="date"
                 class="px-2.5 py-1.5 dd-rounded text-2xs-plus outline-none dd-bg dd-text"
                 :disabled="policyInProgress !== null" />
-              <AppButton size="md" :disabled="!snoozeDateInput || policyInProgress !== null"
+              <AppButton size="md" variant="outlined" :disabled="!snoozeDateInput || policyInProgress !== null"
                       @click="snoozeSelectedUntilDate">
                 Snooze Until
               </AppButton>
-              <AppButton size="md" :disabled="!selectedSnoozeUntil || policyInProgress !== null"
+              <AppButton size="md" variant="outlined" :disabled="!selectedSnoozeUntil || policyInProgress !== null"
                       @click="unsnoozeSelected">
                 Unsnooze
               </AppButton>
@@ -146,11 +146,11 @@ const {
                 class="w-[104px] px-2.5 py-1.5 dd-rounded text-2xs-plus outline-none dd-bg dd-text"
                 :disabled="policyInProgress !== null"
               />
-              <AppButton size="md" :disabled="policyInProgress !== null"
+              <AppButton size="md" variant="outlined" :disabled="policyInProgress !== null"
                       @click="setMaturityPolicySelected(maturityModeInput)">
                 Apply Maturity
               </AppButton>
-              <AppButton size="md" :disabled="!selectedHasMaturityPolicy || policyInProgress !== null"
+              <AppButton size="md" variant="outlined" :disabled="!selectedHasMaturityPolicy || policyInProgress !== null"
                       @click="clearMaturityPolicySelected">
                 Clear Maturity
               </AppButton>
@@ -160,11 +160,11 @@ const {
           <div>
             <div class="text-3xs uppercase tracking-wider mb-1.5 dd-text-muted">Reset</div>
             <div class="flex flex-wrap gap-2">
-              <AppButton size="md" :disabled="selectedSkipTags.length === 0 && selectedSkipDigests.length === 0"
+              <AppButton size="md" variant="outlined" :disabled="selectedSkipTags.length === 0 && selectedSkipDigests.length === 0"
                       @click="clearSkipsSelected">
                 Clear Skips
               </AppButton>
-              <AppButton size="md" :disabled="Object.keys(selectedUpdatePolicy).length === 0"
+              <AppButton size="md" variant="outlined" :disabled="Object.keys(selectedUpdatePolicy).length === 0"
                       @click="clearPolicySelected">
                 Clear Policy
               </AppButton>
@@ -291,7 +291,7 @@ const {
                 <div class="text-xs font-semibold dd-text truncate">{{ trigger.type }}.{{ trigger.name }}</div>
                 <div v-if="trigger.agent" class="text-2xs-plus dd-text-muted">agent: {{ trigger.agent }}</div>
               </div>
-              <AppButton size="md" :disabled="triggerRunInProgress !== null"
+              <AppButton size="md" variant="outlined" :disabled="triggerRunInProgress !== null"
                       @click="runAssociatedTrigger(trigger)">
                 {{ triggerRunInProgress === getTriggerKey(trigger) ? 'Running...' : 'Run' }}
               </AppButton>
@@ -311,7 +311,7 @@ const {
         </div>
         <div class="p-4 space-y-2">
           <div>
-            <AppButton size="md" :disabled="backupsLoading || detailBackups.length === 0 || rollbackInProgress !== null"
+            <AppButton size="md" variant="outlined" :disabled="backupsLoading || detailBackups.length === 0 || rollbackInProgress !== null"
                     @click="confirmRollback()">
               {{ rollbackInProgress === 'latest' ? 'Rolling back...' : 'Rollback Latest' }}
             </AppButton>
@@ -325,7 +325,7 @@ const {
                 <div class="text-xs font-semibold dd-text font-mono truncate">{{ backup.imageName }}:{{ backup.imageTag }}</div>
                 <div class="text-2xs-plus dd-text-muted">{{ formatTimestamp(backup.timestamp) }}</div>
               </div>
-              <AppButton size="md" :disabled="rollbackInProgress !== null"
+              <AppButton size="md" variant="outlined" :disabled="rollbackInProgress !== null"
                       @click="confirmRollback(backup.id)">
                 {{ rollbackInProgress === backup.id ? 'Rolling...' : 'Use' }}
               </AppButton>

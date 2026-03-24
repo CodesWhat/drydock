@@ -580,7 +580,7 @@ const {
               <div>
                 <div class="text-3xs uppercase tracking-wider mb-1.5 dd-text-muted">Actions</div>
                 <div class="flex flex-wrap gap-1.5">
-                  <AppButton size="sm"
+                  <AppButton size="sm" variant="outlined"
                           :disabled="previewLoading"
                           @click="runContainerPreview">
                     {{ previewLoading ? 'Previewing...' : 'Preview Update' }}
@@ -597,7 +597,7 @@ const {
                           @click="confirmUpdate(selectedContainer.name)">
                     Update Now
                   </AppButton>
-                  <AppButton size="sm"
+                  <AppButton size="sm" variant="outlined"
                           :disabled="actionInProgress === selectedContainer.name"
                           @click="scanContainer(selectedContainer.name)">
                     Scan Now
@@ -608,17 +608,17 @@ const {
               <div>
                 <div class="text-3xs uppercase tracking-wider mb-1.5 dd-text-muted">Skip & Snooze</div>
                 <div class="flex flex-wrap gap-1.5">
-                  <AppButton size="sm"
+                  <AppButton size="sm" variant="outlined"
                           :disabled="!selectedContainer.newTag || policyInProgress !== null"
                           @click="skipCurrentForSelected">
                     Skip This Update
                   </AppButton>
-                  <AppButton size="sm"
+                  <AppButton size="sm" variant="outlined"
                           :disabled="policyInProgress !== null"
                           @click="snoozeSelected(1)">
                     Snooze 1d
                   </AppButton>
-                  <AppButton size="sm"
+                  <AppButton size="sm" variant="outlined"
                           :disabled="policyInProgress !== null"
                           @click="snoozeSelected(7)">
                     Snooze 7d
@@ -628,12 +628,12 @@ const {
                     type="date"
                     class="px-2 py-1.5 dd-rounded text-2xs outline-none dd-bg dd-text"
                     :disabled="policyInProgress !== null" />
-                  <AppButton size="sm"
+                  <AppButton size="sm" variant="outlined"
                           :disabled="!snoozeDateInput || policyInProgress !== null"
                           @click="snoozeSelectedUntilDate">
                     Snooze Until
                   </AppButton>
-                  <AppButton size="sm"
+                  <AppButton size="sm" variant="outlined"
                           :disabled="!selectedSnoozeUntil || policyInProgress !== null"
                           @click="unsnoozeSelected">
                     Unsnooze
@@ -660,12 +660,12 @@ const {
                     class="w-[92px] px-2 py-1.5 dd-rounded text-2xs outline-none dd-bg dd-text"
                     :disabled="policyInProgress !== null"
                   />
-                  <AppButton size="sm"
+                  <AppButton size="sm" variant="outlined"
                           :disabled="policyInProgress !== null"
                           @click="setMaturityPolicySelected(maturityModeInput)">
                     Apply Maturity
                   </AppButton>
-                  <AppButton size="sm"
+                  <AppButton size="sm" variant="outlined"
                           :disabled="!selectedHasMaturityPolicy || policyInProgress !== null"
                           @click="clearMaturityPolicySelected">
                     Clear Maturity
@@ -676,12 +676,12 @@ const {
               <div>
                 <div class="text-3xs uppercase tracking-wider mb-1.5 dd-text-muted">Reset</div>
                 <div class="flex flex-wrap gap-1.5">
-                  <AppButton size="sm"
+                  <AppButton size="sm" variant="outlined"
                           :disabled="selectedSkipTags.length === 0 && selectedSkipDigests.length === 0"
                           @click="clearSkipsSelected">
                     Clear Skips
                   </AppButton>
-                  <AppButton size="sm"
+                  <AppButton size="sm" variant="outlined"
                           :disabled="Object.keys(selectedUpdatePolicy).length === 0"
                           @click="clearPolicySelected">
                     Clear Policy
@@ -817,7 +817,7 @@ const {
             <div>
               <div class="dd-text-label mb-2 dd-text-muted">Backups &amp; Rollback</div>
               <div class="mb-2">
-                <AppButton size="sm" :disabled="backupsLoading || detailBackups.length === 0 || rollbackInProgress !== null"
+                <AppButton size="sm" variant="outlined" :disabled="backupsLoading || detailBackups.length === 0 || rollbackInProgress !== null"
                         @click="confirmRollback()">
                   {{ rollbackInProgress === 'latest' ? 'Rolling back...' : 'Rollback Latest' }}
                 </AppButton>
