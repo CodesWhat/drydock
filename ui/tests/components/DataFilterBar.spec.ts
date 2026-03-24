@@ -40,9 +40,9 @@ function factoryWithTooltip(props: Record<string, any> = {}, slots: Record<strin
       stubs: {
         AppIcon: { template: '<span class="app-icon-stub" />' },
         AppIconButton: {
-          props: ['icon', 'variant', 'tooltip', 'ariaLabel'],
+          props: ['icon', 'variant', 'tooltip', 'ariaLabel', 'size'],
           template:
-            '<button class="app-icon-button-stub" :data-icon="icon" :data-variant="variant" :aria-label="ariaLabel"><slot /></button>',
+            '<button class="app-icon-button-stub" v-tooltip="tooltip" :data-icon="icon" :data-variant="variant" :aria-label="ariaLabel || tooltip"><slot /></button>',
         },
       },
       directives: { tooltip: tooltipDirective },

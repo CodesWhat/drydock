@@ -150,7 +150,7 @@ const {
         @click="toggleColumn(column.key)">
         <AppIcon
           :name="visibleColumns.has(column.key) ? 'check' : 'square'"
-          :size="10"
+          :size="13"
           :style="visibleColumns.has(column.key) ? { color: 'var(--dd-primary)' } : {}" />
         {{ column.label }}
       </AppButton>

@@ -738,9 +738,7 @@ describe('ContainersGroupedViews', () => {
     mocked.context = context;
 
     const wrapper = mountSubject();
-    const tableLockBtns = wrapper
-      .findAll('button[disabled]')
-      .filter((b) => b.classes().includes('w-10') || b.classes().includes('w-8'));
+    const tableLockBtns = wrapper.findAll('button[disabled]');
     const tableLockBtn = tableLockBtns[0];
     expect(tableLockBtn).toBeDefined();
     (tableLockBtn!.element as HTMLButtonElement).disabled = false;
@@ -944,7 +942,7 @@ describe('ContainersGroupedViews', () => {
     await nextTick();
     const cardLockButtons = wrapper
       .findAll('button[disabled]')
-      .filter((b) => b.classes().includes('w-9') || b.classes().includes('w-7'));
+      .filter((b) => b.classes().includes('w-10') || b.classes().includes('w-8'));
     const cardLockBtn = cardLockButtons[0];
     expect(cardLockBtn).toBeDefined();
     (cardLockBtn!.element as HTMLButtonElement).disabled = false;

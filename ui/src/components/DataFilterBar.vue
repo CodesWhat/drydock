@@ -70,16 +70,13 @@ function viewModeLabel(id: string): string {
           <div class="flex items-center dd-rounded overflow-hidden"
                role="group"
                aria-label="View mode">
-            <AppButton size="none" variant="plain" weight="none" v-for="vm in (viewModes ?? defaultViewModes)" :key="vm.id"
-                    type="button"
-                    class="w-7 h-7 flex items-center justify-center text-2xs-plus transition-colors"
+            <AppIconButton v-for="vm in (viewModes ?? defaultViewModes)" :key="vm.id"
+                    :icon="vm.icon" size="toolbar" variant="plain"
                     :class="modelValue === vm.id ? 'dd-text dd-bg-elevated' : 'dd-text-secondary hover:dd-text hover:dd-bg-elevated'"
-                    v-tooltip.top="viewModeLabel(vm.id)"
+                    :tooltip="viewModeLabel(vm.id)"
                     :aria-label="viewModeLabel(vm.id)"
                     :aria-pressed="String(modelValue === vm.id)"
-                    @click="emit('update:modelValue', vm.id)">
-              <AppIcon :name="vm.icon" :size="11" />
-            </AppButton>
+                    @click="emit('update:modelValue', vm.id)" />
           </div>
         </div>
       </div>

@@ -66,12 +66,10 @@ describe('DetailPanel', () => {
   describe('close button', () => {
     it('emits update:open false when close button is clicked', async () => {
       const w = factory();
-      // Close button is the w-7 h-7 button in the toolbar (last button in the toolbar row)
-      const toolbarButtons = w
+      // Close button is the w-8 h-8 AppIconButton in the toolbar
+      const closeBtn = w
         .findAll('button')
-        .filter((b) => b.classes().includes('w-7') && b.classes().includes('h-7'));
-      // The close button is the one that is not a size control (S/M/L)
-      const closeBtn = toolbarButtons.find((b) => !['S', 'M', 'L'].includes(b.text().trim()));
+        .find((b) => b.attributes('aria-label') === 'Close details panel');
       expect(closeBtn).toBeDefined();
       await closeBtn?.trigger('click');
       expect(w.emitted('update:open')?.[0]).toEqual([false]);
@@ -110,8 +108,8 @@ describe('DetailPanel', () => {
       const w = factory();
       const closeBtn = w
         .findAll('button')
-        .find((b) => b.classes().includes('w-7') && b.classes().includes('h-7'));
-      expect(closeBtn?.attributes('aria-label')).toBe('Close details panel');
+        .find((b) => b.attributes('aria-label') === 'Close details panel');
+      expect(closeBtn).toBeDefined();
     });
   });
 
@@ -170,24 +168,17 @@ describe('DetailPanel', () => {
 
     it('does not render full page button when showFullPage is false (default)', () => {
       const w = factory();
-      // When showFullPage is false, the only icon-only button is the close button (w-7 h-7)
-      const iconOnlyButtons = w
+      const fpBtn = w
         .findAll('button')
-        .filter((b) => b.find('.app-icon-stub').exists() && !b.text().trim());
-      // All icon-only buttons should be close buttons (w-7 h-7 class)
-      for (const btn of iconOnlyButtons) {
-        expect(btn.classes()).toContain('w-7');
-      }
+        .find((b) => b.attributes('aria-label') === 'Open full page view');
+      expect(fpBtn).toBeUndefined();
     });
 
     it('emits full-page when full page button is clicked', async () => {
       const w = factory({ showFullPage: true });
       const fpBtn = w
         .findAll('button')
-        .find(
-          (b) =>
-            b.find('.app-icon-stub').exists() && !b.text().trim() && !b.classes().includes('w-7'),
-        );
+        .find((b) => b.attributes('aria-label') === 'Open full page view');
       expect(fpBtn).toBeDefined();
       await fpBtn?.trigger('click');
       expect(w.emitted('full-page')).toHaveLength(1);
