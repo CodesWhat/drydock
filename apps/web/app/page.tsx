@@ -26,114 +26,130 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
-const features = [
+type FeatureCategory = "core" | "security" | "integrations" | "operations";
+
+const categoryLabels: Record<FeatureCategory, { label: string; color: string; border: string }> = {
+  core: { label: "Core", color: "text-blue-600 dark:text-blue-400", border: "border-blue-500/30" },
+  security: { label: "Security", color: "text-rose-600 dark:text-rose-400", border: "border-rose-500/30" },
+  integrations: { label: "Integrations", color: "text-purple-600 dark:text-purple-400", border: "border-purple-500/30" },
+  operations: { label: "Operations", color: "text-emerald-600 dark:text-emerald-400", border: "border-emerald-500/30" },
+};
+
+const features: {
+  icon: typeof Container;
+  title: string;
+  color: string;
+  bg: string;
+  description: string;
+  category: FeatureCategory;
+}[] = [
   {
     icon: Container,
     title: "Auto-Discovery",
-    emoji: "\u{1F50D}",
     color: "text-blue-500 dark:text-blue-400",
     bg: "bg-blue-100 dark:bg-blue-900/50",
     description:
       "Automatically discovers running containers and tracks their image versions without manual configuration.",
+    category: "core",
   },
   {
     icon: Radio,
     title: "23 Registries",
-    emoji: "\u{1F4E6}",
     color: "text-purple-500 dark:text-purple-400",
     bg: "bg-purple-100 dark:bg-purple-900/50",
     description:
       "Query Docker Hub, GHCR, ECR, GCR, GAR, GitLab, Quay, LSCR, ACR, Harbor, Artifactory, Nexus, and more.",
+    category: "integrations",
   },
   {
     icon: Bell,
     title: "20 Triggers",
-    emoji: "\u{1F514}",
     color: "text-amber-500 dark:text-amber-400",
     bg: "bg-amber-100 dark:bg-amber-900/50",
     description:
       "Notify via Slack, Discord, Telegram, Teams, SMTP, MQTT, HTTP, Gotify, NTFY, Kafka, and more.",
+    category: "integrations",
   },
   {
     icon: Eye,
     title: "Dry-Run Preview",
-    emoji: "\u{1F441}\uFE0F",
     color: "text-cyan-500 dark:text-cyan-400",
     bg: "bg-cyan-100 dark:bg-cyan-900/50",
     description:
       "Preview updates before applying them. Pre-update image backup with one-click rollback.",
+    category: "operations",
   },
   {
     icon: Network,
     title: "Distributed Agents",
-    emoji: "\u{1F310}",
     color: "text-emerald-500 dark:text-emerald-400",
     bg: "bg-emerald-100 dark:bg-emerald-900/50",
     description:
       "Monitor remote Docker hosts via SSE-based agents. Centralized dashboard for all environments.",
+    category: "core",
   },
   {
     icon: BarChart3,
     title: "Prometheus Metrics",
-    emoji: "\u{1F4CA}",
     color: "text-orange-500 dark:text-orange-400",
     bg: "bg-orange-100 dark:bg-orange-900/50",
     description:
       "Built-in /metrics endpoint with Grafana dashboard template. Full observability out of the box.",
+    category: "core",
   },
   {
     icon: History,
     title: "Audit Log",
-    emoji: "\u{1F4DC}",
     color: "text-teal-500 dark:text-teal-400",
     bg: "bg-teal-100 dark:bg-teal-900/50",
     description:
       "Event-based audit trail with persistent storage. Full REST API and Prometheus counters.",
+    category: "security",
   },
   {
     icon: Lock,
     title: "OIDC Authentication",
-    emoji: "\u{1F512}",
     color: "text-rose-500 dark:text-rose-400",
     bg: "bg-rose-100 dark:bg-rose-900/50",
     description:
       "Secure your instance with OpenID Connect. Works with Authelia, Auth0, and Authentik.",
+    category: "security",
   },
   {
     icon: RotateCcw,
     title: "Auto Rollback",
-    emoji: "\u{1F504}",
     color: "text-indigo-500 dark:text-indigo-400",
     bg: "bg-indigo-100 dark:bg-indigo-900/50",
     description:
       "Automatic rollback on health check failure. Configurable image backup retention policies.",
+    category: "operations",
   },
   {
     icon: Play,
     title: "Container Actions",
-    emoji: "\u{25B6}\uFE0F",
     color: "text-green-500 dark:text-green-400",
     bg: "bg-green-100 dark:bg-green-900/50",
     description:
       "Start, stop, and restart containers directly from the UI or API. Feature-flagged for safety.",
+    category: "operations",
   },
   {
     icon: Webhook,
     title: "Webhook API",
-    emoji: "\u{1F517}",
     color: "text-sky-500 dark:text-sky-400",
     bg: "bg-sky-100 dark:bg-sky-900/50",
     description:
       "Token-authenticated HTTP endpoints for CI/CD integration. Trigger updates on demand.",
+    category: "integrations",
   },
   {
     icon: Layers,
     title: "Container Grouping",
-    emoji: "\u{1F4DA}",
     color: "text-violet-500 dark:text-violet-400",
     bg: "bg-violet-100 dark:bg-violet-900/50",
     description:
       "Smart stack detection via compose project or labels. Collapsible groups with batch actions.",
+    category: "core",
   },
 ];
 
@@ -488,7 +504,7 @@ export default function Home() {
                     rel="noopener noreferrer"
                   >
                     <img
-                      src="https://img.shields.io/badge/GHCR-40K%2B_pulls-2ea44f?logo=github&logoColor=white"
+                      src="https://img.shields.io/badge/GHCR-50K%2B_pulls-2ea44f?logo=github&logoColor=white"
                       alt="GHCR pulls"
                     />
                   </a>
@@ -715,29 +731,51 @@ export default function Home() {
                 </p>
               </div>
 
-              <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                {features.map((feature) => (
-                  <Card
-                    key={feature.title}
-                    className="border-neutral-200 bg-white/50 backdrop-blur-sm dark:border-neutral-800 dark:bg-neutral-900/50"
-                  >
-                    <CardContent className="pt-6">
-                      <div className="mb-4 flex items-center gap-3">
+              <div className="overflow-hidden rounded-xl border border-neutral-300 dark:border-neutral-700">
+                <div className="flex items-center gap-2 border-b border-neutral-300 bg-neutral-100 px-5 py-3 dark:border-neutral-700 dark:bg-neutral-900">
+                  <div className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+                  <span className="font-mono text-xs text-neutral-500 dark:text-neutral-400">
+                    drydock capabilities
+                  </span>
+                  <span className="ml-auto font-mono text-xs text-neutral-400 dark:text-neutral-600">
+                    {features.length} modules
+                  </span>
+                </div>
+                <div className="divide-y divide-neutral-200 bg-white dark:divide-neutral-800 dark:bg-neutral-950">
+                  {features.map((feature, i) => {
+                    const cat = categoryLabels[feature.category];
+                    return (
+                      <div
+                        key={feature.title}
+                        className="group flex items-center gap-5 px-5 py-4 transition-colors hover:bg-neutral-50 dark:hover:bg-neutral-900/50"
+                      >
+                        <span className="w-6 shrink-0 text-right font-mono text-xs tabular-nums text-neutral-300 dark:text-neutral-700">
+                          {String(i + 1).padStart(2, "0")}
+                        </span>
                         <div
-                          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${feature.bg}`}
+                          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md ${feature.bg}`}
                         >
-                          <feature.icon className={`h-5 w-5 ${feature.color}`} />
+                          <feature.icon className={`h-4 w-4 ${feature.color}`} />
                         </div>
-                        <h3 className="font-semibold text-neutral-900 dark:text-neutral-100">
-                          {feature.title}
-                        </h3>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-baseline gap-3">
+                            <h3 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
+                              {feature.title}
+                            </h3>
+                            <span
+                              className={`rounded-full border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider ${cat.border} ${cat.color}`}
+                            >
+                              {cat.label}
+                            </span>
+                          </div>
+                          <p className="mt-0.5 text-xs text-neutral-500 dark:text-neutral-400">
+                            {feature.description}
+                          </p>
+                        </div>
                       </div>
-                      <p className="text-sm text-neutral-600 dark:text-neutral-400">
-                        {feature.description}
-                      </p>
-                    </CardContent>
-                  </Card>
-                ))}
+                    );
+                  })}
+                </div>
               </div>
             </div>
           </section>
