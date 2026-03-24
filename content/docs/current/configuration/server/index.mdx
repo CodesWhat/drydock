@@ -48,7 +48,9 @@ For production deployments, set an explicit trusted origin:
 
 ## Container Healthcheck
 
-The official Docker image includes a built-in `HEALTHCHECK` that polls the `/health` endpoint. When `DD_SERVER_TLS_ENABLED=true`, the healthcheck automatically switches to HTTPS (with `--insecure` for self-signed certificates). No additional configuration is needed.
+The official Docker image includes a built-in `HEALTHCHECK` that polls the `/health` endpoint using a lightweight static binary. When `DD_SERVER_TLS_ENABLED=true`, the healthcheck automatically switches to HTTPS (with `--insecure` for self-signed certificates). No additional configuration is needed — remove any custom `healthcheck:` blocks from your compose file.
+
+<Callout type="warn">**Deprecated:** Custom `curl`-based healthcheck overrides (e.g. `test: curl --fail http://localhost:3000/health`) are deprecated. `curl` will be removed from the image in v1.6.0. Use the built-in probe or switch to `/bin/healthcheck ${DD_SERVER_PORT:-3000}` for custom intervals.</Callout>
 
 ## Plain HTTP Deployments
 

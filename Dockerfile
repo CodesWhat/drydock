@@ -69,7 +69,9 @@ FROM base AS release
 ENV DD_LOG_FORMAT=json
 
 # Remove unnecessary network utilities (busybox symlinks) and npm to reduce attack surface.
-RUN rm -f /usr/bin/wget /usr/bin/nc /usr/bin/curl \
+# curl is kept for backward compatibility with user-defined HEALTHCHECK overrides;
+# it will be removed in v1.6.0 — use the built-in /bin/healthcheck binary instead.
+RUN rm -f /usr/bin/wget /usr/bin/nc \
     && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 
 # Copy healthcheck binary (65KB static, replaces curl for HEALTHCHECK probe)

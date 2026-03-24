@@ -21,7 +21,11 @@ If the application is healthy, the Http Response Status Code is `200` (`500` oth
 }
 ```
 
-You can use it to configure health checks performed by your container orchestrator, for example:
+The official Docker image includes a built-in `HEALTHCHECK` that polls `/health` automatically — no additional configuration is needed in your compose file. The built-in probe uses a lightweight static binary (`/bin/healthcheck`) and handles TLS backends automatically.
+
+<Callout type="warn">**Deprecated:** Custom `curl`-based healthcheck overrides in compose files (e.g. `test: curl --fail http://localhost:3000/health`) are deprecated and will stop working in v1.6.0 when `curl` is removed from the image. Remove custom `healthcheck:` blocks from your drydock service to use the built-in probe.</Callout>
+
+If you need a custom healthcheck (for example, to change the interval), use the built-in binary:
 
 ```yaml
 services:
@@ -30,7 +34,7 @@ services:
     image: codeswhat/drydock:latest
     ...
     healthcheck:
-      test: curl --fail http://localhost:${DD_SERVER_PORT:-3000}/health || exit 1
+      test: /bin/healthcheck ${DD_SERVER_PORT:-3000}
       interval: 10s
       timeout: 10s
       retries: 3

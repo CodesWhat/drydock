@@ -91,8 +91,10 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - /opt/drydock/store:/store
+    # The image includes a built-in HEALTHCHECK — no override needed.
+    # If you need custom intervals, use the built-in binary:
     healthcheck:
-      test: curl --fail http://localhost:${DD_SERVER_PORT:-3000}/health || exit 1
+      test: /bin/healthcheck ${DD_SERVER_PORT:-3000}
       interval: 10s
       timeout: 10s
       retries: 3

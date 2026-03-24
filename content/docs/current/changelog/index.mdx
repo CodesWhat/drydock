@@ -89,7 +89,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Centralized rollback container guard** — `-old-{timestamp}` container rejection moved from Docker trigger to base Trigger class, covering all trigger types.
 - **Container list query internals modularized** — Extracted query-validation logic and split tests by concern.
 - **Container list filtering performance** — Status/kind filters avoid unnecessary full-collection loads; age/created sorting precomputes values.
-- **Healthcheck execution path optimized** — Replaced curl-based healthcheck with a static C binary.
+- **Healthcheck execution path optimized** — The built-in Docker `HEALTHCHECK` now uses a static C binary (`/bin/healthcheck`) instead of curl. Custom `curl`-based healthcheck overrides in compose files continue to work but are deprecated — `curl` will be removed from the image in v1.6.0. Remove custom `healthcheck:` blocks to use the built-in probe, or switch to `/bin/healthcheck ${DD_SERVER_PORT:-3000}`. ([#215](https://github.com/CodesWhat/drydock/issues/215))
 - **Watcher event logging noise reduced** — First event-stream reconnect downgraded from `warn` to `info`.
 - **CI workflows renamed** — Dropped numeric prefixes from workflow filenames for clarity.
 - **Smoke load test profile removed** — Replaced with the ci profile for meaningful regression detection.
