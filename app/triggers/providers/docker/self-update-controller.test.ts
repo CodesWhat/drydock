@@ -11,6 +11,9 @@ const mockDockerodeCtor = vi.hoisted(() => vi.fn());
 vi.mock('dockerode', () => ({
   default: mockDockerodeCtor,
 }));
+vi.mock('../../../watchers/providers/docker/socket-version-probe.js', () => ({
+  probeSocketApiVersion: vi.fn().mockResolvedValue(undefined),
+}));
 
 const DEFAULT_CONTROLLER_ENV = {
   DD_SELF_UPDATE_OP_ID: 'op-123',

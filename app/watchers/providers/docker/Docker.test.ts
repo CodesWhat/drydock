@@ -63,6 +63,9 @@ vi.mock('./maintenance.js', () => ({
   isInMaintenanceWindow: vi.fn(() => true),
   getNextMaintenanceWindow: vi.fn(() => undefined),
 }));
+vi.mock('./socket-version-probe.js', () => ({
+  probeSocketApiVersion: vi.fn().mockResolvedValue(undefined),
+}));
 
 import mockFs from 'node:fs';
 import axios from 'axios';
@@ -698,7 +701,7 @@ describe('Docker Watcher', () => {
       await docker.register('watcher', 'docker', 'test', {
         cron: '0 * * * *',
       });
-      docker.init();
+      await docker.init();
       expect(mockCron.schedule).toHaveBeenCalledWith('0 * * * *', expect.any(Function), {
         maxRandomDelay: 60000,
       });
@@ -710,7 +713,7 @@ describe('Docker Watcher', () => {
       });
       const mockLog = { warn: vi.fn(), info: vi.fn() };
       docker.log = mockLog;
-      docker.init();
+      await docker.init();
       expect(mockLog.warn).toHaveBeenCalledWith(expect.stringContaining('deprecated'));
     });
 
@@ -722,7 +725,7 @@ describe('Docker Watcher', () => {
         });
         const mockLog = { warn: vi.fn(), info: vi.fn() };
         docker.log = mockLog;
-        docker.init();
+        await docker.init();
         expect(mockLog.warn).toHaveBeenCalledWith(
           expect.stringContaining(
             'DD_WATCHER_TEST_WATCHATSTART environment variable is deprecated',
@@ -739,7 +742,7 @@ describe('Docker Watcher', () => {
       });
       const mockLog = { warn: vi.fn(), info: vi.fn() };
       docker.log = mockLog;
-      docker.init();
+      await docker.init();
       expect(mockLog.warn).not.toHaveBeenCalledWith(
         expect.stringContaining('WATCHATSTART environment variable is deprecated'),
       );
@@ -749,7 +752,7 @@ describe('Docker Watcher', () => {
       await docker.register('watcher', 'docker', 'test', {
         watchevents: true,
       });
-      docker.init();
+      await docker.init();
       expect(mockDebounce).toHaveBeenCalled();
     });
 
@@ -757,7 +760,7 @@ describe('Docker Watcher', () => {
       await docker.register('watcher', 'docker', 'test', {
         watchevents: false,
       });
-      docker.init();
+      await docker.init();
       expect(mockDebounce).not.toHaveBeenCalled();
     });
 
@@ -767,7 +770,7 @@ describe('Docker Watcher', () => {
         watchatstart: true,
         watchevents: false,
       });
-      docker.init();
+      await docker.init();
       expect(docker.configuration.watchatstart).toBe(true);
       expect(docker.watchCronTimeout).toBeDefined();
     });
@@ -777,7 +780,7 @@ describe('Docker Watcher', () => {
       await docker.register('watcher', 'docker', 'test', {
         watchatstart: false,
       });
-      docker.init();
+      await docker.init();
       expect(docker.configuration.watchatstart).toBe(false);
     });
 
@@ -800,7 +803,7 @@ describe('Docker Watcher', () => {
   describe('Deregistration', () => {
     test('should stop cron and clear timeouts on deregister', async () => {
       await docker.register('watcher', 'docker', 'test', {});
-      docker.init();
+      await docker.init();
       await docker.deregisterComponent();
       expect(mockSchedule.stop).toHaveBeenCalled();
     });
@@ -1321,7 +1324,7 @@ describe('Docker Watcher', () => {
         protocol: 'https',
       });
       docker.configuration.auth = { type: '' };
-      docker.initWatcher();
+      await docker.initWatcher();
       expect(docker.remoteAuthBlockedReason).toBe(
         'Unable to authenticate remote watcher test: credentials are incomplete',
       );
@@ -1335,7 +1338,7 @@ describe('Docker Watcher', () => {
       });
       // Need hasOidcConfig to bypass first guard, but authType=basic to reach the basic-incomplete path
       docker.configuration.auth = { type: 'basic', oidc: { tokenurl: 'https://idp/token' } };
-      docker.initWatcher();
+      await docker.initWatcher();
       expect(docker.remoteAuthBlockedReason).toBe(
         'Unable to authenticate remote watcher test: basic credentials are incomplete',
       );
@@ -1349,7 +1352,7 @@ describe('Docker Watcher', () => {
       });
       // Need hasOidcConfig to bypass first guard, but authType=bearer to reach the bearer-missing path
       docker.configuration.auth = { type: 'bearer', oidc: { tokenurl: 'https://idp/token' } };
-      docker.initWatcher();
+      await docker.initWatcher();
       expect(docker.remoteAuthBlockedReason).toBe(
         'Unable to authenticate remote watcher test: bearer token is missing',
       );
@@ -1362,7 +1365,7 @@ describe('Docker Watcher', () => {
         protocol: 'https',
       });
       docker.configuration.auth = { type: 'custom', user: 'x', password: 'y' };
-      docker.initWatcher();
+      await docker.initWatcher();
       expect(docker.remoteAuthBlockedReason).toBe(
         'Unable to authenticate remote watcher test: auth type "custom" is unsupported',
       );
@@ -1377,7 +1380,7 @@ describe('Docker Watcher', () => {
       docker.configuration.auth = { type: '', insecure: true };
       const logMock = createMockLog(['warn', 'info', 'debug']);
       docker.log = logMock;
-      docker.initWatcher();
+      await docker.initWatcher();
       expect(docker.remoteAuthBlockedReason).toBeUndefined();
       expect(logMock.warn).toHaveBeenCalledWith(
         expect.stringContaining('continuing because auth.insecure=true'),
@@ -1391,7 +1394,7 @@ describe('Docker Watcher', () => {
         protocol: 'https',
       });
       docker.configuration.auth = { type: '' };
-      docker.initWatcher();
+      await docker.initWatcher();
       mockDockerApi.listContainers.mockResolvedValue([]);
 
       await expect(docker.getContainers()).rejects.toThrow('credentials are incomplete');
@@ -1530,7 +1533,7 @@ describe('Docker Watcher', () => {
         protocol: 'https',
       });
       docker.configuration.auth = { type: '' };
-      docker.initWatcher();
+      await docker.initWatcher();
 
       const masked = docker.maskConfiguration();
       expect(masked.authblocked).toBe(true);

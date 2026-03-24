@@ -5,6 +5,9 @@ const mockDockerodeCtor = vi.hoisted(() => vi.fn());
 vi.mock('dockerode', () => ({
   default: mockDockerodeCtor,
 }));
+vi.mock('../../../watchers/providers/docker/socket-version-probe.js', () => ({
+  probeSocketApiVersion: vi.fn().mockResolvedValue(undefined),
+}));
 
 import * as sseRouter from '../../../api/sse.js';
 import { clearAllListenersForTests, emitSelfUpdateStarting } from '../../../event/index.js';
