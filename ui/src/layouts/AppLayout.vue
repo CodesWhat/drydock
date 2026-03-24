@@ -290,8 +290,7 @@ const stackedBannerInlineStyle = {
   maxWidth: 'none',
 } as const;
 const legacyInputSummary = ref<LegacyInputSummary | null>(null);
-const legacyEnvDeprecationBanner = useDeprecationBanner('dd-banner-legacy-env-v1');
-const legacyLabelDeprecationBanner = useDeprecationBanner('dd-banner-legacy-labels-v1');
+const legacyConfigDeprecationBanner = useDeprecationBanner('dd-banner-legacy-config-v1');
 const legacyApiPathDeprecationBanner = useDeprecationBanner('dd-banner-legacy-api-paths-v1');
 
 type SearchScope = 'all' | 'pages' | 'containers' | 'runtime' | 'config';
@@ -706,17 +705,18 @@ const showLegacyHashDeprecationBanner = computed(
     !hideLegacyHashBannerPermanently.value,
 );
 
-const showLegacyEnvDeprecationBanner = computed(() => legacyEnvDeprecationBanner.visible.value);
-const showLegacyLabelDeprecationBanner = computed(() => legacyLabelDeprecationBanner.visible.value);
+const showLegacyConfigDeprecationBanner = computed(
+  () => legacyConfigDeprecationBanner.visible.value,
+);
 const showLegacyApiPathDeprecationBanner = computed(
   () => legacyApiPathDeprecationBanner.visible.value,
 );
-const legacyEnvBannerTitle = computed(
-  () => `${legacyInputSummary.value?.env.total ?? 0} legacy environment variables detected`,
-);
-const legacyLabelBannerTitle = computed(
-  () => `${legacyInputSummary.value?.label.total ?? 0} legacy container labels detected`,
-);
+const legacyConfigBannerTitle = computed(() => {
+  const envCount = legacyInputSummary.value?.env.total ?? 0;
+  const labelCount = legacyInputSummary.value?.label.total ?? 0;
+  const total = envCount + labelCount;
+  return `${total} legacy configuration alias${total !== 1 ? 'es' : ''} detected`;
+});
 const legacyApiPathBannerTitle = computed(
   () => `${legacyInputSummary.value?.api?.total ?? 0} legacy API paths detected`,
 );
@@ -724,8 +724,7 @@ const hasVisibleAnnouncementBanners = computed(
   () =>
     showOidcHttpCompatibilityBanner.value ||
     showLegacyHashDeprecationBanner.value ||
-    showLegacyEnvDeprecationBanner.value ||
-    showLegacyLabelDeprecationBanner.value ||
+    showLegacyConfigDeprecationBanner.value ||
     showLegacyApiPathDeprecationBanner.value,
 );
 
@@ -741,8 +740,8 @@ async function refreshLegacyInputSummary() {
   const serverData = await getServer().catch(() => null);
   const summary = normalizeLegacyInputSummary(serverData?.compatibility?.legacyInputs);
   legacyInputSummary.value = summary;
-  legacyEnvDeprecationBanner.detected.value = (summary?.env.total ?? 0) > 0;
-  legacyLabelDeprecationBanner.detected.value = (summary?.label.total ?? 0) > 0;
+  legacyConfigDeprecationBanner.detected.value =
+    (summary?.env.total ?? 0) > 0 || (summary?.label.total ?? 0) > 0;
   legacyApiPathDeprecationBanner.detected.value = (summary?.api?.total ?? 0) > 0;
 }
 
@@ -1470,13 +1469,13 @@ onUnmounted(() => {
         </AnnouncementBanner>
 
         <AnnouncementBanner
-          v-if="showLegacyEnvDeprecationBanner"
-          data-testid="legacy-env-deprecation-banner"
-          :title="legacyEnvBannerTitle"
+          v-if="showLegacyConfigDeprecationBanner"
+          data-testid="legacy-config-deprecation-banner"
+          :title="legacyConfigBannerTitle"
           permanent-dismiss-label="Don't show again"
           :style="stackedBannerInlineStyle"
-          @dismiss="legacyEnvDeprecationBanner.dismissForSession"
-          @dismiss-permanent="legacyEnvDeprecationBanner.dismissPermanently">
+          @dismiss="legacyConfigDeprecationBanner.dismissForSession"
+          @dismiss-permanent="legacyConfigDeprecationBanner.dismissPermanently">
           Deprecated environment variable aliases are in use (for example
           <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">WUD_*</code>
           and
@@ -1484,20 +1483,6 @@ onUnmounted(() => {
           <span v-if="legacyEnvKeysPreview" class="block mt-1 truncate">
             Env keys ({{ legacyInputSummary?.env.total }}): {{ legacyEnvKeysPreview }}
           </span>
-        </AnnouncementBanner>
-
-        <AnnouncementBanner
-          v-if="showLegacyLabelDeprecationBanner"
-          data-testid="legacy-label-deprecation-banner"
-          :title="legacyLabelBannerTitle"
-          permanent-dismiss-label="Don't show again"
-          :style="stackedBannerInlineStyle"
-          @dismiss="legacyLabelDeprecationBanner.dismissForSession"
-          @dismiss-permanent="legacyLabelDeprecationBanner.dismissPermanently">
-          Deprecated Docker label aliases are in use (for example
-          <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">wud.*</code>
-          instead of
-          <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">dd.*</code>).
           <span v-if="legacyLabelKeysPreview" class="block mt-1 truncate">
             Label keys ({{ legacyInputSummary?.label.total }}): {{ legacyLabelKeysPreview }}
           </span>

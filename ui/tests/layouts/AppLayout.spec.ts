@@ -570,15 +570,15 @@ describe('AppLayout', () => {
     mountedWrappers.push(wrapper);
     await flushPromises();
 
-    const banner = wrapper.find('[data-testid="legacy-env-deprecation-banner"]');
+    const banner = wrapper.find('[data-testid="legacy-config-deprecation-banner"]');
     expect(banner.exists()).toBe(true);
-    expect(banner.text()).toContain('20 legacy environment variables detected');
+    expect(banner.text()).toContain('20 legacy configuration aliases detected');
     expect(banner.text()).toContain('Env keys (20):');
     expect(banner.text()).toContain('DD_TRIGGER_DOCKER_LOCAL_AUTO');
     expect(banner.text()).toContain('(+2 more)');
   });
 
-  it('shows a legacy label deprecation banner when legacy labels are detected', async () => {
+  it('shows consolidated legacy config banner when only labels are detected', async () => {
     mockGetServer.mockResolvedValue({
       compatibility: {
         legacyInputs: {
@@ -596,9 +596,9 @@ describe('AppLayout', () => {
     mountedWrappers.push(wrapper);
     await flushPromises();
 
-    const banner = wrapper.find('[data-testid="legacy-label-deprecation-banner"]');
+    const banner = wrapper.find('[data-testid="legacy-config-deprecation-banner"]');
     expect(banner.exists()).toBe(true);
-    expect(banner.text()).toContain('3 legacy container labels detected');
+    expect(banner.text()).toContain('3 legacy configuration aliases detected');
     expect(banner.text()).toContain('Label keys (3):');
     expect(banner.text()).toContain('wud.watch');
   });
@@ -628,7 +628,7 @@ describe('AppLayout', () => {
     expect(banner.text()).toContain('/api/containers');
   });
 
-  it('dismisses each legacy category banner independently', async () => {
+  it('dismisses consolidated legacy config banner', async () => {
     mockGetServer.mockResolvedValue({
       compatibility: {
         legacyInputs: {
@@ -643,17 +643,14 @@ describe('AppLayout', () => {
     mountedWrappers.push(wrapper);
     await flushPromises();
 
-    expect(wrapper.find('[data-testid="legacy-env-deprecation-banner"]').exists()).toBe(true);
-    expect(wrapper.find('[data-testid="legacy-label-deprecation-banner"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="legacy-config-deprecation-banner"]').exists()).toBe(true);
 
     await wrapper
-      .find('[data-testid="legacy-env-deprecation-banner-dismiss-forever"]')
+      .find('[data-testid="legacy-config-deprecation-banner-dismiss-forever"]')
       .trigger('click');
     await flushPromises();
 
-    expect(wrapper.find('[data-testid="legacy-env-deprecation-banner"]').exists()).toBe(false);
-    expect(wrapper.find('[data-testid="legacy-label-deprecation-banner"]').exists()).toBe(true);
-    expect(localStorage.getItem('dd-banner-legacy-env-v1')).toBe('true');
-    expect(localStorage.getItem('dd-banner-legacy-labels-v1')).toBeNull();
+    expect(wrapper.find('[data-testid="legacy-config-deprecation-banner"]').exists()).toBe(false);
+    expect(localStorage.getItem('dd-banner-legacy-config-v1')).toBe('true');
   });
 });
