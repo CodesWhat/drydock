@@ -130,7 +130,7 @@ watchEffect(() => {
         {{ dashboardUpdateError }}
       </div>
 
-      <div class="flex-1 min-h-0 overflow-y-auto overscroll-contain">
+      <div class="flex-1 min-h-0 overflow-y-auto overscroll-contain dd-scroll-stable">
         <DataTable
           :columns="UPDATE_TABLE_COLUMNS"
           :rows="recentUpdates"

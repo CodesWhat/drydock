@@ -479,7 +479,7 @@ body.dd-col-resizing {
   opacity: 1;
 }
 
-/* Scrollbar styling — overlay so scrollbars never shift layout */
+/* Scrollbar styling */
 * {
   scrollbar-width: thin;
   scrollbar-color: var(--dd-scrollbar) transparent;
@@ -495,16 +495,10 @@ body.dd-col-resizing {
   background: var(--dd-scrollbar);
   border-radius: var(--dd-radius-sm);
 }
-@supports (overflow: overlay) {
-  .overflow-auto {
-    overflow: overlay;
-  }
-  .overflow-y-auto {
-    overflow-y: overlay;
-  }
-  .overflow-x-auto {
-    overflow-x: overlay;
-  }
+
+/* Prevent layout shifts when scrollbars appear/disappear in bounded scroll areas */
+.dd-scroll-stable {
+  scrollbar-gutter: stable;
 }
 
 /* Hidden scrollbar utility (for horizontal tab bars) */
