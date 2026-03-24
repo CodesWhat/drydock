@@ -315,6 +315,7 @@ function createConfirmHandlers(args: {
   ) => Promise<boolean>;
   forceUpdate: (name: string) => Promise<void>;
   deleteContainer: (name: string) => Promise<boolean>;
+  clearPolicySelected: () => Promise<void>;
   selectedContainer: Readonly<Ref<Container | null | undefined>>;
   rollbackToBackup: (backupId?: string) => Promise<void>;
 }) {
@@ -393,6 +394,21 @@ function createConfirmHandlers(args: {
     });
   }
 
+  function confirmClearPolicy() {
+    const containerName = args.selectedContainer.value?.name;
+    if (!containerName) {
+      return;
+    }
+    args.confirm.require({
+      header: 'Clear Update Policy',
+      message: `Clear all update policy for ${containerName}? This removes skips, snooze, and maturity settings.`,
+      rejectLabel: 'Cancel',
+      acceptLabel: 'Clear Policy',
+      severity: 'warn',
+      accept: () => args.clearPolicySelected(),
+    });
+  }
+
   function confirmRollback(backupId?: string) {
     const containerName = args.selectedContainer.value?.name;
     if (!containerName) {
@@ -410,6 +426,7 @@ function createConfirmHandlers(args: {
   }
 
   return {
+    confirmClearPolicy,
     confirmDelete,
     confirmForceUpdate,
     confirmRestart,
@@ -687,6 +704,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
   }
 
   const {
+    confirmClearPolicy,
     confirmDelete,
     confirmForceUpdate,
     confirmRestart,
@@ -698,6 +716,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
     executeAction,
     forceUpdate,
     deleteContainer,
+    clearPolicySelected: policy.clearPolicySelected,
     selectedContainer: input.selectedContainer,
     rollbackToBackup: backups.rollbackToBackup,
   });
@@ -708,6 +727,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
     backupsLoading: backups.backupsLoading,
     containerActionsDisabledReason,
     containerActionsEnabled,
+    confirmClearPolicy,
     clearPolicySelected: policy.clearPolicySelected,
     clearMaturityPolicySelected: policy.clearMaturityPolicySelected,
     clearSkipsSelected: policy.clearSkipsSelected,

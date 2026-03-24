@@ -213,7 +213,7 @@ vi.mock('@/components/containers/containersViewTemplateContext', () => ({
     maturityMinAgeDaysInput,
     setMaturityPolicySelected: mockSetMaturityPolicySelected,
     clearMaturityPolicySelected: mockClearMaturityPolicySelected,
-    clearPolicySelected: mockClearPolicySelected,
+    confirmClearPolicy: mockClearPolicySelected,
     policyMessage,
     policyError,
     removeSkipTagSelected: mockRemoveSkipTagSelected,

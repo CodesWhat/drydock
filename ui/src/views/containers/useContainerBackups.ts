@@ -133,7 +133,10 @@ async function rollbackToBackupState(args: {
     await args.loadContainers();
     await Promise.all([args.loadDetailBackups(), args.loadDetailUpdateOperations()]);
   } catch (e: unknown) {
-    args.rollbackError.value = errorMessage(e, 'Rollback failed');
+    const msg = errorMessage(e, 'Rollback failed');
+    args.rollbackError.value = msg;
+    const toast = useToast();
+    toast.error('Rollback failed', msg);
   } finally {
     args.rollbackInProgress.value = null;
   }

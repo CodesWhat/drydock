@@ -107,7 +107,7 @@ const {
   maturityMinAgeDaysInput,
   setMaturityPolicySelected,
   clearMaturityPolicySelected,
-  clearPolicySelected,
+  confirmClearPolicy,
   policyMessage,
   policyError,
   removeSkipTagSelected,
@@ -677,13 +677,13 @@ const {
                 <div class="text-3xs uppercase tracking-wider mb-1.5 dd-text-muted">Reset</div>
                 <div class="flex flex-wrap gap-1.5">
                   <AppButton size="sm" variant="outlined"
-                          :disabled="selectedSkipTags.length === 0 && selectedSkipDigests.length === 0"
+                          :disabled="(selectedSkipTags.length === 0 && selectedSkipDigests.length === 0) || policyInProgress !== null"
                           @click="clearSkipsSelected">
                     Clear Skips
                   </AppButton>
                   <AppButton size="sm" variant="outlined"
-                          :disabled="Object.keys(selectedUpdatePolicy).length === 0"
-                          @click="clearPolicySelected">
+                          :disabled="Object.keys(selectedUpdatePolicy).length === 0 || policyInProgress !== null"
+                          @click="confirmClearPolicy">
                     Clear Policy
                   </AppButton>
                 </div>

@@ -57,7 +57,10 @@ async function runAssociatedTriggerState(args: {
     await args.loadContainers();
     await args.refreshActionTabData();
   } catch (e: unknown) {
-    args.triggerError.value = errorMessage(e, `Failed to run ${triggerKey}`);
+    const msg = errorMessage(e, `Failed to run ${triggerKey}`);
+    args.triggerError.value = msg;
+    const toast = useToast();
+    toast.error(`Trigger failed: ${triggerKey}`, msg);
   } finally {
     args.triggerRunInProgress.value = null;
   }
