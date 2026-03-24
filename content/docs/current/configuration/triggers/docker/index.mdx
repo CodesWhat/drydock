@@ -39,6 +39,8 @@ If Drydock restarts while an update is in progress, it automatically reconciles 
 
 This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration). It picks up the Docker configuration from the [configured Docker watchers](/docs/configuration/watchers) so it can handle updates on Local **and** Remote Docker hosts.
 
+<Callout type="info">**Opt-in by default:** The Docker trigger defaults to `AUTO=oninclude`, meaning it only updates containers that explicitly opt in with a `dd.action.include` label (e.g., `dd.action.include=docker`). To auto-update all watched containers, set `DD_TRIGGER_DOCKER_{trigger_name}_AUTO=true`.</Callout>
+
 <Callout type="warn">**Agent mode:** When using [distributed agents](/docs/configuration/agents), each agent needs its own Docker trigger configured (e.g., `DD_TRIGGER_DOCKER_LOCAL_PRUNE=true`). The `{trigger_name}` segment is required — `DD_TRIGGER_DOCKER_PRUNE=true` without a name is invalid and will not create a working trigger. The controller does **not** need Docker triggers for remote agents; agent triggers are discovered automatically during the handshake.</Callout>
 
 ## Image Backup & Rollback
