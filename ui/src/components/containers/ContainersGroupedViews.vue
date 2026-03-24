@@ -698,6 +698,11 @@ const openActionsContainer = computed(
               <AppIcon name="bolt" :size="12" class="w-3 text-center inline-flex justify-center" :style="{ color: 'var(--dd-warning)' }" />
               Force update
             </AppButton>
+            <AppButton v-if="openActionsContainer.bouncer !== 'blocked'" size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text"
+                    @click="confirmUpdate(openActionsContainer.name); closeActionsMenu()">
+              <AppIcon name="cloud-download" :size="12" class="w-3 text-center inline-flex justify-center" :style="{ color: 'var(--dd-success)' }" />
+              Update
+            </AppButton>
             <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text" @click="skipUpdate(openActionsContainer.name); closeActionsMenu()">
               <AppIcon name="skip-forward" :size="12" class="w-3 text-center inline-flex justify-center dd-text-muted" />
               Skip this update
