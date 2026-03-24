@@ -104,10 +104,41 @@ test('validateConfiguration should normalize mixed-case auto value', () => {
   expect(validatedConfiguration.auto).toBe('oninclude');
 });
 
-test('validateConfiguration should default auto to all when not specified', () => {
+test('validateConfiguration should default auto to all for notification triggers', () => {
+  trigger.type = 'slack';
   const { auto, ...configurationWithoutAuto } = configurationValid;
   const validatedConfiguration = trigger.validateConfiguration(configurationWithoutAuto);
   expect(validatedConfiguration.auto).toBe('all');
+});
+
+test('validateConfiguration should default auto to oninclude for action triggers', () => {
+  trigger.type = 'docker';
+  const { auto, ...configurationWithoutAuto } = configurationValid;
+  const validatedConfiguration = trigger.validateConfiguration(configurationWithoutAuto);
+  expect(validatedConfiguration.auto).toBe('oninclude');
+});
+
+test('validateConfiguration should respect explicit auto=true on action triggers', () => {
+  trigger.type = 'docker';
+  const validatedConfiguration = trigger.validateConfiguration({
+    ...configurationValid,
+    auto: true,
+  });
+  expect(validatedConfiguration.auto).toBe('all');
+});
+
+test('validateConfiguration should default auto to oninclude for dockercompose triggers', () => {
+  trigger.type = 'dockercompose';
+  const { auto, ...configurationWithoutAuto } = configurationValid;
+  const validatedConfiguration = trigger.validateConfiguration(configurationWithoutAuto);
+  expect(validatedConfiguration.auto).toBe('oninclude');
+});
+
+test('validateConfiguration should default auto to oninclude for command triggers', () => {
+  trigger.type = 'command';
+  const { auto, ...configurationWithoutAuto } = configurationValid;
+  const validatedConfiguration = trigger.validateConfiguration(configurationWithoutAuto);
+  expect(validatedConfiguration.auto).toBe('oninclude');
 });
 
 test('validateConfiguration should accept digest and non-digest thresholds', async () => {

@@ -701,7 +701,12 @@ class Trigger extends Component {
   async init() {
     await this.initTrigger();
     if (this.getAutoMode() !== 'none') {
-      this.log.info(`Registering for auto execution`);
+      const autoMode = this.getAutoMode();
+      this.log.info(
+        autoMode === 'oninclude'
+          ? 'Registering for auto execution (only containers with explicit include labels)'
+          : 'Registering for auto execution (all watched containers)',
+      );
       if (this.configuration.mode?.toLowerCase() === 'simple') {
         this.unregisterContainerReport = event.registerContainerReport(
           async (containerReport) => this.handleContainerReport(containerReport),
@@ -814,7 +819,7 @@ class Trigger extends Component {
       auto: this.joi
         .alternatives()
         .try(this.joi.bool(), this.joi.string().insensitive().valid('all', 'oninclude', 'none'))
-        .default(true),
+        .default(this.getCategory() === 'action' ? 'oninclude' : true),
       order: this.joi.number().default(100),
       threshold: this.joi
         .string()
