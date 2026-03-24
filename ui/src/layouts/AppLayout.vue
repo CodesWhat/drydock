@@ -1465,7 +1465,14 @@ onUnmounted(() => {
           :style="stackedBannerInlineStyle"
           @dismiss="dismissLegacyHashBannerForSession"
           @dismiss-permanent="dismissLegacyHashBannerPermanently">
-          Your basic authentication uses a legacy password hash format. Legacy v1.3.9 formats are deprecated and will be removed in v1.6.0. Migrate to argon2id hashing.
+          Your basic authentication uses a legacy password hash format. Legacy v1.3.9 formats are deprecated and will be removed in v1.6.0.
+          <a href="https://getdrydock.com/docs/deprecations#legacy-password-hash-formats"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="inline-flex items-center gap-1 underline font-medium"
+            :style="{ color: 'var(--dd-warning)' }">
+            Migrate to argon2id hashing.
+          </a>
         </AnnouncementBanner>
 
         <AnnouncementBanner
@@ -1476,16 +1483,30 @@ onUnmounted(() => {
           :style="stackedBannerInlineStyle"
           @dismiss="legacyConfigDeprecationBanner.dismissForSession"
           @dismiss-permanent="legacyConfigDeprecationBanner.dismissPermanently">
-          Deprecated environment variable aliases are in use (for example
+          Deprecated configuration aliases are in use. Rename
           <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">WUD_*</code>
+          vars to
+          <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">DD_*</code>
           and
-          <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">DD_TRIGGER_*</code>).
+          <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">DD_TRIGGER_*</code>
+          to
+          <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">DD_ACTION_*</code>
+          or
+          <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">DD_NOTIFICATION_*</code>.
           <span v-if="legacyEnvKeysPreview" class="block mt-1 truncate">
             Env keys ({{ legacyInputSummary?.env.total }}): {{ legacyEnvKeysPreview }}
           </span>
           <span v-if="legacyLabelKeysPreview" class="block mt-1 truncate">
             Label keys ({{ legacyInputSummary?.label.total }}): {{ legacyLabelKeysPreview }}
           </span>
+          <a href="https://getdrydock.com/docs/deprecations#removal-in-v160"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="inline-flex items-center gap-1 mt-1.5 text-2xs-plus font-medium underline underline-offset-2"
+            :style="{ color: 'var(--dd-warning)' }">
+            View migration guide
+            <AppIcon name="external-link" :size="10" />
+          </a>
         </AnnouncementBanner>
 
         <AnnouncementBanner
@@ -1503,6 +1524,14 @@ onUnmounted(() => {
           <span v-if="legacyApiPathKeysPreview" class="block mt-1 truncate">
             API paths ({{ legacyInputSummary?.api?.total }}): {{ legacyApiPathKeysPreview }}
           </span>
+          <a href="https://getdrydock.com/docs/deprecations"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="inline-flex items-center gap-1 mt-1.5 text-2xs-plus font-medium underline underline-offset-2"
+            :style="{ color: 'var(--dd-warning)' }">
+            View migration guide
+            <AppIcon name="external-link" :size="10" />
+          </a>
         </AnnouncementBanner>
       </div>
 
