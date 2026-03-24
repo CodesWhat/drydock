@@ -30,19 +30,19 @@ defineOptions({
 const attrs = useAttrs();
 
 const sizeClasses: Record<IconButtonSize, string> = {
-  toolbar: 'w-7 h-7',
-  xs: 'w-9 h-9',
-  sm: 'w-10 h-10',
-  md: 'w-11 h-11',
-  lg: 'w-12 h-12',
+  toolbar: 'w-8 h-8', // 32px — dense bars
+  xs: 'w-10 h-10', // 40px — compact interactive
+  sm: 'w-11 h-11', // 44px — WCAG 2.5.8 minimum (default)
+  md: 'w-12 h-12', // 48px — Material Design
+  lg: 'w-14 h-14', // 56px — prominent actions
 };
 
 const iconSizes: Record<IconButtonSize, number> = {
-  toolbar: 13,
-  xs: 14,
-  sm: 16,
-  md: 18,
-  lg: 20,
+  toolbar: 15,
+  xs: 16,
+  sm: 18,
+  md: 20,
+  lg: 24,
 };
 
 const variantClasses: Record<IconButtonVariant, string> = {

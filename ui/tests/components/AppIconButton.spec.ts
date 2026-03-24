@@ -33,8 +33,8 @@ describe('AppIconButton', () => {
     const wrapper = mountButton();
     const button = wrapper.get('button');
 
-    expect(button.classes()).toContain('w-10');
-    expect(button.classes()).toContain('h-10');
+    expect(button.classes()).toContain('w-11');
+    expect(button.classes()).toContain('h-11');
     expect(button.classes()).toContain('dd-text-muted');
     expect(button.classes()).toContain('hover:dd-text');
     expect(button.classes()).toContain('hover:dd-bg-elevated');
@@ -46,70 +46,70 @@ describe('AppIconButton', () => {
   });
 
   // 2. Size classes
-  it('applies xs size classes (w-9 h-9)', () => {
+  it('applies xs size classes (w-10 h-10)', () => {
     const wrapper = mountButton({ size: 'xs' });
-    const button = wrapper.get('button');
-    expect(button.classes()).toContain('w-9');
-    expect(button.classes()).toContain('h-9');
-  });
-
-  it('applies sm size classes (w-10 h-10)', () => {
-    const wrapper = mountButton({ size: 'sm' });
     const button = wrapper.get('button');
     expect(button.classes()).toContain('w-10');
     expect(button.classes()).toContain('h-10');
   });
 
-  it('applies toolbar size classes (w-7 h-7)', () => {
-    const wrapper = mountButton({ size: 'toolbar' });
-    const button = wrapper.get('button');
-    expect(button.classes()).toContain('w-7');
-    expect(button.classes()).toContain('h-7');
-  });
-
-  it('passes icon size 13 for toolbar', () => {
-    const wrapper = mountButton({ size: 'toolbar' });
-    const icon = wrapper.findComponent(AppIcon);
-    expect(icon.props('size')).toBe(13);
-  });
-
-  it('applies md size classes (w-11 h-11)', () => {
-    const wrapper = mountButton({ size: 'md' });
+  it('applies sm size classes (w-11 h-11)', () => {
+    const wrapper = mountButton({ size: 'sm' });
     const button = wrapper.get('button');
     expect(button.classes()).toContain('w-11');
     expect(button.classes()).toContain('h-11');
   });
 
-  it('applies lg size classes (w-12 h-12)', () => {
-    const wrapper = mountButton({ size: 'lg' });
+  it('applies toolbar size classes (w-8 h-8)', () => {
+    const wrapper = mountButton({ size: 'toolbar' });
+    const button = wrapper.get('button');
+    expect(button.classes()).toContain('w-8');
+    expect(button.classes()).toContain('h-8');
+  });
+
+  it('passes icon size 15 for toolbar', () => {
+    const wrapper = mountButton({ size: 'toolbar' });
+    const icon = wrapper.findComponent(AppIcon);
+    expect(icon.props('size')).toBe(15);
+  });
+
+  it('applies md size classes (w-12 h-12)', () => {
+    const wrapper = mountButton({ size: 'md' });
     const button = wrapper.get('button');
     expect(button.classes()).toContain('w-12');
     expect(button.classes()).toContain('h-12');
   });
 
-  // 3. Icon sizes
-  it('passes icon size 14 for xs', () => {
-    const wrapper = mountButton({ size: 'xs' });
-    const icon = wrapper.findComponent(AppIcon);
-    expect(icon.props('size')).toBe(14);
+  it('applies lg size classes (w-14 h-14)', () => {
+    const wrapper = mountButton({ size: 'lg' });
+    const button = wrapper.get('button');
+    expect(button.classes()).toContain('w-14');
+    expect(button.classes()).toContain('h-14');
   });
 
-  it('passes icon size 16 for sm', () => {
-    const wrapper = mountButton({ size: 'sm' });
+  // 3. Icon sizes
+  it('passes icon size 16 for xs', () => {
+    const wrapper = mountButton({ size: 'xs' });
     const icon = wrapper.findComponent(AppIcon);
     expect(icon.props('size')).toBe(16);
   });
 
-  it('passes icon size 18 for md', () => {
-    const wrapper = mountButton({ size: 'md' });
+  it('passes icon size 18 for sm', () => {
+    const wrapper = mountButton({ size: 'sm' });
     const icon = wrapper.findComponent(AppIcon);
     expect(icon.props('size')).toBe(18);
   });
 
-  it('passes icon size 20 for lg', () => {
-    const wrapper = mountButton({ size: 'lg' });
+  it('passes icon size 20 for md', () => {
+    const wrapper = mountButton({ size: 'md' });
     const icon = wrapper.findComponent(AppIcon);
     expect(icon.props('size')).toBe(20);
+  });
+
+  it('passes icon size 24 for lg', () => {
+    const wrapper = mountButton({ size: 'lg' });
+    const icon = wrapper.findComponent(AppIcon);
+    expect(icon.props('size')).toBe(24);
   });
 
   // 4. Variant classes
