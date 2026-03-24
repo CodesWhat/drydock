@@ -2,6 +2,7 @@ import Dockerode from 'dockerode';
 import { getErrorMessage } from '../../../util/error.js';
 import { toPositiveInteger } from '../../../util/parse.js';
 import { sleep } from '../../../util/sleep.js';
+import { probeSocketApiVersion } from '../../../watchers/providers/docker/socket-version-probe.js';
 import {
   SELF_UPDATE_HEALTH_TIMEOUT_MS,
   SELF_UPDATE_POLL_INTERVAL_MS,
@@ -121,8 +122,8 @@ class SelfUpdateController {
 
   config: SelfUpdateControllerConfig;
 
-  constructor(config: SelfUpdateControllerConfig) {
-    this.docker = new Dockerode({ socketPath: '/var/run/docker.sock' });
+  constructor(config: SelfUpdateControllerConfig, docker?: Dockerode) {
+    this.docker = docker ?? new Dockerode({ socketPath: '/var/run/docker.sock' });
     this.config = config;
   }
 
@@ -295,7 +296,13 @@ class SelfUpdateController {
 
 export async function runSelfUpdateController(): Promise<void> {
   const config = readConfigFromEnv();
-  const controller = new SelfUpdateController(config);
+  const socketPath = '/var/run/docker.sock';
+  const apiVersion = await probeSocketApiVersion(socketPath);
+  const dockerOpts: Dockerode.DockerOptions = { socketPath };
+  if (apiVersion) {
+    dockerOpts.version = `v${apiVersion}`;
+  }
+  const controller = new SelfUpdateController(config, new Dockerode(dockerOpts));
   await controller.run();
 }
 

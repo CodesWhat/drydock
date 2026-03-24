@@ -8,6 +8,7 @@ import {
   isRemoteOidcTokenRefreshRequired,
   refreshRemoteOidcAccessToken,
 } from './oidc.js';
+import { probeSocketApiVersion } from './socket-version-probe.js';
 
 type DockerRemoteAuthConfiguration = OidcRemoteAuthConfiguration & {
   insecure?: boolean;
@@ -45,7 +46,7 @@ interface DockerRemoteAuthWatcher {
   setRemoteAuthorizationHeader: (authorizationValue: string) => void;
 }
 
-export function initWatcherWithRemoteAuth(watcher: DockerRemoteAuthWatcher): void {
+export async function initWatcherWithRemoteAuth(watcher: DockerRemoteAuthWatcher): Promise<void> {
   const options: Dockerode.DockerOptions = {};
   watcher.remoteAuthBlockedReason = undefined;
   if (watcher.configuration.host) {
@@ -89,6 +90,15 @@ export function initWatcherWithRemoteAuth(watcher: DockerRemoteAuthWatcher): voi
     }
   } else {
     options.socketPath = watcher.configuration.socket;
+    // Pin the daemon's API version so all requests use versioned paths
+    // (e.g. /v1.44/images/…).  This prevents Podman's Docker-compat
+    // layer from returning 301 redirects for unversioned endpoints,
+    // which triggers a crash in docker-modem's redirect handler
+    // (getaddrinfo EAI_AGAIN — see GitHub issue #182).
+    const apiVersion = await probeSocketApiVersion(watcher.configuration.socket);
+    if (apiVersion) {
+      options.version = `v${apiVersion}`;
+    }
   }
   watcher.dockerApi = new Dockerode(options);
 }

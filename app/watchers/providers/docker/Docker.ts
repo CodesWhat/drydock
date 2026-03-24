@@ -520,7 +520,7 @@ class Docker extends Watcher {
   async init() {
     this.ensureLogger();
     this.isWatcherDeregistered = false;
-    this.initWatcher();
+    await this.initWatcher();
     if (this.configuration.watchdigest !== undefined) {
       this.log.warn(
         'DD_WATCHER_{watcher_name}_WATCHDIGEST environment variable is deprecated and will be removed in v1.6.0. Use the dd.watch.digest=true container label instead.',
@@ -555,8 +555,8 @@ class Docker extends Watcher {
     }
   }
 
-  initWatcher() {
-    initWatcherWithRemoteAuth(this.asRemoteAuthWatcher());
+  async initWatcher() {
+    await initWatcherWithRemoteAuth(this.asRemoteAuthWatcher());
   }
 
   isHttpsRemoteWatcher(options: Dockerode.DockerOptions) {
