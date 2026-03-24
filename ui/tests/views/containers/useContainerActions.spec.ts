@@ -1067,6 +1067,36 @@ describe('useContainerActions', () => {
     expect(mocks.rollback).toHaveBeenCalledWith('container-1', 'backup-1');
   });
 
+  it('opens clear-policy confirmation only when a container is selected and wires accept', async () => {
+    const container = makeContainer({ id: 'container-1', name: 'web' });
+    const { composable, selectedContainer, selectedContainerId } = await mountActionsHarness({
+      selectedContainer: null,
+      selectedContainerId: undefined,
+      containerIdMap: { web: 'container-1' },
+    });
+
+    composable.confirmClearPolicy();
+    expect(mocks.confirmRequire).not.toHaveBeenCalled();
+
+    selectedContainer.value = container;
+    selectedContainerId.value = container.id;
+    composable.confirmClearPolicy();
+
+    expect(mocks.confirmRequire).toHaveBeenCalledTimes(1);
+    const confirmCall = mocks.confirmRequire.mock.calls[0][0] as {
+      header: string;
+      message: string;
+      acceptLabel: string;
+      accept?: () => Promise<unknown>;
+    };
+    expect(confirmCall.header).toBe('Clear Update Policy');
+    expect(confirmCall.message).toContain('Clear all update policy for web?');
+    expect(confirmCall.acceptLabel).toBe('Clear Policy');
+
+    await confirmCall.accept?.();
+    expect(mocks.updateContainerPolicy).toHaveBeenCalledWith('container-1', 'clear', {});
+  });
+
   it('uses latest-backup messaging when rollback confirmation has no explicit backup id', async () => {
     const container = makeContainer({ id: 'container-1', name: 'web' });
     const { composable } = await mountActionsHarness({
