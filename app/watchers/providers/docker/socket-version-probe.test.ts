@@ -1,6 +1,7 @@
+import { EventEmitter } from 'node:events';
 import http from 'node:http';
 import net from 'node:net';
-import { afterEach, describe, expect, test } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 import { probeSocketApiVersion } from './socket-version-probe.js';
 
 function createFakeSocket(handler: (req: http.IncomingMessage, res: http.ServerResponse) => void): {
@@ -32,6 +33,7 @@ describe('probeSocketApiVersion', () => {
       await closeServer(server);
     }
     servers.length = 0;
+    vi.restoreAllMocks();
   });
 
   test('returns ApiVersion from daemon /version endpoint', async () => {
@@ -121,6 +123,55 @@ describe('probeSocketApiVersion', () => {
     });
 
     const version = await probeSocketApiVersion(socketPath);
+
+    expect(version).toBeUndefined();
+  });
+
+  test('returns undefined and destroys the request when the probe times out', async () => {
+    const request = new EventEmitter() as http.ClientRequest;
+    const destroy = vi.fn();
+    const end = vi.fn(() => {
+      request.emit('timeout');
+      return request;
+    });
+
+    Object.assign(request, {
+      destroy,
+      end,
+    });
+
+    vi.spyOn(http, 'request').mockImplementation((_options, _callback) => request);
+
+    const version = await probeSocketApiVersion('/tmp/drydock-test-probe-timeout.sock');
+
+    expect(version).toBeUndefined();
+    expect(destroy).toHaveBeenCalledTimes(1);
+  });
+
+  test('returns undefined when the response stream errors', async () => {
+    const request = new EventEmitter() as http.ClientRequest;
+    const response = new EventEmitter() as http.IncomingMessage;
+    const end = vi.fn(() => {
+      response.statusCode = 200;
+      response.headers = {};
+      response.setEncoding = vi.fn();
+      const requestSpy = vi.mocked(http.request);
+      const responseHandler = requestSpy.mock.calls.at(-1)?.[1] as
+        | ((res: http.IncomingMessage) => void)
+        | undefined;
+      responseHandler?.(response);
+      response.emit('error', new Error('stream failed'));
+      return request;
+    });
+
+    Object.assign(request, {
+      destroy: vi.fn(),
+      end,
+    });
+
+    vi.spyOn(http, 'request').mockImplementation((_options, _callback) => request);
+
+    const version = await probeSocketApiVersion('/tmp/drydock-test-probe-response-error.sock');
 
     expect(version).toBeUndefined();
   });
