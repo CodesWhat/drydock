@@ -245,9 +245,6 @@ async function refreshStoredContainerImageFields(
   imageName: string,
   containerInStore: Container,
 ) {
-  if (!imageName) {
-    return;
-  }
   try {
     const currentImage = await watcher.dockerApi.getImage(imageName).inspect();
     const freshDigestRepo = getRepoDigest(currentImage);
