@@ -123,8 +123,8 @@ class SelfUpdateController {
 
   config: SelfUpdateControllerConfig;
 
-  constructor(config: SelfUpdateControllerConfig, docker?: Dockerode) {
-    this.docker = docker ?? new Dockerode({ socketPath: '/var/run/docker.sock' });
+  constructor(config: SelfUpdateControllerConfig, docker: Dockerode) {
+    this.docker = docker;
     this.config = config;
   }
 

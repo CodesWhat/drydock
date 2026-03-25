@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import { probeSocketApiVersion } from '../../../watchers/providers/docker/socket-version-probe.js';
 import {
   runSelfUpdateController,
   runSelfUpdateControllerEntrypoint,
@@ -170,6 +171,20 @@ describe('self-update-controller orchestration', () => {
     expect(getLoggedStates()).toContain(
       '[self-update:unknown] PREPARE - old=drydock(old-container-id), new=new-container-id',
     );
+  });
+
+  test('pins Dockerode to the probed socket API version when available', async () => {
+    vi.mocked(probeSocketApiVersion).mockResolvedValue('1.44');
+    const oldContainer = createOldContainer();
+    const newContainer = createNewContainer();
+    mockDocker(oldContainer, newContainer);
+
+    await runSelfUpdateController();
+
+    expect(mockDockerodeCtor).toHaveBeenCalledWith({
+      socketPath: '/var/run/docker.sock',
+      version: 'v1.44',
+    });
   });
 
   test('handles healthcheck transition from starting to healthy', async () => {
