@@ -65,7 +65,7 @@ function isValidLayoutItem(value: unknown): value is WidgetLayoutItem {
 }
 
 function loadPersistedLayout(order: readonly DashboardWidgetId[]): WidgetLayoutItem[] {
-  const rawLayout = (preferences.dashboard as Record<string, unknown>).gridLayout;
+  const rawLayout = preferences.dashboard.gridLayout;
   if (!Array.isArray(rawLayout)) {
     return createLayoutFromOrder(order);
   }
@@ -135,7 +135,7 @@ export function useDashboardWidgetOrder() {
   function persistWidgetOrder() {
     preferences.dashboard.widgetOrder = [...widgetOrder.value];
     // Persist full grid layout (x, y, w, h) so positions and sizes survive reload
-    (preferences.dashboard as Record<string, unknown>).gridLayout = layout.value.map((item) => ({
+    preferences.dashboard.gridLayout = layout.value.map((item) => ({
       i: item.i,
       x: item.x,
       y: item.y,
@@ -151,7 +151,7 @@ export function useDashboardWidgetOrder() {
   function applyWidgetOrder(nextOrder: readonly DashboardWidgetId[]) {
     syncing = true;
     widgetOrder.value = [...nextOrder];
-    layout.value = createLayoutFromOrder(widgetOrder.value);
+    layout.value = loadPersistedLayout(widgetOrder.value);
     persistWidgetOrder();
     queueMicrotask(() => {
       syncing = false;
@@ -165,7 +165,7 @@ export function useDashboardWidgetOrder() {
         return;
       }
       syncing = true;
-      layout.value = createLayoutFromOrder(nextOrder);
+      layout.value = loadPersistedLayout(nextOrder);
       persistWidgetOrder();
       queueMicrotask(() => {
         syncing = false;

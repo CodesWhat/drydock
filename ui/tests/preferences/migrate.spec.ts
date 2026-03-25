@@ -144,6 +144,22 @@ describe('preferences migration', () => {
       expect(result.containers.tableActions).toBe(DEFAULTS.containers.tableActions);
     });
 
+    it('should preserve dashboard gridLayout through migration (#223)', () => {
+      const gridLayout = [
+        { i: 'host-status', x: 10, y: 11, w: 4, h: 6 },
+        { i: 'recent-updates', x: 0, y: 0, w: 12, h: 8 },
+      ];
+      const result = migrate({
+        schemaVersion: 1,
+        dashboard: {
+          widgetOrder: ['host-status', 'recent-updates'],
+          hiddenWidgets: [],
+          gridLayout,
+        },
+      });
+      expect(result.dashboard.gridLayout).toEqual(gridLayout);
+    });
+
     it('should preserve all valid values through sanitization', () => {
       const input = {
         schemaVersion: 1,

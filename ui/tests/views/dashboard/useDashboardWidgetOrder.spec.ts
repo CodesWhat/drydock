@@ -28,7 +28,7 @@ describe('useDashboardWidgetOrder', () => {
   beforeEach(() => {
     localStorage.clear();
     preferences.dashboard.widgetOrder = [...DASHBOARD_WIDGET_IDS];
-    delete (preferences.dashboard as Record<string, unknown>).gridLayout;
+    preferences.dashboard.gridLayout = [];
   });
 
   it('hydrates from preferences and falls back to defaults for non-array values', async () => {
@@ -65,7 +65,7 @@ describe('useDashboardWidgetOrder', () => {
   });
 
   it('hydrates persisted grid layouts and skips invalid entries', async () => {
-    (preferences.dashboard as Record<string, unknown>).gridLayout = [
+    preferences.dashboard.gridLayout = [
       { i: 'host-status', x: 10, y: 11, w: 4, h: 6 },
       null,
       'not-a-layout-item',
@@ -284,6 +284,36 @@ describe('useDashboardWidgetOrder', () => {
       'host-status',
       'update-breakdown',
     ]);
+  });
+
+  it('preserves custom positions when widget order changes (#223)', async () => {
+    const customLayout = DASHBOARD_WIDGET_IDS.map((id, index) => ({
+      i: id,
+      x: index * 2,
+      y: index * 3,
+      w: 4,
+      h: 5,
+    }));
+    preferences.dashboard.gridLayout = customLayout;
+
+    const { state } = await mountWidgetOrderComposable();
+
+    // Verify custom positions loaded
+    const hostBefore = state.layout.value.find((item) => item.i === 'host-status');
+    expect(hostBefore?.x).toBe(customLayout.find((l) => l.i === 'host-status')!.x);
+
+    // Reorder via drag-drop
+    const reversed: DashboardWidgetId[] = [...DASHBOARD_WIDGET_IDS].reverse();
+    state.widgetOrder.value = [...reversed];
+    await nextTick();
+
+    // Custom positions should be preserved for each widget
+    for (const id of DASHBOARD_WIDGET_IDS) {
+      const layoutItem = state.layout.value.find((item) => item.i === id);
+      const original = customLayout.find((item) => item.i === id)!;
+      expect(layoutItem?.x).toBe(original.x);
+      expect(layoutItem?.y).toBe(original.y);
+    }
   });
 
   it('leaves unknown layout items untouched when applying constraints', () => {
