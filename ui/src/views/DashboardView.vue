@@ -3,6 +3,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
 import { type RouteLocationRaw, useRouter } from 'vue-router';
 import { GridItem, GridLayout } from 'grid-layout-plus';
 import AppIconButton from '@/components/AppIconButton.vue';
+import { useBreakpoints } from '../composables/useBreakpoints';
 import { useConfirmDialog } from '../composables/useConfirmDialog';
 import { ROUTES } from '../router/routes';
 import { updateContainer } from '../services/container-actions';
@@ -25,6 +26,7 @@ import { useDashboardWidgetOrder } from './dashboard/useDashboardWidgetOrder';
 
 const router = useRouter();
 const confirm = useConfirmDialog();
+const { isMobile } = useBreakpoints();
 const dashboardUpdateInProgress = ref<string | null>(null);
 const dashboardUpdateAllInProgress = ref(false);
 const dashboardUpdateError = ref<string | null>(null);
@@ -375,15 +377,22 @@ function confirmDashboardUpdateAll() {
       </template>
     </div>
 
+    <!-- Customize panel: mobile overlay backdrop -->
+    <div v-if="editMode && isMobile"
+         class="fixed inset-0 bg-black/50 z-40"
+         @click="toggleEditMode" />
+
     <!-- Customize panel -->
     <aside
       v-if="editMode"
-      class="shrink-0 flex flex-col dd-rounded overflow-hidden sticky top-0 mr-2"
+      class="shrink-0 flex flex-col dd-rounded overflow-hidden"
+      :class="isMobile ? 'fixed top-0 right-0 z-50' : 'sticky top-0 mr-2'"
       :style="{
-        width: 'var(--dd-layout-sidebar-expanded-width)',
-        minWidth: 'var(--dd-layout-sidebar-expanded-width)',
+        width: isMobile ? '100%' : 'var(--dd-layout-sidebar-expanded-width)',
+        minWidth: isMobile ? undefined : 'var(--dd-layout-sidebar-expanded-width)',
+        maxWidth: isMobile ? '100%' : undefined,
         backgroundColor: 'var(--dd-bg-card)',
-        height: 'calc(100vh - var(--dd-layout-main-viewport-offset))',
+        height: isMobile ? '100vh' : 'calc(100vh - var(--dd-layout-main-viewport-offset))',
       }">
       <div class="shrink-0 px-4 py-3 flex items-center justify-between"
            :style="{ borderBottom: '1px solid var(--dd-border)' }">
