@@ -43,7 +43,7 @@ describe('AnnouncementBanner', () => {
     expect(wrapper.attributes('style')).not.toContain('var(--dd-warning)');
   });
 
-  it('renders only the session dismiss action by default', () => {
+  it('renders only the session dismiss button by default', () => {
     const wrapper = factory();
     const buttons = wrapper.findAll('button');
 
@@ -51,44 +51,72 @@ describe('AnnouncementBanner', () => {
     expect(buttons[0].text()).toBe('Dismiss');
   });
 
-  it('renders custom dismiss labels and permanent action when configured', () => {
+  it('renders a link button when linkHref is provided', () => {
     const wrapper = factory({
-      dismissLabel: 'Not now',
-      permanentDismissLabel: 'Dismiss forever',
+      linkHref: 'https://example.com/docs',
+      linkLabel: 'View docs',
     });
-    const buttons = wrapper.findAll('button');
+    const link = wrapper.find('a[href="https://example.com/docs"]');
 
-    expect(buttons).toHaveLength(2);
-    expect(buttons[0].text()).toBe('Not now');
-    expect(buttons[1].text()).toBe('Dismiss forever');
+    expect(link.exists()).toBe(true);
+    expect(link.text()).toContain('View docs');
+    expect(link.attributes('target')).toBe('_blank');
   });
 
-  it('emits dismiss when the session dismiss button is clicked', async () => {
-    const wrapper = factory({}, { 'data-testid': 'announcement' });
+  it('shows permanent dismiss checkbox when permanentDismissLabel is provided', () => {
+    const wrapper = factory({ permanentDismissLabel: "Don't show again" });
+    const label = wrapper.find('[data-testid="announcement-dismiss-forever"]');
+
+    expect(label.exists()).toBe(false);
+
+    const wrapper2 = factory(
+      { permanentDismissLabel: "Don't show again" },
+      { 'data-testid': 'announcement' },
+    );
+    const checkbox = wrapper2.find(
+      '[data-testid="announcement-dismiss-forever"] input[type="checkbox"]',
+    );
+
+    expect(checkbox.exists()).toBe(true);
+    expect(wrapper2.text()).toContain("Don't show again");
+  });
+
+  it('emits dismiss when dismiss button is clicked without checkbox', async () => {
+    const wrapper = factory(
+      { permanentDismissLabel: "Don't show again" },
+      { 'data-testid': 'announcement' },
+    );
 
     await wrapper.get('[data-testid="announcement-dismiss-session"]').trigger('click');
 
     expect(wrapper.emitted('dismiss')).toHaveLength(1);
+    expect(wrapper.emitted('dismiss-permanent')).toBeUndefined();
   });
 
-  it('emits dismiss-permanent when the permanent dismiss button is clicked', async () => {
+  it('emits dismiss-permanent when dismiss is clicked with checkbox checked', async () => {
     const wrapper = factory(
-      { permanentDismissLabel: 'Dismiss forever' },
+      { permanentDismissLabel: "Don't show again" },
       { 'data-testid': 'announcement' },
     );
 
-    await wrapper.get('[data-testid="announcement-dismiss-forever"]').trigger('click');
+    const checkbox = wrapper.find(
+      '[data-testid="announcement-dismiss-forever"] input[type="checkbox"]',
+    );
+    await checkbox.setValue(true);
+    await wrapper.get('[data-testid="announcement-dismiss-session"]').trigger('click');
 
     expect(wrapper.emitted('dismiss-permanent')).toHaveLength(1);
+    expect(wrapper.emitted('dismiss')).toBeUndefined();
   });
 
   it('adds action data-testids from the provided data-testid attr', () => {
     const wrapper = factory(
-      { permanentDismissLabel: 'Dismiss forever' },
+      { permanentDismissLabel: "Don't show again", linkHref: 'https://example.com' },
       { 'data-testid': 'announcement' },
     );
 
     expect(wrapper.find('[data-testid="announcement-dismiss-session"]').exists()).toBe(true);
     expect(wrapper.find('[data-testid="announcement-dismiss-forever"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="announcement-link"]').exists()).toBe(true);
   });
 });

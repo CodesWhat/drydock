@@ -1444,17 +1444,14 @@ onUnmounted(() => {
           data-testid="oidc-http-compat-banner"
           title="HTTP OIDC discovery detected"
           permanent-dismiss-label="Don't show again"
+          link-href="https://getdrydock.com/docs/configuration/authentications/oidc"
+          link-label="Migration guide"
           :style="stackedBannerInlineStyle"
           @dismiss="dismissOidcHttpBannerForSession"
           @dismiss-permanent="dismissOidcHttpBannerPermanently">
           One or more OIDC providers use an insecure
           <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">http://</code>
           discovery URL. HTTP discovery is deprecated and will be removed in v1.6.0.
-          <a href="https://getdrydock.com/docs/configuration/authentications/oidc"
-             target="_blank"
-             rel="noopener noreferrer"
-             class="underline font-medium"
-             :style="{ color: 'var(--dd-warning)' }">Migrate your IdP to HTTPS.</a>
         </AnnouncementBanner>
 
         <AnnouncementBanner
@@ -1462,17 +1459,12 @@ onUnmounted(() => {
           data-testid="sha-hash-deprecation-banner"
           title="Legacy password hash detected"
           permanent-dismiss-label="Don't show again"
+          link-href="https://getdrydock.com/docs/deprecations#legacy-password-hash-formats"
+          link-label="Migration guide"
           :style="stackedBannerInlineStyle"
           @dismiss="dismissLegacyHashBannerForSession"
           @dismiss-permanent="dismissLegacyHashBannerPermanently">
           Your basic authentication uses a legacy password hash format. Legacy v1.3.9 formats are deprecated and will be removed in v1.6.0.
-          <a href="https://getdrydock.com/docs/deprecations#legacy-password-hash-formats"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="inline-flex items-center gap-1 underline font-medium"
-            :style="{ color: 'var(--dd-warning)' }">
-            Migrate to argon2id hashing.
-          </a>
         </AnnouncementBanner>
 
         <AnnouncementBanner
@@ -1480,6 +1472,8 @@ onUnmounted(() => {
           data-testid="legacy-config-deprecation-banner"
           :title="legacyConfigBannerTitle"
           permanent-dismiss-label="Don't show again"
+          link-href="https://getdrydock.com/docs/deprecations#removal-in-v160"
+          link-label="Migration guide"
           :style="stackedBannerInlineStyle"
           @dismiss="legacyConfigDeprecationBanner.dismissForSession"
           @dismiss-permanent="legacyConfigDeprecationBanner.dismissPermanently">
@@ -1499,14 +1493,6 @@ onUnmounted(() => {
           <span v-if="legacyLabelKeysPreview" class="block mt-1 truncate">
             Label keys ({{ legacyInputSummary?.label.total }}): {{ legacyLabelKeysPreview }}
           </span>
-          <a href="https://getdrydock.com/docs/deprecations#removal-in-v160"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="inline-flex items-center gap-1 mt-1.5 text-2xs-plus font-medium underline underline-offset-2"
-            :style="{ color: 'var(--dd-warning)' }">
-            View migration guide
-            <AppIcon name="external-link" :size="10" />
-          </a>
         </AnnouncementBanner>
 
         <AnnouncementBanner
@@ -1514,6 +1500,8 @@ onUnmounted(() => {
           data-testid="legacy-api-path-deprecation-banner"
           :title="legacyApiPathBannerTitle"
           permanent-dismiss-label="Don't show again"
+          link-href="https://getdrydock.com/docs/deprecations"
+          link-label="Migration guide"
           :style="stackedBannerInlineStyle"
           @dismiss="legacyApiPathDeprecationBanner.dismissForSession"
           @dismiss-permanent="legacyApiPathDeprecationBanner.dismissPermanently">
@@ -1524,14 +1512,6 @@ onUnmounted(() => {
           <span v-if="legacyApiPathKeysPreview" class="block mt-1 truncate">
             API paths ({{ legacyInputSummary?.api?.total }}): {{ legacyApiPathKeysPreview }}
           </span>
-          <a href="https://getdrydock.com/docs/deprecations"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="inline-flex items-center gap-1 mt-1.5 text-2xs-plus font-medium underline underline-offset-2"
-            :style="{ color: 'var(--dd-warning)' }">
-            View migration guide
-            <AppIcon name="external-link" :size="10" />
-          </a>
         </AnnouncementBanner>
       </div>
 

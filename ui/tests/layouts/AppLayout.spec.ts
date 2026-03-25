@@ -363,7 +363,7 @@ describe('AppLayout', () => {
 
     const banner = wrapper.find('[data-testid="oidc-http-compat-banner"]');
     expect(banner.exists()).toBe(true);
-    expect(banner.text()).toContain('Migrate your IdP to HTTPS');
+    expect(banner.text()).toContain('Migration guide');
   });
 
   it('supports dismissing OIDC HTTP compatibility banner for current session', async () => {
@@ -408,7 +408,10 @@ describe('AppLayout', () => {
 
     expect(wrapper.find('[data-testid="oidc-http-compat-banner"]').exists()).toBe(true);
 
-    await wrapper.find('[data-testid="oidc-http-compat-banner-dismiss-forever"]').trigger('click');
+    await wrapper
+      .find('[data-testid="oidc-http-compat-banner-dismiss-forever"] input[type="checkbox"]')
+      .setValue(true);
+    await wrapper.find('[data-testid="oidc-http-compat-banner-dismiss-session"]').trigger('click');
     await flushPromises();
 
     expect(wrapper.find('[data-testid="oidc-http-compat-banner"]').exists()).toBe(false);
@@ -498,7 +501,10 @@ describe('AppLayout', () => {
     expect(wrapper.find('[data-testid="sha-hash-deprecation-banner"]').exists()).toBe(true);
 
     await wrapper
-      .find('[data-testid="sha-hash-deprecation-banner-dismiss-forever"]')
+      .find('[data-testid="sha-hash-deprecation-banner-dismiss-forever"] input[type="checkbox"]')
+      .setValue(true);
+    await wrapper
+      .find('[data-testid="sha-hash-deprecation-banner-dismiss-session"]')
       .trigger('click');
     await flushPromises();
 
@@ -646,7 +652,12 @@ describe('AppLayout', () => {
     expect(wrapper.find('[data-testid="legacy-config-deprecation-banner"]').exists()).toBe(true);
 
     await wrapper
-      .find('[data-testid="legacy-config-deprecation-banner-dismiss-forever"]')
+      .find(
+        '[data-testid="legacy-config-deprecation-banner-dismiss-forever"] input[type="checkbox"]',
+      )
+      .setValue(true);
+    await wrapper
+      .find('[data-testid="legacy-config-deprecation-banner-dismiss-session"]')
       .trigger('click');
     await flushPromises();
 

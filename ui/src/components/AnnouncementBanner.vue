@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, useAttrs } from 'vue';
+import { computed, ref, useAttrs } from 'vue';
 
 type BannerTone = 'warning' | 'error';
 
@@ -10,19 +10,31 @@ const props = withDefaults(
     tone?: BannerTone;
     dismissLabel?: string;
     permanentDismissLabel?: string;
+    linkHref?: string;
+    linkLabel?: string;
   }>(),
   {
     tone: 'warning',
   },
 );
 
-defineEmits<{
+const emit = defineEmits<{
   dismiss: [];
   'dismiss-permanent': [];
 }>();
 
 const attrs = useAttrs();
 const testIdPrefix = attrs['data-testid'] as string | undefined;
+
+const permanentDismissChecked = ref(false);
+
+function handleDismiss() {
+  if (permanentDismissChecked.value) {
+    emit('dismiss-permanent');
+  } else {
+    emit('dismiss');
+  }
+}
 
 const toneStyles = computed(() => {
   if (props.tone === 'error') {
@@ -33,9 +45,6 @@ const toneStyles = computed(() => {
       buttonTextColor: 'var(--dd-danger)',
       buttonBackgroundColor: 'transparent',
       buttonBorderColor: 'var(--dd-danger)',
-      permanentButtonTextColor: 'var(--dd-bg)',
-      permanentButtonBackgroundColor: 'var(--dd-danger)',
-      permanentButtonBorderColor: 'var(--dd-danger)',
       iconName: props.icon ?? 'warning',
     };
   }
@@ -47,9 +56,6 @@ const toneStyles = computed(() => {
     buttonTextColor: 'var(--dd-warning)',
     buttonBackgroundColor: 'transparent',
     buttonBorderColor: 'var(--dd-warning)',
-    permanentButtonTextColor: 'var(--dd-bg)',
-    permanentButtonBackgroundColor: 'var(--dd-warning)',
-    permanentButtonBorderColor: 'var(--dd-warning)',
     iconName: props.icon ?? 'warning',
   };
 });
@@ -78,30 +84,41 @@ const toneStyles = computed(() => {
         </p>
       </div>
     </div>
-    <div class="flex items-center gap-2 shrink-0">
+    <div class="flex flex-col items-end gap-1.5 shrink-0">
+      <a v-if="linkHref"
+        :href="linkHref"
+        target="_blank"
+        rel="noopener noreferrer"
+        :data-testid="testIdPrefix ? `${testIdPrefix}-link` : undefined"
+        class="inline-flex items-center gap-1 text-2xs-plus px-2.5 py-1.5 dd-rounded transition-colors w-full justify-center"
+        :style="{
+          border: `1px solid ${toneStyles.buttonBorderColor}`,
+          color: toneStyles.buttonTextColor,
+          backgroundColor: toneStyles.buttonBackgroundColor,
+        }">
+        {{ linkLabel ?? 'Learn more' }}
+        <AppIcon name="external-link" :size="10" />
+      </a>
       <AppButton size="none" variant="plain" weight="none"
         :data-testid="testIdPrefix ? `${testIdPrefix}-dismiss-session` : undefined"
-        class="text-2xs-plus px-2.5 py-1.5 dd-rounded transition-colors"
+        class="text-2xs-plus px-2.5 py-1.5 dd-rounded transition-colors w-full text-center"
         :style="{
           border: `1px solid ${toneStyles.buttonBorderColor}`,
           color: toneStyles.buttonTextColor,
           backgroundColor: toneStyles.buttonBackgroundColor,
         }"
-        @click="$emit('dismiss')">
+        @click="handleDismiss">
         {{ dismissLabel ?? 'Dismiss' }}
       </AppButton>
-      <AppButton size="none" variant="plain" weight="none"
-        v-if="permanentDismissLabel !== undefined"
+      <label v-if="permanentDismissLabel !== undefined"
         :data-testid="testIdPrefix ? `${testIdPrefix}-dismiss-forever` : undefined"
-        class="text-2xs-plus px-2.5 py-1.5 dd-rounded transition-colors"
-        :style="{
-          border: `1px solid ${toneStyles.permanentButtonBorderColor}`,
-          color: toneStyles.permanentButtonTextColor,
-          backgroundColor: toneStyles.permanentButtonBackgroundColor,
-        }"
-        @click="$emit('dismiss-permanent')">
-        {{ permanentDismissLabel }}
-      </AppButton>
+        class="flex items-center gap-1.5 cursor-pointer">
+        <input
+          type="checkbox"
+          v-model="permanentDismissChecked"
+          class="shrink-0 w-3 h-3 dd-rounded-sm cursor-pointer" />
+        <span class="text-3xs dd-text-muted">{{ permanentDismissLabel }}</span>
+      </label>
     </div>
   </div>
 </template>
