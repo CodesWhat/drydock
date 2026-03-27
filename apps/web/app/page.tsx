@@ -30,9 +30,21 @@ type FeatureCategory = "core" | "security" | "integrations" | "operations";
 
 const categoryLabels: Record<FeatureCategory, { label: string; color: string; border: string }> = {
   core: { label: "Core", color: "text-blue-600 dark:text-blue-400", border: "border-blue-500/30" },
-  security: { label: "Security", color: "text-rose-600 dark:text-rose-400", border: "border-rose-500/30" },
-  integrations: { label: "Integrations", color: "text-purple-600 dark:text-purple-400", border: "border-purple-500/30" },
-  operations: { label: "Operations", color: "text-emerald-600 dark:text-emerald-400", border: "border-emerald-500/30" },
+  security: {
+    label: "Security",
+    color: "text-rose-600 dark:text-rose-400",
+    border: "border-rose-500/30",
+  },
+  integrations: {
+    label: "Integrations",
+    color: "text-purple-600 dark:text-purple-400",
+    border: "border-purple-500/30",
+  },
+  operations: {
+    label: "Operations",
+    color: "text-emerald-600 dark:text-emerald-400",
+    border: "border-emerald-500/30",
+  },
 };
 
 const features: {
