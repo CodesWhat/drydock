@@ -20,6 +20,7 @@ describe('vitest coverage configuration', () => {
       '**/registries/providers/gitea/Gitea.ts',
       '**/registries/providers/harbor/Harbor.ts',
       '**/registries/providers/nexus/Nexus.ts',
+      '**/registries/providers/trueforge/Trueforge.ts',
       '**/api/container/query-values.ts',
       '**/api/container/sorting.ts',
       '**/api/container/update-age.ts',

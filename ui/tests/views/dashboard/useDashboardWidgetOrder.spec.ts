@@ -64,6 +64,15 @@ describe('useDashboardWidgetOrder', () => {
     expect(state.hiddenWidgets.value).toEqual([]);
   });
 
+  it('falls back to default layout when gridLayout is not an array', async () => {
+    preferences.dashboard.gridLayout = 'not-an-array' as unknown as unknown[];
+
+    const { state } = await mountWidgetOrderComposable();
+
+    expect(state.layout.value).toHaveLength(DASHBOARD_WIDGET_IDS.length);
+    expect(state.layout.value.map((item) => item.i)).toEqual(DASHBOARD_WIDGET_IDS);
+  });
+
   it('hydrates persisted grid layouts and skips invalid entries', async () => {
     preferences.dashboard.gridLayout = [
       { i: 'host-status', x: 10, y: 11, w: 4, h: 6 },
@@ -257,6 +266,25 @@ describe('useDashboardWidgetOrder', () => {
     expect(state.hiddenWidgets.value).toEqual([]);
     expect(state.widgetOrder.value).toEqual(DASHBOARD_WIDGET_IDS);
     expect(state.editMode.value).toBe(true);
+  });
+
+  it('debounces position/size persistence when layout changes without order change', async () => {
+    vi.useFakeTimers();
+    const { state } = await mountWidgetOrderComposable();
+
+    // Mutate a position without changing order
+    const updated = state.layout.value.map((item) => ({ ...item }));
+    updated[0] = { ...updated[0], x: 99 };
+    state.layout.value = updated;
+    await nextTick();
+
+    // Before debounce fires, gridLayout should not yet be updated
+    vi.advanceTimersByTime(300);
+    expect(preferences.dashboard.gridLayout).toEqual(
+      expect.arrayContaining([expect.objectContaining({ i: updated[0].i, x: 99 })]),
+    );
+
+    vi.useRealTimers();
   });
 
   it('returns the original order when asked to move invalid or no-op widget pairs', () => {
