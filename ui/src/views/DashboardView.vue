@@ -61,10 +61,28 @@ const {
   widgetOrderIndex,
 } = useDashboardWidgetOrder();
 
+// Widget panel visibility (separate from edit mode so it's opt-in on mobile)
+const showWidgetPanel = ref(false);
+
+function handleToggleEditMode() {
+  toggleEditMode();
+  // On desktop, auto-open panel when entering edit mode; on mobile, leave it closed
+  showWidgetPanel.value = editMode.value && !isMobile.value;
+}
+
+function toggleWidgetPanel() {
+  showWidgetPanel.value = !showWidgetPanel.value;
+}
+
+function closeWidgetPanel() {
+  showWidgetPanel.value = false;
+}
+
 // Exit edit mode on Escape key
 function onKeydown(event: KeyboardEvent) {
   if (event.key === 'Escape' && editMode.value) {
     editMode.value = false;
+    showWidgetPanel.value = false;
   }
 }
 onMounted(() => {
@@ -240,14 +258,25 @@ function confirmDashboardUpdateAll() {
       <template v-else>
         <!-- Pencil icon teleported to breadcrumb header -->
         <Teleport to="#breadcrumb-actions">
-          <AppIconButton
-            data-test="dashboard-edit-toggle"
-            :icon="editMode ? 'check' : 'ph:pencil-simple'"
-            size="xs"
-            :variant="editMode ? 'plain' : 'muted'"
-            :class="editMode ? 'dd-bg-elevated dd-text ml-2' : 'ml-2'"
-            :tooltip="editMode ? 'Done customizing' : 'Customize dashboard'"
-            @click="toggleEditMode" />
+          <div class="flex items-center">
+            <AppIconButton
+              v-if="editMode && !showWidgetPanel"
+              data-test="dashboard-widget-panel-toggle"
+              icon="ph:sliders-horizontal"
+              size="xs"
+              variant="muted"
+              class="ml-2"
+              tooltip="Show widget panel"
+              @click="toggleWidgetPanel" />
+            <AppIconButton
+              data-test="dashboard-edit-toggle"
+              :icon="editMode ? 'check' : 'ph:pencil-simple'"
+              size="xs"
+              :variant="editMode ? 'plain' : 'muted'"
+              :class="editMode ? 'dd-bg-elevated dd-text ml-2' : 'ml-2'"
+              :tooltip="editMode ? 'Done customizing' : 'Customize dashboard'"
+              @click="handleToggleEditMode" />
+          </div>
         </Teleport>
 
         <!-- Grid Layout -->
@@ -382,13 +411,13 @@ function confirmDashboardUpdateAll() {
     </div>
 
     <!-- Customize panel: mobile overlay backdrop -->
-    <div v-if="editMode && isMobile"
+    <div v-if="showWidgetPanel && isMobile"
          class="fixed inset-0 bg-black/50 z-40"
-         @click="toggleEditMode" />
+         @click="closeWidgetPanel" />
 
     <!-- Customize panel -->
     <aside
-      v-if="editMode"
+      v-if="showWidgetPanel"
       class="shrink-0 flex flex-col dd-rounded overflow-hidden"
       :class="isMobile ? 'fixed top-0 right-0 z-50' : 'sticky top-0 mr-2'"
       :style="{
@@ -409,7 +438,7 @@ function confirmDashboardUpdateAll() {
           size="xs"
           variant="muted"
           aria-label="Close panel"
-          @click="toggleEditMode" />
+          @click="closeWidgetPanel" />
       </div>
 
       <div class="flex-1 overflow-y-auto p-3 space-y-1">
