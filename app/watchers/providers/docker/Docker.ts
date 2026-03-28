@@ -1008,6 +1008,13 @@ class Docker extends Watcher {
         return fallbackContainerReport;
       });
       event.emitContainerReports(containerReports);
+      event.emitWatcherSnapshot({
+        watcher: {
+          type: this.type,
+          name: this.name,
+        },
+        containers: containerReports.map((containerReport) => containerReport.container),
+      });
       return containerReports;
     } finally {
       endDigestCachePollCycleForRegistries();

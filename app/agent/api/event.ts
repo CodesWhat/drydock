@@ -140,6 +140,25 @@ function getAgentContainerSsePayload(payload: unknown): unknown {
   return sanitizeContainerLifecyclePayloadForAgentSse(payload);
 }
 
+function sanitizeWatcherSnapshotPayloadForAgentSse(payload: unknown): unknown {
+  if (!payload || typeof payload !== 'object') {
+    return payload;
+  }
+
+  const snapshotPayload = payload as {
+    watcher?: unknown;
+    containers?: unknown;
+  };
+  const containers = Array.isArray(snapshotPayload.containers)
+    ? snapshotPayload.containers.map((container) => getAgentContainerSsePayload(container))
+    : [];
+
+  return {
+    watcher: snapshotPayload.watcher,
+    containers,
+  };
+}
+
 function computeContainerSummary(): ContainerSummary {
   const containers = storeContainer.getContainers();
   const containerStatus = getContainerStatusSummary(containers);
@@ -225,6 +244,9 @@ export function initEvents() {
   );
   event.registerContainerRemoved((container: event.ContainerLifecycleEventPayload) =>
     sendSseEvent('dd:container-removed', { id: container.id }),
+  );
+  event.registerWatcherSnapshot((payload: event.WatcherSnapshotEventPayload) =>
+    sendSseEvent('dd:watcher-snapshot', sanitizeWatcherSnapshotPayloadForAgentSse(payload)),
   );
 }
 

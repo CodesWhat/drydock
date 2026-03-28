@@ -482,6 +482,40 @@ describe('Container Actions Router', () => {
       });
     });
 
+    test('should not clear updateAvailable when the post-trigger container is already up to date', async () => {
+      const container = {
+        id: 'c1',
+        name: 'nginx',
+        image: { name: 'nginx' },
+        updateAvailable: true,
+      };
+      const updatedContainer = {
+        ...container,
+        image: { name: 'nginx:latest' },
+        updateAvailable: false,
+      };
+      mockGetContainer
+        .mockReturnValueOnce(container)
+        .mockReturnValueOnce(updatedContainer)
+        .mockReturnValueOnce(updatedContainer);
+      const mockTriggerFn = vi.fn().mockResolvedValue(undefined);
+      const trigger = { type: 'docker', trigger: mockTriggerFn };
+      mockGetState.mockReturnValue({ trigger: { 'docker.default': trigger } });
+
+      const handler = getHandler('post', '/:id/update');
+      const req = createMockRequest({ params: { id: 'c1' } });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(mockTriggerFn).toHaveBeenCalledWith(container);
+      expect(mockUpdateContainer).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        message: 'Container updated successfully',
+        result: updatedContainer,
+      });
+    });
+
     test('should select the dockercompose trigger matching container compose labels', async () => {
       const container = {
         id: 'c1',

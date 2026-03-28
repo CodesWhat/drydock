@@ -2209,6 +2209,32 @@ test('doesReferenceMatchId should return false when trigger id has no name segme
   expect(Trigger.doesReferenceMatchId('update', '')).toBe(false);
 });
 
+test('canonicalizeReportName should strip docker recreate aliases', () => {
+  const report = {
+    container: {
+      name: '0123456789ab_nginx',
+    },
+    changed: false,
+  };
+
+  Trigger.canonicalizeReportName(report);
+
+  expect(report.container.name).toBe('nginx');
+});
+
+test('canonicalizeReportName should ignore reports without a string name', () => {
+  const report = {
+    container: {
+      name: undefined,
+    },
+    changed: false,
+  };
+
+  Trigger.canonicalizeReportName(report);
+
+  expect(report.container.name).toBeUndefined();
+});
+
 test('preview should return an empty object by default', async () => {
   await expect(trigger.preview({})).resolves.toEqual({});
 });

@@ -10,6 +10,10 @@ const eventTestCases = [
     register: event.registerContainerReports,
   },
   {
+    emitter: event.emitWatcherSnapshot,
+    register: event.registerWatcherSnapshot,
+  },
+  {
     emitter: event.emitContainerReport,
     register: event.registerContainerReport,
   },

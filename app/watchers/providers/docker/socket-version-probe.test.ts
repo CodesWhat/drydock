@@ -175,4 +175,34 @@ describe('probeSocketApiVersion', () => {
 
     expect(version).toBeUndefined();
   });
+
+  test('returns undefined and destroys the request when the response body exceeds the probe limit', async () => {
+    const request = new EventEmitter() as http.ClientRequest;
+    const response = new EventEmitter() as http.IncomingMessage;
+    const destroy = vi.fn();
+    const end = vi.fn(() => {
+      response.statusCode = 200;
+      response.headers = {};
+      response.setEncoding = vi.fn();
+      const requestSpy = vi.mocked(http.request);
+      const responseHandler = requestSpy.mock.calls.at(-1)?.[1] as
+        | ((res: http.IncomingMessage) => void)
+        | undefined;
+      responseHandler?.(response);
+      response.emit('data', 'x'.repeat(70 * 1024));
+      return request;
+    });
+
+    Object.assign(request, {
+      destroy,
+      end,
+    });
+
+    vi.spyOn(http, 'request').mockImplementation((_options, _callback) => request);
+
+    const version = await probeSocketApiVersion('/tmp/drydock-test-probe-oversized.sock');
+
+    expect(version).toBeUndefined();
+    expect(destroy).toHaveBeenCalledTimes(1);
+  });
 });

@@ -95,12 +95,21 @@ export interface AgentDisconnectedEventPayload {
   reason?: string;
 }
 
+export interface WatcherSnapshotEventPayload {
+  watcher: {
+    type: string;
+    name: string;
+  };
+  containers: Container[];
+}
+
 export type ContainerLifecycleEventPayload = Partial<Omit<Container, 'image'>> & {
   image?: Partial<Container['image']>;
 };
 
 const containerReportHandlers = new Map<number, OrderedEventHandler<ContainerReport>>();
 const containerReportsHandlers = new Map<number, OrderedEventHandler<ContainerReport[]>>();
+const watcherSnapshotHandlers = new Map<number, OrderedEventHandler<WatcherSnapshotEventPayload>>();
 const containerUpdateAppliedHandlers = new Map<number, OrderedEventHandler<string>>();
 const containerUpdateFailedHandlers = new Map<
   number,
@@ -176,6 +185,25 @@ export function registerContainerReports(
   options: EventHandlerRegistrationOptions = {},
 ): () => void {
   return registerOrderedEventHandler(containerReportsHandlers, handler, options);
+}
+
+/**
+ * Emit WatcherSnapshot event.
+ * @param payload
+ */
+export async function emitWatcherSnapshot(payload: WatcherSnapshotEventPayload): Promise<void> {
+  await emitOrderedHandlers(watcherSnapshotHandlers, payload);
+}
+
+/**
+ * Register to WatcherSnapshot event.
+ * @param handler
+ */
+export function registerWatcherSnapshot(
+  handler: OrderedEventHandlerFn<WatcherSnapshotEventPayload>,
+  options: EventHandlerRegistrationOptions = {},
+): () => void {
+  return registerOrderedEventHandler(watcherSnapshotHandlers, handler, options);
 }
 
 /**
@@ -425,6 +453,7 @@ export function clearAllListenersForTests(): void {
   eventEmitter.removeAllListeners();
   containerReportHandlers.clear();
   containerReportsHandlers.clear();
+  watcherSnapshotHandlers.clear();
   containerUpdateAppliedHandlers.clear();
   containerUpdateFailedHandlers.clear();
   securityAlertHandlers.clear();

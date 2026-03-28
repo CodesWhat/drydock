@@ -26,6 +26,7 @@ vi.mock('../../event/index.js', () => ({
   registerContainerAdded: vi.fn(),
   registerContainerUpdated: vi.fn(),
   registerContainerRemoved: vi.fn(),
+  registerWatcherSnapshot: vi.fn(),
 }));
 
 vi.mock('../../configuration/index.js', () => ({
@@ -205,6 +206,7 @@ describe('agent API event', () => {
       expect(event.registerContainerAdded).toHaveBeenCalledWith(expect.any(Function));
       expect(event.registerContainerUpdated).toHaveBeenCalledWith(expect.any(Function));
       expect(event.registerContainerRemoved).toHaveBeenCalledWith(expect.any(Function));
+      expect(event.registerWatcherSnapshot).toHaveBeenCalledWith(expect.any(Function));
     });
 
     test('container-added handler should send SSE to connected clients', () => {
@@ -357,6 +359,74 @@ describe('agent API event', () => {
       expect(res.write).toHaveBeenCalled();
       const payload = res.write.mock.calls[0][0];
       expect(payload).toContain('dd:container-removed');
+    });
+
+    test('watcher-snapshot handler should send watcher identity and sanitized containers', () => {
+      storeContainer.getContainerRaw.mockReturnValueOnce({
+        id: 'c1',
+        watcher: 'local',
+        details: {
+          env: [{ key: 'API_TOKEN', value: 'super-secret' }],
+        },
+      });
+
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+      eventApi.initEvents();
+
+      const snapshotHandler = event.registerWatcherSnapshot.mock.calls[0][0];
+      snapshotHandler({
+        watcher: { type: 'docker', name: 'local' },
+        containers: [
+          {
+            id: 'c1',
+            watcher: 'local',
+            details: {
+              env: [{ key: 'API_TOKEN', value: '[REDACTED]', sensitive: true }],
+            },
+          },
+        ],
+      });
+
+      expect(res.write).toHaveBeenCalled();
+      const payload = res.write.mock.calls[0][0];
+      expect(payload).toContain('dd:watcher-snapshot');
+      expect(payload).toContain('"type":"docker"');
+      expect(payload).toContain('"name":"local"');
+      expect(payload).toContain('"key":"API_TOKEN"');
+      expect(payload).toContain('"value":"super-secret"');
+      expect(payload).not.toContain('"sensitive"');
+    });
+
+    test('watcher-snapshot handler should emit an empty container list for non-array containers', () => {
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+      eventApi.initEvents();
+
+      const snapshotHandler = event.registerWatcherSnapshot.mock.calls[0][0];
+      snapshotHandler({
+        watcher: { type: 'docker', name: 'local' },
+        containers: 'invalid',
+      });
+
+      expect(res.write).toHaveBeenCalled();
+      const payload = res.write.mock.calls[0][0];
+      expect(payload).toContain('dd:watcher-snapshot');
+      expect(payload).toContain('"containers":[]');
+    });
+
+    test('watcher-snapshot handler should pass through non-object payloads', () => {
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+      eventApi.initEvents();
+
+      const snapshotHandler = event.registerWatcherSnapshot.mock.calls[0][0];
+      snapshotHandler('invalid-snapshot');
+
+      expect(res.write).toHaveBeenCalled();
+      const payload = res.write.mock.calls[0][0];
+      expect(payload).toContain('dd:watcher-snapshot');
+      expect(payload).toContain('"data":"invalid-snapshot"');
     });
   });
 });

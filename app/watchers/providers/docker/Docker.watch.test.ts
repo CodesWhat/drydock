@@ -130,6 +130,7 @@ describe('Docker Watcher', () => {
     event.emitWatcherStop.mockImplementation(() => {});
     event.emitContainerReport.mockImplementation(() => {});
     event.emitContainerReports.mockImplementation(() => {});
+    event.emitWatcherSnapshot.mockImplementation(() => {});
 
     // Setup tag mock
     mockTag.parse.mockReturnValue({ major: 1, minor: 0, patch: 0 });
@@ -453,6 +454,10 @@ describe('Docker Watcher', () => {
         changed: false,
       });
       expect(event.emitContainerReports).toHaveBeenCalledWith(result);
+      expect(event.emitWatcherSnapshot).toHaveBeenCalledWith({
+        watcher: { type: docker.type, name: docker.name },
+        containers: result.map((report) => report.container),
+      });
     });
 
     test('should skip containers refreshed by registry webhooks on the next scheduled poll', async () => {

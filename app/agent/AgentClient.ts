@@ -54,6 +54,14 @@ interface AgentSsePayload {
   data?: unknown;
 }
 
+interface WatcherSnapshotPayload {
+  watcher?: {
+    type?: unknown;
+    name?: unknown;
+  };
+  containers?: unknown;
+}
+
 interface RemoteTriggerErrorPayload {
   error?: unknown;
   details?: unknown;
@@ -423,6 +431,23 @@ export class AgentClient {
     storeContainer.deleteContainer(removedContainerData.id);
   }
 
+  private async handleWatcherSnapshotEvent(data: unknown) {
+    const snapshotPayload = data as WatcherSnapshotPayload;
+    const watcherName =
+      typeof snapshotPayload?.watcher?.name === 'string' ? snapshotPayload.watcher.name : undefined;
+    const containers = Array.isArray(snapshotPayload?.containers)
+      ? (snapshotPayload.containers as Container[])
+      : [];
+
+    for (const container of containers) {
+      await this.processContainer(container);
+    }
+
+    if (watcherName) {
+      this.pruneOldContainers(containers, watcherName);
+    }
+  }
+
   async handleEvent(eventName: string, data: unknown) {
     switch (eventName) {
       case 'dd:ack':
@@ -434,6 +459,9 @@ export class AgentClient {
         return;
       case 'dd:container-removed':
         this.handleContainerRemovedEvent(data);
+        return;
+      case 'dd:watcher-snapshot':
+        await this.handleWatcherSnapshotEvent(data);
         return;
       default:
         return;

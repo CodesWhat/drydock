@@ -720,6 +720,68 @@ describe('AgentClient', () => {
       expect(storeContainer.deleteContainer).toHaveBeenCalledWith('c1');
     });
 
+    test('should reconcile watcher snapshot by processing current containers and pruning missing ones', async () => {
+      const processSpy = vi.spyOn(client, 'processContainer').mockResolvedValue(undefined);
+      const containersInStore = [
+        { id: 'c1', name: 'current', watcher: 'local', agent: 'test-agent' },
+        { id: 'c2', name: 'stale-old', watcher: 'local', agent: 'test-agent' },
+        { id: 'c3', name: 'other-watcher', watcher: 'remote', agent: 'test-agent' },
+      ];
+      storeContainer.getContainers.mockImplementation((query = {}) =>
+        containersInStore.filter(
+          (container) =>
+            (!query.agent || container.agent === query.agent) &&
+            (!query.watcher || container.watcher === query.watcher),
+        ),
+      );
+
+      await client.handleEvent('dd:watcher-snapshot', {
+        watcher: { type: 'docker', name: 'local' },
+        containers: [{ id: 'c1', name: 'current', watcher: 'local' }],
+      });
+
+      expect(processSpy).toHaveBeenCalledWith({ id: 'c1', name: 'current', watcher: 'local' });
+      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('c2');
+      expect(storeContainer.deleteContainer).not.toHaveBeenCalledWith('c3');
+    });
+
+    test('should prune all containers for a watcher when a watcher snapshot is empty', async () => {
+      const containersInStore = [
+        { id: 'c1', name: 'stale-1', watcher: 'local', agent: 'test-agent' },
+        { id: 'c2', name: 'stale-2', watcher: 'local', agent: 'test-agent' },
+        { id: 'c3', name: 'other-watcher', watcher: 'remote', agent: 'test-agent' },
+      ];
+      storeContainer.getContainers.mockImplementation((query = {}) =>
+        containersInStore.filter(
+          (container) =>
+            (!query.agent || container.agent === query.agent) &&
+            (!query.watcher || container.watcher === query.watcher),
+        ),
+      );
+
+      await client.handleEvent('dd:watcher-snapshot', {
+        watcher: { type: 'docker', name: 'local' },
+        containers: [],
+      });
+
+      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('c1');
+      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('c2');
+      expect(storeContainer.deleteContainer).not.toHaveBeenCalledWith('c3');
+    });
+
+    test('should ignore invalid watcher snapshot payloads without pruning', async () => {
+      const processSpy = vi.spyOn(client, 'processContainer').mockResolvedValue(undefined);
+
+      await client.handleEvent('dd:watcher-snapshot', {
+        watcher: { type: 'docker', name: 42 },
+        containers: { id: 'c1' },
+      });
+
+      expect(processSpy).not.toHaveBeenCalled();
+      expect(storeContainer.deleteContainer).not.toHaveBeenCalled();
+      expect(storeContainer.getContainers).not.toHaveBeenCalled();
+    });
+
     test('should ignore unknown event types', async () => {
       const processSpy = vi.spyOn(client, 'processContainer');
       await client.handleEvent('dd:unknown', {});
