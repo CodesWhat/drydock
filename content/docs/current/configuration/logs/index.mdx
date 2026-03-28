@@ -14,10 +14,10 @@ Control drydock's own log output with environment variables.
 | Env var | Required | Description | Supported values | Default in official Docker image |
 | ---------------- | :--------------: | ----------- | --------------------------- | --------------------------- |
 | `DD_LOG_LEVEL` | ⚪ | Log level | `fatal`, `error`, `warn`, `info`, `debug`, `trace` | `info` |
-| `DD_LOG_FORMAT` | ⚪ | Log format | text json | `json` |
+| `DD_LOG_FORMAT` | ⚪ | Log format | text json | `text` |
 | `DD_LOG_BUFFER_ENABLED` | ⚪ | Enable in-memory log ring buffer used by UI/API log viewer | `true`, `false` | `true` |
 
-The official image sets `DD_LOG_FORMAT=json` by default for structured production logs. Override with `DD_LOG_FORMAT=text` for pretty logs.
+The official image sets `DD_LOG_FORMAT=text` by default for pretty, human-readable logs. Set `DD_LOG_FORMAT=json` when you want structured output for log aggregators.
 Set `DD_LOG_BUFFER_ENABLED=false` to disable the in-memory ring buffer (reduces per-log processing overhead).
 
 ### Examples

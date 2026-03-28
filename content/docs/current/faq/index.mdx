@@ -286,7 +286,7 @@ Drydock log behavior is controlled by environment variables:
 | `DD_LOG_FORMAT` | `text`, `json` | `json` |
 | `DD_LOG_BUFFER_ENABLED` | `true`, `false` | `true` |
 
-The official image defaults to `DD_LOG_FORMAT=json` for structured output suitable for log aggregators like Elasticsearch or Loki. Set `DD_LOG_FORMAT=text` if you prefer pretty logs.
+The official image defaults to `DD_LOG_FORMAT=text` for pretty, human-readable logs. Set `DD_LOG_FORMAT=json` if you want structured output for log aggregators like Elasticsearch or Loki.
 Set `DD_LOG_BUFFER_ENABLED=false` to disable the in-memory application log ring buffer used by `/api/v1/log/entries` and the UI log viewer.
 See [Logs](/docs/configuration/logs) for examples.
 

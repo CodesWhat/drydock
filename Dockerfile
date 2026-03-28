@@ -66,7 +66,7 @@ RUN npm run build
 
 # Release stage
 FROM base AS release
-ENV DD_LOG_FORMAT=json
+ENV DD_LOG_FORMAT=text
 
 # Remove unnecessary network utilities (busybox symlinks) and npm to reduce attack surface.
 # curl is kept for backward compatibility with user-defined HEALTHCHECK overrides;
