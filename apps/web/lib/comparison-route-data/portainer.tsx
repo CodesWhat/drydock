@@ -25,7 +25,7 @@ Docker Swarm|Yes|Planned (v2.0.0)|competitor
 Web terminal / shell|Yes|Planned|competitor
 Compose templates|Yes|Planned|competitor
 Audit log|Yes (BE only)|Yes (free)|drydock
-Resource footprint|Heavy (~200MB+ RAM)|Lightweight (~80MB RAM)|drydock
+Resource footprint|Heavier (~100–200MB RAM)|Lightweight (~80MB RAM)|drydock
 License|Zlib (CE) / Proprietary (BE)|AGPL-3.0|drydock
 `,
   highlightsTable: `
