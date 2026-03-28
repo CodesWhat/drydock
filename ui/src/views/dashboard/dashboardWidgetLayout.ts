@@ -15,28 +15,25 @@ export interface WidgetLayoutItem {
 
 /**
  * Responsive breakpoints for the dashboard grid (pixel widths).
+ * Measured against the grid CONTAINER width (not viewport) by grid-layout-plus.
  *
- * - `lg` (>= 1024): full desktop — 12 columns
- * - `md` (>= 768): tablet — 6 columns
- * - `sm` (>= 640): large phone — 2 columns (stat pairs side-by-side)
- * - `xs` (>= 480): small phone — 1 column, widgets stack
- * - `xxs` (>= 0): tiny screens — 1 column
+ * Widget default widths (w:3 stat cards, w:4 big widgets) only tile cleanly
+ * into 12 columns (3*4=12, 4*3=12). Any other column count (6, 8, etc.)
+ * creates gaps because grid-layout-plus responsive mode clamps positions
+ * instead of reflowing. So we keep 12 columns all the way down to phone
+ * width, then drop to 1 column where everything stacks full-width.
  */
 export const GRID_BREAKPOINTS: Breakpoints = {
   lg: 1024,
-  md: 768,
-  sm: 640,
-  xs: 480,
-  xxs: 0,
+  md: 640,
+  sm: 0,
 };
 
 /** Column counts per responsive breakpoint. */
 export const GRID_COLS: Breakpoints = {
   lg: 12,
-  md: 6,
-  sm: 2,
-  xs: 1,
-  xxs: 1,
+  md: 12,
+  sm: 1,
 };
 
 interface WidgetLayoutConstraints {

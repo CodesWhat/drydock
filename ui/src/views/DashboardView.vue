@@ -26,7 +26,13 @@ import { useDashboardWidgetOrder } from './dashboard/useDashboardWidgetOrder';
 
 const router = useRouter();
 const confirm = useConfirmDialog();
-const { isMobile } = useBreakpoints();
+const { isMobile, windowNarrow } = useBreakpoints();
+// Responsive grid margins: slightly wider vertical gaps on touch screens for scroll room
+const gridMargin = computed<[number, number]>(() => {
+  if (isMobile.value) return [10, 20]; // < 768px: tighter horizontal, taller vertical for touch
+  if (windowNarrow.value) return [14, 18]; // < 1024px: tablet
+  return [16, 16]; // desktop
+});
 const dashboardUpdateInProgress = ref<string | null>(null);
 const dashboardUpdateAllInProgress = ref(false);
 const dashboardUpdateError = ref<string | null>(null);
@@ -239,7 +245,7 @@ function confirmDashboardUpdateAll() {
   <div class="flex flex-col flex-1 min-h-0">
     <div class="flex gap-2 min-w-0 flex-1 min-h-0">
     <!-- Main dashboard content -->
-    <div class="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden sm:pr-[15px]">
+    <div class="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden px-1 sm:pr-[15px] dd-touch-scroll">
       <div v-if="loading" class="flex items-center justify-center py-16">
         <div class="text-sm dd-text-muted">Loading dashboard...</div>
       </div>
@@ -284,7 +290,7 @@ function confirmDashboardUpdateAll() {
           v-model:layout="layout"
           :col-num="12"
           :row-height="30"
-          :margin="[16, 16]"
+          :margin="gridMargin"
           :responsive="true"
           :breakpoints="GRID_BREAKPOINTS"
           :cols="GRID_COLS"

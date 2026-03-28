@@ -501,6 +501,13 @@ body.dd-col-resizing {
   scrollbar-gutter: stable;
 }
 
+/* Allow vertical page scroll to pass through widget scroll containers on touch devices.
+   Ensures swiping vertically on a widget boundary scrolls the dashboard, not the widget. */
+.dd-touch-scroll {
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
+}
+
 /* Hidden scrollbar utility (for horizontal tab bars) */
 .scrollbar-hide {
   -ms-overflow-style: none;
