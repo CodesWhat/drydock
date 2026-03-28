@@ -283,7 +283,7 @@ Drydock log behavior is controlled by environment variables:
 | Variable | Values | Default |
 | --- | --- | --- |
 | `DD_LOG_LEVEL` | `fatal`, `error`, `warn`, `info`, `debug`, `trace` | `info` |
-| `DD_LOG_FORMAT` | `text`, `json` | `json` |
+| `DD_LOG_FORMAT` | `text`, `json` | `text` |
 | `DD_LOG_BUFFER_ENABLED` | `true`, `false` | `true` |
 
 The official image defaults to `DD_LOG_FORMAT=text` for pretty, human-readable logs. Set `DD_LOG_FORMAT=json` if you want structured output for log aggregators like Elasticsearch or Loki.
