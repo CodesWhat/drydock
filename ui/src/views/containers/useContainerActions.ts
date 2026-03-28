@@ -96,6 +96,9 @@ async function executeContainerActionState(args: {
     args.inputError.value = msg;
     const toast = useToast();
     toast.error(`Update failed: ${args.name}`, msg);
+    if (shouldReloadContainers) {
+      await args.loadContainers();
+    }
     return false;
   } finally {
     const next = new Set(args.actionInProgress.value);
@@ -178,8 +181,8 @@ async function updateAllInGroupState(args: {
         updatedAny = true;
       }
     }
+    await args.loadContainers();
     if (updatedAny) {
-      await args.loadContainers();
       const toast = useToast();
       const count = frozenUpdateTargets.length;
       toast.success(`Updated ${count} container${count === 1 ? '' : 's'} in ${args.group.key}`);

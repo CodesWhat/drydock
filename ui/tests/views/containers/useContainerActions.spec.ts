@@ -569,7 +569,7 @@ describe('useContainerActions', () => {
     });
 
     expect(mocks.updateContainer).toHaveBeenCalledTimes(2);
-    expect(loadContainers).not.toHaveBeenCalled();
+    expect(loadContainers).toHaveBeenCalledTimes(1);
     expect(composable.groupUpdateInProgress.value.has('group-1')).toBe(false);
     expect(mocks.toastSuccess).not.toHaveBeenCalled();
     expect(mocks.toastError).toHaveBeenCalledTimes(2);
