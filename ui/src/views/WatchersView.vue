@@ -189,7 +189,7 @@ onMounted(async () => {
     >
       <template #cell-name="{ row }">
         <div class="flex items-center gap-2">
-          <StatusDot :color="watcherStatusColor(row.status)" />
+          <StatusDot :color="watcherStatusColor(row.status)" v-tooltip.top="row.status === 'watching' ? 'Watching' : 'Paused'" />
           <span class="font-medium dd-text">{{ row.name }}</span>
         </div>
       </template>
@@ -223,7 +223,7 @@ onMounted(async () => {
       <template #card="{ item: watcher }">
         <div class="px-4 pt-4 pb-2 flex items-start justify-between">
           <div class="flex items-center gap-2.5 min-w-0">
-            <StatusDot :color="watcherStatusColor(watcher.status)" size="lg" class="mt-1" />
+            <StatusDot :color="watcherStatusColor(watcher.status)" size="lg" class="mt-1" v-tooltip.top="watcher.status === 'watching' ? 'Watching' : 'Paused'" />
             <div class="min-w-0">
               <div class="text-sm-plus font-semibold truncate dd-text">{{ watcher.name }}</div>
               <div class="text-2xs-plus truncate mt-0.5 dd-text-muted font-mono">{{ watcher.cron }}</div>
@@ -264,7 +264,7 @@ onMounted(async () => {
       @item-click="openDetail($event)"
     >
       <template #header="{ item: watcher }">
-        <StatusDot :color="watcherStatusColor(watcher.status)" size="lg" />
+        <StatusDot :color="watcherStatusColor(watcher.status)" size="lg" v-tooltip.top="watcher.status === 'watching' ? 'Watching' : 'Paused'" />
         <AppIcon name="watchers" :size="14" class="dd-text-secondary" />
         <span class="text-sm font-semibold flex-1 min-w-0 truncate dd-text">{{ watcher.name }}</span>
         <AppIcon :name="watcher.status === 'watching' ? 'watchers' : 'pause'" :size="13" class="shrink-0 md:!hidden"

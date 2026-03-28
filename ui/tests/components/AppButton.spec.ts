@@ -136,4 +136,23 @@ describe('AppButton', () => {
     expect(button.classes()).not.toContain('font-medium');
     expect(button.classes()).not.toContain('font-semibold');
   });
+
+  it('uses tooltip text as the accessible label and title for icon-only controls', () => {
+    const wrapper = mount(AppButton, {
+      props: {
+        size: 'none',
+        variant: 'plain',
+        weight: 'none',
+        tooltip: 'Close panel',
+      } as any,
+      slots: {
+        default: 'x',
+      },
+    });
+
+    const button = wrapper.get('button');
+
+    expect(button.attributes('aria-label')).toBe('Close panel');
+    expect(button.attributes('title')).toBe('Close panel');
+  });
 });

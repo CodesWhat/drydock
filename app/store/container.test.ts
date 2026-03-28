@@ -2305,6 +2305,51 @@ describe('hasContainerChanged', () => {
     expect(container.hasContainerChanged(a, b)).toBe(true);
   });
 
+  test('should return false when security has same data in different key order', () => {
+    const a = createContainerFixture({
+      security: {
+        scan: {
+          scanner: 'trivy',
+          image: 'registry/image:1.2.3',
+          scannedAt: '2024-01-01T00:00:00.000Z',
+          status: 'passed',
+          blockSeverities: [],
+          blockingCount: 0,
+          summary: {
+            unknown: 0,
+            low: 0,
+            medium: 0,
+            high: 0,
+            critical: 0,
+          },
+          vulnerabilities: [],
+        },
+      },
+    });
+    const b = createContainerFixture({
+      security: {
+        scan: {
+          vulnerabilities: [],
+          summary: {
+            critical: 0,
+            high: 0,
+            medium: 0,
+            low: 0,
+            unknown: 0,
+          },
+          blockingCount: 0,
+          blockSeverities: [],
+          status: 'passed',
+          scannedAt: '2024-01-01T00:00:00.000Z',
+          image: 'registry/image:1.2.3',
+          scanner: 'trivy',
+        },
+      },
+    });
+
+    expect(container.hasContainerChanged(a, b)).toBe(false);
+  });
+
   test('should return false when only timestamp-like metadata differs', () => {
     const a = createContainerFixture({ updateDetectedAt: '2024-01-01T00:00:00Z' });
     const b = createContainerFixture({ updateDetectedAt: '2024-12-31T23:59:59Z' });

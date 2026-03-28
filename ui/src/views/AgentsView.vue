@@ -496,7 +496,7 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
             </template>
             <template #extra-buttons>
               <div v-if="agentViewMode === 'table'">
-                <AppIconButton icon="config" size="sm" variant="plain" class="text-2xs-plus"
+                <AppIconButton icon="config" size="toolbar" variant="plain" class="text-2xs-plus"
                         :class="showAgentColumnPicker ? 'dd-text dd-bg-elevated' : 'dd-text-secondary hover:dd-text hover:dd-bg-elevated'"
                         aria-label="Toggle columns"
                         v-tooltip.top="'Toggle columns'"
@@ -539,7 +539,7 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
                      @row-click="selectAgent($event)">
             <template #cell-name="{ row }">
               <div class="flex items-start gap-2 min-w-0">
-                <StatusDot :status="row.status" size="md" class="mt-1.5" />
+                <StatusDot :status="row.status" size="md" class="mt-1.5" v-tooltip.top="row.status === 'connected' ? 'Connected' : 'Disconnected'" />
                 <div class="min-w-0 flex-1">
                   <div class="font-medium truncate dd-text">{{ row.name }}</div>
                   <div class="text-2xs mt-0.5 truncate dd-text-muted">{{ row.host }}</div>
@@ -600,7 +600,7 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
               <!-- Card header -->
               <div class="px-4 pt-4 pb-2 flex items-start justify-between">
                 <div class="flex items-center gap-2.5 min-w-0">
-                  <StatusDot :status="agent.status" size="lg" class="mt-1" />
+                  <StatusDot :status="agent.status" size="lg" class="mt-1" v-tooltip.top="agent.status === 'connected' ? 'Connected' : 'Disconnected'" />
                   <div class="min-w-0">
                     <div class="text-sm-plus font-semibold truncate dd-text">{{ agent.name }}</div>
                     <div class="text-2xs-plus truncate mt-0.5 dd-text-muted">{{ agent.host }}</div>
@@ -658,7 +658,7 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
                              item-key="id"
                              :selected-key="selectedAgent?.id ?? null">
             <template #header="{ item: agent }">
-              <StatusDot :status="agent.status" size="lg" />
+              <StatusDot :status="agent.status" size="lg" v-tooltip.top="agent.status === 'connected' ? 'Connected' : 'Disconnected'" />
               <div class="min-w-0 flex-1">
                 <div class="text-sm font-semibold truncate dd-text">{{ agent.name }}</div>
                 <div class="text-2xs mt-0.5 truncate dd-text-muted">{{ agent.host }}</div>
@@ -726,7 +726,7 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
           @update:open="agentPanelOpen = $event; if (!$event) selectedAgent = null">
           <template #header>
             <div class="flex items-center gap-2.5 min-w-0">
-              <StatusDot :status="selectedAgent?.status === 'connected' ? 'connected' : 'disconnected'" size="lg" />
+              <StatusDot :status="selectedAgent?.status === 'connected' ? 'connected' : 'disconnected'" size="lg" v-tooltip.top="selectedAgent?.status === 'connected' ? 'Connected' : 'Disconnected'" />
               <span class="text-sm font-bold truncate dd-text">{{ selectedAgent?.name }}</span>
               <AppBadge :tone="selectedAgent?.status === 'connected' ? 'success' : 'danger'" size="xs" class="shrink-0">
                 {{ selectedAgent?.status }}

@@ -517,6 +517,10 @@ describe('ContainerFullPageTabContent', () => {
     const digestRemoveButton = digestLabel?.element.parentElement?.querySelector('button');
     expect(tagRemoveButton).toBeTruthy();
     expect(digestRemoveButton).toBeTruthy();
+    expect((tagRemoveButton as HTMLButtonElement).getAttribute('aria-label')).toBe('Remove skip');
+    expect((digestRemoveButton as HTMLButtonElement).getAttribute('aria-label')).toBe(
+      'Remove skip',
+    );
 
     (tagRemoveButton as HTMLButtonElement).click();
     (digestRemoveButton as HTMLButtonElement).click();
@@ -930,11 +934,19 @@ describe('ContainerFullPageTabContent', () => {
     const secretRow = wrapper.findAll('.font-mono').find((node) => node.text().includes('SECRET'));
     const eyeButton = secretRow?.find('button');
     expect(eyeButton).toBeDefined();
+    expect(eyeButton?.attributes('aria-label')).toBe('Reveal value');
 
     await eyeButton?.trigger('click');
     await flushPromises();
     await nextTick();
     expect(wrapper.text()).toContain('super-secret');
+    expect(
+      wrapper
+        .findAll('.font-mono')
+        .find((node) => node.text().includes('SECRET'))
+        ?.find('button')
+        .attributes('aria-label'),
+    ).toBe('Hide value');
     expect(mockRevealContainerEnv).toHaveBeenCalledTimes(1);
 
     await eyeButton?.trigger('click');

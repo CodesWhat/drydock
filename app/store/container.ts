@@ -468,6 +468,27 @@ export function clearAllCachedSecurityState() {
   securityStateCachePruneIterator = undefined;
 }
 
+function stableStringify(value: unknown): string {
+  const normalizeValue = (current: unknown): unknown => {
+    if (Array.isArray(current)) {
+      return current.map(normalizeValue);
+    }
+
+    if (current && typeof current === 'object') {
+      return Object.keys(current)
+        .sort()
+        .reduce<Record<string, unknown>>((normalized, key) => {
+          normalized[key] = normalizeValue(current[key]);
+          return normalized;
+        }, {});
+    }
+
+    return current;
+  };
+
+  return JSON.stringify(normalizeValue(value));
+}
+
 /**
  * Check whether meaningful container state changed between the existing record
  * and the incoming update.  Returns false when nothing actionable changed
@@ -495,7 +516,7 @@ export function hasContainerChanged(
   if (existing.image?.tag?.value !== incoming.image?.tag?.value) {
     return true;
   }
-  if (JSON.stringify(existing.security) !== JSON.stringify(incoming.security)) {
+  if (stableStringify(existing.security) !== stableStringify(incoming.security)) {
     return true;
   }
   return false;

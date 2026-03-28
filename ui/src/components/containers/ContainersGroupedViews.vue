@@ -349,12 +349,12 @@ const openActionsContainer = computed(
                         :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-text-muted)' }">
                   <AppIcon name="lock" :size="14" class="mr-1" /> Blocked
                 </AppButton>
-                <AppButton size="none" variant="plain" weight="none" class="inline-flex items-center justify-center w-7 transition-colors dd-text-muted hover:dd-text hover:dd-bg-hover"
+                <AppIconButton icon="chevron-down" size="toolbar" variant="plain"
+                        class="transition-colors dd-text-muted hover:dd-text hover:dd-bg-hover"
                         :style="{ backgroundColor: 'var(--dd-bg)' }"
                         :class="openActionsMenu === c.name ? 'dd-bg-elevated dd-text' : ''"
-                        @click.stop="toggleActionsMenu(c.name, $event)">
-                  <AppIcon name="chevron-down" :size="14" />
-                </AppButton>
+                        aria-label="Open actions menu"
+                        @click.stop="toggleActionsMenu(c.name, $event)" />
               </div>
               <!-- Updatable: split button -->
               <div v-else class="inline-flex dd-rounded overflow-hidden"
@@ -367,13 +367,13 @@ const openActionsContainer = computed(
                         @click.stop="confirmUpdate(c.name)">
                   <AppIcon name="cloud-download" :size="14" class="mr-1" /> Update
                 </AppButton>
-                <AppButton size="none" variant="plain" weight="none" class="inline-flex items-center justify-center w-7 transition-colors"
+                <AppIconButton icon="chevron-down" size="toolbar" variant="plain"
+                        class="transition-colors"
                         :class="actionInProgress.has(c.name) ? 'cursor-not-allowed' : openActionsMenu === c.name ? 'brightness-125' : ''"
                         :style="{ backgroundColor: 'var(--dd-success-muted)', color: 'var(--dd-success)', borderLeft: '1px solid var(--dd-success)' }"
                         :disabled="actionInProgress.has(c.name)"
-                        @click.stop="toggleActionsMenu(c.name, $event)">
-                  <AppIcon name="chevron-down" :size="14" />
-                </AppButton>
+                        aria-label="Open update actions menu"
+                        @click.stop="toggleActionsMenu(c.name, $event)" />
               </div>
             </div>
             <div v-else class="flex items-center justify-end gap-1">
@@ -497,7 +497,7 @@ const openActionsContainer = computed(
                     <AppIcon name="clock" :size="13" />
                   </span>
                 </template>
-                <AppIcon v-else name="check" :size="14" class="ml-1" style="color: var(--dd-success);" />
+                <AppIcon v-else name="check" :size="14" class="ml-1" style="color: var(--dd-success);" v-tooltip.top="tt('Up to date')" />
               </template>
             </div>
             <div v-if="c.suggestedTag || c.releaseNotes || c.releaseLink" class="flex items-center gap-2 flex-wrap mt-2">
@@ -512,7 +512,7 @@ const openActionsContainer = computed(
                  borderTop: '1px solid var(--dd-border)',
                  backgroundColor: 'var(--dd-bg-elevated)',
                }">
-            <AppBadge class="px-1.5 py-0 md:!hidden" size="xs" :tone="c.status === 'running' ? 'success' : 'danger'">
+            <AppBadge class="px-1.5 py-0 md:!hidden" size="xs" :tone="c.status === 'running' ? 'success' : 'danger'" v-tooltip.top="tt(c.status)">
               <AppIcon :name="c.status === 'running' ? 'play' : 'stop'" :size="12" />
             </AppBadge>
             <AppBadge class="max-md:!hidden" size="xs" :tone="c.status === 'running' ? 'success' : 'danger'">
@@ -582,6 +582,7 @@ const openActionsContainer = computed(
           <div class="flex items-center gap-1.5 shrink-0">
             <!-- Update kind: icon on mobile, badge on desktop -->
             <AppBadge v-if="c.updateKind" size="xs" class="px-1.5 py-0 md:!hidden"
+                  v-tooltip.top="tt(c.updateKind)"
                   :custom="{ bg: updateKindColor(c.updateKind).bg, text: updateKindColor(c.updateKind).text }">
               <AppIcon :name="c.updateKind === 'major' ? 'chevrons-up' : c.updateKind === 'minor' ? 'chevron-up' : c.updateKind === 'patch' ? 'hashtag' : 'fingerprint'" :size="12" />
             </AppBadge>
@@ -592,6 +593,7 @@ const openActionsContainer = computed(
             <UpdateMaturityBadge :maturity="c.updateMaturity" :tooltip="c.updateMaturityTooltip" />
             <!-- Status: icon on mobile, badge on desktop -->
             <AppIcon :name="c.status === 'running' ? 'play' : 'stop'" :size="13" class="shrink-0 md:!hidden"
+                     v-tooltip.top="tt(c.status)"
                      :style="{ color: c.status === 'running' ? 'var(--dd-success)' : 'var(--dd-danger)' }" />
             <AppBadge class="max-md:!hidden" size="xs" :tone="c.status === 'running' ? 'success' : 'danger'">
               {{ c.status }}
@@ -625,11 +627,11 @@ const openActionsContainer = computed(
               <AppIcon name="clock" :size="12" />
             </span>
             <!-- Bouncer: icon in badge -->
-            <AppBadge v-if="c.bouncer === 'blocked'" tone="danger" size="xs" class="px-1.5 py-0">
+            <AppBadge v-if="c.bouncer === 'blocked'" tone="danger" size="xs" class="px-1.5 py-0" v-tooltip.top="tt('Blocked by Bouncer')">
               <AppIcon name="blocked" :size="12" />
             </AppBadge>
             <!-- Server: icon on mobile, badge on desktop -->
-            <AppIcon :name="parseServer(c.server).name === 'Local' ? 'home' : 'remote'" :size="12" class="shrink-0 dd-text-muted md:!hidden" />
+            <AppIcon :name="parseServer(c.server).name === 'Local' ? 'home' : 'remote'" :size="12" class="shrink-0 dd-text-muted md:!hidden" v-tooltip.top="tt(parseServer(c.server).name)" />
             <AppBadge class="max-md:!hidden" size="xs" :custom="{ bg: serverBadgeColor(c.server).bg, text: serverBadgeColor(c.server).text }">
               {{ parseServer(c.server).name }}
             </AppBadge>

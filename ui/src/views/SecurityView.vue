@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import AppBadge from '../components/AppBadge.vue';
+import AppIconButton from '../components/AppIconButton.vue';
 import ScanProgressBanner from '../components/ScanProgressBanner.vue';
 import SecurityEmptyState from '../components/SecurityEmptyState.vue';
 import StatusDot from '../components/StatusDot.vue';
@@ -275,17 +276,27 @@ onUnmounted(() => {
         </template>
         <template #center>
           <span class="inline-flex" v-tooltip.top="scanDisabledReason">
-            <AppButton size="none" variant="plain" weight="none" class="h-7 dd-rounded flex items-center justify-center gap-1.5 text-2xs-plus font-semibold transition-colors"
+            <AppIconButton v-if="isCompact"
+                    icon="restart" size="toolbar" variant="plain"
+                    :class="[
+                      scanning || runtimeLoading || !scannerReady
+                        ? 'dd-text-muted'
+                        : 'dd-text-secondary hover:dd-text hover:dd-bg-elevated',
+                    ]"
+                    :loading="scanning"
+                    aria-label="Scan all containers"
+                    :disabled="scanning || runtimeLoading || !scannerReady"
+                    @click="scanAllContainers" />
+            <AppButton v-else size="none" variant="plain" weight="none" class="dd-rounded flex items-center justify-center gap-1.5 px-3 text-2xs-plus font-semibold transition-colors h-8"
                     :class="[
                       scanning || runtimeLoading || !scannerReady
                         ? 'dd-text-muted cursor-not-allowed'
                         : 'dd-text-secondary hover:dd-text hover:dd-bg-elevated',
-                      isCompact ? 'w-7' : 'px-3',
                     ]"
                     :disabled="scanning || runtimeLoading || !scannerReady"
                     @click="scanAllContainers">
               <AppIcon name="restart" :size="11" :class="{ 'animate-spin': scanning }" v-tooltip.top="scanning ? 'Scanning...' : undefined" />
-              <span v-if="!isCompact">Scan Now</span>
+              <span>Scan Now</span>
             </AppButton>
           </span>
         </template>

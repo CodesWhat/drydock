@@ -189,6 +189,7 @@ const {
                       :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
                   <span class="dd-text">{{ tag }}</span>
                   <AppButton size="none" variant="plain" weight="none" class="inline-flex items-center justify-center w-4 h-4 dd-rounded-sm transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
+                          tooltip="Remove skip"
                           :disabled="policyInProgress !== null"
                           @click="removeSkipTagSelected(tag)">
                     <AppIcon name="xmark" :size="9" />
@@ -204,6 +205,7 @@ const {
                       :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
                   <span class="dd-text">{{ digest }}</span>
                   <AppButton size="none" variant="plain" weight="none" class="inline-flex items-center justify-center w-4 h-4 dd-rounded-sm transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
+                          tooltip="Remove skip"
                           :disabled="policyInProgress !== null"
                           @click="removeSkipDigestSelected(digest)">
                     <AppIcon name="xmark" :size="9" />

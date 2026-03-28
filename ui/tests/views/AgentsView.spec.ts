@@ -73,9 +73,9 @@ async function mountAgentsView() {
       stubs: {
         ...dataViewStubs,
         AppIconButton: {
-          props: ['icon', 'variant', 'tooltip', 'ariaLabel'],
+          props: ['icon', 'variant', 'tooltip', 'ariaLabel', 'size'],
           template:
-            '<button class="app-icon-button-stub" :data-icon="icon" :data-variant="variant" :aria-label="ariaLabel"><slot /></button>',
+            '<button class="app-icon-button-stub" v-bind="$attrs" :data-icon="icon" :data-variant="variant" :data-size="size" :aria-label="ariaLabel"><slot /></button>',
         },
       },
     },
@@ -154,6 +154,7 @@ describe('AgentsView', () => {
     expect(columnPicker.exists()).toBe(true);
     expect(columnPicker.attributes('data-icon')).toBe('config');
     expect(columnPicker.attributes('data-variant')).toBe('plain');
+    expect(columnPicker.attributes('data-size')).toBe('toolbar');
   });
 
   it('refreshes agents when agent status SSE event is received', async () => {

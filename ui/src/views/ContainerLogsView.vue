@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import AppIconButton from '../components/AppIconButton.vue';
 import ContainerLogs from '../components/containers/ContainerLogs.vue';
 import { getAllContainers } from '../services/container';
 import type { Container } from '../types/container';
@@ -54,16 +55,15 @@ function goBack() {
   <div class="flex-1 min-h-0 min-w-0 overflow-y-auto pr-2 sm:pr-[15px]">
     <!-- Header -->
     <div class="flex items-center gap-3 mb-3">
-      <AppButton
-        size="none"
+      <AppIconButton
+        icon="arrow-left"
+        size="toolbar"
         variant="plain"
-        weight="none"
-        class="p-1.5 dd-rounded transition-colors dd-text-muted hover:dd-text"
-        v-tooltip="'Back to containers'"
+        class="dd-text-muted hover:dd-text"
+        tooltip="Back to containers"
+        aria-label="Back to containers"
         @click="goBack"
-      >
-        <AppIcon name="arrow-left" :size="14" />
-      </AppButton>
+      />
 
       <div class="flex flex-col gap-0.5 min-w-0">
         <div class="flex items-center gap-2">

@@ -1099,9 +1099,9 @@ The container model includes additional fields useful for understanding update s
 
 ## Docker Event Stream
 
-The watcher monitors Docker events (container create, destroy, start, stop, etc.) in real time. If the event stream disconnects, drydock automatically reconnects with exponential backoff starting at 1 second and capping at 30 seconds.
+The watcher monitors Docker events (container create, destroy, start, stop, etc.) in real time. If the event stream disconnects, Drydock automatically reconnects with exponential backoff starting at 1 second and capping at 30 seconds.
 
-When using third-party socket proxies, periodic reconnects can be expected: many proxies close idle long-lived HTTP connections after their configured timeout. In logs this often appears as:
+When using third-party socket proxies, periodic reconnects are expected: many proxies close idle long-lived HTTP connections after their configured timeout. In logs this appears as:
 
 `Docker event stream error (aborted); reconnect attempt #1 in 1000ms`
 
@@ -1109,11 +1109,23 @@ followed by:
 
 `Listening to docker events`
 
-If reconnect succeeds immediately and monitoring continues, this is usually benign.
+The first reconnect attempt is logged at **info** level since it is expected behavior (proxy timeout or network blip). If the first attempt fails and subsequent reconnects are needed, those are logged at **warn** level to flag a potential real problem.
+
+### Event gap during reconnect
+
+Container lifecycle events (create, start, stop, destroy) that occur during the brief reconnect window are not captured until the next scheduled poll cycle. The reconnect window is typically ~1 second under normal conditions. In practice this is rarely noticeable because the next cron poll will pick up the current container state, but it means Drydock does not guarantee zero missed events across a reconnect.
+
+A future release will wire the reconnect path to request events from the last-seen timestamp, closing this gap entirely.
+
+### Native socket proxy (roadmap)
+
+The root cause of proxy-timeout reconnects is that Drydock cannot control idle timeout behavior on third-party proxies. A purpose-built Drydock socket proxy is planned (see [roadmap](/docs/roadmap)) that will exempt event stream connections from idle timeouts, eliminating the reconnect cycle entirely.
 
 ### Reduce proxy-timeout reconnect churn
+
+Until the native proxy ships, you can reduce reconnect noise:
 
 1. Increase your proxy idle timeout (for example, linuxserver socket-proxy `TIMEOUT=86400s`).
 2. Prefer direct socket mount when your environment allows it.
 3. If your proxy supports endpoint-specific behavior, exempt Docker `/events` streams from idle timeout.
-4. As a workaround, run a lightweight heartbeat job/container that keeps the proxy connection path active.
+4. As a workaround, run a lightweight heartbeat container (e.g. `alpine:latest` with `command: sh -c "sleep 300"` and `restart: always`) to keep the proxy connection path active.

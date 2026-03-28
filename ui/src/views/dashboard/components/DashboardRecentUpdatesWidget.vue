@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watchEffect } from 'vue';
 import AppBadge from '@/components/AppBadge.vue';
+import AppIconButton from '@/components/AppIconButton.vue';
 import type { RecentUpdateRow, UpdateKind } from '../dashboardTypes';
 
 const UPDATE_TABLE_COLUMNS = [
@@ -224,24 +225,21 @@ watchEffect(() => {
               v-tooltip.top="'Security blocked'">
               <AppIcon name="lock" :size="14" />
             </span>
-            <AppButton
+            <AppIconButton
               v-else-if="row.status === 'pending'"
-              data-test="dashboard-update-btn"
-              size="none"
+              icon="cloud-download"
+              size="toolbar"
               variant="plain"
-              weight="none"
-              type="button"
-              class="w-7 h-7 dd-rounded-sm flex items-center justify-center transition-colors"
+              data-test="dashboard-update-btn"
+              class="dd-rounded-sm transition-colors"
               :class="dashboardUpdateInProgress === row.id || dashboardUpdateAllInProgress
                 ? 'dd-text-muted opacity-50 cursor-not-allowed'
                 : 'dd-text-muted hover:dd-text-success hover:dd-bg-elevated'"
               :disabled="dashboardUpdateInProgress === row.id || dashboardUpdateAllInProgress"
-              @click.stop="handleConfirmUpdate(row)">
-              <AppIcon
-                :name="dashboardUpdateInProgress === row.id ? 'spinner' : 'cloud-download'"
-                :size="14"
-                :class="dashboardUpdateInProgress === row.id ? 'dd-spin' : ''" />
-            </AppButton>
+              :loading="dashboardUpdateInProgress === row.id"
+              tooltip="Update container"
+              aria-label="Update container"
+              @click.stop="handleConfirmUpdate(row)" />
             </div>
           </template>
 

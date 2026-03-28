@@ -35,6 +35,8 @@ describe('AppIconButton', () => {
 
     expect(button.classes()).toContain('w-11');
     expect(button.classes()).toContain('h-11');
+    expect(button.classes()).toContain('min-w-8');
+    expect(button.classes()).toContain('min-h-8');
     expect(button.classes()).toContain('dd-text-muted');
     expect(button.classes()).toContain('hover:dd-text');
     expect(button.classes()).toContain('hover:dd-bg-elevated');
@@ -65,6 +67,8 @@ describe('AppIconButton', () => {
     const button = wrapper.get('button');
     expect(button.classes()).toContain('w-8');
     expect(button.classes()).toContain('h-8');
+    expect(button.classes()).toContain('min-w-8');
+    expect(button.classes()).toContain('min-h-8');
   });
 
   it('passes icon size 15 for toolbar', () => {

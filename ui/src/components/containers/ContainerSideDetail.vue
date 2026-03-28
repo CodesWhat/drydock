@@ -99,6 +99,7 @@ const {
         <div class="flex items-center gap-2 min-w-0">
           <StatusDot
             :status="selectedContainer.status === 'running' ? 'running' : 'stopped'"
+            v-tooltip.top="selectedContainer.status"
             size="lg" />
           <span class="text-sm font-bold truncate dd-text">
             {{ selectedContainer.name }}

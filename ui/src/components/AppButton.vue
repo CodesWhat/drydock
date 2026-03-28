@@ -59,6 +59,8 @@ const props = withDefaults(
     variant?: ButtonVariant;
     weight?: ButtonWeight;
     type?: 'button' | 'submit' | 'reset';
+    tooltip?: string | Record<string, unknown>;
+    ariaLabel?: string;
   }>(),
   {
     size: 'md',
@@ -74,6 +76,29 @@ defineOptions({
 
 const attrs = useAttrs();
 
+const resolvedAriaLabel = computed(() => {
+  if (props.ariaLabel) {
+    return props.ariaLabel;
+  }
+  if (typeof props.tooltip === 'string') {
+    return props.tooltip;
+  }
+  if (typeof attrs['aria-label'] === 'string') {
+    return attrs['aria-label'];
+  }
+  return undefined;
+});
+
+const resolvedTitle = computed(() => {
+  if (typeof props.tooltip === 'string') {
+    return props.tooltip;
+  }
+  if (typeof attrs.title === 'string') {
+    return attrs.title;
+  }
+  return undefined;
+});
+
 const buttonClasses = computed(() => [
   'dd-rounded transition-colors',
   sizeClasses[props.size],
@@ -85,7 +110,10 @@ const buttonClasses = computed(() => [
 <template>
   <button
     v-bind="attrs"
+    v-tooltip="tooltip"
     :type="type"
+    :aria-label="resolvedAriaLabel"
+    :title="resolvedTitle"
     :class="buttonClasses"
   >
     <slot />

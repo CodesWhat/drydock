@@ -405,6 +405,7 @@ describe('ContainerSideTabContent - Environment Variables', () => {
 
     const eyeButton = passwordRow?.find('button');
     expect(eyeButton).toBeDefined();
+    expect(eyeButton?.attributes('aria-label')).toBe('Reveal value');
 
     await eyeButton?.trigger('click');
     await flushPromises();
@@ -413,6 +414,7 @@ describe('ContainerSideTabContent - Environment Variables', () => {
     const updatedRows = wrapper.findAll('[data-test="container-side-tab-content"] .font-mono');
     const updatedPasswordRow = updatedRows.find((row) => row.text().includes('DB_PASSWORD'));
     expect(updatedPasswordRow?.text()).toContain('super-secret');
+    expect(updatedPasswordRow?.find('button').attributes('aria-label')).toBe('Hide value');
     expect(mockRevealContainerEnv).toHaveBeenCalledWith('container-1');
   });
 
@@ -619,6 +621,8 @@ describe('ContainerSideTabContent - Environment Variables', () => {
     expect(wrapper.text()).toContain('2026-03-12T14:30:00Z');
     expect(wrapper.text()).toContain('Skipped tags:');
     expect(wrapper.text()).toContain('Skipped digests:');
+    expect(tagChip?.find('button').attributes('aria-label')).toBe('Remove skip');
+    expect(digestChip?.find('button').attributes('aria-label')).toBe('Remove skip');
 
     await tagChip?.find('button').trigger('click');
     await digestChip?.find('button').trigger('click');

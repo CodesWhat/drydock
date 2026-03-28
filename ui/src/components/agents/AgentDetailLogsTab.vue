@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import AppIconButton from '../AppIconButton.vue';
 import LogViewer from '../LogViewer.vue';
 
 interface AgentLog {
@@ -113,15 +114,17 @@ function asLog(entry: unknown): AgentLog {
           >
             Reset
           </AppButton>
-          <AppButton size="none" variant="plain" weight="none"
+          <AppIconButton
+            icon="refresh"
+            size="toolbar"
+            variant="plain"
             data-testid="agent-log-refresh"
-            class="p-1.5 dd-rounded transition-colors dd-text-muted hover:dd-text"
-            :class="props.loading ? 'opacity-50 pointer-events-none' : ''"
-            v-tooltip.top="'Refresh'"
+            class="dd-text-muted hover:dd-text"
+            :class="props.loading ? 'pointer-events-none' : ''"
+            tooltip="Refresh"
+            :disabled="props.loading"
             @click="emit('refresh')"
-          >
-            <AppIcon name="refresh" :size="12" />
-          </AppButton>
+          />
         </div>
       </template>
 

@@ -338,7 +338,7 @@ function confirmDashboardUpdateAll() {
               ]"
               :style="{ backgroundColor: 'var(--dd-bg-card)' }"
               @click="handleStatClick(item.i as DashboardWidgetId)">
-              <div v-if="editMode" class="drag-handle dd-drag-handle absolute top-1.5 left-1/2 -translate-x-1/2 z-10">
+              <div v-if="editMode" class="drag-handle dd-drag-handle absolute top-1.5 left-1/2 -translate-x-1/2 z-10" v-tooltip.top="'Drag to reorder'">
                 <AppIcon name="ph:dots-six" :size="14" />
               </div>
               <div class="flex items-center justify-between mb-2">
@@ -445,6 +445,7 @@ function confirmDashboardUpdateAll() {
           icon="xmark"
           size="xs"
           variant="muted"
+          tooltip="Close panel"
           aria-label="Close panel"
           @click="closeWidgetPanel" />
       </div>

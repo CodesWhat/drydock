@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import AppBadge from '@/components/AppBadge.vue';
+import AppIconButton from '@/components/AppIconButton.vue';
 import AppTabBar from '@/components/AppTabBar.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import ContainerFullPageTabContent from './ContainerFullPageTabContent.vue';
@@ -44,6 +45,7 @@ const {
           <div class="flex items-center gap-3 min-w-0">
             <StatusDot
               :status="selectedContainer.status === 'running' ? 'running' : 'stopped'"
+              v-tooltip.top="selectedContainer.status"
               size="lg" />
             <div class="min-w-0">
               <h1 class="text-base sm:text-lg font-bold truncate dd-text">
@@ -177,9 +179,10 @@ const {
       :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)', border: '1px solid var(--dd-danger)' }">
       <AppIcon name="warning" :size="14" class="shrink-0" />
       <span class="min-w-0 break-words">{{ error }}</span>
-      <AppButton size="none" variant="plain" weight="none" class="ml-auto shrink-0 hover:opacity-70 transition-opacity" aria-label="Dismiss error" @click="error = null">
-        <AppIcon name="x" :size="12" />
-      </AppButton>
+      <AppIconButton icon="x" size="toolbar" variant="plain"
+              class="ml-auto shrink-0 hover:opacity-70"
+              aria-label="Dismiss error"
+              @click="error = null" />
     </div>
 
     <ContainerFullPageTabContent />

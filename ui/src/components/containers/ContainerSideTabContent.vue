@@ -537,6 +537,7 @@ const {
                     <span v-if="getRevealedValue(selectedContainer.id, e.key)" class="truncate dd-text">{{ getRevealedValue(selectedContainer.id, e.key) }}</span>
                     <span v-else class="truncate dd-text-muted">&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;</span>
                     <AppButton size="none" variant="plain" weight="none" class="shrink-0 p-0.5 dd-text-muted hover:dd-text transition-colors"
+                            :tooltip="getRevealedValue(selectedContainer.id, e.key) ? 'Hide value' : 'Reveal value'"
                             :disabled="envRevealLoading"
                             @click="toggleReveal(selectedContainer.id, e.key)">
                       <AppIcon :name="getRevealedValue(selectedContainer.id, e.key) ? 'eye-slash' : 'eye'" :size="11" />
@@ -707,6 +708,7 @@ const {
                           :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
                       <span class="dd-text">{{ tag }}</span>
                       <AppButton size="none" variant="plain" weight="none" class="inline-flex items-center justify-center w-4 h-4 dd-rounded-sm transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
+                              tooltip="Remove skip"
                               :disabled="policyInProgress !== null"
                               @click="removeSkipTagSelected(tag)">
                         <AppIcon name="xmark" :size="9" />
@@ -722,6 +724,7 @@ const {
                           :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
                       <span class="dd-text">{{ digest }}</span>
                       <AppButton size="none" variant="plain" weight="none" class="inline-flex items-center justify-center w-4 h-4 dd-rounded-sm transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
+                              tooltip="Remove skip"
                               :disabled="policyInProgress !== null"
                               @click="removeSkipDigestSelected(digest)">
                         <AppIcon name="xmark" :size="9" />

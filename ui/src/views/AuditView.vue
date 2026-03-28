@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import AppBadge from '../components/AppBadge.vue';
+import AppIconButton from '../components/AppIconButton.vue';
 import DetailField from '../components/DetailField.vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
 import { useViewMode } from '../preferences/useViewMode';
@@ -378,18 +379,16 @@ onMounted(fetchAudit);
         Page {{ page }} of {{ totalPages }} ({{ total }} entries)
       </span>
       <div class="flex items-center gap-1.5">
-        <AppButton size="none" variant="plain" weight="none" class="px-2.5 py-1 dd-rounded text-2xs-plus font-medium dd-bg dd-text disabled:opacity-40"
+        <AppIconButton icon="chevron-left" size="toolbar" variant="plain"
+                class="dd-bg dd-text hover:dd-bg-elevated"
                 :disabled="page <= 1"
                 v-tooltip.top="'Previous page'"
-                @click="prevPage">
-          <AppIcon name="chevron-left" :size="11" />
-        </AppButton>
-        <AppButton size="none" variant="plain" weight="none" class="px-2.5 py-1 dd-rounded text-2xs-plus font-medium dd-bg dd-text disabled:opacity-40"
+                @click="prevPage" />
+        <AppIconButton icon="chevron-right" size="toolbar" variant="plain"
+                class="dd-bg dd-text hover:dd-bg-elevated"
                 :disabled="page >= totalPages"
                 v-tooltip.top="'Next page'"
-                @click="nextPage">
-          <AppIcon name="chevron-right" :size="11" />
-        </AppButton>
+                @click="nextPage" />
       </div>
     </div>
 

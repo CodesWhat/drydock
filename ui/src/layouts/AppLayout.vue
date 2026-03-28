@@ -1271,6 +1271,7 @@ onUnmounted(() => {
                 icon="xmark"
                 size="xs"
                 variant="muted"
+                tooltip="Close menu"
                 aria-label="Close menu"
                 @click="isMobileMenuOpen = false"
         />
@@ -1373,7 +1374,8 @@ onUnmounted(() => {
         <!-- Left: hamburger + breadcrumb -->
         <div class="flex items-center gap-3">
           <AppButton size="none" variant="plain" weight="none" v-if="isMobile"
-                  aria-label="Toggle menu"
+                  :tooltip="isMobileMenuOpen ? 'Close menu' : 'Open menu'"
+                  :aria-label="isMobileMenuOpen ? 'Close menu' : 'Open menu'"
                   :aria-expanded="String(isMobileMenuOpen)"
                   class="flex flex-col items-center justify-center w-8 h-8 gap-1 rounded-md transition-colors hover:dd-bg-elevated"
                   @click="isMobileMenuOpen = !isMobileMenuOpen">
@@ -1401,7 +1403,7 @@ onUnmounted(() => {
           <NotificationBell />
 
           <div class="relative user-menu-wrapper">
-            <AppButton size="none" variant="plain" weight="none" aria-label="User menu"
+            <AppButton size="none" variant="plain" weight="none" tooltip="User menu" aria-label="User menu"
                     :aria-expanded="String(showUserMenu)"
                     class="flex items-center gap-2 dd-rounded px-1.5 py-1 transition-colors hover:dd-bg-elevated"
                     @click="toggleUserMenu">
@@ -1539,6 +1541,7 @@ onUnmounted(() => {
                     icon="xmark"
                     size="xs"
                     variant="muted"
+                    tooltip="Close"
                     aria-label="Close"
                     class="absolute top-3 right-3 z-10"
                     @click="showAbout = false"

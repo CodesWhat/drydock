@@ -222,7 +222,7 @@ onMounted(fetchServers);
             <span class="font-mono text-2xs dd-text-secondary">{{ row.host }}</span>
           </template>
           <template #cell-status="{ row }">
-            <AppBadge :tone="row.status === 'connected' ? 'success' : 'danger'" size="xs" class="px-1.5 py-0 md:!hidden">
+            <AppBadge :tone="row.status === 'connected' ? 'success' : 'danger'" size="xs" class="px-1.5 py-0 md:!hidden" v-tooltip.top="row.status === 'connected' ? 'Connected' : 'Disconnected'">
               <AppIcon :name="row.status === 'connected' ? 'check' : 'xmark'" :size="12" />
             </AppBadge>
             <AppBadge :tone="row.status === 'connected' ? 'success' : 'danger'" size="xs" class="max-md:!hidden">
@@ -261,7 +261,7 @@ onMounted(fetchServers);
                   <div class="text-2xs-plus truncate mt-0.5 dd-text-muted font-mono">{{ server.host }}</div>
                 </div>
               </div>
-              <AppBadge :tone="server.status === 'connected' ? 'success' : 'danger'" size="xs" class="px-1.5 py-0 shrink-0 ml-2 md:!hidden">
+              <AppBadge :tone="server.status === 'connected' ? 'success' : 'danger'" size="xs" class="px-1.5 py-0 shrink-0 ml-2 md:!hidden" v-tooltip.top="server.status === 'connected' ? 'Connected' : 'Disconnected'">
                 <AppIcon :name="server.status === 'connected' ? 'check' : 'xmark'" :size="12" />
               </AppBadge>
               <AppBadge :tone="server.status === 'connected' ? 'success' : 'danger'" size="xs" class="shrink-0 ml-2 max-md:!hidden">
