@@ -19,6 +19,7 @@
     "format": "biome format --write .",
     "lint:fix": "biome check --fix .",
     "lint": "biome check .",
+    "test:security": "node ./node_modules/vitest/vitest.mjs run tests/security/*.spec.ts --maxWorkers=1 --fileParallelism=false",
     "test:unit": "vitest run --coverage",
     "test:unit:watch": "vitest",
     "test:mutation": "stryker run",
@@ -66,6 +67,8 @@
     "vitest": "^4.1.0"
   },
   "overrides": {
-    "minimatch": "^10.2.3"
+    "minimatch": "^10.2.3",
+    "picomatch": "4.0.4",
+    "yaml": "2.8.3"
   }
 }

@@ -13,6 +13,7 @@
     "format": "biome format --write .",
     "lint:fix": "biome check --fix .",
     "lint": "biome check .",
+    "test:security": "node ./node_modules/vitest/vitest.mjs run security/*.test.ts --maxWorkers=1 --fileParallelism=false",
     "test": "\"$npm_node_execpath\" -e \"const major = Number(process.versions.node.split('.')[0]); if (!Number.isInteger(major) || major < 24) { console.error('Drydock backend tests require Node.js >=24. Current: ' + process.version); process.exit(1); }\" && \"$npm_node_execpath\" ./node_modules/vitest/vitest.mjs run --coverage --maxWorkers=1 --fileParallelism=false",
     "test:mutation": "stryker run",
     "knip": "knip"
@@ -73,6 +74,7 @@
   "overrides": {
     "body-parser": "2.2.2",
     "fast-xml-parser": "5.5.8",
+    "picomatch": "4.0.4",
     "qs": "6.15.0"
   },
   "devDependencies": {

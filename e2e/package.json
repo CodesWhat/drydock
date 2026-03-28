@@ -11,6 +11,7 @@
     "lint:fix": "biome check --fix .",
     "lint": "biome check .",
     "cucumber": "cucumber-js **/*.feature",
+    "test:security": "node --test tests/security/*.test.js",
     "test:playwright": "playwright test",
     "test:playwright:ui": "playwright test --headed",
     "test:local": "dotenvx run -- ../scripts/run-e2e-tests.sh",
@@ -34,7 +35,10 @@
     "artillery": "2.0.30"
   },
   "overrides": {
+    "brace-expansion": "5.0.5",
     "fast-xml-parser": "5.5.8",
-    "minimatch": "10.2.4"
+    "minimatch": "10.2.4",
+    "picomatch": "4.0.4",
+    "yaml": "2.8.3"
   }
 }
