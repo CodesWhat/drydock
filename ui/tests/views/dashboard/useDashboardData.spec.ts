@@ -197,56 +197,32 @@ describe('useDashboardData', () => {
     expect(state.recentStatusByContainer.value).toEqual({});
   });
 
-  it('normalizes malformed summary payload values during debounced summary refresh', async () => {
+  it('performs full data refresh on debounced container-changed SSE event', async () => {
     vi.useFakeTimers();
     const setIntervalSpy = vi.spyOn(window, 'setInterval');
     mocks.getAllWatchers.mockResolvedValue([{ id: 'watcher-without-config' }]);
 
     const { state } = await mountDashboardData();
-    mocks.getContainerSummary.mockResolvedValueOnce({
-      containers: {
-        total: -5,
-        running: Number.POSITIVE_INFINITY,
-        stopped: 'invalid',
-      },
-      security: {
-        issues: -1,
-      },
-    });
+
+    // Reset call counts from initial mount fetch
+    mocks.getAllContainers.mockClear();
 
     globalThis.dispatchEvent(new CustomEvent('dd:sse-container-changed'));
     vi.advanceTimersByTime(1_000);
     await flushPromises();
 
-    expect(mocks.getContainerSummary).toHaveBeenCalledTimes(1);
-    expect(state.containerSummary.value).toEqual({
-      containers: { total: 0, running: 0, stopped: 0 },
-      security: { issues: 0 },
-    });
+    expect(mocks.getAllContainers).toHaveBeenCalledTimes(1);
+    expect(state.error.value).toBeNull();
     expect(setIntervalSpy).not.toHaveBeenCalled();
 
-    mocks.getContainerSummary.mockResolvedValueOnce({
-      containers: 'invalid',
-      security: 'invalid',
-    });
+    // Debounce collapses rapid events into a single refresh
+    mocks.getAllContainers.mockClear();
+    globalThis.dispatchEvent(new CustomEvent('dd:sse-container-changed'));
     globalThis.dispatchEvent(new CustomEvent('dd:sse-container-changed'));
     vi.advanceTimersByTime(1_000);
     await flushPromises();
 
-    expect(state.containerSummary.value).toEqual({
-      containers: { total: 0, running: 0, stopped: 0 },
-      security: { issues: 0 },
-    });
-
-    mocks.getContainerSummary.mockResolvedValueOnce({});
-    globalThis.dispatchEvent(new CustomEvent('dd:sse-container-changed'));
-    vi.advanceTimersByTime(1_000);
-    await flushPromises();
-
-    expect(state.containerSummary.value).toEqual({
-      containers: { total: 0, running: 0, stopped: 0 },
-      security: { issues: 0 },
-    });
+    expect(mocks.getAllContainers).toHaveBeenCalledTimes(1);
   });
 
   it('sets error for a failed foreground fetch and clears loading', async () => {
@@ -289,19 +265,18 @@ describe('useDashboardData', () => {
     wrapper.unmount();
   });
 
-  it('logs summary refresh failures when data has already rendered', async () => {
+  it('logs full refresh failures when data has already rendered via container-changed SSE', async () => {
     vi.useFakeTimers();
     const debugSpy = vi.spyOn(console, 'debug').mockImplementation(() => {});
 
     await mountDashboardData();
-    mocks.getContainerSummary.mockRejectedValueOnce(new Error('summary refresh failed'));
+    mocks.getAllContainers.mockRejectedValueOnce(new Error('background refresh failed'));
 
     globalThis.dispatchEvent(new CustomEvent('dd:sse-container-changed'));
     vi.advanceTimersByTime(1_000);
     await flushPromises();
 
-    expect(mocks.getContainerSummary).toHaveBeenCalledTimes(1);
-    expect(debugSpy).toHaveBeenCalledWith('summary refresh failed');
+    expect(debugSpy).toHaveBeenCalledWith(expect.stringContaining('background refresh failed'));
   });
 
   it('surfaces background errors when no data has rendered yet', async () => {
@@ -334,19 +309,17 @@ describe('useDashboardData', () => {
     warnSpy.mockRestore();
   });
 
-  it('surfaces summary refresh errors when no dashboard data has rendered yet', async () => {
+  it('surfaces full refresh errors when no dashboard data has rendered yet', async () => {
     vi.useFakeTimers();
     mocks.getAllContainers.mockRejectedValue(new Error('initial load failed'));
 
     const { state } = await mountDashboardData();
-    mocks.getContainerSummary.mockRejectedValueOnce(new Error('summary bootstrap failed'));
 
     globalThis.dispatchEvent(new CustomEvent('dd:sse-container-changed'));
     vi.advanceTimersByTime(1_000);
     await flushPromises();
 
-    expect(mocks.getContainerSummary).toHaveBeenCalledTimes(1);
-    expect(state.error.value).toBe('summary bootstrap failed');
+    expect(state.error.value).toBe('initial load failed');
   });
 
   it('pauses timer while hidden, resumes when visible, and clears pending realtime timer on unmount', async () => {

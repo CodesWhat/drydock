@@ -183,6 +183,12 @@ async function updateContainer(req: Request, res: Response) {
 
   try {
     await trigger.trigger(container);
+    // Clear updateAvailable so the UI refresh sees the change immediately
+    // (the watcher will re-evaluate on its next scan cycle)
+    const containerAfterTrigger = storeContainer.getContainer(id);
+    if (containerAfterTrigger?.updateAvailable) {
+      storeContainer.updateContainer({ ...containerAfterTrigger, updateAvailable: false });
+    }
     const updatedContainer = storeContainer.getContainer(id);
     recordAuditEvent({ action: 'container-update', container, status: 'success' });
     getContainerActionsCounter()?.inc({ action: 'container-update' });

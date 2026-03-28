@@ -366,23 +366,17 @@ describe('DashboardView', () => {
   });
 
   describe('SSE refresh behavior', () => {
-    it('refreshes dashboard summary on dd:sse-container-changed without full refresh', async () => {
+    it('performs full data refresh on dd:sse-container-changed (#229)', async () => {
       vi.useFakeTimers();
       try {
         await mountDashboard([makeContainer()]);
-        const summaryCallsBefore = mockGetContainerSummary.mock.calls.length;
         const containersCallsBefore = mockGetAllContainers.mock.calls.length;
-        const serverCallsBefore = mockGetServer.mock.calls.length;
-        const agentsCallsBefore = mockGetAgents.mock.calls.length;
 
         globalThis.dispatchEvent(new CustomEvent('dd:sse-container-changed'));
         vi.advanceTimersByTime(1000);
         await flushPromises();
 
-        expect(mockGetContainerSummary.mock.calls.length).toBeGreaterThan(summaryCallsBefore);
-        expect(mockGetAllContainers.mock.calls.length).toBe(containersCallsBefore);
-        expect(mockGetServer.mock.calls.length).toBe(serverCallsBefore);
-        expect(mockGetAgents.mock.calls.length).toBe(agentsCallsBefore);
+        expect(mockGetAllContainers.mock.calls.length).toBeGreaterThan(containersCallsBefore);
       } finally {
         vi.useRealTimers();
       }

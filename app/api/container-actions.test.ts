@@ -415,8 +415,16 @@ describe('Container Actions Router', () => {
         image: { name: 'nginx' },
         updateAvailable: true,
       };
-      const updatedContainer = { ...container, image: { name: 'nginx:latest' } };
-      mockGetContainer.mockReturnValueOnce(container).mockReturnValueOnce(updatedContainer);
+      const clearedContainer = {
+        ...container,
+        image: { name: 'nginx:latest' },
+        updateAvailable: false,
+      };
+      mockGetContainer
+        .mockReturnValueOnce(container) // initial lookup
+        .mockReturnValueOnce(container) // post-trigger check (still has updateAvailable)
+        .mockReturnValueOnce(clearedContainer); // after updateContainer clears flag
+      mockUpdateContainer.mockReturnValue(clearedContainer);
       const mockTriggerFn = vi.fn().mockResolvedValue(undefined);
       const trigger = { type: 'docker', trigger: mockTriggerFn };
       mockGetState.mockReturnValue({ trigger: { 'docker.default': trigger } });
@@ -427,10 +435,13 @@ describe('Container Actions Router', () => {
       await handler(req, res);
 
       expect(mockTriggerFn).toHaveBeenCalledWith(container);
+      expect(mockUpdateContainer).toHaveBeenCalledWith(
+        expect.objectContaining({ updateAvailable: false }),
+      );
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
         message: 'Container updated successfully',
-        result: updatedContainer,
+        result: clearedContainer,
       });
     });
 
@@ -441,8 +452,16 @@ describe('Container Actions Router', () => {
         image: { name: 'nginx' },
         updateAvailable: true,
       };
-      const updatedContainer = { ...container, image: { name: 'nginx:latest' } };
-      mockGetContainer.mockReturnValueOnce(container).mockReturnValueOnce(updatedContainer);
+      const clearedContainer = {
+        ...container,
+        image: { name: 'nginx:latest' },
+        updateAvailable: false,
+      };
+      mockGetContainer
+        .mockReturnValueOnce(container) // initial lookup
+        .mockReturnValueOnce(container) // post-trigger check
+        .mockReturnValueOnce(clearedContainer); // after clearing flag
+      mockUpdateContainer.mockReturnValue(clearedContainer);
       const mockTriggerFn = vi.fn().mockResolvedValue(undefined);
       const trigger = { type: 'dockercompose', trigger: mockTriggerFn };
       mockGetState.mockReturnValue({ trigger: { 'dockercompose.default': trigger } });
@@ -453,10 +472,13 @@ describe('Container Actions Router', () => {
       await handler(req, res);
 
       expect(mockTriggerFn).toHaveBeenCalledWith(container);
+      expect(mockUpdateContainer).toHaveBeenCalledWith(
+        expect.objectContaining({ updateAvailable: false }),
+      );
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
         message: 'Container updated successfully',
-        result: updatedContainer,
+        result: clearedContainer,
       });
     });
 

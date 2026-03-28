@@ -301,7 +301,7 @@ export function useDashboardData() {
   let stopMaintenanceWindowWatch: ReturnType<typeof watch> | undefined;
 
   onMounted(async () => {
-    globalThis.addEventListener('dd:sse-container-changed', summaryRefreshListener);
+    globalThis.addEventListener('dd:sse-container-changed', fullRefreshListener);
     globalThis.addEventListener('dd:sse-scan-completed', fullRefreshListener);
     globalThis.addEventListener('dd:sse-connected', fullRefreshListener);
     document.addEventListener('visibilitychange', visibilityChangeListener);
@@ -312,7 +312,7 @@ export function useDashboardData() {
   });
 
   onUnmounted(() => {
-    globalThis.removeEventListener('dd:sse-container-changed', summaryRefreshListener);
+    globalThis.removeEventListener('dd:sse-container-changed', fullRefreshListener);
     globalThis.removeEventListener('dd:sse-scan-completed', fullRefreshListener);
     globalThis.removeEventListener('dd:sse-connected', fullRefreshListener);
     document.removeEventListener('visibilitychange', visibilityChangeListener);
