@@ -266,16 +266,7 @@ const openActionsContainer = computed(
             {{ c.status }}
           </AppBadge>
         </template>
-        <!-- Bouncer icon -->
-        <template #cell-bouncer="{ row: c }">
-          <span v-if="c.bouncer === 'safe'" class="dd-text-muted">–</span>
-          <span v-else-if="c.bouncer === 'blocked'" v-tooltip.top="tt('Blocked')" class="cursor-default">
-            <AppIcon name="blocked" :size="14" style="color: var(--dd-danger);" />
-          </span>
-          <span v-else v-tooltip.top="tt(c.bouncer)" class="cursor-default">
-            <AppIcon name="warning" :size="14" style="color: var(--dd-warning);" />
-          </span>
-        </template>
+        <!-- Bouncer column removed — blocked state integrated into update button -->
         <!-- Image Age -->
         <template #cell-imageAge="{ row: c }">
           <span class="text-2xs-plus dd-text-secondary whitespace-nowrap"

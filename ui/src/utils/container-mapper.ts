@@ -261,8 +261,12 @@ function deriveSecuritySummaryFromScan(
   return normalizeSecuritySummary(scan?.summary);
 }
 
-/** Derive `bouncer` (security gate verdict) from current-image scan data. */
+/** Derive `bouncer` (security gate verdict) from current-image OR update-image scan data.
+ * If either scan shows blocked, the container is blocked. The update scan takes
+ * precedence since it reflects the SecurityGate verdict during the last update attempt. */
 function deriveBouncer(apiContainer: ApiContainerInput): BouncerStatus {
+  const updateScan = getSecurityScan(apiContainer, 'updateScan');
+  if (updateScan?.status === 'blocked') return 'blocked';
   return deriveBouncerFromScan(getSecurityScan(apiContainer, 'scan'));
 }
 
