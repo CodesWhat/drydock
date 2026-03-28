@@ -586,19 +586,19 @@ const {
                     {{ previewLoading ? 'Previewing...' : 'Preview Update' }}
                   </AppButton>
                   <AppButton v-if="selectedContainer.bouncer === 'blocked'" size="sm" variant="plain" :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)', border: '1px solid var(--dd-danger)' }"
-                          :disabled="actionInProgress === selectedContainer.name"
+                          :disabled="actionInProgress.has(selectedContainer.name)"
                           @click="confirmForceUpdate(selectedContainer.name)">
                     <AppIcon name="lock" :size="10" class="mr-1 inline" />Force Update
                   </AppButton>
                   <AppButton v-else
                           size="sm"
 
-                          :disabled="!selectedContainer.newTag || actionInProgress === selectedContainer.name"
+                          :disabled="!selectedContainer.newTag || actionInProgress.has(selectedContainer.name)"
                           @click="confirmUpdate(selectedContainer.name)">
                     Update Now
                   </AppButton>
                   <AppButton size="sm" variant="outlined"
-                          :disabled="actionInProgress === selectedContainer.name"
+                          :disabled="actionInProgress.has(selectedContainer.name)"
                           @click="scanContainer(selectedContainer.name)">
                     Scan Now
                   </AppButton>

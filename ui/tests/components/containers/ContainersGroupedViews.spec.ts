@@ -99,7 +99,7 @@ function makeContext(overrides: Record<string, unknown> = {}) {
   const collapsedGroups = ref(new Set<string>());
   const groupUpdateInProgress = ref(new Set<string>());
   const containerActionsEnabled = ref(true);
-  const actionInProgress = ref<string | null>(null);
+  const actionInProgress = ref(new Set<string>());
   const containerViewMode = ref<'table' | 'cards' | 'list'>('table');
   const tableColumns = ref([
     { key: 'icon', label: '', align: 'text-center' },
@@ -722,7 +722,7 @@ describe('ContainersGroupedViews', () => {
     refs.groupByStack.value = true;
     refs.containerActionsEnabled.value = false;
     refs.groupUpdateInProgress.value = new Set(['stack-disabled']);
-    refs.actionInProgress.value = 'alpha';
+    refs.actionInProgress.value = new Set(['alpha']);
     refs.filteredContainers.value = [item];
     refs.displayContainers.value = [item];
     refs.renderGroups.value = [
@@ -852,19 +852,19 @@ describe('ContainersGroupedViews', () => {
     ];
     refs.containerViewMode.value = 'table';
     refs.tableActionStyle.value = 'buttons';
-    refs.actionInProgress.value = 'alpha';
+    refs.actionInProgress.value = new Set(['alpha']);
     mocked.context = context;
 
     const wrapper = mountSubject();
     expect(wrapper.text()).toContain('alpha');
 
-    refs.actionInProgress.value = 'beta';
+    refs.actionInProgress.value = new Set(['beta']);
     await nextTick();
-    refs.actionInProgress.value = 'gamma';
+    refs.actionInProgress.value = new Set(['gamma']);
     await nextTick();
 
     refs.tableActionStyle.value = 'icons';
-    refs.actionInProgress.value = 'gamma';
+    refs.actionInProgress.value = new Set(['gamma']);
     await nextTick();
   });
 
@@ -929,16 +929,16 @@ describe('ContainersGroupedViews', () => {
         updatableCount: 4,
       },
     ];
-    refs.actionInProgress.value = 'beta';
+    refs.actionInProgress.value = new Set(['beta']);
     mocked.context = context;
 
     const wrapper = mountSubject();
 
-    refs.actionInProgress.value = 'gamma';
+    refs.actionInProgress.value = new Set(['gamma']);
     await nextTick();
 
     refs.containerActionsEnabled.value = false;
-    refs.actionInProgress.value = null;
+    refs.actionInProgress.value = new Set();
     await nextTick();
     const cardLockButtons = wrapper
       .findAll('button[disabled]')

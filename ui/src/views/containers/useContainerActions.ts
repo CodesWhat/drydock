@@ -46,7 +46,7 @@ async function executeContainerActionState(args: {
   containerIdMap: Record<string, string>;
   containerId?: string;
   name: string;
-  actionInProgress: Ref<string | null>;
+  actionInProgress: Ref<Set<string>>;
   inputError: Ref<string | null>;
   containers: Readonly<Ref<Container[]>>;
   action: (id: string) => Promise<unknown>;
@@ -64,10 +64,12 @@ async function executeContainerActionState(args: {
     return false;
   }
   const containerId = args.containerId ?? args.containerIdMap[args.name];
-  if (!containerId || args.actionInProgress.value) {
+  if (!containerId || args.actionInProgress.value.has(args.name)) {
     return false;
   }
-  args.actionInProgress.value = args.name;
+  const next = new Set(args.actionInProgress.value);
+  next.add(args.name);
+  args.actionInProgress.value = next;
   args.inputError.value = null;
   const shouldReloadContainers = args.reloadContainers ?? true;
   const snapshot = args.containers.value.find((container) => container.name === args.name);
@@ -96,7 +98,9 @@ async function executeContainerActionState(args: {
     toast.error(`Update failed: ${args.name}`, msg);
     return false;
   } finally {
-    args.actionInProgress.value = null;
+    const next = new Set(args.actionInProgress.value);
+    next.delete(args.name);
+    args.actionInProgress.value = next;
   }
 }
 
@@ -190,7 +194,7 @@ async function deleteContainerState(args: {
   containerActionsDisabledReason: string;
   containerIdMap: Record<string, string>;
   name: string;
-  actionInProgress: Ref<string | null>;
+  actionInProgress: Ref<Set<string>>;
   inputError: Ref<string | null>;
   skippedUpdates: Ref<Set<string>>;
   selectedContainerName: string | undefined;
@@ -203,10 +207,12 @@ async function deleteContainerState(args: {
     return false;
   }
   const containerId = args.containerIdMap[args.name];
-  if (!containerId || args.actionInProgress.value) {
+  if (!containerId || args.actionInProgress.value.has(args.name)) {
     return false;
   }
-  args.actionInProgress.value = args.name;
+  const next = new Set(args.actionInProgress.value);
+  next.add(args.name);
+  args.actionInProgress.value = next;
   try {
     await apiDeleteContainer(containerId);
     args.skippedUpdates.value.delete(args.name);
@@ -225,7 +231,9 @@ async function deleteContainerState(args: {
     toast.error(`Delete failed: ${args.name}`, msg);
     return false;
   } finally {
-    args.actionInProgress.value = null;
+    const next = new Set(args.actionInProgress.value);
+    next.delete(args.name);
+    args.actionInProgress.value = next;
   }
 }
 
@@ -591,7 +599,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
     { immediate: true },
   );
 
-  const actionInProgress = ref<string | null>(null);
+  const actionInProgress = ref(new Set<string>());
   const actionPending = ref<Map<string, Container>>(new Map());
   const actionPendingStartTimes = ref<Map<string, number>>(new Map());
   const pendingActionsPollTimer = ref<ReturnType<typeof setInterval> | null>(null);

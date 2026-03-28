@@ -44,6 +44,7 @@ vi.mock('@/components/containers/containersViewTemplateContext', () => ({
     scanContainer,
     confirmUpdate,
     confirmDelete,
+    actionInProgress: ref(new Set<string>()),
     tt,
   }),
 }));

@@ -790,20 +790,37 @@ describe('ContainersView', () => {
   });
 
   describe('actionInProgress', () => {
-    it('prevents concurrent actions', async () => {
+    it('prevents concurrent actions on the same container', async () => {
       const containers = [makeContainer({ newTag: '2.0.0' })];
       const wrapper = await mountContainersView(containers);
       const vm = wrapper.vm as any;
 
-      // Simulate first action in progress
-      vm.actionInProgress = 'nginx';
+      // Simulate action already in progress on 'nginx'
+      vm.actionInProgress = new Set(['nginx']);
 
-      // Attempting another action should be blocked (containerIdMap needs an entry)
+      // Attempting the same container should be blocked
       mockApiUpdate.mockResolvedValue({});
-      await vm.executeAction('other', mockApiUpdate);
+      await vm.executeAction('nginx', mockApiUpdate);
 
-      // apiUpdateContainer should not be called because actionInProgress is set
       expect(mockApiUpdate).not.toHaveBeenCalled();
+    });
+
+    it('allows concurrent actions on different containers', async () => {
+      const containers = [
+        makeContainer({ name: 'nginx', newTag: '2.0.0' }),
+        makeContainer({ name: 'redis', newTag: '8.0.0' }),
+      ];
+      const wrapper = await mountContainersView(containers);
+      const vm = wrapper.vm as any;
+
+      // Simulate action already in progress on 'nginx'
+      vm.actionInProgress = new Set(['nginx']);
+
+      // Attempting a different container should NOT be blocked
+      mockApiUpdate.mockResolvedValue({});
+      await vm.executeAction('redis', mockApiUpdate);
+
+      expect(mockApiUpdate).toHaveBeenCalled();
     });
   });
 

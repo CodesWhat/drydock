@@ -637,7 +637,7 @@ describe('useContainerActions', () => {
 
     await composable.startContainer('web');
 
-    expect(composable.actionInProgress.value).toBeNull();
+    expect(composable.actionInProgress.value.size).toBe(0);
     expect(error.value).toBe('start failed');
     expect(mocks.toastError).toHaveBeenCalledWith('Update failed: web', 'start failed');
 
