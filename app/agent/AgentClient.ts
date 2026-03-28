@@ -69,6 +69,7 @@ interface RemoteTriggerErrorPayload {
 
 const INITIAL_SSE_RECONNECT_DELAY_MS = 1_000;
 const MAX_SSE_RECONNECT_DELAY_MS = 60_000;
+const REMOTE_UPDATE_TRIGGER_TYPES = new Set(['docker', 'dockercompose']);
 
 export class AgentClient {
   public name: string;
@@ -80,6 +81,7 @@ export class AgentClient {
   public info: AgentClientRuntimeInfo;
   private reconnectTimer: NodeJS.Timeout | null;
   private reconnectAttempts: number;
+  private readonly pendingFreshStateAfterRemoteUpdate: Set<string>;
 
   constructor(name: string, config: AgentClientConfig) {
     this.name = name;
@@ -94,6 +96,7 @@ export class AgentClient {
     this.info = {};
     this.reconnectTimer = null;
     this.reconnectAttempts = 0;
+    this.pendingFreshStateAfterRemoteUpdate = new Set();
   }
 
   private parseBaseUrl(): URL {
@@ -189,8 +192,33 @@ export class AgentClient {
 
     containersToRemove.forEach((c) => {
       this.log.info(`Pruning container ${c.name} (removed on Agent)`);
+      this.pendingFreshStateAfterRemoteUpdate.delete(c.id);
       storeContainer.deleteContainer(c.id);
     });
+  }
+
+  private markPendingFreshState(containerId: unknown) {
+    if (typeof containerId === 'string' && containerId.length > 0) {
+      this.pendingFreshStateAfterRemoteUpdate.add(containerId);
+    }
+  }
+
+  private clearPendingFreshState(containerId: unknown) {
+    if (typeof containerId === 'string' && containerId.length > 0) {
+      this.pendingFreshStateAfterRemoteUpdate.delete(containerId);
+    }
+  }
+
+  private shouldPreserveClearedUpdateAvailable(container: Container): boolean {
+    return (
+      this.pendingFreshStateAfterRemoteUpdate.has(container.id) &&
+      container.updateAvailable === true
+    );
+  }
+
+  private async processAuthoritativeContainer(container: Container) {
+    this.clearPendingFreshState(container.id);
+    await this.processContainer(container);
   }
 
   private async registerAgentComponents(
@@ -220,7 +248,7 @@ export class AgentClient {
     this.log.info(`Handshake successful. Received ${containers.length} containers.`);
 
     for (const container of containers) {
-      await this.processContainer(container);
+      await this.processAuthoritativeContainer(container);
     }
     this.pruneOldContainers(containers);
 
@@ -268,6 +296,12 @@ export class AgentClient {
     // emitter may attach — the controller's Joi schema does not allow it.
     if (container.details?.env && Array.isArray(container.details.env)) {
       container.details.env = container.details.env.map(({ key, value }) => ({ key, value }));
+    }
+
+    if (this.shouldPreserveClearedUpdateAvailable(container)) {
+      container.updateAvailable = false;
+    } else if (container.updateAvailable === false) {
+      this.clearPendingFreshState(container.id);
     }
 
     // Save to store logic with Change Detection
@@ -428,6 +462,7 @@ export class AgentClient {
 
   private handleContainerRemovedEvent(data: unknown) {
     const removedContainerData = data as { id: string };
+    this.clearPendingFreshState(removedContainerData.id);
     storeContainer.deleteContainer(removedContainerData.id);
   }
 
@@ -440,7 +475,7 @@ export class AgentClient {
       : [];
 
     for (const container of containers) {
-      await this.processContainer(container);
+      await this.processAuthoritativeContainer(container);
     }
 
     if (watcherName) {
@@ -507,6 +542,9 @@ export class AgentClient {
         container,
         this.axiosOptions,
       );
+      if (REMOTE_UPDATE_TRIGGER_TYPES.has(triggerType)) {
+        this.markPendingFreshState(container.id);
+      }
     } catch (error: unknown) {
       const detailedMessage = this.getRemoteTriggerFailureMessage(error);
       const errorMessage = detailedMessage ?? getErrorMessage(error);
@@ -522,6 +560,9 @@ export class AgentClient {
         containers,
         this.axiosOptions,
       );
+      if (REMOTE_UPDATE_TRIGGER_TYPES.has(triggerType)) {
+        containers.forEach(({ id }) => this.markPendingFreshState(id));
+      }
     } catch (error: unknown) {
       const detailedMessage = this.getRemoteTriggerFailureMessage(error);
       const errorMessage = detailedMessage ?? getErrorMessage(error);
@@ -588,7 +629,7 @@ export class AgentClient {
       );
       const reports = response.data;
       for (const report of reports) {
-        await this.processContainer(report.container);
+        await this.processAuthoritativeContainer(report.container);
       }
       const containers = reports.map((report) => report.container);
       this.pruneOldContainers(containers, watcherName);
@@ -609,7 +650,7 @@ export class AgentClient {
       const report = response.data;
 
       // Process the result (registry check, store update)
-      await this.processContainer(report.container);
+      await this.processAuthoritativeContainer(report.container);
       return report;
     } catch (error: unknown) {
       this.log.error(
