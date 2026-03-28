@@ -37,25 +37,14 @@ function handleDismiss() {
 }
 
 const toneStyles = computed(() => {
-  if (props.tone === 'error') {
-    return {
-      backgroundColor: 'color-mix(in srgb, var(--dd-danger) 25%, var(--dd-bg-card))',
-      borderColor: 'var(--dd-danger)',
-      textColor: 'var(--dd-danger)',
-      buttonTextColor: 'var(--dd-danger)',
-      buttonBackgroundColor: 'transparent',
-      buttonBorderColor: 'var(--dd-danger)',
-      iconName: props.icon ?? 'warning',
-    };
-  }
-
+  const cssVar = props.tone === 'error' ? '--dd-danger' : '--dd-warning';
   return {
-    backgroundColor: 'color-mix(in srgb, var(--dd-warning) 25%, var(--dd-bg-card))',
-    borderColor: 'var(--dd-warning)',
-    textColor: 'var(--dd-warning)',
-    buttonTextColor: 'var(--dd-warning)',
+    backgroundColor: `color-mix(in srgb, var(${cssVar}) 25%, var(--dd-bg-card))`,
+    borderColor: `var(${cssVar})`,
+    textColor: `var(${cssVar})`,
+    buttonTextColor: `var(${cssVar})`,
     buttonBackgroundColor: 'transparent',
-    buttonBorderColor: 'var(--dd-warning)',
+    buttonBorderColor: `var(${cssVar})`,
     iconName: props.icon ?? 'warning',
   };
 });

@@ -17,7 +17,11 @@ describe('deepMerge', () => {
 
   it('preserves array values from source when target has matching key', () => {
     const target = {
-      dashboard: { widgetOrder: ['a', 'b'], hiddenWidgets: [], gridLayout: [] as unknown[] },
+      dashboard: {
+        widgetOrder: ['a', 'b'],
+        hiddenWidgets: [],
+        gridLayout: [] as { i: string; x: number; y: number; w: number; h: number }[],
+      },
     };
     const source = {
       dashboard: {

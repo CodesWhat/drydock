@@ -3,6 +3,14 @@ import type { RadiusPresetId } from './radius';
 
 export type ViewMode = 'table' | 'cards' | 'list';
 
+export interface PersistedLayoutItem {
+  i: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
 export interface PreferencesSchema {
   schemaVersion: number;
   theme: { family: ThemeFamily; variant: string };
@@ -24,7 +32,7 @@ export interface PreferencesSchema {
     };
     columns: string[];
   };
-  dashboard: { widgetOrder: string[]; hiddenWidgets: string[]; gridLayout: unknown[] };
+  dashboard: { widgetOrder: string[]; hiddenWidgets: string[]; gridLayout: PersistedLayoutItem[] };
   views: {
     security: { mode: ViewMode; sortField: string; sortAsc: boolean };
     audit: { mode: ViewMode };

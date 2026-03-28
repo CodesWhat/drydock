@@ -1,6 +1,7 @@
 import http from 'node:http';
 
 const PROBE_TIMEOUT_MS = 5000;
+const MAX_BODY_BYTES = 64 * 1024;
 
 /**
  * Probe a container daemon's API version over a unix socket.
@@ -45,6 +46,10 @@ export function probeSocketApiVersion(socketPath: string): Promise<string | unde
           res.setEncoding('utf8');
           res.on('data', (chunk: string) => {
             body += chunk;
+            if (body.length > MAX_BODY_BYTES) {
+              req.destroy();
+              resolve(undefined);
+            }
           });
           res.on('end', () => {
             try {

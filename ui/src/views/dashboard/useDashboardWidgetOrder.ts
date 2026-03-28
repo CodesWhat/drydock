@@ -1,4 +1,4 @@
-import { ref, watch } from 'vue';
+import { onScopeDispose, ref, watch } from 'vue';
 import { preferences } from '../../preferences/store';
 import { DASHBOARD_WIDGET_IDS, type DashboardWidgetId } from './dashboardTypes';
 import {
@@ -204,6 +204,10 @@ export function useDashboardWidgetOrder() {
   );
 
   watch(hiddenWidgets, persistHiddenWidgets, { deep: true });
+
+  onScopeDispose(() => {
+    clearTimeout(layoutPersistTimer);
+  });
 
   function isWidgetVisible(widgetId: DashboardWidgetId): boolean {
     return !hiddenWidgets.value.includes(widgetId);

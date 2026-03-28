@@ -37,10 +37,14 @@ function navigateTo(route: RouteLocationRaw) {
 
 // Delay enabling grid transitions to prevent fly-in on initial load
 const gridReady = ref(false);
+let gridReadyTimer: ReturnType<typeof setTimeout> | undefined;
 onMounted(() => {
-  setTimeout(() => {
+  gridReadyTimer = setTimeout(() => {
     gridReady.value = true;
   }, 300);
+});
+onUnmounted(() => {
+  clearTimeout(gridReadyTimer);
 });
 
 const {
