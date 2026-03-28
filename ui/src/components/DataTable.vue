@@ -345,7 +345,7 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
       @scroll="handleVirtualScroll">
       <table
         ref="tableRef"
-        class="w-full text-xs"
+        class="w-full text-xs isolate"
         :style="{ borderCollapse: 'separate', borderSpacing: '0', ...(Object.keys(colWidths).length > 0 ? { tableLayout: 'fixed' } : {}) }">
         <thead>
           <tr :style="{ backgroundColor: 'var(--dd-bg-inset)', borderBottom: 'none' }">
