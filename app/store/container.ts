@@ -1,6 +1,7 @@
 /**
  * Container store.
  */
+import { createHash } from 'node:crypto';
 import { byString, byValues } from 'sort-es';
 import { redactContainerRuntimeEnv, redactContainersRuntimeEnv } from '../api/container/shared.js';
 import { getDefaultCacheMaxEntries } from '../configuration/runtime-defaults.js';
@@ -28,6 +29,7 @@ const DEFAULT_SECURITY_STATE_CACHE_MAX_ENTRIES = DEFAULT_CACHE_MAX_ENTRIES;
 const SECURITY_STATE_CACHE_PRUNE_SCAN_BUDGET = 10;
 const CONTAINER_COLLECTION_INDICES = ['data.watcher', 'data.status', 'data.updateAvailable'];
 const UNSAFE_QUERY_PATH_SEGMENTS = new Set(['__proto__', 'prototype', 'constructor']);
+const STABLE_UNDEFINED_SENTINEL = '__undefined__';
 
 type SecurityStateCacheEntry = {
   security: unknown;
@@ -35,6 +37,8 @@ type SecurityStateCacheEntry = {
 };
 
 const securityStateCache = new Map<string, SecurityStateCacheEntry>();
+const containerSecurityStateHashCache = new Map<string, string>();
+let securityStateObjectHashCache = new WeakMap<object, string>();
 let securityStateCachePruneIterator:
   | IterableIterator<[string, SecurityStateCacheEntry]>
   | undefined;
@@ -468,35 +472,81 @@ export function clearAllCachedSecurityState() {
   securityStateCachePruneIterator = undefined;
 }
 
-function stableStringify(value: unknown): string {
-  const normalizeValue = (current: unknown): unknown => {
-    if (Array.isArray(current)) {
-      return current.map(normalizeValue);
-    }
+function normalizeValue(current: unknown): unknown {
+  if (Array.isArray(current)) {
+    return current.map(normalizeValue);
+  }
 
-    if (current && typeof current === 'object') {
-      return Object.keys(current)
-        .sort()
-        .reduce<Record<string, unknown>>((normalized, key) => {
-          normalized[key] = normalizeValue(current[key]);
-          return normalized;
-        }, {});
-    }
+  if (current && typeof current === 'object') {
+    return Object.keys(current)
+      .sort()
+      .reduce<Record<string, unknown>>((normalized, key) => {
+        normalized[key] = normalizeValue(current[key]);
+        return normalized;
+      }, {});
+  }
 
-    return current;
-  };
-
-  return JSON.stringify(normalizeValue(value));
+  return current;
 }
 
-/**
- * Check whether meaningful container state changed between the existing record
- * and the incoming update.  Returns false when nothing actionable changed
- * (e.g. same data re-polled with only LokiJS timestamp metadata differing).
- */
-export function hasContainerChanged(
+function stableSerialize(value: unknown): string {
+  const normalizedValue = normalizeValue(value);
+  return normalizedValue === undefined
+    ? STABLE_UNDEFINED_SENTINEL
+    : JSON.stringify(normalizedValue);
+}
+
+function hashSecurityState(value: unknown): string {
+  return createHash('sha256').update(stableSerialize(value)).digest('hex');
+}
+
+const EMPTY_SECURITY_STATE_HASH = hashSecurityState(undefined);
+
+function getSecurityStateHash(value: unknown): string {
+  if (!value || typeof value !== 'object') {
+    return value === undefined ? EMPTY_SECURITY_STATE_HASH : hashSecurityState(value);
+  }
+
+  const cachedHash = securityStateObjectHashCache.get(value);
+  if (cachedHash) {
+    return cachedHash;
+  }
+
+  const computedHash = hashSecurityState(value);
+  securityStateObjectHashCache.set(value, computedHash);
+  return computedHash;
+}
+
+function getStoredContainerSecurityStateHash(
+  containerToHash: Pick<container.Container, 'id' | 'security'> | undefined,
+): string {
+  if (!containerToHash) {
+    return EMPTY_SECURITY_STATE_HASH;
+  }
+
+  const cachedHash = containerSecurityStateHashCache.get(containerToHash.id);
+  if (cachedHash) {
+    return cachedHash;
+  }
+
+  const computedHash = getSecurityStateHash(containerToHash.security);
+  containerSecurityStateHashCache.set(containerToHash.id, computedHash);
+  return computedHash;
+}
+
+function storeContainerSecurityStateHash(
+  containerToHash: Pick<container.Container, 'id' | 'security'>,
+): string {
+  const computedHash = getSecurityStateHash(containerToHash.security);
+  containerSecurityStateHashCache.set(containerToHash.id, computedHash);
+  return computedHash;
+}
+
+function hasContainerChangedWithSecurityHashes(
   existing: container.Container,
   incoming: container.Container,
+  existingSecurityHash: string,
+  incomingSecurityHash: string,
 ): boolean {
   if (existing.updateAvailable !== incoming.updateAvailable) {
     return true;
@@ -516,10 +566,27 @@ export function hasContainerChanged(
   if (existing.image?.tag?.value !== incoming.image?.tag?.value) {
     return true;
   }
-  if (stableStringify(existing.security) !== stableStringify(incoming.security)) {
+  if (existingSecurityHash !== incomingSecurityHash) {
     return true;
   }
   return false;
+}
+
+/**
+ * Check whether meaningful container state changed between the existing record
+ * and the incoming update.  Returns false when nothing actionable changed
+ * (e.g. same data re-polled with only LokiJS timestamp metadata differing).
+ */
+export function hasContainerChanged(
+  existing: container.Container,
+  incoming: container.Container,
+): boolean {
+  return hasContainerChangedWithSecurityHashes(
+    existing,
+    incoming,
+    getSecurityStateHash(existing.security),
+    getSecurityStateHash(incoming.security),
+  );
 }
 
 function getUpdateDetectedAt(containerCurrent, containerNext) {
@@ -588,6 +655,7 @@ export function insertContainer(container) {
   const containerToSave = validateContainer(container);
   containerToSave.updateDetectedAt = getUpdateDetectedAt(undefined, containerToSave);
   containerToSave.firstSeenAt = getFirstSeenAt(undefined, containerToSave);
+  storeContainerSecurityStateHash(containerToSave);
   containers.insert({
     data: containerToSave,
   });
@@ -629,6 +697,11 @@ export function updateContainer(container) {
   const containerToReturn = validateContainer(containerMerged);
   containerToReturn.updateDetectedAt = getUpdateDetectedAt(containerCurrent, containerToReturn);
   containerToReturn.firstSeenAt = getFirstSeenAt(containerCurrent, containerToReturn);
+  const containerCurrentSecurityHash = getStoredContainerSecurityStateHash(containerCurrent);
+  const containerNextSecurityHash =
+    !hasSecurity && containerCurrent
+      ? containerCurrentSecurityHash
+      : storeContainerSecurityStateHash(containerToReturn);
 
   if (containerCurrentDoc && typeof containers?.update === 'function') {
     containerCurrentDoc.data = containerToReturn;
@@ -648,7 +721,15 @@ export function updateContainer(container) {
     });
   }
   invalidateContainersCacheForMutation(containerCurrent, containerToReturn);
-  if (!containerCurrent || hasContainerChanged(containerCurrent, containerToReturn)) {
+  if (
+    !containerCurrent ||
+    hasContainerChangedWithSecurityHashes(
+      containerCurrent,
+      containerToReturn,
+      containerCurrentSecurityHash,
+      containerNextSecurityHash,
+    )
+  ) {
     const containerUpdatedEventPayload: ContainerLifecycleEventPayload = redactContainerRuntimeEnv({
       ...containerToReturn,
     });
@@ -772,6 +853,7 @@ export function deleteContainer(id) {
       })
       .remove();
     invalidateContainersCacheForMutation(containerRaw, undefined);
+    containerSecurityStateHashCache.delete(id);
     emitContainerRemoved(container);
   }
 }
@@ -779,6 +861,8 @@ export function deleteContainer(id) {
 export function _resetContainerStoreStateForTests() {
   clearContainersQueryCacheState();
   securityStateCache.clear();
+  containerSecurityStateHashCache.clear();
+  securityStateObjectHashCache = new WeakMap<object, string>();
   securityStateCachePruneIterator = undefined;
 }
 

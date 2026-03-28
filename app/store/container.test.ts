@@ -2350,6 +2350,132 @@ describe('hasContainerChanged', () => {
     expect(container.hasContainerChanged(a, b)).toBe(false);
   });
 
+  test('should reuse cached security hashes across repeated comparisons', () => {
+    let securityOwnKeysCount = 0;
+    const security = new Proxy(
+      {
+        scan: {
+          scanner: 'trivy',
+          image: 'registry/image:1.2.3',
+          scannedAt: '2024-01-01T00:00:00.000Z',
+          status: 'passed',
+          blockSeverities: [],
+          blockingCount: 0,
+          summary: {
+            unknown: 0,
+            low: 0,
+            medium: 0,
+            high: 0,
+            critical: 0,
+          },
+          vulnerabilities: [],
+        },
+      },
+      {
+        ownKeys(target) {
+          securityOwnKeysCount += 1;
+          return Reflect.ownKeys(target);
+        },
+      },
+    );
+    const a = createContainerFixture({
+      id: 'container-security-hash-cache',
+      security,
+    });
+    const b = createContainerFixture({
+      id: 'container-security-hash-cache',
+      security: {
+        scan: {
+          vulnerabilities: [],
+          summary: {
+            critical: 0,
+            high: 0,
+            medium: 0,
+            low: 0,
+            unknown: 0,
+          },
+          blockingCount: 0,
+          blockSeverities: [],
+          status: 'passed',
+          scannedAt: '2024-01-01T00:00:00.000Z',
+          image: 'registry/image:1.2.3',
+          scanner: 'trivy',
+        },
+      },
+    });
+
+    expect(container.hasContainerChanged(a, b)).toBe(false);
+    const initialSecurityOwnKeysCount = securityOwnKeysCount;
+    expect(initialSecurityOwnKeysCount).toBeGreaterThan(0);
+
+    expect(container.hasContainerChanged(a, b)).toBe(false);
+    expect(securityOwnKeysCount).toBe(initialSecurityOwnKeysCount);
+  });
+
+  test('updateContainer should reuse the stored security hash when the next payload omits security', () => {
+    const collection = createFilterableCollection([]);
+    const db = {
+      getCollection: () => collection,
+      addCollection: () => null,
+    };
+    container.createCollections(db);
+
+    let securityOwnKeysCount = 0;
+    const security = new Proxy(
+      {
+        scan: {
+          vulnerabilities: [],
+          summary: {
+            critical: 0,
+            high: 0,
+            medium: 0,
+            low: 0,
+            unknown: 0,
+          },
+          blockingCount: 0,
+          blockSeverities: [],
+          status: 'passed',
+          scannedAt: '2024-01-01T00:00:00.000Z',
+          image: 'registry/image:1.2.3',
+          scanner: 'trivy',
+        },
+      },
+      {
+        ownKeys(target) {
+          securityOwnKeysCount += 1;
+          return Reflect.ownKeys(target);
+        },
+      },
+    );
+    const existingContainer = createContainerFixture({
+      id: 'stored-security-hash-cache',
+      updateAvailable: false,
+      security,
+    });
+
+    container.insertContainer(existingContainer);
+    const initialSecurityOwnKeysCount = securityOwnKeysCount;
+    expect(initialSecurityOwnKeysCount).toBeGreaterThan(0);
+
+    const updatedContainer = container.updateContainer({
+      ...existingContainer,
+      updateAvailable: true,
+      security: undefined,
+    });
+
+    expect(updatedContainer).toBeDefined();
+    expect(securityOwnKeysCount).toBe(initialSecurityOwnKeysCount);
+  });
+
+  test('should compare primitive security values without object hashing', () => {
+    const a = createContainerFixture({ security: false as any });
+    const b = createContainerFixture({ security: false as any });
+    const c = createContainerFixture({ security: true as any });
+
+    expect(container.hasContainerChanged(a, b)).toBe(false);
+    expect(container.hasContainerChanged(a, c)).toBe(true);
+  });
+
   test('should return false when only timestamp-like metadata differs', () => {
     const a = createContainerFixture({ updateDetectedAt: '2024-01-01T00:00:00Z' });
     const b = createContainerFixture({ updateDetectedAt: '2024-12-31T23:59:59Z' });
