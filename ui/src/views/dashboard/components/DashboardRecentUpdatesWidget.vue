@@ -23,7 +23,15 @@ interface Props {
   recentUpdates: RecentUpdateRow[];
 }
 
-defineProps<Props>();
+const props = defineProps<Props>();
+
+function getRowClass(row: Record<string, unknown>): string {
+  const id = row.id as string;
+  if (props.dashboardUpdateInProgress === id || props.dashboardUpdateAllInProgress) {
+    return 'opacity-50 pointer-events-none transition-opacity duration-300';
+  }
+  return '';
+}
 
 const emit = defineEmits<{
   confirmUpdate: [row: RecentUpdateRow];
@@ -135,6 +143,7 @@ watchEffect(() => {
           :columns="UPDATE_TABLE_COLUMNS"
           :rows="recentUpdates"
           row-key="id"
+          :row-class="getRowClass"
           compact>
           <template #cell-icon="{ row }">
             <ContainerIcon :icon="row.icon" :size="28" />

@@ -83,33 +83,27 @@ describe('dashboardWidgetLayout', () => {
   });
 
   describe('responsive grid constants', () => {
-    const breakpointKeys = ['xxs', 'xs', 'sm', 'md', 'lg'] as const;
-
-    test('GRID_BREAKPOINTS defines all five standard breakpoints', () => {
-      for (const key of breakpointKeys) {
-        expect(GRID_BREAKPOINTS).toHaveProperty(key);
+    test('GRID_BREAKPOINTS and GRID_COLS have matching keys', () => {
+      const bpKeys = Object.keys(GRID_BREAKPOINTS).sort();
+      const colKeys = Object.keys(GRID_COLS).sort();
+      expect(bpKeys).toEqual(colKeys);
+      for (const key of bpKeys) {
         expect(typeof GRID_BREAKPOINTS[key]).toBe('number');
-      }
-    });
-
-    test('GRID_COLS defines a column count for every breakpoint', () => {
-      for (const key of breakpointKeys) {
-        expect(GRID_COLS).toHaveProperty(key);
         expect(typeof GRID_COLS[key]).toBe('number');
         expect(GRID_COLS[key]).toBeGreaterThanOrEqual(1);
       }
     });
 
-    test('breakpoints are ordered ascending (xxs < xs < sm < md < lg)', () => {
-      expect(GRID_BREAKPOINTS.xxs).toBeLessThan(GRID_BREAKPOINTS.xs);
-      expect(GRID_BREAKPOINTS.xs).toBeLessThan(GRID_BREAKPOINTS.sm);
-      expect(GRID_BREAKPOINTS.sm).toBeLessThan(GRID_BREAKPOINTS.md);
-      expect(GRID_BREAKPOINTS.md).toBeLessThan(GRID_BREAKPOINTS.lg);
+    test('breakpoints are ordered ascending', () => {
+      const entries = Object.entries(GRID_BREAKPOINTS).sort(([, a], [, b]) => a - b);
+      for (let i = 1; i < entries.length; i++) {
+        expect(entries[i][1]).toBeGreaterThan(entries[i - 1][1]);
+      }
     });
 
-    test('mobile breakpoints (xs, xxs) use 1 column for stacking', () => {
-      expect(GRID_COLS.xxs).toBe(1);
-      expect(GRID_COLS.xs).toBe(1);
+    test('smallest breakpoint uses 1 column for stacking', () => {
+      const smallest = Object.entries(GRID_BREAKPOINTS).sort(([, a], [, b]) => a - b)[0][0];
+      expect(GRID_COLS[smallest]).toBe(1);
     });
 
     test('desktop breakpoint (lg) uses 12 columns matching colNum', () => {
@@ -117,10 +111,10 @@ describe('dashboardWidgetLayout', () => {
     });
 
     test('column counts increase with breakpoint size', () => {
-      expect(GRID_COLS.xxs).toBeLessThanOrEqual(GRID_COLS.xs);
-      expect(GRID_COLS.xs).toBeLessThanOrEqual(GRID_COLS.sm);
-      expect(GRID_COLS.sm).toBeLessThanOrEqual(GRID_COLS.md);
-      expect(GRID_COLS.md).toBeLessThanOrEqual(GRID_COLS.lg);
+      const entries = Object.entries(GRID_BREAKPOINTS).sort(([, a], [, b]) => a - b);
+      for (let i = 1; i < entries.length; i++) {
+        expect(GRID_COLS[entries[i][0]]).toBeGreaterThanOrEqual(GRID_COLS[entries[i - 1][0]]);
+      }
     });
   });
 

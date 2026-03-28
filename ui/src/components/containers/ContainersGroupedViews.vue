@@ -116,6 +116,7 @@ const openActionsContainer = computed(
                  :selected-key="selectedContainer ? getContainerViewKey(selectedContainer) : null"
                  :show-actions="true"
                  :virtual-scroll="false"
+                 :row-class="(row) => actionInProgress === row.name ? 'opacity-50 pointer-events-none transition-opacity duration-300' : ''"
                  @update:sort-key="containerSortKey = $event"
                  @update:sort-asc="containerSortAsc = $event"
                  @row-click="selectContainer($event)">
@@ -409,7 +410,7 @@ const openActionsContainer = computed(
                     @item-click="selectContainer($event)">
         <template #card="{ item: c }">
           <!-- Card header -->
-          <div class="px-4 pt-4 pb-2 flex items-start justify-between" :class="{ 'opacity-50': c._pending }">
+          <div class="px-4 pt-4 pb-2 flex items-start justify-between" :class="{ 'opacity-50': c._pending || actionInProgress === c.name }">
             <div class="flex items-center gap-2.5 min-w-0">
               <AppIcon v-if="c._pending" name="spinner" :size="16" class="dd-spin dd-text-muted shrink-0" />
               <ContainerIcon v-else :icon="c.icon" :size="24" class="shrink-0" />
@@ -458,7 +459,7 @@ const openActionsContainer = computed(
           </div>
 
           <!-- Card body -- inline Current / Latest -->
-          <div class="px-4 py-3 min-w-0">
+          <div class="px-4 py-3 min-w-0" :class="{ 'opacity-50': actionInProgress === c.name }">
             <div class="flex items-center gap-2 flex-wrap min-w-0">
               <span class="text-2xs-plus dd-text-muted shrink-0">Current</span>
               <CopyableTag :tag="c.currentTag" class="text-xs font-bold dd-text truncate max-w-[120px]" @click.stop>

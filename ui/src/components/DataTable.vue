@@ -27,6 +27,8 @@ const props = withDefaults(
     virtualMaxHeight?: string;
     /** Optional max-height for scroll area when virtualScroll is false (e.g., '340px') */
     maxHeight?: string;
+    /** Optional function returning extra CSS classes for a row (e.g. dim during actions) */
+    rowClass?: (row: Record<string, unknown>) => string;
   }>(),
   {
     showActions: false,
@@ -394,7 +396,10 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
           </tr>
           <tr v-for="(row, i) in visibleRows" :key="getRowKey(row, rowKey)"
               class="cursor-pointer transition-colors hover:dd-bg-hover"
-              :class="selectedKey != null && getRowKey(row, rowKey) === selectedKey ? 'ring-1 ring-inset ring-drydock-secondary' : ''"
+              :class="[
+                selectedKey != null && getRowKey(row, rowKey) === selectedKey ? 'ring-1 ring-inset ring-drydock-secondary' : '',
+                rowClass?.(row) ?? '',
+              ]"
               :style="{
                 backgroundColor: selectedKey != null && getRowKey(row, rowKey) === selectedKey
                   ? 'var(--dd-bg-elevated)'
