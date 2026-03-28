@@ -23,6 +23,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Container-update event deduplication** — Added `hasContainerChanged()` to detect meaningful state differences between existing and incoming container records. Suppresses redundant SSE `container-updated` events when a poll cycle returns identical data.
 - **Log viewer layout improvements** — Log entries now use `white-space: nowrap` for single-line scannable output (horizontal scroll for overflow), row alignment changed to `items-center` for consistent baselines, and the terminal has a `min-h-[300px]` floor. Log viewer fills container height with `flex-1`, removed line separators, and added dark background on search input.
 - **AppIconButton toolbar size** — Added `toolbar` size variant (w-7 h-7, 13px icon) for dense filter bars.
+- **Deprecation banner actions layout** — Migration guide link, Dismiss button, and "Don't show again" checkbox stacked vertically with checkbox-gated permanent dismiss.
+- **Dashboard customize panel responsive on mobile** — Panel is opt-in on mobile (sliders icon to open), full-screen overlay with backdrop dismiss. Desktop behavior unchanged. ([#222](https://github.com/CodesWhat/drydock/issues/222))
+- **Socket version probe hardened** — Added 64KB body cap on socket probe response, timer cleanup via `onScopeDispose`/`onUnmounted`, and typed `gridLayout` as `PersistedLayoutItem[]`.
 
 ### Fixed
 
@@ -35,6 +38,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Missing component imports** — Added missing imports in `SecurityEmptyState` and `AgentsView` that were silently dropped.
 - **tagPrecision mapper type safety** — Removed `as any` cast from tagPrecision container mapper.
 - **AppIconButton tooltip type** — Widened tooltip prop type and fixed ThemeToggle dead branch.
+- **Docker recreate alias prefix stripping unconditional** — Container names are now unconditionally stripped of `hex12_` prefixes at both watcher and trigger level, preventing alias names like `fcdb966987a0_termix` from leaking into notifications. ([#156](https://github.com/CodesWhat/drydock/issues/156))
+- **Banner checkbox label text invisible** — "Don't show again" text on deprecation banners was unreadable because `dd-text-muted` was used on a `color-mix` background. Switched to tone color.
+- **Dashboard updates list not refreshing after container update** — Backend now clears `updateAvailable` flag after manual trigger; frontend SSE `container-changed` event triggers full data refresh instead of summary-only. ([#229](https://github.com/CodesWhat/drydock/issues/229))
+- **Dashboard layout customizations lost on page reload** — Added `gridLayout` to `PreferencesSchema`; reorder now uses `loadPersistedLayout` instead of `createLayoutFromOrder`. ([#223](https://github.com/CodesWhat/drydock/issues/223))
 
 ### Accessibility
 
@@ -49,6 +56,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Vite 7.3 upgraded to 8.0** — Migrated to Vite 8.0 with Rolldown bundler.
 - **Patch/minor dependency bumps** — Updated all patch/minor dependencies and upgraded knip to v6.
 - **`fast-xml-parser` patched for CVE-2026-33349** — Additional patch on top of the v1.5.0 upgrade.
+- **Vulnerable transitive dependency patches** — nodemailer 8.0.3→8.0.4, picomatch→4.0.4, brace-expansion→5.0.5, smol-toml→1.6.1, yaml→2.8.3.
 
 ## [1.5.0] — 2026-03-19
 
