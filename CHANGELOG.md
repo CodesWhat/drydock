@@ -29,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Official image pretty logs restored by default** — The release Docker image now defaults back to `DD_LOG_FORMAT=text`, restoring the human-readable `docker logs` experience from v1.4.5. Set `DD_LOG_FORMAT=json` explicitly if you want structured log output. ([Discussion #221](https://github.com/CodesWhat/drydock/discussions/221))
 - **CalVer zero-padded month in strict family filter** — Tags like `2026.02.0` were rejected when the current tag was `2025.11.1` because zero-padded single digits (`01`–`09`) were treated as a family mismatch. Normal in CalVer month fields. ([#202](https://github.com/CodesWhat/drydock/issues/202))
 - **Dashboard updates widget 6-item cap** — Removed hard-coded `RECENT_UPDATES_LIMIT` that silently dropped entries beyond 6 in the Updates Available widget. The scroll container was already in place. ([#208](https://github.com/CodesWhat/drydock/issues/208))
 - **Disabled tooltip regression** — Restored pointer events on disabled `AppIconButton` so tooltips still explain why actions are unavailable (regressed lock button explanations in grouped views).
