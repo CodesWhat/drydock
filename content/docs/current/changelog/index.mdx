@@ -13,46 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-
-- **Bearer token auth for `/metrics` endpoint** — Set `DD_SERVER_METRICS_TOKEN` to authenticate Prometheus scrapers via `Authorization: Bearer <token>` without requiring session/basic auth. Uses SHA-256 hashing with timing-safe comparison. Three auth modes: (1) bearer token when token is set, (2) session/basic auth fallback, (3) no auth when `DD_SERVER_METRICS_AUTH=false`.
-- **Design system components** — Added shared UI building blocks: `AppIconButton` (icon-only button with WCAG 2.5.8 touch targets), `AppBadge` (tone-based badge with size/uppercase/dot props), `StatusDot` (semantic status indicator), `DetailField` (label+value pair), and `AppTabBar` (v-model tab bar with icons, counts, compact mode). Migrated dashboard, container, settings, layout, and config views to use the new components. ([Discussion #199](https://github.com/CodesWhat/drydock/discussions/199))
-- **Floating tag detection and UI indicator** — New `tagPrecision` classifier (`specific` | `floating`) detects mutable version aliases (e.g. `v3`, `1.4`) and auto-enables digest watching on non-Docker Hub registries. Container detail views show a caution badge when a floating tag is detected without digest watching enabled. ([Discussion #178](https://github.com/CodesWhat/drydock/discussions/178))
-- **Notification bell action filtering** — Audit log endpoint now supports an `actions` query parameter for comma-separated event type filtering. `NotificationBell` uses this to fetch only actionable alert types instead of the full audit log.
-- **Semantic typography utility classes** — Added `dd-text-label`, `dd-text-body`, `dd-text-heading-panel`, and related Tailwind utility classes for consistent text sizing across views.
-
 ### Changed
 
-- **Action triggers default to opt-in (`oninclude`)** — Docker, Docker Compose, and Command triggers now default to `auto=oninclude`, meaning they only act on containers with an explicit `dd.action.include` label. Previously, action triggers defaulted to `auto=all`, which could update containers without explicit opt-in when combined with `watchByDefault=true`. Notification triggers (Slack, email, Pushover, etc.) are unchanged and still default to `auto=all`. To restore the previous behavior, set `DD_TRIGGER_DOCKER_<NAME>_AUTO=true`. ([#213](https://github.com/CodesWhat/drydock/issues/213))
-- **Container-update event deduplication** — Added `hasContainerChanged()` to detect meaningful state differences between existing and incoming container records. Suppresses redundant SSE `container-updated` events when a poll cycle returns identical data.
-- **Log viewer layout improvements** — Log entries now use `white-space: nowrap` for single-line scannable output (horizontal scroll for overflow), row alignment changed to `items-center` for consistent baselines, and the terminal has a `min-h-[300px]` floor. Log viewer fills container height with `flex-1`, removed line separators, and added dark background on search input.
 - **AppIconButton size tiers bumped for WCAG 2.5.8** — Default `sm` size now meets the 44px minimum touch target. All tiers increased: `toolbar` 28→32px, `xs` 36→40px, `sm` 40→44px, `md` 44→48px, `lg` 48→56px. Migrated remaining raw icon buttons on the containers page (view mode switcher, stop/start/restart, detail panel close/expand, split button icons, column picker). ([Discussion #199](https://github.com/CodesWhat/drydock/discussions/199))
-
-### Fixed
-
-- **Official image pretty logs restored by default** — The release Docker image now defaults back to `DD_LOG_FORMAT=text`, restoring the human-readable `docker logs` experience from v1.4.5. Set `DD_LOG_FORMAT=json` explicitly if you want structured log output. ([Discussion #221](https://github.com/CodesWhat/drydock/discussions/221))
-- **CalVer zero-padded month in strict family filter** — Tags like `2026.02.0` were rejected when the current tag was `2025.11.1` because zero-padded single digits (`01`–`09`) were treated as a family mismatch. Normal in CalVer month fields. ([#202](https://github.com/CodesWhat/drydock/issues/202))
-- **Dashboard updates widget 6-item cap** — Removed hard-coded `RECENT_UPDATES_LIMIT` that silently dropped entries beyond 6 in the Updates Available widget. The scroll container was already in place. ([#208](https://github.com/CodesWhat/drydock/issues/208))
-- **Disabled tooltip regression** — Restored pointer events on disabled `AppIconButton` so tooltips still explain why actions are unavailable (regressed lock button explanations in grouped views).
-- **AppTabBar accessibility** — Added `aria-label` in `iconOnly` mode so tabs are identifiable to assistive technology when visible labels are hidden.
-- **OpenAPI `/metrics` security spec** — Removed anonymous `{}` from security alternatives; runtime requires auth by default, spec should not advertise otherwise.
-- **Missing filter icon in DataFilterBar** — Restored `AppIconButton` import that was silently swallowed by Vue, making the filter icon invisible on all pages.
-- **Missing component imports** — Added missing imports in `SecurityEmptyState` and `AgentsView` that were silently dropped.
-- **tagPrecision mapper type safety** — Removed `as any` cast from tagPrecision container mapper.
-- **AppIconButton tooltip type** — Widened tooltip prop type and fixed ThemeToggle dead branch.
-
-### Accessibility
-
-- **Tooltip audit** — Added `v-tooltip` to interactive elements and status indicators missing tooltip hints: status dots (watchers, registries, triggers, audit, security), drag handles on dashboard widgets, icon-only badges (registry private/public), NotificationBell button, pagination and test buttons, and spinner/action-in-progress indicators. ([Discussion #199](https://github.com/CodesWhat/drydock/discussions/199))
-
-### Security
-
-- **Trivy supply chain advisory** — Published advisory page and site banner for Trivy supply chain compromise. Pinned Trivy versions and corrected advisory details.
 
 ### Dependencies
 
-- **Vite 7.3 upgraded to 8.0** — Migrated to Vite 8.0 with Rolldown bundler.
-- **Patch/minor dependency bumps** — Updated all patch/minor dependencies and upgraded knip to v6.
 - **`fast-xml-parser` patched for CVE-2026-33349** — Additional patch on top of the v1.5.0 upgrade.
 
 ## [1.5.0] — 2026-03-19
@@ -75,6 +41,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **System log live streaming in UI** — Added end-to-end WebSocket support for system logs (`/api/v1/log/stream`) with new UI service/composable and live log view integration.
 - **Watcher run-time visibility in UI** — Watcher metadata now exposes `lastRunAt`, and UI surfaces it as a relative timestamp.
 - **Shared log viewer primitives** — Added reusable `AppLogViewer` building blocks, JSON tokenizer/search utilities, and full-page container detail tab components for consistent log UX.
+- **Bearer token auth for `/metrics` endpoint** — Set `DD_SERVER_METRICS_TOKEN` to authenticate Prometheus scrapers via `Authorization: Bearer <token>` without requiring session/basic auth. Uses SHA-256 hashing with timing-safe comparison. Three auth modes: (1) bearer token when token is set, (2) session/basic auth fallback, (3) no auth when `DD_SERVER_METRICS_AUTH=false`.
+- **Design system components** — Added shared UI building blocks: `AppIconButton` (icon-only button with WCAG 2.5.8 touch targets), `AppBadge` (tone-based badge with size/uppercase/dot props), `StatusDot` (semantic status indicator), `DetailField` (label+value pair), and `AppTabBar` (v-model tab bar with icons, counts, compact mode). Migrated dashboard, container, settings, layout, and config views to use the new components. ([Discussion #199](https://github.com/CodesWhat/drydock/discussions/199))
+- **Floating tag detection and UI indicator** — New `tagPrecision` classifier (`specific` | `floating`) detects mutable version aliases (e.g. `v3`, `1.4`) and auto-enables digest watching on non-Docker Hub registries. Container detail views show a caution badge when a floating tag is detected without digest watching enabled. ([Discussion #178](https://github.com/CodesWhat/drydock/discussions/178))
+- **Notification bell action filtering** — Audit log endpoint now supports an `actions` query parameter for comma-separated event type filtering. `NotificationBell` uses this to fetch only actionable alert types instead of the full audit log.
+- **Semantic typography utility classes** — Added `dd-text-label`, `dd-text-body`, `dd-text-heading-panel`, and related Tailwind utility classes for consistent text sizing across views.
+- **Disable default local watcher** — Set `DD_LOCAL_WATCHER=false` to prevent the built-in Docker watcher from starting, useful for controller-only nodes that manage remote agents exclusively.
+- **Container row dimming during actions** — Container table rows dim with reduced opacity while an action (update, restart, etc.) is in progress, providing clear visual feedback. ([#227](https://github.com/CodesWhat/drydock/issues/227))
 
 ### Changed
 
@@ -94,6 +67,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Watcher event logging noise reduced** — First event-stream reconnect downgraded from `warn` to `info`.
 - **CI workflows renamed** — Dropped numeric prefixes from workflow filenames for clarity.
 - **Smoke load test profile removed** — Replaced with the ci profile for meaningful regression detection.
+- **Container-update event deduplication** — Added `hasContainerChanged()` to detect meaningful state differences between existing and incoming container records. Suppresses redundant SSE `container-updated` events when a poll cycle returns identical data.
+- **Log viewer layout improvements** — Log entries now use `white-space: nowrap` for single-line scannable output (horizontal scroll for overflow), row alignment changed to `items-center` for consistent baselines, and the terminal has a `min-h-[300px]` floor. Log viewer fills container height with `flex-1`, removed line separators, and added dark background on search input.
+- **AppIconButton toolbar size** — Added `toolbar` size variant (w-8 h-8, 15px icon) for dense filter bars.
+- **Deprecation banner actions layout** — Migration guide link, Dismiss button, and "Don't show again" checkbox stacked vertically with checkbox-gated permanent dismiss.
+- **Dashboard customize panel responsive on mobile** — Panel is opt-in on mobile (sliders icon to open), full-screen overlay with backdrop dismiss. Desktop behavior unchanged. ([#222](https://github.com/CodesWhat/drydock/issues/222))
+- **Socket version probe hardened** — Added 64KB body cap on socket probe response, timer cleanup via `onScopeDispose`/`onUnmounted`, and typed `gridLayout` as `PersistedLayoutItem[]`.
+- **Action trigger default mode** — Action triggers (`docker`, `dockercompose`, `command`) now default to `auto=oninclude` instead of `auto=all`, requiring an explicit `dd.trigger.include` label before auto-updating containers. ([#213](https://github.com/CodesWhat/drydock/issues/213))
 
 ### Fixed
 
@@ -115,14 +95,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Debug dump filename normalization** — Debug exports now use date-only `.json` filenames.
 - **Dashboard widget mobile scroll** — Added `overscroll-contain` to all scrollable dashboard widgets so touch scrolling stays within the widget instead of scrolling the page. ([#200](https://github.com/CodesWhat/drydock/issues/200))
 - **WebSocket robustness fixes** — Prevented writes on closed sockets, fixed non-matching upgrade URL pass-through behavior, and eliminated stats-collector listener leaks across restart cycles.
+- **Official image pretty logs restored by default** — The release Docker image now defaults back to `DD_LOG_FORMAT=text`, restoring the human-readable `docker logs` experience from v1.4.5. Set `DD_LOG_FORMAT=json` explicitly if you want structured log output. ([Discussion #221](https://github.com/CodesWhat/drydock/discussions/221))
+- **CalVer zero-padded month in strict family filter** — Tags like `2026.02.0` were rejected when the current tag was `2025.11.1` because zero-padded single digits (`01`–`09`) were treated as a family mismatch. Normal in CalVer month fields. ([#202](https://github.com/CodesWhat/drydock/issues/202))
+- **Dashboard updates widget 6-item cap** — Removed hard-coded `RECENT_UPDATES_LIMIT` that silently dropped entries beyond 6 in the Updates Available widget. The scroll container was already in place. ([#208](https://github.com/CodesWhat/drydock/issues/208))
+- **Disabled tooltip regression** — Restored pointer events on disabled `AppIconButton` so tooltips still explain why actions are unavailable (regressed lock button explanations in grouped views).
+- **AppTabBar accessibility** — Added `aria-label` in `iconOnly` mode so tabs are identifiable to assistive technology when visible labels are hidden.
+- **OpenAPI `/metrics` security spec** — Removed anonymous `{}` from security alternatives; runtime requires auth by default, spec should not advertise otherwise.
+- **Missing filter icon in DataFilterBar** — Restored `AppIconButton` import that was silently swallowed by Vue, making the filter icon invisible on all pages.
+- **Missing component imports** — Added missing imports in `SecurityEmptyState` and `AgentsView` that were silently dropped.
+- **tagPrecision mapper type safety** — Removed `as any` cast from tagPrecision container mapper.
+- **AppIconButton tooltip type** — Widened tooltip prop type and fixed ThemeToggle dead branch.
+- **Docker recreate alias prefix stripping unconditional** — Container names are now unconditionally stripped of `hex12_` prefixes at both watcher and trigger level, preventing alias names like `fcdb966987a0_termix` from leaking into notifications. ([#156](https://github.com/CodesWhat/drydock/issues/156))
+- **Banner checkbox label text invisible** — "Don't show again" text on deprecation banners was unreadable because `dd-text-muted` was used on a `color-mix` background. Switched to tone color.
+- **Dashboard updates list not refreshing after container update** — Backend now clears `updateAvailable` flag after manual trigger; frontend SSE `container-changed` event triggers full data refresh instead of summary-only. ([#229](https://github.com/CodesWhat/drydock/issues/229))
+- **Dashboard layout customizations lost on page reload** — Added `gridLayout` to `PreferencesSchema`; reorder now uses `loadPersistedLayout` instead of `createLayoutFromOrder`. ([#223](https://github.com/CodesWhat/drydock/issues/223))
+- **Mobile vertical scroll on containers page** — Restored vertical scrolling on the containers page when viewed on mobile devices. ([#231](https://github.com/CodesWhat/drydock/issues/231))
+- **Podman pod infra containers skipped** — Watchers now skip Podman pod infrastructure containers that have an empty `Image` field instead of failing during version comparison. ([#182](https://github.com/CodesWhat/drydock/issues/182))
+- **Dashboard scroll and layout fixes** — Removed scroll trap from Security Overview widget ([#216](https://github.com/CodesWhat/drydock/issues/216)), prevented dashboard widget scroll layout shift ([#217](https://github.com/CodesWhat/drydock/issues/217)), stopped table resize handles from bleeding through modals, and discarded corrupted single-column grid layouts on load.
+- **Stale updateAvailable overwrite after remote trigger** — Agent controller no longer overwrites cleared `updateAvailable` flags with stale snapshot data after a remote trigger completes. ([#229](https://github.com/CodesWhat/drydock/issues/229))
+
+### Accessibility
+
+- **Tooltip audit** — Added `v-tooltip` to interactive elements and status indicators missing tooltip hints: status dots (watchers, registries, triggers, audit, security), drag handles on dashboard widgets, icon-only badges (registry private/public), NotificationBell button, pagination and test buttons, and spinner/action-in-progress indicators. ([Discussion #199](https://github.com/CodesWhat/drydock/discussions/199))
 
 ### Security
 
 - **WebSocket origin and lockout hardening** — Added stricter WebSocket origin validation and safer lockout file-permission handling.
+- **Trivy supply chain advisory** — Published advisory page and site banner for Trivy supply chain compromise. Pinned Trivy versions and corrected advisory details.
+- **Security bouncer enforcement on container updates** — Update and Update All actions now enforce the security bouncer gate, surfacing blocked-update reasons in the UI instead of silently failing.
 
 ### Dependencies
 
-- **`fast-xml-parser` upgraded to 5.5.7** — Updated app/e2e dependency versions to address the CVE-2026-33349 advisory.
+- **`fast-xml-parser` upgraded to 5.5.8** — Addresses CVE-2026-33349 (numeric entity expansion bypass). Updated app/e2e dependency versions.
+- **Vite 7.3 upgraded to 8.0** — Migrated to Vite 8.0 with Rolldown bundler.
+- **Patch/minor dependency bumps** — Updated all patch/minor dependencies and upgraded knip to v6.
+- **Vulnerable transitive dependency patches** — nodemailer 8.0.3→8.0.4, picomatch→4.0.4, brace-expansion→5.0.5, smol-toml→1.6.1, yaml→2.8.3.
 
 ### Testing
 

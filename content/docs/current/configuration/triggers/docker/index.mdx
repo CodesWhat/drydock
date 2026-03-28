@@ -104,6 +104,14 @@ A non-zero exit code or timeout is treated as failure. When `dd.hook.pre.abort` 
 
 Lifecycle hooks are **not** executed during self-updates. When hook labels are present, Drydock records `hook-configured` in the audit log before execution, then `hook-pre-*` / `hook-post-*` based on outcomes.
 
+## Compose File Sync
+
+When the Docker trigger updates a container that was originally started via Docker Compose, Drydock automatically patches the image tag in the compose file so that subsequent `docker compose up` commands do not revert the update. The compose file path is resolved from the `com.docker.compose.project.config_files` label that Docker Compose sets on every container it creates.
+
+This is a best-effort operation — if the compose file is not writable or cannot be resolved, the container update still succeeds and a warning is logged.
+
+<Callout type="info">If you manage compose-based containers with the [Docker Compose trigger](/docs/configuration/triggers/docker-compose) instead, that trigger handles compose file updates natively and this sync is not needed.</Callout>
+
 ## Self-Update
 
 Drydock can update itself. When it detects that its own container has an available update, it performs a safe self-replacement sequence:

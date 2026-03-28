@@ -17,7 +17,7 @@ The `telegram` trigger lets you send realtime notifications using [Telegram](htt
 | `DD_TRIGGER_TELEGRAM_{trigger_name}_BOTTOKEN` | 🔴 | The Bot token | | |
 | `DD_TRIGGER_TELEGRAM_{trigger_name}_CHATID` | 🔴 | The Chat ID | | |
 | `DD_TRIGGER_TELEGRAM_{trigger_name}_DISABLETITLE` | ⚪ | Disable title to have full control over the message formatting | `true`, `false` | `false` |
-| `DD_TRIGGER_TELEGRAM_{trigger_name}_MESSAGEFORMAT` | ⚪ | Send the message as markdown or as html (useful for custom message formatting) | `Markdown`, `HTML` | `Markdown` |
+| `DD_TRIGGER_TELEGRAM_{trigger_name}_MESSAGEFORMAT` | ⚪ | Send the message as markdown or as html (useful for custom message formatting). `Markdown` uses Telegram's [MarkdownV2](https://core.telegram.org/bots/api#markdownv2-style) parse mode, which requires escaping special characters. Case-insensitive. | `Markdown`, `HTML` | `Markdown` |
 
 <Callout type="info">This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration).</Callout>
 

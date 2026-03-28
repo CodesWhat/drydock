@@ -87,6 +87,7 @@ If the header is missing or does not match the expected token, the API responds 
 | `/api/v1/containers/:id/stats` | `GET` | Single container stats snapshot and history (see [Container API](/docs/api/container)) |
 | `/api/v1/containers/:id/stats/stream` | `GET` | SSE stream for real-time container stats (see [Container API](/docs/api/container)) |
 | `/api/v1/containers/:id/release-notes` | `GET` | GitHub release notes for a container's available update (see [Container API](/docs/api/container)) |
+| `/api/v1/containers/backups` | `GET` | [All image backups](/docs/api/container#list-all-backups) (optionally filter by `containerName`) |
 | `/api/v1/icons/:source/:name` | `GET` | Proxy and cache registry icon images |
 | `/api/v1/auth/status` | `GET` | Authentication status check |
 | `/api/v1/webhook/watch` | `POST` | [Webhook](/docs/configuration/webhooks) — trigger watch on all containers |
@@ -212,7 +213,8 @@ curl "http://drydock:3000/api/v1/audit?offset=0&limit=25&action=update-applied&c
 | --- | --- | --- | --- |
 | `offset` | integer | `0` | Number of entries to skip |
 | `limit` | integer | `50` | Results per page (max 200) |
-| `action` | string | | Filter by action type |
+| `action` | string | | Filter by a single action type |
+| `actions` | string | | Comma-separated list of action types (e.g. `update-applied,update-failed`) |
 | `container` | string | | Filter by container name |
 | `from` | string | | ISO 8601 date -- only entries on or after this timestamp |
 | `to` | string | | ISO 8601 date -- only entries on or before this timestamp |

@@ -22,7 +22,7 @@ The `smtp` trigger lets you send emails with smtp.
 | `DD_TRIGGER_SMTP_{trigger_name}_TLS_VERIFY` | ⚪ | Verify server TLS certificate | `true`, `false` | `true` |
 | `DD_TRIGGER_SMTP_{trigger_name}_ALLOWCUSTOMTLD` | ⚪ | Allow custom tlds for the email addresses | `true`, `false` | `false` |
 
-<Callout type="info">This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration).</Callout>
+<Callout type="info">This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration). In `batch` or `digest` mode, the email subject and body are rendered using the `BATCHTITLE` and common batch template variables.</Callout>
 
 ## Examples
 

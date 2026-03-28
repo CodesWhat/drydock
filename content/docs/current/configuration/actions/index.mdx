@@ -31,6 +31,24 @@ Container actions can be individually toggled with environment variables:
 <Callout type="info">When a feature flag is disabled, the corresponding buttons are hidden in the UI and the API endpoints return `403 Forbidden`.</Callout>
 <Callout type="warn">Container action endpoints currently use an authentication-only, single-operator trust model. Any authenticated user can start, stop, restart, update, or delete any container. Run drydock behind trusted SSO/access controls until fine-grained RBAC is available.</Callout>
 
+## Trigger configuration aliases
+
+Container updates are executed by action triggers (Docker, Docker Compose, Command). These triggers can be configured with three environment variable prefixes that are treated identically:
+
+| Prefix | Status |
+| --- | --- |
+| `DD_ACTION_*` | Current — recommended for action triggers |
+| `DD_NOTIFICATION_*` | Current — recommended for notification triggers |
+| `DD_TRIGGER_*` | Deprecated — removal in v1.7.0 |
+
+When the same trigger is defined under multiple prefixes, the merge priority is: `DD_NOTIFICATION_*` > `DD_ACTION_*` > `DD_TRIGGER_*`.
+
+Container labels follow the same pattern: `dd.action.include` / `dd.action.exclude` replace the deprecated `dd.trigger.include` / `dd.trigger.exclude`.
+
+<Callout type="info">Action triggers (Docker, Docker Compose, Command) default to `AUTO=oninclude`, meaning they only auto-update containers that have an explicit `dd.action.include` label matching the trigger name. Notification triggers default to `AUTO=true`.</Callout>
+
+See [Triggers](/docs/configuration/triggers) for full trigger configuration reference and the [migration CLI](/docs/configuration/triggers#migration) for automated prefix rewriting.
+
 ## Update action
 
 The update action triggers the Docker or Docker Compose trigger for the selected container. It will:

@@ -30,7 +30,7 @@ Larger panels that visualize trends and breakdowns.
 
 | Widget | Shows |
 | --- | --- |
-| **Recent Updates** | Top 6 pending container updates with update/skip action buttons. Includes an "Update All" batch button when pending updates exist. Registry failures are excluded. |
+| **Recent Updates** | Pending container updates with update/skip action buttons in a scrollable list. Includes an "Update All" batch button when pending updates exist. Registry failures are excluded. |
 | **Security Overview** | Donut chart of clean / issues / not-scanned images, a 2×2 severity grid (critical / high / medium / low), and a list of the top 5 vulnerabilities. |
 | **Resource Usage** | Live CPU and memory utilization. Aggregate progress bars (green < 60%, amber 60–85%, red > 85%) plus ranked lists of the top 5 consumers by CPU and memory. |
 | **Host Status** | Agent and watcher connectivity. Shows each host's connection status (green = connected, red = disconnected), address, and running / total container count. |
@@ -71,9 +71,8 @@ The grid adapts to the viewport width:
 | Breakpoint | Min width | Columns |
 | --- | --- | --- |
 | `lg` | 1024 px | 12 |
-| `md` | 768 px | 6 |
-| `sm` | 640 px | 2 |
-| `xs` / `xxs` | 480 px / 0 px | 1 |
+| `md` | 640 px | 12 |
+| `sm` | 0 px | 1 |
 
 On narrow screens stat cards stack vertically and detail widgets fill the full width.
 

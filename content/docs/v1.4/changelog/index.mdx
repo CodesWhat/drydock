@@ -15,11 +15,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.4.5] — 2026-03-17
 
+### Added
+
+- **Dashboard Update buttons** — Per-row update buttons and "Update all" button in the Updates Available dashboard widget. ([#173](https://github.com/CodesWhat/drydock/discussions/173))
+- **Getting Started guide** — New step-by-step onboarding guide covering watchers, tag filters, registries, notifications, auto-updates, safety features, and multi-host setup. ([#153](https://github.com/CodesWhat/drydock/discussions/153))
+
 ### Fixed
 
 - **Container recreate alias filtering** — Hardened Docker watcher timestamp parsing, added event handler early return for transient aliases, canonical MQTT topic naming, and stale topic cleanup for recreated containers. ([#156](https://github.com/CodesWhat/drydock/issues/156))
 - **About modal version display** — Version is now fetched dynamically from the API instead of being hardcoded, ensuring the modal always reflects the running server version. ([#167](https://github.com/CodesWhat/drydock/issues/167))
 - **Version resolution fallback** — `DD_VERSION=unknown` is now skipped so the version is correctly read from `package.json` at startup.
+- **Theme circle transition origin** — The theme toggle circle animation now originates from the click point instead of the viewport center.
+- **Trigger code bugs** — Gotify URL and Apprise URL now correctly enforce `.required()` validation; Kafka `clientId` casing normalized with `clientId` kept as a deprecated compatibility alias until v1.6.0.
 
 ### Security
 
@@ -32,12 +39,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **API versioning** — All UI fetch calls migrated from `/api/` to `/api/v1/` paths.
 - **OIDC empty bearer token log level** — Downgraded empty bearer token log from `warn` to `debug`. ([#169](https://github.com/CodesWhat/drydock/issues/169))
 
+### Documentation
+
+- **Docs audit (78 files)** — Fixed 18 doc accuracy issues, 3 code bugs, 22+ broken links, and restructured 8 pages (90 callouts → 36). Triggers overview reduced from 17 callouts to 3 with threshold reference table. Template variables expanded from 12 to 30 with example values. Docker Compose trigger now linked from triggers overview. ([#153](https://github.com/CodesWhat/drydock/discussions/153), [#172](https://github.com/CodesWhat/drydock/discussions/172))
+
+### Dependencies
+
+- **Security** — `fast-xml-parser` 5.3.8 → 5.5.6 (CVE: numeric entity expansion bypass), `next` 16.1.6 → 16.1.7 (HTTP smuggling, CSRF bypass, DoS)
+- **CI** — `step-security/harden-runner` v2.15.1 → v2.16.0, `github/codeql-action` v4.32.6 → v4.33.0
+- **App** — `@aws-sdk/client-ecr`, `@slack/web-api`, `express-rate-limit`, `fast-check`, `knip`, `nodemailer`, `undici`, `@types/node`
+- **UI** — `@iconify-json/lucide`, `knip`, `jsdom` 28 → 29
+- **Website** — `fumadocs-core`, `fumadocs-mdx`, `fumadocs-ui`, `lucide-react`, `lefthook`, `@vercel/analytics` v1 → v2, `@vercel/speed-insights` v1 → v2
+- **Demo** — `@iconify-json/lucide`, `@vitejs/plugin-vue`, `msw` 2.10 → 2.12
+- **E2E** — `@dotenvx/dotenvx`, `fast-xml-parser`, `minimatch`
+
 ### Chore
 
 - **QA infrastructure** — Added Portainer, slow-shutdown container, and watchevents service for end-to-end container recreate testing. ([#156](https://github.com/CodesWhat/drydock/issues/156))
 - **Coverage and types cleanup** — Coverage read retry, OpenAPI re-export, and auth types cleanup.
-- **Demo version bump** — Bumped demo package version.
+- **Demo version bump** — Bumped demo package version to 1.4.5.
 - **Alias filtering test coverage** — Added timestamp edge-case tests for Docker watcher alias filtering. ([#156](https://github.com/CodesWhat/drydock/issues/156))
+- **msw worker regenerated** — Updated `mockServiceWorker.js` for msw 2.12 (origin-based → clientId-based validation).
 
 ## [1.4.4] — 2026-03-16
 
@@ -86,6 +108,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Update-operations pagination** — `GET /api/containers/:id/update-operations` now supports `limit` and `offset` query parameters with `_links` navigation, matching the existing container list pagination pattern.
 - **Periodic audit log pruning** — Audit store now runs a background timer (hourly, unref'd) to prune stale entries even with low insert volume, in addition to the existing insert-count-based pruning.
+- **Container release notes enrichment** — Watch cycles now enrich update candidates with GitHub release metadata (`result.releaseNotes` and `result.releaseLink`), and full notes are available via `GET /api/containers/:id/release-notes`.
+- **Container list sort and filter query params** — `GET /api/containers` now supports `sort` (`name`, `status`, `age`, `created`, with optional `-` prefix for descending), plus `status`, `kind`, `watcher`, and `maturity` filters.
+- **Update age and maturity API signals** — Container payloads now track `updateAge` and support maturity states (`hot`, `mature`, `established`) for filtering and policy workflows.
+- **Suggested semver tag hints** — Containers tracked on non-semver tags such as `latest` now expose `result.suggestedTag` to surface the best semver target.
+- **`oninclude` trigger auto mode** — Trigger `auto` now supports `oninclude`, which only auto-runs for containers explicitly matched by include labels. ([#160](https://github.com/CodesWhat/drydock/issues/160))
+- **Container runtime observability APIs** — Added `/api/containers/stats`, `/api/containers/:id/stats`, and `/api/containers/:id/stats/stream` for resource telemetry, plus richer per-container runtime snapshots.
+- **Real-time container log streaming** — Added WebSocket streaming at `/api/v1/containers/:id/logs/stream` with `stdout`/`stderr`, `tail`, `since`, and `follow` controls.
+- **Container logs and runtime stats panels** — Container detail views now include dedicated live Logs and Runtime Stats tabs (including full-page logs route support).
+- **Signed registry webhook receiver** — Added `POST /api/webhooks/registry` with HMAC signature verification and provider-specific payload parsing for registry push events.
+- **Auth lockout Prometheus observability** — Added Prometheus metrics for login success/failure and lockout activity.
 
 ### Changed
 
@@ -95,10 +127,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Decompose useContainerActions** — Split the 1200-line composable into focused modules: `useContainerBackups`, `useContainerPolicy`, `useContainerPreview`, and `useContainerTriggers`.
 - **Registry error handling** — Replaced `catch (e: any)` with `catch (e: unknown)` and `getErrorMessage(e)` in component registration and trigger/watcher startup.
 - **E2E test resilience** — Container row count assertions now use `toBeGreaterThan(0)` instead of hardcoded counts, preventing false failures when the QA environment has a different number of containers.
+- **Registry digest cache dedup per poll cycle** — Digest cache lookups now deduplicate repeated requests within a single poll cycle, reducing redundant registry calls and improving metric accuracy.
 - **Extract runtime config evaluation context type** — Consolidated scattered runtime field evaluation parameters into a typed `ClonedRuntimeFieldEvaluationContext` interface for trigger providers.
 - **Argon2 hash parsing type safety** — Extracted `Argon2Parameters` interface, parameter key type guard, and PHC parameter parsing into a reusable function for improved type safety.
 - **Extract agent client initialization methods** — Extracted URL parsing, HTTPS detection, protocol validation, and TLS configuration from monolithic constructor into focused private methods.
 - **Extract shared self-hosted registry config schema** — Deduplicated the registry configuration schema (url, login, password, auth, cafile, insecure, clientcert, clientkey) into a reusable helper shared by Custom and SelfHostedBasic registry providers.
+
+### Documentation
+
+- **Podman docs expansion** — Added Podman setup/compatibility guidance plus SELinux, `podman-compose`, and production notes in watcher and FAQ docs.
+- **Docs site URL rebrand** — Replaced `drydock.codeswhat.com` links with `getdrydock.com` across docs pages, sitemap/robots metadata, and website copy.
 
 ### Fixed
 

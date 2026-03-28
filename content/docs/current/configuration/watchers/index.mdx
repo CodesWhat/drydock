@@ -721,9 +721,15 @@ To fine-tune the behaviour of drydock _per container_, you can add labels on the
 | `dd.watch.digest` | ⚪ | Watch this container digest | Valid Boolean | `false` |
 | `dd.watch` | ⚪ | Explicitly include or exclude this container from monitoring (overrides `WATCHBYDEFAULT`) | Valid Boolean | Inherits from `WATCHBYDEFAULT` (`true` by default) |
 | `dd.compose.file` | ⚪ | Path to the docker-compose.yml file for compose-native updates (also configurable via trigger `COMPOSEFILELABEL`) | file path | |
+| `dd.source.repo` | ⚪ | Source repository override for release-notes lookup (e.g. `owner/repo`) | Valid `owner/repo` string | |
 | `dd.webhook.enabled` | ⚪ | Allow or block [webhook API](/docs/configuration/webhooks) calls targeting this container | `true`, `false` | `true` |
-| `dd.updatePolicy.maturityMode` | ⚪ | Update maturity policy — `all` allows any update, `mature` blocks updates detected less than `maturityMinAgeDays` ago | `all`, `mature` | `all` |
-| `dd.updatePolicy.maturityMinAgeDays` | ⚪ | Minimum age in days before an update is considered mature (only applies when `maturityMode` is `mature`) | integer (`>=1`) | `7` |
+| `dd.hook.pre` | ⚪ | Shell command to run before a container update | Valid shell command | |
+| `dd.hook.post` | ⚪ | Shell command to run after a container update | Valid shell command | |
+| `dd.hook.pre.abort` | ⚪ | Abort the update if the pre-hook exits non-zero | Valid Boolean | `true` |
+| `dd.hook.timeout` | ⚪ | Timeout in milliseconds for hook execution | integer | `60000` |
+| `dd.rollback.auto` | ⚪ | Automatically rollback the container if the health check fails after an update | Valid Boolean | `false` |
+| `dd.rollback.window` | ⚪ | Health monitoring window in milliseconds after an update (how long to watch for failures) | integer | `300000` |
+| `dd.rollback.interval` | ⚪ | Health polling interval in milliseconds during the rollback window | integer | `10000` |
 | `dd.runtime.entrypoint.origin` | ⚪ | Tracks whether the container's entrypoint was explicitly set or inherited from the image. Used during updates to decide whether to preserve the current entrypoint or let the new image defaults apply. | `explicit`, `inherited`, `unknown` | auto-detected |
 | `dd.runtime.cmd.origin` | ⚪ | Tracks whether the container's cmd was explicitly set or inherited from the image. Used during updates to decide whether to preserve the current cmd or let the new image defaults apply. | `explicit`, `inherited`, `unknown` | auto-detected |
 
@@ -732,6 +738,10 @@ To fine-tune the behaviour of drydock _per container_, you can add labels on the
 <Callout type="warn">`dd.inspect.tag.path` is optional and opt-in. Use it only when your image metadata tracks the running app version reliably; some images set unrelated values. Also note that legacy alias `dd.registry.lookup.url` is still accepted for compatibility, but prefer `dd.registry.lookup.image`.</Callout>
 
 <Callout type="info">**`dd.action.include` / `dd.notification.include` (and their `.exclude` counterparts) control automatic trigger dispatch.** These labels filter which triggers fire automatically when an update is detected (e.g., route notifications to specific Slack channels or restrict which docker trigger auto-updates this container). They match against the trigger **name** (e.g., `alerts`) or **full ID** (e.g., `smtp.alerts`). Manual updates from the UI use [agent-based matching](/docs/configuration/agents) instead — the update is routed to the agent that discovered the container. The legacy `dd.trigger.include` / `dd.trigger.exclude` labels still work but are deprecated — see [Deprecation Schedule](/docs/deprecations#ddtriggerinclude--ddtriggerexclude-container-labels).</Callout>
+
+<Callout type="info">**Update hooks** (`dd.hook.pre` / `dd.hook.post`) let you run arbitrary shell commands before and after a container update. If `dd.hook.pre.abort` is `true` (the default) and the pre-hook exits non-zero, the update is cancelled. Use `dd.hook.timeout` to control how long the hook is allowed to run before being killed.</Callout>
+
+<Callout type="info">**Automatic rollback** (`dd.rollback.auto`) monitors the container's health check after an update. If the health check fails within the `dd.rollback.window` (default 5 minutes, polled every `dd.rollback.interval` = 10 seconds), drydock automatically rolls the container back to its previous image.</Callout>
 
 ## Label examples
 

@@ -20,7 +20,7 @@ The `mqtt` trigger lets you send container update notifications to an MQTT broke
 | `DD_TRIGGER_MQTT_{trigger_name}_CLIENTID` | ⚪ | The Mqtt client Id to use | | `dd_$random` |
 | `DD_TRIGGER_MQTT_{trigger_name}_TOPIC` | ⚪ | The base topic where the updates are published to | | `dd/container` |
 | `DD_TRIGGER_MQTT_{trigger_name}_HASS_ENABLED` | ⚪ | Enable [Home-assistant](https://www.home-assistant.io/) integration and deliver additional topics | `true`, `false` | `false` |
-| `DD_TRIGGER_MQTT_{trigger_name}_HASS_DISCOVERY` | ⚪ | Enable [Home-assistant](https://www.home-assistant.io/) integration including discovery | `true`, `false` | `false` |
+| `DD_TRIGGER_MQTT_{trigger_name}_HASS_DISCOVERY` | ⚪ | Enable [Home-assistant](https://www.home-assistant.io/) integration including discovery. When omitted, defaults to the value of `HASS_ENABLED`. | `true`, `false` | Same as `HASS_ENABLED` |
 | `DD_TRIGGER_MQTT_{trigger_name}_HASS_PREFIX` | ⚪ | Base topic for hass entity discovery | | `homeassistant` |
 | `DD_TRIGGER_MQTT_{trigger_name}_HASS_ATTRIBUTES` | ⚪ | Attribute preset controlling which container fields are included in MQTT payloads. `full` sends everything; `short` excludes large fields like SBOM documents, scan vulnerabilities, details, and labels. | `full`, `short` | `short` |
 | `DD_TRIGGER_MQTT_{trigger_name}_HASS_FILTER_INCLUDE` | ⚪ | Comma-separated list of flattened MQTT attribute keys to keep (include-mode). When set, only these keys are published. | Comma-separated flattened keys | |

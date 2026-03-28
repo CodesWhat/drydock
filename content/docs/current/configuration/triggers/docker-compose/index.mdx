@@ -91,6 +91,32 @@ Before lifecycle execution, Drydock checks the running container image against t
 
 When `COMPOSEFILEONCE=true` and multiple services in the same compose stack/file require runtime refresh, Drydock performs one runtime refresh per unique service and skips repeated refreshes for subsequent containers sharing the same service in that batch.
 
+## Inherited Docker Trigger Features
+
+The Docker Compose trigger extends the [Docker trigger](/docs/configuration/triggers/docker) and inherits the following features:
+
+### Lifecycle Hooks
+
+Container lifecycle hooks (`dd.hook.pre`, `dd.hook.post`, `dd.hook.pre.abort`, `dd.hook.timeout`) work identically to the Docker trigger. Hooks execute before and after each container update in the batch. See [Docker trigger — Lifecycle Hooks](/docs/configuration/triggers/docker#lifecycle-hooks) for full details.
+
+<Callout type="warn">Hook labels are ignored unless `DD_HOOKS_ENABLED=true` is set on the Drydock container.</Callout>
+
+### Auto-Rollback
+
+Auto-rollback labels (`dd.rollback.auto`, `dd.rollback.window`, `dd.rollback.interval`) are supported. When a container becomes unhealthy after a compose-based update, Drydock automatically rolls back to the previous image. See [Docker trigger — Auto-Rollback](/docs/configuration/triggers/docker#auto-rollback).
+
+### Image Backup & Rollback
+
+Image backups are retained per container (controlled by the `BACKUPCOUNT` variable). You can roll back to any retained backup via the API. See [Docker trigger — Image Backup & Rollback](/docs/configuration/triggers/docker#image-backup--rollback).
+
+### Security Gate (Update Bouncer)
+
+When [Update Bouncer](/docs/configuration/security) is configured, candidate images are scanned for vulnerabilities before the compose update proceeds. If blocking issues are found, the update is aborted and a `security-alert` notification is sent.
+
+### Self-Update
+
+The Docker Compose trigger supports self-updates — when Drydock detects that its own container has an available update, it performs the same safe self-replacement sequence described in [Docker trigger — Self-Update](/docs/configuration/triggers/docker#self-update), with the additional step of updating the compose file first.
+
 ## Multi-file compose chains
 
 When a container was started with multiple compose files (e.g. `docker-compose.yml` + `docker-compose.override.yml`), Drydock detects the full file chain from the `com.docker.compose.project.config_files` label.

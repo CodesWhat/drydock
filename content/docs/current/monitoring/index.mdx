@@ -1,7 +1,9 @@
 ---
 title: "Monitoring"
-description: "drydock exposes an endpoint to check the service healthiness."
+description: "Health check, Prometheus metrics, auth abuse observability, and Grafana dashboards for drydock."
 ---
+
+import { Callout } from 'fumadocs-ui/components/callout';
 
 ## HealthCheck
 
@@ -150,6 +152,18 @@ dd_container_actions_total{action="start"} 1
 # HELP dd_trigger_rollback_total Total count of trigger rollback outcomes
 # TYPE dd_trigger_rollback_total counter
 dd_trigger_rollback_total{type="docker",name="local",outcome="success",reason="manual"} 1
+```
+
+#### Digest cache metrics
+
+```bash
+# HELP drydock_digest_cache_hits_total Total number of digest cache hits
+# TYPE drydock_digest_cache_hits_total counter
+drydock_digest_cache_hits_total 12
+
+# HELP drydock_digest_cache_misses_total Total number of digest cache misses
+# TYPE drydock_digest_cache_misses_total counter
+drydock_digest_cache_misses_total 3
 ```
 
 When a watcher logger cannot be initialized, drydock falls back to structured stderr JSON logs and increments `dd_watcher_logger_init_failures_total`.

@@ -53,7 +53,7 @@ docker run \
 </Tab>
 </Tabs>
 
-#### Example of payload (POST request)
+#### Example of payload (POST request, simple mode)
 
 ```json
 {
@@ -84,4 +84,15 @@ docker run \
   },
   "updateAvailable": true
 }
+```
+
+#### Batch mode payload
+
+When `MODE=batch`, the POST body is an array of all containers with available updates:
+
+```json
+[
+  { "id": "...", "name": "app1", "image": { ... }, "result": { "tag": "2.0.0" }, "updateAvailable": true },
+  { "id": "...", "name": "app2", "image": { ... }, "result": { "tag": "3.1.0" }, "updateAvailable": true }
+]
 ```

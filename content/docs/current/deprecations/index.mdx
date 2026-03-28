@@ -37,7 +37,7 @@ When `DD_SERVER_CORS_ENABLED=true` and `DD_SERVER_CORS_ORIGIN` is not set, drydo
 
 | | |
 | --- | --- |
-| **Deprecated since** | v1.3.0 |
+| **Deprecated since** | v1.4.0 |
 | **Detection** | Startup console warning; Prometheus counter `dd_legacy_input_total{source="env"}`; UI deprecation banner |
 | **Migration** | Rename all `WUD_*` vars to `DD_*`. Run `drydock config migrate --dry-run` to preview changes |
 
@@ -47,7 +47,7 @@ When `DD_SERVER_CORS_ENABLED=true` and `DD_SERVER_CORS_ORIGIN` is not set, drydo
 
 | | |
 | --- | --- |
-| **Deprecated since** | v1.3.0 |
+| **Deprecated since** | v1.4.0 |
 | **Detection** | Per-label log warning on container init; Prometheus counter `dd_legacy_input_total{source="label"}`; UI deprecation banner |
 | **Migration** | Rename all `wud.*` labels to `dd.*` in your compose files. Run `drydock config migrate --file /path/to/compose.yml` |
 
@@ -67,7 +67,7 @@ The `PUT` method on `/api/settings` is a compatibility alias for `PATCH`. Respon
 
 | | |
 | --- | --- |
-| **Deprecated since** | v1.5.0 |
+| **Deprecated since** | v1.4.0 |
 | **Detection** | Log warning on each `PUT` request; `Deprecation` and `Sunset` response headers |
 | **Migration** | Change `PUT /api/settings` to `PATCH /api/settings` |
 
@@ -97,7 +97,7 @@ The camelCase `clientId` key in Kafka trigger configuration is deprecated.
 
 | | |
 | --- | --- |
-| **Deprecated since** | v1.4.0 |
+| **Deprecated since** | v1.4.5 |
 | **Detection** | Startup log warning |
 | **Migration** | Rename `clientId` to `clientid` (lowercase) in your Kafka trigger configuration |
 
@@ -131,15 +131,15 @@ The official Docker image previously included `curl` for custom healthcheck over
 | **Detection** | Not runtime-detectable (Docker executes healthchecks outside the application) |
 | **Migration** | Remove custom `healthcheck:` blocks from your drydock compose service — the image handles it automatically. If you need custom intervals, use `test: /bin/healthcheck ${DD_SERVER_PORT:-3000}`. See [Monitoring](/docs/monitoring) |
 
-### Incompatible registry `PUBLIC_*` token-auth credentials
+### Registry `PUBLIC_TOKEN` configuration
 
-Legacy `DD_REGISTRY_{provider}_PUBLIC_*` token-auth credentials that don't match any supported auth pattern fall back to anonymous access.
+Token-based authentication for public registries has been replaced by password-based authentication for consistency.
 
 | | |
 | --- | --- |
 | **Deprecated since** | v1.4.0 |
 | **Detection** | Startup log warning when fallback to anonymous is triggered |
-| **Migration** | Use supported auth patterns: `LOGIN+PASSWORD`, `LOGIN+TOKEN`, `AUTH`, or remove credentials for anonymous access |
+| **Migration** | Replace `DD_REGISTRY_HUB_PUBLIC_TOKEN` with `DD_REGISTRY_HUB_PUBLIC_PASSWORD`. Replace `DD_REGISTRY_DHI_TOKEN` with `DD_REGISTRY_DHI_PASSWORD` |
 
 ## Removal in v1.7.0
 

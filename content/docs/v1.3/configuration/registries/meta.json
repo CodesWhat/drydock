@@ -5,9 +5,10 @@
     "acr",
     "alicr",
     "artifactory",
+    "codeberg",
     "custom",
-    "docr",
     "dhi",
+    "docr",
     "ecr",
     "forgejo",
     "gar",
@@ -21,7 +22,7 @@
     "lscr",
     "nexus",
     "ocir",
-    "trueforge",
-    "quay"
+    "quay",
+    "trueforge"
   ]
 }

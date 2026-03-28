@@ -275,6 +275,8 @@ This operation lets you control per-container update suppression policy (stored 
 - `snooze`: suppress update notifications until a date (supports `days` or explicit `snoozeUntil`)
 - `unsnooze`: remove `snoozeUntil`
 - `clear`: remove all update policy
+- `set-maturity-policy`: require updates to be at least N days old before triggering (requires `mode` and optionally `minAgeDays`)
+- `clear-maturity-policy`: remove `maturityMode` and `maturityMinAgeDays`
 
 ```bash
 curl -X PATCH http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/update-policy \
@@ -300,6 +302,20 @@ curl -X PATCH http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68
 curl -X PATCH http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/update-policy \
   -H 'Content-Type: application/json' \
   -d '{"action":"snooze","days":7}'
+```
+
+```bash
+# Require updates to be at least 14 days old before triggering
+curl -X PATCH http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/update-policy \
+  -H 'Content-Type: application/json' \
+  -d '{"action":"set-maturity-policy","mode":"mature","minAgeDays":14}'
+```
+
+```bash
+# Remove maturity policy (allow all updates regardless of age)
+curl -X PATCH http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/update-policy \
+  -H 'Content-Type: application/json' \
+  -d '{"action":"clear-maturity-policy"}'
 ```
 
 ## Get security vulnerability overview
@@ -331,6 +347,8 @@ Requires `DD_SECURITY_SCANNER=trivy` to be configured.
 ```bash
 curl -X POST http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/scan
 ```
+
+Rate-limited to 30 requests per minute.
 
 Returns 200 with the updated container on success, 400 if security scanner is not configured, 404 if the container is not found, or 500 on scan failure.
 
@@ -475,6 +493,36 @@ This operation returns a dry-run preview of what an update would change, without
 ```bash
 curl -X POST http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/preview
 ```
+
+## List all backups
+
+Returns all image backups across all containers, optionally filtered by container name.
+
+```bash
+curl "http://drydock:3000/api/v1/containers/backups?containerName=homeassistant"
+
+{
+  "data": [
+    {
+      "id": "abc123",
+      "containerId": "31a61a8305ef...",
+      "containerName": "homeassistant",
+      "imageName": "homeassistant/home-assistant",
+      "imageTag": "2024.11.3",
+      "imageDigest": "sha256:...",
+      "timestamp": "2024-12-01T10:00:00.000Z",
+      "triggerName": "docker.local"
+    }
+  ],
+  "total": 1
+}
+```
+
+### Query parameters
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `containerName` | string | Filter backups by container name |
 
 ## Get container backups
 
