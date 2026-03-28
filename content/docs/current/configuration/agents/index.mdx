@@ -106,6 +106,8 @@ services:
       - 3000:3000
 ```
 
+<Callout type="info">By default, the controller also watches its own local Docker socket. If you're running the controller as a pure aggregator with no local containers to monitor, set `DD_LOCAL_WATCHER=false` to disable the default local watcher.</Callout>
+
 ## Complete Multi-Host Example
 
 This example shows a controller watching its own containers and connecting to one remote agent. The controller handles notifications (Slack, SMTP, etc.); each agent handles its own container updates.

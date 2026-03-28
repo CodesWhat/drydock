@@ -44,7 +44,7 @@ The `docker` watcher lets you configure the Docker hosts you want to watch.
 
 **Notes:**
 
-- If no watcher is configured, a default one named `local` will be automatically created (reading the Docker socket).
+- If no watcher is configured, a default one named `local` will be automatically created (reading the Docker socket). To suppress this default watcher (e.g. when running as a controller-only node for remote agents), set `DD_LOCAL_WATCHER=false`.
 - Multiple watchers can be configured (if you have multiple Docker hosts to watch). Just give them different names.
 - Socket configuration and host/port configuration are mutually exclusive.
 - When `MAINTENANCE_WINDOW` is configured and a check is skipped outside the allowed schedule, drydock queues one pending check and runs it automatically when the next maintenance window opens.

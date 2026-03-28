@@ -143,6 +143,10 @@ export function getLogBufferEnabled() {
   return ddEnvVars.DD_LOG_BUFFER_ENABLED?.trim().toLowerCase() !== 'false';
 }
 
+export function getLocalWatcherEnabled() {
+  return ddEnvVars.DD_LOCAL_WATCHER?.trim().toLowerCase() !== 'false';
+}
+
 function parseWatcherMaintenanceEnvAlias(envKey: string) {
   const envKeyUpper = envKey.toUpperCase();
   const prefix = 'DD_WATCHER_';

@@ -15,6 +15,7 @@ vi.mock('../configuration/index.js', () => ({
   getLogLevel: vi.fn(() => 'info'),
   getLogFormat: vi.fn(() => 'json'),
   getLogBufferEnabled: vi.fn(() => true),
+  getLocalWatcherEnabled: vi.fn(() => true),
   getRegistryConfigurations: vi.fn(),
   getTriggerConfigurations: vi.fn(),
   getWatcherConfigurations: vi.fn(),
@@ -54,6 +55,7 @@ const mockGetTriggerConfigurations = configuration.getTriggerConfigurations;
 const mockGetWatcherConfigurations = configuration.getWatcherConfigurations;
 const mockGetAuthenticationConfigurations = configuration.getAuthenticationConfigurations;
 const mockGetAgentConfigurations = configuration.getAgentConfigurations;
+const mockGetLocalWatcherEnabled = configuration.getLocalWatcherEnabled;
 
 mockGetRegistryConfigurations.mockImplementation(() => registries);
 mockGetTriggerConfigurations.mockImplementation(() => triggers);
@@ -654,6 +656,15 @@ test('registerWatchers should keep remote watcher registered when auth configura
 test('registerWatchers should register local docker watcher by default', async () => {
   await registry.testable_registerWatchers();
   expect(Object.keys(registry.getState().watcher)).toEqual(['docker.local']);
+});
+
+test('registerWatchers should skip default local watcher when DD_LOCAL_WATCHER=false', async () => {
+  const spyLog = vi.spyOn(registry.testable_log, 'info');
+  mockGetLocalWatcherEnabled.mockReturnValue(false);
+  await registry.testable_registerWatchers();
+  expect(Object.keys(registry.getState().watcher)).toEqual([]);
+  expect(spyLog).toHaveBeenCalledWith('Default local watcher disabled (DD_LOCAL_WATCHER=false)');
+  mockGetLocalWatcherEnabled.mockReturnValue(true);
 });
 
 test('registerWatchers should warn when registration errors occur', async () => {

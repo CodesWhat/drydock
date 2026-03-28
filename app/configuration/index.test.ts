@@ -64,6 +64,17 @@ test('getLogBufferEnabled should return false when disabled via env', async () =
   delete configuration.ddEnvVars.DD_LOG_BUFFER_ENABLED;
 });
 
+test('getLocalWatcherEnabled should default to true', async () => {
+  delete configuration.ddEnvVars.DD_LOCAL_WATCHER;
+  expect(configuration.getLocalWatcherEnabled()).toStrictEqual(true);
+});
+
+test('getLocalWatcherEnabled should return false when disabled via env', async () => {
+  configuration.ddEnvVars.DD_LOCAL_WATCHER = 'false';
+  expect(configuration.getLocalWatcherEnabled()).toStrictEqual(false);
+  delete configuration.ddEnvVars.DD_LOCAL_WATCHER;
+});
+
 test('getDnsMode should default to ipv4first', () => {
   delete configuration.ddEnvVars.DD_DNS_MODE;
   expect(configuration.getDnsMode()).toBe('ipv4first');

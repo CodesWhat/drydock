@@ -18,6 +18,7 @@ import {
   ddEnvVars,
   getAgentConfigurations,
   getAuthenticationConfigurations,
+  getLocalWatcherEnabled,
   getRegistryConfigurations,
   getTriggerConfigurations,
   getWatcherConfigurations,
@@ -391,16 +392,20 @@ async function registerWatchers(options: RegistrationOptions = {}) {
         log.error('Agent mode requires at least one watcher configured.');
         process.exit(1);
       }
-      log.info('No Watcher configured => Init a default one (Docker with default options)');
-      watchersToRegister.push(
-        registerComponent({
-          kind: 'watcher',
-          provider: 'docker',
-          name: 'local',
-          configuration: {},
-          componentPath: 'watchers/providers',
-        }),
-      );
+      if (!getLocalWatcherEnabled()) {
+        log.info('Default local watcher disabled (DD_LOCAL_WATCHER=false)');
+      } else {
+        log.info('No Watcher configured => Init a default one (Docker with default options)');
+        watchersToRegister.push(
+          registerComponent({
+            kind: 'watcher',
+            provider: 'docker',
+            name: 'local',
+            configuration: {},
+            componentPath: 'watchers/providers',
+          }),
+        );
+      }
     } else {
       watchersToRegister = watchersToRegister.concat(
         Object.keys(configurations).map((watcherKey) => {
