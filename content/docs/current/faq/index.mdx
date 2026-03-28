@@ -302,6 +302,14 @@ curl http://drydock:3000/api/v1/server/security/runtime
 
 If you build a custom image, ensure Trivy and Cosign are installed in your Dockerfile. See [Security](/docs/configuration/security) for scanning configuration.
 
+## Temporary container names during recreation (hex prefix aliases)
+
+When Docker recreates a container — for example via Portainer, Docker Compose `up --force-recreate`, or a Drydock Docker trigger — Docker temporarily renames the old container to a name like `fcdb966987a0_myapp` (a 12-character hex prefix matching the container ID, followed by an underscore and the original name). This alias is transient and disappears once the recreation completes.
+
+Drydock automatically detects and filters these temporary alias names. They will never appear in notifications, MQTT topics, the UI, or any trigger output. No configuration is needed — this is handled unconditionally.
+
+<Callout type="info">If you previously saw garbled container names in notifications during container updates, this was caused by the temporary alias leaking through. This is resolved as of v1.5.0.</Callout>
+
 ## Self-update leaves container stopped
 
 Drydock updates itself using a **helper container pattern**: it renames the old container, creates a new one with the updated image, then spawns a short-lived helper container that stops the old container, starts the new one, and removes the old one on success. If the new container fails to start, the helper restarts the old container as a fallback.

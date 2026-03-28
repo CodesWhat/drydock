@@ -42,13 +42,13 @@ All detail widgets use a `ResizeObserver` to detect their rendered height and pr
 
 ### Edit mode
 
-Click the **pencil icon** in the breadcrumb header to enter edit mode. Press **Escape** or click the **X** button to exit.
+Click the **pencil icon** in the breadcrumb header to enter edit mode. Press **Escape** or click the **check icon** to exit.
 
 While in edit mode, interactive widget content is disabled and three controls become available:
 
 - **Drag to reorder** — grab the 6-dot drag handle on any widget and move it to a new position.
 - **Resize** — drag the handle at the bottom-right corner of a widget. Each widget enforces minimum and maximum size constraints.
-- **Widget visibility** — a sidebar panel slides in from the right listing every widget with a checkbox. Toggle any widget on or off. Size capability badges (S / M / L) indicate how each widget can be resized.
+- **Widget visibility** — a sidebar panel slides in from the right listing every widget with a checkbox. Toggle any widget on or off. Size capability badges (S / M / L) indicate how each widget can be resized. On mobile, the panel is opt-in — tap the **sliders icon** to open it.
 - **Reset to Default** — a button at the bottom of the sidebar restores the original layout, order, and visibility.
 
 All changes are saved automatically to `localStorage` and persist across page reloads.

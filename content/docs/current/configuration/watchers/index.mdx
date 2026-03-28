@@ -712,8 +712,12 @@ To fine-tune the behaviour of drydock _per container_, you can add labels on the
 | `dd.tag.include` | ⚪ | Regex to include specific tags only | Valid JavaScript Regex | |
 | `dd.tag.transform` | ⚪ | Transform function to apply to the tag | `$valid_regex => $valid_string_with_placeholders` (see below) | |
 | `dd.tag.family` | ⚪ | Tag family policy for semver updates | `strict` (default) or `loose` | `strict` |
-| `dd.trigger.exclude` | ⚪ | Exclude specific triggers from automatic execution for this container | `$trigger_1_id_or_name,$trigger_2_id_or_name:$threshold` | |
-| `dd.trigger.include` | ⚪ | Only allow specific triggers to automatically execute for this container | `$trigger_1_id_or_name,$trigger_2_id_or_name:$threshold` | |
+| `dd.action.exclude` | ⚪ | Exclude specific action triggers from automatic execution for this container | `$trigger_1_id_or_name,$trigger_2_id_or_name:$threshold` | |
+| `dd.action.include` | ⚪ | Only allow specific action triggers to automatically execute for this container | `$trigger_1_id_or_name,$trigger_2_id_or_name:$threshold` | |
+| `dd.notification.exclude` | ⚪ | Exclude specific notification triggers from this container | `$trigger_1_id_or_name,$trigger_2_id_or_name:$threshold` | |
+| `dd.notification.include` | ⚪ | Only allow specific notification triggers for this container | `$trigger_1_id_or_name,$trigger_2_id_or_name:$threshold` | |
+| `dd.trigger.exclude` | ⚪ | **Deprecated** — use `dd.action.exclude` or `dd.notification.exclude` instead | `$trigger_1_id_or_name,$trigger_2_id_or_name:$threshold` | |
+| `dd.trigger.include` | ⚪ | **Deprecated** — use `dd.action.include` or `dd.notification.include` instead | `$trigger_1_id_or_name,$trigger_2_id_or_name:$threshold` | |
 | `dd.watch.digest` | ⚪ | Watch this container digest | Valid Boolean | `false` |
 | `dd.watch` | ⚪ | Explicitly include or exclude this container from monitoring (overrides `WATCHBYDEFAULT`) | Valid Boolean | Inherits from `WATCHBYDEFAULT` (`true` by default) |
 | `dd.compose.file` | ⚪ | Path to the docker-compose.yml file for compose-native updates (also configurable via trigger `COMPOSEFILELABEL`) | file path | |
@@ -727,7 +731,7 @@ To fine-tune the behaviour of drydock _per container_, you can add labels on the
 
 <Callout type="warn">`dd.inspect.tag.path` is optional and opt-in. Use it only when your image metadata tracks the running app version reliably; some images set unrelated values. Also note that legacy alias `dd.registry.lookup.url` is still accepted for compatibility, but prefer `dd.registry.lookup.image`.</Callout>
 
-<Callout type="info">**`dd.trigger.include` / `dd.trigger.exclude` control automatic trigger dispatch.** These labels filter which triggers fire automatically when an update is detected (e.g., route notifications to specific Slack channels or restrict which docker trigger auto-updates this container). They match against the trigger **name** (e.g., `alerts`) or **full ID** (e.g., `smtp.alerts`). Manual updates from the UI use [agent-based matching](/docs/configuration/agents) instead — the update is routed to the agent that discovered the container.</Callout>
+<Callout type="info">**`dd.action.include` / `dd.notification.include` (and their `.exclude` counterparts) control automatic trigger dispatch.** These labels filter which triggers fire automatically when an update is detected (e.g., route notifications to specific Slack channels or restrict which docker trigger auto-updates this container). They match against the trigger **name** (e.g., `alerts`) or **full ID** (e.g., `smtp.alerts`). Manual updates from the UI use [agent-based matching](/docs/configuration/agents) instead — the update is routed to the agent that discovered the container. The legacy `dd.trigger.include` / `dd.trigger.exclude` labels still work but are deprecated — see [Deprecation Schedule](/docs/deprecations#ddtriggerinclude--ddtriggerexclude-container-labels).</Callout>
 
 ## Label examples
 
@@ -1048,19 +1052,20 @@ services:
   my_important_service:
     image: my_important_service:1.0.0
     labels:
-      - dd.trigger.include=smtp.gmail,dockercompose.local:minor
+      - dd.notification.include=smtp.gmail
+      - dd.action.include=dockercompose.local:minor
 ```
 
 </Tab>
 <Tab value="Docker (Trigger Include)">
 ```bash
-docker run -d --name my_important_service --label 'dd.trigger.include=smtp.gmail,dockercompose.local:minor' my_important_service:1.0.0
+docker run -d --name my_important_service --label 'dd.notification.include=smtp.gmail' --label 'dd.action.include=dockercompose.local:minor' my_important_service:1.0.0
 ```
 </Tab>
 </Tabs>
 
-- `dd.trigger.include=smtp.gmail` is a shorthand for `dd.trigger.include=smtp.gmail:all`
-- `dd.trigger.include=update` (or `dd.trigger.exclude=update`) targets all triggers named `update`, for example `docker.update` and `discord.update`
+- `dd.notification.include=smtp.gmail` is a shorthand for `dd.notification.include=smtp.gmail:all`
+- `dd.action.include=update` (or `dd.action.exclude=update`) targets all triggers named `update`, for example `docker.update` and `dockercompose.update`
 
 **Threshold values:**
 
