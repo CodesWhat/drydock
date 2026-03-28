@@ -85,6 +85,13 @@ function loadPersistedLayout(order: readonly DashboardWidgetId[]): WidgetLayoutI
     return { ...fallback! };
   });
 
+  // Sanity check: if every widget is at x=0 with narrow widths, the layout was
+  // likely corrupted by a breakpoint mismatch — discard and use defaults
+  const allColumnZero = result.length > 1 && result.every((item) => item.x === 0);
+  if (allColumnZero) {
+    return createLayoutFromOrder(order);
+  }
+
   return applyConstraints(result);
 }
 
