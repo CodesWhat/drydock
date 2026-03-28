@@ -420,7 +420,16 @@ describe('preferences migration', () => {
         const columns = ['name', 'status', 'registry'];
         localStorage.setItem('dd-table-cols-v1', JSON.stringify(columns));
         const result = migrateFromLegacyKeys();
-        expect(result.containers.columns).toEqual(columns);
+        expect(result.containers.columns).toEqual(['icon', ...columns]);
+      });
+
+      it('should drop stale columns that no longer exist in the table', () => {
+        localStorage.setItem(
+          'dd-table-cols-v1',
+          JSON.stringify(['icon', 'name', 'bouncer', 'status', 'registry']),
+        );
+        const result = migrateFromLegacyKeys();
+        expect(result.containers.columns).toEqual(['icon', 'name', 'status', 'registry']);
       });
     });
 

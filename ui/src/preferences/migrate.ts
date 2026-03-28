@@ -1,5 +1,10 @@
 import { deepMerge } from './deepMerge';
-import { DEFAULTS, type PreferencesSchema } from './schema';
+import {
+  CONTAINER_TABLE_COLUMN_KEYS,
+  CONTAINER_TABLE_REQUIRED_COLUMN_KEYS,
+  DEFAULTS,
+  type PreferencesSchema,
+} from './schema';
 import {
   FONT_FAMILIES,
   ICON_LIBRARIES,
@@ -66,6 +71,19 @@ function sanitize(data: Record<string, unknown>): void {
     const c = containers as Record<string, unknown>;
     if ('viewMode' in c && !isViewMode(c.viewMode)) delete c.viewMode;
     deleteIfInvalid(c, 'tableActions', TABLE_ACTIONS);
+
+    if ('columns' in c) {
+      if (!isStringArray(c.columns)) {
+        delete c.columns;
+      } else {
+        const visible = new Set(c.columns);
+        c.columns = CONTAINER_TABLE_COLUMN_KEYS.filter(
+          (key) =>
+            visible.has(key) ||
+            (CONTAINER_TABLE_REQUIRED_COLUMN_KEYS as readonly string[]).includes(key),
+        );
+      }
+    }
   }
 }
 
@@ -453,6 +471,7 @@ export function migrateFromLegacyKeys(): PreferencesSchema {
     prefs.views = views;
   }
 
+  sanitize(prefs);
   const result = mergeDefaults(prefs);
   persistMigratedPreferences(result);
   return result;

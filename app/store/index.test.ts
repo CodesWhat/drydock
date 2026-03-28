@@ -284,9 +284,7 @@ describe('Store Module', () => {
       renameSync: vi.fn(),
     };
 
-    registerCommonMocks();
-    // Override the fs mock with the custom one for migration logic
-    vi.doMock('node:fs', () => ({ default: mockFs }));
+    registerCommonMocks({ fs: mockFs });
 
     const storeMigrate = await import('./index.js');
     await storeMigrate.init();

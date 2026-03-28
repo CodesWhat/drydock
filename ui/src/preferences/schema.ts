@@ -46,6 +46,19 @@ export interface PreferencesSchema {
   };
 }
 
+export const CONTAINER_TABLE_COLUMN_KEYS = [
+  'icon',
+  'name',
+  'version',
+  'kind',
+  'status',
+  'imageAge',
+  'server',
+  'registry',
+] as const;
+
+export const CONTAINER_TABLE_REQUIRED_COLUMN_KEYS = ['icon', 'name'] as const;
+
 export const DEFAULTS: PreferencesSchema = {
   schemaVersion: 1,
   theme: { family: 'one-dark', variant: 'dark' },
@@ -65,17 +78,7 @@ export const DEFAULTS: PreferencesSchema = {
       server: 'all',
       kind: 'all',
     },
-    columns: [
-      'icon',
-      'name',
-      'version',
-      'kind',
-      'status',
-      'bouncer',
-      'imageAge',
-      'server',
-      'registry',
-    ],
+    columns: [...CONTAINER_TABLE_COLUMN_KEYS],
   },
   dashboard: {
     widgetOrder: [
