@@ -2,6 +2,9 @@ import cron, { type ScheduledTask } from 'node-cron';
 import { usesLegacyTriggerPrefix } from '../../configuration/index.js';
 import * as event from '../../event/index.js';
 import { type Container, fullName } from '../../model/container.js';
+
+const RECREATED_ALIAS_RE = /^[a-f0-9]{12}_(.+)$/i;
+
 import { getTriggerCounter } from '../../prometheus/trigger.js';
 import Component, { type ComponentConfiguration } from '../../registry/Component.js';
 import * as storeContainer from '../../store/container.js';
@@ -524,6 +527,9 @@ class Trigger extends Component {
       return;
     }
 
+    // Strip Docker recreate alias prefixes before any trigger processing
+    Trigger.canonicalizeReportName(containerReport);
+
     // Filter on changed containers with update available and passing trigger threshold
     if (!this.shouldHandleSimpleContainerReport(containerReport)) {
       return;
@@ -550,6 +556,11 @@ class Trigger extends Component {
   async handleContainerReports(containerReports: ContainerReport[]) {
     if (!this.isUpdateAvailableAutoTriggerEnabled()) {
       return;
+    }
+
+    // Strip Docker recreate alias prefixes before any trigger processing
+    for (const report of containerReports) {
+      Trigger.canonicalizeReportName(report);
     }
 
     // Filter on containers with update available and passing trigger threshold
@@ -671,6 +682,20 @@ class Trigger extends Component {
    * @param containerResult
    * @returns {boolean}
    */
+  /**
+   * Strip Docker recreate alias prefix from a container report's name.
+   * Belt-and-suspenders guard — the watcher should have already canonicalized,
+   * but this catches any remaining leaks regardless of environment quirks.
+   */
+  static canonicalizeReportName(report: ContainerReport): void {
+    const name = report.container?.name;
+    if (typeof name !== 'string') return;
+    const match = name.match(RECREATED_ALIAS_RE);
+    if (match) {
+      report.container.name = match[1];
+    }
+  }
+
   static isRollbackContainer(container: { name?: unknown }): boolean {
     return (
       typeof container?.name === 'string' &&

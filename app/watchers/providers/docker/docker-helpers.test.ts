@@ -206,17 +206,17 @@ describe('docker helper extraction module', () => {
     ).toBe('termix');
   });
 
-  test('getContainerName should keep alias name when container ID does not match the prefix', () => {
+  test('getContainerName should strip alias unconditionally even when container ID does not match', () => {
     expect(
       getContainerName({
         Id: 'aaaa00000000abcdef1234567890',
         Names: ['/8bf70beac570_termix'],
       }),
-    ).toBe('8bf70beac570_termix');
+    ).toBe('termix');
   });
 
-  test('getContainerName should keep alias name when no container ID is available', () => {
-    expect(getContainerName({ Names: ['/8bf70beac570_termix'] })).toBe('8bf70beac570_termix');
+  test('getContainerName should strip alias unconditionally even when no container ID is available', () => {
+    expect(getContainerName({ Names: ['/8bf70beac570_termix'] })).toBe('termix');
   });
 
   test('getContainerName should skip non-string entries in Names when finding canonical name', () => {
@@ -244,14 +244,14 @@ describe('docker helper extraction module', () => {
       );
     });
 
-    test('should keep name when container ID does not match', () => {
+    test('should strip alias unconditionally even when container ID does not match', () => {
       expect(canonicalizeContainerName('8bf70beac570_termix', 'aaaa00000000abcdef1234567890')).toBe(
-        '8bf70beac570_termix',
+        'termix',
       );
     });
 
-    test('should keep name when no container ID provided', () => {
-      expect(canonicalizeContainerName('8bf70beac570_termix', '')).toBe('8bf70beac570_termix');
+    test('should strip alias unconditionally even when no container ID provided', () => {
+      expect(canonicalizeContainerName('8bf70beac570_termix', '')).toBe('termix');
     });
 
     test('should keep non-alias names unchanged', () => {

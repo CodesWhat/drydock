@@ -101,9 +101,15 @@ export function getRawContainerName(container: { Names?: string[] }): string {
 }
 
 /**
- * Extract the canonical container name. Strips Docker recreate alias prefixes
- * (e.g. `8bf70beac570_termix` → `termix`) when the hex prefix matches the
- * container ID, so alias names never enter the store or triggers.
+ * Extract the canonical container name. Unconditionally strips Docker recreate
+ * alias prefixes (e.g. `8bf70beac570_termix` → `termix`) when the name matches
+ * the `^[a-f0-9]{12}_.+` pattern.
+ *
+ * Previous versions only stripped when the hex prefix matched the container ID,
+ * but this failed in environments where the Docker API (via socket proxies like
+ * linuxserver/socket-proxy) returned unexpected ID formats or timing. The
+ * unconditional approach is safe because no legitimate container naming
+ * convention uses a 12-character lowercase hex prefix followed by underscore.
  *
  * When Names contains both an alias and the canonical name during a rename,
  * prefers the non-alias entry.
@@ -114,12 +120,10 @@ export function getContainerName(container: ContainerWithNames) {
     return '';
   }
 
-  const containerId = typeof container.Id === 'string' ? container.Id.toLowerCase() : '';
-
   // When Docker renames a container during recreate, Names may contain both
   // the transient alias ("/8bf70beac570_termix") and the canonical name ("/termix").
-  // Prefer the first non-alias name when the alias prefix matches the container ID.
-  if (names.length > 1 && containerId !== '') {
+  // Prefer the first non-alias name.
+  if (names.length > 1) {
     for (const raw of names) {
       if (typeof raw !== 'string') {
         continue;
@@ -131,36 +135,25 @@ export function getContainerName(container: ContainerWithNames) {
     }
   }
 
-  // Single name (or all names are aliases) — strip alias prefix if it matches the container ID.
+  // Single name (or all names are aliases) — unconditionally strip alias prefix.
   const containerName = getRawContainerName(container);
-  if (containerId !== '' && containerName !== '') {
-    const aliasMatch = containerName.match(RECREATED_ALIAS_PATTERN);
-    if (aliasMatch) {
-      const [, shortIdPrefix, baseName] = aliasMatch;
-      if (containerId.startsWith(shortIdPrefix.toLowerCase())) {
-        return baseName;
-      }
-    }
+  const aliasMatch = containerName.match(RECREATED_ALIAS_PATTERN);
+  if (aliasMatch) {
+    return aliasMatch[2];
   }
 
   return containerName;
 }
 
 /**
- * Strip a Docker recreate alias prefix from a container name if the hex prefix
- * matches the container ID. Used by the event-update path where Docker inspect
- * returns a single Name rather than a Names array.
+ * Strip a Docker recreate alias prefix from a container name unconditionally.
+ * Used by the event-update path where Docker inspect returns a single Name
+ * rather than a Names array.
  */
-export function canonicalizeContainerName(name: string, containerId: string): string {
-  if (containerId === '') {
-    return name;
-  }
+export function canonicalizeContainerName(name: string, _containerId?: string): string {
   const aliasMatch = name.match(RECREATED_ALIAS_PATTERN);
   if (aliasMatch) {
-    const [, shortIdPrefix, baseName] = aliasMatch;
-    if (containerId.toLowerCase().startsWith(shortIdPrefix.toLowerCase())) {
-      return baseName;
-    }
+    return aliasMatch[2];
   }
   return name;
 }
