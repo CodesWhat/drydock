@@ -50,6 +50,8 @@ interface ContainerStatsCollectorDependencies {
   intervalSeconds?: number;
   historySize?: number;
   now?: () => number;
+  setIntervalFn?: typeof globalThis.setInterval;
+  clearIntervalFn?: typeof globalThis.clearInterval;
   setTimeoutFn?: typeof globalThis.setTimeout;
   clearTimeoutFn?: typeof globalThis.clearTimeout;
 }
@@ -67,11 +69,13 @@ interface CollectorRuntime {
   intervalMs: number;
   historySize: number;
   now: () => number;
+  setIntervalFn: typeof globalThis.setInterval;
+  clearIntervalFn: typeof globalThis.clearInterval;
   setTimeoutFn: typeof globalThis.setTimeout;
   clearTimeoutFn: typeof globalThis.clearTimeout;
   restTouchTtlMs: number;
   states: Map<string, ContainerCollectionState>;
-  lastStateSweepAtMs: number;
+  stateSweepInterval?: ReturnType<typeof globalThis.setInterval>;
 }
 
 interface ResolvedStatsTarget {
@@ -126,6 +130,8 @@ function createCollectorRuntime(
   const intervalMs = Math.max(1, dependencies.intervalSeconds ?? getStatsIntervalSeconds()) * 1000;
   const historySize = Math.max(1, dependencies.historySize ?? getStatsHistorySize());
   const now = dependencies.now ?? (() => Date.now());
+  const setIntervalFn = dependencies.setIntervalFn ?? globalThis.setInterval;
+  const clearIntervalFn = dependencies.clearIntervalFn ?? globalThis.clearInterval;
   const setTimeoutFn = dependencies.setTimeoutFn ?? globalThis.setTimeout;
   const clearTimeoutFn = dependencies.clearTimeoutFn ?? globalThis.clearTimeout;
   const restTouchTtlMs = Math.max(MIN_REST_TOUCH_TTL_MS, intervalMs * REST_TOUCH_TTL_MULTIPLIER);
@@ -134,11 +140,12 @@ function createCollectorRuntime(
     intervalMs,
     historySize,
     now,
+    setIntervalFn,
+    clearIntervalFn,
     setTimeoutFn,
     clearTimeoutFn,
     restTouchTtlMs,
     states: new Map<string, ContainerCollectionState>(),
-    lastStateSweepAtMs: Number.NEGATIVE_INFINITY,
   };
 }
 
@@ -161,6 +168,7 @@ function getOrCreateState(
 
   const nextState = createCollectionState(runtime.historySize);
   runtime.states.set(containerId, nextState);
+  ensureDeletedStateSweep(runtime);
   return nextState;
 }
 
@@ -187,15 +195,29 @@ function pruneContainerStateIfMissing(
     return;
   }
   runtime.states.delete(containerId);
+  maybeStopDeletedStateSweep(runtime);
+}
+
+function ensureDeletedStateSweep(runtime: CollectorRuntime): void {
+  if (runtime.stateSweepInterval || runtime.states.size === 0) {
+    return;
+  }
+
+  runtime.stateSweepInterval = runtime.setIntervalFn(() => {
+    sweepDeletedInactiveStates(runtime);
+  }, runtime.restTouchTtlMs);
+}
+
+function maybeStopDeletedStateSweep(runtime: CollectorRuntime): void {
+  if (runtime.states.size > 0 || !runtime.stateSweepInterval) {
+    return;
+  }
+
+  runtime.clearIntervalFn(runtime.stateSweepInterval);
+  runtime.stateSweepInterval = undefined;
 }
 
 function sweepDeletedInactiveStates(runtime: CollectorRuntime): void {
-  const nowMs = runtime.now();
-  if (nowMs - runtime.lastStateSweepAtMs < runtime.restTouchTtlMs) {
-    return;
-  }
-  runtime.lastStateSweepAtMs = nowMs;
-
   for (const [containerId, state] of runtime.states) {
     pruneContainerStateIfMissing(runtime, containerId, state);
   }
@@ -221,6 +243,14 @@ function processStatsPayload(
 ): void {
   const nowMs = runtime.now();
   if (state.lastSampleAtMs !== undefined && nowMs - state.lastSampleAtMs < runtime.intervalMs) {
+    log.trace(
+      {
+        containerId,
+        elapsedMs: nowMs - state.lastSampleAtMs,
+        intervalMs: runtime.intervalMs,
+      },
+      'Dropping throttled container stats sample',
+    );
     return;
   }
 
@@ -387,7 +417,6 @@ function createWatchRelease(
 }
 
 function watchContainer(runtime: CollectorRuntime, containerId: string): () => void {
-  sweepDeletedInactiveStates(runtime);
   const state = getOrCreateState(runtime, containerId);
   state.watchCount += 1;
   void startCollection(runtime, containerId, state);
@@ -395,7 +424,6 @@ function watchContainer(runtime: CollectorRuntime, containerId: string): () => v
 }
 
 function touchContainer(runtime: CollectorRuntime, containerId: string): void {
-  sweepDeletedInactiveStates(runtime);
   const state = getOrCreateState(runtime, containerId);
   if (!state.restTouchRelease) {
     state.restTouchRelease = watchContainer(runtime, containerId);
@@ -418,7 +446,6 @@ function subscribeToContainer(
   containerId: string,
   listener: StatsListener,
 ): () => void {
-  sweepDeletedInactiveStates(runtime);
   const state = getOrCreateState(runtime, containerId);
   state.listeners.add(listener);
 
@@ -432,7 +459,6 @@ function getLatest(
   runtime: CollectorRuntime,
   containerId: string,
 ): ContainerStatsSnapshot | undefined {
-  sweepDeletedInactiveStates(runtime);
   const state = runtime.states.get(containerId);
   if (!state) {
     return undefined;
@@ -442,7 +468,6 @@ function getLatest(
 }
 
 function getHistory(runtime: CollectorRuntime, containerId: string): ContainerStatsSnapshot[] {
-  sweepDeletedInactiveStates(runtime);
   const state = runtime.states.get(containerId);
   if (!state) {
     return [];
