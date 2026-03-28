@@ -21,6 +21,7 @@ const props = withDefaults(
     selectedKey?: string | null;
     showActions?: boolean;
     compact?: boolean;
+    fixedLayout?: boolean;
     virtualScroll?: boolean;
     virtualRowHeight?: number;
     virtualOverscan?: number;
@@ -33,6 +34,7 @@ const props = withDefaults(
   {
     showActions: false,
     compact: false,
+    fixedLayout: false,
     virtualScroll: false,
     virtualRowHeight: 56,
     virtualOverscan: 6,
@@ -119,6 +121,7 @@ const totalColumnCount = computed(() => props.columns.length + (props.showAction
 const normalizedRowHeight = computed(() => Math.max(24, props.virtualRowHeight));
 const normalizedOverscan = computed(() => Math.max(0, props.virtualOverscan));
 const virtualizationEnabled = computed(() => props.virtualScroll && props.rows.length > 0);
+const useFixedLayout = computed(() => props.fixedLayout || Object.keys(colWidths).length > 0);
 
 function fallbackViewportHeight(): number {
   const explicitMaxHeight = parsePixelHeight(props.virtualMaxHeight);
@@ -346,7 +349,7 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
       <table
         ref="tableRef"
         class="w-full text-xs isolate"
-        :style="{ borderCollapse: 'separate', borderSpacing: '0', ...(Object.keys(colWidths).length > 0 ? { tableLayout: 'fixed' } : {}) }">
+        :style="{ borderCollapse: 'separate', borderSpacing: '0', ...(useFixedLayout ? { tableLayout: 'fixed' } : {}) }">
         <thead>
           <tr :style="{ backgroundColor: 'var(--dd-bg-inset)', borderBottom: 'none' }">
             <th v-for="(col, colIdx) in columns" :key="col.key"

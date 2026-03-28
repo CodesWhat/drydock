@@ -64,6 +64,11 @@ describe('DataTable', () => {
       const ths = w.findAll('thead th');
       expect(ths).toHaveLength(3);
     });
+
+    it('uses fixed table layout when fixedLayout is enabled', () => {
+      const w = factory({ fixedLayout: true });
+      expect(w.find('table').attributes('style')).toContain('table-layout: fixed');
+    });
   });
 
   describe('rows', () => {

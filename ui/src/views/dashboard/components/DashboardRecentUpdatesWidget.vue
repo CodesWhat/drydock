@@ -5,11 +5,11 @@ import AppIconButton from '@/components/AppIconButton.vue';
 import type { RecentUpdateRow, UpdateKind } from '../dashboardTypes';
 
 const UPDATE_TABLE_COLUMNS = [
-  { key: 'icon', label: '', icon: true },
-  { key: 'container', label: 'Container', sortable: false },
-  { key: 'version', label: 'Version', sortable: false, align: 'text-center' },
-  { key: 'type', label: 'Type', sortable: false },
-  { key: 'actions', label: 'Actions', sortable: false, align: 'text-center' },
+  { key: 'icon', label: '', icon: true, width: '6%' },
+  { key: 'container', label: 'Container', sortable: false, width: '38%' },
+  { key: 'version', label: 'Version', sortable: false, align: 'text-center', width: '28%' },
+  { key: 'type', label: 'Type', sortable: false, width: '16%' },
+  { key: 'actions', label: 'Actions', sortable: false, align: 'text-center', width: '12%' },
 ] as const;
 
 interface Props {
@@ -145,6 +145,7 @@ watchEffect(() => {
           :rows="recentUpdates"
           row-key="id"
           :row-class="getRowClass"
+          fixed-layout
           compact>
           <template #cell-icon="{ row }">
             <ContainerIcon :icon="row.icon" :size="28" />

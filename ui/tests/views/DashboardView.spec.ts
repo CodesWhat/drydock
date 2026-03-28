@@ -580,6 +580,23 @@ describe('DashboardView', () => {
       expect(rows.length).toBe(12);
     });
 
+    it('renders the recent updates table with a fixed layout to keep columns stable while scrolling', async () => {
+      const containers = Array.from({ length: 12 }, (_, i) =>
+        makeContainer({
+          id: `c${i}`,
+          name: `container-${i}`,
+          newTag: `${i + 1}.0.0`,
+        }),
+      );
+      const wrapper = await mountDashboard(containers);
+      const tableStyle = wrapper
+        .find('[data-widget-id="recent-updates"]')
+        .find('table')
+        .attributes('style');
+
+      expect(tableStyle).toContain('table-layout: fixed');
+    });
+
     it('orders recent updates by newest detected update first', async () => {
       const containers = [
         {
