@@ -1,10 +1,6 @@
 import { computed, onMounted, onUnmounted, type Ref, ref, watch } from 'vue';
 import { getAgents } from '../../services/agent';
-import {
-  getAllContainers,
-  getContainerRecentStatus,
-  getContainerSummary,
-} from '../../services/container';
+import { getAllContainers, getContainerRecentStatus } from '../../services/container';
 import { getAllRegistries } from '../../services/registry';
 import { getServer } from '../../services/server';
 import { type ContainerStatsSummaryItem, getAllContainerStats } from '../../services/stats';
@@ -74,54 +70,6 @@ function watcherHasMaintenanceWindow(watcher: unknown): boolean {
   const configuration = getWatcherConfiguration(watcher);
   const maintenanceWindow = configuration.maintenancewindow ?? configuration.maintenanceWindow;
   return typeof maintenanceWindow === 'string' && maintenanceWindow.trim().length > 0;
-}
-
-function toNonNegativeInteger(value: unknown): number {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
-    return 0;
-  }
-  return Math.floor(value);
-}
-
-function normalizeContainerSummary(summary: unknown): DashboardContainerSummary {
-  const containersData =
-    summary && typeof summary === 'object' && 'containers' in summary
-      ? (summary as { containers?: unknown }).containers
-      : undefined;
-  const securityData =
-    summary && typeof summary === 'object' && 'security' in summary
-      ? (summary as { security?: unknown }).security
-      : undefined;
-  const total = toNonNegativeInteger(
-    containersData && typeof containersData === 'object'
-      ? (containersData as { total?: unknown }).total
-      : undefined,
-  );
-  const running = toNonNegativeInteger(
-    containersData && typeof containersData === 'object'
-      ? (containersData as { running?: unknown }).running
-      : undefined,
-  );
-  const stopped = toNonNegativeInteger(
-    containersData && typeof containersData === 'object'
-      ? (containersData as { stopped?: unknown }).stopped
-      : undefined,
-  );
-  const issues = toNonNegativeInteger(
-    securityData && typeof securityData === 'object'
-      ? (securityData as { issues?: unknown }).issues
-      : undefined,
-  );
-  return {
-    containers: {
-      total,
-      running,
-      stopped,
-    },
-    security: {
-      issues,
-    },
-  };
 }
 
 function buildContainerSummaryFromContainers(containers: Container[]): DashboardContainerSummary {
@@ -223,25 +171,8 @@ function createDashboardDataFetchers(state: DashboardStateRefs) {
       }
     }
   }
-
-  async function fetchDashboardSummary() {
-    const hasRenderedData = hasRenderedDashboardData(state);
-    try {
-      const summary = await getContainerSummary();
-      state.containerSummary.value = normalizeContainerSummary(summary);
-      state.error.value = null;
-    } catch (e: unknown) {
-      if (!hasRenderedData) {
-        state.error.value = errorMessage(e, 'Failed to load dashboard data');
-      } else {
-        console.debug(errorMessage(e, 'Dashboard summary refresh failed'));
-      }
-    }
-  }
-
   return {
     fetchDashboardData,
-    fetchDashboardSummary,
   };
 }
 
@@ -271,7 +202,7 @@ export function useDashboardData() {
     recentStatusByContainer,
   };
 
-  const { fetchDashboardData, fetchDashboardSummary } = createDashboardDataFetchers(state);
+  const { fetchDashboardData } = createDashboardDataFetchers(state);
   const hasMaintenanceWindows = computed(() =>
     watchers.value.some((watcher) => watcherHasMaintenanceWindow(watcher)),
   );
@@ -284,9 +215,6 @@ export function useDashboardData() {
   });
   const realtimeRefreshScheduler = createRealtimeRefreshScheduler({
     debounceMs: DASHBOARD_REALTIME_REFRESH_DEBOUNCE_MS,
-    refreshSummary: () => {
-      void fetchDashboardSummary();
-    },
     refreshFull: () => {
       void fetchDashboardData({ background: true });
     },
@@ -294,8 +222,6 @@ export function useDashboardData() {
     clearTimeoutFn: window.clearTimeout.bind(window),
   });
 
-  const summaryRefreshListener = (() =>
-    realtimeRefreshScheduler.schedule('summary')) as EventListener;
   const fullRefreshListener = (() => realtimeRefreshScheduler.schedule('full')) as EventListener;
   const visibilityChangeListener = maintenanceCountdownController.sync as EventListener;
   let stopMaintenanceWindowWatch: ReturnType<typeof watch> | undefined;

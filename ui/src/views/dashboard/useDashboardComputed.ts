@@ -19,6 +19,7 @@ import type {
 import { getWatcherConfiguration } from './watcherConfiguration';
 
 const DONUT_CIRCUMFERENCE = 301.6;
+const RECENT_UPDATES_LIMIT = 6;
 
 const FILTER_KIND_ANY = 'ANY'.toLowerCase();
 
@@ -582,7 +583,7 @@ function buildRecentUpdateRows(
   }
 
   candidates.sort(comparePendingRecentUpdates);
-  return candidates.map((candidate) => candidate.row);
+  return candidates.slice(0, RECENT_UPDATES_LIMIT).map((candidate) => candidate.row);
 }
 
 function useRecentUpdatesComputed(input: UseDashboardComputedInput) {

@@ -99,6 +99,28 @@ describe('useDashboardWidgetOrder', () => {
     });
   });
 
+  it('falls back to the default layout when every persisted widget lands in column zero', async () => {
+    preferences.dashboard.gridLayout = DASHBOARD_WIDGET_IDS.map((id, index) => ({
+      i: id,
+      x: 0,
+      y: index,
+      w: 1,
+      h: 1,
+    }));
+
+    const { state } = await mountWidgetOrderComposable();
+
+    expect(state.layout.value).toEqual(
+      applyConstraints(
+        DASHBOARD_WIDGET_IDS.map((id) => {
+          const item = state.layout.value.find((layoutItem) => layoutItem.i === id);
+          return { ...item! };
+        }),
+      ),
+    );
+    expect(state.layout.value.some((item) => item.x !== 0)).toBe(true);
+  });
+
   it('returns explicit style ordering and uses canonical fallback index for missing ids', async () => {
     const { state } = await mountWidgetOrderComposable();
     state.widgetOrder.value = DASHBOARD_WIDGET_IDS.filter((id) => id !== 'host-status');

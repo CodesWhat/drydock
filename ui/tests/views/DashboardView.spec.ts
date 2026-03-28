@@ -566,7 +566,7 @@ describe('DashboardView', () => {
       expect(wrapper.text()).toContain('7.0.0');
     });
 
-    it('shows all pending updates without a hard cap', async () => {
+    it('caps pending updates to six visible rows', async () => {
       const containers = Array.from({ length: 12 }, (_, i) =>
         makeContainer({
           id: `c${i}`,
@@ -577,7 +577,7 @@ describe('DashboardView', () => {
       const wrapper = await mountDashboard(containers);
       const widget = wrapper.find('[data-widget-id="recent-updates"]');
       const rows = widget.findAll('tbody tr').filter((r) => !r.attributes('aria-hidden'));
-      expect(rows.length).toBe(12);
+      expect(rows.length).toBe(6);
     });
 
     it('renders the recent updates table with a fixed layout to keep columns stable while scrolling', async () => {

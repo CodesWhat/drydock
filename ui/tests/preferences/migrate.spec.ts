@@ -144,6 +144,11 @@ describe('preferences migration', () => {
       expect(result.containers.tableActions).toBe(DEFAULTS.containers.tableActions);
     });
 
+    it('should replace invalid container columns with default', () => {
+      const result = migrate({ schemaVersion: 1, containers: { columns: 'name' as any } });
+      expect(result.containers.columns).toEqual(DEFAULTS.containers.columns);
+    });
+
     it('should preserve dashboard gridLayout through migration (#223)', () => {
       const gridLayout = [
         { i: 'host-status', x: 10, y: 11, w: 4, h: 6 },

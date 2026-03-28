@@ -4,7 +4,7 @@ type RealtimeRefreshMode = 'summary' | 'full';
 
 interface RealtimeRefreshSchedulerOptions {
   debounceMs: number;
-  refreshSummary: () => void;
+  refreshSummary?: () => void;
   refreshFull: () => void;
   setTimeoutFn?: typeof setTimeout;
   clearTimeoutFn?: typeof clearTimeout;
@@ -52,7 +52,7 @@ export function createRealtimeRefreshScheduler({
         refreshFull();
         return;
       }
-      refreshSummary();
+      refreshSummary?.();
     }, debounceMs);
   }
 
