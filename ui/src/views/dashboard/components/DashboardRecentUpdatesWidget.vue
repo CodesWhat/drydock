@@ -218,8 +218,14 @@ watchEffect(() => {
 
           <template #cell-actions="{ row }">
             <div class="flex justify-center">
+            <span
+              v-if="row.blocked"
+              class="w-7 h-7 dd-rounded-sm flex items-center justify-center dd-text-muted opacity-60 cursor-not-allowed"
+              v-tooltip.top="'Security blocked'">
+              <AppIcon name="lock" :size="14" />
+            </span>
             <AppButton
-              v-if="row.status === 'pending'"
+              v-else-if="row.status === 'pending'"
               data-test="dashboard-update-btn"
               size="none"
               variant="plain"

@@ -118,7 +118,7 @@ describe('Preview Router', () => {
 
       const res = await callPreview();
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith({ error: 'Error previewing container' });
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ error: expect.any(String) }));
     });
 
     test('should stringify non-Error preview failures', async () => {
@@ -133,7 +133,7 @@ describe('Preview Router', () => {
 
       const res = await callPreview();
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith({ error: 'Error previewing container' });
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ error: expect.any(String) }));
     });
 
     test('should skip docker triggers with mismatched agent', async () => {

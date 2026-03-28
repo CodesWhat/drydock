@@ -538,6 +538,7 @@ function isPendingRecentUpdateContainer(container: Container): boolean {
 function toPendingRecentUpdateCandidate(
   container: Container,
   recentStatusByContainer: Record<string, RecentAuditStatus>,
+  blocked: boolean,
 ): PendingRecentUpdateCandidate {
   return {
     detectedAt: parseDetectedAt(container.updateDetectedAt),
@@ -553,6 +554,7 @@ function toPendingRecentUpdateCandidate(
       updateKind: container.updateKind ?? null,
       running: container.status === 'running',
       registryError: undefined,
+      blocked,
     },
   };
 }
@@ -570,7 +572,13 @@ function buildRecentUpdateRows(
       continue;
     }
 
-    candidates.push(toPendingRecentUpdateCandidate(container, recentStatusByContainer));
+    candidates.push(
+      toPendingRecentUpdateCandidate(
+        container,
+        recentStatusByContainer,
+        container.bouncer === 'blocked',
+      ),
+    );
   }
 
   candidates.sort(comparePendingRecentUpdates);

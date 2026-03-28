@@ -173,6 +173,11 @@ async function updateContainer(req: Request, res: Response) {
     return;
   }
 
+  if (container.security?.scan?.status === 'blocked') {
+    sendErrorResponse(res, 409, 'Update blocked by security scan. Use force-update to override.');
+    return;
+  }
+
   const trigger = findDockerTriggerForContainer(registry.getState().trigger, container, {
     triggerTypes: ['docker', 'dockercompose'],
   });

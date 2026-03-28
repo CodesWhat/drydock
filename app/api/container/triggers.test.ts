@@ -447,7 +447,7 @@ describe('api/container/triggers', () => {
       );
       expect(res.status).toHaveBeenCalledWith(500);
       expect(res.json).toHaveBeenCalledWith({
-        error: 'Error when running trigger (type=slack, name=notify)',
+        error: 'trigger exploded',
       });
     });
   });

@@ -219,7 +219,8 @@ function createRunTriggerHandler({
       sendErrorResponse(
         res,
         500,
-        `Error when running trigger (type=${triggerType}, name=${triggerName})`,
+        getErrorMessage(error) ||
+          `Error when running trigger (type=${triggerType}, name=${triggerName})`,
       );
     }
   };

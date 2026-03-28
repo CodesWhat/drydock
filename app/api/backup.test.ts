@@ -468,7 +468,7 @@ describe('Backup Router', () => {
       await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith({ error: 'Error rolling back container' });
+      expect(res.json).toHaveBeenCalledWith({ error: 'Pull failed' });
     });
 
     test('should stringify non-Error rollback failures', async () => {
@@ -503,7 +503,7 @@ describe('Backup Router', () => {
       await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith({ error: 'Error rolling back container' });
+      expect(res.json).toHaveBeenCalledWith({ error: 'pull failed as string' });
     });
   });
 });

@@ -116,7 +116,7 @@ const openActionsContainer = computed(
                  :selected-key="selectedContainer ? getContainerViewKey(selectedContainer) : null"
                  :show-actions="true"
                  :virtual-scroll="false"
-                 :row-class="(row) => actionInProgress === row.name ? 'opacity-50 pointer-events-none transition-opacity duration-300' : ''"
+                 :row-class="(row) => actionInProgress === row.name || groupUpdateInProgress.has(group.key) ? 'opacity-50 pointer-events-none transition-opacity duration-300' : ''"
                  @update:sort-key="containerSortKey = $event"
                  @update:sort-asc="containerSortAsc = $event"
                  @row-click="selectContainer($event)">
@@ -410,7 +410,7 @@ const openActionsContainer = computed(
                     @item-click="selectContainer($event)">
         <template #card="{ item: c }">
           <!-- Card header -->
-          <div class="px-4 pt-4 pb-2 flex items-start justify-between" :class="{ 'opacity-50': c._pending || actionInProgress === c.name }">
+          <div class="px-4 pt-4 pb-2 flex items-start justify-between" :class="{ 'opacity-50': c._pending || actionInProgress === c.name || groupUpdateInProgress.has(group.key) }">
             <div class="flex items-center gap-2.5 min-w-0">
               <AppIcon v-if="c._pending" name="spinner" :size="16" class="dd-spin dd-text-muted shrink-0" />
               <ContainerIcon v-else :icon="c.icon" :size="24" class="shrink-0" />
@@ -459,7 +459,7 @@ const openActionsContainer = computed(
           </div>
 
           <!-- Card body -- inline Current / Latest -->
-          <div class="px-4 py-3 min-w-0" :class="{ 'opacity-50': actionInProgress === c.name }">
+          <div class="px-4 py-3 min-w-0" :class="{ 'opacity-50': actionInProgress === c.name || groupUpdateInProgress.has(group.key) }">
             <div class="flex items-center gap-2 flex-wrap min-w-0">
               <span class="text-2xs-plus dd-text-muted shrink-0">Current</span>
               <CopyableTag :tag="c.currentTag" class="text-xs font-bold dd-text truncate max-w-[120px]" @click.stop>
@@ -545,7 +545,11 @@ const openActionsContainer = computed(
                         :class="actionInProgress === c.name ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-secondary hover:dd-bg-elevated'"
                         :disabled="actionInProgress === c.name"
                         :tooltip="tt('Scan')" @click.stop="scanContainer(c.name)" />
-                <AppIconButton v-if="c.newTag" icon="cloud-download" size="xs" variant="muted"
+                <AppIconButton v-if="c.newTag && c.bouncer === 'blocked'" icon="lock" size="xs" variant="muted"
+                        class="opacity-60 cursor-not-allowed"
+                        :disabled="true"
+                        :tooltip="tt('Security blocked')" />
+                <AppIconButton v-else-if="c.newTag" icon="cloud-download" size="xs" variant="muted"
                         :class="actionInProgress === c.name ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-success hover:dd-bg-elevated'"
                         :disabled="actionInProgress === c.name"
                         :tooltip="tt('Update')" @click.stop="confirmUpdate(c.name)" />

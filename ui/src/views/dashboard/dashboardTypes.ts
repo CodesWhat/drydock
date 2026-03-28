@@ -144,6 +144,7 @@ export interface RecentUpdateRow {
   updateKind: UpdateKind | null;
   running: boolean;
   registryError?: string;
+  blocked: boolean;
 }
 
 export interface DashboardServerRow {

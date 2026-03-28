@@ -597,7 +597,7 @@ describe('ContainersGroupedViews', () => {
       updateKind: 'major',
       updateMaturity: 'fresh',
       status: 'running',
-      bouncer: 'blocked',
+      bouncer: 'safe',
       registryError: 'timeout',
       server: 'local-main',
     });

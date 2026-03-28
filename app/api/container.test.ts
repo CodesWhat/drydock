@@ -2257,7 +2257,7 @@ describe('Container Router', () => {
       const res = await callRunTrigger({ id: 'c1', triggerType: 'slack', triggerName: 'default' });
       expect(res.status).toHaveBeenCalledWith(500);
       expect(res.json).toHaveBeenCalledWith({
-        error: 'Error when running trigger (type=slack, name=default)',
+        error: 'trigger error',
       });
     });
 

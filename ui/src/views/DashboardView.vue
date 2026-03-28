@@ -146,7 +146,9 @@ const {
   watchers,
 });
 
-const pendingUpdates = computed(() => recentUpdates.value.filter((r) => r.status === 'pending'));
+const pendingUpdates = computed(() =>
+  recentUpdates.value.filter((r) => r.status === 'pending' && !r.blocked),
+);
 
 // Stat card data lookup by widget id
 const statById = computed(() => {

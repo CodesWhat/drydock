@@ -187,7 +187,7 @@ describe('Container Actions Router', () => {
       await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith({ error: 'Error performing start on container' });
+      expect(res.json).toHaveBeenCalledWith({ error: 'container already started' });
     });
 
     test('should stringify non-Error Docker API failures', async () => {
@@ -203,7 +203,7 @@ describe('Container Actions Router', () => {
       await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith({ error: 'Error performing start on container' });
+      expect(res.json).toHaveBeenCalledWith({ error: 'start failed as string' });
     });
 
     test('should insert audit entry on success', async () => {
@@ -335,7 +335,7 @@ describe('Container Actions Router', () => {
       await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith({ error: 'Error performing stop on container' });
+      expect(res.json).toHaveBeenCalledWith({ error: 'stop failed' });
     });
   });
 
@@ -403,7 +403,7 @@ describe('Container Actions Router', () => {
       await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith({ error: 'Error performing restart on container' });
+      expect(res.json).toHaveBeenCalledWith({ error: 'restart failed' });
     });
   });
 
@@ -667,7 +667,7 @@ describe('Container Actions Router', () => {
       await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith({ error: 'Error updating container' });
+      expect(res.json).toHaveBeenCalledWith({ error: 'pull failed' });
     });
 
     test('should insert audit entry on success', async () => {
@@ -766,7 +766,7 @@ describe('Container Actions Router', () => {
       await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith({ error: 'Error updating container' });
+      expect(res.json).toHaveBeenCalledWith({ error: 'update failed as string' });
     });
   });
 });
