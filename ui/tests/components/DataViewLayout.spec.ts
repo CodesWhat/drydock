@@ -81,6 +81,15 @@ describe('DataViewLayout', () => {
     expect(scrollArea.text()).toContain('Scrollable');
   });
 
+  it('uses the shared mobile touch-scroll behavior on the main content area', () => {
+    const wrapper = mount(DataViewLayout, {
+      slots: { default: '<p>Scrollable</p>' },
+    });
+    const scrollArea = wrapper.find('.overflow-y-auto');
+    expect(scrollArea.classes()).toContain('dd-touch-scroll');
+    expect(scrollArea.classes()).toContain('overflow-x-hidden');
+  });
+
   it('applies pr-[15px] on the scrollable content area for scrollbar centering', () => {
     const wrapper = mount(DataViewLayout, {
       slots: { default: '<p>Content</p>' },
