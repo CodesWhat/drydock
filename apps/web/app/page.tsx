@@ -298,7 +298,7 @@ const roadmap = [
     status: "planned" as const,
     dotColor:
       "border-orange-400 bg-orange-50 text-orange-500 dark:border-orange-500 dark:bg-orange-950 dark:text-orange-400",
-    items: ["Notification templates", "MS Teams & Matrix triggers", "Deprecation removals"],
+    items: ["Notification templates", "Notification preferences UI", "Deprecation removals"],
   },
   {
     version: "v1.7.0",
