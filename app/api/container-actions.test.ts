@@ -616,6 +616,31 @@ describe('Container Actions Router', () => {
       expect(mockTriggerFn).not.toHaveBeenCalled();
     });
 
+    test('should return 409 when update is blocked by a security scan', async () => {
+      const container = {
+        id: 'c1',
+        name: 'nginx',
+        image: { name: 'nginx' },
+        updateAvailable: true,
+        security: {
+          scan: {
+            status: 'blocked',
+          },
+        },
+      };
+      mockGetContainer.mockReturnValue(container);
+
+      const handler = getHandler('post', '/:id/update');
+      const req = createMockRequest({ params: { id: 'c1' } });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(409);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Update blocked by security scan. Use force-update to override.',
+      });
+    });
+
     test('should return 404 when no docker trigger found', async () => {
       const container = {
         id: 'c1',

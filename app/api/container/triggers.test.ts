@@ -450,5 +450,31 @@ describe('api/container/triggers', () => {
         error: 'trigger exploded',
       });
     });
+
+    test('falls back to a synthesized error when getErrorMessage returns an empty string', async () => {
+      const trigger = createTrigger({
+        id: 'slack.notify',
+        name: 'notify',
+        trigger: vi.fn().mockRejectedValue(new Error('trigger exploded')),
+      });
+      const harness = createHarness({
+        container: { id: 'c1' },
+        triggerMap: {
+          'slack.notify': trigger,
+        },
+      });
+      harness.deps.getErrorMessage.mockReturnValue('');
+
+      const res = await callRunTrigger(harness.handlers, {
+        id: 'c1',
+        triggerType: 'slack',
+        triggerName: 'notify',
+      });
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Error when running trigger (type=slack, name=notify)',
+      });
+    });
   });
 });

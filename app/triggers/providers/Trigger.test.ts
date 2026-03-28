@@ -2268,6 +2268,61 @@ test('handleContainerReports should suppress repeated identical batch errors dur
   expect(debugSpy).toHaveBeenCalledWith('Suppressed repeated error (batch fail)');
 });
 
+test('flushEventBatchDispatch should warn when auto event batch dispatch fails', async () => {
+  trigger.configuration = {
+    threshold: 'all',
+    mode: 'batch',
+  };
+  trigger.triggerBatch = vi.fn().mockRejectedValue(new Error('event batch fail'));
+  vi.spyOn(trigger as any, 'shouldSuppressAutoTriggerError').mockReturnValue(false);
+
+  const warnSpy = vi.spyOn(log, 'warn');
+  const debugSpy = vi.spyOn(log, 'debug');
+
+  await (trigger as any).flushEventBatchDispatch('update-applied', [
+    { name: 'c1', watcher: 'local' },
+  ]);
+
+  expect(warnSpy).toHaveBeenCalledWith('Error handling update-applied event (event batch fail)');
+  expect(debugSpy).toHaveBeenCalledWith(expect.any(Error));
+});
+
+test('flushEventBatchDispatch should skip empty batches', async () => {
+  trigger.configuration = {
+    threshold: 'all',
+    mode: 'batch',
+  };
+  trigger.triggerBatch = vi.fn();
+
+  await (trigger as any).flushEventBatchDispatch('update-applied', []);
+
+  expect(trigger.triggerBatch).not.toHaveBeenCalled();
+});
+
+test('flushEventBatchDispatch should suppress repeated auto event batch errors', async () => {
+  trigger.configuration = {
+    threshold: 'all',
+    mode: 'batch',
+  };
+  trigger.triggerBatch = vi.fn().mockRejectedValue(new Error('event batch fail'));
+  vi.spyOn(trigger as any, 'shouldSuppressAutoTriggerError').mockReturnValue(true);
+
+  const warnSpy = vi.spyOn(log, 'warn');
+  const debugSpy = vi.spyOn(log, 'debug');
+
+  await (trigger as any).flushEventBatchDispatch('update-applied', [
+    { name: 'c1', watcher: 'local' },
+  ]);
+
+  expect(warnSpy).not.toHaveBeenCalledWith(
+    'Error handling update-applied event (event batch fail)',
+  );
+  expect(debugSpy).toHaveBeenCalledWith(
+    'Suppressed repeated error handling update-applied event (event batch fail)',
+  );
+  expect(debugSpy).toHaveBeenCalledWith(expect.any(Error));
+});
+
 test('shouldSuppressAutoTriggerError should prune stale cache entries', () => {
   const triggerAny = trigger as any;
   triggerAny.autoTriggerErrorSeenAt.set('stale-signature', 0);
@@ -2605,6 +2660,30 @@ describe('digest mode', () => {
     await trigger.flushDigestBuffer();
     expect(triggerBatchSpy).not.toHaveBeenCalled();
     triggerBatchSpy.mockRestore();
+  });
+
+  test('clearEventBatchDispatches should clear pending timers and buffered containers', () => {
+    const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout');
+    const timer = setTimeout(() => undefined, 1_000);
+    const scheduledDispatch = {
+      timer,
+      containers: new Map([['test_app', { name: 'app', watcher: 'test' }]]),
+    };
+    const unscheduledDispatch = {
+      containers: new Map([['test_web', { name: 'web', watcher: 'test' }]]),
+    };
+
+    (trigger as any).eventBatchDispatches.set('update-applied', scheduledDispatch);
+    (trigger as any).eventBatchDispatches.set('update-failed', unscheduledDispatch);
+
+    (trigger as any).clearEventBatchDispatches();
+
+    expect(clearTimeoutSpy).toHaveBeenCalledWith(timer);
+    expect(scheduledDispatch.containers.size).toBe(0);
+    expect(scheduledDispatch.timer).toBeUndefined();
+    expect(unscheduledDispatch.containers.size).toBe(0);
+    expect(unscheduledDispatch.timer).toBeUndefined();
+    expect((trigger as any).eventBatchDispatches.size).toBe(0);
   });
 
   test('handleContainerUpdateAppliedEvent should evict container from digest buffer', async () => {
