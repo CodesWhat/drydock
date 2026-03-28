@@ -64,6 +64,7 @@ interface EventDispatchOptions extends notificationStore.NotificationRuleDispatc
 
 const AUTO_TRIGGER_ERROR_SUPPRESSION_WINDOW_MS = 15_000;
 const AUTO_TRIGGER_ERROR_SUPPRESSION_RETENTION_MS = AUTO_TRIGGER_ERROR_SUPPRESSION_WINDOW_MS * 4;
+const AUTO_EVENT_BATCH_FLUSH_DELAY_MS = 250;
 const TRIGGER_RELEASE_NOTES_BODY_MAX_LENGTH = 500;
 const ACTION_TRIGGER_TYPES = new Set(['command', 'docker', 'dockercompose']);
 const AGENT_DISCONNECT_SIMPLE_TITLE_TEMPLATE = 'Agent ${event.agentName} disconnected';
@@ -166,6 +167,11 @@ interface ContainerReport {
   changed: boolean;
 }
 
+interface EventBatchDispatchState {
+  containers: Map<string, Container>;
+  timer?: ReturnType<typeof setTimeout>;
+}
+
 function splitAndTrimCommaSeparatedList(value: string): string[] {
   return value
     .split(',')
@@ -189,6 +195,8 @@ class Trigger extends Component {
   private readonly notificationResults: Map<string, unknown> = new Map();
   private readonly autoTriggerErrorSeenAt: Map<string, number> = new Map();
   private readonly digestBuffer: Map<string, Container> = new Map();
+  private readonly eventBatchDispatches: Map<NotificationRuleId, EventBatchDispatchState> =
+    new Map();
   private digestCronTask?: ScheduledTask;
 
   static getSupportedThresholds() {
@@ -353,6 +361,69 @@ class Trigger extends Component {
     );
   }
 
+  private getOrCreateEventBatchDispatch(ruleId: NotificationRuleId): EventBatchDispatchState {
+    const existing = this.eventBatchDispatches.get(ruleId);
+    if (existing) {
+      return existing;
+    }
+
+    const created: EventBatchDispatchState = {
+      containers: new Map(),
+    };
+    this.eventBatchDispatches.set(ruleId, created);
+    return created;
+  }
+
+  private buildEventBatchDispatchKey(container: Container): string {
+    return container.id || fullName(container);
+  }
+
+  private async flushEventBatchDispatch(ruleId: NotificationRuleId, containers: Container[]) {
+    if (containers.length === 0) {
+      return;
+    }
+
+    try {
+      await this.triggerBatch(containers);
+    } catch (e: unknown) {
+      const errorMessage = Trigger.getErrorMessage(e);
+      const firstContainer = containers[0];
+      if (this.shouldSuppressAutoTriggerError(ruleId, firstContainer, errorMessage)) {
+        this.log.debug(`Suppressed repeated error handling ${ruleId} event (${errorMessage})`);
+      } else {
+        this.log.warn(`Error handling ${ruleId} event (${errorMessage})`);
+      }
+      this.log.debug(e);
+    }
+  }
+
+  private queueEventBatchDispatch(ruleId: NotificationRuleId, container: Container) {
+    const eventBatchDispatch = this.getOrCreateEventBatchDispatch(ruleId);
+    eventBatchDispatch.containers.set(this.buildEventBatchDispatchKey(container), container);
+
+    if (eventBatchDispatch.timer) {
+      clearTimeout(eventBatchDispatch.timer);
+    }
+
+    eventBatchDispatch.timer = setTimeout(() => {
+      const containers = Array.from(eventBatchDispatch.containers.values());
+      eventBatchDispatch.containers.clear();
+      eventBatchDispatch.timer = undefined;
+      void this.flushEventBatchDispatch(ruleId, containers);
+    }, AUTO_EVENT_BATCH_FLUSH_DELAY_MS);
+  }
+
+  private clearEventBatchDispatches() {
+    for (const eventBatchDispatch of this.eventBatchDispatches.values()) {
+      if (eventBatchDispatch.timer) {
+        clearTimeout(eventBatchDispatch.timer);
+      }
+      eventBatchDispatch.containers.clear();
+      eventBatchDispatch.timer = undefined;
+    }
+    this.eventBatchDispatches.clear();
+  }
+
   private async dispatchContainerForEvent(
     ruleId: NotificationRuleId,
     container: Container | undefined,
@@ -383,7 +454,7 @@ class Trigger extends Component {
         this.configuration.mode?.toLowerCase() === 'batch' &&
         getNotificationEvent(container)?.kind !== 'agent-disconnect';
       if (shouldUseBatchMode) {
-        await this.triggerBatch([container]);
+        this.queueEventBatchDispatch(ruleId, container);
       } else {
         await this.trigger(container);
       }
@@ -829,6 +900,7 @@ class Trigger extends Component {
     this.digestCronTask?.stop();
     this.digestCronTask = undefined;
     this.digestBuffer.clear();
+    this.clearEventBatchDispatches();
 
     this.autoTriggerErrorSeenAt.clear();
   }

@@ -1598,22 +1598,31 @@ test('handleContainerUpdateAppliedEvent should suppress repeated identical dispa
 });
 
 test('handleContainerUpdateFailedEvent should run batch trigger when configured in batch mode', async () => {
+  vi.useFakeTimers();
   const container = {
     watcher: 'local',
     name: 'container1',
     updateAvailable: true,
     updateKind: { kind: 'tag', semverDiff: 'major' },
   };
-  trigger.configuration.mode = 'batch';
-  storeContainer.getContainers.mockReturnValue([container]);
-  const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+  try {
+    trigger.configuration.mode = 'batch';
+    storeContainer.getContainers.mockReturnValue([container]);
+    const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
 
-  await trigger.handleContainerUpdateFailedEvent({
-    containerName: 'local_container1',
-    error: 'boom',
-  });
+    await trigger.handleContainerUpdateFailedEvent({
+      containerName: 'local_container1',
+      error: 'boom',
+    });
 
-  expect(triggerBatchSpy).toHaveBeenCalledWith([container]);
+    expect(triggerBatchSpy).not.toHaveBeenCalled();
+
+    await vi.runOnlyPendingTimersAsync();
+
+    expect(triggerBatchSpy).toHaveBeenCalledWith([container]);
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 test('handleContainerUpdateFailedEvent should skip when threshold is not reached', async () => {
@@ -1715,6 +1724,85 @@ test('handleSecurityAlertEvent should catch trigger execution errors', async () 
 
   expect(warnSpy).toHaveBeenCalledWith('Error handling security-alert event (dispatch failed)');
   expect(debugSpy).toHaveBeenCalledWith(expect.any(Error));
+});
+
+test('handleContainerUpdateAppliedEvent should aggregate nearby update-applied events in batch mode', async () => {
+  vi.useFakeTimers();
+  const containers = [
+    {
+      watcher: 'local',
+      name: 'container1',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', semverDiff: 'major' },
+    },
+    {
+      watcher: 'local',
+      name: 'container2',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', semverDiff: 'major' },
+    },
+  ];
+
+  try {
+    trigger.configuration.mode = 'batch';
+    storeContainer.getContainers.mockReturnValue(containers);
+    const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+
+    await trigger.handleContainerUpdateAppliedEvent('local_container1');
+    await trigger.handleContainerUpdateAppliedEvent('local_container2');
+
+    expect(triggerBatchSpy).not.toHaveBeenCalled();
+
+    await vi.runOnlyPendingTimersAsync();
+
+    expect(triggerBatchSpy).toHaveBeenCalledTimes(1);
+    expect(triggerBatchSpy).toHaveBeenCalledWith(containers);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('handleSecurityAlertEvent should aggregate nearby security alerts in batch mode', async () => {
+  vi.useFakeTimers();
+  const containers = [
+    {
+      watcher: 'local',
+      name: 'container1',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', semverDiff: 'major' },
+    },
+    {
+      watcher: 'local',
+      name: 'container2',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', semverDiff: 'major' },
+    },
+  ];
+
+  try {
+    trigger.configuration.mode = 'batch';
+    const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+
+    await trigger.handleSecurityAlertEvent({
+      containerName: 'local_container1',
+      details: 'high=1',
+      container: containers[0],
+    });
+    await trigger.handleSecurityAlertEvent({
+      containerName: 'local_container2',
+      details: 'high=2',
+      container: containers[1],
+    });
+
+    expect(triggerBatchSpy).not.toHaveBeenCalled();
+
+    await vi.runOnlyPendingTimersAsync();
+
+    expect(triggerBatchSpy).toHaveBeenCalledTimes(1);
+    expect(triggerBatchSpy).toHaveBeenCalledWith(containers);
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 test('handleAgentDisconnectedEvent should bypass threshold filtering', async () => {
