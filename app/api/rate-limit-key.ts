@@ -1,7 +1,8 @@
 import type { Request } from 'express';
 import { ipKeyGenerator, type ValueDeterminingMiddleware } from 'express-rate-limit';
 
-type IdentityAwareRateLimitRequest = Request & {
+export type IdentityAwareRateLimitRequestLike = {
+  ip?: unknown;
   isAuthenticated?: () => boolean;
   sessionID?: unknown;
   user?: {
@@ -17,7 +18,7 @@ function getTrimmedString(value: unknown): string | undefined {
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
-function getIpRateLimitKey(request: Request): string {
+function getIpRateLimitKey(request: Pick<IdentityAwareRateLimitRequestLike, 'ip'>): string {
   const rawRequestIp = request.ip;
   if (rawRequestIp === undefined) {
     return 'ip:unknown';
@@ -31,7 +32,7 @@ function getIpRateLimitKey(request: Request): string {
 }
 
 function getAuthenticatedIdentityRateLimitKey(
-  request: IdentityAwareRateLimitRequest,
+  request: IdentityAwareRateLimitRequestLike,
 ): string | undefined {
   if (typeof request.isAuthenticated !== 'function' || !request.isAuthenticated()) {
     return undefined;
@@ -50,6 +51,12 @@ function getAuthenticatedIdentityRateLimitKey(
   return undefined;
 }
 
+export function getAuthenticatedRouteRateLimitKey(
+  request: IdentityAwareRateLimitRequestLike,
+): string {
+  return getAuthenticatedIdentityRateLimitKey(request) || getIpRateLimitKey(request);
+}
+
 export function createAuthenticatedRouteRateLimitKeyGenerator(
   identityAwareKeyingEnabled: boolean,
 ): ValueDeterminingMiddleware<string> | undefined {
@@ -57,9 +64,7 @@ export function createAuthenticatedRouteRateLimitKeyGenerator(
     return undefined;
   }
 
-  return (request: Request) =>
-    getAuthenticatedIdentityRateLimitKey(request as IdentityAwareRateLimitRequest) ||
-    getIpRateLimitKey(request);
+  return (request: Request) => getAuthenticatedRouteRateLimitKey(request);
 }
 
 export function isIdentityAwareRateLimitKeyingEnabled(

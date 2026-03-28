@@ -107,6 +107,15 @@ function matchesFilter(entry: LogEntry, minLevel: number, component?: string): b
   return meetsMinLevel(entry, minLevel) && matchesComponent(entry, component);
 }
 
+function trySendLogEntry(webSocket: WebSocketLike, entry: LogEntry): boolean {
+  try {
+    webSocket.send(JSON.stringify(entry));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function streamSystemLogsToWebSocket({
   webSocket,
   query,
@@ -124,7 +133,9 @@ function streamSystemLogsToWebSocket({
     tail: query.tail,
   });
   for (const entry of backfill) {
-    webSocket.send(JSON.stringify(entry));
+    if (!trySendLogEntry(webSocket, entry)) {
+      return Promise.resolve();
+    }
   }
 
   const minLevel = getMinLevel(query.level);
@@ -132,9 +143,7 @@ function streamSystemLogsToWebSocket({
   return new Promise<void>((resolve) => {
     const unsubscribe = subscribeToEntries((entry: LogEntry) => {
       if (matchesFilter(entry, minLevel, query.component)) {
-        try {
-          webSocket.send(JSON.stringify(entry));
-        } catch {
+        if (!trySendLogEntry(webSocket, entry)) {
           cleanup();
         }
       }

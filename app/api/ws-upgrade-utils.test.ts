@@ -1,4 +1,3 @@
-import * as rateLimitKey from './rate-limit-key.js';
 import {
   applySessionMiddleware,
   createFixedWindowRateLimiter,
@@ -445,45 +444,137 @@ describe('ws-upgrade-utils', () => {
       expect(key.length).toBeGreaterThan(0);
     });
 
-    test('falls back to ip key when identity-aware generator returns empty string', () => {
-      const createKeySpy = vi
-        .spyOn(rateLimitKey, 'createAuthenticatedRouteRateLimitKeyGenerator')
-        .mockReturnValue(() => '' as any);
+    test('uses passport username when session id is missing', () => {
+      const resolver = createIdentityAwareUpgradeRateLimitKeyResolver({
+        ratelimit: { identitykeying: true },
+      });
 
-      try {
-        const resolver = createIdentityAwareUpgradeRateLimitKeyResolver({
-          ratelimit: { identitykeying: true },
-        });
+      const request = {
+        socket: { remoteAddress: '10.0.0.1' },
+        session: { passport: { user: '{"username":"alice"}' } },
+      } as any;
 
-        const request = { socket: { remoteAddress: '10.0.0.1' } } as any;
-        expect(resolver(request, true)).toBe('ip:10.0.0.1');
-      } finally {
-        createKeySpy.mockRestore();
-      }
+      expect(resolver(request, true)).toBe('user:alice');
+    });
+
+    test('uses passport username when session user is already an object', () => {
+      const resolver = createIdentityAwareUpgradeRateLimitKeyResolver({
+        ratelimit: { identitykeying: true },
+      });
+
+      const request = {
+        socket: { remoteAddress: '10.0.0.1' },
+        session: { passport: { user: { username: 'alice' } } },
+      } as any;
+
+      expect(resolver(request, true)).toBe('user:alice');
+    });
+
+    test('falls back to ip key when passport user is null', () => {
+      const resolver = createIdentityAwareUpgradeRateLimitKeyResolver({
+        ratelimit: { identitykeying: true },
+      });
+
+      const request = {
+        socket: { remoteAddress: '10.0.0.1' },
+        session: { passport: { user: null } },
+      } as any;
+
+      expect(resolver(request, true)).toBe('ip:10.0.0.1');
+    });
+
+    test('falls back to ip key when passport user object has no username', () => {
+      const resolver = createIdentityAwareUpgradeRateLimitKeyResolver({
+        ratelimit: { identitykeying: true },
+      });
+
+      const request = {
+        socket: { remoteAddress: '10.0.0.1' },
+        session: { passport: { user: {} } },
+      } as any;
+
+      expect(resolver(request, true)).toBe('ip:10.0.0.1');
+    });
+
+    test('falls back to ip key when authenticated identity values are invalid', () => {
+      const resolver = createIdentityAwareUpgradeRateLimitKeyResolver({
+        ratelimit: { identitykeying: true },
+      });
+
+      const request = {
+        socket: { remoteAddress: '10.0.0.1' },
+        sessionID: '   ',
+        session: { passport: { user: 'not-json' } },
+      } as any;
+
+      expect(resolver(request, true)).toBe('ip:10.0.0.1');
+    });
+
+    test('falls back to ip key when passport user is not a string or object', () => {
+      const resolver = createIdentityAwareUpgradeRateLimitKeyResolver({
+        ratelimit: { identitykeying: true },
+      });
+
+      const request = {
+        socket: { remoteAddress: '10.0.0.1' },
+        session: { passport: { user: 123 } },
+      } as any;
+
+      expect(resolver(request, true)).toBe('ip:10.0.0.1');
+    });
+
+    test('falls back to ip key when parsed passport user is not an object', () => {
+      const resolver = createIdentityAwareUpgradeRateLimitKeyResolver({
+        ratelimit: { identitykeying: true },
+      });
+
+      const request = {
+        socket: { remoteAddress: '10.0.0.1' },
+        session: { passport: { user: '"alice"' } },
+      } as any;
+
+      expect(resolver(request, true)).toBe('ip:10.0.0.1');
+    });
+
+    test('falls back to ip key when parsed passport user object has no username', () => {
+      const resolver = createIdentityAwareUpgradeRateLimitKeyResolver({
+        ratelimit: { identitykeying: true },
+      });
+
+      const request = {
+        socket: { remoteAddress: '10.0.0.1' },
+        session: { passport: { user: '{}' } },
+      } as any;
+
+      expect(resolver(request, true)).toBe('ip:10.0.0.1');
+    });
+
+    test('prefers request.user over session passport user when present', () => {
+      const resolver = createIdentityAwareUpgradeRateLimitKeyResolver({
+        ratelimit: { identitykeying: true },
+      });
+
+      const request = {
+        socket: { remoteAddress: '10.0.0.1' },
+        user: { username: 'bob' },
+        session: { passport: { user: '{"username":"alice"}' } },
+      } as any;
+
+      expect(resolver(request, true)).toBe('user:bob');
     });
 
     test('normalizes non-boolean authenticated values to unauthenticated', () => {
-      const createKeySpy = vi
-        .spyOn(rateLimitKey, 'createAuthenticatedRouteRateLimitKeyGenerator')
-        .mockReturnValue((request: any) =>
-          request.isAuthenticated?.() ? 'authenticated-key' : 'anonymous-key',
-        );
+      const resolver = createIdentityAwareUpgradeRateLimitKeyResolver({
+        ratelimit: { identitykeying: true },
+      });
 
-      try {
-        const resolver = createIdentityAwareUpgradeRateLimitKeyResolver({
-          ratelimit: { identitykeying: true },
-        });
+      const request = {
+        socket: { remoteAddress: '10.0.0.1' },
+        session: { passport: { user: '{"username":"alice"}' } },
+        sessionID: 'sess-abc',
+      } as any;
 
-        const request = {
-          socket: { remoteAddress: '10.0.0.1' },
-          session: { passport: { user: 'alice' } },
-          sessionID: 'sess-abc',
-        } as any;
-
-        expect(resolver(request, 'truthy-value' as unknown as boolean)).toBe('anonymous-key');
-      } finally {
-        createKeySpy.mockRestore();
-      }
+      expect(resolver(request, 'truthy-value' as unknown as boolean)).toBe('ip:10.0.0.1');
     });
   });
 });

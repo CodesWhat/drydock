@@ -344,6 +344,48 @@ describe('api/log-stream', () => {
       await upgradePromise;
     });
 
+    test('does not reject upgrade when websocket backfill send overflows its buffer', async () => {
+      const ws = new EventEmitter() as EventEmitter & {
+        send: ReturnType<typeof vi.fn>;
+        close: ReturnType<typeof vi.fn>;
+        bufferedAmount: number;
+      };
+      ws.bufferedAmount = 0;
+      ws.close = vi.fn();
+      ws.send = vi.fn(() => {
+        ws.bufferedAmount += 512;
+        if (ws.bufferedAmount > 700) {
+          throw new Error('WebSocket buffer overflow');
+        }
+      });
+
+      const subscribeToEntries = vi.fn(() => vi.fn());
+      const backfillEntries = [makeEntry({ msg: 'backfill-1' }), makeEntry({ msg: 'backfill-2' })];
+
+      const gateway = createSystemLogStreamGateway({
+        sessionMiddleware: authenticatingSessionMiddleware,
+        webSocketServer: {
+          handleUpgrade: vi.fn((_req, _socket, _head, callback: (socket: unknown) => void) =>
+            callback(ws),
+          ),
+        },
+        isRateLimited: vi.fn(() => false),
+        getBackfillEntries: vi.fn(() => backfillEntries),
+        subscribeToEntries,
+      });
+
+      await expect(
+        gateway.handleUpgrade(
+          createUpgradeRequest('/api/v1/log/stream?tail=50') as any,
+          createUpgradeSocket() as any,
+          Buffer.alloc(0),
+        ),
+      ).resolves.toBeUndefined();
+
+      expect(ws.send).toHaveBeenCalledTimes(2);
+      expect(subscribeToEntries).not.toHaveBeenCalled();
+    });
+
     test('streams live entries that match filters', async () => {
       const ws = new EventEmitter() as EventEmitter & {
         send: ReturnType<typeof vi.fn>;

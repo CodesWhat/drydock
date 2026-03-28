@@ -791,6 +791,81 @@ describe('api/container/log-stream', () => {
       expect(dockerStream.destroy).toHaveBeenCalledTimes(1);
     });
 
+    test('stops emitting queued log lines after websocket buffer overflow', async () => {
+      const dockerStream = new EventEmitter() as EventEmitter & {
+        destroy: ReturnType<typeof vi.fn>;
+      };
+      dockerStream.destroy = vi.fn();
+
+      const mockDockerContainer = {
+        logs: vi.fn().mockResolvedValue(dockerStream),
+      };
+      const mockWatcher = {
+        dockerApi: {
+          getContainer: vi.fn(() => mockDockerContainer),
+        },
+      };
+
+      const ws = new EventEmitter() as EventEmitter & {
+        send: ReturnType<typeof vi.fn>;
+        close: ReturnType<typeof vi.fn>;
+        bufferedAmount: number;
+      };
+      ws.bufferedAmount = 0;
+      ws.send = vi.fn(() => {
+        ws.bufferedAmount += 512;
+        if (ws.bufferedAmount > 700) {
+          throw new Error('WebSocket buffer overflow');
+        }
+      });
+      ws.close = vi.fn();
+
+      const gateway = createContainerLogStreamGateway({
+        getContainer: vi.fn(() => ({
+          id: 'c1',
+          name: 'my-container',
+          watcher: 'local',
+          status: 'running',
+        })),
+        getWatchers: vi.fn(() => ({
+          'docker.local': mockWatcher,
+        })),
+        sessionMiddleware: (req: any, _res: unknown, next: (error?: unknown) => void) => {
+          req.session = { passport: { user: '{"username":"alice"}' } };
+          req.sessionID = 'session-1';
+          next();
+        },
+        webSocketServer: {
+          handleUpgrade: vi.fn((_req, _socket, _head, callback: (socket: unknown) => void) =>
+            callback(ws),
+          ),
+        },
+        isRateLimited: vi.fn(() => false),
+      });
+
+      await gateway.handleUpgrade(
+        createUpgradeRequest('/api/v1/containers/c1/logs/stream') as any,
+        createUpgradeSocket() as any,
+        Buffer.alloc(0),
+      );
+
+      dockerStream.emit(
+        'data',
+        dockerFrame(
+          [
+            '2026-01-01T00:00:00.000000000Z first',
+            '2026-01-01T00:00:01.000000000Z second',
+            '2026-01-01T00:00:02.000000000Z third',
+          ].join('\n') + '\n',
+          1,
+        ),
+      );
+      dockerStream.emit('data', dockerFrame('2026-01-01T00:00:03.000000000Z after-cleanup\n', 1));
+
+      expect(ws.send).toHaveBeenCalledTimes(2);
+      expect(dockerStream.destroy).toHaveBeenCalledTimes(1);
+    });
+
     test('does not throw when close fails during stream end', async () => {
       const dockerStream = new EventEmitter() as EventEmitter & {
         destroy: ReturnType<typeof vi.fn>;

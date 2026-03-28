@@ -1,7 +1,8 @@
 import { type IncomingMessage, ServerResponse } from 'node:http';
 import type { Socket } from 'node:net';
 import {
-  createAuthenticatedRouteRateLimitKeyGenerator,
+  getAuthenticatedRouteRateLimitKey,
+  type IdentityAwareRateLimitRequestLike,
   isIdentityAwareRateLimitKeyingEnabled,
 } from './rate-limit-key.js';
 
@@ -16,13 +17,8 @@ export type UpgradeRequest = IncomingMessage & {
   sessionID?: unknown;
   isAuthenticated?: () => boolean;
   ip?: string;
+  user?: { username?: unknown };
 };
-
-type IdentityAwareRateLimitKeyGenerator = NonNullable<
-  ReturnType<typeof createAuthenticatedRouteRateLimitKeyGenerator>
->;
-type IdentityAwareRateLimitRequest = Parameters<IdentityAwareRateLimitKeyGenerator>[0];
-type IdentityAwareRateLimitResponse = Parameters<IdentityAwareRateLimitKeyGenerator>[1];
 
 /**
  * Validates the Origin header against the Host header to prevent WebSocket CSRF.
@@ -183,23 +179,64 @@ export function createFixedWindowRateLimiter(options: {
 export function createIdentityAwareUpgradeRateLimitKeyResolver(
   serverConfiguration: Record<string, unknown>,
 ) {
-  const identityAwareRateLimitKeyGenerator = createAuthenticatedRouteRateLimitKeyGenerator(
-    isIdentityAwareRateLimitKeyingEnabled(serverConfiguration),
-  );
-  if (!identityAwareRateLimitKeyGenerator) {
+  if (!isIdentityAwareRateLimitKeyingEnabled(serverConfiguration)) {
     return (request: UpgradeRequest, _authenticated: boolean) => getDefaultRateLimitKey(request);
   }
 
   return (request: UpgradeRequest, authenticated: boolean) => {
-    request.ip = request.socket.remoteAddress;
-    request.isAuthenticated = () => authenticated === true;
-    const generatedKey = identityAwareRateLimitKeyGenerator(
-      request as unknown as IdentityAwareRateLimitRequest,
-      {} as IdentityAwareRateLimitResponse,
+    return getAuthenticatedRouteRateLimitKey(
+      toIdentityAwareUpgradeRateLimitRequest(request, authenticated),
     );
-    if (typeof generatedKey === 'string' && generatedKey.length > 0) {
-      return generatedKey;
+  };
+}
+
+function getUsernameFromPassportSessionUser(passportUser: unknown): unknown {
+  if (!passportUser) {
+    return undefined;
+  }
+
+  if (typeof passportUser === 'object') {
+    return (passportUser as { username?: unknown }).username;
+  }
+
+  if (typeof passportUser !== 'string') {
+    return undefined;
+  }
+
+  try {
+    const parsedUser = JSON.parse(passportUser);
+    if (!parsedUser || typeof parsedUser !== 'object') {
+      return undefined;
     }
-    return getDefaultRateLimitKey(request);
+    return (parsedUser as { username?: unknown }).username;
+  } catch {
+    return undefined;
+  }
+}
+
+function getUpgradeRateLimitUser(
+  request: UpgradeRequest,
+): IdentityAwareRateLimitRequestLike['user'] | undefined {
+  if (request.user) {
+    return request.user;
+  }
+
+  const username = getUsernameFromPassportSessionUser(request.session?.passport?.user);
+  if (username === undefined) {
+    return undefined;
+  }
+
+  return { username };
+}
+
+function toIdentityAwareUpgradeRateLimitRequest(
+  request: UpgradeRequest,
+  authenticated: boolean,
+): IdentityAwareRateLimitRequestLike {
+  return {
+    ip: request.socket.remoteAddress,
+    isAuthenticated: () => authenticated === true,
+    sessionID: request.sessionID,
+    user: getUpgradeRateLimitUser(request),
   };
 }
