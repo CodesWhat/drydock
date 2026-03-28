@@ -106,7 +106,7 @@ const toneStyles = computed(() => {
           type="checkbox"
           v-model="permanentDismissChecked"
           class="shrink-0 w-3 h-3 dd-rounded-sm cursor-pointer" />
-        <span class="text-3xs dd-text-muted">{{ permanentDismissLabel }}</span>
+        <span class="text-3xs" :style="{ color: toneStyles.textColor }">{{ permanentDismissLabel }}</span>
       </label>
     </div>
   </div>
