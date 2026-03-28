@@ -3,7 +3,12 @@ import https from 'node:https';
 import { StringDecoder } from 'node:string_decoder';
 import axios, { type AxiosRequestConfig } from 'axios';
 import type { Logger } from 'pino';
-import { emitAgentConnected, emitAgentDisconnected, emitContainerReport } from '../event/index.js';
+import {
+  emitAgentConnected,
+  emitAgentDisconnected,
+  emitContainerReport,
+  emitContainerReports,
+} from '../event/index.js';
 import logger from '../log/index.js';
 import { sanitizeLogParam } from '../log/sanitize.js';
 import type { Container, ContainerReport } from '../model/container.js';
@@ -216,9 +221,20 @@ export class AgentClient {
     );
   }
 
-  private async processAuthoritativeContainer(container: Container) {
+  private async processAuthoritativeContainer(container: Container): Promise<ContainerReport> {
     this.clearPendingFreshState(container.id);
-    await this.processContainer(container);
+    return this.processContainer(container);
+  }
+
+  private async processAuthoritativeContainers(
+    containers: Container[],
+  ): Promise<ContainerReport[]> {
+    const containerReports: ContainerReport[] = [];
+    for (const container of containers) {
+      containerReports.push(await this.processAuthoritativeContainer(container));
+    }
+    void emitContainerReports(containerReports);
+    return containerReports;
   }
 
   private async registerAgentComponents(
@@ -247,9 +263,7 @@ export class AgentClient {
     const containers = response.data;
     this.log.info(`Handshake successful. Received ${containers.length} containers.`);
 
-    for (const container of containers) {
-      await this.processAuthoritativeContainer(container);
-    }
+    await this.processAuthoritativeContainers(containers);
     this.pruneOldContainers(containers);
 
     // Unregister existing components for this agent
@@ -287,7 +301,7 @@ export class AgentClient {
     }
   }
 
-  async processContainer(container: Container) {
+  async processContainer(container: Container): Promise<ContainerReport> {
     container.agent = this.name;
     // The container coming from Agent should already be normalized and have results
     // We rely on the Agent to perform Registry checks if configured
@@ -327,7 +341,8 @@ export class AgentClient {
     }
 
     // Emit report so Triggers can fire if changed
-    emitContainerReport(containerReport);
+    void emitContainerReport(containerReport);
+    return containerReport;
   }
 
   private getNextReconnectDelayMs(): number {
@@ -474,9 +489,7 @@ export class AgentClient {
       ? (snapshotPayload.containers as Container[])
       : [];
 
-    for (const container of containers) {
-      await this.processAuthoritativeContainer(container);
-    }
+    await this.processAuthoritativeContainers(containers);
 
     if (watcherName) {
       this.pruneOldContainers(containers, watcherName);
@@ -628,9 +641,7 @@ export class AgentClient {
         this.axiosOptions,
       );
       const reports = response.data;
-      for (const report of reports) {
-        await this.processAuthoritativeContainer(report.container);
-      }
+      await this.processAuthoritativeContainers(reports.map((report) => report.container));
       const containers = reports.map((report) => report.container);
       this.pruneOldContainers(containers, watcherName);
       return reports;

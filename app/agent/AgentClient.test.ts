@@ -25,6 +25,7 @@ vi.mock('../event/index.js', () => ({
   emitAgentConnected: vi.fn().mockResolvedValue(undefined),
   emitAgentDisconnected: vi.fn().mockResolvedValue(undefined),
   emitContainerReport: vi.fn(),
+  emitContainerReports: vi.fn(),
 }));
 vi.mock('../registry/index.js', () => ({
   deregisterAgentComponents: vi.fn(),
@@ -463,6 +464,38 @@ describe('AgentClient', () => {
       expect(event.emitAgentConnected).toHaveBeenCalledWith({ agentName: 'test-agent' });
     });
 
+    test('should emit batched container reports after handshake processing', async () => {
+      axios.get
+        .mockResolvedValueOnce({
+          data: [
+            { id: 'c1', name: 'one', watcher: 'local' },
+            { id: 'c2', name: 'two', watcher: 'local' },
+          ],
+        })
+        .mockResolvedValueOnce({ data: [] })
+        .mockResolvedValueOnce({ data: [] });
+
+      storeContainer.getContainer.mockReturnValue(undefined);
+      storeContainer.insertContainer.mockImplementation((container) => ({
+        ...container,
+        updateAvailable: true,
+      }));
+      storeContainer.getContainers.mockReturnValue([]);
+
+      await client.handshake();
+
+      expect(event.emitContainerReports).toHaveBeenCalledWith([
+        expect.objectContaining({
+          changed: true,
+          container: expect.objectContaining({ id: 'c1', agent: 'test-agent' }),
+        }),
+        expect.objectContaining({
+          changed: true,
+          container: expect.objectContaining({ id: 'c2', agent: 'test-agent' }),
+        }),
+      ]);
+    });
+
     test('should not emit agent-connected when already connected', async () => {
       client.isConnected = true;
       axios.get
@@ -877,6 +910,34 @@ describe('AgentClient', () => {
       expect(processSpy).toHaveBeenCalledWith({ id: 'c1', name: 'current', watcher: 'local' });
       expect(storeContainer.deleteContainer).toHaveBeenCalledWith('c2');
       expect(storeContainer.deleteContainer).not.toHaveBeenCalledWith('c3');
+    });
+
+    test('should emit batched container reports for watcher snapshots', async () => {
+      storeContainer.getContainer.mockReturnValue(undefined);
+      storeContainer.insertContainer.mockImplementation((container) => ({
+        ...container,
+        updateAvailable: true,
+      }));
+      storeContainer.getContainers.mockReturnValue([]);
+
+      await client.handleEvent('dd:watcher-snapshot', {
+        watcher: { type: 'docker', name: 'local' },
+        containers: [
+          { id: 'c1', name: 'current', watcher: 'local' },
+          { id: 'c2', name: 'next', watcher: 'local' },
+        ],
+      });
+
+      expect(event.emitContainerReports).toHaveBeenCalledWith([
+        expect.objectContaining({
+          changed: true,
+          container: expect.objectContaining({ id: 'c1', agent: 'test-agent' }),
+        }),
+        expect.objectContaining({
+          changed: true,
+          container: expect.objectContaining({ id: 'c2', agent: 'test-agent' }),
+        }),
+      ]);
     });
 
     test('should prune all containers for a watcher when a watcher snapshot is empty', async () => {
