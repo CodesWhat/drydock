@@ -276,6 +276,19 @@ services:
       - dd.display.name=Alpine (Latest)
       - dd.tag.include=^latest$$
 
+  # ── Container pinned at current version (skip update) ──
+  # Redis 7.4 has an update available but the bootstrap script
+  # calls the skip-update API so it shows the "pinned" badge.
+  redis-pinned:
+    image: redis:7.4.0
+    pull_policy: missing
+    container_name: drydock-playwright-redis-pinned
+    command: ["redis-server", "--save", ""]
+    labels:
+      - dd.watch=true
+      - dd.display.name=Redis (Pinned)
+      - dd.group=test
+
   # ── Log spammer (generates container log activity) ─────
 
   # Busybox printing a line every 5s — populates dashboard container log
