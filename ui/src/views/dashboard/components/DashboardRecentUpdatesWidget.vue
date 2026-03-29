@@ -181,14 +181,15 @@ watchEffect(() => {
                 {{ row.newVer }}
               </CopyableTag>
             </div>
-            <div class="flex sm:hidden flex-col items-start gap-0.5 min-w-0">
-              <CopyableTag :tag="row.oldVer" class="text-3xs dd-text-secondary break-all leading-tight">
+            <div class="flex sm:hidden flex-col items-center gap-0.5 min-w-0 max-w-full">
+              <CopyableTag :tag="row.oldVer" class="text-3xs dd-text-secondary truncate max-w-full leading-tight" v-tooltip.top="row.oldVer">
                 {{ row.oldVer }}
               </CopyableTag>
               <CopyableTag
                 :tag="row.newVer"
-                class="text-3xs font-semibold break-all leading-tight"
-                :style="{ color: getUpdateKindColor(row.updateKind) }">
+                class="text-3xs font-semibold truncate max-w-full leading-tight"
+                :style="{ color: getUpdateKindColor(row.updateKind) }"
+                v-tooltip.top="row.newVer">
                 {{ row.newVer }}
               </CopyableTag>
             </div>
