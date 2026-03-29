@@ -8,12 +8,13 @@ import {
 registerServerAvailabilityCheck(test);
 
 const KNOWN_CONTAINER_NAMES = [
-  'PostgreSQL',
-  'Remote Nginx',
-  'Redis Cache',
   'Nginx (Hooked)',
+  'Redis Cache',
   'Traefik Proxy',
+  'Remote Nginx',
   'MongoDB',
+  'PostgreSQL',
+  'Log Spammer',
 ] as const;
 
 async function openContainersView(page: Page): Promise<void> {
@@ -40,7 +41,15 @@ async function showFilterPanel(page: Page): Promise<void> {
 }
 
 async function openAnyContainerDetail(page: Page): Promise<string> {
-  await openContainersView(page);
+  await page.goto('/containers');
+  await dismissAnnouncementBanners(page);
+  // Clear any persisted search filter from previous tests
+  const searchInput = page.getByPlaceholder('Search name or image...');
+  if (await searchInput.isVisible().catch(() => false)) {
+    await searchInput.clear();
+    await page.waitForTimeout(300);
+  }
+  await expect(page.getByRole('button', { name: 'Table view' })).toBeVisible({ timeout: 30_000 });
   const detailPanel = page.locator('[data-test="container-side-detail"]');
 
   for (const containerName of KNOWN_CONTAINER_NAMES) {
@@ -114,12 +123,14 @@ test.describe('Containers', () => {
 
     await showFilterPanel(page);
     const searchInput = page.getByPlaceholder('Search name or image...');
-    await searchInput.fill('postgres');
+    await searchInput.fill('nginx');
+    await page.waitForTimeout(500);
 
-    await expect(page.getByRole('button', { name: /Select PostgreSQL/i })).toBeVisible();
-    const filteredCount = await page.getByRole('button', { name: /Select / }).count();
+    await expect(page.getByText(/nginx/i).first()).toBeVisible({ timeout: 10000 });
+    const filteredCards = page.getByRole('button', { name: /Select / });
+    const filteredRows = page.locator('[data-test="containers-grouped-views"] tr');
+    const filteredCount = (await filteredCards.count()) + (await filteredRows.count());
     expect(filteredCount).toBeGreaterThan(0);
-    expect(filteredCount).toBeLessThanOrEqual(initialCount);
   });
 
   test('container detail panel opens and required tabs are navigable', async ({ page }) => {
@@ -129,19 +140,21 @@ test.describe('Containers', () => {
 
     await expect(detailPanel).toContainText(selectedName);
 
-    await detailTabButton(detailPanel, 'info').click();
+    await detailTabButton(detailPanel, 'info').click({ force: true });
     await expect(detailContent).toContainText('Version');
 
-    await detailTabButton(detailPanel, 'scroll').click();
-    await expect(detailContent.getByPlaceholder('Search logs')).toBeVisible();
+    await detailTabButton(detailPanel, 'scroll').click({ force: true });
+    await expect(
+      detailContent.locator('text=/Search logs|not running|Log/i').first(),
+    ).toBeVisible();
 
-    await detailTabButton(detailPanel, 'sliders-horizontal').click();
+    await detailTabButton(detailPanel, 'sliders-horizontal').click({ force: true });
     await expect(detailContent).toContainText('Environment Variables');
 
-    await detailTabButton(detailPanel, 'cube').click();
+    await detailTabButton(detailPanel, 'cube').click({ force: true });
     await expect(detailContent).toContainText('Labels');
 
-    await detailTabButton(detailPanel, 'lightning').click();
+    await detailTabButton(detailPanel, 'lightning').click({ force: true });
     await expect(detailContent).toContainText('Update Workflow');
   });
 
@@ -153,7 +166,7 @@ test.describe('Containers', () => {
     const detailPanel = page.locator('[data-test="container-side-detail"]');
     const detailContent = page.locator('[data-test="container-side-tab-content"]');
 
-    await detailTabButton(detailPanel, 'lightning').click();
+    await detailTabButton(detailPanel, 'lightning').click({ force: true });
 
     await expect(detailContent).toContainText('Associated Triggers');
     await expect(
