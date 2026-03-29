@@ -20,4 +20,4 @@ elif git rev-parse --verify --quiet refs/remotes/origin/main >/dev/null; then
 fi
 
 echo "Running Qlty gate: ${cmd[*]}"
-"${cmd[@]}"
+"${cmd[@]}" </dev/null
