@@ -504,10 +504,24 @@ function confirmDashboardUpdateAll() {
   --vgl-resizer-border-color: var(--dd-text-secondary);
   --vgl-resizer-border-width: 1.5px;
   --vgl-resizer-size: 20px;
-  /* Grid library adds 16px margin on all 4 outer edges.
-     Pull top and left flush — right side is already correct. */
+  /* Grid library adds outer-edge margins equal to the item gap.
+     Pull top and left flush to align with page content.
+     Vertical stays at -16px (works at all breakpoints).
+     Horizontal must match the responsive gridMargin[0]. */
   margin-top: -16px;
-  margin-left: -16px;
+  margin-left: -10px;  /* mobile: gridMargin [10, 20] */
+}
+
+@media (min-width: 768px) {
+  .vgl-layout {
+    margin-left: -14px;  /* tablet: gridMargin [14, 18] */
+  }
+}
+
+@media (min-width: 1024px) {
+  .vgl-layout {
+    margin-left: -16px;  /* desktop: gridMargin [16, 16] */
+  }
 }
 
 /* Disable the initial fly-in — library sets inline transition styles */
