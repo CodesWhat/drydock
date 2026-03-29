@@ -110,12 +110,19 @@ async function ensureSidebarExpanded(page: Page): Promise<void> {
 }
 
 async function dismissAnnouncementBanners(page: Page): Promise<void> {
+  const dismissButtons = page.locator('[data-testid$="-dismiss-session"]');
+  await dismissButtons
+    .first()
+    .waitFor({ state: 'visible', timeout: 1_500 })
+    .catch(() => {});
+
   for (let attempt = 0; attempt < 8; attempt += 1) {
-    const dismissButton = page.locator('[data-testid$="-dismiss-session"]').first();
+    const dismissButton = dismissButtons.first();
     if (!(await dismissButton.isVisible().catch(() => false))) {
       return;
     }
     await dismissButton.click();
+    await page.waitForTimeout(100);
   }
 }
 
