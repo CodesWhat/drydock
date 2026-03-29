@@ -252,9 +252,14 @@ const openActionsContainer = computed(
           <AppBadge v-if="c.updateKind" size="xs" :custom="{ bg: updateKindColor(c.updateKind).bg, text: updateKindColor(c.updateKind).text }">
             {{ c.updateKind }}
           </AppBadge>
+          <AppBadge v-else-if="getContainerListPolicyState(c.name).skipped" size="xs" v-tooltip.top="'Pinned'" :custom="{ bg: 'var(--dd-success-muted)', text: 'var(--dd-success)' }">
+            <AppIcon name="pin" :size="12" />
+          </AppBadge>
+          <AppBadge v-else-if="!c.updateKind && !c.updateMaturity && !c.suggestedTag" size="xs" v-tooltip.top="'Up to date'" :custom="{ bg: 'var(--dd-success-muted)', text: 'var(--dd-success)' }">
+            <AppIcon name="up-to-date" :size="12" />
+          </AppBadge>
           <UpdateMaturityBadge :maturity="c.updateMaturity" :tooltip="c.updateMaturityTooltip" />
           <SuggestedTagBadge :tag="c.suggestedTag" :current-tag="c.currentTag" />
-          <span v-if="!c.updateKind && !c.updateMaturity && !(c.suggestedTag && (!c.currentTag || c.currentTag.toLowerCase() === 'latest'))" class="text-2xs dd-text-muted">&mdash;</span>
           </div>
         </template>
         <!-- Status -->

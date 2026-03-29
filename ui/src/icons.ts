@@ -288,6 +288,15 @@ export const iconMap: Record<string, Record<IconLibrary, string>> = {
     heroicons: 'heroicons:check-circle',
     iconoir: 'iconoir:check-circle',
   },
+  pin: {
+    'fa6-solid': 'fa6-solid:thumbtack',
+    ph: 'ph:push-pin',
+    'ph-duotone': 'ph:push-pin-duotone',
+    lucide: 'lucide:pin',
+    tabler: 'tabler:pin',
+    heroicons: 'heroicons:map-pin',
+    iconoir: 'iconoir:pin',
+  },
   stop: {
     'fa6-solid': 'fa6-solid:stop',
     ph: 'ph:stop',
