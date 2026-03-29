@@ -535,12 +535,22 @@ function confirmDashboardUpdateAll() {
   flex-direction: column;
 }
 
-/* Edit mode — dashed outline + grab cursor, disable interactive content */
+/* Edit mode — dashed border + grab cursor, disable interactive content.
+   Uses an inset pseudo-element instead of outline because CSS outlines
+   are clipped by ancestor overflow-hidden on items at the grid edges. */
 .dd-grid-edit {
-  outline: 2px dashed var(--dd-border-strong);
-  outline-offset: -2px;
-  border-radius: var(--dd-radius);
   cursor: grab;
+  position: relative;
+}
+
+.dd-grid-edit::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 2px dashed var(--dd-border-strong);
+  border-radius: var(--dd-radius);
+  pointer-events: none;
+  z-index: 1;
 }
 
 .dd-grid-edit:active {
