@@ -852,11 +852,11 @@ describe('api/container/log-stream', () => {
       dockerStream.emit(
         'data',
         dockerFrame(
-          [
+          `${[
             '2026-01-01T00:00:00.000000000Z first',
             '2026-01-01T00:00:01.000000000Z second',
             '2026-01-01T00:00:02.000000000Z third',
-          ].join('\n') + '\n',
+          ].join('\n')}\n`,
           1,
         ),
       );

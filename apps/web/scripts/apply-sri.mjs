@@ -58,9 +58,7 @@ export function applySriToHtml(html, manifest) {
 
 // ---- CLI entry point (skipped when imported as a module by tests) ----
 
-const isDirectRun =
-  process.argv[1] &&
-  import.meta.url === `file://${process.argv[1]}`;
+const isDirectRun = process.argv[1] && import.meta.url === `file://${process.argv[1]}`;
 
 if (isDirectRun) {
   if (!existsSync(MANIFEST_PATH)) {
