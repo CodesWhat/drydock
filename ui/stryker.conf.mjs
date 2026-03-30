@@ -13,7 +13,7 @@ const config = {
   testRunner: 'vitest',
   checkers: ['typescript'],
   tsconfigFile: 'tsconfig.json',
-  coverageAnalysis: 'off',
+  coverageAnalysis: 'perTest',
   reporters: ['clear-text', 'progress', 'html', ...(dashboardReporterEnabled ? ['dashboard'] : [])],
   htmlReporter: {
     fileName: 'reports/mutation/html/index.html',
@@ -29,6 +29,7 @@ const config = {
     : {}),
   vitest: {
     configFile: 'vitest.config.ts',
+    related: false,
   },
   thresholds: {
     high: 80,
