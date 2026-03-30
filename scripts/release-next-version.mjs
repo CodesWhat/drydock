@@ -17,6 +17,23 @@ const PATCH_TYPES = new Set([
 
 const conventionalSubjectRegex =
   /^(?:\S+\s+)?(?<type>feat|fix|docs|style|refactor|perf|test|chore|security|deps|revert)(?<breakingA>!)?(?:\([^)]+\))?(?<breakingB>!)?:\s.+$/u;
+const stableVersionRegex = /^v?(?<major>\d+)\.(?<minor>\d+)\.(?<patch>\d+)$/u;
+const explicitReleaseVersionRegex = /(?:^|[/: \t])v(?<version>\d+\.\d+\.\d+)(?![0-9A-Za-z.-])/u;
+
+function parseStableVersion(version) {
+  const match = String(version ?? '')
+    .trim()
+    .match(stableVersionRegex);
+  if (!match?.groups) {
+    throw new Error(`Invalid current version: ${version}`);
+  }
+
+  return {
+    major: Number(match.groups.major),
+    minor: Number(match.groups.minor),
+    patch: Number(match.groups.patch),
+  };
+}
 
 export function inferReleaseLevel(commits) {
   let hasFeat = false;
@@ -63,16 +80,7 @@ export function inferReleaseLevel(commits) {
 }
 
 export function bumpSemver(currentVersion, level) {
-  const match = String(currentVersion ?? '')
-    .trim()
-    .match(/^v?(?<major>\d+)\.(?<minor>\d+)\.(?<patch>\d+)$/u);
-  if (!match?.groups) {
-    throw new Error(`Invalid current version: ${currentVersion}`);
-  }
-
-  const major = Number(match.groups.major);
-  const minor = Number(match.groups.minor);
-  const patch = Number(match.groups.patch);
+  const { major, minor, patch } = parseStableVersion(currentVersion);
 
   if (level === 'major') {
     return `${major + 1}.0.0`;
@@ -85,6 +93,62 @@ export function bumpSemver(currentVersion, level) {
   }
 
   throw new Error(`Invalid release level: ${level}`);
+}
+
+function inferExplicitReleaseVersion(commits) {
+  for (const commit of commits) {
+    const message = String(commit ?? '').trim();
+    if (!message) {
+      continue;
+    }
+
+    const subject = message.split(/\r?\n/u, 1)[0] ?? '';
+    const match = subject.match(explicitReleaseVersionRegex);
+    if (match?.groups?.version) {
+      return match.groups.version;
+    }
+  }
+
+  return null;
+}
+
+function inferReleaseLevelFromVersions(currentVersion, nextVersion) {
+  const current = parseStableVersion(currentVersion);
+  const next = parseStableVersion(nextVersion);
+
+  if (next.major > current.major) {
+    return 'major';
+  }
+  if (next.major === current.major && next.minor > current.minor) {
+    return 'minor';
+  }
+  if (next.major === current.major && next.minor === current.minor && next.patch > current.patch) {
+    return 'patch';
+  }
+
+  throw new Error(
+    `Explicit release version ${nextVersion} is not newer than current version ${currentVersion}`,
+  );
+}
+
+export function resolveAutoRelease(currentVersion, commits) {
+  const explicitReleaseVersion = inferExplicitReleaseVersion(commits);
+  if (explicitReleaseVersion) {
+    return {
+      releaseLevel: inferReleaseLevelFromVersions(currentVersion, explicitReleaseVersion),
+      nextVersion: explicitReleaseVersion,
+    };
+  }
+
+  const releaseLevel = inferReleaseLevel(commits);
+  if (!releaseLevel) {
+    return null;
+  }
+
+  return {
+    releaseLevel,
+    nextVersion: bumpSemver(currentVersion, releaseLevel),
+  };
 }
 
 function parseArgs(argv) {
@@ -133,10 +197,16 @@ function main() {
       throw new Error('--from is required when --bump auto');
     }
     const commits = getCommitMessages(fromRef, toRef);
-    releaseLevel = inferReleaseLevel(commits);
-    if (!releaseLevel) {
+    const resolved = resolveAutoRelease(current, commits);
+    if (!resolved) {
       throw new Error('No releasable commits found between refs');
     }
+
+    releaseLevel = resolved.releaseLevel;
+    const nextVersion = resolved.nextVersion;
+    console.log(`release_level=${releaseLevel}`);
+    console.log(`next_version=${nextVersion}`);
+    return;
   }
 
   const nextVersion = bumpSemver(current, releaseLevel);
