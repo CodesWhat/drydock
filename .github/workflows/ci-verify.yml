@@ -1071,49 +1071,56 @@ jobs:
         run: |
           set -euo pipefail
 
-          latest_tag="$(git tag --list 'v*' --sort=-v:refname | head -n1)"
+          # Resolve latest stable tag (skip pre-release tags like v1.5.0-rc2
+          # since release-next-version.mjs only accepts X.Y.Z).
+          latest_tag="$(git tag --list 'v*' --sort=-v:refname \
+            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n1)"
           if [ -z "${latest_tag}" ]; then
             latest_tag="v0.0.0"
           fi
 
           current_version="${latest_tag#v}"
 
-          release_level=""
-          next_version=""
-
           if [ "${latest_tag}" = "v0.0.0" ]; then
             release_level="patch"
             next_version="0.0.1"
           else
             set +e
-            mapfile -t vars < <(node scripts/release-next-version.mjs \
+            output="$(node scripts/release-next-version.mjs \
               --current "${current_version}" \
               --bump auto \
               --from "${latest_tag}" \
-              --to "${TARGET_SHA}")
+              --to "${TARGET_SHA}" 2>&1)"
             rc=$?
             set -e
 
             if [ "${rc}" -ne 0 ]; then
-              echo "No releasable commits found; skipping auto tag."
-              echo "should_tag=false" >> "$GITHUB_OUTPUT"
-              exit 0
+              # Distinguish "no releasable commits" (exit 1 with known message)
+              # from unexpected errors that should fail the job.
+              if echo "${output}" | grep -qi "no releasable commits"; then
+                echo "No releasable commits since ${latest_tag}; skipping auto tag."
+                echo "should_tag=false" >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+              echo "::error::release-next-version.mjs failed: ${output}"
+              exit 1
             fi
 
-            for kv in "${vars[@]}"; do
+            release_level=""
+            next_version=""
+            while IFS= read -r kv; do
               key="${kv%%=*}"
               value="${kv#*=}"
               case "${key}" in
                 release_level) release_level="${value}" ;;
                 next_version) next_version="${value}" ;;
               esac
-            done
-          fi
+            done <<< "${output}"
 
-          if [ -z "${next_version}" ]; then
-            echo "No next version computed; skipping auto tag."
-            echo "should_tag=false" >> "$GITHUB_OUTPUT"
-            exit 0
+            if [ -z "${next_version}" ]; then
+              echo "::error::release-next-version.mjs succeeded but produced no next_version. Output: ${output}"
+              exit 1
+            fi
           fi
 
           release_tag="v${next_version}"
