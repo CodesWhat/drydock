@@ -86,16 +86,16 @@ const openActionsContainer = computed(
             {{ group.updatesAvailable }} update{{ group.updatesAvailable === 1 ? '' : 's' }}
           </AppBadge>
           <AppButton size="none" variant="plain" weight="none"
-            v-if="group.updatableCount > 0 || !containerActionsEnabled"
+            v-if="group.updatesAvailable > 0 || !containerActionsEnabled"
             class="ml-auto inline-flex items-center justify-center px-2 py-1 dd-rounded border text-2xs font-semibold transition-colors"
             :class="!containerActionsEnabled || groupUpdateInProgress.has(group.key)
               ? 'dd-text-muted cursor-not-allowed opacity-60'
               : 'dd-text hover:dd-bg-elevated'"
-            :disabled="!containerActionsEnabled || groupUpdateInProgress.has(group.key)"
-            v-tooltip.top="tt(containerActionsEnabled ? 'Update all in group' : containerActionsDisabledReason)"
+            :disabled="!containerActionsEnabled || group.updatableCount === 0 || groupUpdateInProgress.has(group.key)"
+            v-tooltip.top="tt(!containerActionsEnabled ? containerActionsDisabledReason : group.updatableCount === 0 ? 'All updates blocked by security scan' : 'Update all in group')"
             @click.stop="updateAllInGroup(group)">
             <AppIcon
-              :name="!containerActionsEnabled ? 'lock' : groupUpdateInProgress.has(group.key) ? 'spinner' : 'cloud-download'"
+              :name="!containerActionsEnabled || group.updatableCount === 0 ? 'lock' : groupUpdateInProgress.has(group.key) ? 'spinner' : 'cloud-download'"
               :size="14"
               class="mr-1"
               :class="!containerActionsEnabled ? '' : groupUpdateInProgress.has(group.key) ? 'dd-spin' : ''" />
