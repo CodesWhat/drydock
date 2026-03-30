@@ -1,0 +1,23 @@
+name: Setup Snyk
+description: Install Node.js and the pinned Snyk CLI for workflow jobs
+
+inputs:
+  node-version:
+    description: Node.js version to install
+    required: true
+  snyk-version:
+    description: Snyk CLI version to install
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f  # v6.3.0
+      with:
+        node-version: ${{ inputs.node-version }}
+
+    - name: Install Snyk CLI
+      uses: snyk/actions/setup@9adf32b1121593767fc3c057af55b55db032dc04  # v1.0.0
+      with:
+        snyk-version: ${{ inputs.snyk-version }}

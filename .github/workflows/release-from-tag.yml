@@ -5,7 +5,7 @@ on:
   push:
     tags: ['v*']
 
-permissions: read-all
+permissions: {}
 
 env:
   DOCKER_PLATFORMS: linux/amd64,linux/arm64
@@ -20,6 +20,10 @@ jobs:
     name: "✅ Release: Verify Prior CI Success"
     runs-on: ubuntu-latest
     timeout-minutes: 20  # Poll loop waits for prior branch CI status on tag SHA
+    outputs:
+      base_version: ${{ steps.tag.outputs.base_version }}
+      is_prerelease: ${{ steps.tag.outputs.is_prerelease }}
+      prerelease: ${{ steps.tag.outputs.prerelease }}
     permissions:
       contents: read
       actions: read
@@ -30,52 +34,28 @@ jobs:
         with:
           egress-policy: audit
 
-      - name: Resolve CI workflow reference
-        id: ci_workflow
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-
-          workflow_url="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/workflows/${CI_VERIFY_WORKFLOW_FILE}"
-          workflow_json="$(curl -fsSL \
-            -H "Authorization: Bearer ${GH_TOKEN}" \
-            -H "Accept: application/vnd.github+json" \
-            "${workflow_url}")"
-
-          workflow_id="$(echo "${workflow_json}" | jq -r '.id // empty')"
-          workflow_name="$(echo "${workflow_json}" | jq -r '.name // empty')"
-          workflow_path="$(echo "${workflow_json}" | jq -r '.path // empty')"
-          if [ -z "${workflow_id}" ] || [ -z "${workflow_path}" ]; then
-            echo "::error::Failed to resolve workflow metadata for ${CI_VERIFY_WORKFLOW_FILE}."
-            exit 1
-          fi
-
-          {
-            echo "id=${workflow_id}"
-            echo "name=${workflow_name}"
-            echo "path=${workflow_path}"
-          } >> "$GITHUB_OUTPUT"
-          echo "Using CI verification workflow: ${workflow_name} (${workflow_path}, id=${workflow_id})"
-
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
         with:
           persist-credentials: false
 
-      - name: Assert tag version matches package versions
+      - name: Parse release tag
+        id: tag
         run: |
           set -euo pipefail
 
-          tag_version="${GITHUB_REF_NAME#v}"
-          if [ -z "${tag_version}" ] || [ "${tag_version}" = "${GITHUB_REF_NAME}" ]; then
-            echo "::error::Tag '${GITHUB_REF_NAME}' does not match expected format vX.Y.Z[-prerelease]."
-            exit 1
-          fi
+          output="$(node scripts/release-tag.mjs --tag "${GITHUB_REF_NAME}")"
+          while IFS= read -r kv; do
+            key="${kv%%=*}"
+            value="${kv#*=}"
+            echo "${key}=${value}" >> "$GITHUB_OUTPUT"
+          done <<< "${output}"
 
-          # For prereleases (rc, nightly), compare base version only:
-          # v1.5.0-rc.1 → compare 1.5.0 against package.json
-          base_version="${tag_version%%-*}"
+      - name: Assert tag version matches package versions
+        env:
+          BASE_VERSION: ${{ steps.tag.outputs.base_version }}
+        run: |
+          set -euo pipefail
 
           for package_path in package.json app/package.json ui/package.json; do
             package_version="$(jq -r '.version // empty' "${package_path}")"
@@ -83,53 +63,22 @@ jobs:
               echo "::error::Missing required version field in ${package_path}"
               exit 1
             fi
-            if [ "${package_version}" != "${base_version}" ]; then
-              echo "::error::Version mismatch: tag base=${base_version} (from ${GITHUB_REF_NAME}), ${package_path}=${package_version}"
+            if [ "${package_version}" != "${BASE_VERSION}" ]; then
+              echo "::error::Version mismatch: tag base=${BASE_VERSION} (from ${GITHUB_REF_NAME}), ${package_path}=${package_version}"
               exit 1
             fi
           done
 
-          echo "Tag version ${base_version} matches package.json, app/package.json, and ui/package.json."
+          echo "Tag version ${BASE_VERSION} matches package.json, app/package.json, and ui/package.json."
 
       - name: Wait for successful branch CI on tag SHA
-        env:
-          GH_TOKEN: ${{ github.token }}
-          CI_WORKFLOW_ID: ${{ steps.ci_workflow.outputs.id }}
-          CI_WORKFLOW_NAME: ${{ steps.ci_workflow.outputs.name }}
-        run: |
-          set -euo pipefail
-
-          max_attempts=25
-          sleep_seconds=60
-
-          for attempt in $(seq 1 "${max_attempts}"); do
-            runs_url="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/workflows/${CI_WORKFLOW_ID}/runs?head_sha=${GITHUB_SHA}&event=push&per_page=50"
-            runs_json="$(curl -fsSL \
-              -H "Authorization: Bearer ${GH_TOKEN}" \
-              -H "Accept: application/vnd.github+json" \
-              "${runs_url}")"
-
-            success_count="$(echo "${runs_json}" | jq '[.workflow_runs[] | select(.conclusion == "success" and ((.head_branch // "") | length > 0))] | length')"
-            in_progress_count="$(echo "${runs_json}" | jq '[.workflow_runs[] | select(.status != "completed" and ((.head_branch // "") | length > 0))] | length')"
-            completed_count="$(echo "${runs_json}" | jq '[.workflow_runs[] | select(.status == "completed" and ((.head_branch // "") | length > 0))] | length')"
-
-            if [ "${success_count}" -gt 0 ]; then
-              echo "Found successful ${CI_WORKFLOW_NAME} push run for ${GITHUB_SHA}."
-              exit 0
-            fi
-
-            if [ "${completed_count}" -gt 0 ] && [ "${in_progress_count}" -eq 0 ]; then
-              echo "::error::${CI_WORKFLOW_NAME} branch push runs for ${GITHUB_SHA} completed without success."
-              echo "${runs_json}" | jq '.workflow_runs[] | select((.head_branch // "") | length > 0) | {id, status, conclusion, head_branch, html_url}'
-              exit 1
-            fi
-
-            echo "Attempt ${attempt}/${max_attempts}: waiting for ${CI_WORKFLOW_NAME} branch push run on ${GITHUB_SHA}..."
-            sleep "${sleep_seconds}"
-          done
-
-          echo "::error::Timed out waiting for successful ${CI_WORKFLOW_NAME} branch push run on ${GITHUB_SHA}."
-          exit 1
+        uses: ./.github/actions/wait-for-successful-branch-ci
+        with:
+          github-token: ${{ github.token }}
+          workflow-file: ${{ env.CI_VERIFY_WORKFLOW_FILE }}
+          target-sha: ${{ github.sha }}
+          max-attempts: '25'
+          sleep-seconds: '60'
 
   release:
     name: "🚀 Release: Docker Build & Push"
@@ -418,6 +367,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         id: release_notes
         env:
+          IS_PRERELEASE: ${{ needs.verify-ci.outputs.is_prerelease }}
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
@@ -428,7 +378,7 @@ jobs:
           missing_heading="## [${RELEASE_TAG#v}] - YYYY-MM-DD"
           if ! node scripts/extract-changelog-entry.mjs --version "${RELEASE_TAG}" --file CHANGELOG.md > "${entry_path}"; then
             # For pre-releases (rc, beta, alpha), try [Unreleased] as fallback
-            if [[ "${RELEASE_TAG}" == *-* ]] && node scripts/extract-changelog-entry.mjs --version "Unreleased" --file CHANGELOG.md > "${entry_path}" 2>/dev/null; then
+            if [ "${IS_PRERELEASE}" = "true" ] && node scripts/extract-changelog-entry.mjs --version "Unreleased" --file CHANGELOG.md > "${entry_path}" 2>/dev/null; then
               echo "Using [Unreleased] changelog section for pre-release ${RELEASE_TAG}."
             else
               rm -f "${entry_path}" "${notes_path}"
@@ -453,14 +403,14 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         env:
           GH_TOKEN: ${{ github.token }}
+          IS_PRERELEASE: ${{ needs.verify-ci.outputs.is_prerelease }}
           RELEASE_TAG: ${{ github.ref_name }}
           RELEASE_NOTES_PATH: ${{ steps.release_notes.outputs.path }}
         run: |
-          # Mark RC and nightly tags as prerelease on GitHub
           prerelease_flag=""
-          case "${RELEASE_TAG}" in
-            *-rc.*) prerelease_flag="--prerelease" ;;
-          esac
+          if [ "${IS_PRERELEASE}" = "true" ]; then
+            prerelease_flag="--prerelease"
+          fi
 
           gh release view "${RELEASE_TAG}" >/dev/null 2>&1 || gh release create "${RELEASE_TAG}" --title "${RELEASE_TAG}" --notes-file "${RELEASE_NOTES_PATH}" ${prerelease_flag}
           gh release edit "${RELEASE_TAG}" --title "${RELEASE_TAG}" --notes-file "${RELEASE_NOTES_PATH}" ${prerelease_flag}

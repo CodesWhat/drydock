@@ -102,13 +102,11 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Setup Node.js
-        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f  # v6.3.0
+      - name: Setup Snyk toolchain
+        uses: ./.github/actions/setup-snyk
         with:
-          node-version: 24
-
-      - name: Install Snyk CLI
-        run: npm install -g "snyk@${SNYK_CLI_VERSION}"
+          node-version: '24'
+          snyk-version: v${{ env.SNYK_CLI_VERSION }}
 
       - name: Run Snyk Open Source scans
         run: |
@@ -140,13 +138,11 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Setup Node.js
-        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f  # v6.3.0
+      - name: Setup Snyk toolchain
+        uses: ./.github/actions/setup-snyk
         with:
-          node-version: 24
-
-      - name: Install Snyk CLI
-        run: npm install -g "snyk@${SNYK_CLI_VERSION}"
+          node-version: '24'
+          snyk-version: v${{ env.SNYK_CLI_VERSION }}
 
       - name: Run Snyk Code scan
         run: ./scripts/snyk-code-gate.sh
@@ -172,13 +168,11 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Setup Node.js
-        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f  # v6.3.0
+      - name: Setup Snyk toolchain
+        uses: ./.github/actions/setup-snyk
         with:
-          node-version: 24
-
-      - name: Install Snyk CLI
-        run: npm install -g "snyk@${SNYK_CLI_VERSION}"
+          node-version: '24'
+          snyk-version: v${{ env.SNYK_CLI_VERSION }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd  # v4.0.0
@@ -218,13 +212,11 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Setup Node.js
-        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f  # v6.3.0
+      - name: Setup Snyk toolchain
+        uses: ./.github/actions/setup-snyk
         with:
-          node-version: 24
-
-      - name: Install Snyk CLI
-        run: npm install -g "snyk@${SNYK_CLI_VERSION}"
+          node-version: '24'
+          snyk-version: v${{ env.SNYK_CLI_VERSION }}
 
       - name: Run Snyk IaC scan
         run: ./scripts/snyk-iac-gate.sh .
