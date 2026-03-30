@@ -850,6 +850,128 @@ test('removeContainerSensor should clean up stale tracked topic when container i
   expect(removedTopics).toContain('homeassistant/update/topic_watcher-name_old-name/config');
 });
 
+test('removeContainerSensor should keep a canonical topic when another live container still uses it', async () => {
+  vi.spyOn(hass, 'updateContainerSensors').mockResolvedValue(undefined);
+
+  await hass.addContainerSensor({
+    id: 'old-container-id',
+    name: 'termix',
+    watcher: 'watcher-name',
+    displayIcon: 'mdi:docker',
+  });
+  await hass.addContainerSensor({
+    id: 'new-container-id',
+    name: 'termix',
+    watcher: 'watcher-name',
+    displayIcon: 'mdi:docker',
+  });
+
+  mqttClientMock.publish.mockClear();
+
+  vi.spyOn(containerStore, 'getContainers').mockReturnValue([
+    {
+      id: 'new-container-id',
+      name: 'termix',
+      watcher: 'watcher-name',
+      displayIcon: 'mdi:docker',
+    },
+  ] as any);
+
+  await hass.removeContainerSensor({
+    id: 'old-container-id',
+    name: 'termix',
+    watcher: 'watcher-name',
+    displayIcon: 'mdi:docker',
+  });
+
+  expect(mqttClientMock.publish).not.toHaveBeenCalledWith(
+    'homeassistant/update/topic_watcher-name_termix/config',
+    '',
+    { retain: true },
+  );
+});
+
+test('removeContainerSensor should still remove topic when watcher name is empty', async () => {
+  vi.spyOn(hass, 'updateContainerSensors').mockResolvedValue(undefined);
+
+  await hass.addContainerSensor({
+    id: 'container-1',
+    name: 'app',
+    watcher: '',
+    displayIcon: 'mdi:docker',
+  });
+
+  mqttClientMock.publish.mockClear();
+
+  await hass.removeContainerSensor({
+    id: 'container-1',
+    name: 'app',
+    watcher: '',
+    displayIcon: 'mdi:docker',
+  });
+
+  expect(mqttClientMock.publish).toHaveBeenCalledWith(
+    'homeassistant/update/topic__app/config',
+    '',
+    { retain: true },
+  );
+});
+
+test('removeContainerSensor should still remove topic when store throws', async () => {
+  vi.spyOn(hass, 'updateContainerSensors').mockResolvedValue(undefined);
+
+  await hass.addContainerSensor({
+    id: 'container-1',
+    name: 'app',
+    watcher: 'local',
+    displayIcon: 'mdi:docker',
+  });
+
+  mqttClientMock.publish.mockClear();
+  vi.spyOn(containerStore, 'getContainers').mockImplementation(() => {
+    throw new Error('store unavailable');
+  });
+
+  await hass.removeContainerSensor({
+    id: 'container-1',
+    name: 'app',
+    watcher: 'local',
+    displayIcon: 'mdi:docker',
+  });
+
+  expect(mqttClientMock.publish).toHaveBeenCalledWith(
+    'homeassistant/update/topic_local_app/config',
+    '',
+    { retain: true },
+  );
+});
+
+test('removeContainerSensor should still remove topic when watcher is not a string', async () => {
+  vi.spyOn(hass, 'updateContainerSensors').mockResolvedValue(undefined);
+
+  await hass.addContainerSensor({
+    id: 'container-1',
+    name: 'app',
+    watcher: undefined,
+    displayIcon: 'mdi:docker',
+  });
+
+  mqttClientMock.publish.mockClear();
+
+  await hass.removeContainerSensor({
+    id: 'container-1',
+    name: 'app',
+    watcher: undefined,
+    displayIcon: 'mdi:docker',
+  });
+
+  expect(mqttClientMock.publish).toHaveBeenCalledWith(
+    'homeassistant/update/topic_undefined_app/config',
+    '',
+    { retain: true },
+  );
+});
+
 test('addContainerSensor should enforce a defensive cap on tracked state topics', async () => {
   const hassNoDiscovery = new Hass({
     client: mqttClientMock,
