@@ -41,80 +41,23 @@ jobs:
           echo "sha=${sha}" >> "$GITHUB_OUTPUT"
           echo "Target SHA: ${sha}"
 
-      - name: Resolve CI workflow reference
-        id: ci_workflow
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-
-          workflow_url="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/workflows/${CI_VERIFY_WORKFLOW_FILE}"
-          workflow_json="$(curl -fsSL \
-            -H "Authorization: Bearer ${GH_TOKEN}" \
-            -H "Accept: application/vnd.github+json" \
-            "${workflow_url}")"
-
-          workflow_id="$(echo "${workflow_json}" | jq -r '.id // empty')"
-          workflow_name="$(echo "${workflow_json}" | jq -r '.name // empty')"
-          workflow_path="$(echo "${workflow_json}" | jq -r '.path // empty')"
-          if [ -z "${workflow_id}" ] || [ -z "${workflow_path}" ]; then
-            echo "::error::Failed to resolve workflow metadata for ${CI_VERIFY_WORKFLOW_FILE}."
-            exit 1
-          fi
-
-          {
-            echo "id=${workflow_id}"
-            echo "name=${workflow_name}"
-            echo "path=${workflow_path}"
-          } >> "$GITHUB_OUTPUT"
-          echo "Using CI verification workflow: ${workflow_name} (${workflow_path}, id=${workflow_id})"
-
       - name: Verify successful branch CI on target SHA
-        env:
-          GH_TOKEN: ${{ github.token }}
-          CI_WORKFLOW_ID: ${{ steps.ci_workflow.outputs.id }}
-          CI_WORKFLOW_NAME: ${{ steps.ci_workflow.outputs.name }}
-          TARGET_SHA: ${{ steps.target.outputs.sha }}
-        run: |
-          set -euo pipefail
-
-          max_attempts=20
-          sleep_seconds=15
-
-          for attempt in $(seq 1 "${max_attempts}"); do
-            runs_url="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/workflows/${CI_WORKFLOW_ID}/runs?head_sha=${TARGET_SHA}&event=push&per_page=50"
-            runs_json="$(curl -fsSL \
-              -H "Authorization: Bearer ${GH_TOKEN}" \
-              -H "Accept: application/vnd.github+json" \
-              "${runs_url}")"
-
-            successful_runs="$(echo "${runs_json}" | jq '[.workflow_runs[] | select(.conclusion == "success" and ((.head_branch // "") | length > 0))] | length')"
-            in_progress_runs="$(echo "${runs_json}" | jq '[.workflow_runs[] | select(.status != "completed" and ((.head_branch // "") | length > 0))] | length')"
-            completed_runs="$(echo "${runs_json}" | jq '[.workflow_runs[] | select(.status == "completed" and ((.head_branch // "") | length > 0))] | length')"
-
-            if [ "${successful_runs}" -gt 0 ]; then
-              echo "Found successful ${CI_WORKFLOW_NAME} branch push run for ${TARGET_SHA}."
-              exit 0
-            fi
-
-            if [ "${completed_runs}" -gt 0 ] && [ "${in_progress_runs}" -eq 0 ]; then
-              echo "::error::${CI_WORKFLOW_NAME} branch push runs for ${TARGET_SHA} completed without success."
-              echo "${runs_json}" | jq '.workflow_runs[] | select((.head_branch // "") | length > 0) | {id, status, conclusion, head_branch, html_url}'
-              exit 1
-            fi
-
-            echo "Attempt ${attempt}/${max_attempts}: waiting for successful ${CI_WORKFLOW_NAME} branch push run on ${TARGET_SHA}..."
-            sleep "${sleep_seconds}"
-          done
-
-          echo "::error::Timed out waiting for successful ${CI_WORKFLOW_NAME} branch push run on ${TARGET_SHA}."
-          exit 1
+        uses: ./.github/actions/wait-for-successful-branch-ci
+        with:
+          github-token: ${{ github.token }}
+          workflow-file: ${{ env.CI_VERIFY_WORKFLOW_FILE }}
+          target-sha: ${{ steps.target.outputs.sha }}
+          max-attempts: '20'
+          sleep-seconds: '15'
 
       - name: Find latest release tag
         id: base
         run: |
           set -euo pipefail
-          latest_tag="$(git tag --list 'v*' --sort=-v:refname | head -n1)"
+          # Resolve latest stable tag (skip pre-release tags like v1.5.0-rc.2
+          # since release-next-version.mjs only accepts X.Y.Z).
+          latest_tag="$(git tag --list 'v*' --sort=-v:refname \
+            | awk '/^v[0-9]+\.[0-9]+\.[0-9]+$/ { print; exit }')"
           if [ -z "${latest_tag}" ]; then
             latest_tag="v0.0.0"
           fi
@@ -136,20 +79,39 @@ jobs:
             release_level="patch"
             next_version="0.0.1"
           else
-            mapfile -t vars < <(node scripts/release-next-version.mjs \
+            set +e
+            output="$(node scripts/release-next-version.mjs \
               --current "${CURRENT_VERSION}" \
               --bump "${BUMP}" \
               --from "${LATEST_TAG}" \
-              --to "${TARGET_SHA}")
+              --to "${TARGET_SHA}" 2>&1)"
+            rc=$?
+            set -e
 
-            for kv in "${vars[@]}"; do
+            if [ "${rc}" -ne 0 ]; then
+              if echo "${output}" | grep -qi "no releasable commits"; then
+                echo "::error::No releasable commits since ${LATEST_TAG}; refusing to cut a release tag."
+              else
+                echo "::error::release-next-version.mjs failed: ${output}"
+              fi
+              exit 1
+            fi
+
+            release_level=""
+            next_version=""
+            while IFS= read -r kv; do
               key="${kv%%=*}"
               value="${kv#*=}"
               case "${key}" in
                 release_level) release_level="${value}" ;;
                 next_version) next_version="${value}" ;;
               esac
-            done
+            done <<< "${output}"
+
+            if [ -z "${release_level}" ] || [ -z "${next_version}" ]; then
+              echo "::error::release-next-version.mjs succeeded but returned incomplete output. Output: ${output}"
+              exit 1
+            fi
           fi
 
           release_tag="v${next_version}"

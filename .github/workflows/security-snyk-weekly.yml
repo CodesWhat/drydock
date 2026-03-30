@@ -102,14 +102,10 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Setup Node.js
-        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f  # v6.3.0
+      - name: Setup Snyk toolchain
+        uses: ./.github/actions/setup-snyk
         with:
-          node-version: 24
-
-      - name: Install Snyk CLI
-        uses: snyk/actions/setup@9adf32b1121593767fc3c057af55b55db032dc04  # v1.0.0
-        with:
+          node-version: '24'
           snyk-version: v${{ env.SNYK_CLI_VERSION }}
 
       - name: Run Snyk Open Source scans
@@ -142,14 +138,10 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Setup Node.js
-        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f  # v6.3.0
+      - name: Setup Snyk toolchain
+        uses: ./.github/actions/setup-snyk
         with:
-          node-version: 24
-
-      - name: Install Snyk CLI
-        uses: snyk/actions/setup@9adf32b1121593767fc3c057af55b55db032dc04  # v1.0.0
-        with:
+          node-version: '24'
           snyk-version: v${{ env.SNYK_CLI_VERSION }}
 
       - name: Run Snyk Code scan
@@ -176,14 +168,10 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Setup Node.js
-        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f  # v6.3.0
+      - name: Setup Snyk toolchain
+        uses: ./.github/actions/setup-snyk
         with:
-          node-version: 24
-
-      - name: Install Snyk CLI
-        uses: snyk/actions/setup@9adf32b1121593767fc3c057af55b55db032dc04  # v1.0.0
-        with:
+          node-version: '24'
           snyk-version: v${{ env.SNYK_CLI_VERSION }}
 
       - name: Set up Docker Buildx
@@ -224,14 +212,10 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Setup Node.js
-        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f  # v6.3.0
+      - name: Setup Snyk toolchain
+        uses: ./.github/actions/setup-snyk
         with:
-          node-version: 24
-
-      - name: Install Snyk CLI
-        uses: snyk/actions/setup@9adf32b1121593767fc3c057af55b55db032dc04  # v1.0.0
-        with:
+          node-version: '24'
           snyk-version: v${{ env.SNYK_CLI_VERSION }}
 
       - name: Run Snyk IaC scan
