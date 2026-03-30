@@ -30,8 +30,7 @@ concurrency:
   group: ci-verify-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-permissions:
-  contents: read
+permissions: {}
 
 jobs:
   zizmor:
@@ -1079,6 +1078,9 @@ jobs:
 
           current_version="${latest_tag#v}"
 
+          release_level=""
+          next_version=""
+
           if [ "${latest_tag}" = "v0.0.0" ]; then
             release_level="patch"
             next_version="0.0.1"
@@ -1106,6 +1108,12 @@ jobs:
                 next_version) next_version="${value}" ;;
               esac
             done
+          fi
+
+          if [ -z "${next_version}" ]; then
+            echo "No next version computed; skipping auto tag."
+            echo "should_tag=false" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
 
           release_tag="v${next_version}"

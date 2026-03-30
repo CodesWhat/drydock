@@ -5,7 +5,7 @@ on:
   push:
     tags: ['v*']
 
-permissions: read-all
+permissions: {}
 
 env:
   DOCKER_PLATFORMS: linux/amd64,linux/arm64

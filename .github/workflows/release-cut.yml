@@ -4,9 +4,7 @@ run-name: "🏷️ Release: Cut — manual by ${{ github.actor }}"
 on:
   workflow_dispatch:
 
-permissions:
-  contents: write
-  actions: read
+permissions: {}
 
 concurrency:
   group: release-cut
@@ -20,6 +18,9 @@ jobs:
     name: "🏷️ Release: Cut Tag"
     runs-on: ubuntu-latest
     timeout-minutes: 20  # Includes CI-success polling for target SHA before tagging
+    permissions:
+      contents: write
+      actions: read
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594  # v2.16.0

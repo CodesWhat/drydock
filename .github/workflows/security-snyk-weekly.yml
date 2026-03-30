@@ -108,7 +108,9 @@ jobs:
           node-version: 24
 
       - name: Install Snyk CLI
-        run: npm install -g "snyk@${SNYK_CLI_VERSION}"
+        uses: snyk/actions/setup@9adf32b1121593767fc3c057af55b55db032dc04  # v1.0.0
+        with:
+          snyk-version: v${{ env.SNYK_CLI_VERSION }}
 
       - name: Run Snyk Open Source scans
         run: |
@@ -146,7 +148,9 @@ jobs:
           node-version: 24
 
       - name: Install Snyk CLI
-        run: npm install -g "snyk@${SNYK_CLI_VERSION}"
+        uses: snyk/actions/setup@9adf32b1121593767fc3c057af55b55db032dc04  # v1.0.0
+        with:
+          snyk-version: v${{ env.SNYK_CLI_VERSION }}
 
       - name: Run Snyk Code scan
         run: ./scripts/snyk-code-gate.sh
@@ -178,7 +182,9 @@ jobs:
           node-version: 24
 
       - name: Install Snyk CLI
-        run: npm install -g "snyk@${SNYK_CLI_VERSION}"
+        uses: snyk/actions/setup@9adf32b1121593767fc3c057af55b55db032dc04  # v1.0.0
+        with:
+          snyk-version: v${{ env.SNYK_CLI_VERSION }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd  # v4.0.0
@@ -224,7 +230,9 @@ jobs:
           node-version: 24
 
       - name: Install Snyk CLI
-        run: npm install -g "snyk@${SNYK_CLI_VERSION}"
+        uses: snyk/actions/setup@9adf32b1121593767fc3c057af55b55db032dc04  # v1.0.0
+        with:
+          snyk-version: v${{ env.SNYK_CLI_VERSION }}
 
       - name: Run Snyk IaC scan
         run: ./scripts/snyk-iac-gate.sh .
