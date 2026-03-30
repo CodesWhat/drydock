@@ -33,6 +33,36 @@ function closeServer(server: http.Server): Promise<void> {
   });
 }
 
+function requestOverSocket(
+  socketPath: string,
+  path: string,
+): Promise<{ statusCode: number; body: string }> {
+  return new Promise((resolve, reject) => {
+    const req = http.request(
+      {
+        socketPath,
+        path,
+        method: 'GET',
+      },
+      (res) => {
+        let body = '';
+        res.setEncoding('utf8');
+        res.on('data', (chunk) => {
+          body += chunk;
+        });
+        res.on('end', () => {
+          resolve({
+            statusCode: res.statusCode ?? 0,
+            body,
+          });
+        });
+      },
+    );
+    req.on('error', reject);
+    req.end();
+  });
+}
+
 /**
  * Simulates a Podman-like daemon that:
  * - Serves /version with ApiVersion
@@ -91,8 +121,8 @@ function podmanHandler(req: http.IncomingMessage, res: http.ServerResponse): voi
     return;
   }
 
-  res.writeHead(404);
-  res.end(`Not found: ${url}`);
+  res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+  res.end('Not found');
 }
 
 describe('Podman redirect guard integration', () => {
@@ -113,6 +143,17 @@ describe('Podman redirect guard integration', () => {
     const version = await probeSocketApiVersion(socketPath);
 
     expect(version).toBe('1.44');
+  });
+
+  test('404 handler does not reflect request URL in response body', async () => {
+    const { socketPath, server } = createMockSocket(podmanHandler);
+    servers.push(server);
+    await listenOnSocket(server, socketPath);
+
+    const response = await requestOverSocket(socketPath, '/missing?<script>alert(1)</script>');
+
+    expect(response.statusCode).toBe(404);
+    expect(response.body).toBe('Not found');
   });
 
   test('version-pinned Dockerode uses versioned paths that bypass 301 redirects', async () => {

@@ -14,7 +14,7 @@
  * looks up their integrity hash from the manifest, and injects the attributes.
  */
 
-import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const NEXT_DIR = join(process.cwd(), ".next");
@@ -76,13 +76,13 @@ if (isDirectRun) {
   let totalTags = 0;
 
   function walk(dir) {
-    for (const entry of readdirSync(dir)) {
-      const full = join(dir, entry);
-      if (statSync(full).isDirectory()) {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) {
         walk(full);
         continue;
       }
-      if (!entry.endsWith(".html")) {
+      if (!entry.isFile() || !entry.name.endsWith(".html")) {
         continue;
       }
 
