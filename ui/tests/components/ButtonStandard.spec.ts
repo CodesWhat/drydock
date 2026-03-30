@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
+import { JSDOM } from 'jsdom';
 import { describe, expect, it } from 'vitest';
 
 const SRC_DIR = join(process.cwd(), 'src');
@@ -18,6 +19,37 @@ const ALLOWED_ICON_ONLY_APP_BUTTON_FILES = new Set([
   'src/components/containers/ContainerFullPageTabContent.vue',
   'src/components/containers/ContainerSideTabContent.vue',
 ]);
+
+function getVisibleText(source: string): string {
+  const dom = new JSDOM(`<body>${source}</body>`);
+  const { document, Node } = dom.window;
+
+  function collectText(node: ParentNode): string {
+    let text = '';
+
+    for (const child of node.childNodes) {
+      if (child.nodeType === Node.TEXT_NODE) {
+        text += child.textContent ?? '';
+        continue;
+      }
+
+      if (child.nodeType !== Node.ELEMENT_NODE) {
+        continue;
+      }
+
+      if (child instanceof dom.window.HTMLTemplateElement) {
+        text += collectText(child.content);
+        continue;
+      }
+
+      text += collectText(child);
+    }
+
+    return text;
+  }
+
+  return collectText(document.body).replace(/\s+/g, '').trim();
+}
 
 function collectVueFiles(dir: string): string[] {
   const entries = readdirSync(dir, { withFileTypes: true });
@@ -77,10 +109,7 @@ describe('button standard', () => {
           return false;
         }
 
-        const visibleContent = inner
-          .replace(/<[^>]+>/g, '')
-          .replace(/\s+/g, '')
-          .trim();
+        const visibleContent = getVisibleText(inner);
         return visibleContent.length === 0;
       });
 

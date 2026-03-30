@@ -74,56 +74,6 @@ const mockAxios = axios as Mocked<typeof axios>;
 
 // --- Shared factory functions to reduce test duplication ---
 
-/** Base OIDC auth configuration for remote Docker API tests. */
-function createOidcConfig(oidcOverrides = {}, configOverrides = {}) {
-  return {
-    host: 'docker-api.example.com',
-    port: 443,
-    protocol: 'https',
-    auth: {
-      type: 'oidc',
-      oidc: {
-        tokenurl: 'https://idp.example.com/oauth/token',
-        ...oidcOverrides,
-      },
-    },
-    ...configOverrides,
-  };
-}
-
-/** Device flow OIDC config (adds deviceurl + clientid to base OIDC). */
-function createDeviceFlowConfig(oidcOverrides = {}, configOverrides = {}) {
-  return createOidcConfig(
-    {
-      deviceurl: 'https://idp.example.com/oauth/device/code',
-      clientid: 'dd-device-client',
-      ...oidcOverrides,
-    },
-    configOverrides,
-  );
-}
-
-/** Standard device authorization response from the IdP. */
-function createDeviceCodeResponse(overrides = {}) {
-  return {
-    device_code: 'device-code-123',
-    user_code: 'ABCD-1234',
-    verification_uri: 'https://idp.example.com/device',
-    interval: 1,
-    expires_in: 300,
-    ...overrides,
-  };
-}
-
-/** Token response from the IdP. */
-function createTokenResponse(overrides = {}) {
-  return {
-    access_token: 'test-token',
-    expires_in: 3600,
-    ...overrides,
-  };
-}
-
 /** Creates a mock log object with commonly needed methods. */
 function createMockLog(methods = ['info', 'warn', 'debug', 'error']) {
   const log = {};
@@ -214,47 +164,6 @@ function createHaParseMock() {
       return { domain: 'ghcr.io', path: 'home-assistant/home-assistant' };
     }
     return { domain: 'docker.io', path: 'library/nginx', tag: '1.0.0' };
-  };
-}
-
-function createDockerOidcStateAdapter(docker) {
-  return {
-    get accessToken() {
-      return docker.remoteOidcAccessToken;
-    },
-    set accessToken(value) {
-      docker.remoteOidcAccessToken = value;
-    },
-    get refreshToken() {
-      return docker.remoteOidcRefreshToken;
-    },
-    set refreshToken(value) {
-      docker.remoteOidcRefreshToken = value;
-    },
-    get accessTokenExpiresAt() {
-      return docker.remoteOidcAccessTokenExpiresAt;
-    },
-    set accessTokenExpiresAt(value) {
-      docker.remoteOidcAccessTokenExpiresAt = value;
-    },
-    get deviceCodeCompleted() {
-      return docker.remoteOidcDeviceCodeCompleted;
-    },
-    set deviceCodeCompleted(value) {
-      docker.remoteOidcDeviceCodeCompleted = value;
-    },
-  };
-}
-
-function createDockerOidcContext(docker) {
-  return {
-    watcherName: docker.name,
-    log: docker.log,
-    state: createDockerOidcStateAdapter(docker),
-    getOidcAuthString: (paths) => docker.getOidcAuthString(paths),
-    getOidcAuthNumber: (paths) => docker.getOidcAuthNumber(paths),
-    normalizeNumber: testable_normalizeConfigNumberValue,
-    sleep: (ms) => docker.sleep(ms),
   };
 }
 

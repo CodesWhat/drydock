@@ -162,80 +162,6 @@ function createMockLogWithChild(childMethods = ['info', 'warn', 'debug', 'error'
   };
 }
 
-/** Standard mock registry for container detail tests. */
-function createMockRegistry(id = 'hub', matchFn = () => true) {
-  return {
-    normalizeImage: vi.fn((img) => img),
-    getId: () => id,
-    match: matchFn,
-  };
-}
-
-/** Standard image details fixture. */
-function createImageDetails(overrides = {}) {
-  return {
-    Id: 'image123',
-    Architecture: 'amd64',
-    Os: 'linux',
-    Created: '2023-01-01',
-    ...overrides,
-  };
-}
-
-/** Standard container fixture for Docker API list results. */
-function createDockerContainer(overrides = {}) {
-  return {
-    Id: '123',
-    Names: ['/test-container'],
-    State: 'running',
-    Labels: {},
-    ...overrides,
-  };
-}
-
-/**
- * Harbor + Docker Hub dual-registry state for lookup label tests.
- */
-function createHarborHubRegistryState() {
-  return {
-    harbor: {
-      normalizeImage: vi.fn((img) => img),
-      getId: () => 'harbor',
-      match: (img) => img.registry.url === 'harbor.example.com',
-    },
-    hub: {
-      normalizeImage: vi.fn((img) => ({
-        ...img,
-        registry: {
-          ...img.registry,
-          url: 'https://registry-1.docker.io/v2',
-        },
-      })),
-      getId: () => 'hub',
-      match: (img) => !img.registry.url || /^.*\.?docker.io$/.test(img.registry.url),
-    },
-  };
-}
-
-/**
- * Home Assistant mockParse implementation (used in multiple imgset tests).
- * Maps HA image strings to their parsed components.
- */
-function createHaParseMock() {
-  return (value) => {
-    if (value === 'ghcr.io/home-assistant/home-assistant:2026.2.1') {
-      return { domain: 'ghcr.io', path: 'home-assistant/home-assistant', tag: '2026.2.1' };
-    }
-    if (value === 'ghcr.io/home-assistant/home-assistant:stable') {
-      return { domain: 'ghcr.io', path: 'home-assistant/home-assistant', tag: 'stable' };
-    }
-    if (value === 'ghcr.io/home-assistant/home-assistant') {
-      return { domain: 'ghcr.io', path: 'home-assistant/home-assistant' };
-    }
-    return { domain: 'docker.io', path: 'library/nginx', tag: '1.0.0' };
-  };
-}
-
 function createDockerOidcStateAdapter(docker) {
   return {
     get accessToken() {
@@ -277,60 +203,12 @@ function createDockerOidcContext(docker) {
   };
 }
 
-/**
- * Setup a container-detail test: registers the watcher, sets up image inspect,
- * parse mock, tag mock, registry state, and validateContainer mock.
- * Returns the raw Docker API container object, ready for addImageDetailsToContainer.
- */
-async function setupContainerDetailTest(
-  docker,
-  {
-    registerConfig = {},
-    container: containerOverrides = {},
-    imageDetails: imageOverrides = {},
-    parsedImage = { domain: 'docker.io', path: 'library/nginx', tag: '1.0.0' },
-    parseImpl = undefined,
-    semverValue = { major: 1, minor: 0, patch: 0 },
-    registryId = 'hub',
-    registryMatchFn = () => true,
-    registryState = undefined,
-    validateImpl = (c) => c,
-  } = {},
-) {
-  await docker.register('watcher', 'docker', 'test', registerConfig);
-
-  const imageDetails = createImageDetails(imageOverrides);
-  mockImage.inspect.mockResolvedValue(imageDetails);
-
-  if (parseImpl) {
-    mockParse.mockImplementation(parseImpl);
-  } else {
-    mockParse.mockReturnValue(parsedImage);
-  }
-  mockTag.parse.mockReturnValue(semverValue);
-
-  if (registryState) {
-    registry.getState.mockReturnValue({ registry: registryState });
-  } else {
-    const mockReg = createMockRegistry(registryId, registryMatchFn);
-    registry.getState.mockReturnValue({ registry: { [registryId]: mockReg } });
-  }
-
-  const containerModule = await import('../../../model/container.js');
-  const validateContainer = containerModule.validate;
-  validateContainer.mockImplementation(validateImpl);
-
-  return createDockerContainer(containerOverrides);
-}
-
-// Keep a module-level reference so setupContainerDetailTest can see it
-let mockImage;
-
 describe('Docker Watcher', () => {
   let docker;
   let mockDockerApi;
   let mockSchedule;
   let mockContainer;
+  let mockImage;
 
   beforeEach(async () => {
     vi.clearAllMocks();
