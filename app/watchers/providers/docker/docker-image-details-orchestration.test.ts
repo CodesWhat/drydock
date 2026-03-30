@@ -210,6 +210,91 @@ describe('docker image details orchestration module', () => {
     expect(containerInStore.image.created).toBe('2026-03-01T00:00:00.000Z');
   });
 
+  test('re-normalizes stored digest-only image references from container inspect', async () => {
+    const containerInStore = {
+      id: 'container-1',
+      name: 'service',
+      displayName: 'service',
+      status: 'running',
+      error: undefined,
+      details: {
+        ports: [],
+        volumes: [],
+        env: [],
+      },
+      image: {
+        id: 'image-old',
+        name: 'linuxserver/socket-proxy',
+        registry: {
+          name: 'unknown',
+          url: 'lscr.io',
+        },
+        tag: {
+          value: 'sha256:deadbeef',
+          semver: false,
+        },
+        digest: {
+          repo: 'sha256:old',
+          value: 'sha256:old',
+          watch: false,
+        },
+        architecture: 'amd64',
+        os: 'linux',
+        created: '2025-01-01T00:00:00.000Z',
+      },
+    };
+    vi.spyOn(storeContainer, 'getContainer').mockReturnValue(containerInStore as any);
+
+    const { watcher, inspectContainer, inspectImage } = createWatcher();
+    inspectContainer.mockResolvedValue({
+      Config: {
+        Image: 'lscr.io/linuxserver/socket-proxy:latest',
+      },
+    });
+    inspectImage.mockResolvedValue({
+      Id: 'image-new',
+      RepoTags: [],
+      RepoDigests: ['lscr.io/linuxserver/socket-proxy@sha256:new'],
+      Architecture: 'amd64',
+      Os: 'linux',
+      Created: '2026-03-01T00:00:00.000Z',
+    });
+    const helpers = createHelpers({
+      resolveImageName: vi.fn().mockReturnValue({
+        domain: 'lscr.io',
+        path: 'linuxserver/socket-proxy',
+        tag: 'latest',
+      }),
+      resolveTagName: vi.fn().mockReturnValue('latest'),
+    });
+
+    await addImageDetailsToContainerOrchestration(
+      watcher as any,
+      createDockerSummaryContainer({
+        Image: 'sha256:deadbeef',
+        Names: ['/docker-socket-proxy'],
+      }),
+      {},
+      helpers as any,
+    );
+
+    expect(helpers.resolveImageName).toHaveBeenCalledWith(
+      'lscr.io/linuxserver/socket-proxy:latest',
+      expect.objectContaining({
+        RepoDigests: ['lscr.io/linuxserver/socket-proxy@sha256:new'],
+      }),
+      'docker-socket-proxy',
+    );
+    expect(containerInStore.image.name).toBe('linuxserver/socket-proxy');
+    expect(containerInStore.image.tag.value).toBe('latest');
+    expect(containerInStore.image.digest).toEqual({
+      repo: 'sha256:new',
+      value: 'sha256:new',
+      watch: true,
+    });
+    expect(containerInStore.image.registry.url).toBe('lscr.io');
+  });
+
   test('skips container inspect when docker events are enabled and backfills digest value', async () => {
     const containerInStore = {
       id: 'container-1',
@@ -258,6 +343,87 @@ describe('docker image details orchestration module', () => {
     });
     expect(containerInStore.image.digest.value).toBe('sha256:same');
     expect(containerInStore.image.created).toBe('2025-01-01T00:00:00.000Z');
+  });
+
+  test('still inspects stored digest-only containers when docker events are enabled to repair image references', async () => {
+    const containerInStore = {
+      id: 'container-1',
+      name: 'docker-socket-proxy',
+      displayName: 'docker-socket-proxy',
+      status: 'running',
+      error: undefined,
+      details: {
+        ports: ['443/tcp'],
+        volumes: [],
+        env: [],
+      },
+      image: {
+        id: 'image-old',
+        name: 'linuxserver/socket-proxy',
+        registry: {
+          name: 'unknown',
+          url: 'lscr.io',
+        },
+        tag: {
+          value: 'sha256:deadbeef',
+          semver: false,
+        },
+        digest: {
+          repo: 'sha256:old',
+          value: 'sha256:old',
+          watch: false,
+        },
+        architecture: 'amd64',
+        os: 'linux',
+        created: '2025-01-01T00:00:00.000Z',
+      },
+    };
+    vi.spyOn(storeContainer, 'getContainer').mockReturnValue(containerInStore as any);
+
+    const { watcher, inspectContainer, inspectImage } = createWatcher({
+      configuration: {
+        watchevents: true,
+      },
+    });
+    inspectContainer.mockResolvedValue({
+      Config: {
+        Image: 'lscr.io/linuxserver/socket-proxy:latest',
+      },
+    });
+    inspectImage.mockResolvedValue({
+      Id: 'image-new',
+      RepoTags: [],
+      RepoDigests: ['lscr.io/linuxserver/socket-proxy@sha256:new'],
+      Architecture: 'amd64',
+      Os: 'linux',
+      Created: '2026-03-01T00:00:00.000Z',
+    });
+    const helpers = createHelpers({
+      resolveImageName: vi.fn().mockReturnValue({
+        domain: 'lscr.io',
+        path: 'linuxserver/socket-proxy',
+        tag: 'latest',
+      }),
+      resolveTagName: vi.fn().mockReturnValue('latest'),
+    });
+
+    await addImageDetailsToContainerOrchestration(
+      watcher as any,
+      createDockerSummaryContainer({
+        Image: 'sha256:deadbeef',
+        Names: ['/docker-socket-proxy'],
+      }),
+      {},
+      helpers as any,
+    );
+
+    expect(watcher.dockerApi.getContainer).toHaveBeenCalledWith('container-1');
+    expect(containerInStore.image.tag.value).toBe('latest');
+    expect(containerInStore.image.digest).toEqual({
+      repo: 'sha256:new',
+      value: 'sha256:new',
+      watch: true,
+    });
   });
 
   test('reconciles container status from Docker summary when it differs from store', async () => {
