@@ -24,16 +24,20 @@ export interface WidgetLayoutItem {
  * width, then drop to 1 column where everything stacks full-width.
  */
 export const GRID_BREAKPOINTS: Breakpoints = {
+  xxs: 0,
+  xs: 480,
+  sm: 639,
   lg: 1024,
   md: 640,
-  sm: 0,
 };
 
 /** Column counts per responsive breakpoint. */
 export const GRID_COLS: Breakpoints = {
+  xxs: 1,
+  xs: 1,
+  sm: 1,
   lg: 12,
   md: 12,
-  sm: 1,
 };
 
 interface WidgetLayoutConstraints {

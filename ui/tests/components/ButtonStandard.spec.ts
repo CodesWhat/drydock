@@ -24,7 +24,11 @@ function getVisibleText(source: string): string {
   const dom = new JSDOM(`<body>${source}</body>`);
   const { document, Node } = dom.window;
 
-  function collectText(node: ParentNode): string {
+  function isTemplateElement(node: Node): node is HTMLTemplateElement {
+    return node.nodeType === Node.ELEMENT_NODE && (node as Element).tagName === 'TEMPLATE';
+  }
+
+  function collectText(node: Node): string {
     let text = '';
 
     for (const child of node.childNodes) {
@@ -37,7 +41,7 @@ function getVisibleText(source: string): string {
         continue;
       }
 
-      if (child instanceof dom.window.HTMLTemplateElement) {
+      if (isTemplateElement(child)) {
         text += collectText(child.content);
         continue;
       }
@@ -101,7 +105,7 @@ describe('button standard', () => {
       }
 
       const source = readFileSync(filePath, 'utf8');
-      const buttonBlocks = source.match(/<AppButton\b[\s\S]*?<\/AppButton>/g) ?? [];
+      const buttonBlocks: string[] = source.match(/<AppButton\b[\s\S]*?<\/AppButton>/g) ?? [];
       const hasIconOnlyAppButton = buttonBlocks.some((block) => {
         const inner = block.replace(/^<AppButton\b[\s\S]*?>/, '').replace(/<\/AppButton>$/, '');
 

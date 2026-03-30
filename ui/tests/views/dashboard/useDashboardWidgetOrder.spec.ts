@@ -65,7 +65,8 @@ describe('useDashboardWidgetOrder', () => {
   });
 
   it('falls back to default layout when gridLayout is not an array', async () => {
-    preferences.dashboard.gridLayout = 'not-an-array' as unknown as unknown[];
+    preferences.dashboard.gridLayout =
+      'not-an-array' as unknown as typeof preferences.dashboard.gridLayout;
 
     const { state } = await mountWidgetOrderComposable();
 
@@ -79,7 +80,7 @@ describe('useDashboardWidgetOrder', () => {
       null,
       'not-a-layout-item',
       { i: 'recent-updates', x: 1, y: 2, w: 6, h: 5 },
-    ];
+    ] as unknown as typeof preferences.dashboard.gridLayout;
 
     const { state } = await mountWidgetOrderComposable();
 
