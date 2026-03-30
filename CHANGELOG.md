@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Up-to-date and pinned badges in Kind column** — Containers table now shows a green check-circle badge ("Up to date") for containers at their latest version, and a green pin badge ("Pinned") for containers with skipped updates, replacing the previous dash placeholder.
+
 - **Real-time container log viewer** — WebSocket-based live log streaming from Docker containers directly in the UI. Features ANSI color rendering, automatic JSON log detection with syntax-highlighted pretty-printing, free-text and regex search with match navigation, stdout/stderr stream filtering, log level filtering for structured logs, copy to clipboard, and gzip-compressed download. Available in both the container detail panel and a dedicated full-page view at `/containers/:id/logs`. ([Phase 4.2](https://getdrydock.com/docs/configuration/logs))
 - **Diagnostic debug dump** — One-click export of redacted system state from Configuration > Diagnostics. Collects runtime metadata, component state (watchers, registries, triggers, agents), Docker API diagnostics, MQTT Home Assistant sensors, recent Docker events, store stats, and `DD_*` environment variables. Sensitive values matching `password|token|secret|key|hash` are automatically redacted. Configurable time window (1–1440 minutes). ([Phase 4.14](https://getdrydock.com/docs/api/container))
 - **Container log streaming API** — `WS /api/v1/containers/:id/logs/stream` endpoint with Docker binary stream demultiplexing, session-based authentication on WebSocket upgrade, and fixed-window rate limiting (1,000 connections per 15 minutes).
@@ -66,6 +68,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Telegram MarkdownV2 escaping in all trigger paths** — Body text in `trigger()` and `triggerBatch()` was not escaped for MarkdownV2 reserved characters (`.`, `-`, `(`, `)`, `>`, etc.), causing Telegram API 400 errors and silent notification failures. Now all paths escape via a format-aware helper. ([Discussion #211](https://github.com/CodesWhat/drydock/discussions/211))
+- **Dashboard edit-mode dashed borders clipped at grid edges** — Replaced CSS `outline` with `::before` pseudo-element for edit-mode dashed borders; outlines were clipped by ancestor `overflow-hidden` on items at grid edges. Also matched grid negative margins to responsive breakpoints (mobile 10px, tablet 14px, desktop 16px).
+- **DataTable icon column clipping on mobile** — Removed `overflow-hidden` from icon-type table columns that was clipping container icons on narrow viewports.
+- **Version column alignment on mobile** — Recent updates widget mobile version text now centers and truncates with tooltip instead of left-aligning with `break-all`.
+- **Competitor comparison page accuracy** — Corrected WUD registry count (13→10), Watchtower lifecycle hooks verdict (tie→drydock advantage), Portainer RAM footprint (~200MB+→~100–200MB), Dockhand scanning feature name (Update Bouncer→Safe-Pull Protection).
 - **TypeScript type safety in watcher registry lookups** — Replaced unsafe `as unknown as` casts with `isDockerWatcher()` type guard for Docker watcher state lookups.
 - **Container alias name canonicalization** — `getContainerName()` now strips Docker recreate alias prefixes (e.g. `8bf70beac570_termix` → `termix`) before the name enters the store, so all triggers (Telegram, Slack, Pushover, etc.) receive canonical names. MQTT was already fixed in v1.4.5; this extends the fix to the source. ([#156](https://github.com/CodesWhat/drydock/issues/156))
 - **Cascading -old container updates** — "Update All" batch no longer triggers updates on containers renamed with `-old-{timestamp}` suffix during a prior update. Guard added to base Trigger class (`mustTrigger`), all API endpoints (container-actions, webhook, trigger proxy), and UI batch freezes container IDs at start. ([#183](https://github.com/CodesWhat/drydock/issues/183))
@@ -109,6 +116,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- **Log injection prevention** — Removed version string interpolation from startup and migration log messages.
+- **Reflected XSS in Podman redirect guard** — 404 handler no longer reflects request URL in response body.
+- **TOCTOU race in SRI script** — `apply-sri.mjs` now uses `readdirSync({ withFileTypes })` to eliminate stat/read race condition.
 - **WebSocket origin and lockout hardening** — Added stricter WebSocket origin validation and safer lockout file-permission handling.
 - **Trivy supply chain advisory** — Published advisory page and site banner for Trivy supply chain compromise. Pinned Trivy versions and corrected advisory details.
 - **Security bouncer enforcement on container updates** — Update and Update All actions now enforce the security bouncer gate, surfacing blocked-update reasons in the UI instead of silently failing.
