@@ -1071,10 +1071,10 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Resolve latest stable tag (skip pre-release tags like v1.5.0-rc2
+          # Resolve latest stable tag (skip pre-release tags like v1.5.0-rc.2
           # since release-next-version.mjs only accepts X.Y.Z).
           latest_tag="$(git tag --list 'v*' --sort=-v:refname \
-            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n1)"
+            | awk '/^v[0-9]+\.[0-9]+\.[0-9]+$/ { print; exit }')"
           if [ -z "${latest_tag}" ]; then
             latest_tag="v0.0.0"
           fi
