@@ -15,6 +15,16 @@ type PostStartHook =
       environment?: string[] | Record<string, unknown>;
     };
 
+type PostStartHookObject = Exclude<PostStartHook, string>;
+
+type PostStartHookConfiguration = {
+  command: string | string[];
+  user?: string;
+  working_dir?: string;
+  privileged?: boolean;
+  environment?: string[] | Record<string, unknown>;
+};
+
 type PostStartExecStream = {
   once?: (event: string, callback: (error?: unknown) => void) => void;
   removeListener: (event: string, callback: (error?: unknown) => void) => void;
@@ -140,7 +150,15 @@ class PostStartExecutor {
   }
 
   async resolvePostStartHooksContainer(container: { name?: string }, serviceKey: string) {
-    const watcher = this.getWatcher(container);
+    let watcher: unknown;
+    try {
+      watcher = this.getWatcher(container);
+    } catch {
+      this.getLog()?.warn?.(
+        `Skip compose post_start hooks for ${container.name} (${serviceKey}) because watcher Docker API is unavailable`,
+      );
+      return null;
+    }
     const dockerApi = this.getDockerApiFromWatcher(watcher);
     if (!dockerApi) {
       this.getLog()?.warn?.(
@@ -163,10 +181,14 @@ class PostStartExecutor {
     hook: PostStartHook,
     containerName: string,
     serviceKey: string,
-  ) {
-    const hookConfiguration = typeof hook === 'string' ? { command: hook } : hook;
-    if (hookConfiguration?.command) {
-      return hookConfiguration;
+  ): PostStartHookConfiguration | null {
+    const hookConfiguration: PostStartHookConfiguration | PostStartHookObject =
+      typeof hook === 'string' ? { command: hook } : hook;
+    if (hookConfiguration.command) {
+      return {
+        ...hookConfiguration,
+        command: hookConfiguration.command,
+      };
     }
 
     this.getLog()?.warn?.(
@@ -175,13 +197,7 @@ class PostStartExecutor {
     return null;
   }
 
-  buildPostStartHookExecOptions(hookConfiguration: {
-    command: string | string[];
-    user?: string;
-    working_dir?: string;
-    privileged?: boolean;
-    environment?: string[] | Record<string, unknown>;
-  }) {
+  buildPostStartHookExecOptions(hookConfiguration: PostStartHookConfiguration) {
     return {
       AttachStdout: true,
       AttachStderr: true,
@@ -244,7 +260,7 @@ class PostStartExecutor {
       return;
     }
 
-    const execOptions = this.buildPostStartHookExecOptions(hookConfiguration as any);
+    const execOptions = this.buildPostStartHookExecOptions(hookConfiguration);
     this.getLog()?.info?.(`Run compose post_start hook for ${container.name} (${serviceKey})`);
     const exec = await containerToUpdate.exec(execOptions);
     const execStream = await exec.start({

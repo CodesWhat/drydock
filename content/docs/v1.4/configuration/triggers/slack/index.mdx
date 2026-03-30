@@ -1,0 +1,50 @@
+---
+title: "Slack"
+description: "The slack trigger lets you post image update notifications to a Slack channel."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+![logo](/docs/assets/configuration/triggers/slack/slack.png)
+
+The `slack` trigger lets you post image update notifications to a Slack channel.
+
+## Variables
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --- | :---: | --- | --- | --- |
+| `DD_TRIGGER_SLACK_{trigger_name}_TOKEN` | 🔴 | The Oauth Token of the Slack app | | |
+| `DD_TRIGGER_SLACK_{trigger_name}_CHANNEL` | 🔴 | The name of the channel to post | | |
+| `DD_TRIGGER_SLACK_{trigger_name}_DISABLETITLE` | ⚪ | Disable title to have full control over the message formatting | `true`, `false` | `false` |
+
+<Callout type="warn">The Slack channel must already exist on the workspace (the trigger won't automatically create it)</Callout>
+
+<Callout type="info">This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration).</Callout>
+
+## Examples
+
+<Tabs items={["Docker Compose", "Docker"]}>
+<Tab value="Docker Compose">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    environment:
+        - DD_TRIGGER_SLACK_TEST_TOKEN=xoxp-743817063446-xxx
+        - DD_TRIGGER_SLACK_TEST_CHANNEL=drydock
+```
+
+</Tab>
+<Tab value="Docker">
+```bash
+docker run \
+    -e DD_TRIGGER_SLACK_TEST_TOKEN="xoxp-743817063446-xxx" \
+    -e DD_TRIGGER_SLACK_TEST_CHANNEL="drydock" \
+  ...
+  codeswhat/drydock
+```
+</Tab>
+</Tabs>

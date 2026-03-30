@@ -34,6 +34,7 @@ const configuration = configurationToValidate.value;
 type LokiDatabase = InstanceType<typeof Loki>;
 let db: LokiDatabase | undefined;
 let isMemoryMode = false;
+let storePathResolved: string | undefined;
 
 function createCollections() {
   app.createCollections(db);
@@ -79,6 +80,7 @@ export async function init(options: { memory?: boolean } = {}) {
   const storePath = resolveConfiguredPathWithinBase(storeDirectory, configuration.file, {
     label: 'DD_STORE_FILE',
   });
+  storePathResolved = storePath;
   if (storePath === storeDirectory) {
     throw new Error('DD_STORE_FILE must reference a file path, not a directory');
   }
@@ -137,4 +139,66 @@ export async function save() {
  */
 export function getConfiguration() {
   return configuration;
+}
+
+export interface StoreDebugCollectionStats {
+  name: string;
+  documents: number;
+}
+
+export interface StoreDebugSnapshot {
+  memoryMode: boolean;
+  path?: string;
+  collectionCount: number;
+  documentCount: number;
+  lastPersistAt?: string;
+  collections: StoreDebugCollectionStats[];
+}
+
+function getCollectionDocumentCount(collection: unknown): number {
+  if (!collection || typeof collection !== 'object') {
+    return 0;
+  }
+
+  if (typeof (collection as { count?: unknown }).count === 'function') {
+    return Math.max(0, Number((collection as { count: () => number }).count()) || 0);
+  }
+
+  const data = (collection as { data?: unknown }).data;
+  return Array.isArray(data) ? data.length : 0;
+}
+
+function getStoreLastPersistAt(): string | undefined {
+  if (isMemoryMode || !storePathResolved || !fs.existsSync(storePathResolved)) {
+    return undefined;
+  }
+
+  try {
+    return fs.statSync(storePathResolved).mtime.toISOString();
+  } catch {
+    return undefined;
+  }
+}
+
+export function getDebugSnapshot(): StoreDebugSnapshot {
+  const collections = Array.isArray((db as { collections?: unknown[] } | undefined)?.collections)
+    ? ((db as { collections: unknown[] }).collections as unknown[])
+    : [];
+  const collectionStats = collections.map((collection) => ({
+    name:
+      typeof (collection as { name?: unknown }).name === 'string'
+        ? ((collection as { name: string }).name as string)
+        : 'unknown',
+    documents: getCollectionDocumentCount(collection),
+  }));
+  const documentCount = collectionStats.reduce((total, stats) => total + stats.documents, 0);
+
+  return {
+    memoryMode: isMemoryMode,
+    path: storePathResolved,
+    collectionCount: collectionStats.length,
+    documentCount,
+    lastPersistAt: getStoreLastPersistAt(),
+    collections: collectionStats,
+  };
 }

@@ -1,4 +1,5 @@
 import { performance } from 'node:perf_hooks';
+import { RE2JS } from 're2js';
 import { describe, expect, test, vi } from 'vitest';
 
 import {
@@ -47,6 +48,75 @@ describe('docker tag candidates module', () => {
       'Strict tag-family policy filtered out 1 higher semver tag(s)',
     );
     expect(log.warn).toHaveBeenCalledWith(expect.stringContaining('dd.tag.family=loose'));
+  });
+
+  test('allows CalVer tags with zero-padded months through strict family filter (#202)', () => {
+    const container = createContainer({
+      image: {
+        tag: {
+          value: '2025.11.1',
+          semver: true,
+        },
+      },
+      tagFamily: 'strict',
+    });
+    const log = {
+      warn: vi.fn(),
+      debug: vi.fn(),
+    };
+
+    const result = getTagCandidates(
+      container,
+      ['2025.11.1', '2026.02.0', '2026.01.0', '2025.09.3'],
+      log,
+    );
+
+    expect(result.tags).toContain('2026.02.0');
+    expect(result.tags).toContain('2026.01.0');
+    expect(log.warn).not.toHaveBeenCalled();
+  });
+
+  test('allows CalVer upgrade when both reference and candidate have zero-padded segments', () => {
+    const container = createContainer({
+      image: {
+        tag: {
+          value: '2025.01.3',
+          semver: true,
+        },
+      },
+      tagFamily: 'strict',
+    });
+    const log = {
+      warn: vi.fn(),
+      debug: vi.fn(),
+    };
+
+    const result = getTagCandidates(container, ['2025.01.3', '2025.02.0'], log);
+
+    expect(result.tags).toContain('2025.02.0');
+  });
+
+  test('still rejects zero-padded tags for non-CalVer semver in strict mode', () => {
+    const container = createContainer({
+      image: {
+        tag: {
+          value: '5.1.4',
+          semver: true,
+        },
+      },
+      tagFamily: 'strict',
+    });
+    const log = {
+      warn: vi.fn(),
+      debug: vi.fn(),
+    };
+
+    // '20.04.1' has a leading zero in '04' but reference major is 5 (not CalVer).
+    // Should be rejected as a cross-family jump.
+    const result = getTagCandidates(container, ['5.1.4', '20.04.1', '5.1.5'], log);
+
+    expect(result.tags).not.toContain('20.04.1');
+    expect(result.tags).toContain('5.1.5');
   });
 
   test('allows include-filter recovery for semver image outside include regex', () => {
@@ -141,6 +211,42 @@ describe('docker tag candidates module', () => {
     );
 
     expect(filtered).toEqual(inputTags);
+  });
+
+  test('reports error message from non-Error object with string message property', () => {
+    const compileSpy = vi.spyOn(RE2JS, 'compile').mockImplementation(() => {
+      throw { message: 'custom compile failure' };
+    });
+    const log = { warn: vi.fn(), debug: vi.fn() };
+
+    getTagCandidates(createContainer({ includeTags: 'anything' }), ['1.0.1'], log);
+
+    expect(log.warn).toHaveBeenCalledWith(expect.stringContaining('custom compile failure'));
+    compileSpy.mockRestore();
+  });
+
+  test('falls back to String(error) for thrown non-Error primitive', () => {
+    const compileSpy = vi.spyOn(RE2JS, 'compile').mockImplementation(() => {
+      throw 42;
+    });
+    const log = { warn: vi.fn(), debug: vi.fn() };
+
+    getTagCandidates(createContainer({ includeTags: 'anything' }), ['1.0.1'], log);
+
+    expect(log.warn).toHaveBeenCalledWith(expect.stringContaining('42'));
+    compileSpy.mockRestore();
+  });
+
+  test('stringifies object errors when the message field is not a string', () => {
+    const compileSpy = vi.spyOn(RE2JS, 'compile').mockImplementation(() => {
+      throw { message: { reason: 'custom compile failure' } };
+    });
+    const log = { warn: vi.fn(), debug: vi.fn() };
+
+    getTagCandidates(createContainer({ includeTags: 'anything' }), ['1.0.1'], log);
+
+    expect(log.warn).toHaveBeenCalledWith(expect.stringContaining('[object Object]'));
+    compileSpy.mockRestore();
   });
 
   test('processes large tag lists within lightweight runtime budget', () => {

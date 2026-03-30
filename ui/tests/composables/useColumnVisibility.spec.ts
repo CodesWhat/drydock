@@ -30,7 +30,7 @@ describe('useColumnVisibility', () => {
       'version',
       'kind',
       'status',
-      'bouncer',
+      'imageAge',
       'server',
       'registry',
     ]);
@@ -94,12 +94,12 @@ describe('useColumnVisibility', () => {
   it('should persist visible columns to preferences', async () => {
     const { useColumnVisibility } = await loadColumnVisibility();
     const { toggleColumn } = useColumnVisibility(ref(false));
-    toggleColumn('bouncer');
+    toggleColumn('kind');
     await nextTick();
     const { flushPreferences } = await import('@/preferences/store');
     flushPreferences();
     const stored = JSON.parse(localStorage.getItem('dd-preferences') ?? '{}').containers.columns;
-    expect(stored).not.toContain('bouncer');
+    expect(stored).not.toContain('kind');
   });
 
   it('should restore visible columns from preferences', async () => {

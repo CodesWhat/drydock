@@ -8,6 +8,7 @@ import { sanitizeLogParam } from '../log/sanitize.js';
 import { getWebhookCounter } from '../prometheus/webhook.js';
 import * as registry from '../registry/index.js';
 import * as storeContainer from '../store/container.js';
+import Trigger from '../triggers/providers/Trigger.js';
 import { getErrorMessage } from '../util/error.js';
 import { ddWebhookEnabled, wudWebhookEnabled } from '../watchers/providers/docker/label.js';
 import { recordAuditEvent } from './audit-events.js';
@@ -278,6 +279,11 @@ async function updateContainer(req: Request, res: Response) {
   const trigger = findDockerTriggerForContainer(registry.getState().trigger, container);
   if (!trigger) {
     sendErrorResponse(res, 404, NO_DOCKER_TRIGGER_FOUND_ERROR);
+    return;
+  }
+
+  if (Trigger.isRollbackContainer(container)) {
+    sendErrorResponse(res, 409, 'Cannot update temporary rollback container');
     return;
   }
 

@@ -1,0 +1,323 @@
+import { extractCollectionData } from '../utils/api';
+
+export interface ContainerStatsSnapshot {
+  containerId: string;
+  cpuPercent: number;
+  memoryUsageBytes: number;
+  memoryLimitBytes: number;
+  memoryPercent: number;
+  networkRxBytes: number;
+  networkTxBytes: number;
+  blockReadBytes: number;
+  blockWriteBytes: number;
+  timestamp: string;
+}
+
+interface ContainerStatsResponse {
+  data: ContainerStatsSnapshot | null;
+  history: ContainerStatsSnapshot[];
+}
+
+export interface ContainerStatsSummaryItem {
+  id: string;
+  name: string;
+  status?: string;
+  watcher?: string;
+  agent?: string;
+  stats: ContainerStatsSnapshot | null;
+}
+
+interface ContainerStatsStreamEventHandlers {
+  onOpen?: () => void;
+  onSnapshot?: (snapshot: ContainerStatsSnapshot) => void;
+  onHeartbeat?: () => void;
+  onError?: () => void;
+}
+
+interface ContainerStatsStreamOptions {
+  reconnectDelayMs?: number;
+}
+
+export interface ContainerStatsStreamController {
+  pause: () => void;
+  resume: () => void;
+  disconnect: () => void;
+  isPaused: () => boolean;
+}
+
+const DEFAULT_RECONNECT_DELAY_MS = 3000;
+
+interface StreamConnectionState {
+  eventSource?: EventSource;
+  reconnectTimer?: ReturnType<typeof globalThis.setTimeout>;
+  paused: boolean;
+  disconnected: boolean;
+}
+
+function toFiniteNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function parseSnapshot(rawSnapshot: unknown): ContainerStatsSnapshot | null {
+  if (!rawSnapshot || typeof rawSnapshot !== 'object') {
+    return null;
+  }
+
+  const snapshot = rawSnapshot as Record<string, unknown>;
+  const containerId =
+    typeof snapshot.containerId === 'string' && snapshot.containerId.length > 0
+      ? snapshot.containerId
+      : undefined;
+  const timestamp =
+    typeof snapshot.timestamp === 'string' && snapshot.timestamp.length > 0
+      ? snapshot.timestamp
+      : undefined;
+
+  if (!containerId || !timestamp) {
+    return null;
+  }
+
+  const numericFields = {
+    cpuPercent: toFiniteNumber(snapshot.cpuPercent),
+    memoryUsageBytes: toFiniteNumber(snapshot.memoryUsageBytes),
+    memoryLimitBytes: toFiniteNumber(snapshot.memoryLimitBytes),
+    memoryPercent: toFiniteNumber(snapshot.memoryPercent),
+    networkRxBytes: toFiniteNumber(snapshot.networkRxBytes),
+    networkTxBytes: toFiniteNumber(snapshot.networkTxBytes),
+    blockReadBytes: toFiniteNumber(snapshot.blockReadBytes),
+    blockWriteBytes: toFiniteNumber(snapshot.blockWriteBytes),
+  };
+
+  if (Object.values(numericFields).some((value) => value === undefined)) {
+    return null;
+  }
+
+  const {
+    cpuPercent,
+    memoryUsageBytes,
+    memoryLimitBytes,
+    memoryPercent,
+    networkRxBytes,
+    networkTxBytes,
+    blockReadBytes,
+    blockWriteBytes,
+  } = numericFields as Record<keyof typeof numericFields, number>;
+
+  return {
+    containerId,
+    cpuPercent,
+    memoryUsageBytes,
+    memoryLimitBytes,
+    memoryPercent,
+    networkRxBytes,
+    networkTxBytes,
+    blockReadBytes,
+    blockWriteBytes,
+    timestamp,
+  };
+}
+
+function parseHistory(rawHistory: unknown): ContainerStatsSnapshot[] {
+  if (!Array.isArray(rawHistory)) {
+    return [];
+  }
+
+  const snapshots: ContainerStatsSnapshot[] = [];
+  for (const rawSnapshot of rawHistory) {
+    const snapshot = parseSnapshot(rawSnapshot);
+    if (snapshot) {
+      snapshots.push(snapshot);
+    }
+  }
+
+  return snapshots;
+}
+
+function parseSummaryItem(rawItem: unknown): ContainerStatsSummaryItem | null {
+  if (!rawItem || typeof rawItem !== 'object') {
+    return null;
+  }
+
+  const item = rawItem as Record<string, unknown>;
+  if (typeof item.id !== 'string' || typeof item.name !== 'string') {
+    return null;
+  }
+
+  const status = typeof item.status === 'string' ? item.status : undefined;
+  const watcher = typeof item.watcher === 'string' ? item.watcher : undefined;
+  const agent = typeof item.agent === 'string' ? item.agent : undefined;
+  const stats = item.stats === null ? null : parseSnapshot(item.stats);
+
+  return {
+    id: item.id,
+    name: item.name,
+    status,
+    watcher,
+    agent,
+    stats,
+  };
+}
+
+async function parseJson(response: Response): Promise<unknown> {
+  return response.json();
+}
+
+export async function getContainerStats(containerId: string): Promise<ContainerStatsResponse> {
+  const response = await fetch(`/api/v1/containers/${encodeURIComponent(containerId)}/stats`, {
+    credentials: 'include',
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to get container stats: ${response.statusText}`);
+  }
+
+  const payload = await parseJson(response);
+  const envelope =
+    payload && typeof payload === 'object' ? (payload as Record<string, unknown>) : {};
+  const data = envelope.data === null ? null : parseSnapshot(envelope.data);
+
+  return {
+    data,
+    history: parseHistory(envelope.history),
+  };
+}
+
+export async function getAllContainerStats(): Promise<ContainerStatsSummaryItem[]> {
+  const response = await fetch('/api/v1/containers/stats', {
+    credentials: 'include',
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to get container stats: ${response.statusText}`);
+  }
+
+  const payload = await parseJson(response);
+  const summaryItems: ContainerStatsSummaryItem[] = [];
+  for (const rawItem of extractCollectionData(payload)) {
+    const item = parseSummaryItem(rawItem);
+    if (item) {
+      summaryItems.push(item);
+    }
+  }
+
+  return summaryItems;
+}
+
+function parseSnapshotEvent(rawData: unknown): ContainerStatsSnapshot | null {
+  if (typeof rawData !== 'string') {
+    return null;
+  }
+
+  try {
+    return parseSnapshot(JSON.parse(rawData));
+  } catch {
+    return null;
+  }
+}
+
+function clearReconnectTimer(state: StreamConnectionState): void {
+  if (state.reconnectTimer) {
+    globalThis.clearTimeout(state.reconnectTimer);
+    state.reconnectTimer = undefined;
+  }
+}
+
+function closeSource(state: StreamConnectionState): void {
+  if (state.eventSource) {
+    state.eventSource.close();
+    state.eventSource = undefined;
+  }
+}
+
+function createEventSource(
+  streamUrl: string,
+  handlers: ContainerStatsStreamEventHandlers,
+  onError: () => void,
+): EventSource {
+  const source = new EventSource(streamUrl);
+  source.addEventListener('open', () => {
+    handlers.onOpen?.();
+  });
+  source.addEventListener('dd:heartbeat', () => {
+    handlers.onHeartbeat?.();
+  });
+  source.addEventListener('dd:container-stats', (event: Event) => {
+    const messageEvent = event as MessageEvent;
+    const snapshot = parseSnapshotEvent(messageEvent.data);
+    if (snapshot) {
+      handlers.onSnapshot?.(snapshot);
+    }
+  });
+  source.onerror = onError;
+  return source;
+}
+
+function scheduleReconnect(
+  state: StreamConnectionState,
+  reconnectDelayMs: number,
+  reconnect: () => void,
+): void {
+  clearReconnectTimer(state);
+  state.reconnectTimer = globalThis.setTimeout(() => {
+    state.reconnectTimer = undefined;
+    reconnect();
+  }, reconnectDelayMs);
+}
+
+export function connectContainerStatsStream(
+  containerId: string,
+  handlers: ContainerStatsStreamEventHandlers = {},
+  options: ContainerStatsStreamOptions = {},
+): ContainerStatsStreamController {
+  const reconnectDelayMs = Math.max(1, options.reconnectDelayMs ?? DEFAULT_RECONNECT_DELAY_MS);
+  const streamUrl = `/api/v1/containers/${encodeURIComponent(containerId)}/stats/stream`;
+  const state: StreamConnectionState = {
+    paused: false,
+    disconnected: false,
+  };
+
+  function handleError(): void {
+    handlers.onError?.();
+    if (state.paused || state.disconnected) {
+      return;
+    }
+
+    closeSource(state);
+    scheduleReconnect(state, reconnectDelayMs, connect);
+  }
+
+  function connect(): void {
+    closeSource(state);
+    state.eventSource = createEventSource(streamUrl, handlers, handleError);
+  }
+
+  connect();
+
+  return {
+    pause() {
+      if (state.paused || state.disconnected) {
+        return;
+      }
+      state.paused = true;
+      clearReconnectTimer(state);
+      closeSource(state);
+    },
+    resume() {
+      if (!state.paused || state.disconnected) {
+        return;
+      }
+      state.paused = false;
+      connect();
+    },
+    disconnect() {
+      if (state.disconnected) {
+        return;
+      }
+      state.disconnected = true;
+      state.paused = true;
+      clearReconnectTimer(state);
+      closeSource(state);
+    },
+    isPaused() {
+      return state.paused;
+    },
+  };
+}

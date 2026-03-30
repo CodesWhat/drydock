@@ -1,12 +1,13 @@
 {
   "name": "drydock-demo",
-  "version": "1.4.5",
+  "version": "1.5.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:security": "node --test tests/security/*.test.js"
   },
   "dependencies": {
     "@fontsource/ibm-plex-mono": "^5.2.7",
@@ -33,6 +34,9 @@
     "@vitejs/plugin-vue": "^6.0.5",
     "typescript": "^5.9.3",
     "vite": "^7.3.1"
+  },
+  "overrides": {
+    "yaml": "2.8.3"
   },
   "msw": {
     "workerDirectory": [

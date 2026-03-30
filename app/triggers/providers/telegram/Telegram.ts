@@ -69,22 +69,26 @@ class Telegram extends Trigger {
     const body = this.renderSimpleBody(container);
 
     if (this.configuration.disabletitle) {
-      return this.sendMessage(body);
+      return this.sendMessage(this.escape(body));
     }
 
     const title = this.renderSimpleTitle(container);
 
-    return this.sendMessage(`${this.bold(title)}\n\n${escapeMarkdown(body)}`);
+    return this.sendMessage(`${this.bold(title)}\n\n${this.escape(body)}`);
   }
 
   async triggerBatch(containers) {
     const body = this.renderBatchBody(containers);
     if (this.configuration.disabletitle) {
-      return this.sendMessage(body);
+      return this.sendMessage(this.escape(body));
     }
 
     const title = this.renderBatchTitle(containers);
-    return this.sendMessage(`${this.bold(title)}\n\n${body}`);
+    return this.sendMessage(`${this.bold(title)}\n\n${this.escape(body)}`);
+  }
+
+  private escape(text: string): string {
+    return this.getParseMode() === 'MarkdownV2' ? escapeMarkdown(text) : escapeHtml(text);
   }
 
   /**
@@ -107,13 +111,15 @@ class Telegram extends Trigger {
   }
 
   bold(text) {
-    return this.configuration.messageformat.toLowerCase() === 'markdown'
+    return (this.configuration.messageformat as string).toLowerCase() === 'markdown'
       ? `*${escapeMarkdown(text)}*`
       : `<b>${escapeHtml(text)}</b>`;
   }
 
   getParseMode() {
-    return this.configuration.messageformat.toLowerCase() === 'markdown' ? 'MarkdownV2' : 'HTML';
+    return (this.configuration.messageformat as string).toLowerCase() === 'markdown'
+      ? 'MarkdownV2'
+      : 'HTML';
   }
 }
 

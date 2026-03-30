@@ -1,7 +1,76 @@
 ---
 title: "Agent API"
-description: "The Agent exposes specific endpoints for the Controller to synchronize state and receive events."
+description: "Controller endpoints for remote agent status and logs, plus the Agent's own internal API."
 ---
+
+## Controller endpoints
+
+These endpoints are served by the Controller and provide read-only access to connected remote agents.
+
+### List all agents
+
+Returns all configured agents with connection status, system info, and container stats.
+
+```bash
+curl http://drydock:3000/api/v1/agents
+
+{
+  "data": [
+    {
+      "name": "agent1",
+      "host": "192.168.1.50",
+      "port": 3000,
+      "connected": true,
+      "version": "1.5.0",
+      "os": "linux",
+      "arch": "amd64",
+      "cpus": 4,
+      "memoryGb": 8,
+      "uptimeSeconds": 86400,
+      "lastSeen": "2026-03-28T10:00:00.000Z",
+      "logLevel": "info",
+      "pollInterval": "0 * * * *",
+      "containers": { "total": 5, "running": 4, "stopped": 1 },
+      "images": 5
+    }
+  ],
+  "total": 1
+}
+```
+
+### Response fields
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `data[].name` | string | Agent name |
+| `data[].host` | string | Agent hostname or IP |
+| `data[].port` | integer | Agent port |
+| `data[].connected` | boolean | Whether the agent is currently connected |
+| `data[].version` | string | Agent drydock version |
+| `data[].os` | string | Operating system |
+| `data[].arch` | string | CPU architecture |
+| `data[].cpus` | integer | Number of CPU cores |
+| `data[].memoryGb` | number | Total memory in GB |
+| `data[].uptimeSeconds` | number | Agent process uptime |
+| `data[].lastSeen` | string | ISO 8601 timestamp of last heartbeat |
+| `data[].logLevel` | string | Agent's configured log level |
+| `data[].pollInterval` | string | Agent's watcher cron schedule |
+| `data[].containers` | object | Container count summary (`total`, `running`, `stopped`) |
+| `data[].images` | integer | Number of distinct images across agent containers |
+
+### Get agent log entries
+
+Returns application log entries from a connected agent, proxied through the controller. See [Log API](/docs/api/log#get-agent-log-entries) for query parameters.
+
+```bash
+curl "http://drydock:3000/api/v1/agents/agent1/log/entries?level=warn&tail=50"
+```
+
+Returns 404 if the agent is not found, or 503 if the agent is not connected.
+
+---
+
+## Agent internal API
 
 The Agent exposes specific endpoints for the Controller to synchronize state and receive events. These are generally internal APIs used by the Controller but are documented here for reference or advanced debugging.
 
@@ -82,7 +151,7 @@ Sent immediately upon connection to confirm the handshake.
 {
   "type": "dd:ack",
   "data": {
-    "version": "1.0.0"
+    "version": "1.5.0"
   }
 }
 ```
@@ -131,7 +200,7 @@ curl -H "X-Dd-Agent-Secret: <SECRET>" \
   "http://agent:3000/api/containers/:id/logs?tail=100"
 ```
 
-Query parameters are the same as the [controller container logs endpoint](/docs/api/container#get-container-logs).
+Query parameters are the same as the [controller container logs endpoint](/docs/api/container#download-container-logs).
 
 ## Application Log Entries
 

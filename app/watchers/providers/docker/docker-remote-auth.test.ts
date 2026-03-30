@@ -8,6 +8,8 @@ const {
   mockInitializeRemoteOidcStateFromConfiguration,
   mockIsRemoteOidcTokenRefreshRequired,
   mockRefreshRemoteOidcAccessToken,
+  mockProbeSocketApiVersion,
+  mockDisableSocketRedirects,
 } = vi.hoisted(() => ({
   mockDockerodeCtor: vi.fn(),
   mockReadFileSync: vi.fn(),
@@ -16,6 +18,8 @@ const {
   mockInitializeRemoteOidcStateFromConfiguration: vi.fn(),
   mockIsRemoteOidcTokenRefreshRequired: vi.fn(() => false),
   mockRefreshRemoteOidcAccessToken: vi.fn(),
+  mockProbeSocketApiVersion: vi.fn<(socketPath: string) => Promise<string | undefined>>(),
+  mockDisableSocketRedirects: vi.fn(),
 }));
 
 vi.mock('dockerode', () => ({
@@ -40,6 +44,14 @@ vi.mock('./oidc.js', () => ({
   initializeRemoteOidcStateFromConfiguration: mockInitializeRemoteOidcStateFromConfiguration,
   isRemoteOidcTokenRefreshRequired: mockIsRemoteOidcTokenRefreshRequired,
   refreshRemoteOidcAccessToken: mockRefreshRemoteOidcAccessToken,
+}));
+
+vi.mock('./disable-socket-redirects.js', () => ({
+  disableSocketRedirects: mockDisableSocketRedirects,
+}));
+
+vi.mock('./socket-version-probe.js', () => ({
+  probeSocketApiVersion: mockProbeSocketApiVersion,
 }));
 
 import {
@@ -96,9 +108,10 @@ describe('docker remote auth module', () => {
     mockGetErrorMessage.mockImplementation((_: unknown, fallback: string) => fallback);
     mockIsRemoteOidcTokenRefreshRequired.mockReturnValue(false);
     mockRefreshRemoteOidcAccessToken.mockResolvedValue(undefined);
+    mockProbeSocketApiVersion.mockResolvedValue(undefined);
   });
 
-  test('initWatcherWithRemoteAuth initializes local socket watcher', () => {
+  test('initWatcherWithRemoteAuth initializes local socket watcher', async () => {
     const dockerApi = { modem: { headers: {} } };
     mockDockerodeCtor.mockImplementation(function DockerodeMock() {
       return dockerApi;
@@ -111,17 +124,44 @@ describe('docker remote auth module', () => {
       },
     });
 
-    initWatcherWithRemoteAuth(watcher as any);
+    await initWatcherWithRemoteAuth(watcher as any);
 
+    expect(mockProbeSocketApiVersion).toHaveBeenCalledWith('/var/run/docker.sock');
     expect(mockDockerodeCtor).toHaveBeenCalledWith({
       socketPath: '/var/run/docker.sock',
     });
+    expect(mockDisableSocketRedirects).toHaveBeenCalledWith(dockerApi);
     expect(watcher.applyRemoteAuthHeaders).not.toHaveBeenCalled();
     expect(watcher.remoteAuthBlockedReason).toBeUndefined();
     expect(watcher.dockerApi).toBe(dockerApi);
   });
 
-  test('initWatcherWithRemoteAuth loads TLS files and applies headers for remote watcher', () => {
+  test('initWatcherWithRemoteAuth pins API version when probe succeeds', async () => {
+    const dockerApi = { modem: { headers: {} } };
+    mockDockerodeCtor.mockImplementation(function DockerodeMock() {
+      return dockerApi;
+    });
+    mockProbeSocketApiVersion.mockResolvedValue('1.44');
+
+    const watcher = createWatcher({
+      configuration: {
+        socket: '/run/podman/podman.sock',
+        port: 0,
+      },
+    });
+
+    await initWatcherWithRemoteAuth(watcher as any);
+
+    expect(mockProbeSocketApiVersion).toHaveBeenCalledWith('/run/podman/podman.sock');
+    expect(mockDockerodeCtor).toHaveBeenCalledWith({
+      socketPath: '/run/podman/podman.sock',
+      version: 'v1.44',
+    });
+    expect(mockDisableSocketRedirects).toHaveBeenCalledWith(dockerApi);
+    expect(watcher.dockerApi).toBe(dockerApi);
+  });
+
+  test('initWatcherWithRemoteAuth loads TLS files and applies headers for remote watcher', async () => {
     const dockerApi = { modem: { headers: {} } };
     mockDockerodeCtor.mockImplementation(function DockerodeMock() {
       return dockerApi;
@@ -143,7 +183,7 @@ describe('docker remote auth module', () => {
       },
     });
 
-    initWatcherWithRemoteAuth(watcher as any);
+    await initWatcherWithRemoteAuth(watcher as any);
 
     expect(mockResolveConfiguredPath).toHaveBeenCalledWith('ca.pem', {
       label: 'watcher remote-watcher CA file path',
@@ -178,7 +218,27 @@ describe('docker remote auth module', () => {
     expect(watcher.dockerApi).toBe(dockerApi);
   });
 
-  test('initWatcherWithRemoteAuth blocks remote watcher auth when header application fails', () => {
+  test('initWatcherWithRemoteAuth does not probe version or disable redirects for remote host watchers', async () => {
+    mockDockerodeCtor.mockImplementation(function DockerodeMock() {
+      return { modem: { headers: {} } };
+    });
+
+    const watcher = createWatcher({
+      configuration: {
+        host: 'docker-api.example.com',
+        socket: '/var/run/docker.sock',
+        port: 443,
+        protocol: 'https',
+      },
+    });
+
+    await initWatcherWithRemoteAuth(watcher as any);
+
+    expect(mockProbeSocketApiVersion).not.toHaveBeenCalled();
+    expect(mockDisableSocketRedirects).not.toHaveBeenCalled();
+  });
+
+  test('initWatcherWithRemoteAuth blocks remote watcher auth when header application fails', async () => {
     mockDockerodeCtor.mockImplementation(function DockerodeMock() {
       return { modem: { headers: {} } };
     });
@@ -195,7 +255,7 @@ describe('docker remote auth module', () => {
       }),
     });
 
-    initWatcherWithRemoteAuth(watcher as any);
+    await initWatcherWithRemoteAuth(watcher as any);
 
     expect(mockGetErrorMessage).toHaveBeenCalledWith(
       expect.any(Error),

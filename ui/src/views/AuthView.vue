@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
+import AppBadge from '../components/AppBadge.vue';
+import DetailField from '../components/DetailField.vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
 import { useViewMode } from '../preferences/useViewMode';
 import { getAllAuthentications, getAuthentication } from '../services/authentication';
@@ -122,12 +124,12 @@ onMounted(async () => {
 <template>
   <DataViewLayout>
       <div v-if="error"
-           class="mb-3 px-3 py-2 text-[0.6875rem] dd-rounded"
+           class="mb-3 px-3 py-2 text-2xs-plus dd-rounded"
            :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
         {{ error }}
       </div>
 
-      <div v-if="loading" class="text-[0.6875rem] dd-text-muted py-3 px-1">
+      <div v-if="loading" class="text-2xs-plus dd-text-muted py-3 px-1">
         Loading authentication providers...
       </div>
 
@@ -142,12 +144,12 @@ onMounted(async () => {
           <input v-model="searchQuery"
                  type="text"
                  placeholder="Filter by name..."
-                 class="flex-1 min-w-[120px] max-w-[240px] px-2.5 py-1.5 dd-rounded text-[0.6875rem] font-medium outline-none dd-bg dd-text dd-placeholder" />
-          <button v-if="searchQuery"
-                  class="text-[0.625rem] dd-text-muted hover:dd-text transition-colors"
+                 class="flex-1 min-w-[120px] max-w-[var(--dd-layout-filter-max-width)] px-2.5 py-1.5 dd-rounded text-2xs-plus font-medium outline-none dd-bg dd-text dd-placeholder" />
+          <AppButton size="none" variant="text-muted" weight="medium" class="text-2xs" v-if="searchQuery"
+                  
                   @click="searchQuery = ''">
             Clear
-          </button>
+          </AppButton>
         </template>
       </DataFilterBar>
 
@@ -163,21 +165,16 @@ onMounted(async () => {
           <span class="font-medium dd-text">{{ row.name }}</span>
         </template>
         <template #cell-type="{ row }">
-          <span class="badge text-[0.5625rem] uppercase font-bold"
-                :style="{ backgroundColor: authTypeBadge(row.type).bg, color: authTypeBadge(row.type).text }">
+          <AppBadge :custom="{ bg: authTypeBadge(row.type).bg, text: authTypeBadge(row.type).text }" size="xs">
             {{ authTypeBadge(row.type).label }}
-          </span>
+          </AppBadge>
         </template>
         <template #cell-status="{ row }">
           <AppIcon :name="row.status === 'active' ? 'check' : 'xmark'" :size="13" class="shrink-0 md:!hidden"
                    :style="{ color: row.status === 'active' ? 'var(--dd-success)' : 'var(--dd-neutral)' }" />
-          <span class="badge text-[0.5625rem] font-bold max-md:!hidden"
-                :style="{
-                  backgroundColor: row.status === 'active' ? 'var(--dd-success-muted)' : 'var(--dd-neutral-muted)',
-                  color: row.status === 'active' ? 'var(--dd-success)' : 'var(--dd-neutral)',
-                }">
+          <AppBadge :tone="row.status === 'active' ? 'success' : 'neutral'" size="xs" class="max-md:!hidden">
             {{ row.status }}
-          </span>
+          </AppBadge>
         </template>
         <template #empty>
           <EmptyState icon="filter" message="No providers match your filters" :show-clear="activeFilterCount > 0" @clear="searchQuery = ''" />
@@ -194,18 +191,17 @@ onMounted(async () => {
         <template #card="{ item: auth }">
           <div class="px-4 pt-4 pb-2 flex items-start justify-between">
             <div class="min-w-0">
-              <div class="text-[0.9375rem] font-semibold truncate dd-text">{{ auth.name }}</div>
+              <div class="text-sm-plus font-semibold truncate dd-text">{{ auth.name }}</div>
             </div>
-            <span class="badge text-[0.5625rem] uppercase font-bold shrink-0 ml-2"
-                  :style="{ backgroundColor: authTypeBadge(auth.type).bg, color: authTypeBadge(auth.type).text }">
+            <AppBadge :custom="{ bg: authTypeBadge(auth.type).bg, text: authTypeBadge(auth.type).text }" size="xs" class="shrink-0 ml-2">
               {{ authTypeBadge(auth.type).label }}
-            </span>
+            </AppBadge>
           </div>
           <div class="px-4 py-3">
-            <div class="grid grid-cols-1 gap-2 text-[0.6875rem]">
+            <div class="grid grid-cols-1 gap-2 text-2xs-plus">
               <div v-for="(val, key) in auth.config" :key="key">
                 <span class="dd-text-muted">{{ key }}</span>
-                <div class="font-semibold truncate dd-text font-mono text-[0.625rem]">{{ val }}</div>
+                <div class="font-semibold truncate dd-text font-mono text-2xs">{{ val }}</div>
               </div>
             </div>
           </div>
@@ -213,13 +209,9 @@ onMounted(async () => {
                :style="{ borderTop: '1px solid var(--dd-border)', backgroundColor: 'var(--dd-bg-elevated)' }">
             <AppIcon :name="auth.status === 'active' ? 'check' : 'xmark'" :size="13" class="shrink-0 md:!hidden"
                      :style="{ color: auth.status === 'active' ? 'var(--dd-success)' : 'var(--dd-neutral)' }" />
-            <span class="badge text-[0.5625rem] font-bold max-md:!hidden"
-                  :style="{
-                    backgroundColor: auth.status === 'active' ? 'var(--dd-success-muted)' : 'var(--dd-neutral-muted)',
-                    color: auth.status === 'active' ? 'var(--dd-success)' : 'var(--dd-neutral)',
-                  }">
+            <AppBadge :tone="auth.status === 'active' ? 'success' : 'neutral'" size="xs" class="max-md:!hidden">
               {{ auth.status }}
-            </span>
+            </AppBadge>
           </div>
         </template>
       </DataCardGrid>
@@ -234,25 +226,16 @@ onMounted(async () => {
         <template #header="{ item: auth }">
           <AppIcon name="auth" :size="14" class="dd-text-secondary" />
           <span class="text-sm font-semibold flex-1 min-w-0 truncate dd-text">{{ auth.name }}</span>
-          <span class="badge text-[0.5625rem] uppercase font-bold shrink-0"
-                :style="{ backgroundColor: authTypeBadge(auth.type).bg, color: authTypeBadge(auth.type).text }">
+          <AppBadge :custom="{ bg: authTypeBadge(auth.type).bg, text: authTypeBadge(auth.type).text }" size="xs" class="shrink-0">
             {{ authTypeBadge(auth.type).label }}
-          </span>
+          </AppBadge>
         </template>
         <template #details="{ item: auth }">
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3 mt-2">
-            <div v-for="(val, key) in auth.config" :key="key">
-              <div class="text-[0.625rem] font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">{{ key }}</div>
-              <div class="text-xs font-mono dd-text">{{ val }}</div>
-            </div>
-            <div>
-              <div class="text-[0.625rem] font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">Status</div>
-              <span class="badge text-[0.625rem] font-semibold"
-                    :style="{
-                      backgroundColor: auth.status === 'active' ? 'var(--dd-success-muted)' : 'var(--dd-neutral-muted)',
-                      color: auth.status === 'active' ? 'var(--dd-success)' : 'var(--dd-neutral)',
-                    }">{{ auth.status }}</span>
-            </div>
+            <DetailField v-for="(val, key) in auth.config" :key="key" :label="String(key)" mono compact>{{ val }}</DetailField>
+            <DetailField label="Status" compact>
+              <AppBadge :tone="auth.status === 'active' ? 'success' : 'neutral'" size="sm" :uppercase="false">{{ auth.status }}</AppBadge>
+            </DetailField>
           </div>
         </template>
       </DataListAccordion>
@@ -276,40 +259,34 @@ onMounted(async () => {
         <template #header>
           <div class="flex items-center gap-2.5 min-w-0">
             <span class="text-sm font-bold truncate dd-text">{{ selectedAuth?.name }}</span>
-            <span v-if="selectedAuth" class="badge text-[0.5625rem] uppercase font-bold shrink-0"
-                  :style="{ backgroundColor: authTypeBadge(selectedAuth.type).bg, color: authTypeBadge(selectedAuth.type).text }">
+            <AppBadge v-if="selectedAuth" :custom="{ bg: authTypeBadge(selectedAuth.type).bg, text: authTypeBadge(selectedAuth.type).text }" size="xs" class="shrink-0">
               {{ authTypeBadge(selectedAuth.type).label }}
-            </span>
+            </AppBadge>
           </div>
         </template>
 
         <template #subtitle>
-          <span v-if="selectedAuth" class="badge text-[0.5625rem] font-bold"
-                :style="{
-                  backgroundColor: selectedAuth.status === 'active' ? 'var(--dd-success-muted)' : 'var(--dd-neutral-muted)',
-                  color: selectedAuth.status === 'active' ? 'var(--dd-success)' : 'var(--dd-neutral)',
-                }">
+          <AppBadge v-if="selectedAuth" :tone="selectedAuth.status === 'active' ? 'success' : 'neutral'" size="xs">
             {{ selectedAuth.status }}
-          </span>
+          </AppBadge>
         </template>
 
         <template v-if="selectedAuth" #default>
           <div class="p-4 space-y-5">
-            <div v-if="detailLoading" class="text-[0.6875rem] dd-text-muted">
+            <div v-if="detailLoading" class="text-2xs-plus dd-text-muted">
               Refreshing authentication details...
             </div>
             <div v-if="detailError"
-                 class="px-3 py-2 text-[0.6875rem] dd-rounded"
+                 class="px-3 py-2 text-2xs-plus dd-rounded"
                  :style="{ backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning)' }">
               {{ detailError }}
             </div>
 
-            <div v-for="(val, key) in selectedAuth.config" :key="key">
-              <div class="text-[0.625rem] font-semibold uppercase tracking-wider mb-1 dd-text-muted">{{ key }}</div>
-              <div class="text-xs font-mono dd-text break-all">{{ val }}</div>
-            </div>
+            <DetailField v-for="(val, key) in selectedAuth.config" :key="key" :label="String(key)" mono>
+              <span class="break-all">{{ val }}</span>
+            </DetailField>
             <div v-if="Object.keys(selectedAuth.config).length === 0">
-              <div class="text-[0.6875rem] dd-text-muted">No configuration properties</div>
+              <div class="text-2xs-plus dd-text-muted">No configuration properties</div>
             </div>
           </div>
         </template>

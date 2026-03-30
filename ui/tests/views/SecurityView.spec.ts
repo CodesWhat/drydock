@@ -5,6 +5,8 @@ const mockGetSecurityVulnerabilityOverview = vi.fn();
 const mockScanContainer = vi.fn();
 const mockGetContainerSbom = vi.fn();
 const mockGetSecurityRuntime = vi.fn();
+const mockIsMobile = { value: false };
+const mockWindowNarrow = { value: false };
 const { mockComputeSecurityDelta } = vi.hoisted(() => ({
   mockComputeSecurityDelta: vi.fn(),
 }));
@@ -21,7 +23,7 @@ vi.mock('@/services/server', () => ({
 }));
 
 vi.mock('@/composables/useBreakpoints', () => ({
-  useBreakpoints: () => ({ isMobile: { value: false }, windowNarrow: { value: false } }),
+  useBreakpoints: () => ({ isMobile: mockIsMobile, windowNarrow: mockWindowNarrow }),
 }));
 
 vi.mock('@/utils/container-mapper', async () => {
@@ -78,7 +80,14 @@ const stubs: Record<string, any> = {
       'countLabel',
     ],
     emits: ['update:modelValue', 'update:showFilters'],
-    template: '<div class="dfb"><slot name="filters" /><slot name="left" /></div>',
+    template:
+      '<div class="dfb"><slot name="filters" /><slot name="left" /><slot name="center" /></div>',
+  }),
+  AppIconButton: defineComponent({
+    inheritAttrs: false,
+    props: ['icon', 'size', 'variant', 'tooltip', 'ariaLabel', 'disabled', 'loading'],
+    template:
+      '<button class="app-icon-button-stub" v-bind="$attrs" :data-icon="icon" :data-size="size" :data-variant="variant" :data-loading="String(loading)" :aria-label="ariaLabel" :disabled="disabled"><slot /></button>',
   }),
   DataTable: defineComponent({
     props: ['columns', 'rows', 'rowKey', 'sortKey', 'sortAsc', 'selectedKey'],
@@ -247,6 +256,8 @@ describe('SecurityView', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     containerIdCounter = 0;
+    mockIsMobile.value = false;
+    mockWindowNarrow.value = false;
     mockGetSecurityRuntime.mockResolvedValue(readyRuntimeStatus());
   });
 
@@ -513,6 +524,24 @@ describe('SecurityView', () => {
 
       expect(w.text()).toContain('View SBOM');
       expect(w.text()).toContain('Download SBOM');
+    });
+  });
+
+  describe('scan action sizing', () => {
+    it('renders the compact scan action as a toolbar AppIconButton', async () => {
+      mockWindowNarrow.value = true;
+      mockContainers([makeContainer()]);
+
+      const wrapper = factory();
+      await vi.waitFor(() => {
+        expect(mockGetSecurityRuntime).toHaveBeenCalledOnce();
+      });
+      await nextTick();
+
+      const scanButton = wrapper.find('.app-icon-button-stub[aria-label="Scan all containers"]');
+      expect(scanButton.exists()).toBe(true);
+      expect(scanButton.attributes('data-icon')).toBe('restart');
+      expect(scanButton.attributes('data-size')).toBe('toolbar');
     });
   });
 

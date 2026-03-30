@@ -13,6 +13,7 @@ const { mockRoute } = vi.hoisted(() => ({
 
 vi.mock('vue-router', () => ({
   useRoute: () => mockRoute,
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
 }));
 
 vi.mock('@/composables/useBreakpoints', () => ({
@@ -68,7 +69,16 @@ function makeAgent(overrides: Record<string, any> = {}) {
 
 async function mountAgentsView() {
   const wrapper = mountWithPlugins(AgentsView, {
-    global: { stubs: dataViewStubs },
+    global: {
+      stubs: {
+        ...dataViewStubs,
+        AppIconButton: {
+          props: ['icon', 'variant', 'tooltip', 'ariaLabel', 'size'],
+          template:
+            '<button class="app-icon-button-stub" v-bind="$attrs" :data-icon="icon" :data-variant="variant" :data-size="size" :aria-label="ariaLabel"><slot /></button>',
+        },
+      },
+    },
   });
   mountedWrappers.push(wrapper);
   await flushPromises();
@@ -135,6 +145,16 @@ describe('AgentsView', () => {
 
     expect(wrapper.text()).toContain('boom');
     expect(wrapper.find('.data-table').attributes('data-row-count')).toBe('0');
+  });
+
+  it('renders the table column picker as an AppIconButton', async () => {
+    const wrapper = await mountAgentsView();
+
+    const columnPicker = wrapper.find('.app-icon-button-stub[aria-label="Toggle columns"]');
+    expect(columnPicker.exists()).toBe(true);
+    expect(columnPicker.attributes('data-icon')).toBe('config');
+    expect(columnPicker.attributes('data-variant')).toBe('plain');
+    expect(columnPicker.attributes('data-size')).toBe('toolbar');
   });
 
   it('refreshes agents when agent status SSE event is received', async () => {

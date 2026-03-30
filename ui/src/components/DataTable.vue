@@ -21,16 +21,20 @@ const props = withDefaults(
     selectedKey?: string | null;
     showActions?: boolean;
     compact?: boolean;
+    fixedLayout?: boolean;
     virtualScroll?: boolean;
     virtualRowHeight?: number;
     virtualOverscan?: number;
     virtualMaxHeight?: string;
     /** Optional max-height for scroll area when virtualScroll is false (e.g., '340px') */
     maxHeight?: string;
+    /** Optional function returning extra CSS classes for a row (e.g. dim during actions) */
+    rowClass?: (row: Record<string, unknown>) => string;
   }>(),
   {
     showActions: false,
     compact: false,
+    fixedLayout: false,
     virtualScroll: false,
     virtualRowHeight: 56,
     virtualOverscan: 6,
@@ -117,6 +121,7 @@ const totalColumnCount = computed(() => props.columns.length + (props.showAction
 const normalizedRowHeight = computed(() => Math.max(24, props.virtualRowHeight));
 const normalizedOverscan = computed(() => Math.max(0, props.virtualOverscan));
 const virtualizationEnabled = computed(() => props.virtualScroll && props.rows.length > 0);
+const useFixedLayout = computed(() => props.fixedLayout || Object.keys(colWidths).length > 0);
 
 function fallbackViewportHeight(): number {
   const explicitMaxHeight = parsePixelHeight(props.virtualMaxHeight);
@@ -343,15 +348,15 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
       @scroll="handleVirtualScroll">
       <table
         ref="tableRef"
-        class="w-full text-xs"
-        :style="{ borderCollapse: 'separate', borderSpacing: '0', ...(Object.keys(colWidths).length > 0 ? { tableLayout: 'fixed' } : {}) }">
+        class="w-full text-xs isolate"
+        :style="{ borderCollapse: 'separate', borderSpacing: '0', ...(useFixedLayout ? { tableLayout: 'fixed' } : {}) }">
         <thead>
           <tr :style="{ backgroundColor: 'var(--dd-bg-inset)', borderBottom: 'none' }">
             <th v-for="(col, colIdx) in columns" :key="col.key"
                 :data-col-key="col.key"
                 :class="[
                   col.icon ? 'text-center pl-5 pr-0' : [col.align ?? 'text-center', 'px-5'],
-                  'whitespace-nowrap py-2.5 font-semibold uppercase tracking-wider text-[0.625rem] select-none transition-colors relative',
+                  'whitespace-nowrap py-2.5 font-semibold uppercase tracking-wider text-2xs select-none transition-colors relative',
                   isSortableColumn(col) ? 'cursor-pointer' : '',
                   sortKey === col.key ? 'dd-text-secondary' : 'dd-text-muted hover:dd-text-secondary',
                 ]"
@@ -361,7 +366,7 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
                 @keydown="handleHeaderKeydown($event, col)"
                 @click="!resizing && isSortableColumn(col) && toggleSort(col.key, sortKey, sortAsc)">
               {{ col.label }}
-              <span v-if="sortKey === col.key" class="inline-block ml-0.5 text-[0.5rem]">{{ sortAsc ? '\u25B2' : '\u25BC' }}</span>
+              <span v-if="sortKey === col.key" class="inline-block ml-0.5 text-4xs">{{ sortAsc ? '\u25B2' : '\u25BC' }}</span>
               <!-- Resize handle -->
               <div v-if="!col.icon && colIdx < columns.length - 1"
                    role="separator"
@@ -372,7 +377,7 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
                      style="background: var(--dd-text-muted)" />
               </div>
             </th>
-            <th v-if="showActions" class="text-center px-4 py-2.5 font-semibold uppercase tracking-wider text-[0.625rem] whitespace-nowrap dd-text-muted relative">
+            <th v-if="showActions" class="text-center px-4 py-2.5 font-semibold uppercase tracking-wider text-2xs whitespace-nowrap dd-text-muted relative">
               Actions
               <div v-if="lastResizableColumnKey"
                    role="separator"
@@ -394,7 +399,10 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
           </tr>
           <tr v-for="(row, i) in visibleRows" :key="getRowKey(row, rowKey)"
               class="cursor-pointer transition-colors hover:dd-bg-hover"
-              :class="selectedKey != null && getRowKey(row, rowKey) === selectedKey ? 'ring-1 ring-inset ring-drydock-secondary' : ''"
+              :class="[
+                selectedKey != null && getRowKey(row, rowKey) === selectedKey ? 'ring-1 ring-inset ring-drydock-secondary' : '',
+                rowClass?.(row) ?? '',
+              ]"
               :style="{
                 backgroundColor: selectedKey != null && getRowKey(row, rowKey) === selectedKey
                   ? 'var(--dd-bg-elevated)'
@@ -405,8 +413,8 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
               @keydown="handleRowKeydown($event, row)"
               @click="emit('row-click', row)">
             <td v-for="col in columns" :key="col.key"
-                class="py-3 align-middle overflow-hidden text-ellipsis"
-                :class="col.icon ? 'text-center pl-5 pr-0' : [col.align ?? 'text-center', 'px-5']">
+                class="py-3 align-middle"
+                :class="col.icon ? 'text-center pl-5 pr-0' : ['overflow-hidden text-ellipsis', col.align ?? 'text-center', 'px-5']">
               <slot :name="'cell-' + col.key" :row="row" :value="row[col.key]">
                 {{ row[col.key] }}
               </slot>

@@ -33,6 +33,7 @@ function createMainLogStream() {
   return pinoPretty({
     colorize: Boolean(process.stdout.isTTY),
     sync: true,
+    singleLine: true,
   });
 }
 

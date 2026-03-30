@@ -100,7 +100,7 @@ const containerResumeAutoScroll = vi.fn();
 const previewLoading = ref(false);
 const previewError = ref<string | null>(null);
 const runContainerPreview = vi.fn();
-const actionInProgress = ref<string | null>(null);
+const actionInProgress = ref(new Set<string>());
 const mockSkipCurrentForSelected = vi.fn();
 const mockSnoozeSelected = vi.fn();
 const mockSnoozeSelectedUntilDate = vi.fn();
@@ -213,7 +213,7 @@ vi.mock('@/components/containers/containersViewTemplateContext', () => ({
     maturityMinAgeDaysInput,
     setMaturityPolicySelected: mockSetMaturityPolicySelected,
     clearMaturityPolicySelected: mockClearMaturityPolicySelected,
-    clearPolicySelected: mockClearPolicySelected,
+    confirmClearPolicy: mockClearPolicySelected,
     policyMessage,
     policyError,
     removeSkipTagSelected: mockRemoveSkipTagSelected,
@@ -256,6 +256,16 @@ function mountComponent() {
     global: {
       stubs: {
         AppIcon: { template: '<span class="app-icon-stub" />', props: ['name', 'size'] },
+        ContainerLogs: {
+          props: ['containerId', 'containerName', 'compact'],
+          template:
+            '<div data-test="container-logs-stub" :data-id="containerId" :data-name="containerName" :data-compact="compact === undefined ? `false` : `true`">{{ containerName }}</div>',
+        },
+        ContainerStats: {
+          props: ['containerId', 'compact'],
+          template:
+            '<div data-test="container-stats-stub" :data-id="containerId" :data-compact="compact === undefined ? `false` : `true`"></div>',
+        },
       },
       directives: {
         tooltip: {},
@@ -312,7 +322,7 @@ describe('ContainerSideTabContent - Environment Variables', () => {
     containerScrollBlocked.value = false;
     previewLoading.value = false;
     previewError.value = null;
-    actionInProgress.value = null;
+    actionInProgress.value = new Set();
     policyInProgress.value = null;
     snoozeDateInput.value = '';
     selectedSnoozeUntil.value = null;
@@ -395,6 +405,7 @@ describe('ContainerSideTabContent - Environment Variables', () => {
 
     const eyeButton = passwordRow?.find('button');
     expect(eyeButton).toBeDefined();
+    expect(eyeButton?.attributes('aria-label')).toBe('Reveal value');
 
     await eyeButton?.trigger('click');
     await flushPromises();
@@ -403,6 +414,7 @@ describe('ContainerSideTabContent - Environment Variables', () => {
     const updatedRows = wrapper.findAll('[data-test="container-side-tab-content"] .font-mono');
     const updatedPasswordRow = updatedRows.find((row) => row.text().includes('DB_PASSWORD'));
     expect(updatedPasswordRow?.text()).toContain('super-secret');
+    expect(updatedPasswordRow?.find('button').attributes('aria-label')).toBe('Hide value');
     expect(mockRevealContainerEnv).toHaveBeenCalledWith('container-1');
   });
 
@@ -609,6 +621,8 @@ describe('ContainerSideTabContent - Environment Variables', () => {
     expect(wrapper.text()).toContain('2026-03-12T14:30:00Z');
     expect(wrapper.text()).toContain('Skipped tags:');
     expect(wrapper.text()).toContain('Skipped digests:');
+    expect(tagChip?.find('button').attributes('aria-label')).toBe('Remove skip');
+    expect(digestChip?.find('button').attributes('aria-label')).toBe('Remove skip');
 
     await tagChip?.find('button').trigger('click');
     await digestChip?.find('button').trigger('click');
@@ -719,29 +733,16 @@ describe('ContainerSideTabContent - Environment Variables', () => {
     expect(loadDetailSbom).toHaveBeenCalledTimes(1);
   });
 
-  it('renders logs tab rows and handles scroll-resume controls', async () => {
+  it('renders compact logs tab via container logs component', () => {
     activeDetailTab.value = 'logs';
-    getContainerLogs.mockReturnValue([
-      '2026-03-13T20:00:00.000Z [warn] first warning',
-      '2026-03-13T20:00:01.000Z [error] second error',
-    ]);
-    containerScrollBlocked.value = true;
-    containerAutoFetchInterval.value = 15;
 
     const wrapper = mountComponent();
-    const intervalSelect = wrapper.find('select');
-    const logContainer = wrapper.find('[style*="max-height: calc(100vh - 400px);"]');
-    const resumeButton = findButtonByText(wrapper, 'Resume');
+    const logsStub = wrapper.find('[data-test="container-logs-stub"]');
 
-    await intervalSelect.setValue('30');
-    await logContainer.trigger('scroll');
-    await resumeButton?.trigger('click');
-
-    expect(wrapper.text()).toContain('Container Logs');
-    expect(wrapper.text()).toContain('2 lines');
-    expect(containerAutoFetchInterval.value).toBe(30);
-    expect(containerHandleLogScroll).toHaveBeenCalledTimes(1);
-    expect(containerResumeAutoScroll).toHaveBeenCalledTimes(1);
+    expect(logsStub.exists()).toBe(true);
+    expect(logsStub.attributes('data-id')).toBe('container-1');
+    expect(logsStub.attributes('data-name')).toBe('nginx');
+    expect(logsStub.attributes('data-compact')).toBe('true');
   });
 
   it('renders labels list when labels exist', () => {
@@ -887,6 +888,40 @@ describe('ContainerSideTabContent - Environment Variables', () => {
     expect(wrapper.text()).toContain('Pinned image digest has no newer tag');
   });
 
+  it('shows floating tag badge in overview when tag precision is floating and digest watch is disabled', () => {
+    activeDetailTab.value = 'overview';
+    selectedContainer.value = {
+      ...createSelectedContainer(),
+      tagPrecision: 'floating',
+      imageDigestWatch: false,
+    };
+
+    const wrapper = mountComponent();
+
+    expect(wrapper.find('[data-test="floating-tag-badge"]').exists()).toBe(true);
+  });
+
+  it('hides floating tag badge in overview when tag is specific or digest watch is enabled', async () => {
+    activeDetailTab.value = 'overview';
+    selectedContainer.value = {
+      ...createSelectedContainer(),
+      tagPrecision: 'specific',
+      imageDigestWatch: false,
+    };
+
+    const wrapper = mountComponent();
+    expect(wrapper.find('[data-test="floating-tag-badge"]').exists()).toBe(false);
+
+    selectedContainer.value = {
+      ...createSelectedContainer(),
+      tagPrecision: 'floating',
+      imageDigestWatch: true,
+    };
+    await nextTick();
+
+    expect(wrapper.find('[data-test="floating-tag-badge"]').exists()).toBe(false);
+  });
+
   it('renders vulnerability and SBOM loading/error states', () => {
     activeDetailTab.value = 'overview';
     detailVulnerabilityLoading.value = true;
@@ -1022,19 +1057,17 @@ describe('ContainerSideTabContent - Environment Variables', () => {
     expect(dataWrapper.text()).toContain('timeout');
   });
 
-  it('renders labels empty state and logs without auto-scroll pause', async () => {
+  it('renders labels empty state and logs component without inline pause controls', async () => {
     activeDetailTab.value = 'labels';
     const labelsWrapper = mountComponent();
     expect(labelsWrapper.text()).toContain('No labels assigned');
 
     activeDetailTab.value = 'logs';
-    getContainerLogs.mockReturnValue(['2026-03-13T20:00:02.000Z [info] steady-state']);
-    containerScrollBlocked.value = true;
-    containerAutoFetchInterval.value = 0;
     await nextTick();
 
     const logsWrapper = mountComponent();
-    expect(logsWrapper.text()).toContain('1 lines');
+    const logsStub = logsWrapper.find('[data-test="container-logs-stub"]');
+    expect(logsStub.exists()).toBe(true);
     expect(logsWrapper.text()).not.toContain('Auto-scroll paused');
   });
 

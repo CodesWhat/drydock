@@ -34,7 +34,7 @@ export const ContentOnly: Story = {
           <div class="px-3 py-2 dd-rounded flex items-center justify-between"
                :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }">
             <span class="text-xs font-semibold dd-text">Containers</span>
-            <span class="text-[0.625rem] dd-text-muted">14 / 23 visible</span>
+            <span class="text-2xs dd-text-muted">14 / 23 visible</span>
           </div>
           <div class="dd-rounded p-4"
                :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }">
@@ -58,7 +58,7 @@ export const WithDetailPanelSlot: Story = {
           <div class="px-3 py-2 dd-rounded flex items-center justify-between"
                :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }">
             <span class="text-xs font-semibold dd-text">Servers</span>
-            <span class="text-[0.625rem] dd-text-muted">3 connected, 1 disconnected</span>
+            <span class="text-2xs dd-text-muted">3 connected, 1 disconnected</span>
           </div>
           <div class="dd-rounded p-4"
                :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }">
@@ -84,7 +84,7 @@ export const WithDetailPanelSlot: Story = {
               </button>
             </div>
             <div class="p-4 space-y-2">
-              <div class="text-[0.625rem] uppercase tracking-wider font-semibold dd-text-muted">Selection</div>
+              <div class="text-2xs uppercase tracking-wider font-semibold dd-text-muted">Selection</div>
               <div class="text-xs font-mono dd-text">edge-1 / drydock-api</div>
             </div>
           </aside>
@@ -176,10 +176,10 @@ export const IntegratedWorkspace: Story = {
               v-model="query"
               type="text"
               placeholder="Filter by name or server..."
-              class="flex-1 min-w-[120px] max-w-[260px] px-2.5 py-1.5 dd-rounded text-[0.6875rem] font-medium outline-none dd-bg dd-text dd-placeholder"
+              class="flex-1 min-w-[120px] max-w-[260px] px-2.5 py-1.5 dd-rounded text-2xs-plus font-medium outline-none dd-bg dd-text dd-placeholder"
             />
             <button
-              class="text-[0.625rem] dd-text-muted hover:dd-text transition-colors"
+              class="text-2xs dd-text-muted hover:dd-text transition-colors"
               @click="query = ''"
             >
               Clear
@@ -196,7 +196,7 @@ export const IntegratedWorkspace: Story = {
           @row-click="openDetails($event)"
         >
           <template #cell-status="{ row }">
-            <span class="badge text-[0.5625rem] uppercase font-bold"
+            <span class="badge text-3xs uppercase font-bold"
                   :style="{
                     backgroundColor: row.status === 'running' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
                     color: row.status === 'running' ? 'var(--dd-success)' : 'var(--dd-danger)',
@@ -216,9 +216,9 @@ export const IntegratedWorkspace: Story = {
           <template #card="{ item, selected }">
             <div class="px-4 py-3">
               <div class="text-sm font-semibold dd-text">{{ item.name }}</div>
-              <div class="text-[0.6875rem] dd-text-muted mt-1">{{ item.server }}</div>
+              <div class="text-2xs-plus dd-text-muted mt-1">{{ item.server }}</div>
             </div>
-            <div class="px-4 py-2.5 text-[0.625rem] dd-text-muted"
+            <div class="px-4 py-2.5 text-2xs dd-text-muted"
                  :style="{ borderTop: '1px solid var(--dd-border-strong)', backgroundColor: selected ? 'var(--dd-bg-elevated)' : 'var(--dd-bg-inset)' }">
               {{ item.status }}
             </div>
@@ -233,7 +233,7 @@ export const IntegratedWorkspace: Story = {
         >
           <template #header="{ item }">
             <span class="text-sm font-semibold flex-1 min-w-0 truncate dd-text">{{ item.name }}</span>
-            <span class="text-[0.625rem] font-mono dd-text-muted">{{ item.server }}</span>
+            <span class="text-2xs font-mono dd-text-muted">{{ item.server }}</span>
           </template>
           <template #details="{ item }">
             <div class="text-xs dd-text">Status: {{ item.status }}</div>
@@ -254,7 +254,7 @@ export const IntegratedWorkspace: Story = {
               <div class="text-sm font-semibold dd-text">Selection</div>
             </template>
             <template #subtitle>
-              <span class="text-[0.6875rem] font-mono dd-text-secondary">{{ selected?.name }}</span>
+              <span class="text-2xs-plus font-mono dd-text-secondary">{{ selected?.name }}</span>
             </template>
             <div class="p-4 text-xs dd-text-muted">
               Server: {{ selected?.server }}<br />

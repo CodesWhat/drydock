@@ -5,7 +5,7 @@
 #   0. Clean tree gate — rejects untracked/uncommitted/stashed files
 #   1. Lint gate (~20s) — catches formatting/lint before burning CPU
 #   2. Build + test (~26s parallel) — independent workspaces run concurrently
-#   3. E2E + zizmor (blocking)
+#   3. E2E + Playwright + zizmor (blocking)
 #
 # Snyk scans are CI-only (release workflow) to preserve the 200/month quota.
 #
@@ -60,7 +60,7 @@ pre-push:
       priority: 2
       timeout: 30s
     qlty:
-      run: CI=1 qlty check --all --no-progress </dev/null
+      run: ./scripts/qlty-check-gate.sh all
       priority: 3
       timeout: 4m
 
@@ -74,7 +74,13 @@ pre-push:
     e2e:
       run: ./scripts/run-e2e-tests.sh
       priority: 5
-      timeout: 2m
+      timeout: 10m
+
+    # ── Playwright: mirrors CI "Playwright E2E" job ────────────────
+    e2e-playwright:
+      run: ./scripts/run-playwright-qa.sh
+      priority: 6
+      timeout: 15m
 
     # ── Zizmor: GitHub Actions security scanner (blocking) ───────────
     zizmor:
@@ -82,5 +88,5 @@ pre-push:
       run: zizmor .github/workflows/
       skip:
         - run: '! command -v zizmor >/dev/null 2>&1'
-      priority: 6
+      priority: 7
       timeout: 30s

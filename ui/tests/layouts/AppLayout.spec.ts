@@ -13,6 +13,7 @@ const {
   mockGetEffectiveDisplayIcon,
   mockGetAllNotificationRules,
   mockGetAllRegistries,
+  mockGetServer,
   mockGetAllTriggers,
   mockGetAllWatchers,
   mockSseConnect,
@@ -30,6 +31,7 @@ const {
   mockGetEffectiveDisplayIcon: vi.fn(),
   mockGetAllNotificationRules: vi.fn(),
   mockGetAllRegistries: vi.fn(),
+  mockGetServer: vi.fn(),
   mockGetAllTriggers: vi.fn(),
   mockGetAllWatchers: vi.fn(),
   mockSseConnect: vi.fn(),
@@ -96,6 +98,10 @@ vi.mock('@/services/registry', () => ({
   getAllRegistries: (...args: unknown[]) => mockGetAllRegistries(...args),
 }));
 
+vi.mock('@/services/server', () => ({
+  getServer: (...args: unknown[]) => mockGetServer(...args),
+}));
+
 vi.mock('@/services/trigger', () => ({
   getAllTriggers: (...args: unknown[]) => mockGetAllTriggers(...args),
 }));
@@ -140,6 +146,15 @@ describe('AppLayout', () => {
     mockGetAllTriggers.mockResolvedValue([]);
     mockGetAllWatchers.mockResolvedValue([]);
     mockGetAllRegistries.mockResolvedValue([]);
+    mockGetServer.mockResolvedValue({
+      compatibility: {
+        legacyInputs: {
+          total: 0,
+          env: { total: 0, keys: [] },
+          label: { total: 0, keys: [] },
+        },
+      },
+    });
     mockGetAllAuthentications.mockResolvedValue([]);
     mockGetAllNotificationRules.mockResolvedValue([]);
     mockGetEffectiveDisplayIcon.mockReturnValue('docker');
@@ -348,7 +363,7 @@ describe('AppLayout', () => {
 
     const banner = wrapper.find('[data-testid="oidc-http-compat-banner"]');
     expect(banner.exists()).toBe(true);
-    expect(banner.text()).toContain('Migrate your IdP to HTTPS');
+    expect(banner.text()).toContain('Migration guide');
   });
 
   it('supports dismissing OIDC HTTP compatibility banner for current session', async () => {
@@ -393,7 +408,10 @@ describe('AppLayout', () => {
 
     expect(wrapper.find('[data-testid="oidc-http-compat-banner"]').exists()).toBe(true);
 
-    await wrapper.find('[data-testid="oidc-http-compat-banner-dismiss-forever"]').trigger('click');
+    await wrapper
+      .find('[data-testid="oidc-http-compat-banner-dismiss-forever"] input[type="checkbox"]')
+      .setValue(true);
+    await wrapper.find('[data-testid="oidc-http-compat-banner-dismiss-session"]').trigger('click');
     await flushPromises();
 
     expect(wrapper.find('[data-testid="oidc-http-compat-banner"]').exists()).toBe(false);
@@ -483,7 +501,10 @@ describe('AppLayout', () => {
     expect(wrapper.find('[data-testid="sha-hash-deprecation-banner"]').exists()).toBe(true);
 
     await wrapper
-      .find('[data-testid="sha-hash-deprecation-banner-dismiss-forever"]')
+      .find('[data-testid="sha-hash-deprecation-banner-dismiss-forever"] input[type="checkbox"]')
+      .setValue(true);
+    await wrapper
+      .find('[data-testid="sha-hash-deprecation-banner-dismiss-session"]')
       .trigger('click');
     await flushPromises();
 
@@ -526,5 +547,121 @@ describe('AppLayout', () => {
     await flushPromises();
 
     expect(wrapper.find('[data-testid="sha-hash-deprecation-banner"]').exists()).toBe(false);
+  });
+
+  it('shows a legacy env deprecation banner with truncated key preview', async () => {
+    mockGetServer.mockResolvedValue({
+      compatibility: {
+        legacyInputs: {
+          total: 20,
+          env: {
+            total: 20,
+            keys: [
+              'DD_TRIGGER_DOCKER_LOCAL_AUTO',
+              'DD_TRIGGER_DOCKER_LOCAL_PRUNE',
+              'DD_TRIGGER_DOCKER_LOCAL_INCLUDE',
+              'DD_TRIGGER_DOCKER_LOCAL_EXCLUDE',
+              'DD_TRIGGER_DOCKER_LOCAL_NOTIFY',
+              'DD_TRIGGER_DOCKER_LOCAL_INTERVAL',
+              'WUD_SERVER_PORT',
+              'WUD_WATCHER_LOCAL_WATCHBYDEFAULT',
+            ],
+          },
+          label: { total: 0, keys: [] },
+        },
+      },
+    });
+
+    const wrapper = mountLayout();
+    mountedWrappers.push(wrapper);
+    await flushPromises();
+
+    const banner = wrapper.find('[data-testid="legacy-config-deprecation-banner"]');
+    expect(banner.exists()).toBe(true);
+    expect(banner.text()).toContain('20 legacy configuration aliases detected');
+    expect(banner.text()).toContain('Env keys (20):');
+    expect(banner.text()).toContain('DD_TRIGGER_DOCKER_LOCAL_AUTO');
+    expect(banner.text()).toContain('(+2 more)');
+  });
+
+  it('shows consolidated legacy config banner when only labels are detected', async () => {
+    mockGetServer.mockResolvedValue({
+      compatibility: {
+        legacyInputs: {
+          total: 3,
+          env: { total: 0, keys: [] },
+          label: {
+            total: 3,
+            keys: ['wud.tag.include', 'wud.tag.exclude', 'wud.watch'],
+          },
+        },
+      },
+    });
+
+    const wrapper = mountLayout();
+    mountedWrappers.push(wrapper);
+    await flushPromises();
+
+    const banner = wrapper.find('[data-testid="legacy-config-deprecation-banner"]');
+    expect(banner.exists()).toBe(true);
+    expect(banner.text()).toContain('3 legacy configuration aliases detected');
+    expect(banner.text()).toContain('Label keys (3):');
+    expect(banner.text()).toContain('wud.watch');
+  });
+
+  it('shows a legacy API path deprecation banner when server reports API path usage', async () => {
+    mockGetServer.mockResolvedValue({
+      compatibility: {
+        legacyInputs: {
+          total: 7,
+          env: { total: 0, keys: [] },
+          label: { total: 0, keys: [] },
+          api: {
+            total: 7,
+            keys: ['/api/containers', '/api/settings'],
+          },
+        },
+      },
+    });
+
+    const wrapper = mountLayout();
+    mountedWrappers.push(wrapper);
+    await flushPromises();
+
+    const banner = wrapper.find('[data-testid="legacy-api-path-deprecation-banner"]');
+    expect(banner.exists()).toBe(true);
+    expect(banner.text()).toContain('7 legacy API paths detected');
+    expect(banner.text()).toContain('/api/containers');
+  });
+
+  it('dismisses consolidated legacy config banner', async () => {
+    mockGetServer.mockResolvedValue({
+      compatibility: {
+        legacyInputs: {
+          total: 2,
+          env: { total: 1, keys: ['DD_TRIGGER_DOCKER_LOCAL_AUTO'] },
+          label: { total: 1, keys: ['wud.watch'] },
+        },
+      },
+    });
+
+    const wrapper = mountLayout();
+    mountedWrappers.push(wrapper);
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="legacy-config-deprecation-banner"]').exists()).toBe(true);
+
+    await wrapper
+      .find(
+        '[data-testid="legacy-config-deprecation-banner-dismiss-forever"] input[type="checkbox"]',
+      )
+      .setValue(true);
+    await wrapper
+      .find('[data-testid="legacy-config-deprecation-banner-dismiss-session"]')
+      .trigger('click');
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="legacy-config-deprecation-banner"]').exists()).toBe(false);
+    expect(localStorage.getItem('dd-banner-legacy-config-v1')).toBe('true');
   });
 });

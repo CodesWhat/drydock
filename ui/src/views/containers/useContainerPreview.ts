@@ -1,4 +1,5 @@
 import { computed, type Ref, ref } from 'vue';
+import { useToast } from '../../composables/useToast';
 import type { ContainerComposePreview, ContainerPreviewPayload } from '../../services/preview';
 import { previewContainer } from '../../services/preview';
 import { errorMessage } from '../../utils/error';
@@ -71,7 +72,10 @@ async function runContainerPreviewState(args: {
     args.detailPreview.value = await previewContainer(args.containerId);
   } catch (e: unknown) {
     args.detailPreview.value = null;
-    args.previewError.value = errorMessage(e, 'Failed to generate update preview');
+    const msg = errorMessage(e, 'Failed to generate update preview');
+    args.previewError.value = msg;
+    const toast = useToast();
+    toast.error('Preview failed', msg);
   } finally {
     args.previewLoading.value = false;
   }

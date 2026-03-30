@@ -117,6 +117,23 @@ describe('docker event orchestration helpers', () => {
     expect(watcher.dockerApi.getEvents).not.toHaveBeenCalled();
   });
 
+  test('listenDockerEventsOrchestration handles non-object auth error gracefully', async () => {
+    const { watcher } = createWatcher({
+      ensureRemoteAuthHeaders: vi.fn().mockRejectedValue('string error'),
+    });
+
+    await listenDockerEventsOrchestration(watcher as any);
+
+    expect(watcher.log.warn).toHaveBeenCalledWith(
+      'Unable to initialize remote watcher auth for docker events (undefined)',
+    );
+    expect(watcher.scheduleDockerEventsReconnect).toHaveBeenCalledWith(
+      'auth initialization failure',
+      'string error',
+    );
+    expect(watcher.dockerApi.getEvents).not.toHaveBeenCalled();
+  });
+
   test('listenDockerEventsOrchestration wires stream handlers when docker events stream opens', async () => {
     const { watcher, stream, streamHandlers } = createWatcher();
 
@@ -236,6 +253,22 @@ describe('docker event orchestration helpers', () => {
     expect(watcher.log.debug).toHaveBeenCalledWith(
       expect.stringContaining('Unable to process Docker event'),
     );
+  });
+
+  test('processDockerEventPayloadOrchestration handles parse errors with non-string message field', async () => {
+    const { watcher } = createWatcher();
+    const parseSpy = vi.spyOn(JSON, 'parse').mockImplementation(() => {
+      throw { message: { detail: 'bad json' } };
+    });
+
+    const processed = await processDockerEventPayloadOrchestration(
+      watcher as any,
+      '{"Action":"ok"}',
+    );
+
+    expect(processed).toBe(true);
+    expect(watcher.log.debug).toHaveBeenCalledWith('Unable to process Docker event (undefined)');
+    parseSpy.mockRestore();
   });
 
   test('processDockerEventOrchestration delegates through state dependencies', async () => {

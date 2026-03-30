@@ -35,12 +35,12 @@ const props = defineProps<{
         </div>
         <div class="min-w-0">
           <div class="text-sm font-bold dd-text truncate">{{ props.profileDisplayName }}</div>
-          <div class="text-[0.6875rem] dd-text-muted truncate">
+          <div class="text-2xs-plus dd-text-muted truncate">
             {{ props.profileData.email || props.profileData.username || '—' }}
           </div>
           <span
             v-if="props.profileData.role"
-            class="badge text-[0.5625rem] font-semibold mt-1 inline-flex"
+            class="badge text-3xs font-semibold mt-1 inline-flex"
             :style="{ backgroundColor: 'var(--dd-primary-muted)', color: 'var(--dd-primary)' }"
           >
             {{ props.profileData.role }}
@@ -54,34 +54,34 @@ const props = defineProps<{
         </div>
         <div
           v-else-if="props.profileError"
-          class="text-[0.6875rem] px-3 py-2 dd-rounded"
+          class="text-2xs-plus px-3 py-2 dd-rounded"
           :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }"
         >
           {{ props.profileError }}
         </div>
         <template v-else>
           <div class="flex items-center justify-between py-2" :style="{ borderBottom: '1px solid var(--dd-border)' }">
-            <span class="text-[0.6875rem] font-semibold uppercase tracking-wider dd-text-muted">Username</span>
+            <span class="text-2xs-plus font-semibold uppercase tracking-wider dd-text-muted">Username</span>
             <span class="text-xs font-medium font-mono dd-text">{{ props.profileData.username || '—' }}</span>
           </div>
           <div class="flex items-center justify-between py-2" :style="{ borderBottom: '1px solid var(--dd-border)' }">
-            <span class="text-[0.6875rem] font-semibold uppercase tracking-wider dd-text-muted">Email</span>
+            <span class="text-2xs-plus font-semibold uppercase tracking-wider dd-text-muted">Email</span>
             <span class="text-xs font-medium font-mono dd-text">{{ props.profileData.email || '—' }}</span>
           </div>
           <div class="flex items-center justify-between py-2" :style="{ borderBottom: '1px solid var(--dd-border)' }">
-            <span class="text-[0.6875rem] font-semibold uppercase tracking-wider dd-text-muted">Role</span>
+            <span class="text-2xs-plus font-semibold uppercase tracking-wider dd-text-muted">Role</span>
             <span class="text-xs font-medium font-mono dd-text">{{ props.profileData.role || '—' }}</span>
           </div>
           <div class="flex items-center justify-between py-2" :style="{ borderBottom: '1px solid var(--dd-border)' }">
-            <span class="text-[0.6875rem] font-semibold uppercase tracking-wider dd-text-muted">Provider</span>
+            <span class="text-2xs-plus font-semibold uppercase tracking-wider dd-text-muted">Provider</span>
             <span class="text-xs font-medium font-mono dd-text">{{ props.profileData.provider || '—' }}</span>
           </div>
           <div class="flex items-center justify-between py-2" :style="{ borderBottom: '1px solid var(--dd-border)' }">
-            <span class="text-[0.6875rem] font-semibold uppercase tracking-wider dd-text-muted">Last Login</span>
+            <span class="text-2xs-plus font-semibold uppercase tracking-wider dd-text-muted">Last Login</span>
             <span class="text-xs font-medium font-mono dd-text">{{ props.profileData.lastLogin || '—' }}</span>
           </div>
           <div class="flex items-center justify-between py-2">
-            <span class="text-[0.6875rem] font-semibold uppercase tracking-wider dd-text-muted">Active Sessions</span>
+            <span class="text-2xs-plus font-semibold uppercase tracking-wider dd-text-muted">Active Sessions</span>
             <span class="text-xs font-medium font-mono dd-text">{{ props.profileData.sessions }}</span>
           </div>
         </template>

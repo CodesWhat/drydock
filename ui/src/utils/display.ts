@@ -79,3 +79,7 @@ export function maturityColor(maturity: string | null) {
   }
   return { bg: 'transparent', text: 'transparent' };
 }
+
+export function suggestedTagColor() {
+  return { bg: 'var(--dd-alt-muted)', text: 'var(--dd-alt)' };
+}

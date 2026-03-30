@@ -35,13 +35,7 @@ const allColumns: ColumnDef[] = [
   },
   { key: 'kind', label: 'Kind', px: 'px-3', style: '', required: false },
   { key: 'status', label: 'Status', px: 'px-3', style: '', required: false },
-  {
-    key: 'bouncer',
-    label: 'Bouncer',
-    px: 'px-3',
-    style: '',
-    required: false,
-  },
+  { key: 'imageAge', label: 'Image Age', px: 'px-3', style: '', required: false },
   { key: 'server', label: 'Host', px: 'px-3', style: '', required: false },
   {
     key: 'registry',

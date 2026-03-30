@@ -21,7 +21,7 @@ const configurationValid = {
   threshold: 'all',
   mode: 'simple',
   once: true,
-  auto: true,
+  auto: 'all',
   order: 100,
   simpletitle: 'New ${container.updateKind.kind} found for container ${container.name}',
 
@@ -30,6 +30,7 @@ const configurationValid = {
 
   batchtitle: '${containers.length} updates available',
   resolvenotifications: false,
+  digestcron: '0 8 * * *',
 };
 
 test('validateConfiguration should return validated configuration when valid', async () => {
@@ -102,7 +103,7 @@ test('maskConfiguration should mask sensitive data', async () => {
   expect(pushover.maskConfiguration()).toEqual({
     mode: 'simple',
     priority: 0,
-    auto: true,
+    auto: 'all',
     order: 100,
     simplebody:
       'Container ${container.name} running with ${container.updateKind.kind} ${container.updateKind.localValue} can be updated to ${container.updateKind.kind} ${container.updateKind.remoteValue}${container.result && container.result.link ? "\\n" + container.result.link : ""}',
@@ -117,6 +118,7 @@ test('maskConfiguration should mask sensitive data', async () => {
     once: true,
     token: '[REDACTED]',
     user: '[REDACTED]',
+    digestcron: '0 8 * * *',
   });
 });
 
@@ -267,4 +269,65 @@ test('sendMessage should reject when send callback has error', async () => {
   const po = new PushoverFresh();
   po.configuration = { ...configurationValid };
   await expect(po.sendMessage({ title: 'Test', message: 'test' })).rejects.toThrow('send error');
+});
+
+test('sendMessage should preserve Error.toString output for callback errors', async () => {
+  vi.resetModules();
+  vi.doMock('pushover-notifications', () => ({
+    default: class Push {
+      set onerror(_fn) {}
+      send(_message, cb) {
+        cb(new Error('send failed'), null);
+      }
+    },
+  }));
+  const { default: PushoverFresh } = await import('./Pushover.js');
+  const po = new PushoverFresh();
+  po.configuration = { ...configurationValid };
+  await expect(po.sendMessage({ title: 'Test', message: 'test' })).rejects.toThrow(
+    'Error: send failed',
+  );
+});
+
+test('sendMessage should allow undefined onerror payloads', async () => {
+  vi.resetModules();
+  vi.doMock('pushover-notifications', () => ({
+    default: class Push {
+      set onerror(fn) {
+        this._onerror = fn;
+      }
+      send(_message, _cb) {
+        this._onerror(undefined);
+      }
+    },
+  }));
+  const { default: PushoverFresh } = await import('./Pushover.js');
+  const po = new PushoverFresh();
+  po.configuration = { ...configurationValid };
+  await expect(po.sendMessage({ title: 'Test', message: 'test' })).rejects.toMatchObject({
+    message: '',
+  });
+});
+
+test('sendMessage should fallback to unknown error when callback error cannot be stringified', async () => {
+  vi.resetModules();
+  vi.doMock('pushover-notifications', () => ({
+    default: class Push {
+      set onerror(_fn) {}
+      send(_message, cb) {
+        cb(
+          {
+            toString() {
+              throw new Error('stringify failed');
+            },
+          },
+          null,
+        );
+      }
+    },
+  }));
+  const { default: PushoverFresh } = await import('./Pushover.js');
+  const po = new PushoverFresh();
+  po.configuration = { ...configurationValid };
+  await expect(po.sendMessage({ title: 'Test', message: 'test' })).rejects.toThrow('Unknown error');
 });

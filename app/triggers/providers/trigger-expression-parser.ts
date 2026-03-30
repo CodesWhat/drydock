@@ -10,7 +10,7 @@ type TemplateVars = Record<string, unknown>;
 
 /**
  * Safely resolve a dotted property path on an object.
- * Returns undefined when any segment along the path is nullish.
+ * Returns undefined when a segment along the path is nullish.
  */
 function resolvePath(obj: unknown, path: string): unknown {
   return path.split('.').reduce<unknown>((cur, key) => {
@@ -347,8 +347,12 @@ function warnLegacyTemplateVars(template: string, legacyVars: string[], replacem
  */
 export function renderSimple(template: string, container: Container): string {
   if (template) warnLegacyTemplateVars(template, LEGACY_SIMPLE_VARS, 'container');
+  const event = Reflect.get(new Object(container), 'notificationEvent');
   const vars: TemplateVars = {
     container,
+    event: event && typeof event === 'object' ? event : {},
+    releaseNotes: container.result?.releaseNotes,
+    suggestedTag: container.result?.suggestedTag ?? container.result?.tag ?? '',
     // Deprecated vars for backward compatibility
     id: container.id,
     name: container.name,

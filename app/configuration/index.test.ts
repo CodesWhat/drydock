@@ -64,6 +64,17 @@ test('getLogBufferEnabled should return false when disabled via env', async () =
   delete configuration.ddEnvVars.DD_LOG_BUFFER_ENABLED;
 });
 
+test('getLocalWatcherEnabled should default to true', async () => {
+  delete configuration.ddEnvVars.DD_LOCAL_WATCHER;
+  expect(configuration.getLocalWatcherEnabled()).toStrictEqual(true);
+});
+
+test('getLocalWatcherEnabled should return false when disabled via env', async () => {
+  configuration.ddEnvVars.DD_LOCAL_WATCHER = 'false';
+  expect(configuration.getLocalWatcherEnabled()).toStrictEqual(false);
+  delete configuration.ddEnvVars.DD_LOCAL_WATCHER;
+});
+
 test('getDnsMode should default to ipv4first', () => {
   delete configuration.ddEnvVars.DD_DNS_MODE;
   expect(configuration.getDnsMode()).toBe('ipv4first');
@@ -273,6 +284,7 @@ test('getStoreConfiguration should return configured store', async () => {
 test('getServerConfiguration should return configured api (new vars)', async () => {
   configuration.ddEnvVars.DD_SERVER_PORT = '4000';
   delete configuration.ddEnvVars.DD_SERVER_METRICS_AUTH;
+  delete configuration.ddEnvVars.DD_SERVER_METRICS_TOKEN;
   expect(configuration.getServerConfiguration()).toStrictEqual({
     cookie: {},
     compression: {},
@@ -305,6 +317,7 @@ test('getServerConfiguration should allow disabling metrics auth', async () => {
     },
     metrics: {
       auth: false,
+      token: '',
     },
     port: 3000,
     session: {},
@@ -312,6 +325,29 @@ test('getServerConfiguration should allow disabling metrics auth', async () => {
     trustproxy: false,
     ui: {},
   });
+  delete configuration.ddEnvVars.DD_SERVER_METRICS_AUTH;
+});
+
+test('getServerConfiguration should parse DD_SERVER_METRICS_TOKEN', async () => {
+  delete configuration.ddEnvVars.DD_SERVER_PORT;
+  configuration.ddEnvVars.DD_SERVER_METRICS_TOKEN = 'my-prom-metrics-token';
+  const config = configuration.getServerConfiguration();
+  expect(config.metrics).toStrictEqual({
+    auth: true,
+    token: 'my-prom-metrics-token',
+  });
+  delete configuration.ddEnvVars.DD_SERVER_METRICS_TOKEN;
+});
+
+test('getServerConfiguration should allow DD_SERVER_METRICS_TOKEN to be empty', async () => {
+  delete configuration.ddEnvVars.DD_SERVER_PORT;
+  configuration.ddEnvVars.DD_SERVER_METRICS_TOKEN = '';
+  const config = configuration.getServerConfiguration();
+  expect(config.metrics).toStrictEqual({
+    auth: true,
+    token: '',
+  });
+  delete configuration.ddEnvVars.DD_SERVER_METRICS_TOKEN;
 });
 
 test('getServerConfiguration should allow disabling the UI router', async () => {
@@ -928,6 +964,12 @@ describe('getServerConfiguration errors', () => {
     delete configuration.ddEnvVars.DD_SERVER_SESSION_MAXCONCURRENTSESSIONS;
   });
 
+  test('should throw when metrics token is shorter than 16 characters', () => {
+    configuration.ddEnvVars.DD_SERVER_METRICS_TOKEN = 'short-token';
+    expect(() => configuration.getServerConfiguration()).toThrow();
+    delete configuration.ddEnvVars.DD_SERVER_METRICS_TOKEN;
+  });
+
   test('should fallback to defaults when nested server config is null', () => {
     const originalDd = configuration.ddEnvVars.dd;
     configuration.ddEnvVars.dd = {
@@ -978,6 +1020,7 @@ describe('getAuthenticationConfigurations', () => {
 describe('getWebhookConfiguration', () => {
   beforeEach(() => {
     delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_ENABLED;
+    delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_SECRET;
     delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKEN;
     delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKENS;
     delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKENS_WATCHALL;
@@ -988,6 +1031,7 @@ describe('getWebhookConfiguration', () => {
   test('should return disabled webhook by default', () => {
     expect(configuration.getWebhookConfiguration()).toStrictEqual({
       enabled: false,
+      secret: '',
       token: '',
       tokens: {
         watchall: '',
@@ -1003,7 +1047,25 @@ describe('getWebhookConfiguration', () => {
 
     expect(configuration.getWebhookConfiguration()).toStrictEqual({
       enabled: true,
+      secret: '',
       token: 'secret-token',
+      tokens: {
+        watchall: '',
+        watch: '',
+        update: '',
+      },
+    });
+  });
+
+  test('should allow enabling registry webhooks with HMAC secret and no bearer token', () => {
+    configuration.ddEnvVars.DD_SERVER_WEBHOOK_ENABLED = 'true';
+    configuration.ddEnvVars.DD_SERVER_WEBHOOK_SECRET = 'webhook-signing-secret';
+    delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKEN;
+
+    expect(configuration.getWebhookConfiguration()).toStrictEqual({
+      enabled: true,
+      secret: 'webhook-signing-secret',
+      token: '',
       tokens: {
         watchall: '',
         watch: '',
@@ -1021,6 +1083,7 @@ describe('getWebhookConfiguration', () => {
 
     expect(configuration.getWebhookConfiguration()).toStrictEqual({
       enabled: true,
+      secret: '',
       token: '',
       tokens: {
         watchall: 'watchall-token',
@@ -1042,8 +1105,9 @@ describe('getWebhookConfiguration', () => {
     );
   });
 
-  test('should throw when webhook is enabled without shared or endpoint tokens', () => {
+  test('should throw when webhook is enabled without tokens or HMAC secret', () => {
     configuration.ddEnvVars.DD_SERVER_WEBHOOK_ENABLED = 'true';
+    delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_SECRET;
     delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKEN;
     delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKENS_WATCHALL;
     delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKENS_WATCH;
@@ -1064,6 +1128,7 @@ describe('getWebhookConfiguration', () => {
 
     expect(configuration.getWebhookConfiguration()).toStrictEqual({
       enabled: false,
+      secret: '',
       token: '',
       tokens: {
         watchall: '',
@@ -1087,6 +1152,7 @@ describe('getWebhookConfiguration', () => {
         ...(originalDd?.server || {}),
         webhook: {
           enabled: false,
+          secret: '',
           token: '',
           tokens: {
             watchall: '',
@@ -1099,6 +1165,7 @@ describe('getWebhookConfiguration', () => {
 
     expect(configuration.getWebhookConfiguration()).toStrictEqual({
       enabled: false,
+      secret: '',
       token: '',
       tokens: {
         watchall: '',
@@ -1159,5 +1226,117 @@ describe('module bootstrap env mapping', () => {
     const freshConfiguration = await import('./index.js');
 
     expect(freshConfiguration.ddEnvVars.DD_TEST_BOOTSTRAP_VAR).toBe('new-value');
+  });
+});
+
+describe('trigger env aliases', () => {
+  async function importFreshConfiguration() {
+    vi.resetModules();
+    return import('./index.js');
+  }
+
+  test('should merge DD_ACTION and DD_NOTIFICATION aliases with DD_TRIGGER legacy env vars', async () => {
+    const freshConfiguration = await importFreshConfiguration();
+    freshConfiguration.ddEnvVars.DD_TRIGGER_DOCKER_UPDATE_THRESHOLD = 'major';
+    freshConfiguration.ddEnvVars.DD_ACTION_DOCKER_UPDATE_THRESHOLD = 'minor';
+    freshConfiguration.ddEnvVars.DD_NOTIFICATION_SMTP_ALERT_ENABLED = 'false';
+
+    expect(freshConfiguration.getTriggerConfigurations()).toStrictEqual({
+      docker: {
+        update: {
+          threshold: 'minor',
+        },
+      },
+      smtp: {
+        alert: {
+          enabled: 'false',
+        },
+      },
+    });
+  });
+
+  test('should prefer alias values over DD_TRIGGER legacy values for the same setting', async () => {
+    const freshConfiguration = await importFreshConfiguration();
+    freshConfiguration.ddEnvVars.DD_TRIGGER_DOCKER_UPDATE_THRESHOLD = 'major';
+    freshConfiguration.ddEnvVars.DD_ACTION_DOCKER_UPDATE_THRESHOLD = 'minor';
+
+    expect(freshConfiguration.getTriggerConfigurations()).toStrictEqual({
+      docker: {
+        update: {
+          threshold: 'minor',
+        },
+      },
+    });
+  });
+
+  test('should warn once per legacy DD_TRIGGER key and record legacy env usage', async () => {
+    const freshConfiguration = await importFreshConfiguration();
+    const freshLegacyInput = await import('../prometheus/compatibility.js');
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const legacyKey = 'DD_TRIGGER_DISCORD_NOTIFY_URL';
+    freshConfiguration.ddEnvVars[legacyKey] = 'https://example.invalid/webhook';
+    freshConfiguration.ddEnvVars.DD_NOTIFICATION_DISCORD_NOTIFY_ENABLED = 'true';
+
+    const summaryBefore = freshLegacyInput.getLegacyInputSummary().env.total;
+
+    freshConfiguration.getTriggerConfigurations();
+    freshConfiguration.getTriggerConfigurations();
+
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Legacy trigger environment variable'),
+    );
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('v1.7.0'));
+    expect(freshLegacyInput.getLegacyInputSummary().env.total).toBeGreaterThan(summaryBefore);
+    expect(freshLegacyInput.getLegacyInputSummary().env.keys).toContain(legacyKey);
+
+    warnSpy.mockRestore();
+  });
+});
+
+describe('legacy trigger prefix tracking guards', () => {
+  const nonLegacyTriggerKey = 'DD_ACTION_DOCKER_UPDATE_THRESHOLD';
+  const tooFewSegmentsKey = 'DD_TRIGGER_DOCKER';
+  const undefinedValueKey = 'DD_TRIGGER_DOCKER_UPDATE_THRESHOLD';
+
+  async function importFreshConfiguration() {
+    vi.resetModules();
+    return import('./index.js');
+  }
+
+  test('should ignore non-DD_TRIGGER keys when tracking legacy prefixes', async () => {
+    const freshConfiguration = await importFreshConfiguration();
+    freshConfiguration.ddEnvVars[nonLegacyTriggerKey] = 'major';
+
+    expect(freshConfiguration.getTriggerConfigurations()).toStrictEqual({
+      docker: {
+        update: {
+          threshold: 'major',
+        },
+      },
+    });
+    expect(freshConfiguration.usesLegacyTriggerPrefix('docker', 'update')).toBe(false);
+  });
+
+  test('should ignore DD_TRIGGER keys with too few path segments when tracking legacy prefixes', async () => {
+    const freshConfiguration = await importFreshConfiguration();
+    freshConfiguration.ddEnvVars[tooFewSegmentsKey] = 'ignored';
+
+    expect(freshConfiguration.getTriggerConfigurations()).toStrictEqual({
+      docker: 'ignored',
+    });
+    expect(freshConfiguration.usesLegacyTriggerPrefix('docker', 'update')).toBe(false);
+  });
+
+  test('should ignore DD_TRIGGER keys with undefined values when tracking legacy prefixes', async () => {
+    const freshConfiguration = await importFreshConfiguration();
+    freshConfiguration.ddEnvVars[undefinedValueKey] = undefined;
+
+    expect(freshConfiguration.getTriggerConfigurations()).toStrictEqual({
+      docker: {
+        update: {},
+      },
+    });
+    expect(freshConfiguration.usesLegacyTriggerPrefix('docker', 'update')).toBe(false);
   });
 });

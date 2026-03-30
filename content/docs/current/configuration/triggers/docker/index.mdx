@@ -39,6 +39,10 @@ If Drydock restarts while an update is in progress, it automatically reconciles 
 
 This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration). It picks up the Docker configuration from the [configured Docker watchers](/docs/configuration/watchers) so it can handle updates on Local **and** Remote Docker hosts.
 
+<Callout type="info">**Opt-in by default:** The Docker trigger defaults to `AUTO=oninclude`, meaning it only updates containers that explicitly opt in with a `dd.action.include` label (e.g., `dd.action.include=docker`). To auto-update all watched containers, set `DD_TRIGGER_DOCKER_{trigger_name}_AUTO=true`.</Callout>
+
+<Callout type="warn">**Agent mode:** When using [distributed agents](/docs/configuration/agents), each agent needs its own Docker trigger configured (e.g., `DD_TRIGGER_DOCKER_LOCAL_PRUNE=true`). The `{trigger_name}` segment is required — `DD_TRIGGER_DOCKER_PRUNE=true` without a name is invalid and will not create a working trigger. The controller does **not** need Docker triggers for remote agents; agent triggers are discovered automatically during the handshake.</Callout>
+
 ## Image Backup & Rollback
 
 Every time a container is updated, Drydock automatically backs up the previous image metadata. Backups are retained per container up to the `BACKUPCOUNT` limit (default: 3), with older backups pruned automatically.
@@ -46,7 +50,7 @@ Every time a container is updated, Drydock automatically backs up the previous i
 You can roll back to any retained backup via the API:
 
 ```text
-POST /api/containers/{id}/rollback
+POST /api/v1/containers/{id}/rollback
 ```
 
 Optionally pass a specific backup ID in the request body:
@@ -99,6 +103,14 @@ A non-zero exit code or timeout is treated as failure. When `dd.hook.pre.abort` 
 <Callout type="warn">Hook labels are ignored unless `DD_HOOKS_ENABLED=true` is set on the Drydock container.</Callout>
 
 Lifecycle hooks are **not** executed during self-updates. When hook labels are present, Drydock records `hook-configured` in the audit log before execution, then `hook-pre-*` / `hook-post-*` based on outcomes.
+
+## Compose File Sync
+
+When the Docker trigger updates a container that was originally started via Docker Compose, Drydock automatically patches the image tag in the compose file so that subsequent `docker compose up` commands do not revert the update. The compose file path is resolved from the `com.docker.compose.project.config_files` label that Docker Compose sets on every container it creates.
+
+This is a best-effort operation — if the compose file is not writable or cannot be resolved, the container update still succeeds and a warning is logged.
+
+<Callout type="info">If you manage compose-based containers with the [Docker Compose trigger](/docs/configuration/triggers/docker-compose) instead, that trigger handles compose file updates natively and this sync is not needed.</Callout>
 
 ## Self-Update
 

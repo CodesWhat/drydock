@@ -44,21 +44,20 @@ The `docker` watcher lets you configure the Docker hosts you want to watch.
 
 **Notes:**
 
-- If no watcher is configured, a default one named `local` will be automatically created (reading the Docker socket).
+- If no watcher is configured, a default one named `local` will be automatically created (reading the Docker socket). To suppress this default watcher (e.g. when running as a controller-only node for remote agents), set `DD_LOCAL_WATCHER=false`.
 - Multiple watchers can be configured (if you have multiple Docker hosts to watch). Just give them different names.
 - Socket configuration and host/port configuration are mutually exclusive.
 - When `MAINTENANCE_WINDOW` is configured and a check is skipped outside the allowed schedule, drydock queues one pending check and runs it automatically when the next maintenance window opens.
 - Legacy compatibility: `wud.*` labels are still accepted as fallback to `dd.*`. When a fallback is used, drydock emits a one-time warning for that key and increments `dd_legacy_input_total{source="label",key="<legacy_key>"}`. To rewrite configs in place, run `node dist/index.js config migrate --dry-run` then `node dist/index.js config migrate --file <path>`.
 - If watcher logger initialization fails, drydock automatically falls back to structured stderr JSON logs and increments `dd_watcher_logger_init_failures_total{type,name}`. Alert on non-zero increases to catch degraded logging early.
 
-<Callout type="warn">When using socket configuration, mount the Docker socket on your drydock container. When using host/port configuration, enable the [Docker remote API](https://docs.docker.com/reference/cli/dockerd/). If the remote API is secured with TLS, mount and configure the [TLS certificates](https://docs.docker.com/engine/security/protect-access/#use-tls-https-to-protect-the-docker-daemon-socket).</Callout>
+<Callout type="warn">
+**Before you start — important watcher caveats:**
 
-<Callout type="warn">Remote watcher auth (`AUTH_*`) is fail-closed by default and requires HTTPS (`PROTOCOL=https`) or TLS certificate-based connections. Set `AUTH_INSECURE=true` only if you intentionally need legacy fail-open behavior.</Callout>
-
-<Callout type="warn">Watching image digests causes an extensive usage of _Docker Registry Pull API_ which is restricted by [**Quotas on the Docker Hub**](https://docs.docker.com/docker-hub/usage/).
-By default, drydock enables it only for **non semver** image tags.
-You can tune this behavior per container using the `dd.watch.digest` label.
-If you face [quota related errors](https://docs.docker.com/docker-hub/usage/#how-do-i-know-my-pull-requests-are-being-limited), consider slowing down the watcher rate by adjusting the `DD_WATCHER_{watcher_name}_CRON` variable.</Callout>
+- **Socket vs remote API** — When using socket configuration, mount the Docker socket on your drydock container. When using host/port configuration, enable the [Docker remote API](https://docs.docker.com/reference/cli/dockerd/). If the remote API is secured with TLS, mount and configure the [TLS certificates](https://docs.docker.com/engine/security/protect-access/#use-tls-https-to-protect-the-docker-daemon-socket).
+- **Remote auth is fail-closed** — Remote watcher auth (`AUTH_*`) requires HTTPS (`PROTOCOL=https`) or TLS certificate-based connections by default. Set `AUTH_INSECURE=true` only if you intentionally need legacy fail-open behavior.
+- **Digest watching and Hub quotas** — Watching image digests causes extensive usage of the _Docker Registry Pull API_, which is restricted by [**Quotas on the Docker Hub**](https://docs.docker.com/docker-hub/usage/). By default, drydock enables it only for **non semver** image tags. You can tune this behavior per container using the `dd.watch.digest` label. If you face [quota related errors](https://docs.docker.com/docker-hub/usage/#how-do-i-know-my-pull-requests-are-being-limited), consider slowing down the watcher rate by adjusting the `DD_WATCHER_{watcher_name}_CRON` variable.
+</Callout>
 
 ## Variable examples
 
@@ -204,8 +203,8 @@ services:
         - DD_WATCHER_MYREMOTEHOST_KEYFILE=/certs/key.pem
     volumes:
         - /my-host/my-certs/ca.pem:/certs/ca.pem:ro
-        - /my-host/my-certs/ca.pem:/certs/cert.pem:ro
-        - /my-host/my-certs/ca.pem:/certs/key.pem:ro
+        - /my-host/my-certs/cert.pem:/certs/cert.pem:ro
+        - /my-host/my-certs/key.pem:/certs/key.pem:ro
 ```
 
 </Tab>
@@ -218,8 +217,8 @@ docker run \
     -e DD_WATCHER_MYREMOTEHOST_CERTFILE="/certs/cert.pem" \
     -e DD_WATCHER_MYREMOTEHOST_KEYFILE="/certs/key.pem" \
     -v /my-host/my-certs/ca.pem:/certs/ca.pem:ro \
-    -v /my-host/my-certs/ca.pem:/certs/cert.pem:ro \
-    -v /my-host/my-certs/ca.pem:/certs/key.pem:ro \
+    -v /my-host/my-certs/cert.pem:/certs/cert.pem:ro \
+    -v /my-host/my-certs/key.pem:/certs/key.pem:ro \
   ...
   codeswhat/drydock
 ```
@@ -227,6 +226,33 @@ docker run \
 </Tabs>
 
 <Callout type="warn">Don't forget to mount the certificates into the container!</Callout>
+
+### Connecting via SSH
+
+Drydock does not currently support the `ssh://` protocol for remote Docker connections. The `PROTOCOL` variable only accepts `http` or `https`.
+
+If your remote Docker host is only reachable over SSH, you can use an **SSH tunnel** to forward the remote Docker socket to a local TCP port or Unix socket, then point Drydock at that forwarded endpoint:
+
+```bash
+# Forward the remote Docker socket to a local TCP port
+ssh -nNT -L 2375:/var/run/docker.sock user@remote-host
+```
+
+Then configure Drydock to connect to the forwarded port:
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    environment:
+      - DD_WATCHER_MYREMOTEHOST_HOST=host.docker.internal
+      - DD_WATCHER_MYREMOTEHOST_PORT=2375
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+```
+
+<Callout type="info">For production SSH tunneling, consider using [autossh](https://www.harding.motd.ca/autossh/) to automatically restart the tunnel if the connection drops.</Callout>
 
 ## Docker Socket Security
 
@@ -247,6 +273,8 @@ Drydock needs to communicate with the Docker Engine API to monitor containers an
 A socket proxy runs as a separate container with access to the Docker socket and exposes only the API endpoints Drydock needs. Drydock connects to the proxy over HTTP, so no socket mount is required at all.
 
 This is the **recommended approach** for all deployments. It provides a strict security boundary with minimal setup.
+
+<Callout type="info">Running Drydock with Podman? See [Podman Quick Start](#podman-quick-start) for rootless/rootful socket paths and proxy setup details.</Callout>
 
 ```yaml
 services:
@@ -442,6 +470,129 @@ Understanding exactly what Drydock accesses helps you configure socket proxies a
 
 If you only need monitoring (no auto-updates), a read-only socket proxy configuration is sufficient.
 
+### Podman Quick Start
+
+Podman works with Drydock through Podman's Docker-compatible API socket.
+
+<Callout type="info">Podman compatibility is supported in current releases. Drydock negotiates against the daemon API version and is most reliable with direct socket mounts.</Callout>
+
+<Callout type="info">Background and user reports: [GitHub issue #152](https://github.com/CodesWhat/drydock/issues/152).</Callout>
+
+#### Socket path mapping (`podman.sock` vs `docker.sock`)
+
+Use Podman's host socket path, but mount it inside the Drydock container at `/var/run/docker.sock` so existing Drydock defaults still work.
+
+| Runtime mode | Host socket path | Path inside Drydock container | Drydock watcher variable |
+| --- | --- | --- | --- |
+| Docker | `/var/run/docker.sock` | `/var/run/docker.sock` | `DD_WATCHER_LOCAL_SOCKET=/var/run/docker.sock` |
+| Podman rootful | `/run/podman/podman.sock` | `/var/run/docker.sock` | `DD_WATCHER_LOCAL_SOCKET=/var/run/docker.sock` |
+| Podman rootless | `/run/user/<uid>/podman/podman.sock` | `/var/run/docker.sock` | `DD_WATCHER_LOCAL_SOCKET=/var/run/docker.sock` |
+
+#### Rootful vs rootless setup
+
+- **Rootful Podman socket:** `sudo systemctl enable --now podman.socket`
+- **Rootless Podman socket:** `systemctl --user enable --now podman.socket`
+
+<Callout type="warn">
+**Choosing rootful vs rootless:**
+
+- **Rootless is recommended** for production because it runs the entire container stack without root privileges. Use rootful only when you need privileged ports (&lt;1024) or specific kernel features.
+- **Rootless requires lingering sessions** — You **must** run `loginctl enable-linger <user>` so the user systemd instance (and all rootless containers) survives logout. Without it, Podman containers stop when the user session ends.
+</Callout>
+
+<Tabs items={["Podman Rootful (Direct Socket)", "Podman Rootless (Direct Socket)", "Podman + Socket Proxy"]}>
+<Tab value="Podman Rootful (Direct Socket)">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    volumes:
+      - /run/podman/podman.sock:/var/run/docker.sock
+    environment:
+      - DD_WATCHER_LOCAL_SOCKET=/var/run/docker.sock
+      - DD_TRIGGER_DOCKER_LOCAL_AUTO=false
+    ports:
+      - 3000:3000
+```
+
+</Tab>
+<Tab value="Podman Rootless (Direct Socket)">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    volumes:
+      - ${XDG_RUNTIME_DIR}/podman/podman.sock:/var/run/docker.sock
+    environment:
+      - DD_WATCHER_LOCAL_SOCKET=/var/run/docker.sock
+      - DD_TRIGGER_DOCKER_LOCAL_AUTO=false
+    ports:
+      - 3000:3000
+```
+
+</Tab>
+<Tab value="Podman + Socket Proxy">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    depends_on:
+      socket-proxy:
+        condition: service_healthy
+    environment:
+      - DD_WATCHER_LOCAL_HOST=socket-proxy
+      - DD_WATCHER_LOCAL_PORT=2375
+      - DD_TRIGGER_DOCKER_LOCAL_AUTO=false
+    ports:
+      - 3000:3000
+
+  socket-proxy:
+    image: tecnativa/docker-socket-proxy
+    environment:
+      - SOCKET_PATH=/run/podman/podman.sock
+      - CONTAINERS=1
+      - IMAGES=1
+      - EVENTS=1
+      - SERVICES=1
+      - POST=1
+      - NETWORKS=1
+    volumes:
+      - /run/podman/podman.sock:/run/podman/podman.sock
+    healthcheck:
+      test: wget --spider http://localhost:2375/version || exit 1
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+```
+
+</Tab>
+</Tabs>
+
+<Callout type="warn">
+**Podman socket proxy notes:**
+
+- **Rootless proxy path** — For rootless Podman with socket proxy, set `SOCKET_PATH=${XDG_RUNTIME_DIR}/podman/podman.sock` and mount the same host path into the proxy container.
+- **503 errors** — Some users have reported intermittent `503` errors when using `tecnativa/docker-socket-proxy` with Podman ([tecnativa/docker-socket-proxy#66](https://github.com/Tecnativa/docker-socket-proxy/issues/66)). If you experience this, prefer direct socket mount over the proxy — the direct mount examples above are the most reliable option with Podman.
+- **Docker Compose trigger compatibility** — The Docker Compose trigger (`DD_TRIGGER_DOCKERCOMPOSE_*`) works with Podman — it inherits the socket connection from your watcher configuration. No additional Podman-specific trigger settings are needed.
+</Callout>
+
+#### Known limitations and tested versions
+
+| Topic | Status |
+| --- | --- |
+| Tested Podman version | `5.6.0` on Rocky Linux `9.7` (issue [#152](https://github.com/CodesWhat/drydock/issues/152)) |
+| API version handling | Drydock probes daemon compatibility and pins client API behavior for Podman/Docker socket endpoints |
+| CI coverage | No dedicated Podman CI matrix yet |
+| Rootless networking | Can differ from Docker bridge behavior; see [Podman FAQ](/docs/faq#podman-rootless-networking-limitations) |
+| SELinux (RHEL/Rocky/Fedora) | Socket mounts need `:Z` flag; see [SELinux FAQ](/docs/faq#selinux-blocks-podman-socket-access-permission-denied) |
+| `podman-compose` networking | Pod-based networking breaks service-name DNS; use `podman compose` instead; see [FAQ](/docs/faq#podman-compose-vs-podman-compose-networking) |
+
+For common Podman troubleshooting, see [FAQ Podman entries](/docs/faq#selinux-blocks-podman-socket-access-permission-denied).
+
 ### Watch 1 local Docker host and 2 remote docker hosts at the same time
 
 <Tabs items={["Docker Compose (Multiple Hosts)", "Docker (Multiple Hosts)"]}>
@@ -561,20 +712,36 @@ To fine-tune the behaviour of drydock _per container_, you can add labels on the
 | `dd.tag.include` | ⚪ | Regex to include specific tags only | Valid JavaScript Regex | |
 | `dd.tag.transform` | ⚪ | Transform function to apply to the tag | `$valid_regex => $valid_string_with_placeholders` (see below) | |
 | `dd.tag.family` | ⚪ | Tag family policy for semver updates | `strict` (default) or `loose` | `strict` |
-| `dd.trigger.exclude` | ⚪ | Optional list of triggers to exclude | `$trigger_1_id_or_name,$trigger_2_id_or_name:$threshold` | |
-| `dd.trigger.include` | ⚪ | Optional list of triggers to include | `$trigger_1_id_or_name,$trigger_2_id_or_name:$threshold` | |
+| `dd.action.exclude` | ⚪ | Exclude specific action triggers from automatic execution for this container | `$trigger_1_id_or_name,$trigger_2_id_or_name:$threshold` | |
+| `dd.action.include` | ⚪ | Only allow specific action triggers to automatically execute for this container | `$trigger_1_id_or_name,$trigger_2_id_or_name:$threshold` | |
+| `dd.notification.exclude` | ⚪ | Exclude specific notification triggers from this container | `$trigger_1_id_or_name,$trigger_2_id_or_name:$threshold` | |
+| `dd.notification.include` | ⚪ | Only allow specific notification triggers for this container | `$trigger_1_id_or_name,$trigger_2_id_or_name:$threshold` | |
+| `dd.trigger.exclude` | ⚪ | **Deprecated** — use `dd.action.exclude` or `dd.notification.exclude` instead | `$trigger_1_id_or_name,$trigger_2_id_or_name:$threshold` | |
+| `dd.trigger.include` | ⚪ | **Deprecated** — use `dd.action.include` or `dd.notification.include` instead | `$trigger_1_id_or_name,$trigger_2_id_or_name:$threshold` | |
 | `dd.watch.digest` | ⚪ | Watch this container digest | Valid Boolean | `false` |
 | `dd.watch` | ⚪ | Explicitly include or exclude this container from monitoring (overrides `WATCHBYDEFAULT`) | Valid Boolean | Inherits from `WATCHBYDEFAULT` (`true` by default) |
 | `dd.compose.file` | ⚪ | Path to the docker-compose.yml file for compose-native updates (also configurable via trigger `COMPOSEFILELABEL`) | file path | |
+| `dd.source.repo` | ⚪ | Source repository override for release-notes lookup (e.g. `owner/repo`) | Valid `owner/repo` string | |
 | `dd.webhook.enabled` | ⚪ | Allow or block [webhook API](/docs/configuration/webhooks) calls targeting this container | `true`, `false` | `true` |
-| `dd.updatePolicy.maturityMode` | ⚪ | Update maturity policy — `all` allows any update, `mature` blocks updates detected less than `maturityMinAgeDays` ago | `all`, `mature` | `all` |
-| `dd.updatePolicy.maturityMinAgeDays` | ⚪ | Minimum age in days before an update is considered mature (only applies when `maturityMode` is `mature`) | integer (`>=1`) | `7` |
+| `dd.hook.pre` | ⚪ | Shell command to run before a container update | Valid shell command | |
+| `dd.hook.post` | ⚪ | Shell command to run after a container update | Valid shell command | |
+| `dd.hook.pre.abort` | ⚪ | Abort the update if the pre-hook exits non-zero | Valid Boolean | `true` |
+| `dd.hook.timeout` | ⚪ | Timeout in milliseconds for hook execution | integer | `60000` |
+| `dd.rollback.auto` | ⚪ | Automatically rollback the container if the health check fails after an update | Valid Boolean | `false` |
+| `dd.rollback.window` | ⚪ | Health monitoring window in milliseconds after an update (how long to watch for failures) | integer | `300000` |
+| `dd.rollback.interval` | ⚪ | Health polling interval in milliseconds during the rollback window | integer | `10000` |
 | `dd.runtime.entrypoint.origin` | ⚪ | Tracks whether the container's entrypoint was explicitly set or inherited from the image. Used during updates to decide whether to preserve the current entrypoint or let the new image defaults apply. | `explicit`, `inherited`, `unknown` | auto-detected |
 | `dd.runtime.cmd.origin` | ⚪ | Tracks whether the container's cmd was explicitly set or inherited from the image. Used during updates to decide whether to preserve the current cmd or let the new image defaults apply. | `explicit`, `inherited`, `unknown` | auto-detected |
 
 `dd.runtime.entrypoint.origin` and `dd.runtime.cmd.origin` are managed automatically by the Docker trigger during container updates. You only need to set them manually if drydock cannot detect the origin (shows `unknown`) and you want to explicitly pin or release a custom entrypoint/cmd.
 
 <Callout type="warn">`dd.inspect.tag.path` is optional and opt-in. Use it only when your image metadata tracks the running app version reliably; some images set unrelated values. Also note that legacy alias `dd.registry.lookup.url` is still accepted for compatibility, but prefer `dd.registry.lookup.image`.</Callout>
+
+<Callout type="info">**`dd.action.include` / `dd.notification.include` (and their `.exclude` counterparts) control automatic trigger dispatch.** These labels filter which triggers fire automatically when an update is detected (e.g., route notifications to specific Slack channels or restrict which docker trigger auto-updates this container). They match against the trigger **name** (e.g., `alerts`) or **full ID** (e.g., `smtp.alerts`). Manual updates from the UI use [agent-based matching](/docs/configuration/agents) instead — the update is routed to the agent that discovered the container. The legacy `dd.trigger.include` / `dd.trigger.exclude` labels still work but are deprecated — see [Deprecation Schedule](/docs/deprecations#ddtriggerinclude--ddtriggerexclude-container-labels).</Callout>
+
+<Callout type="info">**Update hooks** (`dd.hook.pre` / `dd.hook.post`) let you run arbitrary shell commands before and after a container update. If `dd.hook.pre.abort` is `true` (the default) and the pre-hook exits non-zero, the update is cancelled. Use `dd.hook.timeout` to control how long the hook is allowed to run before being killed.</Callout>
+
+<Callout type="info">**Automatic rollback** (`dd.rollback.auto`) monitors the container's health check after an update. If the health check fails within the `dd.rollback.window` (default 5 minutes, polled every `dd.rollback.interval` = 10 seconds), drydock automatically rolls the container back to its previous image.</Callout>
 
 ## Label examples
 
@@ -895,19 +1062,20 @@ services:
   my_important_service:
     image: my_important_service:1.0.0
     labels:
-      - dd.trigger.include=smtp.gmail,dockercompose.local:minor
+      - dd.notification.include=smtp.gmail
+      - dd.action.include=dockercompose.local:minor
 ```
 
 </Tab>
 <Tab value="Docker (Trigger Include)">
 ```bash
-docker run -d --name my_important_service --label 'dd.trigger.include=smtp.gmail,dockercompose.local:minor' my_important_service:1.0.0
+docker run -d --name my_important_service --label 'dd.notification.include=smtp.gmail' --label 'dd.action.include=dockercompose.local:minor' my_important_service:1.0.0
 ```
 </Tab>
 </Tabs>
 
-- `dd.trigger.include=smtp.gmail` is a shorthand for `dd.trigger.include=smtp.gmail:all`
-- `dd.trigger.include=update` (or `dd.trigger.exclude=update`) targets all triggers named `update`, for example `docker.update` and `discord.update`
+- `dd.notification.include=smtp.gmail` is a shorthand for `dd.notification.include=smtp.gmail:all`
+- `dd.action.include=update` (or `dd.action.exclude=update`) targets all triggers named `update`, for example `docker.update` and `dockercompose.update`
 
 **Threshold values:**
 
@@ -941,4 +1109,33 @@ The container model includes additional fields useful for understanding update s
 
 ## Docker Event Stream
 
-The watcher monitors Docker events (container create, destroy, start, stop, etc.) in real time. If the event stream disconnects, drydock automatically reconnects with exponential backoff starting at 1 second and capping at 30 seconds.
+The watcher monitors Docker events (container create, destroy, start, stop, etc.) in real time. If the event stream disconnects, Drydock automatically reconnects with exponential backoff starting at 1 second and capping at 30 seconds.
+
+When using third-party socket proxies, periodic reconnects are expected: many proxies close idle long-lived HTTP connections after their configured timeout. In logs this appears as:
+
+`Docker event stream error (aborted); reconnect attempt #1 in 1000ms`
+
+followed by:
+
+`Listening to docker events`
+
+The first reconnect attempt is logged at **info** level since it is expected behavior (proxy timeout or network blip). If the first attempt fails and subsequent reconnects are needed, those are logged at **warn** level to flag a potential real problem.
+
+### Event gap during reconnect
+
+Container lifecycle events (create, start, stop, destroy) that occur during the brief reconnect window are not captured until the next scheduled poll cycle. The reconnect window is typically ~1 second under normal conditions. In practice this is rarely noticeable because the next cron poll will pick up the current container state, but it means Drydock does not guarantee zero missed events across a reconnect.
+
+A future release will wire the reconnect path to request events from the last-seen timestamp, closing this gap entirely.
+
+### Native socket proxy (roadmap)
+
+The root cause of proxy-timeout reconnects is that Drydock cannot control idle timeout behavior on third-party proxies. A purpose-built Drydock socket proxy is planned (see [roadmap](/docs/roadmap)) that will exempt event stream connections from idle timeouts, eliminating the reconnect cycle entirely.
+
+### Reduce proxy-timeout reconnect churn
+
+Until the native proxy ships, you can reduce reconnect noise:
+
+1. Increase your proxy idle timeout (for example, linuxserver socket-proxy `TIMEOUT=86400s`).
+2. Prefer direct socket mount when your environment allows it.
+3. If your proxy supports endpoint-specific behavior, exempt Docker `/events` streams from idle timeout.
+4. As a workaround, run a lightweight heartbeat container (e.g. `alpine:latest` with `command: sh -c "sleep 300"` and `restart: always`) to keep the proxy connection path active.

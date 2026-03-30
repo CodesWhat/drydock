@@ -16,7 +16,7 @@ const selectedContainer = ref({
 });
 
 const activeDetailTab = ref('overview');
-const actionInProgress = ref<string | null>(null);
+const actionInProgress = ref(new Set<string>());
 const closeFullPage = vi.fn();
 const confirmStop = vi.fn();
 const startContainer = vi.fn();
@@ -59,7 +59,7 @@ function factory() {
 describe('ContainerFullPageDetail', () => {
   afterEach(() => {
     activeDetailTab.value = 'overview';
-    actionInProgress.value = null;
+    actionInProgress.value = new Set();
     selectedContainer.value = {
       id: 'container-1',
       name: 'nginx',
@@ -128,7 +128,7 @@ describe('ContainerFullPageDetail', () => {
 
   describe('disabled state during action', () => {
     it('disables action buttons when actionInProgress matches container name', () => {
-      actionInProgress.value = 'nginx';
+      actionInProgress.value = new Set(['nginx']);
       const wrapper = factory();
       const actionButtons = wrapper
         .findAll('button')
@@ -139,7 +139,7 @@ describe('ContainerFullPageDetail', () => {
     });
 
     it('does not disable buttons when actionInProgress is a different container', () => {
-      actionInProgress.value = 'other-container';
+      actionInProgress.value = new Set(['other-container']);
       const wrapper = factory();
       const actionButtons = wrapper
         .findAll('button')
@@ -150,7 +150,7 @@ describe('ContainerFullPageDetail', () => {
     });
 
     it('applies opacity-50 class when disabled', () => {
-      actionInProgress.value = 'nginx';
+      actionInProgress.value = new Set(['nginx']);
       const wrapper = factory();
       const stopBtn = wrapper.find('button[aria-label="Stop container"]');
       expect(stopBtn.classes()).toContain('opacity-50');
@@ -158,7 +158,7 @@ describe('ContainerFullPageDetail', () => {
     });
 
     it('does not apply opacity-50 class when not disabled', () => {
-      actionInProgress.value = null;
+      actionInProgress.value = new Set();
       const wrapper = factory();
       const stopBtn = wrapper.find('button[aria-label="Stop container"]');
       expect(stopBtn.classes()).not.toContain('opacity-50');

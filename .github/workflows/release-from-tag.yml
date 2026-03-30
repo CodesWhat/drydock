@@ -1,0 +1,482 @@
+name: "🚀 Release: From Tag"
+run-name: "🚀 Release: From Tag — ${{ github.ref_name }}"
+
+on:
+  push:
+    tags: ['v*']
+
+permissions: read-all
+
+env:
+  DOCKER_PLATFORMS: linux/amd64,linux/arm64
+  CI_VERIFY_WORKFLOW_FILE: ci-verify.yml
+
+concurrency:
+  group: release-from-tag-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify-ci:
+    name: "✅ Release: Verify Prior CI Success"
+    runs-on: ubuntu-latest
+    timeout-minutes: 20  # Poll loop waits for prior branch CI status on tag SHA
+    permissions:
+      contents: read
+      actions: read
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594  # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Resolve CI workflow reference
+        id: ci_workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          workflow_url="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/workflows/${CI_VERIFY_WORKFLOW_FILE}"
+          workflow_json="$(curl -fsSL \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "${workflow_url}")"
+
+          workflow_id="$(echo "${workflow_json}" | jq -r '.id // empty')"
+          workflow_name="$(echo "${workflow_json}" | jq -r '.name // empty')"
+          workflow_path="$(echo "${workflow_json}" | jq -r '.path // empty')"
+          if [ -z "${workflow_id}" ] || [ -z "${workflow_path}" ]; then
+            echo "::error::Failed to resolve workflow metadata for ${CI_VERIFY_WORKFLOW_FILE}."
+            exit 1
+          fi
+
+          {
+            echo "id=${workflow_id}"
+            echo "name=${workflow_name}"
+            echo "path=${workflow_path}"
+          } >> "$GITHUB_OUTPUT"
+          echo "Using CI verification workflow: ${workflow_name} (${workflow_path}, id=${workflow_id})"
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Assert tag version matches package versions
+        run: |
+          set -euo pipefail
+
+          tag_version="${GITHUB_REF_NAME#v}"
+          if [ -z "${tag_version}" ] || [ "${tag_version}" = "${GITHUB_REF_NAME}" ]; then
+            echo "::error::Tag '${GITHUB_REF_NAME}' does not match expected format vX.Y.Z[-prerelease]."
+            exit 1
+          fi
+
+          # For prereleases (rc, nightly), compare base version only:
+          # v1.5.0-rc.1 → compare 1.5.0 against package.json
+          base_version="${tag_version%%-*}"
+
+          for package_path in package.json app/package.json ui/package.json; do
+            package_version="$(jq -r '.version // empty' "${package_path}")"
+            if [ -z "${package_version}" ]; then
+              echo "::error::Missing required version field in ${package_path}"
+              exit 1
+            fi
+            if [ "${package_version}" != "${base_version}" ]; then
+              echo "::error::Version mismatch: tag base=${base_version} (from ${GITHUB_REF_NAME}), ${package_path}=${package_version}"
+              exit 1
+            fi
+          done
+
+          echo "Tag version ${base_version} matches package.json, app/package.json, and ui/package.json."
+
+      - name: Wait for successful branch CI on tag SHA
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CI_WORKFLOW_ID: ${{ steps.ci_workflow.outputs.id }}
+          CI_WORKFLOW_NAME: ${{ steps.ci_workflow.outputs.name }}
+        run: |
+          set -euo pipefail
+
+          max_attempts=25
+          sleep_seconds=60
+
+          for attempt in $(seq 1 "${max_attempts}"); do
+            runs_url="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/workflows/${CI_WORKFLOW_ID}/runs?head_sha=${GITHUB_SHA}&event=push&per_page=50"
+            runs_json="$(curl -fsSL \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              "${runs_url}")"
+
+            success_count="$(echo "${runs_json}" | jq '[.workflow_runs[] | select(.conclusion == "success" and ((.head_branch // "") | length > 0))] | length')"
+            in_progress_count="$(echo "${runs_json}" | jq '[.workflow_runs[] | select(.status != "completed" and ((.head_branch // "") | length > 0))] | length')"
+            completed_count="$(echo "${runs_json}" | jq '[.workflow_runs[] | select(.status == "completed" and ((.head_branch // "") | length > 0))] | length')"
+
+            if [ "${success_count}" -gt 0 ]; then
+              echo "Found successful ${CI_WORKFLOW_NAME} push run for ${GITHUB_SHA}."
+              exit 0
+            fi
+
+            if [ "${completed_count}" -gt 0 ] && [ "${in_progress_count}" -eq 0 ]; then
+              echo "::error::${CI_WORKFLOW_NAME} branch push runs for ${GITHUB_SHA} completed without success."
+              echo "${runs_json}" | jq '.workflow_runs[] | select((.head_branch // "") | length > 0) | {id, status, conclusion, head_branch, html_url}'
+              exit 1
+            fi
+
+            echo "Attempt ${attempt}/${max_attempts}: waiting for ${CI_WORKFLOW_NAME} branch push run on ${GITHUB_SHA}..."
+            sleep "${sleep_seconds}"
+          done
+
+          echo "::error::Timed out waiting for successful ${CI_WORKFLOW_NAME} branch push run on ${GITHUB_SHA}."
+          exit 1
+
+  release:
+    name: "🚀 Release: Docker Build & Push"
+    runs-on: ubuntu-latest
+    timeout-minutes: 120  # Multi-arch build, signing, attestations, and release upload
+    environment: release-publish
+    needs: [verify-ci]
+    permissions:
+      contents: write
+      packages: write
+      id-token: write  # cosign keyless signing
+      attestations: write
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594  # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a  # v4.0.0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd  # v4.0.0
+
+      - name: Log in to GHCR
+        uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2  # v4.0.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2  # v4.0.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Log in to Quay.io
+        uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2  # v4.0.0
+        with:
+          registry: quay.io
+          username: ${{ secrets.QUAY_USERNAME }}
+          password: ${{ secrets.QUAY_PASSWORD }}
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf  # v6.0.0
+        with:
+          images: |
+            ghcr.io/${{ github.repository }}
+            docker.io/codeswhat/drydock
+            quay.io/codeswhat/drydock
+          tags: |
+            # full semver on all tags (e.g. 1.5.0, 1.5.0-rc.1)
+            type=semver,pattern={{version}}
+            # major.minor on stable only (e.g. 1.5)
+            type=semver,pattern={{major}}.{{minor}},enable=${{ !contains(github.ref_name, '-') }}
+            # major on stable only (e.g. 1)
+            type=semver,pattern={{major}},enable=${{ !contains(github.ref_name, '-') }}
+            # latest on stable tags only
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-') }}
+
+      - name: Build and push
+        id: build
+        continue-on-error: true  # allow manifest retry path on transient push failures
+        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294  # v7.0.0
+        with:
+          context: .
+          push: true
+          platforms: ${{ env.DOCKER_PLATFORMS }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: DD_VERSION=${{ steps.meta.outputs.version || github.ref_name }}
+          sbom: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Retry manifest publish on transient registry failure
+        id: manifest-retry
+        if: steps.build.outcome == 'failure'
+        env:
+          BUILD_DIGEST: ${{ steps.build.outputs.digest }}
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${BUILD_DIGEST:-}" ]; then
+            echo "::error::Build step failed before producing a digest; cannot retry manifest publish without a source digest."
+            exit 1
+          fi
+
+          source_candidates=(
+            "ghcr.io/${GITHUB_REPOSITORY}@${BUILD_DIGEST}"
+            "docker.io/codeswhat/drydock@${BUILD_DIGEST}"
+            "quay.io/codeswhat/drydock@${BUILD_DIGEST}"
+          )
+
+          source_ref=""
+          for candidate in "${source_candidates[@]}"; do
+            if docker buildx imagetools inspect "${candidate}" >/dev/null 2>&1; then
+              source_ref="${candidate}"
+              break
+            fi
+          done
+
+          if [ -z "${source_ref}" ]; then
+            echo "::error::No registry contains source manifest digest ${BUILD_DIGEST}; cannot perform manifest-only retry."
+            exit 1
+          fi
+
+          while IFS= read -r tag; do
+            [ -z "${tag}" ] && continue
+            echo "Re-pushing manifest tag: ${tag} (source: ${source_ref})"
+            for attempt in 1 2 3; do
+              if docker buildx imagetools create --tag "${tag}" "${source_ref}" >/dev/null; then
+                break
+              fi
+
+              if [ "${attempt}" -eq 3 ]; then
+                echo "::error::Manifest publish retry failed for ${tag}"
+                exit 1
+              fi
+
+              sleep 5
+            done
+          done <<< "${TAGS}"
+
+          echo "digest=${BUILD_DIGEST}" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve image digest
+        id: digest
+        if: steps.build.outcome == 'success' || steps.manifest-retry.outcome == 'success'
+        env:
+          RETRY_DIGEST: ${{ steps.manifest-retry.outputs.digest }}
+          BUILD_DIGEST: ${{ steps.build.outputs.digest }}
+        run: echo "value=${RETRY_DIGEST:-$BUILD_DIGEST}" >> "$GITHUB_OUTPUT"
+
+      - name: Install cosign
+        if: steps.build.outcome == 'success' || steps.manifest-retry.outcome == 'success'
+        uses: sigstore/cosign-installer@ba7bc0a3fef59531c69a25acd34668d6d3fe6f22  # v4.1.0
+
+      - name: Sign container images
+        if: always() && steps.digest.outputs.value
+        env:
+          DIGEST: ${{ steps.digest.outputs.value }}
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          set -euo pipefail
+          images=()
+          while IFS= read -r tag; do
+            [ -n "${tag}" ] && images+=("${tag}@${DIGEST}")
+          done <<< "${TAGS}"
+          cosign sign --yes "${images[@]}"
+
+      - name: Verify container image signatures
+        if: always() && steps.digest.outputs.value
+        env:
+          DIGEST: ${{ steps.digest.outputs.value }}
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          set -euo pipefail
+          identity_regex="^https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release-from-tag.yml@refs/tags/.+$"
+          issuer="https://token.actions.githubusercontent.com"
+
+          images=()
+          while IFS= read -r tag; do
+            [ -n "${tag}" ] && images+=("${tag}@${DIGEST}")
+          done <<< "${TAGS}"
+
+          if [ "${#images[@]}" -eq 0 ]; then
+            echo "::error::No images found to verify"
+            exit 1
+          fi
+
+          for image in "${images[@]}"; do
+            echo "Verifying cosign signature for ${image}"
+            for attempt in 1 2 3; do
+              if cosign verify \
+                --certificate-identity-regexp "${identity_regex}" \
+                --certificate-oidc-issuer "${issuer}" \
+                "${image}" >/dev/null; then
+                break
+              fi
+
+              if [ "${attempt}" -eq 3 ]; then
+                echo "::error::Cosign verification failed for ${image}"
+                exit 1
+              fi
+
+              sleep 5
+            done
+          done
+
+      - name: Build release artifact
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          mkdir -p dist
+          artifact="dist/drydock-${RELEASE_TAG}.tar.gz"
+          git archive --format=tar.gz --prefix="drydock-${RELEASE_TAG}/" --output="${artifact}" "${GITHUB_SHA}"
+          sha256sum "${artifact}" > "${artifact}.sha256"
+
+      - name: Sign release artifact
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          artifact="dist/drydock-${RELEASE_TAG}.tar.gz"
+          cosign sign-blob --yes \
+            --bundle "${artifact}.bundle" \
+            --new-bundle-format=false \
+            --output-signature "${artifact}.sig" \
+            --output-certificate "${artifact}.pem" \
+            "${artifact}"
+
+          # Cosign v3 may only emit bundle output in some keyless flows.
+          # Materialize legacy signature/cert files from the bundle when needed.
+          if [ ! -s "${artifact}.sig" ]; then
+            sig_b64="$(jq -r '.base64Signature // .messageSignature.signature // empty' "${artifact}.bundle")"
+            if [ -n "${sig_b64}" ]; then
+              printf '%s' "${sig_b64}" | base64 --decode > "${artifact}.sig"
+            fi
+          fi
+
+          if [ ! -s "${artifact}.pem" ]; then
+            cert_pem="$(jq -r '.cert // empty' "${artifact}.bundle")"
+            if [ -n "${cert_pem}" ]; then
+              printf '%s\n' "${cert_pem}" > "${artifact}.pem"
+            else
+              cert_der_b64="$(jq -r '.verificationMaterial.certificate.rawBytes // empty' "${artifact}.bundle")"
+              if [ -n "${cert_der_b64}" ]; then
+                printf '%s' "${cert_der_b64}" | base64 --decode | openssl x509 -inform DER -out "${artifact}.pem"
+              fi
+            fi
+          fi
+
+          if [ ! -s "${artifact}.sig" ] || [ ! -s "${artifact}.pem" ]; then
+            echo "::error::Expected signature outputs were not generated"
+            ls -la dist
+            jq 'keys' "${artifact}.bundle" || true
+            exit 1
+          fi
+
+      - name: Verify release artifact signature
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          artifact="dist/drydock-${RELEASE_TAG}.tar.gz"
+          identity_regex="^https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release-from-tag.yml@refs/tags/.+$"
+          issuer="https://token.actions.githubusercontent.com"
+
+          cosign verify-blob \
+            --signature "${artifact}.sig" \
+            --certificate "${artifact}.pem" \
+            --certificate-identity-regexp "${identity_regex}" \
+            --certificate-oidc-issuer "${issuer}" \
+            "${artifact}" >/dev/null
+
+      - name: Attest release artifact provenance
+        if: startsWith(github.ref, 'refs/tags/')
+        id: attest_release_artifact
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32  # v4.1.0
+        with:
+          subject-path: dist/drydock-${{ github.ref_name }}.tar.gz
+
+      - name: Export release provenance asset
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          BUNDLE_PATH: ${{ steps.attest_release_artifact.outputs.bundle-path }}
+        run: |
+          artifact="dist/drydock-${RELEASE_TAG}.tar.gz"
+          cp "${BUNDLE_PATH}" "${artifact}.intoto.jsonl"
+
+      - name: Generate release notes from changelog
+        if: startsWith(github.ref, 'refs/tags/')
+        id: release_notes
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          notes_path="dist/release-notes-${RELEASE_TAG}.md"
+
+          # Try exact version first, then fall back to [Unreleased] for pre-releases
+          entry_path="$(mktemp)"
+          missing_heading="## [${RELEASE_TAG#v}] - YYYY-MM-DD"
+          if ! node scripts/extract-changelog-entry.mjs --version "${RELEASE_TAG}" --file CHANGELOG.md > "${entry_path}"; then
+            # For pre-releases (rc, beta, alpha), try [Unreleased] as fallback
+            if [[ "${RELEASE_TAG}" == *-* ]] && node scripts/extract-changelog-entry.mjs --version "Unreleased" --file CHANGELOG.md > "${entry_path}" 2>/dev/null; then
+              echo "Using [Unreleased] changelog section for pre-release ${RELEASE_TAG}."
+            else
+              rm -f "${entry_path}" "${notes_path}"
+              echo "::error::Release notes generation failed: CHANGELOG entry missing for ${RELEASE_TAG}. Add heading '${missing_heading}' and retry release."
+              {
+                echo "### Release Notes Generation"
+                echo "- Result: FAIL"
+                echo "- AI_ACTION_REQUIRED: Add CHANGELOG entry for \`${RELEASE_TAG}\` using heading \`${missing_heading}\`, then re-run release."
+              } >> "${GITHUB_STEP_SUMMARY}"
+              exit 1
+            fi
+          fi
+          {
+            echo "# ${RELEASE_TAG}"
+            echo ""
+            cat "${entry_path}"
+          } > "${notes_path}"
+          rm -f "${entry_path}"
+          echo "path=${notes_path}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload signed release assets
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_NOTES_PATH: ${{ steps.release_notes.outputs.path }}
+        run: |
+          # Mark RC and nightly tags as prerelease on GitHub
+          prerelease_flag=""
+          case "${RELEASE_TAG}" in
+            *-rc.*) prerelease_flag="--prerelease" ;;
+          esac
+
+          gh release view "${RELEASE_TAG}" >/dev/null 2>&1 || gh release create "${RELEASE_TAG}" --title "${RELEASE_TAG}" --notes-file "${RELEASE_NOTES_PATH}" ${prerelease_flag}
+          gh release edit "${RELEASE_TAG}" --title "${RELEASE_TAG}" --notes-file "${RELEASE_NOTES_PATH}" ${prerelease_flag}
+          gh release upload "${RELEASE_TAG}" \
+            "dist/drydock-${RELEASE_TAG}.tar.gz" \
+            "dist/drydock-${RELEASE_TAG}.tar.gz.sha256" \
+            "dist/drydock-${RELEASE_TAG}.tar.gz.bundle" \
+            "dist/drydock-${RELEASE_TAG}.tar.gz.sig" \
+            "dist/drydock-${RELEASE_TAG}.tar.gz.intoto.jsonl" \
+            "dist/drydock-${RELEASE_TAG}.tar.gz.pem" \
+            --clobber
+
+      - name: Attest build provenance
+        if: always() && steps.digest.outputs.value
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32  # v4.1.0
+        with:
+          subject-name: ghcr.io/${{ github.repository }}
+          subject-digest: ${{ steps.digest.outputs.value }}
+          push-to-registry: true

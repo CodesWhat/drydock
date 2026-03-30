@@ -16,6 +16,10 @@ gcr.configuration = {
   privatekey: TEST_PRIVATE_KEY,
 };
 
+beforeEach(() => {
+  vi.clearAllMocks();
+});
+
 test('validatedConfiguration should initialize when configuration is valid', async () => {
   expect(
     gcr.validateConfiguration({
@@ -121,6 +125,35 @@ test('authenticate should throw when gcr token is missing', async () => {
 
   await expect(gcr.authenticate({}, { headers: {} })).rejects.toThrow(
     'GCR token endpoint response does not contain token',
+  );
+});
+
+test('authenticate should propagate network errors', async () => {
+  const { default: axios } = await import('axios');
+  axios.mockRejectedValueOnce(new Error('connect ECONNREFUSED 127.0.0.1:443'));
+
+  await expect(gcr.authenticate({}, { headers: {} })).rejects.toThrow(
+    'connect ECONNREFUSED 127.0.0.1:443',
+  );
+});
+
+test('authenticate should propagate timeout errors', async () => {
+  const { default: axios } = await import('axios');
+  axios.mockRejectedValueOnce(new Error('timeout of 15000ms exceeded'));
+
+  await expect(gcr.authenticate({}, { headers: {} })).rejects.toThrow(
+    'timeout of 15000ms exceeded',
+  );
+});
+
+test('authenticate should propagate 429 rate limit errors', async () => {
+  const { default: axios } = await import('axios');
+  const error = new Error('Request failed with status code 429');
+  (error as any).response = { status: 429 };
+  axios.mockRejectedValueOnce(error);
+
+  await expect(gcr.authenticate({}, { headers: {} })).rejects.toThrow(
+    'Request failed with status code 429',
   );
 });
 

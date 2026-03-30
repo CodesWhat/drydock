@@ -1,0 +1,15 @@
+{
+  "runsPerMonth": 4,
+  "testsPerRun": {
+    "openSource": 4,
+    "code": 1,
+    "container": 1,
+    "iac": 1
+  },
+  "quotas": {
+    "openSource": 200,
+    "code": 100,
+    "container": 100,
+    "iac": 300
+  }
+}

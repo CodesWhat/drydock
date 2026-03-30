@@ -1,6 +1,6 @@
 {
   "name": "drydock-app",
-  "version": "1.4.5",
+  "version": "1.5.0",
   "description": "Drydock backend — Docker container update manager",
   "engines": {
     "node": ">=24.0.0"
@@ -13,14 +13,16 @@
     "format": "biome format --write .",
     "lint:fix": "biome check --fix .",
     "lint": "biome check .",
+    "test:security": "node ./node_modules/vitest/vitest.mjs run security/*.test.ts --maxWorkers=1 --fileParallelism=false",
     "test": "\"$npm_node_execpath\" -e \"const major = Number(process.versions.node.split('.')[0]); if (!Number.isInteger(major) || major < 24) { console.error('Drydock backend tests require Node.js >=24. Current: ' + process.version); process.exit(1); }\" && \"$npm_node_execpath\" ./node_modules/vitest/vitest.mjs run --coverage --maxWorkers=1 --fileParallelism=false",
+    "test:mutation": "stryker run",
     "knip": "knip"
   },
   "author": "CodesWhat",
   "repository": "CodesWhat/drydock",
   "license": "AGPL-3.0-only",
   "dependencies": {
-    "@aws-sdk/client-ecr": "^3.1011.0",
+    "@aws-sdk/client-ecr": "^3.1014.0",
     "@slack/web-api": "^7.15.0",
     "ajv": "^8.18.0",
     "ajv-formats": "^3.0.1",
@@ -32,7 +34,7 @@
     "connect-loki": "1.2.0",
     "cors": "2.8.6",
     "cron-parser": "^5.5.0",
-    "dockerode": "4.0.9",
+    "dockerode": "4.0.10",
     "express": "5.2.1",
     "express-healthcheck": "0.1.0",
     "express-rate-limit": "^8.3.1",
@@ -48,7 +50,7 @@
     "mqtt": "5.15.0",
     "nocache": "4.0.0",
     "node-cron": "4.2.1",
-    "nodemailer": "8.0.2",
+    "nodemailer": "^8.0.4",
     "openid-client": "6.8.2",
     "p-limit": "^7.3.0",
     "parse-docker-image-name": "3.0.0",
@@ -63,18 +65,23 @@
     "semver": "7.7.4",
     "set-value": "4.1.0",
     "sort-es": "1.7.18",
-    "undici": "^7.24.4",
+    "undici": "^7.24.5",
     "unix-crypt-td-js": "1.1.4",
     "uuid": "^13.0.0",
-    "yaml": "2.8.2"
+    "ws": "^8.20.0",
+    "yaml": "2.8.3"
   },
   "overrides": {
     "body-parser": "2.2.2",
     "fast-xml-parser": "5.5.8",
+    "picomatch": "4.0.4",
     "qs": "6.15.0"
   },
   "devDependencies": {
     "@fast-check/vitest": "^0.3.0",
+    "@stryker-mutator/core": "^9.6.0",
+    "@stryker-mutator/typescript-checker": "^9.6.0",
+    "@stryker-mutator/vitest-runner": "^9.6.0",
     "@types/cors": "^2.8.19",
     "@types/dockerode": "4.0.1",
     "@types/express": "^5.0.6",
@@ -87,7 +94,7 @@
     "@types/yaml": "^1.9.7",
     "@vitest/coverage-v8": "^4.1.0",
     "fast-check": "^4.6.0",
-    "knip": "^5.87.0",
+    "knip": "^6.0.1",
     "nodemon": "3.1.14",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3",

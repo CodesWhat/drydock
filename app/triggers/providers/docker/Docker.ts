@@ -26,6 +26,7 @@ import { runHook } from '../../hooks/HookRunner.js';
 import Trigger from '../Trigger.js';
 import ContainerRuntimeConfigManager from './ContainerRuntimeConfigManager.js';
 import ContainerUpdateExecutor from './ContainerUpdateExecutor.js';
+import { syncComposeFileTag } from './compose-file-sync.js';
 import { startHealthMonitor } from './HealthMonitor.js';
 import HookExecutor from './HookExecutor.js';
 import RegistryResolver from './RegistryResolver.js';
@@ -39,6 +40,11 @@ const NON_SELF_UPDATE_HEALTH_TIMEOUT_MS = 120_000;
 const NON_SELF_UPDATE_HEALTH_POLL_INTERVAL_MS = 1_000;
 const TRIGGER_BATCH_CONCURRENCY = 3;
 const warnedLegacyTriggerLabelFallbacks = new Set<string>();
+
+type ContainerFullNameReference = {
+  name: string;
+  watcher?: unknown;
+};
 
 function getPreferredLabelValue(labels, ddKey, wudKey, logger) {
   return resolvePreferredLabelValue(labels, ddKey, wudKey, {
@@ -84,6 +90,46 @@ function shouldKeepImage(imageNormalized, container) {
     return true;
   }
   return false;
+}
+
+function getContainerFullNameForLifecycle(container: ContainerFullNameReference): string {
+  return `${container.watcher}_${container.name}`;
+}
+
+function getErrorMessage(error: unknown): string {
+  if (!error || typeof error !== 'object' || !('message' in error)) {
+    return String(error);
+  }
+  return String((error as { message?: unknown }).message);
+}
+
+function getErrorNumberField(error: unknown, field: 'statusCode' | 'status'): number | undefined {
+  if (!error || typeof error !== 'object') {
+    return undefined;
+  }
+  const value = (error as Record<string, unknown>)[field];
+  return typeof value === 'number' ? value : undefined;
+}
+
+function getErrorStringField(error: unknown, field: 'message' | 'reason'): string | undefined {
+  if (!error || typeof error !== 'object') {
+    return undefined;
+  }
+  const value = (error as Record<string, unknown>)[field];
+  return typeof value === 'string' ? value : undefined;
+}
+
+function getErrorJsonMessage(error: unknown): string | undefined {
+  if (!error || typeof error !== 'object') {
+    return undefined;
+  }
+  const json = (error as { json?: unknown }).json;
+  if (!json || typeof json !== 'object') {
+    return undefined;
+  }
+  const jsonMessage = (json as { message?: unknown }).message;
+  /* v8 ignore next -- json.message is typically string when present; non-string forms are defensive */
+  return typeof jsonMessage === 'string' ? jsonMessage : undefined;
 }
 
 const HOOK_EXECUTOR_ORCHESTRATOR_METHODS = ['recordHookAudit'] as const;
@@ -238,7 +284,7 @@ class Docker extends Trigger {
         getLogger: () => this.log,
       },
       context: {
-        getContainerFullName: (container) => fullName(container as any),
+        getContainerFullName: (container) => getContainerFullNameForLifecycle(container),
         createTriggerContext: updateLifecycleCallbacks.createTriggerContext,
       },
       security: {
@@ -291,17 +337,18 @@ class Docker extends Trigger {
     return this.securityGate;
   }
 
-  isContainerNotFoundError(error) {
+  isContainerNotFoundError(error: unknown) {
     if (!error) {
       return false;
     }
 
-    const statusCode = error?.statusCode ?? error?.status;
+    const statusCode =
+      getErrorNumberField(error, 'statusCode') ?? getErrorNumberField(error, 'status');
     if (statusCode === 404) {
       return true;
     }
 
-    const errorMessage = `${error?.message ?? ''} ${error?.reason ?? ''} ${error?.json?.message ?? ''}`;
+    const errorMessage = `${getErrorStringField(error, 'message') ?? ''} ${getErrorStringField(error, 'reason') ?? ''} ${getErrorJsonMessage(error) ?? ''}`;
     return errorMessage.toLowerCase().includes('no such container');
   }
 
@@ -325,7 +372,15 @@ class Docker extends Trigger {
    */
 
   getWatcher(container) {
-    return getState().watcher[`docker.${container.watcher}`];
+    const watcherId = container?.agent
+      ? `${container.agent}.docker.${container.watcher}`
+      : `docker.${container.watcher}`;
+    const watcher = getState().watcher[watcherId];
+    if (!watcher) {
+      const containerIdOrName = container?.id || container?.name || 'unknown';
+      throw new Error(`No watcher found for container ${containerIdOrName} (${watcherId})`);
+    }
+    return watcher;
   }
 
   normalizeRegistryHost(registryUrlOrName) {
@@ -366,7 +421,7 @@ class Docker extends Trigger {
     this.log.debug(`Get container ${container.id}`);
     try {
       return await dockerApi.getContainer(container.id);
-    } catch (e) {
+    } catch (e: unknown) {
       this.log.warn(`Error when getting container ${container.id}`);
       throw e;
     }
@@ -381,7 +436,7 @@ class Docker extends Trigger {
     this.log.debug(`Inspect container ${container.id}`);
     try {
       return await container.inspect();
-    } catch (e) {
+    } catch (e: unknown) {
       logContainer.warn(`Error when inspecting container ${container.id}`);
       throw e;
     }
@@ -417,8 +472,10 @@ class Docker extends Trigger {
           return imageToRemove.remove();
         }),
       );
-    } catch (e) {
-      logContainer.warn(`Some errors occurred when trying to prune previous tags (${e.message})`);
+    } catch (e: unknown) {
+      logContainer.warn(
+        `Some errors occurred when trying to prune previous tags (${getErrorMessage(e)})`,
+      );
     }
   }
 
@@ -514,8 +571,8 @@ class Docker extends Trigger {
         ),
       );
       logContainer.info(`Image ${newImage} pulled with success`);
-    } catch (e) {
-      logContainer.warn(`Error when pulling image ${newImage} (${e.message})`);
+    } catch (e: unknown) {
+      logContainer.warn(`Error when pulling image ${newImage} (${getErrorMessage(e)})`);
       throw e;
     }
   }
@@ -534,7 +591,7 @@ class Docker extends Trigger {
     try {
       await container.stop();
       logContainer.info(`Container ${containerName} with id ${containerId} stopped with success`);
-    } catch (e) {
+    } catch (e: unknown) {
       logContainer.warn(`Error when stopping container ${containerName} with id ${containerId}`);
       throw e;
     }
@@ -553,7 +610,7 @@ class Docker extends Trigger {
     try {
       await container.remove();
       logContainer.info(`Container ${containerName} with id ${containerId} removed with success`);
-    } catch (e) {
+    } catch (e: unknown) {
       logContainer.warn(`Error when removing container ${containerName} with id ${containerId}`);
       throw e;
     }
@@ -572,7 +629,7 @@ class Docker extends Trigger {
       logContainer.info(
         `Container ${containerName} with id ${containerId} auto-removed successfully`,
       );
-    } catch (e) {
+    } catch (e: unknown) {
       logContainer.warn(
         e,
         `Error while waiting for container ${containerName} with id ${containerId}`,
@@ -632,8 +689,8 @@ class Docker extends Trigger {
 
       logContainer.info(`Container ${containerName} recreated on new image with success`);
       return newContainer;
-    } catch (e) {
-      logContainer.warn(`Error when creating container ${containerName} (${e.message})`);
+    } catch (e: unknown) {
+      logContainer.warn(`Error when creating container ${containerName} (${getErrorMessage(e)})`);
       throw e;
     }
   }
@@ -650,7 +707,7 @@ class Docker extends Trigger {
     try {
       await container.start();
       logContainer.info(`Container ${containerName} started with success`);
-    } catch (e) {
+    } catch (e: unknown) {
       logContainer.warn(`Error when starting container ${containerName}`);
       throw e;
     }
@@ -669,7 +726,7 @@ class Docker extends Trigger {
       const image = await dockerApi.getImage(imageToRemove);
       await image.remove();
       logContainer.info(`Image ${imageToRemove} removed with success`);
-    } catch (e) {
+    } catch (e: unknown) {
       logContainer.warn(`Error when removing image ${imageToRemove}`);
       throw e;
     }
@@ -815,8 +872,8 @@ class Docker extends Trigger {
       try {
         const oldImage = registry.getImageFullName(container.image, container.image.digest.repo);
         await this.removeImage(dockerApi, oldImage, logContainer);
-      } catch (e) {
-        logContainer.warn(`Unable to remove previous digest image (${e.message})`);
+      } catch (e: unknown) {
+        logContainer.warn(`Unable to remove previous digest image (${getErrorMessage(e)})`);
       }
     }
   }
@@ -1095,7 +1152,15 @@ class Docker extends Trigger {
    * mechanics while reusing the shared lifecycle orchestrator.
    */
   async performContainerUpdate(context, container, logContainer, _runtimeContext?: unknown) {
-    return this.executeContainerUpdate(context, container, logContainer);
+    const updated = await this.executeContainerUpdate(context, container, logContainer);
+    if (updated && container.updateKind?.kind === 'tag') {
+      await syncComposeFileTag({
+        labels: context.currentContainerSpec?.Config?.Labels,
+        newImage: context.newImage,
+        logContainer,
+      });
+    }
+    return updated;
   }
 
   getRollbackConfig(container) {

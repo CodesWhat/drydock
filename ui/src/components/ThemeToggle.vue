@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
+import { iconButtonIconSizes, iconButtonPixels } from './appIconButtonSizes';
 import { useBreakpoints } from '../composables/useBreakpoints';
 import { useTheme } from '../theme/useTheme';
 
@@ -21,8 +22,8 @@ const variants = [
 
 const expanded = ref(false);
 
-const cellSize = computed(() => (props.size === 'md' ? 32 : 32));
-const iconSize = computed(() => (props.size === 'md' ? 14 : 15));
+const cellSize = computed(() => iconButtonPixels[props.size]);
+const iconSize = computed(() => iconButtonIconSizes[props.size]);
 
 const activeIndex = computed(() => variants.findIndex((v) => v.id === themeVariant.value));
 const activeVariant = computed(() => variants[activeIndex.value]);

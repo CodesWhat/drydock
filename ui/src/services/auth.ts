@@ -7,6 +7,18 @@ import { errorMessage } from '../utils/error';
 // Current logged user
 let user = undefined;
 
+function getPayloadErrorMessage(payload: unknown): string {
+  if (typeof payload !== 'object' || payload === null) {
+    return '';
+  }
+  if (!('error' in payload)) {
+    return '';
+  }
+
+  const error = payload.error;
+  return typeof error === 'string' ? error.trim() : '';
+}
+
 /**
  * Get auth provider status.
  * @returns {Promise<unknown>}
@@ -64,14 +76,26 @@ async function loginBasic(username: string, password: string, remember: boolean 
     body: JSON.stringify({ remember }),
   });
   if (!response.ok) {
-    throw new Error('Username or password error');
+    let message = '';
+    try {
+      const payload: unknown = await response.json();
+      message = getPayloadErrorMessage(payload);
+    } catch {
+      // Ignore response parsing errors and fallback to a generic credential error.
+    }
+
+    if (response.status === 401 || message.toLowerCase() === 'unauthorized') {
+      throw new Error('Username or password error');
+    }
+
+    throw new Error(message || 'Username or password error');
   }
   user = await response.json();
   return user;
 }
 
 /**
- * Store remember-me preference in the session before any auth flow.
+ * Store remember-me preference in the session before auth flows.
  */
 async function setRememberMe(remember: boolean) {
   await fetch('/auth/remember', {

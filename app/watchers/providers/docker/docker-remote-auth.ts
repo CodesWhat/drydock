@@ -1,12 +1,19 @@
 import fs from 'node:fs';
 import Dockerode from 'dockerode';
 import { resolveConfiguredPath } from '../../../runtime/paths.js';
+import { disableSocketRedirects } from './disable-socket-redirects.js';
 import { getErrorMessage } from './docker-helpers.js';
+import type { MutableOidcState, OidcContext, OidcRemoteAuthConfiguration } from './oidc.js';
 import {
   initializeRemoteOidcStateFromConfiguration,
   isRemoteOidcTokenRefreshRequired,
   refreshRemoteOidcAccessToken,
 } from './oidc.js';
+import { probeSocketApiVersion } from './socket-version-probe.js';
+
+type DockerRemoteAuthConfiguration = OidcRemoteAuthConfiguration & {
+  insecure?: boolean;
+};
 
 interface DockerRemoteAuthWatcher {
   name: string;
@@ -17,17 +24,17 @@ interface DockerRemoteAuthWatcher {
     host?: string;
     socket: string;
     port: number;
-    protocol?: 'http' | 'https' | 'ssh';
+    protocol?: 'http' | 'https';
     cafile?: string;
     certfile?: string;
     keyfile?: string;
-    auth?: any;
+    auth?: DockerRemoteAuthConfiguration;
   };
   log: {
     warn: (message: string) => void;
   };
   applyRemoteAuthHeaders: (options: Dockerode.DockerOptions) => void;
-  getRemoteAuthResolution: (auth: any) => {
+  getRemoteAuthResolution: (auth: OidcRemoteAuthConfiguration | undefined) => {
     authType: string;
     hasBearer: boolean;
     hasBasic: boolean;
@@ -35,12 +42,12 @@ interface DockerRemoteAuthWatcher {
   };
   isHttpsRemoteWatcher: (options: Dockerode.DockerOptions) => boolean;
   handleRemoteAuthFailure: (message: string) => void;
-  getOidcContext: () => any;
-  getOidcStateAdapter: () => any;
+  getOidcContext: () => OidcContext;
+  getOidcStateAdapter: () => MutableOidcState;
   setRemoteAuthorizationHeader: (authorizationValue: string) => void;
 }
 
-export function initWatcherWithRemoteAuth(watcher: DockerRemoteAuthWatcher): void {
+export async function initWatcherWithRemoteAuth(watcher: DockerRemoteAuthWatcher): Promise<void> {
   const options: Dockerode.DockerOptions = {};
   watcher.remoteAuthBlockedReason = undefined;
   if (watcher.configuration.host) {
@@ -72,7 +79,7 @@ export function initWatcherWithRemoteAuth(watcher: DockerRemoteAuthWatcher): voi
     }
     try {
       watcher.applyRemoteAuthHeaders(options);
-    } catch (e: any) {
+    } catch (e: unknown) {
       const authFailureMessage = getErrorMessage(
         e,
         `Unable to authenticate remote watcher ${watcher.name}`,
@@ -84,8 +91,20 @@ export function initWatcherWithRemoteAuth(watcher: DockerRemoteAuthWatcher): voi
     }
   } else {
     options.socketPath = watcher.configuration.socket;
+    // Pin the daemon's API version so all requests use versioned paths
+    // (e.g. /v1.44/images/…).  This prevents Podman's Docker-compat
+    // layer from returning 301 redirects for unversioned endpoints,
+    // which triggers a crash in docker-modem's redirect handler
+    // (getaddrinfo EAI_AGAIN — see GitHub issue #182).
+    const apiVersion = await probeSocketApiVersion(watcher.configuration.socket);
+    if (apiVersion) {
+      options.version = `v${apiVersion}`;
+    }
   }
   watcher.dockerApi = new Dockerode(options);
+  if (!watcher.configuration.host) {
+    disableSocketRedirects(watcher.dockerApi);
+  }
 }
 
 export async function ensureRemoteAuthHeadersForWatcher(

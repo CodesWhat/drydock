@@ -1,7 +1,9 @@
 import { createApp } from 'vue';
 import App from './App.vue';
 import { disableIconifyApi, registerIcons } from './boot/icons';
+import AppButton from './components/AppButton.vue';
 import AppIcon from './components/AppIcon.vue';
+import AppToast from './components/AppToast.vue';
 import ConfirmDialog from './components/ConfirmDialog.vue';
 import ContainerIcon from './components/ContainerIcon.vue';
 import CopyableTag from './components/CopyableTag.vue';
@@ -54,6 +56,7 @@ void loadServerFeatures();
 
 const app = createApp(App);
 app.component('AppIcon', AppIcon);
+app.component('AppButton', AppButton);
 app.component('AppLayout', AppLayout);
 app.component('ContainerIcon', ContainerIcon);
 app.component('ThemeToggle', ThemeToggle);
@@ -65,6 +68,7 @@ app.component('DataListAccordion', DataListAccordion);
 app.component('DataViewLayout', DataViewLayout);
 app.component('DetailPanel', DetailPanel);
 app.component('EmptyState', EmptyState);
+app.component('AppToast', AppToast);
 app.component('ConfirmDialog', ConfirmDialog);
 app.component('CopyableTag', CopyableTag);
 app.directive('tooltip', Tooltip);

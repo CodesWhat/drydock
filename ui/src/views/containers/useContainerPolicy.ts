@@ -1,4 +1,5 @@
 import { computed, type Ref, ref, watch } from 'vue';
+import { useToast } from '../../composables/useToast';
 import { updateContainerPolicy } from '../../services/container';
 import type { Container } from '../../types/container';
 import { errorMessage } from '../../utils/error';
@@ -226,10 +227,15 @@ async function applyPolicyState(args: {
   try {
     await updateContainerPolicy(containerId, args.action, args.payload);
     args.policyMessage.value = args.message;
+    const toast = useToast();
+    toast.success(args.message);
     await args.loadContainers();
     return true;
   } catch (e: unknown) {
-    args.policyError.value = errorMessage(e, 'Failed to update policy');
+    const msg = errorMessage(e, 'Failed to update policy');
+    args.policyError.value = msg;
+    const toast = useToast();
+    toast.error(`Policy update failed: ${args.name}`, msg);
     return false;
   } finally {
     args.policyInProgress.value = null;

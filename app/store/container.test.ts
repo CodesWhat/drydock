@@ -127,6 +127,7 @@ test('updateContainer should use collection update when available for existing c
   const existingContainer = {
     data: createContainerFixture({
       id: 'container-update-with-update-method',
+      status: 'running',
     }),
   };
   const collection = {
@@ -145,6 +146,7 @@ test('updateContainer should use collection update when available for existing c
   };
   const containerToSave = createContainerFixture({
     id: 'container-update-with-update-method',
+    status: 'stopped',
   });
   const spyEvent = vi.spyOn(event, 'emitContainerUpdated');
   container.createCollections(db);
@@ -527,6 +529,31 @@ test('insertContainer should stamp updateDetectedAt when update is available', a
   expect(typeof inserted.updateDetectedAt).toBe('string');
 });
 
+test('insertContainer should stamp firstSeenAt when update is available', async () => {
+  const collection = {
+    findOne: () => {},
+    insert: () => {},
+  };
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => null,
+  };
+  const base = createContainerFixture();
+  const containerWithUpdate = {
+    ...base,
+    image: {
+      ...base.image,
+      tag: { ...base.image.tag, value: '1.0.0' },
+    },
+    result: { tag: '2.0.0' },
+  };
+
+  container.createCollections(db);
+  const inserted = container.insertContainer(containerWithUpdate);
+
+  expect(typeof inserted.firstSeenAt).toBe('string');
+});
+
 test('updateContainer should preserve updateDetectedAt when update has not changed', async () => {
   const existingDetectedAt = '2026-02-24T09:15:00.000Z';
   const existingFixture = createContainerFixture();
@@ -568,6 +595,49 @@ test('updateContainer should preserve updateDetectedAt when update has not chang
   const updated = container.updateContainer(containerToSave);
 
   expect(updated.updateDetectedAt).toBe(existingDetectedAt);
+});
+
+test('updateContainer should preserve firstSeenAt when update has not changed', async () => {
+  const existingFirstSeenAt = '2026-02-24T09:15:00.000Z';
+  const existingFixture = createContainerFixture();
+  const existingContainer = {
+    data: {
+      ...existingFixture,
+      image: {
+        ...existingFixture.image,
+        tag: { ...existingFixture.image.tag, value: '1.0.0' },
+      },
+      result: { tag: '2.0.0' },
+      firstSeenAt: existingFirstSeenAt,
+    },
+  };
+  const collection = {
+    findOne: () => existingContainer,
+    insert: () => {},
+    chain: () => ({
+      find: () => ({
+        remove: () => ({}),
+      }),
+    }),
+  };
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => null,
+  };
+  const nextFixture = createContainerFixture();
+  const containerToSave = {
+    ...nextFixture,
+    image: {
+      ...nextFixture.image,
+      tag: { ...nextFixture.image.tag, value: '1.0.0' },
+    },
+    result: { tag: '2.0.0' },
+  };
+
+  container.createCollections(db);
+  const updated = container.updateContainer(containerToSave);
+
+  expect(updated.firstSeenAt).toBe(existingFirstSeenAt);
 });
 
 test('updateContainer should preserve explicit incoming updateDetectedAt when provided', async () => {
@@ -700,6 +770,50 @@ test('updateContainer should refresh updateDetectedAt when update result changes
   expect(updated.updateDetectedAt).not.toBe(existingDetectedAt);
 });
 
+test('updateContainer should refresh firstSeenAt when update result changes', async () => {
+  const existingFirstSeenAt = '2026-02-24T09:15:00.000Z';
+  const existingFixture = createContainerFixture();
+  const existingContainer = {
+    data: {
+      ...existingFixture,
+      image: {
+        ...existingFixture.image,
+        tag: { ...existingFixture.image.tag, value: '1.0.0' },
+      },
+      result: { tag: '2.0.0' },
+      firstSeenAt: existingFirstSeenAt,
+    },
+  };
+  const collection = {
+    findOne: () => existingContainer,
+    insert: () => {},
+    chain: () => ({
+      find: () => ({
+        remove: () => ({}),
+      }),
+    }),
+  };
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => null,
+  };
+  const nextFixture = createContainerFixture();
+  const containerToSave = {
+    ...nextFixture,
+    image: {
+      ...nextFixture.image,
+      tag: { ...nextFixture.image.tag, value: '1.0.0' },
+    },
+    result: { tag: '2.1.0' },
+  };
+
+  container.createCollections(db);
+  const updated = container.updateContainer(containerToSave);
+
+  expect(updated.firstSeenAt).toBeDefined();
+  expect(updated.firstSeenAt).not.toBe(existingFirstSeenAt);
+});
+
 test('updateContainer should clear updateDetectedAt when update is no longer available', async () => {
   const existingFixture = createContainerFixture();
   const existingContainer = {
@@ -740,6 +854,48 @@ test('updateContainer should clear updateDetectedAt when update is no longer ava
   const updated = container.updateContainer(containerToSave);
 
   expect(updated.updateDetectedAt).toBeUndefined();
+});
+
+test('updateContainer should clear firstSeenAt when update is no longer available', async () => {
+  const existingFixture = createContainerFixture();
+  const existingContainer = {
+    data: {
+      ...existingFixture,
+      image: {
+        ...existingFixture.image,
+        tag: { ...existingFixture.image.tag, value: '1.0.0' },
+      },
+      result: { tag: '2.0.0' },
+      firstSeenAt: '2026-02-24T09:15:00.000Z',
+    },
+  };
+  const collection = {
+    findOne: () => existingContainer,
+    insert: () => {},
+    chain: () => ({
+      find: () => ({
+        remove: () => ({}),
+      }),
+    }),
+  };
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => null,
+  };
+  const nextFixture = createContainerFixture();
+  const containerToSave = {
+    ...nextFixture,
+    image: {
+      ...nextFixture.image,
+      tag: { ...nextFixture.image.tag, value: '1.0.0' },
+    },
+    result: { tag: '1.0.0' },
+  };
+
+  container.createCollections(db);
+  const updated = container.updateContainer(containerToSave);
+
+  expect(updated.firstSeenAt).toBeUndefined();
 });
 
 test('getContainers should return all containers sorted by name', async () => {
@@ -2086,4 +2242,279 @@ test('getValueByPath helper should reject unsafe and invalid traversal paths', (
     container._getValueByPathForTests({ safe: { value: 'ok' } }, '__proto__.polluted'),
   ).toBeUndefined();
   expect(container._getValueByPathForTests({ name: 'plain-string' }, 'name.value')).toBeUndefined();
+});
+
+describe('hasContainerChanged', () => {
+  test('should return false for identical containers', () => {
+    const a = createContainerFixture();
+    const b = createContainerFixture();
+    expect(container.hasContainerChanged(a, b)).toBe(false);
+  });
+
+  test('should return true when updateAvailable changes', () => {
+    const a = createContainerFixture({ updateAvailable: false });
+    const b = createContainerFixture({ updateAvailable: true });
+    expect(container.hasContainerChanged(a, b)).toBe(true);
+  });
+
+  test('should return true when result.tag changes', () => {
+    const a = createContainerFixture({ result: { tag: '1.0.0' } });
+    const b = createContainerFixture({ result: { tag: '2.0.0' } });
+    expect(container.hasContainerChanged(a, b)).toBe(true);
+  });
+
+  test('should return true when result.digest changes', () => {
+    const a = createContainerFixture({ result: { tag: 'v1', digest: 'sha256:aaa' } });
+    const b = createContainerFixture({ result: { tag: 'v1', digest: 'sha256:bbb' } });
+    expect(container.hasContainerChanged(a, b)).toBe(true);
+  });
+
+  test('should return true when status changes', () => {
+    const a = createContainerFixture({ status: 'running' });
+    const b = createContainerFixture({ status: 'stopped' });
+    expect(container.hasContainerChanged(a, b)).toBe(true);
+  });
+
+  test('should return true when error appears', () => {
+    const a = createContainerFixture();
+    const b = createContainerFixture({ error: { message: 'connection refused' } });
+    expect(container.hasContainerChanged(a, b)).toBe(true);
+  });
+
+  test('should return true when error is cleared', () => {
+    const a = createContainerFixture({ error: { message: 'connection refused' } });
+    const b = createContainerFixture();
+    expect(container.hasContainerChanged(a, b)).toBe(true);
+  });
+
+  test('should return true when image.tag.value changes', () => {
+    const a = createContainerFixture();
+    const imageB = {
+      ...createContainerFixture().image,
+      tag: { value: 'new-version', semver: false },
+    };
+    const b = createContainerFixture({ image: imageB });
+    expect(container.hasContainerChanged(a, b)).toBe(true);
+  });
+
+  test('should return true when security state changes', () => {
+    const a = createContainerFixture({ security: undefined });
+    const b = createContainerFixture({
+      security: { scan: { scanner: 'trivy', status: 'passed' } },
+    });
+    expect(container.hasContainerChanged(a, b)).toBe(true);
+  });
+
+  test('should return false when security has same data in different key order', () => {
+    const a = createContainerFixture({
+      security: {
+        scan: {
+          scanner: 'trivy',
+          image: 'registry/image:1.2.3',
+          scannedAt: '2024-01-01T00:00:00.000Z',
+          status: 'passed',
+          blockSeverities: [],
+          blockingCount: 0,
+          summary: {
+            unknown: 0,
+            low: 0,
+            medium: 0,
+            high: 0,
+            critical: 0,
+          },
+          vulnerabilities: [],
+        },
+      },
+    });
+    const b = createContainerFixture({
+      security: {
+        scan: {
+          vulnerabilities: [],
+          summary: {
+            critical: 0,
+            high: 0,
+            medium: 0,
+            low: 0,
+            unknown: 0,
+          },
+          blockingCount: 0,
+          blockSeverities: [],
+          status: 'passed',
+          scannedAt: '2024-01-01T00:00:00.000Z',
+          image: 'registry/image:1.2.3',
+          scanner: 'trivy',
+        },
+      },
+    });
+
+    expect(container.hasContainerChanged(a, b)).toBe(false);
+  });
+
+  test('should reuse cached security hashes across repeated comparisons', () => {
+    let securityOwnKeysCount = 0;
+    const security = new Proxy(
+      {
+        scan: {
+          scanner: 'trivy',
+          image: 'registry/image:1.2.3',
+          scannedAt: '2024-01-01T00:00:00.000Z',
+          status: 'passed',
+          blockSeverities: [],
+          blockingCount: 0,
+          summary: {
+            unknown: 0,
+            low: 0,
+            medium: 0,
+            high: 0,
+            critical: 0,
+          },
+          vulnerabilities: [],
+        },
+      },
+      {
+        ownKeys(target) {
+          securityOwnKeysCount += 1;
+          return Reflect.ownKeys(target);
+        },
+      },
+    );
+    const a = createContainerFixture({
+      id: 'container-security-hash-cache',
+      security,
+    });
+    const b = createContainerFixture({
+      id: 'container-security-hash-cache',
+      security: {
+        scan: {
+          vulnerabilities: [],
+          summary: {
+            critical: 0,
+            high: 0,
+            medium: 0,
+            low: 0,
+            unknown: 0,
+          },
+          blockingCount: 0,
+          blockSeverities: [],
+          status: 'passed',
+          scannedAt: '2024-01-01T00:00:00.000Z',
+          image: 'registry/image:1.2.3',
+          scanner: 'trivy',
+        },
+      },
+    });
+
+    expect(container.hasContainerChanged(a, b)).toBe(false);
+    const initialSecurityOwnKeysCount = securityOwnKeysCount;
+    expect(initialSecurityOwnKeysCount).toBeGreaterThan(0);
+
+    expect(container.hasContainerChanged(a, b)).toBe(false);
+    expect(securityOwnKeysCount).toBe(initialSecurityOwnKeysCount);
+  });
+
+  test('updateContainer should reuse the stored security hash when the next payload omits security', () => {
+    const collection = createFilterableCollection([]);
+    const db = {
+      getCollection: () => collection,
+      addCollection: () => null,
+    };
+    container.createCollections(db);
+
+    let securityOwnKeysCount = 0;
+    const security = new Proxy(
+      {
+        scan: {
+          vulnerabilities: [],
+          summary: {
+            critical: 0,
+            high: 0,
+            medium: 0,
+            low: 0,
+            unknown: 0,
+          },
+          blockingCount: 0,
+          blockSeverities: [],
+          status: 'passed',
+          scannedAt: '2024-01-01T00:00:00.000Z',
+          image: 'registry/image:1.2.3',
+          scanner: 'trivy',
+        },
+      },
+      {
+        ownKeys(target) {
+          securityOwnKeysCount += 1;
+          return Reflect.ownKeys(target);
+        },
+      },
+    );
+    const existingContainer = createContainerFixture({
+      id: 'stored-security-hash-cache',
+      updateAvailable: false,
+      security,
+    });
+
+    container.insertContainer(existingContainer);
+    const initialSecurityOwnKeysCount = securityOwnKeysCount;
+    expect(initialSecurityOwnKeysCount).toBeGreaterThan(0);
+
+    const updatedContainer = container.updateContainer({
+      ...existingContainer,
+      updateAvailable: true,
+      security: undefined,
+    });
+
+    expect(updatedContainer).toBeDefined();
+    expect(securityOwnKeysCount).toBe(initialSecurityOwnKeysCount);
+  });
+
+  test('should compare primitive security values without object hashing', () => {
+    const a = createContainerFixture({ security: false as any });
+    const b = createContainerFixture({ security: false as any });
+    const c = createContainerFixture({ security: true as any });
+
+    expect(container.hasContainerChanged(a, b)).toBe(false);
+    expect(container.hasContainerChanged(a, c)).toBe(true);
+  });
+
+  test('should return false when only timestamp-like metadata differs', () => {
+    const a = createContainerFixture({ updateDetectedAt: '2024-01-01T00:00:00Z' });
+    const b = createContainerFixture({ updateDetectedAt: '2024-12-31T23:59:59Z' });
+    expect(container.hasContainerChanged(a, b)).toBe(false);
+  });
+});
+
+test('updateContainer should not emit when container data is unchanged', async () => {
+  const existingContainer = {
+    data: createContainerFixture({
+      id: 'unchanged-container',
+      status: 'running',
+      updateAvailable: false,
+    }),
+  };
+  const collection = {
+    findOne: () => existingContainer,
+    update: vi.fn(),
+    insert: vi.fn(),
+    chain: vi.fn(() => ({
+      find: () => ({
+        remove: () => ({}),
+      }),
+    })),
+  };
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => null,
+  };
+  const containerToSave = createContainerFixture({
+    id: 'unchanged-container',
+    status: 'running',
+    updateAvailable: false,
+  });
+  const spyEvent = vi.spyOn(event, 'emitContainerUpdated');
+  container.createCollections(db);
+
+  container.updateContainer(containerToSave);
+
+  expect(collection.update).toHaveBeenCalledTimes(1);
+  expect(spyEvent).not.toHaveBeenCalled();
 });

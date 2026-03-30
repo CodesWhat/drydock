@@ -552,6 +552,26 @@ describe('ContainerUpdateExecutor', () => {
     );
   });
 
+  test('execute stringifies object errors when message field is undefined', async () => {
+    const context = createContext();
+    const createContainerError = { message: undefined, detail: 'create failed' };
+    const executor = createExecutor({
+      createContainer: vi.fn().mockRejectedValue(createContainerError),
+      buildRuntimeConfigCompatibilityError: vi.fn(() => undefined),
+    });
+
+    await expect(executor.execute(context, createContainer(), createLog())).rejects.toBe(
+      createContainerError,
+    );
+
+    expect(mockUpdateOperation).toHaveBeenCalledWith(
+      'op-1',
+      expect.objectContaining({
+        lastError: '[object Object]',
+      }),
+    );
+  });
+
   test('execute logs best-effort rollback cleanup failures for failed candidate container', async () => {
     const context = createContext({
       currentContainerSpec: createCurrentContainerSpec({

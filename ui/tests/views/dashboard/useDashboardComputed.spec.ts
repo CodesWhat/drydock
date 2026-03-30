@@ -8,6 +8,12 @@ import type {
   RecentAuditStatus,
 } from '@/views/dashboard/dashboardTypes';
 import { useDashboardComputed } from '@/views/dashboard/useDashboardComputed';
+import { getWatcherConfiguration } from '@/views/dashboard/watcherConfiguration';
+
+vi.mock('@/views/dashboard/watcherConfiguration', async (importOriginal) => {
+  const original = await importOriginal<typeof import('@/views/dashboard/watcherConfiguration')>();
+  return { getWatcherConfiguration: vi.fn(original.getWatcherConfiguration) };
+});
 
 function makeContainer(
   id: number,
@@ -599,10 +605,231 @@ describe('useDashboardComputed maintenance countdown', () => {
 
     expect(state.maintenanceCountdownLabel.value).toBe('45m');
   });
+
+  it('exposes nextMaintenanceWindowByWatcher keyed by watcher name', () => {
+    const now = Date.parse('2026-03-01T00:00:00.000Z');
+    const thirtyMin = new Date(now + 30 * 60_000).toISOString();
+    const sixtyMin = new Date(now + 60 * 60_000).toISOString();
+    const watchers = [
+      {
+        name: 'docker-a',
+        configuration: {
+          maintenanceWindow: 'Sun 02:00-03:00 UTC',
+          maintenanceNextWindow: thirtyMin,
+        },
+      },
+      {
+        name: 'docker-b',
+        configuration: {
+          maintenanceWindow: 'Mon 04:00-05:00 UTC',
+          maintenanceNextWindow: sixtyMin,
+        },
+      },
+      {
+        name: 'no-window',
+        configuration: {},
+      },
+    ];
+    const state = createState({ watchers, maintenanceCountdownNow: now });
+    const map = state.nextMaintenanceWindowByWatcher.value;
+
+    expect(map.size).toBe(2);
+    expect(map.get('docker-a')).toBe(Date.parse(thirtyMin));
+    expect(map.get('docker-b')).toBe(Date.parse(sixtyMin));
+    expect(map.has('no-window')).toBe(false);
+  });
+
+  it('falls back to local for unnamed watchers in nextMaintenanceWindowByWatcher', () => {
+    const now = Date.parse('2026-03-01T00:00:00.000Z');
+    const ts = new Date(now + 10 * 60_000).toISOString();
+    const watchers = [
+      {
+        configuration: {
+          maintenanceWindow: 'Sun 02:00-03:00 UTC',
+          maintenanceNextWindow: ts,
+        },
+      },
+    ];
+    const state = createState({ watchers, maintenanceCountdownNow: now });
+    const map = state.nextMaintenanceWindowByWatcher.value;
+
+    expect(map.get('local')).toBe(Date.parse(ts));
+  });
+
+  it('omits watchers with invalid timestamps from nextMaintenanceWindowByWatcher', () => {
+    const watchers = [
+      {
+        name: 'bad-ts',
+        configuration: {
+          maintenanceWindow: 'Sun 02:00-03:00 UTC',
+          maintenanceNextWindow: 'not-a-date',
+        },
+      },
+    ];
+    const state = createState({ watchers });
+    const map = state.nextMaintenanceWindowByWatcher.value;
+
+    expect(map.size).toBe(0);
+  });
+
+  it('falls back to local key when watcher name is an empty string', () => {
+    const now = Date.parse('2026-03-01T00:00:00.000Z');
+    const ts = new Date(now + 20 * 60_000).toISOString();
+    const watchers = [
+      {
+        name: '',
+        configuration: {
+          maintenanceWindow: 'Sun 02:00-03:00 UTC',
+          maintenanceNextWindow: ts,
+        },
+      },
+    ];
+    const state = createState({ watchers, maintenanceCountdownNow: now });
+    const map = state.nextMaintenanceWindowByWatcher.value;
+
+    expect(map.get('local')).toBe(Date.parse(ts));
+  });
+
+  it('defaults watcher name to local when a non-object entry leaks into the filtered list', () => {
+    const now = Date.parse('2026-03-01T00:00:00.000Z');
+    const ts = new Date(now + 25 * 60_000).toISOString();
+    const watchers = [
+      {
+        name: 'docker-a',
+        configuration: {
+          maintenanceWindow: 'Sun 02:00-03:00 UTC',
+          maintenanceNextWindow: ts,
+        },
+      },
+    ];
+    const state = createState({ watchers, maintenanceCountdownNow: now });
+
+    // Force the filtered maintenance-window watcher list to be computed and cached.
+    const cached = state.maintenanceWindowWatchers.value;
+
+    // Inject a non-object entry into the cached array to exercise the defensive
+    // guard in getWatcherName (line 283 else-branch).
+    cached.push(null as unknown as never);
+
+    // Access nextMaintenanceWindowByWatcher for the first time so Vue computes
+    // it using the (now mutated) cached maintenanceWindowWatchers array.
+    const map = state.nextMaintenanceWindowByWatcher.value;
+
+    // The valid watcher should still appear; the null entry is safely ignored
+    // because parseMaintenanceWindowAt returns undefined for non-objects.
+    expect(map.get('docker-a')).toBe(Date.parse(ts));
+    expect(map.has('local')).toBe(false);
+  });
+
+  it('falls back to local when getWatcherName receives a non-object watcher with a parseable timestamp', () => {
+    const now = Date.parse('2026-03-01T00:00:00.000Z');
+    const ts = new Date(now + 40 * 60_000).toISOString();
+    const nonObjectWatcher = 42;
+    const watchers = [
+      {
+        name: 'docker-a',
+        configuration: {
+          maintenanceWindow: 'Sun 02:00-03:00 UTC',
+          maintenanceNextWindow: ts,
+        },
+      },
+    ];
+    const state = createState({ watchers, maintenanceCountdownNow: now });
+
+    // Cache the maintenanceWindowWatchers computed, then inject a non-object
+    // entry that has getWatcherConfiguration mocked to return a valid timestamp.
+    const cached = state.maintenanceWindowWatchers.value;
+    cached.push(nonObjectWatcher as unknown as never);
+
+    // Make getWatcherConfiguration return a configuration with a parseable
+    // timestamp for the non-object entry so getWatcherName is actually reached.
+    const mockedGetConfig = vi.mocked(getWatcherConfiguration);
+    const originalImpl = mockedGetConfig.getMockImplementation()!;
+    mockedGetConfig.mockImplementation((w: unknown) => {
+      if (w === nonObjectWatcher) {
+        return { maintenanceNextWindow: ts } as ReturnType<typeof getWatcherConfiguration>;
+      }
+      return originalImpl(w);
+    });
+
+    const map = state.nextMaintenanceWindowByWatcher.value;
+
+    expect(map.get('docker-a')).toBe(Date.parse(ts));
+    // The non-object watcher falls back to 'local' in getWatcherName.
+    expect(map.get('local')).toBe(Date.parse(ts));
+
+    mockedGetConfig.mockImplementation(originalImpl);
+  });
+
+  it('picks the earliest next window across multiple watchers for the countdown', () => {
+    const now = Date.parse('2026-03-01T00:00:00.000Z');
+    const earlyTs = new Date(now + 15 * 60_000).toISOString();
+    const lateTs = new Date(now + 90 * 60_000).toISOString();
+    const watchers = [
+      {
+        name: 'watcher-early',
+        configuration: {
+          maintenanceWindow: 'Sun 02:00-03:00 UTC',
+          maintenanceNextWindow: earlyTs,
+        },
+      },
+      {
+        name: 'watcher-late',
+        configuration: {
+          maintenanceWindow: 'Mon 04:00-05:00 UTC',
+          maintenanceNextWindow: lateTs,
+        },
+      },
+    ];
+    const state = createState({ watchers, maintenanceCountdownNow: now });
+
+    expect(state.maintenanceCountdownLabel.value).toBe('15m');
+    expect(state.nextMaintenanceWindowByWatcher.value.size).toBe(2);
+  });
+
+  it('skips non-minimum timestamps in the min-reduction loop when finding next window', () => {
+    const now = Date.parse('2026-03-01T00:00:00.000Z');
+    const earliest = new Date(now + 10 * 60_000).toISOString();
+    const middle = new Date(now + 30 * 60_000).toISOString();
+    const latest = new Date(now + 60 * 60_000).toISOString();
+    const watchers = [
+      {
+        name: 'watcher-first',
+        configuration: {
+          maintenanceWindow: 'Sun 02:00-03:00 UTC',
+          maintenanceNextWindow: earliest,
+        },
+      },
+      {
+        name: 'watcher-second',
+        configuration: {
+          maintenanceWindow: 'Mon 04:00-05:00 UTC',
+          maintenanceNextWindow: middle,
+        },
+      },
+      {
+        name: 'watcher-third',
+        configuration: {
+          maintenanceWindow: 'Tue 06:00-07:00 UTC',
+          maintenanceNextWindow: latest,
+        },
+      },
+    ];
+    const state = createState({ watchers, maintenanceCountdownNow: now });
+
+    // The earliest timestamp should be selected as the countdown target.
+    // The second and third entries exercise the ts < min false branch.
+    expect(state.maintenanceCountdownLabel.value).toBe('10m');
+    const map = state.nextMaintenanceWindowByWatcher.value;
+    expect(map.size).toBe(3);
+    expect(map.get('watcher-first')).toBe(Date.parse(earliest));
+    expect(map.get('watcher-second')).toBe(Date.parse(middle));
+    expect(map.get('watcher-third')).toBe(Date.parse(latest));
+  });
 });
 
 describe('useDashboardComputed recent updates', () => {
-  it('prioritizes registry errors, sorts pending updates, and enforces the six-row limit', () => {
+  it('excludes registry errors and sorts pending updates by date with six-row limit', () => {
     const state = createState({
       containers: [
         makeBaseContainer({
@@ -672,21 +899,19 @@ describe('useDashboardComputed recent updates', () => {
     const rows = state.recentUpdates.value;
     const rowByName = new Map(rows.map((row) => [row.name, row]));
 
+    // Registry error containers should NOT appear (#186)
+    expect(rowByName.has('registry-error')).toBe(false);
+    expect(rowByName.has('ignore-me')).toBe(false);
+
     expect(rows).toHaveLength(6);
     expect(rows.map((row) => row.name)).toEqual([
-      'registry-error',
       'bravo',
       'alpha',
       'charlie',
       'skip-me',
       'snooze-me',
+      'no-date',
     ]);
-    expect(rowByName.get('registry-error')).toMatchObject({
-      status: 'error',
-      newVer: 'check failed',
-      registryError: 'registry auth failed',
-      running: false,
-    });
     expect(rowByName.get('bravo')).toMatchObject({ status: 'pending' });
     expect(rowByName.get('alpha')).toMatchObject({
       status: 'updated',
@@ -702,11 +927,9 @@ describe('useDashboardComputed recent updates', () => {
       status: 'snoozed',
       newVer: '8.8.8',
     });
-    expect(rowByName.has('no-date')).toBe(false);
-    expect(rowByName.has('ignore-me')).toBe(false);
   });
 
-  it('returns only registry failures when they already fill the recent update limit', () => {
+  it('returns empty list when only registry failures exist', () => {
     const containers = Array.from({ length: 8 }, (_, index) =>
       makeBaseContainer({
         id: `registry-failure-${index}`,
@@ -719,39 +942,22 @@ describe('useDashboardComputed recent updates', () => {
     const state = createState({ containers });
     const rows = state.recentUpdates.value;
 
-    expect(rows).toHaveLength(6);
-    expect(rows.every((row) => row.status === 'error')).toBe(true);
-    expect(rows.map((row) => row.name)).toEqual([
-      'registry-failure-0',
-      'registry-failure-1',
-      'registry-failure-2',
-      'registry-failure-3',
-      'registry-failure-4',
-      'registry-failure-5',
-    ]);
+    // Registry failures should not appear in Updates Available (#186)
+    expect(rows).toHaveLength(0);
   });
 
-  it('selects top rows without repeatedly reading updateDetectedAt during sort', () => {
-    const counters = { detectedAtReads: 0 };
+  it('returns only the six most recent pending updates after sorting', () => {
     const containers = Array.from({ length: 300 }, (_, index) => {
-      const container = makeBaseContainer({
-        id: `u-${index}`,
-        name: `update-${String(index).padStart(3, '0')}`,
-        newTag: `2.${index}.0`,
-      });
-
-      Object.defineProperty(container, 'updateDetectedAt', {
-        configurable: true,
-        enumerable: true,
-        get() {
-          counters.detectedAtReads += 1;
-          const day = String((index % 28) + 1).padStart(2, '0');
-          const hour = String(index % 24).padStart(2, '0');
-          return `2026-03-${day}T${hour}:00:00.000Z`;
-        },
-      });
-
-      return container;
+      const day = String((index % 28) + 1).padStart(2, '0');
+      const hour = String(index % 24).padStart(2, '0');
+      return {
+        ...makeBaseContainer({
+          id: `u-${index}`,
+          name: `update-${String(index).padStart(3, '0')}`,
+          newTag: `2.${index}.0`,
+        }),
+        updateDetectedAt: `2026-03-${day}T${hour}:00:00.000Z`,
+      };
     });
 
     const state = createState({ containers });
@@ -759,7 +965,14 @@ describe('useDashboardComputed recent updates', () => {
     const rows = state.recentUpdates.value;
 
     expect(rows).toHaveLength(6);
-    expect(counters.detectedAtReads).toBeLessThanOrEqual(containers.length * 3);
+    expect(rows.map((row) => row.name)).toEqual([
+      'update-167',
+      'update-139',
+      'update-111',
+      'update-279',
+      'update-083',
+      'update-251',
+    ]);
   });
 
   it('falls back to suppressed update defaults when tags or timestamps are invalid', () => {

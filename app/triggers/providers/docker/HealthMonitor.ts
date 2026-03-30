@@ -3,16 +3,50 @@ import * as auditStore from '../../../store/audit.js';
 import * as backupStore from '../../../store/backup.js';
 import { getErrorMessage } from '../../../util/error.js';
 
+type UnknownRecord = Record<string, unknown>;
+
+interface LoggerLike {
+  info(message: string): void;
+  warn(message: string): void;
+  error(message: string): void;
+}
+
+interface DockerContainerLike {
+  inspect(): Promise<unknown>;
+}
+
+interface DockerApiLike {
+  getContainer(containerId: string): DockerContainerLike;
+}
+
+interface TriggerInstanceLike {
+  getCurrentContainer(dockerApi: DockerApiLike, containerRef: ContainerRef): Promise<unknown>;
+  inspectContainer(container: unknown, log: LoggerLike): Promise<unknown>;
+  stopAndRemoveContainer(
+    container: unknown,
+    containerSpec: unknown,
+    containerRef: ContainerRef,
+    log: LoggerLike,
+  ): Promise<void>;
+  recreateContainer(
+    dockerApi: DockerApiLike,
+    containerSpec: unknown,
+    backupImage: string,
+    containerRef: ContainerRef,
+    log: LoggerLike,
+  ): Promise<void>;
+}
+
 interface HealthMonitorOptions {
-  dockerApi: any;
+  dockerApi: unknown;
   containerId: string;
   containerName: string;
   backupImageTag: string;
   backupImageDigest?: string;
   window: number;
   interval: number;
-  triggerInstance: any;
-  log: any;
+  triggerInstance: unknown;
+  log: unknown;
 }
 
 interface ContainerRef {
@@ -26,22 +60,35 @@ interface MonitorTimers {
 }
 
 interface RollbackContext {
-  dockerApi: any;
-  triggerInstance: any;
+  dockerApi: DockerApiLike;
+  triggerInstance: TriggerInstanceLike;
   containerRef: ContainerRef;
   containerName: string;
   backupImageTag: string;
-  log: any;
+  log: LoggerLike;
 }
 
 interface HealthPollContext {
-  dockerApi: any;
+  dockerApi: DockerApiLike;
   containerId: string;
   containerName: string;
   signal: AbortSignal;
   cleanup: () => void;
   onUnhealthy: () => Promise<void>;
-  log: any;
+  log: LoggerLike;
+}
+
+function asUnknownRecord(value: unknown): UnknownRecord | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+  return value as UnknownRecord;
+}
+
+function getInspectionHealthState(inspection: unknown): UnknownRecord | null {
+  const inspectionRecord = asUnknownRecord(inspection);
+  const stateRecord = asUnknownRecord(inspectionRecord?.State);
+  return asUnknownRecord(stateRecord?.Health);
 }
 
 function createContainerRef(containerId: string, containerName: string): ContainerRef {
@@ -127,7 +174,7 @@ async function performRollback(context: RollbackContext): Promise<void> {
 
     recordRollbackSuccess(containerName, backupImageTag, latestBackup.imageTag);
     log.info(`Auto-rollback of container ${containerName} completed successfully`);
-  } catch (error) {
+  } catch (error: unknown) {
     const message = getErrorMessage(error);
     log.error(`Auto-rollback failed for container ${containerName}: ${message}`);
     recordRollbackError(containerName, message);
@@ -138,7 +185,7 @@ async function inspectHealthAndHandle(context: HealthPollContext): Promise<void>
   const { dockerApi, containerId, containerName, cleanup, onUnhealthy, log } = context;
   const container = dockerApi.getContainer(containerId);
   const inspection = await container.inspect();
-  const healthState = inspection?.State?.Health;
+  const healthState = getInspectionHealthState(inspection);
 
   if (!healthState) {
     log.warn(`Container ${containerName} has no HEALTHCHECK defined — stopping health monitoring`);
@@ -164,7 +211,7 @@ function createPollHandler(context: HealthPollContext): () => Promise<void> {
 
     try {
       await inspectHealthAndHandle(context);
-    } catch (error) {
+    } catch (error: unknown) {
       const message = getErrorMessage(error);
       context.log.warn(
         `Error inspecting container ${context.containerName} during health monitoring: ${message}`,
@@ -179,7 +226,7 @@ function handleWindowExpiry(
   signal: AbortSignal,
   containerName: string,
   cleanup: () => void,
-  log: any,
+  log: LoggerLike,
 ): void {
   if (signal.aborted) return;
   log.info(
@@ -197,15 +244,18 @@ function handleWindowExpiry(
  */
 export function startHealthMonitor(options: HealthMonitorOptions): AbortController {
   const {
-    dockerApi,
+    dockerApi: dockerApiOption,
     containerId,
     containerName,
     backupImageTag,
     window: monitorWindow,
     interval,
-    triggerInstance,
-    log,
+    triggerInstance: triggerInstanceOption,
+    log: logOption,
   } = options;
+  const dockerApi = dockerApiOption as DockerApiLike;
+  const triggerInstance = triggerInstanceOption as TriggerInstanceLike;
+  const log = logOption as LoggerLike;
 
   const abortController = new AbortController();
   const { signal } = abortController;

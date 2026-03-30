@@ -21,15 +21,15 @@ test("docs redirects keep versioned URLs and map legacy deep links to current do
   const rootRedirect = redirects.find((rule) => rule.source === "/docs");
   assert.deepEqual(rootRedirect, {
     source: "/docs",
-    destination: "/docs/v1.4",
+    destination: "/docs/v1.5",
     permanent: false,
   });
 
   assert.ok(
     redirects.some(
       (rule) =>
-        rule.source === "/docs/:path((?!v1\\.4(?:/|$)|v1\\.3(?:/|$)).*)" &&
-        rule.destination === "/docs/v1.4/:path" &&
+        rule.source === "/docs/:path((?!v1\\.5(?:/|$)|v1\\.4(?:/|$)|v1\\.3(?:/|$)).*)" &&
+        rule.destination === "/docs/v1.5/:path" &&
         rule.permanent === false,
     ),
     "expected a deep-link compatibility redirect for unversioned docs paths",

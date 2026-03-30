@@ -1,0 +1,91 @@
+---
+title: "App API"
+description: "Application info and server configuration endpoints."
+---
+
+## Get App information
+
+Returns application name and version.
+
+```bash
+curl http://drydock:3000/api/app
+
+{
+  "name":"drydock",
+  "version":"1.4.0"
+}
+```
+
+## Get server configuration
+
+Returns the server configuration, webhook status, and legacy input compatibility summary.
+
+```bash
+curl http://drydock:3000/api/server
+
+{
+  "configuration": {
+    "port": 3000,
+    "feature": { "delete": false },
+    "webhook": { "enabled": true }
+  },
+  "compatibility": {
+    "legacyInputs": {}
+  }
+}
+```
+
+## Get security runtime status
+
+Returns the availability status of security tools (Trivy scanner, Cosign signature verification) and SBOM configuration. Use this to check whether the runtime environment has the required binaries before triggering scans.
+
+```bash
+curl http://drydock:3000/api/server/security/runtime
+
+{
+  "checkedAt": "2024-12-01T10:00:00.000Z",
+  "ready": true,
+  "scanner": {
+    "enabled": true,
+    "command": "trivy",
+    "commandAvailable": true,
+    "status": "ready",
+    "message": "Trivy client is ready",
+    "scanner": "trivy",
+    "server": ""
+  },
+  "signature": {
+    "enabled": false,
+    "command": "",
+    "commandAvailable": null,
+    "status": "disabled",
+    "message": "Signature verification is disabled"
+  },
+  "sbom": {
+    "enabled": true,
+    "formats": ["spdx-json", "cyclonedx-json"]
+  },
+  "requirements": []
+}
+```
+
+### Response fields
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `checkedAt` | string | ISO 8601 timestamp of the check |
+| `ready` | boolean | `true` when the scanner is enabled and its command is available |
+| `scanner.enabled` | boolean | Whether vulnerability scanning is configured |
+| `scanner.command` | string | Scanner command (e.g. `trivy`) |
+| `scanner.commandAvailable` | boolean \| null | Whether the command was found in the runtime; `null` when disabled |
+| `scanner.status` | string | `ready`, `missing`, or `disabled` |
+| `scanner.server` | string | Trivy server URL (empty when using local mode) |
+| `signature.enabled` | boolean | Whether signature verification is configured |
+| `signature.command` | string | Cosign command |
+| `signature.commandAvailable` | boolean \| null | Whether cosign was found in the runtime |
+| `signature.status` | string | `ready`, `missing`, or `disabled` |
+| `sbom.enabled` | boolean | Whether SBOM generation is enabled |
+| `sbom.formats` | string[] | Configured SBOM output formats |
+| `requirements` | string[] | Human-readable list of missing dependencies (empty when everything is ready) |
+
+Returns 200 on success, or 500 if the runtime check fails.

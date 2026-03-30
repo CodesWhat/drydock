@@ -46,9 +46,9 @@ If any step fails, drydock attempts to restore the previous state:
 
 When the self-update begins, the server needs to ensure that connected browsers have received the update notification and displayed the overlay before the container is replaced. This is handled by an ack flow:
 
-1. Each SSE client receives a `clientId` and `clientToken` when it connects to the `/api/events/ui` endpoint (via a `dd:connected` event).
+1. Each SSE client receives a `clientId` and `clientToken` when it connects to the `/api/v1/events/ui` endpoint (via a `dd:connected` event).
 2. When the `dd:self-update` event is broadcast, the server records which client tokens were connected at that moment.
-3. Browsers acknowledge the event by sending `POST /api/events/ui/self-update/:operationId/ack` with their `clientId` and `clientToken`.
+3. Browsers acknowledge the event by sending `POST /api/v1/events/ui/self-update/:operationId/ack` with their `clientId` and `clientToken`.
 4. Once at least one acknowledgment is received (or the timeout expires), the update proceeds.
 
 The ack timeout defaults to 3 seconds. If no browsers are connected, the update proceeds immediately without waiting.

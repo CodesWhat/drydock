@@ -5,13 +5,26 @@ import * as triggerApi from '../../api/trigger.js';
 import logger from '../../log/index.js';
 import { sanitizeLogParam } from '../../log/sanitize.js';
 import * as registry from '../../registry/index.js';
-import { getErrorMessage } from '../../util/error.js';
 
 const log = logger.child({ component: 'agent-api-trigger' });
 
 interface TriggerRouteParams {
   type: string;
   name: string;
+}
+
+type TriggerRequest = Request<TriggerRouteParams>;
+
+function getErrorMessage(error: unknown): string | undefined {
+  if (
+    error &&
+    typeof error === 'object' &&
+    'message' in error &&
+    typeof error.message === 'string'
+  ) {
+    return error.message;
+  }
+  return undefined;
 }
 
 /**
@@ -27,11 +40,11 @@ export function getTriggers(req: Request, res: Response) {
  * Run Remote Trigger.
  * Delegates to the common API handler but ensures no proxying happens.
  */
-export async function runTrigger(req: Request, res: Response) {
+export async function runTrigger(req: TriggerRequest, res: Response) {
   if (req.body?.agent) {
     delete req.body.agent;
   }
-  return triggerApi.runTrigger(req as unknown as Request<TriggerRouteParams>, res);
+  return triggerApi.runTrigger(req, res);
 }
 
 /**
@@ -63,11 +76,20 @@ export async function runTriggerBatch(req: Request, res: Response) {
     });
     await trigger.triggerBatch(sanitizedContainers);
     res.status(200).json({});
-  } catch (e) {
+  } catch (e: unknown) {
     const errorMessage = getErrorMessage(e);
     log.error(
-      `Error running batch trigger ${sanitizeLogParam(name)}: ${sanitizeLogParam(errorMessage)}`,
+      `Error running batch trigger ${sanitizeLogParam(name)}: ${sanitizeLogParam(errorMessage ?? '')}`,
     );
-    sendErrorResponse(res, 500, `Error when running batch trigger ${type}.${name}`);
+    if (errorMessage) {
+      sendErrorResponse(res, 500, {
+        message: `Error when running batch trigger ${type}.${name}`,
+        details: {
+          reason: errorMessage,
+        },
+      });
+      return;
+    }
+    sendErrorResponse(res, 500);
   }
 }

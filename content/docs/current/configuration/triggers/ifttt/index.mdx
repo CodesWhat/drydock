@@ -21,6 +21,8 @@ The `ifttt` trigger lets you send container update notifications to Ifttt via th
 
 ## Ifttt ingredients
 
+### Simple mode
+
 On Webhook call, Ifttt captures the following ingredients:
 
 - eventName
@@ -28,6 +30,10 @@ On Webhook call, Ifttt captures the following ingredients:
 - value1 (the image which can be updated)
 - value2 (the new version)
 - value3 (the image notification JSON message)
+
+### Batch mode
+
+When `MODE=batch`, the webhook sends only `value1` containing the full JSON array of all containers with available updates. `value2` and `value3` are not sent in batch mode.
 
 ## Examples
 

@@ -11,14 +11,14 @@ class Mau extends Gitlab {
    * @returns {*}
    */
   getConfigurationSchema() {
-    return this.joi.alternatives([
+    return this.joi.alternatives().try(
       this.joi.string().allow(''),
       this.joi.object().keys({
         url: this.joi.string().uri().default('https://dock.mau.dev'),
         authurl: this.joi.string().uri().default('https://dock.mau.dev'),
         token: this.joi.string(),
       }),
-    ]) as any;
+    );
   }
 
   /**

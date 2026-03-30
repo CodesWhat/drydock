@@ -1,10 +1,10 @@
 services:
   drydock:
     image: drydock:dev
-    container_name: drydock-qa
+    container_name: drydock-playwright-qa
     user: root
     ports:
-      - "3333:3000"
+      - "${DD_PLAYWRIGHT_PORT:-3333}:3000"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./qa-compose.yml:/drydock/qa-compose.yml:ro
@@ -25,7 +25,7 @@ services:
       - DD_SERVER_WEBHOOK_ENABLED=true
       - DD_SERVER_WEBHOOK_TOKEN=test-token-12345
       - DD_SESSION_SECRET=qa-test-session-secret
-      - DD_PUBLIC_URL=http://localhost:3333
+      - DD_PUBLIC_URL=http://localhost:${DD_PLAYWRIGHT_PORT:-3333}
       # --- OIDC (Dex) ---
       - DD_AUTH_OIDC_DEX_DISCOVERY=http://dex:5556/dex/.well-known/openid-configuration
       - DD_AUTH_OIDC_DEX_CLIENTID=drydock
@@ -84,9 +84,9 @@ services:
   # ── OIDC Identity Provider (Dex) ─────────────────────
   dex:
     image: dexidp/dex:latest
-    container_name: dex-oidc
-    ports:
-      - "5556:5556"
+    container_name: drydock-playwright-dex
+    expose:
+      - "5556"
     volumes:
       - ./dex-config.yaml:/etc/dex/config.yaml:ro
     command: ["dex", "serve", "/etc/dex/config.yaml"]
@@ -94,9 +94,9 @@ services:
   # ── MQTT broker (Mosquitto) ──────────────────────────
   mosquitto:
     image: eclipse-mosquitto:2
-    container_name: mosquitto
-    ports:
-      - "1883:1883"
+    container_name: drydock-playwright-mosquitto
+    expose:
+      - "1883"
     volumes:
       - ./mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
     healthcheck:
@@ -112,7 +112,7 @@ services:
   # Access at http://localhost:9443 (HTTPS) or http://localhost:9000
   portainer:
     image: portainer/portainer-ce:2.27.5
-    container_name: portainer
+    container_name: drydock-playwright-portainer
     ports:
       - "9000:9000"
       - "9443:9443"
@@ -126,7 +126,7 @@ services:
   # ── Trivy vulnerability scanner (client-server mode) ──
   trivy-server:
     image: aquasec/trivy:0.69.3
-    container_name: trivy-server
+    container_name: drydock-playwright-trivy-server
     command: ["server", "--listen", "0.0.0.0:4954"]
     expose:
       - "4954"
@@ -168,8 +168,8 @@ services:
   # Icon uses colon separator with nested prefix (tests Fix 03 + Fix 06)
   nginx-hooked:
     image: nginx:1.25.5
-    pull_policy: never
-    container_name: nginx-hooked
+    pull_policy: missing
+    container_name: drydock-playwright-nginx-hooked
     labels:
       - dd.watch=true
       - dd.display.name=Nginx (Hooked)
@@ -183,8 +183,8 @@ services:
   # Icon uses colon separator (tests Fix 06)
   redis-cache:
     image: redis:7.2.0
-    pull_policy: never
-    container_name: redis-cache
+    pull_policy: missing
+    container_name: drydock-playwright-redis-cache
     labels:
       - dd.watch=true
       - dd.display.name=Redis Cache
@@ -195,8 +195,8 @@ services:
   # Icon uses dash separator (standard format — baseline comparison)
   traefik-proxy:
     image: traefik:v3.0.0
-    pull_policy: never
-    container_name: traefik-proxy
+    pull_policy: missing
+    container_name: drydock-playwright-traefik-proxy
     labels:
       - dd.watch=true
       - dd.display.name=Traefik Proxy
@@ -209,8 +209,8 @@ services:
   # LSCR/GHCR public image (tests anonymous token exchange)
   lscr-nginx:
     image: ghcr.io/linuxserver/nginx:1.26.2
-    pull_policy: never
-    container_name: lscr-nginx
+    pull_policy: missing
+    container_name: drydock-playwright-lscr-nginx
     labels:
       - dd.watch=true
       - dd.display.name=LSCR Nginx (GHCR)
@@ -219,8 +219,8 @@ services:
   # PostgreSQL ungrouped (tests ungrouped container)
   postgres-db:
     image: postgres:16.0
-    pull_policy: never
-    container_name: postgres-db
+    pull_policy: missing
+    container_name: drydock-playwright-postgres-db
     environment:
       - POSTGRES_PASSWORD=testpass
     labels:
@@ -230,8 +230,8 @@ services:
   # Mongo — old version with update (tests another registry + more data)
   mongo-db:
     image: mongo:7.0.0
-    pull_policy: never
-    container_name: mongo-db
+    pull_policy: missing
+    container_name: drydock-playwright-mongo-db
     labels:
       - dd.watch=true
       - dd.display.name=MongoDB
@@ -243,7 +243,7 @@ services:
   # After watcher finds update, trigger scan to get "blocked" bouncer status
   node-vulnerable:
     image: node:16.0.0-alpine
-    container_name: node-vulnerable
+    container_name: drydock-playwright-node-vulnerable
     command: ["node", "-e", "setInterval(() => {}, 60000)"]
     labels:
       - dd.watch=true
@@ -255,7 +255,7 @@ services:
   # Should show "unsafe" bouncer after scan (not blocked since only CRITICALs block)
   python-unsafe:
     image: python:3.9.0-slim
-    container_name: python-unsafe
+    container_name: drydock-playwright-python-unsafe
     command: ["python", "-c", "import time; time.sleep(999999)"]
     labels:
       - dd.watch=true
@@ -269,21 +269,34 @@ services:
   alpine-latest:
     image: alpine:latest
     pull_policy: always
-    container_name: alpine-latest
+    container_name: drydock-playwright-alpine-latest
     command: ["sleep", "infinity"]
     labels:
       - dd.watch=true
       - dd.display.name=Alpine (Latest)
       - dd.tag.include=^latest$$
 
+  # ── Container pinned at current version (skip update) ──
+  # Redis 7.4 has an update available but the bootstrap script
+  # calls the skip-update API so it shows the "pinned" badge.
+  redis-pinned:
+    image: redis:7.4.0
+    pull_policy: missing
+    container_name: drydock-playwright-redis-pinned
+    command: ["redis-server", "--save", ""]
+    labels:
+      - dd.watch=true
+      - dd.display.name=Redis (Pinned)
+      - dd.group=test
+
   # ── Log spammer (generates container log activity) ─────
 
   # Busybox printing a line every 5s — populates dashboard container log
   log-spammer:
     image: busybox:1.36
-    pull_policy: never
-    container_name: log-spammer
-    command: ["sh", "-c", "i=0; while true; do i=$((i+1)); echo \"[$$i] drydock-qa heartbeat $(date -u +%H:%M:%S)\"; sleep 5; done"]
+    pull_policy: missing
+    container_name: drydock-playwright-log-spammer
+    command: ["sh", "-c", "i=0; while true; do i=$((i+1)); echo \"[$$i] drydock-playwright-qa heartbeat $(date -u +%H:%M:%S)\"; sleep 5; done"]
     labels:
       - dd.watch=true
       - dd.display.name=Log Spammer
@@ -296,8 +309,8 @@ services:
   # to reproduce the Docker transient alias race condition.
   slow-shutdown:
     image: busybox:1.36
-    pull_policy: never
-    container_name: slow-shutdown
+    pull_policy: missing
+    container_name: drydock-playwright-slow-shutdown
     command: ["sh", "-c", "trap 'echo SIGTERM received; sleep 15; exit 0' TERM; echo 'slow-shutdown running'; while true; do sleep 1; done"]
     stop_grace_period: 30s
     labels:
@@ -310,8 +323,8 @@ services:
   # Memcached — starts then exits (shows "stopped" in container list)
   memcached-stopped:
     image: memcached:1.6.0
-    pull_policy: never
-    container_name: memcached-stopped
+    pull_policy: missing
+    container_name: drydock-playwright-memcached-stopped
     command: ["sh", "-c", "exit 0"]
     labels:
       - dd.watch=true

@@ -16,14 +16,15 @@ const {
   function createLokiMock(
     loadDbCallback = (options, callback) => callback(null),
     saveDbCallback = (callback) => callback(null),
+    createDbInstance = () => ({
+      loadDatabase: vi.fn(loadDbCallback),
+      saveDatabase: vi.fn(saveDbCallback),
+    }),
   ) {
     return {
       // biome-ignore lint/complexity/useArrowFunction: mock constructor requires function expression
       default: vi.fn().mockImplementation(function () {
-        return {
-          loadDatabase: vi.fn(loadDbCallback),
-          saveDatabase: vi.fn(saveDbCallback),
-        };
+        return createDbInstance();
       }),
     };
   }
@@ -51,11 +52,14 @@ const {
     overrides: {
       loki?: Parameters<typeof createLokiMock>[0];
       lokiSave?: Parameters<typeof createLokiMock>[1];
+      lokiInstance?: Parameters<typeof createLokiMock>[2];
       fs?: Record<string, unknown>;
       config?: Record<string, unknown>;
     } = {},
   ) {
-    vi.doMock('lokijs', () => createLokiMock(overrides.loki, overrides.lokiSave));
+    vi.doMock('lokijs', () =>
+      createLokiMock(overrides.loki, overrides.lokiSave, overrides.lokiInstance),
+    );
     vi.doMock('node:fs', () => createFsMock(overrides.fs));
     vi.doMock('../configuration', () => createConfigMock(overrides.config ?? STORE_CONFIG));
     vi.doMock('./app', createCollectionsMock);
@@ -280,13 +284,150 @@ describe('Store Module', () => {
       renameSync: vi.fn(),
     };
 
-    registerCommonMocks();
-    // Override the fs mock with the custom one for migration logic
-    vi.doMock('node:fs', () => ({ default: mockFs }));
+    registerCommonMocks({ fs: mockFs });
 
     const storeMigrate = await import('./index.js');
     await storeMigrate.init();
 
     expect(mockFs.renameSync).toHaveBeenCalledWith('/test/store/wud.json', '/test/store/test.json');
+  });
+
+  test('should collect debug snapshot values from collection fallbacks', async () => {
+    vi.resetModules();
+
+    const storeDb = {
+      collections: [
+        123,
+        { count: vi.fn(() => -4) },
+        { name: undefined, count: vi.fn(() => Number.NaN) },
+        { name: 'bad-data', data: { value: 1 } },
+        { name: 'data', data: [1, 2, 3] },
+        { name: 'named', count: vi.fn(() => 5) },
+      ],
+      loadDatabase: vi.fn((options, callback) => callback(null)),
+      saveDatabase: vi.fn((callback) => callback(null)),
+    };
+
+    registerCommonMocks({
+      lokiInstance: () => storeDb,
+      fs: {
+        existsSync: vi.fn(() => true),
+        mkdirSync: vi.fn(),
+        statSync: vi.fn(() => ({ mtime: new Date('2026-03-18T12:34:56.000Z') })),
+        renameSync: vi.fn(),
+      },
+    });
+
+    const storeWithSnapshot = await import('./index.js');
+    await storeWithSnapshot.init();
+
+    expect(storeWithSnapshot.getDebugSnapshot()).toEqual({
+      memoryMode: false,
+      path: '/test/store/test.json',
+      collectionCount: 6,
+      documentCount: 8,
+      lastPersistAt: '2026-03-18T12:34:56.000Z',
+      collections: [
+        { name: 'unknown', documents: 0 },
+        { name: 'unknown', documents: 0 },
+        { name: 'unknown', documents: 0 },
+        { name: 'bad-data', documents: 0 },
+        { name: 'data', documents: 3 },
+        { name: 'named', documents: 5 },
+      ],
+    });
+  });
+
+  test('should return undefined lastPersistAt when store runs in memory mode', async () => {
+    vi.resetModules();
+
+    registerCommonMocks({
+      lokiInstance: () => ({
+        collections: [],
+        loadDatabase: vi.fn((options, callback) => callback(null)),
+        saveDatabase: vi.fn((callback) => callback(null)),
+      }),
+      fs: {
+        existsSync: vi.fn(() => true),
+        mkdirSync: vi.fn(),
+        statSync: vi.fn(() => ({ mtime: new Date('2026-03-18T12:34:56.000Z') })),
+        renameSync: vi.fn(),
+      },
+    });
+
+    const storeInMemory = await import('./index.js');
+    await storeInMemory.init({ memory: true });
+
+    expect(storeInMemory.getDebugSnapshot()).toEqual({
+      memoryMode: true,
+      path: '/test/store/test.json',
+      collectionCount: 0,
+      documentCount: 0,
+      lastPersistAt: undefined,
+      collections: [],
+    });
+  });
+
+  test('should return undefined lastPersistAt when store path has not been initialized', async () => {
+    vi.resetModules();
+
+    registerCommonMocks({
+      lokiInstance: () => ({
+        collections: [],
+        loadDatabase: vi.fn((options, callback) => callback(null)),
+        saveDatabase: vi.fn((callback) => callback(null)),
+      }),
+      fs: {
+        existsSync: vi.fn(() => true),
+        mkdirSync: vi.fn(),
+        statSync: vi.fn(() => ({ mtime: new Date('2026-03-18T12:34:56.000Z') })),
+        renameSync: vi.fn(),
+      },
+    });
+
+    const storeWithoutInit = await import('./index.js');
+
+    expect(storeWithoutInit.getDebugSnapshot()).toEqual({
+      memoryMode: false,
+      path: undefined,
+      collectionCount: 0,
+      documentCount: 0,
+      lastPersistAt: undefined,
+      collections: [],
+    });
+  });
+
+  test('should return undefined lastPersistAt when statSync throws', async () => {
+    vi.resetModules();
+
+    registerCommonMocks({
+      lokiInstance: () => ({
+        collections: [{ name: 'only', count: vi.fn(() => 1) }],
+        loadDatabase: vi.fn((options, callback) => callback(null)),
+        saveDatabase: vi.fn((callback) => callback(null)),
+      }),
+      fs: {
+        existsSync: vi.fn(
+          (targetPath) => targetPath === '/test/store/test.json' || targetPath === '/test/store',
+        ),
+        mkdirSync: vi.fn(),
+        statSync: vi.fn(() => {
+          throw new Error('stat failed');
+        }),
+        renameSync: vi.fn(),
+      },
+    });
+
+    const storeWithStatError = await import('./index.js');
+    await storeWithStatError.init();
+
+    expect(storeWithStatError.getDebugSnapshot()).toEqual({
+      memoryMode: false,
+      path: '/test/store/test.json',
+      collectionCount: 1,
+      documentCount: 1,
+      lastPersistAt: undefined,
+      collections: [{ name: 'only', documents: 1 }],
+    });
   });
 });

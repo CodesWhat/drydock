@@ -23,13 +23,14 @@ const configurationValid = {
   threshold: 'all',
   mode: 'simple',
   once: true,
-  auto: true,
+  auto: 'all',
   order: 100,
   simpletitle: 'Test Title',
   simplebody: 'Test Body',
   batchtitle: 'Batch Title',
   resolvenotifications: false,
   disabletitle: false,
+  digestcron: '0 8 * * *',
 };
 
 test('validateConfiguration should return validated configuration when valid', async () => {

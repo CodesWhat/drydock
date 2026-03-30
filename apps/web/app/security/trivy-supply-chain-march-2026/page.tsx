@@ -105,7 +105,7 @@ export default function TrivyAdvisoryPage() {
 
               <h2>Exposure windows</h2>
               <div className="overflow-x-auto">
-                <table>
+                <table className="w-auto">
                   <thead>
                     <tr>
                       <th>Component</th>
@@ -400,7 +400,7 @@ uses: aquasecurity/trivy-action@<full-commit-sha>  # 0.24.0`}</code>
 
               <h2>Timeline</h2>
               <div className="overflow-x-auto">
-                <table>
+                <table className="w-auto">
                   <thead>
                     <tr>
                       <th>Date (UTC)</th>

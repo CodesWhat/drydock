@@ -84,7 +84,6 @@ describe('Main Application', () => {
     const agentManager = await import('./agent/index.js');
     const agentServer = await import('./agent/api/index.js');
     const prometheus = await import('./prometheus/index.js');
-    const { getVersion } = await import('./configuration/index.js');
     const migrateCli = await import('./configuration/migrate-cli.js');
 
     // Import and run the main module
@@ -97,10 +96,7 @@ describe('Main Application', () => {
     expect(migrateCli.runConfigMigrateCommandIfRequested).toHaveBeenCalledWith(
       process.argv.slice(2),
     );
-    expect(getVersion).toHaveBeenCalled();
-    expect(log.info).toHaveBeenCalledWith(
-      'drydock is starting in Controller mode (version = 1.0.0)',
-    );
+    expect(log.info).toHaveBeenCalledWith('drydock is starting');
     expect(store.init).toHaveBeenCalledWith({ memory: false });
     expect(prometheus.init).toHaveBeenCalled();
     expect(registry.init).toHaveBeenCalledWith({ agent: false });
@@ -126,7 +122,7 @@ describe('Main Application', () => {
     await import('./index.js');
     await new Promise((resolve) => setImmediate(resolve));
 
-    expect(log.info).toHaveBeenCalledWith('drydock is starting in Agent mode (version = 1.0.0)');
+    expect(log.info).toHaveBeenCalledWith('drydock is starting');
     expect(migrateCli.runConfigMigrateCommandIfRequested).toHaveBeenCalledWith(
       process.argv.slice(2),
     );

@@ -2,7 +2,7 @@ import { HttpResponse, http } from 'msw';
 import { auditEntries } from '../data/audit';
 
 export const auditHandlers = [
-  http.get('/api/audit', ({ request }) => {
+  http.get('/api/v1/audit', ({ request }) => {
     const url = new URL(request.url);
     const limit = Number(url.searchParams.get('limit')) || 50;
     const offset = Number(url.searchParams.get('offset')) || 0;

@@ -5,9 +5,11 @@ import { securityOverview } from '../data/vulnerabilities';
 type MockContainer = (typeof containers)[number] & Record<string, unknown>;
 
 export const securityHandlers = [
-  http.get('/api/containers/security/vulnerabilities', () => HttpResponse.json(securityOverview)),
+  http.get('/api/v1/containers/security/vulnerabilities', () =>
+    HttpResponse.json(securityOverview),
+  ),
 
-  http.get('/api/containers/:id/vulnerabilities', ({ params }) => {
+  http.get('/api/v1/containers/:id/vulnerabilities', ({ params }) => {
     const container = containers.find((c) => c.id === params.id) as MockContainer | undefined;
     if (!container) return new HttpResponse(null, { status: 404 });
 
@@ -28,7 +30,7 @@ export const securityHandlers = [
     });
   }),
 
-  http.get('/api/containers/:id/sbom', () =>
+  http.get('/api/v1/containers/:id/sbom', () =>
     HttpResponse.json({
       spdxVersion: 'SPDX-2.3',
       dataLicense: 'CC0-1.0',

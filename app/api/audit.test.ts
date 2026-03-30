@@ -138,7 +138,16 @@ describe('Audit Router', () => {
       skip: 0,
       limit: 50,
     });
-    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ offset: 0 }));
+    expect(res.json).toHaveBeenCalledWith({
+      data: [],
+      total: 0,
+      limit: 50,
+      offset: 0,
+      hasMore: false,
+      _links: {
+        self: '/api/audit?limit=50&offset=0',
+      },
+    });
   });
 
   test('should clamp limit to maximum of 200', () => {
@@ -262,5 +271,102 @@ describe('Audit Router', () => {
     expect(mockGetAuditEntries).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(400);
     expect(res.json).toHaveBeenCalledWith({ error: 'Invalid container query parameter' });
+  });
+
+  test('should pass actions filter as array to store', () => {
+    auditRouter.init();
+    const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/')[1];
+
+    mockGetAuditEntries.mockReturnValue({ entries: [], total: 0 });
+
+    const req = createMockRequest({
+      query: {
+        actions: 'update-available,security-alert,agent-disconnect',
+      },
+    });
+    const res = createMockResponse();
+
+    handler(req, res);
+
+    expect(mockGetAuditEntries).toHaveBeenCalledWith({
+      skip: 0,
+      limit: 50,
+      actions: ['update-available', 'security-alert', 'agent-disconnect'],
+    });
+    expect(res.status).toHaveBeenCalledWith(200);
+  });
+
+  test('should return 400 when actions parameter contains unsafe characters', () => {
+    auditRouter.init();
+    const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/')[1];
+
+    const req = createMockRequest({
+      query: { actions: 'update-available,evil;drop' },
+    });
+    const res = createMockResponse();
+
+    handler(req, res);
+
+    expect(mockGetAuditEntries).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({ error: 'Invalid actions query parameter' });
+  });
+
+  test('should ignore empty actions parameter', () => {
+    auditRouter.init();
+    const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/')[1];
+
+    mockGetAuditEntries.mockReturnValue({ entries: [], total: 0 });
+
+    const req = createMockRequest({ query: { actions: '' } });
+    const res = createMockResponse();
+
+    handler(req, res);
+
+    expect(mockGetAuditEntries).toHaveBeenCalledWith({
+      skip: 0,
+      limit: 50,
+    });
+  });
+
+  test('should ignore actions parameter containing only commas', () => {
+    auditRouter.init();
+    const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/')[1];
+
+    mockGetAuditEntries.mockReturnValue({ entries: [], total: 0 });
+
+    const req = createMockRequest({ query: { actions: ',,,' } });
+    const res = createMockResponse();
+
+    handler(req, res);
+
+    expect(mockGetAuditEntries).toHaveBeenCalledWith({
+      skip: 0,
+      limit: 50,
+    });
+  });
+
+  test('should prefer action over actions when both provided', () => {
+    auditRouter.init();
+    const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/')[1];
+
+    mockGetAuditEntries.mockReturnValue({ entries: [], total: 0 });
+
+    const req = createMockRequest({
+      query: {
+        action: 'update-applied',
+        actions: 'update-available,security-alert',
+      },
+    });
+    const res = createMockResponse();
+
+    handler(req, res);
+
+    expect(mockGetAuditEntries).toHaveBeenCalledWith({
+      skip: 0,
+      limit: 50,
+      action: 'update-applied',
+      actions: ['update-available', 'security-alert'],
+    });
   });
 });

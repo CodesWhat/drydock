@@ -25,4 +25,39 @@ describe('createRealtimeRefreshScheduler', () => {
 
     scheduler.dispose();
   });
+
+  it('runs a summary refresh when no full refresh supersedes it', () => {
+    vi.useFakeTimers();
+    const refreshSummary = vi.fn();
+    const refreshFull = vi.fn();
+    const scheduler = createRealtimeRefreshScheduler({
+      debounceMs: 1_000,
+      refreshSummary,
+      refreshFull,
+    });
+
+    scheduler.schedule('summary');
+
+    vi.advanceTimersByTime(1_000);
+    expect(refreshSummary).toHaveBeenCalledTimes(1);
+    expect(refreshFull).not.toHaveBeenCalled();
+
+    scheduler.dispose();
+  });
+
+  it('ignores summary refreshes when no summary handler is configured', () => {
+    vi.useFakeTimers();
+    const refreshFull = vi.fn();
+    const scheduler = createRealtimeRefreshScheduler({
+      debounceMs: 1_000,
+      refreshFull,
+    });
+
+    scheduler.schedule('summary');
+
+    expect(() => vi.advanceTimersByTime(1_000)).not.toThrow();
+    expect(refreshFull).not.toHaveBeenCalled();
+
+    scheduler.dispose();
+  });
 });

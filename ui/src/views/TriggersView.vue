@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
+import AppBadge from '@/components/AppBadge.vue';
+import DetailField from '@/components/DetailField.vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
 import { useViewMode } from '../preferences/useViewMode';
 import { getAllTriggers, getTrigger, runTrigger } from '../services/trigger';
@@ -187,12 +189,12 @@ onMounted(async () => {
 <template>
   <DataViewLayout>
     <div v-if="error"
-         class="mb-3 px-3 py-2 text-[0.6875rem] dd-rounded"
+         class="mb-3 px-3 py-2 text-2xs-plus dd-rounded"
          :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
       {{ error }}
     </div>
 
-    <div v-if="loading" class="text-[0.6875rem] dd-text-muted py-3 px-1">Loading triggers...</div>
+    <div v-if="loading" class="text-2xs-plus dd-text-muted py-3 px-1">Loading triggers...</div>
 
     <!-- Filter bar -->
     <DataFilterBar
@@ -206,12 +208,12 @@ onMounted(async () => {
         <input v-model="searchQuery"
                type="text"
                placeholder="Filter by name..."
-               class="flex-1 min-w-[120px] max-w-[240px] px-2.5 py-1.5 dd-rounded text-[0.6875rem] font-medium outline-none dd-bg dd-text dd-placeholder" />
-        <button v-if="searchQuery"
-                class="text-[0.625rem] dd-text-muted hover:dd-text transition-colors"
+               class="flex-1 min-w-[120px] max-w-[var(--dd-layout-filter-max-width)] px-2.5 py-1.5 dd-rounded text-2xs-plus font-medium outline-none dd-bg dd-text dd-placeholder" />
+        <AppButton size="none" variant="text-muted" weight="medium" class="text-2xs" v-if="searchQuery"
+                
                 @click="clearFilters">
           Clear
-        </button>
+        </AppButton>
       </template>
     </DataFilterBar>
 
@@ -228,21 +230,17 @@ onMounted(async () => {
         <span class="font-medium dd-text">{{ row.name }}</span>
       </template>
       <template #cell-type="{ row }">
-        <span class="badge text-[0.5625rem] uppercase font-bold"
-              :style="{ backgroundColor: triggerTypeBadge(row.type).bg, color: triggerTypeBadge(row.type).text }">
+        <AppBadge :custom="{ bg: triggerTypeBadge(row.type).bg, text: triggerTypeBadge(row.type).text }" size="xs">
           {{ triggerTypeBadge(row.type).label }}
-        </span>
+        </AppBadge>
       </template>
       <template #cell-status="{ row }">
         <AppIcon :name="row.status === 'active' ? 'check' : 'xmark'" :size="13" class="shrink-0 md:!hidden"
+                 v-tooltip.top="row.status === 'active' ? 'Active' : 'Inactive'"
                  :style="{ color: row.status === 'active' ? 'var(--dd-success)' : 'var(--dd-danger)' }" />
-        <span class="badge text-[0.5625rem] font-bold max-md:!hidden"
-              :style="{
-                backgroundColor: row.status === 'active' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
-                color: row.status === 'active' ? 'var(--dd-success)' : 'var(--dd-danger)',
-              }">
+        <AppBadge :tone="row.status === 'active' ? 'success' : 'danger'" size="xs" class="max-md:!hidden">
           {{ row.status }}
-        </span>
+        </AppBadge>
       </template>
       <template #empty>
         <EmptyState icon="triggers" message="No triggers match your filters" show-clear @clear="clearFilters" />
@@ -260,18 +258,17 @@ onMounted(async () => {
       <template #card="{ item }">
         <div class="px-4 pt-4 pb-2 flex items-start justify-between">
           <div class="min-w-0">
-            <div class="text-[0.9375rem] font-semibold truncate dd-text">{{ item.name }}</div>
+            <div class="text-sm-plus font-semibold truncate dd-text">{{ item.name }}</div>
           </div>
-          <span class="badge text-[0.5625rem] uppercase font-bold shrink-0 ml-2"
-                :style="{ backgroundColor: triggerTypeBadge(item.type).bg, color: triggerTypeBadge(item.type).text }">
+          <AppBadge :custom="{ bg: triggerTypeBadge(item.type).bg, text: triggerTypeBadge(item.type).text }" size="xs" class="shrink-0 ml-2">
             {{ triggerTypeBadge(item.type).label }}
-          </span>
+          </AppBadge>
         </div>
         <div class="px-4 py-3">
-          <div class="grid grid-cols-1 gap-2 text-[0.6875rem]">
+          <div class="grid grid-cols-1 gap-2 text-2xs-plus">
             <div v-for="(val, key) in item.config" :key="key">
               <span class="dd-text-muted">{{ key }}</span>
-              <div class="font-semibold truncate dd-text font-mono text-[0.625rem]">{{ val }}</div>
+              <div class="font-semibold truncate dd-text font-mono text-2xs">{{ val }}</div>
             </div>
           </div>
         </div>
@@ -279,25 +276,23 @@ onMounted(async () => {
              :style="{ borderTop: '1px solid var(--dd-border)', backgroundColor: 'var(--dd-bg-elevated)' }">
           <div class="flex items-center justify-between">
             <AppIcon :name="item.status === 'active' ? 'check' : 'xmark'" :size="13" class="shrink-0 md:!hidden"
+                     v-tooltip.top="item.status === 'active' ? 'Active' : 'Inactive'"
                      :style="{ color: item.status === 'active' ? 'var(--dd-success)' : 'var(--dd-danger)' }" />
-            <span class="badge text-[0.5625rem] font-bold max-md:!hidden"
-                  :style="{
-                    backgroundColor: item.status === 'active' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
-                    color: item.status === 'active' ? 'var(--dd-success)' : 'var(--dd-danger)',
-                  }">
+            <AppBadge :tone="item.status === 'active' ? 'success' : 'danger'" size="xs" class="max-md:!hidden">
               {{ item.status }}
-            </span>
-            <button class="inline-flex items-center gap-1 px-2 py-1 dd-rounded text-[0.625rem] font-bold transition-[color,background-color,border-color,opacity,transform,box-shadow] text-white"
+            </AppBadge>
+            <AppButton size="none" variant="plain" weight="none" class="inline-flex items-center gap-1 px-2 py-1 dd-rounded text-2xs font-bold transition-[color,background-color,border-color,opacity,transform,box-shadow] text-white"
                     :style="{ background: testResult?.id === item.id
                       ? (testResult.success ? 'var(--dd-success)' : 'var(--dd-danger)')
                       : 'linear-gradient(135deg, var(--dd-primary), var(--dd-info))' }"
                     :disabled="testingTrigger !== null"
                     @click.stop="testTrigger(item)">
-              <AppIcon :name="testingTrigger === item.id ? 'pending' : testResult?.id === item.id ? (testResult.success ? 'check' : 'xmark') : 'play'" :size="11" />
+              <AppIcon :name="testingTrigger === item.id ? 'pending' : testResult?.id === item.id ? (testResult.success ? 'check' : 'xmark') : 'play'" :size="11"
+                       v-tooltip.top="testingTrigger === item.id ? 'Testing...' : testResult?.id === item.id ? (testResult.success ? 'Test passed' : 'Test failed') : 'Run test'" />
               {{ testingTrigger === item.id ? 'Testing...' : testResult?.id === item.id ? (testResult.success ? 'Sent!' : 'Failed') : 'Test' }}
-            </button>
+            </AppButton>
           </div>
-          <p v-if="testError?.id === item.id" class="mt-2 text-[0.625rem] break-words" style="color: var(--dd-danger);">
+          <p v-if="testError?.id === item.id" class="mt-2 text-2xs break-words" style="color: var(--dd-danger);">
             {{ testError.message }}
           </p>
         </div>
@@ -315,38 +310,30 @@ onMounted(async () => {
       <template #header="{ item }">
         <AppIcon name="triggers" :size="14" class="dd-text-secondary" />
         <span class="text-sm font-semibold flex-1 min-w-0 truncate dd-text">{{ item.name }}</span>
-        <span class="badge text-[0.5625rem] uppercase font-bold shrink-0"
-              :style="{ backgroundColor: triggerTypeBadge(item.type).bg, color: triggerTypeBadge(item.type).text }">
+        <AppBadge :custom="{ bg: triggerTypeBadge(item.type).bg, text: triggerTypeBadge(item.type).text }" size="xs" class="shrink-0">
           {{ triggerTypeBadge(item.type).label }}
-        </span>
+        </AppBadge>
       </template>
       <template #details="{ item }">
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3 mt-2">
-          <div v-for="(val, key) in item.config" :key="key">
-            <div class="text-[0.625rem] font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">{{ key }}</div>
-            <div class="text-xs font-mono dd-text">{{ val }}</div>
-          </div>
-          <div>
-            <div class="text-[0.625rem] font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">Status</div>
-            <span class="badge text-[0.625rem] font-semibold"
-                  :style="{
-                    backgroundColor: item.status === 'active' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
-                    color: item.status === 'active' ? 'var(--dd-success)' : 'var(--dd-danger)',
-                  }">{{ item.status }}</span>
-          </div>
+          <DetailField v-for="(val, key) in item.config" :key="key" :label="String(key)" compact mono>{{ val }}</DetailField>
+          <DetailField label="Status" compact>
+            <AppBadge :tone="item.status === 'active' ? 'success' : 'danger'" size="sm">{{ item.status }}</AppBadge>
+          </DetailField>
         </div>
         <div class="mt-4 pt-3" :style="{ borderTop: '1px solid var(--dd-border)' }">
-          <button class="inline-flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[0.6875rem] font-bold tracking-wide transition-[color,background-color,border-color,opacity,transform,box-shadow] text-white"
+          <AppButton size="none" variant="plain" weight="none" class="inline-flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-2xs-plus font-bold tracking-wide transition-[color,background-color,border-color,opacity,transform,box-shadow] text-white"
                   :style="{ background: testResult?.id === item.id
                     ? (testResult.success ? 'var(--dd-success)' : 'var(--dd-danger)')
-                    : 'linear-gradient(135deg, var(--dd-primary), var(--dd-info))',
-                    boxShadow: '0 1px 3px rgba(0,150,199,0.3)' }"
+                      : 'linear-gradient(135deg, var(--dd-primary), var(--dd-info))',
+                    boxShadow: 'var(--dd-shadow-sm)' }"
                   :disabled="testingTrigger !== null"
                   @click.stop="testTrigger(item)">
-            <AppIcon :name="testingTrigger === item.id ? 'pending' : testResult?.id === item.id ? (testResult.success ? 'check' : 'xmark') : 'play'" :size="10" />
+            <AppIcon :name="testingTrigger === item.id ? 'pending' : testResult?.id === item.id ? (testResult.success ? 'check' : 'xmark') : 'play'" :size="10"
+                     v-tooltip.top="testingTrigger === item.id ? 'Testing...' : testResult?.id === item.id ? (testResult.success ? 'Test passed' : 'Test failed') : 'Run test'" />
             {{ testingTrigger === item.id ? 'Testing...' : testResult?.id === item.id ? (testResult.success ? 'Sent!' : 'Failed') : 'Test' }}
-          </button>
-          <p v-if="testError?.id === item.id" class="mt-2 text-[0.625rem] break-words" style="color: var(--dd-danger);">
+          </AppButton>
+          <p v-if="testError?.id === item.id" class="mt-2 text-2xs break-words" style="color: var(--dd-danger);">
             {{ testError.message }}
           </p>
         </div>
@@ -373,54 +360,47 @@ onMounted(async () => {
         <template #header>
           <div class="flex items-center gap-2.5 min-w-0">
             <span class="text-sm font-bold truncate dd-text">{{ selectedTrigger?.name }}</span>
-            <span v-if="selectedTrigger" class="badge text-[0.5625rem] uppercase font-bold shrink-0"
-                  :style="{ backgroundColor: triggerTypeBadge(selectedTrigger.type).bg, color: triggerTypeBadge(selectedTrigger.type).text }">
+            <AppBadge v-if="selectedTrigger" :custom="{ bg: triggerTypeBadge(selectedTrigger.type).bg, text: triggerTypeBadge(selectedTrigger.type).text }" size="xs" class="shrink-0">
               {{ triggerTypeBadge(selectedTrigger.type).label }}
-            </span>
+            </AppBadge>
           </div>
         </template>
 
         <template #subtitle>
-          <span v-if="selectedTrigger" class="badge text-[0.5625rem] font-bold"
-                :style="{
-                  backgroundColor: selectedTrigger.status === 'active' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
-                  color: selectedTrigger.status === 'active' ? 'var(--dd-success)' : 'var(--dd-danger)',
-                }">
+          <AppBadge v-if="selectedTrigger" :tone="selectedTrigger.status === 'active' ? 'success' : 'danger'" size="xs">
             {{ selectedTrigger.status }}
-          </span>
+          </AppBadge>
         </template>
 
         <template v-if="selectedTrigger" #default>
           <div class="p-4 space-y-5">
-            <div v-if="detailLoading" class="text-[0.6875rem] dd-text-muted">Refreshing trigger details...</div>
+            <div v-if="detailLoading" class="text-2xs-plus dd-text-muted">Refreshing trigger details...</div>
             <div v-if="detailError"
-                 class="px-3 py-2 text-[0.6875rem] dd-rounded"
+                 class="px-3 py-2 text-2xs-plus dd-rounded"
                  :style="{ backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning)' }">
               {{ detailError }}
             </div>
 
-            <div v-for="(val, key) in selectedTrigger.config" :key="key">
-              <div class="text-[0.625rem] font-semibold uppercase tracking-wider mb-1 dd-text-muted">{{ key }}</div>
-              <div class="text-xs font-mono dd-text break-all">{{ val }}</div>
-            </div>
+            <DetailField v-for="(val, key) in selectedTrigger.config" :key="key" :label="String(key)" mono>{{ val }}</DetailField>
             <div v-if="Object.keys(selectedTrigger.config).length === 0">
-              <div class="text-[0.6875rem] dd-text-muted">No configuration properties</div>
+              <div class="text-2xs-plus dd-text-muted">No configuration properties</div>
             </div>
 
             <!-- Test trigger button -->
             <div class="pt-2" :style="{ borderTop: '1px solid var(--dd-border)' }">
-              <button class="inline-flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[0.6875rem] font-bold tracking-wide transition-[color,background-color,border-color,opacity,transform,box-shadow] text-white"
+              <AppButton size="none" variant="plain" weight="none" class="inline-flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-2xs-plus font-bold tracking-wide transition-[color,background-color,border-color,opacity,transform,box-shadow] text-white"
                       :style="{ background: testResult?.id === selectedTrigger.id
                         ? (testResult.success ? 'var(--dd-success)' : 'var(--dd-danger)')
                         : 'linear-gradient(135deg, var(--dd-primary), var(--dd-info))',
-                        boxShadow: '0 1px 3px rgba(0,150,199,0.3)' }"
+                        boxShadow: 'var(--dd-shadow-sm)' }"
                       :disabled="testingTrigger !== null"
                       @click.stop="testTrigger(selectedTrigger)">
-                <AppIcon :name="testingTrigger === selectedTrigger.id ? 'pending' : testResult?.id === selectedTrigger.id ? (testResult.success ? 'check' : 'xmark') : 'play'" :size="11" />
+                <AppIcon :name="testingTrigger === selectedTrigger.id ? 'pending' : testResult?.id === selectedTrigger.id ? (testResult.success ? 'check' : 'xmark') : 'play'" :size="11"
+                         v-tooltip.top="testingTrigger === selectedTrigger.id ? 'Testing...' : testResult?.id === selectedTrigger.id ? (testResult.success ? 'Test passed' : 'Test failed') : 'Run test'" />
                 {{ testingTrigger === selectedTrigger.id ? 'Testing...' : testResult?.id === selectedTrigger.id ? (testResult.success ? 'Sent!' : 'Failed') : 'Test Trigger' }}
-              </button>
+              </AppButton>
               <p v-if="testError?.id === selectedTrigger.id"
-                 class="mt-2 text-[0.625rem] break-words"
+                 class="mt-2 text-2xs break-words"
                  style="color: var(--dd-danger);">
                 {{ testError.message }}
               </p>

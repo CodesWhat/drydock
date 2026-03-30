@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import { probeSocketApiVersion } from '../../../watchers/providers/docker/socket-version-probe.js';
 import {
   runSelfUpdateController,
   runSelfUpdateControllerEntrypoint,
@@ -10,6 +11,12 @@ const mockDockerodeCtor = vi.hoisted(() => vi.fn());
 
 vi.mock('dockerode', () => ({
   default: mockDockerodeCtor,
+}));
+vi.mock('../../../watchers/providers/docker/disable-socket-redirects.js', () => ({
+  disableSocketRedirects: vi.fn(),
+}));
+vi.mock('../../../watchers/providers/docker/socket-version-probe.js', () => ({
+  probeSocketApiVersion: vi.fn().mockResolvedValue(undefined),
 }));
 
 const DEFAULT_CONTROLLER_ENV = {
@@ -164,6 +171,20 @@ describe('self-update-controller orchestration', () => {
     expect(getLoggedStates()).toContain(
       '[self-update:unknown] PREPARE - old=drydock(old-container-id), new=new-container-id',
     );
+  });
+
+  test('pins Dockerode to the probed socket API version when available', async () => {
+    vi.mocked(probeSocketApiVersion).mockResolvedValue('1.44');
+    const oldContainer = createOldContainer();
+    const newContainer = createNewContainer();
+    mockDocker(oldContainer, newContainer);
+
+    await runSelfUpdateController();
+
+    expect(mockDockerodeCtor).toHaveBeenCalledWith({
+      socketPath: '/var/run/docker.sock',
+      version: 'v1.44',
+    });
   });
 
   test('handles healthcheck transition from starting to healthy', async () => {
@@ -390,6 +411,23 @@ describe('self-update-controller orchestration', () => {
     const oldContainer = createOldContainer({
       inspect: vi.fn().mockResolvedValue({ State: { Running: false }, Name: '/drydock' }),
       start: vi.fn().mockRejectedValue({ statusCode: 304, message: 'already started' }),
+    });
+    const newContainer = createNewContainer({
+      start: vi.fn().mockRejectedValue(new Error('start failed')),
+    });
+    mockDocker(oldContainer, newContainer);
+
+    await expect(runSelfUpdateController()).rejects.toThrow('start failed');
+
+    expect(getLoggedStates().some((line) => line.includes('ROLLBACK_START_OLD_FAILED'))).toBe(
+      false,
+    );
+  });
+
+  test('does not log rollback-start failure when old container start rejects with already-started string', async () => {
+    const oldContainer = createOldContainer({
+      inspect: vi.fn().mockResolvedValue({ State: { Running: false }, Name: '/drydock' }),
+      start: vi.fn().mockRejectedValue('already started by another process'),
     });
     const newContainer = createNewContainer({
       start: vi.fn().mockRejectedValue(new Error('start failed')),

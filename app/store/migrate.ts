@@ -7,8 +7,6 @@ const log = logger.child({ component: 'store' });
  * @param from version
  * @param to version
  */
-export function migrate(from, to) {
-  const safeFrom = String(from).replaceAll(/[^a-zA-Z0-9._\-+]/g, '');
-  const safeTo = String(to).replaceAll(/[^a-zA-Z0-9._\-+]/g, '');
-  log.info(`Migrate data from version ${safeFrom} to version ${safeTo}`);
+export function migrate(_from, _to) {
+  log.info('Migrate data between schema versions');
 }

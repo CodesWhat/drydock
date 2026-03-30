@@ -15,6 +15,9 @@ import {
 } from './maturity-policy.js';
 
 const { parse: parseSemver, diff: diffSemver, transform: transformTag } = tag;
+const DEFAULT_UI_MATURITY_THRESHOLD_DAYS = 7;
+const ESTABLISHED_UPDATE_AGE_DAYS = 30;
+const UI_MATURITY_THRESHOLD_DAYS_ENV = 'DD_UI_MATURITY_THRESHOLD_DAYS';
 
 export interface ContainerImage {
   id: string;
@@ -28,6 +31,7 @@ export interface ContainerImage {
   tag: {
     value: string;
     semver: boolean;
+    tagPrecision?: 'specific' | 'floating';
   };
   digest: {
     watch: boolean;
@@ -42,10 +46,21 @@ export interface ContainerImage {
 
 export interface ContainerResult {
   tag?: string;
+  suggestedTag?: string;
   digest?: string;
   created?: string;
+  publishedAt?: string;
   link?: string;
   noUpdateReason?: string;
+  releaseNotes?: ContainerReleaseNotes;
+}
+
+export interface ContainerReleaseNotes {
+  title: string;
+  body: string;
+  url: string;
+  publishedAt: string;
+  provider: 'github' | 'gitlab' | 'gitea';
 }
 
 export interface ContainerUpdateKind {
@@ -109,7 +124,11 @@ export interface Container {
   updateAvailable: boolean;
   updateKind: ContainerUpdateKind;
   updateDetectedAt?: string;
+  firstSeenAt?: string;
+  updateAge?: number;
+  updateMaturityLevel?: 'hot' | 'mature' | 'established';
   labels?: Record<string, string>;
+  sourceRepo?: string;
   details?: ContainerRuntimeDetails;
   resultChanged?: (otherContainer: Container | undefined) => boolean;
 }
@@ -225,6 +244,7 @@ const schema = joi.object({
         .object({
           value: joi.string().min(1).required(),
           semver: joi.boolean().default(false),
+          tagPrecision: joi.string().valid('specific', 'floating'),
         })
         .required(),
       digest: joi
@@ -242,10 +262,19 @@ const schema = joi.object({
     .required(),
   result: joi.object({
     tag: joi.string().min(1),
+    suggestedTag: joi.string().min(1),
     digest: joi.string(),
     created: joi.string().isoDate(),
+    publishedAt: joi.string().isoDate(),
     link: joi.string(),
     noUpdateReason: joi.string().min(1),
+    releaseNotes: joi.object({
+      title: joi.string().required(),
+      body: joi.string().required(),
+      url: joi.string().required(),
+      publishedAt: joi.string().isoDate().required(),
+      provider: joi.string().valid('github', 'gitlab', 'gitea').required(),
+    }),
   }),
   error: joi.object({
     message: joi.string().min(1).required(),
@@ -260,8 +289,12 @@ const schema = joi.object({
     })
     .default({ kind: 'unknown' }),
   updateDetectedAt: joi.string().isoDate(),
+  firstSeenAt: joi.string().isoDate(),
+  updateAge: joi.number().integer().min(0),
+  updateMaturityLevel: joi.string().valid('hot', 'mature', 'established'),
   resultChanged: joi.function(),
   labels: joi.object(),
+  sourceRepo: joi.string(),
   details: joi.object({
     ports: joi.array().items(joi.string()).required(),
     volumes: joi.array().items(joi.string()).required(),
@@ -475,6 +508,58 @@ function isUpdateSuppressed(container: Container, updateKind: ContainerUpdateKin
   return false;
 }
 
+function parseDateMs(value: string | undefined): number | undefined {
+  const timestampMs = Date.parse(value || '');
+  return Number.isFinite(timestampMs) ? timestampMs : undefined;
+}
+
+function resolveUiMaturityThresholdDays(): number {
+  return resolveMaturityMinAgeDays(
+    process.env[UI_MATURITY_THRESHOLD_DAYS_ENV],
+    DEFAULT_UI_MATURITY_THRESHOLD_DAYS,
+  );
+}
+
+function getRawUpdateAge(container: Container): number | undefined {
+  if (!container.updateAvailable) {
+    return undefined;
+  }
+
+  const firstSeenAtMs = parseDateMs(container.firstSeenAt);
+  const publishedAtMs = parseDateMs(container.result?.publishedAt);
+  let startedAtMs: number | undefined;
+
+  if (firstSeenAtMs !== undefined && publishedAtMs !== undefined) {
+    startedAtMs = Math.min(firstSeenAtMs, publishedAtMs);
+  } else {
+    startedAtMs = firstSeenAtMs ?? publishedAtMs;
+  }
+
+  if (startedAtMs === undefined) {
+    return undefined;
+  }
+
+  return Math.max(0, Date.now() - startedAtMs);
+}
+
+function getRawUpdateMaturityLevel(
+  container: Container,
+): 'hot' | 'mature' | 'established' | undefined {
+  const updateAge = getRawUpdateAge(container);
+  if (updateAge === undefined) {
+    return undefined;
+  }
+
+  const establishedThresholdMs = maturityMinAgeDaysToMilliseconds(ESTABLISHED_UPDATE_AGE_DAYS);
+  if (updateAge >= establishedThresholdMs) {
+    return 'established';
+  }
+
+  const maturityThresholdDays = resolveUiMaturityThresholdDays();
+  const maturityThresholdMs = maturityMinAgeDaysToMilliseconds(maturityThresholdDays);
+  return updateAge >= maturityThresholdMs ? 'mature' : 'hot';
+}
+
 /**
  * Render Link template.
  * @param container
@@ -570,6 +655,30 @@ function addUpdateKindProperty(container: Container) {
   });
 }
 
+function addUpdateAgeProperty(container: Container) {
+  if (getRawUpdateAge(container) === undefined) {
+    return;
+  }
+  Object.defineProperty(container, 'updateAge', {
+    enumerable: true,
+    get(this: Container) {
+      return getRawUpdateAge(this);
+    },
+  });
+}
+
+function addUpdateMaturityLevelProperty(container: Container) {
+  if (getRawUpdateMaturityLevel(container) === undefined) {
+    return;
+  }
+  Object.defineProperty(container, 'updateMaturityLevel', {
+    enumerable: true,
+    get(this: Container) {
+      return getRawUpdateMaturityLevel(this);
+    },
+  });
+}
+
 /**
  * Computed function to check whether the result is different.
  * @param otherContainer
@@ -579,6 +688,7 @@ function resultChangedFunction(this: Container, otherContainer: Container | unde
   return (
     otherContainer === undefined ||
     this.result?.tag !== otherContainer.result?.tag ||
+    this.result?.suggestedTag !== otherContainer.result?.suggestedTag ||
     this.result?.digest !== otherContainer.result?.digest ||
     this.result?.created !== otherContainer.result?.created
   );
@@ -600,7 +710,7 @@ function addResultChangedFunction(container: Container) {
  * @param container
  * @returns {*}
  */
-export function validate(container: any): Container {
+export function validate(container: unknown): Container {
   const validation = schema.validate(container);
   if (validation.error) {
     throw new Error(`Error when validating container properties ${validation.error}`);
@@ -619,6 +729,8 @@ export function validate(container: any): Container {
   // Add computed properties
   addUpdateAvailableProperty(containerValidated);
   addUpdateKindProperty(containerValidated);
+  addUpdateAgeProperty(containerValidated);
+  addUpdateMaturityLevelProperty(containerValidated);
   addLinkProperty(containerValidated);
 
   // Add computed functions
@@ -632,7 +744,7 @@ export function validate(container: any): Container {
  * @returns {*}
  */
 export function flatten(container: Container) {
-  const containerFlatten: any = flat(container, {
+  const containerFlatten = flat<Container, Record<string, unknown>>(container, {
     delimiter: '_',
     transformKey: (key: string) => snakeCase(key),
   });

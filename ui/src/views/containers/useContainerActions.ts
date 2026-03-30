@@ -1,6 +1,7 @@
 import { computed, onUnmounted, type Ref, ref, watch } from 'vue';
 import { useConfirmDialog } from '../../composables/useConfirmDialog';
 import { useServerFeatures } from '../../composables/useServerFeatures';
+import { useToast } from '../../composables/useToast';
 import {
   deleteContainer as apiDeleteContainer,
   scanContainer as apiScanContainer,
@@ -43,8 +44,9 @@ async function executeContainerActionState(args: {
   containerActionsEnabled: boolean;
   containerActionsDisabledReason: string;
   containerIdMap: Record<string, string>;
+  containerId?: string;
   name: string;
-  actionInProgress: Ref<string | null>;
+  actionInProgress: Ref<Set<string>>;
   inputError: Ref<string | null>;
   containers: Readonly<Ref<Container[]>>;
   action: (id: string) => Promise<unknown>;
@@ -55,16 +57,19 @@ async function executeContainerActionState(args: {
   selectedContainerName: string | undefined;
   activeDetailTab: string;
   refreshActionTabData: () => Promise<void>;
+  successMessage?: string;
 }): Promise<boolean> {
   if (!args.containerActionsEnabled) {
     args.inputError.value = args.containerActionsDisabledReason;
     return false;
   }
-  const containerId = args.containerIdMap[args.name];
-  if (!containerId || args.actionInProgress.value) {
+  const containerId = args.containerId ?? args.containerIdMap[args.name];
+  if (!containerId || args.actionInProgress.value.has(args.name)) {
     return false;
   }
-  args.actionInProgress.value = args.name;
+  const next = new Set(args.actionInProgress.value);
+  next.add(args.name);
+  args.actionInProgress.value = next;
   args.inputError.value = null;
   const shouldReloadContainers = args.reloadContainers ?? true;
   const snapshot = args.containers.value.find((container) => container.name === args.name);
@@ -81,12 +86,24 @@ async function executeContainerActionState(args: {
     if (args.selectedContainerName === args.name && args.activeDetailTab === 'actions') {
       await args.refreshActionTabData();
     }
+    if (args.successMessage) {
+      const toast = useToast();
+      toast.success(args.successMessage);
+    }
     return true;
   } catch (e: unknown) {
-    args.inputError.value = errorMessage(e, `Action failed for ${args.name}`);
+    const msg = errorMessage(e, `Action failed for ${args.name}`);
+    args.inputError.value = msg;
+    const toast = useToast();
+    toast.error(`Update failed: ${args.name}`, msg);
+    if (shouldReloadContainers) {
+      await args.loadContainers();
+    }
     return false;
   } finally {
-    args.actionInProgress.value = null;
+    const next = new Set(args.actionInProgress.value);
+    next.delete(args.name);
+    args.actionInProgress.value = next;
   }
 }
 
@@ -107,13 +124,15 @@ function setGroupUpdateStateValue(
 async function updateAllInGroupState(args: {
   containerActionsEnabled: boolean;
   containerActionsDisabledReason: string;
+  containerIdMap: Record<string, string>;
+  containers: Readonly<Ref<Container[]>>;
   inputError: Ref<string | null>;
   groupUpdateInProgress: Ref<Set<string>>;
   group: ContainerActionGroup;
   executeAction: (
     name: string,
     action: (id: string) => Promise<unknown>,
-    options?: { reloadContainers?: boolean },
+    options?: { containerId?: string; reloadContainers?: boolean; successMessage?: string },
   ) => Promise<boolean>;
   loadContainers: () => Promise<void>;
 }) {
@@ -127,22 +146,46 @@ async function updateAllInGroupState(args: {
   const updatableContainers = args.group.containers.filter((container) => {
     return container.newTag && container.bouncer !== 'blocked';
   });
-  if (updatableContainers.length === 0) {
+  const frozenUpdateTargets = updatableContainers
+    .map((container) => ({
+      name: container.name,
+      containerId: args.containerIdMap[container.name],
+    }))
+    .filter(
+      (
+        target,
+      ): target is {
+        name: string;
+        containerId: string;
+      } => typeof target.containerId === 'string' && target.containerId.length > 0,
+    );
+  if (frozenUpdateTargets.length === 0) {
     return;
   }
   setGroupUpdateStateValue(args.groupUpdateInProgress, args.group.key, true);
   try {
     let updatedAny = false;
-    for (const container of updatableContainers) {
-      const updated = await args.executeAction(container.name, apiUpdateContainer, {
+    for (const target of frozenUpdateTargets) {
+      const currentContainer = args.containers.value.find(
+        (container) => container.id === target.containerId,
+      );
+      if (!currentContainer || currentContainer.name !== target.name) {
+        continue;
+      }
+
+      const updated = await args.executeAction(target.name, apiUpdateContainer, {
+        containerId: target.containerId,
         reloadContainers: false,
       });
       if (updated) {
         updatedAny = true;
       }
     }
+    await args.loadContainers();
     if (updatedAny) {
-      await args.loadContainers();
+      const toast = useToast();
+      const count = frozenUpdateTargets.length;
+      toast.success(`Updated ${count} container${count === 1 ? '' : 's'} in ${args.group.key}`);
     }
   } finally {
     setGroupUpdateStateValue(args.groupUpdateInProgress, args.group.key, false);
@@ -154,7 +197,7 @@ async function deleteContainerState(args: {
   containerActionsDisabledReason: string;
   containerIdMap: Record<string, string>;
   name: string;
-  actionInProgress: Ref<string | null>;
+  actionInProgress: Ref<Set<string>>;
   inputError: Ref<string | null>;
   skippedUpdates: Ref<Set<string>>;
   selectedContainerName: string | undefined;
@@ -167,10 +210,12 @@ async function deleteContainerState(args: {
     return false;
   }
   const containerId = args.containerIdMap[args.name];
-  if (!containerId || args.actionInProgress.value) {
+  if (!containerId || args.actionInProgress.value.has(args.name)) {
     return false;
   }
-  args.actionInProgress.value = args.name;
+  const next = new Set(args.actionInProgress.value);
+  next.add(args.name);
+  args.actionInProgress.value = next;
   try {
     await apiDeleteContainer(containerId);
     args.skippedUpdates.value.delete(args.name);
@@ -179,12 +224,19 @@ async function deleteContainerState(args: {
       args.closePanel();
     }
     await args.loadContainers();
+    const toast = useToast();
+    toast.success(`Deleted: ${args.name}`);
     return true;
   } catch (e: unknown) {
-    args.inputError.value = errorMessage(e, `Failed to delete ${args.name}`);
+    const msg = errorMessage(e, `Failed to delete ${args.name}`);
+    args.inputError.value = msg;
+    const toast = useToast();
+    toast.error(`Delete failed: ${args.name}`, msg);
     return false;
   } finally {
-    args.actionInProgress.value = null;
+    const next = new Set(args.actionInProgress.value);
+    next.delete(args.name);
+    args.actionInProgress.value = next;
   }
 }
 
@@ -270,10 +322,11 @@ function createConfirmHandlers(args: {
   executeAction: (
     name: string,
     action: (id: string) => Promise<unknown>,
-    options?: { reloadContainers?: boolean },
+    options?: { containerId?: string; reloadContainers?: boolean; successMessage?: string },
   ) => Promise<boolean>;
   forceUpdate: (name: string) => Promise<void>;
   deleteContainer: (name: string) => Promise<boolean>;
+  clearPolicySelected: () => Promise<void>;
   selectedContainer: Readonly<Ref<Container | null | undefined>>;
   rollbackToBackup: (backupId?: string) => Promise<void>;
 }) {
@@ -284,7 +337,10 @@ function createConfirmHandlers(args: {
       rejectLabel: 'Cancel',
       acceptLabel: 'Stop',
       severity: 'danger',
-      accept: () => args.executeAction(name, apiStopContainer) as unknown as Promise<void>,
+      accept: () =>
+        args.executeAction(name, apiStopContainer, {
+          successMessage: `Stopped: ${name}`,
+        }) as unknown as Promise<void>,
     });
   }
 
@@ -295,7 +351,10 @@ function createConfirmHandlers(args: {
       rejectLabel: 'Cancel',
       acceptLabel: 'Restart',
       severity: 'warn',
-      accept: () => args.executeAction(name, apiRestartContainer) as unknown as Promise<void>,
+      accept: () =>
+        args.executeAction(name, apiRestartContainer, {
+          successMessage: `Restarted: ${name}`,
+        }) as unknown as Promise<void>,
     });
   }
 
@@ -311,13 +370,27 @@ function createConfirmHandlers(args: {
   }
 
   function confirmUpdate(name: string) {
+    const container = args.selectedContainer.value;
+    let message = `Update ${name} now? This will apply the latest discovered image.`;
+    if (container && container.currentTag && container.newTag) {
+      const isTagChange = container.updateKind !== 'digest';
+      if (isTagChange) {
+        const kind = container.updateKind ? ` (${container.updateKind})` : '';
+        message = `Update ${name}? This will change the image tag from :${container.currentTag} to :${container.newTag}${kind}.`;
+      } else {
+        message = `Update ${name}? A newer build of :${container.currentTag} is available (digest change).`;
+      }
+    }
     args.confirm.require({
       header: 'Update Container',
-      message: `Update ${name} now? This will apply the latest discovered image.`,
+      message,
       rejectLabel: 'Cancel',
       acceptLabel: 'Update',
       severity: 'warn',
-      accept: () => args.executeAction(name, apiUpdateContainer) as unknown as Promise<void>,
+      accept: () =>
+        args.executeAction(name, apiUpdateContainer, {
+          successMessage: `Updated: ${name}`,
+        }) as unknown as Promise<void>,
     });
   }
 
@@ -329,6 +402,21 @@ function createConfirmHandlers(args: {
       acceptLabel: 'Delete',
       severity: 'danger',
       accept: () => args.deleteContainer(name) as unknown as Promise<void>,
+    });
+  }
+
+  function confirmClearPolicy() {
+    const containerName = args.selectedContainer.value?.name;
+    if (!containerName) {
+      return;
+    }
+    args.confirm.require({
+      header: 'Clear Update Policy',
+      message: `Clear all update policy for ${containerName}? This removes skips, snooze, and maturity settings.`,
+      rejectLabel: 'Cancel',
+      acceptLabel: 'Clear Policy',
+      severity: 'warn',
+      accept: () => args.clearPolicySelected(),
     });
   }
 
@@ -349,6 +437,7 @@ function createConfirmHandlers(args: {
   }
 
   return {
+    confirmClearPolicy,
     confirmDelete,
     confirmForceUpdate,
     confirmRestart,
@@ -362,7 +451,7 @@ function createContainerActionHandlers(args: {
   executeAction: (
     name: string,
     action: (id: string) => Promise<unknown>,
-    options?: { reloadContainers?: boolean },
+    options?: { containerId?: string; reloadContainers?: boolean; successMessage?: string },
   ) => Promise<boolean>;
   applyPolicy: (
     name: string,
@@ -376,15 +465,17 @@ function createContainerActionHandlers(args: {
   refreshActionTabData: () => Promise<void>;
 }) {
   async function startContainer(name: string) {
-    await args.executeAction(name, apiStartContainer);
+    await args.executeAction(name, apiStartContainer, { successMessage: `Started: ${name}` });
   }
 
   async function updateContainer(name: string) {
-    await args.executeAction(name, apiUpdateContainer);
+    await args.executeAction(name, apiUpdateContainer, { successMessage: `Updated: ${name}` });
   }
 
   async function scanContainer(name: string) {
-    await args.executeAction(name, apiScanContainer);
+    await args.executeAction(name, apiScanContainer, {
+      successMessage: `Scan triggered: ${name}`,
+    });
   }
 
   async function skipUpdate(name: string) {
@@ -404,7 +495,9 @@ function createContainerActionHandlers(args: {
 
   async function forceUpdate(name: string) {
     await args.applyPolicy(name, 'clear', {}, `Cleared update policy for ${name}`);
-    await args.executeAction(name, apiUpdateContainer);
+    await args.executeAction(name, apiUpdateContainer, {
+      successMessage: `Force updated: ${name}`,
+    });
   }
 
   return {
@@ -509,7 +602,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
     { immediate: true },
   );
 
-  const actionInProgress = ref<string | null>(null);
+  const actionInProgress = ref(new Set<string>());
   const actionPending = ref<Map<string, Container>>(new Map());
   const actionPendingStartTimes = ref<Map<string, number>>(new Map());
   const pendingActionsPollTimer = ref<ReturnType<typeof setInterval> | null>(null);
@@ -558,12 +651,13 @@ export function useContainerActions(input: UseContainerActionsInput) {
   async function executeAction(
     name: string,
     action: (id: string) => Promise<unknown>,
-    options?: { reloadContainers?: boolean },
+    options?: { containerId?: string; reloadContainers?: boolean; successMessage?: string },
   ) {
     return executeContainerActionState({
       containerActionsEnabled: containerActionsEnabled.value,
       containerActionsDisabledReason: containerActionsDisabledReason.value,
       containerIdMap: input.containerIdMap.value,
+      containerId: options?.containerId,
       name,
       actionInProgress,
       inputError: input.error,
@@ -576,6 +670,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
       selectedContainerName: input.selectedContainer.value?.name,
       activeDetailTab: input.activeDetailTab.value,
       refreshActionTabData,
+      successMessage: options?.successMessage,
     });
   }
 
@@ -583,6 +678,8 @@ export function useContainerActions(input: UseContainerActionsInput) {
     await updateAllInGroupState({
       containerActionsEnabled: containerActionsEnabled.value,
       containerActionsDisabledReason: containerActionsDisabledReason.value,
+      containerIdMap: input.containerIdMap.value,
+      containers: input.containers,
       inputError: input.error,
       groupUpdateInProgress,
       group,
@@ -618,6 +715,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
   }
 
   const {
+    confirmClearPolicy,
     confirmDelete,
     confirmForceUpdate,
     confirmRestart,
@@ -629,6 +727,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
     executeAction,
     forceUpdate,
     deleteContainer,
+    clearPolicySelected: policy.clearPolicySelected,
     selectedContainer: input.selectedContainer,
     rollbackToBackup: backups.rollbackToBackup,
   });
@@ -639,6 +738,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
     backupsLoading: backups.backupsLoading,
     containerActionsDisabledReason,
     containerActionsEnabled,
+    confirmClearPolicy,
     clearPolicySelected: policy.clearPolicySelected,
     clearMaturityPolicySelected: policy.clearMaturityPolicySelected,
     clearSkipsSelected: policy.clearSkipsSelected,

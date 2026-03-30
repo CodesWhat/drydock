@@ -25,6 +25,7 @@ vi.mock('../event/index.js', () => ({
   emitAgentConnected: vi.fn().mockResolvedValue(undefined),
   emitAgentDisconnected: vi.fn().mockResolvedValue(undefined),
   emitContainerReport: vi.fn(),
+  emitContainerReports: vi.fn(),
 }));
 vi.mock('../registry/index.js', () => ({
   deregisterAgentComponents: vi.fn(),
@@ -291,6 +292,140 @@ describe('AgentClient', () => {
         expect.objectContaining({ changed: false }),
       );
     });
+
+    test('should ignore invalid ids when managing pending freshness state', () => {
+      const internal = client as unknown as {
+        markPendingFreshState: (containerId: unknown) => void;
+        clearPendingFreshState: (containerId: unknown) => void;
+        pendingFreshStateAfterRemoteUpdate: Set<string>;
+      };
+
+      internal.pendingFreshStateAfterRemoteUpdate.add('c1');
+      internal.markPendingFreshState(undefined);
+      internal.markPendingFreshState('');
+      internal.clearPendingFreshState(undefined);
+      internal.clearPendingFreshState('');
+
+      expect([...internal.pendingFreshStateAfterRemoteUpdate]).toEqual(['c1']);
+    });
+
+    test('should preserve cleared updateAvailable for stale incremental events after remote update', async () => {
+      axios.post.mockResolvedValue({ data: {} });
+      const existing = {
+        id: 'c1',
+        updateAvailable: false,
+        resultChanged: vi.fn().mockReturnValue(true),
+      };
+      storeContainer.getContainer.mockReturnValue(existing);
+      storeContainer.updateContainer.mockReturnValue({
+        id: 'c1',
+        updateAvailable: false,
+      });
+
+      await client.runRemoteTrigger({ id: 'c1' }, 'docker', 'update');
+      await client.handleEvent('dd:container-updated', {
+        id: 'c1',
+        name: 'test',
+        updateAvailable: true,
+      });
+
+      expect(storeContainer.updateContainer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'c1',
+          name: 'test',
+          agent: 'test-agent',
+          updateAvailable: false,
+        }),
+      );
+      expect(event.emitContainerReport).toHaveBeenCalledWith(
+        expect.objectContaining({ changed: false }),
+      );
+    });
+
+    test('should clear stale update suppression after agent reports updateAvailable false', async () => {
+      axios.post.mockResolvedValue({ data: {} });
+      const existing = {
+        id: 'c1',
+        updateAvailable: false,
+        resultChanged: vi.fn().mockReturnValue(true),
+      };
+      storeContainer.getContainer.mockReturnValue(existing);
+      storeContainer.updateContainer
+        .mockReturnValueOnce({
+          id: 'c1',
+          updateAvailable: false,
+        })
+        .mockReturnValueOnce({
+          id: 'c1',
+          updateAvailable: true,
+        });
+
+      await client.runRemoteTrigger({ id: 'c1' }, 'docker', 'update');
+      await client.handleEvent('dd:container-updated', {
+        id: 'c1',
+        name: 'test',
+        updateAvailable: false,
+      });
+      await client.handleEvent('dd:container-updated', {
+        id: 'c1',
+        name: 'test',
+        updateAvailable: true,
+      });
+
+      expect(storeContainer.updateContainer).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          id: 'c1',
+          name: 'test',
+          agent: 'test-agent',
+          updateAvailable: false,
+        }),
+      );
+      expect(storeContainer.updateContainer).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+          id: 'c1',
+          name: 'test',
+          agent: 'test-agent',
+          updateAvailable: true,
+        }),
+      );
+    });
+
+    test('should accept authoritative watcher snapshot state after remote update suppression', async () => {
+      axios.post.mockResolvedValue({ data: {} });
+      const existing = {
+        id: 'c1',
+        updateAvailable: false,
+        resultChanged: vi.fn().mockReturnValue(true),
+      };
+      storeContainer.getContainer.mockReturnValue(existing);
+      storeContainer.updateContainer.mockReturnValue({
+        id: 'c1',
+        watcher: 'local',
+        updateAvailable: true,
+      });
+      storeContainer.getContainers.mockReturnValue([]);
+
+      await client.runRemoteTrigger({ id: 'c1' }, 'docker', 'update');
+      await client.handleEvent('dd:watcher-snapshot', {
+        watcher: { type: 'docker', name: 'local' },
+        containers: [{ id: 'c1', name: 'test', watcher: 'local', updateAvailable: true }],
+      });
+
+      expect(storeContainer.updateContainer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'c1',
+          name: 'test',
+          watcher: 'local',
+          agent: 'test-agent',
+          updateAvailable: true,
+        }),
+      );
+      expect(event.emitContainerReport).toHaveBeenCalledWith(
+        expect.objectContaining({ changed: true }),
+      );
+    });
   });
 
   describe('handshake', () => {
@@ -327,6 +462,38 @@ describe('AgentClient', () => {
       await client.handshake();
 
       expect(event.emitAgentConnected).toHaveBeenCalledWith({ agentName: 'test-agent' });
+    });
+
+    test('should emit batched container reports after handshake processing', async () => {
+      axios.get
+        .mockResolvedValueOnce({
+          data: [
+            { id: 'c1', name: 'one', watcher: 'local' },
+            { id: 'c2', name: 'two', watcher: 'local' },
+          ],
+        })
+        .mockResolvedValueOnce({ data: [] })
+        .mockResolvedValueOnce({ data: [] });
+
+      storeContainer.getContainer.mockReturnValue(undefined);
+      storeContainer.insertContainer.mockImplementation((container) => ({
+        ...container,
+        updateAvailable: true,
+      }));
+      storeContainer.getContainers.mockReturnValue([]);
+
+      await client.handshake();
+
+      expect(event.emitContainerReports).toHaveBeenCalledWith([
+        expect.objectContaining({
+          changed: true,
+          container: expect.objectContaining({ id: 'c1', agent: 'test-agent' }),
+        }),
+        expect.objectContaining({
+          changed: true,
+          container: expect.objectContaining({ id: 'c2', agent: 'test-agent' }),
+        }),
+      ]);
     });
 
     test('should not emit agent-connected when already connected', async () => {
@@ -720,6 +887,96 @@ describe('AgentClient', () => {
       expect(storeContainer.deleteContainer).toHaveBeenCalledWith('c1');
     });
 
+    test('should reconcile watcher snapshot by processing current containers and pruning missing ones', async () => {
+      const processSpy = vi.spyOn(client, 'processContainer').mockResolvedValue(undefined);
+      const containersInStore = [
+        { id: 'c1', name: 'current', watcher: 'local', agent: 'test-agent' },
+        { id: 'c2', name: 'stale-old', watcher: 'local', agent: 'test-agent' },
+        { id: 'c3', name: 'other-watcher', watcher: 'remote', agent: 'test-agent' },
+      ];
+      storeContainer.getContainers.mockImplementation((query = {}) =>
+        containersInStore.filter(
+          (container) =>
+            (!query.agent || container.agent === query.agent) &&
+            (!query.watcher || container.watcher === query.watcher),
+        ),
+      );
+
+      await client.handleEvent('dd:watcher-snapshot', {
+        watcher: { type: 'docker', name: 'local' },
+        containers: [{ id: 'c1', name: 'current', watcher: 'local' }],
+      });
+
+      expect(processSpy).toHaveBeenCalledWith({ id: 'c1', name: 'current', watcher: 'local' });
+      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('c2');
+      expect(storeContainer.deleteContainer).not.toHaveBeenCalledWith('c3');
+    });
+
+    test('should emit batched container reports for watcher snapshots', async () => {
+      storeContainer.getContainer.mockReturnValue(undefined);
+      storeContainer.insertContainer.mockImplementation((container) => ({
+        ...container,
+        updateAvailable: true,
+      }));
+      storeContainer.getContainers.mockReturnValue([]);
+
+      await client.handleEvent('dd:watcher-snapshot', {
+        watcher: { type: 'docker', name: 'local' },
+        containers: [
+          { id: 'c1', name: 'current', watcher: 'local' },
+          { id: 'c2', name: 'next', watcher: 'local' },
+        ],
+      });
+
+      expect(event.emitContainerReports).toHaveBeenCalledWith([
+        expect.objectContaining({
+          changed: true,
+          container: expect.objectContaining({ id: 'c1', agent: 'test-agent' }),
+        }),
+        expect.objectContaining({
+          changed: true,
+          container: expect.objectContaining({ id: 'c2', agent: 'test-agent' }),
+        }),
+      ]);
+    });
+
+    test('should prune all containers for a watcher when a watcher snapshot is empty', async () => {
+      const containersInStore = [
+        { id: 'c1', name: 'stale-1', watcher: 'local', agent: 'test-agent' },
+        { id: 'c2', name: 'stale-2', watcher: 'local', agent: 'test-agent' },
+        { id: 'c3', name: 'other-watcher', watcher: 'remote', agent: 'test-agent' },
+      ];
+      storeContainer.getContainers.mockImplementation((query = {}) =>
+        containersInStore.filter(
+          (container) =>
+            (!query.agent || container.agent === query.agent) &&
+            (!query.watcher || container.watcher === query.watcher),
+        ),
+      );
+
+      await client.handleEvent('dd:watcher-snapshot', {
+        watcher: { type: 'docker', name: 'local' },
+        containers: [],
+      });
+
+      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('c1');
+      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('c2');
+      expect(storeContainer.deleteContainer).not.toHaveBeenCalledWith('c3');
+    });
+
+    test('should ignore invalid watcher snapshot payloads without pruning', async () => {
+      const processSpy = vi.spyOn(client, 'processContainer').mockResolvedValue(undefined);
+
+      await client.handleEvent('dd:watcher-snapshot', {
+        watcher: { type: 'docker', name: 42 },
+        containers: { id: 'c1' },
+      });
+
+      expect(processSpy).not.toHaveBeenCalled();
+      expect(storeContainer.deleteContainer).not.toHaveBeenCalled();
+      expect(storeContainer.getContainers).not.toHaveBeenCalled();
+    });
+
     test('should ignore unknown event types', async () => {
       const processSpy = vi.spyOn(client, 'processContainer');
       await client.handleEvent('dd:unknown', {});
@@ -747,6 +1004,89 @@ describe('AgentClient', () => {
       );
     });
 
+    test('should stringify non-object remote trigger failures', async () => {
+      axios.post.mockRejectedValue('trigger failed as string');
+
+      await expect(client.runRemoteTrigger({ id: 'c1' }, 'docker', 'update')).rejects.toThrow(
+        'trigger failed as string',
+      );
+    });
+
+    test('should fall back to generic error message when remote payload is not an object', async () => {
+      axios.post.mockRejectedValue({
+        message: 'Request failed with status code 500',
+        response: {
+          status: 500,
+          data: 'unexpected response shape',
+        },
+      });
+
+      await expect(client.runRemoteTrigger({ id: 'c1' }, 'docker', 'update')).rejects.toThrow(
+        'Request failed with status code 500',
+      );
+    });
+
+    test('should fall back to transport error message when remote payload has no error field', async () => {
+      axios.post.mockRejectedValue({
+        message: 'Request failed with status code 500',
+        response: {
+          status: 500,
+          data: {
+            details: {
+              reason: 'No watcher found',
+            },
+          },
+        },
+      });
+
+      await expect(client.runRemoteTrigger({ id: 'c1' }, 'docker', 'update')).rejects.toThrow(
+        'Request failed with status code 500',
+      );
+    });
+
+    test('should rethrow original error preserving response for proxy forwarding', async () => {
+      const axiosError = {
+        message: 'Request failed with status code 500',
+        response: {
+          status: 500,
+          data: {
+            error: 'Error when running trigger docker.update',
+            details: {
+              reason: 'No watcher found for container c1 (docker.default)',
+            },
+          },
+        },
+      };
+      axios.post.mockRejectedValue(axiosError);
+
+      await expect(client.runRemoteTrigger({ id: 'c1' }, 'docker', 'update')).rejects.toBe(
+        axiosError,
+      );
+      // Original error is rethrown with response intact for proxy forwarding
+      expect(axiosError.response.status).toBe(500);
+      expect(axiosError.response.data.details.reason).toBe(
+        'No watcher found for container c1 (docker.default)',
+      );
+    });
+
+    test('should rethrow original error when details lack reason field', async () => {
+      const axiosError = {
+        message: 'Request failed with status code 500',
+        response: {
+          status: 500,
+          data: {
+            error: 'Error when running trigger docker.update',
+            details: { info: 'missing reason field' },
+          },
+        },
+      };
+      axios.post.mockRejectedValue(axiosError);
+
+      await expect(client.runRemoteTrigger({ id: 'c1' }, 'docker', 'update')).rejects.toBe(
+        axiosError,
+      );
+    });
+
     test('should encode path segments to prevent SSRF', async () => {
       axios.post.mockResolvedValue({ data: {} });
       await client.runRemoteTrigger({ id: 'c1' }, '../admin', '../../etc/passwd');
@@ -766,6 +1106,36 @@ describe('AgentClient', () => {
         expect.stringContaining('/api/triggers/docker/update/batch'),
         containers,
         expect.any(Object),
+      );
+    });
+
+    test('should not preserve stale updateAvailable after non-update batch triggers', async () => {
+      axios.post.mockResolvedValue({ data: {} });
+      const existing = {
+        id: 'c1',
+        updateAvailable: false,
+        resultChanged: vi.fn().mockReturnValue(true),
+      };
+      storeContainer.getContainer.mockReturnValue(existing);
+      storeContainer.updateContainer.mockReturnValue({
+        id: 'c1',
+        updateAvailable: true,
+      });
+
+      await client.runRemoteTriggerBatch([{ id: 'c1' }], 'mock', 'notify');
+      await client.handleEvent('dd:container-updated', {
+        id: 'c1',
+        name: 'test',
+        updateAvailable: true,
+      });
+
+      expect(storeContainer.updateContainer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'c1',
+          name: 'test',
+          agent: 'test-agent',
+          updateAvailable: true,
+        }),
       );
     });
 

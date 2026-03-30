@@ -29,7 +29,13 @@ export default mergeConfig(
         provider: 'v8',
         reporter: ['text', 'lcov', 'html'],
         include: ['src/**/*.ts'],
-        exclude: ['**/*.stories.ts', '**/*.typecheck.ts', '**/*.d.ts', '**/node_modules/**'],
+        exclude: [
+          '**/*.stories.ts',
+          '**/*.typecheck.ts',
+          '**/*.d.ts',
+          '**/types/**',
+          '**/node_modules/**',
+        ],
         thresholds: {
           lines: 100,
           branches: 100,

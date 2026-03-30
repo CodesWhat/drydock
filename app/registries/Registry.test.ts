@@ -96,6 +96,10 @@ test('getAuthPull should return undefined by default', async () => {
 // --- getTags tests ---
 
 describe('getTags', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   const tagsImage = { name: 'test', registry: { url: 'test' } };
 
   test.each([
@@ -107,6 +111,51 @@ describe('getTags', () => {
     registryMocked.callRegistry = () => ({ headers: {}, data });
     const result = await registryMocked.getTags(tagsImage);
     expect(result).toStrictEqual(expected);
+  });
+
+  test('should propagate network errors from callRegistry', async () => {
+    const registryMocked = createMockedRegistry();
+    registryMocked.callRegistry = () => {
+      throw new Error('connect ECONNREFUSED 127.0.0.1:443');
+    };
+    await expect(registryMocked.getTags(tagsImage)).rejects.toThrow(
+      'connect ECONNREFUSED 127.0.0.1:443',
+    );
+  });
+
+  test('should propagate timeout errors from callRegistry', async () => {
+    const registryMocked = createMockedRegistry();
+    registryMocked.callRegistry = () => {
+      throw new Error('timeout of 15000ms exceeded');
+    };
+    await expect(registryMocked.getTags(tagsImage)).rejects.toThrow('timeout of 15000ms exceeded');
+  });
+
+  test('should propagate 401 errors from callRegistry', async () => {
+    const registryMocked = createMockedRegistry();
+    registryMocked.callRegistry = () => {
+      const error = new Error('Request failed with status code 401');
+      (error as any).response = { status: 401 };
+      throw error;
+    };
+    await expect(registryMocked.getTags(tagsImage)).rejects.toThrow(
+      'Request failed with status code 401',
+    );
+  });
+
+  test('should propagate errors during pagination', async () => {
+    const registryMocked = createMockedRegistry();
+    let callCount = 0;
+    registryMocked.callRegistry = () => {
+      callCount++;
+      if (callCount === 1) {
+        return { headers: { link: 'next' }, data: { tags: ['v1', 'v2'] } };
+      }
+      throw new Error('Request failed with status code 429');
+    };
+    await expect(registryMocked.getTags(tagsImage)).rejects.toThrow(
+      'Request failed with status code 429',
+    );
   });
 
   test('should handle undefined data and tags in page', async () => {
@@ -208,6 +257,111 @@ describe('getImageManifestDigest', () => {
         resolveWithFullResponse: true,
       }),
     );
+  });
+
+  test('should include created date from schemaVersion 2 manifest config blob', async () => {
+    const registryMocked = createMockedRegistry();
+    registryMocked.callRegistry = vi.fn((options) => {
+      if (options.method === 'head') {
+        return { headers: { 'docker-content-digest': 'sha256:manifest' } };
+      }
+      if (options.url === 'url/image/manifests/tag') {
+        return {
+          schemaVersion: 2,
+          mediaType: 'application/vnd.docker.distribution.manifest.v2+json',
+        };
+      }
+      if (
+        options.url === 'url/image/manifests/sha256:manifest' &&
+        options.method === 'get' &&
+        options.headers?.Accept === 'application/vnd.docker.distribution.manifest.v2+json'
+      ) {
+        return {
+          schemaVersion: 2,
+          config: {
+            digest: 'sha256:config',
+          },
+        };
+      }
+      if (options.url === 'url/image/blobs/sha256:config') {
+        return {
+          created: '2026-03-04T11:22:33.000Z',
+        };
+      }
+      throw new Error(`Unexpected request: ${JSON.stringify(options)}`);
+    });
+
+    await expect(registryMocked.getImageManifestDigest(imageInput())).resolves.toStrictEqual({
+      version: 2,
+      digest: 'sha256:manifest',
+      created: '2026-03-04T11:22:33.000Z',
+    });
+  });
+
+  test('should ignore invalid created date from schemaVersion 2 config blob', async () => {
+    const registryMocked = createMockedRegistry();
+    registryMocked.callRegistry = vi.fn((options) => {
+      if (options.method === 'head') {
+        return { headers: { 'docker-content-digest': 'sha256:manifest' } };
+      }
+      if (options.url === 'url/image/manifests/tag') {
+        return {
+          schemaVersion: 2,
+          mediaType: 'application/vnd.docker.distribution.manifest.v2+json',
+        };
+      }
+      if (
+        options.url === 'url/image/manifests/sha256:manifest' &&
+        options.method === 'get' &&
+        options.headers?.Accept === 'application/vnd.docker.distribution.manifest.v2+json'
+      ) {
+        return {
+          schemaVersion: 2,
+          config: {
+            digest: 'sha256:config',
+          },
+        };
+      }
+      if (options.url === 'url/image/blobs/sha256:config') {
+        return {
+          created: 'invalid-date',
+        };
+      }
+      throw new Error(`Unexpected request: ${JSON.stringify(options)}`);
+    });
+
+    await expect(registryMocked.getImageManifestDigest(imageInput())).resolves.toStrictEqual({
+      version: 2,
+      digest: 'sha256:manifest',
+    });
+  });
+
+  test('should continue when schemaVersion 2 manifest config fetch fails', async () => {
+    const registryMocked = createMockedRegistry();
+    registryMocked.callRegistry = vi.fn((options) => {
+      if (options.method === 'head') {
+        return { headers: { 'docker-content-digest': 'sha256:manifest' } };
+      }
+      if (options.url === 'url/image/manifests/tag') {
+        return {
+          schemaVersion: 2,
+          mediaType: 'application/vnd.docker.distribution.manifest.v2+json',
+        };
+      }
+      if (
+        options.url === 'url/image/manifests/sha256:manifest' &&
+        options.method === 'get' &&
+        options.headers?.Accept === 'application/vnd.docker.distribution.manifest.v2+json'
+      ) {
+        throw new Error('manifest config unavailable');
+      }
+      throw new Error(`Unexpected request: ${JSON.stringify(options)}`);
+    });
+
+    await expect(registryMocked.getImageManifestDigest(imageInput())).resolves.toStrictEqual({
+      version: 2,
+      digest: 'sha256:manifest',
+    });
   });
 
   test('should return digest for container.image.v1 (schemaVersion 1)', async () => {
@@ -379,6 +533,115 @@ describe('getImageManifestDigest', () => {
     expect(result).toStrictEqual({ version: 2, digest: 'first-match-digest' });
   });
 
+  test('should propagate network errors from callRegistry during manifest fetch', async () => {
+    const registryMocked = createMockedRegistry();
+    registryMocked.callRegistry = () => {
+      throw new Error('connect ECONNREFUSED 10.0.0.1:443');
+    };
+    await expect(registryMocked.getImageManifestDigest(imageInput())).rejects.toThrow(
+      'connect ECONNREFUSED 10.0.0.1:443',
+    );
+  });
+
+  test('should propagate timeout errors from callRegistry during manifest fetch', async () => {
+    const registryMocked = createMockedRegistry();
+    registryMocked.callRegistry = () => {
+      throw new Error('timeout of 15000ms exceeded');
+    };
+    await expect(registryMocked.getImageManifestDigest(imageInput())).rejects.toThrow(
+      'timeout of 15000ms exceeded',
+    );
+  });
+
+  test('should propagate 401 errors from callRegistry during manifest fetch', async () => {
+    const registryMocked = createMockedRegistry();
+    registryMocked.callRegistry = () => {
+      const error = new Error('Request failed with status code 401');
+      (error as any).response = { status: 401 };
+      throw error;
+    };
+    await expect(registryMocked.getImageManifestDigest(imageInput())).rejects.toThrow(
+      'Request failed with status code 401',
+    );
+  });
+
+  test('should propagate 429 rate limit errors from callRegistry during manifest fetch', async () => {
+    const registryMocked = createMockedRegistry();
+    registryMocked.callRegistry = () => {
+      const error = new Error('Request failed with status code 429');
+      (error as any).response = { status: 429 };
+      throw error;
+    };
+    await expect(registryMocked.getImageManifestDigest(imageInput())).rejects.toThrow(
+      'Request failed with status code 429',
+    );
+  });
+
+  test('should propagate 500 errors from callRegistry during manifest fetch', async () => {
+    const registryMocked = createMockedRegistry();
+    registryMocked.callRegistry = () => {
+      const error = new Error('Request failed with status code 500');
+      (error as any).response = { status: 500 };
+      throw error;
+    };
+    await expect(registryMocked.getImageManifestDigest(imageInput())).rejects.toThrow(
+      'Request failed with status code 500',
+    );
+  });
+
+  test('should handle malformed JSON in schemaVersion 1 v1Compatibility', async () => {
+    const registryMocked = createMockedRegistry();
+    registryMocked.callRegistry = () => ({
+      schemaVersion: 1,
+      history: [{ v1Compatibility: 'not valid json' }],
+    });
+    await expect(registryMocked.getImageManifestDigest(imageInput())).rejects.toThrow();
+  });
+
+  test('should gracefully handle blob fetch error for legacy manifest config', async () => {
+    const registryMocked = createMockedRegistry();
+    registryMocked.callRegistry = vi.fn((options) => {
+      if (options.headers?.Accept === ALL_MANIFEST_ACCEPT) {
+        return manifestListResponse([
+          platformManifest(
+            'amd64',
+            'linux',
+            'digest_x',
+            'application/vnd.docker.container.image.v1+json',
+          ),
+        ]);
+      }
+      if (options.url?.includes('/blobs/')) {
+        throw new Error('blob fetch failed');
+      }
+      throw new Error(`Unexpected request: ${JSON.stringify(options)}`);
+    });
+    const result = await registryMocked.getImageManifestDigest(imageInput());
+    expect(result).toStrictEqual({ version: 1, digest: 'digest_x' });
+  });
+
+  test('should propagate errors from head request during manifest digest resolution', async () => {
+    const registryMocked = createMockedRegistry();
+    let callCount = 0;
+    registryMocked.callRegistry = vi.fn(() => {
+      callCount++;
+      if (callCount === 1) {
+        return manifestListResponse([
+          platformManifest(
+            'amd64',
+            'linux',
+            'digest_x',
+            'application/vnd.docker.distribution.manifest.v2+json',
+          ),
+        ]);
+      }
+      throw new Error('Request failed with status code 502');
+    });
+    await expect(registryMocked.getImageManifestDigest(imageInput())).rejects.toThrow(
+      'Request failed with status code 502',
+    );
+  });
+
   test.each([
     ['no digest found (empty object)', () => ({})],
     ['undefined response', () => undefined],
@@ -388,6 +651,85 @@ describe('getImageManifestDigest', () => {
     registryMocked.callRegistry = callRegistryFn;
     await expect(registryMocked.getImageManifestDigest(imageInput())).rejects.toThrow(
       'Unexpected error; no manifest found',
+    );
+  });
+});
+
+// --- getImagePublishedAt tests ---
+
+describe('getImagePublishedAt', () => {
+  test('should return created date from manifest metadata', async () => {
+    const registryMocked = createMockedRegistry();
+    vi.spyOn(registryMocked, 'getImageManifestDigest').mockResolvedValue({
+      digest: 'sha256:manifest',
+      created: '2026-03-04T11:22:33.000Z',
+      version: 2,
+    });
+
+    const publishedAt = await registryMocked.getImagePublishedAt(
+      imageInput({ tag: { value: 'latest' } }),
+      '1.2.3',
+    );
+
+    expect(publishedAt).toBe('2026-03-04T11:22:33.000Z');
+  });
+
+  test('should return undefined when manifest created is missing or invalid', async () => {
+    const registryMocked = createMockedRegistry();
+    const manifestSpy = vi.spyOn(registryMocked, 'getImageManifestDigest');
+    manifestSpy.mockResolvedValueOnce({
+      digest: 'sha256:manifest',
+      version: 2,
+    } as any);
+    manifestSpy.mockResolvedValueOnce({
+      digest: 'sha256:manifest',
+      created: 'invalid-date',
+      version: 2,
+    } as any);
+
+    const missingCreated = await registryMocked.getImagePublishedAt(imageInput());
+    const invalidCreated = await registryMocked.getImagePublishedAt(imageInput());
+
+    expect(missingCreated).toBeUndefined();
+    expect(invalidCreated).toBeUndefined();
+  });
+
+  test('should propagate network errors from getImageManifestDigest', async () => {
+    const registryMocked = createMockedRegistry();
+    vi.spyOn(registryMocked, 'getImageManifestDigest').mockRejectedValue(
+      new Error('connect ECONNREFUSED 127.0.0.1:443'),
+    );
+
+    await expect(
+      registryMocked.getImagePublishedAt(imageInput({ tag: { value: 'latest' } })),
+    ).rejects.toThrow('connect ECONNREFUSED 127.0.0.1:443');
+  });
+
+  test('should propagate timeout errors from getImageManifestDigest', async () => {
+    const registryMocked = createMockedRegistry();
+    vi.spyOn(registryMocked, 'getImageManifestDigest').mockRejectedValue(
+      new Error('timeout of 15000ms exceeded'),
+    );
+
+    await expect(
+      registryMocked.getImagePublishedAt(imageInput({ tag: { value: 'latest' } })),
+    ).rejects.toThrow('timeout of 15000ms exceeded');
+  });
+
+  test('should handle publish date lookup when image tag metadata is absent', async () => {
+    const registryMocked = createMockedRegistry();
+    const manifestSpy = vi.spyOn(registryMocked, 'getImageManifestDigest').mockResolvedValue({
+      digest: 'sha256:manifest',
+      created: '2026-03-04T11:22:33.000Z',
+      version: 2,
+    });
+
+    await registryMocked.getImagePublishedAt(imageInput({ tag: undefined }) as any);
+
+    expect(manifestSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'image',
+      }),
     );
   });
 });
@@ -492,6 +834,160 @@ describe('callRegistry', () => {
     expect(requestOptions.httpAgent).toBeDefined();
     expect(requestOptions.httpAgent.options.keepAlive).toBe(true);
     expect(requestOptions.httpsAgent).toBe(customHttpsAgent);
+  });
+
+  test('should rethrow ECONNREFUSED with original error message', async () => {
+    const { default: axios } = await import('axios');
+    const error = new Error('connect ECONNREFUSED 127.0.0.1:443');
+    (error as any).code = 'ECONNREFUSED';
+    axios.mockRejectedValue(error);
+    const registryMocked = createMockedRegistry();
+    registryMocked.type = 'hub';
+    registryMocked.name = 'test';
+    await expect(
+      registryMocked.callRegistry({ image: {}, url: 'url', method: 'get' }),
+    ).rejects.toThrow('connect ECONNREFUSED 127.0.0.1:443');
+  });
+
+  test('should rethrow ETIMEDOUT with original error message', async () => {
+    const { default: axios } = await import('axios');
+    const error = new Error('connect ETIMEDOUT 10.0.0.1:443');
+    (error as any).code = 'ETIMEDOUT';
+    axios.mockRejectedValue(error);
+    const registryMocked = createMockedRegistry();
+    registryMocked.type = 'hub';
+    registryMocked.name = 'test';
+    await expect(
+      registryMocked.callRegistry({ image: {}, url: 'url', method: 'get' }),
+    ).rejects.toThrow('connect ETIMEDOUT 10.0.0.1:443');
+  });
+
+  test('should rethrow ECONNRESET with original error message', async () => {
+    const { default: axios } = await import('axios');
+    const error = new Error('read ECONNRESET');
+    (error as any).code = 'ECONNRESET';
+    axios.mockRejectedValue(error);
+    const registryMocked = createMockedRegistry();
+    registryMocked.type = 'hub';
+    registryMocked.name = 'test';
+    await expect(
+      registryMocked.callRegistry({ image: {}, url: 'url', method: 'get' }),
+    ).rejects.toThrow('read ECONNRESET');
+  });
+
+  test('should rethrow 401 Unauthorized errors', async () => {
+    const { default: axios } = await import('axios');
+    const error = new Error('Request failed with status code 401');
+    (error as any).response = { status: 401 };
+    axios.mockRejectedValue(error);
+    const registryMocked = createMockedRegistry();
+    registryMocked.type = 'hub';
+    registryMocked.name = 'test';
+    await expect(
+      registryMocked.callRegistry({ image: {}, url: 'url', method: 'get' }),
+    ).rejects.toThrow('Request failed with status code 401');
+  });
+
+  test('should rethrow 403 Forbidden errors', async () => {
+    const { default: axios } = await import('axios');
+    const error = new Error('Request failed with status code 403');
+    (error as any).response = { status: 403 };
+    axios.mockRejectedValue(error);
+    const registryMocked = createMockedRegistry();
+    registryMocked.type = 'hub';
+    registryMocked.name = 'test';
+    await expect(
+      registryMocked.callRegistry({ image: {}, url: 'url', method: 'get' }),
+    ).rejects.toThrow('Request failed with status code 403');
+  });
+
+  test('should rethrow 429 rate limit errors', async () => {
+    const { default: axios } = await import('axios');
+    const error = new Error('Request failed with status code 429');
+    (error as any).response = { status: 429, headers: { 'retry-after': '30' } };
+    axios.mockRejectedValue(error);
+    const registryMocked = createMockedRegistry();
+    registryMocked.type = 'hub';
+    registryMocked.name = 'test';
+    await expect(
+      registryMocked.callRegistry({ image: {}, url: 'url', method: 'get' }),
+    ).rejects.toThrow('Request failed with status code 429');
+  });
+
+  test('should rethrow 500 Internal Server Error', async () => {
+    const { default: axios } = await import('axios');
+    const error = new Error('Request failed with status code 500');
+    (error as any).response = { status: 500 };
+    axios.mockRejectedValue(error);
+    const registryMocked = createMockedRegistry();
+    registryMocked.type = 'hub';
+    registryMocked.name = 'test';
+    await expect(
+      registryMocked.callRegistry({ image: {}, url: 'url', method: 'get' }),
+    ).rejects.toThrow('Request failed with status code 500');
+  });
+
+  test('should rethrow 502 Bad Gateway errors', async () => {
+    const { default: axios } = await import('axios');
+    const error = new Error('Request failed with status code 502');
+    (error as any).response = { status: 502 };
+    axios.mockRejectedValue(error);
+    const registryMocked = createMockedRegistry();
+    registryMocked.type = 'hub';
+    registryMocked.name = 'test';
+    await expect(
+      registryMocked.callRegistry({ image: {}, url: 'url', method: 'get' }),
+    ).rejects.toThrow('Request failed with status code 502');
+  });
+
+  test('should rethrow 503 Service Unavailable errors', async () => {
+    const { default: axios } = await import('axios');
+    const error = new Error('Request failed with status code 503');
+    (error as any).response = { status: 503 };
+    axios.mockRejectedValue(error);
+    const registryMocked = createMockedRegistry();
+    registryMocked.type = 'hub';
+    registryMocked.name = 'test';
+    await expect(
+      registryMocked.callRegistry({ image: {}, url: 'url', method: 'get' }),
+    ).rejects.toThrow('Request failed with status code 503');
+  });
+
+  test('should rethrow timeout errors', async () => {
+    const { default: axios } = await import('axios');
+    const error = new Error('timeout of 15000ms exceeded');
+    (error as any).code = 'ECONNABORTED';
+    axios.mockRejectedValue(error);
+    const registryMocked = createMockedRegistry();
+    registryMocked.type = 'hub';
+    registryMocked.name = 'test';
+    await expect(
+      registryMocked.callRegistry({ image: {}, url: 'url', method: 'get' }),
+    ).rejects.toThrow('timeout of 15000ms exceeded');
+  });
+
+  test('should rethrow DNS resolution failure errors', async () => {
+    const { default: axios } = await import('axios');
+    const error = new Error('getaddrinfo ENOTFOUND registry.nonexistent.tld');
+    (error as any).code = 'ENOTFOUND';
+    axios.mockRejectedValue(error);
+    const registryMocked = createMockedRegistry();
+    registryMocked.type = 'hub';
+    registryMocked.name = 'test';
+    await expect(
+      registryMocked.callRegistry({ image: {}, url: 'url', method: 'get' }),
+    ).rejects.toThrow('getaddrinfo ENOTFOUND registry.nonexistent.tld');
+  });
+
+  test('should rethrow non-Error rejection values', async () => {
+    const { default: axios } = await import('axios');
+    axios.mockRejectedValue('plain string error');
+    const registryMocked = createMockedRegistry();
+    registryMocked.type = 'hub';
+    registryMocked.name = 'test';
+    await expect(
+      registryMocked.callRegistry({ image: {}, url: 'url', method: 'get' }),
+    ).rejects.toBe('plain string error');
   });
 
   test('should return full response when resolveWithFullResponse is true', async () => {

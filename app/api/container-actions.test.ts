@@ -121,12 +121,10 @@ describe('Container Actions Router', () => {
 
       expect(dockerContainer.start).toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          message: 'Container started successfully',
-          result: expect.any(Object),
-        }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        message: 'Container started successfully',
+        result: expect.any(Object),
+      });
       const contractValidation = validateOpenApiJsonResponse({
         path: '/api/containers/{id}/start',
         method: 'post',
@@ -146,9 +144,7 @@ describe('Container Actions Router', () => {
       await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(404);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: 'Container not found' }),
-      );
+      expect(res.json).toHaveBeenCalledWith({ error: 'Container not found' });
     });
 
     test('should return 404 when no docker trigger found', async () => {
@@ -161,9 +157,9 @@ describe('Container Actions Router', () => {
       await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(404);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: expect.stringContaining('No docker trigger found') }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        error: expect.stringContaining('No docker trigger found'),
+      });
     });
 
     test('should return 403 when feature flag is disabled', async () => {
@@ -175,9 +171,7 @@ describe('Container Actions Router', () => {
       await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(403);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: 'Container actions are disabled' }),
-      );
+      expect(res.json).toHaveBeenCalledWith({ error: 'Container actions are disabled' });
     });
 
     test('should return 500 when Docker API throws error', async () => {
@@ -193,9 +187,7 @@ describe('Container Actions Router', () => {
       await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: 'Error performing start on container' }),
-      );
+      expect(res.json).toHaveBeenCalledWith({ error: 'container already started' });
     });
 
     test('should stringify non-Error Docker API failures', async () => {
@@ -211,9 +203,7 @@ describe('Container Actions Router', () => {
       await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: 'Error performing start on container' }),
-      );
+      expect(res.json).toHaveBeenCalledWith({ error: 'start failed as string' });
     });
 
     test('should insert audit entry on success', async () => {
@@ -293,12 +283,10 @@ describe('Container Actions Router', () => {
 
       expect(mockUpdateContainer).not.toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          message: 'Container started successfully',
-          result: container,
-        }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        message: 'Container started successfully',
+        result: container,
+      });
     });
   });
 
@@ -316,12 +304,10 @@ describe('Container Actions Router', () => {
 
       expect(dockerContainer.stop).toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          message: 'Container stopped successfully',
-          result: expect.any(Object),
-        }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        message: 'Container stopped successfully',
+        result: expect.any(Object),
+      });
     });
 
     test('should return 403 when feature flag is disabled', async () => {
@@ -333,9 +319,7 @@ describe('Container Actions Router', () => {
       await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(403);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: 'Container actions are disabled' }),
-      );
+      expect(res.json).toHaveBeenCalledWith({ error: 'Container actions are disabled' });
     });
 
     test('should return 500 when Docker API throws error', async () => {
@@ -351,9 +335,7 @@ describe('Container Actions Router', () => {
       await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: 'Error performing stop on container' }),
-      );
+      expect(res.json).toHaveBeenCalledWith({ error: 'stop failed' });
     });
   });
 
@@ -371,12 +353,10 @@ describe('Container Actions Router', () => {
 
       expect(dockerContainer.restart).toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          message: 'Container restarted successfully',
-          result: expect.any(Object),
-        }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        message: 'Container restarted successfully',
+        result: expect.any(Object),
+      });
     });
 
     test('should return 403 when feature flag is disabled', async () => {
@@ -388,9 +368,7 @@ describe('Container Actions Router', () => {
       await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(403);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: 'Container actions are disabled' }),
-      );
+      expect(res.json).toHaveBeenCalledWith({ error: 'Container actions are disabled' });
     });
 
     test('should insert audit entry with correct action', async () => {
@@ -425,9 +403,7 @@ describe('Container Actions Router', () => {
       await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: 'Error performing restart on container' }),
-      );
+      expect(res.json).toHaveBeenCalledWith({ error: 'restart failed' });
     });
   });
 
@@ -439,8 +415,16 @@ describe('Container Actions Router', () => {
         image: { name: 'nginx' },
         updateAvailable: true,
       };
-      const updatedContainer = { ...container, image: { name: 'nginx:latest' } };
-      mockGetContainer.mockReturnValueOnce(container).mockReturnValueOnce(updatedContainer);
+      const clearedContainer = {
+        ...container,
+        image: { name: 'nginx:latest' },
+        updateAvailable: false,
+      };
+      mockGetContainer
+        .mockReturnValueOnce(container) // initial lookup
+        .mockReturnValueOnce(container) // post-trigger check (still has updateAvailable)
+        .mockReturnValueOnce(clearedContainer); // after updateContainer clears flag
+      mockUpdateContainer.mockReturnValue(clearedContainer);
       const mockTriggerFn = vi.fn().mockResolvedValue(undefined);
       const trigger = { type: 'docker', trigger: mockTriggerFn };
       mockGetState.mockReturnValue({ trigger: { 'docker.default': trigger } });
@@ -451,13 +435,14 @@ describe('Container Actions Router', () => {
       await handler(req, res);
 
       expect(mockTriggerFn).toHaveBeenCalledWith(container);
-      expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          message: 'Container updated successfully',
-          result: updatedContainer,
-        }),
+      expect(mockUpdateContainer).toHaveBeenCalledWith(
+        expect.objectContaining({ updateAvailable: false }),
       );
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        message: 'Container updated successfully',
+        result: clearedContainer,
+      });
     });
 
     test('should update container successfully with a dockercompose trigger', async () => {
@@ -467,8 +452,16 @@ describe('Container Actions Router', () => {
         image: { name: 'nginx' },
         updateAvailable: true,
       };
-      const updatedContainer = { ...container, image: { name: 'nginx:latest' } };
-      mockGetContainer.mockReturnValueOnce(container).mockReturnValueOnce(updatedContainer);
+      const clearedContainer = {
+        ...container,
+        image: { name: 'nginx:latest' },
+        updateAvailable: false,
+      };
+      mockGetContainer
+        .mockReturnValueOnce(container) // initial lookup
+        .mockReturnValueOnce(container) // post-trigger check
+        .mockReturnValueOnce(clearedContainer); // after clearing flag
+      mockUpdateContainer.mockReturnValue(clearedContainer);
       const mockTriggerFn = vi.fn().mockResolvedValue(undefined);
       const trigger = { type: 'dockercompose', trigger: mockTriggerFn };
       mockGetState.mockReturnValue({ trigger: { 'dockercompose.default': trigger } });
@@ -479,13 +472,48 @@ describe('Container Actions Router', () => {
       await handler(req, res);
 
       expect(mockTriggerFn).toHaveBeenCalledWith(container);
-      expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          message: 'Container updated successfully',
-          result: updatedContainer,
-        }),
+      expect(mockUpdateContainer).toHaveBeenCalledWith(
+        expect.objectContaining({ updateAvailable: false }),
       );
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        message: 'Container updated successfully',
+        result: clearedContainer,
+      });
+    });
+
+    test('should not clear updateAvailable when the post-trigger container is already up to date', async () => {
+      const container = {
+        id: 'c1',
+        name: 'nginx',
+        image: { name: 'nginx' },
+        updateAvailable: true,
+      };
+      const updatedContainer = {
+        ...container,
+        image: { name: 'nginx:latest' },
+        updateAvailable: false,
+      };
+      mockGetContainer
+        .mockReturnValueOnce(container)
+        .mockReturnValueOnce(updatedContainer)
+        .mockReturnValueOnce(updatedContainer);
+      const mockTriggerFn = vi.fn().mockResolvedValue(undefined);
+      const trigger = { type: 'docker', trigger: mockTriggerFn };
+      mockGetState.mockReturnValue({ trigger: { 'docker.default': trigger } });
+
+      const handler = getHandler('post', '/:id/update');
+      const req = createMockRequest({ params: { id: 'c1' } });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(mockTriggerFn).toHaveBeenCalledWith(container);
+      expect(mockUpdateContainer).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        message: 'Container updated successfully',
+        result: updatedContainer,
+      });
     });
 
     test('should select the dockercompose trigger matching container compose labels', async () => {
@@ -543,9 +571,7 @@ describe('Container Actions Router', () => {
       await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(404);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: 'Container not found' }),
-      );
+      expect(res.json).toHaveBeenCalledWith({ error: 'Container not found' });
     });
 
     test('should return 400 when no update available', async () => {
@@ -563,9 +589,56 @@ describe('Container Actions Router', () => {
       await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: 'No update available for this container' }),
-      );
+      expect(res.json).toHaveBeenCalledWith({ error: 'No update available for this container' });
+    });
+
+    test('should return 409 when target is a temporary rollback -old container', async () => {
+      const container = {
+        id: 'c1',
+        name: 'nginx-old-1773933154786',
+        image: { name: 'nginx' },
+        updateAvailable: true,
+      };
+      mockGetContainer.mockReturnValue(container);
+      const mockTriggerFn = vi.fn().mockResolvedValue(undefined);
+      const trigger = { type: 'docker', trigger: mockTriggerFn };
+      mockGetState.mockReturnValue({ trigger: { 'docker.default': trigger } });
+
+      const handler = getHandler('post', '/:id/update');
+      const req = createMockRequest({ params: { id: 'c1' } });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(409);
+      expect(res.json).toHaveBeenCalledWith({
+        error: expect.stringContaining('temporary rollback container'),
+      });
+      expect(mockTriggerFn).not.toHaveBeenCalled();
+    });
+
+    test('should return 409 when update is blocked by a security scan', async () => {
+      const container = {
+        id: 'c1',
+        name: 'nginx',
+        image: { name: 'nginx' },
+        updateAvailable: true,
+        security: {
+          scan: {
+            status: 'blocked',
+          },
+        },
+      };
+      mockGetContainer.mockReturnValue(container);
+
+      const handler = getHandler('post', '/:id/update');
+      const req = createMockRequest({ params: { id: 'c1' } });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(409);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Update blocked by security scan. Use force-update to override.',
+      });
     });
 
     test('should return 404 when no docker trigger found', async () => {
@@ -584,9 +657,9 @@ describe('Container Actions Router', () => {
       await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(404);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: expect.stringContaining('No docker trigger found') }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        error: expect.stringContaining('No docker trigger found'),
+      });
     });
 
     test('should return 403 when feature flag is disabled', async () => {
@@ -598,9 +671,7 @@ describe('Container Actions Router', () => {
       await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(403);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: 'Container actions are disabled' }),
-      );
+      expect(res.json).toHaveBeenCalledWith({ error: 'Container actions are disabled' });
     });
 
     test('should return 500 when trigger throws error', async () => {
@@ -621,9 +692,7 @@ describe('Container Actions Router', () => {
       await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: 'Error updating container' }),
-      );
+      expect(res.json).toHaveBeenCalledWith({ error: 'pull failed' });
     });
 
     test('should insert audit entry on success', async () => {
@@ -722,9 +791,7 @@ describe('Container Actions Router', () => {
       await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: 'Error updating container' }),
-      );
+      expect(res.json).toHaveBeenCalledWith({ error: 'update failed as string' });
     });
   });
 });

@@ -13,6 +13,10 @@ mau.configuration = {
 
 vi.mock('axios');
 
+beforeEach(() => {
+  vi.clearAllMocks();
+});
+
 test('validatedConfiguration should initialize when configuration is empty string', async () => {
   expect(mau.validateConfiguration('')).toStrictEqual({});
 });
@@ -149,6 +153,32 @@ test('authenticate should throw when token endpoint returns empty response', asy
       },
     ),
   ).rejects.toThrow('does not contain token');
+});
+
+test('authenticate should propagate network errors', async () => {
+  axios.mockRejectedValue(new Error('connect ECONNREFUSED 127.0.0.1:443'));
+
+  await expect(mau.authenticate({ name: 'team/image' }, { headers: {} })).rejects.toThrow(
+    'connect ECONNREFUSED 127.0.0.1:443',
+  );
+});
+
+test('authenticate should propagate timeout errors', async () => {
+  axios.mockRejectedValue(new Error('timeout of 15000ms exceeded'));
+
+  await expect(mau.authenticate({ name: 'team/image' }, { headers: {} })).rejects.toThrow(
+    'timeout of 15000ms exceeded',
+  );
+});
+
+test('authenticate should propagate 429 rate limit errors', async () => {
+  const error = new Error('Request failed with status code 429');
+  (error as any).response = { status: 429 };
+  axios.mockRejectedValue(error);
+
+  await expect(mau.authenticate({ name: 'team/image' }, { headers: {} })).rejects.toThrow(
+    'Request failed with status code 429',
+  );
 });
 
 test('normalizeImage should return the proper registry v2 endpoint', async () => {

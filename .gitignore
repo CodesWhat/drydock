@@ -25,6 +25,8 @@ lib-cov
 # Coverage directory used by tools like istanbul
 coverage
 *.lcov
+.coverage-gaps.json
+CLAUDE.md
 
 # nyc test coverage
 .nyc_output
@@ -150,6 +152,9 @@ ui/public/fonts/
 # Generated from content/docs/current for Turbopack compatibility
 # Canonical docs are versioned at content/docs/*
 apps/web/content/docs/
+
+# Stryker mutation testing sandboxes
+.stryker-tmp/
 
 # Storybook build output
 storybook-static/

@@ -8,11 +8,90 @@ export const DASHBOARD_WIDGET_IDS = [
   'stat-registries',
   'recent-updates',
   'security-overview',
+  'resource-usage',
   'host-status',
   'update-breakdown',
 ] as const;
 
 export type DashboardWidgetId = (typeof DASHBOARD_WIDGET_IDS)[number];
+
+interface DashboardWidgetMeta {
+  id: DashboardWidgetId;
+  label: string;
+  category: 'stat' | 'widget';
+  canStretch: boolean;
+  defaultSpan: number;
+}
+
+export const DASHBOARD_WIDGET_META: DashboardWidgetMeta[] = [
+  {
+    id: 'stat-containers',
+    label: 'Containers',
+    category: 'stat',
+    canStretch: false,
+    defaultSpan: 1,
+  },
+  {
+    id: 'stat-updates',
+    label: 'Updates Available',
+    category: 'stat',
+    canStretch: false,
+    defaultSpan: 1,
+  },
+  {
+    id: 'stat-security',
+    label: 'Security Issues',
+    category: 'stat',
+    canStretch: false,
+    defaultSpan: 1,
+  },
+  {
+    id: 'stat-registries',
+    label: 'Registries',
+    category: 'stat',
+    canStretch: false,
+    defaultSpan: 1,
+  },
+  {
+    id: 'recent-updates',
+    label: 'Updates Available',
+    category: 'widget',
+    canStretch: true,
+    defaultSpan: 2,
+  },
+  {
+    id: 'security-overview',
+    label: 'Security Overview',
+    category: 'widget',
+    canStretch: false,
+    defaultSpan: 1,
+  },
+  {
+    id: 'resource-usage',
+    label: 'Resource Usage',
+    category: 'widget',
+    canStretch: false,
+    defaultSpan: 1,
+  },
+  {
+    id: 'host-status',
+    label: 'Host Status',
+    category: 'widget',
+    canStretch: false,
+    defaultSpan: 1,
+  },
+  {
+    id: 'update-breakdown',
+    label: 'Update Breakdown',
+    category: 'widget',
+    canStretch: true,
+    defaultSpan: 2,
+  },
+];
+
+export interface WidgetOrderItem {
+  id: DashboardWidgetId;
+}
 
 export interface DashboardServerInfo {
   configuration?: {
@@ -65,6 +144,7 @@ export interface RecentUpdateRow {
   updateKind: UpdateKind | null;
   running: boolean;
   registryError?: string;
+  blocked: boolean;
 }
 
 export interface DashboardServerRow {

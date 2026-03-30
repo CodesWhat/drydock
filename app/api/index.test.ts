@@ -1,25 +1,38 @@
-const { mockApp, mockFs, mockHttps, mockGetServerConfiguration } = vi.hoisted(() => ({
-  mockApp: {
-    disable: vi.fn(),
-    set: vi.fn(),
-    use: vi.fn(),
-    listen: vi.fn((port, cb) => cb()),
-  },
-  mockFs: {
-    readFileSync: vi.fn(),
-  },
-  mockHttps: {
-    createServer: vi.fn(() => ({
+const { mockApp, mockFs, mockHttps, mockGetServerConfiguration, mockHttpServer, mockHttpsServer } =
+  vi.hoisted(() => {
+    const mockHttpServer = {
+      on: vi.fn(),
+    };
+    const mockHttpsServer = {
+      on: vi.fn(),
       listen: vi.fn((port, cb) => cb()),
-    })),
-  },
-  mockGetServerConfiguration: vi.fn(() => ({
-    enabled: true,
-    port: 3000,
-    cors: {},
-    tls: {},
-  })),
-}));
+    };
+    return {
+      mockApp: {
+        disable: vi.fn(),
+        set: vi.fn(),
+        use: vi.fn(),
+        listen: vi.fn((port, cb) => {
+          cb();
+          return mockHttpServer;
+        }),
+      },
+      mockFs: {
+        readFileSync: vi.fn(),
+      },
+      mockHttpServer,
+      mockHttpsServer,
+      mockHttps: {
+        createServer: vi.fn(() => mockHttpsServer),
+      },
+      mockGetServerConfiguration: vi.fn(() => ({
+        enabled: true,
+        port: 3000,
+        cors: {},
+        tls: {},
+      })),
+    };
+  });
 const mockLog = vi.hoisted(() => ({
   debug: vi.fn(),
   info: vi.fn(),
@@ -29,6 +42,9 @@ const mockLog = vi.hoisted(() => ({
 const mockDdEnvVars = vi.hoisted(() => ({}) as Record<string, string | undefined>);
 const mockHelmet = vi.hoisted(() => vi.fn(() => 'helmet-middleware'));
 const mockIsInternetlessModeEnabled = vi.hoisted(() => vi.fn(() => false));
+const mockGetSessionMiddleware = vi.hoisted(() => vi.fn(() => vi.fn()));
+const mockAttachContainerLogStreamWebSocketServer = vi.hoisted(() => vi.fn());
+const mockAttachSystemLogStreamWebSocketServer = vi.hoisted(() => vi.fn());
 
 vi.mock('node:fs', () => ({
   default: mockFs,
@@ -69,6 +85,7 @@ vi.mock('../log', () => ({
 
 vi.mock('./auth', () => ({
   init: vi.fn(),
+  getSessionMiddleware: mockGetSessionMiddleware,
 }));
 
 vi.mock('./api', () => ({
@@ -85,6 +102,14 @@ vi.mock('./prometheus', () => ({
 
 vi.mock('./health', () => ({
   init: vi.fn(() => 'health-router'),
+}));
+
+vi.mock('./container/log-stream', () => ({
+  attachContainerLogStreamWebSocketServer: mockAttachContainerLogStreamWebSocketServer,
+}));
+
+vi.mock('./log-stream', () => ({
+  attachSystemLogStreamWebSocketServer: mockAttachSystemLogStreamWebSocketServer,
 }));
 
 vi.mock('../configuration', () => ({
@@ -105,8 +130,15 @@ describe('API Index', () => {
     mockApp.set.mockClear();
     mockApp.use.mockClear();
     mockApp.listen.mockClear();
+    mockHttpServer.on.mockClear();
+    mockHttpsServer.listen.mockClear();
+    mockHttpsServer.on.mockClear();
     mockHelmet.mockClear();
     mockIsInternetlessModeEnabled.mockReturnValue(false);
+    mockGetSessionMiddleware.mockReset();
+    mockGetSessionMiddleware.mockReturnValue(vi.fn());
+    mockAttachContainerLogStreamWebSocketServer.mockClear();
+    mockAttachSystemLogStreamWebSocketServer.mockClear();
     Object.keys(mockDdEnvVars).forEach((key) => delete mockDdEnvVars[key]);
   });
 
@@ -142,6 +174,54 @@ describe('API Index', () => {
     await indexRouter.init();
 
     expect(mockApp.listen).toHaveBeenCalledWith(3000, expect.any(Function));
+    expect(mockAttachContainerLogStreamWebSocketServer).toHaveBeenCalledWith({
+      server: mockHttpServer,
+      sessionMiddleware: expect.any(Function),
+      serverConfiguration: expect.objectContaining({ enabled: true }),
+      isRateLimited: expect.any(Function),
+    });
+    expect(mockAttachSystemLogStreamWebSocketServer).toHaveBeenCalledWith({
+      server: mockHttpServer,
+      sessionMiddleware: expect.any(Function),
+      serverConfiguration: expect.objectContaining({ enabled: true }),
+      isRateLimited: expect.any(Function),
+    });
+  });
+
+  test('should share a single rate limiter across both WebSocket log stream gateways', async () => {
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {},
+      tls: {},
+    });
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    await indexRouter.init();
+
+    const containerIsRateLimited =
+      mockAttachContainerLogStreamWebSocketServer.mock.calls[0][0].isRateLimited;
+    const systemIsRateLimited =
+      mockAttachSystemLogStreamWebSocketServer.mock.calls[0][0].isRateLimited;
+    expect(containerIsRateLimited).toBe(systemIsRateLimited);
+  });
+
+  test('isRateLimited callback should execute and report allowed traffic for a fresh key', async () => {
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {},
+      tls: {},
+    });
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    await indexRouter.init();
+
+    const isRateLimited =
+      mockAttachContainerLogStreamWebSocketServer.mock.calls[0][0].isRateLimited;
+    expect(isRateLimited('127.0.0.1')).toBe(false);
   });
 
   test('should start HTTP server when TLS is explicitly disabled', async () => {

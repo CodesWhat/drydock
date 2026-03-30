@@ -99,7 +99,7 @@ function makeContext(overrides: Record<string, unknown> = {}) {
   const collapsedGroups = ref(new Set<string>());
   const groupUpdateInProgress = ref(new Set<string>());
   const containerActionsEnabled = ref(true);
-  const actionInProgress = ref<string | null>(null);
+  const actionInProgress = ref(new Set<string>());
   const containerViewMode = ref<'table' | 'cards' | 'list'>('table');
   const tableColumns = ref([
     { key: 'icon', label: '', align: 'text-center' },
@@ -538,6 +538,57 @@ describe('ContainersGroupedViews', () => {
     expect(spies.confirmDelete).toHaveBeenCalled();
   });
 
+  it('renders a single teleported actions menu when one container menu is open across groups', async () => {
+    const alpha = makeContainer({
+      id: 'c-alpha',
+      name: 'alpha',
+      newTag: '2.0.0',
+      bouncer: 'blocked',
+      status: 'running',
+    });
+    const beta = makeContainer({
+      id: 'c-beta',
+      name: 'beta',
+      newTag: null,
+      status: 'stopped',
+    });
+
+    const { context, refs } = makeContext();
+    context.groupByStack.value = true;
+    context.containerViewMode.value = 'table';
+    context.tableActionStyle.value = 'buttons';
+    context.filteredContainers.value = [alpha, beta];
+    context.displayContainers.value = [alpha, beta];
+    context.renderGroups.value = [
+      {
+        key: 'stack-a',
+        name: 'stack-a',
+        containers: [alpha],
+        containerCount: 1,
+        updatesAvailable: 1,
+        updatableCount: 1,
+      },
+      {
+        key: 'stack-b',
+        name: 'stack-b',
+        containers: [beta],
+        containerCount: 1,
+        updatesAvailable: 0,
+        updatableCount: 0,
+      },
+    ];
+    refs.openActionsMenu.value = 'alpha';
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+    await nextTick();
+
+    const deleteButtons = wrapper
+      .findAll('button')
+      .filter((button) => button.text().trim() === 'Delete');
+    expect(deleteButtons).toHaveLength(1);
+  });
+
   it('covers card/list view events and footer action handlers', async () => {
     const running = makeContainer({
       id: 'c-card-1',
@@ -546,7 +597,7 @@ describe('ContainersGroupedViews', () => {
       updateKind: 'major',
       updateMaturity: 'fresh',
       status: 'running',
-      bouncer: 'blocked',
+      bouncer: 'safe',
       registryError: 'timeout',
       server: 'local-main',
     });
@@ -671,7 +722,7 @@ describe('ContainersGroupedViews', () => {
     refs.groupByStack.value = true;
     refs.containerActionsEnabled.value = false;
     refs.groupUpdateInProgress.value = new Set(['stack-disabled']);
-    refs.actionInProgress.value = 'alpha';
+    refs.actionInProgress.value = new Set(['alpha']);
     refs.filteredContainers.value = [item];
     refs.displayContainers.value = [item];
     refs.renderGroups.value = [
@@ -687,12 +738,11 @@ describe('ContainersGroupedViews', () => {
     mocked.context = context;
 
     const wrapper = mountSubject();
-    const tableLock = wrapper
-      .findAll('button.w-8.h-8')
-      .find((button) => button.attributes('disabled') !== undefined);
-    expect(tableLock).toBeDefined();
-    (tableLock!.element as HTMLButtonElement).disabled = false;
-    await tableLock!.trigger('click');
+    const tableLockBtns = wrapper.findAll('button[disabled]');
+    const tableLockBtn = tableLockBtns[0];
+    expect(tableLockBtn).toBeDefined();
+    (tableLockBtn!.element as HTMLButtonElement).disabled = false;
+    await tableLockBtn!.trigger('click');
   });
 
   it('covers compact table badge branches across kind/maturity/policy/status variants', async () => {
@@ -802,19 +852,19 @@ describe('ContainersGroupedViews', () => {
     ];
     refs.containerViewMode.value = 'table';
     refs.tableActionStyle.value = 'buttons';
-    refs.actionInProgress.value = 'alpha';
+    refs.actionInProgress.value = new Set(['alpha']);
     mocked.context = context;
 
     const wrapper = mountSubject();
     expect(wrapper.text()).toContain('alpha');
 
-    refs.actionInProgress.value = 'beta';
+    refs.actionInProgress.value = new Set(['beta']);
     await nextTick();
-    refs.actionInProgress.value = 'gamma';
+    refs.actionInProgress.value = new Set(['gamma']);
     await nextTick();
 
     refs.tableActionStyle.value = 'icons';
-    refs.actionInProgress.value = 'gamma';
+    refs.actionInProgress.value = new Set(['gamma']);
     await nextTick();
   });
 
@@ -879,23 +929,24 @@ describe('ContainersGroupedViews', () => {
         updatableCount: 4,
       },
     ];
-    refs.actionInProgress.value = 'beta';
+    refs.actionInProgress.value = new Set(['beta']);
     mocked.context = context;
 
     const wrapper = mountSubject();
 
-    refs.actionInProgress.value = 'gamma';
+    refs.actionInProgress.value = new Set(['gamma']);
     await nextTick();
 
     refs.containerActionsEnabled.value = false;
-    refs.actionInProgress.value = null;
+    refs.actionInProgress.value = new Set();
     await nextTick();
-    const cardLock = wrapper
-      .findAll('button.w-7.h-7')
-      .find((button) => button.attributes('disabled') !== undefined);
-    expect(cardLock).toBeDefined();
-    (cardLock!.element as HTMLButtonElement).disabled = false;
-    await cardLock!.trigger('click');
+    const cardLockButtons = wrapper
+      .findAll('button[disabled]')
+      .filter((b) => b.classes().includes('w-10') || b.classes().includes('w-8'));
+    const cardLockBtn = cardLockButtons[0];
+    expect(cardLockBtn).toBeDefined();
+    (cardLockBtn!.element as HTMLButtonElement).disabled = false;
+    await cardLockBtn!.trigger('click');
 
     refs.containerViewMode.value = 'list';
     refs.containerActionsEnabled.value = true;

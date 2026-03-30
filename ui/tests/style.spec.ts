@@ -16,16 +16,12 @@ describe('style.css scrollbar rules', () => {
     expect(css).toMatch(/::-webkit-scrollbar-track\s*\{[^}]*background:\s*transparent/);
   });
 
-  it('enables overflow overlay for .overflow-auto when supported', () => {
-    expect(css).toMatch(/@supports\s*\(overflow:\s*overlay\)/);
-    expect(css).toMatch(/\.overflow-auto\s*\{[^}]*overflow:\s*overlay;/);
+  it('does not use deprecated overflow overlay', () => {
+    expect(css).not.toMatch(/@supports\s*\(overflow:\s*overlay\)/);
+    expect(css).not.toMatch(/overflow:\s*overlay/);
   });
 
-  it('enables overflow-y overlay for .overflow-y-auto when supported', () => {
-    expect(css).toMatch(/\.overflow-y-auto\s*\{[^}]*overflow-y:\s*overlay;/);
-  });
-
-  it('enables overflow-x overlay for .overflow-x-auto when supported', () => {
-    expect(css).toMatch(/\.overflow-x-auto\s*\{[^}]*overflow-x:\s*overlay;/);
+  it('provides dd-scroll-stable utility with scrollbar-gutter stable', () => {
+    expect(css).toMatch(/\.dd-scroll-stable\s*\{[^}]*scrollbar-gutter:\s*stable/);
   });
 });

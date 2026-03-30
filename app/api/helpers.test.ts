@@ -125,7 +125,11 @@ describe('handleContainerActionError', () => {
       status: 'error',
       details: error.message,
     });
-    expect(mockSendErrorResponse).toHaveBeenCalledWith(res, 500, 'Error stopping container');
+    expect(mockSendErrorResponse).toHaveBeenCalledWith(
+      res,
+      500,
+      'docker stop failed\nreason: timeout',
+    );
   });
 
   test('stringifies non-Error failures for audit details and return value', () => {
@@ -154,6 +158,6 @@ describe('handleContainerActionError', () => {
       status: 'error',
       details: '503',
     });
-    expect(mockSendErrorResponse).toHaveBeenCalledWith(res, 500, 'Error starting container');
+    expect(mockSendErrorResponse).toHaveBeenCalledWith(res, 500, '503');
   });
 });

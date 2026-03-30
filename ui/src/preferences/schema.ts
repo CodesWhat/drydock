@@ -3,6 +3,14 @@ import type { RadiusPresetId } from './radius';
 
 export type ViewMode = 'table' | 'cards' | 'list';
 
+export interface PersistedLayoutItem {
+  i: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
 export interface PreferencesSchema {
   schemaVersion: number;
   theme: { family: ThemeFamily; variant: string };
@@ -24,7 +32,7 @@ export interface PreferencesSchema {
     };
     columns: string[];
   };
-  dashboard: { widgetOrder: string[] };
+  dashboard: { widgetOrder: string[]; hiddenWidgets: string[]; gridLayout: PersistedLayoutItem[] };
   views: {
     security: { mode: ViewMode; sortField: string; sortAsc: boolean };
     audit: { mode: ViewMode };
@@ -37,6 +45,19 @@ export interface PreferencesSchema {
     auth: { mode: ViewMode };
   };
 }
+
+export const CONTAINER_TABLE_COLUMN_KEYS = [
+  'icon',
+  'name',
+  'version',
+  'kind',
+  'status',
+  'imageAge',
+  'server',
+  'registry',
+] as const;
+
+export const CONTAINER_TABLE_REQUIRED_COLUMN_KEYS = ['icon', 'name'] as const;
 
 export const DEFAULTS: PreferencesSchema = {
   schemaVersion: 1,
@@ -57,7 +78,7 @@ export const DEFAULTS: PreferencesSchema = {
       server: 'all',
       kind: 'all',
     },
-    columns: ['icon', 'name', 'version', 'kind', 'status', 'bouncer', 'server', 'registry'],
+    columns: [...CONTAINER_TABLE_COLUMN_KEYS],
   },
   dashboard: {
     widgetOrder: [
@@ -67,9 +88,12 @@ export const DEFAULTS: PreferencesSchema = {
       'stat-registries',
       'recent-updates',
       'security-overview',
+      'resource-usage',
       'host-status',
       'update-breakdown',
     ],
+    hiddenWidgets: [],
+    gridLayout: [],
   },
   views: {
     security: { mode: 'table', sortField: 'critical', sortAsc: false },

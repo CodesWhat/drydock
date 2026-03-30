@@ -20,32 +20,34 @@ const props = defineProps<{
   resourceFields: AgentDetailField[];
   systemFields: AgentDetailField[];
 }>();
+
+defineEmits<{ 'view-containers': [] }>();
 </script>
 
 <template>
   <div class="p-4 space-y-5">
     <div v-if="props.resourceFields.length > 0">
-      <div class="text-[0.625rem] font-semibold uppercase tracking-wider mb-2 dd-text-muted">Resources</div>
+      <div class="text-2xs font-semibold uppercase tracking-wider mb-2 dd-text-muted">Resources</div>
       <div class="grid grid-cols-2 gap-2">
         <div
           v-for="field in props.resourceFields"
           :key="field.label"
-          class="px-2.5 py-1.5 dd-rounded text-[0.6875rem]"
+          class="px-2.5 py-1.5 dd-rounded text-2xs-plus"
           :style="{ backgroundColor: 'var(--dd-bg-inset)' }"
         >
-          <div class="text-[0.625rem] dd-text-muted">{{ field.label }}</div>
+          <div class="text-2xs dd-text-muted">{{ field.label }}</div>
           <div class="font-semibold" :class="field.muted ? 'dd-text-muted' : 'dd-text'">{{ field.value }}</div>
         </div>
       </div>
     </div>
 
     <div v-if="props.systemFields.length > 0">
-      <div class="text-[0.625rem] font-semibold uppercase tracking-wider mb-2 dd-text-muted">System</div>
+      <div class="text-2xs font-semibold uppercase tracking-wider mb-2 dd-text-muted">System</div>
       <div class="space-y-1">
         <div
           v-for="field in props.systemFields"
           :key="field.label"
-          class="flex items-center justify-between px-2.5 py-1.5 dd-rounded text-[0.6875rem]"
+          class="flex items-center justify-between px-2.5 py-1.5 dd-rounded text-2xs-plus"
           :style="{ backgroundColor: 'var(--dd-bg-inset)' }"
         >
           <span class="dd-text-muted">{{ field.label }}</span>
@@ -55,15 +57,15 @@ const props = defineProps<{
     </div>
 
     <div>
-      <div class="text-[0.625rem] font-semibold uppercase tracking-wider mb-2 dd-text-muted">Containers</div>
+      <div class="text-2xs font-semibold uppercase tracking-wider mb-2 dd-text-muted">Containers</div>
       <div class="grid grid-cols-3 gap-2 text-center">
         <div class="px-2 py-2 dd-rounded" :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
           <div class="text-lg font-bold dd-text">{{ props.agent.containers.total }}</div>
-          <div class="text-[0.625rem] dd-text-muted">Total</div>
+          <div class="text-2xs dd-text-muted">Total</div>
         </div>
         <div class="px-2 py-2 dd-rounded" :style="{ backgroundColor: 'var(--dd-success-muted)' }">
           <div class="text-lg font-bold" :style="{ color: 'var(--dd-success)' }">{{ props.agent.containers.running }}</div>
-          <div class="text-[0.625rem]" :style="{ color: 'var(--dd-success)' }">Running</div>
+          <div class="text-2xs" :style="{ color: 'var(--dd-success)' }">Running</div>
         </div>
         <div
           class="px-2 py-2 dd-rounded"
@@ -76,51 +78,61 @@ const props = defineProps<{
             {{ props.agent.containers.stopped }}
           </div>
           <div
-            class="text-[0.625rem]"
+            class="text-2xs"
             :style="{ color: props.agent.containers.stopped > 0 ? 'var(--dd-danger)' : 'var(--dd-text-muted)' }"
           >
             Stopped
           </div>
         </div>
       </div>
+      <AppButton
+        v-if="props.agent.containers.total > 0"
+        size="none"
+        variant="plain"
+        weight="none"
+        class="mt-2 inline-flex items-center gap-1 text-2xs-plus font-medium transition-colors text-drydock-secondary hover:text-drydock-secondary-hover"
+        @click="$emit('view-containers')">
+        <AppIcon name="arrow-right" :size="10" />
+        View containers
+      </AppButton>
     </div>
 
     <div>
-      <div class="text-[0.625rem] font-semibold uppercase tracking-wider mb-2 dd-text-muted">Automation</div>
+      <div class="text-2xs font-semibold uppercase tracking-wider mb-2 dd-text-muted">Automation</div>
       <div class="space-y-2">
-        <div class="px-2.5 py-2 dd-rounded text-[0.6875rem]" :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+        <div class="px-2.5 py-2 dd-rounded text-2xs-plus" :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
           <div class="flex items-center justify-between gap-2">
             <span class="font-semibold dd-text">Watchers</span>
-            <span class="text-[0.625rem] dd-text-muted">{{ props.agent.watchers.length }}</span>
+            <span class="text-2xs dd-text-muted">{{ props.agent.watchers.length }}</span>
           </div>
           <div class="mt-1.5 flex flex-wrap gap-1.5">
             <span
               v-for="watcherName in props.agent.watchers"
               :key="watcherName"
-              class="px-1.5 py-0.5 dd-rounded text-[0.625rem] font-mono dd-bg-elevated dd-text-secondary"
+              class="px-1.5 py-0.5 dd-rounded text-2xs font-mono dd-bg-elevated dd-text-secondary"
             >
               {{ watcherName }}
             </span>
-            <span v-if="props.agent.watchers.length === 0" class="text-[0.625rem] italic dd-text-muted">
+            <span v-if="props.agent.watchers.length === 0" class="text-2xs italic dd-text-muted">
               None
             </span>
           </div>
         </div>
 
-        <div class="px-2.5 py-2 dd-rounded text-[0.6875rem]" :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+        <div class="px-2.5 py-2 dd-rounded text-2xs-plus" :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
           <div class="flex items-center justify-between gap-2">
             <span class="font-semibold dd-text">Triggers</span>
-            <span class="text-[0.625rem] dd-text-muted">{{ props.agent.triggers.length }}</span>
+            <span class="text-2xs dd-text-muted">{{ props.agent.triggers.length }}</span>
           </div>
           <div class="mt-1.5 flex flex-wrap gap-1.5">
             <span
               v-for="triggerName in props.agent.triggers"
               :key="triggerName"
-              class="px-1.5 py-0.5 dd-rounded text-[0.625rem] font-mono dd-bg-elevated dd-text-secondary"
+              class="px-1.5 py-0.5 dd-rounded text-2xs font-mono dd-bg-elevated dd-text-secondary"
             >
               {{ triggerName }}
             </span>
-            <span v-if="props.agent.triggers.length === 0" class="text-[0.625rem] italic dd-text-muted">
+            <span v-if="props.agent.triggers.length === 0" class="text-2xs italic dd-text-muted">
               None
             </span>
           </div>

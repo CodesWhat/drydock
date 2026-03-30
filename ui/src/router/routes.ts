@@ -5,6 +5,9 @@
  *  - `?q=`          — search term (standard across all list views)
  *  - `?tab=`        — section tab (ConfigView: appearance | profile)
  *  - `?filterKind=` — update kind filter (ContainersView)
+ *  - `?filterStatus=` / `?filterRegistry=` / `?filterBouncer=` / `?filterServer=` — container filters (ContainersView)
+ *  - `?sort=`       — container sort (ContainersView)
+ *  - `?groupByStack=` — group containers by stack labels (ContainersView)
  *  - `?view=`       — view mode (AuditView)
  *  - `?page=`       — pagination (AuditView)
  *  - `?action=`     — action filter (AuditView)
@@ -20,6 +23,7 @@ export const ROUTES = {
   LOGIN: '/login',
   DASHBOARD: '/',
   CONTAINERS: '/containers',
+  CONTAINER_LOGS: '/containers/:id/logs',
   SECURITY: '/security',
   SERVERS: '/servers',
   CONFIG: '/config',
@@ -32,5 +36,3 @@ export const ROUTES = {
   AUDIT: '/audit',
   LOGS: '/logs',
 } as const;
-
-export type RoutePath = (typeof ROUTES)[keyof typeof ROUTES];

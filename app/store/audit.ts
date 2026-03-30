@@ -18,6 +18,7 @@ type AuditCollectionEntry = {
 
 type GetAuditEntriesQuery = {
   action?: string;
+  actions?: string[];
   container?: string;
   from?: string;
   to?: string;
@@ -55,10 +56,12 @@ function hasInvalidDateRange(fromDate?: number, toDate?: number): boolean {
   return Number.isNaN(fromDate) || Number.isNaN(toDate);
 }
 
-function buildCollectionQuery(query: GetAuditEntriesQuery): Record<string, string> {
-  const collectionQuery: Record<string, string> = {};
+function buildCollectionQuery(query: GetAuditEntriesQuery): Record<string, unknown> {
+  const collectionQuery: Record<string, unknown> = {};
   if (query.action) {
     collectionQuery['data.action'] = query.action;
+  } else if (query.actions && query.actions.length > 0) {
+    collectionQuery['data.action'] = { $in: query.actions };
   }
   if (query.container) {
     collectionQuery['data.containerName'] = query.container;
@@ -86,7 +89,7 @@ function buildTimestampRangeQuery(
 }
 
 function getChainedAuditEntries(
-  collectionQuery: Record<string, string>,
+  collectionQuery: Record<string, unknown>,
   fromDate?: number,
   toDate?: number,
 ): AuditCollectionEntry[] | undefined {
@@ -128,7 +131,7 @@ function applyDateFilters(
 }
 
 function getFallbackAuditEntries(
-  collectionQuery: Record<string, string>,
+  collectionQuery: Record<string, unknown>,
   fromDate?: number,
   toDate?: number,
 ): AuditCollectionEntry[] {

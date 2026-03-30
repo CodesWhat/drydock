@@ -48,7 +48,7 @@ export function registerStrategies(app: Application): void {
   });
 }
 
-export function getUniqueStrategies(): StrategyDescription[] {
+function getUniqueStrategies(): StrategyDescription[] {
   const strategies = Object.values(registry.getState().authentication).map(
     (authentication: Authentication): StrategyDescription =>
       authentication.getStrategyDescription(),
@@ -80,7 +80,7 @@ export function getAuthStatus(_req: Request, res: Response): void {
 
 /**
  * Return the registered strategies from the registry.
- * Includes any registration warnings so the login UI can surface them.
+ * Includes registration warnings so the login UI can surface them.
  * @param req
  * @param res
  */

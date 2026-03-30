@@ -12,6 +12,31 @@ const mockEmitSecurityAlert = vi.hoisted(() => vi.fn().mockResolvedValue(undefin
 const mockGetOperationsByContainerName = vi.hoisted(() => vi.fn());
 const mockCreateAuthenticatedRouteRateLimitKeyGenerator = vi.hoisted(() => vi.fn(() => undefined));
 const mockIsIdentityAwareRateLimitKeyingEnabled = vi.hoisted(() => vi.fn(() => false));
+const { mockCreateContainerStatsCollector, capturedContainerStatsCollectorDependencies } =
+  vi.hoisted(() => {
+    const captured = {
+      current: undefined as
+        | { getContainerById: (id: string) => unknown; getWatchers: () => Record<string, unknown> }
+        | undefined,
+    };
+
+    return {
+      mockCreateContainerStatsCollector: vi.fn((dependencies: unknown) => {
+        captured.current = dependencies as {
+          getContainerById: (id: string) => unknown;
+          getWatchers: () => Record<string, unknown>;
+        };
+        return {
+          watch: vi.fn(() => vi.fn()),
+          touch: vi.fn(),
+          subscribe: vi.fn(() => vi.fn()),
+          getLatest: vi.fn(() => undefined),
+          getHistory: vi.fn(() => []),
+        };
+      }),
+      capturedContainerStatsCollectorDependencies: captured,
+    };
+  });
 
 vi.mock('express', () => ({
   default: { Router: vi.fn(() => mockRouter) },
@@ -79,6 +104,7 @@ vi.mock('../triggers/providers/Trigger', () => ({
   default: {
     parseIncludeOrIncludeTriggerString: vi.fn((str) => ({ id: str })),
     doesReferenceMatchId: vi.fn(() => false),
+    isRollbackContainer: vi.fn(() => false),
   },
 }));
 
@@ -90,6 +116,10 @@ vi.mock('../agent/manager', () => ({
 
 vi.mock('../event/index.js', () => ({
   emitSecurityAlert: (...args: unknown[]) => mockEmitSecurityAlert(...args),
+}));
+
+vi.mock('../stats/collector.js', () => ({
+  createContainerStatsCollector: (...args: unknown[]) => mockCreateContainerStatsCollector(...args),
 }));
 
 vi.mock('./rate-limit-key.js', () => ({
@@ -211,10 +241,14 @@ describe('Container Router', () => {
       const router = containerRouter.init();
       expect(router.use).toHaveBeenCalledWith('nocache-middleware');
       expect(router.get).toHaveBeenCalledWith('/', expect.any(Function));
+      expect(router.get).toHaveBeenCalledWith('/stats', expect.any(Function));
       expect(router.get).toHaveBeenCalledWith('/summary', expect.any(Function));
       expect(router.get).toHaveBeenCalledWith('/recent-status', expect.any(Function));
       expect(router.post).toHaveBeenCalledWith('/watch', expect.any(Function));
       expect(router.get).toHaveBeenCalledWith('/:id', expect.any(Function));
+      expect(router.get).toHaveBeenCalledWith('/:id/release-notes', expect.any(Function));
+      expect(router.get).toHaveBeenCalledWith('/:id/stats', expect.any(Function));
+      expect(router.get).toHaveBeenCalledWith('/:id/stats/stream', expect.any(Function));
       expect(router.delete).toHaveBeenCalledWith(
         '/:id',
         expect.any(Function),
@@ -301,6 +335,21 @@ describe('Container Router', () => {
           keyGenerator,
         }),
       );
+    });
+
+    test('should wire stats collector dependencies to store and registry state', () => {
+      expect(capturedContainerStatsCollectorDependencies.current).toBeDefined();
+      const dependencies = capturedContainerStatsCollectorDependencies.current!;
+      const container = { id: 'container-1' };
+
+      storeContainer.getContainer.mockReturnValue(container as any);
+      expect(dependencies.getContainerById('container-1')).toBe(container);
+
+      registry.getState.mockReturnValue({
+        watcher: undefined,
+        trigger: {},
+      } as any);
+      expect(dependencies.getWatchers()).toEqual({});
     });
   });
 
@@ -635,6 +684,8 @@ describe('Container Router', () => {
         security: {
           issues: 2,
         },
+        hotUpdates: 0,
+        matureUpdates: 0,
       });
       expect(res.json.mock.calls[0][0]).not.toHaveProperty('vulnerabilities');
     });
@@ -670,6 +721,8 @@ describe('Container Router', () => {
         security: {
           issues: 1,
         },
+        hotUpdates: 0,
+        matureUpdates: 0,
       });
     });
   });
@@ -939,13 +992,15 @@ describe('Container Router', () => {
       const res = createResponse();
       handler({ params: { id: 'c1' } }, res);
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          status: 'not-scanned',
-          vulnerabilities: [],
-          blockingCount: 0,
-        }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        scanner: undefined,
+        scannedAt: undefined,
+        status: 'not-scanned',
+        blockSeverities: [],
+        blockingCount: 0,
+        summary: { unknown: 0, low: 0, medium: 0, high: 0, critical: 0 },
+        vulnerabilities: [],
+      });
     });
 
     test('should return scan payload when available', async () => {
@@ -1012,11 +1067,9 @@ describe('Container Router', () => {
       const res = createResponse();
       await handler({ params: { id: 'c1' }, query: { format: 'foo' } }, res);
       expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          error: expect.stringContaining('Unsupported SBOM format'),
-        }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        error: expect.stringContaining('Unsupported SBOM format'),
+      });
     });
 
     test('should return existing sbom document when available in container security state', async () => {
@@ -1040,12 +1093,14 @@ describe('Container Router', () => {
       await handler({ params: { id: 'c1' }, query: {} }, res);
       expect(mockGenerateImageSbom).not.toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          format: 'spdx-json',
-          document: { SPDXID: 'SPDXRef-DOCUMENT' },
-        }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        generator: 'trivy',
+        image: 'registry.example.com/test/app:1.2.3',
+        generatedAt: '2026-02-15T12:00:00.000Z',
+        format: 'spdx-json',
+        document: { SPDXID: 'SPDXRef-DOCUMENT' },
+        error: undefined,
+      });
     });
 
     test('should generate sbom when existing sbom is generated but lacks requested format', async () => {
@@ -1086,12 +1141,14 @@ describe('Container Router', () => {
         expect.objectContaining({ formats: ['cyclonedx-json'] }),
       );
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          format: 'cyclonedx-json',
-          document: { bomFormat: 'CycloneDX' },
-        }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        generator: 'trivy',
+        image: 'my-registry/test/app:1.2.3',
+        generatedAt: '2026-02-15T12:00:00.000Z',
+        format: 'cyclonedx-json',
+        document: { bomFormat: 'CycloneDX' },
+        error: undefined,
+      });
     });
 
     test('should generate and persist sbom when not cached', async () => {
@@ -1240,11 +1297,9 @@ describe('Container Router', () => {
       const res = createResponse();
       await handler({ params: { id: 'c1' }, query: {} }, res);
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          error: expect.stringContaining('Error generating SBOM'),
-        }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        error: expect.stringContaining('Error generating SBOM'),
+      });
     });
 
     test('should return 500 when sbom generation throws', async () => {
@@ -1404,9 +1459,7 @@ describe('Container Router', () => {
       });
       const res = await callScanContainer();
       expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: 'Security scanner is not configured' }),
-      );
+      expect(res.json).toHaveBeenCalledWith({ error: 'Security scanner is not configured' });
     });
 
     test('should return 400 when scanner is not trivy', async () => {
@@ -1419,9 +1472,7 @@ describe('Container Router', () => {
       });
       const res = await callScanContainer();
       expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: 'Security scanner is not configured' }),
-      );
+      expect(res.json).toHaveBeenCalledWith({ error: 'Security scanner is not configured' });
     });
 
     test('should scan update candidate image when updateKind is present', async () => {
@@ -1995,11 +2046,9 @@ describe('Container Router', () => {
       getServerConfiguration.mockReturnValue({ feature: { delete: true } });
       const res = await callDeleteRemoteContainer(undefined);
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          error: expect.stringContaining('Agent remote not found'),
-        }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        error: expect.stringContaining('Agent remote not found'),
+      });
     });
 
     test('should delete remote container successfully', async () => {
@@ -2028,11 +2077,9 @@ describe('Container Router', () => {
       const mockAgentObj = { deleteContainer: vi.fn().mockRejectedValue(error) };
       const res = await callDeleteRemoteContainer(mockAgentObj);
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          error: expect.stringContaining('Error deleting container on agent'),
-        }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        error: expect.stringContaining('Error deleting container on agent'),
+      });
     });
 
     test('should return 500 on non-error rejection from agent delete', async () => {
@@ -2040,11 +2087,9 @@ describe('Container Router', () => {
       const mockAgentObj = { deleteContainer: vi.fn().mockRejectedValue(null) };
       const res = await callDeleteRemoteContainer(mockAgentObj);
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          error: expect.stringContaining('unknown error'),
-        }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        error: expect.stringContaining('unknown error'),
+      });
     });
 
     test('should handle agent delete error without response', async () => {
@@ -2085,11 +2130,9 @@ describe('Container Router', () => {
       await handler({ query: {} }, res);
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          error: expect.stringContaining('watch failed'),
-        }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        error: expect.stringContaining('watch failed'),
+      });
     });
   });
 
@@ -2106,9 +2149,7 @@ describe('Container Router', () => {
         { type: 'slack', name: 'default', configuration: {} },
       ]);
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ data: expect.any(Array), total: 1 }),
-      );
+      expect(res.json).toHaveBeenCalledWith({ data: expect.any(Array), total: 1 });
     });
 
     test('should filter triggers with triggerInclude', async () => {
@@ -2180,9 +2221,7 @@ describe('Container Router', () => {
         triggerName: 'default',
       });
       expect(res.status).toHaveBeenCalledWith(404);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: 'Container not found' }),
-      );
+      expect(res.json).toHaveBeenCalledWith({ error: 'Container not found' });
     });
 
     test.each([
@@ -2199,9 +2238,7 @@ describe('Container Router', () => {
       registry.getState.mockReturnValue({ watcher: {}, trigger: {} });
       const res = await callRunTrigger({ id: 'c1', triggerType: 'slack', triggerName: 'default' });
       expect(res.status).toHaveBeenCalledWith(404);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: 'Trigger not found' }),
-      );
+      expect(res.json).toHaveBeenCalledWith({ error: 'Trigger not found' });
     });
 
     test('should run trigger successfully', async () => {
@@ -2220,7 +2257,7 @@ describe('Container Router', () => {
       const res = await callRunTrigger({ id: 'c1', triggerType: 'slack', triggerName: 'default' });
       expect(res.status).toHaveBeenCalledWith(500);
       expect(res.json).toHaveBeenCalledWith({
-        error: 'Error when running trigger (type=slack, name=default)',
+        error: 'trigger error',
       });
     });
 
@@ -2286,9 +2323,9 @@ describe('Container Router', () => {
       registry.getState.mockReturnValue({ watcher: {}, trigger: {} });
       const res = await callWatchContainer();
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: expect.stringContaining('No provider found') }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        error: expect.stringContaining('No provider found'),
+      });
     });
 
     test('should use agent prefix for watcher id when container has agent', async () => {
@@ -2296,9 +2333,9 @@ describe('Container Router', () => {
       registry.getState.mockReturnValue({ watcher: {}, trigger: {} });
       const res = await callWatchContainer();
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: expect.stringContaining('remote.docker.local') }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        error: expect.stringContaining('remote.docker.local'),
+      });
     });
 
     test('should watch container successfully', async () => {
@@ -2377,10 +2414,10 @@ describe('Container Router', () => {
     }
 
     /** Helper: invoke getContainerLogs handler */
-    async function callGetContainerLogs(id = 'c1', query = {}) {
+    async function callGetContainerLogs(id = 'c1', query = {}, requestOverrides = {}) {
       const handler = getHandler('get', '/:id/logs');
       const res = createResponse();
-      await handler({ params: { id }, query }, res);
+      await handler({ params: { id }, query, ...requestOverrides }, res);
       return res;
     }
 
@@ -2410,13 +2447,18 @@ describe('Container Router', () => {
       expect(mockDockerContainer.logs).toHaveBeenCalledWith({
         stdout: true,
         stderr: true,
-        tail: 100,
+        tail: 1000,
         since: 0,
         timestamps: true,
         follow: false,
       });
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith({ logs: logText });
+      expect(res.setHeader).toHaveBeenCalledWith('Content-Type', 'text/plain; charset=utf-8');
+      expect(res.setHeader).toHaveBeenCalledWith(
+        'Content-Disposition',
+        'attachment; filename="my-container-logs.txt"',
+      );
+      expect(res.send).toHaveBeenCalledWith(logText);
     });
 
     test('should demux logs when docker API returns a non-Buffer payload', async () => {
@@ -2435,7 +2477,7 @@ describe('Container Router', () => {
 
       const res = await callGetContainerLogs('c1');
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith({ logs: logText });
+      expect(res.send).toHaveBeenCalledWith(logText);
     });
 
     test('should ignore truncated docker stream frames', async () => {
@@ -2457,7 +2499,7 @@ describe('Container Router', () => {
 
       const res = await callGetContainerLogs('c1');
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith({ logs: '' });
+      expect(res.send).toHaveBeenCalledWith('');
     });
 
     test('should pass query params to docker logs', async () => {
@@ -2473,10 +2515,16 @@ describe('Container Router', () => {
       });
       registry.getState.mockReturnValue({ watcher: { 'docker.local': mockWatcher }, trigger: {} });
 
-      await callGetContainerLogs('c1', { tail: '50', since: '1700000000', timestamps: 'false' });
+      await callGetContainerLogs('c1', {
+        stdout: 'false',
+        stderr: 'true',
+        tail: '50',
+        since: '1700000000',
+        timestamps: 'false',
+      });
 
       expect(mockDockerContainer.logs).toHaveBeenCalledWith({
-        stdout: true,
+        stdout: false,
         stderr: true,
         tail: 50,
         since: 1700000000,
@@ -2528,7 +2576,7 @@ describe('Container Router', () => {
       expect(mockDockerContainer.logs).toHaveBeenCalledWith({
         stdout: true,
         stderr: true,
-        tail: 100,
+        tail: 1000,
         since: 0,
         timestamps: true,
         follow: false,
@@ -2553,7 +2601,7 @@ describe('Container Router', () => {
       expect(mockDockerContainer.logs).toHaveBeenCalledWith({
         stdout: true,
         stderr: true,
-        tail: 100,
+        tail: 1000,
         since: 0,
         timestamps: true,
         follow: false,
@@ -2578,7 +2626,7 @@ describe('Container Router', () => {
       expect(mockDockerContainer.logs).toHaveBeenCalledWith({
         stdout: true,
         stderr: true,
-        tail: 100,
+        tail: 1000,
         since: 0,
         timestamps: true,
         follow: false,
@@ -2598,12 +2646,36 @@ describe('Container Router', () => {
       const res = await callGetContainerLogs('c1');
 
       expect(mockAgent.getContainerLogs).toHaveBeenCalledWith('c1', {
-        tail: 100,
+        tail: 1000,
         since: 0,
         timestamps: true,
       });
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith({ logs: 'agent logs' });
+      expect(res.send).toHaveBeenCalledWith('agent logs');
+    });
+
+    test('should gzip log download when client accepts gzip', async () => {
+      const logText = 'compressed logs';
+      const mockLogs = dockerStreamBuffer(logText);
+      const mockDockerContainer = { logs: vi.fn().mockResolvedValue(mockLogs) };
+      const mockWatcher = {
+        dockerApi: { getContainer: vi.fn().mockReturnValue(mockDockerContainer) },
+      };
+      storeContainer.getContainer.mockReturnValue({
+        id: 'c1',
+        name: 'gzip me',
+        watcher: 'local',
+      });
+      registry.getState.mockReturnValue({ watcher: { 'docker.local': mockWatcher }, trigger: {} });
+
+      const res = await callGetContainerLogs('c1', {}, { headers: { 'accept-encoding': 'gzip' } });
+
+      expect(res.setHeader).toHaveBeenCalledWith(
+        'Content-Disposition',
+        'attachment; filename="gzip_me-logs.txt.gz"',
+      );
+      expect(res.setHeader).toHaveBeenCalledWith('Content-Encoding', 'gzip');
+      expect(res.send).toHaveBeenCalledWith(expect.any(Buffer));
     });
 
     test('should return 500 when agent not found for agent container', async () => {
@@ -2618,11 +2690,9 @@ describe('Container Router', () => {
       const res = await callGetContainerLogs('c1');
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          error: expect.stringContaining('Agent remote not found'),
-        }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        error: expect.stringContaining('Agent remote not found'),
+      });
     });
 
     test('should return 500 when agent call fails', async () => {
@@ -2638,11 +2708,9 @@ describe('Container Router', () => {
       const res = await callGetContainerLogs('c1');
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          error: expect.stringContaining('Error fetching logs from agent'),
-        }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        error: expect.stringContaining('Error fetching logs from agent'),
+      });
     });
 
     test('should return 500 when watcher not found', async () => {
@@ -2656,11 +2724,9 @@ describe('Container Router', () => {
       const res = await callGetContainerLogs('c1');
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          error: expect.stringContaining('No watcher found'),
-        }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        error: expect.stringContaining('No watcher found'),
+      });
     });
 
     test('should return 500 when docker API fails', async () => {
@@ -2678,11 +2744,9 @@ describe('Container Router', () => {
       const res = await callGetContainerLogs('c1');
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          error: expect.stringContaining('Error fetching container logs'),
-        }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        error: expect.stringContaining('Error fetching container logs'),
+      });
     });
 
     test('should use first id when logs route param id is an array', async () => {
@@ -2725,9 +2789,7 @@ describe('Container Router', () => {
     test('should return 400 when no action provided', () => {
       const res = callUpdatePolicy({ id: 'c1' }, {});
       expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: 'Action is required' }),
-      );
+      expect(res.json).toHaveBeenCalledWith({ error: 'Action is required' });
     });
 
     test('should use first id when update-policy route param id is an array', () => {
@@ -2791,9 +2853,7 @@ describe('Container Router', () => {
     test('should return 400 for unknown action', () => {
       const res = callUpdatePolicy({ id: 'c1' }, { action: 'unknown-action' });
       expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: expect.stringContaining('Unknown action') }),
-      );
+      expect(res.json).toHaveBeenCalledWith({ error: expect.stringContaining('Unknown action') });
     });
 
     test('should skip current tag update', () => {
@@ -2866,9 +2926,9 @@ describe('Container Router', () => {
         { action: 'skip-current' },
       );
       expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: expect.stringContaining('No current update available') }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        error: expect.stringContaining('No current update available'),
+      });
     });
 
     test('should return 400 when no update value available', () => {
@@ -2877,9 +2937,9 @@ describe('Container Router', () => {
         { action: 'skip-current' },
       );
       expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: expect.stringContaining('No update value available') }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        error: expect.stringContaining('No update value available'),
+      });
     });
 
     test('should clear skip tags and digests', () => {
@@ -2971,9 +3031,7 @@ describe('Container Router', () => {
     ])('should return 400 when remove-skip payload is invalid: %s', (_label, body) => {
       const res = callUpdatePolicy({ id: 'c1', updatePolicy: { skipTags: ['2.0.0'] } }, body);
       expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: expect.stringContaining('remove-skip') }),
-      );
+      expect(res.json).toHaveBeenCalledWith({ error: expect.stringContaining('remove-skip') });
     });
 
     test('should snooze with default 7 days', () => {

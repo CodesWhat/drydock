@@ -9,7 +9,7 @@ Language|Go|TypeScript|tie
 Web UI|Yes|Yes|tie
 Image update detection|Yes|Yes|tie
 Auto-update containers|Yes|Yes (monitor-first)|tie
-Vulnerability scanning|Yes (🥊 Update Bouncer)|Yes (Trivy + SBOM + cosign)|tie
+Vulnerability scanning|Yes (Safe-Pull Protection)|Yes (Trivy + SBOM + cosign)|tie
 Automatic rollback|No|Yes, on health check failure|drydock
 Maintenance windows|No|Yes|drydock
 Lifecycle hooks (pre/post)|No|Yes, with timeout & abort|drydock

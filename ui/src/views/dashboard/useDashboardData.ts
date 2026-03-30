@@ -1,12 +1,9 @@
 import { computed, onMounted, onUnmounted, type Ref, ref, watch } from 'vue';
 import { getAgents } from '../../services/agent';
-import {
-  getAllContainers,
-  getContainerRecentStatus,
-  getContainerSummary,
-} from '../../services/container';
+import { getAllContainers, getContainerRecentStatus } from '../../services/container';
 import { getAllRegistries } from '../../services/registry';
 import { getServer } from '../../services/server';
+import { type ContainerStatsSummaryItem, getAllContainerStats } from '../../services/stats';
 import { getAllWatchers } from '../../services/watcher';
 import type { Container } from '../../types/container';
 import { type ApiContainerInput, mapApiContainers } from '../../utils/container-mapper';
@@ -33,6 +30,7 @@ interface DashboardStateRefs {
   loading: Ref<boolean>;
   error: Ref<string | null>;
   containerSummary: Ref<DashboardContainerSummary | null>;
+  containerStats: Ref<ContainerStatsSummaryItem[]>;
   containers: Ref<Container[]>;
   serverInfo: Ref<DashboardServerInfo | null>;
   agents: Ref<DashboardAgent[]>;
@@ -43,6 +41,7 @@ interface DashboardStateRefs {
 
 interface DashboardDataResponse {
   containersRes: ApiContainerInput[];
+  containerStatsRes: ContainerStatsSummaryItem[];
   serverRes: DashboardServerInfo;
   agentsRes: DashboardAgent[];
   watchersRes: unknown;
@@ -73,54 +72,6 @@ function watcherHasMaintenanceWindow(watcher: unknown): boolean {
   return typeof maintenanceWindow === 'string' && maintenanceWindow.trim().length > 0;
 }
 
-function toNonNegativeInteger(value: unknown): number {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
-    return 0;
-  }
-  return Math.floor(value);
-}
-
-function normalizeContainerSummary(summary: unknown): DashboardContainerSummary {
-  const containersData =
-    summary && typeof summary === 'object' && 'containers' in summary
-      ? (summary as { containers?: unknown }).containers
-      : undefined;
-  const securityData =
-    summary && typeof summary === 'object' && 'security' in summary
-      ? (summary as { security?: unknown }).security
-      : undefined;
-  const total = toNonNegativeInteger(
-    containersData && typeof containersData === 'object'
-      ? (containersData as { total?: unknown }).total
-      : undefined,
-  );
-  const running = toNonNegativeInteger(
-    containersData && typeof containersData === 'object'
-      ? (containersData as { running?: unknown }).running
-      : undefined,
-  );
-  const stopped = toNonNegativeInteger(
-    containersData && typeof containersData === 'object'
-      ? (containersData as { stopped?: unknown }).stopped
-      : undefined,
-  );
-  const issues = toNonNegativeInteger(
-    securityData && typeof securityData === 'object'
-      ? (securityData as { issues?: unknown }).issues
-      : undefined,
-  );
-  return {
-    containers: {
-      total,
-      running,
-      stopped,
-    },
-    security: {
-      issues,
-    },
-  };
-}
-
 function buildContainerSummaryFromContainers(containers: Container[]): DashboardContainerSummary {
   const total = containers.length;
   const running = containers.filter((container) => container.status === 'running').length;
@@ -146,6 +97,7 @@ function isPageVisible(): boolean {
 function hasRenderedDashboardData(state: DashboardStateRefs): boolean {
   const hasRenderedCollections = [
     state.containers.value,
+    state.containerStats.value,
     state.watchers.value,
     state.registries.value,
     state.agents.value,
@@ -161,6 +113,7 @@ function hasRenderedDashboardData(state: DashboardStateRefs): boolean {
 function applyFetchedDashboardData(state: DashboardStateRefs, response: DashboardDataResponse) {
   state.containers.value = mapApiContainers(response.containersRes);
   state.containerSummary.value = buildContainerSummaryFromContainers(state.containers.value);
+  state.containerStats.value = response.containerStatsRes;
   state.serverInfo.value = response.serverRes;
   state.agents.value = response.agentsRes;
   state.watchers.value = Array.isArray(response.watchersRes) ? response.watchersRes : [];
@@ -180,17 +133,26 @@ function createDashboardDataFetchers(state: DashboardStateRefs) {
     }
 
     try {
-      const [containersRes, serverRes, agentsRes, watchersRes, registriesRes, recentStatusRes] =
-        await Promise.all([
-          getAllContainers(),
-          getServer(),
-          getAgents(),
-          getAllWatchers(),
-          getAllRegistries(),
-          getContainerRecentStatus(),
-        ]);
+      const [
+        containersRes,
+        containerStatsRes,
+        serverRes,
+        agentsRes,
+        watchersRes,
+        registriesRes,
+        recentStatusRes,
+      ] = await Promise.all([
+        getAllContainers(),
+        getAllContainerStats(),
+        getServer(),
+        getAgents(),
+        getAllWatchers(),
+        getAllRegistries(),
+        getContainerRecentStatus(),
+      ]);
       applyFetchedDashboardData(state, {
         containersRes,
+        containerStatsRes,
         serverRes,
         agentsRes,
         watchersRes,
@@ -209,25 +171,8 @@ function createDashboardDataFetchers(state: DashboardStateRefs) {
       }
     }
   }
-
-  async function fetchDashboardSummary() {
-    const hasRenderedData = hasRenderedDashboardData(state);
-    try {
-      const summary = await getContainerSummary();
-      state.containerSummary.value = normalizeContainerSummary(summary);
-      state.error.value = null;
-    } catch (e: unknown) {
-      if (!hasRenderedData) {
-        state.error.value = errorMessage(e, 'Failed to load dashboard data');
-      } else {
-        console.debug(errorMessage(e, 'Dashboard summary refresh failed'));
-      }
-    }
-  }
-
   return {
     fetchDashboardData,
-    fetchDashboardSummary,
   };
 }
 
@@ -235,6 +180,7 @@ export function useDashboardData() {
   const loading = ref(true);
   const error = ref<string | null>(null);
   const containerSummary = ref<DashboardContainerSummary | null>(null);
+  const containerStats = ref<ContainerStatsSummaryItem[]>([]);
   const containers = ref<Container[]>([]);
   const serverInfo = ref<DashboardServerInfo | null>(null);
   const agents = ref<DashboardAgent[]>([]);
@@ -247,6 +193,7 @@ export function useDashboardData() {
     loading,
     error,
     containerSummary,
+    containerStats,
     containers,
     serverInfo,
     agents,
@@ -255,7 +202,7 @@ export function useDashboardData() {
     recentStatusByContainer,
   };
 
-  const { fetchDashboardData, fetchDashboardSummary } = createDashboardDataFetchers(state);
+  const { fetchDashboardData } = createDashboardDataFetchers(state);
   const hasMaintenanceWindows = computed(() =>
     watchers.value.some((watcher) => watcherHasMaintenanceWindow(watcher)),
   );
@@ -268,9 +215,6 @@ export function useDashboardData() {
   });
   const realtimeRefreshScheduler = createRealtimeRefreshScheduler({
     debounceMs: DASHBOARD_REALTIME_REFRESH_DEBOUNCE_MS,
-    refreshSummary: () => {
-      void fetchDashboardSummary();
-    },
     refreshFull: () => {
       void fetchDashboardData({ background: true });
     },
@@ -278,14 +222,12 @@ export function useDashboardData() {
     clearTimeoutFn: window.clearTimeout.bind(window),
   });
 
-  const summaryRefreshListener = (() =>
-    realtimeRefreshScheduler.schedule('summary')) as EventListener;
   const fullRefreshListener = (() => realtimeRefreshScheduler.schedule('full')) as EventListener;
   const visibilityChangeListener = maintenanceCountdownController.sync as EventListener;
   let stopMaintenanceWindowWatch: ReturnType<typeof watch> | undefined;
 
   onMounted(async () => {
-    globalThis.addEventListener('dd:sse-container-changed', summaryRefreshListener);
+    globalThis.addEventListener('dd:sse-container-changed', fullRefreshListener);
     globalThis.addEventListener('dd:sse-scan-completed', fullRefreshListener);
     globalThis.addEventListener('dd:sse-connected', fullRefreshListener);
     document.addEventListener('visibilitychange', visibilityChangeListener);
@@ -296,7 +238,7 @@ export function useDashboardData() {
   });
 
   onUnmounted(() => {
-    globalThis.removeEventListener('dd:sse-container-changed', summaryRefreshListener);
+    globalThis.removeEventListener('dd:sse-container-changed', fullRefreshListener);
     globalThis.removeEventListener('dd:sse-scan-completed', fullRefreshListener);
     globalThis.removeEventListener('dd:sse-connected', fullRefreshListener);
     document.removeEventListener('visibilitychange', visibilityChangeListener);
@@ -308,6 +250,7 @@ export function useDashboardData() {
   return {
     agents,
     containerSummary,
+    containerStats,
     containers,
     error,
     fetchDashboardData,

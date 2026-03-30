@@ -36,11 +36,16 @@ export function useDetailPanel() {
   const containerFullPage = ref(false);
 
   const panelFlex = computed(() =>
-    panelSize.value === 'sm' ? '0 0 420px' : panelSize.value === 'md' ? '0 0 560px' : '0 0 720px',
+    panelSize.value === 'sm'
+      ? '0 0 var(--dd-layout-panel-width-sm)'
+      : panelSize.value === 'md'
+        ? '0 0 var(--dd-layout-panel-width-md)'
+        : '0 0 var(--dd-layout-panel-width-lg)',
   );
 
   const detailTabs = [
     { id: 'overview', label: 'Overview', icon: 'info' },
+    { id: 'stats', label: 'Stats', icon: 'uptime' },
     { id: 'logs', label: 'Logs', icon: 'logs' },
     { id: 'environment', label: 'Environment', icon: 'config' },
     { id: 'labels', label: 'Labels', icon: 'containers' },

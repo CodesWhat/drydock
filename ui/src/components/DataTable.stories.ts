@@ -1,14 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/vue3';
 import { expect, fn, userEvent, within } from 'storybook/test';
 import DataTable from './DataTable.vue';
-
-interface SampleRow {
-  id: string;
-  name: string;
-  status: 'running' | 'stopped';
-  server: string;
-  updates: number;
-}
+import { sampleContainerRows as rows } from './stories/sampleData';
 
 const columns = [
   { key: 'name', label: 'Container', width: '44%' },
@@ -20,12 +13,6 @@ const columns = [
 const columnsWithIcon = [
   { key: 'icon', label: '', icon: true, width: '44px', sortable: false },
   ...columns,
-];
-
-const rows: SampleRow[] = [
-  { id: 'api', name: 'drydock-api', status: 'running', server: 'local', updates: 0 },
-  { id: 'web', name: 'drydock-web', status: 'running', server: 'edge-1', updates: 2 },
-  { id: 'db', name: 'postgres', status: 'stopped', server: 'edge-2', updates: 1 },
 ];
 
 const meta = {
@@ -92,7 +79,7 @@ export const WithCustomCellsAndActions: Story = {
           </div>
         </template>
         <template #cell-status="{ row }">
-          <span class="badge text-[0.5625rem] font-bold uppercase"
+          <span class="badge text-3xs font-bold uppercase"
                 :style="{
                   backgroundColor: row.status === 'running' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
                   color: row.status === 'running' ? 'var(--dd-success)' : 'var(--dd-danger)',
@@ -101,7 +88,7 @@ export const WithCustomCellsAndActions: Story = {
           </span>
         </template>
         <template #actions="{ row }">
-          <button class="px-2 py-1 text-[0.625rem] dd-rounded dd-bg-elevated dd-text-muted hover:dd-text">
+          <button class="px-2 py-1 text-2xs dd-rounded dd-bg-elevated dd-text-muted hover:dd-text">
             Open {{ row.id }}
           </button>
         </template>

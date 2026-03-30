@@ -12,8 +12,17 @@ function createDb() {
     return path.split('.').reduce((acc, key) => acc?.[key], object);
   }
 
+  function matchesQueryValue(actual, expected) {
+    if (expected && typeof expected === 'object' && '$in' in expected) {
+      return Array.isArray(expected.$in) && expected.$in.includes(actual);
+    }
+    return actual === expected;
+  }
+
   function matchesQuery(doc, query = {}) {
-    return Object.entries(query).every(([key, value]) => getByPath(doc, key) === value);
+    return Object.entries(query).every(([key, value]) =>
+      matchesQueryValue(getByPath(doc, key), value),
+    );
   }
 
   var collections = {};
@@ -42,8 +51,17 @@ function createChainDb(initialDocs = []) {
     return path.split('.').reduce((acc, key) => acc?.[key], object);
   }
 
+  function matchesQueryValue(actual, expected) {
+    if (expected && typeof expected === 'object' && '$in' in expected) {
+      return Array.isArray(expected.$in) && expected.$in.includes(actual);
+    }
+    return actual === expected;
+  }
+
   function matchesQuery(doc, query = {}) {
-    return Object.entries(query).every(([key, value]) => getByPath(doc, key) === value);
+    return Object.entries(query).every(([key, value]) =>
+      matchesQueryValue(getByPath(doc, key), value),
+    );
   }
 
   const docs = initialDocs.map((doc, index) => ({
@@ -356,6 +374,34 @@ describe('Audit Store', () => {
     var result = audit.getAuditEntries({ action: 'update-applied' });
     expect(result.total).toBe(1);
     expect(result.entries[0].containerName).toBe('redis');
+  });
+
+  test('getAuditEntries should filter by multiple actions', () => {
+    audit.insertAudit({ action: 'update-available', containerName: 'nginx', status: 'info' });
+    audit.insertAudit({ action: 'update-applied', containerName: 'redis', status: 'success' });
+    audit.insertAudit({ action: 'container-update', containerName: 'postgres', status: 'info' });
+    audit.insertAudit({ action: 'security-alert', containerName: 'mysql', status: 'error' });
+
+    var result = audit.getAuditEntries({ actions: ['update-available', 'security-alert'] });
+    expect(result.total).toBe(2);
+    const actionTypes = result.entries.map((e) => e.action);
+    expect(actionTypes).toContain('update-available');
+    expect(actionTypes).toContain('security-alert');
+    expect(actionTypes).not.toContain('container-update');
+    expect(actionTypes).not.toContain('update-applied');
+  });
+
+  test('getAuditEntries should prefer action over actions when both provided', () => {
+    audit.insertAudit({ action: 'update-available', containerName: 'nginx', status: 'info' });
+    audit.insertAudit({ action: 'update-applied', containerName: 'redis', status: 'success' });
+    audit.insertAudit({ action: 'security-alert', containerName: 'mysql', status: 'error' });
+
+    var result = audit.getAuditEntries({
+      action: 'update-available',
+      actions: ['update-applied', 'security-alert'],
+    });
+    expect(result.total).toBe(1);
+    expect(result.entries[0].action).toBe('update-available');
   });
 
   test('getAuditEntries should filter by container name', () => {

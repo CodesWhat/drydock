@@ -16,7 +16,7 @@ import type {
 type SelfUpdateRuntimeConfigOptions = Record<string, unknown>;
 type SelfUpdateContainerCreateSpec = Record<string, unknown>;
 
-export interface SelfUpdateTransitionDependencies {
+interface SelfUpdateTransitionDependencies {
   getConfiguration: () => SelfUpdateConfiguration | undefined;
   findDockerSocketBind: (spec: SelfUpdateContainerSpec | undefined) => string | undefined;
   insertContainerImageBackup: (

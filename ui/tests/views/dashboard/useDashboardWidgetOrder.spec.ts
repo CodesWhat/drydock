@@ -1,8 +1,9 @@
 import { mount } from '@vue/test-utils';
 import { defineComponent, h, nextTick } from 'vue';
 import { preferences } from '@/preferences/store';
-import { DASHBOARD_WIDGET_IDS } from '@/views/dashboard/dashboardTypes';
-import { useDashboardWidgetOrder } from '@/views/dashboard/useDashboardWidgetOrder';
+import { DASHBOARD_WIDGET_IDS, type DashboardWidgetId } from '@/views/dashboard/dashboardTypes';
+import { applyConstraints } from '@/views/dashboard/dashboardWidgetLayout';
+import { moveWidget, useDashboardWidgetOrder } from '@/views/dashboard/useDashboardWidgetOrder';
 
 async function mountWidgetOrderComposable() {
   let state: ReturnType<typeof useDashboardWidgetOrder> | undefined;
@@ -27,6 +28,7 @@ describe('useDashboardWidgetOrder', () => {
   beforeEach(() => {
     localStorage.clear();
     preferences.dashboard.widgetOrder = [...DASHBOARD_WIDGET_IDS];
+    preferences.dashboard.gridLayout = [];
   });
 
   it('hydrates from preferences and falls back to defaults for non-array values', async () => {
@@ -52,6 +54,71 @@ describe('useDashboardWidgetOrder', () => {
       'stat-containers',
       ...DASHBOARD_WIDGET_IDS.filter((id) => id !== 'recent-updates' && id !== 'stat-containers'),
     ]);
+  });
+
+  it('sanitizes invalid hidden widget values', async () => {
+    preferences.dashboard.hiddenWidgets = 'invalid-hidden' as unknown as string[];
+
+    const { state } = await mountWidgetOrderComposable();
+
+    expect(state.hiddenWidgets.value).toEqual([]);
+  });
+
+  it('falls back to default layout when gridLayout is not an array', async () => {
+    preferences.dashboard.gridLayout = 'not-an-array' as unknown as unknown[];
+
+    const { state } = await mountWidgetOrderComposable();
+
+    expect(state.layout.value).toHaveLength(DASHBOARD_WIDGET_IDS.length);
+    expect(state.layout.value.map((item) => item.i)).toEqual(DASHBOARD_WIDGET_IDS);
+  });
+
+  it('hydrates persisted grid layouts and skips invalid entries', async () => {
+    preferences.dashboard.gridLayout = [
+      { i: 'host-status', x: 10, y: 11, w: 4, h: 6 },
+      null,
+      'not-a-layout-item',
+      { i: 'recent-updates', x: 1, y: 2, w: 6, h: 5 },
+    ];
+
+    const { state } = await mountWidgetOrderComposable();
+
+    expect(state.layout.value).toHaveLength(DASHBOARD_WIDGET_IDS.length);
+    expect(state.layout.value.map((item) => item.i)).toEqual(DASHBOARD_WIDGET_IDS);
+    expect(state.layout.value.find((item) => item.i === 'host-status')).toMatchObject({
+      x: 10,
+      y: 11,
+      w: 4,
+      h: 6,
+    });
+    expect(state.layout.value.find((item) => item.i === 'recent-updates')).toMatchObject({
+      x: 1,
+      y: 2,
+      w: 6,
+      h: 5,
+    });
+  });
+
+  it('falls back to the default layout when every persisted widget lands in column zero', async () => {
+    preferences.dashboard.gridLayout = DASHBOARD_WIDGET_IDS.map((id, index) => ({
+      i: id,
+      x: 0,
+      y: index,
+      w: 1,
+      h: 1,
+    }));
+
+    const { state } = await mountWidgetOrderComposable();
+
+    expect(state.layout.value).toEqual(
+      applyConstraints(
+        DASHBOARD_WIDGET_IDS.map((id) => {
+          const item = state.layout.value.find((layoutItem) => layoutItem.i === id);
+          return { ...item! };
+        }),
+      ),
+    );
+    expect(state.layout.value.some((item) => item.x !== 0)).toBe(true);
   });
 
   it('returns explicit style ordering and uses canonical fallback index for missing ids', async () => {
@@ -100,6 +167,7 @@ describe('useDashboardWidgetOrder', () => {
       'update-breakdown',
       'recent-updates',
       'security-overview',
+      'resource-usage',
       'host-status',
     ]);
     expect(state.draggedWidgetId.value).toBeNull();
@@ -121,6 +189,14 @@ describe('useDashboardWidgetOrder', () => {
     } as unknown as DragEvent);
     expect(preventDefault).not.toHaveBeenCalled();
 
+    state.onWidgetDragOver(
+      'not-a-dashboard-widget' as any,
+      {
+        preventDefault,
+      } as unknown as DragEvent,
+    );
+    expect(preventDefault).not.toHaveBeenCalled();
+
     state.onWidgetDragOver('recent-updates', {
       preventDefault,
     } as unknown as DragEvent);
@@ -139,6 +215,23 @@ describe('useDashboardWidgetOrder', () => {
     state.onWidgetDrop('stat-updates', {
       preventDefault,
       dataTransfer: {
+        getData: () => 'stat-updates',
+      },
+    } as unknown as DragEvent);
+
+    state.onWidgetDrop(
+      'not-a-dashboard-widget' as any,
+      {
+        preventDefault,
+        dataTransfer: {
+          getData: () => 'stat-updates',
+        },
+      } as unknown as DragEvent,
+    );
+
+    state.onWidgetDrop('stat-updates', {
+      preventDefault,
+      dataTransfer: {
         getData: () => 'not-a-dashboard-widget',
       },
     } as unknown as DragEvent);
@@ -149,5 +242,132 @@ describe('useDashboardWidgetOrder', () => {
 
     state.resetWidgetOrder();
     expect(state.widgetOrder.value).toEqual(DASHBOARD_WIDGET_IDS);
+  });
+
+  it('keeps layout, visibility, edit mode, and reset state in sync', async () => {
+    const { state } = await mountWidgetOrderComposable();
+
+    expect(state.isWidgetVisible('host-status')).toBe(true);
+    state.toggleWidgetVisibility('host-status');
+    await nextTick();
+    expect(state.hiddenWidgets.value).toContain('host-status');
+    expect(state.isWidgetVisible('host-status')).toBe(false);
+    expect(preferences.dashboard.hiddenWidgets).toContain('host-status');
+
+    state.hiddenWidgets.value = ['host-status'];
+    state.layout.value = state.layout.value.filter((item) => item.i !== 'host-status');
+    await nextTick();
+    state.toggleWidgetVisibility('host-status');
+    await nextTick();
+    expect(state.isWidgetVisible('host-status')).toBe(true);
+    expect(state.layout.value.some((item) => item.i === 'host-status')).toBe(true);
+
+    state.hiddenWidgets.value = ['host-status'];
+    const layoutBeforeRestore = [...state.layout.value];
+    await nextTick();
+    state.toggleWidgetVisibility('host-status');
+    await nextTick();
+    expect(state.isWidgetVisible('host-status')).toBe(true);
+    expect(state.layout.value).toEqual(layoutBeforeRestore);
+
+    const reversed: DashboardWidgetId[] = [...DASHBOARD_WIDGET_IDS].reverse();
+    state.widgetOrder.value = [...reversed];
+    await nextTick();
+    expect(state.layout.value.map((item) => item.i)).toEqual(reversed);
+    expect(preferences.dashboard.widgetOrder).toEqual(reversed);
+
+    state.layout.value = [...state.layout.value].reverse();
+    await nextTick();
+    expect(state.widgetOrder.value).toEqual([...DASHBOARD_WIDGET_IDS]);
+
+    state.toggleEditMode();
+    expect(state.editMode.value).toBe(true);
+
+    state.resetAll();
+    await nextTick();
+    expect(state.hiddenWidgets.value).toEqual([]);
+    expect(state.widgetOrder.value).toEqual(DASHBOARD_WIDGET_IDS);
+    expect(state.editMode.value).toBe(true);
+  });
+
+  it('debounces position/size persistence when layout changes without order change', async () => {
+    vi.useFakeTimers();
+    const { state } = await mountWidgetOrderComposable();
+
+    // Mutate a position without changing order
+    const updated = state.layout.value.map((item) => ({ ...item }));
+    updated[0] = { ...updated[0], x: 99 };
+    state.layout.value = updated;
+    await nextTick();
+
+    // Before debounce fires, gridLayout should not yet be updated
+    vi.advanceTimersByTime(300);
+    expect(preferences.dashboard.gridLayout).toEqual(
+      expect.arrayContaining([expect.objectContaining({ i: updated[0].i, x: 99 })]),
+    );
+
+    vi.useRealTimers();
+  });
+
+  it('returns the original order when asked to move invalid or no-op widget pairs', () => {
+    const original = [...DASHBOARD_WIDGET_IDS];
+    expect(moveWidget(original, 'stat-containers', 'stat-containers')).toEqual(original);
+    expect(moveWidget(original, 'missing-widget' as DashboardWidgetId, 'stat-containers')).toEqual(
+      original,
+    );
+    expect(moveWidget(original, 'stat-containers', 'missing-widget' as DashboardWidgetId)).toEqual(
+      original,
+    );
+  });
+
+  it('moves widgets from an earlier slot ahead of later targets', () => {
+    const moved = moveWidget([...DASHBOARD_WIDGET_IDS], 'stat-containers', 'resource-usage');
+
+    expect(moved).toEqual([
+      'stat-updates',
+      'stat-security',
+      'stat-registries',
+      'recent-updates',
+      'security-overview',
+      'stat-containers',
+      'resource-usage',
+      'host-status',
+      'update-breakdown',
+    ]);
+  });
+
+  it('preserves custom positions when widget order changes (#223)', async () => {
+    const customLayout = DASHBOARD_WIDGET_IDS.map((id, index) => ({
+      i: id,
+      x: index * 2,
+      y: index * 3,
+      w: 4,
+      h: 5,
+    }));
+    preferences.dashboard.gridLayout = customLayout;
+
+    const { state } = await mountWidgetOrderComposable();
+
+    // Verify custom positions loaded
+    const hostBefore = state.layout.value.find((item) => item.i === 'host-status');
+    expect(hostBefore?.x).toBe(customLayout.find((l) => l.i === 'host-status')!.x);
+
+    // Reorder via drag-drop
+    const reversed: DashboardWidgetId[] = [...DASHBOARD_WIDGET_IDS].reverse();
+    state.widgetOrder.value = [...reversed];
+    await nextTick();
+
+    // Custom positions should be preserved for each widget
+    for (const id of DASHBOARD_WIDGET_IDS) {
+      const layoutItem = state.layout.value.find((item) => item.i === id);
+      const original = customLayout.find((item) => item.i === id)!;
+      expect(layoutItem?.x).toBe(original.x);
+      expect(layoutItem?.y).toBe(original.y);
+    }
+  });
+
+  it('leaves unknown layout items untouched when applying constraints', () => {
+    const item = { i: 'unknown-widget', x: 1, y: 2, w: 3, h: 4 } as never;
+    expect(applyConstraints([item])).toEqual([item]);
   });
 });

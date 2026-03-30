@@ -11,12 +11,30 @@ interface SafeRegex {
   test(s: string): boolean;
 }
 
+interface TagCandidatesLogger {
+  warn(message: string): void;
+  debug?: (message: string) => void;
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === 'object' && error !== null && 'message' in error) {
+    const { message } = error as { message: unknown };
+    if (typeof message === 'string') {
+      return message;
+    }
+  }
+  return String(error);
+}
+
 /**
  * Safely compile a user-supplied regex pattern.
  * Returns null (and logs a warning) when the pattern is invalid.
  * Uses RE2 (via re2js), which is inherently immune to ReDoS backtracking attacks.
  */
-function safeRegExp(pattern: string, logger: any): SafeRegex | null {
+function safeRegExp(pattern: string, logger: TagCandidatesLogger): SafeRegex | null {
   const MAX_PATTERN_LENGTH = 1024;
   if (pattern.length > MAX_PATTERN_LENGTH) {
     logger.warn(`Regex pattern exceeds maximum length of ${MAX_PATTERN_LENGTH} characters`);
@@ -29,8 +47,8 @@ function safeRegExp(pattern: string, logger: any): SafeRegex | null {
         return compiled.matcher(s).find();
       },
     };
-  } catch (e: any) {
-    logger.warn(`Invalid regex pattern "${pattern}": ${e.message}`);
+  } catch (e: unknown) {
+    logger.warn(`Invalid regex pattern "${pattern}": ${getErrorMessage(e)}`);
     return null;
   }
 }
@@ -42,7 +60,7 @@ function safeRegExp(pattern: string, logger: any): SafeRegex | null {
 function applyIncludeExcludeFilters(
   container: Container,
   tags: string[],
-  logContainer: any,
+  logContainer: TagCandidatesLogger,
 ): { filteredTags: string[]; allowIncludeFilterRecovery: boolean } {
   let filteredTags = tags;
   let allowIncludeFilterRecovery = false;
@@ -109,7 +127,7 @@ function hasLeadingZero(value: string): boolean {
   return value.length > 1 && value.startsWith('0');
 }
 
-interface NumericTagShape {
+export interface NumericTagShape {
   prefix: string;
   numericSegments: string[];
   suffix: string;
@@ -147,7 +165,7 @@ function getNumericTagShapeFromTransformedTag(transformedTag: string): NumericTa
   };
 }
 
-function getNumericTagShape(
+export function getNumericTagShape(
   tag: string,
   transformTags: string | undefined,
 ): NumericTagShape | null {
@@ -175,7 +193,10 @@ function isSuffixCompatible(referenceSuffix: string, candidateSuffix: string): b
   );
 }
 
-function getTagFamilyPolicy(container: Container, logContainer: any): TagFamilyPolicy {
+function getTagFamilyPolicy(
+  container: Container,
+  logContainer: TagCandidatesLogger,
+): TagFamilyPolicy {
   if (!container.tagFamily) {
     return 'strict';
   }
@@ -199,10 +220,18 @@ function isStrictFamilyMatch(
     return false;
   }
 
-  return candidateShape.numericSegments.every(
-    (segment, index) =>
-      !(!hasLeadingZero(referenceShape.numericSegments[index]) && hasLeadingZero(segment)),
-  );
+  // For CalVer-style tags (major >= 1000, e.g. 2025.11.1), relax the
+  // leading-zero check so zero-padded months like '02' are accepted.
+  const majorValue = Number.parseInt(referenceShape.numericSegments[0], 10);
+  const isCalVer = !Number.isNaN(majorValue) && majorValue >= 1000;
+
+  return candidateShape.numericSegments.every((segment, index) => {
+    if (!hasLeadingZero(segment)) return true;
+    if (hasLeadingZero(referenceShape.numericSegments[index])) return true;
+    // Candidate has a leading zero but reference doesn't.
+    // Only allow this for CalVer tags where zero-padded months are normal.
+    return isCalVer;
+  });
 }
 
 function hasExpectedPrefix(tag: string, currentPrefix: string): boolean {
@@ -344,7 +373,7 @@ function filterSemverCandidatesOnePass(
 }
 
 function logSemverCandidateFilterStats(
-  logContainer: any,
+  logContainer: TagCandidatesLogger,
   tagFamilyPolicy: TagFamilyPolicy,
   stats: SemverCandidateFilterStats,
 ): void {
@@ -426,7 +455,7 @@ function filterSemverOnly(tags: string[], transformTags: string | undefined): st
 export function getTagCandidates(
   container: Container,
   tags: string[],
-  logContainer: any,
+  logContainer: TagCandidatesLogger,
 ): TagCandidatesResult {
   const { filteredTags: baseTags, allowIncludeFilterRecovery } = applyIncludeExcludeFilters(
     container,

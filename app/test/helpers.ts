@@ -6,30 +6,37 @@
  * For logger mocking, use the manual mock at log/__mocks__/index.ts
  * with vi.mock('../log') (no factory).
  */
+import type { Request, Response } from 'express';
 import { vi } from 'vitest';
 
 /**
  * Mock HTTP response object for API handler tests.
+ * Returns an Express-compatible Response with common methods stubbed.
  */
-export function createMockResponse() {
+export function createMockResponse(): Response {
   return {
     status: vi.fn().mockReturnThis(),
+    set: vi.fn().mockReturnThis(),
+    setHeader: vi.fn(),
     json: vi.fn(),
     sendStatus: vi.fn(),
     send: vi.fn(),
-  };
+  } as unknown as Response;
 }
 
 /**
  * Mock HTTP request object for API handler tests.
+ * Returns an Express-compatible Request with params, query, and body stubbed.
  */
-export function createMockRequest(overrides: Record<string, unknown> = {}) {
+export function createMockRequest<P = Record<string, string>>(
+  overrides: Record<string, unknown> = {},
+): Request<P> {
   return {
     params: {},
     query: {},
     body: undefined,
     ...overrides,
-  };
+  } as unknown as Request<P>;
 }
 
 /**

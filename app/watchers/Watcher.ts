@@ -6,21 +6,28 @@ import Component from '../registry/Component.js';
  */
 abstract class Watcher extends Component {
   dockerApi?: unknown;
+  lastRunAt?: string;
 
   protected constructor() {
     super();
   }
 
+  getMetadata(): Record<string, unknown> {
+    return {
+      lastRunAt: this.lastRunAt,
+    };
+  }
+
   /**
    * Watch main method.
-   * @returns {Promise<any[]>}
+   * @returns {Promise<ContainerReport[]>}
    */
   abstract watch(): Promise<ContainerReport[]>;
 
   /**
    * Watch a Container.
    * @param container
-   * @returns {Promise<any>}
+   * @returns {Promise<ContainerReport>}
    */
   abstract watchContainer(container: Container): Promise<ContainerReport>;
 }

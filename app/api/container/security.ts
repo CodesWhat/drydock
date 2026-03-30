@@ -32,7 +32,7 @@ interface SecurityAlertPayload {
   container?: Container;
 }
 
-export interface SecurityHandlerDependencies {
+interface SecurityHandlerDependencies {
   storeContainer: SecurityStoreContainerApi;
   getSecurityConfiguration: () => SecurityConfiguration;
   SECURITY_SBOM_FORMATS: readonly SecuritySbomFormat[];

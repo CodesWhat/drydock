@@ -2,6 +2,35 @@ import axios from 'axios';
 import { getOutboundHttpTimeoutMs } from '../../../configuration/runtime-defaults.js';
 import Trigger from '../Trigger.js';
 
+type TeamsAdaptiveCardTextBlock = {
+  type: 'TextBlock';
+  text: string;
+  wrap: true;
+};
+
+type TeamsAdaptiveCardOpenUrlAction = {
+  type: 'Action.OpenUrl';
+  title: 'Open release';
+  url: string;
+};
+
+type TeamsAdaptiveCardContent = {
+  type: 'AdaptiveCard';
+  $schema: 'http://adaptivecards.io/schemas/adaptive-card.json';
+  version: string;
+  body: TeamsAdaptiveCardTextBlock[];
+  actions?: TeamsAdaptiveCardOpenUrlAction[];
+};
+
+type TeamsMessageBody = {
+  type: 'message';
+  attachments: Array<{
+    contentType: 'application/vnd.microsoft.card.adaptive';
+    contentUrl: null;
+    content: TeamsAdaptiveCardContent;
+  }>;
+};
+
 /**
  * Microsoft Teams Trigger implementation
  */
@@ -48,7 +77,7 @@ class Teams extends Trigger {
   }
 
   buildMessageBody(text, resultLink?) {
-    const content: any = {
+    const content: TeamsAdaptiveCardContent = {
       type: 'AdaptiveCard',
       $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
       version: this.configuration.cardversion,
@@ -71,7 +100,7 @@ class Teams extends Trigger {
       ];
     }
 
-    return {
+    const messageBody: TeamsMessageBody = {
       type: 'message',
       attachments: [
         {
@@ -81,6 +110,8 @@ class Teams extends Trigger {
         },
       ],
     };
+
+    return messageBody;
   }
 
   async postMessage(text, resultLink?) {

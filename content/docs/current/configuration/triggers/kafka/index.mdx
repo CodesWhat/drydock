@@ -63,7 +63,7 @@ docker run \
 </Tab>
 </Tabs>
 
-### Example of published record
+### Example of published record (simple mode)
 
 ```json
 {
@@ -95,3 +95,7 @@ docker run \
   "updateAvailable": true
 }
 ```
+
+### Batch mode
+
+When `MODE=batch`, each container in the batch is sent as a separate Kafka message in a single `send()` call. The message key is the container name and the value is the JSON-serialized container object.

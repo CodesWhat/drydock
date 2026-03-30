@@ -27,6 +27,7 @@ You can adjust the server configuration with the following environment variables
 | `DD_SERVER_FEATURE_CONTAINERACTIONS` | ⚪ | Enable start, stop, restart, and update actions via API and UI | `true`, `false` | `true` |
 | `DD_SERVER_FEATURE_DELETE` | ⚪ | If deleting operations are enabled through API & UI | `true`, `false` | `true` |
 | `DD_SERVER_METRICS_AUTH` | ⚪ | Require authentication on `/metrics` endpoint | `true`, `false` | `true` |
+| `DD_SERVER_METRICS_TOKEN` | ⚪ | Bearer token for `/metrics` Prometheus scraping (takes priority over session auth when set) | String (minimum 16 characters) | |
 | `DD_SESSION_SECRET` | ⚪ | Override the auto-generated session secret for cookie signing | Any string | auto-generated |
 | `DD_SERVER_COOKIE_SAMESITE` | ⚪ | Session cookie SameSite policy for auth flows (`none` requires HTTPS) | `strict`, `lax`, `none` | `lax` |
 | `DD_SERVER_SESSION_MAXCONCURRENTSESSIONS` | ⚪ | Maximum concurrent authenticated sessions per user (oldest sessions are revoked first at login when limit is reached) | integer (`>=1`) | `5` |
@@ -47,7 +48,9 @@ For production deployments, set an explicit trusted origin:
 
 ## Container Healthcheck
 
-The official Docker image includes a built-in `HEALTHCHECK` that polls the `/health` endpoint. When `DD_SERVER_TLS_ENABLED=true`, the healthcheck automatically switches to HTTPS (with `--insecure` for self-signed certificates). No additional configuration is needed.
+The official Docker image includes a built-in `HEALTHCHECK` that polls the `/health` endpoint using a lightweight static binary. When `DD_SERVER_TLS_ENABLED=true`, the healthcheck automatically switches to HTTPS (with `--insecure` for self-signed certificates). No additional configuration is needed — remove any custom `healthcheck:` blocks from your compose file.
+
+<Callout type="warn">**Deprecated:** Custom `curl`-based healthcheck overrides (e.g. `test: curl --fail http://localhost:3000/health`) are deprecated. `curl` will be removed from the image in v1.6.0. Use the built-in probe or switch to `/bin/healthcheck ${DD_SERVER_PORT:-3000}` for custom intervals.</Callout>
 
 ## Plain HTTP Deployments
 

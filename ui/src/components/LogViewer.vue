@@ -26,7 +26,7 @@ const props = withDefaults(
     containerClass: '',
     containerStyle: undefined,
     loadingClass: 'text-xs dd-text-muted text-center py-6',
-    errorClass: 'text-[0.6875rem] px-3 py-2 dd-rounded',
+    errorClass: 'text-2xs-plus px-3 py-2 dd-rounded',
     errorStyle: () => ({
       backgroundColor: 'var(--dd-danger-muted)',
       color: 'var(--dd-danger)',

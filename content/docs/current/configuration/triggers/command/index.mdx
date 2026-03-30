@@ -131,7 +131,7 @@ services:
 <Tab value="Docker (Bash Script)">
 ```bash
 docker run \
-  -e DD_TRIGGER_COMMAND_LOCAL_CMD=DD_TRIGGER_COMMAND_LOCAL_CMD=bash -c /drydock/trigger.sh \
+  -e DD_TRIGGER_COMMAND_LOCAL_CMD="bash -c /drydock/trigger.sh" \
   -v ${PWD}/drydock/trigger.sh:/drydock/trigger.sh
   ...
   codeswhat/drydock

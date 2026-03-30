@@ -47,6 +47,106 @@ services:
 
 Drydock automatically retries with exponential backoff (1s → 30s max) and will recover once the proxy becomes available, but the health check prevents unnecessary retries during startup.
 
+## Docker event stream "aborted" reconnects every few minutes
+
+If you see periodic messages like:
+
+`Docker event stream error (aborted); reconnect attempt #1 in 1000ms`
+
+followed by:
+
+`Listening to docker events`
+
+this is commonly caused by proxy idle timeout, not a hard failure. Docker events use a long-lived stream, and third-party socket proxies often close idle streams after `TIMEOUT`.
+
+Common fixes:
+
+1. Increase proxy timeout (for example `TIMEOUT=86400s` on linuxserver socket-proxy).
+2. Prefer direct socket mount over proxy where possible.
+3. Use a proxy that supports exempting `/events` from idle timeout.
+4. Optional workaround: run a lightweight heartbeat container/job to reduce idle disconnects.
+
+<Callout type="info">A single reconnect that immediately recovers is expected in many proxy setups. Repeated reconnect failures (not recovering) indicate a real connectivity issue.</Callout>
+
+## SELinux blocks Podman socket access (Permission denied)
+
+On RHEL, Rocky Linux, Fedora, and CentOS with SELinux enforcing, you may see `permission denied` or `EACCES` when Drydock tries to connect to the Podman socket. This is caused by SELinux denying the container access to the host socket file.
+
+**Fix:** Add the `:Z` flag to your socket volume mount so SELinux relabels the socket for the container:
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    volumes:
+      - /run/podman/podman.sock:/var/run/docker.sock:Z
+```
+
+<Callout type="info">The `:Z` flag applies a private SELinux label, granting exclusive access to this container. If multiple containers need the same socket, use `:z` (lowercase) for a shared label instead. Check `ausearch -m avc -ts recent` to confirm SELinux denials are the cause.</Callout>
+
+## `podman-compose` vs `podman compose` networking
+
+If service-name DNS (e.g. `socket-proxy`) fails between containers, check which compose tool you are using:
+
+- **`podman-compose`** (third-party Python tool) groups containers into a single **pod** where all containers share `localhost`. Service names are not resolvable — containers communicate via `localhost:<port>` instead.
+- **`podman compose`** (Podman 4.0+ built-in) uses proper container networking with service-name DNS, matching Docker Compose behavior.
+
+**Recommendation:** Use `podman compose` (built-in, Podman 4.0+) or Docker Compose with the Podman socket for proper service-name DNS resolution. If you must use `podman-compose`, replace hostname references like `socket-proxy` with `localhost` and ensure port mappings are correct.
+
+## Podman socket proxy DNS resolution fails (ENOTFOUND)
+
+If you see `getaddrinfo ENOTFOUND socket-proxy` with Podman, this is usually service-name DNS, not an API compatibility problem.
+
+Checklist:
+
+1. Run `drydock` and `socket-proxy` on the same Compose network (same compose file is simplest).
+2. Keep `DD_WATCHER_LOCAL_HOST=socket-proxy` only when that hostname is resolvable from the drydock container.
+3. If running containers separately, use a resolvable hostname or IP instead of `socket-proxy`.
+
+See [Podman Quick Start](/docs/configuration/watchers#podman-quick-start) and [GitHub issue #152](https://github.com/CodesWhat/drydock/issues/152).
+
+## Podman rootless networking limitations
+
+Rootless Podman networking can behave differently from Docker bridge networking:
+
+- Service-name DNS works only inside the same rootless Podman network/project.
+- Port publishing uses user-mode networking, which may differ in latency and behavior from rootful bridge networking.
+- Host networking and cross-project name resolution are more limited than rootful setups.
+
+If socket-proxy hostname resolution is unstable in rootless mode, prefer:
+
+1. Running both services in one compose project/network.
+2. Or mounting the Podman socket directly and using `DD_WATCHER_LOCAL_SOCKET=/var/run/docker.sock`.
+
+Reference examples: [Podman Quick Start](/docs/configuration/watchers#podman-quick-start).
+
+## Podman `podman.sock` vs `docker.sock` path
+
+Use Podman's host socket path, then map it to `/var/run/docker.sock` inside Drydock.
+
+- Rootful Podman host path: `/run/podman/podman.sock`
+- Rootless Podman host path: `/run/user/<uid>/podman/podman.sock`
+- Inside Drydock: `/var/run/docker.sock` (mapped target)
+
+Then set:
+
+```yaml
+environment:
+  - DD_WATCHER_LOCAL_SOCKET=/var/run/docker.sock
+```
+
+See the full mapping table in [Podman Quick Start](/docs/configuration/watchers#podman-quick-start).
+
+## Podman trigger configuration differences
+
+There are no Podman-specific trigger variables in v1.5. Trigger setup is the same as Docker:
+
+- Add a Docker trigger (`DD_TRIGGER_DOCKER_{name}_AUTO=false` or `true`).
+- If using socket proxy, include `POST=1` and `NETWORKS=1` on the proxy.
+
+Without a Docker trigger, UI actions show `No docker trigger found for this container`.
+See [Socket proxy permissions](/docs/configuration/watchers#proxy-permissions-by-feature) for the required proxy env vars.
+
 ## CSRF validation failed (403) behind a reverse proxy
 
 If you see `403 {"error":"CSRF validation failed"}` when clicking buttons like **Recheck for updates**, **Scan**, or any action that sends a POST/PUT/DELETE request, your reverse proxy setup is missing the `DD_SERVER_TRUSTPROXY` configuration.
@@ -183,11 +283,11 @@ Drydock log behavior is controlled by environment variables:
 | Variable | Values | Default |
 | --- | --- | --- |
 | `DD_LOG_LEVEL` | `fatal`, `error`, `warn`, `info`, `debug`, `trace` | `info` |
-| `DD_LOG_FORMAT` | `text`, `json` | `json` |
+| `DD_LOG_FORMAT` | `text`, `json` | `text` |
 | `DD_LOG_BUFFER_ENABLED` | `true`, `false` | `true` |
 
-The official image defaults to `DD_LOG_FORMAT=json` for structured output suitable for log aggregators like Elasticsearch or Loki. Set `DD_LOG_FORMAT=text` if you prefer pretty logs.
-Set `DD_LOG_BUFFER_ENABLED=false` to disable the in-memory application log ring buffer used by `/api/log/entries` and the UI log viewer.
+The official image defaults to `DD_LOG_FORMAT=text` for pretty, human-readable logs. Set `DD_LOG_FORMAT=json` if you want structured output for log aggregators like Elasticsearch or Loki.
+Set `DD_LOG_BUFFER_ENABLED=false` to disable the in-memory application log ring buffer used by `/api/v1/log/entries` and the UI log viewer.
 See [Logs](/docs/configuration/logs) for examples.
 
 ## Trivy or Cosign not found errors
@@ -197,10 +297,18 @@ Since v1.4.0, drydock ships a **single image** that bundles both Trivy and Cosig
 Verify tool availability at runtime via the API:
 
 ```bash
-curl http://drydock:3000/api/server/security/runtime
+curl http://drydock:3000/api/v1/server/security/runtime
 ```
 
 If you build a custom image, ensure Trivy and Cosign are installed in your Dockerfile. See [Security](/docs/configuration/security) for scanning configuration.
+
+## Temporary container names during recreation (hex prefix aliases)
+
+When Docker recreates a container — for example via Portainer, Docker Compose `up --force-recreate`, or a Drydock Docker trigger — Docker temporarily renames the old container to a name like `fcdb966987a0_myapp` (a 12-character hex prefix matching the container ID, followed by an underscore and the original name). This alias is transient and disappears once the recreation completes.
+
+Drydock automatically detects and filters these temporary alias names. They will never appear in notifications, MQTT topics, the UI, or any trigger output. No configuration is needed — this is handled unconditionally.
+
+<Callout type="info">If you previously saw garbled container names in notifications during container updates, this was caused by the temporary alias leaking through. This is resolved as of v1.5.0.</Callout>
 
 ## Self-update leaves container stopped
 

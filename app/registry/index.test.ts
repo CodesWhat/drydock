@@ -15,6 +15,7 @@ vi.mock('../configuration/index.js', () => ({
   getLogLevel: vi.fn(() => 'info'),
   getLogFormat: vi.fn(() => 'json'),
   getLogBufferEnabled: vi.fn(() => true),
+  getLocalWatcherEnabled: vi.fn(() => true),
   getRegistryConfigurations: vi.fn(),
   getTriggerConfigurations: vi.fn(),
   getWatcherConfigurations: vi.fn(),
@@ -25,6 +26,14 @@ vi.mock('../configuration/index.js', () => ({
 
 vi.mock('../store/index.js', () => ({
   save: vi.fn(),
+}));
+
+const mockGetContainersRaw = vi.hoisted(() => vi.fn(() => []));
+const mockDeleteContainer = vi.hoisted(() => vi.fn());
+
+vi.mock('../store/container.js', () => ({
+  getContainersRaw: mockGetContainersRaw,
+  deleteContainer: mockDeleteContainer,
 }));
 
 vi.mock('../security/scheduler.js', () => ({
@@ -46,6 +55,7 @@ const mockGetTriggerConfigurations = configuration.getTriggerConfigurations;
 const mockGetWatcherConfigurations = configuration.getWatcherConfigurations;
 const mockGetAuthenticationConfigurations = configuration.getAuthenticationConfigurations;
 const mockGetAgentConfigurations = configuration.getAgentConfigurations;
+const mockGetLocalWatcherEnabled = configuration.getLocalWatcherEnabled;
 
 mockGetRegistryConfigurations.mockImplementation(() => registries);
 mockGetTriggerConfigurations.mockImplementation(() => triggers);
@@ -75,6 +85,7 @@ beforeEach(async () => {
   mockGetAuthenticationConfigurations.mockImplementation(() => authentications);
   mockGetAgentConfigurations.mockImplementation(() => agents);
   registry.testable_registrationWarnings.length = 0;
+  mockGetContainersRaw.mockReturnValue([]);
 });
 
 afterEach(async () => {
@@ -647,6 +658,15 @@ test('registerWatchers should register local docker watcher by default', async (
   expect(Object.keys(registry.getState().watcher)).toEqual(['docker.local']);
 });
 
+test('registerWatchers should skip default local watcher when DD_LOCAL_WATCHER=false', async () => {
+  const spyLog = vi.spyOn(registry.testable_log, 'info');
+  mockGetLocalWatcherEnabled.mockReturnValue(false);
+  await registry.testable_registerWatchers();
+  expect(Object.keys(registry.getState().watcher)).toEqual([]);
+  expect(spyLog).toHaveBeenCalledWith('Default local watcher disabled (DD_LOCAL_WATCHER=false)');
+  mockGetLocalWatcherEnabled.mockReturnValue(true);
+});
+
 test('registerWatchers should warn when registration errors occur', async () => {
   const spyLog = vi.spyOn(registry.testable_log, 'warn');
   watchers = {
@@ -840,6 +860,21 @@ test('registerAuthentications should fallback to anonymous when all configured p
   );
 });
 
+test('registerAuthentications should log startup health guidance when DD_AUTH vars exist and auth config is empty', async () => {
+  configuration.ddEnvVars.DD_AUTH_BASIC_ANDI_USER = 'ANDI';
+  const spyLog = vi.spyOn(registry.testable_log, 'error');
+
+  authentications = {};
+  await registry.testable_registerAuthentications();
+
+  expect(Object.keys(registry.getState().authentication)).toEqual(['anonymous.anonymous']);
+  expect(spyLog).toHaveBeenCalledWith(
+    expect.stringContaining(
+      'Detected DD_AUTH_* environment variables, but no configured authentication providers were registered successfully.',
+    ),
+  );
+});
+
 test('registerAuthentications should log startup health guidance when DD_AUTH vars exist but no provider registers', async () => {
   configuration.ddEnvVars.DD_AUTH_BASIC_ANDI_USER = 'ANDI';
   mockIsUpgrade.mockReturnValue(true);
@@ -932,6 +967,73 @@ test('init should register all components', async () => {
   expect(Object.keys(registry.getState().trigger)).toEqual(['mock.mock1', 'mock.mock2']);
   expect(Object.keys(registry.getState().watcher)).toEqual(['docker.watcher1', 'docker.watcher2']);
   expect(Object.keys(registry.getState().authentication)).toEqual(['basic.john', 'basic.jane']);
+});
+
+test('init should prune local containers whose watcher no longer exists', async () => {
+  watchers = {
+    local: {},
+  };
+  mockGetContainersRaw.mockReturnValue([
+    {
+      id: 'keep-local',
+      watcher: 'local',
+    },
+    {
+      id: 'stale-local',
+      watcher: 'legacy',
+    },
+    {
+      id: 'stale-missing-watcher',
+    },
+    {
+      id: 'keep-agent',
+      watcher: 'legacy',
+      agent: 'edge-agent',
+    },
+  ]);
+
+  await registry.init();
+
+  expect(mockDeleteContainer).toHaveBeenCalledTimes(2);
+  expect(mockDeleteContainer).toHaveBeenCalledWith('stale-local');
+  expect(mockDeleteContainer).toHaveBeenCalledWith('stale-missing-watcher');
+});
+
+test('init should skip orphan pruning when no local watchers are registered', async () => {
+  watchers = {
+    invalid: {
+      fail: true,
+    },
+  };
+  mockGetContainersRaw.mockReturnValue([
+    {
+      id: 'stale-local',
+      watcher: 'legacy',
+    },
+  ]);
+
+  await registry.init();
+
+  expect(mockGetContainersRaw).not.toHaveBeenCalled();
+});
+
+test('init should log and continue when orphan pruning fails', async () => {
+  watchers = {
+    local: {},
+  };
+  mockGetContainersRaw.mockImplementation(() => {
+    throw new Error('container store unavailable');
+  });
+
+  const warnSpy = vi.spyOn(registry.testable_log, 'warn');
+  const debugSpy = vi.spyOn(registry.testable_log, 'debug');
+
+  await registry.init();
+
+  expect(warnSpy).toHaveBeenCalledWith(
+    'Unable to prune orphaned local containers (container store unavailable)',
+  );
+  expect(debugSpy).toHaveBeenCalled();
 });
 
 test('deregisterAll should deregister all components', async () => {

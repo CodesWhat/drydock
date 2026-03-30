@@ -18,15 +18,15 @@ OIDC providers configured with an `http://` discovery URL trigger `allowInsecure
 
 ---
 
-### SHA-1 Basic Auth Password Hashes
+### Legacy Basic Auth Password Hashes
 
 | | |
 | --- | --- |
 | **Deprecated in** | v1.4.0 |
 | **Removed in** | v1.6.0 |
-| **Affects** | `DD_AUTH_BASIC_*_HASH` values using `{SHA}<base64>` format |
+| **Affects** | `DD_AUTH_BASIC_*_HASH` values using `{SHA}`, `$apr1$`/`$1$` (MD5), `crypt`, or plain-text formats |
 
-Legacy SHA-1 `{SHA}` password hashes inherited from the upstream WUD project are accepted with deprecation warnings. SHA-1 is cryptographically broken and unsuitable for password hashing.
+Legacy password hash formats inherited from the upstream WUD project (`{SHA}`, APR1/MD5, crypt, and plain-text) are accepted with deprecation warnings. These formats are cryptographically weak and unsuitable for password hashing.
 
 **Migration:** Generate a new argon2id hash using the Drydock container and update your `DD_AUTH_BASIC_<name>_HASH` environment variable:
 
@@ -87,7 +87,7 @@ Setting `DD_SERVER_CORS_ENABLED=true` without specifying `DD_SERVER_CORS_ORIGIN`
 
 | | |
 | --- | --- |
-| **Deprecated in** | v1.2.0 |
+| **Deprecated in** | v1.4.0 |
 | **Removed in** | v1.6.0 |
 | **Affects** | Containers using `wud.*` labels (e.g., `wud.watch`, `wud.tag.include`) |
 
@@ -101,7 +101,7 @@ Legacy `wud.*` labels from the upstream WUD project are accepted as fallbacks fo
 
 | | |
 | --- | --- |
-| **Deprecated in** | v1.2.0 |
+| **Deprecated in** | v1.4.0 |
 | **Removed in** | v1.6.0 |
 | **Affects** | Configurations using `WUD_*` env vars (e.g., `WUD_AGENT_SECRET`) |
 
@@ -111,11 +111,51 @@ Legacy `WUD_*` environment variables are accepted as fallbacks for their `DD_*` 
 
 ---
 
+### `curl` in Docker image
+
+| | |
+| --- | --- |
+| **Deprecated in** | v1.5.0 |
+| **Removed in** | v1.6.0 |
+| **Affects** | Custom `healthcheck:` overrides in compose files that use `curl` |
+
+The official Docker image previously included `curl` for custom healthcheck overrides. The built-in `HEALTHCHECK` now uses a lightweight static binary (`/bin/healthcheck`).
+
+**Migration:** Remove custom `healthcheck:` blocks from your drydock compose service — the image handles it automatically. If you need custom intervals, use `test: /bin/healthcheck ${DD_SERVER_PORT:-3000}`. See [Monitoring](https://getdrydock.com/docs/monitoring).
+
+---
+
+### Legacy trigger prefix inputs (`DD_TRIGGER_*`, `dd.trigger.*`)
+
+| | |
+| --- | --- |
+| **Deprecated in** | v1.5.0 |
+| **Removed in** | v1.7.0 |
+| **Affects** | Trigger configs using `DD_TRIGGER_*` env vars and container labels `dd.trigger.include` / `dd.trigger.exclude` |
+
+Legacy trigger prefixes are accepted as compatibility aliases while the trigger taxonomy moves to action/notification prefixes.
+
+**Migration:** Prefer `DD_ACTION_*` / `DD_NOTIFICATION_*` and `dd.action.*` / `dd.notification.*`.
+
+The migration CLI can rewrite legacy trigger prefixes for you:
+
+```bash
+# Preview changes
+node dist/index.js config migrate --source trigger --dry-run
+
+# Apply to specific files
+node dist/index.js config migrate --source trigger --file .env --file compose.yaml
+```
+
+The CLI rewrites legacy trigger keys to action-prefixed aliases by default (`DD_ACTION_*`, `dd.action.*`), which remain fully compatible.
+
+---
+
 ### `DD_WATCHER_{name}_WATCHDIGEST` environment variable
 
 | | |
 | --- | --- |
-| **Deprecated in** | v1.2.0 |
+| **Deprecated in** | v1.4.0 |
 | **Removed in** | v1.6.0 |
 | **Affects** | Configurations using `DD_WATCHER_{name}_WATCHDIGEST` |
 
@@ -129,7 +169,7 @@ The `WATCHDIGEST` env var is deprecated. Use the `dd.watch.digest=true` containe
 
 | | |
 | --- | --- |
-| **Deprecated in** | v1.2.0 |
+| **Deprecated in** | v1.4.0 |
 | **Removed in** | v1.6.0 |
 | **Affects** | Configurations using `DD_WATCHER_{name}_WATCHATSTART` |
 
@@ -171,7 +211,7 @@ Kafka trigger configuration now uses `clientid` (lowercase) as the canonical key
 
 | | |
 | --- | --- |
-| **Deprecated in** | v1.3.0 |
+| **Deprecated in** | v1.4.0 |
 | **Removed in** | v1.6.0 |
 | **Affects** | `DD_REGISTRY_HUB_PUBLIC_TOKEN`, `DD_REGISTRY_DHI_TOKEN`, and similar token-auth env vars |
 

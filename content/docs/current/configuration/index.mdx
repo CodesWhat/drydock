@@ -23,6 +23,7 @@ Please find below the documentation for each of them:
 - [**Authentication**](/docs/configuration/authentications)
 - [**Backup & Rollback**](/docs/configuration/rollback) — automatic image backup and one-click restore
 - [**Container Actions**](/docs/configuration/actions) — start, stop, restart, update, and delete
+- [**Dashboard**](/docs/configuration/dashboard) — widget layout, customization, and trigger aliases
 - [**DNS**](/docs/configuration/dns) — DNS result ordering for Alpine/musl compatibility
 - [**Lifecycle Hooks**](/docs/configuration/hooks) — pre/post-update commands
 - [**Logs**](/docs/configuration/logs)
@@ -90,8 +91,10 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - /opt/drydock/store:/store
+    # The image includes a built-in HEALTHCHECK — no override needed.
+    # If you need custom intervals, use the built-in binary:
     healthcheck:
-      test: curl --fail http://localhost:${DD_SERVER_PORT:-3000}/health || exit 1
+      test: /bin/healthcheck ${DD_SERVER_PORT:-3000}
       interval: 10s
       timeout: 10s
       retries: 3

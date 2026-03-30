@@ -75,6 +75,8 @@ services:
         - DD_TRIGGER_PUSHOVER_1_PRIORITY=2
         - DD_TRIGGER_PUSHOVER_1_EXPIRE=600
         - DD_TRIGGER_PUSHOVER_1_RETRY=60
+        - DD_TRIGGER_PUSHOVER_1_HTML=1
+        - DD_TRIGGER_PUSHOVER_1_TTL=3600
 ```
 
 </Tab>
@@ -88,6 +90,8 @@ docker run \
     -e DD_TRIGGER_PUSHOVER_1_PRIORITY="2" \
     -e DD_TRIGGER_PUSHOVER_1_EXPIRE="600" \
     -e DD_TRIGGER_PUSHOVER_1_RETRY="60" \
+    -e DD_TRIGGER_PUSHOVER_1_HTML="1" \
+    -e DD_TRIGGER_PUSHOVER_1_TTL="3600" \
   ...
   codeswhat/drydock
 ```

@@ -1,6 +1,13 @@
 import type { Container } from '../../../model/container.js';
+import * as registry from '../../../registry/index.js';
+import { detectSourceRepoFromImageMetadata } from '../../../release-notes/index.js';
 import * as storeContainer from '../../../store/container.js';
 import { parse as parseSemver, transform as transformTag } from '../../../tag/index.js';
+import {
+  getDockerWatcherRegistryId,
+  getDockerWatcherSourceKey,
+  isDockerWatcher,
+} from './container-init.js';
 import {
   getContainerDisplayName,
   getContainerName,
@@ -8,6 +15,7 @@ import {
   isDigestToWatch,
   type ResolvedImgset,
   shouldUpdateDisplayNameFromContainerName,
+  type TagPrecision,
 } from './docker-helpers.js';
 import {
   areRuntimeDetailsEqual,
@@ -16,6 +24,20 @@ import {
   mergeRuntimeDetails,
   normalizeRuntimeDetails,
 } from './runtime-details.js';
+import { getNumericTagShape } from './tag-candidates.js';
+
+const MIN_SPECIFIC_SEGMENTS = 3;
+
+function classifyTagPrecision(
+  tag: string,
+  transformTags: string | undefined,
+  parsedTag: unknown,
+): TagPrecision {
+  if (!parsedTag) return 'floating';
+  const shape = getNumericTagShape(tag, transformTags);
+  if (!shape) return 'floating';
+  return shape.numericSegments.length >= MIN_SPECIFIC_SEGMENTS ? 'specific' : 'floating';
+}
 
 export interface ContainerLabelOverrides {
   includeTags?: string;
@@ -53,6 +75,9 @@ interface DockerImageInspectPayload {
   Os?: string;
   Variant?: string;
   Created?: string;
+  Config?: {
+    Labels?: Record<string, string>;
+  };
   [key: string]: unknown;
 }
 
@@ -94,8 +119,13 @@ interface ResolvedContainerConfig {
 
 interface DockerImageDetailsWatcher {
   name: string;
+  agent?: string;
   configuration: {
     watchevents: boolean;
+    host?: string;
+    socket?: string;
+    protocol?: string;
+    port?: number;
   };
   dockerApi: {
     getContainer: (id: string) => { inspect: () => Promise<DockerContainerInspectPayload> };
@@ -123,6 +153,7 @@ interface DockerImageDetailsHelpers {
   resolveImageName: (
     imageName: string,
     image: DockerImageInspectPayload,
+    containerName?: string,
   ) => ParsedDockerImageReference | undefined;
   resolveTagName: (
     parsedImage: ParsedDockerImageReference,
@@ -138,7 +169,7 @@ interface DockerImageDetailsHelpers {
 
 type RuntimeDetails = ReturnType<typeof getRuntimeDetailsFromContainerSummary>;
 
-function getErrorMessage(error: unknown) {
+function getErrorMessage(error: unknown): string {
   if (error instanceof Error) {
     return error.message;
   }
@@ -278,8 +309,10 @@ async function inspectImageForContainer(
   try {
     await watcher.ensureRemoteAuthHeaders();
     return await watcher.dockerApi.getImage(imageName).inspect();
-  } catch (e: unknown) {
-    throw new Error(`Unable to inspect image for container ${containerId}: ${getErrorMessage(e)}`);
+  } catch (error: unknown) {
+    throw new Error(
+      `Unable to inspect image for container ${containerId}: ${getErrorMessage(error)}`,
+    );
   }
 }
 
@@ -305,31 +338,63 @@ function warnWhenUntrackableImage(
   dockerContainerName: string,
   isSemver: boolean,
   watchDigest: boolean,
+  tagPrecision: TagPrecision,
 ) {
-  if (isSemver || watchDigest) {
+  if (watchDigest) {
     return;
   }
 
-  watcher.ensureLogger();
-  watcher.log.warn(
-    `Image is not a semver and digest watching is disabled so drydock won't report any update for container "${dockerContainerName}". Please review the configuration to enable digest watching for this container or exclude this container from being watched`,
-  );
+  if (isSemver && tagPrecision === 'floating') {
+    watcher.ensureLogger();
+    watcher.log.warn(
+      `Tag for container "${dockerContainerName}" looks like a floating version alias (e.g. v3, 1.4). Digest watching is disabled so in-place updates won't be detected. Set dd.watch.digest=true or use a full semver tag (e.g. 1.4.5)`,
+    );
+    return;
+  }
+
+  if (!isSemver) {
+    watcher.ensureLogger();
+    watcher.log.warn(
+      `Image is not a semver and digest watching is disabled so drydock won't report any update for container "${dockerContainerName}". Please review the configuration to enable digest watching for this container or exclude this container from being watched`,
+    );
+  }
 }
 
 function removeStaleContainerEntriesWithSameName(
-  watcherName: string,
+  watcher: DockerImageDetailsWatcher,
   containerToReturn: Container,
 ) {
   if (typeof containerToReturn.name !== 'string' || containerToReturn.name === '') {
     return;
   }
 
-  const containersWithSameName = storeContainer.getContainers({
-    watcher: watcherName,
-    name: containerToReturn.name,
-  });
+  const containersWithSameName = storeContainer.getContainers({ name: containerToReturn.name });
+  const watcherRegistryState = registry.getState().watcher;
+  const currentWatcherSourceKey = getDockerWatcherSourceKey(watcher);
+  const currentWatcherAgent = watcher.agent;
+
   containersWithSameName
     .filter((staleContainer) => staleContainer.id !== containerToReturn.id)
+    .filter((staleContainer) => staleContainer.agent === currentWatcherAgent)
+    .filter((staleContainer) => {
+      if (staleContainer.watcher === watcher.name) {
+        return true;
+      }
+
+      if (typeof staleContainer.watcher !== 'string' || staleContainer.watcher === '') {
+        return false;
+      }
+      const staleWatcherId = getDockerWatcherRegistryId(
+        staleContainer.watcher,
+        staleContainer.agent,
+      );
+      const staleWatcher = watcherRegistryState[staleWatcherId];
+      if (!isDockerWatcher(staleWatcher)) {
+        return false;
+      }
+
+      return getDockerWatcherSourceKey(staleWatcher) === currentWatcherSourceKey;
+    })
     .forEach((staleContainer) => storeContainer.deleteContainer(staleContainer.id));
 }
 
@@ -345,6 +410,14 @@ export async function addImageDetailsToContainerOrchestration(
   const containerId = container.Id;
   const containerLabels: Record<string, string> = container.Labels || {};
   const dockerContainerName = getContainerName(container);
+
+  // Podman pod infra containers have an empty Image field — skip them
+  // to avoid broken API paths like /images//json that trigger 301 crashes
+  // in docker-modem's redirect handler (see GitHub issue #182).
+  if (!container.Image) {
+    return undefined;
+  }
+
   const runtimeDetailsFromSummary = getRuntimeDetailsFromContainerSummary(container);
 
   // Is container already in store? Refresh volatile image fields, then return it
@@ -361,7 +434,7 @@ export async function addImageDetailsToContainerOrchestration(
 
   const image = await inspectImageForContainer(watcher, containerId, container.Image);
 
-  const parsedImage = helpers.resolveImageName(container.Image, image);
+  const parsedImage = helpers.resolveImageName(container.Image, image, dockerContainerName);
   if (!parsedImage) {
     return undefined;
   }
@@ -391,15 +464,23 @@ export async function addImageDetailsToContainerOrchestration(
     containerId,
   );
 
-  const isSemver = parseSemver(transformTag(resolvedConfig.transformTags, tagName)) != null;
-  const watchDigest = isDigestToWatch(resolvedConfig.watchDigest, parsedImage, isSemver);
+  const transformedTag = transformTag(resolvedConfig.transformTags, tagName);
+  const parsedTag = parseSemver(transformedTag);
+  const isSemver = parsedTag != null;
+  const tagPrecision = classifyTagPrecision(tagName, resolvedConfig.transformTags, parsedTag);
+  const watchDigest = isDigestToWatch(
+    resolvedConfig.watchDigest,
+    parsedImage,
+    isSemver,
+    tagPrecision,
+  );
   const repoDigest = getRepoDigest(image);
   const runtimeDetails = await resolveRuntimeDetailsForDiscoveredContainer(
     watcher,
     containerId,
     runtimeDetailsFromSummary,
   );
-  warnWhenUntrackableImage(watcher, dockerContainerName, isSemver, watchDigest);
+  warnWhenUntrackableImage(watcher, dockerContainerName, isSemver, watchDigest, tagPrecision);
 
   const containerToReturn = helpers.normalizeContainer({
     id: containerId,
@@ -430,6 +511,7 @@ export async function addImageDetailsToContainerOrchestration(
       tag: {
         value: tagName,
         semver: isSemver,
+        tagPrecision,
       },
       digest: {
         watch: watchDigest,
@@ -442,6 +524,12 @@ export async function addImageDetailsToContainerOrchestration(
       created: image.Created,
     },
     labels: containerLabels,
+    sourceRepo: detectSourceRepoFromImageMetadata({
+      containerLabels,
+      imageLabels: image.Config?.Labels,
+      imageRegistryDomain: parsedImage.domain,
+      imagePath: parsedImage.path,
+    }),
     details: runtimeDetails,
     result: {
       tag: tagName,
@@ -449,7 +537,12 @@ export async function addImageDetailsToContainerOrchestration(
     updateAvailable: false,
     updateKind: { kind: 'unknown' },
   } as Container);
-  removeStaleContainerEntriesWithSameName(watcher.name, containerToReturn);
+  removeStaleContainerEntriesWithSameName(watcher, containerToReturn);
 
   return containerToReturn;
 }
+
+export {
+  classifyTagPrecision as testable_classifyTagPrecision,
+  getNumericTagShape as testable_getNumericTagShape,
+};

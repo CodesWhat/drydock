@@ -345,6 +345,21 @@ async function scanContainer(containerId: string, signal?: AbortSignal) {
   return response.json();
 }
 
+async function getContainerReleaseNotes(containerId: string) {
+  const response = await fetch(`/api/v1/containers/${containerId}/release-notes`, {
+    credentials: 'include',
+  });
+  if (response.status === 404) {
+    return null;
+  }
+  if (!response.ok) {
+    throw new Error(
+      `Failed to get release notes for container ${containerId}: ${response.statusText}`,
+    );
+  }
+  return response.json();
+}
+
 async function revealContainerEnv(containerId: string) {
   const response = await fetch(`/api/v1/containers/${containerId}/env/reveal`, {
     method: 'POST',
@@ -363,6 +378,7 @@ export {
   getContainerGroups,
   getContainerLogs,
   getContainerRecentStatus,
+  getContainerReleaseNotes,
   getContainerSbom,
   getContainerSummary,
   getContainerTriggers,

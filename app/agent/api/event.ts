@@ -28,6 +28,16 @@ interface ContainerSummaryCache {
   expiresAtMs: number;
 }
 
+interface ContainerImageLike {
+  id?: unknown;
+  name?: unknown;
+}
+
+interface ContainerLike {
+  id?: unknown;
+  image?: ContainerImageLike;
+}
+
 const CONTAINER_SUMMARY_CACHE_TTL_MS = 2_000;
 
 interface RuntimeEnvEntry {
@@ -53,7 +63,7 @@ function allocateSseClientId(): number {
  * @param eventName
  * @param data
  */
-function sendSseEvent(eventName: string, data: any) {
+function sendSseEvent(eventName: string, data: unknown) {
   const message = {
     type: eventName,
     data: data,
@@ -130,12 +140,31 @@ function getAgentContainerSsePayload(payload: unknown): unknown {
   return sanitizeContainerLifecyclePayloadForAgentSse(payload);
 }
 
+function sanitizeWatcherSnapshotPayloadForAgentSse(payload: unknown): unknown {
+  if (!payload || typeof payload !== 'object') {
+    return payload;
+  }
+
+  const snapshotPayload = payload as {
+    watcher?: unknown;
+    containers?: unknown;
+  };
+  const containers = Array.isArray(snapshotPayload.containers)
+    ? snapshotPayload.containers.map((container) => getAgentContainerSsePayload(container))
+    : [];
+
+  return {
+    watcher: snapshotPayload.watcher,
+    containers,
+  };
+}
+
 function computeContainerSummary(): ContainerSummary {
   const containers = storeContainer.getContainers();
   const containerStatus = getContainerStatusSummary(containers);
   const images = new Set(
     containers.map(
-      (container: any) => container.image?.id ?? container.image?.name ?? container.id,
+      (container: ContainerLike) => container.image?.id ?? container.image?.name ?? container.id,
     ),
   ).size;
   return {
@@ -215,6 +244,9 @@ export function initEvents() {
   );
   event.registerContainerRemoved((container: event.ContainerLifecycleEventPayload) =>
     sendSseEvent('dd:container-removed', { id: container.id }),
+  );
+  event.registerWatcherSnapshot((payload: event.WatcherSnapshotEventPayload) =>
+    sendSseEvent('dd:watcher-snapshot', sanitizeWatcherSnapshotPayloadForAgentSse(payload)),
   );
 }
 

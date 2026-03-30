@@ -11,7 +11,7 @@ const configurationValid = {
   mode: 'simple',
   threshold: 'all',
   once: true,
-  auto: true,
+  auto: 'all',
   order: 100,
   simpletitle: 'New ${container.updateKind.kind} found for container ${container.name}',
   simplebody:
@@ -19,6 +19,7 @@ const configurationValid = {
 
   batchtitle: '${containers.length} updates available',
   resolvenotifications: false,
+  digestcron: '0 8 * * *',
 };
 
 beforeEach(async () => {
@@ -57,12 +58,13 @@ test('maskConfiguration should mask sensitive data', async () => {
     mode: 'simple',
     threshold: 'all',
     once: true,
-    auto: true,
+    auto: 'all',
     order: 100,
     simpletitle: configurationValid.simpletitle,
     simplebody: configurationValid.simplebody,
     batchtitle: configurationValid.batchtitle,
     resolvenotifications: false,
+    digestcron: '0 8 * * *',
   });
 });
 

@@ -60,6 +60,11 @@ export const openApiDocument = {
         description:
           'Bearer token configured via webhook settings (shared token or endpoint-specific webhook tokens).',
       },
+      metricsBearerAuth: {
+        type: 'http',
+        scheme: 'bearer',
+        description: 'DD_SERVER_METRICS_TOKEN bearer token for /metrics endpoint',
+      },
     },
     schemas: openApiSchemas,
   },

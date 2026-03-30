@@ -6,6 +6,7 @@ import type { AuditEntry } from '../model/audit.js';
 import { getContainerActionsCounter } from '../prometheus/container-actions.js';
 import * as registry from '../registry/index.js';
 import * as storeContainer from '../store/container.js';
+import Trigger from '../triggers/providers/Trigger.js';
 import { recordAuditEvent } from './audit-events.js';
 import { findDockerTriggerForContainer, NO_DOCKER_TRIGGER_FOUND_ERROR } from './docker-trigger.js';
 import { sendErrorResponse } from './error-response.js';
@@ -47,8 +48,8 @@ type DockerWatcher = {
  * Execute a container action (start, stop, restart).
  *
  * Security note: these action endpoints are intentionally authentication-gated
- * only. In current single-operator deployments, any authenticated user can
- * start, stop, or restart any container. Fine-grained RBAC is planned for a
+ * only. In current single-operator deployments, all authenticated users can
+ * start, stop, or restart containers. Fine-grained RBAC is planned for a
  * future enterprise access release.
  */
 async function executeAction(
@@ -163,6 +164,20 @@ async function updateContainer(req: Request, res: Response) {
     return;
   }
 
+  if (Trigger.isRollbackContainer(container)) {
+    sendErrorResponse(
+      res,
+      409,
+      'Cannot update temporary rollback container renamed with -old-{timestamp}',
+    );
+    return;
+  }
+
+  if (container.security?.scan?.status === 'blocked') {
+    sendErrorResponse(res, 409, 'Update blocked by security scan. Use force-update to override.');
+    return;
+  }
+
   const trigger = findDockerTriggerForContainer(registry.getState().trigger, container, {
     triggerTypes: ['docker', 'dockercompose'],
   });
@@ -173,6 +188,12 @@ async function updateContainer(req: Request, res: Response) {
 
   try {
     await trigger.trigger(container);
+    // Clear updateAvailable so the UI refresh sees the change immediately
+    // (the watcher will re-evaluate on its next scan cycle)
+    const containerAfterTrigger = storeContainer.getContainer(id);
+    if (containerAfterTrigger?.updateAvailable) {
+      storeContainer.updateContainer({ ...containerAfterTrigger, updateAvailable: false });
+    }
     const updatedContainer = storeContainer.getContainer(id);
     recordAuditEvent({ action: 'container-update', container, status: 'success' });
     getContainerActionsCounter()?.inc({ action: 'container-update' });

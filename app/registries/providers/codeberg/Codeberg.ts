@@ -19,7 +19,7 @@ class Codeberg extends Forgejo {
       .and('login', 'password')
       .without('login', 'auth');
 
-    return this.joi.alternatives().try(this.joi.string().allow(''), credentialsSchema);
+    return credentialsSchema.allow('');
   }
 
   init() {

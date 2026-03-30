@@ -562,7 +562,7 @@ export function buildDeviceCodeTokenRequest(
 
 /**
  * Handle an error response during device-code token polling.
- * Returns an object indicating whether to continue polling and any
+ * Returns an object indicating whether to continue polling and an optional
  * adjustment to the poll interval, or throws on fatal errors.
  */
 export function handleTokenErrorResponse(

@@ -94,6 +94,7 @@ describe('useLogViewport', () => {
 
 describe('useAutoFetchLogs', () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     vi.useFakeTimers();
   });
 
@@ -323,6 +324,66 @@ describe('useAutoFetchLogs', () => {
         Object.defineProperty(globalThis, 'document', originalDocumentDescriptor);
       } else {
         Reflect.deleteProperty(globalThis, 'document');
+      }
+    }
+  });
+
+  it('does not leak timer when visibilitychange fires during scope disposal', async () => {
+    const fetchFn = vi.fn().mockResolvedValue(undefined);
+    const originalHidden = Object.getOwnPropertyDescriptor(document, 'hidden');
+    const originalVisibilityState = Object.getOwnPropertyDescriptor(document, 'visibilityState');
+
+    // Tab is hidden so the interval is paused
+    Object.defineProperty(document, 'hidden', {
+      configurable: true,
+      get: () => true,
+    });
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => 'hidden',
+    });
+
+    const scope = effectScope();
+    try {
+      scope.run(() => {
+        const { autoFetchInterval } = useAutoFetchLogs({
+          fetchFn,
+          scrollToBottom: vi.fn(),
+          scrollBlocked: ref(false),
+        });
+        autoFetchInterval.value = 2000;
+      });
+      await nextTick();
+
+      // Tab becomes visible right as scope is being disposed.
+      // The visibility listener removal must run BEFORE stopAutoFetch
+      // (onScopeDispose reverse order) to prevent the listener from
+      // restarting the interval after stopAutoFetch clears it.
+      Object.defineProperty(document, 'hidden', {
+        configurable: true,
+        get: () => false,
+      });
+      Object.defineProperty(document, 'visibilityState', {
+        configurable: true,
+        get: () => 'visible',
+      });
+
+      scope.stop();
+
+      // Fire visibilitychange AFTER scope disposal — listener must be gone
+      document.dispatchEvent(new Event('visibilitychange'));
+      await nextTick();
+
+      // Advance time well past the interval — no fetch should fire
+      vi.advanceTimersByTime(10_000);
+      expect(fetchFn).not.toHaveBeenCalled();
+    } finally {
+      if (originalHidden) Object.defineProperty(document, 'hidden', originalHidden);
+      else Reflect.deleteProperty(document, 'hidden');
+      if (originalVisibilityState) {
+        Object.defineProperty(document, 'visibilityState', originalVisibilityState);
+      } else {
+        Reflect.deleteProperty(document, 'visibilityState');
       }
     }
   });

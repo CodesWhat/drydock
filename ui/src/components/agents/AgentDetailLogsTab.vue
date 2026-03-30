@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import AppIconButton from '../AppIconButton.vue';
 import LogViewer from '../LogViewer.vue';
 
 interface AgentLog {
@@ -61,15 +62,15 @@ function asLog(entry: unknown): AgentLog {
       :panel-style="{ backgroundColor: 'var(--dd-bg-code)' }"
       container-class="px-1"
       container-style="box-shadow: var(--dd-shadow-inset);"
-      error-class="mx-3 mt-3 text-[0.6875rem] px-3 py-2 dd-rounded"
-      empty-class="px-3 py-4 text-[0.6875rem] dd-text-muted text-center"
+      error-class="mx-3 mt-3 text-2xs-plus px-3 py-2 dd-rounded"
+      empty-class="px-3 py-4 text-2xs-plus dd-text-muted text-center"
     >
       <template #controls>
         <div class="px-3 py-2 flex flex-wrap items-center gap-2">
           <select
             v-model="logLevelFilterModel"
             data-testid="agent-log-level-filter"
-            class="px-2 py-1.5 dd-rounded text-[0.6875rem] font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text"
+            class="px-2 py-1.5 dd-rounded text-2xs-plus font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text"
           >
             <option value="all">All Levels</option>
             <option value="debug">Debug</option>
@@ -81,7 +82,7 @@ function asLog(entry: unknown): AgentLog {
           <select
             v-model.number="tailModel"
             data-testid="agent-log-tail-filter"
-            class="px-2 py-1.5 dd-rounded text-[0.6875rem] font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text"
+            class="px-2 py-1.5 dd-rounded text-2xs-plus font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text"
           >
             <option :value="50">Tail 50</option>
             <option :value="100">Tail 100</option>
@@ -94,53 +95,55 @@ function asLog(entry: unknown): AgentLog {
             data-testid="agent-log-component-filter"
             type="text"
             placeholder="Filter by component..."
-            class="flex-1 min-w-[160px] px-2.5 py-1.5 dd-rounded text-[0.6875rem] font-medium outline-none dd-bg dd-text dd-placeholder"
+            class="flex-1 min-w-[160px] px-2.5 py-1.5 dd-rounded text-2xs-plus font-medium outline-none dd-bg dd-text dd-placeholder"
             @keyup.enter="emit('refresh')"
           />
 
-          <button
+          <AppButton size="none" variant="plain" weight="none"
             data-testid="agent-log-apply"
-            class="px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors dd-bg-elevated dd-text hover:opacity-90"
+            class="px-3 py-1.5 dd-rounded text-2xs-plus font-semibold transition-colors dd-bg-elevated dd-text hover:opacity-90"
             :class="props.loading ? 'opacity-50 pointer-events-none' : ''"
             @click="emit('refresh')"
           >
             Apply
-          </button>
-          <button
-            class="px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors dd-text-muted hover:dd-text"
+          </AppButton>
+          <AppButton size="none" variant="plain" weight="none"
+            class="px-3 py-1.5 dd-rounded text-2xs-plus font-semibold transition-colors dd-text-muted hover:dd-text"
             :class="props.loading ? 'opacity-50 pointer-events-none' : ''"
             @click="emit('reset')"
           >
             Reset
-          </button>
-          <button
+          </AppButton>
+          <AppIconButton
+            icon="refresh"
+            size="toolbar"
+            variant="plain"
             data-testid="agent-log-refresh"
-            class="p-1.5 dd-rounded transition-colors dd-text-muted hover:dd-text"
-            :class="props.loading ? 'opacity-50 pointer-events-none' : ''"
-            v-tooltip.top="'Refresh'"
+            class="dd-text-muted hover:dd-text"
+            :class="props.loading ? 'pointer-events-none' : ''"
+            tooltip="Refresh"
+            :disabled="props.loading"
             @click="emit('refresh')"
-          >
-            <AppIcon name="refresh" :size="12" />
-          </button>
+          />
         </div>
       </template>
 
       <template #meta>
-        <div class="px-3 py-1 text-[0.625rem] dd-text-muted">
+        <div class="px-3 py-1 text-2xs dd-text-muted">
           Last fetched: {{ props.formatLastFetched(props.lastFetchedIso) }}
         </div>
       </template>
 
       <template #entry="{ entry }">
         <div
-          class="px-3 py-[3px] font-mono text-[0.6875rem] leading-relaxed flex gap-3 transition-colors"
+          class="px-3 py-[3px] font-mono text-2xs-plus leading-relaxed flex gap-3 transition-colors"
           :style="{ borderBottom: '1px solid var(--dd-log-line)' }"
         >
           <span class="shrink-0 tabular-nums" style="color: var(--dd-log-text-muted);">
             {{ props.formatTimestamp(asLog(entry).timestamp) }}
           </span>
           <span
-            class="shrink-0 w-11 text-right font-semibold uppercase text-[0.625rem]"
+            class="shrink-0 w-11 text-right font-semibold uppercase text-2xs"
             :style="{
               color: asLog(entry).level === 'error' ? 'var(--dd-danger)'
                    : asLog(entry).level === 'warn' ? 'var(--dd-warning)'
@@ -160,7 +163,7 @@ function asLog(entry: unknown): AgentLog {
           class="shrink-0 px-4 py-2 flex items-center justify-between"
           :style="{ borderTop: '1px solid var(--dd-log-divider)', backgroundColor: 'var(--dd-log-footer-bg)' }"
         >
-          <span class="text-[0.625rem] font-medium" style="color: var(--dd-log-text-muted);">
+          <span class="text-2xs font-medium" style="color: var(--dd-log-text-muted);">
             {{ props.logs.length }} entries
           </span>
           <div class="flex items-center gap-1.5">
@@ -169,7 +172,7 @@ function asLog(entry: unknown): AgentLog {
               :style="{ backgroundColor: props.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)' }"
             />
             <span
-              class="text-[0.625rem] font-semibold"
+              class="text-2xs font-semibold"
               :style="{ color: props.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)' }"
             >
               {{ props.status === 'connected' ? 'Live' : 'Offline' }}

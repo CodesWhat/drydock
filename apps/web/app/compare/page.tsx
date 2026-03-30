@@ -91,7 +91,7 @@ const tools = [
     name: "WUD",
     slug: "wud",
     description:
-      "Drydock's upstream fork (What's Up Docker). See what Drydock adds: 13 more registries, security scanning, agents, audit log, and a TypeScript rewrite.",
+      "Drydock's upstream fork (What's Up Docker). See what Drydock adds: 10 more registries, security scanning, agents, audit log, and a TypeScript rewrite.",
     status: "Active",
     statusColor: "bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-400",
   },

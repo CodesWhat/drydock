@@ -2,6 +2,13 @@ import axios from 'axios';
 import { getOutboundHttpTimeoutMs } from '../../../configuration/runtime-defaults.js';
 import Trigger from '../Trigger.js';
 
+type GoogleChatMessageBody = {
+  text: string;
+  thread?: {
+    threadKey: string;
+  };
+};
+
 /**
  * Google Chat Trigger implementation
  */
@@ -43,7 +50,7 @@ class Googlechat extends Trigger {
   }
 
   buildMessageBody(text) {
-    const body: any = { text };
+    const body: GoogleChatMessageBody = { text };
     if (this.configuration.threadkey) {
       body.thread = { threadKey: this.configuration.threadkey };
     }

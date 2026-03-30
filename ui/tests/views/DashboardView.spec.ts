@@ -22,6 +22,10 @@ vi.mock('@/services/container', () => ({
   getContainerSummary: vi.fn(),
 }));
 
+vi.mock('@/services/stats', () => ({
+  getAllContainerStats: vi.fn(),
+}));
+
 vi.mock('@/services/agent', () => ({
   getAgents: vi.fn(),
 }));
@@ -69,9 +73,11 @@ import {
 } from '@/services/container';
 import { getAllRegistries } from '@/services/registry';
 import { getServer } from '@/services/server';
+import { getAllContainerStats } from '@/services/stats';
 import { getAllWatchers } from '@/services/watcher';
 
 const mockGetAllContainers = getAllContainers as ReturnType<typeof vi.fn>;
+const mockGetAllContainerStats = getAllContainerStats as ReturnType<typeof vi.fn>;
 const mockGetContainerRecentStatus = getContainerRecentStatus as ReturnType<typeof vi.fn>;
 const mockGetContainerSummary = getContainerSummary as ReturnType<typeof vi.fn>;
 const mockGetAgents = getAgents as ReturnType<typeof vi.fn>;
@@ -105,6 +111,7 @@ interface DashboardDataOverrides {
   registries?: any[];
   auditEntries?: any[];
   recentStatuses?: Record<string, string>;
+  containerStats?: any[];
 }
 
 function mapAuditEntriesToRecentStatuses(auditEntries: any[]): Record<string, string> {
@@ -135,6 +142,7 @@ async function mountDashboard(
   overrides: DashboardDataOverrides = {},
 ) {
   mockGetAllContainers.mockResolvedValue(containers);
+  mockGetAllContainerStats.mockResolvedValue(overrides.containerStats ?? []);
   mockGetContainerSummary.mockResolvedValue({
     containers: {
       total: containers.length,
@@ -358,23 +366,17 @@ describe('DashboardView', () => {
   });
 
   describe('SSE refresh behavior', () => {
-    it('refreshes dashboard summary on dd:sse-container-changed without full refresh', async () => {
+    it('performs full data refresh on dd:sse-container-changed (#229)', async () => {
       vi.useFakeTimers();
       try {
         await mountDashboard([makeContainer()]);
-        const summaryCallsBefore = mockGetContainerSummary.mock.calls.length;
         const containersCallsBefore = mockGetAllContainers.mock.calls.length;
-        const serverCallsBefore = mockGetServer.mock.calls.length;
-        const agentsCallsBefore = mockGetAgents.mock.calls.length;
 
         globalThis.dispatchEvent(new CustomEvent('dd:sse-container-changed'));
         vi.advanceTimersByTime(1000);
         await flushPromises();
 
-        expect(mockGetContainerSummary.mock.calls.length).toBeGreaterThan(summaryCallsBefore);
-        expect(mockGetAllContainers.mock.calls.length).toBe(containersCallsBefore);
-        expect(mockGetServer.mock.calls.length).toBe(serverCallsBefore);
-        expect(mockGetAgents.mock.calls.length).toBe(agentsCallsBefore);
+        expect(mockGetAllContainers.mock.calls.length).toBeGreaterThan(containersCallsBefore);
       } finally {
         vi.useRealTimers();
       }
@@ -564,7 +566,7 @@ describe('DashboardView', () => {
       expect(wrapper.text()).toContain('7.0.0');
     });
 
-    it('limits recent updates to 6 entries', async () => {
+    it('caps pending updates to six visible rows', async () => {
       const containers = Array.from({ length: 12 }, (_, i) =>
         makeContainer({
           id: `c${i}`,
@@ -576,6 +578,23 @@ describe('DashboardView', () => {
       const widget = wrapper.find('[data-widget-id="recent-updates"]');
       const rows = widget.findAll('tbody tr').filter((r) => !r.attributes('aria-hidden'));
       expect(rows.length).toBe(6);
+    });
+
+    it('renders the recent updates table with a fixed layout to keep columns stable while scrolling', async () => {
+      const containers = Array.from({ length: 12 }, (_, i) =>
+        makeContainer({
+          id: `c${i}`,
+          name: `container-${i}`,
+          newTag: `${i + 1}.0.0`,
+        }),
+      );
+      const wrapper = await mountDashboard(containers);
+      const tableStyle = wrapper
+        .find('[data-widget-id="recent-updates"]')
+        .find('table')
+        .attributes('style');
+
+      expect(tableStyle).toContain('table-layout: fixed');
     });
 
     it('orders recent updates by newest detected update first', async () => {
@@ -693,7 +712,7 @@ describe('DashboardView', () => {
       expect(rows[0].text()).toContain('redis');
     });
 
-    it('surfaces registry check failures in recent updates', async () => {
+    it('does not include registry check failures in recent updates', async () => {
       const containers = [
         makeContainer({
           id: 'c1',
@@ -713,9 +732,10 @@ describe('DashboardView', () => {
       const widget = wrapper.find('[data-widget-id="recent-updates"]');
       const rows = widget.findAll('tbody tr').filter((r) => !r.attributes('aria-hidden'));
       const errorRow = rows.find((r) => r.text().includes('registry-fail'));
+      const pendingRow = rows.find((r) => r.text().includes('has-update'));
 
-      expect(errorRow).toBeDefined();
-      expect(errorRow!.text()).toContain('Registry request failed: unauthorized');
+      expect(errorRow).toBeUndefined();
+      expect(pendingRow).toBeDefined();
     });
 
     it('renders release notes links when available in recent updates rows', async () => {
@@ -997,6 +1017,67 @@ describe('DashboardView', () => {
     });
   });
 
+  describe('resource usage widget', () => {
+    it('renders top cpu and memory containers from live stats summary', async () => {
+      const wrapper = await mountDashboard(
+        [makeContainer()],
+        [],
+        {},
+        {
+          containerStats: [
+            {
+              id: 'c1',
+              name: 'web',
+              status: 'running',
+              watcher: 'local',
+              agent: undefined,
+              stats: {
+                containerId: 'c1',
+                cpuPercent: 30,
+                memoryUsageBytes: 300,
+                memoryLimitBytes: 600,
+                memoryPercent: 50,
+                networkRxBytes: 1,
+                networkTxBytes: 2,
+                blockReadBytes: 3,
+                blockWriteBytes: 4,
+                timestamp: '2026-03-14T10:00:00.000Z',
+              },
+            },
+            {
+              id: 'c2',
+              name: 'db',
+              status: 'running',
+              watcher: 'local',
+              agent: undefined,
+              stats: {
+                containerId: 'c2',
+                cpuPercent: 80,
+                memoryUsageBytes: 500,
+                memoryLimitBytes: 1_000,
+                memoryPercent: 50,
+                networkRxBytes: 1,
+                networkTxBytes: 2,
+                blockReadBytes: 3,
+                blockWriteBytes: 4,
+                timestamp: '2026-03-14T10:00:00.000Z',
+              },
+            },
+          ],
+        },
+      );
+
+      const resourceWidget = wrapper.find('[data-widget-id="resource-usage"]');
+      expect(resourceWidget.text()).toContain('Resource Usage');
+      expect(resourceWidget.text()).toContain('Top CPU');
+      expect(resourceWidget.text()).toContain('Top Memory');
+      expect(resourceWidget.text()).toContain('db');
+      expect(resourceWidget.text()).toContain('web');
+      expect(resourceWidget.text()).toContain('55.0%');
+      expect(resourceWidget.text()).toContain('800 B / 1.6 KB');
+    });
+  });
+
   describe('dashboard widget ordering', () => {
     it('hydrates widget order from preferences', async () => {
       const { preferences } = await import('@/preferences/store');
@@ -1008,6 +1089,7 @@ describe('DashboardView', () => {
         'host-status',
         'recent-updates',
         'security-overview',
+        'resource-usage',
         'update-breakdown',
       ];
 
@@ -1022,6 +1104,9 @@ describe('DashboardView', () => {
       expect(
         wrapper.find('[data-widget-id="security-overview"]').attributes('data-widget-order'),
       ).toBe('6');
+      expect(
+        wrapper.find('[data-widget-id="resource-usage"]').attributes('data-widget-order'),
+      ).toBe('7');
     });
 
     it('reorders widgets on drop and persists the new order', async () => {
@@ -1058,6 +1143,7 @@ describe('DashboardView', () => {
         'update-breakdown',
         'recent-updates',
         'security-overview',
+        'resource-usage',
         'host-status',
       ]);
     });
@@ -1115,6 +1201,10 @@ describe('DashboardView', () => {
       const securityCard = statCards.find((c) => c.text().includes('Security Issues'));
       await securityCard?.trigger('click');
       expect(mockRouterPush).toHaveBeenCalledWith('/security');
+
+      const registriesCard = statCards.find((c) => c.text().includes('Registries'));
+      await registriesCard?.trigger('click');
+      expect(mockRouterPush).toHaveBeenCalledWith('/registries');
     });
 
     it('routes update view-all buttons with has-update filter', async () => {

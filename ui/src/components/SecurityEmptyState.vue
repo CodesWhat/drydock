@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import ScanProgressText from './ScanProgressText.vue';
+
 withDefaults(
   defineProps<{
     hasVulnerabilityData: boolean;
@@ -48,14 +50,14 @@ defineEmits<{
       {{ scannerMessage }}
     </p>
     <div class="flex items-center gap-2 mt-2">
-      <button
+      <AppButton size="none" variant="plain" weight="none"
         v-if="activeFilterCount > 0"
         data-testid="security-empty-clear-filters"
         class="text-xs font-medium px-3 py-1.5 dd-rounded transition-colors text-drydock-secondary bg-drydock-secondary/10 hover:bg-drydock-secondary/20"
         @click="$emit('clear-filters')"
       >
         Clear all filters
-      </button>
+      </AppButton>
 
       <a
         v-if="!hasVulnerabilityData && scannerSetupNeeded"
@@ -69,7 +71,7 @@ defineEmits<{
       </a>
 
       <span v-if="!hasVulnerabilityData && !scannerSetupNeeded" class="inline-flex" v-tooltip.top="scanDisabledReason">
-        <button
+        <AppButton size="none" variant="plain" weight="none"
           data-testid="security-empty-scan-now"
           class="text-xs font-medium px-3 py-1.5 dd-rounded transition-colors flex items-center gap-1.5"
           :class="
@@ -87,7 +89,7 @@ defineEmits<{
           <template v-else>
             Scan Now
           </template>
-        </button>
+        </AppButton>
       </span>
     </div>
   </div>

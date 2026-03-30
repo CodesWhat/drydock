@@ -1,5 +1,10 @@
+import cron, { type ScheduledTask } from 'node-cron';
+import { usesLegacyTriggerPrefix } from '../../configuration/index.js';
 import * as event from '../../event/index.js';
 import { type Container, fullName } from '../../model/container.js';
+
+const RECREATED_ALIAS_RE = /^[a-f0-9]{12}_(.+)$/i;
+
 import { getTriggerCounter } from '../../prometheus/trigger.js';
 import Component, { type ComponentConfiguration } from '../../registry/Component.js';
 import * as storeContainer from '../../store/container.js';
@@ -11,7 +16,10 @@ import {
   SUPPORTED_THRESHOLDS,
 } from './trigger-threshold.js';
 
+const OLD_ROLLBACK_CONTAINER_NAME_PATTERN = /-old-\d{10,}$/;
+
 type SupportedThreshold = (typeof SUPPORTED_THRESHOLDS)[number];
+type TriggerAutoMode = 'all' | 'oninclude' | 'none';
 type NotificationRuleId =
   | 'update-available'
   | 'update-applied'
@@ -44,12 +52,31 @@ interface AgentDisconnectedPayload {
   reason?: string;
 }
 
+interface TriggerNotificationEvent {
+  kind: 'agent-disconnect';
+  agentName: string;
+  reason?: string;
+}
+
 interface EventDispatchOptions extends notificationStore.NotificationRuleDispatchOptions {
   skipThreshold?: boolean;
 }
 
 const AUTO_TRIGGER_ERROR_SUPPRESSION_WINDOW_MS = 15_000;
 const AUTO_TRIGGER_ERROR_SUPPRESSION_RETENTION_MS = AUTO_TRIGGER_ERROR_SUPPRESSION_WINDOW_MS * 4;
+const AUTO_EVENT_BATCH_FLUSH_DELAY_MS = 250;
+const TRIGGER_RELEASE_NOTES_BODY_MAX_LENGTH = 500;
+const ACTION_TRIGGER_TYPES = new Set(['command', 'docker', 'dockercompose']);
+const AGENT_DISCONNECT_SIMPLE_TITLE_TEMPLATE = 'Agent ${event.agentName} disconnected';
+const AGENT_DISCONNECT_SIMPLE_BODY_TEMPLATE =
+  'Agent ${event.agentName} disconnected${event.reason ? ": " + event.reason : ""}';
+
+function truncateReleaseNotesBody(body: string, maxLength: number) {
+  if (body.length <= maxLength) {
+    return body;
+  }
+  return body.slice(0, maxLength);
+}
 
 function buildAgentDisconnectedContainer(agentName: string, reason?: string): Container {
   return {
@@ -78,16 +105,42 @@ function buildAgentDisconnectedContainer(agentName: string, reason?: string): Co
     },
     updateAvailable: false,
     updateKind: {
-      kind: 'tag',
-      localValue: reason || 'disconnected',
-      remoteValue: reason || 'disconnected',
-      semverDiff: 'patch',
+      kind: 'unknown',
+      semverDiff: 'unknown',
     },
     error: reason
       ? {
           message: reason,
         }
       : undefined,
+    notificationEvent: {
+      kind: 'agent-disconnect',
+      agentName,
+      reason,
+    },
+  } as Container;
+}
+
+function getNotificationEvent(container: Container): TriggerNotificationEvent | undefined {
+  const notificationEvent = Reflect.get(new Object(container), 'notificationEvent');
+  if (!notificationEvent || typeof notificationEvent !== 'object') {
+    return undefined;
+  }
+
+  if (Reflect.get(new Object(notificationEvent), 'kind') !== 'agent-disconnect') {
+    return undefined;
+  }
+
+  const agentName = Reflect.get(new Object(notificationEvent), 'agentName');
+  const reason = Reflect.get(new Object(notificationEvent), 'reason');
+  if (typeof agentName !== 'string' || agentName.length === 0) {
+    return undefined;
+  }
+
+  return {
+    kind: 'agent-disconnect',
+    agentName,
+    reason: typeof reason === 'string' && reason.length > 0 ? reason : undefined,
   };
 }
 
@@ -96,7 +149,7 @@ function isSupportedThreshold(value: string): value is SupportedThreshold {
 }
 
 export interface TriggerConfiguration extends ComponentConfiguration {
-  auto?: boolean;
+  auto?: boolean | TriggerAutoMode;
   order?: number;
   threshold?: string;
   mode?: string;
@@ -105,12 +158,18 @@ export interface TriggerConfiguration extends ComponentConfiguration {
   simpletitle?: string;
   simplebody?: string;
   batchtitle?: string;
+  digestcron?: string;
   resolvenotifications?: boolean;
 }
 
 interface ContainerReport {
   container: Container;
   changed: boolean;
+}
+
+interface EventBatchDispatchState {
+  containers: Map<string, Container>;
+  timer?: ReturnType<typeof setTimeout>;
 }
 
 function splitAndTrimCommaSeparatedList(value: string): string[] {
@@ -135,6 +194,10 @@ class Trigger extends Component {
   private unregisterContainerUpdateAppliedForResolution?: () => void;
   private readonly notificationResults: Map<string, unknown> = new Map();
   private readonly autoTriggerErrorSeenAt: Map<string, number> = new Map();
+  private readonly digestBuffer: Map<string, Container> = new Map();
+  private readonly eventBatchDispatches: Map<NotificationRuleId, EventBatchDispatchState> =
+    new Map();
+  private digestCronTask?: ScheduledTask;
 
   static getSupportedThresholds() {
     return [...SUPPORTED_THRESHOLDS];
@@ -144,9 +207,30 @@ class Trigger extends Component {
     return parseThresholdWithDigestBehaviorHelper(threshold);
   }
 
+  private static normalizeAutoMode(auto: TriggerConfiguration['auto']): TriggerAutoMode {
+    if (auto === false) {
+      return 'none';
+    }
+    if (auto === true || auto === undefined) {
+      return 'all';
+    }
+    return auto.toLowerCase() as TriggerAutoMode;
+  }
+
+  private getCategory() {
+    return ACTION_TRIGGER_TYPES.has(this.type.toLowerCase()) ? 'action' : 'notification';
+  }
+
+  private getAutoMode() {
+    return Trigger.normalizeAutoMode(this.configuration.auto);
+  }
+
   private static getErrorMessage(error: unknown): string {
     if (error instanceof Error) {
       return error.message;
+    }
+    if (typeof error === 'symbol') {
+      return String(error);
     }
     return `${error}`;
   }
@@ -277,6 +361,69 @@ class Trigger extends Component {
     );
   }
 
+  private getOrCreateEventBatchDispatch(ruleId: NotificationRuleId): EventBatchDispatchState {
+    const existing = this.eventBatchDispatches.get(ruleId);
+    if (existing) {
+      return existing;
+    }
+
+    const created: EventBatchDispatchState = {
+      containers: new Map(),
+    };
+    this.eventBatchDispatches.set(ruleId, created);
+    return created;
+  }
+
+  private buildEventBatchDispatchKey(container: Container): string {
+    return container.id || fullName(container);
+  }
+
+  private async flushEventBatchDispatch(ruleId: NotificationRuleId, containers: Container[]) {
+    if (containers.length === 0) {
+      return;
+    }
+
+    try {
+      await this.triggerBatch(containers);
+    } catch (e: unknown) {
+      const errorMessage = Trigger.getErrorMessage(e);
+      const firstContainer = containers[0];
+      if (this.shouldSuppressAutoTriggerError(ruleId, firstContainer, errorMessage)) {
+        this.log.debug(`Suppressed repeated error handling ${ruleId} event (${errorMessage})`);
+      } else {
+        this.log.warn(`Error handling ${ruleId} event (${errorMessage})`);
+      }
+      this.log.debug(e);
+    }
+  }
+
+  private queueEventBatchDispatch(ruleId: NotificationRuleId, container: Container) {
+    const eventBatchDispatch = this.getOrCreateEventBatchDispatch(ruleId);
+    eventBatchDispatch.containers.set(this.buildEventBatchDispatchKey(container), container);
+
+    if (eventBatchDispatch.timer) {
+      clearTimeout(eventBatchDispatch.timer);
+    }
+
+    eventBatchDispatch.timer = setTimeout(() => {
+      const containers = Array.from(eventBatchDispatch.containers.values());
+      eventBatchDispatch.containers.clear();
+      eventBatchDispatch.timer = undefined;
+      void this.flushEventBatchDispatch(ruleId, containers);
+    }, AUTO_EVENT_BATCH_FLUSH_DELAY_MS);
+  }
+
+  private clearEventBatchDispatches() {
+    for (const eventBatchDispatch of this.eventBatchDispatches.values()) {
+      if (eventBatchDispatch.timer) {
+        clearTimeout(eventBatchDispatch.timer);
+      }
+      eventBatchDispatch.containers.clear();
+      eventBatchDispatch.timer = undefined;
+    }
+    this.eventBatchDispatches.clear();
+  }
+
   private async dispatchContainerForEvent(
     ruleId: NotificationRuleId,
     container: Container | undefined,
@@ -303,8 +450,11 @@ class Trigger extends Component {
     }
 
     try {
-      if (this.configuration.mode?.toLowerCase() === 'batch') {
-        await this.triggerBatch([container]);
+      const shouldUseBatchMode =
+        this.configuration.mode?.toLowerCase() === 'batch' &&
+        getNotificationEvent(container)?.kind !== 'agent-disconnect';
+      if (shouldUseBatchMode) {
+        this.queueEventBatchDispatch(ruleId, container);
       } else {
         await this.trigger(container);
       }
@@ -320,6 +470,12 @@ class Trigger extends Component {
   }
 
   async handleContainerUpdateAppliedEvent(containerName: string) {
+    // Evict from digest buffer — container is already updated, no need to notify.
+    // containerName is the full business ID (watcher_name), matching the buffer key.
+    if (this.digestBuffer.delete(containerName)) {
+      this.log.debug(`Evicted ${containerName} from digest buffer (update applied)`);
+    }
+
     await this.dispatchContainerForEvent(
       'update-applied',
       this.findContainerByBusinessId(containerName),
@@ -442,6 +598,9 @@ class Trigger extends Component {
       return;
     }
 
+    // Strip Docker recreate alias prefixes before any trigger processing
+    Trigger.canonicalizeReportName(containerReport);
+
     // Filter on changed containers with update available and passing trigger threshold
     if (!this.shouldHandleSimpleContainerReport(containerReport)) {
       return;
@@ -468,6 +627,11 @@ class Trigger extends Component {
   async handleContainerReports(containerReports: ContainerReport[]) {
     if (!this.isUpdateAvailableAutoTriggerEnabled()) {
       return;
+    }
+
+    // Strip Docker recreate alias prefixes before any trigger processing
+    for (const report of containerReports) {
+      Trigger.canonicalizeReportName(report);
     }
 
     // Filter on containers with update available and passing trigger threshold
@@ -500,6 +664,62 @@ class Trigger extends Component {
     }
   }
 
+  /**
+   * Buffer a container for digest mode. Keyed by full name so the latest
+   * update for each container wins if multiple scans fire before the digest
+   * cron flushes.
+   */
+  private bufferContainerForDigest(container: Container) {
+    this.digestBuffer.set(fullName(container), container);
+    this.log.debug(
+      `Buffered ${fullName(container)} for digest (${this.digestBuffer.size} buffered)`,
+    );
+  }
+
+  /**
+   * Handle container report (digest mode — single container from simple event).
+   */
+  async handleContainerReportDigest(containerReport: ContainerReport) {
+    if (!this.isUpdateAvailableAutoTriggerEnabled()) {
+      return;
+    }
+    if (!this.shouldHandleSimpleContainerReport(containerReport)) {
+      return;
+    }
+    const { container } = containerReport;
+    if (!Trigger.isThresholdReached(container, this.getSimpleModeThreshold())) {
+      return;
+    }
+    if (!this.mustTrigger(container)) {
+      return;
+    }
+    this.bufferContainerForDigest(container);
+  }
+
+  /**
+   * Flush the digest buffer: send a single batch notification with all
+   * accumulated containers, then clear the buffer.
+   */
+  async flushDigestBuffer() {
+    if (this.digestBuffer.size === 0) {
+      this.log.debug('Digest cron fired — buffer empty, nothing to send');
+      return;
+    }
+    const containers = Array.from(this.digestBuffer.values());
+    this.digestBuffer.clear();
+    this.log.info(`Digest flush: sending ${containers.length} update(s)`);
+    let status: 'success' | 'error' = 'error';
+    try {
+      await this.triggerBatch(containers);
+      status = 'success';
+    } catch (e: unknown) {
+      this.log.warn(`Digest flush failed (${Trigger.getErrorMessage(e)})`);
+      this.log.debug(e);
+    } finally {
+      this.incrementTriggerCounter(status);
+    }
+  }
+
   isTriggerIncludedOrExcluded(containerResult: Container, trigger: string) {
     const triggerId = this.getId().toLowerCase();
     const triggers = splitAndTrimCommaSeparatedList(trigger).map((triggerToMatch) =>
@@ -516,7 +736,7 @@ class Trigger extends Component {
 
   isTriggerIncluded(containerResult: Container, triggerInclude: string | undefined) {
     if (!triggerInclude) {
-      return true;
+      return this.getAutoMode() !== 'oninclude';
     }
     return this.isTriggerIncludedOrExcluded(containerResult, triggerInclude);
   }
@@ -533,7 +753,31 @@ class Trigger extends Component {
    * @param containerResult
    * @returns {boolean}
    */
+  /**
+   * Strip Docker recreate alias prefix from a container report's name.
+   * Belt-and-suspenders guard — the watcher should have already canonicalized,
+   * but this catches any remaining leaks regardless of environment quirks.
+   */
+  static canonicalizeReportName(report: ContainerReport): void {
+    const name = report.container?.name;
+    if (typeof name !== 'string') return;
+    const match = name.match(RECREATED_ALIAS_RE);
+    if (match) {
+      report.container.name = match[1];
+    }
+  }
+
+  static isRollbackContainer(container: { name?: unknown }): boolean {
+    return (
+      typeof container?.name === 'string' &&
+      OLD_ROLLBACK_CONTAINER_NAME_PATTERN.test(container.name)
+    );
+  }
+
   mustTrigger(containerResult: Container) {
+    if (Trigger.isRollbackContainer(containerResult)) {
+      return false;
+    }
     if (this.agent && this.agent !== containerResult.agent) {
       return false;
     }
@@ -552,8 +796,13 @@ class Trigger extends Component {
    */
   async init() {
     await this.initTrigger();
-    if (this.configuration.auto) {
-      this.log.info(`Registering for auto execution`);
+    if (this.getAutoMode() !== 'none') {
+      const autoMode = this.getAutoMode();
+      this.log.info(
+        autoMode === 'oninclude'
+          ? 'Registering for auto execution (only containers with explicit include labels)'
+          : 'Registering for auto execution (all watched containers)',
+      );
       if (this.configuration.mode?.toLowerCase() === 'simple') {
         this.unregisterContainerReport = event.registerContainerReport(
           async (containerReport) => this.handleContainerReport(containerReport),
@@ -571,6 +820,20 @@ class Trigger extends Component {
             order: this.configuration.order,
           },
         );
+      }
+      if (this.configuration.mode?.toLowerCase() === 'digest') {
+        this.unregisterContainerReport = event.registerContainerReport(
+          async (containerReport) => this.handleContainerReportDigest(containerReport),
+          {
+            id: this.getId(),
+            order: this.configuration.order,
+          },
+        );
+        const digestCronExpression = this.configuration.digestcron ?? '0 8 * * *';
+        this.digestCronTask = cron.schedule(digestCronExpression, () => {
+          void this.flushDigestBuffer();
+        });
+        this.log.info(`Digest scheduled (${digestCronExpression})`);
       }
 
       this.unregisterContainerUpdateAppliedForAutoDispatch = event.registerContainerUpdateApplied(
@@ -634,6 +897,11 @@ class Trigger extends Component {
     this.unregisterContainerUpdateAppliedForResolution?.();
     this.unregisterContainerUpdateAppliedForResolution = undefined;
 
+    this.digestCronTask?.stop();
+    this.digestCronTask = undefined;
+    this.digestBuffer.clear();
+    this.clearEventBatchDispatches();
+
     this.autoTriggerErrorSeenAt.clear();
   }
 
@@ -643,17 +911,30 @@ class Trigger extends Component {
    * @returns {*}
    */
   validateConfiguration(configuration: TriggerConfiguration): TriggerConfiguration {
-    const schema = this.getConfigurationSchema();
+    const schema = this.getConfigurationSchema() as ReturnType<typeof this.joi.object>;
     const schemaWithDefaultOptions = schema.append({
-      auto: this.joi.bool().default(true),
+      auto: this.joi
+        .alternatives()
+        .try(this.joi.bool(), this.joi.string().insensitive().valid('all', 'oninclude', 'none'))
+        .default(this.getCategory() === 'action' ? 'oninclude' : true),
       order: this.joi.number().default(100),
       threshold: this.joi
         .string()
         .insensitive()
         .valid(...Trigger.getSupportedThresholds())
         .default('all'),
-      mode: this.joi.string().insensitive().valid('simple', 'batch').default('simple'),
+      mode: this.joi.string().insensitive().valid('simple', 'batch', 'digest').default('simple'),
       once: this.joi.boolean().default(true),
+      digestcron: this.joi
+        .string()
+        .default('0 8 * * *')
+        .custom((value, helpers) => {
+          if (!cron.validate(value)) {
+            return helpers.error('string.pattern.base', { value });
+          }
+          return value;
+        })
+        .messages({ 'string.pattern.base': 'digestcron must be a valid cron expression' }),
       simpletitle: this.joi
         .string()
         .default('New ${container.updateKind.kind} found for container ${container.name}'),
@@ -669,7 +950,9 @@ class Trigger extends Component {
     if (schemaValidated.error) {
       throw schemaValidated.error;
     }
-    return schemaValidated.value;
+    const normalizedConfiguration = schemaValidated.value as TriggerConfiguration;
+    normalizedConfiguration.auto = Trigger.normalizeAutoMode(normalizedConfiguration.auto);
+    return normalizedConfiguration;
   }
 
   /**
@@ -684,15 +967,13 @@ class Trigger extends Component {
    * Preview what an update would do without performing it.
    * Can be overridden in trigger implementation class.
    */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async preview(container: Container): Promise<Record<string, unknown>> {
+  async preview(_container: Container): Promise<Record<string, unknown>> {
     return {};
   }
 
   /**
    * Trigger method. Must be overridden in trigger implementation class.
    */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async trigger(containerWithResult: Container): Promise<unknown> {
     // do nothing by default
     this.log.warn('Cannot trigger container result; this trigger does not implement "simple" mode');
@@ -708,6 +989,13 @@ class Trigger extends Component {
     // do nothing by default
     this.log.warn('Cannot trigger container results; this trigger does not implement "batch" mode');
     return containersWithResult;
+  }
+
+  getMetadata(): Record<string, unknown> {
+    return {
+      category: this.getCategory(),
+      usesLegacyPrefix: usesLegacyTriggerPrefix(this.type, this.name),
+    };
   }
 
   /**
@@ -739,8 +1027,7 @@ class Trigger extends Component {
    * @param containerId the container identifier
    * @param triggerResult the result returned by trigger() when the notification was sent
    */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async dismiss(containerId: string, triggerResult: unknown): Promise<void> {
+  async dismiss(_containerId: string, _triggerResult: unknown): Promise<void> {
     // do nothing by default
   }
 
@@ -795,12 +1082,38 @@ class Trigger extends Component {
   }
 
   /**
+   * Build the container template context used by trigger body/title rendering.
+   * Release notes bodies are shortened for notifications to avoid excessively long payloads.
+   */
+  private getTemplateContainer(container: Container): Container {
+    const releaseNotes = container.result?.releaseNotes;
+    if (!releaseNotes || typeof releaseNotes.body !== 'string') {
+      return container;
+    }
+
+    return {
+      ...container,
+      result: {
+        ...container.result,
+        releaseNotes: {
+          ...releaseNotes,
+          body: truncateReleaseNotesBody(releaseNotes.body, TRIGGER_RELEASE_NOTES_BODY_MAX_LENGTH),
+        },
+      },
+    };
+  }
+
+  /**
    * Render trigger title simple.
    * @param container
    * @returns {*}
    */
   renderSimpleTitle(container: Container) {
-    return renderSimple(this.configuration.simpletitle ?? '', container);
+    const template =
+      getNotificationEvent(container)?.kind === 'agent-disconnect'
+        ? AGENT_DISCONNECT_SIMPLE_TITLE_TEMPLATE
+        : (this.configuration.simpletitle ?? '');
+    return renderSimple(template, this.getTemplateContainer(container));
   }
 
   /**
@@ -809,7 +1122,11 @@ class Trigger extends Component {
    * @returns {*}
    */
   renderSimpleBody(container: Container) {
-    return renderSimple(this.configuration.simplebody ?? '', container);
+    const template =
+      getNotificationEvent(container)?.kind === 'agent-disconnect'
+        ? AGENT_DISCONNECT_SIMPLE_BODY_TEMPLATE
+        : (this.configuration.simplebody ?? '');
+    return renderSimple(template, this.getTemplateContainer(container));
   }
 
   /**

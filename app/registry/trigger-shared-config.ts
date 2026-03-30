@@ -1,14 +1,18 @@
 const SHARED_TRIGGER_CONFIGURATION_KEYS = ['threshold', 'once', 'mode', 'order'];
 const SHARED_TRIGGER_CONFIGURATION_KEY_SET = new Set(SHARED_TRIGGER_CONFIGURATION_KEYS);
 
-function isRecord(value: unknown): value is Record<string, any> {
+type UnknownRecord = Record<string, unknown>;
+type SharedValuesByName = Record<string, Record<string, Set<unknown>>>;
+type TriggerGroupDefaults = Record<string, UnknownRecord>;
+
+function isRecord(value: unknown): value is UnknownRecord {
   return (
     value !== null && value !== undefined && typeof value === 'object' && !Array.isArray(value)
   );
 }
 
-function applyProviderSharedTriggerConfiguration(configurations: Record<string, any>) {
-  const normalizedConfigurations: Record<string, any> = {};
+function applyProviderSharedTriggerConfiguration(configurations: UnknownRecord) {
+  const normalizedConfigurations: UnknownRecord = {};
 
   Object.keys(configurations || {}).forEach((provider) => {
     const providerConfigurations = configurations[provider];
@@ -17,7 +21,7 @@ function applyProviderSharedTriggerConfiguration(configurations: Record<string, 
       return;
     }
 
-    const sharedConfiguration: Record<string, any> = {};
+    const sharedConfiguration: UnknownRecord = {};
     Object.keys(providerConfigurations).forEach((key) => {
       const value = providerConfigurations[key];
       if (SHARED_TRIGGER_CONFIGURATION_KEY_SET.has(key.toLowerCase()) && !isRecord(value)) {
@@ -43,10 +47,10 @@ function applyProviderSharedTriggerConfiguration(configurations: Record<string, 
 }
 
 function addSharedTriggerValue(
-  valuesByName: Record<string, Record<string, Set<any>>>,
+  valuesByName: SharedValuesByName,
   triggerName: string,
   key: string,
-  value: any,
+  value: unknown,
 ) {
   const normalizedTriggerName = triggerName.toLowerCase();
   valuesByName[normalizedTriggerName] ??= {};
@@ -55,9 +59,9 @@ function addSharedTriggerValue(
 }
 
 function collectSharedValuesForTrigger(
-  valuesByName: Record<string, Record<string, Set<any>>>,
+  valuesByName: SharedValuesByName,
   triggerName: string,
-  triggerConfiguration: Record<string, any>,
+  triggerConfiguration: UnknownRecord,
 ) {
   for (const key of SHARED_TRIGGER_CONFIGURATION_KEYS) {
     const value = triggerConfiguration[key];
@@ -68,7 +72,7 @@ function collectSharedValuesForTrigger(
 }
 
 function collectValuesForProvider(
-  valuesByName: Record<string, Record<string, Set<any>>>,
+  valuesByName: SharedValuesByName,
   providerConfigurations: unknown,
 ) {
   if (!isRecord(providerConfigurations)) {
@@ -84,10 +88,8 @@ function collectValuesForProvider(
   }
 }
 
-function collectValuesByName(
-  configurations: Record<string, any>,
-): Record<string, Record<string, Set<any>>> {
-  const valuesByName: Record<string, Record<string, Set<any>>> = {};
+function collectValuesByName(configurations: UnknownRecord): SharedValuesByName {
+  const valuesByName: SharedValuesByName = {};
 
   for (const providerConfigurations of Object.values(configurations)) {
     collectValuesForProvider(valuesByName, providerConfigurations);
@@ -96,10 +98,8 @@ function collectValuesByName(
   return valuesByName;
 }
 
-function extractSharedValues(
-  valuesByName: Record<string, Record<string, Set<any>>>,
-): Record<string, any> {
-  const shared: Record<string, any> = {};
+function extractSharedValues(valuesByName: SharedValuesByName): Record<string, UnknownRecord> {
+  const shared: Record<string, UnknownRecord> = {};
 
   for (const triggerName of Object.keys(valuesByName)) {
     for (const key of SHARED_TRIGGER_CONFIGURATION_KEYS) {
@@ -116,18 +116,18 @@ function extractSharedValues(
   return shared;
 }
 
-function getSharedTriggerConfigurationByName(configurations: Record<string, any>) {
+function getSharedTriggerConfigurationByName(configurations: UnknownRecord) {
   const valuesByName = collectValuesByName(configurations);
   return extractSharedValues(valuesByName);
 }
 
-export function applySharedTriggerConfigurationByName(configurations: Record<string, any>) {
+export function applySharedTriggerConfigurationByName(configurations: UnknownRecord) {
   const configurationsWithProviderSharedValues =
     applyProviderSharedTriggerConfiguration(configurations);
   const sharedConfigurationByName = getSharedTriggerConfigurationByName(
     configurationsWithProviderSharedValues,
   );
-  const configurationsWithSharedValues: Record<string, any> = {};
+  const configurationsWithSharedValues: UnknownRecord = {};
 
   Object.keys(configurationsWithProviderSharedValues).forEach((provider) => {
     const providerConfigurations = configurationsWithProviderSharedValues[provider];
@@ -153,7 +153,7 @@ export function applySharedTriggerConfigurationByName(configurations: Record<str
   return configurationsWithSharedValues;
 }
 
-function isValidTriggerGroup(entry: Record<string, any>): boolean {
+function isValidTriggerGroup(entry: UnknownRecord): boolean {
   const keys = Object.keys(entry);
   return (
     keys.length > 0 &&
@@ -165,7 +165,7 @@ function isValidTriggerGroup(entry: Record<string, any>): boolean {
 
 function classifyConfigurationEntry(
   key: string,
-  value: any,
+  value: unknown,
   knownProviderSet: Set<string>,
 ): 'provider' | 'trigger-group' {
   const keyLower = key.toLowerCase();
@@ -179,17 +179,17 @@ function classifyConfigurationEntry(
 }
 
 function splitTriggerGroupDefaults(
-  configurations: Record<string, any>,
+  configurations: UnknownRecord,
   knownProviderSet: Set<string>,
-  onTriggerGroupDetected?: (groupName: string, value: Record<string, any>) => void,
+  onTriggerGroupDetected?: (groupName: string, value: UnknownRecord) => void,
 ) {
-  const triggerGroupDefaults: Record<string, Record<string, any>> = {};
-  const providerConfigurations: Record<string, any> = {};
+  const triggerGroupDefaults: TriggerGroupDefaults = {};
+  const providerConfigurations: UnknownRecord = {};
 
   for (const key of Object.keys(configurations)) {
     const value = configurations[key];
     const classification = classifyConfigurationEntry(key, value, knownProviderSet);
-    if (classification === 'trigger-group') {
+    if (classification === 'trigger-group' && isRecord(value)) {
       const keyLower = key.toLowerCase();
       triggerGroupDefaults[keyLower] = value;
       onTriggerGroupDetected?.(keyLower, value);
@@ -202,8 +202,8 @@ function splitTriggerGroupDefaults(
 }
 
 function mergeTriggerConfigurationWithDefaults(
-  triggerConfiguration: any,
-  groupDefaults: Record<string, any> | undefined,
+  triggerConfiguration: unknown,
+  groupDefaults: UnknownRecord | undefined,
 ) {
   if (!groupDefaults || !isRecord(triggerConfiguration)) {
     return triggerConfiguration;
@@ -217,13 +217,13 @@ function mergeTriggerConfigurationWithDefaults(
 
 function applyDefaultsToProviderConfiguration(
   providerConfig: unknown,
-  triggerGroupDefaults: Record<string, Record<string, any>>,
+  triggerGroupDefaults: TriggerGroupDefaults,
 ) {
   if (!isRecord(providerConfig)) {
     return providerConfig;
   }
 
-  const providerResult: Record<string, any> = {};
+  const providerResult: UnknownRecord = {};
   for (const triggerName of Object.keys(providerConfig)) {
     const triggerConfig = providerConfig[triggerName];
     const groupDefaults = triggerGroupDefaults[triggerName.toLowerCase()];
@@ -237,10 +237,10 @@ function applyDefaultsToProviderConfiguration(
 }
 
 function applyDefaultsToProviderConfigurations(
-  providerConfigurations: Record<string, any>,
-  triggerGroupDefaults: Record<string, Record<string, any>>,
+  providerConfigurations: UnknownRecord,
+  triggerGroupDefaults: TriggerGroupDefaults,
 ) {
-  const result: Record<string, any> = {};
+  const result: UnknownRecord = {};
 
   for (const provider of Object.keys(providerConfigurations)) {
     result[provider] = applyDefaultsToProviderConfiguration(
@@ -252,15 +252,15 @@ function applyDefaultsToProviderConfigurations(
   return result;
 }
 
-function hasConfigurationEntries(configurations: Record<string, any> | null | undefined): boolean {
+function hasConfigurationEntries(configurations: UnknownRecord | null | undefined): boolean {
   return !!configurations && Object.keys(configurations).length > 0;
 }
 
 export function applyTriggerGroupDefaults(
-  configurations: Record<string, any> | null | undefined,
+  configurations: UnknownRecord | null | undefined,
   knownProviderSet: Set<string>,
-  onTriggerGroupDetected?: (groupName: string, value: Record<string, any>) => void,
-): Record<string, any> | null | undefined {
+  onTriggerGroupDetected?: (groupName: string, value: UnknownRecord) => void,
+): UnknownRecord | null | undefined {
   if (!hasConfigurationEntries(configurations)) {
     return configurations;
   }

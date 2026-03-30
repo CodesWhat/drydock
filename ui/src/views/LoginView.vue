@@ -5,6 +5,7 @@ import { ROUTES } from '../router/routes';
 import whaleLogo from '../assets/whale-logo.png?inline';
 import { getOidcRedirection, getStrategies, loginBasic, setRememberMe } from '../services/auth';
 import { useTheme } from '../theme/useTheme';
+import { errorMessage } from '../utils/error';
 
 const router = useRouter();
 const route = useRoute();
@@ -19,6 +20,40 @@ interface Strategy {
 interface AuthProviderError {
   provider: string;
   error: string;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function isStrategy(value: unknown): value is Strategy {
+  if (!isRecord(value)) {
+    return false;
+  }
+  if (typeof value.type !== 'string' || typeof value.name !== 'string') {
+    return false;
+  }
+  return typeof value.redirect === 'undefined' || typeof value.redirect === 'boolean';
+}
+
+function isAuthProviderError(value: unknown): value is AuthProviderError {
+  return isRecord(value) && typeof value.provider === 'string' && typeof value.error === 'string';
+}
+
+function parseStrategies(value: unknown): Strategy[] {
+  return Array.isArray(value) ? value.filter(isStrategy) : [];
+}
+
+function parseAuthProviderErrors(value: unknown): AuthProviderError[] {
+  return Array.isArray(value) ? value.filter(isAuthProviderError) : [];
+}
+
+function extractOidcRedirect(value: unknown): string | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  const redirect = value.redirect ?? value.url;
+  return typeof redirect === 'string' ? redirect : undefined;
 }
 
 const strategies = ref<Strategy[]>([]);
@@ -80,8 +115,17 @@ async function handleBasicLogin() {
   try {
     await loginBasic(username.value, password.value, rememberMe.value);
     navigateAfterLogin();
-  } catch {
-    error.value = 'Invalid username or password';
+  } catch (loginError: unknown) {
+    const loginErrorMessage = errorMessage(loginError).trim();
+    if (
+      loginErrorMessage.length === 0 ||
+      loginErrorMessage === 'Username or password error' ||
+      loginErrorMessage === 'Unauthorized'
+    ) {
+      error.value = 'Invalid username or password';
+    } else {
+      error.value = loginErrorMessage;
+    }
   } finally {
     submitting.value = false;
   }
@@ -91,11 +135,7 @@ async function handleOidc(name: string) {
   try {
     await setRememberMe(rememberMe.value);
     const result = await getOidcRedirection(name);
-    const redirect =
-      result && typeof result === 'object'
-        ? ((result as { redirect?: unknown; url?: unknown }).redirect ??
-          (result as { redirect?: unknown; url?: unknown }).url)
-        : undefined;
+    const redirect = extractOidcRedirect(result);
 
     if (typeof redirect === 'string') {
       const parsedUrl = new URL(redirect, globalThis.location.origin);
@@ -123,11 +163,11 @@ function oidcIcon(name: string): string {
 
 async function loadStrategies() {
   const response = await getStrategies();
-  const data = response.providers as Strategy[];
+  const data = parseStrategies(response.providers);
   strategies.value = data;
   hasBasic.value = data.some((s: Strategy) => s.type === 'basic');
   oidcStrategies.value = data.filter((s: Strategy) => s.type === 'oidc');
-  authErrors.value = response.errors ?? [];
+  authErrors.value = parseAuthProviderErrors(response.errors);
   error.value = '';
   connectionLost.value = false;
   retryDelayMs = INITIAL_RETRY_DELAY_MS;
@@ -196,7 +236,7 @@ onUnmounted(() => {
       <div
         v-if="!loading"
         class="w-full dd-rounded-lg overflow-hidden"
-        style="max-width: 420px; background-color: var(--dd-bg-card); box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);"
+        style="max-width: var(--dd-layout-dialog-max-width); background-color: var(--dd-bg-card); box-shadow: var(--dd-shadow-modal);"
       >
       <div class="p-8">
         <!-- Logo -->
@@ -220,7 +260,7 @@ onUnmounted(() => {
         <!-- Basic auth form -->
         <form v-if="hasBasic" @submit.prevent="handleBasicLogin" class="space-y-5">
           <div>
-            <label class="block text-[0.6875rem] font-medium uppercase tracking-wider mb-2.5 dd-text-muted">
+            <label class="block text-2xs-plus font-medium uppercase tracking-wider mb-2.5 dd-text-muted">
               Username
             </label>
             <input
@@ -235,7 +275,7 @@ onUnmounted(() => {
           </div>
 
           <div>
-            <label class="block text-[0.6875rem] font-medium uppercase tracking-wider mb-2.5 dd-text-muted">
+            <label class="block text-2xs-plus font-medium uppercase tracking-wider mb-2.5 dd-text-muted">
               Password
             </label>
             <input
@@ -249,7 +289,7 @@ onUnmounted(() => {
             />
           </div>
 
-          <button
+          <AppButton size="none" variant="plain" weight="none"
             type="submit"
             :disabled="submitting"
             class="w-full py-2.5 text-sm font-semibold dd-rounded transition-colors cursor-pointer"
@@ -260,19 +300,19 @@ onUnmounted(() => {
               Signing in...
             </template>
             <template v-else>Sign in</template>
-          </button>
+          </AppButton>
         </form>
 
         <!-- OIDC separator (only if both basic and OIDC exist) -->
         <div v-if="hasBasic && oidcStrategies.length > 0" class="flex items-center gap-3 my-6">
           <div class="flex-1 h-px" style="background-color: var(--dd-border-strong);" />
-          <span class="text-[0.6875rem] dd-text-muted">or continue with</span>
+          <span class="text-2xs-plus dd-text-muted">or continue with</span>
           <div class="flex-1 h-px" style="background-color: var(--dd-border-strong);" />
         </div>
 
         <!-- OIDC provider buttons -->
         <div v-if="oidcStrategies.length > 0" :class="oidcLayoutClass">
-          <button
+          <AppButton size="none" variant="plain" weight="none"
             v-for="strategy in oidcStrategies"
             :key="strategy.name"
             type="button"
@@ -282,10 +322,10 @@ onUnmounted(() => {
           >
             <AppIcon :name="oidcIcon(strategy.name)" :size="13" />
             {{ strategy.name }}
-          </button>
+          </AppButton>
         </div>
 
-        <!-- Remember me (shown for any auth method) -->
+        <!-- Remember me (shown for all auth methods) -->
         <label v-if="hasBasic || oidcStrategies.length > 0"
                class="flex items-center gap-2 mt-4 cursor-pointer select-none">
           <input
@@ -293,7 +333,7 @@ onUnmounted(() => {
             type="checkbox"
             class="w-3.5 h-3.5 dd-rounded-sm accent-[var(--dd-primary)]"
           />
-          <span class="text-[0.6875rem] dd-text-muted">Remember me</span>
+          <span class="text-2xs-plus dd-text-muted">Remember me</span>
         </label>
 
         <!-- No strategies available -->
@@ -316,8 +356,8 @@ onUnmounted(() => {
     <!-- Connection Lost Overlay -->
     <Transition name="fade">
       <div v-if="connectionLost"
-           class="fixed inset-0 z-[200] bg-black/70 backdrop-blur-sm flex items-center justify-center">
-        <div class="w-full max-w-[320px] mx-4 dd-rounded-lg overflow-hidden shadow-2xl text-center"
+           class="fixed inset-0 z-modal bg-black/70 backdrop-blur-sm flex items-center justify-center">
+        <div class="w-full max-w-[var(--dd-layout-overlay-max-width)] mx-4 dd-rounded-lg overflow-hidden shadow-2xl text-center"
              :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }">
           <div class="flex flex-col items-center px-6 py-8 gap-3">
             <div class="disconnect-bounce h-10 mb-1">
@@ -325,12 +365,12 @@ onUnmounted(() => {
                    :style="[{ transform: 'rotate(180deg) scaleX(-1)' }, isDark ? { filter: 'invert(1)' } : {}]" />
             </div>
             <h2 class="text-sm font-bold dd-text">Connection Lost</h2>
-            <p class="text-[0.6875rem] dd-text-muted leading-relaxed">
+            <p class="text-2xs-plus dd-text-muted leading-relaxed">
               The server is unreachable. Waiting for it to come back online...
             </p>
             <div class="flex items-center gap-2 mt-1">
               <AppIcon name="spinner" :size="12" class="dd-spin dd-text-muted" />
-              <span class="text-[0.625rem] dd-text-muted">Reconnecting</span>
+              <span class="text-2xs dd-text-muted">Reconnecting</span>
             </div>
           </div>
         </div>
@@ -341,26 +381,26 @@ onUnmounted(() => {
 
 <style scoped>
 .login-logo {
-  animation: bounce 2s ease-in-out infinite;
+  animation: bounce var(--dd-duration-pulse) ease-in-out infinite;
 }
 @keyframes bounce {
   0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-8px); }
+  50% { transform: translateY(var(--dd-motion-bounce-y)); }
 }
 .login-card-enter-active {
-  transition: opacity 0.35s ease, transform 0.35s ease;
+  transition: opacity var(--dd-duration-emphasis) ease, transform var(--dd-duration-emphasis) ease;
 }
 .login-card-enter-from {
   opacity: 0;
-  transform: translateY(8px);
+  transform: translateY(var(--dd-motion-card-enter-y));
 }
 .fade-enter-active, .fade-leave-active {
-  transition: opacity 0.3s ease;
+  transition: opacity var(--dd-duration-enter) ease;
 }
 .fade-enter-from, .fade-leave-to {
   opacity: 0;
 }
 .disconnect-bounce {
-  animation: bounce 2s ease-in-out infinite;
+  animation: bounce var(--dd-duration-pulse) ease-in-out infinite;
 }
 </style>

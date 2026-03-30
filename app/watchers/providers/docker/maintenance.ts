@@ -1,5 +1,16 @@
 import cron from 'node-cron';
 
+interface MaintenanceWindowTask {
+  timeMatcher: {
+    match: (date: Date) => boolean;
+    getNextMatch: (fromDate: Date) => unknown;
+  };
+}
+
+function createMaintenanceWindowTask(cronExpr: string, tz: string): MaintenanceWindowTask {
+  return cron.createTask(cronExpr, () => {}, { timezone: tz }) as unknown as MaintenanceWindowTask;
+}
+
 /**
  * Check if the current time falls within a maintenance window defined by a cron expression.
  * The cron expression defines WHEN updates are ALLOWED (the maintenance window).
@@ -14,7 +25,7 @@ export function isInMaintenanceWindow(cronExpr: string, tz: string = 'UTC'): boo
     return false;
   }
 
-  const task = cron.createTask(cronExpr, () => {}, { timezone: tz }) as any;
+  const task = createMaintenanceWindowTask(cronExpr, tz);
 
   // node-cron's timeMatcher.match() checks seconds too; for 5-field cron
   // the seconds expression defaults to [0], so we normalize to second 0
@@ -44,7 +55,7 @@ export function getNextMaintenanceWindow(
   }
 
   try {
-    const task = cron.createTask(cronExpr, () => {}, { timezone: tz }) as any;
+    const task = createMaintenanceWindowTask(cronExpr, tz);
     const nextMatch = task.timeMatcher.getNextMatch(fromDate);
     return nextMatch instanceof Date ? nextMatch : undefined;
   } catch {

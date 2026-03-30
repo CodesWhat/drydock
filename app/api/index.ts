@@ -14,10 +14,13 @@ import { ddEnvVars, getServerConfiguration } from '../configuration/index.js';
 import * as settingsStore from '../store/settings.js';
 import * as apiRouter from './api.js';
 import * as auth from './auth.js';
+import { attachContainerLogStreamWebSocketServer } from './container/log-stream.js';
 import { sendErrorResponse } from './error-response.js';
 import * as healthRouter from './health.js';
+import { attachSystemLogStreamWebSocketServer } from './log-stream.js';
 import * as prometheusRouter from './prometheus.js';
 import * as uiRouter from './ui.js';
+import { createFixedWindowRateLimiter } from './ws-upgrade-utils.js';
 
 const configuration = getServerConfiguration();
 
@@ -155,25 +158,26 @@ function startHttpsServer(app) {
   const serverKey = readTlsFile(keyPath, 'key');
   const serverCert = readTlsFile(certPath, 'cert');
 
-  https.createServer({ key: serverKey, cert: serverCert }, app).listen(configuration.port, () => {
+  const server = https.createServer({ key: serverKey, cert: serverCert }, app);
+  server.listen(configuration.port, () => {
     log.info(`Server listening on port ${configuration.port} (HTTPS)`);
   });
+  return server;
 }
 
 function startHttpServer(app) {
-  app.listen(configuration.port, () => {
+  return app.listen(configuration.port, () => {
     log.info(`Server listening on port ${configuration.port} (HTTP)`);
   });
 }
 
 function startServer(app) {
   if (configuration.tls.enabled === true) {
-    startHttpsServer(app);
-    return;
+    return startHttpsServer(app);
   }
 
   // Listen plain HTTP
-  startHttpServer(app);
+  return startHttpServer(app);
 }
 
 function createApp() {
@@ -213,5 +217,22 @@ export async function init() {
 
   log.debug(`API/UI enabled => Start Http listener on port ${configuration.port}`);
   const app = createApp();
-  startServer(app);
+  const server = startServer(app);
+  const sharedLimiter = createFixedWindowRateLimiter({
+    windowMs: 15 * 60 * 1000,
+    max: 1000,
+  });
+  const isRateLimited = (key: string) => !sharedLimiter.consume(key);
+  attachContainerLogStreamWebSocketServer({
+    server,
+    sessionMiddleware: auth.getSessionMiddleware?.(),
+    serverConfiguration: configuration as Record<string, unknown>,
+    isRateLimited,
+  });
+  attachSystemLogStreamWebSocketServer({
+    server,
+    sessionMiddleware: auth.getSessionMiddleware?.(),
+    serverConfiguration: configuration as Record<string, unknown>,
+    isRateLimited,
+  });
 }

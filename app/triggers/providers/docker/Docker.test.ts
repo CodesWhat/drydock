@@ -10,7 +10,7 @@ const configurationValid = {
   threshold: 'all',
   mode: 'simple',
   once: true,
-  auto: true,
+  auto: 'all',
   order: 100,
   autoremovetimeout: 10000,
   backupcount: 3,
@@ -19,6 +19,7 @@ const configurationValid = {
     'Container ${container.name} running with ${container.updateKind.kind} ${container.updateKind.localValue} can be updated to ${container.updateKind.kind} ${container.updateKind.remoteValue}${container.result && container.result.link ? "\\n" + container.result.link : ""}',
   batchtitle: '${containers.length} updates available',
   resolvenotifications: false,
+  digestcron: '0 8 * * *',
 };
 
 const docker = new Docker();
@@ -95,6 +96,11 @@ vi.mock('../../../store/update-operation.js', () => ({
   updateOperation: (...args: any[]) => mockUpdateOperation(...args),
   getInProgressOperationByContainerName: (...args: any[]) =>
     mockGetInProgressOperationByContainerName(...args),
+}));
+
+const mockSyncComposeFileTag = vi.hoisted(() => vi.fn().mockResolvedValue(false));
+vi.mock('./compose-file-sync.js', () => ({
+  syncComposeFileTag: (...args: any[]) => mockSyncComposeFileTag(...args),
 }));
 
 vi.mock('../../../registry', () => ({
@@ -430,6 +436,62 @@ test('getWatcher should return watcher responsible for a container', async () =>
   ).toEqual('docker.test');
 });
 
+test('getWatcher should throw when the watcher reference does not exist', async () => {
+  expect(() =>
+    docker.getWatcher({
+      id: 'missing-id',
+      watcher: 'missing',
+    }),
+  ).toThrowError('No watcher found for container');
+});
+
+test('getWatcher should resolve agent-prefixed watcher ids', async () => {
+  const getStateSpy = vi.spyOn(registryStore, 'getState').mockReturnValue({
+    watcher: {
+      'edge-agent.docker.test': {
+        getId: () => 'edge-agent.docker.test',
+        dockerApi: {},
+      },
+    },
+  } as any);
+
+  try {
+    expect(
+      docker.getWatcher({
+        agent: 'edge-agent',
+        watcher: 'test',
+      }),
+    ).toMatchObject({
+      getId: expect.any(Function),
+    });
+    expect(docker.getWatcher({ agent: 'edge-agent', watcher: 'test' }).getId()).toBe(
+      'edge-agent.docker.test',
+    );
+    expect(getStateSpy).toHaveBeenCalled();
+  } finally {
+    getStateSpy.mockRestore();
+  }
+});
+
+test('getWatcher should include container name when id is missing', async () => {
+  vi.spyOn(registryStore, 'getState').mockReturnValue({ watcher: {} } as any);
+
+  expect(() =>
+    docker.getWatcher({
+      name: 'named-only',
+      watcher: 'missing',
+    }),
+  ).toThrowError('No watcher found for container named-only (docker.missing)');
+});
+
+test('getWatcher should fall back to unknown when id and name are absent', async () => {
+  vi.spyOn(registryStore, 'getState').mockReturnValue({ watcher: {} } as any);
+
+  expect(() => docker.getWatcher({ watcher: 'missing' })).toThrowError(
+    'No watcher found for container unknown (docker.missing)',
+  );
+});
+
 // --- getCurrentContainer ---
 
 test('getCurrentContainer should return container from dockerApi', async () => {
@@ -517,6 +579,22 @@ test('createContainer should throw error when error occurs', async () => {
       log,
     ),
   ).rejects.toThrowError('Error when creating container');
+});
+
+test('createContainer should stringify non-object errors in warning logs', async () => {
+  const dockerApi = {
+    createContainer: vi.fn().mockRejectedValue(Symbol('create failed')),
+    getNetwork: vi.fn(),
+  };
+  const logContainer = createMockLog('info', 'warn');
+
+  await expect(
+    docker.createContainer(dockerApi as any, { name: 'ko' }, 'name', logContainer as any),
+  ).rejects.toBeTypeOf('symbol');
+
+  expect(logContainer.warn).toHaveBeenCalledWith(
+    'Error when creating container name (Symbol(create failed))',
+  );
 });
 
 test('createContainer should connect additional networks after create', async () => {
@@ -947,6 +1025,16 @@ test('trigger should not throw when all is ok', async () => {
       updateKind: { remoteValue: '4.5.6' },
     }),
   ).resolves.toBeUndefined();
+});
+
+test('mustTrigger should reject containers renamed with -old unix timestamp suffix', () => {
+  expect(
+    docker.mustTrigger(createTriggerContainer({ name: 'container-name-old-1773933154786' })),
+  ).toBe(false);
+});
+
+test('mustTrigger should allow containers without rollback suffix', () => {
+  expect(docker.mustTrigger(createTriggerContainer({ name: 'my-container' }))).toBe(true);
 });
 
 test('trigger should not throw in dryrun mode', async () => {
@@ -3277,6 +3365,7 @@ describe('extracted lifecycle delegation', () => {
 describe('additional direct wrapper coverage', () => {
   test('isContainerNotFoundError should handle empty, status, and message-based inputs', () => {
     expect(docker.isContainerNotFoundError(undefined)).toBe(false);
+    expect(docker.isContainerNotFoundError('no such container as primitive')).toBe(false);
     expect(docker.isContainerNotFoundError({ statusCode: 404 })).toBe(true);
     expect(docker.isContainerNotFoundError({ status: 404 })).toBe(true);
     expect(docker.isContainerNotFoundError({ message: 'No such container: abc' })).toBe(true);
@@ -3284,6 +3373,7 @@ describe('additional direct wrapper coverage', () => {
     expect(docker.isContainerNotFoundError({ json: { message: 'No such container: ghi' } })).toBe(
       true,
     );
+    expect(docker.isContainerNotFoundError({ json: { message: 404 } })).toBe(false);
     expect(docker.isContainerNotFoundError({ message: 'something else' })).toBe(false);
   });
 
@@ -3647,5 +3737,102 @@ describe('trigger self-update routing', () => {
     expect(maybeNotifySelfUpdateSpy).toHaveBeenCalled();
     expect(executeSelfUpdateSpy).toHaveBeenCalled();
     expect(executeContainerUpdateSpy).not.toHaveBeenCalled();
+  });
+});
+
+// --- compose file sync ---
+
+describe('performContainerUpdate compose file sync', () => {
+  beforeEach(() => {
+    mockSyncComposeFileTag.mockClear();
+  });
+
+  test('should call syncComposeFileTag after successful tag update', async () => {
+    const executeUpdateSpy = vi.spyOn(docker, 'executeContainerUpdate').mockResolvedValue(true);
+
+    const context = {
+      currentContainerSpec: {
+        Config: {
+          Labels: {
+            'com.docker.compose.project.config_files': '/app/docker-compose.yml',
+            'com.docker.compose.service': 'web',
+          },
+        },
+      },
+      newImage: 'myapp:v2',
+    };
+
+    const container = {
+      updateKind: { kind: 'tag', localValue: 'v1', remoteValue: 'v2' },
+    };
+
+    const logContainer = { info: vi.fn(), warn: vi.fn(), debug: vi.fn(), error: vi.fn() };
+
+    await docker.performContainerUpdate(context, container, logContainer);
+
+    expect(mockSyncComposeFileTag).toHaveBeenCalledWith({
+      labels: context.currentContainerSpec.Config.Labels,
+      newImage: 'myapp:v2',
+      logContainer,
+    });
+
+    executeUpdateSpy.mockRestore();
+  });
+
+  test('should not call syncComposeFileTag for digest updates', async () => {
+    const executeUpdateSpy = vi.spyOn(docker, 'executeContainerUpdate').mockResolvedValue(true);
+
+    const context = {
+      currentContainerSpec: {
+        Config: {
+          Labels: {
+            'com.docker.compose.project.config_files': '/app/docker-compose.yml',
+            'com.docker.compose.service': 'web',
+          },
+        },
+      },
+      newImage: 'myapp:latest',
+    };
+
+    const container = {
+      updateKind: { kind: 'digest' },
+    };
+
+    const logContainer = { info: vi.fn(), warn: vi.fn(), debug: vi.fn(), error: vi.fn() };
+
+    await docker.performContainerUpdate(context, container, logContainer);
+
+    expect(mockSyncComposeFileTag).not.toHaveBeenCalled();
+
+    executeUpdateSpy.mockRestore();
+  });
+
+  test('should not call syncComposeFileTag when update fails', async () => {
+    const executeUpdateSpy = vi.spyOn(docker, 'executeContainerUpdate').mockResolvedValue(false);
+
+    const context = {
+      currentContainerSpec: {
+        Config: {
+          Labels: {
+            'com.docker.compose.project.config_files': '/app/docker-compose.yml',
+            'com.docker.compose.service': 'web',
+          },
+        },
+      },
+      newImage: 'myapp:v2',
+    };
+
+    const container = {
+      updateKind: { kind: 'tag', localValue: 'v1', remoteValue: 'v2' },
+    };
+
+    const logContainer = { info: vi.fn(), warn: vi.fn(), debug: vi.fn(), error: vi.fn() };
+
+    const result = await docker.performContainerUpdate(context, container, logContainer);
+
+    expect(result).toBe(false);
+    expect(mockSyncComposeFileTag).not.toHaveBeenCalled();
+
+    executeUpdateSpy.mockRestore();
   });
 });

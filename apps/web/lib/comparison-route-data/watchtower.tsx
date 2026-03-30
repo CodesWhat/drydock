@@ -22,7 +22,7 @@ Auto rollback|No|Yes, on health check failure|drydock
 Authentication|None|OIDC (Authelia, Auth0, Authentik)|drydock
 Container actions|Restart only (via update)|Start/stop/restart from UI/API|drydock
 Docker Compose updates|Limited|Full compose pull & recreate|drydock
-Lifecycle hooks|Yes|Yes (pre/post-update)|tie
+Lifecycle hooks|Yes (advisory — no abort on failure)|Yes (pre/post with abort & audit)|drydock
 Image backup|No|Pre-update backup with retention|drydock
 Webhook API|HTTP API mode|Token-authenticated webhooks|drydock
 License|Apache 2.0|AGPL-3.0|tie

@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
-import { useBreakpoints } from '../composables/useBreakpoints';
+import AppBadge from '../components/AppBadge.vue';
 import ToggleSwitch from '../components/ToggleSwitch.vue';
+import { useBreakpoints } from '../composables/useBreakpoints';
 import { useViewMode } from '../preferences/useViewMode';
 import type { NotificationRule, NotificationRuleUpdate } from '../services/notification';
 import { getAllNotificationRules, updateNotificationRule } from '../services/notification';
@@ -283,13 +284,13 @@ onMounted(async () => {
 <template>
   <DataViewLayout>
     <div v-if="error"
-         class="mb-3 px-3 py-2 text-[0.6875rem] dd-rounded"
+         class="mb-3 px-3 py-2 text-2xs-plus dd-rounded"
          :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
       {{ error }}
     </div>
 
     <div v-if="saveError"
-         class="mb-3 px-3 py-2 text-[0.6875rem] dd-rounded"
+         class="mb-3 px-3 py-2 text-2xs-plus dd-rounded"
          :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
       {{ saveError }}
     </div>
@@ -304,16 +305,16 @@ onMounted(async () => {
         <input v-model="searchQuery"
                type="text"
                placeholder="Filter by name, description, or trigger..."
-               class="flex-1 min-w-[120px] max-w-[320px] px-2.5 py-1.5 dd-rounded text-[0.6875rem] font-medium outline-none dd-bg dd-text dd-placeholder" />
-        <button v-if="searchQuery"
-                class="text-[0.625rem] dd-text-muted hover:dd-text transition-colors"
+               class="flex-1 min-w-[120px] max-w-[320px] px-2.5 py-1.5 dd-rounded text-2xs-plus font-medium outline-none dd-bg dd-text dd-placeholder" />
+        <AppButton size="none" variant="text-muted" weight="medium" class="text-2xs" v-if="searchQuery"
+                
                 @click="clearFilters">
           Clear
-        </button>
+        </AppButton>
       </template>
     </DataFilterBar>
 
-    <div v-if="loading" class="text-[0.6875rem] dd-text-muted py-3 px-1">Loading notification rules...</div>
+    <div v-if="loading" class="text-2xs-plus dd-text-muted py-3 px-1">Loading notification rules...</div>
 
     <DataTable
       v-if="notificationsViewMode === 'table' && !loading"
@@ -337,16 +338,15 @@ onMounted(async () => {
       </template>
       <template #cell-name="{ row }">
         <div class="font-medium dd-text">{{ row.name }}</div>
-        <div class="text-[0.625rem] mt-0.5 dd-text-muted">{{ row.description }}</div>
+        <div class="text-2xs mt-0.5 dd-text-muted">{{ row.description }}</div>
       </template>
       <template #cell-triggers="{ row }">
         <div class="flex flex-wrap gap-1 justify-end">
-          <span v-for="triggerId in row.triggers" :key="triggerId"
-                class="badge text-[0.5625rem] font-semibold"
-                :style="{ backgroundColor: 'var(--dd-neutral-muted)', color: 'var(--dd-text-secondary)' }">
+          <AppBadge v-for="triggerId in row.triggers" :key="triggerId"
+                    :custom="{ bg: 'var(--dd-neutral-muted)', text: 'var(--dd-text-secondary)' }" size="xs" :uppercase="false">
             {{ triggerNameById(triggerId) }}
-          </span>
-          <span v-if="row.triggers.length === 0" class="text-[0.625rem] italic dd-text-muted">None</span>
+          </AppBadge>
+          <span v-if="row.triggers.length === 0" class="text-2xs italic dd-text-muted">None</span>
         </div>
       </template>
       <template #empty>
@@ -366,8 +366,8 @@ onMounted(async () => {
       <template #card="{ item: notif }">
         <div class="px-4 pt-4 pb-2 flex items-start justify-between gap-3">
           <div class="min-w-0 flex-1">
-            <div class="text-[0.9375rem] font-semibold truncate dd-text">{{ notif.name }}</div>
-            <div class="text-[0.6875rem] mt-0.5 dd-text-muted">{{ notif.description }}</div>
+            <div class="text-sm-plus font-semibold truncate dd-text">{{ notif.name }}</div>
+            <div class="text-2xs-plus mt-0.5 dd-text-muted">{{ notif.description }}</div>
           </div>
           <ToggleSwitch
             :model-value="notif.enabled"
@@ -383,12 +383,11 @@ onMounted(async () => {
         </div>
         <div class="px-4 py-2.5 flex flex-wrap gap-1.5 mt-auto"
              :style="{ borderTop: '1px solid var(--dd-border)', backgroundColor: 'var(--dd-bg-elevated)' }">
-          <span v-for="triggerId in notif.triggers" :key="triggerId"
-                class="badge text-[0.5625rem] font-semibold"
-                :style="{ backgroundColor: 'var(--dd-neutral-muted)', color: 'var(--dd-text-secondary)' }">
+          <AppBadge v-for="triggerId in notif.triggers" :key="triggerId"
+                    :custom="{ bg: 'var(--dd-neutral-muted)', text: 'var(--dd-text-secondary)' }" size="xs" :uppercase="false">
             {{ triggerNameById(triggerId) }}
-          </span>
-          <span v-if="notif.triggers.length === 0" class="text-[0.625rem] italic dd-text-muted">
+          </AppBadge>
+          <span v-if="notif.triggers.length === 0" class="text-2xs italic dd-text-muted">
             No triggers
           </span>
         </div>
@@ -415,16 +414,15 @@ onMounted(async () => {
         />
         <span class="text-sm font-semibold flex-1 min-w-0 truncate dd-text">{{ notif.name }}</span>
         <div class="flex flex-wrap gap-1.5 shrink-0 max-w-[320px] justify-end">
-          <span v-for="triggerId in notif.triggers" :key="triggerId"
-                class="badge text-[0.5625rem] font-semibold"
-                :style="{ backgroundColor: 'var(--dd-neutral-muted)', color: 'var(--dd-text-secondary)' }">
+          <AppBadge v-for="triggerId in notif.triggers" :key="triggerId"
+                    :custom="{ bg: 'var(--dd-neutral-muted)', text: 'var(--dd-text-secondary)' }" size="xs" :uppercase="false">
             {{ triggerNameById(triggerId) }}
-          </span>
-          <span v-if="notif.triggers.length === 0" class="text-[0.625rem] italic dd-text-muted">No triggers</span>
+          </AppBadge>
+          <span v-if="notif.triggers.length === 0" class="text-2xs italic dd-text-muted">No triggers</span>
         </div>
       </template>
       <template #details="{ item: notif }">
-        <div class="text-[0.6875rem] dd-text-muted">{{ notif.description }}</div>
+        <div class="text-2xs-plus dd-text-muted">{{ notif.description }}</div>
       </template>
     </DataListAccordion>
 
@@ -450,23 +448,18 @@ onMounted(async () => {
         </template>
 
         <template #subtitle>
-          <span v-if="selectedRule"
-                class="badge text-[0.5625rem] font-bold"
-                :style="{
-                  backgroundColor: selectedRule.enabled ? 'var(--dd-success-muted)' : 'var(--dd-neutral-muted)',
-                  color: selectedRule.enabled ? 'var(--dd-success)' : 'var(--dd-neutral)',
-                }">
+          <AppBadge v-if="selectedRule" :tone="selectedRule.enabled ? 'success' : 'neutral'" size="xs">
             {{ selectedRule.enabled ? 'enabled' : 'disabled' }}
-          </span>
-          <span v-if="selectedRule" class="text-[0.625rem] font-mono dd-text-muted">{{ selectedRule.id }}</span>
+          </AppBadge>
+          <span v-if="selectedRule" class="text-2xs font-mono dd-text-muted">{{ selectedRule.id }}</span>
         </template>
 
         <template v-if="selectedRule" #default>
           <div class="p-4 space-y-5">
-            <div class="text-[0.6875rem] dd-text-muted">{{ selectedRule.description }}</div>
+            <div class="text-2xs-plus dd-text-muted">{{ selectedRule.description }}</div>
 
             <div>
-              <div class="text-[0.625rem] font-semibold uppercase tracking-wider mb-2 dd-text-muted">Rule status</div>
+              <div class="text-2xs font-semibold uppercase tracking-wider mb-2 dd-text-muted">Rule status</div>
               <ToggleSwitch
                 :model-value="detailEnabled"
                 :disabled="detailSaving"
@@ -475,16 +468,16 @@ onMounted(async () => {
                 off-color="var(--dd-border-strong)"
                 @update:model-value="detailEnabled = $event"
               />
-              <div class="text-[0.625rem] mt-1 dd-text-muted">
+              <div class="text-2xs mt-1 dd-text-muted">
                 {{ detailEnabled ? 'Enabled: notifications can fire for this event.' : 'Disabled: notifications are suppressed for this event.' }}
               </div>
             </div>
 
             <div>
-              <div class="text-[0.625rem] font-semibold uppercase tracking-wider mb-2 dd-text-muted">
+              <div class="text-2xs font-semibold uppercase tracking-wider mb-2 dd-text-muted">
                 Assigned Triggers
               </div>
-              <div v-if="triggersSorted.length === 0" class="text-[0.6875rem] dd-text-muted">
+              <div v-if="triggersSorted.length === 0" class="text-2xs-plus dd-text-muted">
                 No triggers configured. Add triggers on the <RouterLink to="/triggers"
                 class="underline hover:no-underline">Triggers page</RouterLink>.
               </div>
@@ -498,29 +491,28 @@ onMounted(async () => {
                          @change="toggleDetailTrigger(trigger.id)" />
                   <div class="flex-1 min-w-0">
                     <div class="text-xs font-semibold truncate dd-text">{{ trigger.name }}</div>
-                    <div class="text-[0.625rem] font-mono dd-text-muted">{{ trigger.id }}</div>
+                    <div class="text-2xs font-mono dd-text-muted">{{ trigger.id }}</div>
                   </div>
-                  <span class="badge text-[0.5625rem] uppercase font-bold shrink-0"
-                        :style="{ backgroundColor: triggerTypeBadge(trigger.type).bg, color: triggerTypeBadge(trigger.type).text }">
+                  <AppBadge :custom="{ bg: triggerTypeBadge(trigger.type).bg, text: triggerTypeBadge(trigger.type).text }" size="xs" class="shrink-0">
                     {{ triggerTypeBadge(trigger.type).label }}
-                  </span>
+                  </AppBadge>
                 </label>
               </div>
             </div>
 
             <div class="pt-2 flex items-center gap-2">
-              <button class="inline-flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors disabled:opacity-50 disabled:pointer-events-none"
+              <AppButton size="none" variant="plain" weight="none" class="inline-flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-2xs-plus font-semibold transition-colors disabled:opacity-50 disabled:pointer-events-none"
                       :style="{ backgroundColor: 'var(--dd-primary)', color: 'white' }"
                       :disabled="detailSaving || !detailHasChanges"
                       @click="saveSelectedRule">
                 <AppIcon :name="detailSaving ? 'pending' : 'check'" :size="12" />
                 {{ detailSaving ? 'Saving...' : 'Save changes' }}
-              </button>
-              <button class="px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated disabled:opacity-50 disabled:pointer-events-none"
+              </AppButton>
+              <AppButton size="none" variant="plain" weight="none" class="px-3 py-1.5 dd-rounded text-2xs-plus font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated disabled:opacity-50 disabled:pointer-events-none"
                       :disabled="detailSaving || !detailHasChanges"
                       @click="syncDetailDraftFromRule">
                 Reset
-              </button>
+              </AppButton>
             </div>
           </div>
         </template>

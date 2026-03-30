@@ -6,15 +6,14 @@ vi.mock('@/services/log', () => ({
   getLogEntries: vi.fn().mockResolvedValue([]),
 }));
 
-vi.mock('@/composables/useLogViewerBehavior', () => ({
-  LOG_AUTO_FETCH_INTERVALS: [{ label: 'Off', value: 0 }],
-  useAutoFetchLogs: () => ({ autoFetchInterval: { value: 0 } }),
-  useLogViewport: () => ({
-    logContainer: { value: null },
-    scrollBlocked: { value: false },
-    scrollToBottom: vi.fn(),
-    handleLogScroll: vi.fn(),
-    resumeAutoScroll: vi.fn(),
+vi.mock('@/composables/useSystemLogStream', () => ({
+  useSystemLogStream: () => ({
+    entries: { value: [] },
+    status: { value: 'disconnected' },
+    connect: vi.fn(),
+    disconnect: vi.fn(),
+    updateFilters: vi.fn(),
+    clear: vi.fn(),
   }),
 }));
 
@@ -32,7 +31,7 @@ describe('LogsView', () => {
       expect(root.classes()).toContain('sm:pr-[15px]');
     });
 
-    it('prevents page-level scroll with overflow-hidden', () => {
+    it('uses the standard vertical scroll container', () => {
       const wrapper = mount(LogsView, {
         global: {
           stubs: {
@@ -41,10 +40,10 @@ describe('LogsView', () => {
         },
       });
       const root = wrapper.find('div');
-      expect(root.classes()).toContain('overflow-hidden');
+      expect(root.classes()).toContain('overflow-y-auto');
     });
 
-    it('stretches to fill available height with flex-1 and min-h-0', () => {
+    it('stretches to fill available height with flex-1/min-h-0/min-w-0', () => {
       const wrapper = mount(LogsView, {
         global: {
           stubs: {
@@ -55,7 +54,7 @@ describe('LogsView', () => {
       const root = wrapper.find('div');
       expect(root.classes()).toContain('flex-1');
       expect(root.classes()).toContain('min-h-0');
-      expect(root.classes()).toContain('flex-col');
+      expect(root.classes()).toContain('min-w-0');
     });
   });
 });

@@ -1,0 +1,44 @@
+---
+title: "GAR (Google Artifact Registry)"
+description: "The gar registry lets you configure Google Artifact Registry integration."
+---
+
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+The `gar` registry lets you configure [Google Artifact Registry](https://cloud.google.com/artifact-registry) integration for container registries under `*-docker.pkg.dev`.
+
+## Variables
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --- | :---: | --- | --- | --- |
+| `DD_REGISTRY_GAR_{REGISTRY_NAME}_CLIENTEMAIL` | ⚪ | Service Account Client Email (required for private images access) | See [Service Account credentials](https://cloud.google.com/iam/docs/keys-create-delete) | |
+| `DD_REGISTRY_GAR_{REGISTRY_NAME}_PRIVATEKEY` | ⚪ | Service Account Private Key (required for private images access) | See [Service Account credentials](https://cloud.google.com/iam/docs/keys-create-delete) | |
+
+## Examples
+
+### Configure for authenticated access
+
+<Tabs items={["Docker Compose", "Docker"]}>
+<Tab value="Docker Compose">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    environment:
+      - DD_REGISTRY_GAR_PRIVATE_CLIENTEMAIL=johndoe@myproject.iam.gserviceaccount.com
+      - DD_REGISTRY_GAR_PRIVATE_PRIVATEKEY=-----BEGIN PRIVATE KEY-----xxxxxxxxxxx\n-----END PRIVATE KEY-----\n
+```
+
+</Tab>
+<Tab value="Docker">
+```bash
+docker run \
+  -e DD_REGISTRY_GAR_PRIVATE_CLIENTEMAIL="johndoe@myproject.iam.gserviceaccount.com" \
+  -e DD_REGISTRY_GAR_PRIVATE_PRIVATEKEY="-----BEGIN PRIVATE KEY-----xxxxxxxxxxx\n-----END PRIVATE KEY-----\n" \
+  ...
+  codeswhat/drydock
+```
+</Tab>
+</Tabs>

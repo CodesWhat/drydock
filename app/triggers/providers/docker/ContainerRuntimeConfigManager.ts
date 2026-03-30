@@ -38,7 +38,7 @@ type ClonedRuntimeFieldEvaluationContext = Pick<
   'sourceImageConfig' | 'targetImageConfig' | 'runtimeFieldOrigins' | 'logContainer'
 >;
 
-export type RuntimeConfigManagerDependencies = {
+type RuntimeConfigManagerDependencies = {
   getPreferredLabelValue: (
     labels: Record<string, string> | undefined,
     ddKey: string,

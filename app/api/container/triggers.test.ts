@@ -372,6 +372,31 @@ describe('api/container/triggers', () => {
       expect(res.json).toHaveBeenCalledWith({ error: 'Trigger not found' });
     });
 
+    test('returns 409 when trigger targets a temporary rollback container', async () => {
+      const trigger = createTrigger({
+        id: 'slack.notify',
+        name: 'notify',
+      });
+      const harness = createHarness({
+        container: { id: 'c1', name: 'app-old-1234567890' },
+        triggerMap: {
+          'slack.notify': trigger,
+        },
+      });
+
+      const res = await callRunTrigger(harness.handlers, {
+        id: 'c1',
+        triggerType: 'slack',
+        triggerName: 'notify',
+      });
+
+      expect(res.status).toHaveBeenCalledWith(409);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Cannot update temporary rollback container',
+      });
+      expect(trigger.trigger).not.toHaveBeenCalled();
+    });
+
     test('resolves and executes an agent-qualified trigger id', async () => {
       const trigger = createTrigger({
         id: 'agent-1.slack.notify',
@@ -420,6 +445,32 @@ describe('api/container/triggers', () => {
       expect(harness.deps.log.warn).toHaveBeenCalledWith(
         expect.stringContaining('trigger exploded'),
       );
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'trigger exploded',
+      });
+    });
+
+    test('falls back to a synthesized error when getErrorMessage returns an empty string', async () => {
+      const trigger = createTrigger({
+        id: 'slack.notify',
+        name: 'notify',
+        trigger: vi.fn().mockRejectedValue(new Error('trigger exploded')),
+      });
+      const harness = createHarness({
+        container: { id: 'c1' },
+        triggerMap: {
+          'slack.notify': trigger,
+        },
+      });
+      harness.deps.getErrorMessage.mockReturnValue('');
+
+      const res = await callRunTrigger(harness.handlers, {
+        id: 'c1',
+        triggerType: 'slack',
+        triggerName: 'notify',
+      });
+
       expect(res.status).toHaveBeenCalledWith(500);
       expect(res.json).toHaveBeenCalledWith({
         error: 'Error when running trigger (type=slack, name=notify)',

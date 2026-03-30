@@ -202,4 +202,40 @@ describe('api/container/security-overview', () => {
     expect(response.totalContainers).toBe(25);
     expect(response.scannedContainers).toBe(1);
   });
+
+  test('keeps the current latest scan timestamp when a later container has an older valid timestamp', () => {
+    const response = buildSecurityVulnerabilityOverviewResponse(
+      [
+        createContainer({
+          id: 'first',
+          security: { scan: { scannedAt: '2026-02-20T00:00:00.000Z', vulnerabilities: [] } },
+        }),
+        createContainer({
+          id: 'second',
+          security: { scan: { scannedAt: '2026-02-10T00:00:00.000Z', vulnerabilities: [] } },
+        }),
+      ] as any[],
+      {} as any,
+    );
+
+    expect(response.latestScannedAt).toBe('2026-02-20T00:00:00.000Z');
+  });
+
+  test('falls back to lexicographic ordering when scannedAt values are not parseable dates', () => {
+    const response = buildSecurityVulnerabilityOverviewResponse(
+      [
+        createContainer({
+          id: 'first',
+          security: { scan: { scannedAt: 'aaa', vulnerabilities: [] } },
+        }),
+        createContainer({
+          id: 'second',
+          security: { scan: { scannedAt: 'zzz', vulnerabilities: [] } },
+        }),
+      ] as any[],
+      {} as any,
+    );
+
+    expect(response.latestScannedAt).toBe('zzz');
+  });
 });

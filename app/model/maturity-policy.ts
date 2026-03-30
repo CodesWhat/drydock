@@ -2,7 +2,6 @@ export const DEFAULT_MATURITY_MIN_AGE_DAYS = 7;
 export const MATURITY_MIN_AGE_DAYS_MIN = 1;
 export const MATURITY_MIN_AGE_DAYS_MAX = 365;
 export const MS_PER_DAY = 24 * 60 * 60 * 1000;
-export const MILLISECONDS_PER_DAY = MS_PER_DAY;
 
 export type MaturityMode = 'all' | 'mature';
 

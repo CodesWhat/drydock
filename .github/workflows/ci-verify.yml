@@ -1,0 +1,1152 @@
+name: "🔬 CI Verify"
+run-name: >-
+  ${{
+    github.event_name == 'pull_request' && format('🔬 CI Verify — PR #{0}: {1}', github.event.pull_request.number, github.event.pull_request.title) ||
+    github.event_name == 'push' && format('🔬 CI Verify — {0}', github.event.head_commit.message) ||
+    github.event_name == 'merge_group' && format('🔬 CI Verify — Merge Queue: {0}', github.ref_name) ||
+    github.event_name == 'workflow_call' && format('🔬 CI Verify — workflow_call ({0})', github.sha) ||
+    format('🔬 CI Verify — {0}', github.ref_name)
+  }}
+
+on:
+  push:
+    branches:
+      - main
+      - 'release/**'
+      - 'feature/**'
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '30 6 * * 1'  # Weekly CodeQL (Monday 06:30 UTC)
+    - cron: '0 6 * * 0'   # Weekly Fuzz (Sunday 06:00 UTC)
+  merge_group:
+    branches: [main]
+  workflow_call:
+    secrets:
+      CODECOV_TOKEN:
+        required: false
+
+concurrency:
+  group: ci-verify-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  zizmor:
+    name: "🔐 Security: Actions"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594  # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Run zizmor
+        uses: zizmorcore/zizmor-action@71321a20a9ded102f6e9ce5718a2fcec2c4f70d8  # v0.5.2
+        with:
+          token: ${{ github.token }}
+
+  codeql:
+    name: "🛡️ SAST: CodeQL"
+    if: github.event_name == 'pull_request' || github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    needs: [zizmor]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60  # CodeQL init/autobuild/analyze can be long on cache misses
+    permissions:
+      security-events: write
+      contents: read
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [javascript-typescript]
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594  # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@b1bff81932f5cdfc8695c7752dcee935dcd061c8  # v4.33.0
+        with:
+          languages: ${{ matrix.language }}
+          config-file: ./.github/codeql/codeql-config.yml
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@b1bff81932f5cdfc8695c7752dcee935dcd061c8  # v4.33.0
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@b1bff81932f5cdfc8695c7752dcee935dcd061c8  # v4.33.0
+        with:
+          category: /language:${{ matrix.language }}
+
+  fuzz:
+    name: "🎯 Fuzz Testing"
+    if: github.event_name == 'pull_request' || github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    needs: [zizmor]
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      issues: write
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594  # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f  # v6.3.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: app
+
+      - name: Run fuzz tests
+        id: fuzz-run
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          mkdir -p ../artifacts/fuzz
+          npx vitest run --reporter=verbose '.fuzz.test.ts' 2>&1 | tee ../artifacts/fuzz/fuzz-test.log
+        working-directory: app
+
+      - name: Summarize fuzz result
+        id: fuzz-status
+        if: always()
+        env:
+          FUZZ_OUTCOME: ${{ steps.fuzz-run.outcome }}
+        run: |
+          set -euo pipefail
+
+          if [ "${FUZZ_OUTCOME}" = "success" ]; then
+            echo "failed=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Fuzz Testing"
+              echo "- Result: PASS"
+              echo "- Log artifact: \`fuzz-log-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}\`"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          echo "failed=true" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Fuzz Testing"
+            echo "- Result: FAIL"
+            echo "- AI_ACTION_REQUIRED: inspect fuzz log artifact and failing seed/case before merge."
+            echo "- Log artifact: \`fuzz-log-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload fuzz log artifact
+        if: always()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7.0.0
+        with:
+          name: fuzz-log-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/fuzz/fuzz-test.log
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Notify via issue on unattended failure
+        if: steps.fuzz-status.outputs.failed == 'true' && github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_TITLE: "🚨 CI: Fuzz tests failing on main"
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+
+          api_headers=(
+            -H "Authorization: Bearer ${GH_TOKEN}"
+            -H "Accept: application/vnd.github+json"
+          )
+
+          issues_url="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/issues?state=open&per_page=100"
+          open_issues="$(curl -fsSL "${api_headers[@]}" "${issues_url}")"
+          existing_number="$(echo "${open_issues}" | jq -r --arg title "${ISSUE_TITLE}" '.[] | select(.title == $title and (.pull_request | not)) | .number' | head -n1)"
+
+          comment_body=$(
+            cat <<EOF
+          Fuzz job failed again.
+
+          - Workflow run: ${RUN_URL}
+          - Commit: \`${GITHUB_SHA}\`
+          - Ref: \`${GITHUB_REF}\`
+          - Log artifact: \`fuzz-log-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}\`
+          EOF
+          )
+
+          if [ -n "${existing_number}" ]; then
+            comment_url="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/issues/${existing_number}/comments"
+            curl -fsSL -X POST "${api_headers[@]}" "${comment_url}" \
+              -d "$(jq -n --arg body "${comment_body}" '{body: $body}')" >/dev/null
+            exit 0
+          fi
+
+          issue_body=$(
+            cat <<EOF
+          Fuzz tests are failing on unattended runs.
+
+          - Latest failing run: ${RUN_URL}
+          - Commit: \`${GITHUB_SHA}\`
+          - Ref: \`${GITHUB_REF}\`
+          - Log artifact: \`fuzz-log-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}\`
+
+          Keep this issue open until fuzz is green again.
+          EOF
+          )
+
+          create_url="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/issues"
+          curl -fsSL -X POST "${api_headers[@]}" "${create_url}" \
+            -d "$(jq -n --arg title "${ISSUE_TITLE}" --arg body "${issue_body}" '{title: $title, body: $body}')" >/dev/null
+
+      - name: Fail workflow on fuzz failure
+        if: steps.fuzz-status.outputs.failed == 'true'
+        run: exit 1
+
+  dependency-review:
+    name: "📦 Security: Dependency Review"
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594  # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Dependency review
+        uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48  # v4.9.0
+        with:
+          base-ref: ${{ github.event_name == 'push' && github.event.before || '' }}
+          head-ref: ${{ github.event_name == 'push' && github.sha || '' }}
+
+  commit-message:
+    name: "📝 Policy: Commit Message Gate (Advisory)"
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true
+    permissions:
+      contents: read
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594  # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f  # v6.3.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Validate commit messages in PR range
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: node scripts/validate-commit-range.mjs --base "${BASE_SHA}" --head "${HEAD_SHA}"
+
+  lint:
+    name: "🧹 Quality: Lint"
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594  # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f  # v6.3.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Block new @ts-nocheck usage
+        run: node scripts/check-ts-nocheck-allowlist.mjs
+
+      - name: Biome check
+        run: npx biome check .
+
+      - name: Setup Qlty
+        uses: qltysh/qlty-action/install@a19242102d17e497f437d7466aa01b528537e899  # v2.2.0
+
+      - name: Qlty check (all plugins, enforced)
+        run: ./scripts/qlty-check-gate.sh all
+
+      - name: Qlty smells report (advisory)
+        run: |
+          mkdir -p artifacts/qlty
+          node scripts/qlty-smells-gate.mjs \
+            --scope=all \
+            --sarif-output=artifacts/qlty/qlty-smells-all.sarif \
+            --summary-output=artifacts/qlty/qlty-smells-summary.md
+
+      - name: Upload Qlty smells report
+        if: always()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7.0.0
+        with:
+          name: qlty-smells-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/qlty
+          if-no-files-found: warn
+          retention-days: 14
+
+  test:
+    name: "🧪 Quality: Test & Coverage"
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: ci-codecov
+    permissions:
+      contents: read
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594  # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f  # v6.3.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Install app dependencies
+        run: npm ci
+        working-directory: app
+
+      - name: Install ui dependencies
+        run: npm ci
+        working-directory: ui
+
+      - name: Run app tests
+        run: npm test
+        working-directory: app
+
+      - name: Run ui tests
+        run: npm run test:unit
+        working-directory: ui
+
+      - name: Normalize coverage paths for Codecov
+        run: node scripts/prepare-codecov-reports.mjs
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2  # v6.0.0
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: coverage/codecov-app.lcov.info,coverage/codecov-ui.lcov.info
+          flags: app,ui
+          fail_ci_if_error: false  # coverage upload is informational — don't block CI on transient Codecov infra failures
+
+  build:
+    name: "🏗️ Build"
+    if: github.event_name != 'schedule'
+    needs: [lint, test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 35  # Includes UI build + single-arch QA image + multi-arch smoke build
+    permissions:
+      contents: read
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594  # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f  # v6.3.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Install ui dependencies
+        run: npm ci
+        working-directory: ui
+
+      - name: Build ui
+        run: npm run build
+        working-directory: ui
+
+      - name: Build Storybook (regression smoke)
+        run: npm run test:storybook
+        working-directory: ui
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd  # v4.0.0
+
+      - name: Docker build (QA image + smoke test)
+        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294  # v7.0.0
+        with:
+          context: .
+          push: false
+          load: true
+          tags: drydock:dev
+          build-args: DD_VERSION=ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Set up QEMU (multi-arch smoke build)
+        uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a  # v4.0.0
+
+      - name: Docker build (multi-arch smoke)
+        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294  # v7.0.0
+        with:
+          context: .
+          push: false
+          platforms: linux/amd64,linux/arm64
+          build-args: DD_VERSION=ci-multiarch-smoke
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Export QA image artifact
+        run: |
+          mkdir -p artifacts/qa
+          docker save drydock:dev | gzip > artifacts/qa/drydock-dev-image.tar.gz
+
+      - name: Upload QA image artifact
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7.0.0
+        with:
+          name: qa-image-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/qa/drydock-dev-image.tar.gz
+          if-no-files-found: error
+          retention-days: 1
+
+  dast-zap-baseline:
+    name: "🕷️ DAST: ZAP Baseline"
+    runs-on: ubuntu-latest
+    timeout-minutes: 25  # Includes QA stack startup and scanner container runtime
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release/')
+    needs: [build]
+    permissions:
+      contents: read
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594  # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Download QA image artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        with:
+          name: qa-image-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/qa
+
+      - name: Load QA image
+        run: docker load < artifacts/qa/drydock-dev-image.tar.gz
+
+      - name: Start QA stack
+        run: docker compose -p drydock-zap -f test/qa-compose.yml up -d
+
+      - name: Wait for QA health
+        run: |
+          set -euo pipefail
+          for _ in $(seq 1 60); do
+            if curl -sf http://localhost:3333/health >/dev/null 2>&1; then
+              echo "Drydock is healthy"
+              exit 0
+            fi
+            sleep 2
+          done
+
+          echo "Drydock failed to become healthy after 120 seconds."
+          docker compose -p drydock-zap -f test/qa-compose.yml ps
+          exit 1
+
+      - name: Run ZAP baseline scan
+        uses: zaproxy/action-baseline@de8ad967d3548d44ef623df22cf95c3b0baf8b25  # v0.15.0
+        with:
+          target: http://localhost:3333
+          docker_name: ghcr.io/zaproxy/zaproxy:stable
+          allow_issue_writing: false
+          fail_action: true
+          cmd_options: '-I'
+
+      - name: Upload ZAP HTML report
+        if: always()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7.0.0
+        with:
+          name: zap-baseline-html-${{ github.run_id }}-${{ github.run_attempt }}
+          path: report_html.html
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Summarize ZAP findings
+        if: always()
+        run: |
+          set -uo pipefail
+
+          report="report_json.json"
+          artifact_name="zap-baseline-html-${{ github.run_id }}-${{ github.run_attempt }}"
+          artifact_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}#artifacts"
+
+          high=0
+          medium=0
+          low=0
+          info=0
+          total=0
+          parse_error=0
+
+          if [ -f "${report}" ] && [ -s "${report}" ]; then
+            if jq -e . "${report}" >/dev/null 2>&1; then
+              high="$(jq '[.site[]?.alerts[]? | select((.riskcode // "") == "3")] | length' "${report}")"
+              medium="$(jq '[.site[]?.alerts[]? | select((.riskcode // "") == "2")] | length' "${report}")"
+              low="$(jq '[.site[]?.alerts[]? | select((.riskcode // "") == "1")] | length' "${report}")"
+              info="$(jq '[.site[]?.alerts[]? | select((.riskcode // "") == "0")] | length' "${report}")"
+              total=$((high + medium + low + info))
+            else
+              parse_error=1
+            fi
+          fi
+
+          {
+            echo "### DAST: ZAP Baseline"
+            if [ ! -f "${report}" ]; then
+              echo "- Report: JSON output not found (\`${report}\`)."
+            elif [ ! -s "${report}" ]; then
+              echo "- Report: JSON output is empty (\`${report}\`)."
+            elif [ "${parse_error}" -eq 1 ]; then
+              echo "- Report: JSON output could not be parsed (\`${report}\`)."
+            fi
+            echo "- Findings: **${total}**"
+            echo "- Severity breakdown: high=${high}, medium=${medium}, low=${low}, info=${info}"
+            echo "- Artifact: [${artifact_name}](${artifact_url})"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Show QA logs on failure
+        if: failure()
+        run: docker compose -p drydock-zap -f test/qa-compose.yml logs --no-color
+
+      - name: Stop QA stack
+        if: always()
+        run: docker compose -p drydock-zap -f test/qa-compose.yml down -v --remove-orphans
+
+  dast-nuclei:
+    name: "🔎 DAST: Nuclei"
+    runs-on: ubuntu-latest
+    timeout-minutes: 25  # Includes QA stack startup and full medium+ template pass
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release/')
+    needs: [build]
+    permissions:
+      contents: read
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594  # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Download QA image artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        with:
+          name: qa-image-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/qa
+
+      - name: Load QA image
+        run: docker load < artifacts/qa/drydock-dev-image.tar.gz
+
+      - name: Start QA stack
+        run: docker compose -p drydock-nuclei -f test/qa-compose.yml up -d
+
+      - name: Wait for QA health
+        run: |
+          set -euo pipefail
+          for _ in $(seq 1 60); do
+            if curl -sf http://localhost:3333/health >/dev/null 2>&1; then
+              echo "Drydock is healthy"
+              exit 0
+            fi
+            sleep 2
+          done
+
+          echo "Drydock failed to become healthy after 120 seconds."
+          docker compose -p drydock-nuclei -f test/qa-compose.yml ps
+          exit 1
+
+      - name: Create Nuclei report directory
+        run: mkdir -p artifacts/dast
+
+      - name: Run Nuclei scan
+        id: nuclei_scan
+        continue-on-error: true
+        uses: projectdiscovery/nuclei-action@32a91c0da7be14c07b0ade6c14fa0f6e78d97c9c  # v3.1.0
+        with:
+          version: v3.7.1
+          args: -u http://localhost:3333 -as -severity medium,high,critical -json-export artifacts/dast/nuclei-report.json -silent
+
+      - name: Enforce Nuclei severity gate (medium+)
+        env:
+          SCAN_OUTCOME: ${{ steps.nuclei_scan.outcome }}
+        run: |
+          set -euo pipefail
+
+          report="artifacts/dast/nuclei-report.json"
+
+          if [ ! -f "${report}" ]; then
+            echo "Nuclei did not produce a JSON report."
+            if [ "${SCAN_OUTCOME}" != "success" ]; then
+              echo "Nuclei action failed before report generation."
+              exit 1
+            fi
+            exit 0
+          fi
+
+          if [ ! -s "${report}" ]; then
+            echo "No medium+ findings detected."
+            if [ "${SCAN_OUTCOME}" != "success" ]; then
+              echo "Nuclei action did not succeed."
+              exit 1
+            fi
+            exit 0
+          fi
+
+          finding_count="$(jq -s '[.[] | (if type == "array" then .[] else . end) | select(((.info.severity // .severity // "") | ascii_downcase | test("^(medium|high|critical)$")))] | length' "${report}")"
+          echo "Medium+ findings: ${finding_count}"
+
+          if [ "${SCAN_OUTCOME}" != "success" ]; then
+            echo "Nuclei action did not complete successfully."
+            exit 1
+          fi
+
+          if [ "${finding_count}" -gt 0 ]; then
+            echo "Nuclei reported medium+ severity findings."
+            exit 1
+          fi
+
+      - name: Upload Nuclei JSON report
+        if: always()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7.0.0
+        with:
+          name: nuclei-json-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/dast/nuclei-report.json
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Summarize Nuclei findings
+        if: always()
+        run: |
+          set -uo pipefail
+
+          report="artifacts/dast/nuclei-report.json"
+          artifact_name="nuclei-json-${{ github.run_id }}-${{ github.run_attempt }}"
+          artifact_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}#artifacts"
+
+          critical=0
+          high=0
+          medium=0
+          low=0
+          info=0
+          total=0
+          parse_error=0
+
+          if [ -f "${report}" ] && [ -s "${report}" ]; then
+            if jq -e -s . "${report}" >/dev/null 2>&1; then
+              total="$(jq -s '[.[] | (if type == "array" then .[] else . end)] | length' "${report}")"
+              critical="$(jq -s '[.[] | (if type == "array" then .[] else . end) | select(((.info.severity // .severity // "") | ascii_downcase) == "critical")] | length' "${report}")"
+              high="$(jq -s '[.[] | (if type == "array" then .[] else . end) | select(((.info.severity // .severity // "") | ascii_downcase) == "high")] | length' "${report}")"
+              medium="$(jq -s '[.[] | (if type == "array" then .[] else . end) | select(((.info.severity // .severity // "") | ascii_downcase) == "medium")] | length' "${report}")"
+              low="$(jq -s '[.[] | (if type == "array" then .[] else . end) | select(((.info.severity // .severity // "") | ascii_downcase) == "low")] | length' "${report}")"
+              info="$(jq -s '[.[] | (if type == "array" then .[] else . end) | select(((.info.severity // .severity // "") | ascii_downcase) == "info")] | length' "${report}")"
+            else
+              parse_error=1
+            fi
+          fi
+
+          {
+            echo "### DAST: Nuclei"
+            if [ ! -f "${report}" ]; then
+              echo "- Report: JSON output not found (\`${report}\`)."
+            elif [ ! -s "${report}" ]; then
+              echo "- Report: JSON output is empty (\`${report}\`)."
+            elif [ "${parse_error}" -eq 1 ]; then
+              echo "- Report: JSON output could not be parsed (\`${report}\`)."
+            fi
+            echo "- Findings: **${total}**"
+            echo "- Severity breakdown: critical=${critical}, high=${high}, medium=${medium}, low=${low}, info=${info}"
+            echo "- Artifact: [${artifact_name}](${artifact_url})"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Show QA logs on failure
+        if: failure()
+        run: docker compose -p drydock-nuclei -f test/qa-compose.yml logs --no-color
+
+      - name: Stop QA stack
+        if: always()
+        run: docker compose -p drydock-nuclei -f test/qa-compose.yml down -v --remove-orphans
+
+  e2e:
+    name: "🥒 E2E: Cucumber"
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [build]
+    permissions:
+      contents: read
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594  # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f  # v6.3.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Install e2e dependencies
+        run: npm ci
+        working-directory: e2e
+
+      - name: Setup test containers
+        run: ./scripts/setup-test-containers.sh
+
+      - name: Start drydock
+        id: drydock
+        run: ./scripts/start-drydock.sh
+
+      - name: Run Cucumber e2e tests
+        run: npm run cucumber
+        working-directory: e2e
+        env:
+          DD_PORT: ${{ steps.drydock.outputs.dd_port }}
+
+      - name: Show drydock logs on failure
+        if: failure()
+        run: docker logs drydock
+
+      - name: Cleanup
+        if: always()
+        run: ./scripts/cleanup-test-containers.sh
+
+  playwright:
+    name: "🎭 E2E: Playwright"
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25  # Browser install + QA stack startup + full UI flow tests
+    needs: [build]
+    permissions:
+      contents: read
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594  # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f  # v6.3.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Download QA image artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        with:
+          name: qa-image-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/qa
+
+      - name: Load QA image
+        run: docker load < artifacts/qa/drydock-dev-image.tar.gz
+
+      - name: Install e2e dependencies
+        run: npm ci
+        working-directory: e2e
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+        working-directory: e2e
+
+      - name: Start QA stack
+        run: docker compose -p drydock-playwright -f test/qa-compose.yml up -d
+
+      - name: Wait for QA health
+        run: |
+          set -euo pipefail
+          for _ in $(seq 1 60); do
+            if curl -sf http://localhost:3333/health >/dev/null 2>&1; then
+              echo "Drydock QA is healthy"
+              exit 0
+            fi
+            sleep 2
+          done
+
+          echo "Drydock QA failed to become healthy after 120 seconds."
+          docker compose -p drydock-playwright -f test/qa-compose.yml ps
+          exit 1
+
+      - name: Run Playwright tests
+        run: npm run test:playwright
+        working-directory: e2e
+
+      - name: Upload Playwright HTML report
+        if: failure()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7.0.0
+        with:
+          name: playwright-html-${{ github.run_id }}-${{ github.run_attempt }}
+          path: e2e/playwright-report
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload Playwright traces
+        if: failure()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7.0.0
+        with:
+          name: playwright-traces-${{ github.run_id }}-${{ github.run_attempt }}
+          path: e2e/test-results
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Show QA logs on failure
+        if: failure()
+        run: docker compose -p drydock-playwright -f test/qa-compose.yml logs --no-color
+
+      - name: Stop QA stack
+        if: always()
+        run: docker compose -p drydock-playwright -f test/qa-compose.yml down -v --remove-orphans
+
+  load-test-ci:
+    name: "⚡ Load Test: CI"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30  # Full enforced load/correctness gates on push
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))
+    needs: [build]
+    permissions:
+      contents: read
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594  # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f  # v6.3.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd  # v4.0.0
+
+      - name: Install e2e dependencies
+        run: npm ci
+        working-directory: e2e
+
+      - name: Run Artillery load test
+        id: run-load-test-ci
+        env:
+          ARTILLERY_ENV: ci
+          DD_LOAD_TEST_BUILD_CACHE: gha
+          DD_LOAD_TEST_ARTIFACT_DIR: artifacts/load-test/ci
+        run: ./scripts/run-load-test.sh
+
+      - name: Run Artillery behavior test
+        env:
+          ARTILLERY_FILE: ./test/test-behavior.yml
+          ARTILLERY_ENV: behavior
+          DD_LOAD_TEST_BUILD_CACHE: gha
+          DD_LOAD_TEST_ARTIFACT_DIR: artifacts/load-test/behavior
+        run: ./scripts/run-load-test.sh
+
+      - name: Summarize load test metrics (ci)
+        if: always()
+        run: |
+          report="$(find artifacts/load-test/ci -maxdepth 1 -name '*.json' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -n1 | cut -d' ' -f2-)"
+          ./scripts/summarize-load-test-report.sh "$report" "Load Test (CI)"
+
+      - name: Summarize load test metrics (behavior)
+        if: always()
+        run: |
+          report="$(find artifacts/load-test/behavior -maxdepth 1 -name '*.json' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -n1 | cut -d' ' -f2-)"
+          ./scripts/summarize-load-test-report.sh "$report" "Load Test (Behavior)"
+
+      - name: Correctness check (ci, enforced)
+        if: always()
+        env:
+          DD_LOAD_TEST_CORRECTNESS_ENFORCE: 'true'
+          DD_LOAD_TEST_MAX_5XX: '0'
+          DD_LOAD_TEST_MAX_VUSERS_FAILED: '0'
+          DD_LOAD_TEST_MIN_429: '0'
+          DD_LOAD_TEST_MAX_429: '0'
+        run: |
+          report="$(find artifacts/load-test/ci -maxdepth 1 -name '*.json' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -n1 | cut -d' ' -f2-)"
+          ./scripts/check-load-test-correctness.sh "$report" "Load Test Correctness (CI)"
+
+      - name: Correctness check (behavior, advisory)
+        if: always()
+        env:
+          DD_LOAD_TEST_CORRECTNESS_ENFORCE: 'false'
+          DD_LOAD_TEST_MAX_5XX: '0'
+          DD_LOAD_TEST_MAX_VUSERS_FAILED: '0'
+          DD_LOAD_TEST_MIN_429: '0'
+          DD_LOAD_TEST_MAX_429: '0'
+        run: |
+          report="$(find artifacts/load-test/behavior -maxdepth 1 -name '*.json' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -n1 | cut -d' ' -f2-)"
+          ./scripts/check-load-test-correctness.sh "$report" "Load Test Correctness (Behavior)"
+
+      - name: Resolve committed load test baseline (ci)
+        id: load-test-baseline-ci
+        if: ${{ always() && steps.run-load-test-ci.conclusion == 'success' }}
+        run: |
+          set -euo pipefail
+
+          baseline_report="test/load-test-baselines/ci.json"
+          if [ ! -f "${baseline_report}" ]; then
+            echo "::error::Committed baseline not found at ${baseline_report}."
+            exit 1
+          fi
+
+          echo "baseline_artifact_name=repo:${baseline_report}" >> "${GITHUB_OUTPUT}"
+          echo "baseline_report=${baseline_report}" >> "${GITHUB_OUTPUT}"
+
+      - name: Regression check against committed baseline (ci, enforced)
+        if: ${{ always() && steps.run-load-test-ci.conclusion == 'success' }}
+        env:
+          BASELINE_REPORT: ${{ steps.load-test-baseline-ci.outputs.baseline_report }}
+          DD_LOAD_TEST_BASELINE_ARTIFACT_NAME: ${{ steps.load-test-baseline-ci.outputs.baseline_artifact_name }}
+          DD_LOAD_TEST_MAX_P95_INCREASE_PCT: '20'
+          DD_LOAD_TEST_MAX_P99_INCREASE_PCT: '25'
+          DD_LOAD_TEST_MAX_RATE_DECREASE_PCT: '15'
+          DD_LOAD_TEST_MAX_P95_MS: '1200'
+          DD_LOAD_TEST_MAX_P99_MS: '2500'
+          DD_LOAD_TEST_MIN_REQUEST_RATE: '10'
+          DD_LOAD_TEST_REGRESSION_ENFORCE: 'true'
+        run: |
+          set -euo pipefail
+
+          if [ "${DD_LOAD_TEST_REGRESSION_ENFORCE:-}" != "true" ]; then
+            echo "::error::Regression gate misconfigured: DD_LOAD_TEST_REGRESSION_ENFORCE must be true in enforced mode."
+            exit 1
+          fi
+
+          current_report="$(find artifacts/load-test/ci -maxdepth 1 -name '*.json' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -n1 | cut -d' ' -f2-)"
+          if [ -z "${current_report}" ]; then
+            echo "::error::Current CI report not found; cannot run regression gate."
+            exit 1
+          fi
+
+          if [ -z "${BASELINE_REPORT}" ]; then
+            echo "::error::Baseline report path is empty; expected committed baseline."
+            exit 1
+          fi
+
+          ./scripts/check-load-test-regression.sh "${current_report}" "${BASELINE_REPORT}"
+
+      - name: Upload load test artifact (ci)
+        if: always()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7.0.0
+        with:
+          name: load-test-ci-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/load-test/ci/*.json
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Upload load test artifact (behavior)
+        if: always()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7.0.0
+        with:
+          name: load-test-behavior-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/load-test/behavior/*.json
+          if-no-files-found: warn
+          retention-days: 30
+
+  auto-tag:
+    name: "🏷️ Release: Auto Tag"
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [zizmor, dependency-review, lint, test, build, e2e, playwright, load-test-ci, codeql, fuzz]
+    permissions:
+      contents: write
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594  # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Compute release tag
+        id: compute
+        env:
+          TARGET_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          latest_tag="$(git tag --list 'v*' --sort=-v:refname | head -n1)"
+          if [ -z "${latest_tag}" ]; then
+            latest_tag="v0.0.0"
+          fi
+
+          current_version="${latest_tag#v}"
+
+          if [ "${latest_tag}" = "v0.0.0" ]; then
+            release_level="patch"
+            next_version="0.0.1"
+          else
+            set +e
+            mapfile -t vars < <(node scripts/release-next-version.mjs \
+              --current "${current_version}" \
+              --bump auto \
+              --from "${latest_tag}" \
+              --to "${TARGET_SHA}")
+            rc=$?
+            set -e
+
+            if [ "${rc}" -ne 0 ]; then
+              echo "No releasable commits found; skipping auto tag."
+              echo "should_tag=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            for kv in "${vars[@]}"; do
+              key="${kv%%=*}"
+              value="${kv#*=}"
+              case "${key}" in
+                release_level) release_level="${value}" ;;
+                next_version) next_version="${value}" ;;
+              esac
+            done
+          fi
+
+          release_tag="v${next_version}"
+          if git rev-parse -q --verify "refs/tags/${release_tag}" >/dev/null; then
+            echo "Tag already exists: ${release_tag}; nothing to do."
+            echo "should_tag=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          {
+            echo "should_tag=true"
+            echo "release_level=${release_level}"
+            echo "release_tag=${release_tag}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create and push release tag
+        if: steps.compute.outputs.should_tag == 'true'
+        env:
+          RELEASE_TAG: ${{ steps.compute.outputs.release_tag }}
+          TARGET_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "${RELEASE_TAG}" "${TARGET_SHA}" -m "release: ${RELEASE_TAG}"
+          git push origin "${RELEASE_TAG}"
+
+      - name: Tag summary
+        if: always()
+        env:
+          SHOULD_TAG: ${{ steps.compute.outputs.should_tag }}
+          RELEASE_LEVEL: ${{ steps.compute.outputs.release_level }}
+          RELEASE_TAG: ${{ steps.compute.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+          should_tag="${SHOULD_TAG:-false}"
+          {
+            echo "### Auto Tag"
+            echo "- should_tag: \`${should_tag}\`"
+            if [ "${should_tag}" = "true" ]; then
+              echo "- release_level: \`${RELEASE_LEVEL}\`"
+              echo "- release_tag: \`${RELEASE_TAG}\`"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

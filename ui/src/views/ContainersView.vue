@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, provide, ref, watch } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import ContainerFullPageDetail from '../components/containers/ContainerFullPageDetail.vue';
 import ContainerSideDetail from '../components/containers/ContainerSideDetail.vue';
 import ContainersListContent from '../components/containers/ContainersListContent.vue';
@@ -196,6 +196,7 @@ const {
   clearPolicySelected,
   clearMaturityPolicySelected,
   clearSkipsSelected,
+  confirmClearPolicy,
   confirmDelete,
   confirmForceUpdate,
   confirmUpdate,
@@ -291,45 +292,188 @@ const {
   clearFilters,
 } = useContainerFilters(containers);
 const route = useRoute();
-const VALID_FILTER_KINDS = new Set(['all', 'any', 'major', 'minor', 'patch', 'digest']);
+const router = useRouter();
+const VALID_FILTER_KIND_VALUES = ['all', 'a\u006Ey', 'major', 'minor', 'patch', 'digest'] as const;
+type FilterKindQueryValue = (typeof VALID_FILTER_KIND_VALUES)[number];
+const DEFAULT_FILTER_KIND: FilterKindQueryValue = 'all';
+const VALID_FILTER_KINDS: ReadonlySet<FilterKindQueryValue> = new Set(VALID_FILTER_KIND_VALUES);
+const DEFAULT_FILTER_VALUE = 'all';
+const QUERY_SYNC_KEYS = new Set([
+  'q',
+  'filterKind',
+  'filterStatus',
+  'filterRegistry',
+  'filterBouncer',
+  'filterServer',
+  'groupByStack',
+  'sort',
+] as const);
+const VALID_CONTAINER_SORT_KEYS = [
+  'name',
+  'image',
+  'status',
+  'server',
+  'registry',
+  'bouncer',
+  'kind',
+  'version',
+  'imageAge',
+] as const;
+type ContainerSortKey = (typeof VALID_CONTAINER_SORT_KEYS)[number];
+const DEFAULT_CONTAINER_SORT_KEY: ContainerSortKey = 'name';
+const DEFAULT_CONTAINER_SORT_ASC = true;
+const VALID_CONTAINER_SORT_KEYS_SET = new Set<string>(VALID_CONTAINER_SORT_KEYS);
+const isSyncingRouteFromState = ref(false);
 
-function applyFilterKindFromQuery(queryValue: unknown) {
-  const raw = Array.isArray(queryValue) ? queryValue[0] : queryValue;
-  if (raw === undefined || raw === null) {
-    filterKind.value = 'all';
-    return;
-  }
-  if (typeof raw !== 'string') {
-    filterKind.value = 'all';
-    return;
-  }
-  filterKind.value = VALID_FILTER_KINDS.has(raw) ? raw : 'all';
+function isFilterKindQueryValue(value: string): value is FilterKindQueryValue {
+  return VALID_FILTER_KINDS.has(value as FilterKindQueryValue);
 }
 
-function applyFilterSearchFromQuery(queryValue: unknown) {
-  const raw = Array.isArray(queryValue) ? queryValue[0] : queryValue;
+function firstQueryValue(value: unknown): string | undefined {
+  const raw = Array.isArray(value) ? value[0] : value;
+  return typeof raw === 'string' ? raw : undefined;
+}
+
+function isContainerSortKey(value: string): value is ContainerSortKey {
+  return VALID_CONTAINER_SORT_KEYS_SET.has(value);
+}
+
+function parseSortFromQuery(queryValue: unknown):
+  | {
+      key: ContainerSortKey;
+      asc: boolean;
+    }
+  | undefined {
+  const raw = firstQueryValue(queryValue);
+  if (!raw) {
+    return undefined;
+  }
+  if (raw === 'oldest-first') {
+    return { key: 'imageAge', asc: true };
+  }
+  if (raw === 'newest-first') {
+    return { key: 'imageAge', asc: false };
+  }
+  if (raw.endsWith('-desc')) {
+    const key = raw.slice(0, -5);
+    if (isContainerSortKey(key)) {
+      return { key, asc: false };
+    }
+    return undefined;
+  }
+  if (isContainerSortKey(raw)) {
+    return { key: raw, asc: true };
+  }
+  return undefined;
+}
+
+function encodeSortQueryValue(key: string, asc: boolean): string | undefined {
+  if (!isContainerSortKey(key)) {
+    return undefined;
+  }
+  if (key === DEFAULT_CONTAINER_SORT_KEY && asc === DEFAULT_CONTAINER_SORT_ASC) {
+    return undefined;
+  }
+  if (key === 'imageAge') {
+    return asc ? 'oldest-first' : 'newest-first';
+  }
+  return asc ? key : `${key}-desc`;
+}
+
+function resolveRouteParamId(rawValue: unknown): string | undefined {
+  if (Array.isArray(rawValue)) {
+    return typeof rawValue[0] === 'string' ? rawValue[0] : undefined;
+  }
+  return typeof rawValue === 'string' ? rawValue : undefined;
+}
+
+const isContainerLogsRoute = computed(() => route.name === 'container-logs');
+
+function syncRouteDrivenContainerLogsView(): void {
+  if (!isContainerLogsRoute.value) {
+    return;
+  }
+
+  const containerIdFromRoute = resolveRouteParamId((route.params as Record<string, unknown>)?.id);
+  if (!containerIdFromRoute) {
+    return;
+  }
+
+  const targetContainer =
+    containers.value.find((container) => container.id === containerIdFromRoute) ??
+    containers.value.find(
+      (container) => containerIdMap.value[container.name] === containerIdFromRoute,
+    );
+
+  if (!targetContainer) {
+    return;
+  }
+
+  selectedContainer.value = targetContainer;
+  activeDetailTab.value = 'logs';
+  detailPanelOpen.value = false;
+  containerFullPage.value = true;
+}
+
+function applyFilterKindFromQuery(queryValue: unknown) {
+  const raw = firstQueryValue(queryValue);
+  if (raw === undefined) {
+    return;
+  }
+  if (!raw) {
+    filterKind.value = DEFAULT_FILTER_KIND;
+    return;
+  }
+  filterKind.value = isFilterKindQueryValue(raw) ? raw : DEFAULT_FILTER_KIND;
+}
+
+function applyFilterSearchFromQuery(
+  queryValue: unknown,
+  options?: { clearDropdownFilters?: boolean },
+) {
+  const raw = firstQueryValue(queryValue);
   filterSearch.value = typeof raw === 'string' ? raw : '';
+  if (!options?.clearDropdownFilters) {
+    return;
+  }
   // When navigating with a search query (e.g. from Ctrl+K), clear persisted
   // dropdown filters so the target container is always visible.
   if (filterSearch.value) {
-    filterStatus.value = 'all';
-    filterRegistry.value = 'all';
-    filterBouncer.value = 'all';
-    filterServer.value = 'all';
-    filterKind.value = 'all';
+    filterStatus.value = DEFAULT_FILTER_VALUE;
+    filterRegistry.value = DEFAULT_FILTER_VALUE;
+    filterBouncer.value = DEFAULT_FILTER_VALUE;
+    filterServer.value = DEFAULT_FILTER_VALUE;
+    filterKind.value = DEFAULT_FILTER_KIND;
   }
 }
 
-applyFilterSearchFromQuery(route.query.q);
-watch(
-  () => route.query.q,
-  (value) => applyFilterSearchFromQuery(value),
-);
+function applyOptionalFilterValueFromQuery(
+  queryValue: unknown,
+  setter: (value: string) => void,
+  fallback: string,
+) {
+  const raw = firstQueryValue(queryValue);
+  if (raw === undefined) {
+    return;
+  }
+  setter(raw || fallback);
+}
 
-applyFilterKindFromQuery(route.query.filterKind);
+function applySortFromQuery(queryValue: unknown) {
+  const sort = parseSortFromQuery(queryValue);
+  if (!sort) {
+    return;
+  }
+  containerSortKey.value = sort.key;
+  containerSortAsc.value = sort.asc;
+}
+
 watch(
-  () => route.query.filterKind,
-  (value) => applyFilterKindFromQuery(value),
+  [() => route.name, () => route.path, () => route.params, () => containers.value.length],
+  () => {
+    syncRouteDrivenContainerLogsView();
+  },
+  { immediate: true },
 );
 
 const serverNames = computed(() => [
@@ -346,6 +490,167 @@ const containerSortAsc = usePreference(
   () => preferences.containers.sort.asc,
   (value) => {
     preferences.containers.sort.asc = value;
+  },
+);
+const groupByStack = usePreference(
+  () => preferences.containers.groupByStack,
+  (value) => {
+    preferences.containers.groupByStack = value;
+  },
+);
+
+function applyGroupByStackFromQuery(queryValue: unknown) {
+  const raw = firstQueryValue(queryValue);
+  if (raw === undefined) {
+    return;
+  }
+  groupByStack.value = raw === 'true' || raw === '1';
+}
+
+watch(
+  () => [
+    route.query.q,
+    route.query.filterKind,
+    route.query.filterStatus,
+    route.query.filterRegistry,
+    route.query.filterBouncer,
+    route.query.filterServer,
+    route.query.groupByStack,
+    route.query.sort,
+  ],
+  ([
+    querySearch,
+    queryFilterKind,
+    queryFilterStatus,
+    queryFilterRegistry,
+    queryFilterBouncer,
+    queryFilterServer,
+    queryGroupByStack,
+    querySort,
+  ]) => {
+    applyFilterSearchFromQuery(querySearch, {
+      clearDropdownFilters: !isSyncingRouteFromState.value,
+    });
+    applyFilterKindFromQuery(queryFilterKind);
+    applyOptionalFilterValueFromQuery(
+      queryFilterStatus,
+      (value) => {
+        filterStatus.value = value;
+      },
+      DEFAULT_FILTER_VALUE,
+    );
+    applyOptionalFilterValueFromQuery(
+      queryFilterRegistry,
+      (value) => {
+        filterRegistry.value = value;
+      },
+      DEFAULT_FILTER_VALUE,
+    );
+    applyOptionalFilterValueFromQuery(
+      queryFilterBouncer,
+      (value) => {
+        filterBouncer.value = value;
+      },
+      DEFAULT_FILTER_VALUE,
+    );
+    applyOptionalFilterValueFromQuery(
+      queryFilterServer,
+      (value) => {
+        filterServer.value = value;
+      },
+      DEFAULT_FILTER_VALUE,
+    );
+    applyGroupByStackFromQuery(queryGroupByStack);
+    applySortFromQuery(querySort);
+  },
+  { immediate: true },
+);
+
+function normalizeQueryRecord(query: Record<string, unknown>): Record<string, string> {
+  const normalized: Record<string, string> = {};
+  for (const [key, value] of Object.entries(query)) {
+    const normalizedValue = firstQueryValue(value);
+    if (normalizedValue !== undefined) {
+      normalized[key] = normalizedValue;
+    }
+  }
+  return normalized;
+}
+
+function buildSyncedRouteQuery(): Record<string, string> {
+  const nextQuery = normalizeQueryRecord(route.query as Record<string, unknown>);
+  for (const key of QUERY_SYNC_KEYS) {
+    delete nextQuery[key];
+  }
+
+  if (filterSearch.value) {
+    nextQuery.q = filterSearch.value;
+  }
+  if (filterKind.value !== DEFAULT_FILTER_KIND) {
+    nextQuery.filterKind = filterKind.value;
+  }
+  if (filterStatus.value !== DEFAULT_FILTER_VALUE) {
+    nextQuery.filterStatus = filterStatus.value;
+  }
+  if (filterRegistry.value !== DEFAULT_FILTER_VALUE) {
+    nextQuery.filterRegistry = filterRegistry.value;
+  }
+  if (filterBouncer.value !== DEFAULT_FILTER_VALUE) {
+    nextQuery.filterBouncer = filterBouncer.value;
+  }
+  if (filterServer.value !== DEFAULT_FILTER_VALUE) {
+    nextQuery.filterServer = filterServer.value;
+  }
+  if (groupByStack.value) {
+    nextQuery.groupByStack = 'true';
+  }
+  const sortQuery = encodeSortQueryValue(containerSortKey.value, containerSortAsc.value);
+  if (sortQuery) {
+    nextQuery.sort = sortQuery;
+  }
+  return nextQuery;
+}
+
+function areQueriesEqual(left: Record<string, string>, right: Record<string, string>): boolean {
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+  if (leftKeys.length !== rightKeys.length) {
+    return false;
+  }
+  return leftKeys.every((key) => left[key] === right[key]);
+}
+
+async function syncRouteQueryFromState() {
+  if (isContainerLogsRoute.value) {
+    return;
+  }
+  const currentQuery = normalizeQueryRecord(route.query as Record<string, unknown>);
+  const nextQuery = buildSyncedRouteQuery();
+  if (areQueriesEqual(currentQuery, nextQuery)) {
+    return;
+  }
+  isSyncingRouteFromState.value = true;
+  try {
+    await router.replace({ query: nextQuery });
+  } finally {
+    isSyncingRouteFromState.value = false;
+  }
+}
+
+watch(
+  [
+    filterSearch,
+    filterKind,
+    filterStatus,
+    filterRegistry,
+    filterBouncer,
+    filterServer,
+    groupByStack,
+    containerSortKey,
+    containerSortAsc,
+  ],
+  () => {
+    void syncRouteQueryFromState();
   },
 );
 
@@ -389,6 +694,10 @@ const sortedContainers = computed(() => {
     } else if (key === 'version') {
       leftValue = left.currentTag;
       rightValue = right.currentTag;
+    } else if (key === 'imageAge') {
+      const leftMs = left.imageCreated ? new Date(left.imageCreated).getTime() : 0;
+      const rightMs = right.imageCreated ? new Date(right.imageCreated).getTime() : 0;
+      return leftMs < rightMs ? -dir : leftMs > rightMs ? dir : 0;
     } else {
       return 0;
     }
@@ -414,12 +723,6 @@ const displayContainers = computed(() => {
   return [...live, ...ghosts];
 });
 
-const groupByStack = usePreference(
-  () => preferences.containers.groupByStack,
-  (value) => {
-    preferences.containers.groupByStack = value;
-  },
-);
 const groupMembershipMap = ref<Record<string, string>>({});
 const collapsedGroups = ref(new Set<string>());
 
@@ -430,20 +733,6 @@ watch(
       void loadGroups();
     }
   },
-);
-
-function applyGroupByStackFromQuery(queryValue: unknown) {
-  const raw = Array.isArray(queryValue) ? queryValue[0] : queryValue;
-  if (typeof raw !== 'string') {
-    return;
-  }
-  groupByStack.value = raw === 'true' || raw === '1';
-}
-
-applyGroupByStackFromQuery(route.query.groupByStack);
-watch(
-  () => route.query.groupByStack,
-  (value) => applyGroupByStackFromQuery(value),
 );
 
 function toggleGroupCollapse(key: string) {
@@ -494,6 +783,17 @@ const groupedContainers = computed<RenderGroup[]>(() => {
       buckets[key] = [];
     }
     buckets[key].push(container);
+  }
+  // Flatten single-container stacks into the ungrouped bucket so they render
+  // without a collapsible group header (GitHub Discussion #179).
+  for (const key of Object.keys(buckets)) {
+    if (key !== '__ungrouped__' && buckets[key].length === 1) {
+      if (!buckets.__ungrouped__) {
+        buckets.__ungrouped__ = [];
+      }
+      buckets.__ungrouped__.push(...buckets[key]);
+      delete buckets[key];
+    }
   }
   const named: RenderGroup[] = [];
   let ungrouped: RenderGroup | null = null;
@@ -554,6 +854,10 @@ const tableColumns = computed(() =>
 );
 
 onMounted(() => {
+  if (isContainerLogsRoute.value) {
+    return;
+  }
+
   const saved = detailPanelStorage.read();
   if (!saved) {
     return;
@@ -766,6 +1070,7 @@ provide(containersViewTemplateContextKey, {
   maturityMinAgeDaysInput,
   setMaturityPolicySelected,
   clearMaturityPolicySelected,
+  confirmClearPolicy,
   clearPolicySelected,
   policyMessage,
   policyError,
@@ -800,7 +1105,6 @@ provide(containersViewTemplateContextKey, {
 </script>
 
 <template>
-  <ConfirmDialog />
   <DataViewLayout v-if="!containerFullPage">
     <ContainersListContent />
     <template #panel>

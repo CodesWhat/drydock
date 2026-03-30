@@ -103,7 +103,7 @@ const containerAutoFetchInterval = ref(0);
 const containerLogRef = ref<HTMLElement | null>(null);
 const containerScrollBlocked = ref(false);
 const previewLoading = ref(false);
-const actionInProgress = ref<string | null>(null);
+const actionInProgress = ref(new Set<string>());
 const policyInProgress = ref<string | null>(null);
 const snoozeDateInput = ref('');
 const selectedSnoozeUntil = ref<string | null>(null);
@@ -238,7 +238,7 @@ vi.mock('@/components/containers/containersViewTemplateContext', () => ({
     maturityMinAgeDaysInput,
     setMaturityPolicySelected: mockSetMaturityPolicySelected,
     clearMaturityPolicySelected: mockClearMaturityPolicySelected,
-    clearPolicySelected: mockClearPolicySelected,
+    confirmClearPolicy: mockClearPolicySelected,
     policyMessage,
     policyError,
     removeSkipTagSelected: mockRemoveSkipTagSelected,
@@ -321,7 +321,7 @@ function resetState() {
   containerLogRef.value = null;
   containerScrollBlocked.value = false;
   previewLoading.value = false;
-  actionInProgress.value = null;
+  actionInProgress.value = new Set();
   policyInProgress.value = null;
   snoozeDateInput.value = '';
   selectedSnoozeUntil.value = null;
@@ -385,6 +385,11 @@ function mountComponent() {
   return mount(ContainerFullPageTabContent, {
     global: {
       stubs: {
+        ContainerLogs: {
+          template:
+            '<div data-test="container-logs-stub" :data-id="containerId" :data-name="containerName" :data-compact="compact ? `true` : `false`">{{ containerName }}</div>',
+          props: ['containerId', 'containerName', 'compact'],
+        },
         AppIcon: {
           template: '<span class="app-icon-stub" />',
           props: ['name', 'size'],
@@ -512,6 +517,10 @@ describe('ContainerFullPageTabContent', () => {
     const digestRemoveButton = digestLabel?.element.parentElement?.querySelector('button');
     expect(tagRemoveButton).toBeTruthy();
     expect(digestRemoveButton).toBeTruthy();
+    expect((tagRemoveButton as HTMLButtonElement).getAttribute('aria-label')).toBe('Remove skip');
+    expect((digestRemoveButton as HTMLButtonElement).getAttribute('aria-label')).toBe(
+      'Remove skip',
+    );
 
     (tagRemoveButton as HTMLButtonElement).click();
     (digestRemoveButton as HTMLButtonElement).click();
@@ -855,32 +864,50 @@ describe('ContainerFullPageTabContent', () => {
     expect(errorWrapper.text()).toContain('SBOM refresh failed');
   });
 
-  it('renders logs tab branches and log controls', async () => {
-    activeDetailTab.value = 'logs';
-    containerAutoFetchInterval.value = 5;
-    containerScrollBlocked.value = true;
-    mockGetContainerLogs.mockReturnValue([
-      '2026-03-13T00:00:00Z [error] broken',
-      '2026-03-13T00:00:01Z [warn] attention',
-      '2026-03-13T00:00:02Z plain message',
-    ]);
+  it('shows floating tag badge in overview when tag precision is floating and digest watch is disabled', () => {
+    activeDetailTab.value = 'overview';
+    selectedContainer.value = makeContainer({
+      newTag: undefined,
+      tagPrecision: 'floating',
+      imageDigestWatch: false,
+    });
 
     const wrapper = mountComponent();
-    expect(wrapper.text()).toContain('Container Logs');
-    expect(wrapper.text()).toContain('3 lines');
-    expect(wrapper.text()).toContain('Auto-scroll paused');
 
-    const logViewport = wrapper.find('div[style*="max-height: calc(100vh - 320px)"]');
-    expect(logViewport.exists()).toBe(true);
-    await logViewport.trigger('scroll');
-    expect(mockContainerHandleLogScroll).toHaveBeenCalledTimes(1);
+    expect(wrapper.find('[data-test="floating-tag-badge"]').exists()).toBe(true);
+  });
 
-    await findButtonByText(wrapper, 'Resume')?.trigger('click');
-    expect(mockContainerResumeAutoScroll).toHaveBeenCalledTimes(1);
+  it('hides floating tag badge in overview when tag is specific or digest watch is enabled', async () => {
+    activeDetailTab.value = 'overview';
+    selectedContainer.value = makeContainer({
+      newTag: undefined,
+      tagPrecision: 'specific',
+      imageDigestWatch: false,
+    });
 
-    containerScrollBlocked.value = false;
+    const wrapper = mountComponent();
+    expect(wrapper.find('[data-test="floating-tag-badge"]').exists()).toBe(false);
+
+    selectedContainer.value = makeContainer({
+      newTag: undefined,
+      tagPrecision: 'floating',
+      imageDigestWatch: true,
+    });
     await nextTick();
-    expect(wrapper.text()).not.toContain('Auto-scroll paused');
+
+    expect(wrapper.find('[data-test="floating-tag-badge"]').exists()).toBe(false);
+  });
+
+  it('renders logs tab with the real-time log viewer component', () => {
+    activeDetailTab.value = 'logs';
+    selectedContainer.value = makeContainer({ id: 'container-99', name: 'api' });
+
+    const wrapper = mountComponent();
+    const logsStub = wrapper.find('[data-test="container-logs-stub"]');
+    expect(logsStub.exists()).toBe(true);
+    expect(logsStub.attributes('data-id')).toBe('container-99');
+    expect(logsStub.attributes('data-name')).toBe('api');
+    expect(logsStub.attributes('data-compact')).toBe('false');
   });
 
   it('renders environment sensitive-value reveal flows including cache and hide', async () => {
@@ -907,11 +934,19 @@ describe('ContainerFullPageTabContent', () => {
     const secretRow = wrapper.findAll('.font-mono').find((node) => node.text().includes('SECRET'));
     const eyeButton = secretRow?.find('button');
     expect(eyeButton).toBeDefined();
+    expect(eyeButton?.attributes('aria-label')).toBe('Reveal value');
 
     await eyeButton?.trigger('click');
     await flushPromises();
     await nextTick();
     expect(wrapper.text()).toContain('super-secret');
+    expect(
+      wrapper
+        .findAll('.font-mono')
+        .find((node) => node.text().includes('SECRET'))
+        ?.find('button')
+        .attributes('aria-label'),
+    ).toBe('Hide value');
     expect(mockRevealContainerEnv).toHaveBeenCalledTimes(1);
 
     await eyeButton?.trigger('click');
@@ -1052,7 +1087,7 @@ describe('ContainerFullPageTabContent', () => {
     expect(mockRevealContainerEnv).toHaveBeenCalledTimes(1);
   });
 
-  it('updates select and input models for sbom, logs, snooze date, and maturity mode controls', async () => {
+  it('updates select and input models for sbom, snooze date, and maturity mode controls', async () => {
     activeDetailTab.value = 'overview';
     const wrapper = mountComponent();
 
@@ -1062,15 +1097,6 @@ describe('ContainerFullPageTabContent', () => {
     expect(sbomSelect).toBeDefined();
     await sbomSelect?.setValue('cyclonedx-json');
     expect(selectedSbomFormat.value).toBe('cyclonedx-json');
-
-    activeDetailTab.value = 'logs';
-    await nextTick();
-    const logsSelect = wrapper
-      .findAll('select')
-      .find((select) => select.find('option[value="5"]').exists());
-    expect(logsSelect).toBeDefined();
-    await logsSelect?.setValue('5');
-    expect(containerAutoFetchInterval.value).toBe(5);
 
     activeDetailTab.value = 'actions';
     await nextTick();

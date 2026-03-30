@@ -1,7 +1,12 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 
+import * as registry from '../../../registry/index.js';
 import * as storeContainer from '../../../store/container.js';
-import { addImageDetailsToContainerOrchestration } from './docker-image-details-orchestration.js';
+import {
+  addImageDetailsToContainerOrchestration,
+  testable_classifyTagPrecision,
+  testable_getNumericTagShape,
+} from './docker-image-details-orchestration.js';
 
 function createDockerSummaryContainer(overrides: Record<string, any> = {}) {
   return {
@@ -93,6 +98,55 @@ afterEach(() => {
 });
 
 describe('docker image details orchestration module', () => {
+  test('testable_getNumericTagShape derives numeric segment counts across tag formats', () => {
+    expect(testable_getNumericTagShape('1.2.3', undefined)).toMatchObject({
+      prefix: '',
+      numericSegments: ['1', '2', '3'],
+      suffix: '',
+    });
+    expect(testable_getNumericTagShape('v3', undefined)).toMatchObject({
+      prefix: 'v',
+      numericSegments: ['3'],
+      suffix: '',
+    });
+    expect(testable_getNumericTagShape('1.4-alpine', undefined)).toMatchObject({
+      prefix: '',
+      numericSegments: ['1', '4'],
+      suffix: '-alpine',
+    });
+    expect(testable_getNumericTagShape('v2.0.1-alpine', '^v(.*) => $1')).toMatchObject({
+      prefix: '',
+      numericSegments: ['2', '0', '1'],
+      suffix: '-alpine',
+    });
+    expect(testable_getNumericTagShape('latest', undefined)).toBeNull();
+  });
+
+  test('testable_classifyTagPrecision distinguishes specific releases from floating aliases', () => {
+    expect(testable_classifyTagPrecision('1.2.3', undefined, {})).toBe('specific');
+    expect(testable_classifyTagPrecision('1.4', undefined, {})).toBe('floating');
+    expect(testable_classifyTagPrecision('v3', undefined, {})).toBe('floating');
+    expect(testable_classifyTagPrecision('latest', undefined, {})).toBe('floating');
+    expect(testable_classifyTagPrecision('v2.0.1-alpine', '^v(.*) => $1', {})).toBe('specific');
+    expect(testable_classifyTagPrecision('1.2.3', undefined, null)).toBe('floating');
+  });
+
+  test('returns undefined for containers with empty Image (Podman pod infra)', async () => {
+    const { watcher } = createWatcher();
+    const container = createDockerSummaryContainer({ Image: '' });
+    const helpers = createHelpers();
+
+    const result = await addImageDetailsToContainerOrchestration(
+      watcher as any,
+      container,
+      {},
+      helpers as any,
+    );
+
+    expect(result).toBeUndefined();
+    expect(watcher.dockerApi.getImage).not.toHaveBeenCalled();
+  });
+
   test('refreshes runtime and image details for containers already present in store', async () => {
     const containerInStore = {
       id: 'container-1',
@@ -486,6 +540,49 @@ describe('docker image details orchestration module', () => {
     });
   });
 
+  test('detects sourceRepo from manual label override and OCI source labels', async () => {
+    vi.spyOn(storeContainer, 'getContainer').mockReturnValue(undefined);
+
+    const { watcher, inspectContainer, inspectImage } = createWatcher();
+    inspectContainer.mockResolvedValue({});
+    inspectImage.mockResolvedValue({
+      Id: 'image-new',
+      RepoDigests: ['ghcr.io/acme/service@sha256:new'],
+      Architecture: 'amd64',
+      Os: 'linux',
+      Created: '2026-02-01T00:00:00.000Z',
+      Config: {
+        Labels: {
+          'org.opencontainers.image.source': 'https://github.com/acme/service',
+        },
+      },
+    });
+
+    const resultFromImageSource = await addImageDetailsToContainerOrchestration(
+      watcher as any,
+      createDockerSummaryContainer({
+        Labels: {},
+      }),
+      {},
+      createHelpers() as any,
+    );
+
+    expect(resultFromImageSource?.sourceRepo).toBe('github.com/acme/service');
+
+    const resultFromManualOverride = await addImageDetailsToContainerOrchestration(
+      watcher as any,
+      createDockerSummaryContainer({
+        Labels: {
+          'dd.source.repo': 'github.com/acme/override',
+        },
+      }),
+      {},
+      createHelpers() as any,
+    );
+
+    expect(resultFromManualOverride?.sourceRepo).toBe('github.com/acme/override');
+  });
+
   test('falls back to summary runtime details when container inspect is unavailable', async () => {
     vi.spyOn(storeContainer, 'getContainer').mockReturnValue(undefined);
 
@@ -536,8 +633,75 @@ describe('docker image details orchestration module', () => {
     );
 
     expect(result?.id).toBe('new-container-id');
-    expect(getContainersSpy).toHaveBeenCalledWith({ watcher: 'docker-test', name: 'service' });
+    expect(getContainersSpy).toHaveBeenCalledWith({ name: 'service' });
     expect(deleteContainerSpy).toHaveBeenCalledWith('old-container-id');
+  });
+
+  test('removes stale same-name entries from a different watcher when both watchers point to the same docker source', async () => {
+    vi.spyOn(storeContainer, 'getContainer').mockReturnValue(undefined);
+    vi.spyOn(storeContainer, 'getContainers').mockReturnValue([
+      {
+        id: 'old-container-current-watcher',
+        watcher: 'docker-test',
+        name: 'service',
+      } as any,
+      {
+        id: 'old-container-same-source-different-watcher',
+        watcher: 'docker-alias',
+        name: 'service',
+      } as any,
+    ]);
+    const deleteContainerSpy = vi
+      .spyOn(storeContainer, 'deleteContainer')
+      .mockImplementation(() => {});
+    vi.spyOn(registry, 'getState').mockReturnValue({
+      watcher: {
+        'docker.docker-test': {
+          type: 'docker',
+          name: 'docker-test',
+          configuration: {
+            host: 'socket-proxy.internal',
+            protocol: 'http',
+            port: 2375,
+            socket: '/var/run/docker.sock',
+          },
+        },
+        'docker.docker-alias': {
+          type: 'docker',
+          name: 'docker-alias',
+          configuration: {
+            host: 'socket-proxy.internal',
+            protocol: 'http',
+            port: 2375,
+            socket: '/var/run/docker.sock',
+          },
+        },
+      },
+    } as any);
+
+    const { watcher } = createWatcher({
+      configuration: {
+        watchevents: false,
+        host: 'socket-proxy.internal',
+        protocol: 'http',
+        port: 2375,
+        socket: '/var/run/docker.sock',
+      },
+    });
+
+    const result = await addImageDetailsToContainerOrchestration(
+      watcher as any,
+      createDockerSummaryContainer({
+        Id: 'new-container-id',
+        Names: ['/service'],
+      }),
+      {},
+      createHelpers() as any,
+    );
+
+    expect(result?.id).toBe('new-container-id');
+    expect(deleteContainerSpy).toHaveBeenCalledWith('old-container-current-watcher');
+    expect(deleteContainerSpy).toHaveBeenCalledWith('old-container-same-source-different-watcher');
   });
 
   test('skips same-name dedupe when the discovered container name is empty', async () => {
@@ -568,6 +732,67 @@ describe('docker image details orchestration module', () => {
     expect(result?.id).toBe('new-container-id');
     expect(result?.name).toBe('');
     expect(getContainersSpy).not.toHaveBeenCalled();
+    expect(deleteContainerSpy).not.toHaveBeenCalled();
+  });
+
+  test('skips stale same-name entries with missing, blank, or non-docker watcher metadata', async () => {
+    vi.spyOn(storeContainer, 'getContainer').mockReturnValue(undefined);
+    vi.spyOn(storeContainer, 'getContainers').mockReturnValue([
+      {
+        id: 'old-container-empty-watcher',
+        watcher: '',
+        name: 'service',
+      } as any,
+      {
+        id: 'old-container-whitespace-watcher',
+        watcher: '   ',
+        name: 'service',
+      } as any,
+      {
+        id: 'old-container-non-docker',
+        watcher: 'docker-queue',
+        name: 'service',
+      } as any,
+    ]);
+    const deleteContainerSpy = vi
+      .spyOn(storeContainer, 'deleteContainer')
+      .mockImplementation(() => {});
+    vi.spyOn(registry, 'getState').mockReturnValue({
+      watcher: {
+        'docker.docker-queue': {
+          type: 'queue',
+          name: 'docker-queue',
+          configuration: {
+            host: 'socket-proxy.internal',
+            protocol: 'http',
+            port: 2375,
+            socket: '/var/run/docker.sock',
+          },
+        },
+      },
+    } as any);
+
+    const { watcher } = createWatcher({
+      configuration: {
+        watchevents: false,
+        host: 'socket-proxy.internal',
+        protocol: 'http',
+        port: 2375,
+        socket: '/var/run/docker.sock',
+      },
+    });
+
+    const result = await addImageDetailsToContainerOrchestration(
+      watcher as any,
+      createDockerSummaryContainer({
+        Id: 'new-container-id',
+        Names: ['/service'],
+      }),
+      {},
+      createHelpers() as any,
+    );
+
+    expect(result?.id).toBe('new-container-id');
     expect(deleteContainerSpy).not.toHaveBeenCalled();
   });
 });

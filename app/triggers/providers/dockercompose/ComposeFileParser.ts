@@ -57,7 +57,14 @@ function formatReplacementImageValue(currentImageValueText: string, newImage: st
   return newImage;
 }
 
-export function parseComposeDocument(composeFileText: string) {
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
+}
+
+function parseComposeDocument(composeFileText: string) {
   const parseDocumentOptions = {
     keepSourceTokens: true,
     maxAliasCount: YAML_MAX_ALIAS_COUNT,
@@ -71,9 +78,11 @@ export function parseComposeDocument(composeFileText: string) {
   return composeDoc;
 }
 
+type ComposeDocument = ReturnType<typeof parseComposeDocument>;
+
 function buildComposeServiceImageTextEdit(
   composeFileText: string,
-  composeDoc: any,
+  composeDoc: ComposeDocument,
   serviceName: string,
   newImage: string,
 ): ComposeTextEdit {
@@ -158,7 +167,7 @@ export function updateComposeServiceImageInText(
   composeFileText: string,
   serviceName: string,
   newImage: string,
-  composeDoc: any = null,
+  composeDoc: ComposeDocument | null = null,
 ) {
   const doc = composeDoc || parseComposeDocument(composeFileText);
   const composeTextEdit = buildComposeServiceImageTextEdit(
@@ -173,7 +182,7 @@ export function updateComposeServiceImageInText(
 export function updateComposeServiceImagesInText(
   composeFileText: string,
   serviceImageUpdates: Map<string, string>,
-  composeDoc: any = null,
+  composeDoc: ComposeDocument | null = null,
 ) {
   if (serviceImageUpdates.size === 0) {
     return composeFileText;
@@ -191,7 +200,7 @@ export function updateComposeServiceImagesInText(
 class ComposeFileParser {
   _composeCacheMaxEntries = COMPOSE_CACHE_MAX_ENTRIES;
   _composeObjectCache = new Map<string, { mtimeMs: number; compose: unknown }>();
-  _composeDocumentCache = new Map<string, { mtimeMs: number; composeDoc: unknown }>();
+  _composeDocumentCache = new Map<string, { mtimeMs: number; composeDoc: ComposeDocument }>();
 
   private readonly resolveComposeFilePath: (file: string) => string;
   private readonly getDefaultComposeFilePath: () => string | null | undefined;
@@ -280,9 +289,9 @@ class ComposeFileParser {
     const filePath = this.resolveComposeFilePath(configuredFilePath as string);
     try {
       return fs.readFile(filePath);
-    } catch (e: any) {
+    } catch (e: unknown) {
       this.getLog()?.error?.(
-        `Error when reading the docker-compose yaml file ${filePath} (${e.message})`,
+        `Error when reading the docker-compose yaml file ${filePath} (${getErrorMessage(e)})`,
       );
       throw e;
     }
@@ -311,9 +320,9 @@ class ComposeFileParser {
         compose,
       });
       return compose;
-    } catch (e: any) {
+    } catch (e: unknown) {
       this.getLog()?.error?.(
-        `Error when parsing the docker-compose yaml file ${configuredFilePath} (${e.message})`,
+        `Error when parsing the docker-compose yaml file ${configuredFilePath} (${getErrorMessage(e)})`,
       );
       throw e;
     }

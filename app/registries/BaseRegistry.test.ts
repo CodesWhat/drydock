@@ -1,8 +1,8 @@
 import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
+import * as registryPrometheus from '../prometheus/registry.js';
 import BaseRegistry from './BaseRegistry.js';
 import { REGISTRY_BEARER_TOKEN_CACHE_TTL_MS } from './configuration.js';
+import Registry from './Registry.js';
 
 vi.mock('axios', () => ({
   default: vi.fn(),
@@ -119,18 +119,20 @@ test('authenticateBasic should attach httpsAgent when insecure=true', async () =
 });
 
 test('authenticateBearer should attach CA from cafile when configured', async () => {
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'drydock-baseregistry-'));
-  const caPath = path.join(tempDir, 'ca.pem');
+  const caPath = '/tmp/test-ca.pem';
+  const readFileSyncSpy = vi
+    .spyOn(fs, 'readFileSync')
+    .mockReturnValue(Buffer.from('test-ca-content'));
   try {
-    fs.writeFileSync(caPath, 'test-ca-content');
     baseRegistry.configuration = { cafile: caPath };
     const result = await baseRegistry.authenticateBearer({ headers: {} }, 'token-value');
+    expect(readFileSyncSpy).toHaveBeenCalledWith(caPath);
     expect(result.headers.Authorization).toBe('Bearer token-value');
     expect(result.httpsAgent).toBeDefined();
     expect(result.httpsAgent.options.rejectUnauthorized).toBe(true);
     expect(result.httpsAgent.options.ca.toString('utf-8')).toBe('test-ca-content');
   } finally {
-    fs.rmSync(tempDir, { recursive: true, force: true });
+    readFileSyncSpy.mockRestore();
   }
 });
 
@@ -494,4 +496,720 @@ test('authenticateBearerFromAuthUrl should evict expired cache entries from othe
   } finally {
     vi.useRealTimers();
   }
+});
+
+test('getImagePublishedAt should return created date from manifest metadata', async () => {
+  const getImageManifestDigestSpy = vi
+    .spyOn(baseRegistry, 'getImageManifestDigest')
+    .mockResolvedValue({
+      digest: 'sha256:abc123',
+      created: '2026-03-06T08:00:00.000Z',
+      version: 2,
+    });
+
+  const publishedAt = await baseRegistry.getImagePublishedAt({
+    name: 'library/nginx',
+    tag: { value: 'latest' },
+    registry: { url: 'https://registry.example.com/v2' },
+  });
+
+  expect(getImageManifestDigestSpy).toHaveBeenCalledWith(
+    expect.objectContaining({
+      tag: { value: 'latest' },
+    }),
+  );
+  expect(publishedAt).toBe('2026-03-06T08:00:00.000Z');
+});
+
+test('getImagePublishedAt should use provided tag override for lookup', async () => {
+  const getImageManifestDigestSpy = vi
+    .spyOn(baseRegistry, 'getImageManifestDigest')
+    .mockResolvedValue({
+      created: '2026-03-06T08:00:00.000Z',
+    });
+
+  await baseRegistry.getImagePublishedAt(
+    {
+      name: 'library/nginx',
+      tag: { value: 'latest' },
+      registry: { url: 'https://registry.example.com/v2' },
+    },
+    '1.26.0',
+  );
+
+  expect(getImageManifestDigestSpy).toHaveBeenCalledWith(
+    expect.objectContaining({
+      tag: { value: '1.26.0' },
+    }),
+  );
+});
+
+test('getImagePublishedAt should return undefined when manifest metadata has no created field', async () => {
+  vi.spyOn(baseRegistry, 'getImageManifestDigest').mockResolvedValue({
+    digest: 'sha256:abc123',
+    version: 2,
+  });
+
+  const publishedAt = await baseRegistry.getImagePublishedAt({
+    name: 'library/nginx',
+    tag: { value: 'latest' },
+    registry: { url: 'https://registry.example.com/v2' },
+  });
+
+  expect(publishedAt).toBeUndefined();
+});
+
+test('getImagePublishedAt should return undefined when created timestamp is invalid', async () => {
+  vi.spyOn(baseRegistry, 'getImageManifestDigest').mockResolvedValue({
+    digest: 'sha256:abc123',
+    created: 'not-a-date',
+    version: 2,
+  });
+
+  const publishedAt = await baseRegistry.getImagePublishedAt({
+    name: 'library/nginx',
+    tag: { value: 'latest' },
+    registry: { url: 'https://registry.example.com/v2' },
+  });
+
+  expect(publishedAt).toBeUndefined();
+});
+
+test('getImagePublishedAt should handle images without tag metadata', async () => {
+  const getImageManifestDigestSpy = vi
+    .spyOn(baseRegistry, 'getImageManifestDigest')
+    .mockResolvedValue({
+      digest: 'sha256:abc123',
+      created: '2026-03-06T08:00:00.000Z',
+      version: 2,
+    });
+
+  await baseRegistry.getImagePublishedAt({
+    name: 'library/nginx',
+    registry: { url: 'https://registry.example.com/v2' },
+  } as any);
+
+  expect(getImageManifestDigestSpy).toHaveBeenCalledWith(
+    expect.objectContaining({
+      name: 'library/nginx',
+    }),
+  );
+});
+
+test('getImageManifestDigest should deduplicate sequential lookups within a poll cycle', async () => {
+  const superGetImageManifestDigestSpy = vi
+    .spyOn(Registry.prototype, 'getImageManifestDigest')
+    .mockResolvedValue({
+      digest: 'sha256:manifest-123',
+      created: '2026-03-10T12:00:00.000Z',
+      version: 2,
+    });
+
+  baseRegistry.startDigestCachePollCycle();
+
+  const image = {
+    name: 'library/postgres',
+    tag: { value: '16' },
+    architecture: 'amd64',
+    os: 'linux',
+    registry: { url: 'https://registry-1.docker.io/v2' },
+  };
+
+  const first = await baseRegistry.getImageManifestDigest(image);
+  const second = await baseRegistry.getImageManifestDigest(image);
+
+  expect(superGetImageManifestDigestSpy).toHaveBeenCalledTimes(1);
+  expect(first).toEqual(second);
+});
+
+test('getImageManifestDigest should deduplicate concurrent lookups within a poll cycle', async () => {
+  let resolveDigest: (manifest: { digest: string; created: string; version: number }) => void;
+  const superGetImageManifestDigestSpy = vi
+    .spyOn(Registry.prototype, 'getImageManifestDigest')
+    .mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveDigest = resolve;
+        }),
+    );
+
+  baseRegistry.startDigestCachePollCycle();
+  const image = {
+    name: 'library/postgres',
+    tag: { value: '16' },
+    architecture: 'amd64',
+    os: 'linux',
+    registry: { url: 'https://registry-1.docker.io/v2' },
+  };
+
+  const firstLookup = baseRegistry.getImageManifestDigest(image);
+  const secondLookup = baseRegistry.getImageManifestDigest(image);
+
+  resolveDigest({
+    digest: 'sha256:manifest-456',
+    created: '2026-03-10T12:00:00.000Z',
+    version: 2,
+  });
+
+  const [first, second] = await Promise.all([firstLookup, secondLookup]);
+
+  expect(superGetImageManifestDigestSpy).toHaveBeenCalledTimes(1);
+  expect(first).toEqual(second);
+});
+
+test('startDigestCachePollCycle should clear previous digest cache entries', async () => {
+  const superGetImageManifestDigestSpy = vi
+    .spyOn(Registry.prototype, 'getImageManifestDigest')
+    .mockResolvedValue({
+      digest: 'sha256:manifest-789',
+      created: '2026-03-10T12:00:00.000Z',
+      version: 2,
+    });
+
+  const image = {
+    name: 'library/postgres',
+    tag: { value: '16' },
+    architecture: 'amd64',
+    os: 'linux',
+    registry: { url: 'https://registry-1.docker.io/v2' },
+  };
+
+  baseRegistry.startDigestCachePollCycle();
+  await baseRegistry.getImageManifestDigest(image);
+  await baseRegistry.getImageManifestDigest(image);
+  expect(superGetImageManifestDigestSpy).toHaveBeenCalledTimes(1);
+
+  baseRegistry.startDigestCachePollCycle();
+  await baseRegistry.getImageManifestDigest(image);
+
+  expect(superGetImageManifestDigestSpy).toHaveBeenCalledTimes(2);
+});
+
+test('getImageManifestDigest should include architecture in digest cache keys', async () => {
+  const superGetImageManifestDigestSpy = vi
+    .spyOn(Registry.prototype, 'getImageManifestDigest')
+    .mockResolvedValue({
+      digest: 'sha256:manifest-arch',
+      created: '2026-03-10T12:00:00.000Z',
+      version: 2,
+    });
+
+  baseRegistry.startDigestCachePollCycle();
+  await baseRegistry.getImageManifestDigest({
+    name: 'library/postgres',
+    tag: { value: '16' },
+    architecture: 'amd64',
+    os: 'linux',
+    registry: { url: 'https://registry-1.docker.io/v2' },
+  });
+  await baseRegistry.getImageManifestDigest({
+    name: 'library/postgres',
+    tag: { value: '16' },
+    architecture: 'arm64',
+    os: 'linux',
+    registry: { url: 'https://registry-1.docker.io/v2' },
+  });
+
+  expect(superGetImageManifestDigestSpy).toHaveBeenCalledTimes(2);
+});
+
+test('getImageManifestDigest should normalize docker hub references to canonical cache key', async () => {
+  const superGetImageManifestDigestSpy = vi
+    .spyOn(Registry.prototype, 'getImageManifestDigest')
+    .mockResolvedValue({
+      digest: 'sha256:manifest-canonical',
+      created: '2026-03-10T12:00:00.000Z',
+      version: 2,
+    });
+
+  baseRegistry.startDigestCachePollCycle();
+
+  await baseRegistry.getImageManifestDigest({
+    name: 'postgres',
+    tag: { value: '16' },
+    architecture: 'amd64',
+    os: 'linux',
+    registry: { url: 'registry-1.docker.io' },
+  });
+  await baseRegistry.getImageManifestDigest({
+    name: 'library/postgres',
+    tag: { value: '16' },
+    architecture: 'amd64',
+    os: 'linux',
+    registry: { url: 'docker.io' },
+  });
+
+  expect(superGetImageManifestDigestSpy).toHaveBeenCalledTimes(1);
+});
+
+test('getImageManifestDigest should treat blank registry URLs as docker.io for cache keys', async () => {
+  const superGetImageManifestDigestSpy = vi
+    .spyOn(Registry.prototype, 'getImageManifestDigest')
+    .mockResolvedValue({
+      digest: 'sha256:manifest-blank-registry',
+      created: '2026-03-10T12:00:00.000Z',
+      version: 2,
+    });
+
+  baseRegistry.startDigestCachePollCycle();
+  await baseRegistry.getImageManifestDigest({
+    name: 'postgres',
+    tag: { value: '16' },
+    architecture: 'amd64',
+    os: 'linux',
+    registry: { url: '   ' },
+  });
+  await baseRegistry.getImageManifestDigest({
+    name: 'library/postgres',
+    tag: { value: '16' },
+    architecture: 'amd64',
+    os: 'linux',
+    registry: { url: 'docker.io' },
+  });
+
+  expect(superGetImageManifestDigestSpy).toHaveBeenCalledTimes(1);
+});
+
+test('getImageManifestDigest should fall back to original image when normalizeImage throws during cache key generation', async () => {
+  const superGetImageManifestDigestSpy = vi
+    .spyOn(Registry.prototype, 'getImageManifestDigest')
+    .mockResolvedValue({
+      digest: 'sha256:manifest-normalize-throw',
+      created: '2026-03-10T12:00:00.000Z',
+      version: 2,
+    });
+  const normalizeImageSpy = vi.spyOn(baseRegistry, 'normalizeImage').mockImplementation(() => {
+    throw new Error('normalize failed');
+  });
+
+  baseRegistry.startDigestCachePollCycle();
+  const image = {
+    name: 'library/postgres',
+    tag: { value: '16' },
+    architecture: 'amd64',
+    os: 'linux',
+    registry: { url: 'docker.io' },
+  };
+  await baseRegistry.getImageManifestDigest(image);
+  await baseRegistry.getImageManifestDigest(image);
+
+  expect(superGetImageManifestDigestSpy).toHaveBeenCalledTimes(1);
+  normalizeImageSpy.mockRestore();
+});
+
+test('getImageManifestDigest should build cache key with defensive defaults for missing fields', async () => {
+  const superGetImageManifestDigestSpy = vi
+    .spyOn(Registry.prototype, 'getImageManifestDigest')
+    .mockResolvedValue({
+      digest: 'sha256:manifest-defaults',
+      created: '2026-03-10T12:00:00.000Z',
+      version: 2,
+    });
+
+  baseRegistry.startDigestCachePollCycle();
+  const image = {
+    registry: { url: 'docker.io' },
+    tag: { value: '' },
+  } as any;
+
+  await baseRegistry.getImageManifestDigest(image);
+  await baseRegistry.getImageManifestDigest(image);
+
+  expect(superGetImageManifestDigestSpy).toHaveBeenCalledTimes(1);
+});
+
+test('getImageManifestDigest should include variant and explicit digest in cache keys', async () => {
+  const superGetImageManifestDigestSpy = vi
+    .spyOn(Registry.prototype, 'getImageManifestDigest')
+    .mockResolvedValue({
+      digest: 'sha256:manifest-variant',
+      created: '2026-03-10T12:00:00.000Z',
+      version: 2,
+    });
+
+  baseRegistry.startDigestCachePollCycle();
+  const image = {
+    name: 'library/postgres',
+    tag: { value: '16' },
+    architecture: 'amd64',
+    os: 'linux',
+    variant: 'v8',
+    registry: { url: 'docker.io' },
+  };
+
+  await baseRegistry.getImageManifestDigest(image, 'sha256:explicit-digest');
+  await baseRegistry.getImageManifestDigest(image, 'sha256:explicit-digest');
+
+  expect(superGetImageManifestDigestSpy).toHaveBeenCalledTimes(1);
+});
+
+test('authenticateBearerFromAuthUrl should include ECONNREFUSED in error message', async () => {
+  const { default: axios } = await import('axios');
+  const error = new Error('connect ECONNREFUSED 127.0.0.1:443');
+  (error as any).code = 'ECONNREFUSED';
+  axios.mockRejectedValue(error);
+
+  await expect(
+    baseRegistry.authenticateBearerFromAuthUrl(
+      { headers: {}, url: 'https://auth.example.com/v2/library/nginx/manifests/latest' },
+      'https://auth.example.com/token',
+      undefined,
+    ),
+  ).rejects.toThrow('token request failed (connect ECONNREFUSED 127.0.0.1:443)');
+});
+
+test('authenticateBearerFromAuthUrl should include ETIMEDOUT in error message', async () => {
+  const { default: axios } = await import('axios');
+  const error = new Error('connect ETIMEDOUT 10.0.0.1:443');
+  (error as any).code = 'ETIMEDOUT';
+  axios.mockRejectedValue(error);
+
+  await expect(
+    baseRegistry.authenticateBearerFromAuthUrl(
+      { headers: {}, url: 'https://auth.example.com/v2/library/nginx/manifests/latest' },
+      'https://auth.example.com/token',
+      undefined,
+    ),
+  ).rejects.toThrow('token request failed (connect ETIMEDOUT 10.0.0.1:443)');
+});
+
+test('authenticateBearerFromAuthUrl should include ECONNRESET in error message', async () => {
+  const { default: axios } = await import('axios');
+  const error = new Error('read ECONNRESET');
+  (error as any).code = 'ECONNRESET';
+  axios.mockRejectedValue(error);
+
+  await expect(
+    baseRegistry.authenticateBearerFromAuthUrl(
+      { headers: {}, url: 'https://auth.example.com/v2/library/nginx/manifests/latest' },
+      'https://auth.example.com/token',
+      undefined,
+    ),
+  ).rejects.toThrow('token request failed (read ECONNRESET)');
+});
+
+test('authenticateBearerFromAuthUrl should wrap 401 Unauthorized in error message', async () => {
+  const { default: axios } = await import('axios');
+  const error = new Error('Request failed with status code 401');
+  (error as any).response = { status: 401 };
+  axios.mockRejectedValue(error);
+
+  await expect(
+    baseRegistry.authenticateBearerFromAuthUrl(
+      { headers: {}, url: 'https://auth.example.com/v2/library/nginx/manifests/latest' },
+      'https://auth.example.com/token',
+      'dXNlcjpwYXNz',
+    ),
+  ).rejects.toThrow('token request failed (Request failed with status code 401)');
+});
+
+test('authenticateBearerFromAuthUrl should wrap 429 rate limit in error message', async () => {
+  const { default: axios } = await import('axios');
+  const error = new Error('Request failed with status code 429');
+  (error as any).response = { status: 429, headers: { 'retry-after': '60' } };
+  axios.mockRejectedValue(error);
+
+  await expect(
+    baseRegistry.authenticateBearerFromAuthUrl(
+      { headers: {}, url: 'https://auth.example.com/v2/library/nginx/manifests/latest' },
+      'https://auth.example.com/token',
+      undefined,
+    ),
+  ).rejects.toThrow('token request failed (Request failed with status code 429)');
+});
+
+test('authenticateBearerFromAuthUrl should wrap 502 Bad Gateway in error message', async () => {
+  const { default: axios } = await import('axios');
+  axios.mockRejectedValue(new Error('Request failed with status code 502'));
+
+  await expect(
+    baseRegistry.authenticateBearerFromAuthUrl(
+      { headers: {}, url: 'https://auth.example.com/v2/library/nginx/manifests/latest' },
+      'https://auth.example.com/token',
+      undefined,
+    ),
+  ).rejects.toThrow('token request failed (Request failed with status code 502)');
+});
+
+test('authenticateBearerFromAuthUrl should wrap 503 Service Unavailable in error message', async () => {
+  const { default: axios } = await import('axios');
+  axios.mockRejectedValue(new Error('Request failed with status code 503'));
+
+  await expect(
+    baseRegistry.authenticateBearerFromAuthUrl(
+      { headers: {}, url: 'https://auth.example.com/v2/library/nginx/manifests/latest' },
+      'https://auth.example.com/token',
+      undefined,
+    ),
+  ).rejects.toThrow('token request failed (Request failed with status code 503)');
+});
+
+test('authenticateBearerFromAuthUrl should handle non-Error rejection values', async () => {
+  const { default: axios } = await import('axios');
+  axios.mockRejectedValue('string rejection');
+
+  await expect(
+    baseRegistry.authenticateBearerFromAuthUrl(
+      { headers: {}, url: 'https://auth.example.com/v2/library/nginx/manifests/latest' },
+      'https://auth.example.com/token',
+      undefined,
+    ),
+  ).rejects.toThrow('token request failed');
+});
+
+test('authenticateBearerFromAuthUrl should handle null response data', async () => {
+  const { default: axios } = await import('axios');
+  axios.mockResolvedValue({ data: null });
+
+  await expect(
+    baseRegistry.authenticateBearerFromAuthUrl(
+      { headers: {}, url: 'https://auth.example.com/v2/library/nginx/manifests/latest' },
+      'https://auth.example.com/token',
+      undefined,
+    ),
+  ).rejects.toThrow('token endpoint response does not contain token');
+});
+
+test('authenticateBearerFromAuthUrl should handle response with empty string token', async () => {
+  const { default: axios } = await import('axios');
+  axios.mockResolvedValue({ data: { token: '' } });
+
+  await expect(
+    baseRegistry.authenticateBearerFromAuthUrl(
+      { headers: {}, url: 'https://auth.example.com/v2/library/nginx/manifests/latest' },
+      'https://auth.example.com/token',
+      undefined,
+    ),
+  ).rejects.toThrow('token endpoint response does not contain token');
+});
+
+test('authenticateBearerFromAuthUrl should handle response with whitespace-only token', async () => {
+  const { default: axios } = await import('axios');
+  axios.mockResolvedValue({ data: { token: '   ' } });
+
+  await expect(
+    baseRegistry.authenticateBearerFromAuthUrl(
+      { headers: {}, url: 'https://auth.example.com/v2/library/nginx/manifests/latest' },
+      'https://auth.example.com/token',
+      undefined,
+    ),
+  ).rejects.toThrow('token endpoint response does not contain token');
+});
+
+test('authenticateBearerFromAuthUrl should handle token refresh failure after cache expiry', async () => {
+  const { default: axios } = await import('axios');
+  vi.useFakeTimers();
+  const startedAtMs = new Date('2026-03-05T10:00:00.000Z').getTime();
+
+  try {
+    vi.setSystemTime(startedAtMs);
+    axios.mockResolvedValueOnce({ data: { token: 'initial-token' } });
+    await baseRegistry.authenticateBearerFromAuthUrl(
+      { headers: {}, url: 'https://auth.example.com/v2/library/nginx/manifests/latest' },
+      'https://auth.example.com/token',
+      'dXNlcjpwYXNz',
+    );
+
+    vi.setSystemTime(startedAtMs + REGISTRY_BEARER_TOKEN_CACHE_TTL_MS + 1);
+    axios.mockRejectedValueOnce(new Error('connect ECONNREFUSED 127.0.0.1:443'));
+
+    await expect(
+      baseRegistry.authenticateBearerFromAuthUrl(
+        { headers: {}, url: 'https://auth.example.com/v2/library/nginx/manifests/latest' },
+        'https://auth.example.com/token',
+        'dXNlcjpwYXNz',
+      ),
+    ).rejects.toThrow('token request failed (connect ECONNREFUSED 127.0.0.1:443)');
+
+    expect(axios).toHaveBeenCalledTimes(2);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('getImageManifestDigest should propagate errors through digest cache', async () => {
+  const superGetImageManifestDigestSpy = vi
+    .spyOn(Registry.prototype, 'getImageManifestDigest')
+    .mockRejectedValue(new Error('registry unavailable'));
+
+  baseRegistry.startDigestCachePollCycle();
+  const image = {
+    name: 'library/postgres',
+    tag: { value: '16' },
+    architecture: 'amd64',
+    os: 'linux',
+    registry: { url: 'docker.io' },
+  };
+
+  await expect(baseRegistry.getImageManifestDigest(image)).rejects.toThrow('registry unavailable');
+  expect(superGetImageManifestDigestSpy).toHaveBeenCalledTimes(1);
+});
+
+test('getImageManifestDigest should not cache failed lookups', async () => {
+  const superGetImageManifestDigestSpy = vi
+    .spyOn(Registry.prototype, 'getImageManifestDigest')
+    .mockRejectedValueOnce(new Error('temporary failure'))
+    .mockResolvedValueOnce({
+      digest: 'sha256:recovered',
+      created: '2026-03-10T12:00:00.000Z',
+      version: 2,
+    });
+
+  baseRegistry.startDigestCachePollCycle();
+  const image = {
+    name: 'library/postgres',
+    tag: { value: '16' },
+    architecture: 'amd64',
+    os: 'linux',
+    registry: { url: 'docker.io' },
+  };
+
+  await expect(baseRegistry.getImageManifestDigest(image)).rejects.toThrow('temporary failure');
+  const result = await baseRegistry.getImageManifestDigest(image);
+
+  expect(result.digest).toBe('sha256:recovered');
+  expect(superGetImageManifestDigestSpy).toHaveBeenCalledTimes(2);
+});
+
+test('getImageManifestDigest should clear in-flight entry after rejection', async () => {
+  let rejectDigest: (error: Error) => void;
+  vi.spyOn(Registry.prototype, 'getImageManifestDigest').mockImplementation(
+    () =>
+      new Promise((_resolve, reject) => {
+        rejectDigest = reject;
+      }),
+  );
+
+  baseRegistry.startDigestCachePollCycle();
+  const image = {
+    name: 'library/postgres',
+    tag: { value: '16' },
+    architecture: 'amd64',
+    os: 'linux',
+    registry: { url: 'docker.io' },
+  };
+
+  const lookup = baseRegistry.getImageManifestDigest(image);
+  rejectDigest(new Error('connection reset'));
+
+  await expect(lookup).rejects.toThrow('connection reset');
+
+  const inFlightMap = (
+    baseRegistry as unknown as {
+      digestManifestCacheInFlight: Map<string, unknown>;
+    }
+  ).digestManifestCacheInFlight;
+  expect(inFlightMap.size).toBe(0);
+});
+
+test('getImagePublishedAt should return undefined when getImageManifestDigest throws', async () => {
+  vi.spyOn(baseRegistry, 'getImageManifestDigest').mockRejectedValue(new Error('registry offline'));
+
+  await expect(
+    baseRegistry.getImagePublishedAt({
+      name: 'library/nginx',
+      tag: { value: 'latest' },
+      registry: { url: 'https://registry.example.com/v2' },
+    }),
+  ).rejects.toThrow('registry offline');
+});
+
+test('getImageManifestDigest should not cache responses without a digest string', async () => {
+  const superGetImageManifestDigestSpy = vi
+    .spyOn(Registry.prototype, 'getImageManifestDigest')
+    .mockResolvedValue({
+      digest: '',
+      created: '2026-03-10T12:00:00.000Z',
+      version: 2,
+    });
+
+  baseRegistry.startDigestCachePollCycle();
+  const image = {
+    name: 'library/postgres',
+    tag: { value: '16' },
+    architecture: 'amd64',
+    os: 'linux',
+    registry: { url: 'docker.io' },
+  };
+
+  await baseRegistry.getImageManifestDigest(image);
+  await baseRegistry.getImageManifestDigest(image);
+
+  expect(superGetImageManifestDigestSpy).toHaveBeenCalledTimes(2);
+});
+
+test('endDigestCachePollCycle should return zero hit rate when no requests were recorded', () => {
+  baseRegistry.startDigestCachePollCycle();
+  baseRegistry.log = {} as any;
+
+  expect(baseRegistry.endDigestCachePollCycle()).toEqual({
+    hits: 0,
+    misses: 0,
+    hitRate: 0,
+  });
+});
+
+test('endDigestCachePollCycle should log debug hit rate summary', async () => {
+  const superGetImageManifestDigestSpy = vi
+    .spyOn(Registry.prototype, 'getImageManifestDigest')
+    .mockResolvedValue({
+      digest: 'sha256:manifest-stats',
+      created: '2026-03-10T12:00:00.000Z',
+      version: 2,
+    });
+  const debug = vi.fn();
+  baseRegistry.log = {
+    debug,
+  } as any;
+
+  baseRegistry.startDigestCachePollCycle();
+  await baseRegistry.getImageManifestDigest({
+    name: 'library/postgres',
+    tag: { value: '16' },
+    architecture: 'amd64',
+    os: 'linux',
+    registry: { url: 'docker.io' },
+  });
+  await baseRegistry.getImageManifestDigest({
+    name: 'library/postgres',
+    tag: { value: '16' },
+    architecture: 'amd64',
+    os: 'linux',
+    registry: { url: 'docker.io' },
+  });
+  baseRegistry.endDigestCachePollCycle();
+
+  expect(superGetImageManifestDigestSpy).toHaveBeenCalledTimes(1);
+  expect(debug).toHaveBeenCalledWith(expect.stringContaining('digest cache hit rate'));
+});
+
+test('getImageManifestDigest should increment digest cache hit and miss counters when metrics are initialized', async () => {
+  const superGetImageManifestDigestSpy = vi
+    .spyOn(Registry.prototype, 'getImageManifestDigest')
+    .mockResolvedValue({
+      digest: 'sha256:manifest-metrics',
+      created: '2026-03-10T12:00:00.000Z',
+      version: 2,
+    });
+
+  registryPrometheus.init();
+  const hitsCounter = registryPrometheus.getDigestCacheHitsCounter();
+  const missesCounter = registryPrometheus.getDigestCacheMissesCounter();
+  const hitsIncSpy = vi.spyOn(hitsCounter, 'inc');
+  const missesIncSpy = vi.spyOn(missesCounter, 'inc');
+
+  baseRegistry.startDigestCachePollCycle();
+  const image = {
+    name: 'library/postgres',
+    tag: { value: '16' },
+    architecture: 'amd64',
+    os: 'linux',
+    registry: { url: 'docker.io' },
+  };
+  await baseRegistry.getImageManifestDigest(image);
+  await baseRegistry.getImageManifestDigest(image);
+
+  expect(superGetImageManifestDigestSpy).toHaveBeenCalledTimes(1);
+  expect(hitsIncSpy).toHaveBeenCalledTimes(1);
+  expect(missesIncSpy).toHaveBeenCalledTimes(1);
 });

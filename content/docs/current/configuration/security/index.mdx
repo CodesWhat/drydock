@@ -129,7 +129,7 @@ services:
     environment:
       - DD_SECURITY_SCANNER=trivy
       - DD_SECURITY_VERIFY_SIGNATURES=true
-      - DD_SECURITY_COSIGN_IDENTITY=https://github.com/CodesWhat/drydock/.github/workflows/release.yml@refs/tags/*
+      - DD_SECURITY_COSIGN_IDENTITY=https://github.com/CodesWhat/drydock/.github/workflows/release-from-tag.yml@refs/tags/*
       - DD_SECURITY_COSIGN_ISSUER=https://token.actions.githubusercontent.com
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
@@ -156,7 +156,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
 ```
 
-<Callout type="info">SBOM documents are retrievable per-container via `GET /api/containers/:id/sbom?format=\{format\}` where `format` is one of `spdx-json` or `cyclonedx-json`.</Callout>
+<Callout type="info">SBOM documents are retrievable per-container via `GET /api/v1/containers/:id/sbom?format=\{format\}` where `format` is one of `spdx-json` or `cyclonedx-json`.</Callout>
 
 ## Scheduled scanning
 
@@ -185,13 +185,13 @@ services:
 You can trigger a security scan for any individual container without waiting for the next watch cycle or scheduled scan.
 
 - **UI:** Click the shield button on a container row to start a scan.
-- **API:** `POST /api/containers/:id/scan` runs vulnerability scanning, signature verification (if configured), and SBOM generation (if configured) on demand.
+- **API:** `POST /api/v1/containers/:id/scan` runs vulnerability scanning, signature verification (if configured), and SBOM generation (if configured) on demand.
 
 The endpoint is rate-limited to 30 requests per minute. Real-time progress is broadcast via SSE events `dd:scan-started` and `dd:scan-completed` so the UI updates automatically.
 
 ## Dual-slot scanning
 
-When a container has an available update, clicking **Scan Now** (or calling `POST /api/containers/:id/scan`) scans both the current running image and the available update image in a single operation.
+When a container has an available update, clicking **Scan Now** (or calling `POST /api/v1/containers/:id/scan`) scans both the current running image and the available update image in a single operation.
 
 - Results for the current image are stored in `container.security.scan`
 - Results for the update image are stored in `container.security.updateScan`
@@ -216,7 +216,7 @@ services:
       - DD_SECURITY_BLOCK_SEVERITY=CRITICAL,HIGH
       - DD_SECURITY_TRIVY_SERVER=http://trivy:4954
       - DD_SECURITY_VERIFY_SIGNATURES=true
-      - DD_SECURITY_COSIGN_IDENTITY=https://github.com/CodesWhat/drydock/.github/workflows/release.yml@refs/tags/*
+      - DD_SECURITY_COSIGN_IDENTITY=https://github.com/CodesWhat/drydock/.github/workflows/release-from-tag.yml@refs/tags/*
       - DD_SECURITY_COSIGN_ISSUER=https://token.actions.githubusercontent.com
       - DD_SECURITY_SBOM_ENABLED=true
       - DD_SECURITY_SBOM_FORMATS=spdx-json,cyclonedx-json

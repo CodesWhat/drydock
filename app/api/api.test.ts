@@ -61,6 +61,7 @@ vi.mock('./log', mockInit);
 vi.mock('./notification', mockInit);
 vi.mock('./settings', mockInit);
 vi.mock('./store', mockInit);
+vi.mock('./debug', mockInit);
 vi.mock('./server', mockInit);
 vi.mock('./agent', mockInit);
 vi.mock('./preview', mockInit);
@@ -68,6 +69,7 @@ vi.mock('./backup', mockInit);
 vi.mock('./container-actions', mockInit);
 vi.mock('./audit', mockInit);
 vi.mock('./webhook', mockInit);
+vi.mock('./webhooks', mockInit);
 vi.mock('./sse', mockInit);
 vi.mock('./auth', () => ({
   requireAuthentication: vi.fn((req, res, next) => next()),
@@ -130,6 +132,18 @@ describe('API Router', () => {
     mutationParser({ method: 'PUT' }, {}, next);
     mutationParser({ method: 'PATCH' }, {}, next);
     expect(mockJsonMiddleware).toHaveBeenCalledTimes(3);
+  });
+
+  test('should capture raw mutation request body in json verify hook', () => {
+    const jsonOptions = mockExpressJson.mock.calls[0]?.[0];
+    expect(jsonOptions).toBeDefined();
+    expect(typeof jsonOptions.verify).toBe('function');
+
+    const req = {} as { rawBody?: Buffer };
+    const body = Buffer.from('{"hello":"world"}');
+    jsonOptions.verify(req, {}, body);
+
+    expect(req.rawBody).toEqual(Buffer.from('{"hello":"world"}'));
   });
 
   test('should reject mutation requests with non-json content type when body is present', async () => {
@@ -254,6 +268,7 @@ describe('API Router', () => {
     const notificationRouter = await import('./notification.js');
     const settingsRouter = await import('./settings.js');
     const storeRouter = await import('./store.js');
+    const debugRouter = await import('./debug.js');
     const serverRouter = await import('./server.js');
     const agentRouter = await import('./agent.js');
     const previewRouter = await import('./preview.js');
@@ -261,6 +276,7 @@ describe('API Router', () => {
     const containerActionsRouter = await import('./container-actions.js');
     const auditRouter = await import('./audit.js');
     const webhookRouter = await import('./webhook.js');
+    const webhooksRouter = await import('./webhooks.js');
     await import('./sse.js');
 
     expect(appRouter.init).toHaveBeenCalled();
@@ -275,6 +291,7 @@ describe('API Router', () => {
     expect(notificationRouter.init).toHaveBeenCalled();
     expect(settingsRouter.init).toHaveBeenCalled();
     expect(storeRouter.init).toHaveBeenCalled();
+    expect(debugRouter.init).toHaveBeenCalled();
     expect(serverRouter.init).toHaveBeenCalled();
     expect(agentRouter.init).toHaveBeenCalled();
     expect(previewRouter.init).toHaveBeenCalled();
@@ -282,6 +299,7 @@ describe('API Router', () => {
     expect(containerActionsRouter.init).toHaveBeenCalled();
     expect(auditRouter.init).toHaveBeenCalled();
     expect(webhookRouter.init).toHaveBeenCalled();
+    expect(webhooksRouter.init).toHaveBeenCalled();
   });
 
   test('should use requireAuthentication middleware', async () => {

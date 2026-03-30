@@ -5,6 +5,8 @@ import type { Container, ContainerImage } from '../../../model/container.js';
 import { parse as parseSemver, transform as transformTag } from '../../../tag/index.js';
 import { getErrorMessage as getSharedErrorMessage } from '../../../util/error.js';
 
+export type TagPrecision = 'specific' | 'floating';
+
 const UNKNOWN_CONTAINER_PROCESSING_ERROR = 'Unexpected container processing error';
 
 export interface ResolvedImgset {
@@ -22,6 +24,28 @@ export interface ResolvedImgset {
   registryLookupUrl?: string;
   watchDigest?: string;
   inspectTagPath?: string;
+}
+
+type UnknownRecord = Record<string, unknown>;
+
+const RECREATED_ALIAS_PATTERN = /^([a-f0-9]{12})_(.+)$/i;
+
+interface ContainerWithNames {
+  Id?: unknown;
+  Names?: string[];
+}
+
+interface ParsedImageLike {
+  path?: string;
+  domain?: string;
+}
+
+interface ImageWithRepoDigests {
+  RepoDigests?: string[];
+}
+
+function isRecord(value: unknown): value is UnknownRecord {
+  return typeof value === 'object' && value !== null;
 }
 
 export function getErrorMessage(error: unknown, fallback = UNKNOWN_CONTAINER_PROCESSING_ERROR) {
@@ -62,15 +86,76 @@ export function getOldContainers(newContainers: Container[], containersFromTheSt
   );
 }
 
-export function getContainerName(container: any) {
-  let containerName = '';
+/**
+ * Extract the raw first name from a Docker container summary, stripping only
+ * the leading slash. Does NOT canonicalize alias prefixes — used by alias
+ * filtering which needs to detect the raw alias pattern.
+ */
+export function getRawContainerName(container: { Names?: string[] }): string {
   const names = container.Names;
-  if (names && names.length > 0) {
-    [containerName] = names;
+  if (!names || names.length === 0) {
+    return '';
   }
-  // Strip ugly forward slash
-  containerName = containerName.replace(/^\//, '');
+  const first = names[0];
+  return typeof first === 'string' ? first.replace(/^\//, '') : '';
+}
+
+/**
+ * Extract the canonical container name. Unconditionally strips Docker recreate
+ * alias prefixes (e.g. `8bf70beac570_termix` → `termix`) when the name matches
+ * the `^[a-f0-9]{12}_.+` pattern.
+ *
+ * Previous versions only stripped when the hex prefix matched the container ID,
+ * but this failed in environments where the Docker API (via socket proxies like
+ * linuxserver/socket-proxy) returned unexpected ID formats or timing. The
+ * unconditional approach is safe because no legitimate container naming
+ * convention uses a 12-character lowercase hex prefix followed by underscore.
+ *
+ * When Names contains both an alias and the canonical name during a rename,
+ * prefers the non-alias entry.
+ */
+export function getContainerName(container: ContainerWithNames) {
+  const names = container.Names;
+  if (!names || names.length === 0) {
+    return '';
+  }
+
+  // When Docker renames a container during recreate, Names may contain both
+  // the transient alias ("/8bf70beac570_termix") and the canonical name ("/termix").
+  // Prefer the first non-alias name.
+  if (names.length > 1) {
+    for (const raw of names) {
+      if (typeof raw !== 'string') {
+        continue;
+      }
+      const stripped = raw.replace(/^\//, '');
+      if (!RECREATED_ALIAS_PATTERN.test(stripped)) {
+        return stripped;
+      }
+    }
+  }
+
+  // Single name (or all names are aliases) — unconditionally strip alias prefix.
+  const containerName = getRawContainerName(container);
+  const aliasMatch = containerName.match(RECREATED_ALIAS_PATTERN);
+  if (aliasMatch) {
+    return aliasMatch[2];
+  }
+
   return containerName;
+}
+
+/**
+ * Strip a Docker recreate alias prefix from a container name unconditionally.
+ * Used by the event-update path where Docker inspect returns a single Name
+ * rather than a Names array.
+ */
+export function canonicalizeContainerName(name: string, _containerId?: string): string {
+  const aliasMatch = name.match(RECREATED_ALIAS_PATTERN);
+  if (aliasMatch) {
+    return aliasMatch[2];
+  }
+  return name;
 }
 
 export function getContainerDisplayName(
@@ -85,7 +170,7 @@ export function getContainerDisplayName(
   return containerName;
 }
 
-function normalizeConfigStringValue(value: any) {
+function normalizeConfigStringValue(value: unknown) {
   if (typeof value !== 'string') {
     return undefined;
   }
@@ -93,19 +178,19 @@ function normalizeConfigStringValue(value: any) {
   return valueTrimmed === '' ? undefined : valueTrimmed;
 }
 
-function getNestedValue(value: any, path: string) {
+function getNestedValue(value: unknown, path: string) {
   return path
     .split('.')
     .filter((item) => item !== '')
-    .reduce((nestedValue, item) => {
-      if (nestedValue === undefined || nestedValue === null || typeof nestedValue !== 'object') {
+    .reduce<unknown>((nestedValue, item) => {
+      if (!isRecord(nestedValue)) {
         return undefined;
       }
       return nestedValue[item];
     }, value);
 }
 
-export function getFirstConfigString(value: any, paths: string[]) {
+export function getFirstConfigString(value: unknown, paths: string[]) {
   for (const path of paths) {
     const pathValue = normalizeConfigStringValue(getNestedValue(value, path));
     if (pathValue !== undefined) {
@@ -115,7 +200,7 @@ export function getFirstConfigString(value: any, paths: string[]) {
   return undefined;
 }
 
-function getImageReferenceCandidates(path: string, domain?: string) {
+function getImageReferenceCandidates(path?: string, domain?: string) {
   const pathNormalized = normalizeConfigStringValue(path)?.toLowerCase();
   if (!pathNormalized) {
     return [];
@@ -150,17 +235,17 @@ export function getImageReferenceCandidatesFromPattern(pattern: string) {
       return [patternNormalized.toLowerCase()];
     }
     return getImageReferenceCandidates(parsedPattern.path, parsedPattern.domain);
-  } catch (e) {
+  } catch (_error: unknown) {
     log.debug(`Invalid imgset image pattern "${patternNormalized}" - using normalized value`);
     return [patternNormalized.toLowerCase()];
   }
 }
 
-function getImageReferenceCandidatesFromParsedImage(parsedImage: any) {
+function getImageReferenceCandidatesFromParsedImage(parsedImage: ParsedImageLike) {
   return getImageReferenceCandidates(parsedImage?.path, parsedImage?.domain);
 }
 
-export function getImgsetSpecificity(imagePattern: string, parsedImage: any) {
+export function getImgsetSpecificity(imagePattern: string, parsedImage: ParsedImageLike) {
   const patternCandidates = getImageReferenceCandidatesFromPattern(imagePattern);
   if (patternCandidates.length === 0) {
     return -1;
@@ -183,7 +268,10 @@ export function getImgsetSpecificity(imagePattern: string, parsedImage: any) {
   );
 }
 
-export function getResolvedImgsetConfiguration(name: string, imgsetConfiguration: any) {
+export function getResolvedImgsetConfiguration(
+  name: string,
+  imgsetConfiguration: unknown,
+): ResolvedImgset {
   return {
     name,
     includeTags: getFirstConfigString(imgsetConfiguration, [
@@ -228,7 +316,7 @@ export function getResolvedImgsetConfiguration(name: string, imgsetConfiguration
       'inspect.tag.path',
       'inspectTagPath',
     ]),
-  } as ResolvedImgset;
+  };
 }
 
 export function getContainerConfigValue(
@@ -238,7 +326,7 @@ export function getContainerConfigValue(
   return normalizeConfigStringValue(labelValue) || normalizeConfigStringValue(imgsetValue);
 }
 
-export function normalizeConfigNumberValue(value: any) {
+export function normalizeConfigNumberValue(value: unknown) {
   if (typeof value === 'number' && Number.isFinite(value)) {
     return value;
   }
@@ -251,7 +339,7 @@ export function normalizeConfigNumberValue(value: any) {
   return undefined;
 }
 
-export function getFirstConfigNumber(value: any, paths: string[]) {
+export function getFirstConfigNumber(value: unknown, paths: string[]) {
   for (const path of paths) {
     const pathValue = normalizeConfigNumberValue(getNestedValue(value, path));
     if (pathValue !== undefined) {
@@ -266,7 +354,7 @@ export function getFirstConfigNumber(value: any, paths: string[]) {
  * @param containerImage
  * @returns {*} digest
  */
-export function getRepoDigest(containerImage: any) {
+export function getRepoDigest(containerImage: ImageWithRepoDigests) {
   if (!containerImage.RepoDigests || containerImage.RepoDigests.length === 0) {
     return undefined;
   }
@@ -279,16 +367,16 @@ export function getRepoDigest(containerImage: any) {
  * Resolve a value in a Docker inspect payload from a slash-separated path.
  * Example: Config/Labels/org.opencontainers.image.version
  */
-export function getInspectValueByPath(containerInspect: any, path: string) {
+export function getInspectValueByPath(containerInspect: unknown, path: string) {
   if (!path) {
     return undefined;
   }
   const pathSegments = path.split('/').filter((segment) => segment !== '');
-  return pathSegments.reduce((value, key) => {
+  return pathSegments.reduce<unknown>((value, key) => {
     if (value === undefined || value === null) {
       return undefined;
     }
-    return value[key];
+    return (value as UnknownRecord)[key];
   }, containerInspect);
 }
 
@@ -296,7 +384,7 @@ export function getInspectValueByPath(containerInspect: any, path: string) {
  * Try to derive a semver tag from a Docker inspect path.
  */
 export function getSemverTagFromInspectPath(
-  containerInspect: any,
+  containerInspect: unknown,
   inspectPath: string,
   transformTags: string,
 ) {
@@ -329,12 +417,14 @@ export function isContainerToWatch(watchLabelValue: string, watchByDefault: bool
  * @param {string} watchDigestLabelValue - the value of dd.watch.digest label
  * @param {object} parsedImage - object containing at least `domain` property
  * @param {boolean} isSemver - true if the current image tag is a semver tag
+ * @param {TagPrecision} tagPrecision - whether the tag is specific or floating
  * @returns {boolean}
  */
 export function isDigestToWatch(
   watchDigestLabelValue: string,
-  parsedImage: any,
+  parsedImage: ParsedImageLike,
   isSemver: boolean,
+  tagPrecision: TagPrecision,
 ) {
   const domain = parsedImage.domain;
   const isDockerHub =
@@ -350,10 +440,13 @@ export function isDigestToWatch(
     return shouldWatch;
   }
 
-  if (isSemver) {
+  // Specific semver releases (1.4.5) — immutable, no digest watching needed
+  if (isSemver && tagPrecision === 'specific') {
     return false;
   }
 
+  // Floating tags (v3, 1, 1.4, latest, stable)
+  // Docker Hub stays opt-in because of its documented pull/abuse throttling.
   return !isDockerHub;
 }
 
@@ -393,7 +486,7 @@ export function getImageForRegistryLookup(image: ContainerImage) {
           url: lookupUrl,
         },
       };
-    } catch (e) {
+    } catch (_error: unknown) {
       log.debug(`Invalid registry lookup URL "${lookupImageTrimmed}" - using image defaults`);
       return image;
     }
