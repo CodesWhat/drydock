@@ -47,7 +47,7 @@ const {
             variant="danger"
             :disabled="actionInProgress.has(selectedContainer.name)"
             tooltip="Stop"
-            @click="confirmStop(selectedContainer.name)" />
+            @click="confirmStop(selectedContainer)" />
           <AppIconButton
             v-else
             icon="play"
@@ -55,21 +55,21 @@ const {
             variant="success"
             :disabled="actionInProgress.has(selectedContainer.name)"
             tooltip="Start"
-            @click="startContainer(selectedContainer.name)" />
+            @click="startContainer(selectedContainer)" />
           <AppIconButton
             icon="restart"
             size="xs"
             variant="muted"
             :disabled="actionInProgress.has(selectedContainer.name)"
             tooltip="Restart"
-            @click="confirmRestart(selectedContainer.name)" />
+            @click="confirmRestart(selectedContainer)" />
           <AppIconButton
             icon="security"
             size="xs"
             variant="secondary"
             :disabled="actionInProgress.has(selectedContainer.name)"
             tooltip="Scan"
-            @click="scanContainer(selectedContainer.name)" />
+            @click="scanContainer(selectedContainer)" />
           <AppIconButton
             v-if="selectedContainer.newTag && selectedContainer.bouncer === 'blocked'"
             icon="lock"
@@ -77,7 +77,7 @@ const {
             variant="danger"
             :disabled="actionInProgress.has(selectedContainer.name)"
             tooltip="Blocked — Force Update"
-            @click="confirmForceUpdate(selectedContainer.name)" />
+            @click="confirmForceUpdate(selectedContainer)" />
           <AppIconButton
             v-else-if="selectedContainer.newTag"
             icon="cloud-download"
@@ -85,14 +85,14 @@ const {
             variant="success"
             :disabled="actionInProgress.has(selectedContainer.name)"
             tooltip="Update"
-            @click="confirmUpdate(selectedContainer.name)" />
+            @click="confirmUpdate(selectedContainer)" />
           <AppIconButton
             icon="trash"
             size="xs"
             variant="danger"
             :disabled="actionInProgress.has(selectedContainer.name)"
             tooltip="Delete"
-            @click="confirmDelete(selectedContainer.name)" />
+            @click="confirmDelete(selectedContainer)" />
         </div>
       </template>
       <template #header>

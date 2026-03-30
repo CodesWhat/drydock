@@ -58,8 +58,7 @@ const {
 } = useContainersViewTemplateContext();
 
 const openActionsContainer = computed(
-  () =>
-    displayContainers.value.find((container) => container.name === openActionsMenu.value) ?? null,
+  () => displayContainers.value.find((container) => container.id === openActionsMenu.value) ?? null,
 );
 </script>
 
@@ -170,22 +169,22 @@ const openActionsContainer = computed(
                       v-tooltip.top="tt(registryErrorTooltip(c))">
                   <AppIcon name="warning" :size="12" />
                 </AppBadge>
-                <AppBadge v-if="getContainerListPolicyState(c.name).snoozed"
+                <AppBadge v-if="getContainerListPolicyState(c).snoozed"
                       tone="info" size="xs" class="px-1.5 py-0"
                       aria-label="Snoozed updates"
-                      v-tooltip.top="tt(containerPolicyTooltip(c.name, 'snoozed'))">
+                      v-tooltip.top="tt(containerPolicyTooltip(c, 'snoozed'))">
                   <AppIcon name="pause" :size="12" />
                 </AppBadge>
-                <AppBadge v-if="getContainerListPolicyState(c.name).skipped"
+                <AppBadge v-if="getContainerListPolicyState(c).skipped"
                       tone="warning" size="xs" class="px-1.5 py-0"
                       aria-label="Skipped updates"
-                      v-tooltip.top="tt(containerPolicyTooltip(c.name, 'skipped'))">
+                      v-tooltip.top="tt(containerPolicyTooltip(c, 'skipped'))">
                   <AppIcon name="skip-forward" :size="12" />
                 </AppBadge>
-                <AppBadge v-if="getContainerListPolicyState(c.name).maturityBlocked"
+                <AppBadge v-if="getContainerListPolicyState(c).maturityBlocked"
                       tone="primary" size="xs" class="px-1.5 py-0"
                       aria-label="Maturity-blocked updates"
-                      v-tooltip.top="tt(containerPolicyTooltip(c.name, 'maturity'))">
+                      v-tooltip.top="tt(containerPolicyTooltip(c, 'maturity'))">
                   <AppIcon name="clock" :size="12" />
                 </AppBadge>
                 <AppBadge size="xs" class="px-1.5 py-0"
@@ -211,27 +210,27 @@ const openActionsContainer = computed(
           </div>
           <div v-else class="text-center">
             <span class="text-2xs-plus dd-text-secondary truncate block max-w-[140px] mx-auto" v-tooltip.top="c.currentTag">{{ c.currentTag }}</span>
-            <div v-if="getContainerListPolicyState(c.name).snoozed || getContainerListPolicyState(c.name).skipped || getContainerListPolicyState(c.name).maturityBlocked"
+            <div v-if="getContainerListPolicyState(c).snoozed || getContainerListPolicyState(c).skipped || getContainerListPolicyState(c).maturityBlocked"
                  class="mt-1 inline-flex items-center justify-center gap-1">
-              <span v-if="getContainerListPolicyState(c.name).snoozed"
+              <span v-if="getContainerListPolicyState(c).snoozed"
                     class="inline-flex items-center justify-center"
                     style="color: var(--dd-info);"
                     aria-label="Snoozed updates"
-                    v-tooltip.top="tt(containerPolicyTooltip(c.name, 'snoozed'))">
+                    v-tooltip.top="tt(containerPolicyTooltip(c, 'snoozed'))">
                 <AppIcon name="pause" :size="14" />
               </span>
-              <span v-if="getContainerListPolicyState(c.name).skipped"
+              <span v-if="getContainerListPolicyState(c).skipped"
                     class="inline-flex items-center justify-center"
                     style="color: var(--dd-warning);"
                     aria-label="Skipped updates"
-                    v-tooltip.top="tt(containerPolicyTooltip(c.name, 'skipped'))">
+                    v-tooltip.top="tt(containerPolicyTooltip(c, 'skipped'))">
                 <AppIcon name="skip-forward" :size="14" />
               </span>
-              <span v-if="getContainerListPolicyState(c.name).maturityBlocked"
+              <span v-if="getContainerListPolicyState(c).maturityBlocked"
                     class="inline-flex items-center justify-center"
                     style="color: var(--dd-primary);"
                     aria-label="Maturity-blocked updates"
-                    v-tooltip.top="tt(containerPolicyTooltip(c.name, 'maturity'))">
+                    v-tooltip.top="tt(containerPolicyTooltip(c, 'maturity'))">
                 <AppIcon name="clock" :size="14" />
               </span>
             </div>
@@ -252,7 +251,7 @@ const openActionsContainer = computed(
           <AppBadge v-if="c.updateKind" size="xs" :custom="{ bg: updateKindColor(c.updateKind).bg, text: updateKindColor(c.updateKind).text }">
             {{ c.updateKind }}
           </AppBadge>
-          <AppBadge v-else-if="getContainerListPolicyState(c.name).skipped" size="xs" v-tooltip.top="'Pinned'" :custom="{ bg: 'var(--dd-success-muted)', text: 'var(--dd-success)' }">
+          <AppBadge v-else-if="getContainerListPolicyState(c).skipped" size="xs" v-tooltip.top="'Pinned'" :custom="{ bg: 'var(--dd-success-muted)', text: 'var(--dd-success)' }">
             <AppIcon name="pin" :size="12" />
           </AppBadge>
           <AppBadge v-else-if="!c.updateKind && !c.updateMaturity && !c.suggestedTag" size="xs" v-tooltip.top="'Up to date'" :custom="{ bg: 'var(--dd-success-muted)', text: 'var(--dd-success)' }">
@@ -323,25 +322,25 @@ const openActionsContainer = computed(
                       class="transition-[color,background-color,border-color,opacity,transform,box-shadow]"
                       :class="actionInProgress.has(c.name) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-success hover:dd-bg-hover hover:scale-110 active:scale-95'"
                       :disabled="actionInProgress.has(c.name)"
-                      :tooltip="tt('Update')" @click.stop="confirmUpdate(c.name)" />
+                      :tooltip="tt('Update')" @click.stop="confirmUpdate(c)" />
               <AppIconButton v-else-if="c.status === 'running'" icon="stop" size="sm" variant="muted"
                       class="transition-[color,background-color,border-color,opacity,transform,box-shadow]"
                       :class="actionInProgress.has(c.name) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-danger hover:dd-bg-hover hover:scale-110 active:scale-95'"
                       :disabled="actionInProgress.has(c.name)"
-                      :tooltip="tt('Stop')" @click.stop="confirmStop(c.name)" />
+                      :tooltip="tt('Stop')" @click.stop="confirmStop(c)" />
               <AppIconButton v-else icon="play" size="sm" variant="muted"
                       class="transition-[color,background-color,border-color,opacity,transform,box-shadow]"
                       :class="actionInProgress.has(c.name) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-success hover:dd-bg-hover hover:scale-110 active:scale-95'"
                       :disabled="actionInProgress.has(c.name)"
-                      :tooltip="tt('Start')" @click.stop="startContainer(c.name)" />
+                      :tooltip="tt('Start')" @click.stop="startContainer(c)" />
               <AppIconButton icon="more" size="sm" variant="muted"
                       class="transition-[color,background-color,border-color,opacity,transform,box-shadow]"
                       :class="[
                         actionInProgress.has(c.name) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text hover:dd-bg-hover hover:scale-110 active:scale-95',
-                        openActionsMenu === c.name && !actionInProgress.has(c.name) ? 'dd-bg-elevated dd-text' : '',
+                        openActionsMenu === c.id && !actionInProgress.has(c.name) ? 'dd-bg-elevated dd-text' : '',
                       ]"
                       :disabled="actionInProgress.has(c.name)"
-                      :tooltip="tt('More')" @click.stop="toggleActionsMenu(c.name, $event)" />
+                      :tooltip="tt('More')" @click.stop="toggleActionsMenu(c.id, $event)" />
             </div>
           </template>
           <!-- Button-style actions (full) -->
@@ -357,9 +356,9 @@ const openActionsContainer = computed(
                 <AppIconButton icon="chevron-down" size="toolbar" variant="plain"
                         class="transition-colors dd-text-muted hover:dd-text hover:dd-bg-hover"
                         :style="{ backgroundColor: 'var(--dd-bg)' }"
-                        :class="openActionsMenu === c.name ? 'dd-bg-elevated dd-text' : ''"
+                        :class="openActionsMenu === c.id ? 'dd-bg-elevated dd-text' : ''"
                         aria-label="Open actions menu"
-                        @click.stop="toggleActionsMenu(c.name, $event)" />
+                        @click.stop="toggleActionsMenu(c.id, $event)" />
               </div>
               <!-- Updatable: split button -->
               <div v-else class="inline-flex dd-rounded overflow-hidden"
@@ -369,30 +368,30 @@ const openActionsContainer = computed(
                         :class="actionInProgress.has(c.name) ? 'cursor-not-allowed' : ''"
                         :style="{ backgroundColor: 'var(--dd-success-muted)', color: 'var(--dd-success)' }"
                         :disabled="actionInProgress.has(c.name)"
-                        @click.stop="confirmUpdate(c.name)">
+                        @click.stop="confirmUpdate(c)">
                   <AppIcon name="cloud-download" :size="14" class="mr-1" /> Update
                 </AppButton>
                 <AppIconButton icon="chevron-down" size="toolbar" variant="plain"
                         class="transition-colors"
-                        :class="actionInProgress.has(c.name) ? 'cursor-not-allowed' : openActionsMenu === c.name ? 'brightness-125' : ''"
+                        :class="actionInProgress.has(c.name) ? 'cursor-not-allowed' : openActionsMenu === c.id ? 'brightness-125' : ''"
                         :style="{ backgroundColor: 'var(--dd-success-muted)', color: 'var(--dd-success)', borderLeft: '1px solid var(--dd-success)' }"
                         :disabled="actionInProgress.has(c.name)"
                         aria-label="Open update actions menu"
-                        @click.stop="toggleActionsMenu(c.name, $event)" />
+                        @click.stop="toggleActionsMenu(c.id, $event)" />
               </div>
             </div>
             <div v-else class="flex items-center justify-end gap-1">
               <AppIconButton v-if="c.status === 'running'"
                       icon="stop" size="toolbar" variant="danger"
                       :disabled="actionInProgress.has(c.name)"
-                      :tooltip="tt('Stop')" @click.stop="confirmStop(c.name)" />
+                      :tooltip="tt('Stop')" @click.stop="confirmStop(c)" />
               <AppIconButton v-else
                       icon="play" size="toolbar" variant="success"
                       :disabled="actionInProgress.has(c.name)"
-                      :tooltip="tt('Start')" @click.stop="startContainer(c.name)" />
+                      :tooltip="tt('Start')" @click.stop="startContainer(c)" />
               <AppIconButton icon="restart" size="toolbar" variant="muted"
                       :disabled="actionInProgress.has(c.name)"
-                      :tooltip="tt('Restart')" @click.stop="confirmRestart(c.name)" />
+                      :tooltip="tt('Restart')" @click.stop="confirmRestart(c)" />
             </div>
           </template>
         </template>
@@ -430,25 +429,25 @@ const openActionsContainer = computed(
                     v-tooltip.top="tt(registryErrorTooltip(c))">
                 <AppIcon name="warning" :size="12" />
               </span>
-              <span v-if="getContainerListPolicyState(c.name).snoozed"
+              <span v-if="getContainerListPolicyState(c).snoozed"
                     class="inline-flex items-center justify-center"
                     style="color: var(--dd-info);"
                     aria-label="Snoozed updates"
-                    v-tooltip.top="tt(containerPolicyTooltip(c.name, 'snoozed'))">
+                    v-tooltip.top="tt(containerPolicyTooltip(c, 'snoozed'))">
                 <AppIcon name="pause" :size="12" />
               </span>
-              <span v-if="getContainerListPolicyState(c.name).skipped"
+              <span v-if="getContainerListPolicyState(c).skipped"
                     class="inline-flex items-center justify-center"
                     style="color: var(--dd-warning);"
                     aria-label="Skipped updates"
-                    v-tooltip.top="tt(containerPolicyTooltip(c.name, 'skipped'))">
+                    v-tooltip.top="tt(containerPolicyTooltip(c, 'skipped'))">
                 <AppIcon name="skip-forward" :size="12" />
               </span>
-              <span v-if="getContainerListPolicyState(c.name).maturityBlocked"
+              <span v-if="getContainerListPolicyState(c).maturityBlocked"
                     class="inline-flex items-center justify-center"
                     style="color: var(--dd-primary);"
                     aria-label="Maturity-blocked updates"
-                    v-tooltip.top="tt(containerPolicyTooltip(c.name, 'maturity'))">
+                    v-tooltip.top="tt(containerPolicyTooltip(c, 'maturity'))">
                 <AppIcon name="clock" :size="12" />
               </span>
             </div>
@@ -479,26 +478,26 @@ const openActionsContainer = computed(
                   <AppIcon name="warning" :size="14" class="shrink-0" />
                   <span class="truncate">{{ c.noUpdateReason }}</span>
                 </span>
-                <template v-else-if="getContainerListPolicyState(c.name).snoozed || getContainerListPolicyState(c.name).skipped || getContainerListPolicyState(c.name).maturityBlocked">
-                  <span v-if="getContainerListPolicyState(c.name).snoozed"
+                <template v-else-if="getContainerListPolicyState(c).snoozed || getContainerListPolicyState(c).skipped || getContainerListPolicyState(c).maturityBlocked">
+                  <span v-if="getContainerListPolicyState(c).snoozed"
                         class="inline-flex items-center justify-center ml-1"
                         style="color: var(--dd-info);"
                         aria-label="Snoozed updates"
-                        v-tooltip.top="tt(containerPolicyTooltip(c.name, 'snoozed'))">
+                        v-tooltip.top="tt(containerPolicyTooltip(c, 'snoozed'))">
                     <AppIcon name="pause" :size="13" />
                   </span>
-                  <span v-if="getContainerListPolicyState(c.name).skipped"
+                  <span v-if="getContainerListPolicyState(c).skipped"
                         class="inline-flex items-center justify-center"
                         style="color: var(--dd-warning);"
                         aria-label="Skipped updates"
-                        v-tooltip.top="tt(containerPolicyTooltip(c.name, 'skipped'))">
+                        v-tooltip.top="tt(containerPolicyTooltip(c, 'skipped'))">
                     <AppIcon name="skip-forward" :size="13" />
                   </span>
-                  <span v-if="getContainerListPolicyState(c.name).maturityBlocked"
+                  <span v-if="getContainerListPolicyState(c).maturityBlocked"
                         class="inline-flex items-center justify-center"
                         style="color: var(--dd-primary);"
                         aria-label="Maturity-blocked updates"
-                        v-tooltip.top="tt(containerPolicyTooltip(c.name, 'maturity'))">
+                        v-tooltip.top="tt(containerPolicyTooltip(c, 'maturity'))">
                     <AppIcon name="clock" :size="13" />
                   </span>
                 </template>
@@ -528,19 +527,19 @@ const openActionsContainer = computed(
                 <AppIconButton v-if="c.status === 'running'" icon="stop" size="xs" variant="muted"
                         :class="actionInProgress.has(c.name) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-danger hover:dd-bg-elevated'"
                         :disabled="actionInProgress.has(c.name)"
-                        :tooltip="tt('Stop')" @click.stop="confirmStop(c.name)" />
+                      :tooltip="tt('Stop')" @click.stop="confirmStop(c)" />
                 <AppIconButton v-else icon="play" size="xs" variant="muted"
                         :class="actionInProgress.has(c.name) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-success hover:dd-bg-elevated'"
                         :disabled="actionInProgress.has(c.name)"
-                        :tooltip="tt('Start')" @click.stop="startContainer(c.name)" />
+                        :tooltip="tt('Start')" @click.stop="startContainer(c)" />
                 <AppIconButton icon="restart" size="xs" variant="muted"
                         :class="actionInProgress.has(c.name) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text hover:dd-bg-elevated'"
                         :disabled="actionInProgress.has(c.name)"
-                        :tooltip="tt('Restart')" @click.stop="confirmRestart(c.name)" />
+                        :tooltip="tt('Restart')" @click.stop="confirmRestart(c)" />
                 <AppIconButton icon="security" size="xs" variant="muted"
                         :class="actionInProgress.has(c.name) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-secondary hover:dd-bg-elevated'"
                         :disabled="actionInProgress.has(c.name)"
-                        :tooltip="tt('Scan')" @click.stop="scanContainer(c.name)" />
+                        :tooltip="tt('Scan')" @click.stop="scanContainer(c)" />
                 <AppIconButton v-if="c.newTag && c.bouncer === 'blocked'" icon="lock" size="xs" variant="muted"
                         class="opacity-60 cursor-not-allowed"
                         :disabled="true"
@@ -548,7 +547,7 @@ const openActionsContainer = computed(
                 <AppIconButton v-else-if="c.newTag" icon="cloud-download" size="xs" variant="muted"
                         :class="actionInProgress.has(c.name) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-success hover:dd-bg-elevated'"
                         :disabled="actionInProgress.has(c.name)"
-                        :tooltip="tt('Update')" @click.stop="confirmUpdate(c.name)" />
+                        :tooltip="tt('Update')" @click.stop="confirmUpdate(c)" />
               </template>
               <template v-else>
                 <span class="text-2xs dd-text-muted">Actions disabled</span>
@@ -610,25 +609,25 @@ const openActionsContainer = computed(
                   v-tooltip.top="tt(registryErrorTooltip(c))">
               <AppIcon name="warning" :size="12" />
             </span>
-            <span v-if="getContainerListPolicyState(c.name).snoozed"
+            <span v-if="getContainerListPolicyState(c).snoozed"
                   class="inline-flex items-center justify-center"
                   style="color: var(--dd-info);"
                   aria-label="Snoozed updates"
-                  v-tooltip.top="tt(containerPolicyTooltip(c.name, 'snoozed'))">
+                  v-tooltip.top="tt(containerPolicyTooltip(c, 'snoozed'))">
               <AppIcon name="pause" :size="12" />
             </span>
-            <span v-if="getContainerListPolicyState(c.name).skipped"
+            <span v-if="getContainerListPolicyState(c).skipped"
                   class="inline-flex items-center justify-center"
                   style="color: var(--dd-warning);"
                   aria-label="Skipped updates"
-                  v-tooltip.top="tt(containerPolicyTooltip(c.name, 'skipped'))">
+                  v-tooltip.top="tt(containerPolicyTooltip(c, 'skipped'))">
               <AppIcon name="skip-forward" :size="12" />
             </span>
-            <span v-if="getContainerListPolicyState(c.name).maturityBlocked"
+            <span v-if="getContainerListPolicyState(c).maturityBlocked"
                   class="inline-flex items-center justify-center"
                   style="color: var(--dd-primary);"
                   aria-label="Maturity-blocked updates"
-                  v-tooltip.top="tt(containerPolicyTooltip(c.name, 'maturity'))">
+                  v-tooltip.top="tt(containerPolicyTooltip(c, 'maturity'))">
               <AppIcon name="clock" :size="12" />
             </span>
             <!-- Bouncer: icon in badge -->
@@ -660,27 +659,27 @@ const openActionsContainer = computed(
              }"
              @click.stop>
           <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text" v-if="openActionsContainer.status === 'running'"
-                  @click="confirmStop(openActionsContainer.name); closeActionsMenu()">
+                  @click="confirmStop(openActionsContainer); closeActionsMenu()">
             <AppIcon name="stop" :size="12" class="w-3 text-center inline-flex justify-center" :style="{ color: 'var(--dd-danger)' }" />
             Stop
           </AppButton>
           <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text" v-else
-                  @click="startContainer(openActionsContainer.name); closeActionsMenu()">
+                  @click="startContainer(openActionsContainer); closeActionsMenu()">
             <AppIcon name="play" :size="12" class="w-3 text-center inline-flex justify-center" :style="{ color: 'var(--dd-success)' }" />
             Start
           </AppButton>
-          <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text" @click="confirmRestart(openActionsContainer.name); closeActionsMenu()">
+          <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text" @click="confirmRestart(openActionsContainer); closeActionsMenu()">
             <AppIcon name="restart" :size="12" class="w-3 text-center inline-flex justify-center dd-text-muted" />
             Restart
           </AppButton>
-          <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text" @click="scanContainer(openActionsContainer.name); closeActionsMenu()">
+          <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text" @click="scanContainer(openActionsContainer); closeActionsMenu()">
             <AppIcon name="security" :size="12" class="w-3 text-center inline-flex justify-center" :style="{ color: 'var(--dd-secondary)' }" />
             Scan
           </AppButton>
           <!-- Force update for blocked containers (even without newTag) -->
           <template v-if="openActionsContainer.bouncer === 'blocked' && !openActionsContainer.newTag">
             <div class="my-1" :style="{ borderTop: '1px solid var(--dd-border)' }" />
-            <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text" @click="confirmForceUpdate(openActionsContainer.name); closeActionsMenu()">
+            <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text" @click="confirmForceUpdate(openActionsContainer); closeActionsMenu()">
               <AppIcon name="bolt" :size="12" class="w-3 text-center inline-flex justify-center" :style="{ color: 'var(--dd-warning)' }" />
               Force update
             </AppButton>
@@ -688,23 +687,23 @@ const openActionsContainer = computed(
           <template v-if="openActionsContainer.newTag">
             <div class="my-1" :style="{ borderTop: '1px solid var(--dd-border)' }" />
             <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text" v-if="openActionsContainer.bouncer === 'blocked'"
-                    @click="confirmForceUpdate(openActionsContainer.name); closeActionsMenu()">
+                    @click="confirmForceUpdate(openActionsContainer); closeActionsMenu()">
               <AppIcon name="bolt" :size="12" class="w-3 text-center inline-flex justify-center" :style="{ color: 'var(--dd-warning)' }" />
               Force update
             </AppButton>
             <AppButton v-if="openActionsContainer.bouncer !== 'blocked'" size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text"
-                    @click="confirmUpdate(openActionsContainer.name); closeActionsMenu()">
+                    @click="confirmUpdate(openActionsContainer); closeActionsMenu()">
               <AppIcon name="cloud-download" :size="12" class="w-3 text-center inline-flex justify-center" :style="{ color: 'var(--dd-success)' }" />
               Update
             </AppButton>
-            <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text" @click="skipUpdate(openActionsContainer.name); closeActionsMenu()">
+            <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text" @click="skipUpdate(openActionsContainer); closeActionsMenu()">
               <AppIcon name="skip-forward" :size="12" class="w-3 text-center inline-flex justify-center dd-text-muted" />
               Skip this update
             </AppButton>
           </template>
           <div class="my-1" :style="{ borderTop: '1px solid var(--dd-border)' }" />
           <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2" style="color: var(--dd-danger);"
-                  @click="confirmDelete(openActionsContainer.name); closeActionsMenu()">
+                  @click="confirmDelete(openActionsContainer); closeActionsMenu()">
             <AppIcon name="trash" :size="12" class="w-3 text-center inline-flex justify-center" />
             Delete
           </AppButton>

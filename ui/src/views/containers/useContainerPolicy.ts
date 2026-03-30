@@ -31,6 +31,8 @@ type ContainerListPolicyState = {
     }
 );
 
+type ContainerPolicyTarget = string | Pick<Container, 'id' | 'name'>;
+
 interface UseContainerPolicyInput {
   selectedContainer: Readonly<Ref<Container | null | undefined>>;
   containerMetaMap: Readonly<Ref<Record<string, unknown>>>;
@@ -95,11 +97,24 @@ function normalizeUpdateDetectedAt(value: unknown): string | undefined {
   return new Date(parsed).toISOString();
 }
 
-function deriveContainerListPolicyState(
+function resolveContainerPolicyTargetKey(target: ContainerPolicyTarget): string {
+  if (typeof target === 'string') {
+    return target;
+  }
+  return target.id || target.name;
+}
+
+function resolveContainerPolicyMeta(
   containerMetaMap: Record<string, unknown>,
-  containerName: string,
-): ContainerListPolicyState {
-  const meta = containerMetaMap[containerName];
+  target: ContainerPolicyTarget,
+): unknown {
+  if (typeof target === 'string') {
+    return containerMetaMap[target];
+  }
+  return containerMetaMap[target.id] ?? containerMetaMap[target.name];
+}
+
+function deriveContainerListPolicyState(meta: unknown): ContainerListPolicyState {
   if (!meta || typeof meta !== 'object') {
     return EMPTY_CONTAINER_POLICY_STATE;
   }
@@ -191,19 +206,20 @@ function buildContainerPolicyTooltip(
 
 async function runForSelectedContainer(
   selectedContainer: Readonly<Ref<Container | null | undefined>>,
-  run: (containerName: string) => Promise<void>,
+  run: (container: Pick<Container, 'id' | 'name'>) => Promise<void>,
 ) {
-  const containerName = selectedContainer.value?.name;
-  if (!containerName) {
+  const container = selectedContainer.value;
+  if (!container) {
     return;
   }
-  await run(containerName);
+  await run(container);
 }
 
 async function applyPolicyState(args: {
   containerActionsEnabled: boolean;
   containerActionsDisabledReason: string;
   containerIdMap: Record<string, string>;
+  containerId?: string;
   name: string;
   action: string;
   payload: Record<string, unknown>;
@@ -218,7 +234,7 @@ async function applyPolicyState(args: {
     args.policyError.value = args.containerActionsDisabledReason;
     return false;
   }
-  const containerId = args.containerIdMap[args.name];
+  const containerId = args.containerId ?? args.containerIdMap[args.name];
   if (!containerId || args.policyInProgress.value) {
     return false;
   }
@@ -246,7 +262,7 @@ function createSelectedPolicyActions(args: {
   selectedContainer: Readonly<Ref<Container | null | undefined>>;
   skippedUpdates: Ref<Set<string>>;
   applyPolicy: (
-    name: string,
+    target: ContainerPolicyTarget,
     action: string,
     payload: Record<string, unknown>,
     message: string,
@@ -257,24 +273,24 @@ function createSelectedPolicyActions(args: {
   maturityMinAgeDaysInput: Ref<number>;
 }) {
   async function skipCurrentForSelected() {
-    await runForSelectedContainer(args.selectedContainer, async (containerName) => {
+    await runForSelectedContainer(args.selectedContainer, async (container) => {
       const applied = await args.applyPolicy(
-        containerName,
+        container,
         'skip-current',
         {},
-        `Skipped current update for ${containerName}`,
+        `Skipped current update for ${container.name}`,
       );
       if (applied) {
-        args.skippedUpdates.value.add(containerName);
+        args.skippedUpdates.value.add(resolveContainerPolicyTargetKey(container));
         await args.refreshActionTabData();
       }
     });
   }
 
   async function snoozeSelected(days: number) {
-    await runForSelectedContainer(args.selectedContainer, async (containerName) => {
+    await runForSelectedContainer(args.selectedContainer, async (container) => {
       await args.applyPolicy(
-        containerName,
+        container,
         'snooze',
         { days },
         `Snoozed updates for ${days} day${days === 1 ? '' : 's'}`,
@@ -288,9 +304,9 @@ function createSelectedPolicyActions(args: {
       args.policyError.value = 'Select a valid snooze date';
       return;
     }
-    await runForSelectedContainer(args.selectedContainer, async (containerName) => {
+    await runForSelectedContainer(args.selectedContainer, async (container) => {
       await args.applyPolicy(
-        containerName,
+        container,
         'snooze',
         { snoozeUntil },
         `Snoozed until ${args.snoozeDateInput.value}`,
@@ -299,22 +315,22 @@ function createSelectedPolicyActions(args: {
   }
 
   async function unsnoozeSelected() {
-    await runForSelectedContainer(args.selectedContainer, async (containerName) => {
-      await args.applyPolicy(containerName, 'unsnooze', {}, 'Snooze cleared');
+    await runForSelectedContainer(args.selectedContainer, async (container) => {
+      await args.applyPolicy(container, 'unsnooze', {}, 'Snooze cleared');
     });
   }
 
   async function clearSkipsSelected() {
-    await runForSelectedContainer(args.selectedContainer, async (containerName) => {
-      args.skippedUpdates.value.delete(containerName);
-      await args.applyPolicy(containerName, 'clear-skips', {}, 'Skipped updates cleared');
+    await runForSelectedContainer(args.selectedContainer, async (container) => {
+      args.skippedUpdates.value.delete(resolveContainerPolicyTargetKey(container));
+      await args.applyPolicy(container, 'clear-skips', {}, 'Skipped updates cleared');
     });
   }
 
   async function clearPolicySelected() {
-    await runForSelectedContainer(args.selectedContainer, async (containerName) => {
-      args.skippedUpdates.value.delete(containerName);
-      await args.applyPolicy(containerName, 'clear', {}, 'Update policy cleared');
+    await runForSelectedContainer(args.selectedContainer, async (container) => {
+      args.skippedUpdates.value.delete(resolveContainerPolicyTargetKey(container));
+      await args.applyPolicy(container, 'clear', {}, 'Update policy cleared');
     });
   }
 
@@ -324,9 +340,9 @@ function createSelectedPolicyActions(args: {
       args.policyError.value = `Enter a maturity age between ${MATURITY_MIN_AGE_DAYS_MIN} and ${MATURITY_MIN_AGE_DAYS_MAX} days`;
       return;
     }
-    await runForSelectedContainer(args.selectedContainer, async (containerName) => {
+    await runForSelectedContainer(args.selectedContainer, async (container) => {
       await args.applyPolicy(
-        containerName,
+        container,
         'set-maturity-policy',
         { mode, minAgeDays },
         mode === 'mature'
@@ -337,8 +353,8 @@ function createSelectedPolicyActions(args: {
   }
 
   async function clearMaturityPolicySelected() {
-    await runForSelectedContainer(args.selectedContainer, async (containerName) => {
-      await args.applyPolicy(containerName, 'clear-maturity-policy', {}, 'Maturity policy cleared');
+    await runForSelectedContainer(args.selectedContainer, async (container) => {
+      await args.applyPolicy(container, 'clear-maturity-policy', {}, 'Maturity policy cleared');
     });
   }
 
@@ -346,10 +362,10 @@ function createSelectedPolicyActions(args: {
     if (!value) {
       return;
     }
-    await runForSelectedContainer(args.selectedContainer, async (containerName) => {
-      args.skippedUpdates.value.delete(containerName);
+    await runForSelectedContainer(args.selectedContainer, async (container) => {
+      args.skippedUpdates.value.delete(resolveContainerPolicyTargetKey(container));
       await args.applyPolicy(
-        containerName,
+        container,
         'remove-skip',
         { kind, value },
         `Removed skipped ${kind} ${value}`,
@@ -385,11 +401,14 @@ export function useContainerPolicy(input: UseContainerPolicyInput) {
   const policyError = ref<string | null>(null);
 
   const selectedUpdatePolicy = computed<Record<string, unknown>>(() => {
+    const selectedId = input.selectedContainer.value?.id;
     const selectedName = input.selectedContainer.value?.name;
-    if (!selectedName) {
+    if (!selectedId && !selectedName) {
       return {};
     }
-    const meta = input.containerMetaMap.value[selectedName];
+    const meta =
+      (selectedId ? input.containerMetaMap.value[selectedId] : undefined) ??
+      (selectedName ? input.containerMetaMap.value[selectedName] : undefined);
     if (!meta || typeof meta !== 'object') {
       return {};
     }
@@ -449,15 +468,17 @@ export function useContainerPolicy(input: UseContainerPolicyInput) {
   );
 
   async function applyPolicy(
-    name: string,
+    target: ContainerPolicyTarget,
     action: string,
     payload: Record<string, unknown> = {},
     message: string,
   ) {
+    const name = typeof target === 'string' ? target : target.name;
     return applyPolicyState({
       containerActionsEnabled: input.containerActionsEnabled.value,
       containerActionsDisabledReason: input.containerActionsDisabledReason.value,
       containerIdMap: input.containerIdMap.value,
+      containerId: typeof target === 'string' ? undefined : target.id,
       name,
       action,
       payload,
@@ -504,29 +525,30 @@ export function useContainerPolicy(input: UseContainerPolicyInput) {
     policyError.value = null;
   }
 
-  function getContainerListPolicyState(containerName: string): ContainerListPolicyState {
+  function getContainerListPolicyState(target: ContainerPolicyTarget): ContainerListPolicyState {
     const currentMetaMap = input.containerMetaMap.value;
     if (currentMetaMap !== cachedMetaMapRef) {
       policyStateCache.clear();
       cachedMetaMapRef = currentMetaMap;
     }
 
-    const currentMeta = currentMetaMap[containerName];
-    const cached = policyStateCache.get(containerName);
+    const key = resolveContainerPolicyTargetKey(target);
+    const currentMeta = resolveContainerPolicyMeta(currentMetaMap, target);
+    const cached = policyStateCache.get(key);
     if (cached && cached.meta === currentMeta) {
       return cached.state;
     }
 
-    const state = deriveContainerListPolicyState(currentMetaMap, containerName);
-    policyStateCache.set(containerName, { meta: currentMeta, state });
+    const state = deriveContainerListPolicyState(currentMeta);
+    policyStateCache.set(key, { meta: currentMeta, state });
     return state;
   }
 
   function containerPolicyTooltip(
-    containerName: string,
+    target: ContainerPolicyTarget,
     kind: 'snoozed' | 'skipped' | 'maturity',
   ): string {
-    const state = getContainerListPolicyState(containerName);
+    const state = getContainerListPolicyState(target);
     return buildContainerPolicyTooltip(state, kind);
   }
 

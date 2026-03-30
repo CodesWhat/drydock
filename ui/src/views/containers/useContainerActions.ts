@@ -24,6 +24,8 @@ interface ContainerActionGroup {
   containers: Container[];
 }
 
+type ContainerActionTarget = string | Pick<Container, 'id' | 'name'>;
+
 interface UseContainerActionsInput {
   activeDetailTab: Readonly<Ref<string>>;
   closeFullPage: () => void;
@@ -40,10 +42,29 @@ interface UseContainerActionsInput {
 export const ACTION_TAB_DETAIL_REFRESH_DEBOUNCE_MS = 250;
 export const PENDING_ACTIONS_POLL_INTERVAL_MS = 2000;
 
+function resolveContainerActionTargetKey(target: ContainerActionTarget): string {
+  if (typeof target === 'string') {
+    return target;
+  }
+  return target.id || target.name;
+}
+
+function resolveContainerActionTarget(
+  target: ContainerActionTarget,
+  containerIdMap: Record<string, string>,
+  containerIdOverride?: string,
+) {
+  const name = typeof target === 'string' ? target : target.name;
+  const containerId =
+    containerIdOverride ??
+    (typeof target === 'string' ? undefined : target.id) ??
+    containerIdMap[name];
+  return { containerId, name };
+}
+
 async function executeContainerActionState(args: {
   containerActionsEnabled: boolean;
   containerActionsDisabledReason: string;
-  containerIdMap: Record<string, string>;
   containerId?: string;
   name: string;
   actionInProgress: Ref<Set<string>>;
@@ -54,7 +75,7 @@ async function executeContainerActionState(args: {
   reloadContainers?: boolean;
   actionPending: Ref<Map<string, Container>>;
   startPolling: (name: string) => void;
-  selectedContainerName: string | undefined;
+  selectedContainerId: string | undefined;
   activeDetailTab: string;
   refreshActionTabData: () => Promise<void>;
   successMessage?: string;
@@ -63,7 +84,7 @@ async function executeContainerActionState(args: {
     args.inputError.value = args.containerActionsDisabledReason;
     return false;
   }
-  const containerId = args.containerId ?? args.containerIdMap[args.name];
+  const containerId = args.containerId;
   if (!containerId || args.actionInProgress.value.has(args.name)) {
     return false;
   }
@@ -72,18 +93,20 @@ async function executeContainerActionState(args: {
   args.actionInProgress.value = next;
   args.inputError.value = null;
   const shouldReloadContainers = args.reloadContainers ?? true;
-  const snapshot = args.containers.value.find((container) => container.name === args.name);
+  const snapshot =
+    args.containers.value.find((container) => container.id === containerId) ??
+    args.containers.value.find((container) => container.name === args.name);
   try {
     await args.action(containerId);
     if (shouldReloadContainers) {
       await args.loadContainers();
-      const stillPresent = args.containers.value.find((container) => container.name === args.name);
+      const stillPresent = args.containers.value.find((container) => container.id === containerId);
       if (!stillPresent && snapshot) {
         args.actionPending.value.set(args.name, snapshot);
         args.startPolling(args.name);
       }
     }
-    if (args.selectedContainerName === args.name && args.activeDetailTab === 'actions') {
+    if (args.selectedContainerId === containerId && args.activeDetailTab === 'actions') {
       await args.refreshActionTabData();
     }
     if (args.successMessage) {
@@ -124,13 +147,12 @@ function setGroupUpdateStateValue(
 async function updateAllInGroupState(args: {
   containerActionsEnabled: boolean;
   containerActionsDisabledReason: string;
-  containerIdMap: Record<string, string>;
   containers: Readonly<Ref<Container[]>>;
   inputError: Ref<string | null>;
   groupUpdateInProgress: Ref<Set<string>>;
   group: ContainerActionGroup;
   executeAction: (
-    name: string,
+    target: ContainerActionTarget,
     action: (id: string) => Promise<unknown>,
     options?: { containerId?: string; reloadContainers?: boolean; successMessage?: string },
   ) => Promise<boolean>;
@@ -146,19 +168,10 @@ async function updateAllInGroupState(args: {
   const updatableContainers = args.group.containers.filter((container) => {
     return container.newTag && container.bouncer !== 'blocked';
   });
-  const frozenUpdateTargets = updatableContainers
-    .map((container) => ({
-      name: container.name,
-      containerId: args.containerIdMap[container.name],
-    }))
-    .filter(
-      (
-        target,
-      ): target is {
-        name: string;
-        containerId: string;
-      } => typeof target.containerId === 'string' && target.containerId.length > 0,
-    );
+  const frozenUpdateTargets = updatableContainers.map((container) => ({
+    id: container.id,
+    name: container.name,
+  }));
   if (frozenUpdateTargets.length === 0) {
     return;
   }
@@ -167,14 +180,13 @@ async function updateAllInGroupState(args: {
     let updatedAny = false;
     for (const target of frozenUpdateTargets) {
       const currentContainer = args.containers.value.find(
-        (container) => container.id === target.containerId,
+        (container) => container.id === target.id,
       );
       if (!currentContainer || currentContainer.name !== target.name) {
         continue;
       }
 
-      const updated = await args.executeAction(target.name, apiUpdateContainer, {
-        containerId: target.containerId,
+      const updated = await args.executeAction(target, apiUpdateContainer, {
         reloadContainers: false,
       });
       if (updated) {
@@ -195,12 +207,13 @@ async function updateAllInGroupState(args: {
 async function deleteContainerState(args: {
   containerActionsEnabled: boolean;
   containerActionsDisabledReason: string;
-  containerIdMap: Record<string, string>;
+  containerId?: string;
   name: string;
+  skipKey: string;
   actionInProgress: Ref<Set<string>>;
   inputError: Ref<string | null>;
   skippedUpdates: Ref<Set<string>>;
-  selectedContainerName: string | undefined;
+  selectedContainerId: string | undefined;
   closeFullPage: () => void;
   closePanel: () => void;
   loadContainers: () => Promise<void>;
@@ -209,7 +222,7 @@ async function deleteContainerState(args: {
     args.inputError.value = args.containerActionsDisabledReason;
     return false;
   }
-  const containerId = args.containerIdMap[args.name];
+  const containerId = args.containerId;
   if (!containerId || args.actionInProgress.value.has(args.name)) {
     return false;
   }
@@ -218,8 +231,8 @@ async function deleteContainerState(args: {
   args.actionInProgress.value = next;
   try {
     await apiDeleteContainer(containerId);
-    args.skippedUpdates.value.delete(args.name);
-    if (args.selectedContainerName === args.name) {
+    args.skippedUpdates.value.delete(args.skipKey);
+    if (args.selectedContainerId === containerId) {
       args.closeFullPage();
       args.closePanel();
     }
@@ -320,17 +333,18 @@ function startPollingState(args: {
 function createConfirmHandlers(args: {
   confirm: ReturnType<typeof useConfirmDialog>;
   executeAction: (
-    name: string,
+    target: ContainerActionTarget,
     action: (id: string) => Promise<unknown>,
     options?: { containerId?: string; reloadContainers?: boolean; successMessage?: string },
   ) => Promise<boolean>;
-  forceUpdate: (name: string) => Promise<void>;
-  deleteContainer: (name: string) => Promise<boolean>;
+  forceUpdate: (target: ContainerActionTarget) => Promise<void>;
+  deleteContainer: (target: ContainerActionTarget) => Promise<boolean>;
   clearPolicySelected: () => Promise<void>;
   selectedContainer: Readonly<Ref<Container | null | undefined>>;
   rollbackToBackup: (backupId?: string) => Promise<void>;
 }) {
-  function confirmStop(name: string) {
+  function confirmStop(target: ContainerActionTarget) {
+    const name = typeof target === 'string' ? target : target.name;
     args.confirm.require({
       header: 'Stop Container',
       message: `Stop ${name}?`,
@@ -338,13 +352,14 @@ function createConfirmHandlers(args: {
       acceptLabel: 'Stop',
       severity: 'danger',
       accept: () =>
-        args.executeAction(name, apiStopContainer, {
+        args.executeAction(target, apiStopContainer, {
           successMessage: `Stopped: ${name}`,
         }) as unknown as Promise<void>,
     });
   }
 
-  function confirmRestart(name: string) {
+  function confirmRestart(target: ContainerActionTarget) {
+    const name = typeof target === 'string' ? target : target.name;
     args.confirm.require({
       header: 'Restart Container',
       message: `Restart ${name}?`,
@@ -352,24 +367,26 @@ function createConfirmHandlers(args: {
       acceptLabel: 'Restart',
       severity: 'warn',
       accept: () =>
-        args.executeAction(name, apiRestartContainer, {
+        args.executeAction(target, apiRestartContainer, {
           successMessage: `Restarted: ${name}`,
         }) as unknown as Promise<void>,
     });
   }
 
-  function confirmForceUpdate(name: string) {
+  function confirmForceUpdate(target: ContainerActionTarget) {
+    const name = typeof target === 'string' ? target : target.name;
     args.confirm.require({
       header: 'Force Update',
       message: `Force update ${name}? This clears skip/snooze policy before attempting update.`,
       rejectLabel: 'Cancel',
       acceptLabel: 'Force Update',
       severity: 'warn',
-      accept: () => args.forceUpdate(name),
+      accept: () => args.forceUpdate(target),
     });
   }
 
-  function confirmUpdate(name: string) {
+  function confirmUpdate(target: ContainerActionTarget) {
+    const name = typeof target === 'string' ? target : target.name;
     const container = args.selectedContainer.value;
     let message = `Update ${name} now? This will apply the latest discovered image.`;
     if (container && container.currentTag && container.newTag) {
@@ -388,20 +405,21 @@ function createConfirmHandlers(args: {
       acceptLabel: 'Update',
       severity: 'warn',
       accept: () =>
-        args.executeAction(name, apiUpdateContainer, {
+        args.executeAction(target, apiUpdateContainer, {
           successMessage: `Updated: ${name}`,
         }) as unknown as Promise<void>,
     });
   }
 
-  function confirmDelete(name: string) {
+  function confirmDelete(target: ContainerActionTarget) {
+    const name = typeof target === 'string' ? target : target.name;
     args.confirm.require({
       header: 'Delete Container',
       message: `Delete ${name}? This will remove it from Drydock tracking until rediscovered.`,
       rejectLabel: 'Cancel',
       acceptLabel: 'Delete',
       severity: 'danger',
-      accept: () => args.deleteContainer(name) as unknown as Promise<void>,
+      accept: () => args.deleteContainer(target) as unknown as Promise<void>,
     });
   }
 
@@ -449,12 +467,12 @@ function createConfirmHandlers(args: {
 
 function createContainerActionHandlers(args: {
   executeAction: (
-    name: string,
+    target: ContainerActionTarget,
     action: (id: string) => Promise<unknown>,
     options?: { containerId?: string; reloadContainers?: boolean; successMessage?: string },
   ) => Promise<boolean>;
   applyPolicy: (
-    name: string,
+    target: ContainerActionTarget,
     action: string,
     payload: Record<string, unknown>,
     message: string,
@@ -464,38 +482,47 @@ function createContainerActionHandlers(args: {
   activeDetailTab: Readonly<Ref<string>>;
   refreshActionTabData: () => Promise<void>;
 }) {
-  async function startContainer(name: string) {
-    await args.executeAction(name, apiStartContainer, { successMessage: `Started: ${name}` });
+  async function startContainer(target: ContainerActionTarget) {
+    const name = typeof target === 'string' ? target : target.name;
+    await args.executeAction(target, apiStartContainer, { successMessage: `Started: ${name}` });
   }
 
-  async function updateContainer(name: string) {
-    await args.executeAction(name, apiUpdateContainer, { successMessage: `Updated: ${name}` });
+  async function updateContainer(target: ContainerActionTarget) {
+    const name = typeof target === 'string' ? target : target.name;
+    await args.executeAction(target, apiUpdateContainer, { successMessage: `Updated: ${name}` });
   }
 
-  async function scanContainer(name: string) {
-    await args.executeAction(name, apiScanContainer, {
+  async function scanContainer(target: ContainerActionTarget) {
+    const name = typeof target === 'string' ? target : target.name;
+    await args.executeAction(target, apiScanContainer, {
       successMessage: `Scan triggered: ${name}`,
     });
   }
 
-  async function skipUpdate(name: string) {
+  async function skipUpdate(target: ContainerActionTarget) {
+    const name = typeof target === 'string' ? target : target.name;
+    const targetKey = resolveContainerActionTargetKey(target);
     const applied = await args.applyPolicy(
-      name,
+      target,
       'skip-current',
       {},
       `Skipped current update for ${name}`,
     );
     if (applied) {
-      args.skippedUpdates.value.add(name);
-      if (args.selectedContainer.value?.name === name && args.activeDetailTab.value === 'actions') {
+      args.skippedUpdates.value.add(targetKey);
+      const selectedKey = args.selectedContainer.value
+        ? resolveContainerActionTargetKey(args.selectedContainer.value)
+        : undefined;
+      if (selectedKey === targetKey && args.activeDetailTab.value === 'actions') {
         await args.refreshActionTabData();
       }
     }
   }
 
-  async function forceUpdate(name: string) {
-    await args.applyPolicy(name, 'clear', {}, `Cleared update policy for ${name}`);
-    await args.executeAction(name, apiUpdateContainer, {
+  async function forceUpdate(target: ContainerActionTarget) {
+    const name = typeof target === 'string' ? target : target.name;
+    await args.applyPolicy(target, 'clear', {}, `Cleared update policy for ${name}`);
+    await args.executeAction(target, apiUpdateContainer, {
       successMessage: `Force updated: ${name}`,
     });
   }
@@ -514,7 +541,11 @@ export function useContainerActions(input: UseContainerActionsInput) {
   const { containerActionsEnabled, containerActionsDisabledReason } = useServerFeatures();
 
   const skippedUpdates = ref(new Set<string>());
-  const selectedContainerName = computed(() => input.selectedContainer.value?.name);
+  const selectedContainerKey = computed(() =>
+    input.selectedContainer.value
+      ? resolveContainerActionTargetKey(input.selectedContainer.value)
+      : undefined,
+  );
 
   let actionTabDetailRefreshTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -548,7 +579,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
 
   const backups = useContainerBackups({
     selectedContainerId: input.selectedContainerId,
-    selectedContainerName,
+    selectedContainerKey,
     skippedUpdates,
     containerActionsEnabled,
     containerActionsDisabledReason,
@@ -575,11 +606,11 @@ export function useContainerActions(input: UseContainerActionsInput) {
   }
 
   watch(
-    () => [input.selectedContainer.value?.name, input.activeDetailTab.value],
-    ([containerName, tabName]) => {
+    () => [selectedContainerKey.value, input.activeDetailTab.value],
+    ([containerKey, tabName]) => {
       preview.resetPreview();
 
-      if (!containerName) {
+      if (!containerKey) {
         clearActionTabDetailRefreshTimer();
         triggers.clearTriggerDetails();
         backups.clearBackupsDetails();
@@ -649,15 +680,19 @@ export function useContainerActions(input: UseContainerActionsInput) {
   });
 
   async function executeAction(
-    name: string,
+    target: ContainerActionTarget,
     action: (id: string) => Promise<unknown>,
     options?: { containerId?: string; reloadContainers?: boolean; successMessage?: string },
   ) {
+    const { containerId, name } = resolveContainerActionTarget(
+      target,
+      input.containerIdMap.value,
+      options?.containerId,
+    );
     return executeContainerActionState({
       containerActionsEnabled: containerActionsEnabled.value,
       containerActionsDisabledReason: containerActionsDisabledReason.value,
-      containerIdMap: input.containerIdMap.value,
-      containerId: options?.containerId,
+      containerId,
       name,
       actionInProgress,
       inputError: input.error,
@@ -667,7 +702,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
       reloadContainers: options?.reloadContainers,
       actionPending,
       startPolling,
-      selectedContainerName: input.selectedContainer.value?.name,
+      selectedContainerId: input.selectedContainer.value?.id,
       activeDetailTab: input.activeDetailTab.value,
       refreshActionTabData,
       successMessage: options?.successMessage,
@@ -678,7 +713,6 @@ export function useContainerActions(input: UseContainerActionsInput) {
     await updateAllInGroupState({
       containerActionsEnabled: containerActionsEnabled.value,
       containerActionsDisabledReason: containerActionsDisabledReason.value,
-      containerIdMap: input.containerIdMap.value,
       containers: input.containers,
       inputError: input.error,
       groupUpdateInProgress,
@@ -698,16 +732,18 @@ export function useContainerActions(input: UseContainerActionsInput) {
       refreshActionTabData,
     });
 
-  async function deleteContainer(name: string) {
+  async function deleteContainer(target: ContainerActionTarget) {
+    const { containerId, name } = resolveContainerActionTarget(target, input.containerIdMap.value);
     return deleteContainerState({
       containerActionsEnabled: containerActionsEnabled.value,
       containerActionsDisabledReason: containerActionsDisabledReason.value,
-      containerIdMap: input.containerIdMap.value,
+      containerId,
       name,
+      skipKey: resolveContainerActionTargetKey(target),
       actionInProgress,
       inputError: input.error,
       skippedUpdates,
-      selectedContainerName: input.selectedContainer.value?.name,
+      selectedContainerId: input.selectedContainer.value?.id,
       closeFullPage: input.closeFullPage,
       closePanel: input.closePanel,
       loadContainers: input.loadContainers,

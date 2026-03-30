@@ -7,7 +7,7 @@ import { loadContainerDetailListState } from './loadContainerDetailListState';
 
 interface UseContainerBackupsInput {
   selectedContainerId: Readonly<Ref<string | undefined>>;
-  selectedContainerName: Readonly<Ref<string | undefined>>;
+  selectedContainerKey: Readonly<Ref<string | undefined>>;
   skippedUpdates: Ref<Set<string>>;
   containerActionsEnabled: Readonly<Ref<boolean>>;
   containerActionsDisabledReason: Readonly<Ref<string>>;
@@ -105,7 +105,7 @@ async function rollbackToBackupState(args: {
   rollbackMessage: Ref<string | null>;
   rollbackError: Ref<string | null>;
   skippedUpdates: Ref<Set<string>>;
-  selectedContainerName: string | undefined;
+  selectedContainerKey: string | undefined;
   loadContainers: () => Promise<void>;
   loadDetailBackups: () => Promise<void>;
   loadDetailUpdateOperations: () => Promise<void>;
@@ -129,7 +129,7 @@ async function rollbackToBackupState(args: {
     args.rollbackMessage.value = successMessage;
     const toast = useToast();
     toast.success(successMessage);
-    args.skippedUpdates.value.delete(args.selectedContainerName || '');
+    args.skippedUpdates.value.delete(args.selectedContainerKey || '');
     await args.loadContainers();
     await Promise.all([args.loadDetailBackups(), args.loadDetailUpdateOperations()]);
   } catch (e: unknown) {
@@ -194,7 +194,7 @@ export function useContainerBackups(input: UseContainerBackupsInput) {
       rollbackMessage,
       rollbackError,
       skippedUpdates: input.skippedUpdates,
-      selectedContainerName: input.selectedContainerName.value,
+      selectedContainerKey: input.selectedContainerKey.value,
       loadContainers: input.loadContainers,
       loadDetailBackups,
       loadDetailUpdateOperations,

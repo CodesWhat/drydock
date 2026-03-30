@@ -58,7 +58,9 @@ async function loadContainers() {
     const metaMap: Record<string, unknown> = {};
     for (const apiContainer of apiContainers) {
       const uiName = apiContainer.displayName || apiContainer.name;
+      idMap[apiContainer.id] = apiContainer.id;
       idMap[uiName] = apiContainer.id;
+      metaMap[apiContainer.id] = apiContainer;
       metaMap[uiName] = apiContainer;
     }
     containerIdMap.value = idMap;
@@ -115,8 +117,12 @@ function syncSelectedContainerReference() {
   if (!selectedContainer.value) {
     return;
   }
+  const selectedId = selectedContainer.value.id;
+  const selectedName = selectedContainer.value.name;
   const refreshed = containers.value.find(
-    (container) => container.name === selectedContainer.value?.name,
+    (container) =>
+      (selectedId ? container.id === selectedId : false) ||
+      (!selectedId && selectedName ? container.name === selectedName : false),
   );
   if (refreshed) {
     selectedContainer.value = refreshed;
@@ -132,14 +138,14 @@ watch(
   },
 );
 
-const selectedContainerId = computed(() =>
-  selectedContainer.value ? containerIdMap.value[selectedContainer.value.name] : undefined,
-);
+const selectedContainerId = computed(() => selectedContainer.value?.id);
 const selectedContainerMeta = computed<Record<string, unknown> | undefined>(() => {
   if (!selectedContainer.value) {
     return undefined;
   }
-  const meta = containerMetaMap.value[selectedContainer.value.name];
+  const meta =
+    containerMetaMap.value[selectedContainer.value.id] ??
+    containerMetaMap.value[selectedContainer.value.name];
   return meta && typeof meta === 'object' ? (meta as Record<string, unknown>) : undefined;
 });
 
@@ -399,11 +405,9 @@ function syncRouteDrivenContainerLogsView(): void {
     return;
   }
 
-  const targetContainer =
-    containers.value.find((container) => container.id === containerIdFromRoute) ??
-    containers.value.find(
-      (container) => containerIdMap.value[container.name] === containerIdFromRoute,
-    );
+  const targetContainer = containers.value.find(
+    (container) => container.id === containerIdFromRoute,
+  );
 
   if (!targetContainer) {
     return;
@@ -707,7 +711,7 @@ const sortedContainers = computed(() => {
 
 const displayContainers = computed(() => {
   const live = sortedContainers.value.map((container) =>
-    skippedUpdates.value.has(container.name)
+    skippedUpdates.value.has(container.id) || skippedUpdates.value.has(container.name)
       ? {
           ...container,
           newTag: undefined,
@@ -754,8 +758,15 @@ async function loadGroups() {
         continue;
       }
       for (const container of group.containers) {
-        const uiName = container.displayName || container.name;
-        map[uiName] = group.name;
+        const groupKey =
+          (typeof container.id === 'string' && container.id) ||
+          (typeof container.displayName === 'string' && container.displayName) ||
+          (typeof container.name === 'string' && container.name) ||
+          undefined;
+        if (!groupKey) {
+          continue;
+        }
+        map[groupKey] = group.name;
       }
     }
     groupMembershipMap.value = map;
@@ -777,7 +788,7 @@ const groupedContainers = computed<RenderGroup[]>(() => {
   const map = groupMembershipMap.value;
   const buckets: Record<string, typeof displayContainers.value> = {};
   for (const container of displayContainers.value) {
-    const groupName = map[container.name] ?? null;
+    const groupName = map[container.id] ?? map[container.name] ?? null;
     const key = groupName ?? '__ungrouped__';
     if (!buckets[key]) {
       buckets[key] = [];

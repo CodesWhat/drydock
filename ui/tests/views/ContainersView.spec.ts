@@ -901,6 +901,39 @@ describe('ContainersView', () => {
       expect(mockApiUpdate).toHaveBeenCalledWith('nginx-id-1');
     });
 
+    it('updates the selected duplicate-name container by id instead of the shared name map', async () => {
+      const localNode = makeContainer({
+        id: 'datavault-id',
+        name: 'tdarr_node',
+        newTag: '2.0.0',
+        server: 'Datavault',
+      });
+      const remoteNode = makeContainer({
+        id: 'tmvault-id',
+        name: 'tdarr_node',
+        newTag: '2.0.0',
+        server: 'Tmvault',
+      });
+      const wrapper = await mountContainersView([localNode, remoteNode]);
+      const vm = wrapper.vm as any;
+
+      vm.containerIdMap = { tdarr_node: 'tmvault-id' };
+      mockApiUpdate.mockResolvedValue({});
+
+      const apiContainers = [localNode, remoteNode].map((container) => ({
+        ...container,
+        displayName: container.name,
+      }));
+      mockGetAllContainers.mockResolvedValue(apiContainers);
+      const { mapApiContainers } = await import('@/utils/container-mapper');
+      (mapApiContainers as ReturnType<typeof vi.fn>).mockReturnValue([localNode, remoteNode]);
+
+      await vm.updateContainer(localNode);
+      await flushPromises();
+
+      expect(mockApiUpdate).toHaveBeenCalledWith('datavault-id');
+    });
+
     it('calls scanContainer with the correct container id', async () => {
       const containers = [makeContainer({ name: 'nginx', newTag: '2.0.0' })];
       const wrapper = await mountContainersView(containers);
@@ -1688,8 +1721,14 @@ describe('ContainersView', () => {
       expect(vm.selectedContainerMeta).toBeUndefined();
 
       vm.selectedContainer = live;
-      vm.containerMetaMap = { nginx: 'not-an-object' };
+      vm.containerMetaMap = { c1: 'not-an-object' };
       expect(vm.selectedContainerMeta).toBeUndefined();
+
+      const duplicateName = makeContainer({ id: 'c2', name: 'nginx', server: 'Remote' });
+      vm.containers = [duplicateName, live];
+      vm.selectedContainer = makeContainer({ id: 'c1', name: 'nginx' });
+      vm.syncSelectedContainerReference();
+      expect(vm.selectedContainer.id).toBe('c1');
 
       vm.actionPending = new Map([['ghost', makeContainer({ id: 'ghost', name: 'ghost' })]]);
       const names = vm.displayContainers.map((container: Container) => container.name);
@@ -1720,6 +1759,71 @@ describe('ContainersView', () => {
       mockGetContainerGroups.mockRejectedValueOnce(new Error('network'));
       await vm.loadGroups();
       expect(vm.groupMembershipMap).toEqual({});
+    });
+
+    it('keeps same-named containers in their own groups when ids differ', async () => {
+      const datavaultNode = makeContainer({
+        id: 'c1',
+        name: 'tdarr_node',
+        server: 'Datavault',
+      });
+      const datavaultHelper = makeContainer({
+        id: 'c2',
+        name: 'helper-datavault',
+        server: 'Datavault',
+      });
+      const tmvaultNode = makeContainer({
+        id: 'c3',
+        name: 'tdarr_node',
+        server: 'Tmvault',
+      });
+      const tmvaultHelper = makeContainer({
+        id: 'c4',
+        name: 'helper-tmvault',
+        server: 'Tmvault',
+      });
+
+      mockGetContainerGroups.mockResolvedValue([
+        {
+          name: 'stack-a',
+          containers: [
+            { id: 'c1', name: 'tdarr_node', displayName: 'tdarr_node' },
+            { id: 'c2', name: 'helper-datavault', displayName: 'helper-datavault' },
+          ],
+          containerCount: 2,
+          updatesAvailable: 0,
+        },
+        {
+          name: 'stack-b',
+          containers: [
+            { id: 'c3', name: 'tdarr_node', displayName: 'tdarr_node' },
+            { id: 'c4', name: 'helper-tmvault', displayName: 'helper-tmvault' },
+          ],
+          containerCount: 2,
+          updatesAvailable: 0,
+        },
+      ]);
+
+      const wrapper = await mountContainersView([
+        datavaultNode,
+        datavaultHelper,
+        tmvaultNode,
+        tmvaultHelper,
+      ]);
+      const vm = wrapper.vm as any;
+
+      vm.groupByStack = true;
+      await flushPromises();
+
+      expect(vm.groupedContainers).toHaveLength(2);
+      expect(vm.groupedContainers[0].key).toBe('stack-a');
+      expect(
+        vm.groupedContainers[0].containers.map((container: Container) => container.id).sort(),
+      ).toEqual(['c1', 'c2']);
+      expect(vm.groupedContainers[1].key).toBe('stack-b');
+      expect(
+        vm.groupedContainers[1].containers.map((container: Container) => container.id).sort(),
+      ).toEqual(['c3', 'c4']);
     });
 
     it('restores saved panel state from storage when container is present', async () => {

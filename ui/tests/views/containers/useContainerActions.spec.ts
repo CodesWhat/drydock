@@ -282,7 +282,7 @@ describe('useContainerActions', () => {
       selectedContainer: container,
       selectedContainerId: container.id,
     });
-    composable.skippedUpdates.value.add('web');
+    composable.skippedUpdates.value.add('container-1');
     mocks.getBackups.mockClear();
     mocks.getContainerUpdateOperations.mockClear();
     loadContainers.mockClear();
@@ -291,7 +291,7 @@ describe('useContainerActions', () => {
 
     expect(mocks.rollback).toHaveBeenCalledWith('container-1', 'backup-1');
     expect(composable.rollbackMessage.value).toBe('Rollback completed from selected backup');
-    expect(composable.skippedUpdates.value.has('web')).toBe(false);
+    expect(composable.skippedUpdates.value.has('container-1')).toBe(false);
     expect(loadContainers).toHaveBeenCalledTimes(1);
     expect(mocks.getBackups).toHaveBeenCalledTimes(1);
     expect(mocks.getContainerUpdateOperations).toHaveBeenCalledTimes(1);
@@ -315,7 +315,7 @@ describe('useContainerActions', () => {
 
     expect(mocks.updateContainerPolicy).toHaveBeenCalledWith('container-1', 'skip-current', {});
     expect(composable.policyMessage.value).toBe('Skipped current update for web');
-    expect(composable.skippedUpdates.value.has('web')).toBe(true);
+    expect(composable.skippedUpdates.value.has('container-1')).toBe(true);
     expect(loadContainers).toHaveBeenCalledTimes(1);
     expect(mocks.getContainerTriggers).toHaveBeenCalledTimes(1);
     expect(mocks.getBackups).toHaveBeenCalledTimes(1);
@@ -1401,13 +1401,15 @@ describe('useContainerActions', () => {
     selectedContainer.value = container;
     selectedContainerId.value = container.id;
     await composable.skipCurrentForSelected();
-    expect(mocks.updateContainerPolicy).not.toHaveBeenCalled();
+    expect(mocks.updateContainerPolicy).toHaveBeenCalledWith('container-1', 'skip-current', {});
+    mocks.updateContainerPolicy.mockClear();
+    composable.skippedUpdates.value.clear();
 
     containerIdMap.value = { web: 'container-1' };
     mocks.updateContainerPolicy.mockRejectedValueOnce(new Error('policy failed'));
     await composable.skipCurrentForSelected();
     expect(composable.policyError.value).toBe('policy failed');
-    expect(composable.skippedUpdates.value.has('web')).toBe(false);
+    expect(composable.skippedUpdates.value.has('container-1')).toBe(false);
 
     await composable.snoozeSelected(1);
     await composable.snoozeSelected(2);
@@ -1585,7 +1587,7 @@ describe('useContainerActions', () => {
     mocks.getBackups.mockClear();
     mocks.getContainerUpdateOperations.mockClear();
 
-    await composable.skipUpdate('web');
+    await composable.skipUpdate(container);
     expect(mocks.updateContainerPolicy).toHaveBeenCalledWith('container-1', 'skip-current', {});
     expect(mocks.getContainerTriggers).toHaveBeenCalledTimes(1);
     expect(mocks.getBackups).toHaveBeenCalledTimes(1);
@@ -1744,6 +1746,34 @@ describe('useContainerActions', () => {
     await flushPromises();
 
     expect(loadContainers).not.toHaveBeenCalled();
+  });
+
+  it('updates each container in a group by its own id when names collide across hosts', async () => {
+    const localNode = makeContainer({
+      id: 'container-1',
+      name: 'tdarr_node',
+      newTag: '2.0.0',
+      server: 'Datavault',
+    });
+    const remoteNode = makeContainer({
+      id: 'container-2',
+      name: 'tdarr_node',
+      newTag: '2.0.0',
+      server: 'Tmvault',
+    });
+    const { composable } = await mountActionsHarness({
+      containers: [localNode, remoteNode],
+      containerIdMap: { tdarr_node: 'container-2' },
+    });
+
+    await composable.updateAllInGroup({
+      key: 'tdarr-stack',
+      containers: [localNode, remoteNode],
+    });
+
+    expect(mocks.updateContainer).toHaveBeenCalledTimes(2);
+    expect(mocks.updateContainer).toHaveBeenNthCalledWith(1, 'container-1');
+    expect(mocks.updateContainer).toHaveBeenNthCalledWith(2, 'container-2');
   });
 
   it('fails closed for action handlers when container actions are disabled', async () => {

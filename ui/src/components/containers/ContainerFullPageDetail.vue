@@ -97,7 +97,7 @@ const {
             :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)', border: '1px solid var(--dd-danger)' }"
             :disabled="actionInProgress.has(selectedContainer.name)"
             aria-label="Stop container"
-            @click="confirmStop(selectedContainer.name)">
+            @click="confirmStop(selectedContainer)">
             <AppIcon :name="actionInProgress.has(selectedContainer.name) ? 'spinner' : 'stop'" :size="12" :class="actionInProgress.has(selectedContainer.name) ? 'dd-spin' : ''" />
             Stop
           </AppButton>
@@ -108,7 +108,7 @@ const {
             :style="{ backgroundColor: 'var(--dd-success-muted)', color: 'var(--dd-success)', border: '1px solid var(--dd-success)' }"
             :disabled="actionInProgress.has(selectedContainer.name)"
             aria-label="Start container"
-            @click="startContainer(selectedContainer.name)">
+            @click="startContainer(selectedContainer)">
             <AppIcon :name="actionInProgress.has(selectedContainer.name) ? 'spinner' : 'play'" :size="12" :class="actionInProgress.has(selectedContainer.name) ? 'dd-spin' : ''" />
             Start
           </AppButton>
@@ -117,7 +117,7 @@ const {
             :class="actionInProgress.has(selectedContainer.name) ? 'opacity-50 cursor-not-allowed' : 'dd-text-muted hover:dd-text'"
             :disabled="actionInProgress.has(selectedContainer.name)"
             aria-label="Restart container"
-            @click="confirmRestart(selectedContainer.name)">
+            @click="confirmRestart(selectedContainer)">
             <AppIcon :name="actionInProgress.has(selectedContainer.name) ? 'spinner' : 'restart'" :size="12" :class="actionInProgress.has(selectedContainer.name) ? 'dd-spin' : ''" />
             Restart
           </AppButton>
@@ -126,7 +126,7 @@ const {
             :class="actionInProgress.has(selectedContainer.name) ? 'opacity-50 cursor-not-allowed' : 'dd-text-muted hover:dd-text'"
             :disabled="actionInProgress.has(selectedContainer.name)"
             aria-label="Scan container"
-            @click="scanContainer(selectedContainer.name)">
+            @click="scanContainer(selectedContainer)">
             <AppIcon :name="actionInProgress.has(selectedContainer.name) ? 'spinner' : 'security'" :size="12" :class="actionInProgress.has(selectedContainer.name) ? 'dd-spin' : ''" />
             Scan
           </AppButton>
@@ -137,7 +137,7 @@ const {
             :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)', border: '1px solid var(--dd-danger)' }"
             :disabled="actionInProgress.has(selectedContainer.name)"
             aria-label="Update blocked by security scan"
-            @click="confirmForceUpdate(selectedContainer.name)">
+            @click="confirmForceUpdate(selectedContainer)">
             <AppIcon name="lock" :size="12" />
             Blocked
           </AppButton>
@@ -148,7 +148,7 @@ const {
             :style="{ backgroundColor: 'var(--dd-success-muted)', color: 'var(--dd-success)', border: '1px solid var(--dd-success)' }"
             :disabled="actionInProgress.has(selectedContainer.name)"
             aria-label="Update container"
-            @click="confirmUpdate(selectedContainer.name)">
+            @click="confirmUpdate(selectedContainer)">
             <AppIcon :name="actionInProgress.has(selectedContainer.name) ? 'spinner' : 'cloud-download'" :size="12" :class="actionInProgress.has(selectedContainer.name) ? 'dd-spin' : ''" />
             Update
           </AppButton>
@@ -158,7 +158,7 @@ const {
             :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)', border: '1px solid var(--dd-danger)' }"
             :disabled="actionInProgress.has(selectedContainer.name)"
             aria-label="Delete container"
-            @click="confirmDelete(selectedContainer.name)">
+            @click="confirmDelete(selectedContainer)">
             <AppIcon :name="actionInProgress.has(selectedContainer.name) ? 'spinner' : 'trash'" :size="12" :class="actionInProgress.has(selectedContainer.name) ? 'dd-spin' : ''" />
             Delete
           </AppButton>
