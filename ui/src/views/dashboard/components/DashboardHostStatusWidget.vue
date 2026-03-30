@@ -67,13 +67,13 @@ watchEffect(() => {
       <div
         v-for="server in servers"
         :key="server.name"
-        class="flex items-center gap-3 p-3 dd-rounded cursor-pointer transition-colors hover:dd-bg-elevated"
+        class="flex items-start gap-3 p-3 dd-rounded cursor-pointer transition-colors hover:dd-bg-elevated"
         :style="{ backgroundColor: 'var(--dd-bg-inset)' }"
         @click="handleViewAll">
         <AppBadge
           v-tooltip.top="server.status === 'connected' ? 'Connected' : 'Disconnected'"
           size="xs"
-          class="px-1.5 py-0"
+          class="mt-0.5 shrink-0 px-1.5 py-0"
           :tone="server.status === 'connected' ? 'success' : 'danger'">
           <AppIcon :name="server.status === 'connected' ? 'check' : 'xmark'" :size="12" />
         </AppBadge>
@@ -84,6 +84,7 @@ watchEffect(() => {
         </div>
         <AppBadge
           size="xs"
+          class="mt-0.5 shrink-0"
           :tone="server.status === 'connected' ? 'success' : 'danger'">
           {{ server.statusLabel ?? server.status }}
         </AppBadge>
