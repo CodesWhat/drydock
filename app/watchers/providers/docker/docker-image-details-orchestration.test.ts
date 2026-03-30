@@ -607,6 +607,87 @@ describe('docker image details orchestration module', () => {
     expect(watcher.log.warn).not.toHaveBeenCalled();
   });
 
+  test('uses container inspect image reference when summary only exposes a digest image id', async () => {
+    vi.spyOn(storeContainer, 'getContainer').mockReturnValue(undefined);
+
+    const { watcher, inspectContainer, inspectImage } = createWatcher();
+    inspectContainer.mockResolvedValue({
+      Config: {
+        Image: 'lscr.io/linuxserver/socket-proxy:latest',
+      },
+    });
+    inspectImage.mockResolvedValue({
+      Id: 'image-new',
+      RepoTags: [],
+      RepoDigests: ['lscr.io/linuxserver/socket-proxy@sha256:new'],
+      Architecture: 'amd64',
+      Os: 'linux',
+      Created: '2026-02-01T00:00:00.000Z',
+    });
+    const helpers = createHelpers({
+      resolveImageName: vi.fn().mockReturnValue({
+        domain: 'lscr.io',
+        path: 'linuxserver/socket-proxy',
+        tag: 'latest',
+      }),
+      resolveTagName: vi.fn().mockReturnValue('latest'),
+    });
+
+    const result = await addImageDetailsToContainerOrchestration(
+      watcher as any,
+      createDockerSummaryContainer({
+        Image: 'sha256:deadbeef',
+        Names: ['/docker-socket-proxy'],
+      }),
+      {},
+      helpers as any,
+    );
+
+    expect(helpers.resolveImageName).toHaveBeenCalledWith(
+      'lscr.io/linuxserver/socket-proxy:latest',
+      expect.objectContaining({
+        RepoDigests: ['lscr.io/linuxserver/socket-proxy@sha256:new'],
+      }),
+      'docker-socket-proxy',
+    );
+    expect(result?.image.tag.value).toBe('latest');
+    expect(result?.image.digest.watch).toBe(true);
+  });
+
+  test('falls back to the summary image reference when inspect image reference is blank', async () => {
+    vi.spyOn(storeContainer, 'getContainer').mockReturnValue(undefined);
+
+    const { watcher, inspectContainer } = createWatcher();
+    inspectContainer.mockResolvedValue({
+      Config: {
+        Image: '   ',
+      },
+    });
+    const helpers = createHelpers({
+      resolveImageName: vi.fn().mockReturnValue({
+        domain: 'docker.io',
+        path: 'library/nginx',
+        tag: 'latest',
+      }),
+      resolveTagName: vi.fn().mockReturnValue('latest'),
+    });
+
+    await addImageDetailsToContainerOrchestration(
+      watcher as any,
+      createDockerSummaryContainer({
+        Image: 'sha256:deadbeef',
+      }),
+      {},
+      helpers as any,
+    );
+
+    expect(helpers.resolveImageName).toHaveBeenCalledWith(
+      'sha256:deadbeef',
+      expect.anything(),
+      'service',
+    );
+  });
+
   test('removes stale same-name container entries when a new container id is discovered', async () => {
     vi.spyOn(storeContainer, 'getContainer').mockReturnValue(undefined);
     const getContainersSpy = vi.spyOn(storeContainer, 'getContainers').mockReturnValue([

@@ -105,9 +105,25 @@ export async function findNewVersion(
 
   const result: ContainerResult = { tag: container.image.tag.value };
 
-  // Digest-only images have no tag to compare — skip version checking entirely
   const currentTag = container.image.tag.value;
-  if (currentTag.startsWith('sha256:') || currentTag === 'unknown') {
+  const isDigestOnlyTag = currentTag.startsWith('sha256:');
+
+  // Digest-pinned images cannot do tag comparison, but they can still use
+  // digest watch to compare the currently pinned digest against the registry.
+  if (isDigestOnlyTag) {
+    logContainer.debug('Digest-only image — no tag available for version comparison');
+    result.noUpdateReason = 'Running by digest — no tag to compare';
+
+    if (container.image.digest.watch && container.image.digest.repo) {
+      await handleDigestWatch(container, registryProvider, [], result);
+    }
+
+    return result;
+  }
+
+  // Unknown tags do not provide enough information for either tag or digest
+  // comparison, so keep the previous no-update behavior.
+  if (currentTag === 'unknown') {
     logContainer.debug('Digest-only image — no tag available for version comparison');
     result.noUpdateReason = 'Running by digest — no tag to compare';
     return result;

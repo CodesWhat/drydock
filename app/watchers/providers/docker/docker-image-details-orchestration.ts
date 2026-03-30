@@ -64,6 +64,10 @@ interface DockerContainerSummary {
 }
 
 interface DockerContainerInspectPayload {
+  Config?: {
+    Image?: string;
+    [key: string]: unknown;
+  };
   [key: string]: unknown;
 }
 
@@ -317,20 +321,49 @@ async function inspectImageForContainer(
 }
 
 async function resolveRuntimeDetailsForDiscoveredContainer(
-  watcher: DockerImageDetailsWatcher,
-  containerId: string,
   runtimeDetailsFromSummary: RuntimeDetails,
+  containerInspect: DockerContainerInspectPayload | undefined,
 ) {
-  try {
-    const containerInspect = await watcher.dockerApi.getContainer(containerId).inspect();
-    return mergeRuntimeDetails(
-      getRuntimeDetailsFromInspect(containerInspect),
-      runtimeDetailsFromSummary,
-    );
-  } catch {
-    // Degrade gracefully to summary details.
+  if (!containerInspect) {
     return runtimeDetailsFromSummary;
   }
+
+  return mergeRuntimeDetails(
+    getRuntimeDetailsFromInspect(containerInspect),
+    runtimeDetailsFromSummary,
+  );
+}
+
+async function inspectDiscoveredContainer(
+  watcher: DockerImageDetailsWatcher,
+  containerId: string,
+): Promise<DockerContainerInspectPayload | undefined> {
+  try {
+    return await watcher.dockerApi.getContainer(containerId).inspect();
+  } catch {
+    return undefined;
+  }
+}
+
+function resolveImageReferenceForParsing(
+  summaryImageReference: string,
+  containerInspect: DockerContainerInspectPayload | undefined,
+) {
+  if (!summaryImageReference.includes('sha256:')) {
+    return summaryImageReference;
+  }
+
+  const inspectImageReference = containerInspect?.Config?.Image;
+  if (typeof inspectImageReference !== 'string') {
+    return summaryImageReference;
+  }
+
+  const normalizedInspectImageReference = inspectImageReference.trim();
+  if (!normalizedInspectImageReference) {
+    return summaryImageReference;
+  }
+
+  return normalizedInspectImageReference;
 }
 
 function warnWhenUntrackableImage(
@@ -433,8 +466,13 @@ export async function addImageDetailsToContainerOrchestration(
   }
 
   const image = await inspectImageForContainer(watcher, containerId, container.Image);
+  const containerInspect = await inspectDiscoveredContainer(watcher, containerId);
 
-  const parsedImage = helpers.resolveImageName(container.Image, image, dockerContainerName);
+  const parsedImage = helpers.resolveImageName(
+    resolveImageReferenceForParsing(container.Image, containerInspect),
+    image,
+    dockerContainerName,
+  );
   if (!parsedImage) {
     return undefined;
   }
@@ -476,9 +514,8 @@ export async function addImageDetailsToContainerOrchestration(
   );
   const repoDigest = getRepoDigest(image);
   const runtimeDetails = await resolveRuntimeDetailsForDiscoveredContainer(
-    watcher,
-    containerId,
     runtimeDetailsFromSummary,
+    containerInspect,
   );
   warnWhenUntrackableImage(watcher, dockerContainerName, isSemver, watchDigest, tagPrecision);
 
