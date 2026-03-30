@@ -109,6 +109,21 @@ test('disabletitle should result in no title in message', async () => {
   expect(telegram.sendMessage).toHaveBeenCalledWith('Test Body');
 });
 
+test('disabletitle with HTML format should escape body as HTML', async () => {
+  telegram.configuration = {
+    ...configurationValid,
+    simpletitle: 'Test Title',
+    simplebody: 'Test <Body>',
+    disabletitle: true,
+    messageformat: 'HTML',
+  };
+
+  telegram.sendMessage = vi.fn();
+  await telegram.trigger({});
+
+  expect(telegram.sendMessage).toHaveBeenCalledWith('Test &lt;Body&gt;');
+});
+
 test('triggerBatch should send batch notification', async () => {
   telegram.configuration = configurationValid;
   telegram.sendMessage = vi.fn();
@@ -132,7 +147,20 @@ test('triggerBatch should send batch notification', async () => {
   ];
   await telegram.triggerBatch(containers);
   expect(telegram.sendMessage).toHaveBeenCalledWith(
-    '*2 updates available*\n\n- Container container1 running with tag 1.0.0 can be updated to tag 2.0.0\n\n- Container container2 running with tag 1.1.0 can be updated to tag 2.1.0\n',
+    '*2 updates available*\n\n\\- Container container1 running with tag 1\\.0\\.0 can be updated to tag 2\\.0\\.0\n\n\\- Container container2 running with tag 1\\.1\\.0 can be updated to tag 2\\.1\\.0\n',
+  );
+});
+
+test('trigger should escape MarkdownV2 special characters in body', async () => {
+  telegram.configuration = {
+    ...configurationValid,
+    simpletitle: 'Update',
+    simplebody: 'nginx:1.25.5 -> 1.29.7 (minor)',
+  };
+  telegram.sendMessage = vi.fn();
+  await telegram.trigger({});
+  expect(telegram.sendMessage).toHaveBeenCalledWith(
+    '*Update*\n\nnginx:1\\.25\\.5 \\-\\> 1\\.29\\.7 \\(minor\\)',
   );
 });
 
