@@ -709,6 +709,54 @@ describe('ContainersGroupedViews', () => {
     expect(wrapper.find('[aria-label="Maturity-blocked updates"]').exists()).toBe(true);
   });
 
+  it('keeps the stack Update all button visible when all updates are security-blocked', async () => {
+    const blockedA = makeContainer({
+      id: 'c-blocked-a',
+      name: 'alpha',
+      newTag: '2.0.0',
+      updateKind: 'major',
+      bouncer: 'blocked',
+      status: 'running',
+    });
+    const blockedB = makeContainer({
+      id: 'c-blocked-b',
+      name: 'beta',
+      newTag: '1.1.0',
+      updateKind: 'minor',
+      bouncer: 'blocked',
+      status: 'running',
+    });
+
+    const { context, refs, spies } = makeContext();
+    refs.groupByStack.value = true;
+    refs.filteredContainers.value = [blockedA, blockedB];
+    refs.displayContainers.value = [blockedA, blockedB];
+    refs.renderGroups.value = [
+      {
+        key: 'stack-blocked',
+        name: 'stack-blocked',
+        containers: [blockedA, blockedB],
+        containerCount: 2,
+        updatesAvailable: 2,
+        updatableCount: 0,
+      },
+    ];
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+
+    const updateAllButton = wrapper
+      .findAll('button')
+      .find((button) => button.text().includes('Update all'));
+
+    expect(updateAllButton).toBeDefined();
+    expect(updateAllButton!.attributes('disabled')).toBeDefined();
+    expect(updateAllButton!.find('[data-icon="lock"]').exists()).toBe(true);
+
+    await updateAllButton!.trigger('click');
+    expect(spies.updateAllInGroup).not.toHaveBeenCalled();
+  });
+
   it('covers group-header disabled states and disabled table action click handler', async () => {
     const item = makeContainer({
       id: 'c-disabled',
