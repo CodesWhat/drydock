@@ -16,7 +16,13 @@ const config = {
   checkers: ['typescript'],
   tsconfigFile: 'tsconfig.json',
   coverageAnalysis: 'off',
-  reporters: ['clear-text', 'progress', 'html', 'json', ...(dashboardReporterEnabled ? ['dashboard'] : [])],
+  reporters: [
+    'clear-text',
+    'progress',
+    'html',
+    'json',
+    ...(dashboardReporterEnabled ? ['dashboard'] : []),
+  ],
   htmlReporter: {
     fileName: 'reports/mutation/html/index.html',
   },
