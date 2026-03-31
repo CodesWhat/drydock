@@ -13,7 +13,7 @@ import {
   updateContainer as apiUpdateContainer,
 } from '../../services/container-actions';
 import type { Container } from '../../types/container';
-import { errorMessage } from '../../utils/error';
+import { errorMessage, isNoUpdateAvailableError } from '../../utils/error';
 import { useContainerBackups } from './useContainerBackups';
 import { useContainerPolicy } from './useContainerPolicy';
 import { useContainerPreview } from './useContainerPreview';
@@ -41,10 +41,9 @@ interface UseContainerActionsInput {
 
 export const ACTION_TAB_DETAIL_REFRESH_DEBOUNCE_MS = 250;
 export const PENDING_ACTIONS_POLL_INTERVAL_MS = 2000;
-const NO_UPDATE_AVAILABLE_ERROR = 'No update available for this container';
 
 function isStaleUpdateError(error: unknown): boolean {
-  return errorMessage(error, '').includes(NO_UPDATE_AVAILABLE_ERROR);
+  return isNoUpdateAvailableError(error);
 }
 
 function resolveContainerActionTargetKey(target: ContainerActionTarget): string {

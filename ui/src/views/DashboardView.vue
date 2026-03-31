@@ -7,7 +7,7 @@ import { useBreakpoints } from '../composables/useBreakpoints';
 import { useConfirmDialog } from '../composables/useConfirmDialog';
 import { ROUTES } from '../router/routes';
 import { updateContainer } from '../services/container-actions';
-import { errorMessage } from '../utils/error';
+import { errorMessage, isNoUpdateAvailableError } from '../utils/error';
 import { summarizeContainerResourceUsage } from '../utils/stats-summary';
 import DashboardHostStatusWidget from './dashboard/components/DashboardHostStatusWidget.vue';
 import DashboardRecentUpdatesWidget from './dashboard/components/DashboardRecentUpdatesWidget.vue';
@@ -36,10 +36,9 @@ const gridMargin = computed<[number, number]>(() => {
 const dashboardUpdateInProgress = ref<string | null>(null);
 const dashboardUpdateAllInProgress = ref(false);
 const dashboardUpdateError = ref<string | null>(null);
-const NO_UPDATE_AVAILABLE_ERROR = 'No update available for this container';
 
 function isStaleDashboardUpdateError(error: unknown): boolean {
-  return errorMessage(error, '').includes(NO_UPDATE_AVAILABLE_ERROR);
+  return isNoUpdateAvailableError(error);
 }
 
 function navigateTo(route: RouteLocationRaw) {
