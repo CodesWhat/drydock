@@ -171,6 +171,9 @@ jobs:
 
       - name: Publish aggregate mutation score to dashboard
         if: success() && env.STRYKER_DASHBOARD_API_KEY != ''
+        env:
+          REPO_SLUG: ${{ github.repository }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
           curl \
             --fail-with-body \
@@ -178,7 +181,7 @@ jobs:
             --header "X-Api-Key: ${STRYKER_DASHBOARD_API_KEY}" \
             --header "Content-Type: application/json" \
             --data @artifacts/aggregate/mutation-score.json \
-            "https://dashboard.stryker-mutator.io/api/reports/github.com/${{ github.repository }}/${{ github.ref_name }}"
+            "https://dashboard.stryker-mutator.io/api/reports/github.com/${REPO_SLUG}/${REF_NAME}"
 
       - name: Upload aggregate mutation summary
         if: always()
