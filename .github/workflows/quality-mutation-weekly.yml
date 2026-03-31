@@ -159,21 +159,9 @@ jobs:
         shell: bash
         run: |
           if [[ -f artifacts/aggregate/summary.json ]]; then
-            node -e '
-            const fs = require("fs");
-            const summary = JSON.parse(fs.readFileSync("artifacts/aggregate/summary.json", "utf8"));
-            const totals = summary.totals;
-            const lines = [
-              "### Aggregate Mutation Score",
-              "- Reports aggregated: " + summary.mutationReportCount + ".",
-              "- Mutation score: " + totals.mutationScore.toFixed(2) + "%.",
-              "- Detected / valid: " + totals.detected + " / " + totals.valid + ".",
-              "- Undetected: " + totals.undetected + ".",
-              "- Invalid: " + totals.invalid + ".",
-              "- Ignored: " + totals.ignored + ".",
-            ];
-            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join("\n") + "\n");
-            '
+            node scripts/aggregate-stryker-score.mjs \
+              --summarize artifacts/aggregate/summary.json \
+              >> "$GITHUB_STEP_SUMMARY"
           else
             {
               echo "### Aggregate Mutation Score"
@@ -182,7 +170,7 @@ jobs:
           fi
 
       - name: Publish aggregate mutation score to dashboard
-        if: ${{ success() && env.STRYKER_DASHBOARD_API_KEY != '' }}
+        if: success() && env.STRYKER_DASHBOARD_API_KEY != ''
         run: |
           curl \
             --fail-with-body \

@@ -11,7 +11,23 @@ function usage(message) {
   console.error(
     'Usage: node scripts/aggregate-stryker-score.mjs --input <dir> [--expected-count <n>] --summary-out <file> --score-out <file>',
   );
+  console.error('       node scripts/aggregate-stryker-score.mjs --summarize <summary.json>');
   process.exit(1);
+}
+
+function summarizeToMarkdown(summaryPath) {
+  const summary = JSON.parse(fs.readFileSync(summaryPath, 'utf8'));
+  const totals = summary.totals;
+  const lines = [
+    '### Aggregate Mutation Score',
+    `- Reports aggregated: ${summary.mutationReportCount}.`,
+    `- Mutation score: ${totals.mutationScore.toFixed(2)}%.`,
+    `- Detected / valid: ${totals.detected} / ${totals.valid}.`,
+    `- Undetected: ${totals.undetected}.`,
+    `- Invalid: ${totals.invalid}.`,
+    `- Ignored: ${totals.ignored}.`,
+  ];
+  console.log(lines.join('\n'));
 }
 
 function parseArgs(argv) {
@@ -19,6 +35,7 @@ function parseArgs(argv) {
     expectedCount: null,
     input: null,
     scoreOut: null,
+    summarize: null,
     summaryOut: null,
   };
 
@@ -48,6 +65,13 @@ function parseArgs(argv) {
         args.scoreOut = next;
         index += 1;
         break;
+      case '--summarize':
+        if (!next) {
+          usage('Missing value for --summarize');
+        }
+        args.summarize = next;
+        index += 1;
+        break;
       case '--summary-out':
         if (!next) {
           usage('Missing value for --summary-out');
@@ -58,6 +82,10 @@ function parseArgs(argv) {
       default:
         usage(`Unknown argument: ${arg}`);
     }
+  }
+
+  if (args.summarize) {
+    return args;
   }
 
   if (!args.input || !args.scoreOut || !args.summaryOut) {
@@ -197,6 +225,12 @@ function ensureDirectory(filePath) {
 
 function main() {
   const args = parseArgs(process.argv.slice(2));
+
+  if (args.summarize) {
+    summarizeToMarkdown(path.resolve(args.summarize));
+    return;
+  }
+
   const inputPath = path.resolve(args.input);
 
   if (!fs.existsSync(inputPath)) {
