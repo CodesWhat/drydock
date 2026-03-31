@@ -556,7 +556,7 @@ export default function Home() {
                     rel="noopener noreferrer"
                   >
                     <img
-                      src="https://ghcr-badge.egpl.dev/codeswhat/drydock/size"
+                      src="https://img.shields.io/docker/image-size/codeswhat/drydock/latest?label=image%20size"
                       alt="Container size"
                     />
                   </a>
@@ -643,12 +643,12 @@ export default function Home() {
                 {/* Quality & Security Badges */}
                 <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
                   <a
-                    href="https://github.com/CodesWhat/drydock/actions/workflows/ci.yml"
+                    href="https://github.com/CodesWhat/drydock/actions/workflows/ci-verify.yml"
                     target="_blank"
                     rel="noopener noreferrer"
                   >
                     <img
-                      src="https://github.com/CodesWhat/drydock/actions/workflows/ci.yml/badge.svg?branch=main"
+                      src="https://github.com/CodesWhat/drydock/actions/workflows/ci-verify.yml/badge.svg?branch=main"
                       alt="CI"
                     />
                   </a>
