@@ -1020,6 +1020,34 @@ describe('Docker Watcher', () => {
       expect(result.image.tag.value).toBe('sha256:deadbeef7890abcdef');
     });
 
+    test('should default digest watching on for digest-pinned Docker Hub images without labels', async () => {
+      const container = await setupContainerDetailTest(docker, {
+        container: {
+          Image: 'sha256:abcdef123456',
+          Names: ['/portainer_agent'],
+        },
+        imageDetails: {
+          RepoTags: [],
+          RepoDigests: ['portainer/agent@sha256:abcdef123456'],
+        },
+        parseImpl: (value) => {
+          if (value === 'portainer/agent') {
+            return { domain: undefined, path: 'portainer/agent' };
+          }
+          return { domain: 'docker.io', path: 'library/nginx', tag: '1.0.0' };
+        },
+        semverValue: null,
+        validateImpl: (c) => c,
+      });
+
+      const result = await docker.addImageDetailsToContainer(container);
+
+      expect(result).toBeDefined();
+      expect(result.image.name).toBe('portainer/agent');
+      expect(result.image.tag.value).toBe('sha256:abcdef123456');
+      expect(result.image.digest.watch).toBe(true);
+    });
+
     test('should recover the original tagged image reference from container inspect when RepoTags are missing', async () => {
       await docker.register('watcher', 'docker', 'test', {});
       docker.log = createMockLog(['warn', 'debug']);

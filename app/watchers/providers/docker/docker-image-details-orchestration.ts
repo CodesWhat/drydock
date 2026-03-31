@@ -493,7 +493,13 @@ function resolveContainerImageState(
     tagName,
     isSemver,
     tagPrecision,
-    watchDigest: isDigestToWatch(resolvedConfig.watchDigest, parsedImage, isSemver, tagPrecision),
+    watchDigest: isDigestToWatch(
+      resolvedConfig.watchDigest,
+      parsedImage,
+      isSemver,
+      tagPrecision,
+      tagName,
+    ),
     repoDigest: getRepoDigest(image),
   };
 }
