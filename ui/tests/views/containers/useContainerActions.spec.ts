@@ -346,6 +346,28 @@ describe('useContainerActions', () => {
     expect(mocks.scanContainer).not.toHaveBeenCalled();
   });
 
+  it('refreshes container state instead of surfacing an error when update reports no update available', async () => {
+    const container = makeContainer({ id: 'container-1', name: 'web', newTag: '1.1.0' });
+    const { composable, error, loadContainers } = await mountActionsHarness({
+      containers: [container],
+      selectedContainer: container,
+      selectedContainerId: container.id,
+      containerIdMap: { web: 'container-1' },
+    });
+    mocks.updateContainer.mockRejectedValueOnce(
+      new Error('No update available for this container'),
+    );
+    loadContainers.mockClear();
+
+    await composable.updateContainer('web');
+
+    expect(mocks.updateContainer).toHaveBeenCalledWith('container-1');
+    expect(loadContainers).toHaveBeenCalledTimes(1);
+    expect(error.value).toBeNull();
+    expect(mocks.toastError).not.toHaveBeenCalled();
+    expect(mocks.toastSuccess).not.toHaveBeenCalledWith('Updated: web');
+  });
+
   it('validates snooze-until input before policy updates', async () => {
     const container = makeContainer({ id: 'container-1', name: 'web' });
     const { composable } = await mountActionsHarness({
@@ -573,6 +595,48 @@ describe('useContainerActions', () => {
     expect(composable.groupUpdateInProgress.value.has('group-1')).toBe(false);
     expect(mocks.toastSuccess).not.toHaveBeenCalled();
     expect(mocks.toastError).toHaveBeenCalledTimes(2);
+  });
+
+  it('refreshes grouped updates when stale rows report no update available and only counts successful updates', async () => {
+    const stale = makeContainer({
+      id: 'container-1',
+      name: 'web',
+      newTag: '1.1.0',
+      bouncer: 'safe',
+    });
+    const fresh = makeContainer({
+      id: 'container-2',
+      name: 'api',
+      newTag: '2.0.0',
+      bouncer: 'safe',
+    });
+    const { composable, error, loadContainers } = await mountActionsHarness({
+      containers: [stale, fresh],
+      containerIdMap: {
+        web: 'container-1',
+        api: 'container-2',
+      },
+    });
+    mocks.updateContainer.mockImplementation(async (containerId: string) => {
+      if (containerId === 'container-1') {
+        throw new Error('No update available for this container');
+      }
+      return {};
+    });
+    loadContainers.mockClear();
+
+    await composable.updateAllInGroup({
+      key: 'group-1',
+      containers: [stale, fresh],
+    });
+
+    expect(mocks.updateContainer).toHaveBeenCalledTimes(2);
+    expect(mocks.updateContainer).toHaveBeenNthCalledWith(1, 'container-1');
+    expect(mocks.updateContainer).toHaveBeenNthCalledWith(2, 'container-2');
+    expect(loadContainers).toHaveBeenCalledTimes(1);
+    expect(error.value).toBeNull();
+    expect(mocks.toastError).not.toHaveBeenCalled();
+    expect(mocks.toastSuccess).toHaveBeenCalledWith('Updated 1 container in group-1');
   });
 
   it('tracks pending actions and polls until container reappears', async () => {

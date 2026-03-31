@@ -41,6 +41,11 @@ interface UseContainerActionsInput {
 
 export const ACTION_TAB_DETAIL_REFRESH_DEBOUNCE_MS = 250;
 export const PENDING_ACTIONS_POLL_INTERVAL_MS = 2000;
+const NO_UPDATE_AVAILABLE_ERROR = 'No update available for this container';
+
+function isStaleUpdateError(error: unknown): boolean {
+  return errorMessage(error, '').includes(NO_UPDATE_AVAILABLE_ERROR);
+}
 
 function resolveContainerActionTargetKey(target: ContainerActionTarget): string {
   if (typeof target === 'string') {
@@ -79,6 +84,7 @@ async function executeContainerActionState(args: {
   activeDetailTab: string;
   refreshActionTabData: () => Promise<void>;
   successMessage?: string;
+  treatNoUpdateAsStale?: boolean;
 }): Promise<boolean> {
   if (!args.containerActionsEnabled) {
     args.inputError.value = args.containerActionsDisabledReason;
@@ -115,6 +121,12 @@ async function executeContainerActionState(args: {
     }
     return true;
   } catch (e: unknown) {
+    if (args.treatNoUpdateAsStale && isStaleUpdateError(e)) {
+      if (shouldReloadContainers) {
+        await args.loadContainers();
+      }
+      return false;
+    }
     const msg = errorMessage(e, `Action failed for ${args.name}`);
     args.inputError.value = msg;
     const toast = useToast();
@@ -154,7 +166,12 @@ async function updateAllInGroupState(args: {
   executeAction: (
     target: ContainerActionTarget,
     action: (id: string) => Promise<unknown>,
-    options?: { containerId?: string; reloadContainers?: boolean; successMessage?: string },
+    options?: {
+      containerId?: string;
+      reloadContainers?: boolean;
+      successMessage?: string;
+      treatNoUpdateAsStale?: boolean;
+    },
   ) => Promise<boolean>;
   loadContainers: () => Promise<void>;
 }) {
@@ -177,7 +194,7 @@ async function updateAllInGroupState(args: {
   }
   setGroupUpdateStateValue(args.groupUpdateInProgress, args.group.key, true);
   try {
-    let updatedAny = false;
+    let updatedCount = 0;
     for (const target of frozenUpdateTargets) {
       const currentContainer = args.containers.value.find(
         (container) => container.id === target.id,
@@ -188,16 +205,18 @@ async function updateAllInGroupState(args: {
 
       const updated = await args.executeAction(target, apiUpdateContainer, {
         reloadContainers: false,
+        treatNoUpdateAsStale: true,
       });
       if (updated) {
-        updatedAny = true;
+        updatedCount += 1;
       }
     }
     await args.loadContainers();
-    if (updatedAny) {
+    if (updatedCount > 0) {
       const toast = useToast();
-      const count = frozenUpdateTargets.length;
-      toast.success(`Updated ${count} container${count === 1 ? '' : 's'} in ${args.group.key}`);
+      toast.success(
+        `Updated ${updatedCount} container${updatedCount === 1 ? '' : 's'} in ${args.group.key}`,
+      );
     }
   } finally {
     setGroupUpdateStateValue(args.groupUpdateInProgress, args.group.key, false);
@@ -469,7 +488,12 @@ function createContainerActionHandlers(args: {
   executeAction: (
     target: ContainerActionTarget,
     action: (id: string) => Promise<unknown>,
-    options?: { containerId?: string; reloadContainers?: boolean; successMessage?: string },
+    options?: {
+      containerId?: string;
+      reloadContainers?: boolean;
+      successMessage?: string;
+      treatNoUpdateAsStale?: boolean;
+    },
   ) => Promise<boolean>;
   applyPolicy: (
     target: ContainerActionTarget,
@@ -489,7 +513,10 @@ function createContainerActionHandlers(args: {
 
   async function updateContainer(target: ContainerActionTarget) {
     const name = typeof target === 'string' ? target : target.name;
-    await args.executeAction(target, apiUpdateContainer, { successMessage: `Updated: ${name}` });
+    await args.executeAction(target, apiUpdateContainer, {
+      successMessage: `Updated: ${name}`,
+      treatNoUpdateAsStale: true,
+    });
   }
 
   async function scanContainer(target: ContainerActionTarget) {
@@ -524,6 +551,7 @@ function createContainerActionHandlers(args: {
     await args.applyPolicy(target, 'clear', {}, `Cleared update policy for ${name}`);
     await args.executeAction(target, apiUpdateContainer, {
       successMessage: `Force updated: ${name}`,
+      treatNoUpdateAsStale: true,
     });
   }
 
@@ -682,7 +710,12 @@ export function useContainerActions(input: UseContainerActionsInput) {
   async function executeAction(
     target: ContainerActionTarget,
     action: (id: string) => Promise<unknown>,
-    options?: { containerId?: string; reloadContainers?: boolean; successMessage?: string },
+    options?: {
+      containerId?: string;
+      reloadContainers?: boolean;
+      successMessage?: string;
+      treatNoUpdateAsStale?: boolean;
+    },
   ) {
     const { containerId, name } = resolveContainerActionTarget(
       target,
@@ -706,6 +739,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
       activeDetailTab: input.activeDetailTab.value,
       refreshActionTabData,
       successMessage: options?.successMessage,
+      treatNoUpdateAsStale: options?.treatNoUpdateAsStale,
     });
   }
 
