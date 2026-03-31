@@ -8,7 +8,7 @@
   "private": true,
   "scripts": {
     "dev": "npm run sync:docs && next dev --turbopack",
-    "build": "npm run sync:docs && next build --webpack && node scripts/apply-sri.mjs",
+    "build": "npm run sync:docs && next build --webpack",
     "start": "next start",
     "sync:docs": "node scripts/sync-docs.mjs",
     "lint": "biome check .",
