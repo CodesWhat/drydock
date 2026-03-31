@@ -280,7 +280,7 @@ class Hass {
     }
 
     try {
-      return new Set(
+      return new Set<string>(
         containerStore
           .getContainers({ watcher: watcherName })
           .filter(
@@ -299,13 +299,13 @@ class Hass {
   }: {
     watcherName: string;
     excludingContainerId?: string;
-  }) {
+  }): Set<string> {
     if (watcherName === '') {
       return new Set<string>();
     }
 
     const watcherTopicPrefix = `${this.configuration.topic}/${watcherName}/`;
-    return new Set(
+    return new Set<string>(
       Array.from(this.containerStateTopicById.entries())
         .filter(([containerId]) => containerId !== excludingContainerId)
         .map(([, stateTopic]) => stateTopic)
@@ -433,16 +433,17 @@ class Hass {
     if (this.configuration.hass.discovery) {
       const watcherName = typeof container?.watcher === 'string' ? container.watcher : '';
       const excludingContainerId = this.getContainerId(container);
-      const activeStateTopics = new Set<string>([
-        ...this.getActiveContainerStateTopicsForWatcher({
-          watcherName,
-          excludingContainerId,
-        }),
-        ...this.getTrackedContainerStateTopicsForWatcher({
-          watcherName,
-          excludingContainerId,
-        }),
-      ]);
+      const activeFromStore = this.getActiveContainerStateTopicsForWatcher({
+        watcherName,
+        excludingContainerId,
+      });
+      const trackedLocally = this.getTrackedContainerStateTopicsForWatcher({
+        watcherName,
+        excludingContainerId,
+      });
+      const activeStateTopics = new Set<string>();
+      for (const topic of activeFromStore) activeStateTopics.add(topic);
+      for (const topic of trackedLocally) activeStateTopics.add(topic);
       await this.removeDiscoveryTopics({
         kind: containerStateSensor.kind,
         stateTopics: stateTopicsToRemove.filter((stateTopic) => !activeStateTopics.has(stateTopic)),
