@@ -36,6 +36,11 @@ const gridMargin = computed<[number, number]>(() => {
 const dashboardUpdateInProgress = ref<string | null>(null);
 const dashboardUpdateAllInProgress = ref(false);
 const dashboardUpdateError = ref<string | null>(null);
+const NO_UPDATE_AVAILABLE_ERROR = 'No update available for this container';
+
+function isStaleDashboardUpdateError(error: unknown): boolean {
+  return errorMessage(error, '').includes(NO_UPDATE_AVAILABLE_ERROR);
+}
 
 function navigateTo(route: RouteLocationRaw) {
   router.push(route);
@@ -205,7 +210,11 @@ function confirmDashboardUpdate(row: Pick<RecentUpdateRow, 'id' | 'name'>) {
         await updateContainer(row.id);
         await fetchDashboardData();
       } catch (e: unknown) {
-        dashboardUpdateError.value = errorMessage(e, `Failed to update ${row.name}`);
+        if (isStaleDashboardUpdateError(e)) {
+          await fetchDashboardData();
+        } else {
+          dashboardUpdateError.value = errorMessage(e, `Failed to update ${row.name}`);
+        }
       } finally {
         dashboardUpdateInProgress.value = null;
       }

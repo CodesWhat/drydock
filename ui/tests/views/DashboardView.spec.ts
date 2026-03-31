@@ -1421,6 +1421,42 @@ describe('DashboardView', () => {
       expect(updateError.text()).toContain('update exploded');
     });
 
+    it('refreshes immediately and removes a stale dashboard row when update reports no update available', async () => {
+      mockUpdateContainer.mockRejectedValueOnce(
+        new Error('No update available for this container'),
+      );
+
+      const wrapper = await mountDashboard(
+        [pendingContainer],
+        [],
+        {},
+        {
+          recentStatuses: { nginx: 'pending' },
+        },
+      );
+      const initialFetchCount = mockGetAllContainers.mock.calls.length;
+      mockGetAllContainers.mockResolvedValueOnce([upToDateContainer]);
+      mockGetContainerRecentStatus.mockResolvedValueOnce({ statuses: {} });
+      const { mapApiContainers } = await import('@/utils/container-mapper');
+      (mapApiContainers as ReturnType<typeof vi.fn>).mockReturnValueOnce([upToDateContainer]);
+
+      const { useConfirmDialog } = await import('@/composables/useConfirmDialog');
+      const confirm = useConfirmDialog();
+
+      expect(wrapper.findAll('[data-test="dashboard-update-btn"]')).toHaveLength(1);
+
+      await wrapper.find('[data-test="dashboard-update-btn"]').trigger('click');
+      await confirm.accept();
+      await flushPromises();
+
+      expect(mockGetAllContainers.mock.calls.length).toBe(initialFetchCount + 1);
+      expect(wrapper.findAll('[data-test="dashboard-update-btn"]')).toHaveLength(0);
+      expect(wrapper.find('[data-test="dashboard-update-error"]').exists()).toBe(false);
+      expect(wrapper.find('[data-widget-id="recent-updates"]').text()).toContain(
+        'No updates available',
+      );
+    });
+
     it('clears dashboard update error after a successful retry', async () => {
       mockUpdateContainer
         .mockRejectedValueOnce(new Error('temporary failure'))
