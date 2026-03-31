@@ -2042,6 +2042,54 @@ describe('useContainerActions', () => {
     expect(mocks.updateContainer).toHaveBeenNthCalledWith(2, 'container-2');
   });
 
+  it('tracks in-progress actions by container id when names collide across hosts', async () => {
+    const localNode = makeContainer({
+      id: 'container-1',
+      name: 'tdarr_node',
+      server: 'Datavault',
+    });
+    const remoteNode = makeContainer({
+      id: 'container-2',
+      name: 'tdarr_node',
+      server: 'Tmvault',
+    });
+    const { composable } = await mountActionsHarness({
+      containers: [localNode, remoteNode],
+      containerIdMap: { tdarr_node: 'container-2' },
+    });
+
+    let resolveFirst: (() => void) | undefined;
+    let resolveSecond: (() => void) | undefined;
+    const action = vi.fn((id: string) => {
+      return new Promise<void>((resolve) => {
+        if (id === 'container-1') {
+          resolveFirst = resolve;
+        } else if (id === 'container-2') {
+          resolveSecond = resolve;
+        }
+      });
+    });
+
+    const first = composable.executeAction(localNode, action, {
+      reloadContainers: false,
+    });
+    await nextTick();
+
+    expect(composable.actionInProgress.value.has('container-1')).toBe(true);
+
+    const second = composable.executeAction(remoteNode, action, {
+      reloadContainers: false,
+    });
+    await nextTick();
+
+    expect(action).toHaveBeenCalledTimes(2);
+    expect(composable.actionInProgress.value.has('container-2')).toBe(true);
+
+    resolveFirst?.();
+    resolveSecond?.();
+    await Promise.all([first, second]);
+  });
+
   it('fails closed for action handlers when container actions are disabled', async () => {
     mocks.containerActionsEnabled.value = false;
     const container = makeContainer({ id: 'container-1', name: 'web' });

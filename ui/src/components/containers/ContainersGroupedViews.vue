@@ -3,6 +3,7 @@ import { computed } from 'vue';
 import AppBadge from '../AppBadge.vue';
 import AppIconButton from '../AppIconButton.vue';
 import { useContainersViewTemplateContext } from './containersViewTemplateContext';
+import { getContainerActionKey } from '../../utils/container-action-key';
 import { getContainerViewKey } from '../../utils/container-view-key';
 import { imageAge } from '../../utils/audit-helpers';
 import UpdateMaturityBadge from './UpdateMaturityBadge.vue';
@@ -60,6 +61,10 @@ const {
 const openActionsContainer = computed(
   () => displayContainers.value.find((container) => container.id === openActionsMenu.value) ?? null,
 );
+
+function isActionInProgress(container: { id?: unknown; name?: unknown }) {
+  return actionInProgress.value.has(getContainerActionKey(container));
+}
 </script>
 
 <template>
@@ -115,13 +120,13 @@ const openActionsContainer = computed(
                  :selected-key="selectedContainer ? getContainerViewKey(selectedContainer) : null"
                  :show-actions="true"
                  :virtual-scroll="false"
-                 :row-class="(row) => actionInProgress.has(row.name) || groupUpdateInProgress.has(group.key) ? 'opacity-50 pointer-events-none transition-opacity duration-300' : ''"
+                 :row-class="(row) => isActionInProgress(row) || groupUpdateInProgress.has(group.key) ? 'opacity-50 pointer-events-none transition-opacity duration-300' : ''"
                  @update:sort-key="containerSortKey = $event"
                  @update:sort-asc="containerSortAsc = $event"
                  @row-click="selectContainer($event)">
         <!-- Container icon (own column) -->
         <template #cell-icon="{ row: c }">
-          <AppIcon v-if="c._pending || actionInProgress.has(c.name)" name="spinner" :size="14" class="dd-spin dd-text-muted" v-tooltip.top="tt('Action in progress')" />
+          <AppIcon v-if="c._pending || isActionInProgress(c)" name="spinner" :size="14" class="dd-spin dd-text-muted" v-tooltip.top="tt('Action in progress')" />
           <ContainerIcon v-else :icon="c.icon" :size="20" />
         </template>
 
@@ -320,26 +325,26 @@ const openActionsContainer = computed(
                       :tooltip="tt('Blocked by Bouncer')" @click.stop />
               <AppIconButton v-else-if="c.newTag" icon="cloud-download" size="sm" variant="muted"
                       class="transition-[color,background-color,border-color,opacity,transform,box-shadow]"
-                      :class="actionInProgress.has(c.name) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-success hover:dd-bg-hover hover:scale-110 active:scale-95'"
-                      :disabled="actionInProgress.has(c.name)"
+                      :class="isActionInProgress(c) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-success hover:dd-bg-hover hover:scale-110 active:scale-95'"
+                      :disabled="isActionInProgress(c)"
                       :tooltip="tt('Update')" @click.stop="confirmUpdate(c)" />
               <AppIconButton v-else-if="c.status === 'running'" icon="stop" size="sm" variant="muted"
                       class="transition-[color,background-color,border-color,opacity,transform,box-shadow]"
-                      :class="actionInProgress.has(c.name) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-danger hover:dd-bg-hover hover:scale-110 active:scale-95'"
-                      :disabled="actionInProgress.has(c.name)"
+                      :class="isActionInProgress(c) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-danger hover:dd-bg-hover hover:scale-110 active:scale-95'"
+                      :disabled="isActionInProgress(c)"
                       :tooltip="tt('Stop')" @click.stop="confirmStop(c)" />
               <AppIconButton v-else icon="play" size="sm" variant="muted"
                       class="transition-[color,background-color,border-color,opacity,transform,box-shadow]"
-                      :class="actionInProgress.has(c.name) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-success hover:dd-bg-hover hover:scale-110 active:scale-95'"
-                      :disabled="actionInProgress.has(c.name)"
+                      :class="isActionInProgress(c) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-success hover:dd-bg-hover hover:scale-110 active:scale-95'"
+                      :disabled="isActionInProgress(c)"
                       :tooltip="tt('Start')" @click.stop="startContainer(c)" />
               <AppIconButton icon="more" size="sm" variant="muted"
                       class="transition-[color,background-color,border-color,opacity,transform,box-shadow]"
                       :class="[
-                        actionInProgress.has(c.name) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text hover:dd-bg-hover hover:scale-110 active:scale-95',
-                        openActionsMenu === c.id && !actionInProgress.has(c.name) ? 'dd-bg-elevated dd-text' : '',
+                        isActionInProgress(c) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text hover:dd-bg-hover hover:scale-110 active:scale-95',
+                        openActionsMenu === c.id && !isActionInProgress(c) ? 'dd-bg-elevated dd-text' : '',
                       ]"
-                      :disabled="actionInProgress.has(c.name)"
+                      :disabled="isActionInProgress(c)"
                       :tooltip="tt('More')" @click.stop="toggleActionsMenu(c.id, $event)" />
             </div>
           </template>
@@ -362,20 +367,20 @@ const openActionsContainer = computed(
               </div>
               <!-- Updatable: split button -->
               <div v-else class="inline-flex dd-rounded overflow-hidden"
-                   :class="actionInProgress.has(c.name) ? 'opacity-50' : ''"
+                   :class="isActionInProgress(c) ? 'opacity-50' : ''"
                    :style="{ border: '1px solid var(--dd-success)' }">
                 <AppButton size="none" variant="plain" weight="none" class="inline-flex items-center justify-center whitespace-nowrap px-3 py-1.5 text-2xs-plus font-bold tracking-wide transition-colors"
-                        :class="actionInProgress.has(c.name) ? 'cursor-not-allowed' : ''"
+                        :class="isActionInProgress(c) ? 'cursor-not-allowed' : ''"
                         :style="{ backgroundColor: 'var(--dd-success-muted)', color: 'var(--dd-success)' }"
-                        :disabled="actionInProgress.has(c.name)"
+                        :disabled="isActionInProgress(c)"
                         @click.stop="confirmUpdate(c)">
                   <AppIcon name="cloud-download" :size="14" class="mr-1" /> Update
                 </AppButton>
                 <AppIconButton icon="chevron-down" size="toolbar" variant="plain"
                         class="transition-colors"
-                        :class="actionInProgress.has(c.name) ? 'cursor-not-allowed' : openActionsMenu === c.id ? 'brightness-125' : ''"
+                        :class="isActionInProgress(c) ? 'cursor-not-allowed' : openActionsMenu === c.id ? 'brightness-125' : ''"
                         :style="{ backgroundColor: 'var(--dd-success-muted)', color: 'var(--dd-success)', borderLeft: '1px solid var(--dd-success)' }"
-                        :disabled="actionInProgress.has(c.name)"
+                        :disabled="isActionInProgress(c)"
                         aria-label="Open update actions menu"
                         @click.stop="toggleActionsMenu(c.id, $event)" />
               </div>
@@ -383,14 +388,14 @@ const openActionsContainer = computed(
             <div v-else class="flex items-center justify-end gap-1">
               <AppIconButton v-if="c.status === 'running'"
                       icon="stop" size="toolbar" variant="danger"
-                      :disabled="actionInProgress.has(c.name)"
+                      :disabled="isActionInProgress(c)"
                       :tooltip="tt('Stop')" @click.stop="confirmStop(c)" />
               <AppIconButton v-else
                       icon="play" size="toolbar" variant="success"
-                      :disabled="actionInProgress.has(c.name)"
+                      :disabled="isActionInProgress(c)"
                       :tooltip="tt('Start')" @click.stop="startContainer(c)" />
               <AppIconButton icon="restart" size="toolbar" variant="muted"
-                      :disabled="actionInProgress.has(c.name)"
+                      :disabled="isActionInProgress(c)"
                       :tooltip="tt('Restart')" @click.stop="confirmRestart(c)" />
             </div>
           </template>
@@ -405,7 +410,7 @@ const openActionsContainer = computed(
                     @item-click="selectContainer($event)">
         <template #card="{ item: c }">
           <!-- Card header -->
-          <div class="px-4 pt-4 pb-2 flex items-start justify-between" :class="{ 'opacity-50': c._pending || actionInProgress.has(c.name) || groupUpdateInProgress.has(group.key) }">
+          <div class="px-4 pt-4 pb-2 flex items-start justify-between" :class="{ 'opacity-50': c._pending || isActionInProgress(c) || groupUpdateInProgress.has(group.key) }">
             <div class="flex items-center gap-2.5 min-w-0">
               <AppIcon v-if="c._pending" name="spinner" :size="16" class="dd-spin dd-text-muted shrink-0" />
               <ContainerIcon v-else :icon="c.icon" :size="24" class="shrink-0" />
@@ -454,7 +459,7 @@ const openActionsContainer = computed(
           </div>
 
           <!-- Card body -- inline Current / Latest -->
-          <div class="px-4 py-3 min-w-0" :class="{ 'opacity-50': actionInProgress.has(c.name) || groupUpdateInProgress.has(group.key) }">
+          <div class="px-4 py-3 min-w-0" :class="{ 'opacity-50': isActionInProgress(c) || groupUpdateInProgress.has(group.key) }">
             <div class="flex items-center gap-2 flex-wrap min-w-0">
               <span class="text-2xs-plus dd-text-muted shrink-0">Current</span>
               <CopyableTag :tag="c.currentTag" class="text-xs font-bold dd-text truncate max-w-[120px]" @click.stop>
@@ -525,28 +530,28 @@ const openActionsContainer = computed(
             <div class="flex items-center gap-1.5">
               <template v-if="containerActionsEnabled">
                 <AppIconButton v-if="c.status === 'running'" icon="stop" size="xs" variant="muted"
-                        :class="actionInProgress.has(c.name) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-danger hover:dd-bg-elevated'"
-                        :disabled="actionInProgress.has(c.name)"
+                        :class="isActionInProgress(c) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-danger hover:dd-bg-elevated'"
+                        :disabled="isActionInProgress(c)"
                       :tooltip="tt('Stop')" @click.stop="confirmStop(c)" />
                 <AppIconButton v-else icon="play" size="xs" variant="muted"
-                        :class="actionInProgress.has(c.name) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-success hover:dd-bg-elevated'"
-                        :disabled="actionInProgress.has(c.name)"
+                        :class="isActionInProgress(c) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-success hover:dd-bg-elevated'"
+                        :disabled="isActionInProgress(c)"
                         :tooltip="tt('Start')" @click.stop="startContainer(c)" />
                 <AppIconButton icon="restart" size="xs" variant="muted"
-                        :class="actionInProgress.has(c.name) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text hover:dd-bg-elevated'"
-                        :disabled="actionInProgress.has(c.name)"
+                        :class="isActionInProgress(c) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text hover:dd-bg-elevated'"
+                        :disabled="isActionInProgress(c)"
                         :tooltip="tt('Restart')" @click.stop="confirmRestart(c)" />
                 <AppIconButton icon="security" size="xs" variant="muted"
-                        :class="actionInProgress.has(c.name) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-secondary hover:dd-bg-elevated'"
-                        :disabled="actionInProgress.has(c.name)"
+                        :class="isActionInProgress(c) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-secondary hover:dd-bg-elevated'"
+                        :disabled="isActionInProgress(c)"
                         :tooltip="tt('Scan')" @click.stop="scanContainer(c)" />
                 <AppIconButton v-if="c.newTag && c.bouncer === 'blocked'" icon="lock" size="xs" variant="muted"
                         class="opacity-60 cursor-not-allowed"
                         :disabled="true"
                         :tooltip="tt('Security blocked')" />
                 <AppIconButton v-else-if="c.newTag" icon="cloud-download" size="xs" variant="muted"
-                        :class="actionInProgress.has(c.name) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-success hover:dd-bg-elevated'"
-                        :disabled="actionInProgress.has(c.name)"
+                        :class="isActionInProgress(c) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-success hover:dd-bg-elevated'"
+                        :disabled="isActionInProgress(c)"
                         :tooltip="tt('Update')" @click.stop="confirmUpdate(c)" />
               </template>
               <template v-else>

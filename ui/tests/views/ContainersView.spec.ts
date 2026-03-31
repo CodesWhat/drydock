@@ -791,12 +791,12 @@ describe('ContainersView', () => {
 
   describe('actionInProgress', () => {
     it('prevents concurrent actions on the same container', async () => {
-      const containers = [makeContainer({ newTag: '2.0.0' })];
+      const containers = [makeContainer({ id: 'c1', name: 'nginx', newTag: '2.0.0' })];
       const wrapper = await mountContainersView(containers);
       const vm = wrapper.vm as any;
 
-      // Simulate action already in progress on 'nginx'
-      vm.actionInProgress = new Set(['nginx']);
+      // Simulate action already in progress on container c1
+      vm.actionInProgress = new Set(['c1']);
 
       // Attempting the same container should be blocked
       mockApiUpdate.mockResolvedValue({});
@@ -807,14 +807,14 @@ describe('ContainersView', () => {
 
     it('allows concurrent actions on different containers', async () => {
       const containers = [
-        makeContainer({ name: 'nginx', newTag: '2.0.0' }),
-        makeContainer({ name: 'redis', newTag: '8.0.0' }),
+        makeContainer({ id: 'c1', name: 'nginx', newTag: '2.0.0' }),
+        makeContainer({ id: 'c2', name: 'redis', newTag: '8.0.0' }),
       ];
       const wrapper = await mountContainersView(containers);
       const vm = wrapper.vm as any;
 
-      // Simulate action already in progress on 'nginx'
-      vm.actionInProgress = new Set(['nginx']);
+      // Simulate action already in progress on container c1
+      vm.actionInProgress = new Set(['c1']);
 
       // Attempting a different container should NOT be blocked
       mockApiUpdate.mockResolvedValue({});

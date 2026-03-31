@@ -802,7 +802,7 @@ describe('ContainersGroupedViews', () => {
     refs.groupByStack.value = true;
     refs.containerActionsEnabled.value = false;
     refs.groupUpdateInProgress.value = new Set(['stack-disabled']);
-    refs.actionInProgress.value = new Set(['alpha']);
+    refs.actionInProgress.value = new Set(['c-disabled']);
     refs.filteredContainers.value = [item];
     refs.displayContainers.value = [item];
     refs.renderGroups.value = [
@@ -823,6 +823,53 @@ describe('ContainersGroupedViews', () => {
     expect(tableLockBtn).toBeDefined();
     (tableLockBtn!.element as HTMLButtonElement).disabled = false;
     await tableLockBtn!.trigger('click');
+  });
+
+  it('disables only the matching same-named row when actionInProgress is keyed by id', async () => {
+    const localNode = makeContainer({
+      id: 'c-local',
+      name: 'tdarr_node',
+      server: 'Datavault',
+      newTag: '2.0.0',
+      updateKind: 'major',
+      bouncer: 'safe',
+      status: 'running',
+    });
+    const remoteNode = makeContainer({
+      id: 'c-remote',
+      name: 'tdarr_node',
+      server: 'Tmvault',
+      newTag: '2.0.0',
+      updateKind: 'major',
+      bouncer: 'safe',
+      status: 'running',
+    });
+
+    const { context, refs } = makeContext();
+    refs.filteredContainers.value = [localNode, remoteNode];
+    refs.displayContainers.value = [localNode, remoteNode];
+    refs.renderGroups.value = [
+      {
+        key: '__flat__',
+        name: null,
+        containers: [localNode, remoteNode],
+        containerCount: 2,
+        updatesAvailable: 2,
+        updatableCount: 2,
+      },
+    ];
+    refs.containerViewMode.value = 'table';
+    refs.tableActionStyle.value = 'icons';
+    refs.actionInProgress.value = new Set(['c-local']);
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+    const updateButtons = iconButtons(wrapper, 'cloud-download');
+
+    expect(updateButtons).toHaveLength(2);
+    expect(
+      updateButtons.filter((button) => button.attributes('disabled') !== undefined),
+    ).toHaveLength(1);
   });
 
   it('covers compact table badge branches across kind/maturity/policy/status variants', async () => {
@@ -932,19 +979,19 @@ describe('ContainersGroupedViews', () => {
     ];
     refs.containerViewMode.value = 'table';
     refs.tableActionStyle.value = 'buttons';
-    refs.actionInProgress.value = new Set(['alpha']);
+    refs.actionInProgress.value = new Set(['c-progress-1']);
     mocked.context = context;
 
     const wrapper = mountSubject();
     expect(wrapper.text()).toContain('alpha');
 
-    refs.actionInProgress.value = new Set(['beta']);
+    refs.actionInProgress.value = new Set(['c-progress-2']);
     await nextTick();
-    refs.actionInProgress.value = new Set(['gamma']);
+    refs.actionInProgress.value = new Set(['c-progress-3']);
     await nextTick();
 
     refs.tableActionStyle.value = 'icons';
-    refs.actionInProgress.value = new Set(['gamma']);
+    refs.actionInProgress.value = new Set(['c-progress-3']);
     await nextTick();
   });
 
@@ -1009,12 +1056,12 @@ describe('ContainersGroupedViews', () => {
         updatableCount: 4,
       },
     ];
-    refs.actionInProgress.value = new Set(['beta']);
+    refs.actionInProgress.value = new Set(['c-card-running']);
     mocked.context = context;
 
     const wrapper = mountSubject();
 
-    refs.actionInProgress.value = new Set(['gamma']);
+    refs.actionInProgress.value = new Set(['c-list-minor']);
     await nextTick();
 
     refs.containerActionsEnabled.value = false;

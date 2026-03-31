@@ -13,6 +13,7 @@ import {
   updateContainer as apiUpdateContainer,
 } from '../../services/container-actions';
 import type { Container } from '../../types/container';
+import { getContainerActionKey } from '../../utils/container-action-key';
 import { errorMessage, isNoUpdateAvailableError } from '../../utils/error';
 import { useContainerBackups } from './useContainerBackups';
 import { useContainerPolicy } from './useContainerPolicy';
@@ -50,7 +51,7 @@ function resolveContainerActionTargetKey(target: ContainerActionTarget): string 
   if (typeof target === 'string') {
     return target;
   }
-  return target.id || target.name;
+  return getContainerActionKey(target);
 }
 
 function resolveContainerActionTarget(
@@ -70,6 +71,7 @@ async function executeContainerActionState(args: {
   containerActionsEnabled: boolean;
   containerActionsDisabledReason: string;
   containerId?: string;
+  actionKey: string;
   name: string;
   actionInProgress: Ref<Set<string>>;
   inputError: Ref<string | null>;
@@ -90,11 +92,11 @@ async function executeContainerActionState(args: {
     return false;
   }
   const containerId = args.containerId;
-  if (!containerId || args.actionInProgress.value.has(args.name)) {
+  if (!containerId || args.actionInProgress.value.has(args.actionKey)) {
     return false;
   }
   const next = new Set(args.actionInProgress.value);
-  next.add(args.name);
+  next.add(args.actionKey);
   args.actionInProgress.value = next;
   args.inputError.value = null;
   const shouldReloadContainers = args.reloadContainers ?? true;
@@ -136,7 +138,7 @@ async function executeContainerActionState(args: {
     return false;
   } finally {
     const next = new Set(args.actionInProgress.value);
-    next.delete(args.name);
+    next.delete(args.actionKey);
     args.actionInProgress.value = next;
   }
 }
@@ -226,6 +228,7 @@ async function deleteContainerState(args: {
   containerActionsEnabled: boolean;
   containerActionsDisabledReason: string;
   containerId?: string;
+  actionKey: string;
   name: string;
   skipKey: string;
   actionInProgress: Ref<Set<string>>;
@@ -241,11 +244,11 @@ async function deleteContainerState(args: {
     return false;
   }
   const containerId = args.containerId;
-  if (!containerId || args.actionInProgress.value.has(args.name)) {
+  if (!containerId || args.actionInProgress.value.has(args.actionKey)) {
     return false;
   }
   const next = new Set(args.actionInProgress.value);
-  next.add(args.name);
+  next.add(args.actionKey);
   args.actionInProgress.value = next;
   try {
     await apiDeleteContainer(containerId);
@@ -266,7 +269,7 @@ async function deleteContainerState(args: {
     return false;
   } finally {
     const next = new Set(args.actionInProgress.value);
-    next.delete(args.name);
+    next.delete(args.actionKey);
     args.actionInProgress.value = next;
   }
 }
@@ -721,10 +724,12 @@ export function useContainerActions(input: UseContainerActionsInput) {
       input.containerIdMap.value,
       options?.containerId,
     );
+    const actionKey = containerId ?? resolveContainerActionTargetKey(target);
     return executeContainerActionState({
       containerActionsEnabled: containerActionsEnabled.value,
       containerActionsDisabledReason: containerActionsDisabledReason.value,
       containerId,
+      actionKey,
       name,
       actionInProgress,
       inputError: input.error,
@@ -767,10 +772,12 @@ export function useContainerActions(input: UseContainerActionsInput) {
 
   async function deleteContainer(target: ContainerActionTarget) {
     const { containerId, name } = resolveContainerActionTarget(target, input.containerIdMap.value);
+    const actionKey = containerId ?? resolveContainerActionTargetKey(target);
     return deleteContainerState({
       containerActionsEnabled: containerActionsEnabled.value,
       containerActionsDisabledReason: containerActionsDisabledReason.value,
       containerId,
+      actionKey,
       name,
       skipKey: resolveContainerActionTargetKey(target),
       actionInProgress,

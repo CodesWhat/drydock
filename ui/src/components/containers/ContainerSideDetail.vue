@@ -3,6 +3,7 @@ import AppIconButton from '@/components/AppIconButton.vue';
 import AppBadge from '@/components/AppBadge.vue';
 import AppTabBar from '@/components/AppTabBar.vue';
 import StatusDot from '@/components/StatusDot.vue';
+import { getContainerActionKey } from '../../utils/container-action-key';
 import ContainerSideTabContent from './ContainerSideTabContent.vue';
 import { useContainersViewTemplateContext } from './containersViewTemplateContext';
 
@@ -24,6 +25,10 @@ const {
   confirmForceUpdate,
   confirmDelete,
 } = useContainersViewTemplateContext();
+
+function isActionInProgress(container: { id?: unknown; name?: unknown }) {
+  return actionInProgress.value.has(getContainerActionKey(container));
+}
 </script>
 
 <template>
@@ -45,7 +50,7 @@ const {
             icon="stop"
             size="xs"
             variant="danger"
-            :disabled="actionInProgress.has(selectedContainer.name)"
+            :disabled="isActionInProgress(selectedContainer)"
             tooltip="Stop"
             @click="confirmStop(selectedContainer)" />
           <AppIconButton
@@ -53,21 +58,21 @@ const {
             icon="play"
             size="xs"
             variant="success"
-            :disabled="actionInProgress.has(selectedContainer.name)"
+            :disabled="isActionInProgress(selectedContainer)"
             tooltip="Start"
             @click="startContainer(selectedContainer)" />
           <AppIconButton
             icon="restart"
             size="xs"
             variant="muted"
-            :disabled="actionInProgress.has(selectedContainer.name)"
+            :disabled="isActionInProgress(selectedContainer)"
             tooltip="Restart"
             @click="confirmRestart(selectedContainer)" />
           <AppIconButton
             icon="security"
             size="xs"
             variant="secondary"
-            :disabled="actionInProgress.has(selectedContainer.name)"
+            :disabled="isActionInProgress(selectedContainer)"
             tooltip="Scan"
             @click="scanContainer(selectedContainer)" />
           <AppIconButton
@@ -75,7 +80,7 @@ const {
             icon="lock"
             size="xs"
             variant="danger"
-            :disabled="actionInProgress.has(selectedContainer.name)"
+            :disabled="isActionInProgress(selectedContainer)"
             tooltip="Blocked — Force Update"
             @click="confirmForceUpdate(selectedContainer)" />
           <AppIconButton
@@ -83,14 +88,14 @@ const {
             icon="cloud-download"
             size="xs"
             variant="success"
-            :disabled="actionInProgress.has(selectedContainer.name)"
+            :disabled="isActionInProgress(selectedContainer)"
             tooltip="Update"
             @click="confirmUpdate(selectedContainer)" />
           <AppIconButton
             icon="trash"
             size="xs"
             variant="danger"
-            :disabled="actionInProgress.has(selectedContainer.name)"
+            :disabled="isActionInProgress(selectedContainer)"
             tooltip="Delete"
             @click="confirmDelete(selectedContainer)" />
         </div>
