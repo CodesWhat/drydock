@@ -5,7 +5,7 @@ import * as event from '../../event/index.js';
 import log from '../../log/index.js';
 import * as storeContainer from '../../store/container.js';
 import * as notificationStore from '../../store/notification.js';
-import Trigger from './Trigger.js';
+import Trigger, { getNotificationEvent } from './Trigger.js';
 
 vi.mock('node-cron');
 vi.mock('../../log');
@@ -1189,6 +1189,21 @@ test('renderSimpleTitle should use dedicated template for agent reconnect events
   } as any;
 
   expect(trigger.renderSimpleTitle(container)).toBe('Agent servicevault reconnected');
+});
+
+test('getNotificationEvent should return reconnect metadata for agent reconnect containers', () => {
+  expect(
+    getNotificationEvent({
+      notificationEvent: {
+        kind: 'agent-reconnect',
+        agentName: 'servicevault',
+      },
+    } as any),
+  ).toEqual({
+    kind: 'agent-reconnect',
+    agentName: 'servicevault',
+    reason: undefined,
+  });
 });
 
 test('renderSimpleBody should use dedicated template for agent reconnect events', () => {
@@ -2799,6 +2814,16 @@ describe('digest mode', () => {
     await trigger.flushDigestBuffer();
     expect(triggerBatchSpy).not.toHaveBeenCalled();
     triggerBatchSpy.mockRestore();
+  });
+
+  test('deregisterComponent should unregister agent-connected handlers', async () => {
+    const unregisterAgentConnected = vi.fn();
+    trigger.unregisterAgentConnected = unregisterAgentConnected;
+
+    await trigger.deregisterComponent();
+
+    expect(unregisterAgentConnected).toHaveBeenCalledTimes(1);
+    expect(trigger.unregisterAgentConnected).toBeUndefined();
   });
 
   test('clearEventBatchDispatches should clear pending timers and buffered containers', () => {

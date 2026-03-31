@@ -150,7 +150,7 @@ function buildAgentReconnectedContainer(agentName: string): Container {
   return buildAgentContainer(agentName, 'connected', 'agent-reconnect');
 }
 
-function getNotificationEvent(container: Container): TriggerNotificationEvent | undefined {
+export function getNotificationEvent(container: Container): TriggerNotificationEvent | undefined {
   const notificationEvent = Reflect.get(new Object(container), 'notificationEvent');
   if (!notificationEvent || typeof notificationEvent !== 'object') {
     return undefined;
@@ -495,6 +495,8 @@ class Trigger extends Component {
     }
 
     try {
+      // Agent connectivity notifications synthesize one-off container payloads and should always
+      // dispatch immediately, even when the trigger itself is configured for batch updates.
       const shouldUseBatchMode =
         this.configuration.mode?.toLowerCase() === 'batch' &&
         getNotificationEvent(container) === undefined;
