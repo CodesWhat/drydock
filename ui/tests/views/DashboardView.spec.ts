@@ -1457,6 +1457,33 @@ describe('DashboardView', () => {
       );
     });
 
+    it('shows an inline error when update failure only contains the stale-update text as a substring', async () => {
+      mockUpdateContainer.mockRejectedValueOnce(
+        new Error('Proxy error: No update available for this container'),
+      );
+
+      const wrapper = await mountDashboard(
+        [pendingContainer],
+        [],
+        {},
+        {
+          recentStatuses: { nginx: 'pending' },
+        },
+      );
+      const initialFetchCount = mockGetAllContainers.mock.calls.length;
+      const { useConfirmDialog } = await import('@/composables/useConfirmDialog');
+      const confirm = useConfirmDialog();
+
+      await wrapper.find('[data-test="dashboard-update-btn"]').trigger('click');
+      await confirm.accept();
+      await flushPromises();
+
+      expect(mockGetAllContainers.mock.calls.length).toBe(initialFetchCount);
+      const updateError = wrapper.find('[data-test="dashboard-update-error"]');
+      expect(updateError.exists()).toBe(true);
+      expect(updateError.text()).toContain('Proxy error: No update available for this container');
+    });
+
     it('clears dashboard update error after a successful retry', async () => {
       mockUpdateContainer
         .mockRejectedValueOnce(new Error('temporary failure'))

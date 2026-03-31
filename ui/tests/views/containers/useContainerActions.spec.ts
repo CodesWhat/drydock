@@ -368,6 +368,31 @@ describe('useContainerActions', () => {
     expect(mocks.toastSuccess).not.toHaveBeenCalledWith('Updated: web');
   });
 
+  it('surfaces non-stale update errors that only contain the no-update text as a substring', async () => {
+    const container = makeContainer({ id: 'container-1', name: 'web', newTag: '1.1.0' });
+    const { composable, error, loadContainers } = await mountActionsHarness({
+      containers: [container],
+      selectedContainer: container,
+      selectedContainerId: container.id,
+      containerIdMap: { web: 'container-1' },
+    });
+    mocks.updateContainer.mockRejectedValueOnce(
+      new Error('Proxy error: No update available for this container'),
+    );
+    loadContainers.mockClear();
+
+    await composable.updateContainer('web');
+
+    expect(mocks.updateContainer).toHaveBeenCalledWith('container-1');
+    expect(loadContainers).toHaveBeenCalledTimes(1);
+    expect(error.value).toBe('Proxy error: No update available for this container');
+    expect(mocks.toastError).toHaveBeenCalledWith(
+      'Update failed: web',
+      'Proxy error: No update available for this container',
+    );
+    expect(mocks.toastSuccess).not.toHaveBeenCalledWith('Updated: web');
+  });
+
   it('validates snooze-until input before policy updates', async () => {
     const container = makeContainer({ id: 'container-1', name: 'web' });
     const { composable } = await mountActionsHarness({

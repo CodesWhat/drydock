@@ -1,4 +1,4 @@
-import { ApiError, errorMessage } from '@/utils/error';
+import { ApiError, errorMessage, errorMessageEquals } from '@/utils/error';
 
 describe('error utils', () => {
   it('constructs ApiError with message, status, and name', () => {
@@ -14,5 +14,26 @@ describe('error utils', () => {
     expect(errorMessage(new Error('disk full'))).toBe('disk full');
     expect(errorMessage('plain failure')).toBe('plain failure');
     expect(errorMessage({ code: 'E_UNKNOWN' }, 'Default message')).toBe('Default message');
+  });
+
+  it('matches exact error messages after normalization', () => {
+    expect(
+      errorMessageEquals(
+        new Error('No update available for this container'),
+        'No update available for this container',
+      ),
+    ).toBe(true);
+    expect(
+      errorMessageEquals(
+        new Error('  No update available for this container  '),
+        'No update available for this container',
+      ),
+    ).toBe(true);
+    expect(
+      errorMessageEquals(
+        new Error('Proxy error: No update available for this container'),
+        'No update available for this container',
+      ),
+    ).toBe(false);
   });
 });
