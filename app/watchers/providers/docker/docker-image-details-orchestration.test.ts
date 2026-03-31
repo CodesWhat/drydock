@@ -295,6 +295,92 @@ describe('docker image details orchestration module', () => {
     expect(containerInStore.image.registry.url).toBe('lscr.io');
   });
 
+  test('repairs stored digest-only image references with cached metadata when resolved image data is partial', async () => {
+    const containerInStore = {
+      id: 'container-1',
+      name: 'service',
+      displayName: 'service',
+      status: 'running',
+      error: undefined,
+      details: {
+        ports: [],
+        volumes: [],
+        env: [],
+      },
+      image: {
+        id: 'image-old',
+        name: 'acme/service',
+        registry: undefined,
+        tag: {
+          value: 'sha256:deadbeef',
+          semver: false,
+        },
+        digest: {
+          repo: 'sha256:old',
+          value: 'sha256:cached-value',
+          watch: false,
+        },
+        architecture: 'amd64',
+        os: 'linux',
+        variant: 'v8',
+        created: '2025-01-01T00:00:00.000Z',
+      },
+    };
+    vi.spyOn(storeContainer, 'getContainer').mockReturnValue(containerInStore as any);
+
+    const { watcher, inspectContainer, inspectImage } = createWatcher();
+    inspectContainer.mockResolvedValue({
+      Config: {
+        Image: 'acme/service:latest',
+      },
+    });
+    inspectImage.mockResolvedValue({
+      Id: 'image-new',
+      RepoDigests: [],
+    });
+    const helpers = createHelpers({
+      resolveImageName: vi.fn().mockReturnValue({
+        domain: undefined,
+        path: 'acme/service',
+        tag: 'latest',
+      }),
+      resolveTagName: vi.fn().mockReturnValue('latest'),
+    });
+
+    await addImageDetailsToContainerOrchestration(
+      watcher as any,
+      createDockerSummaryContainer({
+        Image: 'sha256:deadbeef',
+        Labels: undefined,
+      }),
+      {},
+      helpers as any,
+    );
+
+    expect(containerInStore.image).toMatchObject({
+      id: 'image-new',
+      name: 'acme/service',
+      registry: {
+        name: 'unknown',
+        url: '',
+      },
+      tag: {
+        value: 'latest',
+        semver: false,
+      },
+      digest: {
+        repo: undefined,
+        value: 'sha256:cached-value',
+        watch: false,
+      },
+      architecture: 'amd64',
+      os: 'linux',
+      variant: 'v8',
+      created: '2025-01-01T00:00:00.000Z',
+    });
+    expect(containerInStore.sourceRepo).toBeUndefined();
+  });
+
   test('skips container inspect when docker events are enabled and backfills digest value', async () => {
     const containerInStore = {
       id: 'container-1',
@@ -424,6 +510,73 @@ describe('docker image details orchestration module', () => {
       value: 'sha256:new',
       watch: true,
     });
+  });
+
+  test('keeps cached refresh behavior when stored digest-only image references cannot be reparsed', async () => {
+    const containerInStore = {
+      id: 'container-1',
+      name: 'service',
+      displayName: 'service',
+      status: 'running',
+      error: undefined,
+      details: {
+        ports: [],
+        volumes: [],
+        env: [],
+      },
+      image: {
+        id: 'image-old',
+        name: 'acme/service',
+        registry: {
+          name: 'ghcr',
+          url: 'ghcr.io',
+        },
+        tag: {
+          value: 'sha256:deadbeef',
+          semver: false,
+        },
+        digest: {
+          repo: 'sha256:old',
+          value: undefined,
+          watch: false,
+        },
+        created: '2025-01-01T00:00:00.000Z',
+      },
+    };
+    vi.spyOn(storeContainer, 'getContainer').mockReturnValue(containerInStore as any);
+
+    const { watcher, inspectContainer, inspectImage } = createWatcher();
+    inspectContainer.mockResolvedValue({
+      Config: {
+        Image: 'ghcr.io/acme/service:latest',
+      },
+    });
+    inspectImage.mockResolvedValue({
+      Id: 'image-new',
+      RepoDigests: ['ghcr.io/acme/service@sha256:new'],
+      Created: '2026-03-01T00:00:00.000Z',
+    });
+    const helpers = createHelpers({
+      resolveImageName: vi.fn().mockReturnValue(undefined),
+    });
+
+    await addImageDetailsToContainerOrchestration(
+      watcher as any,
+      createDockerSummaryContainer({
+        Image: 'sha256:deadbeef',
+      }),
+      {},
+      helpers as any,
+    );
+
+    expect(helpers.normalizeContainer).not.toHaveBeenCalled();
+    expect(containerInStore.image.id).toBe('image-new');
+    expect(containerInStore.image.digest).toEqual({
+      repo: 'sha256:new',
+      value: 'sha256:new',
+      watch: false,
+    });
+    expect(containerInStore.image.created).toBe('2026-03-01T00:00:00.000Z');
   });
 
   test('reconciles container status from Docker summary when it differs from store', async () => {
@@ -1065,6 +1218,35 @@ describe('docker image details orchestration module', () => {
         socket: '/var/run/docker.sock',
       },
     });
+
+    const result = await addImageDetailsToContainerOrchestration(
+      watcher as any,
+      createDockerSummaryContainer({
+        Id: 'new-container-id',
+        Names: ['/service'],
+      }),
+      {},
+      createHelpers() as any,
+    );
+
+    expect(result?.id).toBe('new-container-id');
+    expect(deleteContainerSpy).not.toHaveBeenCalled();
+  });
+
+  test('ignores stale same-name entries whose stored names are not strings', async () => {
+    vi.spyOn(storeContainer, 'getContainer').mockReturnValue(undefined);
+    vi.spyOn(storeContainer, 'getContainers').mockReturnValue([
+      {
+        id: 'old-container-invalid-name',
+        watcher: 'docker-test',
+        name: null,
+      } as any,
+    ]);
+    const deleteContainerSpy = vi
+      .spyOn(storeContainer, 'deleteContainer')
+      .mockImplementation(() => {});
+
+    const { watcher } = createWatcher();
 
     const result = await addImageDetailsToContainerOrchestration(
       watcher as any,

@@ -1226,3 +1226,4 @@ class Trigger extends Component {
 }
 
 export default Trigger;
+export const testable_resolveNotificationTemplate = resolveNotificationTemplate;

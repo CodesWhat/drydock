@@ -1733,6 +1733,29 @@ test('getNewImageFullName should use remote digest for digest-pinned updates', (
   );
 });
 
+test('getNewImageFullName should fall back to the current digest when a digest-pinned update omits remoteValue', () => {
+  const mockRegistry = {
+    getImageFullName: vi.fn(
+      (image, tagOrDigest) => `${image.registry.url}/${image.name}:${tagOrDigest}`,
+    ),
+  };
+  const containerDigestPinned = {
+    image: {
+      name: 'test/test',
+      tag: { value: 'sha256:currentdigest' },
+      registry: { url: 'my-registry' },
+    },
+    updateKind: { kind: 'digest', remoteValue: undefined },
+  };
+
+  docker.getNewImageFullName(mockRegistry, containerDigestPinned);
+
+  expect(mockRegistry.getImageFullName).toHaveBeenCalledWith(
+    containerDigestPinned.image,
+    'sha256:currentdigest',
+  );
+});
+
 test('getNewImageFullName should fall back to tag value when remoteValue is undefined', () => {
   const mockRegistry = {
     getImageFullName: (image, tagOrDigest) => `${image.registry.url}/${image.name}:${tagOrDigest}`,

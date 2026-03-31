@@ -5,7 +5,7 @@ import * as event from '../../event/index.js';
 import log from '../../log/index.js';
 import * as storeContainer from '../../store/container.js';
 import * as notificationStore from '../../store/notification.js';
-import Trigger, { getNotificationEvent } from './Trigger.js';
+import Trigger, { getNotificationEvent, testable_resolveNotificationTemplate } from './Trigger.js';
 
 vi.mock('node-cron');
 vi.mock('../../log');
@@ -1204,6 +1204,22 @@ test('getNotificationEvent should return reconnect metadata for agent reconnect 
     agentName: 'servicevault',
     reason: undefined,
   });
+});
+
+test('testable_resolveNotificationTemplate falls back when a notification kind has no dedicated template', () => {
+  expect(
+    testable_resolveNotificationTemplate(
+      {
+        kind: 'agent-reconnect',
+        agentName: 'servicevault',
+      },
+      {
+        'agent-disconnect': 'Agent ${event.agentName} disconnected',
+        'agent-reconnect': undefined as unknown as string,
+      },
+      'Fallback template',
+    ),
+  ).toBe('Fallback template');
 });
 
 test('renderSimpleBody should use dedicated template for agent reconnect events', () => {

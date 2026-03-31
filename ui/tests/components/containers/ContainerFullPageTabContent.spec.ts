@@ -428,8 +428,12 @@ describe('ContainerFullPageTabContent', () => {
     await findButtonByText(wrapper, 'Unsnooze')?.trigger('click');
 
     expect(mockRunContainerPreview).toHaveBeenCalledTimes(1);
-    expect(mockConfirmUpdate).toHaveBeenCalledWith('nginx');
-    expect(mockScanContainer).toHaveBeenCalledWith('nginx');
+    expect(mockConfirmUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'container-1', name: 'nginx' }),
+    );
+    expect(mockScanContainer).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'container-1', name: 'nginx' }),
+    );
     expect(mockSkipCurrentForSelected).toHaveBeenCalledTimes(1);
     expect(mockSnoozeSelected).toHaveBeenNthCalledWith(1, 1);
     expect(mockSnoozeSelected).toHaveBeenNthCalledWith(2, 7);
@@ -447,7 +451,9 @@ describe('ContainerFullPageTabContent', () => {
     expect(forceUpdateButton).toBeDefined();
 
     await forceUpdateButton?.trigger('click');
-    expect(mockConfirmForceUpdate).toHaveBeenCalledWith('nginx');
+    expect(mockConfirmForceUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'container-1', name: 'nginx' }),
+    );
   });
 
   it('wires maturity controls and renders mature-only policy summary', async () => {

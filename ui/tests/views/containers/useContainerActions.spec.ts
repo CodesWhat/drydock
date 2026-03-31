@@ -346,6 +346,33 @@ describe('useContainerActions', () => {
     expect(mocks.scanContainer).not.toHaveBeenCalled();
   });
 
+  it('runs action handlers for object targets and falls back to target names when ids are omitted', async () => {
+    const container = makeContainer({ id: 'container-1', name: 'web' });
+    const { composable } = await mountActionsHarness({
+      selectedContainer: container,
+      selectedContainerId: container.id,
+      containerIdMap: { web: 'container-1' },
+    });
+
+    await composable.startContainer({ id: 'container-1', name: 'web' });
+    await composable.scanContainer({ id: 'container-1', name: 'web' });
+    composable.confirmForceUpdate({
+      name: 'web',
+    } as unknown as Parameters<typeof composable.confirmForceUpdate>[0]);
+    const forceCall = mocks.confirmRequire.mock.calls.at(-1)?.[0] as {
+      accept?: () => Promise<unknown>;
+    };
+    await forceCall.accept?.();
+
+    expect(mocks.startContainer).toHaveBeenCalledWith('container-1');
+    expect(mocks.scanContainer).toHaveBeenCalledWith('container-1');
+    expect(mocks.updateContainerPolicy).toHaveBeenCalledWith('container-1', 'clear', {});
+    expect(mocks.updateContainer).toHaveBeenCalledWith('container-1');
+    expect(mocks.toastSuccess).toHaveBeenCalledWith('Started: web');
+    expect(mocks.toastSuccess).toHaveBeenCalledWith('Scan triggered: web');
+    expect(mocks.toastSuccess).toHaveBeenCalledWith('Force updated: web');
+  });
+
   it('refreshes container state instead of surfacing an error when update reports no update available', async () => {
     const container = makeContainer({ id: 'container-1', name: 'web', newTag: '1.1.0' });
     const { composable, error, loadContainers } = await mountActionsHarness({
@@ -1076,6 +1103,47 @@ describe('useContainerActions', () => {
     expect(mocks.toastSuccess).toHaveBeenCalledWith('Force updated: web');
   });
 
+  it('wires confirm handlers for object targets and falls back to names when ids are omitted', async () => {
+    const web = makeContainer({ id: 'container-1', name: 'web', newTag: '1.1.0' });
+    const api = makeContainer({ id: 'container-2', name: 'api' });
+    const { composable, closeFullPage, closePanel, loadContainers } = await mountActionsHarness({
+      selectedContainer: api,
+      selectedContainerId: api.id,
+      containerIdMap: { web: web.id, api: api.id },
+    });
+
+    composable.confirmStop({ id: web.id, name: web.name });
+    composable.confirmRestart({ id: web.id, name: web.name });
+    composable.confirmUpdate({ id: web.id, name: web.name });
+    composable.confirmDelete({ name: web.name } as unknown as Parameters<
+      typeof composable.confirmDelete
+    >[0]);
+
+    expect(mocks.confirmRequire).toHaveBeenCalledTimes(4);
+    const [stopCall, restartCall, updateCall, deleteCall] = mocks.confirmRequire.mock.calls.map(
+      (call) => call[0] as { header: string; accept?: () => Promise<unknown> },
+    );
+
+    expect(stopCall.header).toBe('Stop Container');
+    expect(restartCall.header).toBe('Restart Container');
+    expect(updateCall.header).toBe('Update Container');
+    expect(deleteCall.header).toBe('Delete Container');
+
+    await stopCall.accept?.();
+    await restartCall.accept?.();
+    await updateCall.accept?.();
+    const deleted = await deleteCall.accept?.();
+
+    expect(deleted).toBe(true);
+    expect(mocks.stopContainer).toHaveBeenCalledWith(web.id);
+    expect(mocks.restartContainer).toHaveBeenCalledWith(web.id);
+    expect(mocks.updateContainer).toHaveBeenCalledWith(web.id);
+    expect(mocks.deleteContainer).toHaveBeenCalledWith(web.id);
+    expect(closeFullPage).not.toHaveBeenCalled();
+    expect(closePanel).not.toHaveBeenCalled();
+    expect(loadContainers).toHaveBeenCalledTimes(4);
+  });
+
   it('wires update confirmation dialog to update accept handler', async () => {
     const container = makeContainer({ id: 'container-1', name: 'web', newTag: '1.1.0' });
     const { composable } = await mountActionsHarness({
@@ -1674,6 +1742,91 @@ describe('useContainerActions', () => {
     expect(mocks.getContainerTriggers).not.toHaveBeenCalled();
     expect(mocks.getBackups).not.toHaveBeenCalled();
     expect(mocks.getContainerUpdateOperations).not.toHaveBeenCalled();
+  });
+
+  it('prefers selected container ids when resolving selected update policy metadata', async () => {
+    const container = makeContainer({ id: 'container-1', name: 'web' });
+    const { composable } = await mountActionsHarness({
+      selectedContainer: container,
+      selectedContainerId: container.id,
+      containers: [container],
+      containerIdMap: { web: 'container-1' },
+      containerMetaMap: {
+        'container-1': {
+          updatePolicy: {
+            skipTags: ['by-id'],
+            skipDigests: ['sha256:by-id'],
+          },
+        },
+      },
+    });
+
+    expect(composable.selectedUpdatePolicy.value).toEqual({
+      skipTags: ['by-id'],
+      skipDigests: ['sha256:by-id'],
+    });
+    expect(composable.selectedSkipTags.value).toEqual(['by-id']);
+    expect(composable.selectedSkipDigests.value).toEqual(['sha256:by-id']);
+  });
+
+  it('falls back to selected container names when selected ids are missing', async () => {
+    const selectedContainer = {
+      ...makeContainer({ name: 'web' }),
+      id: undefined,
+    } as unknown as Container;
+    const { composable } = await mountActionsHarness({
+      selectedContainer,
+      selectedContainerId: undefined,
+      containerIdMap: { web: 'container-1' },
+      containerMetaMap: {
+        web: {
+          updatePolicy: {
+            skipTags: ['by-name'],
+          },
+        },
+      },
+    });
+
+    expect(composable.selectedUpdatePolicy.value).toEqual({
+      skipTags: ['by-name'],
+    });
+
+    await composable.skipCurrentForSelected();
+
+    expect(mocks.updateContainerPolicy).toHaveBeenCalledWith('container-1', 'skip-current', {});
+    expect(composable.skippedUpdates.value.has('web')).toBe(true);
+  });
+
+  it('returns an empty selected update policy when the selected container has no id or name', async () => {
+    const { composable } = await mountActionsHarness({
+      selectedContainer: {
+        id: undefined,
+        name: '',
+      } as unknown as Container,
+      selectedContainerId: undefined,
+      containerMetaMap: {
+        web: {
+          updatePolicy: {
+            skipTags: ['ignored'],
+          },
+        },
+      },
+    });
+
+    expect(composable.selectedUpdatePolicy.value).toEqual({});
+  });
+
+  it('guards selected update policy name fallback when only an id is present', async () => {
+    const { composable } = await mountActionsHarness({
+      selectedContainer: {
+        id: 'container-1',
+        name: '',
+      } as unknown as Container,
+      selectedContainerId: 'container-1',
+      containerMetaMap: {},
+    });
+
+    expect(composable.selectedUpdatePolicy.value).toEqual({});
   });
 
   it('refreshes actions-tab detail data after action execution and skip updates', async () => {

@@ -2369,6 +2369,47 @@ describe('Docker Watcher', () => {
       });
     });
 
+    test('pruneOldContainers should treat non-string stale names as empty replacement candidates', async () => {
+      const dockerApi = {
+        getContainer: vi.fn().mockReturnValue({
+          inspect: vi.fn().mockResolvedValue({
+            State: {
+              Status: 'exited',
+            },
+          }),
+        }),
+      };
+
+      await testable_pruneOldContainers(
+        [
+          {
+            id: 'new-1',
+            watcher: 'docker',
+            name: 'app',
+          },
+        ] as any,
+        [
+          {
+            id: 'old-1',
+            watcher: 'docker',
+            name: null,
+          },
+        ] as any,
+        dockerApi as any,
+      );
+
+      expect(dockerApi.getContainer).toHaveBeenCalledWith('old-1');
+      expect(storeContainer.updateContainer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'old-1',
+          status: 'exited',
+        }),
+      );
+      expect(storeContainer.deleteContainer).not.toHaveBeenCalledWith('old-1', {
+        replacementExpected: true,
+      });
+    });
+
     test('pruneOldContainers should force-delete stale ids skipped during alias filtering', async () => {
       const dockerApi = {
         getContainer: vi.fn().mockReturnValue({
