@@ -47,11 +47,12 @@ function demuxDockerStream(buffer: Buffer | string): string {
   const buf = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
   const lines: string[] = [];
   let offset = 0;
+  // Stryker disable next-line EqualityOperator, BlockStatement: exact-header remainder is equivalent and block removal creates an artificial infinite loop.
   while (offset + 8 <= buf.length) {
     const size = buf.readUInt32BE(offset + 4);
     offset += 8;
     if (offset + size > buf.length) break;
-    lines.push(buf.subarray(offset, offset + size).toString('utf-8'));
+    lines.push(buf.subarray(offset, offset + size).toString());
     offset += size;
   }
   return lines.join('');

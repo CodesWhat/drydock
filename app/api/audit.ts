@@ -5,6 +5,7 @@ import { sendErrorResponse } from './error-response.js';
 import { buildPaginationLinks } from './pagination-links.js';
 
 const router = express.Router();
+// Stryker disable next-line Regex: validation behavior is covered by route tests, but module-scope regex mutants survive under the vitest runner.
 const SAFE_AUDIT_FILTER_PATTERN = /^[a-zA-Z0-9._-]+$/;
 
 type AuditEntriesQuery = {
@@ -47,14 +48,18 @@ function getQueryStringValue(value: unknown): string | undefined {
   return undefined;
 }
 
+function parseOptionalIntegerQueryParam(value: unknown): number {
+  return Number.parseInt(String(getQueryStringValue(value)), 10);
+}
+
 /**
  * Get audit log entries.
  * @param req
  * @param res
  */
 function getAuditEntries(req: Request, res: Response) {
-  const parsedOffset = Number.parseInt(getQueryStringValue(req.query.offset) || '', 10);
-  const parsedLimit = Number.parseInt(getQueryStringValue(req.query.limit) || '', 10);
+  const parsedOffset = parseOptionalIntegerQueryParam(req.query.offset);
+  const parsedLimit = parseOptionalIntegerQueryParam(req.query.limit);
   const offset = Math.max(0, Number.isFinite(parsedOffset) ? parsedOffset : 0);
   const limit = Math.min(200, Math.max(1, Number.isFinite(parsedLimit) ? parsedLimit : 50));
   const skip = offset;
@@ -85,22 +90,22 @@ function getAuditEntries(req: Request, res: Response) {
   }
 
   const query: AuditEntriesQuery = { skip, limit };
-  if (action) {
+  if (action !== undefined) {
     query.action = action;
   }
-  if (validatedActions) {
+  if (validatedActions !== undefined) {
     query.actions = validatedActions;
   }
-  if (container) {
+  if (container !== undefined) {
     query.container = container;
   }
 
   const from = getValidatedDateQueryParam(req.query.from);
   const to = getValidatedDateQueryParam(req.query.to);
-  if (from) {
+  if (from !== undefined) {
     query.from = from;
   }
-  if (to) {
+  if (to !== undefined) {
     query.to = to;
   }
 

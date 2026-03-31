@@ -45,6 +45,12 @@ describe('Audit Router', () => {
 
     handler(req, res);
 
+    const query = mockGetAuditEntries.mock.calls[0][0];
+    expect(query).not.toHaveProperty('action');
+    expect(query).not.toHaveProperty('actions');
+    expect(query).not.toHaveProperty('container');
+    expect(query).not.toHaveProperty('from');
+    expect(query).not.toHaveProperty('to');
     expect(mockGetAuditEntries).toHaveBeenCalledWith({
       skip: 0,
       limit: 50,
@@ -102,6 +108,56 @@ describe('Audit Router', () => {
     });
   });
 
+  test('should ignore empty action and container filters', () => {
+    auditRouter.init();
+    const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/')[1];
+
+    mockGetAuditEntries.mockReturnValue({ entries: [], total: 0 });
+
+    const req = createMockRequest({
+      query: {
+        action: '',
+        container: '',
+      },
+    });
+    const res = createMockResponse();
+
+    handler(req, res);
+
+    const query = mockGetAuditEntries.mock.calls[0][0];
+    expect(query).not.toHaveProperty('action');
+    expect(query).not.toHaveProperty('container');
+    expect(mockGetAuditEntries).toHaveBeenCalledWith({
+      skip: 0,
+      limit: 50,
+    });
+  });
+
+  test('should ignore empty from and to date filters', () => {
+    auditRouter.init();
+    const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/')[1];
+
+    mockGetAuditEntries.mockReturnValue({ entries: [], total: 0 });
+
+    const req = createMockRequest({
+      query: {
+        from: '',
+        to: '',
+      },
+    });
+    const res = createMockResponse();
+
+    handler(req, res);
+
+    const query = mockGetAuditEntries.mock.calls[0][0];
+    expect(query).not.toHaveProperty('from');
+    expect(query).not.toHaveProperty('to');
+    expect(mockGetAuditEntries).toHaveBeenCalledWith({
+      skip: 0,
+      limit: 50,
+    });
+  });
+
   test('should accept first value when offset/limit are provided as query arrays', () => {
     auditRouter.init();
     const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/')[1];
@@ -120,6 +176,48 @@ describe('Audit Router', () => {
     expect(mockGetAuditEntries).toHaveBeenCalledWith({
       skip: 40,
       limit: 20,
+    });
+  });
+
+  test('should ignore non-array indexed values for offset and limit', () => {
+    auditRouter.init();
+    const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/')[1];
+    mockGetAuditEntries.mockReturnValue({ entries: [], total: 0 });
+
+    const req = createMockRequest({
+      query: {
+        offset: { 0: '40' },
+        limit: { 0: '20' },
+      },
+    });
+    const res = createMockResponse();
+
+    handler(req, res);
+
+    expect(mockGetAuditEntries).toHaveBeenCalledWith({
+      skip: 0,
+      limit: 50,
+    });
+  });
+
+  test('should ignore array offset and limit values when the first item is not a string', () => {
+    auditRouter.init();
+    const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/')[1];
+    mockGetAuditEntries.mockReturnValue({ entries: [], total: 0 });
+
+    const req = createMockRequest({
+      query: {
+        offset: [40, '99'],
+        limit: [20, '99'],
+      },
+    });
+    const res = createMockResponse();
+
+    handler(req, res);
+
+    expect(mockGetAuditEntries).toHaveBeenCalledWith({
+      skip: 0,
+      limit: 50,
     });
   });
 

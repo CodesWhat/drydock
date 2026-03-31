@@ -6,8 +6,18 @@ import * as registry from '../../registry/index.js';
 import * as storeContainer from '../../store/container.js';
 import * as containerApi from './container.js';
 
+const { mockLogger, mockLoggerChild } = vi.hoisted(() => ({
+  mockLogger: {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+  },
+  mockLoggerChild: vi.fn(() => mockLogger),
+}));
+
 vi.mock('../../log/index.js', () => ({
-  default: { child: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }) },
+  default: { child: mockLoggerChild },
 }));
 
 vi.mock('../../store/container.js', () => ({
@@ -39,6 +49,15 @@ describe('agent API container', () => {
   });
 
   describe('getContainers', () => {
+    test('should create a component-scoped logger during module initialization', async () => {
+      vi.resetModules();
+      mockLoggerChild.mockClear();
+
+      await import('./container.js');
+
+      expect(mockLoggerChild).toHaveBeenCalledWith({ component: 'agent-api-container' });
+    });
+
     test('should return raw containers without redaction', () => {
       const containers = [{ id: 'c1' }, { id: 'c2' }];
       storeContainer.getContainersRaw.mockReturnValue(containers);
@@ -127,8 +146,64 @@ describe('agent API container', () => {
 
       expect(storeContainer.getContainer).toHaveBeenCalledWith('c1');
       expect(mockWatcher.dockerApi.getContainer).toHaveBeenCalledWith('my-container');
+      expect(mockDockerContainer.logs).toHaveBeenCalledWith({
+        stdout: true,
+        stderr: true,
+        tail: 100,
+        since: 0,
+        timestamps: true,
+        follow: false,
+      });
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({ logs: 'log output' });
+    });
+
+    test('should concatenate multiple docker log frames without separators', async () => {
+      const mockLogs = Buffer.concat([
+        dockerStreamBuffer('line one\n'),
+        dockerStreamBuffer('line two\n'),
+      ]);
+      const mockDockerContainer = { logs: vi.fn().mockResolvedValue(mockLogs) };
+      const mockWatcher = {
+        dockerApi: { getContainer: vi.fn().mockReturnValue(mockDockerContainer) },
+      };
+      storeContainer.getContainer.mockReturnValue({
+        id: 'c1',
+        name: 'my-container',
+        watcher: 'local',
+      });
+      registry.getState.mockReturnValue({ watcher: { 'docker.local': mockWatcher }, trigger: {} });
+      req.params.id = 'c1';
+      req.query = {};
+
+      await containerApi.getContainerLogs(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({ logs: 'line one\nline two\n' });
+    });
+
+    test('should pass numeric tail and since query parameters to docker logs', async () => {
+      const mockDockerContainer = { logs: vi.fn().mockResolvedValue(Buffer.alloc(0)) };
+      const mockWatcher = {
+        dockerApi: { getContainer: vi.fn().mockReturnValue(mockDockerContainer) },
+      };
+      storeContainer.getContainer.mockReturnValue({
+        id: 'c1',
+        name: 'my-container',
+        watcher: 'local',
+      });
+      registry.getState.mockReturnValue({ watcher: { 'docker.local': mockWatcher }, trigger: {} });
+      req.params.id = 'c1';
+      req.query = { tail: '25', since: '1700000000' };
+
+      await containerApi.getContainerLogs(req, res);
+
+      expect(mockDockerContainer.logs).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tail: 25,
+          since: 1700000000,
+        }),
+      );
     });
 
     test('should return 500 when docker API fails', async () => {
@@ -145,6 +220,9 @@ describe('agent API container', () => {
       req.params.id = 'c1';
       req.query = {};
       await containerApi.getContainerLogs(req, res);
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        'Error fetching container logs for c1 (docker error)',
+      );
       expect(res.status).toHaveBeenCalledWith(500);
       expect(res.json).toHaveBeenCalledWith({ error: 'Error fetching container logs' });
     });
