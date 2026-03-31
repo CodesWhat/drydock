@@ -64,7 +64,10 @@ function parseArgs(argv) {
     usage('Missing one or more required arguments');
   }
 
-  if (args.expectedCount !== null && (!Number.isInteger(args.expectedCount) || args.expectedCount < 1)) {
+  if (
+    args.expectedCount !== null &&
+    (!Number.isInteger(args.expectedCount) || args.expectedCount < 1)
+  ) {
     usage('--expected-count must be a positive integer');
   }
 
@@ -105,7 +108,8 @@ function finalizeCounts(counts) {
   counts.covered = counts.detected + counts.survived;
   counts.invalid = counts.runtimeErrors + counts.compileErrors;
   counts.valid = counts.detected + counts.undetected;
-  counts.mutationScore = counts.valid === 0 ? 0 : Number(((counts.detected / counts.valid) * 100).toFixed(2));
+  counts.mutationScore =
+    counts.valid === 0 ? 0 : Number(((counts.detected / counts.valid) * 100).toFixed(2));
   counts.coveredMutationScore =
     counts.covered === 0 ? 0 : Number(((counts.detected / counts.covered) * 100).toFixed(2));
   return counts;
