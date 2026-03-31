@@ -121,6 +121,8 @@ jobs:
     runs-on: ubuntu-latest
     environment: mutation
     continue-on-error: true
+    env:
+      STRYKER_DASHBOARD_API_KEY: ${{ secrets.STRYKER_DASHBOARD_API_KEY }}
 
     steps:
       - name: Harden Runner
@@ -157,21 +159,21 @@ jobs:
         shell: bash
         run: |
           if [[ -f artifacts/aggregate/summary.json ]]; then
-            node - <<'NODE'
-            const fs = require('fs');
-            const summary = JSON.parse(fs.readFileSync('artifacts/aggregate/summary.json', 'utf8'));
+            node -e '
+            const fs = require("fs");
+            const summary = JSON.parse(fs.readFileSync("artifacts/aggregate/summary.json", "utf8"));
             const totals = summary.totals;
             const lines = [
-              '### Aggregate Mutation Score',
-              `- Reports aggregated: ${summary.mutationReportCount}.`,
-              `- Mutation score: ${totals.mutationScore.toFixed(2)}%.`,
-              `- Detected / valid: ${totals.detected} / ${totals.valid}.`,
-              `- Undetected: ${totals.undetected}.`,
-              `- Invalid: ${totals.invalid}.`,
-              `- Ignored: ${totals.ignored}.`,
+              "### Aggregate Mutation Score",
+              "- Reports aggregated: " + summary.mutationReportCount + ".",
+              "- Mutation score: " + totals.mutationScore.toFixed(2) + "%.",
+              "- Detected / valid: " + totals.detected + " / " + totals.valid + ".",
+              "- Undetected: " + totals.undetected + ".",
+              "- Invalid: " + totals.invalid + ".",
+              "- Ignored: " + totals.ignored + ".",
             ];
-            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${lines.join('\n')}\n`);
-            NODE
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join("\n") + "\n");
+            '
           else
             {
               echo "### Aggregate Mutation Score"
@@ -180,9 +182,7 @@ jobs:
           fi
 
       - name: Publish aggregate mutation score to dashboard
-        if: success() && secrets.STRYKER_DASHBOARD_API_KEY != ''
-        env:
-          STRYKER_DASHBOARD_API_KEY: ${{ secrets.STRYKER_DASHBOARD_API_KEY }}
+        if: ${{ success() && env.STRYKER_DASHBOARD_API_KEY != '' }}
         run: |
           curl \
             --fail-with-body \
