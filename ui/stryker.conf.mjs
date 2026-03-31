@@ -31,6 +31,7 @@ const config = {
     configFile: 'vitest.config.ts',
     related: false,
   },
+  incremental: true,
   thresholds: {
     high: 80,
     low: 70,

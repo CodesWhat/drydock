@@ -25,7 +25,7 @@ jobs:
     name: "🧬 Quality: Stryker Advisory (${{ matrix.package }})"
     runs-on: ubuntu-latest
     environment: mutation
-    timeout-minutes: 60  # Mutation testing is intentionally expensive; cap runaway mutants
+    timeout-minutes: 360  # GitHub Actions maximum; mutation testing is expensive and advisory-only
     continue-on-error: true  # advisory by policy; review results, then file focused follow-up work
     env:
       STRYKER_DASHBOARD_API_KEY: ${{ secrets.STRYKER_DASHBOARD_API_KEY }}
