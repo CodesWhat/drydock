@@ -127,8 +127,8 @@ describe('ContainerFullPageDetail', () => {
   });
 
   describe('disabled state during action', () => {
-    it('disables action buttons when actionInProgress matches container name', () => {
-      actionInProgress.value = new Set(['nginx']);
+    it('disables action buttons when actionInProgress matches container id', () => {
+      actionInProgress.value = new Set(['container-1']);
       const wrapper = factory();
       const actionButtons = wrapper
         .findAll('button')
@@ -139,7 +139,7 @@ describe('ContainerFullPageDetail', () => {
     });
 
     it('does not disable buttons when actionInProgress is a different container', () => {
-      actionInProgress.value = new Set(['other-container']);
+      actionInProgress.value = new Set(['other-container-id']);
       const wrapper = factory();
       const actionButtons = wrapper
         .findAll('button')
@@ -150,7 +150,7 @@ describe('ContainerFullPageDetail', () => {
     });
 
     it('applies opacity-50 class when disabled', () => {
-      actionInProgress.value = new Set(['nginx']);
+      actionInProgress.value = new Set(['container-1']);
       const wrapper = factory();
       const stopBtn = wrapper.find('button[aria-label="Stop container"]');
       expect(stopBtn.classes()).toContain('opacity-50');

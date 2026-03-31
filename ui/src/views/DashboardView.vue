@@ -7,7 +7,7 @@ import { useBreakpoints } from '../composables/useBreakpoints';
 import { useConfirmDialog } from '../composables/useConfirmDialog';
 import { ROUTES } from '../router/routes';
 import { updateContainer } from '../services/container-actions';
-import { errorMessage } from '../utils/error';
+import { errorMessage, isNoUpdateAvailableError } from '../utils/error';
 import { summarizeContainerResourceUsage } from '../utils/stats-summary';
 import DashboardHostStatusWidget from './dashboard/components/DashboardHostStatusWidget.vue';
 import DashboardRecentUpdatesWidget from './dashboard/components/DashboardRecentUpdatesWidget.vue';
@@ -36,6 +36,10 @@ const gridMargin = computed<[number, number]>(() => {
 const dashboardUpdateInProgress = ref<string | null>(null);
 const dashboardUpdateAllInProgress = ref(false);
 const dashboardUpdateError = ref<string | null>(null);
+
+function isStaleDashboardUpdateError(error: unknown): boolean {
+  return isNoUpdateAvailableError(error);
+}
 
 function navigateTo(route: RouteLocationRaw) {
   router.push(route);
@@ -205,7 +209,11 @@ function confirmDashboardUpdate(row: Pick<RecentUpdateRow, 'id' | 'name'>) {
         await updateContainer(row.id);
         await fetchDashboardData();
       } catch (e: unknown) {
-        dashboardUpdateError.value = errorMessage(e, `Failed to update ${row.name}`);
+        if (isStaleDashboardUpdateError(e)) {
+          await fetchDashboardData();
+        } else {
+          dashboardUpdateError.value = errorMessage(e, `Failed to update ${row.name}`);
+        }
       } finally {
         dashboardUpdateInProgress.value = null;
       }
@@ -318,7 +326,9 @@ function confirmDashboardUpdateAll() {
             :max-w="WIDGET_CONSTRAINTS[item.i as DashboardWidgetId]?.maxW ?? 12"
             :max-h="WIDGET_CONSTRAINTS[item.i as DashboardWidgetId]?.maxH ?? 20"
             drag-ignore-from="input, textarea, button, a, select, .no-drag"
+            drag-allow-from=".drag-handle"
             class="dd-grid-item"
+            :style="editMode ? { touchAction: 'pan-y' } : undefined"
             @dragstart="onWidgetDragStart(item.i as DashboardWidgetId, $event)"
             @dragover="onWidgetDragOver(item.i as DashboardWidgetId, $event)"
             @drop="onWidgetDrop(item.i as DashboardWidgetId, $event)"
@@ -593,6 +603,7 @@ function confirmDashboardUpdateAll() {
   background: var(--dd-neutral-muted);
   border-radius: var(--dd-radius);
   padding: 2px 6px;
+  touch-action: none;
   opacity: 0.8;
   transition: opacity 150ms ease, background-color 150ms ease, color 150ms ease;
 }
@@ -616,6 +627,7 @@ function confirmDashboardUpdateAll() {
   border-radius: var(--dd-radius);
   right: 6px;
   bottom: 6px;
+  touch-action: none;
   transition: opacity 150ms ease, background-color 150ms ease;
 }
 

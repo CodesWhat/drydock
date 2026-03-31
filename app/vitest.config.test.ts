@@ -8,6 +8,7 @@ describe('vitest coverage configuration', () => {
       '**/node_modules/**',
       '**/dist/**',
       '**/coverage/**',
+      '**/.stryker-tmp/**',
       '**/*.d.ts',
       '**/*.typecheck.ts',
       '**/auth-types.ts',

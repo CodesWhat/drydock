@@ -1161,10 +1161,10 @@ describe('SSE Router', () => {
       const { res } = connectSseClient(handler);
       const onAgentConnected = mockRegisterAgentConnected.mock.calls.at(-1)[0];
 
-      onAgentConnected({ agentName: 'edge-1' });
+      onAgentConnected({ agentName: 'edge-1', reconnected: false });
 
       expect(res.write).toHaveBeenCalledWith(
-        'event: dd:agent-connected\ndata: {"agentName":"edge-1"}\n\n',
+        'event: dd:agent-connected\ndata: {"agentName":"edge-1","reconnected":false}\n\n',
       );
     });
 

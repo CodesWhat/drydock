@@ -425,6 +425,7 @@ export function isDigestToWatch(
   parsedImage: ParsedImageLike,
   isSemver: boolean,
   tagPrecision: TagPrecision,
+  currentTag?: string,
 ) {
   const domain = parsedImage.domain;
   const isDockerHub =
@@ -443,6 +444,12 @@ export function isDigestToWatch(
   // Specific semver releases (1.4.5) — immutable, no digest watching needed
   if (isSemver && tagPrecision === 'specific') {
     return false;
+  }
+
+  // Digest-pinned images have no meaningful tag-comparison path, so enable
+  // digest watching even on Docker Hub when the current ref is already sha256-based.
+  if (typeof currentTag === 'string' && currentTag.startsWith('sha256:')) {
+    return true;
   }
 
   // Floating tags (v3, 1, 1.4, latest, stable)

@@ -282,7 +282,7 @@ describe('useContainerActions', () => {
       selectedContainer: container,
       selectedContainerId: container.id,
     });
-    composable.skippedUpdates.value.add('web');
+    composable.skippedUpdates.value.add('container-1');
     mocks.getBackups.mockClear();
     mocks.getContainerUpdateOperations.mockClear();
     loadContainers.mockClear();
@@ -291,7 +291,7 @@ describe('useContainerActions', () => {
 
     expect(mocks.rollback).toHaveBeenCalledWith('container-1', 'backup-1');
     expect(composable.rollbackMessage.value).toBe('Rollback completed from selected backup');
-    expect(composable.skippedUpdates.value.has('web')).toBe(false);
+    expect(composable.skippedUpdates.value.has('container-1')).toBe(false);
     expect(loadContainers).toHaveBeenCalledTimes(1);
     expect(mocks.getBackups).toHaveBeenCalledTimes(1);
     expect(mocks.getContainerUpdateOperations).toHaveBeenCalledTimes(1);
@@ -315,7 +315,7 @@ describe('useContainerActions', () => {
 
     expect(mocks.updateContainerPolicy).toHaveBeenCalledWith('container-1', 'skip-current', {});
     expect(composable.policyMessage.value).toBe('Skipped current update for web');
-    expect(composable.skippedUpdates.value.has('web')).toBe(true);
+    expect(composable.skippedUpdates.value.has('container-1')).toBe(true);
     expect(loadContainers).toHaveBeenCalledTimes(1);
     expect(mocks.getContainerTriggers).toHaveBeenCalledTimes(1);
     expect(mocks.getBackups).toHaveBeenCalledTimes(1);
@@ -344,6 +344,104 @@ describe('useContainerActions', () => {
     await composable.scanContainer('api');
     expect(mocks.updateContainer).not.toHaveBeenCalled();
     expect(mocks.scanContainer).not.toHaveBeenCalled();
+  });
+
+  it('runs action handlers for object targets and falls back to target names when ids are omitted', async () => {
+    const container = makeContainer({ id: 'container-1', name: 'web' });
+    const { composable } = await mountActionsHarness({
+      selectedContainer: container,
+      selectedContainerId: container.id,
+      containerIdMap: { web: 'container-1' },
+    });
+
+    await composable.startContainer({ id: 'container-1', name: 'web' });
+    await composable.scanContainer({ id: 'container-1', name: 'web' });
+    composable.confirmForceUpdate({
+      name: 'web',
+    } as unknown as Parameters<typeof composable.confirmForceUpdate>[0]);
+    const forceCall = mocks.confirmRequire.mock.calls.at(-1)?.[0] as {
+      accept?: () => Promise<unknown>;
+    };
+    await forceCall.accept?.();
+
+    expect(mocks.startContainer).toHaveBeenCalledWith('container-1');
+    expect(mocks.scanContainer).toHaveBeenCalledWith('container-1');
+    expect(mocks.updateContainerPolicy).toHaveBeenCalledWith('container-1', 'clear', {});
+    expect(mocks.updateContainer).toHaveBeenCalledWith('container-1');
+    expect(mocks.toastSuccess).toHaveBeenCalledWith('Started: web');
+    expect(mocks.toastSuccess).toHaveBeenCalledWith('Scan triggered: web');
+    expect(mocks.toastSuccess).toHaveBeenCalledWith('Force updated: web');
+  });
+
+  it('refreshes container state instead of surfacing an error when update reports no update available', async () => {
+    const container = makeContainer({ id: 'container-1', name: 'web', newTag: '1.1.0' });
+    const { composable, error, loadContainers } = await mountActionsHarness({
+      containers: [container],
+      selectedContainer: container,
+      selectedContainerId: container.id,
+      containerIdMap: { web: 'container-1' },
+    });
+    mocks.updateContainer.mockRejectedValueOnce(
+      new Error('No update available for this container'),
+    );
+    loadContainers.mockClear();
+
+    await composable.updateContainer('web');
+
+    expect(mocks.updateContainer).toHaveBeenCalledWith('container-1');
+    expect(loadContainers).toHaveBeenCalledTimes(1);
+    expect(error.value).toBeNull();
+    expect(mocks.toastError).not.toHaveBeenCalled();
+    expect(mocks.toastSuccess).not.toHaveBeenCalledWith('Updated: web');
+  });
+
+  it('surfaces non-stale update errors that only contain the no-update text as a substring', async () => {
+    const container = makeContainer({ id: 'container-1', name: 'web', newTag: '1.1.0' });
+    const { composable, error, loadContainers } = await mountActionsHarness({
+      containers: [container],
+      selectedContainer: container,
+      selectedContainerId: container.id,
+      containerIdMap: { web: 'container-1' },
+    });
+    mocks.updateContainer.mockRejectedValueOnce(
+      new Error('Proxy error: No update available for this container'),
+    );
+    loadContainers.mockClear();
+
+    await composable.updateContainer('web');
+
+    expect(mocks.updateContainer).toHaveBeenCalledWith('container-1');
+    expect(loadContainers).toHaveBeenCalledTimes(1);
+    expect(error.value).toBe('Proxy error: No update available for this container');
+    expect(mocks.toastError).toHaveBeenCalledWith(
+      'Update failed: web',
+      'Proxy error: No update available for this container',
+    );
+    expect(mocks.toastSuccess).not.toHaveBeenCalledWith('Updated: web');
+  });
+
+  it.each([
+    null,
+    undefined,
+    { code: 'E_UNKNOWN' },
+  ])('treats %p update failures as normal errors instead of stale-update refreshes', async (rejection) => {
+    const container = makeContainer({ id: 'container-1', name: 'web', newTag: '1.1.0' });
+    const { composable, error, loadContainers } = await mountActionsHarness({
+      containers: [container],
+      selectedContainer: container,
+      selectedContainerId: container.id,
+      containerIdMap: { web: 'container-1' },
+    });
+    mocks.updateContainer.mockRejectedValueOnce(rejection);
+    loadContainers.mockClear();
+
+    await composable.updateContainer('web');
+
+    expect(mocks.updateContainer).toHaveBeenCalledWith('container-1');
+    expect(loadContainers).toHaveBeenCalledTimes(1);
+    expect(error.value).toBe('Action failed for web');
+    expect(mocks.toastError).toHaveBeenCalledWith('Update failed: web', 'Action failed for web');
+    expect(mocks.toastSuccess).not.toHaveBeenCalledWith('Updated: web');
   });
 
   it('validates snooze-until input before policy updates', async () => {
@@ -573,6 +671,48 @@ describe('useContainerActions', () => {
     expect(composable.groupUpdateInProgress.value.has('group-1')).toBe(false);
     expect(mocks.toastSuccess).not.toHaveBeenCalled();
     expect(mocks.toastError).toHaveBeenCalledTimes(2);
+  });
+
+  it('refreshes grouped updates when stale rows report no update available and only counts successful updates', async () => {
+    const stale = makeContainer({
+      id: 'container-1',
+      name: 'web',
+      newTag: '1.1.0',
+      bouncer: 'safe',
+    });
+    const fresh = makeContainer({
+      id: 'container-2',
+      name: 'api',
+      newTag: '2.0.0',
+      bouncer: 'safe',
+    });
+    const { composable, error, loadContainers } = await mountActionsHarness({
+      containers: [stale, fresh],
+      containerIdMap: {
+        web: 'container-1',
+        api: 'container-2',
+      },
+    });
+    mocks.updateContainer.mockImplementation(async (containerId: string) => {
+      if (containerId === 'container-1') {
+        throw new Error('No update available for this container');
+      }
+      return {};
+    });
+    loadContainers.mockClear();
+
+    await composable.updateAllInGroup({
+      key: 'group-1',
+      containers: [stale, fresh],
+    });
+
+    expect(mocks.updateContainer).toHaveBeenCalledTimes(2);
+    expect(mocks.updateContainer).toHaveBeenNthCalledWith(1, 'container-1');
+    expect(mocks.updateContainer).toHaveBeenNthCalledWith(2, 'container-2');
+    expect(loadContainers).toHaveBeenCalledTimes(1);
+    expect(error.value).toBeNull();
+    expect(mocks.toastError).not.toHaveBeenCalled();
+    expect(mocks.toastSuccess).toHaveBeenCalledWith('Updated 1 container in group-1');
   });
 
   it('tracks pending actions and polls until container reappears', async () => {
@@ -961,6 +1101,47 @@ describe('useContainerActions', () => {
     expect(mocks.toastSuccess).toHaveBeenCalledWith('Stopped: web');
     expect(mocks.toastSuccess).toHaveBeenCalledWith('Restarted: web');
     expect(mocks.toastSuccess).toHaveBeenCalledWith('Force updated: web');
+  });
+
+  it('wires confirm handlers for object targets and falls back to names when ids are omitted', async () => {
+    const web = makeContainer({ id: 'container-1', name: 'web', newTag: '1.1.0' });
+    const api = makeContainer({ id: 'container-2', name: 'api' });
+    const { composable, closeFullPage, closePanel, loadContainers } = await mountActionsHarness({
+      selectedContainer: api,
+      selectedContainerId: api.id,
+      containerIdMap: { web: web.id, api: api.id },
+    });
+
+    composable.confirmStop({ id: web.id, name: web.name });
+    composable.confirmRestart({ id: web.id, name: web.name });
+    composable.confirmUpdate({ id: web.id, name: web.name });
+    composable.confirmDelete({ name: web.name } as unknown as Parameters<
+      typeof composable.confirmDelete
+    >[0]);
+
+    expect(mocks.confirmRequire).toHaveBeenCalledTimes(4);
+    const [stopCall, restartCall, updateCall, deleteCall] = mocks.confirmRequire.mock.calls.map(
+      (call) => call[0] as { header: string; accept?: () => Promise<unknown> },
+    );
+
+    expect(stopCall.header).toBe('Stop Container');
+    expect(restartCall.header).toBe('Restart Container');
+    expect(updateCall.header).toBe('Update Container');
+    expect(deleteCall.header).toBe('Delete Container');
+
+    await stopCall.accept?.();
+    await restartCall.accept?.();
+    await updateCall.accept?.();
+    const deleted = await deleteCall.accept?.();
+
+    expect(deleted).toBe(true);
+    expect(mocks.stopContainer).toHaveBeenCalledWith(web.id);
+    expect(mocks.restartContainer).toHaveBeenCalledWith(web.id);
+    expect(mocks.updateContainer).toHaveBeenCalledWith(web.id);
+    expect(mocks.deleteContainer).toHaveBeenCalledWith(web.id);
+    expect(closeFullPage).not.toHaveBeenCalled();
+    expect(closePanel).not.toHaveBeenCalled();
+    expect(loadContainers).toHaveBeenCalledTimes(4);
   });
 
   it('wires update confirmation dialog to update accept handler', async () => {
@@ -1401,13 +1582,15 @@ describe('useContainerActions', () => {
     selectedContainer.value = container;
     selectedContainerId.value = container.id;
     await composable.skipCurrentForSelected();
-    expect(mocks.updateContainerPolicy).not.toHaveBeenCalled();
+    expect(mocks.updateContainerPolicy).toHaveBeenCalledWith('container-1', 'skip-current', {});
+    mocks.updateContainerPolicy.mockClear();
+    composable.skippedUpdates.value.clear();
 
     containerIdMap.value = { web: 'container-1' };
     mocks.updateContainerPolicy.mockRejectedValueOnce(new Error('policy failed'));
     await composable.skipCurrentForSelected();
     expect(composable.policyError.value).toBe('policy failed');
-    expect(composable.skippedUpdates.value.has('web')).toBe(false);
+    expect(composable.skippedUpdates.value.has('container-1')).toBe(false);
 
     await composable.snoozeSelected(1);
     await composable.snoozeSelected(2);
@@ -1561,6 +1744,91 @@ describe('useContainerActions', () => {
     expect(mocks.getContainerUpdateOperations).not.toHaveBeenCalled();
   });
 
+  it('prefers selected container ids when resolving selected update policy metadata', async () => {
+    const container = makeContainer({ id: 'container-1', name: 'web' });
+    const { composable } = await mountActionsHarness({
+      selectedContainer: container,
+      selectedContainerId: container.id,
+      containers: [container],
+      containerIdMap: { web: 'container-1' },
+      containerMetaMap: {
+        'container-1': {
+          updatePolicy: {
+            skipTags: ['by-id'],
+            skipDigests: ['sha256:by-id'],
+          },
+        },
+      },
+    });
+
+    expect(composable.selectedUpdatePolicy.value).toEqual({
+      skipTags: ['by-id'],
+      skipDigests: ['sha256:by-id'],
+    });
+    expect(composable.selectedSkipTags.value).toEqual(['by-id']);
+    expect(composable.selectedSkipDigests.value).toEqual(['sha256:by-id']);
+  });
+
+  it('falls back to selected container names when selected ids are missing', async () => {
+    const selectedContainer = {
+      ...makeContainer({ name: 'web' }),
+      id: undefined,
+    } as unknown as Container;
+    const { composable } = await mountActionsHarness({
+      selectedContainer,
+      selectedContainerId: undefined,
+      containerIdMap: { web: 'container-1' },
+      containerMetaMap: {
+        web: {
+          updatePolicy: {
+            skipTags: ['by-name'],
+          },
+        },
+      },
+    });
+
+    expect(composable.selectedUpdatePolicy.value).toEqual({
+      skipTags: ['by-name'],
+    });
+
+    await composable.skipCurrentForSelected();
+
+    expect(mocks.updateContainerPolicy).toHaveBeenCalledWith('container-1', 'skip-current', {});
+    expect(composable.skippedUpdates.value.has('web')).toBe(true);
+  });
+
+  it('returns an empty selected update policy when the selected container has no id or name', async () => {
+    const { composable } = await mountActionsHarness({
+      selectedContainer: {
+        id: undefined,
+        name: '',
+      } as unknown as Container,
+      selectedContainerId: undefined,
+      containerMetaMap: {
+        web: {
+          updatePolicy: {
+            skipTags: ['ignored'],
+          },
+        },
+      },
+    });
+
+    expect(composable.selectedUpdatePolicy.value).toEqual({});
+  });
+
+  it('guards selected update policy name fallback when only an id is present', async () => {
+    const { composable } = await mountActionsHarness({
+      selectedContainer: {
+        id: 'container-1',
+        name: '',
+      } as unknown as Container,
+      selectedContainerId: 'container-1',
+      containerMetaMap: {},
+    });
+
+    expect(composable.selectedUpdatePolicy.value).toEqual({});
+  });
+
   it('refreshes actions-tab detail data after action execution and skip updates', async () => {
     const container = makeContainer({ id: 'container-1', name: 'web' });
     const { composable } = await mountActionsHarness({
@@ -1585,7 +1853,7 @@ describe('useContainerActions', () => {
     mocks.getBackups.mockClear();
     mocks.getContainerUpdateOperations.mockClear();
 
-    await composable.skipUpdate('web');
+    await composable.skipUpdate(container);
     expect(mocks.updateContainerPolicy).toHaveBeenCalledWith('container-1', 'skip-current', {});
     expect(mocks.getContainerTriggers).toHaveBeenCalledTimes(1);
     expect(mocks.getBackups).toHaveBeenCalledTimes(1);
@@ -1744,6 +2012,82 @@ describe('useContainerActions', () => {
     await flushPromises();
 
     expect(loadContainers).not.toHaveBeenCalled();
+  });
+
+  it('updates each container in a group by its own id when names collide across hosts', async () => {
+    const localNode = makeContainer({
+      id: 'container-1',
+      name: 'tdarr_node',
+      newTag: '2.0.0',
+      server: 'Datavault',
+    });
+    const remoteNode = makeContainer({
+      id: 'container-2',
+      name: 'tdarr_node',
+      newTag: '2.0.0',
+      server: 'Tmvault',
+    });
+    const { composable } = await mountActionsHarness({
+      containers: [localNode, remoteNode],
+      containerIdMap: { tdarr_node: 'container-2' },
+    });
+
+    await composable.updateAllInGroup({
+      key: 'tdarr-stack',
+      containers: [localNode, remoteNode],
+    });
+
+    expect(mocks.updateContainer).toHaveBeenCalledTimes(2);
+    expect(mocks.updateContainer).toHaveBeenNthCalledWith(1, 'container-1');
+    expect(mocks.updateContainer).toHaveBeenNthCalledWith(2, 'container-2');
+  });
+
+  it('tracks in-progress actions by container id when names collide across hosts', async () => {
+    const localNode = makeContainer({
+      id: 'container-1',
+      name: 'tdarr_node',
+      server: 'Datavault',
+    });
+    const remoteNode = makeContainer({
+      id: 'container-2',
+      name: 'tdarr_node',
+      server: 'Tmvault',
+    });
+    const { composable } = await mountActionsHarness({
+      containers: [localNode, remoteNode],
+      containerIdMap: { tdarr_node: 'container-2' },
+    });
+
+    let resolveFirst: (() => void) | undefined;
+    let resolveSecond: (() => void) | undefined;
+    const action = vi.fn((id: string) => {
+      return new Promise<void>((resolve) => {
+        if (id === 'container-1') {
+          resolveFirst = resolve;
+        } else if (id === 'container-2') {
+          resolveSecond = resolve;
+        }
+      });
+    });
+
+    const first = composable.executeAction(localNode, action, {
+      reloadContainers: false,
+    });
+    await nextTick();
+
+    expect(composable.actionInProgress.value.has('container-1')).toBe(true);
+
+    const second = composable.executeAction(remoteNode, action, {
+      reloadContainers: false,
+    });
+    await nextTick();
+
+    expect(action).toHaveBeenCalledTimes(2);
+    expect(composable.actionInProgress.value.has('container-2')).toBe(true);
+
+    resolveFirst?.();
+    resolveSecond?.();
+    await Promise.all([first, second]);
   });
 
   it('fails closed for action handlers when container actions are disabled', async () => {

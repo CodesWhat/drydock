@@ -268,6 +268,51 @@ class Hass {
     return Array.from(staleStateTopics);
   }
 
+  private getActiveContainerStateTopicsForWatcher({
+    watcherName,
+    excludingContainerId,
+  }: {
+    watcherName: string;
+    excludingContainerId?: string;
+  }) {
+    if (watcherName === '') {
+      return new Set<string>();
+    }
+
+    try {
+      return new Set<string>(
+        containerStore
+          .getContainers({ watcher: watcherName })
+          .filter(
+            (storedContainer) => this.getContainerId(storedContainer) !== excludingContainerId,
+          )
+          .map((storedContainer) => this.getContainerStateTopic({ container: storedContainer })),
+      );
+    } catch {
+      return new Set<string>();
+    }
+  }
+
+  private getTrackedContainerStateTopicsForWatcher({
+    watcherName,
+    excludingContainerId,
+  }: {
+    watcherName: string;
+    excludingContainerId?: string;
+  }): Set<string> {
+    if (watcherName === '') {
+      return new Set<string>();
+    }
+
+    const watcherTopicPrefix = `${this.configuration.topic}/${watcherName}/`;
+    return new Set<string>(
+      Array.from(this.containerStateTopicById.entries())
+        .filter(([containerId]) => containerId !== excludingContainerId)
+        .map(([, stateTopic]) => stateTopic)
+        .filter((stateTopic) => stateTopic.startsWith(watcherTopicPrefix)),
+    );
+  }
+
   private async removeDiscoveryTopics({
     kind,
     stateTopics,
@@ -384,11 +429,44 @@ class Hass {
       containerStateSensor.topic,
       ...staleStateTopics.filter((stateTopic) => stateTopic !== containerStateSensor.topic),
     ];
-    this.log.info(`Remove hass container update sensor [${containerStateSensor.topic}]`);
     if (this.configuration.hass.discovery) {
+      const watcherName = typeof container?.watcher === 'string' ? container.watcher : '';
+      const excludingContainerId = this.getContainerId(container);
+      const replacementExpected = container?.replacementExpected === true;
+      const activeFromStore = this.getActiveContainerStateTopicsForWatcher({
+        watcherName,
+        excludingContainerId,
+      });
+      const trackedLocally = this.getTrackedContainerStateTopicsForWatcher({
+        watcherName,
+        excludingContainerId,
+      });
+      const activeStateTopics = new Set<string>();
+      for (const topic of activeFromStore) activeStateTopics.add(topic);
+      for (const topic of trackedLocally) activeStateTopics.add(topic);
+      const discoveryStateTopicsToRemove = stateTopicsToRemove.filter((stateTopic) => {
+        if (replacementExpected && stateTopic === containerStateSensor.topic) {
+          return false;
+        }
+        return !activeStateTopics.has(stateTopic);
+      });
+      const staleAliasTopicsToRemove = discoveryStateTopicsToRemove.filter(
+        (stateTopic) => stateTopic !== containerStateSensor.topic,
+      );
+
+      if (discoveryStateTopicsToRemove.includes(containerStateSensor.topic)) {
+        this.log.info(`Remove hass container update sensor [${containerStateSensor.topic}]`);
+      } else if (staleAliasTopicsToRemove.length > 0) {
+        this.log.info(
+          `Preserve canonical hass container update sensor [${containerStateSensor.topic}]; removing stale alias topics [${staleAliasTopicsToRemove.join(', ')}]`,
+        );
+      } else {
+        this.log.info(`Skip hass container update sensor removal [${containerStateSensor.topic}]`);
+      }
+
       await this.removeDiscoveryTopics({
         kind: containerStateSensor.kind,
-        stateTopics: stateTopicsToRemove,
+        stateTopics: discoveryStateTopicsToRemove,
       });
     }
     this.clearTrackedContainerStateTopic(container);

@@ -838,11 +838,15 @@ export function getContainerRaw(id: string) {
   return undefined;
 }
 
+interface DeleteContainerOptions {
+  replacementExpected?: boolean;
+}
+
 /**
  * Delete container by id.
  * @param id
  */
-export function deleteContainer(id) {
+export function deleteContainer(id, options: DeleteContainerOptions = {}) {
   const container = getContainer(id);
   const containerRaw = getContainerRaw(id);
   if (container) {
@@ -854,7 +858,10 @@ export function deleteContainer(id) {
       .remove();
     invalidateContainersCacheForMutation(containerRaw, undefined);
     containerSecurityStateHashCache.delete(id);
-    emitContainerRemoved(container);
+    emitContainerRemoved({
+      ...container,
+      replacementExpected: options.replacementExpected,
+    });
   }
 }
 

@@ -3,6 +3,7 @@ import AppBadge from '@/components/AppBadge.vue';
 import AppIconButton from '@/components/AppIconButton.vue';
 import AppTabBar from '@/components/AppTabBar.vue';
 import StatusDot from '@/components/StatusDot.vue';
+import { getContainerActionKey } from '../../utils/container-action-key';
 import ContainerFullPageTabContent from './ContainerFullPageTabContent.vue';
 import { useContainersViewTemplateContext } from './containersViewTemplateContext';
 
@@ -25,6 +26,10 @@ const {
   detailTabs,
   activeDetailTab,
 } = useContainersViewTemplateContext();
+
+function isActionInProgress(container: { id?: unknown; name?: unknown }) {
+  return actionInProgress.value.has(getContainerActionKey(container));
+}
 </script>
 
 <template>
@@ -93,73 +98,73 @@ const {
           <AppButton size="none" variant="plain" weight="none"
             v-if="selectedContainer.status === 'running'"
             class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-2xs-plus font-semibold transition-colors"
-            :class="actionInProgress.has(selectedContainer.name) ? 'opacity-50 cursor-not-allowed' : ''"
+            :class="isActionInProgress(selectedContainer) ? 'opacity-50 cursor-not-allowed' : ''"
             :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)', border: '1px solid var(--dd-danger)' }"
-            :disabled="actionInProgress.has(selectedContainer.name)"
+            :disabled="isActionInProgress(selectedContainer)"
             aria-label="Stop container"
-            @click="confirmStop(selectedContainer.name)">
-            <AppIcon :name="actionInProgress.has(selectedContainer.name) ? 'spinner' : 'stop'" :size="12" :class="actionInProgress.has(selectedContainer.name) ? 'dd-spin' : ''" />
+            @click="confirmStop(selectedContainer)">
+            <AppIcon :name="isActionInProgress(selectedContainer) ? 'spinner' : 'stop'" :size="12" :class="isActionInProgress(selectedContainer) ? 'dd-spin' : ''" />
             Stop
           </AppButton>
           <AppButton size="none" variant="plain" weight="none"
             v-else
             class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-2xs-plus font-semibold transition-colors"
-            :class="actionInProgress.has(selectedContainer.name) ? 'opacity-50 cursor-not-allowed' : ''"
+            :class="isActionInProgress(selectedContainer) ? 'opacity-50 cursor-not-allowed' : ''"
             :style="{ backgroundColor: 'var(--dd-success-muted)', color: 'var(--dd-success)', border: '1px solid var(--dd-success)' }"
-            :disabled="actionInProgress.has(selectedContainer.name)"
+            :disabled="isActionInProgress(selectedContainer)"
             aria-label="Start container"
-            @click="startContainer(selectedContainer.name)">
-            <AppIcon :name="actionInProgress.has(selectedContainer.name) ? 'spinner' : 'play'" :size="12" :class="actionInProgress.has(selectedContainer.name) ? 'dd-spin' : ''" />
+            @click="startContainer(selectedContainer)">
+            <AppIcon :name="isActionInProgress(selectedContainer) ? 'spinner' : 'play'" :size="12" :class="isActionInProgress(selectedContainer) ? 'dd-spin' : ''" />
             Start
           </AppButton>
           <AppButton size="none" variant="plain" weight="none"
             class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-2xs-plus font-semibold transition-colors"
-            :class="actionInProgress.has(selectedContainer.name) ? 'opacity-50 cursor-not-allowed' : 'dd-text-muted hover:dd-text'"
-            :disabled="actionInProgress.has(selectedContainer.name)"
+            :class="isActionInProgress(selectedContainer) ? 'opacity-50 cursor-not-allowed' : 'dd-text-muted hover:dd-text'"
+            :disabled="isActionInProgress(selectedContainer)"
             aria-label="Restart container"
-            @click="confirmRestart(selectedContainer.name)">
-            <AppIcon :name="actionInProgress.has(selectedContainer.name) ? 'spinner' : 'restart'" :size="12" :class="actionInProgress.has(selectedContainer.name) ? 'dd-spin' : ''" />
+            @click="confirmRestart(selectedContainer)">
+            <AppIcon :name="isActionInProgress(selectedContainer) ? 'spinner' : 'restart'" :size="12" :class="isActionInProgress(selectedContainer) ? 'dd-spin' : ''" />
             Restart
           </AppButton>
           <AppButton size="none" variant="plain" weight="none"
             class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-2xs-plus font-semibold transition-colors"
-            :class="actionInProgress.has(selectedContainer.name) ? 'opacity-50 cursor-not-allowed' : 'dd-text-muted hover:dd-text'"
-            :disabled="actionInProgress.has(selectedContainer.name)"
+            :class="isActionInProgress(selectedContainer) ? 'opacity-50 cursor-not-allowed' : 'dd-text-muted hover:dd-text'"
+            :disabled="isActionInProgress(selectedContainer)"
             aria-label="Scan container"
-            @click="scanContainer(selectedContainer.name)">
-            <AppIcon :name="actionInProgress.has(selectedContainer.name) ? 'spinner' : 'security'" :size="12" :class="actionInProgress.has(selectedContainer.name) ? 'dd-spin' : ''" />
+            @click="scanContainer(selectedContainer)">
+            <AppIcon :name="isActionInProgress(selectedContainer) ? 'spinner' : 'security'" :size="12" :class="isActionInProgress(selectedContainer) ? 'dd-spin' : ''" />
             Scan
           </AppButton>
           <AppButton size="none" variant="plain" weight="none"
             v-if="selectedContainer.newTag && selectedContainer.bouncer === 'blocked'"
             class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-2xs-plus font-bold transition-colors"
-            :class="actionInProgress.has(selectedContainer.name) ? 'opacity-50 cursor-not-allowed' : ''"
+            :class="isActionInProgress(selectedContainer) ? 'opacity-50 cursor-not-allowed' : ''"
             :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)', border: '1px solid var(--dd-danger)' }"
-            :disabled="actionInProgress.has(selectedContainer.name)"
+            :disabled="isActionInProgress(selectedContainer)"
             aria-label="Update blocked by security scan"
-            @click="confirmForceUpdate(selectedContainer.name)">
+            @click="confirmForceUpdate(selectedContainer)">
             <AppIcon name="lock" :size="12" />
             Blocked
           </AppButton>
           <AppButton size="none" variant="plain" weight="none"
             v-else-if="selectedContainer.newTag"
             class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-2xs-plus font-bold transition-colors"
-            :class="actionInProgress.has(selectedContainer.name) ? 'opacity-50 cursor-not-allowed' : ''"
+            :class="isActionInProgress(selectedContainer) ? 'opacity-50 cursor-not-allowed' : ''"
             :style="{ backgroundColor: 'var(--dd-success-muted)', color: 'var(--dd-success)', border: '1px solid var(--dd-success)' }"
-            :disabled="actionInProgress.has(selectedContainer.name)"
+            :disabled="isActionInProgress(selectedContainer)"
             aria-label="Update container"
-            @click="confirmUpdate(selectedContainer.name)">
-            <AppIcon :name="actionInProgress.has(selectedContainer.name) ? 'spinner' : 'cloud-download'" :size="12" :class="actionInProgress.has(selectedContainer.name) ? 'dd-spin' : ''" />
+            @click="confirmUpdate(selectedContainer)">
+            <AppIcon :name="isActionInProgress(selectedContainer) ? 'spinner' : 'cloud-download'" :size="12" :class="isActionInProgress(selectedContainer) ? 'dd-spin' : ''" />
             Update
           </AppButton>
           <AppButton size="none" variant="plain" weight="none"
             class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-2xs-plus font-semibold transition-colors"
-            :class="actionInProgress.has(selectedContainer.name) ? 'opacity-50 cursor-not-allowed' : ''"
+            :class="isActionInProgress(selectedContainer) ? 'opacity-50 cursor-not-allowed' : ''"
             :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)', border: '1px solid var(--dd-danger)' }"
-            :disabled="actionInProgress.has(selectedContainer.name)"
+            :disabled="isActionInProgress(selectedContainer)"
             aria-label="Delete container"
-            @click="confirmDelete(selectedContainer.name)">
-            <AppIcon :name="actionInProgress.has(selectedContainer.name) ? 'spinner' : 'trash'" :size="12" :class="actionInProgress.has(selectedContainer.name) ? 'dd-spin' : ''" />
+            @click="confirmDelete(selectedContainer)">
+            <AppIcon :name="isActionInProgress(selectedContainer) ? 'spinner' : 'trash'" :size="12" :class="isActionInProgress(selectedContainer) ? 'dd-spin' : ''" />
             Delete
           </AppButton>
         </div>

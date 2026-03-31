@@ -5,6 +5,7 @@ import { recordLegacyInput } from '../../../prometheus/compatibility.js';
 import * as storeContainer from '../../../store/container.js';
 import type Watcher from '../../Watcher.js';
 import {
+  canonicalizeContainerName,
   getContainerConfigValue,
   getContainerName,
   getFirstConfigString,
@@ -282,16 +283,18 @@ export async function pruneOldContainers(
   const newContainerNames = new Set(
     newContainers
       .filter((container) => typeof container.name === 'string' && container.name !== '')
-      .map((container) => container.name),
+      .map((container) => canonicalizeContainerName(container.name, container.id)),
   );
   const deletedContainerIds = new Set<string>();
   for (const staleContainer of containersToNamePrune) {
-    if (
-      typeof staleContainer.name === 'string' &&
-      staleContainer.name !== '' &&
-      newContainerNames.has(staleContainer.name)
-    ) {
-      storeContainer.deleteContainer(staleContainer.id);
+    const staleContainerName = canonicalizeContainerName(
+      typeof staleContainer.name === 'string' ? staleContainer.name : '',
+      staleContainer.id,
+    );
+    if (staleContainerName !== '' && newContainerNames.has(staleContainerName)) {
+      storeContainer.deleteContainer(staleContainer.id, {
+        replacementExpected: true,
+      });
       deletedContainerIds.add(staleContainer.id);
     }
   }

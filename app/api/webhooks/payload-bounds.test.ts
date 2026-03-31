@@ -186,21 +186,4 @@ describe('webhook payload bounds (DoS prevention)', () => {
       expect(result).toBeUndefined();
     });
   });
-
-  describe('express.json() payload size limit', () => {
-    test('configured limit is 256kb', async () => {
-      // Verify the limit constant is set by importing the module and checking
-      // the express.json() call. Since we cannot easily test the middleware
-      // in isolation, this test documents the expected behavior:
-      // - Payloads <= 256kb are accepted by express.json()
-      // - Payloads > 256kb receive a 413 Payload Too Large response
-      //
-      // The actual enforcement is handled by Express body-parser internals.
-      // Integration/E2E tests verify this end-to-end.
-      const apiSource = await import('node:fs').then((fs) =>
-        fs.readFileSync(new URL('../api.ts', import.meta.url), 'utf8'),
-      );
-      expect(apiSource).toContain("limit: '256kb'");
-    });
-  });
 });

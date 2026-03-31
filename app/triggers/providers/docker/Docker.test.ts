@@ -1710,6 +1710,52 @@ test('getNewImageFullName should use tag value for digest updates', () => {
   expect(result).toBe('my-registry/test/test:nginx-prod');
 });
 
+test('getNewImageFullName should use remote digest for digest-pinned updates', () => {
+  const mockRegistry = {
+    getImageFullName: vi.fn(
+      (image, tagOrDigest) => `${image.registry.url}/${image.name}:${tagOrDigest}`,
+    ),
+  };
+  const containerDigestPinned = {
+    image: {
+      name: 'test/test',
+      tag: { value: 'sha256:olddigest' },
+      registry: { url: 'my-registry' },
+    },
+    updateKind: { kind: 'digest', remoteValue: 'sha256:newdigest' },
+  };
+
+  docker.getNewImageFullName(mockRegistry, containerDigestPinned);
+
+  expect(mockRegistry.getImageFullName).toHaveBeenCalledWith(
+    containerDigestPinned.image,
+    'sha256:newdigest',
+  );
+});
+
+test('getNewImageFullName should fall back to the current digest when a digest-pinned update omits remoteValue', () => {
+  const mockRegistry = {
+    getImageFullName: vi.fn(
+      (image, tagOrDigest) => `${image.registry.url}/${image.name}:${tagOrDigest}`,
+    ),
+  };
+  const containerDigestPinned = {
+    image: {
+      name: 'test/test',
+      tag: { value: 'sha256:currentdigest' },
+      registry: { url: 'my-registry' },
+    },
+    updateKind: { kind: 'digest', remoteValue: undefined },
+  };
+
+  docker.getNewImageFullName(mockRegistry, containerDigestPinned);
+
+  expect(mockRegistry.getImageFullName).toHaveBeenCalledWith(
+    containerDigestPinned.image,
+    'sha256:currentdigest',
+  );
+});
+
 test('getNewImageFullName should fall back to tag value when remoteValue is undefined', () => {
   const mockRegistry = {
     getImageFullName: (image, tagOrDigest) => `${image.registry.url}/${image.name}:${tagOrDigest}`,

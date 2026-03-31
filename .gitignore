@@ -155,6 +155,8 @@ apps/web/content/docs/
 
 # Stryker mutation testing sandboxes
 .stryker-tmp/
+app/reports/
+ui/reports/
 
 # Storybook build output
 storybook-static/

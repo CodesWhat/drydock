@@ -413,11 +413,13 @@ describe('Container Actions Router', () => {
         id: 'c1',
         name: 'nginx',
         image: { name: 'nginx' },
+        result: { digest: 'sha256:new' },
         updateAvailable: true,
       };
       const clearedContainer = {
         ...container,
         image: { name: 'nginx:latest' },
+        result: undefined,
         updateAvailable: false,
       };
       mockGetContainer
@@ -436,7 +438,7 @@ describe('Container Actions Router', () => {
 
       expect(mockTriggerFn).toHaveBeenCalledWith(container);
       expect(mockUpdateContainer).toHaveBeenCalledWith(
-        expect.objectContaining({ updateAvailable: false }),
+        expect.objectContaining({ result: undefined, updateAvailable: false }),
       );
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
@@ -450,11 +452,13 @@ describe('Container Actions Router', () => {
         id: 'c1',
         name: 'nginx',
         image: { name: 'nginx' },
+        result: { digest: 'sha256:new' },
         updateAvailable: true,
       };
       const clearedContainer = {
         ...container,
         image: { name: 'nginx:latest' },
+        result: undefined,
         updateAvailable: false,
       };
       mockGetContainer
@@ -473,7 +477,7 @@ describe('Container Actions Router', () => {
 
       expect(mockTriggerFn).toHaveBeenCalledWith(container);
       expect(mockUpdateContainer).toHaveBeenCalledWith(
-        expect.objectContaining({ updateAvailable: false }),
+        expect.objectContaining({ result: undefined, updateAvailable: false }),
       );
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({

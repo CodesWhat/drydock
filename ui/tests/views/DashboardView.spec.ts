@@ -1,8 +1,15 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { flushPromises, type VueWrapper } from '@vue/test-utils';
 import DataTable from '@/components/DataTable.vue';
 import type { Container } from '@/types/container';
 import DashboardView from '@/views/DashboardView.vue';
 import { mountWithPlugins } from '../helpers/mount';
+
+const dashboardViewSource = readFileSync(
+  resolve(__dirname, '../../src/views/DashboardView.vue'),
+  'utf-8',
+);
 
 const { mockRouterPush, mockBuildDashboardContainerMetrics, mockUpdateContainer } = vi.hoisted(
   () => ({
@@ -218,6 +225,23 @@ describe('DashboardView', () => {
       expect(scrollArea.classes()).not.toContain('sm:pr-2');
       expect(scrollArea.classes()).not.toContain('sm:pr-4');
       expect(scrollArea.classes()).not.toContain('sm:pr-5');
+    });
+
+    it('limits edit-mode dragging to explicit drag handles', async () => {
+      await mountDashboard([makeContainer({ newTag: '2.0.0' })]);
+      expect(dashboardViewSource).toContain('drag-allow-from=".drag-handle"');
+    });
+
+    it('keeps editable widgets vertically pannable while customizing', async () => {
+      const wrapper = await mountDashboard([makeContainer({ newTag: '2.0.0' })]);
+
+      const editToggle = document.querySelector('[data-test="dashboard-edit-toggle"]');
+      expect(editToggle).not.toBeNull();
+      (editToggle as HTMLButtonElement).click();
+      await flushPromises();
+
+      const widget = wrapper.find('[data-widget-id="recent-updates"]');
+      expect(widget.attributes('style')).toContain('touch-action: pan-y');
     });
   });
 
@@ -566,7 +590,7 @@ describe('DashboardView', () => {
       expect(wrapper.text()).toContain('7.0.0');
     });
 
-    it('caps pending updates to six visible rows', async () => {
+    it('shows all pending updates without a hard cap', async () => {
       const containers = Array.from({ length: 12 }, (_, i) =>
         makeContainer({
           id: `c${i}`,
@@ -577,7 +601,7 @@ describe('DashboardView', () => {
       const wrapper = await mountDashboard(containers);
       const widget = wrapper.find('[data-widget-id="recent-updates"]');
       const rows = widget.findAll('tbody tr').filter((r) => !r.attributes('aria-hidden'));
-      expect(rows.length).toBe(6);
+      expect(rows.length).toBe(12);
     });
 
     it('renders the recent updates table with a fixed layout to keep columns stable while scrolling', async () => {
@@ -1395,6 +1419,69 @@ describe('DashboardView', () => {
       const updateError = wrapper.find('[data-test="dashboard-update-error"]');
       expect(updateError.exists()).toBe(true);
       expect(updateError.text()).toContain('update exploded');
+    });
+
+    it('refreshes immediately and removes a stale dashboard row when update reports no update available', async () => {
+      mockUpdateContainer.mockRejectedValueOnce(
+        new Error('No update available for this container'),
+      );
+
+      const wrapper = await mountDashboard(
+        [pendingContainer],
+        [],
+        {},
+        {
+          recentStatuses: { nginx: 'pending' },
+        },
+      );
+      const initialFetchCount = mockGetAllContainers.mock.calls.length;
+      mockGetAllContainers.mockResolvedValueOnce([upToDateContainer]);
+      mockGetContainerRecentStatus.mockResolvedValueOnce({ statuses: {} });
+      const { mapApiContainers } = await import('@/utils/container-mapper');
+      (mapApiContainers as ReturnType<typeof vi.fn>).mockReturnValueOnce([upToDateContainer]);
+
+      const { useConfirmDialog } = await import('@/composables/useConfirmDialog');
+      const confirm = useConfirmDialog();
+
+      expect(wrapper.findAll('[data-test="dashboard-update-btn"]')).toHaveLength(1);
+
+      await wrapper.find('[data-test="dashboard-update-btn"]').trigger('click');
+      await confirm.accept();
+      await flushPromises();
+
+      expect(mockGetAllContainers.mock.calls.length).toBe(initialFetchCount + 1);
+      expect(wrapper.findAll('[data-test="dashboard-update-btn"]')).toHaveLength(0);
+      expect(wrapper.find('[data-test="dashboard-update-error"]').exists()).toBe(false);
+      expect(wrapper.find('[data-widget-id="recent-updates"]').text()).toContain(
+        'No updates available',
+      );
+    });
+
+    it('shows an inline error when update failure only contains the stale-update text as a substring', async () => {
+      mockUpdateContainer.mockRejectedValueOnce(
+        new Error('Proxy error: No update available for this container'),
+      );
+
+      const wrapper = await mountDashboard(
+        [pendingContainer],
+        [],
+        {},
+        {
+          recentStatuses: { nginx: 'pending' },
+        },
+      );
+      const initialFetchCount = mockGetAllContainers.mock.calls.length;
+      const { useConfirmDialog } = await import('@/composables/useConfirmDialog');
+      const confirm = useConfirmDialog();
+
+      await wrapper.find('[data-test="dashboard-update-btn"]').trigger('click');
+      await confirm.accept();
+      await flushPromises();
+
+      expect(mockGetAllContainers.mock.calls.length).toBe(initialFetchCount);
+      const updateError = wrapper.find('[data-test="dashboard-update-error"]');
+      expect(updateError.exists()).toBe(true);
+      expect(updateError.text()).toContain('Proxy error: No update available for this container');
     });
 
     it('clears dashboard update error after a successful retry', async () => {

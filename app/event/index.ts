@@ -88,6 +88,7 @@ export interface SecurityAlertEventPayload {
 
 export interface AgentConnectedEventPayload {
   agentName: string;
+  reconnected: boolean;
 }
 
 export interface AgentDisconnectedEventPayload {
@@ -105,6 +106,7 @@ export interface WatcherSnapshotEventPayload {
 
 export type ContainerLifecycleEventPayload = Partial<Omit<Container, 'image'>> & {
   image?: Partial<Container['image']>;
+  replacementExpected?: boolean;
 };
 
 const containerReportHandlers = new Map<number, OrderedEventHandler<ContainerReport>>();

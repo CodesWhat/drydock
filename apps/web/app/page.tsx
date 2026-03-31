@@ -556,7 +556,7 @@ export default function Home() {
                     rel="noopener noreferrer"
                   >
                     <img
-                      src="https://ghcr-badge.egpl.dev/codeswhat/drydock/size"
+                      src="https://img.shields.io/docker/image-size/codeswhat/drydock/latest?label=image%20size"
                       alt="Container size"
                     />
                   </a>
@@ -643,12 +643,12 @@ export default function Home() {
                 {/* Quality & Security Badges */}
                 <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
                   <a
-                    href="https://github.com/CodesWhat/drydock/actions/workflows/ci.yml"
+                    href="https://github.com/CodesWhat/drydock/actions/workflows/ci-verify.yml"
                     target="_blank"
                     rel="noopener noreferrer"
                   >
                     <img
-                      src="https://github.com/CodesWhat/drydock/actions/workflows/ci.yml/badge.svg?branch=main"
+                      src="https://github.com/CodesWhat/drydock/actions/workflows/ci-verify.yml/badge.svg?branch=main"
                       alt="CI"
                     />
                   </a>
@@ -688,6 +688,16 @@ export default function Home() {
                     rel="noopener noreferrer"
                   >
                     <img src="https://snyk.io/test/github/CodesWhat/drydock/badge.svg" alt="Snyk" />
+                  </a>
+                  <a
+                    href="https://dashboard.stryker-mutator.io/reports/github.com/CodesWhat/drydock/main"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <img
+                      src="https://img.shields.io/endpoint?style=flat&url=https%3A%2F%2Fbadge-api.stryker-mutator.io%2Fgithub.com%2FCodesWhat%2Fdrydock%2Fmain"
+                      alt="Mutation testing"
+                    />
                   </a>
                   <img
                     src="https://visitor-badge.laobi.icu/badge?page_id=getdrydock.com&left_text=site%20views"

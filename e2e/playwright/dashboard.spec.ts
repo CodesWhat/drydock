@@ -67,7 +67,7 @@ test.describe('Dashboard', () => {
       return { maxScroll, results };
     });
 
-    expect(samples.maxScroll).toBeGreaterThanOrEqual(0);
+    expect(samples.maxScroll).toBeGreaterThan(0);
     expect(samples.results[0]?.headers.length).toBeGreaterThan(0);
 
     const baseline = samples.results[0].headers;

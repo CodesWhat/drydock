@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import AppButton from '../AppButton.vue';
+import { getContainerActionKey } from '../../utils/container-action-key';
 import { useContainersViewTemplateContext } from './containersViewTemplateContext';
 
 const {
@@ -58,6 +59,10 @@ const {
   confirmForceUpdate,
   formatTimestamp,
 } = useContainersViewTemplateContext();
+
+function isActionInProgress(container: { id?: unknown; name?: unknown }) {
+  return actionInProgress.value.has(getContainerActionKey(container));
+}
 </script>
 
 <template>
@@ -79,18 +84,18 @@ const {
                 {{ previewLoading ? 'Previewing...' : 'Preview Update' }}
               </AppButton>
               <AppButton v-if="selectedContainer.bouncer === 'blocked'" size="md" variant="plain" :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)', border: '1px solid var(--dd-danger)' }"
-                      :disabled="actionInProgress.has(selectedContainer.name)"
-                      @click="confirmForceUpdate(selectedContainer.name)">
+                      :disabled="isActionInProgress(selectedContainer)"
+                      @click="confirmForceUpdate(selectedContainer)">
                 <AppIcon name="lock" :size="10" class="mr-1 inline" />Force Update
               </AppButton>
               <AppButton v-else
                       size="md"
-                      :disabled="!selectedContainer.newTag || actionInProgress.has(selectedContainer.name)"
-                      @click="confirmUpdate(selectedContainer.name)">
+                      :disabled="!selectedContainer.newTag || isActionInProgress(selectedContainer)"
+                      @click="confirmUpdate(selectedContainer)">
                 Update Now
               </AppButton>
-              <AppButton size="md" variant="outlined" :disabled="actionInProgress.has(selectedContainer.name)"
-                      @click="scanContainer(selectedContainer.name)">
+              <AppButton size="md" variant="outlined" :disabled="isActionInProgress(selectedContainer)"
+                      @click="scanContainer(selectedContainer)">
                 Scan Now
               </AppButton>
             </div>

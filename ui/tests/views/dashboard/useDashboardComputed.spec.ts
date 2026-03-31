@@ -946,7 +946,7 @@ describe('useDashboardComputed recent updates', () => {
     expect(rows).toHaveLength(0);
   });
 
-  it('returns only the six most recent pending updates after sorting', () => {
+  it('returns all pending updates sorted by detection date', () => {
     const containers = Array.from({ length: 300 }, (_, index) => {
       const day = String((index % 28) + 1).padStart(2, '0');
       const hour = String(index % 24).padStart(2, '0');
@@ -964,8 +964,8 @@ describe('useDashboardComputed recent updates', () => {
 
     const rows = state.recentUpdates.value;
 
-    expect(rows).toHaveLength(6);
-    expect(rows.map((row) => row.name)).toEqual([
+    expect(rows).toHaveLength(300);
+    expect(rows.slice(0, 6).map((row) => row.name)).toEqual([
       'update-167',
       'update-139',
       'update-111',

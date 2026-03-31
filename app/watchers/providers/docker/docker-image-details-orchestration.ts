@@ -9,6 +9,7 @@ import {
   isDockerWatcher,
 } from './container-init.js';
 import {
+  canonicalizeContainerName,
   getContainerDisplayName,
   getContainerName,
   getRepoDigest,
@@ -64,6 +65,10 @@ interface DockerContainerSummary {
 }
 
 interface DockerContainerInspectPayload {
+  Config?: {
+    Image?: string;
+    [key: string]: unknown;
+  };
   [key: string]: unknown;
 }
 
@@ -115,6 +120,16 @@ interface ResolvedContainerConfig {
   lookupImage?: string;
   inspectTagPath?: string;
   watchDigest?: string;
+}
+
+interface ResolvedContainerImageState {
+  parsedImage: ParsedDockerImageReference;
+  resolvedConfig: ResolvedContainerConfig;
+  tagName: string;
+  isSemver: boolean;
+  tagPrecision: TagPrecision;
+  watchDigest: boolean;
+  repoDigest: string | undefined;
 }
 
 interface DockerImageDetailsWatcher {
@@ -201,30 +216,21 @@ function refreshContainerIdentityFromSummary(
 }
 
 async function resolveRuntimeDetailsForStoredContainer(
-  watcher: DockerImageDetailsWatcher,
-  containerId: string,
   runtimeDetailsFromSummary: RuntimeDetails,
   currentRuntimeDetails: unknown,
+  containerInspect: DockerContainerInspectPayload | undefined,
 ) {
   const cachedRuntimeDetails = normalizeRuntimeDetails(currentRuntimeDetails);
-  let runtimeDetailsToApply = mergeRuntimeDetails(runtimeDetailsFromSummary, cachedRuntimeDetails);
+  const runtimeDetailsToApply = mergeRuntimeDetails(
+    runtimeDetailsFromSummary,
+    cachedRuntimeDetails,
+  );
 
-  // When Docker events are enabled, runtime detail updates are handled by event-driven inspect calls.
-  // Skip per-cron container inspect to avoid doubling inspect API calls for every tracked container.
-  if (watcher.configuration.watchevents) {
+  if (!containerInspect) {
     return runtimeDetailsToApply;
   }
 
-  try {
-    const containerInspect = await watcher.dockerApi.getContainer(containerId).inspect();
-    runtimeDetailsToApply = mergeRuntimeDetails(
-      getRuntimeDetailsFromInspect(containerInspect),
-      runtimeDetailsToApply,
-    );
-  } catch {
-    // Degrade gracefully to summary and cached details.
-  }
-  return runtimeDetailsToApply;
+  return mergeRuntimeDetails(getRuntimeDetailsFromInspect(containerInspect), runtimeDetailsToApply);
 }
 
 function reconcileStoredContainerStatus(
@@ -242,13 +248,72 @@ function reconcileStoredContainerStatus(
 
 async function refreshStoredContainerImageFields(
   watcher: DockerImageDetailsWatcher,
-  imageName: string,
+  container: DockerContainerSummary,
+  dockerContainerName: string,
+  labelOverrides: ContainerLabelOverrides,
+  helpers: DockerImageDetailsHelpers,
   containerInStore: Container,
+  containerInspect: DockerContainerInspectPayload | undefined,
 ) {
   try {
-    const currentImage = await watcher.dockerApi.getImage(imageName).inspect();
+    const currentImage = await watcher.dockerApi.getImage(container.Image).inspect();
     const freshDigestRepo = getRepoDigest(currentImage);
     const freshImageId = currentImage.Id;
+
+    if (shouldRepairStoredImageReference(containerInStore)) {
+      const resolvedImageState = resolveContainerImageState(
+        watcher,
+        container,
+        dockerContainerName,
+        labelOverrides,
+        currentImage,
+        containerInspect,
+        helpers,
+      );
+
+      if (resolvedImageState) {
+        const refreshedContainer = helpers.normalizeContainer({
+          ...containerInStore,
+          image: {
+            ...containerInStore.image,
+            id: freshImageId,
+            registry: {
+              ...(containerInStore.image.registry || { name: 'unknown', url: '' }),
+              url:
+                resolvedImageState.parsedImage.domain ?? containerInStore.image.registry?.url ?? '',
+              lookupImage: resolvedImageState.resolvedConfig.lookupImage,
+            },
+            name: resolvedImageState.parsedImage.path,
+            tag: {
+              value: resolvedImageState.tagName,
+              semver: resolvedImageState.isSemver,
+              tagPrecision: resolvedImageState.tagPrecision,
+            },
+            digest: {
+              ...containerInStore.image.digest,
+              watch: resolvedImageState.watchDigest,
+              repo: resolvedImageState.repoDigest,
+              value: resolvedImageState.repoDigest ?? containerInStore.image.digest.value,
+            },
+            architecture: currentImage.Architecture ?? containerInStore.image.architecture,
+            os: currentImage.Os ?? containerInStore.image.os,
+            variant: currentImage.Variant ?? containerInStore.image.variant,
+            created: currentImage.Created ?? containerInStore.image.created,
+          },
+          sourceRepo: detectSourceRepoFromImageMetadata({
+            containerLabels: container.Labels || {},
+            imageLabels: currentImage.Config?.Labels,
+            imageRegistryDomain: resolvedImageState.parsedImage.domain,
+            imagePath: resolvedImageState.parsedImage.path,
+          }),
+        } as Container);
+
+        containerInStore.image = refreshedContainer.image;
+        containerInStore.sourceRepo = refreshedContainer.sourceRepo;
+        return;
+      }
+    }
+
     // Keep local digest value populated for digest-watch containers, even when
     // image id/repo digest are unchanged from cached state.
     if (freshDigestRepo !== undefined && containerInStore.image.digest.value === undefined) {
@@ -276,6 +341,8 @@ async function refreshContainerAlreadyInStore(
   watcher: DockerImageDetailsWatcher,
   container: DockerContainerSummary,
   dockerContainerName: string,
+  labelOverrides: ContainerLabelOverrides,
+  helpers: DockerImageDetailsHelpers,
   runtimeDetailsFromSummary: RuntimeDetails,
   containerInStore: Container,
 ) {
@@ -284,11 +351,16 @@ async function refreshContainerAlreadyInStore(
 
   refreshContainerIdentityFromSummary(containerInStore, dockerContainerName);
 
+  const shouldInspectContainer =
+    !watcher.configuration.watchevents || shouldRepairStoredImageReference(containerInStore);
+  const containerInspect = shouldInspectContainer
+    ? await inspectDiscoveredContainer(watcher, container.Id)
+    : undefined;
+
   const runtimeDetailsToApply = await resolveRuntimeDetailsForStoredContainer(
-    watcher,
-    container.Id,
     runtimeDetailsFromSummary,
     containerInStore.details,
+    containerInspect,
   );
   if (!areRuntimeDetailsEqual(containerInStore.details, runtimeDetailsToApply)) {
     containerInStore.details = runtimeDetailsToApply;
@@ -296,7 +368,15 @@ async function refreshContainerAlreadyInStore(
 
   // Reconcile container status from Docker summary (covers events missed during reconnect gaps)
   reconcileStoredContainerStatus(containerInStore, container.State);
-  await refreshStoredContainerImageFields(watcher, container.Image, containerInStore);
+  await refreshStoredContainerImageFields(
+    watcher,
+    container,
+    dockerContainerName,
+    labelOverrides,
+    helpers,
+    containerInStore,
+    containerInspect,
+  );
 
   return containerInStore;
 }
@@ -317,20 +397,119 @@ async function inspectImageForContainer(
 }
 
 async function resolveRuntimeDetailsForDiscoveredContainer(
-  watcher: DockerImageDetailsWatcher,
-  containerId: string,
   runtimeDetailsFromSummary: RuntimeDetails,
+  containerInspect: DockerContainerInspectPayload | undefined,
 ) {
-  try {
-    const containerInspect = await watcher.dockerApi.getContainer(containerId).inspect();
-    return mergeRuntimeDetails(
-      getRuntimeDetailsFromInspect(containerInspect),
-      runtimeDetailsFromSummary,
-    );
-  } catch {
-    // Degrade gracefully to summary details.
+  if (!containerInspect) {
     return runtimeDetailsFromSummary;
   }
+
+  return mergeRuntimeDetails(
+    getRuntimeDetailsFromInspect(containerInspect),
+    runtimeDetailsFromSummary,
+  );
+}
+
+async function inspectDiscoveredContainer(
+  watcher: DockerImageDetailsWatcher,
+  containerId: string,
+): Promise<DockerContainerInspectPayload | undefined> {
+  try {
+    return await watcher.dockerApi.getContainer(containerId).inspect();
+  } catch {
+    return undefined;
+  }
+}
+
+function resolveImageReferenceForParsing(
+  summaryImageReference: string,
+  containerInspect: DockerContainerInspectPayload | undefined,
+) {
+  if (!summaryImageReference.includes('sha256:')) {
+    return summaryImageReference;
+  }
+
+  const inspectImageReference = containerInspect?.Config?.Image;
+  if (typeof inspectImageReference !== 'string') {
+    return summaryImageReference;
+  }
+
+  const normalizedInspectImageReference = inspectImageReference.trim();
+  if (!normalizedInspectImageReference) {
+    return summaryImageReference;
+  }
+
+  return normalizedInspectImageReference;
+}
+
+function resolveContainerImageState(
+  watcher: DockerImageDetailsWatcher,
+  container: DockerContainerSummary,
+  dockerContainerName: string,
+  labelOverrides: ContainerLabelOverrides,
+  image: DockerImageInspectPayload,
+  containerInspect: DockerContainerInspectPayload | undefined,
+  helpers: DockerImageDetailsHelpers,
+): ResolvedContainerImageState | undefined {
+  const containerLabels: Record<string, string> = container.Labels || {};
+  const parsedImage = helpers.resolveImageName(
+    resolveImageReferenceForParsing(container.Image, containerInspect),
+    image,
+    dockerContainerName,
+  );
+  if (!parsedImage) {
+    return undefined;
+  }
+
+  const resolvedLabelOverrides = helpers.resolveLabelsFromContainer(
+    containerLabels,
+    labelOverrides,
+  );
+  const matchingImgset = helpers.getMatchingImgsetConfiguration(parsedImage);
+  if (matchingImgset) {
+    watcher.ensureLogger();
+    watcher.log.debug(`Apply imgset "${matchingImgset.name}" to container ${container.Id}`);
+  }
+
+  const resolvedConfig = helpers.mergeConfigWithImgset(
+    resolvedLabelOverrides,
+    matchingImgset,
+    containerLabels,
+  );
+  const tagName = helpers.resolveTagName(
+    parsedImage,
+    image,
+    resolvedConfig.inspectTagPath,
+    resolvedLabelOverrides.transformTags,
+    container.Id,
+  );
+  const transformedTag = transformTag(resolvedConfig.transformTags, tagName);
+  const parsedTag = parseSemver(transformedTag);
+  const isSemver = parsedTag != null;
+  const tagPrecision = classifyTagPrecision(tagName, resolvedConfig.transformTags, parsedTag);
+
+  return {
+    parsedImage,
+    resolvedConfig,
+    tagName,
+    isSemver,
+    tagPrecision,
+    watchDigest: isDigestToWatch(
+      resolvedConfig.watchDigest,
+      parsedImage,
+      isSemver,
+      tagPrecision,
+      tagName,
+    ),
+    repoDigest: getRepoDigest(image),
+  };
+}
+
+function shouldRepairStoredImageReference(containerInStore: Container) {
+  const currentTag = containerInStore.image?.tag?.value;
+  return (
+    typeof currentTag === 'string' && (currentTag === 'unknown' || currentTag.startsWith('sha256:'))
+  );
 }
 
 function warnWhenUntrackableImage(
@@ -368,7 +547,13 @@ function removeStaleContainerEntriesWithSameName(
     return;
   }
 
-  const containersWithSameName = storeContainer.getContainers({ name: containerToReturn.name });
+  const containersWithSameName = storeContainer.getContainers().filter((storedContainer) => {
+    const storedContainerName = canonicalizeContainerName(
+      typeof storedContainer.name === 'string' ? storedContainer.name : '',
+      storedContainer.id,
+    );
+    return storedContainerName === containerToReturn.name;
+  });
   const watcherRegistryState = registry.getState().watcher;
   const currentWatcherSourceKey = getDockerWatcherSourceKey(watcher);
   const currentWatcherAgent = watcher.agent;
@@ -395,7 +580,11 @@ function removeStaleContainerEntriesWithSameName(
 
       return getDockerWatcherSourceKey(staleWatcher) === currentWatcherSourceKey;
     })
-    .forEach((staleContainer) => storeContainer.deleteContainer(staleContainer.id));
+    .forEach((staleContainer) =>
+      storeContainer.deleteContainer(staleContainer.id, {
+        replacementExpected: true,
+      }),
+    );
 }
 
 /**
@@ -427,58 +616,33 @@ export async function addImageDetailsToContainerOrchestration(
       watcher,
       container,
       dockerContainerName,
+      labelOverrides,
+      helpers,
       runtimeDetailsFromSummary,
       containerInStore,
     );
   }
 
   const image = await inspectImageForContainer(watcher, containerId, container.Image);
-
-  const parsedImage = helpers.resolveImageName(container.Image, image, dockerContainerName);
-  if (!parsedImage) {
+  const containerInspect = await inspectDiscoveredContainer(watcher, containerId);
+  const resolvedImageState = resolveContainerImageState(
+    watcher,
+    container,
+    dockerContainerName,
+    labelOverrides,
+    image,
+    containerInspect,
+    helpers,
+  );
+  if (!resolvedImageState) {
     return undefined;
   }
 
-  const resolvedLabelOverrides = helpers.resolveLabelsFromContainer(
-    containerLabels,
-    labelOverrides,
-  );
-
-  const matchingImgset = helpers.getMatchingImgsetConfiguration(parsedImage);
-  if (matchingImgset) {
-    watcher.ensureLogger();
-    watcher.log.debug(`Apply imgset "${matchingImgset.name}" to container ${containerId}`);
-  }
-
-  const resolvedConfig = helpers.mergeConfigWithImgset(
-    resolvedLabelOverrides,
-    matchingImgset,
-    containerLabels,
-  );
-
-  const tagName = helpers.resolveTagName(
-    parsedImage,
-    image,
-    resolvedConfig.inspectTagPath,
-    resolvedLabelOverrides.transformTags,
-    containerId,
-  );
-
-  const transformedTag = transformTag(resolvedConfig.transformTags, tagName);
-  const parsedTag = parseSemver(transformedTag);
-  const isSemver = parsedTag != null;
-  const tagPrecision = classifyTagPrecision(tagName, resolvedConfig.transformTags, parsedTag);
-  const watchDigest = isDigestToWatch(
-    resolvedConfig.watchDigest,
-    parsedImage,
-    isSemver,
-    tagPrecision,
-  );
-  const repoDigest = getRepoDigest(image);
+  const { parsedImage, resolvedConfig, tagName, isSemver, tagPrecision, watchDigest, repoDigest } =
+    resolvedImageState;
   const runtimeDetails = await resolveRuntimeDetailsForDiscoveredContainer(
-    watcher,
-    containerId,
     runtimeDetailsFromSummary,
+    containerInspect,
   );
   warnWhenUntrackableImage(watcher, dockerContainerName, isSemver, watchDigest, tagPrecision);
 

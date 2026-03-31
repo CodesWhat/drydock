@@ -801,13 +801,17 @@ class Docker extends Trigger {
    * @param container the container
    */
   getNewImageFullName(registry, container) {
-    // Tag to pull/run is
-    // either the same (when updateKind is digest)
-    // or the new one (when updateKind is tag)
+    const currentRef = container.image.tag.value;
+    const isDigestPinned = typeof currentRef === 'string' && currentRef.startsWith('sha256:');
+
+    // Digest updates usually re-pull the same tag, but digest-pinned refs need
+    // the new remote digest to move off the currently pinned image.
     const tagOrDigest =
       container.updateKind.kind === 'digest'
-        ? container.image.tag.value
-        : (container.updateKind.remoteValue ?? container.image.tag.value);
+        ? isDigestPinned
+          ? (container.updateKind.remoteValue ?? currentRef)
+          : currentRef
+        : (container.updateKind.remoteValue ?? currentRef);
 
     // Rebuild image definition string
     return registry.getImageFullName(container.image, tagOrDigest);

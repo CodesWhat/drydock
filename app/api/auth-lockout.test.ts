@@ -25,6 +25,12 @@ const {
     }),
   };
 });
+const LOCKOUT_TRACKED_IDENTITIES_CAP_FOR_TESTS = 5;
+const { previousMaxTrackedLockoutIdentities } = vi.hoisted(() => {
+  const previous = process.env.DD_AUTH_LOCKOUT_MAX_TRACKED_IDENTITIES;
+  process.env.DD_AUTH_LOCKOUT_MAX_TRACKED_IDENTITIES = '5';
+  return { previousMaxTrackedLockoutIdentities: previous };
+});
 
 const lockoutStateFiles = new Map<string, string>();
 const LOCKOUT_STATE_PATH = '/test/store/db.json.auth-lockouts.json';
@@ -75,6 +81,11 @@ import {
   authenticateLogin,
   initializeLoginLockoutState,
   resetLoginLockoutStateForTests,
+  testable_accountLockoutPolicy,
+  testable_evictOldestTrackedEntries,
+  testable_makeTrackedIdentityCapacity,
+  testable_pruneLockoutEntries,
+  testable_registerFailedLoginAttempt,
 } from './auth-lockout.js';
 
 function createResponse() {
@@ -98,6 +109,15 @@ function makePassportSuccess(username = 'john') {
 }
 
 describe('auth-lockout', () => {
+  afterAll(() => {
+    if (previousMaxTrackedLockoutIdentities === undefined) {
+      delete process.env.DD_AUTH_LOCKOUT_MAX_TRACKED_IDENTITIES;
+      return;
+    }
+
+    process.env.DD_AUTH_LOCKOUT_MAX_TRACKED_IDENTITIES = previousMaxTrackedLockoutIdentities;
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     lockoutStateFiles.clear();
@@ -252,6 +272,96 @@ describe('auth-lockout', () => {
     vi.useRealTimers();
   });
 
+  test('testable_pruneLockoutEntries evicts oldest hydrated entries when persisted state exceeds the cap', () => {
+    const now = Date.parse('2026-01-01T00:00:00.000Z');
+    const lockouts = new Map();
+
+    for (let index = 0; index <= LOCKOUT_TRACKED_IDENTITIES_CAP_FOR_TESTS; index += 1) {
+      lockouts.set(`persisted-user-${index}`, {
+        failedAttempts: 1,
+        windowStartAt: now + index,
+        lockedUntil: now + testable_accountLockoutPolicy.lockoutMs,
+        lastAttemptAt: now + index,
+      });
+    }
+
+    testable_pruneLockoutEntries(lockouts, testable_accountLockoutPolicy, now);
+
+    expect(lockouts.size).toBe(LOCKOUT_TRACKED_IDENTITIES_CAP_FOR_TESTS);
+    expect(lockouts.has('persisted-user-0')).toBe(false);
+    expect(lockouts.has(`persisted-user-${LOCKOUT_TRACKED_IDENTITIES_CAP_FOR_TESTS}`)).toBe(true);
+  });
+
+  test('testable_makeTrackedIdentityCapacity removes expired unlocked entries before evicting active ones', () => {
+    const now = Date.parse('2026-01-01T00:20:00.000Z');
+    const expiredAttemptAt = now - testable_accountLockoutPolicy.windowMs - 1_000;
+    const lockouts = new Map([
+      [
+        'expired-user',
+        {
+          failedAttempts: 1,
+          windowStartAt: expiredAttemptAt,
+          lockedUntil: 0,
+          lastAttemptAt: expiredAttemptAt,
+        },
+      ],
+      ...Array.from({ length: LOCKOUT_TRACKED_IDENTITIES_CAP_FOR_TESTS - 1 }, (_, index) => [
+        `fresh-user-${index}`,
+        {
+          failedAttempts: 1,
+          windowStartAt: now - index,
+          lockedUntil: now + testable_accountLockoutPolicy.lockoutMs,
+          lastAttemptAt: now - index,
+        },
+      ]),
+    ]);
+
+    testable_makeTrackedIdentityCapacity(lockouts, testable_accountLockoutPolicy, now);
+
+    expect(lockouts.has('expired-user')).toBe(false);
+    expect(lockouts.size).toBe(LOCKOUT_TRACKED_IDENTITIES_CAP_FOR_TESTS - 1);
+    expect(lockouts.has('fresh-user-0')).toBe(true);
+    expect(lockouts.has(`fresh-user-${LOCKOUT_TRACKED_IDENTITIES_CAP_FOR_TESTS - 2}`)).toBe(true);
+  });
+
+  test('testable_evictOldestTrackedEntries returns early when no entries remain to evict', () => {
+    const lockouts = new Map();
+
+    expect(() => testable_evictOldestTrackedEntries(lockouts, 1)).not.toThrow();
+    expect(lockouts.size).toBe(0);
+  });
+
+  test('testable_registerFailedLoginAttempt replaces stale unlocked entries with a fresh attempt', () => {
+    const now = Date.parse('2026-01-01T00:20:00.000Z');
+    const expiredAttemptAt = now - testable_accountLockoutPolicy.windowMs - 1_000;
+    const lockouts = new Map([
+      [
+        'header-only-user',
+        {
+          failedAttempts: 4,
+          windowStartAt: expiredAttemptAt - 5_000,
+          lockedUntil: 0,
+          lastAttemptAt: expiredAttemptAt,
+        },
+      ],
+    ]);
+
+    const lockoutUntil = testable_registerFailedLoginAttempt(
+      lockouts,
+      testable_accountLockoutPolicy,
+      'header-only-user',
+      now,
+    );
+
+    expect(lockoutUntil).toBeUndefined();
+    expect(lockouts.get('header-only-user')).toEqual({
+      failedAttempts: 1,
+      windowStartAt: now,
+      lockedUntil: 0,
+      lastAttemptAt: now,
+    });
+  });
+
   test('clears lockout state after a successful authentication', () => {
     makePassportInvalidCredentials();
     const req = {
@@ -273,6 +383,34 @@ describe('auth-lockout', () => {
       authenticateLogin(req, res as any, vi.fn());
       expect(res.status).toHaveBeenCalledWith(401);
     }
+  });
+
+  test('evicts the oldest tracked account entry when the identity cap is exceeded', () => {
+    vi.useFakeTimers();
+    makePassportInvalidCredentials();
+    const startedAt = Date.parse('2026-01-01T00:00:00.000Z');
+
+    for (let index = 0; index <= LOCKOUT_TRACKED_IDENTITIES_CAP_FOR_TESTS; index += 1) {
+      vi.setSystemTime(new Date(startedAt + index));
+      authenticateLogin(
+        {
+          body: { username: `evict-user-${index}` },
+          ip: `198.51.100.${index % 255}`,
+        } as any,
+        createResponse() as any,
+        vi.fn(),
+      );
+    }
+
+    vi.advanceTimersByTime(1000);
+
+    const persisted = JSON.parse(lockoutStateFiles.get(LOCKOUT_STATE_PATH) ?? '{}');
+    expect(Object.keys(persisted.account)).toHaveLength(LOCKOUT_TRACKED_IDENTITIES_CAP_FOR_TESTS);
+    expect(persisted.account['evict-user-0']).toBeUndefined();
+    expect(persisted.account[`evict-user-${LOCKOUT_TRACKED_IDENTITIES_CAP_FOR_TESTS}`]).toEqual(
+      expect.objectContaining({ failedAttempts: 1 }),
+    );
+    vi.useRealTimers();
   });
 
   test('extracts login identity from the first authorization header value when headers are arrays', () => {

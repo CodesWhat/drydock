@@ -11,6 +11,10 @@ changed | all) ;;
 	;;
 esac
 
+# Coverage output is ignored source, but some qlty plugins still walk it before
+# exclude filters apply. Drop the transient directories to keep the gate stable.
+rm -rf app/coverage ui/coverage
+
 cmd=(qlty check --no-progress)
 
 if [ "$mode" = "all" ]; then

@@ -174,6 +174,44 @@ describe('Docker Watcher', () => {
       expect(result.tag).toBe('unknown');
       expect(result.noUpdateReason).toBe('Running by digest — no tag to compare');
     });
+
+    test('should still resolve remote digest when tag is sha256 digest and digest watch is enabled', async () => {
+      const container = {
+        image: {
+          id: 'image123',
+          registry: { name: 'hub' },
+          tag: { value: 'sha256:abc123def456', semver: false },
+          digest: { watch: true, repo: 'sha256:abc123def456' },
+        },
+      };
+      const mockRegistry = {
+        getTags: vi.fn().mockResolvedValue([]),
+        getImageManifestDigest: vi
+          .fn()
+          .mockResolvedValueOnce({
+            digest: 'sha256:def456abc123',
+            created: '2023-01-01',
+            version: 2,
+          })
+          .mockResolvedValueOnce({
+            digest: 'sha256:manifest123',
+          }),
+      };
+      setRegistryState({ hub: mockRegistry });
+      const logChild = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
+
+      const result = await docker.findNewVersion(container, logChild);
+
+      expect(result).toEqual({
+        tag: 'sha256:abc123def456',
+        digest: 'sha256:def456abc123',
+        created: '2023-01-01',
+        noUpdateReason: 'Running by digest — no tag to compare',
+      });
+      expect(mockRegistry.getTags).not.toHaveBeenCalled();
+      expect(mockRegistry.getImageManifestDigest).toHaveBeenCalledTimes(2);
+      expect(container.image.digest.value).toBe('sha256:manifest123');
+    });
   });
 
   describe('Additional Coverage - getTagCandidates empty', () => {

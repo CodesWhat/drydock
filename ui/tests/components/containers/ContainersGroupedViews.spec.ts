@@ -130,6 +130,8 @@ function makeContext(overrides: Record<string, unknown> = {}) {
     delta: { snoozed: true, skipped: true, maturityBlocked: false },
     epsilon: { snoozed: false, skipped: false, maturityBlocked: true },
   };
+  const resolvePolicyName = (target: string | { name?: string }) =>
+    typeof target === 'string' ? target : (target.name ?? '');
 
   const spies = {
     toggleGroupCollapse: vi.fn((key: string) => {
@@ -145,8 +147,8 @@ function makeContext(overrides: Record<string, unknown> = {}) {
     selectContainer: vi.fn((container: Container) => {
       selectedContainer.value = container;
     }),
-    toggleActionsMenu: vi.fn((name: string) => {
-      openActionsMenu.value = name;
+    toggleActionsMenu: vi.fn((key: string) => {
+      openActionsMenu.value = key;
     }),
     confirmUpdate: vi.fn(),
     confirmStop: vi.fn(),
@@ -201,10 +203,16 @@ function makeContext(overrides: Record<string, unknown> = {}) {
       typeof c.registryError === 'string' && c.registryError.trim().length > 0,
     registryErrorTooltip: (c: Container) =>
       c.registryError ? `Registry error: ${c.registryError}` : 'Registry error',
-    containerPolicyTooltip: (name: string, kind: 'snoozed' | 'skipped' | 'maturity') =>
-      `${name}-${kind}-tooltip`,
-    getContainerListPolicyState: (name: string) =>
-      policyMap[name] ?? { snoozed: false, skipped: false, maturityBlocked: false },
+    containerPolicyTooltip: (
+      target: string | { name?: string },
+      kind: 'snoozed' | 'skipped' | 'maturity',
+    ) => `${resolvePolicyName(target)}-${kind}-tooltip`,
+    getContainerListPolicyState: (target: string | { name?: string }) =>
+      policyMap[resolvePolicyName(target)] ?? {
+        snoozed: false,
+        skipped: false,
+        maturityBlocked: false,
+      },
     serverBadgeColor: () => ({ bg: '#ddd', text: '#111' }),
     parseServer: (server: string) =>
       server.includes('local') ? { name: 'Local', env: 'dev' } : { name: 'Remote', env: null },
@@ -379,9 +387,15 @@ describe('ContainersGroupedViews', () => {
 
     expect(spies.toggleGroupCollapse).toHaveBeenCalledWith('stack-a');
     expect(spies.updateAllInGroup).toHaveBeenCalled();
-    expect(spies.confirmUpdate).toHaveBeenCalledWith('beta');
-    expect(spies.confirmStop).toHaveBeenCalledWith('gamma');
-    expect(spies.startContainer).toHaveBeenCalledWith('delta');
+    expect(spies.confirmUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'c-updatable', name: 'beta' }),
+    );
+    expect(spies.confirmStop).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'c-running', name: 'gamma' }),
+    );
+    expect(spies.startContainer).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'c-stopped', name: 'delta' }),
+    );
     expect(spies.toggleActionsMenu).toHaveBeenCalled();
     expect(spies.selectContainer).toHaveBeenCalled();
     expect(context.containerSortKey.value).toBe('status');
@@ -464,10 +478,18 @@ describe('ContainersGroupedViews', () => {
       .trigger('click');
 
     expect(spies.toggleActionsMenu).toHaveBeenCalled();
-    expect(spies.confirmUpdate).toHaveBeenCalledWith('beta');
-    expect(spies.confirmStop).toHaveBeenCalledWith('gamma');
-    expect(spies.startContainer).toHaveBeenCalledWith('delta');
-    expect(spies.confirmRestart).toHaveBeenCalledWith(expect.any(String));
+    expect(spies.confirmUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'c-s1', name: 'beta' }),
+    );
+    expect(spies.confirmStop).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'c-r1', name: 'gamma' }),
+    );
+    expect(spies.startContainer).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'c-t1', name: 'delta' }),
+    );
+    expect(spies.confirmRestart).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'c-t1', name: 'delta' }),
+    );
   });
 
   it('covers dropdown menu actions across blocked/updateable states', async () => {
@@ -515,26 +537,32 @@ describe('ContainersGroupedViews', () => {
       await matches[index].trigger('click');
     }
 
-    await clickMenuAction('alpha', 'Stop');
-    await clickMenuAction('alpha', 'Restart');
-    await clickMenuAction('alpha', 'Scan');
-    await clickMenuAction('alpha', 'Force update');
-    await clickMenuAction('alpha', 'Delete');
+    await clickMenuAction('c-m1', 'Stop');
+    await clickMenuAction('c-m1', 'Restart');
+    await clickMenuAction('c-m1', 'Scan');
+    await clickMenuAction('c-m1', 'Force update');
+    await clickMenuAction('c-m1', 'Delete');
 
-    await clickMenuAction('beta', 'Start');
-    await clickMenuAction('beta', 'Restart');
-    await clickMenuAction('beta', 'Scan');
-    await clickMenuAction('beta', 'Force update');
-    await clickMenuAction('beta', 'Skip this update');
-    await clickMenuAction('beta', 'Delete');
+    await clickMenuAction('c-m2', 'Start');
+    await clickMenuAction('c-m2', 'Restart');
+    await clickMenuAction('c-m2', 'Scan');
+    await clickMenuAction('c-m2', 'Force update');
+    await clickMenuAction('c-m2', 'Skip this update');
+    await clickMenuAction('c-m2', 'Delete');
 
     expect(spies.closeActionsMenu).toHaveBeenCalled();
-    expect(spies.confirmStop).toHaveBeenCalledWith('alpha');
-    expect(spies.startContainer).toHaveBeenCalledWith('beta');
+    expect(spies.confirmStop).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'c-m1', name: 'alpha' }),
+    );
+    expect(spies.startContainer).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'c-m2', name: 'beta' }),
+    );
     expect(spies.confirmRestart).toHaveBeenCalled();
     expect(spies.scanContainer).toHaveBeenCalled();
     expect(spies.confirmForceUpdate).toHaveBeenCalled();
-    expect(spies.skipUpdate).toHaveBeenCalledWith('beta');
+    expect(spies.skipUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'c-m2', name: 'beta' }),
+    );
     expect(spies.confirmDelete).toHaveBeenCalled();
   });
 
@@ -577,7 +605,7 @@ describe('ContainersGroupedViews', () => {
         updatableCount: 0,
       },
     ];
-    refs.openActionsMenu.value = 'alpha';
+    refs.openActionsMenu.value = 'c-alpha';
     mocked.context = context;
 
     const wrapper = mountSubject();
@@ -658,11 +686,15 @@ describe('ContainersGroupedViews', () => {
     await wrapper.find('.emit-list-click').trigger('click');
 
     expect(spies.selectContainer).toHaveBeenCalled();
-    expect(spies.confirmStop).toHaveBeenCalledWith('alpha');
+    expect(spies.confirmStop).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'c-card-1', name: 'alpha' }),
+    );
     expect(spies.startContainer).toHaveBeenCalled();
     expect(spies.confirmRestart).toHaveBeenCalled();
     expect(spies.scanContainer).toHaveBeenCalled();
-    expect(spies.confirmUpdate).toHaveBeenCalledWith('alpha');
+    expect(spies.confirmUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'c-card-1', name: 'alpha' }),
+    );
   });
 
   it('shows empty state and clears filters', async () => {
@@ -709,6 +741,54 @@ describe('ContainersGroupedViews', () => {
     expect(wrapper.find('[aria-label="Maturity-blocked updates"]').exists()).toBe(true);
   });
 
+  it('keeps the stack Update all button visible when all updates are security-blocked', async () => {
+    const blockedA = makeContainer({
+      id: 'c-blocked-a',
+      name: 'alpha',
+      newTag: '2.0.0',
+      updateKind: 'major',
+      bouncer: 'blocked',
+      status: 'running',
+    });
+    const blockedB = makeContainer({
+      id: 'c-blocked-b',
+      name: 'beta',
+      newTag: '1.1.0',
+      updateKind: 'minor',
+      bouncer: 'blocked',
+      status: 'running',
+    });
+
+    const { context, refs, spies } = makeContext();
+    refs.groupByStack.value = true;
+    refs.filteredContainers.value = [blockedA, blockedB];
+    refs.displayContainers.value = [blockedA, blockedB];
+    refs.renderGroups.value = [
+      {
+        key: 'stack-blocked',
+        name: 'stack-blocked',
+        containers: [blockedA, blockedB],
+        containerCount: 2,
+        updatesAvailable: 2,
+        updatableCount: 0,
+      },
+    ];
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+
+    const updateAllButton = wrapper
+      .findAll('button')
+      .find((button) => button.text().includes('Update all'));
+
+    expect(updateAllButton).toBeDefined();
+    expect(updateAllButton!.attributes('disabled')).toBeDefined();
+    expect(updateAllButton!.find('[data-icon="lock"]').exists()).toBe(true);
+
+    await updateAllButton!.trigger('click');
+    expect(spies.updateAllInGroup).not.toHaveBeenCalled();
+  });
+
   it('covers group-header disabled states and disabled table action click handler', async () => {
     const item = makeContainer({
       id: 'c-disabled',
@@ -722,7 +802,7 @@ describe('ContainersGroupedViews', () => {
     refs.groupByStack.value = true;
     refs.containerActionsEnabled.value = false;
     refs.groupUpdateInProgress.value = new Set(['stack-disabled']);
-    refs.actionInProgress.value = new Set(['alpha']);
+    refs.actionInProgress.value = new Set(['c-disabled']);
     refs.filteredContainers.value = [item];
     refs.displayContainers.value = [item];
     refs.renderGroups.value = [
@@ -743,6 +823,53 @@ describe('ContainersGroupedViews', () => {
     expect(tableLockBtn).toBeDefined();
     (tableLockBtn!.element as HTMLButtonElement).disabled = false;
     await tableLockBtn!.trigger('click');
+  });
+
+  it('disables only the matching same-named row when actionInProgress is keyed by id', async () => {
+    const localNode = makeContainer({
+      id: 'c-local',
+      name: 'tdarr_node',
+      server: 'Datavault',
+      newTag: '2.0.0',
+      updateKind: 'major',
+      bouncer: 'safe',
+      status: 'running',
+    });
+    const remoteNode = makeContainer({
+      id: 'c-remote',
+      name: 'tdarr_node',
+      server: 'Tmvault',
+      newTag: '2.0.0',
+      updateKind: 'major',
+      bouncer: 'safe',
+      status: 'running',
+    });
+
+    const { context, refs } = makeContext();
+    refs.filteredContainers.value = [localNode, remoteNode];
+    refs.displayContainers.value = [localNode, remoteNode];
+    refs.renderGroups.value = [
+      {
+        key: '__flat__',
+        name: null,
+        containers: [localNode, remoteNode],
+        containerCount: 2,
+        updatesAvailable: 2,
+        updatableCount: 2,
+      },
+    ];
+    refs.containerViewMode.value = 'table';
+    refs.tableActionStyle.value = 'icons';
+    refs.actionInProgress.value = new Set(['c-local']);
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+    const updateButtons = iconButtons(wrapper, 'cloud-download');
+
+    expect(updateButtons).toHaveLength(2);
+    expect(
+      updateButtons.filter((button) => button.attributes('disabled') !== undefined),
+    ).toHaveLength(1);
   });
 
   it('covers compact table badge branches across kind/maturity/policy/status variants', async () => {
@@ -852,19 +979,19 @@ describe('ContainersGroupedViews', () => {
     ];
     refs.containerViewMode.value = 'table';
     refs.tableActionStyle.value = 'buttons';
-    refs.actionInProgress.value = new Set(['alpha']);
+    refs.actionInProgress.value = new Set(['c-progress-1']);
     mocked.context = context;
 
     const wrapper = mountSubject();
     expect(wrapper.text()).toContain('alpha');
 
-    refs.actionInProgress.value = new Set(['beta']);
+    refs.actionInProgress.value = new Set(['c-progress-2']);
     await nextTick();
-    refs.actionInProgress.value = new Set(['gamma']);
+    refs.actionInProgress.value = new Set(['c-progress-3']);
     await nextTick();
 
     refs.tableActionStyle.value = 'icons';
-    refs.actionInProgress.value = new Set(['gamma']);
+    refs.actionInProgress.value = new Set(['c-progress-3']);
     await nextTick();
   });
 
@@ -929,12 +1056,12 @@ describe('ContainersGroupedViews', () => {
         updatableCount: 4,
       },
     ];
-    refs.actionInProgress.value = new Set(['beta']);
+    refs.actionInProgress.value = new Set(['c-card-running']);
     mocked.context = context;
 
     const wrapper = mountSubject();
 
-    refs.actionInProgress.value = new Set(['gamma']);
+    refs.actionInProgress.value = new Set(['c-list-minor']);
     await nextTick();
 
     refs.containerActionsEnabled.value = false;

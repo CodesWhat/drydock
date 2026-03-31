@@ -802,8 +802,12 @@ describe('ContainerSideTabContent - Environment Variables', () => {
     await rollbackLatestButton?.trigger('click');
 
     expect(runContainerPreview).toHaveBeenCalledTimes(1);
-    expect(mockConfirmUpdate).toHaveBeenCalledWith('nginx');
-    expect(mockScanContainer).toHaveBeenCalledWith('nginx');
+    expect(mockConfirmUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'container-1', name: 'nginx' }),
+    );
+    expect(mockScanContainer).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'container-1', name: 'nginx' }),
+    );
     expect(mockSkipCurrentForSelected).toHaveBeenCalledTimes(1);
     expect(mockSnoozeSelected).toHaveBeenCalledWith(1);
     expect(mockSnoozeSelected).toHaveBeenCalledWith(7);
@@ -830,7 +834,9 @@ describe('ContainerSideTabContent - Environment Variables', () => {
 
     await forceUpdateButton?.trigger('click');
 
-    expect(mockConfirmForceUpdate).toHaveBeenCalledWith('nginx');
+    expect(mockConfirmForceUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'container-1', name: 'nginx' }),
+    );
   });
 
   it('keeps sensitive value masked when reveal response has no env list', async () => {

@@ -26,6 +26,7 @@ const coverageConfig: CustomCoverageConfig = {
     '**/node_modules/**',
     '**/dist/**',
     '**/coverage/**',
+    '**/.stryker-tmp/**',
     '**/*.d.ts',
     '**/*.typecheck.ts',
     '**/auth-types.ts',

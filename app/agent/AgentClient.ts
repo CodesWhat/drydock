@@ -11,7 +11,11 @@ import {
 } from '../event/index.js';
 import logger from '../log/index.js';
 import { sanitizeLogParam } from '../log/sanitize.js';
-import type { Container, ContainerReport } from '../model/container.js';
+import {
+  type Container,
+  type ContainerReport,
+  clearDetectedUpdateState,
+} from '../model/container.js';
 import * as registry from '../registry/index.js';
 import { resolveConfiguredPath } from '../runtime/paths.js';
 import * as storeContainer from '../store/container.js';
@@ -86,6 +90,7 @@ export class AgentClient {
   public info: AgentClientRuntimeInfo;
   private reconnectTimer: NodeJS.Timeout | null;
   private reconnectAttempts: number;
+  private hasConnectedOnce: boolean;
   private readonly pendingFreshStateAfterRemoteUpdate: Set<string>;
 
   constructor(name: string, config: AgentClientConfig) {
@@ -101,6 +106,7 @@ export class AgentClient {
     this.info = {};
     this.reconnectTimer = null;
     this.reconnectAttempts = 0;
+    this.hasConnectedOnce = false;
     this.pendingFreshStateAfterRemoteUpdate = new Set();
   }
 
@@ -256,6 +262,7 @@ export class AgentClient {
 
   async handshake() {
     const wasConnected = this.isConnected;
+    const reconnected = this.hasConnectedOnce;
     const response = await axios.get<Container[]>(
       `${this.baseUrl}/api/containers`,
       this.axiosOptions,
@@ -292,9 +299,11 @@ export class AgentClient {
     }
 
     this.isConnected = true;
+    this.hasConnectedOnce = true;
     if (!wasConnected) {
       void emitAgentConnected({
         agentName: this.name,
+        reconnected,
       }).catch((error: unknown) => {
         this.log.debug(`Failed to emit agent connected event (${getErrorMessage(error)})`);
       });
@@ -313,7 +322,7 @@ export class AgentClient {
     }
 
     if (this.shouldPreserveClearedUpdateAvailable(container)) {
-      container.updateAvailable = false;
+      container = clearDetectedUpdateState(container);
     } else if (container.updateAvailable === false) {
       this.clearPendingFreshState(container.id);
     }

@@ -351,6 +351,46 @@ describe('useContainerSecurity', () => {
     expect(composable.getVulnerabilityPackage({})).toBe('unknown');
   });
 
+  it('defaults missing vulnerability summary buckets to zero', async () => {
+    mocks.getContainerVulnerabilities.mockResolvedValueOnce({
+      summary: { critical: 2 },
+      vulnerabilities: [],
+    });
+
+    const { composable } = await mountSecurityHarness({
+      selectedContainerId: 'container-1',
+    });
+
+    expect(composable.vulnerabilitySummary.value).toEqual({
+      critical: 2,
+      high: 0,
+      medium: 0,
+      low: 0,
+      unknown: 0,
+    });
+    expect(composable.vulnerabilityTotal.value).toBe(2);
+    expect(composable.vulnerabilityPreview.value).toEqual([]);
+  });
+
+  it('defaults vulnerability summary totals to zero when the summary payload is absent', async () => {
+    mocks.getContainerVulnerabilities.mockResolvedValueOnce({
+      vulnerabilities: [],
+    });
+
+    const { composable } = await mountSecurityHarness({
+      selectedContainerId: 'container-1',
+    });
+
+    expect(composable.vulnerabilitySummary.value).toEqual({
+      critical: 0,
+      high: 0,
+      medium: 0,
+      low: 0,
+      unknown: 0,
+    });
+    expect(composable.vulnerabilityTotal.value).toBe(0);
+  });
+
   it('derives SBOM component count from packages when components are absent', async () => {
     mocks.getContainerSbom.mockResolvedValueOnce({
       generatedAt: '2026-03-05T10:00:00.000Z',

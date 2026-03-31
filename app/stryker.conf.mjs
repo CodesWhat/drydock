@@ -8,6 +8,7 @@ const config = {
     '!**/*.test.ts',
     '!**/*.fuzz.test.ts',
     '!**/*.typecheck.ts',
+    '!test/**',
     '!dist/**',
     '!coverage/**',
   ],
@@ -15,9 +16,18 @@ const config = {
   checkers: ['typescript'],
   tsconfigFile: 'tsconfig.json',
   coverageAnalysis: 'off',
-  reporters: ['clear-text', 'progress', 'html', ...(dashboardReporterEnabled ? ['dashboard'] : [])],
+  reporters: [
+    'clear-text',
+    'progress',
+    'html',
+    'json',
+    ...(dashboardReporterEnabled ? ['dashboard'] : []),
+  ],
   htmlReporter: {
     fileName: 'reports/mutation/html/index.html',
+  },
+  jsonReporter: {
+    fileName: 'reports/mutation/mutation.json',
   },
   ...(dashboardReporterEnabled
     ? {
@@ -31,6 +41,7 @@ const config = {
   vitest: {
     configFile: 'vitest.config.ts',
   },
+  incremental: true,
   thresholds: {
     high: 80,
     low: 70,

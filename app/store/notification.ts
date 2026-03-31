@@ -72,6 +72,13 @@ export const DEFAULT_NOTIFICATION_RULES: NotificationRule[] = [
     triggers: [],
     description: 'When a remote agent loses connection',
   },
+  {
+    id: 'agent-reconnect',
+    name: 'Agent Reconnected',
+    enabled: false,
+    triggers: [],
+    description: 'When a remote agent reconnects after losing connection',
+  },
 ];
 
 const notificationRuleSchema = joi.object({

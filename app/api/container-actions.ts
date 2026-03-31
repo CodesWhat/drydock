@@ -3,6 +3,7 @@ import nocache from 'nocache';
 import { getServerConfiguration } from '../configuration/index.js';
 import logger from '../log/index.js';
 import type { AuditEntry } from '../model/audit.js';
+import { clearDetectedUpdateState } from '../model/container.js';
 import { getContainerActionsCounter } from '../prometheus/container-actions.js';
 import * as registry from '../registry/index.js';
 import * as storeContainer from '../store/container.js';
@@ -188,11 +189,14 @@ async function updateContainer(req: Request, res: Response) {
 
   try {
     await trigger.trigger(container);
-    // Clear updateAvailable so the UI refresh sees the change immediately
-    // (the watcher will re-evaluate on its next scan cycle)
+    // Drop stale raw update data so the next store validation recomputes this
+    // container as up to date until the watcher performs an authoritative rescan.
     const containerAfterTrigger = storeContainer.getContainer(id);
-    if (containerAfterTrigger?.updateAvailable) {
-      storeContainer.updateContainer({ ...containerAfterTrigger, updateAvailable: false });
+    if (
+      containerAfterTrigger &&
+      (containerAfterTrigger.result || containerAfterTrigger.updateAvailable)
+    ) {
+      storeContainer.updateContainer(clearDetectedUpdateState(containerAfterTrigger));
     }
     const updatedContainer = storeContainer.getContainer(id);
     recordAuditEvent({ action: 'container-update', container, status: 'success' });
