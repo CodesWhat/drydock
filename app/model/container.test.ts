@@ -868,6 +868,46 @@ test('model should suppress created-only update when snoozed', async () => {
   expect(containerValidated.updateAvailable).toBeFalsy();
 });
 
+test('clearDetectedUpdateState should drop raw update state so updateAvailable becomes false', () => {
+  const containerValidated = container.validate({
+    id: 'container-clear-update-123456789',
+    name: 'test',
+    watcher: 'test',
+    image: {
+      id: 'image-clear-update-123456789',
+      registry: {
+        name: 'hub',
+        url: 'https://hub',
+      },
+      name: 'organization/image',
+      tag: {
+        value: '1.0.0',
+        semver: true,
+      },
+      digest: {
+        watch: true,
+        value: 'sha256:old',
+        repo: 'sha256:old',
+      },
+      architecture: 'arch',
+      os: 'os',
+      created: '2021-06-12T05:33:38.440Z',
+    },
+    result: {
+      digest: 'sha256:new',
+    },
+  });
+
+  const cleared = container.clearDetectedUpdateState(containerValidated);
+
+  expect(cleared.result).toBeUndefined();
+  expect(cleared.updateAvailable).toBe(false);
+  expect(cleared.updateKind).toEqual({
+    kind: 'unknown',
+    semverDiff: 'unknown',
+  });
+});
+
 test('model should support transforms for links', async () => {
   const containerValidated = container.validate({
     id: 'container-123456789',

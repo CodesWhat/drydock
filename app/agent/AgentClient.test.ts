@@ -326,6 +326,9 @@ describe('AgentClient', () => {
       await client.handleEvent('dd:container-updated', {
         id: 'c1',
         name: 'test',
+        result: {
+          digest: 'sha256:new',
+        },
         updateAvailable: true,
       });
 
@@ -334,6 +337,7 @@ describe('AgentClient', () => {
           id: 'c1',
           name: 'test',
           agent: 'test-agent',
+          result: undefined,
           updateAvailable: false,
         }),
       );
