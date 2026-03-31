@@ -73,11 +73,21 @@ const AUTO_TRIGGER_ERROR_SUPPRESSION_RETENTION_MS = AUTO_TRIGGER_ERROR_SUPPRESSI
 const AUTO_EVENT_BATCH_FLUSH_DELAY_MS = 250;
 const TRIGGER_RELEASE_NOTES_BODY_MAX_LENGTH = 500;
 const ACTION_TRIGGER_TYPES = new Set(['command', 'docker', 'dockercompose']);
-const AGENT_DISCONNECT_SIMPLE_TITLE_TEMPLATE = 'Agent ${event.agentName} disconnected';
+function buildLiteralTemplateExpression(expression: string): string {
+  return '$' + '{' + expression + '}';
+}
+
+const AGENT_DISCONNECT_SIMPLE_TITLE_TEMPLATE =
+  'Agent ' + buildLiteralTemplateExpression('event.agentName') + ' disconnected';
 const AGENT_DISCONNECT_SIMPLE_BODY_TEMPLATE =
-  'Agent ${event.agentName} disconnected${event.reason ? ": " + event.reason : ""}';
-const AGENT_RECONNECT_SIMPLE_TITLE_TEMPLATE = 'Agent ${event.agentName} reconnected';
-const AGENT_RECONNECT_SIMPLE_BODY_TEMPLATE = 'Agent ${event.agentName} reconnected';
+  'Agent ' +
+  buildLiteralTemplateExpression('event.agentName') +
+  ' disconnected' +
+  buildLiteralTemplateExpression('event.reason ? ": " + event.reason : ""');
+const AGENT_RECONNECT_SIMPLE_TITLE_TEMPLATE =
+  'Agent ' + buildLiteralTemplateExpression('event.agentName') + ' reconnected';
+const AGENT_RECONNECT_SIMPLE_BODY_TEMPLATE =
+  'Agent ' + buildLiteralTemplateExpression('event.agentName') + ' reconnected';
 const AGENT_SIMPLE_TITLE_TEMPLATES: Record<TriggerNotificationEvent['kind'], string> = {
   'agent-disconnect': AGENT_DISCONNECT_SIMPLE_TITLE_TEMPLATE,
   'agent-reconnect': AGENT_RECONNECT_SIMPLE_TITLE_TEMPLATE,
@@ -1226,4 +1236,5 @@ class Trigger extends Component {
 }
 
 export default Trigger;
+export const testable_buildLiteralTemplateExpression = buildLiteralTemplateExpression;
 export const testable_resolveNotificationTemplate = resolveNotificationTemplate;
