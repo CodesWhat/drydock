@@ -6,9 +6,6 @@ const docsVersionPrefixes = "v1\\.5(?:/|$)|v1\\.4(?:/|$)|v1\\.3(?:/|$)";
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  experimental: {
-    sri: { algorithm: "sha384" },
-  },
   images: {
     remotePatterns: [
       {
