@@ -34,6 +34,7 @@ function createMainLogStream() {
     colorize: Boolean(process.stdout.isTTY),
     sync: true,
     singleLine: true,
+    translateTime: 'SYS:HH:MM:ss.l',
   });
 }
 
