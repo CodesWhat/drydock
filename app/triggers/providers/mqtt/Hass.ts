@@ -293,6 +293,26 @@ class Hass {
     }
   }
 
+  private getTrackedContainerStateTopicsForWatcher({
+    watcherName,
+    excludingContainerId,
+  }: {
+    watcherName: string;
+    excludingContainerId?: string;
+  }) {
+    if (watcherName === '') {
+      return new Set<string>();
+    }
+
+    const watcherTopicPrefix = `${this.configuration.topic}/${watcherName}/`;
+    return new Set(
+      Array.from(this.containerStateTopicById.entries())
+        .filter(([containerId]) => containerId !== excludingContainerId)
+        .map(([, stateTopic]) => stateTopic)
+        .filter((stateTopic) => stateTopic.startsWith(watcherTopicPrefix)),
+    );
+  }
+
   private async removeDiscoveryTopics({
     kind,
     stateTopics,
@@ -411,10 +431,18 @@ class Hass {
     ];
     this.log.info(`Remove hass container update sensor [${containerStateSensor.topic}]`);
     if (this.configuration.hass.discovery) {
-      const activeStateTopics = this.getActiveContainerStateTopicsForWatcher({
-        watcherName: typeof container?.watcher === 'string' ? container.watcher : '',
-        excludingContainerId: this.getContainerId(container),
-      });
+      const watcherName = typeof container?.watcher === 'string' ? container.watcher : '';
+      const excludingContainerId = this.getContainerId(container);
+      const activeStateTopics = new Set<string>([
+        ...this.getActiveContainerStateTopicsForWatcher({
+          watcherName,
+          excludingContainerId,
+        }),
+        ...this.getTrackedContainerStateTopicsForWatcher({
+          watcherName,
+          excludingContainerId,
+        }),
+      ]);
       await this.removeDiscoveryTopics({
         kind: containerStateSensor.kind,
         stateTopics: stateTopicsToRemove.filter((stateTopic) => !activeStateTopics.has(stateTopic)),

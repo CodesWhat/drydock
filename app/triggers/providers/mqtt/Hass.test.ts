@@ -891,6 +891,40 @@ test('removeContainerSensor should keep a canonical topic when another live cont
   );
 });
 
+test('removeContainerSensor should keep a canonical topic when a replacement container is still tracked during store lag', async () => {
+  vi.spyOn(hass, 'updateContainerSensors').mockResolvedValue(undefined);
+
+  await hass.addContainerSensor({
+    id: 'old-container-id',
+    name: 'termix',
+    watcher: 'watcher-name',
+    displayIcon: 'mdi:docker',
+  });
+  await hass.addContainerSensor({
+    id: 'new-container-id',
+    name: 'termix',
+    watcher: 'watcher-name',
+    displayIcon: 'mdi:docker',
+  });
+
+  mqttClientMock.publish.mockClear();
+
+  vi.spyOn(containerStore, 'getContainers').mockReturnValue([] as any);
+
+  await hass.removeContainerSensor({
+    id: 'old-container-id',
+    name: 'termix',
+    watcher: 'watcher-name',
+    displayIcon: 'mdi:docker',
+  });
+
+  expect(mqttClientMock.publish).not.toHaveBeenCalledWith(
+    'homeassistant/update/topic_watcher-name_termix/config',
+    '',
+    { retain: true },
+  );
+});
+
 test('removeContainerSensor should still remove topic when watcher name is empty', async () => {
   vi.spyOn(hass, 'updateContainerSensors').mockResolvedValue(undefined);
 
