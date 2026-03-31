@@ -11,7 +11,11 @@ import {
 } from '../event/index.js';
 import logger from '../log/index.js';
 import { sanitizeLogParam } from '../log/sanitize.js';
-import type { Container, ContainerReport } from '../model/container.js';
+import {
+  type Container,
+  type ContainerReport,
+  clearDetectedUpdateState,
+} from '../model/container.js';
 import * as registry from '../registry/index.js';
 import { resolveConfiguredPath } from '../runtime/paths.js';
 import * as storeContainer from '../store/container.js';
@@ -313,7 +317,7 @@ export class AgentClient {
     }
 
     if (this.shouldPreserveClearedUpdateAvailable(container)) {
-      container.updateAvailable = false;
+      container = clearDetectedUpdateState(container);
     } else if (container.updateAvailable === false) {
       this.clearPendingFreshState(container.id);
     }

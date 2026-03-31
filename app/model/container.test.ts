@@ -898,7 +898,7 @@ test('clearDetectedUpdateState should drop raw update state so updateAvailable b
     },
   });
 
-  const cleared = container.clearDetectedUpdateState(containerValidated);
+  const cleared = container.validate(container.clearDetectedUpdateState(containerValidated));
 
   expect(cleared.result).toBeUndefined();
   expect(cleared.updateAvailable).toBe(false);

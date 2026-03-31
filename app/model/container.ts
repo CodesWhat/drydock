@@ -739,6 +739,33 @@ export function validate(container: unknown): Container {
 }
 
 /**
+ * Clear stale raw update detection state after a successful update.
+ * `updateAvailable` is derived from `image` + `result`, so callers must
+ * remove the raw result payload rather than trying to persist `false`.
+ */
+export function clearDetectedUpdateState(container: Container): Container {
+  const {
+    result: _result,
+    error: _error,
+    updateAvailable: _updateAvailable,
+    updateKind: _updateKind,
+    updateDetectedAt: _updateDetectedAt,
+    firstSeenAt: _firstSeenAt,
+    updateAge: _updateAge,
+    updateMaturityLevel: _updateMaturityLevel,
+    resultChanged: _resultChanged,
+    ...containerWithoutUpdateState
+  } = container;
+
+  return {
+    ...containerWithoutUpdateState,
+    result: undefined,
+    error: undefined,
+    updateAvailable: false,
+  } as Container;
+}
+
+/**
  * Flatten the container object (useful for k/v based integrations).
  * @param container
  * @returns {*}
