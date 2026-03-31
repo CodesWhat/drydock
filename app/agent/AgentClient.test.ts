@@ -465,7 +465,10 @@ describe('AgentClient', () => {
       storeContainer.getContainers.mockReturnValue([]);
       await client.handshake();
 
-      expect(event.emitAgentConnected).toHaveBeenCalledWith({ agentName: 'test-agent' });
+      expect(event.emitAgentConnected).toHaveBeenCalledWith({
+        agentName: 'test-agent',
+        reconnected: false,
+      });
     });
 
     test('should emit batched container reports after handshake processing', async () => {
@@ -524,10 +527,61 @@ describe('AgentClient', () => {
       await client.handshake();
       await Promise.resolve();
 
-      expect(event.emitAgentConnected).toHaveBeenCalledWith({ agentName: 'test-agent' });
+      expect(event.emitAgentConnected).toHaveBeenCalledWith({
+        agentName: 'test-agent',
+        reconnected: false,
+      });
       expect(client.log.debug).toHaveBeenCalledWith(
         'Failed to emit agent connected event (emit failed)',
       );
+    });
+
+    test('should emit agent-connected with reconnected=true after a prior disconnect', async () => {
+      axios.get
+        .mockResolvedValueOnce({ data: [] })
+        .mockResolvedValueOnce({ data: [] })
+        .mockResolvedValueOnce({ data: [] })
+        .mockResolvedValueOnce({ data: [] })
+        .mockResolvedValueOnce({ data: [] })
+        .mockResolvedValueOnce({ data: [] });
+
+      storeContainer.getContainers.mockReturnValue([]);
+
+      await client.handshake();
+      client.scheduleReconnect(1_000);
+      clearTimeout((client as any).reconnectTimer);
+      (client as any).reconnectTimer = null;
+
+      await client.handshake();
+
+      expect(event.emitAgentConnected).toHaveBeenNthCalledWith(1, {
+        agentName: 'test-agent',
+        reconnected: false,
+      });
+      expect(event.emitAgentConnected).toHaveBeenNthCalledWith(2, {
+        agentName: 'test-agent',
+        reconnected: true,
+      });
+    });
+
+    test('should keep reconnected=false on the first successful handshake after startup retries', async () => {
+      axios.get
+        .mockResolvedValueOnce({ data: [] })
+        .mockResolvedValueOnce({ data: [] })
+        .mockResolvedValueOnce({ data: [] });
+
+      storeContainer.getContainers.mockReturnValue([]);
+
+      client.scheduleReconnect(1_000);
+      clearTimeout((client as any).reconnectTimer);
+      (client as any).reconnectTimer = null;
+
+      await client.handshake();
+
+      expect(event.emitAgentConnected).toHaveBeenCalledWith({
+        agentName: 'test-agent',
+        reconnected: false,
+      });
     });
 
     test('should handle watcher fetch failure gracefully', async () => {

@@ -88,6 +88,7 @@ export interface SecurityAlertEventPayload {
 
 export interface AgentConnectedEventPayload {
   agentName: string;
+  reconnected: boolean;
 }
 
 export interface AgentDisconnectedEventPayload {

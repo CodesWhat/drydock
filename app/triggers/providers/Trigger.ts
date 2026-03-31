@@ -25,7 +25,8 @@ type NotificationRuleId =
   | 'update-applied'
   | 'update-failed'
   | 'security-alert'
-  | 'agent-disconnect';
+  | 'agent-disconnect'
+  | 'agent-reconnect';
 
 interface ContainerUpdateFailedPayload {
   containerName: string;
@@ -52,8 +53,13 @@ interface AgentDisconnectedPayload {
   reason?: string;
 }
 
+interface AgentConnectedPayload {
+  agentName: string;
+  reconnected: boolean;
+}
+
 interface TriggerNotificationEvent {
-  kind: 'agent-disconnect';
+  kind: 'agent-disconnect' | 'agent-reconnect';
   agentName: string;
   reason?: string;
 }
@@ -70,6 +76,16 @@ const ACTION_TRIGGER_TYPES = new Set(['command', 'docker', 'dockercompose']);
 const AGENT_DISCONNECT_SIMPLE_TITLE_TEMPLATE = 'Agent ${event.agentName} disconnected';
 const AGENT_DISCONNECT_SIMPLE_BODY_TEMPLATE =
   'Agent ${event.agentName} disconnected${event.reason ? ": " + event.reason : ""}';
+const AGENT_RECONNECT_SIMPLE_TITLE_TEMPLATE = 'Agent ${event.agentName} reconnected';
+const AGENT_RECONNECT_SIMPLE_BODY_TEMPLATE = 'Agent ${event.agentName} reconnected';
+const AGENT_SIMPLE_TITLE_TEMPLATES: Record<TriggerNotificationEvent['kind'], string> = {
+  'agent-disconnect': AGENT_DISCONNECT_SIMPLE_TITLE_TEMPLATE,
+  'agent-reconnect': AGENT_RECONNECT_SIMPLE_TITLE_TEMPLATE,
+};
+const AGENT_SIMPLE_BODY_TEMPLATES: Record<TriggerNotificationEvent['kind'], string> = {
+  'agent-disconnect': AGENT_DISCONNECT_SIMPLE_BODY_TEMPLATE,
+  'agent-reconnect': AGENT_RECONNECT_SIMPLE_BODY_TEMPLATE,
+};
 
 function truncateReleaseNotesBody(body: string, maxLength: number) {
   if (body.length <= maxLength) {
@@ -78,13 +94,18 @@ function truncateReleaseNotesBody(body: string, maxLength: number) {
   return body.slice(0, maxLength);
 }
 
-function buildAgentDisconnectedContainer(agentName: string, reason?: string): Container {
+function buildAgentContainer(
+  agentName: string,
+  state: 'connected' | 'disconnected',
+  eventKind: TriggerNotificationEvent['kind'],
+  reason?: string,
+): Container {
   return {
     id: `agent-${agentName}`,
     name: agentName,
     displayName: agentName,
-    displayIcon: 'mdi:server-network-off',
-    status: 'disconnected',
+    displayIcon: state === 'disconnected' ? 'mdi:server-network-off' : 'mdi:server-network',
+    status: state,
     watcher: 'agent',
     image: {
       id: `agent-image-${agentName}`,
@@ -94,7 +115,7 @@ function buildAgentDisconnectedContainer(agentName: string, reason?: string): Co
       },
       name: agentName,
       tag: {
-        value: 'disconnected',
+        value: state,
         semver: false,
       },
       digest: {
@@ -114,20 +135,24 @@ function buildAgentDisconnectedContainer(agentName: string, reason?: string): Co
         }
       : undefined,
     notificationEvent: {
-      kind: 'agent-disconnect',
+      kind: eventKind,
       agentName,
-      reason,
+      reason: eventKind === 'agent-disconnect' ? reason : undefined,
     },
   } as Container;
+}
+
+function buildAgentDisconnectedContainer(agentName: string, reason?: string): Container {
+  return buildAgentContainer(agentName, 'disconnected', 'agent-disconnect', reason);
+}
+
+function buildAgentReconnectedContainer(agentName: string): Container {
+  return buildAgentContainer(agentName, 'connected', 'agent-reconnect');
 }
 
 function getNotificationEvent(container: Container): TriggerNotificationEvent | undefined {
   const notificationEvent = Reflect.get(new Object(container), 'notificationEvent');
   if (!notificationEvent || typeof notificationEvent !== 'object') {
-    return undefined;
-  }
-
-  if (Reflect.get(new Object(notificationEvent), 'kind') !== 'agent-disconnect') {
     return undefined;
   }
 
@@ -137,11 +162,30 @@ function getNotificationEvent(container: Container): TriggerNotificationEvent | 
     return undefined;
   }
 
+  const kind = Reflect.get(new Object(notificationEvent), 'kind');
+  if (kind !== 'agent-disconnect' && kind !== 'agent-reconnect') {
+    return undefined;
+  }
+
   return {
-    kind: 'agent-disconnect',
+    kind,
     agentName,
-    reason: typeof reason === 'string' && reason.length > 0 ? reason : undefined,
+    reason:
+      kind === 'agent-disconnect' && typeof reason === 'string' && reason.length > 0
+        ? reason
+        : undefined,
   };
+}
+
+function resolveNotificationTemplate(
+  notificationEvent: TriggerNotificationEvent | undefined,
+  templates: Record<TriggerNotificationEvent['kind'], string>,
+  fallback: string,
+) {
+  if (!notificationEvent) {
+    return fallback;
+  }
+  return templates[notificationEvent.kind] ?? fallback;
 }
 
 function isSupportedThreshold(value: string): value is SupportedThreshold {
@@ -190,6 +234,7 @@ class Trigger extends Component {
   private unregisterContainerUpdateAppliedForAutoDispatch?: () => void;
   private unregisterContainerUpdateFailed?: () => void;
   private unregisterSecurityAlert?: () => void;
+  private unregisterAgentConnected?: () => void;
   private unregisterAgentDisconnected?: () => void;
   private unregisterContainerUpdateAppliedForResolution?: () => void;
   private readonly notificationResults: Map<string, unknown> = new Map();
@@ -452,7 +497,7 @@ class Trigger extends Component {
     try {
       const shouldUseBatchMode =
         this.configuration.mode?.toLowerCase() === 'batch' &&
-        getNotificationEvent(container)?.kind !== 'agent-disconnect';
+        getNotificationEvent(container) === undefined;
       if (shouldUseBatchMode) {
         this.queueEventBatchDispatch(ruleId, container);
       } else {
@@ -509,6 +554,22 @@ class Trigger extends Component {
     await this.dispatchContainerForEvent(
       'agent-disconnect',
       buildAgentDisconnectedContainer(payload.agentName, payload.reason),
+      {
+        allowAllWhenNoTriggers: false,
+        defaultWhenRuleMissing: false,
+        skipThreshold: true,
+      },
+    );
+  }
+
+  async handleAgentConnectedEvent(payload: AgentConnectedPayload) {
+    if (!payload.reconnected) {
+      return;
+    }
+
+    await this.dispatchContainerForEvent(
+      'agent-reconnect',
+      buildAgentReconnectedContainer(payload.agentName),
       {
         allowAllWhenNoTriggers: false,
         defaultWhenRuleMissing: false,
@@ -857,6 +918,13 @@ class Trigger extends Component {
           order: this.configuration.order,
         },
       );
+      this.unregisterAgentConnected = event.registerAgentConnected(
+        async (payload) => this.handleAgentConnectedEvent(payload),
+        {
+          id: this.getId(),
+          order: this.configuration.order,
+        },
+      );
       this.unregisterAgentDisconnected = event.registerAgentDisconnected(
         async (payload) => this.handleAgentDisconnectedEvent(payload),
         {
@@ -890,6 +958,9 @@ class Trigger extends Component {
 
     this.unregisterSecurityAlert?.();
     this.unregisterSecurityAlert = undefined;
+
+    this.unregisterAgentConnected?.();
+    this.unregisterAgentConnected = undefined;
 
     this.unregisterAgentDisconnected?.();
     this.unregisterAgentDisconnected = undefined;
@@ -1109,10 +1180,12 @@ class Trigger extends Component {
    * @returns {*}
    */
   renderSimpleTitle(container: Container) {
-    const template =
-      getNotificationEvent(container)?.kind === 'agent-disconnect'
-        ? AGENT_DISCONNECT_SIMPLE_TITLE_TEMPLATE
-        : (this.configuration.simpletitle ?? '');
+    const notificationEvent = getNotificationEvent(container);
+    const template = resolveNotificationTemplate(
+      notificationEvent,
+      AGENT_SIMPLE_TITLE_TEMPLATES,
+      this.configuration.simpletitle ?? '',
+    );
     return renderSimple(template, this.getTemplateContainer(container));
   }
 
@@ -1122,10 +1195,12 @@ class Trigger extends Component {
    * @returns {*}
    */
   renderSimpleBody(container: Container) {
-    const template =
-      getNotificationEvent(container)?.kind === 'agent-disconnect'
-        ? AGENT_DISCONNECT_SIMPLE_BODY_TEMPLATE
-        : (this.configuration.simplebody ?? '');
+    const notificationEvent = getNotificationEvent(container);
+    const template = resolveNotificationTemplate(
+      notificationEvent,
+      AGENT_SIMPLE_BODY_TEMPLATES,
+      this.configuration.simplebody ?? '',
+    );
     return renderSimple(template, this.getTemplateContainer(container));
   }
 

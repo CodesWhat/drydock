@@ -1155,6 +1155,78 @@ test('renderSimpleBody should omit the reason suffix for agent disconnect events
   expect(trigger.renderSimpleBody(container)).toBe('Agent servicevault disconnected');
 });
 
+test('renderSimpleTitle should use dedicated template for agent reconnect events', () => {
+  const container = {
+    id: 'agent-servicevault',
+    name: 'servicevault',
+    watcher: 'agent',
+    status: 'connected',
+    image: {
+      id: 'agent-servicevault',
+      registry: {
+        name: 'agent',
+        url: 'agent://servicevault',
+      },
+      name: 'servicevault',
+      tag: {
+        value: 'connected',
+        semver: false,
+      },
+      digest: {
+        watch: false,
+      },
+      architecture: 'unknown',
+      os: 'unknown',
+    },
+    updateAvailable: false,
+    updateKind: {
+      kind: 'unknown',
+    },
+    notificationEvent: {
+      kind: 'agent-reconnect',
+      agentName: 'servicevault',
+    },
+  } as any;
+
+  expect(trigger.renderSimpleTitle(container)).toBe('Agent servicevault reconnected');
+});
+
+test('renderSimpleBody should use dedicated template for agent reconnect events', () => {
+  const container = {
+    id: 'agent-servicevault',
+    name: 'servicevault',
+    watcher: 'agent',
+    status: 'connected',
+    image: {
+      id: 'agent-servicevault',
+      registry: {
+        name: 'agent',
+        url: 'agent://servicevault',
+      },
+      name: 'servicevault',
+      tag: {
+        value: 'connected',
+        semver: false,
+      },
+      digest: {
+        watch: false,
+      },
+      architecture: 'unknown',
+      os: 'unknown',
+    },
+    updateAvailable: false,
+    updateKind: {
+      kind: 'unknown',
+    },
+    notificationEvent: {
+      kind: 'agent-reconnect',
+      agentName: 'servicevault',
+    },
+  } as any;
+
+  expect(trigger.renderSimpleBody(container)).toBe('Agent servicevault reconnected');
+});
+
 test('renderSimpleTitle should fall back to the standard template for unsupported notification events', () => {
   const container = {
     id: 'container-servicevault',
@@ -1868,6 +1940,60 @@ test('handleAgentDisconnectedEvent should use simple dispatch even when trigger 
   expect(triggerBatchSpy).not.toHaveBeenCalled();
 });
 
+test('handleAgentConnectedEvent should bypass threshold filtering when reconnected', async () => {
+  trigger.configuration.threshold = 'major-only';
+  const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+  await trigger.handleAgentConnectedEvent({
+    agentName: 'edge-a',
+    reconnected: true,
+  });
+
+  expect(triggerSpy).toHaveBeenCalledWith(
+    expect.objectContaining({
+      name: 'edge-a',
+      watcher: 'agent',
+      status: 'connected',
+      notificationEvent: {
+        kind: 'agent-reconnect',
+        agentName: 'edge-a',
+      },
+    }),
+  );
+});
+
+test('handleAgentConnectedEvent should ignore the initial connected event', async () => {
+  const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+  await trigger.handleAgentConnectedEvent({
+    agentName: 'edge-a',
+    reconnected: false,
+  });
+
+  expect(triggerSpy).not.toHaveBeenCalled();
+});
+
+test('handleAgentConnectedEvent should use simple dispatch even when trigger mode is batch', async () => {
+  trigger.configuration.mode = 'batch';
+  const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+  const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+
+  await trigger.handleAgentConnectedEvent({
+    agentName: 'edge-a',
+    reconnected: true,
+  });
+
+  expect(triggerSpy).toHaveBeenCalledWith(
+    expect.objectContaining({
+      notificationEvent: {
+        kind: 'agent-reconnect',
+        agentName: 'edge-a',
+      },
+    }),
+  );
+  expect(triggerBatchSpy).not.toHaveBeenCalled();
+});
+
 test('dispatchContainerForEvent should fallback to all threshold when threshold is undefined', async () => {
   const container = {
     watcher: 'local',
@@ -1908,6 +2034,7 @@ test('init should wire auto dispatch callbacks for update/security/agent events'
   let onUpdateApplied;
   let onUpdateFailed;
   let onSecurityAlert;
+  let onAgentConnected;
   let onAgentDisconnected;
 
   vi.spyOn(event, 'registerContainerUpdateApplied').mockImplementation((cb) => {
@@ -1920,6 +2047,10 @@ test('init should wire auto dispatch callbacks for update/security/agent events'
   });
   vi.spyOn(event, 'registerSecurityAlert').mockImplementation((cb) => {
     onSecurityAlert = cb;
+    return vi.fn();
+  });
+  vi.spyOn(event, 'registerAgentConnected').mockImplementation((cb) => {
+    onAgentConnected = cb;
     return vi.fn();
   });
   vi.spyOn(event, 'registerAgentDisconnected').mockImplementation((cb) => {
@@ -1936,6 +2067,9 @@ test('init should wire auto dispatch callbacks for update/security/agent events'
   const securityAlertSpy = vi
     .spyOn(trigger, 'handleSecurityAlertEvent')
     .mockResolvedValue(undefined);
+  const agentConnectedSpy = vi
+    .spyOn(trigger, 'handleAgentConnectedEvent')
+    .mockResolvedValue(undefined);
   const agentDisconnectedSpy = vi
     .spyOn(trigger, 'handleAgentDisconnectedEvent')
     .mockResolvedValue(undefined);
@@ -1947,6 +2081,7 @@ test('init should wire auto dispatch callbacks for update/security/agent events'
   await onUpdateApplied('container-a');
   await onUpdateFailed({ containerName: 'container-b', error: 'boom' });
   await onSecurityAlert({ containerName: 'container-c', details: 'high=1' });
+  await onAgentConnected({ agentName: 'edge-a', reconnected: true });
   await onAgentDisconnected({ agentName: 'edge-a', reason: 'disconnected' });
 
   expect(updateAppliedSpy).toHaveBeenCalledWith('container-a');
@@ -1957,6 +2092,10 @@ test('init should wire auto dispatch callbacks for update/security/agent events'
   expect(securityAlertSpy).toHaveBeenCalledWith({
     containerName: 'container-c',
     details: 'high=1',
+  });
+  expect(agentConnectedSpy).toHaveBeenCalledWith({
+    agentName: 'edge-a',
+    reconnected: true,
   });
   expect(agentDisconnectedSpy).toHaveBeenCalledWith({
     agentName: 'edge-a',

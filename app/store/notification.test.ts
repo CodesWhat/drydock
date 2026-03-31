@@ -216,6 +216,24 @@ describe('Notification Store', () => {
     });
   });
 
+  test('getNotificationRule should expose the default agent reconnect rule', () => {
+    const collection = createCollection();
+    const db = {
+      getCollection: vi.fn(() => collection),
+      addCollection: vi.fn(() => collection),
+    };
+
+    notification.createCollections(db);
+
+    expect(notification.getNotificationRule('agent-reconnect')).toEqual({
+      id: 'agent-reconnect',
+      name: 'Agent Reconnected',
+      description: 'When a remote agent reconnects after losing connection',
+      enabled: false,
+      triggers: [],
+    });
+  });
+
   test('getNotificationRule should return undefined for unknown rule', () => {
     const collection = createCollection();
     const db = {
