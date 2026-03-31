@@ -318,7 +318,9 @@ function confirmDashboardUpdateAll() {
             :max-w="WIDGET_CONSTRAINTS[item.i as DashboardWidgetId]?.maxW ?? 12"
             :max-h="WIDGET_CONSTRAINTS[item.i as DashboardWidgetId]?.maxH ?? 20"
             drag-ignore-from="input, textarea, button, a, select, .no-drag"
+            drag-allow-from=".drag-handle"
             class="dd-grid-item"
+            :style="editMode ? { touchAction: 'pan-y' } : undefined"
             @dragstart="onWidgetDragStart(item.i as DashboardWidgetId, $event)"
             @dragover="onWidgetDragOver(item.i as DashboardWidgetId, $event)"
             @drop="onWidgetDrop(item.i as DashboardWidgetId, $event)"
@@ -593,6 +595,7 @@ function confirmDashboardUpdateAll() {
   background: var(--dd-neutral-muted);
   border-radius: var(--dd-radius);
   padding: 2px 6px;
+  touch-action: none;
   opacity: 0.8;
   transition: opacity 150ms ease, background-color 150ms ease, color 150ms ease;
 }
@@ -616,6 +619,7 @@ function confirmDashboardUpdateAll() {
   border-radius: var(--dd-radius);
   right: 6px;
   bottom: 6px;
+  touch-action: none;
   transition: opacity 150ms ease, background-color 150ms ease;
 }
 

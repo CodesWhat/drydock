@@ -1,8 +1,15 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { flushPromises, type VueWrapper } from '@vue/test-utils';
 import DataTable from '@/components/DataTable.vue';
 import type { Container } from '@/types/container';
 import DashboardView from '@/views/DashboardView.vue';
 import { mountWithPlugins } from '../helpers/mount';
+
+const dashboardViewSource = readFileSync(
+  resolve(__dirname, '../../src/views/DashboardView.vue'),
+  'utf-8',
+);
 
 const { mockRouterPush, mockBuildDashboardContainerMetrics, mockUpdateContainer } = vi.hoisted(
   () => ({
@@ -218,6 +225,23 @@ describe('DashboardView', () => {
       expect(scrollArea.classes()).not.toContain('sm:pr-2');
       expect(scrollArea.classes()).not.toContain('sm:pr-4');
       expect(scrollArea.classes()).not.toContain('sm:pr-5');
+    });
+
+    it('limits edit-mode dragging to explicit drag handles', async () => {
+      await mountDashboard([makeContainer({ newTag: '2.0.0' })]);
+      expect(dashboardViewSource).toContain('drag-allow-from=".drag-handle"');
+    });
+
+    it('keeps editable widgets vertically pannable while customizing', async () => {
+      const wrapper = await mountDashboard([makeContainer({ newTag: '2.0.0' })]);
+
+      const editToggle = document.querySelector('[data-test="dashboard-edit-toggle"]');
+      expect(editToggle).not.toBeNull();
+      (editToggle as HTMLButtonElement).click();
+      await flushPromises();
+
+      const widget = wrapper.find('[data-widget-id="recent-updates"]');
+      expect(widget.attributes('style')).toContain('touch-action: pan-y');
     });
   });
 
