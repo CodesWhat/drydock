@@ -1485,6 +1485,31 @@ test('deleteContainer should delete doc and emit an event', async () => {
   expect(spyEvent).toHaveBeenCalled();
 });
 
+test('deleteContainer should forward replacementExpected on the remove event payload', async () => {
+  const containerExample = { data: createContainerFixture() };
+  const collection = {
+    findOne: () => containerExample,
+    chain: () => ({
+      find: () => ({
+        remove: () => ({}),
+      }),
+    }),
+  };
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => null,
+  };
+  const spyEvent = vi.spyOn(event, 'emitContainerRemoved');
+  container.createCollections(db);
+  container.deleteContainer(containerExample, { replacementExpected: true });
+  expect(spyEvent).toHaveBeenCalledWith(
+    expect.objectContaining({
+      id: containerExample.data.id,
+      replacementExpected: true,
+    }),
+  );
+});
+
 test('updateContainer should default security to undefined when container and store both lack it', async () => {
   const collection = {
     findOne: () => undefined,

@@ -106,6 +106,7 @@ export interface WatcherSnapshotEventPayload {
 
 export type ContainerLifecycleEventPayload = Partial<Omit<Container, 'image'>> & {
   image?: Partial<Container['image']>;
+  replacementExpected?: boolean;
 };
 
 const containerReportHandlers = new Map<number, OrderedEventHandler<ContainerReport>>();

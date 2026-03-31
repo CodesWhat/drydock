@@ -880,8 +880,41 @@ describe('docker image details orchestration module', () => {
     );
 
     expect(result?.id).toBe('new-container-id');
-    expect(getContainersSpy).toHaveBeenCalledWith({ name: 'service' });
-    expect(deleteContainerSpy).toHaveBeenCalledWith('old-container-id');
+    expect(getContainersSpy).toHaveBeenCalledWith();
+    expect(deleteContainerSpy).toHaveBeenCalledWith('old-container-id', {
+      replacementExpected: true,
+    });
+  });
+
+  test('removes stale alias-prefixed entries when the canonical replacement container is discovered', async () => {
+    vi.spyOn(storeContainer, 'getContainer').mockReturnValue(undefined);
+    vi.spyOn(storeContainer, 'getContainers').mockReturnValue([
+      {
+        id: '7ea6b8a42686old-container-id',
+        watcher: 'docker-test',
+        name: '7ea6b8a42686_service',
+      } as any,
+    ]);
+    const deleteContainerSpy = vi
+      .spyOn(storeContainer, 'deleteContainer')
+      .mockImplementation(() => {});
+
+    const { watcher } = createWatcher();
+
+    const result = await addImageDetailsToContainerOrchestration(
+      watcher as any,
+      createDockerSummaryContainer({
+        Id: 'new-container-id',
+        Names: ['/service'],
+      }),
+      {},
+      createHelpers() as any,
+    );
+
+    expect(result?.id).toBe('new-container-id');
+    expect(deleteContainerSpy).toHaveBeenCalledWith('7ea6b8a42686old-container-id', {
+      replacementExpected: true,
+    });
   });
 
   test('removes stale same-name entries from a different watcher when both watchers point to the same docker source', async () => {
@@ -947,8 +980,12 @@ describe('docker image details orchestration module', () => {
     );
 
     expect(result?.id).toBe('new-container-id');
-    expect(deleteContainerSpy).toHaveBeenCalledWith('old-container-current-watcher');
-    expect(deleteContainerSpy).toHaveBeenCalledWith('old-container-same-source-different-watcher');
+    expect(deleteContainerSpy).toHaveBeenCalledWith('old-container-current-watcher', {
+      replacementExpected: true,
+    });
+    expect(deleteContainerSpy).toHaveBeenCalledWith('old-container-same-source-different-watcher', {
+      replacementExpected: true,
+    });
   });
 
   test('skips same-name dedupe when the discovered container name is empty', async () => {

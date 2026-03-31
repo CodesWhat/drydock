@@ -9,6 +9,7 @@ import {
   isDockerWatcher,
 } from './container-init.js';
 import {
+  canonicalizeContainerName,
   getContainerDisplayName,
   getContainerName,
   getRepoDigest,
@@ -546,7 +547,13 @@ function removeStaleContainerEntriesWithSameName(
     return;
   }
 
-  const containersWithSameName = storeContainer.getContainers({ name: containerToReturn.name });
+  const containersWithSameName = storeContainer.getContainers().filter((storedContainer) => {
+    const storedContainerName = canonicalizeContainerName(
+      typeof storedContainer.name === 'string' ? storedContainer.name : '',
+      storedContainer.id,
+    );
+    return storedContainerName === containerToReturn.name;
+  });
   const watcherRegistryState = registry.getState().watcher;
   const currentWatcherSourceKey = getDockerWatcherSourceKey(watcher);
   const currentWatcherAgent = watcher.agent;
@@ -573,7 +580,11 @@ function removeStaleContainerEntriesWithSameName(
 
       return getDockerWatcherSourceKey(staleWatcher) === currentWatcherSourceKey;
     })
-    .forEach((staleContainer) => storeContainer.deleteContainer(staleContainer.id));
+    .forEach((staleContainer) =>
+      storeContainer.deleteContainer(staleContainer.id, {
+        replacementExpected: true,
+      }),
+    );
 }
 
 /**

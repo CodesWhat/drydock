@@ -2275,7 +2275,9 @@ describe('Docker Watcher', () => {
       );
 
       expect(dockerApi.getContainer).not.toHaveBeenCalled();
-      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('old-1');
+      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('old-1', {
+        replacementExpected: true,
+      });
     });
 
     test('pruneOldContainers should delete stale same-name entries from same-source cross-watcher candidates', async () => {
@@ -2305,7 +2307,9 @@ describe('Docker Watcher', () => {
       );
 
       expect(dockerApi.getContainer).not.toHaveBeenCalled();
-      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('old-2');
+      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('old-2', {
+        replacementExpected: true,
+      });
     });
 
     test('pruneOldContainers should treat missing watcher as an empty watcher key', async () => {
@@ -2331,7 +2335,38 @@ describe('Docker Watcher', () => {
       );
 
       expect(dockerApi.getContainer).not.toHaveBeenCalled();
-      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('old-1');
+      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('old-1', {
+        replacementExpected: true,
+      });
+    });
+
+    test('pruneOldContainers should treat alias-prefixed stale names as canonical replacements', async () => {
+      const dockerApi = {
+        getContainer: vi.fn(),
+      };
+
+      await testable_pruneOldContainers(
+        [
+          {
+            id: 'new-1',
+            watcher: 'docker',
+            name: 'app',
+          },
+        ] as any,
+        [
+          {
+            id: '7ea6b8a42686old-1',
+            watcher: 'docker',
+            name: '7ea6b8a42686_app',
+          },
+        ] as any,
+        dockerApi as any,
+      );
+
+      expect(dockerApi.getContainer).not.toHaveBeenCalled();
+      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('7ea6b8a42686old-1', {
+        replacementExpected: true,
+      });
     });
 
     test('pruneOldContainers should force-delete stale ids skipped during alias filtering', async () => {

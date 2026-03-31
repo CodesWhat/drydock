@@ -546,7 +546,9 @@ describe('Docker Watcher', () => {
       );
 
       expect(dockerApi.getContainer).not.toHaveBeenCalled();
-      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('old-1');
+      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('old-1', {
+        replacementExpected: true,
+      });
     });
 
     test('pruneOldContainers should delete stale same-name entries from same-source cross-watcher candidates', async () => {
@@ -576,7 +578,9 @@ describe('Docker Watcher', () => {
       );
 
       expect(dockerApi.getContainer).not.toHaveBeenCalled();
-      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('old-2');
+      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('old-2', {
+        replacementExpected: true,
+      });
     });
 
     test('pruneOldContainers should treat missing watcher as an empty watcher key', async () => {
@@ -602,7 +606,9 @@ describe('Docker Watcher', () => {
       );
 
       expect(dockerApi.getContainer).not.toHaveBeenCalled();
-      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('old-1');
+      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('old-1', {
+        replacementExpected: true,
+      });
     });
 
     test('pruneOldContainers should force-delete stale ids skipped during alias filtering', async () => {

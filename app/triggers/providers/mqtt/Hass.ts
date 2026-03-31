@@ -429,10 +429,10 @@ class Hass {
       containerStateSensor.topic,
       ...staleStateTopics.filter((stateTopic) => stateTopic !== containerStateSensor.topic),
     ];
-    this.log.info(`Remove hass container update sensor [${containerStateSensor.topic}]`);
     if (this.configuration.hass.discovery) {
       const watcherName = typeof container?.watcher === 'string' ? container.watcher : '';
       const excludingContainerId = this.getContainerId(container);
+      const replacementExpected = container?.replacementExpected === true;
       const activeFromStore = this.getActiveContainerStateTopicsForWatcher({
         watcherName,
         excludingContainerId,
@@ -444,9 +444,29 @@ class Hass {
       const activeStateTopics = new Set<string>();
       for (const topic of activeFromStore) activeStateTopics.add(topic);
       for (const topic of trackedLocally) activeStateTopics.add(topic);
+      const discoveryStateTopicsToRemove = stateTopicsToRemove.filter((stateTopic) => {
+        if (replacementExpected && stateTopic === containerStateSensor.topic) {
+          return false;
+        }
+        return !activeStateTopics.has(stateTopic);
+      });
+      const staleAliasTopicsToRemove = discoveryStateTopicsToRemove.filter(
+        (stateTopic) => stateTopic !== containerStateSensor.topic,
+      );
+
+      if (discoveryStateTopicsToRemove.includes(containerStateSensor.topic)) {
+        this.log.info(`Remove hass container update sensor [${containerStateSensor.topic}]`);
+      } else if (staleAliasTopicsToRemove.length > 0) {
+        this.log.info(
+          `Preserve canonical hass container update sensor [${containerStateSensor.topic}]; removing stale alias topics [${staleAliasTopicsToRemove.join(', ')}]`,
+        );
+      } else {
+        this.log.info(`Skip hass container update sensor removal [${containerStateSensor.topic}]`);
+      }
+
       await this.removeDiscoveryTopics({
         kind: containerStateSensor.kind,
-        stateTopics: stateTopicsToRemove.filter((stateTopic) => !activeStateTopics.has(stateTopic)),
+        stateTopics: discoveryStateTopicsToRemove,
       });
     }
     this.clearTrackedContainerStateTopic(container);

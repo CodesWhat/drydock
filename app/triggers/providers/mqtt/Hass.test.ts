@@ -925,6 +925,67 @@ test('removeContainerSensor should keep a canonical topic when a replacement con
   );
 });
 
+test('removeContainerSensor should not remove discovery when a same-name replacement is expected', async () => {
+  const logInfoSpy = vi.spyOn(log, 'info').mockImplementation(() => {});
+  vi.spyOn(hass, 'updateContainerSensors').mockResolvedValue(undefined);
+
+  await hass.addContainerSensor({
+    id: 'old-container-id',
+    name: 'termix',
+    watcher: 'watcher-name',
+    displayIcon: 'mdi:docker',
+  });
+
+  mqttClientMock.publish.mockClear();
+
+  vi.spyOn(containerStore, 'getContainers').mockReturnValue([] as any);
+
+  await hass.removeContainerSensor({
+    id: 'old-container-id',
+    name: 'termix',
+    watcher: 'watcher-name',
+    displayIcon: 'mdi:docker',
+    replacementExpected: true,
+  });
+
+  expect(mqttClientMock.publish).not.toHaveBeenCalledWith(
+    'homeassistant/update/topic_watcher-name_termix/config',
+    '',
+    { retain: true },
+  );
+  expect(logInfoSpy).toHaveBeenCalledWith(
+    'Skip hass container update sensor removal [topic/watcher-name/termix]',
+  );
+});
+
+test('removeContainerSensor should log canonical preservation when only stale alias topics are removed', async () => {
+  const logInfoSpy = vi.spyOn(log, 'info').mockImplementation(() => {});
+  vi.spyOn(hass, 'updateContainerSensors').mockResolvedValue(undefined);
+  vi.spyOn(containerStore, 'getContainers').mockReturnValue([] as any);
+
+  await hass.removeContainerSensor({
+    id: '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a10',
+    name: '7ea6b8a42686_termix',
+    watcher: 'watcher-name',
+    displayIcon: 'mdi:docker',
+    replacementExpected: true,
+  });
+
+  expect(mqttClientMock.publish).toHaveBeenCalledWith(
+    'homeassistant/update/topic_watcher-name_7ea6b8a42686_termix/config',
+    '',
+    { retain: true },
+  );
+  expect(mqttClientMock.publish).not.toHaveBeenCalledWith(
+    'homeassistant/update/topic_watcher-name_termix/config',
+    '',
+    { retain: true },
+  );
+  expect(logInfoSpy).toHaveBeenCalledWith(
+    'Preserve canonical hass container update sensor [topic/watcher-name/termix]; removing stale alias topics [topic/watcher-name/7ea6b8a42686_termix]',
+  );
+});
+
 test('removeContainerSensor should still remove topic when watcher name is empty', async () => {
   vi.spyOn(hass, 'updateContainerSensors').mockResolvedValue(undefined);
 
