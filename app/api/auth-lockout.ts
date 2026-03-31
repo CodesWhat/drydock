@@ -569,3 +569,9 @@ export function resetLoginLockoutStateForTests(): void {
   setAuthAccountLockedTotal(0);
   setAuthIpLockedTotal(0);
 }
+
+export const testable_accountLockoutPolicy = accountLockoutPolicy;
+export const testable_evictOldestTrackedEntries = evictOldestTrackedEntries;
+export const testable_makeTrackedIdentityCapacity = makeTrackedIdentityCapacity;
+export const testable_pruneLockoutEntries = pruneLockoutEntries;
+export const testable_registerFailedLoginAttempt = registerFailedLoginAttempt;
