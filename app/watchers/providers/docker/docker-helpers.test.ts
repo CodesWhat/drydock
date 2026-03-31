@@ -139,6 +139,16 @@ describe('docker helper extraction module', () => {
       ),
     ).toBe(true);
 
+    expect(
+      isDigestToWatch(
+        undefined as any,
+        { domain: 'docker.io', path: 'portainer/agent' },
+        true,
+        'floating',
+        'sha256:abc123',
+      ),
+    ).toBe(true);
+
     expect(shouldUpdateDisplayNameFromContainerName('new', 'old', 'old')).toBe(true);
     expect(shouldUpdateDisplayNameFromContainerName('new', 'old', 'custom')).toBe(false);
   });
