@@ -25,6 +25,12 @@ const {
     }),
   };
 });
+const LOCKOUT_TRACKED_IDENTITIES_CAP_FOR_TESTS = 5;
+const { previousMaxTrackedLockoutIdentities } = vi.hoisted(() => {
+  const previous = process.env.DD_AUTH_LOCKOUT_MAX_TRACKED_IDENTITIES;
+  process.env.DD_AUTH_LOCKOUT_MAX_TRACKED_IDENTITIES = '5';
+  return { previousMaxTrackedLockoutIdentities: previous };
+});
 
 const lockoutStateFiles = new Map<string, string>();
 const LOCKOUT_STATE_PATH = '/test/store/db.json.auth-lockouts.json';
@@ -98,6 +104,15 @@ function makePassportSuccess(username = 'john') {
 }
 
 describe('auth-lockout', () => {
+  afterAll(() => {
+    if (previousMaxTrackedLockoutIdentities === undefined) {
+      delete process.env.DD_AUTH_LOCKOUT_MAX_TRACKED_IDENTITIES;
+      return;
+    }
+
+    process.env.DD_AUTH_LOCKOUT_MAX_TRACKED_IDENTITIES = previousMaxTrackedLockoutIdentities;
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     lockoutStateFiles.clear();
@@ -273,6 +288,34 @@ describe('auth-lockout', () => {
       authenticateLogin(req, res as any, vi.fn());
       expect(res.status).toHaveBeenCalledWith(401);
     }
+  });
+
+  test('evicts the oldest tracked account entry when the identity cap is exceeded', () => {
+    vi.useFakeTimers();
+    makePassportInvalidCredentials();
+    const startedAt = Date.parse('2026-01-01T00:00:00.000Z');
+
+    for (let index = 0; index <= LOCKOUT_TRACKED_IDENTITIES_CAP_FOR_TESTS; index += 1) {
+      vi.setSystemTime(new Date(startedAt + index));
+      authenticateLogin(
+        {
+          body: { username: `evict-user-${index}` },
+          ip: `198.51.100.${index % 255}`,
+        } as any,
+        createResponse() as any,
+        vi.fn(),
+      );
+    }
+
+    vi.advanceTimersByTime(1000);
+
+    const persisted = JSON.parse(lockoutStateFiles.get(LOCKOUT_STATE_PATH) ?? '{}');
+    expect(Object.keys(persisted.account)).toHaveLength(LOCKOUT_TRACKED_IDENTITIES_CAP_FOR_TESTS);
+    expect(persisted.account['evict-user-0']).toBeUndefined();
+    expect(persisted.account[`evict-user-${LOCKOUT_TRACKED_IDENTITIES_CAP_FOR_TESTS}`]).toEqual(
+      expect.objectContaining({ failedAttempts: 1 }),
+    );
+    vi.useRealTimers();
   });
 
   test('extracts login identity from the first authorization header value when headers are arrays', () => {

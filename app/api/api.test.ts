@@ -137,6 +137,7 @@ describe('API Router', () => {
   test('should capture raw mutation request body in json verify hook', () => {
     const jsonOptions = mockExpressJson.mock.calls[0]?.[0];
     expect(jsonOptions).toBeDefined();
+    expect(jsonOptions.limit).toBe('256kb');
     expect(typeof jsonOptions.verify).toBe('function');
 
     const req = {} as { rawBody?: Buffer };

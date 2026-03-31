@@ -26,6 +26,12 @@ const {
     mockIsIdentityAwareRateLimitKeyingEnabled: vi.fn(() => false),
   };
 });
+const LOCKOUT_TRACKED_IDENTITIES_CAP_FOR_TESTS = 5;
+const { previousMaxTrackedLockoutIdentities } = vi.hoisted(() => {
+  const previous = process.env.DD_AUTH_LOCKOUT_MAX_TRACKED_IDENTITIES;
+  process.env.DD_AUTH_LOCKOUT_MAX_TRACKED_IDENTITIES = '5';
+  return { previousMaxTrackedLockoutIdentities: previous };
+});
 const mockGetServerConfiguration = vi.hoisted(() => vi.fn(() => ({ cookie: {} })));
 const mockRecordAuditEvent = vi.hoisted(() => vi.fn());
 const mockValidateOpenApiJsonResponse = vi.hoisted(() =>
@@ -172,6 +178,15 @@ function getRouteMiddleware(method, path) {
 }
 
 describe('Auth Router', () => {
+  afterAll(() => {
+    if (previousMaxTrackedLockoutIdentities === undefined) {
+      delete process.env.DD_AUTH_LOCKOUT_MAX_TRACKED_IDENTITIES;
+      return;
+    }
+
+    process.env.DD_AUTH_LOCKOUT_MAX_TRACKED_IDENTITIES = previousMaxTrackedLockoutIdentities;
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     mockIsIdentityAwareRateLimitKeyingEnabled.mockReturnValue(false);
@@ -714,25 +729,41 @@ describe('Auth Router', () => {
     });
 
     test('should prune lockout entries when tracked identities exceed the cap', () => {
+      vi.useFakeTimers();
       passport.authenticate.mockImplementation((_ids, _options, callback) => {
         return () => callback(null, false, undefined, 401);
       });
 
-      const authenticateLoginFn = getLoginMiddleware();
-      const next = vi.fn();
+      try {
+        const authenticateLoginFn = getLoginMiddleware();
+        const next = vi.fn();
+        const startedAt = Date.parse('2026-01-01T00:00:00.000Z');
 
-      for (let index = 0; index < 5002; index += 1) {
-        authenticateLoginFn(
-          {
-            body: { username: `bulk-user-${index}` },
-            ip: `198.51.100.${index % 255}`,
-          },
-          createResponse(),
-          next,
+        for (let index = 0; index <= LOCKOUT_TRACKED_IDENTITIES_CAP_FOR_TESTS; index += 1) {
+          vi.setSystemTime(new Date(startedAt + index));
+          authenticateLoginFn(
+            {
+              body: { username: `bulk-user-${index}` },
+              ip: `198.51.100.${index % 255}`,
+            },
+            createResponse(),
+            next,
+          );
+        }
+
+        vi.advanceTimersByTime(1000);
+
+        const persisted = JSON.parse(lockoutStateFiles.get(LOCKOUT_STATE_PATH) ?? '{}');
+        expect(Object.keys(persisted.account)).toHaveLength(
+          LOCKOUT_TRACKED_IDENTITIES_CAP_FOR_TESTS,
         );
+        expect(persisted.account['bulk-user-0']).toBeUndefined();
+        expect(persisted.account[`bulk-user-${LOCKOUT_TRACKED_IDENTITIES_CAP_FOR_TESTS}`]).toEqual(
+          expect.objectContaining({ failedAttempts: 1 }),
+        );
+      } finally {
+        vi.useRealTimers();
       }
-
-      expect(passport.authenticate).toHaveBeenCalled();
     });
 
     test('should persist lockout state after failed login attempts', () => {

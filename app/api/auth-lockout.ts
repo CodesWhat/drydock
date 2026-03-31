@@ -32,7 +32,7 @@ const DEFAULT_IP_LOCKOUT_MAX_ATTEMPTS = 25;
 const DEFAULT_LOCKOUT_WINDOW_MS = DEFAULT_LOCKOUT_WINDOW_MINUTES * MS_PER_MINUTE;
 const DEFAULT_LOCKOUT_DURATION_MS = DEFAULT_LOCKOUT_DURATION_MINUTES * MS_PER_MINUTE;
 const DEFAULT_LOCKOUT_PRUNE_INTERVAL_MS = MS_PER_MINUTE;
-const MAX_LOCKOUT_TRACKED_IDENTITIES = 5000;
+const DEFAULT_MAX_LOCKOUT_TRACKED_IDENTITIES = 5000;
 const LOCKOUT_STATE_FILE_SUFFIX = '.auth-lockouts.json';
 const LOCKOUT_STATE_PERSIST_DEBOUNCE_MS = 250;
 const LOGIN_LOCKOUT_ERROR_MESSAGE =
@@ -115,6 +115,10 @@ const ipLockoutPolicy: LoginLockoutPolicy = {
 const lockoutPruneIntervalMs = parsePositiveIntegerEnv(
   'DD_AUTH_LOCKOUT_PRUNE_INTERVAL_MS',
   DEFAULT_LOCKOUT_PRUNE_INTERVAL_MS,
+);
+const maxTrackedLockoutIdentities = parsePositiveIntegerEnv(
+  'DD_AUTH_LOCKOUT_MAX_TRACKED_IDENTITIES',
+  DEFAULT_MAX_LOCKOUT_TRACKED_IDENTITIES,
 );
 
 function getLockoutStatePath(): string {
@@ -283,16 +287,76 @@ function pruneLockoutEntries(
     }
   });
 
-  if (lockouts.size <= MAX_LOCKOUT_TRACKED_IDENTITIES) {
+  if (lockouts.size <= maxTrackedLockoutIdentities) {
     return;
   }
 
   const orderedEntries = [...lockouts.entries()].sort(
     (a, b) => a[1].lastAttemptAt - b[1].lastAttemptAt,
   );
-  const overflowCount = orderedEntries.length - MAX_LOCKOUT_TRACKED_IDENTITIES;
+  const overflowCount = orderedEntries.length - maxTrackedLockoutIdentities;
   for (let index = 0; index < overflowCount; index += 1) {
     lockouts.delete(orderedEntries[index][0]);
+  }
+}
+
+function isExpiredUnlockedEntry(
+  entry: LoginLockoutEntry,
+  policy: LoginLockoutPolicy,
+  now: number,
+): boolean {
+  return entry.lockedUntil <= now && now - entry.lastAttemptAt > policy.windowMs;
+}
+
+function removeExpiredUnlockedEntries(
+  lockouts: Map<string, LoginLockoutEntry>,
+  policy: LoginLockoutPolicy,
+  now: number,
+): void {
+  lockouts.forEach((entry, key) => {
+    if (isExpiredUnlockedEntry(entry, policy, now)) {
+      lockouts.delete(key);
+    }
+  });
+}
+
+function evictOldestTrackedEntries(
+  lockouts: Map<string, LoginLockoutEntry>,
+  entriesToEvict: number,
+): void {
+  for (let remaining = entriesToEvict; remaining > 0; remaining -= 1) {
+    let oldestKey: string | undefined;
+    let oldestLastAttemptAt = Number.POSITIVE_INFINITY;
+
+    lockouts.forEach((entry, key) => {
+      if (entry.lastAttemptAt < oldestLastAttemptAt) {
+        oldestKey = key;
+        oldestLastAttemptAt = entry.lastAttemptAt;
+      }
+    });
+
+    if (!oldestKey) {
+      return;
+    }
+
+    lockouts.delete(oldestKey);
+  }
+}
+
+function makeTrackedIdentityCapacity(
+  lockouts: Map<string, LoginLockoutEntry>,
+  policy: LoginLockoutPolicy,
+  now: number,
+): void {
+  if (lockouts.size < maxTrackedLockoutIdentities) {
+    return;
+  }
+
+  removeExpiredUnlockedEntries(lockouts, policy, now);
+
+  const entriesToEvict = lockouts.size - maxTrackedLockoutIdentities + 1;
+  if (entriesToEvict > 0) {
+    evictOldestTrackedEntries(lockouts, entriesToEvict);
   }
 }
 
@@ -333,10 +397,14 @@ function registerFailedLoginAttempt(
     return undefined;
   }
 
-  pruneLockoutEntries(lockouts, policy, now);
+  let existingEntry = lockouts.get(key);
+  if (existingEntry && isExpiredUnlockedEntry(existingEntry, policy, now)) {
+    lockouts.delete(key);
+    existingEntry = undefined;
+  }
 
-  const existingEntry = lockouts.get(key);
   if (!existingEntry) {
+    makeTrackedIdentityCapacity(lockouts, policy, now);
     lockouts.set(key, {
       failedAttempts: 1,
       windowStartAt: now,
