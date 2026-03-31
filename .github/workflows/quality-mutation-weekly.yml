@@ -59,6 +59,14 @@ jobs:
         run: npm ci
         working-directory: ${{ matrix.package }}
 
+      - name: Restore Stryker incremental cache
+        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7  # v5.0.4
+        with:
+          path: ${{ matrix.package }}/reports/stryker-incremental.json
+          key: stryker-incremental-${{ matrix.package }}-${{ github.ref_name }}
+          restore-keys: |
+            stryker-incremental-${{ matrix.package }}-
+
       - name: Run Stryker
         run: npm run test:mutation
         working-directory: ${{ matrix.package }}
