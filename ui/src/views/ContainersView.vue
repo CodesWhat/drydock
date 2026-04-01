@@ -934,13 +934,16 @@ async function handleSseScanCompleted() {
 }
 
 const sseScanCompletedListener = handleSseScanCompleted as EventListener;
+const sseContainerChangedListener = handleSseScanCompleted as EventListener;
 onMounted(() => {
   document.addEventListener('click', handleGlobalClick);
   globalThis.addEventListener('dd:sse-scan-completed', sseScanCompletedListener);
+  globalThis.addEventListener('dd:sse-container-changed', sseContainerChangedListener);
 });
 onUnmounted(() => {
   document.removeEventListener('click', handleGlobalClick);
   globalThis.removeEventListener('dd:sse-scan-completed', sseScanCompletedListener);
+  globalThis.removeEventListener('dd:sse-container-changed', sseContainerChangedListener);
 });
 
 const tt = (label: string) => ({ value: label, showDelay: 400 });
