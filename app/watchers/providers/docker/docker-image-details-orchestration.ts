@@ -500,6 +500,7 @@ function resolveContainerImageState(
       isSemver,
       tagPrecision,
       tagName,
+      container.Image,
     ),
     repoDigest: getRepoDigest(image),
   };

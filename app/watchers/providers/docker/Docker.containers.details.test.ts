@@ -1100,6 +1100,58 @@ describe('Docker Watcher', () => {
       expect(hMockParse).toHaveBeenCalledWith('lscr.io/linuxserver/socket-proxy:latest');
     });
 
+    test('should keep digest watching enabled when Docker Hub image is recovered as latest from inspect', async () => {
+      await docker.register('watcher', 'docker', 'test', {});
+      docker.log = createMockLog(['warn', 'debug']);
+      mockContainer.inspect.mockResolvedValue({
+        Config: {
+          Image: 'portainer/agent:latest',
+        },
+      });
+
+      const container = await setupContainerDetailTest(docker, {
+        container: {
+          Id: 'portainer-agent-1',
+          Image: 'sha256:deadbeef7890',
+          Names: ['/portainer_agent'],
+        },
+        imageDetails: {
+          Id: 'image-portainer-agent',
+          RepoTags: [],
+          RepoDigests: ['portainer/agent@sha256:deadbeef7890abcdef'],
+        },
+        parseImpl: (value) => {
+          if (value === 'portainer/agent:latest') {
+            return {
+              domain: 'docker.io',
+              path: 'portainer/agent',
+              tag: 'latest',
+            };
+          }
+          if (value === 'portainer/agent') {
+            return {
+              domain: 'docker.io',
+              path: 'portainer/agent',
+            };
+          }
+          return {
+            domain: 'docker.io',
+            path: 'library/nginx',
+            tag: '1.0.0',
+          };
+        },
+        semverValue: null,
+        validateImpl: (c) => c,
+      });
+
+      const result = await docker.addImageDetailsToContainer(container);
+
+      expect(result.image.name).toBe('portainer/agent');
+      expect(result.image.tag.value).toBe('latest');
+      expect(result.image.digest.watch).toBe(true);
+      expect(hMockParse).toHaveBeenCalledWith('portainer/agent:latest');
+    });
+
     test('should resolve digest-only image with RepoDigests lacking @ separator', async () => {
       const container = await setupContainerDetailTest(docker, {
         container: {
