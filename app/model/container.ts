@@ -98,6 +98,16 @@ export interface ContainerRuntimeDetails {
   env: ContainerRuntimeEnv[];
 }
 
+export interface ContainerUpdateOperationState {
+  id: string;
+  status: string;
+  phase: string;
+  updatedAt: string;
+  fromVersion?: string;
+  toVersion?: string;
+  targetImage?: string;
+}
+
 export interface Container {
   id: string;
   name: string;
@@ -127,6 +137,7 @@ export interface Container {
   firstSeenAt?: string;
   updateAge?: number;
   updateMaturityLevel?: 'hot' | 'mature' | 'established';
+  updateOperation?: ContainerUpdateOperationState;
   labels?: Record<string, string>;
   sourceRepo?: string;
   details?: ContainerRuntimeDetails;

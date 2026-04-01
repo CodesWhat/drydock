@@ -144,6 +144,7 @@ function createHarness(options: { containers?: any[] } = {}) {
     },
     updateOperationStore: {
       getOperationsByContainerName: vi.fn(() => []),
+      getInProgressOperationByContainerName: vi.fn(() => undefined),
     },
     getServerConfiguration: vi.fn(() => ({ feature: { delete: true } })),
     getAgent: vi.fn(),
@@ -2299,6 +2300,51 @@ describe('api/container/crud', () => {
       expect(res.json).toHaveBeenCalledWith({ error: 'Container not found' });
     });
 
+    test('includes active update-operation state on list and single-container responses', () => {
+      const harness = createHarness({
+        containers: [createContainer({ id: 'c1', name: 'edge-api' })],
+      });
+      harness.deps.updateOperationStore.getInProgressOperationByContainerName.mockReturnValue({
+        id: 'op-1',
+        status: 'in-progress',
+        phase: 'old-stopped',
+        updatedAt: '2026-04-01T12:00:00.000Z',
+        fromVersion: '1.0.0',
+        toVersion: '1.1.0',
+      });
+
+      const listRes = callGetContainers(harness.handlers);
+      const singleRes = callGetContainer(harness.handlers, 'c1');
+
+      expect(
+        harness.deps.updateOperationStore.getInProgressOperationByContainerName,
+      ).toHaveBeenCalledWith('edge-api');
+      expect(listRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: [
+            expect.objectContaining({
+              updateOperation: expect.objectContaining({
+                id: 'op-1',
+                status: 'in-progress',
+                phase: 'old-stopped',
+                fromVersion: '1.0.0',
+                toVersion: '1.1.0',
+              }),
+            }),
+          ],
+        }),
+      );
+      expect(singleRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          updateOperation: expect.objectContaining({
+            id: 'op-1',
+            status: 'in-progress',
+            phase: 'old-stopped',
+          }),
+        }),
+      );
+    });
+
     test('returns update-operation history for an existing container', () => {
       const harness = createHarness({
         containers: [createContainer({ id: 'c1', name: 'edge-api' })],
@@ -2471,6 +2517,7 @@ describe('api/container/crud', () => {
           },
           updateOperationStore: {
             getOperationsByContainerName: vi.fn(() => []),
+            getInProgressOperationByContainerName: vi.fn(() => undefined),
           },
         },
         agentApi: {

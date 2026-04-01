@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import type { Container } from '../../../model/container.js';
+import type { Container, ContainerUpdateOperationState } from '../../../model/container.js';
 import { sendErrorResponse } from '../../error-response.js';
 import { buildPaginationLinks } from '../../pagination-links.js';
 import type { ContainerListResponse, CrudHandlerContext } from '../crud-context.js';
@@ -43,6 +43,53 @@ function stripContainerVulnerabilityArrays(container: Container): Container {
           }
         : container.security.updateScan,
     },
+  };
+}
+
+function sanitizeInProgressUpdateOperation(
+  operation: unknown,
+): ContainerUpdateOperationState | undefined {
+  if (!operation || typeof operation !== 'object') {
+    return undefined;
+  }
+
+  const candidate = operation as Record<string, unknown>;
+
+  const id = typeof candidate.id === 'string' ? candidate.id : undefined;
+  const status = typeof candidate.status === 'string' ? candidate.status : undefined;
+  const phase = typeof candidate.phase === 'string' ? candidate.phase : undefined;
+  const updatedAt = typeof candidate.updatedAt === 'string' ? candidate.updatedAt : undefined;
+
+  if (!id || !status || !phase || !updatedAt) {
+    return undefined;
+  }
+
+  return {
+    id,
+    status,
+    phase,
+    updatedAt,
+    ...(typeof candidate.fromVersion === 'string' ? { fromVersion: candidate.fromVersion } : {}),
+    ...(typeof candidate.toVersion === 'string' ? { toVersion: candidate.toVersion } : {}),
+    ...(typeof candidate.targetImage === 'string' ? { targetImage: candidate.targetImage } : {}),
+  };
+}
+
+export function attachInProgressUpdateOperation(
+  context: CrudHandlerContext,
+  container: Container,
+): Container {
+  const operation = sanitizeInProgressUpdateOperation(
+    context.updateOperationStore.getInProgressOperationByContainerName(container.name),
+  );
+
+  if (!operation) {
+    return container;
+  }
+
+  return {
+    ...container,
+    updateOperation: operation,
   };
 }
 
@@ -115,9 +162,12 @@ export function buildContainerListResponse(
   }
 
   const redactedContainers = context.redactContainersRuntimeEnv(pagedContainers);
-  const data = includeVulnerabilities
+  const strippedContainers = includeVulnerabilities
     ? redactedContainers
     : redactedContainers.map((container) => stripContainerVulnerabilityArrays(container));
+  const data = strippedContainers.map((container) =>
+    attachInProgressUpdateOperation(context, container),
+  );
   const hasMore = pagination.limit > 0 && pagination.offset + data.length < total;
   const links = buildPaginationLinks({
     basePath,

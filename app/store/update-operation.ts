@@ -7,7 +7,10 @@ import { initCollection } from './util.js';
 type UpdateOperationStatus = 'in-progress' | 'succeeded' | 'rolled-back' | 'failed' | (string & {});
 
 type UpdateOperationPhase =
+  | 'pulling'
+  | 'pull-failed'
   | 'prepare'
+  | 'dryrun'
   | 'renamed'
   | 'new-created'
   | 'old-stopped'

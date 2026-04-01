@@ -513,19 +513,6 @@ class ContainerUpdateExecutor {
     const configuration = this.getConfiguration();
 
     await this.reconcileInProgressContainerUpdateOperation(dockerApi, container, logContainer);
-    await this.pullImage(dockerApi, auth, newImage, logContainer);
-
-    if (configuration.dryrun) {
-      logContainer.info('Do not replace the existing container because dry-run mode is enabled');
-      return undefined;
-    }
-
-    const cloneRuntimeConfigOptions = await this.getCloneRuntimeConfigOptions(
-      dockerApi,
-      currentContainerSpec,
-      newImage,
-      logContainer,
-    );
 
     const oldName = currentContainerSpec.Name.replace(/^\//, '');
     const tempName = `${oldName}-old-${Date.now()}`;
@@ -549,8 +536,37 @@ class ContainerUpdateExecutor {
       toVersion: container.updateKind.remoteValue ?? container.image.tag.value,
       targetImage: newImage,
       status: 'in-progress',
-      phase: 'prepare',
+      phase: 'pulling',
     });
+
+    try {
+      await this.pullImage(dockerApi, auth, newImage, logContainer);
+    } catch (pullError: unknown) {
+      updateOperationStore.updateOperation(operation.id, {
+        status: 'failed',
+        phase: 'pull-failed',
+        lastError: getErrorMessage(pullError),
+      });
+      throw pullError;
+    }
+
+    if (configuration.dryrun) {
+      logContainer.info('Do not replace the existing container because dry-run mode is enabled');
+      updateOperationStore.updateOperation(operation.id, {
+        status: 'succeeded',
+        phase: 'dryrun',
+      });
+      return undefined;
+    }
+
+    const cloneRuntimeConfigOptions = await this.getCloneRuntimeConfigOptions(
+      dockerApi,
+      currentContainerSpec,
+      newImage,
+      logContainer,
+    );
+
+    updateOperationStore.updateOperation(operation.id, { phase: 'prepare' });
 
     logContainer.info(`Rename container ${oldName} to ${tempName}`);
     await currentContainer.rename({ name: tempName });
