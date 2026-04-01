@@ -1889,9 +1889,13 @@ describe('ContainersView', () => {
       vm.selectedContainer = null;
       globalThis.dispatchEvent(new Event('dd:sse-scan-completed'));
       await flushPromises();
+      globalThis.dispatchEvent(new Event('dd:sse-container-changed'));
+      await flushPromises();
 
       vm.selectedContainer = c;
       globalThis.dispatchEvent(new Event('dd:sse-scan-completed'));
+      await flushPromises();
+      globalThis.dispatchEvent(new Event('dd:sse-container-changed'));
       await flushPromises();
       expect(mockGetAllContainers.mock.calls.length).toBeGreaterThan(1);
 
