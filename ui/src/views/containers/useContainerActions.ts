@@ -13,7 +13,7 @@ import {
   updateContainer as apiUpdateContainer,
 } from '../../services/container-actions';
 import type { Container } from '../../types/container';
-import { getContainerActionKey } from '../../utils/container-action-key';
+import { getContainerActionKey, hasTrackedContainerAction } from '../../utils/container-action-key';
 import { errorMessage, isNoUpdateAvailableError } from '../../utils/error';
 import { useContainerBackups } from './useContainerBackups';
 import { useContainerPolicy } from './useContainerPolicy';
@@ -877,7 +877,10 @@ export function useContainerActions(input: UseContainerActionsInput) {
 
   function isContainerUpdateInProgress(target: ContainerActionTarget) {
     return (
-      actionInProgress.value.has(resolveContainerActionTargetKey(target)) ||
+      hasTrackedContainerAction(
+        actionInProgress.value,
+        typeof target === 'string' ? { name: target } : target,
+      ) ||
       hasPendingContainerAction(target, actionPending) ||
       hasInProgressUpdateOperation(target, input.containers)
     );

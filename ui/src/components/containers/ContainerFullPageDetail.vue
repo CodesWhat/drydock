@@ -3,7 +3,7 @@ import AppBadge from '@/components/AppBadge.vue';
 import AppIconButton from '@/components/AppIconButton.vue';
 import AppTabBar from '@/components/AppTabBar.vue';
 import StatusDot from '@/components/StatusDot.vue';
-import { getContainerActionKey } from '../../utils/container-action-key';
+import { hasTrackedContainerAction } from '../../utils/container-action-key';
 import ContainerFullPageTabContent from './ContainerFullPageTabContent.vue';
 import { useContainersViewTemplateContext } from './containersViewTemplateContext';
 
@@ -30,7 +30,7 @@ const {
 
 function isActionInProgress(container: { id?: unknown; name?: unknown }) {
   return (
-    actionInProgress.value.has(getContainerActionKey(container)) ||
+    hasTrackedContainerAction(actionInProgress.value, container) ||
     isContainerUpdateInProgress(container)
   );
 }
