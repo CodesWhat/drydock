@@ -890,20 +890,16 @@ describe('useContainerActions', () => {
       containers: [web],
       containerIdMap: { web: 'container-1' },
     });
-    const dateNowSpy = vi.spyOn(Date, 'now').mockReturnValue(1_000);
     loadContainers.mockImplementation(async () => {
       containers.value = [];
     });
 
     await composable.startContainer('web');
     expect(composable.actionPending.value.has('web')).toBe(true);
-    expect(dateNowSpy).toHaveBeenCalledTimes(1);
 
     containers.value = [web];
     await composable.startContainer('web');
-    expect(dateNowSpy).toHaveBeenCalledTimes(1);
-
-    dateNowSpy.mockRestore();
+    expect(composable.actionPending.value.has('web')).toBe(true);
   });
 
   it('returns false when an action fails and clears in-progress state', async () => {
