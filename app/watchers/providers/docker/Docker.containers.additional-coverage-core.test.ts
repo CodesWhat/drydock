@@ -175,7 +175,7 @@ describe('Docker Watcher', () => {
       expect(result.noUpdateReason).toBe('Running by digest — no tag to compare');
     });
 
-    test('should still resolve remote digest when tag is sha256 digest and digest watch is enabled', async () => {
+    test('should compare digest-pinned images against the latest registry tag when digest watch is enabled', async () => {
       const container = {
         image: {
           id: 'image123',
@@ -185,7 +185,7 @@ describe('Docker Watcher', () => {
         },
       };
       const mockRegistry = {
-        getTags: vi.fn().mockResolvedValue([]),
+        getTags: vi.fn().mockResolvedValue(['latest', '2.27.5', '2.27.4']),
         getImageManifestDigest: vi
           .fn()
           .mockResolvedValueOnce({
@@ -208,9 +208,51 @@ describe('Docker Watcher', () => {
         created: '2023-01-01',
         noUpdateReason: 'Running by digest — no tag to compare',
       });
-      expect(mockRegistry.getTags).not.toHaveBeenCalled();
+      expect(mockRegistry.getTags).toHaveBeenCalledWith(container.image);
       expect(mockRegistry.getImageManifestDigest).toHaveBeenCalledTimes(2);
+      expect(mockRegistry.getImageManifestDigest.mock.calls[0][0].tag.value).toBe('latest');
+      expect(mockRegistry.getImageManifestDigest.mock.calls[1][1]).toBe('sha256:abc123def456');
       expect(container.image.digest.value).toBe('sha256:manifest123');
+    });
+
+    test('should respect includeTags when selecting a comparison tag for digest-pinned images', async () => {
+      const container = {
+        includeTags: '^2\\.',
+        image: {
+          id: 'image123',
+          registry: { name: 'hub' },
+          tag: { value: 'sha256:abc123def456', semver: false },
+          digest: { watch: true, repo: 'sha256:abc123def456' },
+        },
+      };
+      const mockRegistry = {
+        getTags: vi.fn().mockResolvedValue(['latest', '3.0.0', '2.27.5']),
+        getImageManifestDigest: vi
+          .fn()
+          .mockResolvedValueOnce({
+            digest: 'sha256:def456abc123',
+            created: '2023-01-01',
+            version: 2,
+          })
+          .mockResolvedValueOnce({
+            digest: 'sha256:manifest123',
+          }),
+      };
+      setRegistryState({ hub: mockRegistry });
+      hMockTag.parse.mockImplementation((tag) => {
+        if (tag === '2.27.5') {
+          return { major: 2, minor: 27, patch: 5, prerelease: [] };
+        }
+        if (tag === '3.0.0') {
+          return { major: 3, minor: 0, patch: 0, prerelease: [] };
+        }
+        return null;
+      });
+      const logChild = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
+
+      await docker.findNewVersion(container, logChild);
+
+      expect(mockRegistry.getImageManifestDigest.mock.calls[0][0].tag.value).toBe('2.27.5');
     });
   });
 
