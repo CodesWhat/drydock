@@ -119,3 +119,9 @@ set.ignored = true
 [[triage]]
 match.rules = ["markdownlint:MD060"]
 set.ignored = true
+
+# CVE-2025-59472 false positive: fixed in Next.js 16.1.5, we run 16.2.2.
+# osv-scanner database has a stale affected range. Suppress until DB updates.
+[[triage]]
+match.rules = ["osv-scanner:CVE-2025-59472"]
+set.ignored = true
