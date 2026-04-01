@@ -97,6 +97,11 @@ type RollbackTelemetryPayload = {
   toVersion?: string;
 };
 
+type RollbackConfig = {
+  autoRollback?: boolean;
+  [key: string]: unknown;
+};
+
 type PendingContainerUpdateOperation = NonNullable<
   ReturnType<typeof updateOperationStore.getInProgressOperationByContainerName>
 >;
@@ -104,6 +109,7 @@ type PendingContainerUpdateOperation = NonNullable<
 type ContainerUpdateExecutorDependencies = {
   getConfiguration: () => { dryrun?: boolean; [key: string]: unknown };
   getTriggerId: () => string;
+  getRollbackConfig: (container: ContainerForUpdate) => RollbackConfig;
   stopContainer: (
     container: DockerContainerHandle,
     containerName: string,
@@ -176,6 +182,7 @@ type ContainerUpdateExecutorConstructorOptions = Omit<
 
 const REQUIRED_CONTAINER_UPDATE_EXECUTOR_DEPENDENCY_KEYS = [
   'getTriggerId',
+  'getRollbackConfig',
   'stopContainer',
   'waitContainerRemoved',
   'removeContainer',
@@ -214,6 +221,8 @@ class ContainerUpdateExecutor {
   getConfiguration: ContainerUpdateExecutorDependencies['getConfiguration'];
 
   getTriggerId: ContainerUpdateExecutorDependencies['getTriggerId'];
+
+  getRollbackConfig: ContainerUpdateExecutorDependencies['getRollbackConfig'];
 
   stopContainer: ContainerUpdateExecutorDependencies['stopContainer'];
 
@@ -521,7 +530,11 @@ class ContainerUpdateExecutor {
     const oldName = currentContainerSpec.Name.replace(/^\//, '');
     const tempName = `${oldName}-old-${Date.now()}`;
     const wasRunning = currentContainerSpec.State.Running;
-    const shouldHealthGate = wasRunning && this.hasHealthcheckConfigured(currentContainerSpec);
+    const rollbackConfig = this.getRollbackConfig(container);
+    const shouldHealthGate =
+      wasRunning &&
+      rollbackConfig.autoRollback === true &&
+      this.hasHealthcheckConfigured(currentContainerSpec);
 
     const operation = updateOperationStore.insertOperation({
       containerId: container.id,

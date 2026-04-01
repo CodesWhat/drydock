@@ -83,6 +83,7 @@ function createExecutor(overrides = {}) {
   return new ContainerUpdateExecutor({
     getConfiguration: () => ({ dryrun: false }),
     getTriggerId: vi.fn(() => 'docker.update'),
+    getRollbackConfig: vi.fn(() => ({ autoRollback: false })),
     stopContainer: vi.fn().mockResolvedValue(undefined),
     waitContainerRemoved: vi.fn().mockResolvedValue(undefined),
     removeContainer: vi.fn().mockResolvedValue(undefined),
@@ -110,6 +111,7 @@ describe('ContainerUpdateExecutor', () => {
   test('constructor provides default configuration fallback', () => {
     const executor = new ContainerUpdateExecutor({
       getTriggerId: vi.fn(() => 'docker.update'),
+      getRollbackConfig: vi.fn(() => ({ autoRollback: false })),
       stopContainer: vi.fn(),
       waitContainerRemoved: vi.fn(),
       removeContainer: vi.fn(),
@@ -484,6 +486,32 @@ describe('ContainerUpdateExecutor', () => {
     );
   });
 
+  test('execute skips health gate when auto-rollback is disabled', async () => {
+    const context = createContext({
+      currentContainerSpec: createCurrentContainerSpec({
+        State: { Running: true },
+        HostConfig: { AutoRemove: false },
+      }),
+    });
+    const executor = createExecutor({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      getRollbackConfig: vi.fn(() => ({ autoRollback: false })),
+      hasHealthcheckConfigured: vi.fn(() => true),
+    });
+    const log = createLog();
+
+    await expect(executor.execute(context, createContainer(), log)).resolves.toBe(true);
+
+    expect(executor.startContainer).toHaveBeenCalledWith(context.newContainer, 'web', log);
+    expect(executor.waitForContainerHealthy).not.toHaveBeenCalled();
+    expect(mockUpdateOperation).not.toHaveBeenCalledWith(
+      'op-1',
+      expect.objectContaining({
+        phase: 'health-gate-passed',
+      }),
+    );
+  });
+
   test('execute runs stop/start/health and auto-remove cleanup when old container was running', async () => {
     const context = createContext({
       currentContainerSpec: createCurrentContainerSpec({
@@ -494,6 +522,7 @@ describe('ContainerUpdateExecutor', () => {
     context.newContainer.inspect.mockRejectedValue(new Error('inspect unavailable'));
     const executor = createExecutor({
       createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      getRollbackConfig: vi.fn(() => ({ autoRollback: true })),
       hasHealthcheckConfigured: vi.fn(() => true),
       isContainerNotFoundError: vi.fn((error) => error?.message === 'gone'),
       waitContainerRemoved: vi.fn().mockRejectedValue(new Error('gone')),

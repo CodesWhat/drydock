@@ -140,6 +140,7 @@ const SELF_UPDATE_ORCHESTRATOR_METHODS = [
   'insertContainerImageBackup',
 ] as const;
 const CONTAINER_UPDATE_ORCHESTRATOR_METHODS = [
+  'getRollbackConfig',
   'stopContainer',
   'waitContainerRemoved',
   'removeContainer',

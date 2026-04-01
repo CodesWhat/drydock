@@ -17,7 +17,7 @@ The trigger uses a **rename-first** strategy that keeps the original container n
 3. Create a new container with the **original name** and the new image
 4. Stop the old (renamed) container (if it was running)
 5. Start the new container (if the old one was running)
-6. Wait for the new container to become healthy (if a `HEALTHCHECK` is configured)
+6. Wait for the new container to become healthy (only when `dd.rollback.auto=true` and a `HEALTHCHECK` is configured)
 7. Remove the old container
 
 If **any step fails**, the trigger automatically rolls back:
@@ -73,7 +73,7 @@ Configure auto-rollback using container labels:
 | `dd.rollback.window` | Monitoring window in milliseconds | `300000` (5 min) |
 | `dd.rollback.interval` | Health check poll interval in milliseconds | `10000` (10 sec) |
 
-After a successful update, if `dd.rollback.auto` is enabled, Drydock polls the container health status at the configured interval. If the container becomes `unhealthy` within the monitoring window, an automatic rollback is triggered. If the window expires without failure, the container is considered stable.
+When `dd.rollback.auto` is enabled, Drydock first waits for the recreated container to report `healthy` before it finalizes the update. After that, it continues polling the container health status at the configured interval. If the container becomes `unhealthy` within the monitoring window, an automatic rollback is triggered. If the window expires without failure, the container is considered stable.
 
 ## Lifecycle Hooks
 
