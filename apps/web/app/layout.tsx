@@ -105,8 +105,8 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-title" content="Drydock" />
       </head>
       <body className={`${ibmPlexSans.className} ${ibmPlexMono.variable}`}>
-        <AnnouncementBanner id="trivy-march-2026" href="/security/trivy-supply-chain-march-2026">
-          Security Advisory: Trivy supply chain compromise — Drydock is not affected. Read more
+        <AnnouncementBanner id="axios-march-2026" href="/security/axios-supply-chain-march-2026">
+          Security Advisory: Axios npm supply chain compromise — Drydock is not affected. Read more
         </AnnouncementBanner>
         <RootProvider>{children}</RootProvider>
         <Analytics />
