@@ -33,6 +33,16 @@ export interface ContainerReleaseNotes {
   provider: string;
 }
 
+export interface ContainerUpdateOperation {
+  id: string;
+  status: string;
+  phase: string;
+  updatedAt: string;
+  fromVersion?: string;
+  toVersion?: string;
+  targetImage?: string;
+}
+
 export interface Container {
   id: string;
   name: string;
@@ -55,6 +65,7 @@ export interface Container {
   registryUrl?: string;
   updateKind: 'major' | 'minor' | 'patch' | 'digest' | null;
   updateDetectedAt?: string;
+  updateOperation?: ContainerUpdateOperation;
   updateMaturity: 'fresh' | 'settled' | null;
   updateMaturityTooltip?: string;
   updatePolicyState?: 'snoozed' | 'skipped' | 'maturity-blocked';

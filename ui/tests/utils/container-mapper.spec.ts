@@ -51,6 +51,32 @@ describe('container-mapper', () => {
     });
   });
 
+  describe('deriveUpdateOperation', () => {
+    it('maps active update-operation metadata when present', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateOperation: {
+            id: 'op-1',
+            status: 'in-progress',
+            phase: 'old-stopped',
+            updatedAt: '2026-04-01T12:00:00.000Z',
+            fromVersion: '1.0.0',
+            toVersion: '1.1.0',
+          },
+        }),
+      );
+
+      expect(c.updateOperation).toEqual({
+        id: 'op-1',
+        status: 'in-progress',
+        phase: 'old-stopped',
+        updatedAt: '2026-04-01T12:00:00.000Z',
+        fromVersion: '1.0.0',
+        toVersion: '1.1.0',
+      });
+    });
+  });
+
   describe('deriveRegistry', () => {
     it('detects dockerhub from registry name', () => {
       const c = mapApiContainer(makeApiContainer());

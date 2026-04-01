@@ -27,6 +27,7 @@ import { useDashboardWidgetOrder } from './dashboard/useDashboardWidgetOrder';
 const router = useRouter();
 const confirm = useConfirmDialog();
 const { isMobile, windowNarrow } = useBreakpoints();
+const dashboardScrollEl = ref<HTMLElement | null>(null);
 // Responsive grid margins: slightly wider vertical gaps on touch screens for scroll room
 const gridMargin = computed<[number, number]>(() => {
   if (isMobile.value) return [10, 20]; // < 768px: tighter horizontal, taller vertical for touch
@@ -43,6 +44,13 @@ const dashboardPendingUpdatePollTimer = ref<ReturnType<typeof setInterval> | nul
 const dashboardPendingUpdatePollInFlight = ref(false);
 const DASHBOARD_PENDING_UPDATE_POLL_INTERVAL_MS = 2_000;
 const DASHBOARD_PENDING_UPDATE_TIMEOUT_MS = 30_000;
+const DASHBOARD_DRAG_EDGE_THRESHOLD_PX = 72;
+const DASHBOARD_DRAG_MAX_SCROLL_STEP_PX = 24;
+const activeDashboardDragPointerId = ref<number | null>(null);
+const dashboardDragPointerEngaged = ref(false);
+const dashboardDragPointerMoved = ref(false);
+const dashboardDragPointerY = ref<number | null>(null);
+let dashboardDragAutoScrollFrame: number | null = null;
 
 function isStaleDashboardUpdateError(error: unknown): boolean {
   return isNoUpdateAvailableError(error);
@@ -50,6 +58,118 @@ function isStaleDashboardUpdateError(error: unknown): boolean {
 
 function navigateTo(route: RouteLocationRaw) {
   router.push(route);
+}
+
+function clampDashboardScroll(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+function computeDashboardDragScrollDelta(
+  clientY: number,
+  rect: Pick<DOMRect, 'bottom' | 'top'>,
+): number {
+  const topEdge = rect.top + DASHBOARD_DRAG_EDGE_THRESHOLD_PX;
+  if (clientY <= topEdge) {
+    const ratio = Math.min(1, (topEdge - clientY) / DASHBOARD_DRAG_EDGE_THRESHOLD_PX);
+    return -Math.max(1, Math.round(ratio * DASHBOARD_DRAG_MAX_SCROLL_STEP_PX));
+  }
+
+  const bottomEdge = rect.bottom - DASHBOARD_DRAG_EDGE_THRESHOLD_PX;
+  if (clientY >= bottomEdge) {
+    const ratio = Math.min(1, (clientY - bottomEdge) / DASHBOARD_DRAG_EDGE_THRESHOLD_PX);
+    return Math.max(1, Math.round(ratio * DASHBOARD_DRAG_MAX_SCROLL_STEP_PX));
+  }
+
+  return 0;
+}
+
+function resolveDashboardScrollEl(): HTMLElement | null {
+  if (dashboardScrollEl.value) {
+    return dashboardScrollEl.value;
+  }
+  return document.scrollingElement instanceof HTMLElement ? document.scrollingElement : null;
+}
+
+function stopDashboardDragAutoScroll() {
+  dashboardDragPointerEngaged.value = false;
+  dashboardDragPointerMoved.value = false;
+  dashboardDragPointerY.value = null;
+  activeDashboardDragPointerId.value = null;
+  if (dashboardDragAutoScrollFrame !== null) {
+    cancelAnimationFrame(dashboardDragAutoScrollFrame);
+    dashboardDragAutoScrollFrame = null;
+  }
+}
+
+function tickDashboardDragAutoScroll() {
+  if (!editMode.value || !dashboardDragPointerEngaged.value) {
+    dashboardDragAutoScrollFrame = null;
+    return;
+  }
+
+  const scrollEl = resolveDashboardScrollEl();
+  const pointerY = dashboardDragPointerY.value;
+  if (scrollEl && dashboardDragPointerMoved.value && pointerY !== null) {
+    const delta = computeDashboardDragScrollDelta(pointerY, scrollEl.getBoundingClientRect());
+    if (delta !== 0) {
+      const maxScrollTop = Math.max(0, scrollEl.scrollHeight - scrollEl.clientHeight);
+      if (maxScrollTop > 0) {
+        scrollEl.scrollTop = clampDashboardScroll(scrollEl.scrollTop + delta, 0, maxScrollTop);
+      }
+    }
+  }
+
+  dashboardDragAutoScrollFrame = requestAnimationFrame(tickDashboardDragAutoScroll);
+}
+
+function ensureDashboardDragAutoScrollLoop() {
+  if (dashboardDragAutoScrollFrame === null) {
+    dashboardDragAutoScrollFrame = requestAnimationFrame(tickDashboardDragAutoScroll);
+  }
+}
+
+function handleDashboardGridPointerDown(event: PointerEvent) {
+  if (!editMode.value || !(event.target instanceof Element)) {
+    return;
+  }
+  if (!event.target.closest('.drag-handle')) {
+    return;
+  }
+
+  dashboardDragPointerEngaged.value = true;
+  dashboardDragPointerMoved.value = false;
+  dashboardDragPointerY.value = event.clientY;
+  activeDashboardDragPointerId.value = typeof event.pointerId === 'number' ? event.pointerId : null;
+  ensureDashboardDragAutoScrollLoop();
+}
+
+function handleDashboardPointerMove(event: PointerEvent) {
+  if (!dashboardDragPointerEngaged.value) {
+    return;
+  }
+  if (
+    activeDashboardDragPointerId.value !== null &&
+    event.pointerId !== activeDashboardDragPointerId.value
+  ) {
+    return;
+  }
+
+  dashboardDragPointerMoved.value = true;
+  dashboardDragPointerY.value = event.clientY;
+}
+
+function handleDashboardPointerEnd(event: PointerEvent) {
+  if (!dashboardDragPointerEngaged.value) {
+    return;
+  }
+  if (
+    activeDashboardDragPointerId.value !== null &&
+    event.pointerId !== activeDashboardDragPointerId.value
+  ) {
+    return;
+  }
+
+  stopDashboardDragAutoScroll();
 }
 
 // Delay enabling grid transitions to prevent fly-in on initial load
@@ -104,9 +224,18 @@ function onKeydown(event: KeyboardEvent) {
 }
 onMounted(() => {
   window.addEventListener('keydown', onKeydown);
+  window.addEventListener('pointermove', handleDashboardPointerMove, { passive: true });
+  window.addEventListener('pointerup', handleDashboardPointerEnd, { passive: true });
+  window.addEventListener('pointercancel', handleDashboardPointerEnd, { passive: true });
+  window.addEventListener('blur', stopDashboardDragAutoScroll);
 });
 onUnmounted(() => {
   window.removeEventListener('keydown', onKeydown);
+  window.removeEventListener('pointermove', handleDashboardPointerMove);
+  window.removeEventListener('pointerup', handleDashboardPointerEnd);
+  window.removeEventListener('pointercancel', handleDashboardPointerEnd);
+  window.removeEventListener('blur', stopDashboardDragAutoScroll);
+  stopDashboardDragAutoScroll();
 });
 
 const {
@@ -250,6 +379,12 @@ watch(containers, () => {
   pruneDashboardPendingUpdateRows();
 });
 
+watch(editMode, (isEditing) => {
+  if (!isEditing) {
+    stopDashboardDragAutoScroll();
+  }
+});
+
 onUnmounted(() => {
   stopDashboardPendingUpdatePolling();
 });
@@ -353,7 +488,7 @@ function confirmDashboardUpdateAll() {
   <div class="flex flex-col flex-1 min-h-0">
     <div class="flex gap-2 min-w-0 flex-1 min-h-0">
     <!-- Main dashboard content -->
-    <div class="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden px-1 sm:pr-[15px] dd-touch-scroll">
+    <div ref="dashboardScrollEl" class="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden px-1 sm:pr-[15px] dd-touch-scroll">
       <div v-if="loading" class="flex items-center justify-center py-16">
         <div class="text-sm dd-text-muted">Loading dashboard...</div>
       </div>
@@ -396,6 +531,7 @@ function confirmDashboardUpdateAll() {
         <!-- Grid Layout -->
         <GridLayout
           v-model:layout="layout"
+          @pointerdown.capture="handleDashboardGridPointerDown"
           :col-num="12"
           :row-height="30"
           :margin="gridMargin"

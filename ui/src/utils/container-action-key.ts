@@ -12,5 +12,5 @@ function asNonEmptyString(value: unknown): string | undefined {
 }
 
 export function getContainerActionKey(container: ContainerActionKeyInput): string {
-  return asNonEmptyString(container.id) ?? asNonEmptyString(container.name) ?? '';
+  return asNonEmptyString(container.name) ?? asNonEmptyString(container.id) ?? '';
 }

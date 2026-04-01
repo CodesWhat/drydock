@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { flushPromises, type VueWrapper } from '@vue/test-utils';
+import { nextTick } from 'vue';
 import DataTable from '@/components/DataTable.vue';
 import type { Container } from '@/types/container';
 import DashboardView from '@/views/DashboardView.vue';
@@ -93,6 +94,8 @@ const mockGetAllWatchers = getAllWatchers as ReturnType<typeof vi.fn>;
 const mockGetAllRegistries = getAllRegistries as ReturnType<typeof vi.fn>;
 const PREFERENCES_STORAGE_KEY = 'dd-preferences';
 const mountedWrappers: VueWrapper[] = [];
+const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
+const originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
 
 function makeContainer(overrides: Partial<Container> = {}): Container {
   return {
@@ -186,6 +189,66 @@ function mountDashboardView() {
   return wrapper;
 }
 
+function createPointerLikeEvent(
+  type: string,
+  { clientY, pointerId }: { clientY: number; pointerId: number },
+) {
+  const event = new Event(type, { bubbles: true }) as Event & {
+    clientY: number;
+    pointerId: number;
+  };
+  Object.defineProperties(event, {
+    clientY: { configurable: true, value: clientY },
+    pointerId: { configurable: true, value: pointerId },
+  });
+  return event;
+}
+
+function mockScrollableDashboardArea(
+  element: HTMLElement,
+  {
+    bottom,
+    clientHeight = 400,
+    scrollHeight = 1200,
+    scrollTop = 100,
+    top = 0,
+  }: {
+    bottom: number;
+    clientHeight?: number;
+    scrollHeight?: number;
+    scrollTop?: number;
+    top?: number;
+  },
+) {
+  let currentScrollTop = scrollTop;
+  Object.defineProperty(element, 'clientHeight', {
+    configurable: true,
+    get: () => clientHeight,
+  });
+  Object.defineProperty(element, 'scrollHeight', {
+    configurable: true,
+    get: () => scrollHeight,
+  });
+  Object.defineProperty(element, 'scrollTop', {
+    configurable: true,
+    get: () => currentScrollTop,
+    set: (value: number) => {
+      currentScrollTop = value;
+    },
+  });
+  vi.spyOn(element, 'getBoundingClientRect').mockReturnValue({
+    bottom,
+    height: clientHeight,
+    left: 0,
+    right: 320,
+    toJSON: () => ({}),
+    top,
+    width: 320,
+    x: 0,
+    y: top,
+  } as DOMRect);
+}
+
 describe('DashboardView', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -200,6 +263,16 @@ describe('DashboardView', () => {
     for (const wrapper of mountedWrappers.splice(0)) {
       wrapper.unmount();
     }
+    Object.defineProperty(globalThis, 'requestAnimationFrame', {
+      configurable: true,
+      value: originalRequestAnimationFrame,
+      writable: true,
+    });
+    Object.defineProperty(globalThis, 'cancelAnimationFrame', {
+      configurable: true,
+      value: originalCancelAnimationFrame,
+      writable: true,
+    });
     vi.useRealTimers();
   });
 
@@ -242,6 +315,88 @@ describe('DashboardView', () => {
 
       const widget = wrapper.find('[data-widget-id="recent-updates"]');
       expect(widget.attributes('style')).toContain('touch-action: pan-y');
+    });
+
+    it('auto-scrolls the dashboard downward while dragging a widget near the bottom edge', async () => {
+      const animationFrameCallbacks: FrameRequestCallback[] = [];
+      Object.defineProperty(globalThis, 'requestAnimationFrame', {
+        configurable: true,
+        value: vi.fn((callback: FrameRequestCallback) => {
+          animationFrameCallbacks.push(callback);
+          return animationFrameCallbacks.length;
+        }),
+      });
+      Object.defineProperty(globalThis, 'cancelAnimationFrame', {
+        configurable: true,
+        value: vi.fn(),
+      });
+
+      const wrapper = await mountDashboard([makeContainer({ newTag: '2.0.0' })]);
+      const editToggle = document.querySelector('[data-test="dashboard-edit-toggle"]');
+      expect(editToggle).not.toBeNull();
+      (editToggle as HTMLButtonElement).click();
+      await flushPromises();
+
+      const scrollArea = wrapper.find('.flex-1.min-h-0.min-w-0.overflow-y-auto.overflow-x-hidden');
+      expect(scrollArea.exists()).toBe(true);
+      mockScrollableDashboardArea(scrollArea.element as HTMLElement, {
+        bottom: 400,
+        scrollTop: 100,
+      });
+
+      const dragHandle = wrapper.find('.drag-handle');
+      expect(dragHandle.exists()).toBe(true);
+      dragHandle.element.dispatchEvent(
+        createPointerLikeEvent('pointerdown', { clientY: 200, pointerId: 1 }),
+      );
+      window.dispatchEvent(createPointerLikeEvent('pointermove', { clientY: 395, pointerId: 1 }));
+
+      expect(animationFrameCallbacks.length).toBeGreaterThan(0);
+      animationFrameCallbacks[0](0);
+      await nextTick();
+
+      expect((scrollArea.element as HTMLElement).scrollTop).toBeGreaterThan(100);
+    });
+
+    it('auto-scrolls the dashboard upward while dragging a widget near the top edge', async () => {
+      const animationFrameCallbacks: FrameRequestCallback[] = [];
+      Object.defineProperty(globalThis, 'requestAnimationFrame', {
+        configurable: true,
+        value: vi.fn((callback: FrameRequestCallback) => {
+          animationFrameCallbacks.push(callback);
+          return animationFrameCallbacks.length;
+        }),
+      });
+      Object.defineProperty(globalThis, 'cancelAnimationFrame', {
+        configurable: true,
+        value: vi.fn(),
+      });
+
+      const wrapper = await mountDashboard([makeContainer({ newTag: '2.0.0' })]);
+      const editToggle = document.querySelector('[data-test="dashboard-edit-toggle"]');
+      expect(editToggle).not.toBeNull();
+      (editToggle as HTMLButtonElement).click();
+      await flushPromises();
+
+      const scrollArea = wrapper.find('.flex-1.min-h-0.min-w-0.overflow-y-auto.overflow-x-hidden');
+      expect(scrollArea.exists()).toBe(true);
+      mockScrollableDashboardArea(scrollArea.element as HTMLElement, {
+        bottom: 400,
+        scrollTop: 180,
+      });
+
+      const dragHandle = wrapper.find('.drag-handle');
+      expect(dragHandle.exists()).toBe(true);
+      dragHandle.element.dispatchEvent(
+        createPointerLikeEvent('pointerdown', { clientY: 200, pointerId: 7 }),
+      );
+      window.dispatchEvent(createPointerLikeEvent('pointermove', { clientY: 5, pointerId: 7 }));
+
+      expect(animationFrameCallbacks.length).toBeGreaterThan(0);
+      animationFrameCallbacks[0](0);
+      await nextTick();
+
+      expect((scrollArea.element as HTMLElement).scrollTop).toBeLessThan(180);
     });
   });
 
@@ -1455,6 +1610,30 @@ describe('DashboardView', () => {
       expect(wrapper.find('[data-widget-id="recent-updates"]').text()).toContain(
         'No updates available',
       );
+    });
+
+    it('keeps a live dashboard row in Updating while the backend reports an in-progress operation', async () => {
+      const updatingContainer = makeContainer({
+        id: 'c-pending',
+        name: 'nginx',
+        newTag: null,
+        updateKind: null,
+        status: 'stopped',
+        updateOperation: {
+          id: 'op-1',
+          status: 'in-progress',
+          phase: 'old-stopped',
+          updatedAt: '2026-04-01T12:00:00.000Z',
+          fromVersion: '1.0.0',
+          toVersion: '1.1.0',
+        },
+      });
+
+      const wrapper = await mountDashboard([updatingContainer]);
+
+      const widget = wrapper.find('[data-widget-id="recent-updates"]');
+      expect(widget.text()).toContain('Updating');
+      expect(widget.find('[data-test="dashboard-update-btn"]').exists()).toBe(false);
     });
 
     it('keeps a dashboard row visible as updating until the container reappears', async () => {

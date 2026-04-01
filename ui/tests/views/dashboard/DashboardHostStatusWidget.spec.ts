@@ -115,4 +115,19 @@ describe('DashboardHostStatusWidget', () => {
     expect(fullModeRows[0].classes()).toContain('items-start');
     expect(fullModeRows[0].classes()).not.toContain('items-center');
   });
+
+  it('snaps full-mode scrolling to host row boundaries', async () => {
+    const wrapper = mountWidget();
+
+    triggerResize(320);
+    await nextTick();
+
+    const scrollViewport = wrapper.find('.dd-scroll-stable');
+    expect(scrollViewport.classes()).toContain('snap-y');
+    expect(scrollViewport.classes()).toContain('snap-proximity');
+
+    const fullModeRows = wrapper.findAll('.dd-scroll-stable > div');
+    expect(fullModeRows.length).toBeGreaterThan(0);
+    expect(fullModeRows[0].classes()).toContain('snap-start');
+  });
 });

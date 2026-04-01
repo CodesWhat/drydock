@@ -538,6 +538,13 @@ function getContainerStatusIconStyle(container: { id?: unknown; name?: unknown; 
                 <AppIcon v-else name="check" :size="14" class="ml-1" style="color: var(--dd-success);" v-tooltip.top="tt('Up to date')" />
               </template>
             </div>
+            <div
+              v-if="isContainerUpdating(c)"
+              class="mt-2 inline-flex items-center gap-1 text-2xs"
+              style="color: var(--dd-warning);">
+              <AppIcon name="spinner" :size="12" class="dd-spin shrink-0" />
+              Updating
+            </div>
             <div v-if="c.suggestedTag || c.releaseNotes || c.releaseLink" class="flex items-center gap-2 flex-wrap mt-2">
               <SuggestedTagBadge :tag="c.suggestedTag" :current-tag="c.currentTag" />
               <ReleaseNotesLink :release-notes="c.releaseNotes" :release-link="c.releaseLink" />

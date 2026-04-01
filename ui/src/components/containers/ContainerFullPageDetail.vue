@@ -80,6 +80,11 @@ function getStatusTone(container: { id?: unknown; name?: unknown; status?: strin
                 <AppBadge
                   :tone="getStatusTone(selectedContainer)"
                   size="xs">
+                  <AppIcon
+                    v-if="isActionInProgress(selectedContainer)"
+                    name="spinner"
+                    :size="12"
+                    class="mr-1 dd-spin" />
                   {{ getStatusLabel(selectedContainer) }}
                 </AppBadge>
                 <AppBadge

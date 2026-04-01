@@ -20,6 +20,7 @@ import type {
   ContainerReleaseNotes,
   ContainerSecurityDelta,
   ContainerSecuritySummary,
+  ContainerUpdateOperation,
 } from '../types/container';
 import { normalizeSeverityCount } from '../views/security/securityViewUtils';
 import {
@@ -78,6 +79,16 @@ interface ApiContainerUpdatePolicy {
   maturityMinAgeDays?: unknown;
 }
 
+interface ApiContainerUpdateOperation {
+  id?: unknown;
+  status?: unknown;
+  phase?: unknown;
+  updatedAt?: unknown;
+  fromVersion?: unknown;
+  toVersion?: unknown;
+  targetImage?: unknown;
+}
+
 interface ApiContainerDetails {
   ports?: unknown;
   volumes?: unknown;
@@ -127,6 +138,7 @@ export interface ApiContainerInput {
   labels?: Record<string, unknown> | null;
   displayIcon?: unknown;
   updateDetectedAt?: unknown;
+  updateOperation?: ApiContainerUpdateOperation | null;
   updatePolicy?: ApiContainerUpdatePolicy | null;
   details?: ApiContainerDetails | null;
   tagFamily?: unknown;
@@ -551,6 +563,40 @@ function deriveReleaseNotes(apiContainer: ApiContainerInput): ContainerReleaseNo
   return { title, body, url, publishedAt, provider };
 }
 
+function deriveUpdateOperation(
+  apiContainer: ApiContainerInput,
+): ContainerUpdateOperation | undefined {
+  const operation = apiContainer.updateOperation;
+  if (!operation || typeof operation !== 'object') {
+    return undefined;
+  }
+
+  const id = asNonEmptyString(operation.id);
+  const status = asNonEmptyString(operation.status);
+  const phase = asNonEmptyString(operation.phase);
+  const updatedAt = asNonEmptyString(operation.updatedAt);
+
+  if (!id || !status || !phase || !updatedAt) {
+    return undefined;
+  }
+
+  return {
+    id,
+    status,
+    phase,
+    updatedAt,
+    ...(asNonEmptyString(operation.fromVersion)
+      ? { fromVersion: asNonEmptyString(operation.fromVersion) }
+      : {}),
+    ...(asNonEmptyString(operation.toVersion)
+      ? { toVersion: asNonEmptyString(operation.toVersion) }
+      : {}),
+    ...(asNonEmptyString(operation.targetImage)
+      ? { targetImage: asNonEmptyString(operation.targetImage) }
+      : {}),
+  };
+}
+
 /** Map a single API container to the UI Container type. */
 export function mapApiContainer(apiContainer: ApiContainerInput): Container {
   const runtimeDetails = deriveRuntimeDetails(apiContainer);
@@ -582,6 +628,7 @@ export function mapApiContainer(apiContainer: ApiContainerInput): Container {
     releaseNotes: deriveReleaseNotes(apiContainer),
     releaseLink: deriveReleaseLink(apiContainer),
     updateDetectedAt: detectedAt,
+    updateOperation: deriveUpdateOperation(apiContainer),
     updateMaturity: getUpdateMaturity(detectedAt, !!apiContainer.updateAvailable),
     updateMaturityTooltip: formatUpdateAge(detectedAt, !!apiContainer.updateAvailable),
     updatePolicyState,

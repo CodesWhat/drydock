@@ -63,11 +63,11 @@ watchEffect(() => {
     </div>
 
     <!-- Full mode: wide rows, vertical scroll -->
-    <div v-if="mode === 'full'" class="flex-1 min-h-0 overflow-y-auto overscroll-contain dd-scroll-stable p-4 space-y-3">
+    <div v-if="mode === 'full'" class="flex-1 min-h-0 overflow-y-auto overscroll-contain dd-scroll-stable snap-y snap-proximity p-4 space-y-3">
       <div
         v-for="server in servers"
         :key="server.name"
-        class="flex items-start gap-3 p-3 dd-rounded cursor-pointer transition-colors hover:dd-bg-elevated"
+        class="flex items-start gap-3 snap-start p-3 dd-rounded cursor-pointer transition-colors hover:dd-bg-elevated"
         :style="{ backgroundColor: 'var(--dd-bg-inset)' }"
         @click="handleViewAll">
         <AppBadge

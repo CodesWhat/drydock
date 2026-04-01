@@ -282,7 +282,7 @@ describe('useContainerActions', () => {
       selectedContainer: container,
       selectedContainerId: container.id,
     });
-    composable.skippedUpdates.value.add('container-1');
+    composable.skippedUpdates.value.add('web');
     mocks.getBackups.mockClear();
     mocks.getContainerUpdateOperations.mockClear();
     loadContainers.mockClear();
@@ -291,7 +291,7 @@ describe('useContainerActions', () => {
 
     expect(mocks.rollback).toHaveBeenCalledWith('container-1', 'backup-1');
     expect(composable.rollbackMessage.value).toBe('Rollback completed from selected backup');
-    expect(composable.skippedUpdates.value.has('container-1')).toBe(false);
+    expect(composable.skippedUpdates.value.has('web')).toBe(false);
     expect(loadContainers).toHaveBeenCalledTimes(1);
     expect(mocks.getBackups).toHaveBeenCalledTimes(1);
     expect(mocks.getContainerUpdateOperations).toHaveBeenCalledTimes(1);
@@ -758,6 +758,31 @@ describe('useContainerActions', () => {
     expect(composable.actionInProgress.value.size).toBe(0);
     expect(composable.actionPending.value.has('web')).toBe(true);
     expect(composable.isContainerUpdateInProgress(web)).toBe(true);
+  });
+
+  it('reports live containers with an in-progress update operation as still updating', async () => {
+    const web = makeContainer({
+      id: 'container-1',
+      name: 'web',
+      status: 'stopped',
+      updateOperation: {
+        id: 'op-1',
+        status: 'in-progress',
+        phase: 'old-stopped',
+        updatedAt: '2026-04-01T12:00:00.000Z',
+        fromVersion: '1.0.0',
+        toVersion: '1.1.0',
+      },
+    });
+    const { composable } = await mountActionsHarness({
+      containers: [web],
+      selectedContainer: web,
+      selectedContainerId: web.id,
+      containerIdMap: { web: web.id },
+    });
+
+    expect(composable.isContainerUpdateInProgress(web)).toBe(true);
+    expect(composable.isContainerUpdateInProgress('web')).toBe(true);
   });
 
   it('reuses existing pending start timestamps when the same action is queued again', async () => {

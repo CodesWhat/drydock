@@ -42,6 +42,9 @@ interface UseContainerActionsInput {
 
 export const ACTION_TAB_DETAIL_REFRESH_DEBOUNCE_MS = 250;
 export const PENDING_ACTIONS_POLL_INTERVAL_MS = 2000;
+const PENDING_UPDATE_GRACE_MS = 6000;
+
+type PendingActionLifecycleMode = 'presence' | 'update';
 
 function isStaleUpdateError(error: unknown): boolean {
   return isNoUpdateAvailableError(error);
@@ -75,6 +78,49 @@ function hasPendingContainerAction(
   return typeof name === 'string' && name.length > 0 && actionPending.value.has(name);
 }
 
+function hasInProgressUpdateOperation(
+  target: ContainerActionTarget,
+  containers: Readonly<Ref<Container[]>>,
+) {
+  if (typeof target !== 'string' && target.updateOperation?.status === 'in-progress') {
+    return true;
+  }
+
+  const targetId = typeof target === 'string' ? undefined : target.id;
+  const targetName = typeof target === 'string' ? target : target.name;
+
+  return containers.value.some((container) => {
+    const matches = targetId ? container.id === targetId : container.name === targetName;
+    return matches && container.updateOperation?.status === 'in-progress';
+  });
+}
+
+function markPendingActionState(args: {
+  actionPending: Ref<Map<string, Container>>;
+  actionPendingLifecycleModes: Ref<Map<string, PendingActionLifecycleMode>>;
+  actionPendingLifecycleObserved: Ref<Set<string>>;
+  startPolling: (name: string) => void;
+  name: string;
+  snapshot?: Container;
+  mode: PendingActionLifecycleMode;
+}) {
+  if (!args.snapshot) {
+    return;
+  }
+
+  args.actionPending.value.set(args.name, args.snapshot);
+  args.actionPendingLifecycleModes.value.set(args.name, args.mode);
+
+  const nextObserved = new Set(args.actionPendingLifecycleObserved.value);
+  if (args.mode === 'update') {
+    nextObserved.delete(args.name);
+  } else {
+    nextObserved.add(args.name);
+  }
+  args.actionPendingLifecycleObserved.value = nextObserved;
+  args.startPolling(args.name);
+}
+
 async function executeContainerActionState(args: {
   containerActionsEnabled: boolean;
   containerActionsDisabledReason: string;
@@ -88,12 +134,15 @@ async function executeContainerActionState(args: {
   loadContainers: () => Promise<void>;
   reloadContainers?: boolean;
   actionPending: Ref<Map<string, Container>>;
+  actionPendingLifecycleModes: Ref<Map<string, PendingActionLifecycleMode>>;
+  actionPendingLifecycleObserved: Ref<Set<string>>;
   startPolling: (name: string) => void;
   selectedContainerId: string | undefined;
   activeDetailTab: string;
   refreshActionTabData: () => Promise<void>;
   successMessage?: string;
   treatNoUpdateAsStale?: boolean;
+  pendingLifecycleMode?: PendingActionLifecycleMode;
 }): Promise<boolean> {
   if (!args.containerActionsEnabled) {
     args.inputError.value = args.containerActionsDisabledReason;
@@ -113,12 +162,30 @@ async function executeContainerActionState(args: {
     args.containers.value.find((container) => container.name === args.name);
   try {
     await args.action(containerId);
+    if (args.pendingLifecycleMode === 'update') {
+      markPendingActionState({
+        actionPending: args.actionPending,
+        actionPendingLifecycleModes: args.actionPendingLifecycleModes,
+        actionPendingLifecycleObserved: args.actionPendingLifecycleObserved,
+        startPolling: args.startPolling,
+        name: args.name,
+        snapshot,
+        mode: 'update',
+      });
+    }
     if (shouldReloadContainers) {
       await args.loadContainers();
       const stillPresent = args.containers.value.find((container) => container.id === containerId);
       if (!stillPresent && snapshot) {
-        args.actionPending.value.set(args.name, snapshot);
-        args.startPolling(args.name);
+        markPendingActionState({
+          actionPending: args.actionPending,
+          actionPendingLifecycleModes: args.actionPendingLifecycleModes,
+          actionPendingLifecycleObserved: args.actionPendingLifecycleObserved,
+          startPolling: args.startPolling,
+          name: args.name,
+          snapshot,
+          mode: args.pendingLifecycleMode ?? 'presence',
+        });
       }
     }
     if (args.selectedContainerId === containerId && args.activeDetailTab === 'actions') {
@@ -180,6 +247,7 @@ async function updateAllInGroupState(args: {
       reloadContainers?: boolean;
       successMessage?: string;
       treatNoUpdateAsStale?: boolean;
+      pendingLifecycleMode?: PendingActionLifecycleMode;
     },
   ) => Promise<boolean>;
   loadContainers: () => Promise<void>;
@@ -215,6 +283,7 @@ async function updateAllInGroupState(args: {
       const updated = await args.executeAction(target, apiUpdateContainer, {
         reloadContainers: false,
         treatNoUpdateAsStale: true,
+        pendingLifecycleMode: 'update',
       });
       if (updated) {
         updatedCount += 1;
@@ -295,10 +364,53 @@ function stopPendingActionsPollingState(
 function clearPendingActionState(args: {
   actionPending: Ref<Map<string, Container>>;
   actionPendingStartTimes: Ref<Map<string, number>>;
+  actionPendingLifecycleModes: Ref<Map<string, PendingActionLifecycleMode>>;
+  actionPendingLifecycleObserved: Ref<Set<string>>;
   name: string;
 }) {
   args.actionPending.value.delete(args.name);
   args.actionPendingStartTimes.value.delete(args.name);
+  args.actionPendingLifecycleModes.value.delete(args.name);
+  const nextObserved = new Set(args.actionPendingLifecycleObserved.value);
+  nextObserved.delete(args.name);
+  args.actionPendingLifecycleObserved.value = nextObserved;
+}
+
+function isPendingUpdateSettled(args: {
+  name: string;
+  now: number;
+  startTime: number;
+  liveContainer?: Container;
+  snapshot?: Container;
+  actionPendingLifecycleObserved: Ref<Set<string>>;
+}) {
+  const observedLifecycleSignal =
+    !args.liveContainer ||
+    args.liveContainer.updateOperation?.status === 'in-progress' ||
+    (args.snapshot ? args.liveContainer.status !== args.snapshot.status : false);
+  if (observedLifecycleSignal) {
+    const nextObserved = new Set(args.actionPendingLifecycleObserved.value);
+    nextObserved.add(args.name);
+    args.actionPendingLifecycleObserved.value = nextObserved;
+  }
+
+  if (!args.liveContainer) {
+    return false;
+  }
+
+  if (args.liveContainer.updateOperation?.status === 'in-progress') {
+    return false;
+  }
+
+  const expectedStatus = args.snapshot?.status;
+  if (expectedStatus && args.liveContainer.status !== expectedStatus) {
+    return false;
+  }
+
+  return (
+    args.actionPendingLifecycleObserved.value.has(args.name) ||
+    args.now - args.startTime >= PENDING_UPDATE_GRACE_MS
+  );
 }
 
 function prunePendingActionsState(args: {
@@ -306,15 +418,36 @@ function prunePendingActionsState(args: {
   containers: Readonly<Ref<Container[]>>;
   actionPending: Ref<Map<string, Container>>;
   actionPendingStartTimes: Ref<Map<string, number>>;
+  actionPendingLifecycleModes: Ref<Map<string, PendingActionLifecycleMode>>;
+  actionPendingLifecycleObserved: Ref<Set<string>>;
   pollTimeout: number;
   stopPendingActionsPolling: () => void;
 }) {
-  const liveContainerNames = new Set(args.containers.value.map((container) => container.name));
+  const liveContainersByName = new Map(
+    args.containers.value.map((container) => [container.name, container] as const),
+  );
   for (const [name, startTime] of args.actionPendingStartTimes.value.entries()) {
-    if (liveContainerNames.has(name) || args.now - startTime > args.pollTimeout) {
+    const liveContainer = liveContainersByName.get(name);
+    const pendingMode = args.actionPendingLifecycleModes.value.get(name) ?? 'presence';
+    const timedOut = args.now - startTime > args.pollTimeout;
+    const settled =
+      pendingMode === 'update'
+        ? isPendingUpdateSettled({
+            name,
+            now: args.now,
+            startTime,
+            liveContainer,
+            snapshot: args.actionPending.value.get(name),
+            actionPendingLifecycleObserved: args.actionPendingLifecycleObserved,
+          })
+        : Boolean(liveContainer);
+
+    if (timedOut || settled) {
       clearPendingActionState({
         actionPending: args.actionPending,
         actionPendingStartTimes: args.actionPendingStartTimes,
+        actionPendingLifecycleModes: args.actionPendingLifecycleModes,
+        actionPendingLifecycleObserved: args.actionPendingLifecycleObserved,
         name,
       });
     }
@@ -364,7 +497,13 @@ function createConfirmHandlers(args: {
   executeAction: (
     target: ContainerActionTarget,
     action: (id: string) => Promise<unknown>,
-    options?: { containerId?: string; reloadContainers?: boolean; successMessage?: string },
+    options?: {
+      containerId?: string;
+      reloadContainers?: boolean;
+      successMessage?: string;
+      treatNoUpdateAsStale?: boolean;
+      pendingLifecycleMode?: PendingActionLifecycleMode;
+    },
   ) => Promise<boolean>;
   forceUpdate: (target: ContainerActionTarget) => Promise<void>;
   deleteContainer: (target: ContainerActionTarget) => Promise<boolean>;
@@ -436,6 +575,8 @@ function createConfirmHandlers(args: {
       accept: () =>
         args.executeAction(target, apiUpdateContainer, {
           successMessage: `Updated: ${name}`,
+          treatNoUpdateAsStale: true,
+          pendingLifecycleMode: 'update',
         }) as unknown as Promise<void>,
     });
   }
@@ -503,6 +644,7 @@ function createContainerActionHandlers(args: {
       reloadContainers?: boolean;
       successMessage?: string;
       treatNoUpdateAsStale?: boolean;
+      pendingLifecycleMode?: PendingActionLifecycleMode;
     },
   ) => Promise<boolean>;
   applyPolicy: (
@@ -526,6 +668,7 @@ function createContainerActionHandlers(args: {
     await args.executeAction(target, apiUpdateContainer, {
       successMessage: `Updated: ${name}`,
       treatNoUpdateAsStale: true,
+      pendingLifecycleMode: 'update',
     });
   }
 
@@ -562,6 +705,7 @@ function createContainerActionHandlers(args: {
     await args.executeAction(target, apiUpdateContainer, {
       successMessage: `Force updated: ${name}`,
       treatNoUpdateAsStale: true,
+      pendingLifecycleMode: 'update',
     });
   }
 
@@ -674,6 +818,8 @@ export function useContainerActions(input: UseContainerActionsInput) {
   const actionInProgress = ref(new Set<string>());
   const actionPending = ref<Map<string, Container>>(new Map());
   const actionPendingStartTimes = ref<Map<string, number>>(new Map());
+  const actionPendingLifecycleModes = ref<Map<string, PendingActionLifecycleMode>>(new Map());
+  const actionPendingLifecycleObserved = ref<Set<string>>(new Set());
   const pendingActionsPollTimer = ref<ReturnType<typeof setInterval> | null>(null);
   const pendingActionsPollInFlight = ref(false);
   const groupUpdateInProgress = ref(new Set<string>());
@@ -689,6 +835,8 @@ export function useContainerActions(input: UseContainerActionsInput) {
       containers: input.containers,
       actionPending,
       actionPendingStartTimes,
+      actionPendingLifecycleModes,
+      actionPendingLifecycleObserved,
       pollTimeout: POLL_TIMEOUT,
       stopPendingActionsPolling,
     });
@@ -717,10 +865,21 @@ export function useContainerActions(input: UseContainerActionsInput) {
     stopPendingActionsPolling();
   });
 
+  watch(
+    () => input.containers.value,
+    () => {
+      if (actionPending.value.size === 0) {
+        return;
+      }
+      prunePendingActions(Date.now());
+    },
+  );
+
   function isContainerUpdateInProgress(target: ContainerActionTarget) {
     return (
       actionInProgress.value.has(resolveContainerActionTargetKey(target)) ||
-      hasPendingContainerAction(target, actionPending)
+      hasPendingContainerAction(target, actionPending) ||
+      hasInProgressUpdateOperation(target, input.containers)
     );
   }
 
@@ -732,6 +891,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
       reloadContainers?: boolean;
       successMessage?: string;
       treatNoUpdateAsStale?: boolean;
+      pendingLifecycleMode?: PendingActionLifecycleMode;
     },
   ) {
     const { containerId, name } = resolveContainerActionTarget(
@@ -753,12 +913,15 @@ export function useContainerActions(input: UseContainerActionsInput) {
       loadContainers: input.loadContainers,
       reloadContainers: options?.reloadContainers,
       actionPending,
+      actionPendingLifecycleModes,
+      actionPendingLifecycleObserved,
       startPolling,
       selectedContainerId: input.selectedContainer.value?.id,
       activeDetailTab: input.activeDetailTab.value,
       refreshActionTabData,
       successMessage: options?.successMessage,
       treatNoUpdateAsStale: options?.treatNoUpdateAsStale,
+      pendingLifecycleMode: options?.pendingLifecycleMode,
     });
   }
 
