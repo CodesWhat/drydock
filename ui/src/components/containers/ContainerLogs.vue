@@ -15,6 +15,7 @@ import {
   parseLogTimestampToUnixSeconds,
   stripAnsiCodes,
 } from '../../utils/container-logs';
+import { formatLogTimestamp } from '../../utils/log-timestamp';
 import type { AppLogEntry } from '../../types/log-entry';
 
 type TailOption = 100 | 500 | 1000 | 'all';
@@ -132,7 +133,7 @@ function appendLogEntry(frame: ContainerLogStreamFrame): void {
   const json = parseJsonLogLine(frame.line);
   const entry: AppLogEntry = {
     id: nextEntryId.value,
-    timestamp: frame.ts,
+    timestamp: frame.displayTs || formatLogTimestamp(frame.ts),
     line: frame.line,
     plainLine: stripAnsiCodes(frame.line),
     ansiSegments: parseAnsiSegments(frame.line),

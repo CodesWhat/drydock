@@ -94,7 +94,9 @@ describe('system-log-stream service', () => {
       expect(MockWebSocket.instances).toHaveLength(1);
       const socket = MockWebSocket.instances[0];
       socket.emitOpen();
-      socket.emitMessage('{"timestamp":1000,"level":"info","component":"api","msg":"hello"}');
+      socket.emitMessage(
+        '{"timestamp":1000,"displayTimestamp":"[00:00:01.000]","level":"info","component":"api","msg":"hello"}',
+      );
       socket.emitMessage('{"invalid":"entry"}');
       socket.emitMessage('not-json');
       socket.emitMessage({ unexpected: true });
@@ -104,6 +106,7 @@ describe('system-log-stream service', () => {
       expect(onMessage).toHaveBeenCalledTimes(1);
       expect(onMessage).toHaveBeenCalledWith({
         timestamp: 1000,
+        displayTimestamp: '[00:00:01.000]',
         level: 'info',
         component: 'api',
         msg: 'hello',

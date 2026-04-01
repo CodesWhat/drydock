@@ -88,7 +88,12 @@ describe('Log Entries Route', () => {
       since: 1000,
     });
     expect(res.status).toHaveBeenCalledWith(200);
-    expect(res.json).toHaveBeenCalledWith(mockEntries);
+    expect(res.json).toHaveBeenCalledWith([
+      expect.objectContaining({
+        ...mockEntries[0],
+        displayTimestamp: expect.stringMatching(/^\[\d{2}:\d{2}:\d{2}\.\d{3}\]$/u),
+      }),
+    ]);
   });
 
   test('should normalize level query parameter to lowercase', () => {
@@ -199,7 +204,16 @@ describe('Log Entries Route', () => {
     handler(req, res);
 
     expect(res.status).toHaveBeenCalledWith(200);
-    expect(res.json).toHaveBeenCalledWith(mockEntries);
+    expect(res.json).toHaveBeenCalledWith([
+      expect.objectContaining({
+        ...mockEntries[0],
+        displayTimestamp: expect.stringMatching(/^\[\d{2}:\d{2}:\d{2}\.\d{3}\]$/u),
+      }),
+      expect.objectContaining({
+        ...mockEntries[1],
+        displayTimestamp: expect.stringMatching(/^\[\d{2}:\d{2}:\d{2}\.\d{3}\]$/u),
+      }),
+    ]);
   });
 
   test('should pass NaN tail when query param is non-numeric', () => {

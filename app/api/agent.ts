@@ -1,5 +1,6 @@
 import express, { type Request, type Response } from 'express';
 import { getAgent, getAgents } from '../agent/index.js';
+import { formatLogDisplayTimestamp } from '../log/display-timestamp.js';
 import type { Container } from '../model/container.js';
 import * as storeContainer from '../store/container.js';
 import { getContainerStatusSummary } from '../util/container-summary.js';
@@ -75,6 +76,32 @@ function getValidatedLogComponent(component: unknown): string | undefined | null
   return component;
 }
 
+function normalizeAgentLogEntry(entry: unknown) {
+  if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+    return entry;
+  }
+
+  const logEntry = entry as Record<string, unknown>;
+  if (
+    typeof logEntry.displayTimestamp === 'string' &&
+    logEntry.displayTimestamp.trim().length > 0
+  ) {
+    return entry;
+  }
+
+  return {
+    ...logEntry,
+    displayTimestamp: formatLogDisplayTimestamp(logEntry.timestamp as number | string | undefined),
+  };
+}
+
+function normalizeAgentLogEntries(entries: unknown) {
+  if (!Array.isArray(entries)) {
+    return entries;
+  }
+  return entries.map((entry) => normalizeAgentLogEntry(entry));
+}
+
 function getAgentsList(req: Request, res: Response) {
   const agents = getAgents();
   const containersByAgent = groupContainersByAgent(storeContainer.getContainers());
@@ -132,7 +159,7 @@ async function getAgentLogEntries(
     const tail = req.query.tail ? Number.parseInt(req.query.tail, 10) : undefined;
     const since = req.query.since ? Number.parseInt(req.query.since, 10) : undefined;
     const entries = await agent.getLogEntries({ level, component, tail, since });
-    res.json(entries);
+    res.json(normalizeAgentLogEntries(entries));
   } catch (error: unknown) {
     sendErrorResponse(res, 502, AGENT_LOG_FETCH_ERROR_MESSAGE);
   }

@@ -10,6 +10,7 @@ import { toAppLogEntry } from '../utils/system-log-adapter';
 
 interface ApiLogEntry {
   timestamp?: string | number;
+  displayTimestamp?: string;
   level?: string;
   component?: string;
   msg?: string;
@@ -62,6 +63,7 @@ function toTimestampMs(value: string | number | undefined): number {
 function toSystemLogEntry(entry: ApiLogEntry): SystemLogEntry {
   return {
     timestamp: toTimestampMs(entry.timestamp),
+    displayTimestamp: entry.displayTimestamp,
     level: entry.level || 'info',
     component: entry.component || '-',
     msg: entry.msg || entry.message || '',

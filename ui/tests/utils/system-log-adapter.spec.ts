@@ -14,6 +14,7 @@ function makeSystemLogEntry(overrides: Partial<SystemLogEntry> = {}): SystemLogE
 describe('toAppLogEntry', () => {
   it('maps plain system log entry fields and parses ANSI segments', () => {
     const entry = makeSystemLogEntry({
+      displayTimestamp: '[20:00:00.000]',
       level: 'WARN',
       msg: '\u001b[31mboom\u001b[0m happened',
     });
@@ -21,7 +22,7 @@ describe('toAppLogEntry', () => {
     const adapted = toAppLogEntry(entry, 42);
 
     expect(adapted.id).toBe(42);
-    expect(adapted.timestamp).toBe('2026-03-15T00:00:00.000Z');
+    expect(adapted.timestamp).toBe('[20:00:00.000]');
     expect(adapted.line).toBe('\u001b[31mboom\u001b[0m happened');
     expect(adapted.plainLine).toBe('boom happened');
     expect(adapted.json).toBeNull();
@@ -80,5 +81,14 @@ describe('toAppLogEntry', () => {
     const adapted = toAppLogEntry(entry, 10);
 
     expect(adapted.timestamp).toBe('-');
+  });
+
+  it('formats legacy numeric timestamps when displayTimestamp is missing', () => {
+    const entry = makeSystemLogEntry();
+
+    const adapted = toAppLogEntry(entry, 11);
+
+    expect(adapted.timestamp).toMatch(/^\[\d{2}:\d{2}:\d{2}\.\d{3}\]$/u);
+    expect(adapted.timestamp).not.toContain('T');
   });
 });

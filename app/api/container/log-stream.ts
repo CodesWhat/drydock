@@ -3,6 +3,7 @@ import type { Socket } from 'node:net';
 import type { Readable } from 'node:stream';
 import { type WebSocket, WebSocketServer } from 'ws';
 import { getServerConfiguration } from '../../configuration/index.js';
+import { formatLogDisplayTimestamp } from '../../log/display-timestamp.js';
 import type { Container } from '../../model/container.js';
 import * as registry from '../../registry/index.js';
 import * as storeContainer from '../../store/container.js';
@@ -325,7 +326,12 @@ async function streamContainerLogsToWebSocket({
   const emitMessages = (messages: DockerLogMessage[]): boolean => {
     for (const message of messages) {
       try {
-        webSocket.send(JSON.stringify(message));
+        webSocket.send(
+          JSON.stringify({
+            ...message,
+            displayTs: formatLogDisplayTimestamp(message.ts),
+          }),
+        );
       } catch {
         return false;
       }

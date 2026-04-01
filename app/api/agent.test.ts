@@ -275,7 +275,12 @@ describe('Agent Log Entries Route', () => {
       tail: 50,
       since: undefined,
     });
-    expect(res.json).toHaveBeenCalledWith(mockEntries);
+    expect(res.json).toHaveBeenCalledWith([
+      expect.objectContaining({
+        ...mockEntries[0],
+        displayTimestamp: expect.stringMatching(/^\[\d{2}:\d{2}:\d{2}\.\d{3}\]$/u),
+      }),
+    ]);
   });
 
   test('should pass all query params to agent', async () => {

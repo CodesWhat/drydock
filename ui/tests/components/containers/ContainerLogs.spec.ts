@@ -82,17 +82,21 @@ describe('ContainerLogs', () => {
     latestOptions.onMessage({
       type: 'stdout',
       ts: '2026-03-15T00:00:00Z',
+      displayTs: '[00:00:00.000]',
       line: 'plain line',
     });
     latestOptions.onMessage({
       type: 'stderr',
       ts: '2026-03-15T00:00:01Z',
+      displayTs: '[00:00:01.000]',
       line: '{"level":"error","msg":"boom"}',
     });
     await nextTick();
 
     expect(wrapper.text()).toContain('plain line');
     expect(wrapper.text()).toContain('boom');
+    expect(wrapper.text()).toContain('[00:00:00.000]');
+    expect(wrapper.text()).toContain('[00:00:01.000]');
     expect(wrapper.findAll('[data-test="container-log-row"]').length).toBe(2);
   });
 

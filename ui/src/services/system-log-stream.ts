@@ -1,5 +1,6 @@
 export interface SystemLogEntry {
   timestamp: number;
+  displayTimestamp?: string;
   level: string;
   component: string;
   msg: string;
@@ -36,6 +37,7 @@ function isSystemLogEntry(payload: unknown): payload is SystemLogEntry {
   const entry = payload as Record<string, unknown>;
   return (
     typeof entry.timestamp === 'number' &&
+    (entry.displayTimestamp === undefined || typeof entry.displayTimestamp === 'string') &&
     typeof entry.level === 'string' &&
     typeof entry.component === 'string' &&
     typeof entry.msg === 'string'
