@@ -86,7 +86,22 @@ function mountWidget(
     global: {
       stubs: {
         DataTable: defineComponent({
-          template: '<div data-test="data-table-stub" />',
+          props: ['rows', 'rowClass'],
+          template: `
+            <div data-test="data-table-stub">
+              <div
+                v-for="row in rows"
+                :key="row.id"
+                class="dashboard-row-stub"
+                :class="typeof rowClass === 'function' ? rowClass(row) : ''">
+                <slot name="cell-icon" :row="row" />
+                <slot name="cell-container" :row="row" />
+                <slot name="cell-version" :row="row" />
+                <slot name="cell-type" :row="row" />
+                <slot name="cell-actions" :row="row" />
+              </div>
+            </div>
+          `,
         }),
       },
     },
@@ -130,5 +145,25 @@ describe('DashboardRecentUpdatesWidget', () => {
     expect(wrapper.text()).toContain('2 updates available');
     expect(wrapper.find('.drag-handle').exists()).toBe(true);
     expect(wrapper.find('.app-icon-stub[data-icon="ph:dots-six"]').exists()).toBe(true);
+  });
+
+  it('shows an updating state while a dashboard row is being updated', () => {
+    const wrapper = mountWidget({
+      dashboardUpdateInProgress: 'c1',
+    });
+
+    const row = wrapper.find('.dashboard-row-stub');
+    expect(row.classes()).toContain('opacity-50');
+    expect(wrapper.text()).toContain('Updating');
+  });
+
+  it('keeps ghost dashboard rows visibly updating when provided as updating rows', () => {
+    const wrapper = mountWidget({
+      recentUpdates: [makeRecentUpdate({ status: 'updating' as RecentUpdateRow['status'] })],
+    });
+
+    const row = wrapper.find('.dashboard-row-stub');
+    expect(row.classes()).toContain('opacity-50');
+    expect(wrapper.text()).toContain('Updating');
   });
 });

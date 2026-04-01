@@ -68,6 +68,7 @@ function getRecentUpdateStatusColor(status: RecentUpdateRow['status']): string {
     case 'updated':
       return 'var(--dd-success)';
     case 'pending':
+    case 'updating':
       return 'var(--dd-warning)';
     case 'snoozed':
       return 'var(--dd-primary)';
@@ -86,6 +87,7 @@ function getRecentUpdateStatusMutedColor(status: RecentUpdateRow['status']): str
     case 'updated':
       return 'var(--dd-success-muted)';
     case 'pending':
+    case 'updating':
       return 'var(--dd-warning-muted)';
     case 'snoozed':
       return 'var(--dd-primary-muted)';
@@ -104,6 +106,7 @@ function getRecentUpdateStatusIcon(status: RecentUpdateRow['status']): string {
     case 'updated':
       return 'check';
     case 'pending':
+    case 'updating':
       return 'pending';
     case 'snoozed':
       return 'pending';

@@ -140,7 +140,15 @@ export interface RecentUpdateRow {
   oldVer: string;
   newVer: string;
   releaseLink?: string;
-  status: 'updated' | 'pending' | 'failed' | 'error' | 'snoozed' | 'skipped' | 'maturity-blocked';
+  status:
+    | 'updated'
+    | 'pending'
+    | 'failed'
+    | 'error'
+    | 'snoozed'
+    | 'skipped'
+    | 'maturity-blocked'
+    | 'updating';
   updateKind: UpdateKind | null;
   running: boolean;
   registryError?: string;

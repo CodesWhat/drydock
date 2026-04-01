@@ -1457,6 +1457,56 @@ describe('DashboardView', () => {
       );
     });
 
+    it('keeps a dashboard row visible as updating until the container reappears', async () => {
+      vi.useFakeTimers();
+      try {
+        const updatedContainer = makeContainer({
+          id: pendingContainer.id,
+          name: pendingContainer.name,
+          newTag: null,
+          updateKind: null,
+        });
+        mockUpdateContainer.mockResolvedValueOnce({});
+
+        const wrapper = await mountDashboard(
+          [pendingContainer],
+          [],
+          {},
+          {
+            recentStatuses: { nginx: 'pending' },
+          },
+        );
+        const { mapApiContainers } = await import('@/utils/container-mapper');
+
+        mockGetAllContainers.mockResolvedValueOnce([]);
+        mockGetContainerRecentStatus.mockResolvedValueOnce({ statuses: {} });
+        (mapApiContainers as ReturnType<typeof vi.fn>).mockReturnValueOnce([]);
+
+        const { useConfirmDialog } = await import('@/composables/useConfirmDialog');
+        const confirm = useConfirmDialog();
+
+        await wrapper.find('[data-test="dashboard-update-btn"]').trigger('click');
+        await confirm.accept();
+        await flushPromises();
+
+        expect(wrapper.find('[data-widget-id="recent-updates"]').text()).toContain('Updating');
+
+        mockGetAllContainers.mockResolvedValueOnce([updatedContainer]);
+        mockGetContainerRecentStatus.mockResolvedValueOnce({ statuses: {} });
+        (mapApiContainers as ReturnType<typeof vi.fn>).mockReturnValueOnce([updatedContainer]);
+
+        vi.advanceTimersByTime(2_000);
+        await flushPromises();
+
+        expect(wrapper.find('[data-widget-id="recent-updates"]').text()).not.toContain('Updating');
+        expect(wrapper.find('[data-widget-id="recent-updates"]').text()).toContain(
+          'No updates available',
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('shows an inline error when update failure only contains the stale-update text as a substring', async () => {
       mockUpdateContainer.mockRejectedValueOnce(
         new Error('Proxy error: No update available for this container'),

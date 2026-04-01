@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { type RouteLocationRaw, useRouter } from 'vue-router';
 import { GridItem, GridLayout } from 'grid-layout-plus';
 import AppIconButton from '@/components/AppIconButton.vue';
@@ -36,6 +36,13 @@ const gridMargin = computed<[number, number]>(() => {
 const dashboardUpdateInProgress = ref<string | null>(null);
 const dashboardUpdateAllInProgress = ref(false);
 const dashboardUpdateError = ref<string | null>(null);
+const dashboardPendingUpdateRows = ref<Map<string, { row: RecentUpdateRow; startedAt: number }>>(
+  new Map(),
+);
+const dashboardPendingUpdatePollTimer = ref<ReturnType<typeof setInterval> | null>(null);
+const dashboardPendingUpdatePollInFlight = ref(false);
+const DASHBOARD_PENDING_UPDATE_POLL_INTERVAL_MS = 2_000;
+const DASHBOARD_PENDING_UPDATE_TIMEOUT_MS = 30_000;
 
 function isStaleDashboardUpdateError(error: unknown): boolean {
   return isNoUpdateAvailableError(error);
@@ -154,11 +161,97 @@ const pendingUpdates = computed(() =>
   recentUpdates.value.filter((r) => r.status === 'pending' && !r.blocked),
 );
 
+const displayRecentUpdates = computed<RecentUpdateRow[]>(() => {
+  const liveRowNames = new Set(recentUpdates.value.map((row) => row.name));
+  const ghosts = [...dashboardPendingUpdateRows.value.values()]
+    .filter(({ row }) => !liveRowNames.has(row.name))
+    .map(({ row }) => row);
+  return [...recentUpdates.value, ...ghosts];
+});
+
+function stopDashboardPendingUpdatePolling() {
+  if (!dashboardPendingUpdatePollTimer.value) {
+    return;
+  }
+  clearInterval(dashboardPendingUpdatePollTimer.value);
+  dashboardPendingUpdatePollTimer.value = null;
+}
+
+function clearDashboardPendingUpdateRow(name: string) {
+  dashboardPendingUpdateRows.value.delete(name);
+}
+
+function pruneDashboardPendingUpdateRows(now: number = Date.now()) {
+  const liveContainerNames = new Set(containers.value.map((container) => container.name));
+  for (const [name, pendingRow] of dashboardPendingUpdateRows.value.entries()) {
+    if (
+      liveContainerNames.has(name) ||
+      now - pendingRow.startedAt > DASHBOARD_PENDING_UPDATE_TIMEOUT_MS
+    ) {
+      clearDashboardPendingUpdateRow(name);
+    }
+  }
+  if (dashboardPendingUpdateRows.value.size === 0) {
+    stopDashboardPendingUpdatePolling();
+  }
+}
+
+async function pollDashboardPendingUpdateRows() {
+  if (dashboardPendingUpdatePollInFlight.value) {
+    return;
+  }
+  dashboardPendingUpdatePollInFlight.value = true;
+  try {
+    await fetchDashboardData({ background: true });
+  } finally {
+    pruneDashboardPendingUpdateRows();
+    dashboardPendingUpdatePollInFlight.value = false;
+  }
+}
+
+function startDashboardPendingUpdatePolling() {
+  if (dashboardPendingUpdatePollTimer.value) {
+    return;
+  }
+  dashboardPendingUpdatePollTimer.value = setInterval(() => {
+    void pollDashboardPendingUpdateRows();
+  }, DASHBOARD_PENDING_UPDATE_POLL_INTERVAL_MS);
+}
+
+function capturePendingDashboardRows(rows: RecentUpdateRow[]) {
+  const liveContainerNames = new Set(containers.value.map((container) => container.name));
+  for (const row of rows) {
+    if (liveContainerNames.has(row.name)) {
+      continue;
+    }
+    const existing = dashboardPendingUpdateRows.value.get(row.name);
+    dashboardPendingUpdateRows.value.set(row.name, {
+      row: {
+        ...row,
+        status: 'updating',
+      },
+      startedAt: existing?.startedAt ?? Date.now(),
+    });
+  }
+  if (dashboardPendingUpdateRows.value.size > 0) {
+    startDashboardPendingUpdatePolling();
+  }
+  pruneDashboardPendingUpdateRows();
+}
+
 // Stat card data lookup by widget id
 const statById = computed(() => {
   const map = new Map<string, (typeof stats.value)[number]>();
   for (const s of stats.value) map.set(s.id, s);
   return map;
+});
+
+watch(containers, () => {
+  pruneDashboardPendingUpdateRows();
+});
+
+onUnmounted(() => {
+  stopDashboardPendingUpdatePolling();
 });
 
 // Widget metadata for customize panel
@@ -195,7 +288,7 @@ function isStatWidget(id: string): boolean {
   return id.startsWith('stat-');
 }
 
-function confirmDashboardUpdate(row: Pick<RecentUpdateRow, 'id' | 'name'>) {
+function confirmDashboardUpdate(row: RecentUpdateRow) {
   confirm.require({
     header: 'Update Container',
     message: `Update ${row.name} now? This will apply the latest discovered image.`,
@@ -208,6 +301,7 @@ function confirmDashboardUpdate(row: Pick<RecentUpdateRow, 'id' | 'name'>) {
       try {
         await updateContainer(row.id);
         await fetchDashboardData();
+        capturePendingDashboardRows([row]);
       } catch (e: unknown) {
         if (isStaleDashboardUpdateError(e)) {
           await fetchDashboardData();
@@ -229,13 +323,17 @@ function confirmDashboardUpdateAll() {
     acceptLabel: 'Update All',
     rejectLabel: 'Cancel',
     accept: async () => {
+      const pendingRowsSnapshot = pendingUpdates.value.filter((row) => !row.blocked);
       dashboardUpdateAllInProgress.value = true;
       dashboardUpdateError.value = null;
       try {
         const updateResults = await Promise.allSettled(
-          pendingUpdates.value.map((row) => updateContainer(row.id)),
+          pendingRowsSnapshot.map((row) => updateContainer(row.id)),
         );
         await fetchDashboardData();
+        capturePendingDashboardRows(
+          pendingRowsSnapshot.filter((_, index) => updateResults[index]?.status === 'fulfilled'),
+        );
         const firstRejectedUpdate = updateResults.find((result) => result.status === 'rejected');
         if (firstRejectedUpdate?.status === 'rejected') {
           dashboardUpdateError.value = errorMessage(
@@ -372,7 +470,7 @@ function confirmDashboardUpdateAll() {
             <DashboardRecentUpdatesWidget
               v-else-if="item.i === 'recent-updates'"
               class="h-full"
-              :recent-updates="recentUpdates"
+              :recent-updates="displayRecentUpdates"
               :pending-updates-count="pendingUpdates.length"
               :dashboard-update-error="dashboardUpdateError"
               :dashboard-update-in-progress="dashboardUpdateInProgress"
