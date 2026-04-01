@@ -1,4 +1,6 @@
 > [!IMPORTANT]
+> **Axios npm Supply Chain Compromise (March 31, 2026):** Drydock is **not affected**. Our lockfile pinned axios at v1.13.6; the compromised versions (1.14.1, 0.30.4) were never installed. All dependency versions are now pinned to exact versions as defense-in-depth. [Full advisory &rarr;](https://getdrydock.com/security/axios-supply-chain-march-2026)
+>
 > **Trivy Supply Chain Compromise (GHSA-69fq-xp46-6x23):** Drydock is **not affected**. We do not use the compromised GitHub Actions, the bundled Trivy binary is pinned to a safe version (v0.69.3), and all CI actions are SHA-pinned. No compromised code was ever pulled or shipped. [Full advisory &rarr;](https://getdrydock.com/security/trivy-supply-chain-march-2026)
 
 <div align="center">
