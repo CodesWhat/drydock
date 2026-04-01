@@ -742,6 +742,24 @@ describe('useContainerActions', () => {
     expect(loadContainers).toHaveBeenCalledTimes(2);
   });
 
+  it('reports pending containers as still updating after the request completes', async () => {
+    vi.useFakeTimers();
+    const web = makeContainer({ id: 'container-1', name: 'web' });
+    const { composable, containers, loadContainers } = await mountActionsHarness({
+      containers: [web],
+      containerIdMap: { web: 'container-1' },
+    });
+    loadContainers.mockImplementation(async () => {
+      containers.value = [];
+    });
+
+    await composable.startContainer(web);
+
+    expect(composable.actionInProgress.value.size).toBe(0);
+    expect(composable.actionPending.value.has('web')).toBe(true);
+    expect(composable.isContainerUpdateInProgress(web)).toBe(true);
+  });
+
   it('reuses existing pending start timestamps when the same action is queued again', async () => {
     vi.useFakeTimers();
     const web = makeContainer({ id: 'container-1', name: 'web' });

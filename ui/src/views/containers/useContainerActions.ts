@@ -67,6 +67,14 @@ function resolveContainerActionTarget(
   return { containerId, name };
 }
 
+function hasPendingContainerAction(
+  target: ContainerActionTarget,
+  actionPending: Readonly<Ref<Map<string, Container>>>,
+) {
+  const name = typeof target === 'string' ? target : target.name;
+  return typeof name === 'string' && name.length > 0 && actionPending.value.has(name);
+}
+
 async function executeContainerActionState(args: {
   containerActionsEnabled: boolean;
   containerActionsDisabledReason: string;
@@ -709,6 +717,13 @@ export function useContainerActions(input: UseContainerActionsInput) {
     stopPendingActionsPolling();
   });
 
+  function isContainerUpdateInProgress(target: ContainerActionTarget) {
+    return (
+      actionInProgress.value.has(resolveContainerActionTargetKey(target)) ||
+      hasPendingContainerAction(target, actionPending)
+    );
+  }
+
   async function executeAction(
     target: ContainerActionTarget,
     action: (id: string) => Promise<unknown>,
@@ -841,6 +856,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
     getOperationStatusStyle: backups.getOperationStatusStyle,
     getTriggerKey: triggers.getTriggerKey,
     groupUpdateInProgress,
+    isContainerUpdateInProgress,
     policyError: policy.policyError,
     policyInProgress: policy.policyInProgress,
     policyMessage: policy.policyMessage,
