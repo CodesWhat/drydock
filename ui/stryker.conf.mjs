@@ -4,7 +4,6 @@ const dashboardReporterEnabled = Boolean(process.env.STRYKER_DASHBOARD_API_KEY);
 const config = {
   mutate: [
     'src/**/*.ts',
-    '!src/**/*.stories.ts',
     '!src/**/*.typecheck.ts',
     '!src/**/*.d.ts',
     '!dist/**',

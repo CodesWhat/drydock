@@ -3,7 +3,6 @@
   "entry": ["scripts/*.mjs"],
   "project": ["src/**/*.{ts,vue}", "tests/**/*.ts"],
   "ignore": ["**/*.typecheck.ts"],
-  "storybook": true,
   "vitest": {
     "config": "vitest.config.ts"
   },

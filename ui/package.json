@@ -23,9 +23,6 @@
     "test:unit": "vitest run --coverage",
     "test:unit:watch": "vitest",
     "test:mutation": "stryker run",
-    "test:storybook": "COMPONENTS_DTS=false storybook build --test --quiet",
-    "storybook": "COMPONENTS_DTS=false storybook dev -p 6006",
-    "build-storybook": "COMPONENTS_DTS=false storybook build",
     "knip": "knip"
   },
   "dependencies": {
@@ -49,8 +46,6 @@
     "@iconify-json/lucide": "1.2.99",
     "@iconify-json/ph": "1.2.2",
     "@iconify-json/tabler": "1.2.32",
-    "@storybook/vue3": "10.3.3",
-    "@storybook/vue3-vite": "10.3.3",
     "@stryker-mutator/core": "9.6.0",
     "@stryker-mutator/typescript-checker": "9.6.0",
     "@stryker-mutator/vitest-runner": "9.6.0",
@@ -61,7 +56,6 @@
     "@vue/test-utils": "2.4.6",
     "jsdom": "29.0.1",
     "knip": "6.0.6",
-    "storybook": "10.3.3",
     "typescript": "5.9.3",
     "vite": "8.0.3",
     "vitest": "4.1.2"
