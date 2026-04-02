@@ -1,9 +1,10 @@
 import type { Request } from 'express';
-import { Strategy, type StrategyOptions, type VerifyFunction } from 'openid-client/passport';
+import passport from 'passport';
 import { asPassportStrategy } from '../PassportStrategy.js';
 
-type OidcStrategyOptions = StrategyOptions & {
-  scope: string;
+type OidcStrategyOptions = {
+  config?: unknown;
+  scope?: string;
   name: string;
 };
 
@@ -12,13 +13,19 @@ interface LoggerLike {
   warn: (message: string) => void;
 }
 
-type VerifyDone = Parameters<VerifyFunction>[1];
+type VerifyDone = (error: unknown, user?: unknown | false) => void;
 type VerifyHandler = (accessToken: string, done: VerifyDone) => void;
 
-class OidcStrategy extends Strategy {
+type VerifyFunction = (tokens: { access_token?: unknown }, done: VerifyDone) => void;
+
+class OidcStrategy extends passport.Strategy {
+  declare success: (user?: unknown) => void;
+  declare fail: (status: number) => void;
+  name: string;
   options: OidcStrategyOptions;
   log: LoggerLike;
   verify: VerifyHandler;
+  _verify: VerifyFunction;
 
   /**
    * Constructor.
@@ -27,14 +34,16 @@ class OidcStrategy extends Strategy {
    * @param log
    */
   constructor(options: OidcStrategyOptions, verify: VerifyHandler, log: LoggerLike) {
+    super();
     const strategyVerify: VerifyFunction = (tokens, done) => {
       const accessToken = typeof tokens.access_token === 'string' ? tokens.access_token : '';
       verify(accessToken, done);
     };
-    super(options, strategyVerify);
+    this.name = options.name;
     this.options = options;
     this.log = log;
     this.verify = verify;
+    this._verify = strategyVerify;
   }
 
   /**
