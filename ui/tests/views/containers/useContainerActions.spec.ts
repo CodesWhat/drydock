@@ -1,6 +1,6 @@
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { computed, defineComponent, h, nextTick, type Ref, ref } from 'vue';
-import type { ApiContainerTrigger } from '@/types/api';
+import type { ApiContainerTrigger, ApiContainerUpdateOperation } from '@/types/api';
 import type { Container } from '@/types/container';
 import { daysToMs } from '@/utils/maturity-policy';
 import {
@@ -1632,7 +1632,15 @@ describe('useContainerActions', () => {
     });
 
     composable.detailBackups.value = [{ id: 'stale-backup' }];
-    composable.detailUpdateOperations.value = [{ id: 'stale-operation' }];
+    composable.detailUpdateOperations.value = [
+      {
+        id: 'stale-operation',
+        status: 'in-progress',
+        phase: 'prepare',
+        createdAt: '2026-03-01T00:00:00Z',
+        updatedAt: '2026-03-01T00:00:00Z',
+      } satisfies ApiContainerUpdateOperation,
+    ];
     composable.updateOperationsError.value = 'stale error';
     mocks.getContainerTriggers.mockClear();
     mocks.getBackups.mockClear();

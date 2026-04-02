@@ -1,33 +1,14 @@
 import crypto from 'node:crypto';
 import { getDefaultCacheMaxEntries } from '../configuration/runtime-defaults.js';
+import type { ContainerUpdateOperationState } from '../model/container.js';
+import type { ContainerUpdateOperationStatus } from '../model/container-update-operation.js';
 import { daysToMs } from '../model/maturity-policy.js';
 import { toPositiveInteger } from '../util/parse.js';
 import { initCollection } from './util.js';
 
-type UpdateOperationStatus = 'in-progress' | 'succeeded' | 'rolled-back' | 'failed' | (string & {});
-
-type UpdateOperationPhase =
-  | 'pulling'
-  | 'pull-failed'
-  | 'prepare'
-  | 'dryrun'
-  | 'renamed'
-  | 'new-created'
-  | 'old-stopped'
-  | 'new-started'
-  | 'health-gate'
-  | 'health-gate-passed'
-  | 'succeeded'
-  | 'rollback-started'
-  | 'rolled-back'
-  | 'rollback-failed'
-  | (string & {});
-
-interface UpdateOperation {
+interface UpdateOperation extends ContainerUpdateOperationState {
   id: string;
   containerName: string;
-  status: UpdateOperationStatus;
-  phase: UpdateOperationPhase;
   createdAt: string;
   updatedAt: string;
   containerId?: string;
@@ -62,7 +43,7 @@ interface UpdateOperationCollectionDocument {
 type UpdateOperationQuery =
   | { 'data.id': string }
   | { 'data.containerName': string }
-  | { 'data.containerName': string; 'data.status': UpdateOperationStatus };
+  | { 'data.containerName': string; 'data.status': ContainerUpdateOperationStatus };
 
 interface UpdateOperationCollection {
   insert(document: UpdateOperationCollectionDocument): void;

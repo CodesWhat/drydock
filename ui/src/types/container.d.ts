@@ -1,3 +1,8 @@
+import type {
+  ContainerUpdateOperationPhase,
+  ContainerUpdateOperationStatus,
+} from './update-operation';
+
 /** Shared UI container type used across views, composables, and templates. */
 
 export interface ContainerDetails {
@@ -35,8 +40,8 @@ export interface ContainerReleaseNotes {
 
 export interface ContainerUpdateOperation {
   id: string;
-  status: string;
-  phase: string;
+  status: ContainerUpdateOperationStatus;
+  phase: ContainerUpdateOperationPhase;
   updatedAt: string;
   fromVersion?: string;
   toVersion?: string;

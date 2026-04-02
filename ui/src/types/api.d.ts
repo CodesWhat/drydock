@@ -1,3 +1,8 @@
+import type {
+  ContainerUpdateOperationPhase,
+  ContainerUpdateOperationStatus,
+} from './update-operation';
+
 /** Base shape returned by /api/{triggers,watchers,registries,authentications} endpoints. */
 export interface ApiComponent {
   id: string;
@@ -55,6 +60,32 @@ export interface ApiContainerTrigger {
   agent?: string;
   configuration?: Record<string, unknown>;
   threshold?: string;
+}
+
+export type ApiContainerUpdateOperationStatus = ContainerUpdateOperationStatus;
+export type ApiContainerUpdateOperationPhase = ContainerUpdateOperationPhase;
+
+/** Persisted update-operation history entry from GET /api/containers/:id/update-operations. */
+export interface ApiContainerUpdateOperation {
+  id: string;
+  status: ApiContainerUpdateOperationStatus;
+  phase: ApiContainerUpdateOperationPhase;
+  createdAt: string;
+  updatedAt: string;
+  containerId?: string;
+  containerName?: string;
+  triggerName?: string;
+  oldContainerId?: string;
+  oldName?: string;
+  tempName?: string;
+  oldContainerWasRunning?: boolean;
+  oldContainerStopped?: boolean;
+  newContainerId?: string;
+  fromVersion?: string;
+  toVersion?: string;
+  targetImage?: string;
+  rollbackReason?: string;
+  lastError?: string;
 }
 
 /** SBOM document shape from GET /api/containers/:id/sbom. */

@@ -73,7 +73,7 @@ const AUTO_TRIGGER_ERROR_SUPPRESSION_RETENTION_MS = AUTO_TRIGGER_ERROR_SUPPRESSI
 const AUTO_EVENT_BATCH_FLUSH_DELAY_MS = 250;
 const TRIGGER_RELEASE_NOTES_BODY_MAX_LENGTH = 500;
 const ACTION_TRIGGER_TYPES = new Set(['command', 'docker', 'dockercompose']);
-function buildLiteralTemplateExpression(expression: string): string {
+export function buildLiteralTemplateExpression(expression: string): string {
   return '$' + '{' + expression + '}';
 }
 
@@ -187,7 +187,7 @@ export function getNotificationEvent(container: Container): TriggerNotificationE
   };
 }
 
-function resolveNotificationTemplate(
+export function resolveNotificationTemplate(
   notificationEvent: TriggerNotificationEvent | undefined,
   templates: Record<TriggerNotificationEvent['kind'], string>,
   fallback: string,
@@ -1249,5 +1249,3 @@ class Trigger extends Component {
 }
 
 export default Trigger;
-export const testable_buildLiteralTemplateExpression = buildLiteralTemplateExpression;
-export const testable_resolveNotificationTemplate = resolveNotificationTemplate;

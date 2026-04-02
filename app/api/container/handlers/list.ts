@@ -1,5 +1,9 @@
 import type { Request, Response } from 'express';
 import type { Container, ContainerUpdateOperationState } from '../../../model/container.js';
+import {
+  isContainerUpdateOperationPhase,
+  isContainerUpdateOperationStatus,
+} from '../../../model/container-update-operation.js';
 import { sendErrorResponse } from '../../error-response.js';
 import { buildPaginationLinks } from '../../pagination-links.js';
 import type { ContainerListResponse, CrudHandlerContext } from '../crud-context.js';
@@ -56,8 +60,8 @@ function sanitizeInProgressUpdateOperation(
   const candidate = operation as Record<string, unknown>;
 
   const id = typeof candidate.id === 'string' ? candidate.id : undefined;
-  const status = typeof candidate.status === 'string' ? candidate.status : undefined;
-  const phase = typeof candidate.phase === 'string' ? candidate.phase : undefined;
+  const status = isContainerUpdateOperationStatus(candidate.status) ? candidate.status : undefined;
+  const phase = isContainerUpdateOperationPhase(candidate.phase) ? candidate.phase : undefined;
   const updatedAt = typeof candidate.updatedAt === 'string' ? candidate.updatedAt : undefined;
 
   if (!id || !status || !phase || !updatedAt) {

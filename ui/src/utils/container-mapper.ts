@@ -15,6 +15,7 @@
  */
 
 import { getEffectiveDisplayIcon } from '../services/image-icon';
+import type { ApiContainerUpdateOperation } from '../types/api';
 import type {
   Container,
   ContainerReleaseNotes,
@@ -22,6 +23,12 @@ import type {
   ContainerSecuritySummary,
   ContainerUpdateOperation,
 } from '../types/container';
+import {
+  CONTAINER_UPDATE_OPERATION_PHASES,
+  CONTAINER_UPDATE_OPERATION_STATUSES,
+  type ContainerUpdateOperationPhase,
+  type ContainerUpdateOperationStatus,
+} from '../types/update-operation';
 import { normalizeSeverityCount } from '../views/security/securityViewUtils';
 import {
   maturityMinAgeDaysToMilliseconds,
@@ -77,16 +84,6 @@ interface ApiContainerUpdatePolicy {
   skipDigests?: unknown;
   maturityMode?: unknown;
   maturityMinAgeDays?: unknown;
-}
-
-interface ApiContainerUpdateOperation {
-  id?: unknown;
-  status?: unknown;
-  phase?: unknown;
-  updatedAt?: unknown;
-  fromVersion?: unknown;
-  toVersion?: unknown;
-  targetImage?: unknown;
 }
 
 interface ApiContainerDetails {
@@ -167,6 +164,24 @@ function asNonEmptyString(value: unknown): string | undefined {
 
 function asOptionalBoolean(value: unknown): boolean | undefined {
   return typeof value === 'boolean' ? value : undefined;
+}
+
+function asContainerUpdateOperationStatus(
+  value: unknown,
+): ContainerUpdateOperationStatus | undefined {
+  return typeof value === 'string' &&
+    (CONTAINER_UPDATE_OPERATION_STATUSES as readonly string[]).includes(value)
+    ? (value as ContainerUpdateOperationStatus)
+    : undefined;
+}
+
+function asContainerUpdateOperationPhase(
+  value: unknown,
+): ContainerUpdateOperationPhase | undefined {
+  return typeof value === 'string' &&
+    (CONTAINER_UPDATE_OPERATION_PHASES as readonly string[]).includes(value)
+    ? (value as ContainerUpdateOperationPhase)
+    : undefined;
 }
 
 /** Derive a human-readable server/host name from watcher + agent fields. */
@@ -572,8 +587,8 @@ function deriveUpdateOperation(
   }
 
   const id = asNonEmptyString(operation.id);
-  const status = asNonEmptyString(operation.status);
-  const phase = asNonEmptyString(operation.phase);
+  const status = asContainerUpdateOperationStatus(operation.status);
+  const phase = asContainerUpdateOperationPhase(operation.phase);
   const updatedAt = asNonEmptyString(operation.updatedAt);
 
   if (!id || !status || !phase || !updatedAt) {

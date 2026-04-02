@@ -504,7 +504,7 @@ describe('ContainerUpdateExecutor', () => {
     );
   });
 
-  test('execute skips health gate when auto-rollback is disabled', async () => {
+  test('execute health-gates when healthcheck exists even if auto-rollback is disabled', async () => {
     const context = createContext({
       currentContainerSpec: createCurrentContainerSpec({
         State: { Running: true },
@@ -521,8 +521,13 @@ describe('ContainerUpdateExecutor', () => {
     await expect(executor.execute(context, createContainer(), log)).resolves.toBe(true);
 
     expect(executor.startContainer).toHaveBeenCalledWith(context.newContainer, 'web', log);
-    expect(executor.waitForContainerHealthy).not.toHaveBeenCalled();
-    expect(mockUpdateOperation).not.toHaveBeenCalledWith(
+    expect(executor.waitForContainerHealthy).toHaveBeenCalledWith(
+      context.newContainer,
+      'web',
+      log,
+      120_000,
+    );
+    expect(mockUpdateOperation).toHaveBeenCalledWith(
       'op-1',
       expect.objectContaining({
         phase: 'health-gate-passed',
@@ -555,7 +560,7 @@ describe('ContainerUpdateExecutor', () => {
       context.newContainer,
       'web',
       log,
-      undefined,
+      120_000,
     );
     expect(executor.waitContainerRemoved).toHaveBeenCalled();
     expect(log.info).toHaveBeenCalledWith(

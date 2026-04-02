@@ -183,6 +183,8 @@ type ContainerUpdateExecutorConstructorOptions = Omit<
   getConfiguration?: ContainerUpdateExecutorDependencies['getConfiguration'];
 };
 
+const DEFAULT_HEALTH_GATE_TIMEOUT_MS = 120_000;
+
 const REQUIRED_CONTAINER_UPDATE_EXECUTOR_DEPENDENCY_KEYS = [
   'getTriggerId',
   'getRollbackConfig',
@@ -218,6 +220,12 @@ function getErrorMessage(error: unknown): string {
     return String(error.message ?? error);
   }
   return String(error);
+}
+
+function getHealthGateTimeoutMs(rollbackConfig: RollbackConfig): number {
+  return Number.isFinite(rollbackConfig.rollbackWindow) && rollbackConfig.rollbackWindow > 0
+    ? rollbackConfig.rollbackWindow
+    : DEFAULT_HEALTH_GATE_TIMEOUT_MS;
 }
 
 class ContainerUpdateExecutor {
@@ -521,11 +529,10 @@ class ContainerUpdateExecutor {
     const tempName = `${oldName}-old-${Date.now()}`;
     const wasRunning = currentContainerSpec.State.Running;
     const rollbackConfig = this.getRollbackConfig(container);
-    const shouldHealthGate =
-      wasRunning &&
-      rollbackConfig.autoRollback === true &&
-      this.hasHealthcheckConfigured(currentContainerSpec);
-    const healthGateTimeoutMs = shouldHealthGate ? rollbackConfig.rollbackWindow : undefined;
+    const shouldHealthGate = wasRunning && this.hasHealthcheckConfigured(currentContainerSpec);
+    const healthGateTimeoutMs = shouldHealthGate
+      ? getHealthGateTimeoutMs(rollbackConfig)
+      : undefined;
 
     const operation = updateOperationStore.insertOperation({
       containerId: container.id,

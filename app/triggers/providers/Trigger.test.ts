@@ -6,9 +6,9 @@ import log from '../../log/index.js';
 import * as storeContainer from '../../store/container.js';
 import * as notificationStore from '../../store/notification.js';
 import Trigger, {
+  buildLiteralTemplateExpression,
   getNotificationEvent,
-  testable_buildLiteralTemplateExpression,
-  testable_resolveNotificationTemplate,
+  resolveNotificationTemplate,
 } from './Trigger.js';
 
 vi.mock('node-cron');
@@ -1210,22 +1210,20 @@ test('getNotificationEvent should return reconnect metadata for agent reconnect 
   });
 });
 
-test('testable_buildLiteralTemplateExpression should build literal template syntax', () => {
-  expect(testable_buildLiteralTemplateExpression('event.agentName')).toBe(
-    '$' + '{event.agentName}',
-  );
+test('buildLiteralTemplateExpression should build literal template syntax', () => {
+  expect(buildLiteralTemplateExpression('event.agentName')).toBe('$' + '{event.agentName}');
 });
 
-test('testable_resolveNotificationTemplate falls back when a notification kind has no dedicated template', () => {
+test('resolveNotificationTemplate falls back when a notification kind has no dedicated template', () => {
   expect(
-    testable_resolveNotificationTemplate(
+    resolveNotificationTemplate(
       {
         kind: 'agent-reconnect',
         agentName: 'servicevault',
       },
       {
         'agent-disconnect':
-          'Agent ' + testable_buildLiteralTemplateExpression('event.agentName') + ' disconnected',
+          'Agent ' + buildLiteralTemplateExpression('event.agentName') + ' disconnected',
         'agent-reconnect': undefined as unknown as string,
       },
       'Fallback template',

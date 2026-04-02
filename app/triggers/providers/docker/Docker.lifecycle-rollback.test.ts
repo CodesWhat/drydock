@@ -1068,7 +1068,7 @@ describe('executeContainerUpdate', () => {
     expect(docker.waitContainerRemoved).not.toHaveBeenCalled();
   });
 
-  test('should skip health gate when HEALTHCHECK is configured but auto-rollback is disabled', async () => {
+  test('should health-gate when HEALTHCHECK is configured even if auto-rollback is disabled', async () => {
     const context = createContainerUpdateContext({
       currentContainerSpec: {
         Id: 'old-container-id',
@@ -1084,7 +1084,12 @@ describe('executeContainerUpdate', () => {
 
     await docker.executeContainerUpdate(context, createTriggerContainer(), logContainer);
 
-    expect(waitForHealthySpy).not.toHaveBeenCalled();
+    expect(waitForHealthySpy).toHaveBeenCalledWith(
+      context._mockNewContainer,
+      'container-name',
+      logContainer,
+      300_000,
+    );
   });
 
   test('should health-gate new container before removing old one when auto-rollback is enabled', async () => {

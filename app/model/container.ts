@@ -7,6 +7,10 @@ import type {
   ContainerSignatureVerification,
 } from '../security/scan.js';
 import * as tag from '../tag/index.js';
+import type {
+  ContainerUpdateOperationPhase,
+  ContainerUpdateOperationStatus,
+} from './container-update-operation.js';
 import {
   MATURITY_MIN_AGE_DAYS_MAX,
   MATURITY_MIN_AGE_DAYS_MIN,
@@ -100,8 +104,8 @@ export interface ContainerRuntimeDetails {
 
 export interface ContainerUpdateOperationState {
   id: string;
-  status: string;
-  phase: string;
+  status: ContainerUpdateOperationStatus;
+  phase: ContainerUpdateOperationPhase;
   updatedAt: string;
   fromVersion?: string;
   toVersion?: string;

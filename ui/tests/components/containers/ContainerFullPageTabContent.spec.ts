@@ -2,6 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { nextTick, ref } from 'vue';
 import ContainerFullPageTabContent from '@/components/containers/ContainerFullPageTabContent.vue';
+import type { ApiContainerUpdateOperation } from '@/types/api';
 
 type Trigger = {
   type: string;
@@ -16,17 +17,7 @@ type Backup = {
   timestamp: string;
 };
 
-type UpdateOperation = {
-  id: string;
-  status: string;
-  phase: string;
-  fromVersion?: string;
-  toVersion?: string;
-  rollbackReason?: string;
-  lastError?: string;
-  updatedAt?: string;
-  createdAt: string;
-};
+type UpdateOperation = ApiContainerUpdateOperation;
 
 function makeContainer(overrides: Record<string, unknown> = {}) {
   return {
@@ -563,8 +554,8 @@ describe('ContainerFullPageTabContent', () => {
     detailUpdateOperations.value = [
       {
         id: 'op-1',
-        status: 'success',
-        phase: 'complete',
+        status: 'succeeded',
+        phase: 'succeeded',
         fromVersion: '1.0',
         toVersion: '1.1',
         rollbackReason: 'manual',
@@ -596,8 +587,8 @@ describe('ContainerFullPageTabContent', () => {
     expect(mockConfirmRollback).toHaveBeenCalledWith();
     expect(mockConfirmRollback).toHaveBeenCalledWith('backup-1');
 
-    expect(wrapper.text()).toContain('status:success');
-    expect(wrapper.text()).toContain('phase:complete');
+    expect(wrapper.text()).toContain('status:succeeded');
+    expect(wrapper.text()).toContain('phase:succeeded');
     expect(wrapper.text()).toContain('reason:manual');
   });
 
@@ -625,7 +616,7 @@ describe('ContainerFullPageTabContent', () => {
       {
         id: 'op-1',
         status: 'failed',
-        phase: 'rollback',
+        phase: 'rollback-started',
         fromVersion: '1.0',
         toVersion: '1.1',
         rollbackReason: 'manual',
@@ -676,15 +667,17 @@ describe('ContainerFullPageTabContent', () => {
     detailUpdateOperations.value = [
       {
         id: 'op-missing-from',
-        status: 'pending',
-        phase: 'download',
+        status: 'in-progress',
+        phase: 'pulling',
+        updatedAt: '2026-03-12T00:00:00Z',
         toVersion: '2.0',
         createdAt: '2026-03-12T00:00:00Z',
       },
       {
         id: 'op-missing-to',
-        status: 'pending',
-        phase: 'download',
+        status: 'in-progress',
+        phase: 'pulling',
+        updatedAt: '2026-03-12T00:00:00Z',
         fromVersion: '1.0',
         createdAt: '2026-03-12T00:00:00Z',
       },
@@ -724,8 +717,9 @@ describe('ContainerFullPageTabContent', () => {
     detailUpdateOperations.value = [
       {
         id: 'op-no-version',
-        status: 'pending',
-        phase: 'download',
+        status: 'in-progress',
+        phase: 'pulling',
+        updatedAt: '2026-03-12T00:00:00Z',
         createdAt: '2026-03-12T00:00:00Z',
       },
     ];
