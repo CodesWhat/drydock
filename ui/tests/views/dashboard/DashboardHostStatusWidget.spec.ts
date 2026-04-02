@@ -6,6 +6,8 @@ import { mountWithPlugins } from '../../helpers/mount';
 
 let resizeObserverCallback: ResizeObserverCallback | undefined;
 const originalResizeObserver = globalThis.ResizeObserver;
+const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
+const originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
 const mountedWrappers: VueWrapper[] = [];
 
 class ResizeObserverTestMock {
@@ -35,6 +37,20 @@ function makeServer(overrides: Partial<DashboardServerRow> = {}): DashboardServe
     containers: { running: 14, total: 15 },
     ...overrides,
   };
+}
+
+function makeDomRect(height: number): DOMRect {
+  return {
+    x: 0,
+    y: 0,
+    width: 320,
+    height,
+    top: 0,
+    right: 320,
+    bottom: height,
+    left: 0,
+    toJSON: () => ({}),
+  } as DOMRect;
 }
 
 function triggerResize(height: number) {
@@ -91,14 +107,38 @@ describe('DashboardHostStatusWidget', () => {
       configurable: true,
       writable: true,
     });
+    Object.defineProperty(globalThis, 'requestAnimationFrame', {
+      value: (callback: FrameRequestCallback) => {
+        callback(0);
+        return 1;
+      },
+      configurable: true,
+      writable: true,
+    });
+    Object.defineProperty(globalThis, 'cancelAnimationFrame', {
+      value: vi.fn(),
+      configurable: true,
+      writable: true,
+    });
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     for (const wrapper of mountedWrappers.splice(0)) {
       wrapper.unmount();
     }
     Object.defineProperty(globalThis, 'ResizeObserver', {
       value: originalResizeObserver,
+      configurable: true,
+      writable: true,
+    });
+    Object.defineProperty(globalThis, 'requestAnimationFrame', {
+      value: originalRequestAnimationFrame,
+      configurable: true,
+      writable: true,
+    });
+    Object.defineProperty(globalThis, 'cancelAnimationFrame', {
+      value: originalCancelAnimationFrame,
       configurable: true,
       writable: true,
     });
@@ -110,7 +150,7 @@ describe('DashboardHostStatusWidget', () => {
     triggerResize(320);
     await nextTick();
 
-    const fullModeRows = wrapper.findAll('.dd-scroll-stable > div');
+    const fullModeRows = wrapper.findAll('[data-host-row]');
     expect(fullModeRows.length).toBeGreaterThan(0);
     expect(fullModeRows[0].classes()).toContain('items-start');
     expect(fullModeRows[0].classes()).not.toContain('items-center');
@@ -124,10 +164,50 @@ describe('DashboardHostStatusWidget', () => {
 
     const scrollViewport = wrapper.find('.dd-scroll-stable');
     expect(scrollViewport.classes()).toContain('snap-y');
-    expect(scrollViewport.classes()).toContain('snap-proximity');
+    expect(scrollViewport.classes()).toContain('snap-mandatory');
 
-    const fullModeRows = wrapper.findAll('.dd-scroll-stable > div');
+    const fullModeRows = wrapper.findAll('[data-host-row]');
     expect(fullModeRows.length).toBeGreaterThan(0);
     expect(fullModeRows[0].classes()).toContain('snap-start');
+  });
+
+  it('adds trailing spacer height so the last host row can snap fully into view', async () => {
+    const wrapper = mountWidget({
+      servers: [
+        makeServer(),
+        makeServer({
+          name: 'nas-agent',
+          host: '192.168.1.50:3001',
+          containers: { running: 0, total: 0 },
+        }),
+        makeServer({
+          name: 'edge-backup',
+          host: '10.0.0.23:3001',
+          containers: { running: 2, total: 2 },
+        }),
+      ],
+    });
+
+    triggerResize(320);
+    await nextTick();
+
+    const scrollViewport = wrapper.get('.dd-scroll-stable');
+    Object.defineProperty(scrollViewport.element, 'clientHeight', {
+      configurable: true,
+      value: 240,
+    });
+
+    const fullModeRows = wrapper.findAll('[data-host-row]');
+    vi.spyOn(
+      fullModeRows[fullModeRows.length - 1].element,
+      'getBoundingClientRect',
+    ).mockReturnValue(makeDomRect(72));
+
+    await wrapper.setProps({ editMode: true });
+    await nextTick();
+    await nextTick();
+
+    const tailSpacer = wrapper.get('[data-test="host-status-tail-spacer"]');
+    expect(tailSpacer.attributes('style')).toContain('height: 168px');
   });
 });
