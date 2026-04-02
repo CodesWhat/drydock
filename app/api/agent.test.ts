@@ -307,6 +307,41 @@ describe('Agent Log Entries Route', () => {
     expect(res.json).toHaveBeenCalledWith([entry]);
   });
 
+  test('should strip unexpected properties from agent log entries', async () => {
+    mockGetAgent.mockReturnValue({
+      isConnected: true,
+      getLogEntries: vi.fn().mockResolvedValue([
+        {
+          timestamp: 1000,
+          level: 'info',
+          component: 'test',
+          msg: 'hello',
+          displayTimestamp: '[already formatted]',
+          secret: 'leak-me',
+          nested: { leaked: true },
+        },
+      ]),
+    });
+
+    const req = createMockRequest({
+      params: { name: 'agent-1' },
+      query: {},
+    });
+    const res = createResponse();
+
+    await handler(req, res);
+
+    expect(res.json).toHaveBeenCalledWith([
+      {
+        timestamp: 1000,
+        level: 'info',
+        component: 'test',
+        msg: 'hello',
+        displayTimestamp: '[already formatted]',
+      },
+    ]);
+  });
+
   test('should leave non-object log entries unchanged when normalizing arrays', async () => {
     mockGetAgent.mockReturnValue({
       isConnected: true,

@@ -10,6 +10,7 @@ const router = express.Router();
 const ALLOWED_LOG_LEVELS = new Set(['trace', 'debug', 'info', 'warn', 'error', 'fatal']);
 const SAFE_LOG_COMPONENT_PATTERN = /^[a-zA-Z0-9._-]+$/;
 const AGENT_LOG_FETCH_ERROR_MESSAGE = 'Failed to fetch logs from agent';
+const AGENT_LOG_STRING_FIELDS = ['level', 'component', 'msg', 'message'] as const;
 
 interface AgentLogEntriesRequestParams {
   name: string;
@@ -20,6 +21,17 @@ interface AgentLogEntriesRequestQuery {
   component?: string;
   tail?: string;
   since?: string;
+}
+
+type AgentLogStringField = (typeof AGENT_LOG_STRING_FIELDS)[number];
+
+interface NormalizedAgentLogEntry {
+  timestamp?: number | string;
+  level?: string;
+  component?: string;
+  msg?: string;
+  message?: string;
+  displayTimestamp: string;
 }
 
 function getAgentContainerStats(containers: Container[]) {
@@ -76,23 +88,54 @@ function getValidatedLogComponent(component: unknown): string | undefined | null
   return component;
 }
 
+function getOwnAgentLogValue(logEntry: Record<string, unknown>, field: string): unknown {
+  return Object.hasOwn(logEntry, field) ? logEntry[field] : undefined;
+}
+
+function getOwnAgentLogString(
+  logEntry: Record<string, unknown>,
+  field: AgentLogStringField | 'displayTimestamp',
+): string | undefined {
+  const value = getOwnAgentLogValue(logEntry, field);
+  return typeof value === 'string' ? value : undefined;
+}
+
+function getOwnAgentLogTimestamp(logEntry: Record<string, unknown>): number | string | undefined {
+  const value = getOwnAgentLogValue(logEntry, 'timestamp');
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : undefined;
+  }
+  return typeof value === 'string' ? value : undefined;
+}
+
 function normalizeAgentLogEntry(entry: unknown) {
   if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
     return entry;
   }
 
   const logEntry = entry as Record<string, unknown>;
-  if (
-    typeof logEntry.displayTimestamp === 'string' &&
-    logEntry.displayTimestamp.trim().length > 0
-  ) {
-    return entry;
+  const normalizedEntry: NormalizedAgentLogEntry = {
+    displayTimestamp: '-',
+  };
+  const timestamp = getOwnAgentLogTimestamp(logEntry);
+  if (timestamp !== undefined) {
+    normalizedEntry.timestamp = timestamp;
   }
 
-  return {
-    ...logEntry,
-    displayTimestamp: formatLogDisplayTimestamp(logEntry.timestamp as number | string | undefined),
-  };
+  for (const field of AGENT_LOG_STRING_FIELDS) {
+    const value = getOwnAgentLogString(logEntry, field);
+    if (value !== undefined) {
+      normalizedEntry[field] = value;
+    }
+  }
+
+  const displayTimestamp = getOwnAgentLogString(logEntry, 'displayTimestamp');
+  normalizedEntry.displayTimestamp =
+    displayTimestamp && displayTimestamp.trim().length > 0
+      ? displayTimestamp
+      : formatLogDisplayTimestamp(timestamp);
+
+  return normalizedEntry;
 }
 
 function normalizeAgentLogEntries(entries: unknown) {
