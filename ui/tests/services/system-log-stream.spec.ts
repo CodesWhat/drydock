@@ -116,6 +116,21 @@ describe('system-log-stream service', () => {
       expect(socket.close).toHaveBeenCalledWith(1000, 'manual-close');
     });
 
+    it('ignores log entries missing the server display timestamp', () => {
+      const onMessage = vi.fn();
+
+      createSystemLogStreamConnection({
+        onMessage,
+        webSocketFactory: (url) => new MockWebSocket(url) as unknown as WebSocket,
+        location: { protocol: 'http:', host: 'localhost:3000' } as Location,
+      });
+
+      const socket = MockWebSocket.instances[0];
+      socket.emitMessage('{"timestamp":1000,"level":"info","component":"api","msg":"hello"}');
+
+      expect(onMessage).not.toHaveBeenCalled();
+    });
+
     it('supports update, pause, and resume lifecycle controls', () => {
       const connection = createSystemLogStreamConnection({
         onMessage: vi.fn(),
@@ -227,16 +242,21 @@ describe('system-log-stream service', () => {
       const secondSocket = MockWebSocket.instances[1];
 
       firstSocket.emitOpen();
-      firstSocket.emitMessage('{"timestamp":1000,"level":"info","component":"api","msg":"stale"}');
+      firstSocket.emitMessage(
+        '{"timestamp":1000,"displayTimestamp":"[00:00:01.000]","level":"info","component":"api","msg":"stale"}',
+      );
       firstSocket.emitClose(1000, 'stale-close');
       secondSocket.emitOpen();
-      secondSocket.emitMessage('{"timestamp":2000,"level":"warn","component":"api","msg":"fresh"}');
+      secondSocket.emitMessage(
+        '{"timestamp":2000,"displayTimestamp":"[00:00:02.000]","level":"warn","component":"api","msg":"fresh"}',
+      );
 
       expect(onStatus).toHaveBeenCalledTimes(1);
       expect(onStatus).toHaveBeenCalledWith('connected');
       expect(onMessage).toHaveBeenCalledTimes(1);
       expect(onMessage).toHaveBeenCalledWith({
         timestamp: 2000,
+        displayTimestamp: '[00:00:02.000]',
         level: 'warn',
         component: 'api',
         msg: 'fresh',

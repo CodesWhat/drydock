@@ -63,7 +63,7 @@ function toTimestampMs(value: string | number | undefined): number {
 function toSystemLogEntry(entry: ApiLogEntry): SystemLogEntry {
   return {
     timestamp: toTimestampMs(entry.timestamp),
-    displayTimestamp: entry.displayTimestamp,
+    displayTimestamp: entry.displayTimestamp ?? '-',
     level: entry.level || 'info',
     component: entry.component || '-',
     msg: entry.msg || entry.message || '',

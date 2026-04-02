@@ -4,6 +4,7 @@ import { toAppLogEntry } from '@/utils/system-log-adapter';
 function makeSystemLogEntry(overrides: Partial<SystemLogEntry> = {}): SystemLogEntry {
   return {
     timestamp: Date.UTC(2026, 2, 15, 0, 0, 0),
+    displayTimestamp: '[00:00:00.000]',
     level: 'info',
     component: 'drydock',
     msg: 'hello world',
@@ -60,35 +61,28 @@ describe('toAppLogEntry', () => {
     expect(adapted.level).toBe('error');
   });
 
-  it('uses "-" timestamp for invalid timestamp values and null level for empty level', () => {
+  it('uses the server display timestamp when the raw timestamp is invalid', () => {
     const entry = makeSystemLogEntry({
       timestamp: Number.NaN as unknown as number,
+      displayTimestamp: '[09:15:00.000]',
       level: '   ',
       msg: 'plain',
     });
 
     const adapted = toAppLogEntry(entry, 9);
 
-    expect(adapted.timestamp).toBe('-');
+    expect(adapted.timestamp).toBe('[09:15:00.000]');
     expect(adapted.level).toBeNull();
   });
 
-  it('uses "-" timestamp when finite number produces an invalid Date', () => {
+  it('uses the server display timestamp when the raw timestamp is out of range', () => {
     const entry = makeSystemLogEntry({
       timestamp: 8.64e15 + 1,
+      displayTimestamp: '[09:16:00.000]',
     });
 
     const adapted = toAppLogEntry(entry, 10);
 
-    expect(adapted.timestamp).toBe('-');
-  });
-
-  it('formats legacy numeric timestamps when displayTimestamp is missing', () => {
-    const entry = makeSystemLogEntry();
-
-    const adapted = toAppLogEntry(entry, 11);
-
-    expect(adapted.timestamp).toMatch(/^\[\d{2}:\d{2}:\d{2}\.\d{3}\]$/u);
-    expect(adapted.timestamp).not.toContain('T');
+    expect(adapted.timestamp).toBe('[09:16:00.000]');
   });
 });

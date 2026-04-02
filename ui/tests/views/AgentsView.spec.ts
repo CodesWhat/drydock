@@ -195,6 +195,7 @@ describe('AgentsView', () => {
     mockGetLogEntries.mockResolvedValue([
       {
         timestamp: '2026-02-28T10:00:00.000Z',
+        displayTimestamp: '[10:00:00.000]',
         level: 'info',
         component: 'agent',
         msg: 'connected',
@@ -234,6 +235,8 @@ describe('AgentsView', () => {
       component: 'api',
       tail: 500,
     });
+
+    expect(wrapper.text()).toContain('[10:00:00.000]');
 
     await refreshButton.trigger('click');
     await flushPromises();

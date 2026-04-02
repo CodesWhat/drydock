@@ -4,7 +4,7 @@ import AppIconButton from '../AppIconButton.vue';
 import LogViewer from '../LogViewer.vue';
 
 interface AgentLog {
-  timestamp: string;
+  displayTimestamp: string;
   level: 'info' | 'warn' | 'error' | 'debug';
   component: string;
   message: string;
@@ -20,7 +20,6 @@ const props = defineProps<{
   lastFetchedIso: string;
   status: 'connected' | 'disconnected';
   formatLastFetched: (iso: string) => string;
-  formatTimestamp: (iso: string) => string;
 }>();
 
 const emit = defineEmits<{
@@ -140,7 +139,7 @@ function asLog(entry: unknown): AgentLog {
           :style="{ borderBottom: '1px solid var(--dd-log-line)' }"
         >
           <span class="shrink-0 tabular-nums" style="color: var(--dd-log-text-muted);">
-            {{ props.formatTimestamp(asLog(entry).timestamp) }}
+            {{ asLog(entry).displayTimestamp }}
           </span>
           <span
             class="shrink-0 w-11 text-right font-semibold uppercase text-2xs"

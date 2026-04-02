@@ -43,7 +43,7 @@ interface Agent {
 }
 
 interface AgentLog {
-  timestamp: string;
+  displayTimestamp: string;
   level: 'info' | 'warn' | 'error' | 'debug';
   component: string;
   message: string;
@@ -64,18 +64,6 @@ const agentLogLevelFilter = ref('all');
 const agentLogTail = ref(100);
 const agentLogComponent = ref('');
 const agentLogsLastFetched = ref('');
-
-function formatAgentLogTimestamp(iso: string) {
-  const d = new Date(iso);
-  return `${d.toTimeString().slice(0, 8)}.${String(d.getMilliseconds()).padStart(3, '0')}`;
-}
-
-function formatTimestamp(ts: number | string): string {
-  if (typeof ts === 'number') {
-    return new Date(ts).toISOString();
-  }
-  return ts;
-}
 
 function formatUptime(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) {
@@ -222,7 +210,7 @@ async function fetchAgentLogs(
       tail,
     });
     agentLogsCache.value[agentName] = (entries ?? []).map((e: ApiAgentLogEntry) => ({
-      timestamp: formatTimestamp(e.timestamp),
+      displayTimestamp: e.displayTimestamp ?? '-',
       level: e.level ?? 'info',
       component: e.component ?? '',
       message: e.msg ?? e.message ?? '',
@@ -767,7 +755,6 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
               :last-fetched-iso="agentLogsLastFetched"
               :status="selectedAgent.status"
               :format-last-fetched="formatLastFetched"
-              :format-timestamp="formatAgentLogTimestamp"
               @update:log-level-filter="agentLogLevelFilter = $event"
               @update:tail="agentLogTail = $event"
               @update:component-filter="agentLogComponent = $event"

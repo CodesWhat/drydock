@@ -3,7 +3,7 @@ type LogStreamTail = number | 'all';
 export interface ContainerLogFrame {
   type: 'stdout' | 'stderr';
   ts: string;
-  displayTs?: string;
+  displayTs: string;
   line: string;
 }
 
@@ -45,7 +45,7 @@ function isLogFrame(payload: unknown): payload is ContainerLogFrame {
   return (
     (frame.type === 'stdout' || frame.type === 'stderr') &&
     typeof frame.ts === 'string' &&
-    (frame.displayTs === undefined || typeof frame.displayTs === 'string') &&
+    typeof frame.displayTs === 'string' &&
     typeof frame.line === 'string'
   );
 }

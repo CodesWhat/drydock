@@ -4,7 +4,12 @@ import ContainerLogs from '@/components/containers/ContainerLogs.vue';
 
 const mocks = vi.hoisted(() => {
   type StreamOptions = {
-    onMessage: (frame: { type: 'stdout' | 'stderr'; ts: string; line: string }) => void;
+    onMessage: (frame: {
+      type: 'stdout' | 'stderr';
+      ts: string;
+      displayTs: string;
+      line: string;
+    }) => void;
     onStatus?: (status: 'connected' | 'disconnected') => void;
     query?: Record<string, unknown>;
     containerId: string;
@@ -110,11 +115,13 @@ describe('ContainerLogs', () => {
     latestOptions.onMessage({
       type: 'stdout',
       ts: '2026-03-15T00:00:00Z',
+      displayTs: '[00:00:00.000]',
       line: 'stdout line',
     });
     latestOptions.onMessage({
       type: 'stderr',
       ts: '2026-03-15T00:00:01Z',
+      displayTs: '[00:00:01.000]',
       line: 'stderr line',
     });
     await nextTick();
@@ -140,16 +147,19 @@ describe('ContainerLogs', () => {
     latestOptions.onMessage({
       type: 'stdout',
       ts: '2026-03-15T00:00:00Z',
+      displayTs: '[00:00:00.000]',
       line: 'alpha',
     });
     latestOptions.onMessage({
       type: 'stdout',
       ts: '2026-03-15T00:00:01Z',
+      displayTs: '[00:00:01.000]',
       line: 'beta',
     });
     latestOptions.onMessage({
       type: 'stdout',
       ts: '2026-03-15T00:00:02Z',
+      displayTs: '[00:00:02.000]',
       line: 'alpha-2',
     });
     await nextTick();

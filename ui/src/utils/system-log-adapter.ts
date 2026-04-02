@@ -1,7 +1,6 @@
 import type { SystemLogEntry } from '../services/system-log-stream';
 import type { AppLogEntry } from '../types/log-entry';
 import { parseAnsiSegments, parseJsonLogLine, stripAnsiCodes } from './container-logs';
-import { formatLogTimestamp } from './log-timestamp';
 
 function normalizeLevel(level: string): string | null {
   const trimmed = level.trim();
@@ -18,7 +17,7 @@ export function toAppLogEntry(entry: SystemLogEntry, id: number): AppLogEntry {
 
   return {
     id,
-    timestamp: entry.displayTimestamp || formatLogTimestamp(entry.timestamp),
+    timestamp: entry.displayTimestamp,
     line,
     plainLine: stripAnsiCodes(line),
     ansiSegments: parseAnsiSegments(line),

@@ -28,8 +28,11 @@ export interface ApiAgent {
 
 /** Single entry from GET /api/agents/:name/log. */
 export interface ApiAgentLogEntry {
-  timestamp?: string;
+  timestamp?: number | string;
+  displayTimestamp?: string;
   level?: string;
+  component?: string;
+  msg?: string;
   message?: string;
 }
 
