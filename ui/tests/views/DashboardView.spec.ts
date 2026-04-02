@@ -280,6 +280,76 @@ describe('DashboardView', () => {
     it('does not auto-scroll when the pointer stays away from the dashboard edges', () => {
       expect(computeDashboardDragScrollDelta(200, { top: 0, bottom: 400 } as DOMRect)).toBe(0);
     });
+
+    it('does not queue another drag auto-scroll frame after drag cleanup occurs mid-frame', async () => {
+      const frameCallbacks: FrameRequestCallback[] = [];
+      const requestAnimationFrameMock = vi.fn((callback: FrameRequestCallback) => {
+        frameCallbacks.push(callback);
+        return frameCallbacks.length;
+      });
+      const cancelAnimationFrameMock = vi.fn();
+      Object.defineProperty(globalThis, 'requestAnimationFrame', {
+        configurable: true,
+        value: requestAnimationFrameMock,
+        writable: true,
+      });
+      Object.defineProperty(globalThis, 'cancelAnimationFrame', {
+        configurable: true,
+        value: cancelAnimationFrameMock,
+        writable: true,
+      });
+
+      const wrapper = await mountDashboard([makeContainer({ newTag: '2.0.0' })]);
+      const editToggle = document.querySelector('[data-test="dashboard-edit-toggle"]');
+      expect(editToggle).not.toBeNull();
+      (editToggle as HTMLButtonElement).click();
+      await flushPromises();
+
+      const scrollArea = wrapper.find('.overflow-y-auto').element as HTMLElement;
+      let pointerEnded = false;
+      const getBoundingClientRectSpy = vi
+        .spyOn(scrollArea, 'getBoundingClientRect')
+        .mockImplementation(() => {
+          if (!pointerEnded) {
+            pointerEnded = true;
+            const pointerUpEvent = new Event('pointerup', { bubbles: true, cancelable: true });
+            Object.defineProperties(pointerUpEvent, {
+              pointerId: { value: 1 },
+              clientY: { value: 395 },
+            });
+            window.dispatchEvent(pointerUpEvent);
+          }
+          return { top: 0, bottom: 400 } as DOMRect;
+        });
+
+      try {
+        const dragHandle = wrapper.find('.drag-handle');
+        expect(dragHandle.exists()).toBe(true);
+        const frameCountBeforeDrag = frameCallbacks.length;
+
+        const pointerDownEvent = new Event('pointerdown', { bubbles: true, cancelable: true });
+        Object.defineProperties(pointerDownEvent, {
+          pointerId: { value: 1 },
+          clientY: { value: 390 },
+        });
+        dragHandle.element.dispatchEvent(pointerDownEvent);
+
+        const pointerMoveEvent = new Event('pointermove', { bubbles: true, cancelable: true });
+        Object.defineProperties(pointerMoveEvent, {
+          pointerId: { value: 1 },
+          clientY: { value: 395 },
+        });
+        window.dispatchEvent(pointerMoveEvent);
+
+        expect(frameCallbacks.length).toBe(frameCountBeforeDrag + 1);
+        frameCallbacks[frameCountBeforeDrag](0);
+        await flushPromises();
+
+        expect(frameCallbacks.length).toBe(frameCountBeforeDrag + 1);
+      } finally {
+        getBoundingClientRectSpy.mockRestore();
+      }
+    });
   });
 
   describe('loading state', () => {
@@ -1563,6 +1633,54 @@ describe('DashboardView', () => {
         expect(wrapper.find('[data-widget-id="recent-updates"]').text()).toContain(
           'No updates available',
         );
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('backs off dashboard pending-update polling when only ghost updating rows remain', async () => {
+      vi.useFakeTimers();
+      try {
+        mockUpdateContainer.mockResolvedValueOnce({});
+
+        const wrapper = await mountDashboard(
+          [pendingContainer],
+          [],
+          {},
+          {
+            recentStatuses: { nginx: 'pending' },
+          },
+        );
+        const { mapApiContainers } = await import('@/utils/container-mapper');
+
+        mockGetAllContainers.mockResolvedValueOnce([]);
+        mockGetContainerRecentStatus.mockResolvedValueOnce({ statuses: {} });
+        (mapApiContainers as ReturnType<typeof vi.fn>).mockReturnValueOnce([]);
+
+        mockGetAllContainers.mockResolvedValueOnce([]);
+        mockGetContainerRecentStatus.mockResolvedValueOnce({ statuses: {} });
+        (mapApiContainers as ReturnType<typeof vi.fn>).mockReturnValueOnce([]);
+
+        const { useConfirmDialog } = await import('@/composables/useConfirmDialog');
+        const confirm = useConfirmDialog();
+
+        await wrapper.find('[data-test="dashboard-update-btn"]').trigger('click');
+        await confirm.accept();
+        await flushPromises();
+
+        const fetchCountAfterImmediateRefresh = mockGetAllContainers.mock.calls.length;
+
+        vi.advanceTimersByTime(2_000);
+        await flushPromises();
+        expect(mockGetAllContainers.mock.calls.length).toBe(fetchCountAfterImmediateRefresh + 1);
+
+        vi.advanceTimersByTime(2_000);
+        await flushPromises();
+        expect(mockGetAllContainers.mock.calls.length).toBe(fetchCountAfterImmediateRefresh + 1);
+
+        vi.advanceTimersByTime(2_000);
+        await flushPromises();
+        expect(mockGetAllContainers.mock.calls.length).toBe(fetchCountAfterImmediateRefresh + 2);
       } finally {
         vi.useRealTimers();
       }

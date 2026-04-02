@@ -44,15 +44,18 @@ const dashboardUpdateError = ref<string | null>(null);
 const dashboardPendingUpdateRows = ref<Map<string, { row: RecentUpdateRow; startedAt: number }>>(
   new Map(),
 );
-const dashboardPendingUpdatePollTimer = ref<ReturnType<typeof setInterval> | null>(null);
+const dashboardPendingUpdatePollTimer = ref<ReturnType<typeof setTimeout> | null>(null);
 const dashboardPendingUpdatePollInFlight = ref(false);
+const dashboardPendingUpdatePollDelayMs = ref(2_000);
 const DASHBOARD_PENDING_UPDATE_POLL_INTERVAL_MS = 2_000;
+const DASHBOARD_PENDING_UPDATE_POLL_MAX_INTERVAL_MS = 16_000;
 const DASHBOARD_PENDING_UPDATE_TIMEOUT_MS = 30_000;
 const activeDashboardDragPointerId = ref<number | null>(null);
 const dashboardDragPointerEngaged = ref(false);
 const dashboardDragPointerMoved = ref(false);
 const dashboardDragPointerY = ref<number | null>(null);
 let dashboardDragAutoScrollFrame: number | null = null;
+let dashboardDragAutoScrollActive = false;
 
 function isStaleDashboardUpdateError(error: unknown): boolean {
   return isNoUpdateAvailableError(error);
@@ -70,6 +73,7 @@ function resolveDashboardScrollEl(): HTMLElement | null {
 }
 
 function stopDashboardDragAutoScroll() {
+  dashboardDragAutoScrollActive = false;
   dashboardDragPointerEngaged.value = false;
   dashboardDragPointerMoved.value = false;
   dashboardDragPointerY.value = null;
@@ -81,7 +85,7 @@ function stopDashboardDragAutoScroll() {
 }
 
 function tickDashboardDragAutoScroll() {
-  if (!editMode.value || !dashboardDragPointerEngaged.value) {
+  if (!dashboardDragAutoScrollActive || !editMode.value || !dashboardDragPointerEngaged.value) {
     dashboardDragAutoScrollFrame = null;
     return;
   }
@@ -98,11 +102,16 @@ function tickDashboardDragAutoScroll() {
     }
   }
 
+  if (!dashboardDragAutoScrollActive || !editMode.value || !dashboardDragPointerEngaged.value) {
+    dashboardDragAutoScrollFrame = null;
+    return;
+  }
   dashboardDragAutoScrollFrame = requestAnimationFrame(tickDashboardDragAutoScroll);
 }
 
 function ensureDashboardDragAutoScrollLoop() {
   if (dashboardDragAutoScrollFrame === null) {
+    dashboardDragAutoScrollActive = true;
     dashboardDragAutoScrollFrame = requestAnimationFrame(tickDashboardDragAutoScroll);
   }
 }
@@ -182,6 +191,9 @@ const showWidgetPanel = ref(false);
 
 function handleToggleEditMode() {
   toggleEditMode();
+  if (!editMode.value) {
+    stopDashboardDragAutoScroll();
+  }
   // On desktop, auto-open panel when entering edit mode; on mobile, leave it closed
   showWidgetPanel.value = editMode.value && !isMobile.value;
 }
@@ -197,6 +209,7 @@ function closeWidgetPanel() {
 // Exit edit mode on Escape key
 function onKeydown(event: KeyboardEvent) {
   if (event.key === 'Escape' && editMode.value) {
+    stopDashboardDragAutoScroll();
     editMode.value = false;
     showWidgetPanel.value = false;
   }
@@ -279,10 +292,12 @@ const displayRecentUpdates = computed<RecentUpdateRow[]>(() => {
 
 function stopDashboardPendingUpdatePolling() {
   if (!dashboardPendingUpdatePollTimer.value) {
+    dashboardPendingUpdatePollDelayMs.value = DASHBOARD_PENDING_UPDATE_POLL_INTERVAL_MS;
     return;
   }
-  clearInterval(dashboardPendingUpdatePollTimer.value);
+  clearTimeout(dashboardPendingUpdatePollTimer.value);
   dashboardPendingUpdatePollTimer.value = null;
+  dashboardPendingUpdatePollDelayMs.value = DASHBOARD_PENDING_UPDATE_POLL_INTERVAL_MS;
 }
 
 function clearDashboardPendingUpdateRow(name: string) {
@@ -314,6 +329,16 @@ async function pollDashboardPendingUpdateRows() {
   } finally {
     pruneDashboardPendingUpdateRows();
     dashboardPendingUpdatePollInFlight.value = false;
+    if (dashboardPendingUpdateRows.value.size > 0) {
+      dashboardPendingUpdatePollDelayMs.value =
+        pendingUpdates.value.length > 0
+          ? DASHBOARD_PENDING_UPDATE_POLL_INTERVAL_MS
+          : Math.min(
+              dashboardPendingUpdatePollDelayMs.value * 2,
+              DASHBOARD_PENDING_UPDATE_POLL_MAX_INTERVAL_MS,
+            );
+      startDashboardPendingUpdatePolling();
+    }
   }
 }
 
@@ -321,9 +346,10 @@ function startDashboardPendingUpdatePolling() {
   if (dashboardPendingUpdatePollTimer.value) {
     return;
   }
-  dashboardPendingUpdatePollTimer.value = setInterval(() => {
+  dashboardPendingUpdatePollTimer.value = setTimeout(() => {
+    dashboardPendingUpdatePollTimer.value = null;
     void pollDashboardPendingUpdateRows();
-  }, DASHBOARD_PENDING_UPDATE_POLL_INTERVAL_MS);
+  }, dashboardPendingUpdatePollDelayMs.value);
 }
 
 function capturePendingDashboardRows(rows: RecentUpdateRow[]) {
@@ -342,6 +368,8 @@ function capturePendingDashboardRows(rows: RecentUpdateRow[]) {
     });
   }
   if (dashboardPendingUpdateRows.value.size > 0) {
+    stopDashboardPendingUpdatePolling();
+    dashboardPendingUpdatePollDelayMs.value = DASHBOARD_PENDING_UPDATE_POLL_INTERVAL_MS;
     startDashboardPendingUpdatePolling();
   }
   pruneDashboardPendingUpdateRows();
