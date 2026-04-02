@@ -436,6 +436,28 @@ describe('ContainersView', () => {
       vm.selectedContainer = containers[0];
       expect(vm.selectedContainerId).toBe('c1');
     });
+
+    it('keeps duplicate display-name aliases out of id and meta lookup maps', async () => {
+      const datavaultNode = makeContainer({
+        id: 'c1',
+        name: 'tdarr_node',
+        server: 'Datavault',
+      });
+      const tmvaultNode = makeContainer({
+        id: 'c2',
+        name: 'tdarr_node',
+        server: 'Tmvault',
+      });
+      const wrapper = await mountContainersView([datavaultNode, tmvaultNode]);
+      const vm = wrapper.vm as any;
+
+      expect(vm.containerIdMap.c1).toBe('c1');
+      expect(vm.containerIdMap.c2).toBe('c2');
+      expect(vm.containerIdMap.tdarr_node).toBeUndefined();
+      expect(vm.containerMetaMap.c1).toMatchObject({ id: 'c1', name: 'tdarr_node' });
+      expect(vm.containerMetaMap.c2).toMatchObject({ id: 'c2', name: 'tdarr_node' });
+      expect(vm.containerMetaMap.tdarr_node).toBeUndefined();
+    });
   });
 
   describe('route query filters', () => {

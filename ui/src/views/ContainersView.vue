@@ -50,19 +50,60 @@ const containers = ref<Container[]>([]);
 const containerIdMap = ref<Record<string, string>>({});
 const containerMetaMap = ref<Record<string, unknown>>({});
 
+function buildContainerLookupMaps(apiContainers: Record<string, unknown>[]) {
+  const idMap: Record<string, string> = {};
+  const metaMap: Record<string, unknown> = {};
+  const aliasCounts = new Map<string, number>();
+
+  for (const apiContainer of apiContainers) {
+    const containerId = typeof apiContainer.id === 'string' ? apiContainer.id : '';
+    if (!containerId) {
+      continue;
+    }
+    const uiName =
+      typeof apiContainer.displayName === 'string' && apiContainer.displayName.trim().length > 0
+        ? apiContainer.displayName
+        : typeof apiContainer.name === 'string'
+          ? apiContainer.name
+          : '';
+
+    idMap[containerId] = containerId;
+    metaMap[containerId] = apiContainer;
+
+    if (!uiName) {
+      continue;
+    }
+    aliasCounts.set(uiName, (aliasCounts.get(uiName) ?? 0) + 1);
+  }
+
+  for (const apiContainer of apiContainers) {
+    const containerId = typeof apiContainer.id === 'string' ? apiContainer.id : '';
+    if (!containerId) {
+      continue;
+    }
+    const uiName =
+      typeof apiContainer.displayName === 'string' && apiContainer.displayName.trim().length > 0
+        ? apiContainer.displayName
+        : typeof apiContainer.name === 'string'
+          ? apiContainer.name
+          : '';
+
+    if (!uiName || aliasCounts.get(uiName) !== 1) {
+      continue;
+    }
+
+    idMap[uiName] = containerId;
+    metaMap[uiName] = apiContainer;
+  }
+
+  return { idMap, metaMap };
+}
+
 async function loadContainers() {
   try {
     const apiContainers = await getAllContainers();
     containers.value = mapApiContainers(apiContainers);
-    const idMap: Record<string, string> = {};
-    const metaMap: Record<string, unknown> = {};
-    for (const apiContainer of apiContainers) {
-      const uiName = apiContainer.displayName || apiContainer.name;
-      idMap[apiContainer.id] = apiContainer.id;
-      idMap[uiName] = apiContainer.id;
-      metaMap[apiContainer.id] = apiContainer;
-      metaMap[uiName] = apiContainer;
-    }
+    const { idMap, metaMap } = buildContainerLookupMaps(apiContainers as Record<string, unknown>[]);
     containerIdMap.value = idMap;
     containerMetaMap.value = metaMap;
     if (groupByStack.value) {

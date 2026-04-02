@@ -185,6 +185,32 @@ describe('useContainerLogs', () => {
     vi.useRealTimers();
   });
 
+  it('auto-fetch refreshes the selected duplicate-name container by id when name aliases are ambiguous', async () => {
+    vi.useFakeTimers();
+    Object.defineProperty(document, 'hidden', {
+      configurable: true,
+      value: false,
+    });
+    const duplicate = makeContainer({
+      id: 'container-2',
+      name: 'tdarr_node',
+      server: 'Tmvault',
+    });
+    const { composable } = await mountLogsHarness({
+      containerIdMap: { 'container-2': 'container-2' },
+      selectedContainer: duplicate,
+      activeDetailTab: 'logs',
+    });
+
+    composable.containerAutoFetchInterval.value = 2000;
+    await nextTick();
+    vi.advanceTimersByTime(2100);
+    await flushPromises();
+
+    expect(mocks.getContainerLogs).toHaveBeenCalledWith('container-2', 100);
+    vi.useRealTimers();
+  });
+
   it('no-ops auto-fetch refresh when there is no selected container', async () => {
     vi.useFakeTimers();
     Object.defineProperty(document, 'hidden', {
