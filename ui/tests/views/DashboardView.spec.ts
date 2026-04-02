@@ -277,7 +277,20 @@ describe('DashboardView', () => {
   });
 
   describe('layout spacing', () => {
-    it('applies pr-[15px] on the scrollable container for scrollbar centering', () => {
+    it('extends scroll container edge-to-edge via negative margins on root', () => {
+      mockGetAllContainers.mockReturnValue(new Promise(() => {}));
+      mockGetAgents.mockReturnValue(new Promise(() => {}));
+      mockGetServer.mockReturnValue(new Promise(() => {}));
+
+      const wrapper = mountDashboardView();
+      const root = wrapper.find('.flex.flex-col.flex-1.min-h-0');
+      expect(root.exists()).toBe(true);
+      expect(root.classes()).toContain('-ml-4');
+      expect(root.classes()).toContain('-mr-2');
+      expect(root.classes()).toContain('-my-4');
+    });
+
+    it('applies internal padding on the scroll container for visual spacing', () => {
       mockGetAllContainers.mockReturnValue(new Promise(() => {}));
       mockGetAgents.mockReturnValue(new Promise(() => {}));
       mockGetServer.mockReturnValue(new Promise(() => {}));
@@ -285,19 +298,9 @@ describe('DashboardView', () => {
       const wrapper = mountDashboardView();
       const scrollArea = wrapper.find('.overflow-y-auto');
       expect(scrollArea.exists()).toBe(true);
-      expect(scrollArea.classes()).toContain('sm:pr-[15px]');
-    });
-
-    it('does not use legacy scrollbar compensation padding', () => {
-      mockGetAllContainers.mockReturnValue(new Promise(() => {}));
-      mockGetAgents.mockReturnValue(new Promise(() => {}));
-      mockGetServer.mockReturnValue(new Promise(() => {}));
-
-      const wrapper = mountDashboardView();
-      const scrollArea = wrapper.find('.overflow-y-auto');
-      expect(scrollArea.classes()).not.toContain('sm:pr-2');
-      expect(scrollArea.classes()).not.toContain('sm:pr-4');
-      expect(scrollArea.classes()).not.toContain('sm:pr-5');
+      expect(scrollArea.classes()).toContain('px-2');
+      expect(scrollArea.classes()).toContain('py-1');
+      expect(scrollArea.classes()).toContain('sm:pr-6');
     });
 
     it('limits edit-mode dragging to explicit drag handles', async () => {

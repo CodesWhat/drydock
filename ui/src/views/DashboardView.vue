@@ -485,10 +485,10 @@ function confirmDashboardUpdateAll() {
 </script>
 
 <template>
-  <div class="flex flex-col flex-1 min-h-0">
+  <div class="flex flex-col flex-1 min-h-0 -ml-4 -mr-2 -my-4 sm:-ml-6 sm:-mr-[9px] sm:-my-6">
     <div class="flex gap-2 min-w-0 flex-1 min-h-0">
     <!-- Main dashboard content -->
-    <div ref="dashboardScrollEl" class="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden px-1 sm:pr-[15px] dd-touch-scroll">
+    <div ref="dashboardScrollEl" class="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden px-2 py-1 sm:pl-7 sm:pr-6 sm:py-6 dd-touch-scroll">
       <div v-if="loading" class="flex items-center justify-center py-16">
         <div class="text-sm dd-text-muted">Loading dashboard...</div>
       </div>
