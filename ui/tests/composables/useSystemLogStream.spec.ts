@@ -1,19 +1,24 @@
 import { effectScope } from 'vue';
 import { useSystemLogStream } from '@/composables/useSystemLogStream';
-import { createSystemLogStreamConnection, type SystemLogEntry } from '@/services/system-log-stream';
+import {
+  createSystemLogStreamConnection,
+  type SystemLogEntry,
+  type SystemLogStreamConnection,
+  type SystemLogStreamQuery,
+} from '@/services/system-log-stream';
 
 vi.mock('@/services/system-log-stream', () => ({
   createSystemLogStreamConnection: vi.fn(),
 }));
 
 interface MockConnectionRecord {
-  close: ReturnType<typeof vi.fn>;
+  close: ReturnType<typeof vi.fn<() => void>>;
   onMessage: (entry: SystemLogEntry) => void;
   onStatus?: (status: 'connected' | 'disconnected') => void;
-  pause: ReturnType<typeof vi.fn>;
+  pause: ReturnType<typeof vi.fn<() => void>>;
   query: Record<string, unknown> | undefined;
-  resume: ReturnType<typeof vi.fn>;
-  update: ReturnType<typeof vi.fn>;
+  resume: ReturnType<typeof vi.fn<() => void>>;
+  update: ReturnType<typeof vi.fn<(query: Partial<SystemLogStreamQuery>) => void>>;
 }
 
 const mockCreateSystemLogStreamConnection = vi.mocked(createSystemLogStreamConnection);
@@ -39,13 +44,13 @@ describe('useSystemLogStream', () => {
 
     mockCreateSystemLogStreamConnection.mockImplementation((options) => {
       const record: MockConnectionRecord = {
-        close: vi.fn(),
+        close: vi.fn<() => void>(),
         onMessage: options.onMessage,
         onStatus: options.onStatus,
-        pause: vi.fn(),
+        pause: vi.fn<() => void>(),
         query: options.query as Record<string, unknown> | undefined,
-        resume: vi.fn(),
-        update: vi.fn(),
+        resume: vi.fn<() => void>(),
+        update: vi.fn<(query: Partial<SystemLogStreamQuery>) => void>(),
       };
       connections.push(record);
       return {
@@ -54,7 +59,7 @@ describe('useSystemLogStream', () => {
         resume: record.resume,
         close: record.close,
         isPaused: () => false,
-      };
+      } satisfies SystemLogStreamConnection;
     });
   });
 
