@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { type RouteLocationRaw, useRouter } from 'vue-router';
 import { GridItem, GridLayout } from 'grid-layout-plus';
 import AppIconButton from '@/components/AppIconButton.vue';
@@ -19,10 +19,7 @@ import {
   type DashboardWidgetId,
   type RecentUpdateRow,
 } from './dashboard/dashboardTypes';
-import {
-  clampDashboardScroll,
-  computeDashboardDragScrollDelta,
-} from './dashboard/dashboardDragAutoScroll';
+import { useDashboardDragAutoScroll } from './dashboard/useDashboardDragAutoScroll';
 import { GRID_BREAKPOINTS, GRID_COLS, WIDGET_CONSTRAINTS } from './dashboard/dashboardWidgetLayout';
 import { useDashboardComputed } from './dashboard/useDashboardComputed';
 import { useDashboardData } from './dashboard/useDashboardData';
@@ -50,12 +47,6 @@ const dashboardPendingUpdatePollDelayMs = ref(2_000);
 const DASHBOARD_PENDING_UPDATE_POLL_INTERVAL_MS = 2_000;
 const DASHBOARD_PENDING_UPDATE_POLL_MAX_INTERVAL_MS = 16_000;
 const DASHBOARD_PENDING_UPDATE_TIMEOUT_MS = 30_000;
-const activeDashboardDragPointerId = ref<number | null>(null);
-const dashboardDragPointerEngaged = ref(false);
-const dashboardDragPointerMoved = ref(false);
-const dashboardDragPointerY = ref<number | null>(null);
-let dashboardDragAutoScrollFrame: number | null = null;
-let dashboardDragAutoScrollActive = false;
 
 function isStaleDashboardUpdateError(error: unknown): boolean {
   return isNoUpdateAvailableError(error);
@@ -63,101 +54,6 @@ function isStaleDashboardUpdateError(error: unknown): boolean {
 
 function navigateTo(route: RouteLocationRaw) {
   router.push(route);
-}
-
-function resolveDashboardScrollEl(): HTMLElement | null {
-  if (dashboardScrollEl.value) {
-    return dashboardScrollEl.value;
-  }
-  return document.scrollingElement instanceof HTMLElement ? document.scrollingElement : null;
-}
-
-function stopDashboardDragAutoScroll() {
-  dashboardDragAutoScrollActive = false;
-  dashboardDragPointerEngaged.value = false;
-  dashboardDragPointerMoved.value = false;
-  dashboardDragPointerY.value = null;
-  activeDashboardDragPointerId.value = null;
-  if (dashboardDragAutoScrollFrame !== null) {
-    cancelAnimationFrame(dashboardDragAutoScrollFrame);
-    dashboardDragAutoScrollFrame = null;
-  }
-}
-
-function tickDashboardDragAutoScroll() {
-  if (!dashboardDragAutoScrollActive || !editMode.value || !dashboardDragPointerEngaged.value) {
-    dashboardDragAutoScrollFrame = null;
-    return;
-  }
-
-  const scrollEl = resolveDashboardScrollEl();
-  const pointerY = dashboardDragPointerY.value;
-  if (scrollEl && dashboardDragPointerMoved.value && pointerY !== null) {
-    const delta = computeDashboardDragScrollDelta(pointerY, scrollEl.getBoundingClientRect());
-    if (delta !== 0) {
-      const maxScrollTop = Math.max(0, scrollEl.scrollHeight - scrollEl.clientHeight);
-      if (maxScrollTop > 0) {
-        scrollEl.scrollTop = clampDashboardScroll(scrollEl.scrollTop + delta, 0, maxScrollTop);
-      }
-    }
-  }
-
-  if (!dashboardDragAutoScrollActive || !editMode.value || !dashboardDragPointerEngaged.value) {
-    dashboardDragAutoScrollFrame = null;
-    return;
-  }
-  dashboardDragAutoScrollFrame = requestAnimationFrame(tickDashboardDragAutoScroll);
-}
-
-function ensureDashboardDragAutoScrollLoop() {
-  if (dashboardDragAutoScrollFrame === null) {
-    dashboardDragAutoScrollActive = true;
-    dashboardDragAutoScrollFrame = requestAnimationFrame(tickDashboardDragAutoScroll);
-  }
-}
-
-function handleDashboardGridPointerDown(event: PointerEvent) {
-  if (!editMode.value || !(event.target instanceof Element)) {
-    return;
-  }
-  if (!event.target.closest('.drag-handle')) {
-    return;
-  }
-
-  dashboardDragPointerEngaged.value = true;
-  dashboardDragPointerMoved.value = false;
-  dashboardDragPointerY.value = event.clientY;
-  activeDashboardDragPointerId.value = typeof event.pointerId === 'number' ? event.pointerId : null;
-  ensureDashboardDragAutoScrollLoop();
-}
-
-function handleDashboardPointerMove(event: PointerEvent) {
-  if (!dashboardDragPointerEngaged.value) {
-    return;
-  }
-  if (
-    activeDashboardDragPointerId.value !== null &&
-    event.pointerId !== activeDashboardDragPointerId.value
-  ) {
-    return;
-  }
-
-  dashboardDragPointerMoved.value = true;
-  dashboardDragPointerY.value = event.clientY;
-}
-
-function handleDashboardPointerEnd(event: PointerEvent) {
-  if (!dashboardDragPointerEngaged.value) {
-    return;
-  }
-  if (
-    activeDashboardDragPointerId.value !== null &&
-    event.pointerId !== activeDashboardDragPointerId.value
-  ) {
-    return;
-  }
-
-  stopDashboardDragAutoScroll();
 }
 
 // Delay enabling grid transitions to prevent fly-in on initial load
@@ -185,6 +81,10 @@ const {
   toggleWidgetVisibility,
   widgetOrderIndex,
 } = useDashboardWidgetOrder();
+const { handleDashboardGridPointerDown, stopDashboardDragAutoScroll } = useDashboardDragAutoScroll({
+  editMode,
+  dashboardScrollEl,
+});
 
 // Widget panel visibility (separate from edit mode so it's opt-in on mobile)
 const showWidgetPanel = ref(false);
@@ -216,18 +116,9 @@ function onKeydown(event: KeyboardEvent) {
 }
 onMounted(() => {
   window.addEventListener('keydown', onKeydown);
-  window.addEventListener('pointermove', handleDashboardPointerMove, { passive: true });
-  window.addEventListener('pointerup', handleDashboardPointerEnd, { passive: true });
-  window.addEventListener('pointercancel', handleDashboardPointerEnd, { passive: true });
-  window.addEventListener('blur', stopDashboardDragAutoScroll);
 });
 onUnmounted(() => {
   window.removeEventListener('keydown', onKeydown);
-  window.removeEventListener('pointermove', handleDashboardPointerMove);
-  window.removeEventListener('pointerup', handleDashboardPointerEnd);
-  window.removeEventListener('pointercancel', handleDashboardPointerEnd);
-  window.removeEventListener('blur', stopDashboardDragAutoScroll);
-  stopDashboardDragAutoScroll();
 });
 
 const {
@@ -384,12 +275,6 @@ const statById = computed(() => {
 
 watch(containers, () => {
   pruneDashboardPendingUpdateRows();
-});
-
-watch(editMode, (isEditing) => {
-  if (!isEditing) {
-    stopDashboardDragAutoScroll();
-  }
 });
 
 onUnmounted(() => {
