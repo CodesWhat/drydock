@@ -1,4 +1,5 @@
 import { flushPromises } from '@vue/test-utils';
+import { resetPreferences } from '@/preferences/store';
 import { getAllContainers } from '@/services/container';
 import { getAllWatchers, getWatcher } from '@/services/watcher';
 import WatchersView from '@/views/WatchersView.vue';
@@ -44,6 +45,7 @@ async function mountWatchersView() {
 describe('WatchersView', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetPreferences();
     mockRoute.query = {};
     mockGetWatcher.mockResolvedValue({
       id: 'watcher-alpha',
@@ -230,6 +232,40 @@ describe('WatchersView', () => {
     await wrapper.find('.row-click-first').trigger('click');
     await flushPromises();
 
+    expect(mockGetWatcher).toHaveBeenCalledWith({
+      type: 'docker',
+      name: 'Alpha Watcher',
+      agent: undefined,
+    });
+    expect(wrapper.text()).toContain('*/1 * * * *');
+    expect(wrapper.text()).toContain('30s');
+  });
+
+  it('opens watcher details from cards mode selections', async () => {
+    mockGetAllWatchers.mockResolvedValue([
+      {
+        id: 'watcher-alpha',
+        name: 'Alpha Watcher',
+        type: 'docker',
+        configuration: { cron: '*/5 * * * *' },
+      },
+    ]);
+    mockGetAllContainers.mockResolvedValue([{ id: 'c-1', watcher: 'Alpha Watcher' }]);
+    mockGetWatcher.mockResolvedValue({
+      id: 'watcher-alpha',
+      name: 'Alpha Watcher',
+      type: 'docker',
+      configuration: { cron: '*/1 * * * *', grace: '30s' },
+    });
+
+    const wrapper = await mountWatchersView();
+
+    await wrapper.find('.mode-cards').trigger('click');
+    await flushPromises();
+    await wrapper.find('.card-click-first').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.find('.detail-panel').attributes('data-open')).toBe('true');
     expect(mockGetWatcher).toHaveBeenCalledWith({
       type: 'docker',
       name: 'Alpha Watcher',

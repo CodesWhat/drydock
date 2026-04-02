@@ -1,5 +1,6 @@
 import { flushPromises } from '@vue/test-utils';
 import { nextTick, ref } from 'vue';
+import { resetPreferences } from '@/preferences/store';
 import { getAgents } from '@/services/agent';
 import { getAllContainers } from '@/services/container';
 import { getServer } from '@/services/server';
@@ -59,6 +60,7 @@ async function mountServersView() {
 describe('ServersView', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetPreferences();
     mockGetServer.mockResolvedValue({ name: 'drydock', version: '1.0.0' });
     mockGetAgents.mockResolvedValue([]);
     mockGetAllContainers.mockResolvedValue([]);
@@ -258,6 +260,27 @@ describe('ServersView', () => {
     await wrapper.find('.close-detail').trigger('click');
     await nextTick();
     expect(wrapper.find('.detail-panel').attributes('data-open')).toBe('false');
+  });
+
+  it('opens the detail panel from cards mode selections', async () => {
+    mockGetAgents.mockResolvedValue([
+      { name: 'Edge-1', connected: true, host: '10.0.0.21', port: 2376 },
+    ]);
+    mockGetAllContainers.mockResolvedValue([
+      { id: 'c-local-1', watcher: 'local', status: 'running', image: 'nginx:1.27' },
+      { id: 'c-edge-1', watcher: 'edge-1', status: 'stopped', image: 'redis:7' },
+    ]);
+
+    const wrapper = await mountServersView();
+
+    await wrapper.find('.mode-cards').trigger('click');
+    await flushPromises();
+    await wrapper.find('.card-click-first').trigger('click');
+    await nextTick();
+
+    expect(wrapper.find('.detail-panel').attributes('data-open')).toBe('true');
+    expect(wrapper.text()).toContain('Refresh');
+    expect(wrapper.text()).toContain('unix:///var/run/docker.sock');
   });
 
   it('renders status badge colors for connected and disconnected', async () => {

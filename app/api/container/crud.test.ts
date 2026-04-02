@@ -2345,6 +2345,30 @@ describe('api/container/crud', () => {
       );
     });
 
+    test('omits invalid active update-operation status and phase values from responses', () => {
+      const harness = createHarness({
+        containers: [createContainer({ id: 'c1', name: 'edge-api' })],
+      });
+      harness.deps.updateOperationStore.getInProgressOperationByContainerName.mockReturnValue({
+        id: 'op-1',
+        status: 'success',
+        phase: 'complete',
+        updatedAt: '2026-04-01T12:00:00.000Z',
+      });
+
+      const listRes = callGetContainers(harness.handlers);
+      const singleRes = callGetContainer(harness.handlers, 'c1');
+
+      expect(listRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: [expect.not.objectContaining({ updateOperation: expect.anything() })],
+        }),
+      );
+      expect(singleRes.json).toHaveBeenCalledWith(
+        expect.not.objectContaining({ updateOperation: expect.anything() }),
+      );
+    });
+
     test('returns update-operation history for an existing container', () => {
       const harness = createHarness({
         containers: [createContainer({ id: 'c1', name: 'edge-api' })],

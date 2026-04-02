@@ -36,6 +36,7 @@ class MockWebSocket {
 function makeEntryPayload(overrides: Record<string, unknown> = {}) {
   return JSON.stringify({
     timestamp: Date.now(),
+    displayTimestamp: '08:00:00.000',
     level: 'info',
     component: 'drydock',
     msg: 'test message',

@@ -448,6 +448,27 @@ test('ensureClientInitialized should preserve a newer initialization promise whe
   expect(oidc.clientInitializationPromise).toBe(replacementPromise);
 });
 
+test('ensureClientInitialized should share a single discovery attempt across concurrent callers', async () => {
+  oidc.client = undefined;
+  let resolveDiscovery!: () => void;
+  const discoveryPromise = new Promise<void>((resolve) => {
+    resolveDiscovery = resolve;
+  });
+  const discoverClientSpy = vi
+    .spyOn(oidc, 'discoverClient')
+    .mockReturnValue(discoveryPromise as Promise<any>);
+
+  const firstInitialization = oidc.ensureClientInitialized();
+  const secondInitialization = oidc.ensureClientInitialized();
+  resolveDiscovery();
+
+  await expect(Promise.all([firstInitialization, secondInitialization])).resolves.toEqual([
+    undefined,
+    undefined,
+  ]);
+  expect(discoverClientSpy).toHaveBeenCalledTimes(1);
+});
+
 test('getAllowedAuthorizationRedirects should tolerate malformed urls and normalize root endpoint path', () => {
   oidc.configuration = {
     ...configurationValid,
