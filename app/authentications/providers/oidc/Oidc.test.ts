@@ -396,6 +396,58 @@ test('getStrategyDescription should return strategy description', async () => {
   });
 });
 
+test('getStrategyDescription should fall back to configured logouturl when discovery has not set one', async () => {
+  oidc.logoutUrl = undefined;
+  oidc.configuration = {
+    ...configurationValid,
+    logouturl: 'https://idp.example.com/logout',
+  };
+
+  expect(oidc.getStrategyDescription()).toEqual({
+    type: 'oidc',
+    name: oidc.name,
+    redirect: false,
+    logoutUrl: 'https://idp.example.com/logout',
+  });
+});
+
+test('getInitializedClient should throw when the client is not initialized', async () => {
+  oidc.client = undefined;
+
+  expect(() => oidc.getInitializedClient()).toThrowError('OIDC client is not initialized');
+});
+
+test('ensureClientInitialized should reuse an in-flight initialization promise', async () => {
+  oidc.client = undefined;
+  oidc.clientInitializationPromise = Promise.resolve();
+  const discoverClientSpy = vi.spyOn(oidc, 'discoverClient');
+
+  await oidc.ensureClientInitialized();
+
+  expect(discoverClientSpy).not.toHaveBeenCalled();
+});
+
+test('ensureClientInitialized should preserve a newer initialization promise when an older attempt settles', async () => {
+  oidc.client = undefined;
+  let resolveDiscovery!: () => void;
+  const discoveryPromise = new Promise<void>((resolve) => {
+    resolveDiscovery = resolve;
+  });
+  const discoverClientSpy = vi
+    .spyOn(oidc, 'discoverClient')
+    .mockReturnValue(discoveryPromise as Promise<any>);
+
+  const initialization = oidc.ensureClientInitialized();
+  const replacementPromise = Promise.resolve();
+  oidc.clientInitializationPromise = replacementPromise;
+  resolveDiscovery();
+
+  await initialization;
+
+  expect(discoverClientSpy).toHaveBeenCalledTimes(1);
+  expect(oidc.clientInitializationPromise).toBe(replacementPromise);
+});
+
 test('getAllowedAuthorizationRedirects should tolerate malformed urls and normalize root endpoint path', () => {
   oidc.configuration = {
     ...configurationValid,

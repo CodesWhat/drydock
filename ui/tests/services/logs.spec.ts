@@ -115,6 +115,27 @@ describe('logs service', () => {
       expect(socket.close).toHaveBeenCalledWith(1000, 'manual-close');
     });
 
+    it('ignores frames with invalid display timestamp metadata', () => {
+      const onMessage = vi.fn();
+
+      createContainerLogStreamConnection({
+        containerId: 'container-1',
+        onMessage,
+        webSocketFactory: (url) => new MockWebSocket(url) as unknown as WebSocket,
+        location: {
+          protocol: 'http:',
+          host: 'localhost:3000',
+        } as Location,
+      });
+
+      const socket = MockWebSocket.instances[0];
+      socket.emitMessage(
+        '{"type":"stdout","ts":"2026-03-15T00:00:00Z","displayTs":123,"line":"ignored"}',
+      );
+
+      expect(onMessage).not.toHaveBeenCalled();
+    });
+
     it('supports update, pause, and resume lifecycle controls', () => {
       const connection = createContainerLogStreamConnection({
         containerId: 'container-1',

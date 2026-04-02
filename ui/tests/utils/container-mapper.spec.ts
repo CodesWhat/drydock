@@ -75,6 +75,44 @@ describe('container-mapper', () => {
         toVersion: '1.1.0',
       });
     });
+
+    it('drops malformed update-operation payloads missing required fields', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateOperation: {
+            id: 'op-1',
+            status: 'in-progress',
+            phase: 'old-stopped',
+          },
+        }),
+      );
+
+      expect(c.updateOperation).toBeUndefined();
+    });
+
+    it('keeps only optional string metadata from update-operation payloads', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateOperation: {
+            id: 'op-1',
+            status: 'in-progress',
+            phase: 'old-stopped',
+            updatedAt: '2026-04-01T12:00:00.000Z',
+            fromVersion: 123,
+            toVersion: null,
+            targetImage: 'nginx:1.1.0',
+          },
+        }),
+      );
+
+      expect(c.updateOperation).toEqual({
+        id: 'op-1',
+        status: 'in-progress',
+        phase: 'old-stopped',
+        updatedAt: '2026-04-01T12:00:00.000Z',
+        targetImage: 'nginx:1.1.0',
+      });
+    });
   });
 
   describe('deriveRegistry', () => {
