@@ -533,7 +533,12 @@ describe('ContainerUpdateExecutor', () => {
 
     expect(executor.stopContainer).toHaveBeenCalled();
     expect(executor.startContainer).toHaveBeenCalledWith(context.newContainer, 'web', log);
-    expect(executor.waitForContainerHealthy).toHaveBeenCalledWith(context.newContainer, 'web', log);
+    expect(executor.waitForContainerHealthy).toHaveBeenCalledWith(
+      context.newContainer,
+      'web',
+      log,
+      undefined,
+    );
     expect(executor.waitContainerRemoved).toHaveBeenCalled();
     expect(log.info).toHaveBeenCalledWith(
       expect.stringContaining('was already removed during cleanup'),
@@ -546,6 +551,30 @@ describe('ContainerUpdateExecutor', () => {
       expect.objectContaining({
         phase: 'health-gate-passed',
       }),
+    );
+  });
+
+  test('execute passes rollback window to health gate when auto-rollback is enabled', async () => {
+    const context = createContext({
+      currentContainerSpec: createCurrentContainerSpec({
+        State: { Running: true },
+        HostConfig: { AutoRemove: false },
+      }),
+    });
+    const executor = createExecutor({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      getRollbackConfig: vi.fn(() => ({ autoRollback: true, rollbackWindow: 300_000 })),
+      hasHealthcheckConfigured: vi.fn(() => true),
+    });
+    const log = createLog();
+
+    await expect(executor.execute(context, createContainer(), log)).resolves.toBe(true);
+
+    expect(executor.waitForContainerHealthy).toHaveBeenCalledWith(
+      context.newContainer,
+      'web',
+      log,
+      300_000,
     );
   });
 

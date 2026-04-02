@@ -2942,6 +2942,7 @@ describe('executeContainerUpdate', () => {
       context._mockNewContainer,
       'container-name',
       logContainer,
+      300_000,
     );
     expect(mockUpdateOperation).toHaveBeenCalledWith(
       expect.any(String),
@@ -3707,6 +3708,31 @@ describe('additional direct wrapper coverage', () => {
       );
       await vi.advanceTimersByTimeAsync(5_000);
       await expect(waitPromise).rejects.toThrow('Health gate timed out');
+    } finally {
+      dateNowSpy.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  test('waitForContainerHealthy should honor a larger caller-provided timeout', async () => {
+    vi.useFakeTimers();
+    const dateNowSpy = vi.spyOn(Date, 'now');
+    dateNowSpy.mockReturnValueOnce(0).mockReturnValueOnce(300_000).mockReturnValueOnce(600_001);
+    const containerToCheck = {
+      inspect: vi.fn().mockResolvedValue({ State: { Health: { Status: 'starting' } } }),
+    };
+
+    try {
+      const waitPromise = docker.waitForContainerHealthy(
+        containerToCheck as any,
+        'web',
+        createMockLog('info', 'warn', 'debug'),
+        600_000,
+      );
+      const rejection = expect(waitPromise).rejects.toThrow('Health gate timed out');
+      await vi.advanceTimersByTimeAsync(5_000);
+      await rejection;
+      expect(containerToCheck.inspect).toHaveBeenCalledTimes(1);
     } finally {
       dateNowSpy.mockRestore();
       vi.useRealTimers();

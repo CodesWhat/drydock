@@ -1113,6 +1113,7 @@ describe('executeContainerUpdate', () => {
       context._mockNewContainer,
       'container-name',
       logContainer,
+      300_000,
     );
     expect(mockUpdateOperation).toHaveBeenCalledWith(
       expect.any(String),

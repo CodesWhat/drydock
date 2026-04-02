@@ -79,6 +79,7 @@ type PreparedContainerUpdateExecution = {
   tempName: string;
   wasRunning: boolean;
   shouldHealthGate: boolean;
+  healthGateTimeoutMs?: number;
   operationId: string;
 };
 
@@ -99,6 +100,7 @@ type RollbackTelemetryPayload = {
 
 type RollbackConfig = {
   autoRollback?: boolean;
+  rollbackWindow?: number;
   [key: string]: unknown;
 };
 
@@ -170,6 +172,7 @@ type ContainerUpdateExecutorDependencies = {
     container: DockerContainerHandle,
     containerName: string,
     logContainer: ContainerUpdateLogger,
+    timeoutMs?: number,
   ) => Promise<void>;
 };
 
@@ -522,6 +525,7 @@ class ContainerUpdateExecutor {
       wasRunning &&
       rollbackConfig.autoRollback === true &&
       this.hasHealthcheckConfigured(currentContainerSpec);
+    const healthGateTimeoutMs = shouldHealthGate ? rollbackConfig.rollbackWindow : undefined;
 
     const operation = updateOperationStore.insertOperation({
       containerId: container.id,
@@ -582,6 +586,7 @@ class ContainerUpdateExecutor {
       tempName,
       wasRunning,
       shouldHealthGate,
+      healthGateTimeoutMs,
       operationId: operation.id,
     };
   }
@@ -674,7 +679,12 @@ class ContainerUpdateExecutor {
 
     attemptState.failureReason = 'health_gate_failed';
     updateOperationStore.updateOperation(preparedExecution.operationId, { phase: 'health-gate' });
-    await this.waitForContainerHealthy(newContainer, preparedExecution.oldName, logContainer);
+    await this.waitForContainerHealthy(
+      newContainer,
+      preparedExecution.oldName,
+      logContainer,
+      preparedExecution.healthGateTimeoutMs,
+    );
     updateOperationStore.updateOperation(preparedExecution.operationId, {
       phase: 'health-gate-passed',
     });
