@@ -77,17 +77,10 @@ export function buildLiteralTemplateExpression(expression: string): string {
   return '$' + '{' + expression + '}';
 }
 
-const AGENT_DISCONNECT_SIMPLE_TITLE_TEMPLATE =
-  'Agent ' + buildLiteralTemplateExpression('event.agentName') + ' disconnected';
-const AGENT_DISCONNECT_SIMPLE_BODY_TEMPLATE =
-  'Agent ' +
-  buildLiteralTemplateExpression('event.agentName') +
-  ' disconnected' +
-  buildLiteralTemplateExpression('event.reason ? ": " + event.reason : ""');
-const AGENT_RECONNECT_SIMPLE_TITLE_TEMPLATE =
-  'Agent ' + buildLiteralTemplateExpression('event.agentName') + ' reconnected';
-const AGENT_RECONNECT_SIMPLE_BODY_TEMPLATE =
-  'Agent ' + buildLiteralTemplateExpression('event.agentName') + ' reconnected';
+const AGENT_DISCONNECT_SIMPLE_TITLE_TEMPLATE = `Agent ${buildLiteralTemplateExpression('event.agentName')} disconnected`;
+const AGENT_DISCONNECT_SIMPLE_BODY_TEMPLATE = `Agent ${buildLiteralTemplateExpression('event.agentName')} disconnected${buildLiteralTemplateExpression('event.reason ? ": " + event.reason : ""')}`;
+const AGENT_RECONNECT_SIMPLE_TITLE_TEMPLATE = `Agent ${buildLiteralTemplateExpression('event.agentName')} reconnected`;
+const AGENT_RECONNECT_SIMPLE_BODY_TEMPLATE = `Agent ${buildLiteralTemplateExpression('event.agentName')} reconnected`;
 const AGENT_SIMPLE_TITLE_TEMPLATES: Record<TriggerNotificationEvent['kind'], string> = {
   'agent-disconnect': AGENT_DISCONNECT_SIMPLE_TITLE_TEMPLATE,
   'agent-reconnect': AGENT_RECONNECT_SIMPLE_TITLE_TEMPLATE,

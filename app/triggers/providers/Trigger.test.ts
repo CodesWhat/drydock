@@ -1211,7 +1211,7 @@ test('getNotificationEvent should return reconnect metadata for agent reconnect 
 });
 
 test('buildLiteralTemplateExpression should build literal template syntax', () => {
-  expect(buildLiteralTemplateExpression('event.agentName')).toBe('$' + '{event.agentName}');
+  expect(buildLiteralTemplateExpression('event.agentName')).toBe(`$\{event.agentName}`);
 });
 
 test('resolveNotificationTemplate falls back when a notification kind has no dedicated template', () => {
@@ -1222,8 +1222,7 @@ test('resolveNotificationTemplate falls back when a notification kind has no ded
         agentName: 'servicevault',
       },
       {
-        'agent-disconnect':
-          'Agent ' + buildLiteralTemplateExpression('event.agentName') + ' disconnected',
+        'agent-disconnect': `Agent ${buildLiteralTemplateExpression('event.agentName')} disconnected`,
         'agent-reconnect': undefined as unknown as string,
       },
       'Fallback template',
