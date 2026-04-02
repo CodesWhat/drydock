@@ -66,9 +66,9 @@ export default function AxiosAdvisoryPage() {
               <p className="text-emerald-800 dark:text-emerald-300">
                 Drydock&apos;s lockfile pinned axios at v1.13.6 throughout the exposure window. The
                 compromised versions (1.14.1 and 0.30.4) were never installed, resolved, or executed
-                in any Drydock environment. As an additional defense-in-depth measure, all dependency
-                versions across the project have been pinned to exact versions, eliminating semver
-                range resolution as an attack vector.
+                in any Drydock environment. As an additional defense-in-depth measure, all
+                dependency versions across the project have been pinned to exact versions,
+                eliminating semver range resolution as an attack vector.
               </p>
             </div>
 
@@ -203,11 +203,11 @@ export default function AxiosAdvisoryPage() {
 
               <h3>3. All versions now pinned to exact</h3>
               <p>
-                As a defense-in-depth response, all dependency versions across{" "}
-                <code>app/</code>, <code>ui/</code>, and <code>e2e/</code> workspaces have been
-                pinned to exact resolved versions (no <code>^</code> or <code>~</code> ranges).
-                This eliminates the risk of semver range resolution pulling in a future compromised
-                version, even if the lockfile is regenerated.
+                As a defense-in-depth response, all dependency versions across <code>app/</code>,{" "}
+                <code>ui/</code>, and <code>e2e/</code> workspaces have been pinned to exact
+                resolved versions (no <code>^</code> or <code>~</code> ranges). This eliminates the
+                risk of semver range resolution pulling in a future compromised version, even if the
+                lockfile is regenerated.
               </p>
               <pre>
                 <code>{`# Before (vulnerable to range resolution)
@@ -278,11 +278,7 @@ ls node_modules/plain-crypto-js 2>/dev/null && echo "COMPROMISED" || echo "CLEAN
                   </a>
                 </li>
                 <li>
-                  <a
-                    href="https://socket.dev"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
+                  <a href="https://socket.dev" target="_blank" rel="noopener noreferrer">
                     Socket &mdash; npm malware detection (detected within 6 minutes)
                   </a>
                 </li>

@@ -74,7 +74,7 @@ const AUTO_EVENT_BATCH_FLUSH_DELAY_MS = 250;
 const TRIGGER_RELEASE_NOTES_BODY_MAX_LENGTH = 500;
 const ACTION_TRIGGER_TYPES = new Set(['command', 'docker', 'dockercompose']);
 export function buildLiteralTemplateExpression(expression: string): string {
-  return '$' + '{' + expression + '}';
+  return `\${${expression}}`;
 }
 
 const AGENT_DISCONNECT_SIMPLE_TITLE_TEMPLATE = `Agent ${buildLiteralTemplateExpression('event.agentName')} disconnected`;
