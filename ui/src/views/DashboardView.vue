@@ -19,6 +19,10 @@ import {
   type DashboardWidgetId,
   type RecentUpdateRow,
 } from './dashboard/dashboardTypes';
+import {
+  clampDashboardScroll,
+  computeDashboardDragScrollDelta,
+} from './dashboard/dashboardDragAutoScroll';
 import { GRID_BREAKPOINTS, GRID_COLS, WIDGET_CONSTRAINTS } from './dashboard/dashboardWidgetLayout';
 import { useDashboardComputed } from './dashboard/useDashboardComputed';
 import { useDashboardData } from './dashboard/useDashboardData';
@@ -44,8 +48,6 @@ const dashboardPendingUpdatePollTimer = ref<ReturnType<typeof setInterval> | nul
 const dashboardPendingUpdatePollInFlight = ref(false);
 const DASHBOARD_PENDING_UPDATE_POLL_INTERVAL_MS = 2_000;
 const DASHBOARD_PENDING_UPDATE_TIMEOUT_MS = 30_000;
-const DASHBOARD_DRAG_EDGE_THRESHOLD_PX = 72;
-const DASHBOARD_DRAG_MAX_SCROLL_STEP_PX = 24;
 const activeDashboardDragPointerId = ref<number | null>(null);
 const dashboardDragPointerEngaged = ref(false);
 const dashboardDragPointerMoved = ref(false);
@@ -58,29 +60,6 @@ function isStaleDashboardUpdateError(error: unknown): boolean {
 
 function navigateTo(route: RouteLocationRaw) {
   router.push(route);
-}
-
-function clampDashboardScroll(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
-}
-
-function computeDashboardDragScrollDelta(
-  clientY: number,
-  rect: Pick<DOMRect, 'bottom' | 'top'>,
-): number {
-  const topEdge = rect.top + DASHBOARD_DRAG_EDGE_THRESHOLD_PX;
-  if (clientY <= topEdge) {
-    const ratio = Math.min(1, (topEdge - clientY) / DASHBOARD_DRAG_EDGE_THRESHOLD_PX);
-    return -Math.max(1, Math.round(ratio * DASHBOARD_DRAG_MAX_SCROLL_STEP_PX));
-  }
-
-  const bottomEdge = rect.bottom - DASHBOARD_DRAG_EDGE_THRESHOLD_PX;
-  if (clientY >= bottomEdge) {
-    const ratio = Math.min(1, (clientY - bottomEdge) / DASHBOARD_DRAG_EDGE_THRESHOLD_PX);
-    return Math.max(1, Math.round(ratio * DASHBOARD_DRAG_MAX_SCROLL_STEP_PX));
-  }
-
-  return 0;
 }
 
 function resolveDashboardScrollEl(): HTMLElement | null {

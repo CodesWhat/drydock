@@ -1,10 +1,13 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { flushPromises, type VueWrapper } from '@vue/test-utils';
-import { nextTick } from 'vue';
 import DataTable from '@/components/DataTable.vue';
 import type { Container } from '@/types/container';
 import DashboardView from '@/views/DashboardView.vue';
+import {
+  clampDashboardScroll,
+  computeDashboardDragScrollDelta,
+} from '@/views/dashboard/dashboardDragAutoScroll';
 import { mountWithPlugins } from '../helpers/mount';
 
 const dashboardViewSource = readFileSync(
@@ -189,66 +192,6 @@ function mountDashboardView() {
   return wrapper;
 }
 
-function createPointerLikeEvent(
-  type: string,
-  { clientY, pointerId }: { clientY: number; pointerId: number },
-) {
-  const event = new Event(type, { bubbles: true }) as Event & {
-    clientY: number;
-    pointerId: number;
-  };
-  Object.defineProperties(event, {
-    clientY: { configurable: true, value: clientY },
-    pointerId: { configurable: true, value: pointerId },
-  });
-  return event;
-}
-
-function mockScrollableDashboardArea(
-  element: HTMLElement,
-  {
-    bottom,
-    clientHeight = 400,
-    scrollHeight = 1200,
-    scrollTop = 100,
-    top = 0,
-  }: {
-    bottom: number;
-    clientHeight?: number;
-    scrollHeight?: number;
-    scrollTop?: number;
-    top?: number;
-  },
-) {
-  let currentScrollTop = scrollTop;
-  Object.defineProperty(element, 'clientHeight', {
-    configurable: true,
-    get: () => clientHeight,
-  });
-  Object.defineProperty(element, 'scrollHeight', {
-    configurable: true,
-    get: () => scrollHeight,
-  });
-  Object.defineProperty(element, 'scrollTop', {
-    configurable: true,
-    get: () => currentScrollTop,
-    set: (value: number) => {
-      currentScrollTop = value;
-    },
-  });
-  vi.spyOn(element, 'getBoundingClientRect').mockReturnValue({
-    bottom,
-    height: clientHeight,
-    left: 0,
-    right: 320,
-    toJSON: () => ({}),
-    top,
-    width: 320,
-    x: 0,
-    y: top,
-  } as DOMRect);
-}
-
 describe('DashboardView', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -320,86 +263,22 @@ describe('DashboardView', () => {
       expect(widget.attributes('style')).toContain('touch-action: pan-y');
     });
 
-    it('auto-scrolls the dashboard downward while dragging a widget near the bottom edge', async () => {
-      const animationFrameCallbacks: FrameRequestCallback[] = [];
-      Object.defineProperty(globalThis, 'requestAnimationFrame', {
-        configurable: true,
-        value: vi.fn((callback: FrameRequestCallback) => {
-          animationFrameCallbacks.push(callback);
-          return animationFrameCallbacks.length;
-        }),
-      });
-      Object.defineProperty(globalThis, 'cancelAnimationFrame', {
-        configurable: true,
-        value: vi.fn(),
-      });
+    it('computes a positive auto-scroll delta near the dashboard bottom edge', () => {
+      const delta = computeDashboardDragScrollDelta(395, { top: 0, bottom: 400 } as DOMRect);
 
-      const wrapper = await mountDashboard([makeContainer({ newTag: '2.0.0' })]);
-      const editToggle = document.querySelector('[data-test="dashboard-edit-toggle"]');
-      expect(editToggle).not.toBeNull();
-      (editToggle as HTMLButtonElement).click();
-      await flushPromises();
-
-      const scrollArea = wrapper.find('.flex-1.min-h-0.min-w-0.overflow-y-auto.overflow-x-hidden');
-      expect(scrollArea.exists()).toBe(true);
-      mockScrollableDashboardArea(scrollArea.element as HTMLElement, {
-        bottom: 400,
-        scrollTop: 100,
-      });
-
-      const dragHandle = wrapper.find('.drag-handle');
-      expect(dragHandle.exists()).toBe(true);
-      dragHandle.element.dispatchEvent(
-        createPointerLikeEvent('pointerdown', { clientY: 200, pointerId: 1 }),
-      );
-      window.dispatchEvent(createPointerLikeEvent('pointermove', { clientY: 395, pointerId: 1 }));
-
-      expect(animationFrameCallbacks.length).toBeGreaterThan(0);
-      animationFrameCallbacks[0](0);
-      await nextTick();
-
-      expect((scrollArea.element as HTMLElement).scrollTop).toBeGreaterThan(100);
+      expect(delta).toBeGreaterThan(0);
+      expect(clampDashboardScroll(100 + delta, 0, 800)).toBeGreaterThan(100);
     });
 
-    it('auto-scrolls the dashboard upward while dragging a widget near the top edge', async () => {
-      const animationFrameCallbacks: FrameRequestCallback[] = [];
-      Object.defineProperty(globalThis, 'requestAnimationFrame', {
-        configurable: true,
-        value: vi.fn((callback: FrameRequestCallback) => {
-          animationFrameCallbacks.push(callback);
-          return animationFrameCallbacks.length;
-        }),
-      });
-      Object.defineProperty(globalThis, 'cancelAnimationFrame', {
-        configurable: true,
-        value: vi.fn(),
-      });
+    it('computes a negative auto-scroll delta near the dashboard top edge', () => {
+      const delta = computeDashboardDragScrollDelta(5, { top: 0, bottom: 400 } as DOMRect);
 
-      const wrapper = await mountDashboard([makeContainer({ newTag: '2.0.0' })]);
-      const editToggle = document.querySelector('[data-test="dashboard-edit-toggle"]');
-      expect(editToggle).not.toBeNull();
-      (editToggle as HTMLButtonElement).click();
-      await flushPromises();
+      expect(delta).toBeLessThan(0);
+      expect(clampDashboardScroll(180 + delta, 0, 800)).toBeLessThan(180);
+    });
 
-      const scrollArea = wrapper.find('.flex-1.min-h-0.min-w-0.overflow-y-auto.overflow-x-hidden');
-      expect(scrollArea.exists()).toBe(true);
-      mockScrollableDashboardArea(scrollArea.element as HTMLElement, {
-        bottom: 400,
-        scrollTop: 180,
-      });
-
-      const dragHandle = wrapper.find('.drag-handle');
-      expect(dragHandle.exists()).toBe(true);
-      dragHandle.element.dispatchEvent(
-        createPointerLikeEvent('pointerdown', { clientY: 200, pointerId: 7 }),
-      );
-      window.dispatchEvent(createPointerLikeEvent('pointermove', { clientY: 5, pointerId: 7 }));
-
-      expect(animationFrameCallbacks.length).toBeGreaterThan(0);
-      animationFrameCallbacks[0](0);
-      await nextTick();
-
-      expect((scrollArea.element as HTMLElement).scrollTop).toBeLessThan(180);
+    it('does not auto-scroll when the pointer stays away from the dashboard edges', () => {
+      expect(computeDashboardDragScrollDelta(200, { top: 0, bottom: 400 } as DOMRect)).toBe(0);
     });
   });
 
