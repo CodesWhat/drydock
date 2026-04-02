@@ -131,6 +131,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Digest mode buffer lost on failed flush** — Digest buffer entries are now retained when a batch send fails instead of being cleared. Overlapping flush guard prevents concurrent digest dispatches. ([#249](https://github.com/CodesWhat/drydock/issues/249))
 - **Host Status widget scroll snapping** — `snap-y snap-mandatory` plus trailing spacer so the widget always settles on a full row instead of resting on partial rows. ([#217](https://github.com/CodesWhat/drydock/issues/217))
 - **Digest watch lost for Docker Hub containers with recovered tags** — Digest watch now stays enabled when Docker summary exposes a `sha256:…` image but container inspect recovers a tagged reference like `:latest`. Prevents update detection from regressing to "suggested tag only" on Docker Hub. ([#192](https://github.com/CodesWhat/drydock/issues/192))
+- **Dashboard drag-scroll orphaned loops** — Auto-scroll rAF loop now tracks an explicit active flag, cleared on edit-mode exit and Escape keypress. Prevents orphaned scroll loops when edit mode is toggled rapidly.
+- **Pending update settlement status** — `isPendingUpdateSettled` now derives expected status from snapshot or live container (not snapshot-only), fixing cases where the settlement check short-circuited when no snapshot was captured. ([#248](https://github.com/CodesWhat/drydock/issues/248))
+- **Dashboard pending update poll backoff** — Polling switches from fixed-interval `setInterval` to chained `setTimeout` with exponential backoff (2s → 16s cap), reducing unnecessary fetches for slow updates.
 
 ### Accessibility
 
@@ -144,6 +147,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **WebSocket origin and lockout hardening** — Added stricter WebSocket origin validation and safer lockout file-permission handling.
 - **Trivy supply chain advisory** — Published advisory page and site banner for Trivy supply chain compromise. Pinned Trivy versions and corrected advisory details.
 - **Security bouncer enforcement on container updates** — Update and Update All actions now enforce the security bouncer gate, surfacing blocked-update reasons in the UI instead of silently failing.
+- **Agent log entry sanitization** — Agent log proxy endpoint now uses an allowlist-based normalizer that only forwards known fields (timestamp, level, component, msg, message, displayTimestamp), preventing unexpected or sensitive properties from leaking through.
 
 ### Dependencies
 
@@ -151,6 +155,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Vite 7.3 upgraded to 8.0** — Migrated to Vite 8.0 with Rolldown bundler.
 - **Patch/minor dependency bumps** — Updated all patch/minor dependencies and upgraded knip to v6.
 - **Vulnerable transitive dependency patches** — nodemailer 8.0.3→8.0.4, picomatch→4.0.4, brace-expansion→5.0.5, smol-toml→1.6.1, yaml→2.8.3.
+- **next 16.2.1→16.2.2** — CVE-2025-59472 (GHSA-5f7q-jpqc-wp7h).
+- **lodash 4.17.23→4.18.1** — CVE-2026-2950 (GHSA-f23m-r3pf-42rh), CVE-2026-4800 (GHSA-r5fr-rjxr-66jc).
 
 ### Testing
 

@@ -152,12 +152,12 @@ See the [Quick Start guide](https://getdrydock.com/docs/quickstart) for Docker C
 
 - **Real-time container log viewer** — WebSocket-based live log streaming with ANSI color rendering, JSON syntax highlighting, regex search, and gzip download.
 - **Dashboard customization** — Drag-to-reorder, resize, and per-widget visibility toggles with a dedicated edit mode.
+- **Multi-host same-name container support** — Containers with identical names across different hosts no longer collide in the UI. Actions, logs, and detail panels route by container ID.
 - **Digest notifications** — Batch update events with `MODE=digest` and configurable `DIGESTCRON`.
-- **Design system components** — `AppIconButton`, `AppBadge`, `StatusDot`, `DetailField`, `AppTabBar` with WCAG 2.5.8 touch targets.
+- **Lazy OIDC discovery** — SSO provider startup failures no longer block the server. Discovery retries on first use.
+- **Digest watch for Docker Hub** — Digest-pinned containers (e.g. Portainer Agent) now detect updates even when Docker recovers a tagged reference from inspect.
 - **Floating tag detection** — `tagPrecision` classifier warns when mutable aliases like `v3` are used without digest watching.
 - **Podman compatibility** — API version negotiation prevents `EAI_AGAIN` crashes with Podman socket connections.
-- **Bearer token auth for `/metrics`** — `DD_SERVER_METRICS_TOKEN` for Prometheus scrapers without session auth.
-- **Toast notifications** — Success/error feedback for all container actions with auto-dismiss.
 
 <hr>
 
