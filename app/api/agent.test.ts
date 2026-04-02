@@ -342,6 +342,55 @@ describe('Agent Log Entries Route', () => {
     ]);
   });
 
+  test('should normalize entries with string timestamps', async () => {
+    mockGetAgent.mockReturnValue({
+      isConnected: true,
+      getLogEntries: vi.fn().mockResolvedValue([
+        {
+          timestamp: '2026-04-02T12:00:00.000Z',
+          level: 'info',
+          component: 'test',
+          msg: 'hello',
+        },
+      ]),
+    });
+
+    const req = createMockRequest({
+      params: { name: 'agent-1' },
+      query: {},
+    });
+    const res = createResponse();
+
+    await handler(req, res);
+
+    const result = (res.json as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(result[0].timestamp).toBe('2026-04-02T12:00:00.000Z');
+    expect(result[0].displayTimestamp).toBeDefined();
+  });
+
+  test('should drop non-finite numeric timestamps and non-string/non-number timestamp values', async () => {
+    mockGetAgent.mockReturnValue({
+      isConnected: true,
+      getLogEntries: vi.fn().mockResolvedValue([
+        { timestamp: Number.POSITIVE_INFINITY, level: 'info', msg: 'inf' },
+        { timestamp: { nested: true }, level: 'warn', msg: 'obj' },
+      ]),
+    });
+
+    const req = createMockRequest({
+      params: { name: 'agent-1' },
+      query: {},
+    });
+    const res = createResponse();
+
+    await handler(req, res);
+
+    const result = (res.json as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(result[0].timestamp).toBeUndefined();
+    expect(result[0].displayTimestamp).toBe('-');
+    expect(result[1].timestamp).toBeUndefined();
+  });
+
   test('should leave non-object log entries unchanged when normalizing arrays', async () => {
     mockGetAgent.mockReturnValue({
       isConnected: true,
