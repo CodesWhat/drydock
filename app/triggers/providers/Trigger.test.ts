@@ -2959,6 +2959,37 @@ describe('digest mode', () => {
     triggerBatchSpy.mockRestore();
   });
 
+  test('flushDigestBuffer should retain buffered updates when triggerBatch throws', async () => {
+    await trigger.register('trigger', 'test', 'digest-trigger', {
+      ...configurationValid,
+      mode: 'digest',
+    });
+    trigger.init();
+
+    await trigger.handleContainerReportDigest({
+      container: {
+        id: 'c1',
+        name: 'app',
+        watcher: 'test',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      },
+      changed: true,
+    });
+
+    const triggerBatchSpy = vi
+      .spyOn(trigger, 'triggerBatch')
+      .mockRejectedValueOnce(new Error('SMTP down'))
+      .mockResolvedValueOnce(undefined);
+
+    await trigger.flushDigestBuffer();
+    await trigger.flushDigestBuffer();
+
+    expect(triggerBatchSpy).toHaveBeenCalledTimes(2);
+    expect(triggerBatchSpy).toHaveBeenNthCalledWith(2, [expect.objectContaining({ name: 'app' })]);
+    triggerBatchSpy.mockRestore();
+  });
+
   test('digest cron callback should invoke flushDigestBuffer', async () => {
     await trigger.register('trigger', 'test', 'digest-trigger', {
       ...configurationValid,

@@ -253,6 +253,7 @@ class Trigger extends Component {
   private readonly eventBatchDispatches: Map<NotificationRuleId, EventBatchDispatchState> =
     new Map();
   private digestCronTask?: ScheduledTask;
+  private isDigestFlushInProgress = false;
 
   static getSupportedThresholds() {
     return [...SUPPORTED_THRESHOLDS];
@@ -774,21 +775,32 @@ class Trigger extends Component {
    * accumulated containers, then clear the buffer.
    */
   async flushDigestBuffer() {
+    if (this.isDigestFlushInProgress) {
+      this.log.debug('Digest flush already in progress');
+      return;
+    }
     if (this.digestBuffer.size === 0) {
       this.log.debug('Digest cron fired — buffer empty, nothing to send');
       return;
     }
-    const containers = Array.from(this.digestBuffer.values());
-    this.digestBuffer.clear();
+    const bufferedEntries = Array.from(this.digestBuffer.entries());
+    const containers = bufferedEntries.map(([, container]) => container);
     this.log.info(`Digest flush: sending ${containers.length} update(s)`);
     let status: 'success' | 'error' = 'error';
+    this.isDigestFlushInProgress = true;
     try {
       await this.triggerBatch(containers);
       status = 'success';
+      for (const [containerName, bufferedContainer] of bufferedEntries) {
+        if (this.digestBuffer.get(containerName) === bufferedContainer) {
+          this.digestBuffer.delete(containerName);
+        }
+      }
     } catch (e: unknown) {
       this.log.warn(`Digest flush failed (${Trigger.getErrorMessage(e)})`);
       this.log.debug(e);
     } finally {
+      this.isDigestFlushInProgress = false;
       this.incrementTriggerCounter(status);
     }
   }
@@ -982,6 +994,7 @@ class Trigger extends Component {
 
     this.digestCronTask?.stop();
     this.digestCronTask = undefined;
+    this.isDigestFlushInProgress = false;
     this.digestBuffer.clear();
     this.clearEventBatchDispatches();
 
