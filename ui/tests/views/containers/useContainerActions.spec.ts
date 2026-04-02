@@ -5,6 +5,7 @@ import type { Container } from '@/types/container';
 import { daysToMs } from '@/utils/maturity-policy';
 import {
   ACTION_TAB_DETAIL_REFRESH_DEBOUNCE_MS,
+  isPendingUpdateSettled,
   PENDING_ACTIONS_POLL_INTERVAL_MS,
   useContainerActions,
 } from '@/views/containers/useContainerActions';
@@ -218,6 +219,20 @@ describe('useContainerActions', () => {
       wrapper.unmount();
     }
     vi.useRealTimers();
+  });
+
+  it('treats matching live containers as settled when no snapshot was recorded', () => {
+    const lifecycleObserved = ref(new Set(['web']));
+
+    expect(
+      isPendingUpdateSettled({
+        name: 'web',
+        now: Date.now(),
+        startTime: Date.now(),
+        liveContainer: makeContainer({ id: 'container-1', name: 'web', status: 'running' }),
+        actionPendingLifecycleObserved: lifecycleObserved,
+      }),
+    ).toBe(true);
   });
 
   it('runs associated trigger and refreshes action-tab data', async () => {
@@ -821,6 +836,97 @@ describe('useContainerActions', () => {
 
     expect(composable.actionPending.value.has('web')).toBe(true);
     expect(composable.isContainerUpdateInProgress('web')).toBe(true);
+
+    vi.advanceTimersByTime(PENDING_ACTIONS_POLL_INTERVAL_MS);
+    await flushPromises();
+
+    expect(composable.actionPending.value.has('web')).toBe(true);
+    expect(composable.isContainerUpdateInProgress('web')).toBe(true);
+
+    vi.advanceTimersByTime(PENDING_ACTIONS_POLL_INTERVAL_MS);
+    await flushPromises();
+
+    expect(composable.actionPending.value.has('web')).toBe(false);
+    expect(composable.isContainerUpdateInProgress('web')).toBe(false);
+  });
+
+  it('keeps update rows pending when the container disappears mid-update and settles once it returns', async () => {
+    vi.useFakeTimers();
+    const web = makeContainer({
+      id: 'container-1',
+      name: 'web',
+      newTag: '1.1.0',
+      status: 'running',
+    });
+    const runningAgain = makeContainer({ id: 'container-1', name: 'web', status: 'running' });
+    const { composable, containers, loadContainers } = await mountActionsHarness({
+      containers: [web],
+      selectedContainer: web,
+      selectedContainerId: web.id,
+      containerIdMap: { web: web.id },
+    });
+    let loadCallCount = 0;
+    loadContainers.mockImplementation(async () => {
+      loadCallCount += 1;
+      containers.value =
+        loadCallCount === 1
+          ? [makeContainer({ id: 'container-1', name: 'web', status: 'running' })]
+          : loadCallCount === 2
+            ? []
+            : [runningAgain];
+    });
+
+    await composable.updateContainer('web');
+
+    expect(composable.actionPending.value.has('web')).toBe(true);
+
+    vi.advanceTimersByTime(PENDING_ACTIONS_POLL_INTERVAL_MS);
+    await flushPromises();
+
+    expect(composable.actionPending.value.has('web')).toBe(true);
+    expect(composable.isContainerUpdateInProgress('web')).toBe(true);
+
+    vi.advanceTimersByTime(PENDING_ACTIONS_POLL_INTERVAL_MS);
+    await flushPromises();
+
+    expect(composable.actionPending.value.has('web')).toBe(false);
+    expect(composable.isContainerUpdateInProgress('web')).toBe(false);
+  });
+
+  it('keeps update rows pending until the container status matches the original snapshot again', async () => {
+    vi.useFakeTimers();
+    const web = makeContainer({
+      id: 'container-1',
+      name: 'web',
+      newTag: '1.1.0',
+      status: 'running',
+    });
+    const stoppedAfterReplace = makeContainer({
+      id: 'container-1',
+      name: 'web',
+      status: 'stopped',
+    });
+    const runningAgain = makeContainer({ id: 'container-1', name: 'web', status: 'running' });
+    const { composable, containers, loadContainers } = await mountActionsHarness({
+      containers: [web],
+      selectedContainer: web,
+      selectedContainerId: web.id,
+      containerIdMap: { web: web.id },
+    });
+    let loadCallCount = 0;
+    loadContainers.mockImplementation(async () => {
+      loadCallCount += 1;
+      containers.value =
+        loadCallCount === 1
+          ? [makeContainer({ id: 'container-1', name: 'web', status: 'running' })]
+          : loadCallCount === 2
+            ? [stoppedAfterReplace]
+            : [runningAgain];
+    });
+
+    await composable.updateContainer('web');
+
+    expect(composable.actionPending.value.has('web')).toBe(true);
 
     vi.advanceTimersByTime(PENDING_ACTIONS_POLL_INTERVAL_MS);
     await flushPromises();

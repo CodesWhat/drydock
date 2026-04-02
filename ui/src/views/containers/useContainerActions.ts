@@ -376,7 +376,7 @@ function clearPendingActionState(args: {
   args.actionPendingLifecycleObserved.value = nextObserved;
 }
 
-function isPendingUpdateSettled(args: {
+export function isPendingUpdateSettled(args: {
   name: string;
   now: number;
   startTime: number;
@@ -384,10 +384,11 @@ function isPendingUpdateSettled(args: {
   snapshot?: Container;
   actionPendingLifecycleObserved: Ref<Set<string>>;
 }) {
+  const expectedStatus = args.snapshot?.status ?? args.liveContainer?.status;
   const observedLifecycleSignal =
     !args.liveContainer ||
     args.liveContainer.updateOperation?.status === 'in-progress' ||
-    (args.snapshot ? args.liveContainer.status !== args.snapshot.status : false);
+    args.liveContainer.status !== expectedStatus;
   if (observedLifecycleSignal) {
     const nextObserved = new Set(args.actionPendingLifecycleObserved.value);
     nextObserved.add(args.name);
@@ -402,8 +403,7 @@ function isPendingUpdateSettled(args: {
     return false;
   }
 
-  const expectedStatus = args.snapshot?.status;
-  if (expectedStatus && args.liveContainer.status !== expectedStatus) {
+  if (args.liveContainer.status !== expectedStatus) {
     return false;
   }
 
@@ -428,7 +428,7 @@ function prunePendingActionsState(args: {
   );
   for (const [name, startTime] of args.actionPendingStartTimes.value.entries()) {
     const liveContainer = liveContainersByName.get(name);
-    const pendingMode = args.actionPendingLifecycleModes.value.get(name) ?? 'presence';
+    const pendingMode = args.actionPendingLifecycleModes.value.get(name);
     const timedOut = args.now - startTime > args.pollTimeout;
     const settled =
       pendingMode === 'update'
