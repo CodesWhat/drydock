@@ -90,6 +90,36 @@ describe('container-mapper', () => {
       expect(c.updateOperation).toBeUndefined();
     });
 
+    it('drops update-operation payloads when status is not a string literal', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateOperation: {
+            id: 'op-1',
+            status: 123,
+            phase: 'old-stopped',
+            updatedAt: '2026-04-01T12:00:00.000Z',
+          },
+        }),
+      );
+
+      expect(c.updateOperation).toBeUndefined();
+    });
+
+    it('drops update-operation payloads when phase is not a string literal', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateOperation: {
+            id: 'op-1',
+            status: 'in-progress',
+            phase: { value: 'old-stopped' },
+            updatedAt: '2026-04-01T12:00:00.000Z',
+          },
+        }),
+      );
+
+      expect(c.updateOperation).toBeUndefined();
+    });
+
     it('keeps only optional string metadata from update-operation payloads', () => {
       const c = mapApiContainer(
         makeApiContainer({
