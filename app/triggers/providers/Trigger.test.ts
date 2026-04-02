@@ -2750,6 +2750,23 @@ describe('digest mode', () => {
     triggerBatchSpy.mockRestore();
   });
 
+  test('flushDigestBuffer should return early when a digest flush is already in progress', async () => {
+    await trigger.register('trigger', 'test', 'digest-trigger', {
+      ...configurationValid,
+      mode: 'digest',
+    });
+    trigger.init();
+
+    (trigger as any).isDigestFlushInProgress = true;
+
+    const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+    await trigger.flushDigestBuffer();
+
+    expect(trigger.log.debug).toHaveBeenCalledWith('Digest flush already in progress');
+    expect(triggerBatchSpy).not.toHaveBeenCalled();
+    triggerBatchSpy.mockRestore();
+  });
+
   test('flushDigestBuffer should deduplicate by keeping latest container', async () => {
     await trigger.register('trigger', 'test', 'digest-trigger', {
       ...configurationValid,
@@ -2812,6 +2829,56 @@ describe('digest mode', () => {
     await trigger.flushDigestBuffer();
     await trigger.flushDigestBuffer(); // second flush should be no-op
     expect(triggerBatchSpy).toHaveBeenCalledTimes(1);
+    triggerBatchSpy.mockRestore();
+  });
+
+  test('flushDigestBuffer should preserve replacements buffered during an in-flight flush', async () => {
+    await trigger.register('trigger', 'test', 'digest-trigger', {
+      ...configurationValid,
+      mode: 'digest',
+    });
+    trigger.init();
+
+    await trigger.handleContainerReportDigest({
+      container: {
+        id: 'c1',
+        name: 'app',
+        watcher: 'test',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      },
+      changed: true,
+    });
+
+    const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockImplementationOnce(async () => {
+      await trigger.handleContainerReportDigest({
+        container: {
+          id: 'c2',
+          name: 'app',
+          watcher: 'test',
+          updateAvailable: true,
+          updateKind: { kind: 'tag', localValue: '2.0', remoteValue: '2.1' },
+        },
+        changed: true,
+      });
+    });
+
+    await trigger.flushDigestBuffer();
+    triggerBatchSpy.mockResolvedValueOnce(undefined);
+    await trigger.flushDigestBuffer();
+
+    expect(triggerBatchSpy).toHaveBeenNthCalledWith(1, [
+      expect.objectContaining({
+        name: 'app',
+        updateKind: expect.objectContaining({ remoteValue: '2.0' }),
+      }),
+    ]);
+    expect(triggerBatchSpy).toHaveBeenNthCalledWith(2, [
+      expect.objectContaining({
+        name: 'app',
+        updateKind: expect.objectContaining({ remoteValue: '2.1' }),
+      }),
+    ]);
     triggerBatchSpy.mockRestore();
   });
 

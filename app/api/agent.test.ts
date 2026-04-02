@@ -283,6 +283,65 @@ describe('Agent Log Entries Route', () => {
     ]);
   });
 
+  test('should preserve agent-provided display timestamps', async () => {
+    const entry = {
+      timestamp: 1000,
+      level: 'info',
+      component: 'test',
+      msg: 'hello',
+      displayTimestamp: '[already formatted]',
+    };
+    mockGetAgent.mockReturnValue({
+      isConnected: true,
+      getLogEntries: vi.fn().mockResolvedValue([entry]),
+    });
+
+    const req = createMockRequest({
+      params: { name: 'agent-1' },
+      query: {},
+    });
+    const res = createResponse();
+
+    await handler(req, res);
+
+    expect(res.json).toHaveBeenCalledWith([entry]);
+  });
+
+  test('should leave non-object log entries unchanged when normalizing arrays', async () => {
+    mockGetAgent.mockReturnValue({
+      isConnected: true,
+      getLogEntries: vi.fn().mockResolvedValue(['raw line', null]),
+    });
+
+    const req = createMockRequest({
+      params: { name: 'agent-1' },
+      query: {},
+    });
+    const res = createResponse();
+
+    await handler(req, res);
+
+    expect(res.json).toHaveBeenCalledWith(['raw line', null]);
+  });
+
+  test('should pass through non-array agent log payloads unchanged', async () => {
+    const payload = { entries: [] };
+    mockGetAgent.mockReturnValue({
+      isConnected: true,
+      getLogEntries: vi.fn().mockResolvedValue(payload),
+    });
+
+    const req = createMockRequest({
+      params: { name: 'agent-1' },
+      query: {},
+    });
+    const res = createResponse();
+
+    await handler(req, res);
+
+    expect(res.json).toHaveBeenCalledWith(payload);
+  });
+
   test('should pass all query params to agent', async () => {
     mockGetAgent.mockReturnValue({
       isConnected: true,

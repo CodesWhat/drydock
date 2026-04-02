@@ -453,6 +453,24 @@ describe('ContainerUpdateExecutor', () => {
     expect(pullImage).toHaveBeenCalled();
   });
 
+  test('execute records pull failures before rethrowing the error', async () => {
+    const pullImage = vi.fn().mockRejectedValue(new Error('pull failed'));
+    const executor = createExecutor({ pullImage });
+
+    await expect(executor.execute(createContext(), createContainer(), createLog())).rejects.toThrow(
+      'pull failed',
+    );
+
+    expect(mockUpdateOperation).toHaveBeenCalledWith(
+      'op-1',
+      expect.objectContaining({
+        status: 'failed',
+        phase: 'pull-failed',
+        lastError: 'pull failed',
+      }),
+    );
+  });
+
   test('execute performs successful update without runtime start when old container is stopped', async () => {
     const context = createContext({
       currentContainerSpec: createCurrentContainerSpec({
