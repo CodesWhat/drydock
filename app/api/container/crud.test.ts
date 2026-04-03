@@ -145,6 +145,7 @@ function createHarness(options: { containers?: any[] } = {}) {
     updateOperationStore: {
       getOperationsByContainerName: vi.fn(() => []),
       getInProgressOperationByContainerName: vi.fn(() => undefined),
+      getInProgressOperationByContainerId: vi.fn(() => undefined),
     },
     getServerConfiguration: vi.fn(() => ({ feature: { delete: true } })),
     getAgent: vi.fn(),
@@ -2542,6 +2543,7 @@ describe('api/container/crud', () => {
           updateOperationStore: {
             getOperationsByContainerName: vi.fn(() => []),
             getInProgressOperationByContainerName: vi.fn(() => undefined),
+            getInProgressOperationByContainerId: vi.fn(() => undefined),
           },
         },
         agentApi: {

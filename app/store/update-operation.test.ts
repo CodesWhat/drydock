@@ -151,6 +151,75 @@ describe('Update Operation Store', () => {
     }
   });
 
+  test('getInProgressOperationByContainerId should return operation matching the container ID', () => {
+    updateOperation.insertOperation({
+      containerName: 'portainer_agent',
+      containerId: 'host1-abc',
+    });
+    updateOperation.insertOperation({
+      containerName: 'portainer_agent',
+      containerId: 'host2-def',
+    });
+
+    const host1Op = updateOperation.getInProgressOperationByContainerId('host1-abc');
+    const host2Op = updateOperation.getInProgressOperationByContainerId('host2-def');
+    const missing = updateOperation.getInProgressOperationByContainerId('host3-ghi');
+
+    expect(host1Op).toBeDefined();
+    expect(host1Op!.containerId).toBe('host1-abc');
+    expect(host2Op).toBeDefined();
+    expect(host2Op!.containerId).toBe('host2-def');
+    expect(missing).toBeUndefined();
+  });
+
+  test('getInProgressOperationByContainerId should return latest when multiple ops exist', () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-02-23T00:00:00.000Z'));
+      updateOperation.insertOperation({
+        containerName: 'web',
+        containerId: 'c1',
+      });
+      vi.setSystemTime(new Date('2026-02-23T00:01:00.000Z'));
+      const second = updateOperation.insertOperation({
+        containerName: 'web',
+        containerId: 'c1',
+      });
+
+      const active = updateOperation.getInProgressOperationByContainerId('c1');
+      expect(active?.id).toBe(second.id);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('getInProgressOperationByContainerId should return undefined when uninitialized', async () => {
+    vi.resetModules();
+    const fresh = await import('./update-operation.js');
+    expect(fresh.getInProgressOperationByContainerId('abc')).toBeUndefined();
+  });
+
+  test('getInProgressOperationByContainerId should return undefined for empty string', () => {
+    expect(updateOperation.getInProgressOperationByContainerId('')).toBeUndefined();
+  });
+
+  test('same-named containers should be disambiguated by container ID', () => {
+    const op = updateOperation.insertOperation({
+      containerName: 'portainer_agent',
+      containerId: 'host1-abc',
+    });
+
+    // Looking up by the WRONG container ID should NOT find the operation
+    expect(updateOperation.getInProgressOperationByContainerId('host2-def')).toBeUndefined();
+
+    // Looking up by NAME finds it (old behavior — this is the root cause of #256)
+    expect(updateOperation.getInProgressOperationByContainerName('portainer_agent')).toBeDefined();
+
+    // Looking up by the CORRECT container ID should find it
+    const found = updateOperation.getInProgressOperationByContainerId('host1-abc');
+    expect(found?.id).toBe(op.id);
+  });
+
   test('getOperationsByContainerName should return container operations sorted by latest update', () => {
     vi.useFakeTimers();
     try {

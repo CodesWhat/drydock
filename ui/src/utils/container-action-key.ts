@@ -12,7 +12,7 @@ function asNonEmptyString(value: unknown): string | undefined {
 }
 
 export function getContainerActionKey(container: ContainerActionKeyInput): string {
-  return asNonEmptyString(container.name) ?? asNonEmptyString(container.id) ?? '';
+  return asNonEmptyString(container.id) ?? asNonEmptyString(container.name) ?? '';
 }
 
 export function hasTrackedContainerAction(

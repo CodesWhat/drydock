@@ -43,7 +43,8 @@ interface UpdateOperationCollectionDocument {
 type UpdateOperationQuery =
   | { 'data.id': string }
   | { 'data.containerName': string }
-  | { 'data.containerName': string; 'data.status': ContainerUpdateOperationStatus };
+  | { 'data.containerName': string; 'data.status': ContainerUpdateOperationStatus }
+  | { 'data.containerId': string; 'data.status': ContainerUpdateOperationStatus };
 
 interface UpdateOperationCollection {
   insert(document: UpdateOperationCollectionDocument): void;
@@ -65,7 +66,12 @@ interface UpdateOperationStoreDb {
 }
 
 let updateOperationCollection: UpdateOperationCollection | undefined;
-const UPDATE_OPERATION_COLLECTION_INDICES = ['data.id', 'data.containerName', 'data.status'];
+const UPDATE_OPERATION_COLLECTION_INDICES = [
+  'data.id',
+  'data.containerName',
+  'data.containerId',
+  'data.status',
+];
 const DEFAULT_UPDATE_OPERATION_MAX_ENTRIES = getDefaultCacheMaxEntries();
 const DEFAULT_UPDATE_OPERATION_RETENTION_DAYS = 30;
 const UPDATE_OPERATION_PRUNE_MUTATION_INTERVAL = 100;
@@ -205,6 +211,27 @@ export function getInProgressOperationByContainerName(
   const operations = updateOperationCollection
     .find({
       'data.containerName': containerName,
+      'data.status': 'in-progress',
+    })
+    .map((item) => item.data)
+    .sort((a, b) => getOperationTimestamp(b) - getOperationTimestamp(a));
+
+  return operations.at(0);
+}
+
+/**
+ * Return the latest in-progress operation for a container ID.
+ */
+export function getInProgressOperationByContainerId(
+  containerId: string,
+): UpdateOperation | undefined {
+  if (!updateOperationCollection || !containerId) {
+    return undefined;
+  }
+
+  const operations = updateOperationCollection
+    .find({
+      'data.containerId': containerId,
       'data.status': 'in-progress',
     })
     .map((item) => item.data)

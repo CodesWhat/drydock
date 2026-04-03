@@ -297,7 +297,7 @@ describe('useContainerActions', () => {
       selectedContainer: container,
       selectedContainerId: container.id,
     });
-    composable.skippedUpdates.value.add('web');
+    composable.skippedUpdates.value.add('container-1');
     mocks.getBackups.mockClear();
     mocks.getContainerUpdateOperations.mockClear();
     loadContainers.mockClear();
@@ -306,7 +306,7 @@ describe('useContainerActions', () => {
 
     expect(mocks.rollback).toHaveBeenCalledWith('container-1', 'backup-1');
     expect(composable.rollbackMessage.value).toBe('Rollback completed from selected backup');
-    expect(composable.skippedUpdates.value.has('web')).toBe(false);
+    expect(composable.skippedUpdates.value.has('container-1')).toBe(false);
     expect(loadContainers).toHaveBeenCalledTimes(1);
     expect(mocks.getBackups).toHaveBeenCalledTimes(1);
     expect(mocks.getContainerUpdateOperations).toHaveBeenCalledTimes(1);
