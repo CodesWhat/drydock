@@ -191,16 +191,19 @@ const tableColumns = computed(() => {
 });
 
 const sseScanCompletedListener = handleSseScanCompleted as EventListener;
+const sseConnectedListener = handleSseScanCompleted as EventListener;
 
 onMounted(() => {
   void fetchSecurityRuntimeStatus();
   void fetchVulnerabilities();
   globalThis.addEventListener('dd:sse-scan-completed', sseScanCompletedListener);
+  globalThis.addEventListener('dd:sse-connected', sseConnectedListener);
 });
 
 onUnmounted(() => {
   clearTimeout(scanCompletedDebounceTimer);
   globalThis.removeEventListener('dd:sse-scan-completed', sseScanCompletedListener);
+  globalThis.removeEventListener('dd:sse-connected', sseConnectedListener);
 });
 </script>
 

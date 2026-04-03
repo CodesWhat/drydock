@@ -299,6 +299,7 @@ describe('NotificationBell', () => {
 
       globalThis.dispatchEvent(new Event('dd:sse-container-changed'));
       globalThis.dispatchEvent(new Event('dd:sse-scan-completed'));
+      globalThis.dispatchEvent(new Event('dd:sse-connected'));
       globalThis.dispatchEvent(new Event('dd:sse-container-changed'));
       await flushPromises();
 
@@ -311,6 +312,25 @@ describe('NotificationBell', () => {
       vi.advanceTimersByTime(1);
       await flushPromises();
       expect(mockGetAuditLog).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('refetches when the SSE connection is re-established', async () => {
+    vi.useFakeTimers();
+    try {
+      factory();
+      await flushPromises();
+      expect(mockGetAuditLog).toHaveBeenCalledTimes(1);
+
+      globalThis.dispatchEvent(new CustomEvent('dd:sse-connected'));
+      await flushPromises();
+      expect(mockGetAuditLog).toHaveBeenCalledTimes(1);
+
+      vi.advanceTimersByTime(800);
+      await flushPromises();
+      expect(mockGetAuditLog).toHaveBeenCalledTimes(2);
     } finally {
       vi.useRealTimers();
     }

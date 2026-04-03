@@ -167,6 +167,16 @@ describe('AgentsView', () => {
     expect(mockGetAgents).toHaveBeenCalledTimes(2);
   });
 
+  it('refreshes agents when the SSE connection is re-established', async () => {
+    await mountAgentsView();
+    expect(mockGetAgents).toHaveBeenCalledTimes(1);
+
+    globalThis.dispatchEvent(new CustomEvent('dd:sse-connected'));
+    await flushPromises();
+
+    expect(mockGetAgents).toHaveBeenCalledTimes(2);
+  });
+
   it('shows agent-specific watchers and triggers in detail panel', async () => {
     mockGetAgents.mockResolvedValue([makeAgent({ name: 'edge-1' })]);
     mockGetAllWatchers.mockResolvedValue([

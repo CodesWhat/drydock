@@ -1757,6 +1757,16 @@ describe('ContainersView', () => {
       expect(names).toContain('ghost');
     });
 
+    it('reloads containers when the SSE connection is re-established', async () => {
+      await mountContainersView([makeContainer({ id: 'c1', name: 'nginx' })]);
+      const callsBeforeReconnect = mockGetAllContainers.mock.calls.length;
+
+      globalThis.dispatchEvent(new CustomEvent('dd:sse-connected'));
+      await flushPromises();
+
+      expect(mockGetAllContainers.mock.calls.length).toBeGreaterThan(callsBeforeReconnect);
+    });
+
     it('covers loadGroups success/skip/error paths', async () => {
       const wrapper = await mountContainersView([makeContainer({ name: 'nginx' })]);
       const vm = wrapper.vm as any;

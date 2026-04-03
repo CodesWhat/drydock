@@ -239,14 +239,17 @@ const agentStatusChangedListener = handleAgentStatusChanged as EventListener;
 onMounted(() => {
   if (activeAgentStatusListener) {
     globalThis.removeEventListener('dd:sse-agent-status-changed', activeAgentStatusListener);
+    globalThis.removeEventListener('dd:sse-connected', activeAgentStatusListener);
   }
   activeAgentStatusListener = agentStatusChangedListener;
   globalThis.addEventListener('dd:sse-agent-status-changed', agentStatusChangedListener);
+  globalThis.addEventListener('dd:sse-connected', agentStatusChangedListener);
   void fetchAgents();
 });
 
 onUnmounted(() => {
   globalThis.removeEventListener('dd:sse-agent-status-changed', agentStatusChangedListener);
+  globalThis.removeEventListener('dd:sse-connected', agentStatusChangedListener);
   if (activeAgentStatusListener === agentStatusChangedListener) {
     activeAgentStatusListener = null;
   }
