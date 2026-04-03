@@ -26,8 +26,21 @@ const fullModeTailSpacerHeight = ref(0);
 // compact = no header, horizontal cards with horizontal scroll
 const mode = ref<'full' | 'compact'>('full');
 
+const FULL_MODE_ROW_HEIGHT = 70;
+const FULL_MODE_ROW_GAP = 12;
+const FULL_MODE_SCROLL_PADDING = 32;
+const FULL_MODE_HEADER_HEIGHT = 49;
+
 let observer: ResizeObserver | null = null;
 let tailSpacerAnimationFrame: number | null = null;
+
+function getFullModeContentHeight(rowCount: number): number {
+  return (
+    FULL_MODE_SCROLL_PADDING +
+    rowCount * FULL_MODE_ROW_HEIGHT +
+    Math.max(0, rowCount - 1) * FULL_MODE_ROW_GAP
+  );
+}
 
 function cancelTailSpacerMeasurement() {
   if (tailSpacerAnimationFrame !== null) {
@@ -92,7 +105,9 @@ onUpdated(() => {
 });
 
 watchEffect(() => {
-  mode.value = containerHeight.value >= 250 ? 'full' : 'compact';
+  const viewportHeight = Math.max(containerHeight.value - FULL_MODE_HEADER_HEIGHT, 0);
+  mode.value =
+    viewportHeight >= getFullModeContentHeight(props.servers.length) ? 'full' : 'compact';
 });
 
 watch(

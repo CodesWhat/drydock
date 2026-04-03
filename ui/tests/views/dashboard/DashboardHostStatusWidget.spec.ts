@@ -99,6 +99,16 @@ function mountWidget(
   return wrapper;
 }
 
+function makeServers(count: number): DashboardServerRow[] {
+  return Array.from({ length: count }, (_, index) =>
+    makeServer({
+      name: index === 0 ? 'Local' : `host-${index + 1}`,
+      host: index === 0 ? 'unix:///var/run/docker.sock' : `192.168.1.${50 + index}:3001`,
+      containers: { running: index + 1, total: index + 1 },
+    }),
+  );
+}
+
 describe('DashboardHostStatusWidget', () => {
   beforeEach(() => {
     resizeObserverCallback = undefined;
@@ -169,6 +179,43 @@ describe('DashboardHostStatusWidget', () => {
     const fullModeRows = wrapper.findAll('[data-host-row]');
     expect(fullModeRows.length).toBeGreaterThan(0);
     expect(fullModeRows[0].classes()).toContain('snap-start');
+  });
+
+  it('keeps two hosts in full mode at the default widget height', async () => {
+    const wrapper = mountWidget({
+      servers: makeServers(2),
+    });
+
+    triggerResize(260);
+    await nextTick();
+
+    expect(wrapper.find('.dd-scroll-stable').exists()).toBe(true);
+    expect(wrapper.findAll('[data-host-row]')).toHaveLength(2);
+  });
+
+  it('switches to compact mode when three hosts cannot fully fit at the default widget height', async () => {
+    const wrapper = mountWidget({
+      servers: makeServers(3),
+    });
+
+    triggerResize(260);
+    await nextTick();
+
+    expect(wrapper.find('.dd-scroll-stable').exists()).toBe(false);
+    expect(wrapper.findAll('[data-host-row]')).toHaveLength(0);
+    expect(wrapper.find('h2').exists()).toBe(false);
+  });
+
+  it('returns to full mode when three hosts fit at a taller widget height', async () => {
+    const wrapper = mountWidget({
+      servers: makeServers(3),
+    });
+
+    triggerResize(400);
+    await nextTick();
+
+    expect(wrapper.find('.dd-scroll-stable').exists()).toBe(true);
+    expect(wrapper.findAll('[data-host-row]')).toHaveLength(3);
   });
 
   it('adds trailing spacer height so the last host row can snap fully into view', async () => {
