@@ -164,9 +164,12 @@ export async function processDockerEvent(
 
     if (containerFound) {
       dependencies.updateContainerFromInspect(containerFound, containerInspect);
-    } else if (action === 'rename') {
-      // Rename can race with create and happen before the new container is in store.
-      // Schedule a full refresh so the final human-readable name is captured.
+    } else {
+      // Container exists in Docker but not in the store. Schedule a refresh so
+      // the next watch cycle picks it up. This covers rename races (the original
+      // case) and containers that started after the initial create-event refresh
+      // ran before the container was ready (e.g. transient errors during compose
+      // updates where listContainers missed the not-yet-running container).
       await dependencies.watchCronDebounced();
     }
   } catch (e: unknown) {

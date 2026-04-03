@@ -198,6 +198,27 @@ describe('container event update helpers', () => {
     expect(watchCronDebounced).toHaveBeenCalledTimes(1);
   });
 
+  test('processDockerEvent schedules a debounced watch for start events when container is not in store', async () => {
+    const watchCronDebounced = vi.fn().mockResolvedValue(undefined);
+
+    await processDockerEvent(
+      { Action: 'start', id: 'new-container-456' },
+      {
+        watchCronDebounced,
+        ensureRemoteAuthHeaders: vi.fn().mockResolvedValue(undefined),
+        inspectContainer: vi.fn().mockResolvedValue({
+          Name: '/stirling-pdf',
+          State: { Status: 'running' },
+        }),
+        getContainerFromStore: vi.fn().mockReturnValue(undefined),
+        updateContainerFromInspect: vi.fn(),
+        debug: vi.fn(),
+      },
+    );
+
+    expect(watchCronDebounced).toHaveBeenCalledTimes(1);
+  });
+
   test('processDockerEvent debounces refresh for transient recreated container alias after inspecting', async () => {
     const aliasContainerId = 'd6ea364fbc03aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
     const watchCronDebounced = vi.fn().mockResolvedValue(undefined);
