@@ -1,7 +1,6 @@
 import http from 'node:http';
 import https from 'node:https';
 import axios, { type AxiosRequestConfig, type AxiosResponse, type Method } from 'axios';
-import log from '../log/index.js';
 import type { ContainerImage } from '../model/container.js';
 import { getSummaryTags } from '../prometheus/registry.js';
 import Component from '../registry/Component.js';
@@ -230,12 +229,12 @@ class Registry extends Component {
       },
     });
     if (responseManifests) {
-      log.debug(`Found manifests [${JSON.stringify(responseManifests)}]`);
+      this.log.debug(`${image.name} - Found manifests [${JSON.stringify(responseManifests)}]`);
       if (responseManifests.schemaVersion === 1) {
-        log.debug('Manifests found with schemaVersion = 1');
+        this.log.debug(`${image.name} - Manifests found with schemaVersion = 1`);
         const result = handleSchemaV1(responseManifests);
-        log.debug(
-          `Manifest found with [digest=${result.digest}, created=${result.created}, version=${result.version}]`,
+        this.log.debug(
+          `${image.name} - Manifest found with [digest=${result.digest}, created=${result.created}, version=${result.version}]`,
         );
         return result;
       }
@@ -272,15 +271,15 @@ class Registry extends Component {
     response: RegistryManifestResponse,
     tagOrDigest: string,
   ): Promise<RegistryManifest> {
-    log.debug('Manifests found with schemaVersion = 2');
-    log.debug(`Manifests media type detected [${response.mediaType}]`);
+    this.log.debug(`${image.name} - Manifests found with schemaVersion = 2`);
+    this.log.debug(`${image.name} - Manifests media type detected [${response.mediaType}]`);
 
     let manifestDigest: string | undefined;
     let manifestMediaType: string | undefined;
 
     if (isManifestList(response.mediaType)) {
-      log.debug(
-        `Filter manifest for [arch=${image.architecture}, os=${image.os}, variant=${image.variant}]`,
+      this.log.debug(
+        `${image.name} - Filter manifest for [arch=${image.architecture}, os=${image.os}, variant=${image.variant}]`,
       );
       const manifests = response.manifests ?? [];
       const matched = filterManifestByPlatform(
@@ -290,14 +289,16 @@ class Registry extends Component {
         image.variant,
       );
       if (matched) {
-        log.debug(`Manifest found with [digest=${matched.digest}, mediaType=${matched.mediaType}]`);
+        this.log.debug(
+          `${image.name} - Manifest found with [digest=${matched.digest}, mediaType=${matched.mediaType}]`,
+        );
         manifestDigest = matched.digest;
         manifestMediaType = matched.mediaType;
       }
     } else if (isSingleManifest(response.mediaType)) {
       const manifestReference = tagOrDigest;
-      log.debug(
-        `Manifest found with [reference=${manifestReference}, mediaType=${response.mediaType}]`,
+      this.log.debug(
+        `${image.name} - Manifest found with [reference=${manifestReference}, mediaType=${response.mediaType}]`,
       );
       manifestDigest = manifestReference;
       manifestMediaType = response.mediaType;
@@ -315,7 +316,9 @@ class Registry extends Component {
         ...(created ? { created } : {}),
         /* v8 ignore stop */
       };
-      log.debug(`Manifest found with [digest=${result.digest}, version=${result.version}]`);
+      this.log.debug(
+        `${image.name} - Manifest found with [digest=${result.digest}, version=${result.version}]`,
+      );
       return result;
     }
     throw new Error('Unexpected error; no manifest found');
@@ -329,7 +332,7 @@ class Registry extends Component {
     manifestDigest: string,
     mediaType: string,
   ): Promise<RegistryManifest> {
-    log.debug('Calling registry to get docker-content-digest header');
+    this.log.debug(`${image.name} - Calling registry to get docker-content-digest header`);
     const responseManifest = await this.callRegistry<RegistryManifestResponse>({
       image,
       method: 'head',
@@ -353,7 +356,9 @@ class Registry extends Component {
       version: 2,
       ...(created ? { created } : {}),
     };
-    log.debug(`Manifest found with [digest=${result.digest}, version=${result.version}]`);
+    this.log.debug(
+      `${image.name} - Manifest found with [digest=${result.digest}, version=${result.version}]`,
+    );
     return result;
   }
 
@@ -377,7 +382,7 @@ class Registry extends Component {
       }
       return this.fetchImageCreatedFromBlob(image, configDigest);
     } catch (error: unknown) {
-      log.debug(
+      this.log.debug(
         `Unable to fetch manifest config created date for ${this.getImageFullName(
           image,
           manifestDigest,
@@ -406,7 +411,7 @@ class Registry extends Component {
       }
       return Number.isNaN(Date.parse(configResponse.created)) ? undefined : configResponse.created;
     } catch (error: unknown) {
-      log.debug(
+      this.log.debug(
         `Unable to fetch image config blob created date for ${this.getImageFullName(
           image,
           digest,
