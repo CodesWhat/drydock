@@ -2,6 +2,8 @@ export const DEFAULT_MATURITY_MIN_AGE_DAYS = 7;
 export const MATURITY_MIN_AGE_DAYS_MIN = 1;
 export const MATURITY_MIN_AGE_DAYS_MAX = 365;
 export const MS_PER_DAY = 24 * 60 * 60 * 1000;
+const MATURITY_MODE_ALL_VALUE: string = 'all';
+const MATURITY_MODE_MATURE_VALUE: string = 'mature';
 
 export type MaturityMode = 'all' | 'mature';
 
@@ -10,8 +12,8 @@ export function normalizeMaturityMode(value: unknown): MaturityMode | undefined 
     return undefined;
   }
   const normalized = value.trim().toLowerCase();
-  if (normalized === 'all' || normalized === 'mature') {
-    return normalized;
+  if (normalized === MATURITY_MODE_ALL_VALUE || normalized === MATURITY_MODE_MATURE_VALUE) {
+    return normalized as MaturityMode;
   }
   return undefined;
 }
