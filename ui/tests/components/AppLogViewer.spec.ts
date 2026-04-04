@@ -153,7 +153,7 @@ describe('AppLogViewer', () => {
     });
 
     await wrapper.get('[data-test="container-log-toggle-pause"]').trigger('click');
-    await getButtonByText(wrapper, 'Unpin').trigger('click');
+    await wrapper.get('[data-test="container-log-toggle-pin"]').trigger('click');
 
     expect(wrapper.emitted('toggle-pause')).toHaveLength(1);
     expect(wrapper.emitted('toggle-pin')).toHaveLength(1);
@@ -172,7 +172,7 @@ describe('AppLogViewer', () => {
       scrollTop: 10,
     });
 
-    await getButtonByText(wrapper, 'Pin').trigger('click');
+    await wrapper.get('[data-test="container-log-toggle-pin"]').trigger('click');
     await nextTick();
 
     expect(wrapper.emitted('toggle-pin')).toHaveLength(1);

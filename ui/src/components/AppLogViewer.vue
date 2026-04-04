@@ -323,42 +323,34 @@ async function copyLogs(): Promise<void> {
       class="px-3 py-2.5 flex flex-col gap-2 shrink-0"
       :style="{ borderBottom: '1px solid var(--dd-log-divider)' }"
     >
-      <div class="flex items-center gap-2 justify-between">
-        <div class="flex items-center gap-2 min-w-0">
-          <slot name="toolbar-left" />
-        </div>
+      <div class="flex items-center gap-1.5 flex-wrap">
+        <slot name="toolbar-left" />
 
-        <div class="flex items-center gap-1.5">
-          <AppButton size="none" variant="plain" weight="none"
-            type="button"
-            data-test="container-log-toggle-pause"
-            class="px-2 py-1 dd-rounded text-2xs font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-            @click="emit('toggle-pause')"
-          >
-            <span class="inline-flex items-center gap-1">
-              <AppIcon :name="props.paused ? 'play' : 'pause'" :size="11" />
-              {{ props.paused ? 'Resume' : 'Pause' }}
-            </span>
-          </AppButton>
+        <AppIconButton
+          :icon="props.paused ? 'play' : 'pause'"
+          size="xs"
+          data-test="container-log-toggle-pause"
+          :tooltip="props.paused ? 'Resume' : 'Pause'"
+          @click="emit('toggle-pause')"
+        />
 
-          <AppButton size="none" variant="plain" weight="none"
-            type="button"
-            class="px-2 py-1 dd-rounded text-2xs font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-            @click="togglePin"
-          >
-            {{ props.autoScrollPinned ? 'Unpin' : 'Pin' }}
-          </AppButton>
+        <AppIconButton
+          :icon="props.autoScrollPinned ? 'ph:push-pin-slash' : 'ph:push-pin'"
+          size="xs"
+          data-test="container-log-toggle-pin"
+          :tooltip="props.autoScrollPinned ? 'Unpin auto-scroll' : 'Pin auto-scroll'"
+          @click="togglePin"
+        />
 
-          <AppIconButton
-            :icon="newestFirst ? 'ph:sort-ascending' : 'ph:sort-descending'"
-            size="xs"
-            data-test="container-log-sort-toggle"
-            :tooltip="newestFirst ? 'Newest first' : 'Oldest first'"
-            @click="newestFirst = !newestFirst"
-          />
+        <AppIconButton
+          :icon="newestFirst ? 'ph:sort-ascending' : 'ph:sort-descending'"
+          size="xs"
+          data-test="container-log-sort-toggle"
+          :tooltip="newestFirst ? 'Newest first' : 'Oldest first'"
+          @click="newestFirst = !newestFirst"
+        />
 
-          <slot name="toolbar-right" />
-        </div>
+        <slot name="toolbar-right" />
       </div>
 
       <div class="flex flex-wrap items-center gap-2">
