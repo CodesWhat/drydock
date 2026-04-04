@@ -54,6 +54,22 @@ async function writeCoverageFileWithRetry(filename: string, content: string): Pr
   throw new Error(`Unable to write coverage file "${filename}"`);
 }
 
+function parseCoverageFile(
+  filename: string,
+  contents: string,
+  onDebug: ((message: string) => void) & { enabled?: boolean },
+): unknown {
+  try {
+    return JSON.parse(contents);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (onDebug.enabled) {
+      onDebug(`Skipping corrupt coverage file "${filename}": ${message}`);
+    }
+    return undefined;
+  }
+}
+
 const coverageProviderModule = {
   ...v8CoverageModule,
   async getProvider() {
@@ -201,7 +217,10 @@ const coverageProviderModule = {
                 if (contents === undefined) {
                   contents = await readCoverageFileWithRetry(filename);
                 }
-                onFileRead(JSON.parse(contents));
+                const parsedCoverage = parseCoverageFile(filename, contents, onDebug);
+                if (parsedCoverage !== undefined) {
+                  onFileRead(parsedCoverage);
+                }
               }),
             );
           }
