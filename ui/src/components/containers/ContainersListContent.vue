@@ -23,6 +23,7 @@ const {
   filterServer,
   serverNames,
   filterKind,
+  filterHidePinned,
   clearFilters,
   showColumnPicker,
   toggleColumnPicker,
@@ -101,6 +102,17 @@ const {
           <option value="patch">Patch</option>
           <option value="digest">Digest</option>
         </select>
+        <label
+          class="flex items-center gap-1.5 px-2 py-1.5 dd-rounded text-2xs-plus font-semibold uppercase tracking-wide cursor-pointer dd-bg dd-text select-none"
+          v-tooltip="'Hide containers pinned to specific versions'"
+        >
+          <input
+            type="checkbox"
+            v-model="filterHidePinned"
+            class="accent-[var(--dd-secondary)]"
+          />
+          Hide Pinned
+        </label>
         <AppButton size="none" variant="plain" weight="none"
           v-if="activeFilterCount > 0 || filterSearch"
           class="text-2xs font-medium px-2 py-1 dd-rounded transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"

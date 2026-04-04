@@ -29,6 +29,7 @@ type ContainerFiltersContext = Pick<
   | 'filterRegistry'
   | 'filterServer'
   | 'filterKind'
+  | 'filterHidePinned'
   | 'showFilters'
   | 'activeFilterCount'
   | 'filteredContainers'

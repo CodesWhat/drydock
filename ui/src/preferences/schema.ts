@@ -29,6 +29,7 @@ export interface PreferencesSchema {
       bouncer: string;
       server: string;
       kind: string;
+      hidePinned: boolean;
     };
     columns: string[];
   };
@@ -77,6 +78,7 @@ export const DEFAULTS: PreferencesSchema = {
       bouncer: 'all',
       server: 'all',
       kind: 'all',
+      hidePinned: false,
     },
     columns: [...CONTAINER_TABLE_COLUMN_KEYS],
   },

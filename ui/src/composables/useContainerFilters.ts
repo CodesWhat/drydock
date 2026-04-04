@@ -11,6 +11,7 @@ interface ContainerFilterCriteria {
   bouncer: string;
   server: string;
   kind: string;
+  hidePinned: boolean;
 }
 
 type ContainerFilterMatcher = (container: Container, criteria: ContainerFilterCriteria) => boolean;
@@ -88,6 +89,7 @@ const CONTAINER_FILTER_MATCHERS: readonly ContainerFilterMatcher[] = [
   (container, criteria) => matchesExactFilter(criteria.bouncer, container.bouncer),
   (container, criteria) => matchesExactFilter(criteria.server, container.server),
   (container, criteria) => matchesKindFilter(container, criteria.kind),
+  (container, criteria) => !criteria.hidePinned || container.tagPrecision !== 'specific',
 ];
 
 function matchesContainerFilters(container: Container, criteria: ContainerFilterCriteria): boolean {
@@ -101,6 +103,7 @@ export function useContainerFilters(containers: Ref<Container[]>) {
   const filterBouncer = ref(preferences.containers.filters.bouncer);
   const filterServer = ref(preferences.containers.filters.server);
   const filterKind = ref(preferences.containers.filters.kind);
+  const filterHidePinned = ref(preferences.containers.filters.hidePinned);
   const showFilters = ref(false);
   const persistedFilterRefs: PersistedFilterRefs = {
     status: filterStatus,
@@ -114,12 +117,20 @@ export function useContainerFilters(containers: Ref<Container[]>) {
     persistFilterValues(getPersistedFilterValues(persistedFilterRefs));
   });
 
-  const activeFilterCount = computed(
-    () =>
-      [filterStatus, filterBouncer, filterRegistry, filterServer, filterKind].filter(
-        (f) => f.value !== DEFAULT_FILTER_VALUE,
-      ).length,
-  );
+  watch(filterHidePinned, (value) => {
+    preferences.containers.filters.hidePinned = value;
+  });
+
+  const activeFilterCount = computed(() => {
+    const dropdownCount = [
+      filterStatus,
+      filterBouncer,
+      filterRegistry,
+      filterServer,
+      filterKind,
+    ].filter((f) => f.value !== DEFAULT_FILTER_VALUE).length;
+    return dropdownCount + (filterHidePinned.value ? 1 : 0);
+  });
 
   const filteredContainers = computed(() => {
     const criteria: ContainerFilterCriteria = {
@@ -129,12 +140,14 @@ export function useContainerFilters(containers: Ref<Container[]>) {
       bouncer: filterBouncer.value,
       server: filterServer.value,
       kind: filterKind.value,
+      hidePinned: filterHidePinned.value,
     };
     return containers.value.filter((container) => matchesContainerFilters(container, criteria));
   });
 
   function clearFilters() {
     filterSearch.value = '';
+    filterHidePinned.value = false;
     clearPersistedFilterRefs(persistedFilterRefs);
   }
 
@@ -145,6 +158,7 @@ export function useContainerFilters(containers: Ref<Container[]>) {
     filterBouncer,
     filterServer,
     filterKind,
+    filterHidePinned,
     showFilters,
     activeFilterCount,
     filteredContainers,
