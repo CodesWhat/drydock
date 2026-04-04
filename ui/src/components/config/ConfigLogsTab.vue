@@ -199,10 +199,13 @@ function togglePin() {
           </template>
 
           <template #entry-prefix="{ entry }">
-            <span class="shrink-0 uppercase font-semibold text-2xs" :style="{ color: levelColor(entry.level) }">
+            <span class="shrink-0 w-10 uppercase font-semibold text-2xs" :style="{ color: levelColor(entry.level) }">
               {{ entry.level || 'info' }}
             </span>
-            <span class="shrink-0 dd-text-secondary">{{ entry.component || '-' }}</span>
+            <span
+              class="shrink-0 w-44 truncate dd-text-secondary"
+              v-tooltip="entry.component"
+            >{{ entry.component || '-' }}</span>
           </template>
         </AppLogViewer>
       </div>

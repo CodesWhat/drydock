@@ -451,7 +451,7 @@ async function copyLogs(): Promise<void> {
         ]"
       >
         <div class="flex items-start gap-2">
-          <span v-if="props.showLineNumbers" class="shrink-0 whitespace-nowrap tabular-nums dd-text-muted">{{ index + 1 }}</span>
+          <span v-if="props.showLineNumbers" class="shrink-0 w-8 text-right whitespace-nowrap tabular-nums dd-text-muted">{{ index + 1 }}</span>
           <span class="shrink-0 whitespace-nowrap tabular-nums" style="color: var(--dd-log-text-muted)">{{ entry.timestamp || '-' }}</span>
 
           <slot name="entry-prefix" :entry="entry" />
