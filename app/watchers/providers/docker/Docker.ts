@@ -1036,8 +1036,8 @@ class Docker extends Watcher {
       log: this.log,
       findNewVersion: (containerToCheck, logContainer) =>
         this.findNewVersion(containerToCheck, logContainer),
-      mapContainerToContainerReport: (containerWithResult) =>
-        this.mapContainerToContainerReport(containerWithResult),
+      mapContainerToContainerReport: (containerWithResult, watchStartedAtMs) =>
+        this.mapContainerToContainerReport(containerWithResult, watchStartedAtMs),
     });
   }
 
@@ -1343,12 +1343,16 @@ class Docker extends Watcher {
    * @param containerWithResult
    * @return {*}
    */
-  mapContainerToContainerReport(containerWithResult: Container) {
+  mapContainerToContainerReport(containerWithResult: Container, watchStartedAtMs?: number) {
     this.ensureLogger();
-    return mapContainerToContainerReportState(containerWithResult, {
-      ensureLogger: () => this.ensureLogger(),
-      log: this.log,
-    });
+    return mapContainerToContainerReportState(
+      containerWithResult,
+      {
+        ensureLogger: () => this.ensureLogger(),
+        log: this.log,
+      },
+      watchStartedAtMs,
+    );
   }
 }
 export default Docker;

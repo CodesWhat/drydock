@@ -1,6 +1,6 @@
 import type { Mocked } from 'vitest';
 import * as event from '../../../event/index.js';
-import { fullName } from '../../../model/container.js';
+import { clearDetectedUpdateState, fullName } from '../../../model/container.js';
 import * as registry from '../../../registry/index.js';
 import * as storeContainer from '../../../store/container.js';
 import { mockConstructor } from '../../../test/mock-constructor.js';
@@ -429,6 +429,11 @@ export function setupDockerWatcherContainerSuite(
 
     // Setup fullName mock
     fullName.mockReturnValue('test_container');
+    clearDetectedUpdateState.mockImplementation((container) => ({
+      ...container,
+      result: undefined,
+      updateAvailable: false,
+    }));
 
     docker = new Docker();
     assignState({

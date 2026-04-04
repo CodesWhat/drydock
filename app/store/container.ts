@@ -38,6 +38,7 @@ type SecurityStateCacheEntry = {
 };
 
 const securityStateCache = new Map<string, SecurityStateCacheEntry>();
+const pendingFreshStateAfterManualUpdate = new Map<string, number>();
 const containerSecurityStateHashCache = new Map<string, string>();
 let securityStateObjectHashCache = new WeakMap<object, string>();
 let securityStateCachePruneIterator:
@@ -51,6 +52,26 @@ interface ContainerListPaginationOptions {
 
 function toCacheKey(watcher, name) {
   return `${watcher}_${name}`;
+}
+
+function toContainerFreshStateKey(
+  containerIdentity: Partial<Pick<container.Container, 'agent' | 'watcher' | 'name'>>,
+) {
+  if (
+    !containerIdentity ||
+    typeof containerIdentity.watcher !== 'string' ||
+    containerIdentity.watcher.length === 0 ||
+    typeof containerIdentity.name !== 'string' ||
+    containerIdentity.name.length === 0
+  ) {
+    return undefined;
+  }
+
+  const agent =
+    typeof containerIdentity.agent === 'string' && containerIdentity.agent.length > 0
+      ? containerIdentity.agent
+      : '';
+  return `${agent}::${containerIdentity.watcher}::${containerIdentity.name}`;
 }
 
 export const SECURITY_STATE_CACHE_TTL_MS = toPositiveInteger(
@@ -480,6 +501,37 @@ export function clearAllCachedSecurityState() {
   securityStateCachePruneIterator = undefined;
 }
 
+export function markPendingFreshStateAfterManualUpdate(
+  containerIdentity: Partial<Pick<container.Container, 'agent' | 'watcher' | 'name'>>,
+  clearedAtMs = Date.now(),
+) {
+  const cacheKey = toContainerFreshStateKey(containerIdentity);
+  if (!cacheKey) {
+    return;
+  }
+  pendingFreshStateAfterManualUpdate.set(cacheKey, clearedAtMs);
+}
+
+export function getPendingFreshStateAfterManualUpdateAt(
+  containerIdentity: Partial<Pick<container.Container, 'agent' | 'watcher' | 'name'>>,
+) {
+  const cacheKey = toContainerFreshStateKey(containerIdentity);
+  if (!cacheKey) {
+    return undefined;
+  }
+  return pendingFreshStateAfterManualUpdate.get(cacheKey);
+}
+
+export function clearPendingFreshStateAfterManualUpdate(
+  containerIdentity: Partial<Pick<container.Container, 'agent' | 'watcher' | 'name'>>,
+) {
+  const cacheKey = toContainerFreshStateKey(containerIdentity);
+  if (!cacheKey) {
+    return;
+  }
+  pendingFreshStateAfterManualUpdate.delete(cacheKey);
+}
+
 function normalizeValue(current: unknown): unknown {
   if (Array.isArray(current)) {
     return current.map(normalizeValue);
@@ -869,6 +921,7 @@ export function deleteContainer(id, options: DeleteContainerOptions = {}) {
   const container = getContainer(id);
   const containerRaw = getContainerRaw(id);
   if (container) {
+    clearPendingFreshStateAfterManualUpdate(containerRaw);
     containers
       .chain()
       .find({
@@ -887,6 +940,7 @@ export function deleteContainer(id, options: DeleteContainerOptions = {}) {
 export function _resetContainerStoreStateForTests() {
   clearContainersQueryCacheState();
   securityStateCache.clear();
+  pendingFreshStateAfterManualUpdate.clear();
   containerSecurityStateHashCache.clear();
   securityStateObjectHashCache = new WeakMap<object, string>();
   securityStateCachePruneIterator = undefined;
@@ -901,6 +955,10 @@ export function _setSecurityStateCacheEntryForTests(
 
 export function _getSecurityStateCacheForTests() {
   return securityStateCache;
+}
+
+export function _getPendingFreshStateAfterManualUpdateForTests() {
+  return pendingFreshStateAfterManualUpdate;
 }
 
 export function _pruneSecurityStateCacheForTests(nowMs = Date.now()) {
