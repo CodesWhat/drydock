@@ -64,14 +64,14 @@ const {
         <select
           v-model="filterStatus"
           class="px-2 py-1.5 dd-rounded text-2xs-plus font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text">
-          <option value="all">Status</option>
+          <option value="all">All Statuses</option>
           <option value="running">Running</option>
           <option value="stopped">Stopped</option>
         </select>
         <select
           v-model="filterBouncer"
           class="px-2 py-1.5 dd-rounded text-2xs-plus font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text">
-          <option value="all">Bouncer</option>
+          <option value="all">All Bouncer</option>
           <option value="safe">Safe</option>
           <option value="unsafe">Unsafe</option>
           <option value="blocked">Blocked</option>
@@ -79,7 +79,7 @@ const {
         <select
           v-model="filterRegistry"
           class="px-2 py-1.5 dd-rounded text-2xs-plus font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text">
-          <option value="all">Registry</option>
+          <option value="all">All Registries</option>
           <option value="dockerhub">Docker Hub</option>
           <option value="ghcr">GHCR</option>
           <option value="custom">Custom</option>
@@ -87,7 +87,7 @@ const {
         <select
           v-model="filterServer"
           class="px-2 py-1.5 dd-rounded text-2xs-plus font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text">
-          <option value="all">Host</option>
+          <option value="all">All Hosts</option>
           <option v-for="serverName in serverNames" :key="serverName" :value="serverName">
             {{ serverName }}
           </option>
@@ -95,7 +95,7 @@ const {
         <select
           v-model="filterKind"
           class="px-2 py-1.5 dd-rounded text-2xs-plus font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text">
-          <option value="all">Update</option>
+          <option value="all">All Updates</option>
           <option value="any">Has Update</option>
           <option value="major">Major</option>
           <option value="minor">Minor</option>
