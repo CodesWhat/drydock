@@ -189,6 +189,14 @@ describe('debug/redact', () => {
     expect(Object.getPrototypeOf(redacted as object)).toBe(Object.prototype);
   });
 
+  test('preserves values under keys with no alphanumeric characters', () => {
+    const source = { '---': 'keep-me', ___: 42 };
+
+    const redacted = redactDebugDump(source);
+
+    expect(redacted).toEqual({ '---': 'keep-me', ___: 42 });
+  });
+
   test('keeps empty and null sensitive values unchanged', () => {
     const source = {
       secret: '',
