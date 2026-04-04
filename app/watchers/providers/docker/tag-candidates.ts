@@ -17,10 +17,12 @@ interface TagCandidatesLogger {
 }
 
 function hasNonErrorStringMessage(error: unknown): error is { message: string } {
-  if (error instanceof Error) {
-    return false;
-  }
-  if (typeof error !== 'object' || error === null || !('message' in error)) {
+  if (
+    typeof error !== 'object' ||
+    error === null ||
+    error instanceof Error ||
+    !('message' in error)
+  ) {
     return false;
   }
   return typeof (error as { message: unknown }).message === 'string';
