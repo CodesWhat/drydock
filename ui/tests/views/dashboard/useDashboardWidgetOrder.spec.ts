@@ -3,7 +3,11 @@ import { defineComponent, h, nextTick } from 'vue';
 import { preferences } from '@/preferences/store';
 import { DASHBOARD_WIDGET_IDS, type DashboardWidgetId } from '@/views/dashboard/dashboardTypes';
 import { applyConstraints } from '@/views/dashboard/dashboardWidgetLayout';
-import { moveWidget, useDashboardWidgetOrder } from '@/views/dashboard/useDashboardWidgetOrder';
+import {
+  _rebuildLayoutsForOrderForTests,
+  moveWidget,
+  useDashboardWidgetOrder,
+} from '@/views/dashboard/useDashboardWidgetOrder';
 
 async function mountWidgetOrderComposable() {
   let state: ReturnType<typeof useDashboardWidgetOrder> | undefined;
@@ -297,6 +301,40 @@ describe('useDashboardWidgetOrder', () => {
     expect(state.editMode.value).toBe(true);
   });
 
+  it('ignores invalid breakpoints and falls back to default layouts for invalid breakpoint payloads', async () => {
+    const { state } = await mountWidgetOrderComposable();
+
+    state.onBreakpointChanged('invalid-breakpoint' as any);
+    expect(state.currentBreakpoint.value).toBe('lg');
+
+    state.onBreakpointChanged('md', 'invalid-layout' as any);
+    await nextTick();
+
+    expect(state.currentBreakpoint.value).toBe('md');
+    expect(state.responsiveLayouts.value.md?.map((item) => item.i)).toEqual(DASHBOARD_WIDGET_IDS);
+  });
+
+  it('resetAll rebuilds the current non-desktop breakpoint layout', async () => {
+    const mobileLayout = DASHBOARD_WIDGET_IDS.map((id, index) => ({
+      i: id,
+      x: 0,
+      y: index * 2,
+      w: 1,
+      h: 2,
+    }));
+    const { state } = await mountWidgetOrderComposable();
+
+    state.onBreakpointChanged('sm', mobileLayout as any);
+    state.layout.value = mobileLayout as any;
+    await nextTick();
+
+    state.resetAll();
+    await nextTick();
+
+    expect(state.currentBreakpoint.value).toBe('sm');
+    expect(state.responsiveLayouts.value.sm?.every((item) => item.w === 1)).toBe(true);
+  });
+
   it('debounces position/size persistence when layout changes without order change', async () => {
     vi.useFakeTimers();
     const { state } = await mountWidgetOrderComposable();
@@ -379,5 +417,21 @@ describe('useDashboardWidgetOrder', () => {
   it('leaves unknown layout items untouched when applying constraints', () => {
     const item = { i: 'unknown-widget', x: 1, y: 2, w: 3, h: 4 } as never;
     expect(applyConstraints([item])).toEqual([item]);
+  });
+
+  it('rebuilds a desktop layout when responsive layouts omit the lg breakpoint', () => {
+    const mobileLayout = DASHBOARD_WIDGET_IDS.map((id, index) => ({
+      i: id,
+      x: 0,
+      y: index,
+      w: 1,
+      h: 1,
+    }));
+
+    const rebuilt = _rebuildLayoutsForOrderForTests(DASHBOARD_WIDGET_IDS, {
+      sm: mobileLayout,
+    });
+
+    expect(rebuilt.lg?.map((item) => item.i)).toEqual(DASHBOARD_WIDGET_IDS);
   });
 });

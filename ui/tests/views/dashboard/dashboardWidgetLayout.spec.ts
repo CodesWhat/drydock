@@ -6,6 +6,7 @@ import {
   createDefaultLayoutForBreakpoint,
   GRID_BREAKPOINTS,
   GRID_COLS,
+  getWidgetBoundsForBreakpoint,
   WIDGET_CONSTRAINTS,
 } from '@/views/dashboard/dashboardWidgetLayout';
 
@@ -138,6 +139,15 @@ describe('dashboardWidgetLayout', () => {
       const result = applyConstraints([{ i: 'resource-usage', x: 0, y: 4, w: 1, h: 8 }], 'sm');
 
       expect(result[0]).toMatchObject({ x: 0, y: 4, w: 1, h: 8, minW: 1, maxW: 1 });
+    });
+
+    test('returns generic bounds for unknown widgets', () => {
+      expect(getWidgetBoundsForBreakpoint('unknown-widget' as any, 'md')).toEqual({
+        minW: 1,
+        minH: 1,
+        maxW: GRID_COLS.md,
+        maxH: Number.POSITIVE_INFINITY,
+      });
     });
   });
 

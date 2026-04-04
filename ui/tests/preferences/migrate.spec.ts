@@ -199,6 +199,71 @@ describe('preferences migration', () => {
       expect(result.dashboard.gridLayouts.sm).toEqual(gridLayout);
     });
 
+    it('should treat non-record legacy grid items as desktop layouts', () => {
+      const gridLayout = [null, { i: 'recent-updates', x: 0, y: 3, w: 1, h: 10 }] as any;
+      const result = migrate({
+        schemaVersion: 1,
+        dashboard: {
+          widgetOrder: ['recent-updates'],
+          hiddenWidgets: [],
+          gridLayout,
+        },
+      });
+
+      expect(result.dashboard.gridLayouts.lg).toEqual(gridLayout);
+    });
+
+    it('should drop non-object responsive gridLayouts before migrating legacy layouts', () => {
+      const gridLayout = [{ i: 'host-status', x: 8, y: 3, w: 4, h: 6 }];
+      const result = migrate({
+        schemaVersion: 1,
+        dashboard: {
+          widgetOrder: ['host-status'],
+          hiddenWidgets: [],
+          gridLayout,
+          gridLayouts: 'invalid-layouts' as any,
+        },
+      });
+
+      expect(result.dashboard.gridLayouts.lg).toEqual(gridLayout);
+    });
+
+    it('should keep valid responsive dashboard layouts and discard invalid entries', () => {
+      const desktopLayout = [{ i: 'host-status', x: 8, y: 3, w: 4, h: 6 }];
+      const result = migrate({
+        schemaVersion: 1,
+        dashboard: {
+          widgetOrder: ['host-status'],
+          hiddenWidgets: [],
+          gridLayout: [{ i: 'host-status', x: 0, y: 0, w: 1, h: 3 }],
+          gridLayouts: {
+            lg: desktopLayout,
+            invalid: desktopLayout,
+            sm: 'not-an-array',
+          },
+        },
+      });
+
+      expect(result.dashboard.gridLayouts).toEqual({
+        ...DEFAULTS.dashboard.gridLayouts,
+        lg: desktopLayout,
+      });
+    });
+
+    it('should drop non-array legacy gridLayout values', () => {
+      const result = migrate({
+        schemaVersion: 1,
+        dashboard: {
+          widgetOrder: ['host-status'],
+          hiddenWidgets: [],
+          gridLayout: { i: 'host-status' } as any,
+        },
+      });
+
+      expect(result.dashboard.gridLayout).toEqual(DEFAULTS.dashboard.gridLayout);
+      expect(result.dashboard.gridLayouts).toEqual(DEFAULTS.dashboard.gridLayouts);
+    });
+
     it('should preserve all valid values through sanitization', () => {
       const input = {
         schemaVersion: 1,
@@ -234,6 +299,28 @@ describe('preferences migration', () => {
       });
 
       expect(result.views.logs.newestFirst).toBe(true);
+    });
+
+    it('should reset invalid log view objects to defaults', () => {
+      const result = migrate({
+        schemaVersion: 1,
+        views: {
+          logs: 'invalid' as any,
+        },
+      });
+
+      expect(result.views.logs).toEqual(DEFAULTS.views.logs);
+    });
+
+    it('should reset invalid log newestFirst values to defaults', () => {
+      const result = migrate({
+        schemaVersion: 1,
+        views: {
+          logs: { newestFirst: 'yes' as any },
+        },
+      });
+
+      expect(result.views.logs.newestFirst).toBe(DEFAULTS.views.logs.newestFirst);
     });
   });
 
