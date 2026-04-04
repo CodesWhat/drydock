@@ -44,7 +44,8 @@ type UpdateOperationQuery =
   | { 'data.id': string }
   | { 'data.containerName': string }
   | { 'data.containerName': string; 'data.status': ContainerUpdateOperationStatus }
-  | { 'data.containerId': string; 'data.status': ContainerUpdateOperationStatus };
+  | { 'data.containerId': string; 'data.status': ContainerUpdateOperationStatus }
+  | { 'data.newContainerId': string; 'data.status': ContainerUpdateOperationStatus };
 
 interface UpdateOperationCollection {
   insert(document: UpdateOperationCollectionDocument): void;
@@ -230,15 +231,25 @@ export function getInProgressOperationByContainerId(
     return undefined;
   }
 
-  const operations = updateOperationCollection
-    .find()
-    .map((item) => item.data)
-    .filter(
-      (operation) =>
-        operation.status === 'in-progress' &&
-        (operation.containerId === containerId || operation.newContainerId === containerId),
-    )
-    .sort((a, b) => getOperationTimestamp(b) - getOperationTimestamp(a));
+  const operationsById = new Map<string, UpdateOperation>();
+
+  for (const document of updateOperationCollection.find({
+    'data.containerId': containerId,
+    'data.status': 'in-progress',
+  })) {
+    operationsById.set(document.data.id, document.data);
+  }
+
+  for (const document of updateOperationCollection.find({
+    'data.newContainerId': containerId,
+    'data.status': 'in-progress',
+  })) {
+    operationsById.set(document.data.id, document.data);
+  }
+
+  const operations = [...operationsById.values()].sort(
+    (a, b) => getOperationTimestamp(b) - getOperationTimestamp(a),
+  );
 
   return operations.at(0);
 }

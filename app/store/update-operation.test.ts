@@ -209,6 +209,67 @@ describe('Update Operation Store', () => {
     expect(active?.newContainerId).toBe('new-456');
   });
 
+  test('getInProgressOperationByContainerId should use targeted indexed queries instead of scanning', async () => {
+    vi.resetModules();
+    const fresh = await import('./update-operation.js');
+    const findQueries: Array<Record<string, string> | undefined> = [];
+    const db = {
+      getCollection: () => null,
+      addCollection: () => {
+        const docs: any[] = [];
+        const getByPath = (object: Record<string, unknown>, path: string) =>
+          path
+            .split('.')
+            .reduce<unknown>((acc, key) => (acc as Record<string, unknown>)?.[key], object);
+        const matchesQuery = (doc: Record<string, unknown>, query: Record<string, string> = {}) =>
+          Object.entries(query).every(([key, value]) => getByPath(doc, key) === value);
+
+        return {
+          insert: (doc: any) => {
+            docs.push(doc);
+          },
+          find: (query: Record<string, string> = {}) => {
+            findQueries.push(Object.keys(query).length === 0 ? undefined : query);
+            return docs.filter((doc) => matchesQuery(doc, query));
+          },
+          findOne: (query: Record<string, string>) =>
+            docs.find((doc) => matchesQuery(doc, query)) || null,
+          remove: (doc: any) => {
+            const index = docs.indexOf(doc);
+            if (index >= 0) {
+              docs.splice(index, 1);
+            }
+          },
+        };
+      },
+    };
+
+    fresh.createCollections(db as any);
+
+    const operation = fresh.insertOperation({
+      containerName: 'web',
+      containerId: 'old-123',
+    });
+    fresh.updateOperation(operation.id, {
+      newContainerId: 'new-456',
+    });
+    findQueries.length = 0;
+
+    const active = fresh.getInProgressOperationByContainerId('new-456');
+
+    expect(active?.id).toBe(operation.id);
+    expect(findQueries).toEqual([
+      {
+        'data.containerId': 'new-456',
+        'data.status': 'in-progress',
+      },
+      {
+        'data.newContainerId': 'new-456',
+        'data.status': 'in-progress',
+      },
+    ]);
+  });
+
   test('getInProgressOperationByContainerId should return undefined when uninitialized', async () => {
     vi.resetModules();
     const fresh = await import('./update-operation.js');
