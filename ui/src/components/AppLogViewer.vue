@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import AppIconButton from '@/components/AppIconButton.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { useLogSearch } from '../composables/useLogSearch';
 import type { AppLogEntry } from '../types/log-entry';
@@ -43,15 +44,20 @@ const lineElements = new Map<number, HTMLElement>();
 const logViewport = ref<HTMLElement | null>(null);
 const copySuccess = ref(false);
 
-function isNearBottom(element: HTMLElement): boolean {
+const newestFirst = ref(false);
+
+function isNearEdge(element: HTMLElement): boolean {
+  if (newestFirst.value) {
+    return element.scrollTop < 28;
+  }
   return element.scrollHeight - element.scrollTop - element.clientHeight < 28;
 }
 
-function scrollToBottom(): void {
+function scrollToEdge(): void {
   if (!logViewport.value) {
     return;
   }
-  logViewport.value.scrollTop = logViewport.value.scrollHeight;
+  logViewport.value.scrollTop = newestFirst.value ? 0 : logViewport.value.scrollHeight;
 }
 
 function handleLogScroll(): void {
@@ -59,8 +65,8 @@ function handleLogScroll(): void {
     return;
   }
 
-  const nearBottom = isNearBottom(logViewport.value);
-  if (nearBottom !== props.autoScrollPinned) {
+  const nearEdge = isNearEdge(logViewport.value);
+  if (nearEdge !== props.autoScrollPinned) {
     emit('toggle-pin');
   }
 }
@@ -69,7 +75,7 @@ function togglePin(): void {
   const wasPinned = props.autoScrollPinned;
   emit('toggle-pin');
   if (!wasPinned) {
-    void nextTick(() => scrollToBottom());
+    void nextTick(() => scrollToEdge());
   }
 }
 
@@ -94,16 +100,21 @@ const {
 } = useLogSearch({
   visibleEntries: computed(() => props.entries),
   lineElements,
+  searchTextForEntry: (entry) =>
+    [entry.timestamp, entry.level, entry.channel, entry.component, entry.plainLine]
+      .filter(Boolean)
+      .join(' '),
 });
 
 const searchFilterMode = ref(false);
 
 const displayEntries = computed(() => {
-  if (!searchFilterMode.value || !searchQuery.value) {
-    return props.entries;
+  let entries = props.entries;
+  if (searchFilterMode.value && searchQuery.value) {
+    const matchedIds = new Set(matchedEntryIds.value);
+    entries = entries.filter((entry) => matchedIds.has(entry.id));
   }
-  const matchedIds = new Set(matchedEntryIds.value);
-  return props.entries.filter((entry) => matchedIds.has(entry.id));
+  return newestFirst.value ? [...entries].reverse() : entries;
 });
 
 const renderedLineCount = computed(() => {
@@ -129,14 +140,14 @@ watch(
     }
 
     if (props.autoScrollPinned) {
-      void nextTick(() => scrollToBottom());
+      void nextTick(() => scrollToEdge());
     }
   },
 );
 
 onMounted(() => {
   if (props.autoScrollPinned) {
-    void nextTick(() => scrollToBottom());
+    void nextTick(() => scrollToEdge());
   }
 });
 
@@ -338,6 +349,14 @@ async function copyLogs(): Promise<void> {
             {{ props.autoScrollPinned ? 'Unpin' : 'Pin' }}
           </AppButton>
 
+          <AppIconButton
+            :icon="newestFirst ? 'ph:sort-ascending' : 'ph:sort-descending'"
+            size="xs"
+            data-test="container-log-sort-toggle"
+            :tooltip="newestFirst ? 'Newest first' : 'Oldest first'"
+            @click="newestFirst = !newestFirst"
+          />
+
           <AppButton size="none" variant="plain" weight="none"
             type="button"
             data-test="container-log-copy"
@@ -381,16 +400,17 @@ async function copyLogs(): Promise<void> {
           .* Regex
         </AppButton>
 
+        <AppIconButton
+          icon="ph:funnel"
+          size="xs"
+          :variant="searchFilterMode ? 'secondary' : 'muted'"
+          data-test="container-log-filter-toggle"
+          :tooltip="searchFilterMode ? 'Showing matches only' : 'Show matches only'"
+          :class="searchFilterMode ? 'dd-bg-elevated' : ''"
+          @click="searchFilterMode = !searchFilterMode"
+        />
+
         <template v-if="searchQuery">
-          <AppButton size="none" variant="plain" weight="none"
-            type="button"
-            data-test="container-log-filter-toggle"
-            class="px-2 py-1.5 dd-rounded text-2xs font-semibold uppercase tracking-wide transition-colors"
-            :class="searchFilterMode ? 'text-drydock-secondary dd-bg-elevated' : 'dd-text-muted hover:dd-text hover:dd-bg-elevated'"
-            @click="searchFilterMode = !searchFilterMode"
-          >
-            {{ searchFilterMode ? 'Matches Only' : 'Filter' }}
-          </AppButton>
           <AppButton size="none" variant="plain" weight="none"
             type="button"
             data-test="container-log-prev-match"

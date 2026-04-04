@@ -186,10 +186,14 @@ function togglePin() {
             >
               Reset
             </AppButton>
+          </template>
 
-            <div class="ml-auto text-2xs dd-text-muted">
-              Server Level: <span class="font-semibold dd-text capitalize">{{ props.logLevel }}</span>
-            </div>
+          <template #footer-extra>
+            <span
+              class="px-1.5 py-0.5 dd-rounded text-3xs font-bold uppercase tracking-wider dd-text-muted cursor-default"
+              style="background-color: var(--dd-log-footer-bg); border: 1px solid var(--dd-log-divider)"
+              v-tooltip="`Server log level: ${props.logLevel}. Only messages at this level or above are captured.`"
+            >{{ props.logLevel }}</span>
           </template>
 
           <template #entry-prefix="{ entry }">

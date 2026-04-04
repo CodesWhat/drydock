@@ -405,4 +405,52 @@ describe('AppLogViewer', () => {
       expect(wrapper.text()).toContain('No matching entries');
     });
   });
+
+  describe('sort order toggle', () => {
+    it('displays entries oldest-first by default', () => {
+      const wrapper = mountViewer({
+        entries: [
+          makeEntry(1, { plainLine: 'first' }),
+          makeEntry(2, { plainLine: 'second' }),
+          makeEntry(3, { plainLine: 'third' }),
+        ],
+      });
+
+      const rows = wrapper.findAll('[data-test="container-log-row"]');
+      expect(rows[0].text()).toContain('first');
+      expect(rows[2].text()).toContain('third');
+    });
+
+    it('reverses entries to newest-first when sort toggle is clicked', async () => {
+      const wrapper = mountViewer({
+        entries: [
+          makeEntry(1, { plainLine: 'first' }),
+          makeEntry(2, { plainLine: 'second' }),
+          makeEntry(3, { plainLine: 'third' }),
+        ],
+      });
+
+      await wrapper.get('[data-test="container-log-sort-toggle"]').trigger('click');
+      await nextTick();
+
+      const rows = wrapper.findAll('[data-test="container-log-row"]');
+      expect(rows[0].text()).toContain('third');
+      expect(rows[2].text()).toContain('first');
+    });
+
+    it('restores oldest-first when toggled back', async () => {
+      const wrapper = mountViewer({
+        entries: [makeEntry(1, { plainLine: 'first' }), makeEntry(2, { plainLine: 'second' })],
+      });
+
+      await wrapper.get('[data-test="container-log-sort-toggle"]').trigger('click');
+      await nextTick();
+      await wrapper.get('[data-test="container-log-sort-toggle"]').trigger('click');
+      await nextTick();
+
+      const rows = wrapper.findAll('[data-test="container-log-row"]');
+      expect(rows[0].text()).toContain('first');
+      expect(rows[1].text()).toContain('second');
+    });
+  });
 });
