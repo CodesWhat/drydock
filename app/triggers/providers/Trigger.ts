@@ -501,8 +501,9 @@ class Trigger extends Component {
     try {
       // Agent connectivity notifications synthesize one-off container payloads and should always
       // dispatch immediately, even when the trigger itself is configured for batch updates.
+      const normalizedMode = this.configuration.mode?.toLowerCase();
       const shouldUseBatchMode =
-        this.configuration.mode?.toLowerCase() === 'batch' &&
+        (normalizedMode === 'batch' || normalizedMode === 'batch+digest') &&
         getNotificationEvent(container) === undefined;
       if (shouldUseBatchMode) {
         this.queueEventBatchDispatch(ruleId, container);
@@ -876,12 +877,17 @@ class Trigger extends Component {
     await this.initTrigger();
     if (this.getAutoMode() !== 'none') {
       const autoMode = this.getAutoMode();
+      const normalizedMode = this.configuration.mode?.toLowerCase();
+      const shouldRegisterBatchHandler =
+        normalizedMode === 'batch' || normalizedMode === 'batch+digest';
+      const shouldRegisterDigestHandler =
+        normalizedMode === 'digest' || normalizedMode === 'batch+digest';
       this.log.info(
         autoMode === 'oninclude'
           ? 'Registering for auto execution (only containers with explicit include labels)'
           : 'Registering for auto execution (all watched containers)',
       );
-      if (this.configuration.mode?.toLowerCase() === 'simple') {
+      if (normalizedMode === 'simple') {
         this.unregisterContainerReport = event.registerContainerReport(
           async (containerReport) => this.handleContainerReport(containerReport),
           {
@@ -890,7 +896,7 @@ class Trigger extends Component {
           },
         );
       }
-      if (this.configuration.mode?.toLowerCase() === 'batch') {
+      if (shouldRegisterBatchHandler) {
         this.unregisterContainerReports = event.registerContainerReports(
           async (containersReports) => this.handleContainerReports(containersReports),
           {
@@ -899,7 +905,7 @@ class Trigger extends Component {
           },
         );
       }
-      if (this.configuration.mode?.toLowerCase() === 'digest') {
+      if (shouldRegisterDigestHandler) {
         this.unregisterContainerReport = event.registerContainerReport(
           async (containerReport) => this.handleContainerReportDigest(containerReport),
           {
@@ -1012,7 +1018,11 @@ class Trigger extends Component {
         .insensitive()
         .valid(...Trigger.getSupportedThresholds())
         .default('all'),
-      mode: this.joi.string().insensitive().valid('simple', 'batch', 'digest').default('simple'),
+      mode: this.joi
+        .string()
+        .insensitive()
+        .valid('simple', 'batch', 'digest', 'batch+digest')
+        .default('simple'),
       once: this.joi.boolean().default(true),
       digestcron: this.joi
         .string()

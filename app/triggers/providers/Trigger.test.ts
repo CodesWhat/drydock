@@ -301,6 +301,7 @@ const handleContainerReportTestCases = [
     once: true,
     changed: true,
     updateAvailable: true,
+    kind: 'tag',
     semverDiff: 'major',
   },
   {
@@ -309,7 +310,17 @@ const handleContainerReportTestCases = [
     once: false,
     changed: false,
     updateAvailable: true,
+    kind: 'tag',
     semverDiff: 'major',
+  },
+  {
+    shouldTrigger: true,
+    threshold: 'all',
+    once: true,
+    changed: true,
+    updateAvailable: true,
+    kind: 'unknown',
+    semverDiff: undefined,
   },
   {
     shouldTrigger: false,
@@ -317,6 +328,7 @@ const handleContainerReportTestCases = [
     once: true,
     changed: true,
     updateAvailable: true,
+    kind: 'tag',
     semverDiff: 'major',
   },
   {
@@ -325,6 +337,7 @@ const handleContainerReportTestCases = [
     once: false,
     changed: false,
     updateAvailable: true,
+    kind: 'tag',
     semverDiff: 'major',
   },
   {
@@ -333,6 +346,7 @@ const handleContainerReportTestCases = [
     once: false,
     changed: true,
     updateAvailable: false,
+    kind: 'tag',
     semverDiff: 'major',
   },
 ];
@@ -354,7 +368,7 @@ test.each(
       name: 'container1',
       updateAvailable: item.updateAvailable,
       updateKind: {
-        kind: 'tag',
+        kind: item.kind,
         semverDiff: item.semverDiff,
       },
     },
@@ -364,7 +378,7 @@ test.each(
       name: 'container1',
       updateAvailable: item.updateAvailable,
       updateKind: {
-        kind: 'tag',
+        kind: item.kind,
         semverDiff: item.semverDiff,
       },
     });
@@ -3124,5 +3138,213 @@ describe('digest mode', () => {
     await trigger.init();
 
     expect(mockCron.schedule).toHaveBeenCalledWith('0 8 * * *', expect.any(Function));
+  });
+});
+
+describe('batch+digest mode', () => {
+  const mockStop = vi.fn();
+
+  beforeEach(() => {
+    mockStop.mockClear();
+    vi.mocked(mockCron.schedule).mockReturnValue({ stop: mockStop } as any);
+    vi.mocked(mockCron.validate).mockReturnValue(true);
+    vi.mocked(event.registerContainerReport).mockReturnValue(vi.fn());
+    vi.mocked(event.registerContainerReports).mockReturnValue(vi.fn());
+    vi.mocked(event.registerContainerUpdateApplied).mockReturnValue(vi.fn());
+    vi.mocked(event.registerContainerUpdateFailed).mockReturnValue(vi.fn());
+    vi.mocked(event.registerSecurityAlert).mockReturnValue(vi.fn());
+    vi.mocked(event.registerAgentConnected).mockReturnValue(vi.fn());
+    vi.mocked(event.registerAgentDisconnected).mockReturnValue(vi.fn());
+  });
+
+  test('validateConfiguration should accept batch+digest mode', () => {
+    const validated = trigger.validateConfiguration({
+      ...configurationValid,
+      mode: 'batch+digest',
+    });
+    expect(validated.mode).toBe('batch+digest');
+  });
+
+  test('init should register both batch and digest handlers and schedule digest cron', async () => {
+    await trigger.register('trigger', 'test', 'combined-trigger', {
+      ...configurationValid,
+      mode: 'batch+digest',
+      digestcron: '0 9 * * *',
+    });
+
+    expect(event.registerContainerReports).toHaveBeenCalledTimes(1);
+    expect(event.registerContainerReport).toHaveBeenCalledTimes(1);
+    expect(mockCron.schedule).toHaveBeenCalledWith('0 9 * * *', expect.any(Function));
+  });
+
+  test('batch handler should fire immediately on scan results in batch+digest mode', async () => {
+    let batchCallback;
+    vi.mocked(event.registerContainerReports).mockImplementation((cb) => {
+      batchCallback = cb;
+      return vi.fn();
+    });
+
+    await trigger.register('trigger', 'test', 'combined-trigger', {
+      ...configurationValid,
+      mode: 'batch+digest',
+    });
+
+    const report = {
+      changed: true,
+      container: {
+        id: 'c1',
+        name: 'app',
+        watcher: 'test',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      },
+    };
+    const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+
+    await batchCallback?.([report] as any);
+
+    expect(triggerBatchSpy).toHaveBeenCalledWith([report.container]);
+  });
+
+  test('digest handler should buffer containers and flush them on cron in batch+digest mode', async () => {
+    let digestCallback;
+    vi.mocked(event.registerContainerReport).mockImplementation((cb) => {
+      digestCallback = cb;
+      return vi.fn();
+    });
+
+    await trigger.register('trigger', 'test', 'combined-trigger', {
+      ...configurationValid,
+      mode: 'batch+digest',
+      digestcron: '0 9 * * *',
+    });
+
+    const report = {
+      changed: true,
+      container: {
+        id: 'c1',
+        name: 'app',
+        watcher: 'test',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      },
+    };
+    const cronCallback = vi.mocked(mockCron.schedule).mock.calls[0]?.[1];
+    const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+
+    await digestCallback?.(report as any);
+    expect(triggerBatchSpy).not.toHaveBeenCalled();
+
+    cronCallback?.();
+    await Promise.resolve();
+
+    expect(triggerBatchSpy).toHaveBeenCalledWith([report.container]);
+  });
+
+  test('handleContainerUpdateAppliedEvent should evict digest entries in batch+digest mode', async () => {
+    await trigger.register('trigger', 'test', 'combined-trigger', {
+      ...configurationValid,
+      mode: 'batch+digest',
+    });
+    storeContainer.getContainers.mockReturnValue([]);
+
+    await trigger.handleContainerReportDigest({
+      container: {
+        id: 'c1',
+        name: 'app',
+        watcher: 'test',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      },
+      changed: true,
+    });
+    await trigger.handleContainerReportDigest({
+      container: {
+        id: 'c2',
+        name: 'web',
+        watcher: 'test',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '3.0' },
+      },
+      changed: true,
+    });
+
+    await trigger.handleContainerUpdateAppliedEvent('test_app');
+
+    const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+    await trigger.flushDigestBuffer();
+
+    expect(triggerBatchSpy).toHaveBeenCalledWith([expect.objectContaining({ name: 'web' })]);
+  });
+
+  test('deregister should unregister both handlers, stop cron, and clear digest buffer', async () => {
+    const unregisterBatch = vi.fn();
+    const unregisterDigest = vi.fn();
+    vi.mocked(event.registerContainerReports).mockReturnValue(unregisterBatch);
+    vi.mocked(event.registerContainerReport).mockReturnValue(unregisterDigest);
+
+    await trigger.register('trigger', 'test', 'combined-trigger', {
+      ...configurationValid,
+      mode: 'batch+digest',
+    });
+
+    await trigger.handleContainerReportDigest({
+      container: {
+        id: 'c1',
+        name: 'app',
+        watcher: 'test',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      },
+      changed: true,
+    });
+
+    await trigger.deregister();
+
+    expect(unregisterBatch).toHaveBeenCalledTimes(1);
+    expect(unregisterDigest).toHaveBeenCalledTimes(1);
+    expect(mockStop).toHaveBeenCalledTimes(1);
+
+    const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+    await trigger.flushDigestBuffer();
+    expect(triggerBatchSpy).not.toHaveBeenCalled();
+  });
+
+  test('non-scan events should use event batch dispatch in batch+digest mode', async () => {
+    vi.useFakeTimers();
+    try {
+      const containers = [
+        {
+          watcher: 'local',
+          name: 'container1',
+          updateAvailable: true,
+          updateKind: { kind: 'tag', semverDiff: 'major' },
+        },
+        {
+          watcher: 'local',
+          name: 'container2',
+          updateAvailable: true,
+          updateKind: { kind: 'tag', semverDiff: 'major' },
+        },
+      ];
+      await trigger.register('trigger', 'test', 'combined-trigger', {
+        ...configurationValid,
+        mode: 'batch+digest',
+      });
+      storeContainer.getContainers.mockReturnValue(containers);
+      const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+
+      await trigger.handleContainerUpdateAppliedEvent('local_container1');
+      await trigger.handleContainerUpdateAppliedEvent('local_container2');
+
+      expect(triggerBatchSpy).not.toHaveBeenCalled();
+
+      await vi.runOnlyPendingTimersAsync();
+
+      expect(triggerBatchSpy).toHaveBeenCalledTimes(1);
+      expect(triggerBatchSpy).toHaveBeenCalledWith(containers);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
