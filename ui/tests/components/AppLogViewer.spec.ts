@@ -165,7 +165,7 @@ describe('AppLogViewer', () => {
       autoScrollPinned: false,
     });
 
-    const viewport = wrapper.get('div.overflow-auto.font-mono').element as HTMLElement;
+    const viewport = wrapper.get('div.overflow-y-auto.font-mono').element as HTMLElement;
     setViewportMetrics(viewport, {
       scrollHeight: 700,
       clientHeight: 100,
@@ -185,14 +185,14 @@ describe('AppLogViewer', () => {
       autoScrollPinned: true,
     });
 
-    const viewport = wrapper.get('div.overflow-auto.font-mono').element as HTMLElement;
+    const viewport = wrapper.get('div.overflow-y-auto.font-mono').element as HTMLElement;
     setViewportMetrics(viewport, {
       scrollHeight: 1000,
       clientHeight: 100,
       scrollTop: 100,
     });
 
-    await wrapper.get('div.overflow-auto.font-mono').trigger('scroll');
+    await wrapper.get('div.overflow-y-auto.font-mono').trigger('scroll');
 
     expect(wrapper.emitted('toggle-pin')).toHaveLength(1);
   });
@@ -287,5 +287,122 @@ describe('AppLogViewer', () => {
     await nextTick();
 
     expect(wrapper.get('[data-test="container-log-copy"]').text()).toContain('Copy');
+  });
+
+  describe('search filter mode', () => {
+    it('shows all entries in highlight mode (default)', async () => {
+      const wrapper = mountViewer({
+        entries: [
+          makeEntry(1, { plainLine: 'alpha started' }),
+          makeEntry(2, { plainLine: 'beta step' }),
+          makeEntry(3, { plainLine: 'alpha finished' }),
+        ],
+      });
+
+      await wrapper.get('[data-test="container-log-search-input"]').setValue('alpha');
+      await nextTick();
+
+      expect(wrapper.findAll('[data-test="container-log-row"]')).toHaveLength(3);
+    });
+
+    it('shows only matching entries when filter mode is active', async () => {
+      const wrapper = mountViewer({
+        entries: [
+          makeEntry(1, { plainLine: 'alpha started' }),
+          makeEntry(2, { plainLine: 'beta step' }),
+          makeEntry(3, { plainLine: 'alpha finished' }),
+        ],
+      });
+
+      await wrapper.get('[data-test="container-log-search-input"]').setValue('alpha');
+      await nextTick();
+      await wrapper.get('[data-test="container-log-filter-toggle"]').trigger('click');
+      await nextTick();
+
+      const rows = wrapper.findAll('[data-test="container-log-row"]');
+      expect(rows).toHaveLength(2);
+      expect(rows[0].text()).toContain('alpha started');
+      expect(rows[1].text()).toContain('alpha finished');
+    });
+
+    it('shows filtered line count in footer when filter mode is active', async () => {
+      const wrapper = mountViewer({
+        entries: [
+          makeEntry(1, { plainLine: 'alpha started' }),
+          makeEntry(2, { plainLine: 'beta step' }),
+          makeEntry(3, { plainLine: 'alpha finished' }),
+        ],
+      });
+
+      await wrapper.get('[data-test="container-log-search-input"]').setValue('alpha');
+      await nextTick();
+      await wrapper.get('[data-test="container-log-filter-toggle"]').trigger('click');
+      await nextTick();
+
+      expect(wrapper.get('[data-test="container-log-line-count"]').text()).toBe('2 / 3 lines');
+    });
+
+    it('restores all entries when filter mode is toggled off', async () => {
+      const wrapper = mountViewer({
+        entries: [
+          makeEntry(1, { plainLine: 'alpha started' }),
+          makeEntry(2, { plainLine: 'beta step' }),
+          makeEntry(3, { plainLine: 'alpha finished' }),
+        ],
+      });
+
+      await wrapper.get('[data-test="container-log-search-input"]').setValue('alpha');
+      await nextTick();
+      await wrapper.get('[data-test="container-log-filter-toggle"]').trigger('click');
+      await nextTick();
+
+      expect(wrapper.findAll('[data-test="container-log-row"]')).toHaveLength(2);
+
+      await wrapper.get('[data-test="container-log-filter-toggle"]').trigger('click');
+      await nextTick();
+
+      expect(wrapper.findAll('[data-test="container-log-row"]')).toHaveLength(3);
+    });
+
+    it('shows all entries when filter mode is on but search is cleared', async () => {
+      const wrapper = mountViewer({
+        entries: [
+          makeEntry(1, { plainLine: 'alpha started' }),
+          makeEntry(2, { plainLine: 'beta step' }),
+        ],
+      });
+
+      await wrapper.get('[data-test="container-log-search-input"]').setValue('alpha');
+      await nextTick();
+      await wrapper.get('[data-test="container-log-filter-toggle"]').trigger('click');
+      await nextTick();
+
+      expect(wrapper.findAll('[data-test="container-log-row"]')).toHaveLength(1);
+
+      await wrapper.get('[data-test="container-log-search-input"]').setValue('');
+      await nextTick();
+
+      expect(wrapper.findAll('[data-test="container-log-row"]')).toHaveLength(2);
+    });
+
+    it('shows empty state when filter mode is on with no matches', async () => {
+      const wrapper = mountViewer({
+        entries: [
+          makeEntry(1, { plainLine: 'alpha started' }),
+          makeEntry(2, { plainLine: 'beta step' }),
+        ],
+      });
+
+      await wrapper.get('[data-test="container-log-search-input"]').setValue('alpha');
+      await nextTick();
+      await wrapper.get('[data-test="container-log-filter-toggle"]').trigger('click');
+      await nextTick();
+
+      await wrapper.get('[data-test="container-log-search-input"]').setValue('zzzzz');
+      await nextTick();
+
+      expect(wrapper.findAll('[data-test="container-log-row"]')).toHaveLength(0);
+      expect(wrapper.text()).toContain('No matching entries');
+    });
   });
 });

@@ -96,7 +96,27 @@ const {
   lineElements,
 });
 
-const renderedLineCount = computed(() => props.lineCount ?? props.entries.length);
+const searchFilterMode = ref(false);
+
+const displayEntries = computed(() => {
+  if (!searchFilterMode.value || !searchQuery.value) {
+    return props.entries;
+  }
+  const matchedIds = new Set(matchedEntryIds.value);
+  return props.entries.filter((entry) => matchedIds.has(entry.id));
+});
+
+const renderedLineCount = computed(() => {
+  const total = props.lineCount ?? props.entries.length;
+  if (
+    searchFilterMode.value &&
+    searchQuery.value &&
+    displayEntries.value.length < props.entries.length
+  ) {
+    return `${displayEntries.value.length} / ${total}`;
+  }
+  return `${total}`;
+});
 
 watch(
   () => props.entries.length,
@@ -364,6 +384,15 @@ async function copyLogs(): Promise<void> {
         <template v-if="searchQuery">
           <AppButton size="none" variant="plain" weight="none"
             type="button"
+            data-test="container-log-filter-toggle"
+            class="px-2 py-1.5 dd-rounded text-2xs font-semibold uppercase tracking-wide transition-colors"
+            :class="searchFilterMode ? 'text-drydock-secondary dd-bg-elevated' : 'dd-text-muted hover:dd-text hover:dd-bg-elevated'"
+            @click="searchFilterMode = !searchFilterMode"
+          >
+            {{ searchFilterMode ? 'Matches Only' : 'Filter' }}
+          </AppButton>
+          <AppButton size="none" variant="plain" weight="none"
+            type="button"
             data-test="container-log-prev-match"
             class="px-2 py-1.5 dd-rounded text-2xs font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
             :disabled="matchedEntryIds.length === 0"
@@ -397,12 +426,12 @@ async function copyLogs(): Promise<void> {
       :class="props.compact ? 'text-2xs' : 'text-2xs-plus'"
       @scroll="handleLogScroll"
     >
-      <div v-if="props.entries.length === 0" class="px-3 py-5 text-center text-2xs-plus dd-text-muted">
-        {{ props.emptyMessage }}
+      <div v-if="displayEntries.length === 0" class="px-3 py-5 text-center text-2xs-plus dd-text-muted">
+        {{ searchFilterMode && searchQuery ? 'No matching entries' : props.emptyMessage }}
       </div>
 
       <div
-        v-for="(entry, index) in props.entries"
+        v-for="(entry, index) in displayEntries"
         :key="entry.id"
         :ref="(element) => setLineElement(entry.id, element as Element | null)"
         data-test="container-log-row"
@@ -439,7 +468,7 @@ async function copyLogs(): Promise<void> {
       :style="{ borderTop: '1px solid var(--dd-log-divider)', backgroundColor: 'var(--dd-log-footer-bg)' }"
     >
       <div class="flex items-center gap-2 min-w-0">
-        <span class="dd-text-muted font-mono">{{ renderedLineCount }} lines</span>
+        <span class="dd-text-muted font-mono" data-test="container-log-line-count">{{ renderedLineCount }} lines</span>
         <slot name="footer-extra" />
       </div>
 
