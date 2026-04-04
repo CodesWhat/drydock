@@ -45,6 +45,19 @@ describe('DataViewLayout', () => {
     expect(root.classes()).toContain('min-h-0');
   });
 
+  it('escapes the clipped AppLayout padding so the scroll area reaches the viewport edge', () => {
+    const wrapper = mount(DataViewLayout, {
+      slots: { default: '<p>Content</p>' },
+    });
+    const root = wrapper.find('div');
+    expect(root.classes()).toContain('-ml-4');
+    expect(root.classes()).toContain('-mr-2');
+    expect(root.classes()).toContain('-my-4');
+    expect(root.classes()).toContain('sm:-ml-6');
+    expect(root.classes()).toContain('sm:-mr-[9px]');
+    expect(root.classes()).toContain('sm:-my-6');
+  });
+
   it('has a flex row inside for main + panel layout with gap-2', () => {
     const wrapper = mount(DataViewLayout, {
       slots: { default: '<p>Content</p>' },
@@ -90,12 +103,17 @@ describe('DataViewLayout', () => {
     expect(scrollArea.classes()).toContain('overflow-x-hidden');
   });
 
-  it('applies pr-[15px] on the scrollable content area for scrollbar centering', () => {
+  it('restores internal page padding inside the scrollable content area', () => {
     const wrapper = mount(DataViewLayout, {
       slots: { default: '<p>Content</p>' },
     });
     const scrollArea = wrapper.find('.overflow-y-auto');
-    expect(scrollArea.classes()).toContain('sm:pr-[15px]');
+    expect(scrollArea.classes()).toContain('pl-4');
+    expect(scrollArea.classes()).toContain('pr-4');
+    expect(scrollArea.classes()).toContain('py-4');
+    expect(scrollArea.classes()).toContain('sm:pl-6');
+    expect(scrollArea.classes()).toContain('sm:pr-[24px]');
+    expect(scrollArea.classes()).toContain('sm:py-6');
   });
 
   it('renders multiple default slot children', () => {
