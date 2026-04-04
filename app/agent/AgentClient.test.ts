@@ -26,6 +26,9 @@ vi.mock('../event/index.js', () => ({
   emitAgentDisconnected: vi.fn().mockResolvedValue(undefined),
   emitContainerReport: vi.fn(),
   emitContainerReports: vi.fn(),
+  emitContainerUpdateApplied: vi.fn().mockResolvedValue(undefined),
+  emitContainerUpdateFailed: vi.fn().mockResolvedValue(undefined),
+  emitSecurityAlert: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock('../registry/index.js', () => ({
   deregisterAgentComponents: vi.fn(),
@@ -943,6 +946,40 @@ describe('AgentClient', () => {
     test('should delete container on dd:container-removed', async () => {
       await client.handleEvent('dd:container-removed', { id: 'c1' });
       expect(storeContainer.deleteContainer).toHaveBeenCalledWith('c1');
+    });
+
+    test('should emit update-applied when agent sends dd:update-applied', async () => {
+      await client.handleEvent('dd:update-applied', 'local_nginx');
+
+      expect(event.emitContainerUpdateApplied).toHaveBeenCalledWith('local_nginx');
+    });
+
+    test('should emit update-failed when agent sends dd:update-failed', async () => {
+      await client.handleEvent('dd:update-failed', {
+        containerName: 'local_nginx',
+        error: 'compose pull failed',
+      });
+
+      expect(event.emitContainerUpdateFailed).toHaveBeenCalledWith({
+        containerName: 'local_nginx',
+        error: 'compose pull failed',
+      });
+    });
+
+    test('should emit security-alert when agent sends dd:security-alert', async () => {
+      await client.handleEvent('dd:security-alert', {
+        containerName: 'local_nginx',
+        details: '1 critical vulnerability',
+        status: 'blocked',
+        blockingCount: 1,
+      });
+
+      expect(event.emitSecurityAlert).toHaveBeenCalledWith({
+        containerName: 'local_nginx',
+        details: '1 critical vulnerability',
+        status: 'blocked',
+        blockingCount: 1,
+      });
     });
 
     test('should reconcile watcher snapshot by processing current containers and pruning missing ones', async () => {
