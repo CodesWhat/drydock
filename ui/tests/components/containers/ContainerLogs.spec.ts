@@ -1,6 +1,7 @@
 import { mount } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import ContainerLogs from '@/components/containers/ContainerLogs.vue';
+import { preferences, resetPreferences } from '@/preferences/store';
 
 const mocks = vi.hoisted(() => {
   type StreamOptions = {
@@ -47,6 +48,8 @@ describe('ContainerLogs', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
+    resetPreferences();
     URL.createObjectURL = vi.fn(() => 'blob:mock-url');
     URL.revokeObjectURL = vi.fn();
   });
@@ -181,6 +184,34 @@ describe('ContainerLogs', () => {
 
     await pauseButton.trigger('click');
     expect(mocks.handle.resume).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses the persisted log sort preference when the viewer remounts', async () => {
+    preferences.views.logs.newestFirst = true;
+
+    const wrapper = mountComponent();
+    const latestOptions = mocks.getLatestOptions();
+    if (!latestOptions) {
+      throw new Error('Missing stream options');
+    }
+
+    latestOptions.onMessage({
+      type: 'stdout',
+      ts: '2026-03-15T00:00:00Z',
+      displayTs: '[00:00:00.000]',
+      line: 'first',
+    });
+    latestOptions.onMessage({
+      type: 'stdout',
+      ts: '2026-03-15T00:00:01Z',
+      displayTs: '[00:00:01.000]',
+      line: 'second',
+    });
+    await nextTick();
+
+    const rows = wrapper.findAll('[data-test="container-log-row"]');
+    expect(rows[0].text()).toContain('second');
+    expect(rows[1].text()).toContain('first');
   });
 
   it('downloads current log selection as a .log file', async () => {

@@ -74,9 +74,9 @@ describe('preferences migration', () => {
   });
 
   describe('migrate', () => {
-    it('should return merged defaults for schemaVersion 1 data', () => {
+    it('should return merged defaults for schemaVersion 1 data and upgrade the schema version', () => {
       const result = migrate({ schemaVersion: 1, theme: { family: 'dracula' } });
-      expect(result.schemaVersion).toBe(1);
+      expect(result.schemaVersion).toBe(DEFAULTS.schemaVersion);
       expect(result.theme.family).toBe('dracula');
       expect(result.theme.variant).toBe('dark');
       expect(result.containers.viewMode).toBe('table');
@@ -216,6 +216,24 @@ describe('preferences migration', () => {
       expect(result.appearance.fontSize).toBe(1.15);
       expect(result.containers.viewMode).toBe('cards');
       expect(result.containers.tableActions).toBe('buttons');
+    });
+
+    it('should add the shared log sort preference when migrating older schema data', () => {
+      const result = migrate({ schemaVersion: 1, views: { triggers: { mode: 'cards' } } });
+
+      expect(result.views.logs.newestFirst).toBe(DEFAULTS.views.logs.newestFirst);
+      expect(result.views.triggers.mode).toBe('cards');
+    });
+
+    it('should preserve the shared log sort preference in current schema data', () => {
+      const result = migrate({
+        schemaVersion: DEFAULTS.schemaVersion,
+        views: {
+          logs: { newestFirst: true },
+        },
+      });
+
+      expect(result.views.logs.newestFirst).toBe(true);
     });
   });
 
