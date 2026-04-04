@@ -183,7 +183,7 @@ function togglePin() {
 
           <template v-if="filtersModified" #toolbar-right>
             <AppIconButton
-              icon="ph:arrow-counter-clockwise"
+              icon="restart"
               size="xs"
               tooltip="Reset filters"
               @click="resetFilters"

@@ -287,7 +287,7 @@ describe('AppLogViewer', () => {
     vi.advanceTimersByTime(2000);
     await nextTick();
 
-    expect(copyBtn.props('icon')).toBe('ph:copy');
+    expect(copyBtn.props('icon')).toBe('copy');
   });
 
   describe('search filter mode', () => {

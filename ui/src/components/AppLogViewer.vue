@@ -335,7 +335,7 @@ async function copyLogs(): Promise<void> {
         />
 
         <AppIconButton
-          :icon="props.autoScrollPinned ? 'ph:push-pin-slash' : 'ph:push-pin'"
+          :icon="props.autoScrollPinned ? 'unpin' : 'pin'"
           size="xs"
           data-test="container-log-toggle-pin"
           :tooltip="props.autoScrollPinned ? 'Unpin auto-scroll' : 'Pin auto-scroll'"
@@ -343,7 +343,7 @@ async function copyLogs(): Promise<void> {
         />
 
         <AppIconButton
-          :icon="newestFirst ? 'ph:sort-ascending' : 'ph:sort-descending'"
+          :icon="newestFirst ? 'sort-asc' : 'sort-desc'"
           size="xs"
           data-test="container-log-sort-toggle"
           :tooltip="newestFirst ? 'Newest first' : 'Oldest first'"
@@ -381,7 +381,7 @@ async function copyLogs(): Promise<void> {
         </AppButton>
 
         <AppIconButton
-          icon="ph:funnel"
+          icon="filter"
           size="xs"
           :variant="searchFilterMode ? 'secondary' : 'muted'"
           data-test="container-log-filter-toggle"
@@ -422,7 +422,7 @@ async function copyLogs(): Promise<void> {
 
     <div class="relative flex-1 min-h-[120px] flex flex-col">
       <AppIconButton
-        :icon="copySuccess ? 'check' : 'ph:copy'"
+        :icon="copySuccess ? 'check' : 'copy'"
         size="xs"
         data-test="container-log-copy"
         :tooltip="copySuccess ? 'Copied!' : 'Copy logs'"
