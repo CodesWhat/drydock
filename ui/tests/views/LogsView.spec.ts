@@ -19,7 +19,7 @@ vi.mock('@/composables/useSystemLogStream', () => ({
 
 describe('LogsView', () => {
   describe('layout spacing', () => {
-    it('applies pr-[15px] on the root container for scrollbar centering', () => {
+    it('clips overflow on the root container so only the log viewport scrolls', () => {
       const wrapper = mount(LogsView, {
         global: {
           stubs: {
@@ -28,19 +28,7 @@ describe('LogsView', () => {
         },
       });
       const root = wrapper.find('div');
-      expect(root.classes()).toContain('sm:pr-[15px]');
-    });
-
-    it('uses the standard vertical scroll container', () => {
-      const wrapper = mount(LogsView, {
-        global: {
-          stubs: {
-            ConfigLogsTab: { template: '<div class="config-logs-stub" />' },
-          },
-        },
-      });
-      const root = wrapper.find('div');
-      expect(root.classes()).toContain('overflow-y-auto');
+      expect(root.classes()).toContain('overflow-hidden');
     });
 
     it('stretches to fill available height with flex-1/min-h-0/min-w-0', () => {

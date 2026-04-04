@@ -284,12 +284,12 @@ async function copyLogs(): Promise<void> {
 
 <template>
   <div
-    class="dd-rounded overflow-hidden flex flex-col min-h-[300px] flex-1"
+    class="dd-rounded overflow-hidden flex flex-col flex-1 min-h-0"
     :style="{ backgroundColor: 'var(--dd-bg-code)' }"
     data-test="app-log-viewer"
   >
     <div
-      class="px-3 py-2.5 flex flex-col gap-2"
+      class="px-3 py-2.5 flex flex-col gap-2 shrink-0"
       :style="{ borderBottom: '1px solid var(--dd-log-divider)' }"
     >
       <div class="flex items-center gap-2 justify-between">
@@ -393,7 +393,7 @@ async function copyLogs(): Promise<void> {
 
     <div
       ref="logViewport"
-      class="flex-1 min-h-0 overflow-auto font-mono"
+      class="flex-1 min-h-[120px] overflow-y-auto overflow-x-hidden font-mono"
       :class="props.compact ? 'text-2xs' : 'text-2xs-plus'"
       @scroll="handleLogScroll"
     >
@@ -412,9 +412,9 @@ async function copyLogs(): Promise<void> {
           isCurrentMatch(entry.id) ? 'bg-drydock-secondary/10' : '',
         ]"
       >
-        <div class="flex items-center gap-2 whitespace-nowrap">
-          <span v-if="props.showLineNumbers" class="shrink-0 tabular-nums dd-text-muted">{{ index + 1 }}</span>
-          <span class="shrink-0 tabular-nums" style="color: var(--dd-log-text-muted)">{{ entry.timestamp || '-' }}</span>
+        <div class="flex items-start gap-2">
+          <span v-if="props.showLineNumbers" class="shrink-0 whitespace-nowrap tabular-nums dd-text-muted">{{ index + 1 }}</span>
+          <span class="shrink-0 whitespace-nowrap tabular-nums" style="color: var(--dd-log-text-muted)">{{ entry.timestamp || '-' }}</span>
 
           <slot name="entry-prefix" :entry="entry" />
 
@@ -423,7 +423,7 @@ async function copyLogs(): Promise<void> {
             class="min-w-0 flex-1 whitespace-pre-wrap break-words"
             style="color: var(--dd-log-text)"
           ><span v-for="(token, tokenIndex) in tokenizeJson(entry.json.pretty)" :key="`${entry.id}-${tokenIndex}`" :class="tokenClassName(token)">{{ token.text }}</span></pre>
-          <span v-else class="min-w-0 flex-1" style="color: var(--dd-log-text)">
+          <span v-else class="min-w-0 flex-1 whitespace-pre-wrap break-words" style="color: var(--dd-log-text)">
             <span
               v-for="(segment, segmentIndex) in entry.ansiSegments"
               :key="`${entry.id}-${segmentIndex}`"
