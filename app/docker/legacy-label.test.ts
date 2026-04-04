@@ -48,6 +48,17 @@ describe('getPreferredLabelValue', () => {
     expect(getPreferredLabelValue({}, 'dd.watch', 'wud.watch')).toBeUndefined();
   });
 
+  test('falls back without a warn handler when no deprecation callback is provided', () => {
+    vi.clearAllMocks();
+
+    expect(getPreferredLabelValue({ 'wud.watch': 'legacy-1' }, 'dd.watch', 'wud.watch')).toBe(
+      'legacy-1',
+    );
+
+    expect(recordLegacyInput).toHaveBeenCalledTimes(1);
+    expect(recordLegacyInput).toHaveBeenCalledWith('label', 'wud.watch');
+  });
+
   test('uses shared fallback warning registry when warnedFallbacks is not provided', () => {
     vi.clearAllMocks();
     const warn = vi.fn();
