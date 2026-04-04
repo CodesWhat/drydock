@@ -60,11 +60,40 @@ interface AgentConnectedPayload {
   reconnected: boolean;
 }
 
-interface TriggerNotificationEvent {
+interface UpdateAppliedNotificationEvent {
+  kind: 'update-applied';
+}
+
+interface UpdateFailedNotificationEvent {
+  kind: 'update-failed';
+  error?: string;
+}
+
+interface SecurityAlertNotificationEvent {
+  kind: 'security-alert';
+  details?: string;
+  status?: string;
+  summary?: SecurityAlertPayload['summary'];
+  blockingCount?: number;
+}
+
+interface AgentDisconnectedNotificationEvent {
   kind: 'agent-disconnect' | 'agent-reconnect';
   agentName: string;
   reason?: string;
 }
+
+interface AgentReconnectedNotificationEvent {
+  kind: 'agent-reconnect';
+  agentName: string;
+}
+
+type TriggerNotificationEvent =
+  | UpdateAppliedNotificationEvent
+  | UpdateFailedNotificationEvent
+  | SecurityAlertNotificationEvent
+  | AgentDisconnectedNotificationEvent
+  | AgentReconnectedNotificationEvent;
 
 interface EventDispatchOptions extends notificationStore.NotificationRuleDispatchOptions {
   skipThreshold?: boolean;
@@ -83,13 +112,40 @@ const AGENT_DISCONNECT_SIMPLE_TITLE_TEMPLATE = `Agent ${buildLiteralTemplateExpr
 const AGENT_DISCONNECT_SIMPLE_BODY_TEMPLATE = `Agent ${buildLiteralTemplateExpression('event.agentName')} disconnected${buildLiteralTemplateExpression('event.reason ? ": " + event.reason : ""')}`;
 const AGENT_RECONNECT_SIMPLE_TITLE_TEMPLATE = `Agent ${buildLiteralTemplateExpression('event.agentName')} reconnected`;
 const AGENT_RECONNECT_SIMPLE_BODY_TEMPLATE = `Agent ${buildLiteralTemplateExpression('event.agentName')} reconnected`;
-const AGENT_SIMPLE_TITLE_TEMPLATES: Record<TriggerNotificationEvent['kind'], string> = {
+const UPDATE_APPLIED_SIMPLE_TITLE_TEMPLATE = `Container ${buildLiteralTemplateExpression('container.name')} updated successfully`;
+const UPDATE_APPLIED_SIMPLE_BODY_TEMPLATE = `Container ${buildLiteralTemplateExpression('container.name')} updated successfully`;
+const UPDATE_FAILED_SIMPLE_TITLE_TEMPLATE = `Container ${buildLiteralTemplateExpression('container.name')} update failed`;
+const UPDATE_FAILED_SIMPLE_BODY_TEMPLATE = `Container ${buildLiteralTemplateExpression('container.name')} update failed${buildLiteralTemplateExpression('event.error ? ": " + event.error : ""')}`;
+const SECURITY_ALERT_SIMPLE_TITLE_TEMPLATE = `Security alert for container ${buildLiteralTemplateExpression('container.name')}`;
+const SECURITY_ALERT_SIMPLE_BODY_TEMPLATE = `Security alert for container ${buildLiteralTemplateExpression('container.name')}${buildLiteralTemplateExpression('event.blockingCount ? " (" + event.blockingCount + " blocking vulnerabilities)" : ""')}${buildLiteralTemplateExpression('event.details ? "\\n" + event.details : ""')}`;
+const NOTIFICATION_SIMPLE_TITLE_TEMPLATES: Partial<
+  Record<TriggerNotificationEvent['kind'], string>
+> = {
+  'update-applied': UPDATE_APPLIED_SIMPLE_TITLE_TEMPLATE,
+  'update-failed': UPDATE_FAILED_SIMPLE_TITLE_TEMPLATE,
+  'security-alert': SECURITY_ALERT_SIMPLE_TITLE_TEMPLATE,
   'agent-disconnect': AGENT_DISCONNECT_SIMPLE_TITLE_TEMPLATE,
   'agent-reconnect': AGENT_RECONNECT_SIMPLE_TITLE_TEMPLATE,
 };
-const AGENT_SIMPLE_BODY_TEMPLATES: Record<TriggerNotificationEvent['kind'], string> = {
+const NOTIFICATION_SIMPLE_BODY_TEMPLATES: Partial<
+  Record<TriggerNotificationEvent['kind'], string>
+> = {
+  'update-applied': UPDATE_APPLIED_SIMPLE_BODY_TEMPLATE,
+  'update-failed': UPDATE_FAILED_SIMPLE_BODY_TEMPLATE,
+  'security-alert': SECURITY_ALERT_SIMPLE_BODY_TEMPLATE,
   'agent-disconnect': AGENT_DISCONNECT_SIMPLE_BODY_TEMPLATE,
   'agent-reconnect': AGENT_RECONNECT_SIMPLE_BODY_TEMPLATE,
+};
+const NOTIFICATION_BATCH_TITLE_TEMPLATES: Partial<
+  Record<TriggerNotificationEvent['kind'], string>
+> = {
+  'update-applied': `${buildLiteralTemplateExpression('containers.length')} updates applied`,
+  'update-failed': `${buildLiteralTemplateExpression('containers.length')} updates failed`,
+  'security-alert': `${buildLiteralTemplateExpression('containers.length')} security alerts`,
+};
+const AGENT_SIMPLE_TITLE_TEMPLATES: Partial<Record<TriggerNotificationEvent['kind'], string>> = {
+  'agent-disconnect': AGENT_DISCONNECT_SIMPLE_TITLE_TEMPLATE,
+  'agent-reconnect': AGENT_RECONNECT_SIMPLE_TITLE_TEMPLATE,
 };
 
 function truncateReleaseNotesBody(body: string, maxLength: number) {
@@ -155,10 +211,53 @@ function buildAgentReconnectedContainer(agentName: string): Container {
   return buildAgentContainer(agentName, 'connected', 'agent-reconnect');
 }
 
+function withNotificationEvent(
+  container: Container,
+  notificationEvent: TriggerNotificationEvent,
+): Container {
+  return {
+    ...container,
+    notificationEvent,
+  } as Container;
+}
+
 export function getNotificationEvent(container: Container): TriggerNotificationEvent | undefined {
   const notificationEvent = Reflect.get(new Object(container), 'notificationEvent');
   if (!notificationEvent || typeof notificationEvent !== 'object') {
     return undefined;
+  }
+
+  const kind = Reflect.get(new Object(notificationEvent), 'kind');
+  if (kind === 'update-applied') {
+    return { kind };
+  }
+
+  if (kind === 'update-failed') {
+    const error = Reflect.get(new Object(notificationEvent), 'error');
+    return {
+      kind,
+      error: typeof error === 'string' && error.length > 0 ? error : undefined,
+    };
+  }
+
+  if (kind === 'security-alert') {
+    const details = Reflect.get(new Object(notificationEvent), 'details');
+    const status = Reflect.get(new Object(notificationEvent), 'status');
+    const summary = Reflect.get(new Object(notificationEvent), 'summary');
+    const blockingCount = Reflect.get(new Object(notificationEvent), 'blockingCount');
+    return {
+      kind,
+      details: typeof details === 'string' && details.length > 0 ? details : undefined,
+      status: typeof status === 'string' && status.length > 0 ? status : undefined,
+      summary:
+        summary && typeof summary === 'object'
+          ? (summary as SecurityAlertPayload['summary'])
+          : undefined,
+      blockingCount:
+        typeof blockingCount === 'number' && Number.isFinite(blockingCount)
+          ? blockingCount
+          : undefined,
+    };
   }
 
   const agentName = Reflect.get(new Object(notificationEvent), 'agentName');
@@ -167,7 +266,6 @@ export function getNotificationEvent(container: Container): TriggerNotificationE
     return undefined;
   }
 
-  const kind = Reflect.get(new Object(notificationEvent), 'kind');
   if (kind !== 'agent-disconnect' && kind !== 'agent-reconnect') {
     return undefined;
   }
@@ -184,7 +282,7 @@ export function getNotificationEvent(container: Container): TriggerNotificationE
 
 export function resolveNotificationTemplate(
   notificationEvent: TriggerNotificationEvent | undefined,
-  templates: Record<TriggerNotificationEvent['kind'], string>,
+  templates: Partial<Record<TriggerNotificationEvent['kind'], string>>,
   fallback: string,
 ) {
   if (!notificationEvent) {
@@ -489,6 +587,15 @@ class Trigger extends Component {
     this.eventBatchDispatches.clear();
   }
 
+  private shouldDispatchNotificationEventInBatch(
+    notificationEvent: TriggerNotificationEvent | undefined,
+  ) {
+    return (
+      notificationEvent?.kind !== 'agent-disconnect' &&
+      notificationEvent?.kind !== 'agent-reconnect'
+    );
+  }
+
   private async dispatchContainerForEvent(
     ruleId: NotificationRuleId,
     container: Container | undefined,
@@ -515,11 +622,12 @@ class Trigger extends Component {
     }
 
     try {
+      const notificationEvent = getNotificationEvent(container);
       // Agent connectivity notifications synthesize one-off container payloads and should always
       // dispatch immediately, even when the trigger itself is configured for batch updates.
       const shouldUseBatchMode =
         Trigger.isBatchCapableMode(this.configuration.mode) &&
-        getNotificationEvent(container) === undefined;
+        this.shouldDispatchNotificationEventInBatch(notificationEvent);
       if (shouldUseBatchMode) {
         this.queueEventBatchDispatch(ruleId, container);
       } else {
@@ -545,7 +653,10 @@ class Trigger extends Component {
 
     await this.dispatchContainerForEvent(
       'update-applied',
-      this.findContainerByBusinessId(containerName),
+      (() => {
+        const container = this.findContainerByBusinessId(containerName);
+        return container ? withNotificationEvent(container, { kind: 'update-applied' }) : undefined;
+      })(),
       {
         allowAllWhenNoTriggers: false,
         defaultWhenRuleMissing: false,
@@ -556,7 +667,15 @@ class Trigger extends Component {
   async handleContainerUpdateFailedEvent(payload: ContainerUpdateFailedPayload) {
     await this.dispatchContainerForEvent(
       'update-failed',
-      this.findContainerByBusinessId(payload.containerName),
+      (() => {
+        const container = this.findContainerByBusinessId(payload.containerName);
+        return container
+          ? withNotificationEvent(container, {
+              kind: 'update-failed',
+              error: payload.error,
+            })
+          : undefined;
+      })(),
       {
         allowAllWhenNoTriggers: false,
         defaultWhenRuleMissing: false,
@@ -566,10 +685,22 @@ class Trigger extends Component {
 
   async handleSecurityAlertEvent(payload: SecurityAlertPayload) {
     const container = payload.container || this.findContainerByBusinessId(payload.containerName);
-    await this.dispatchContainerForEvent('security-alert', container, {
-      allowAllWhenNoTriggers: false,
-      defaultWhenRuleMissing: false,
-    });
+    await this.dispatchContainerForEvent(
+      'security-alert',
+      container
+        ? withNotificationEvent(container, {
+            kind: 'security-alert',
+            details: payload.details,
+            status: payload.status,
+            summary: payload.summary,
+            blockingCount: payload.blockingCount,
+          })
+        : undefined,
+      {
+        allowAllWhenNoTriggers: false,
+        defaultWhenRuleMissing: false,
+      },
+    );
   }
 
   async handleAgentDisconnectedEvent(payload: AgentDisconnectedPayload) {
@@ -1221,7 +1352,7 @@ class Trigger extends Component {
     const notificationEvent = getNotificationEvent(container);
     const template = resolveNotificationTemplate(
       notificationEvent,
-      AGENT_SIMPLE_TITLE_TEMPLATES,
+      NOTIFICATION_SIMPLE_TITLE_TEMPLATES,
       this.configuration.simpletitle ?? '',
     );
     return renderSimple(template, this.getTemplateContainer(container));
@@ -1236,7 +1367,7 @@ class Trigger extends Component {
     const notificationEvent = getNotificationEvent(container);
     const template = resolveNotificationTemplate(
       notificationEvent,
-      AGENT_SIMPLE_BODY_TEMPLATES,
+      NOTIFICATION_SIMPLE_BODY_TEMPLATES,
       this.configuration.simplebody ?? '',
     );
     return renderSimple(template, this.getTemplateContainer(container));
@@ -1248,7 +1379,14 @@ class Trigger extends Component {
    * @returns {*}
    */
   renderBatchTitle(containers: Container[]) {
-    return renderBatch(this.configuration.batchtitle ?? '', containers);
+    const notificationEvent =
+      containers.length > 0 ? getNotificationEvent(containers[0] as Container) : undefined;
+    const template = resolveNotificationTemplate(
+      notificationEvent,
+      NOTIFICATION_BATCH_TITLE_TEMPLATES,
+      this.configuration.batchtitle ?? '',
+    );
+    return renderBatch(template, containers);
   }
 
   /**

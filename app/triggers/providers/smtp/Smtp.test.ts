@@ -389,3 +389,43 @@ test('triggerBatch should format mail as expected', async () => {
     '- Container homeassistant running with tag 1.0.0 can be updated to tag 2.0.0\nhttps://test-2.0.0/changelog\n\n- Container homeassistant running with tag 1.0.0 can be updated to tag 2.0.0\nhttps://test-2.0.0/changelog\n',
   );
 });
+
+test('triggerBatch should use event-specific wording for update-applied notifications', async () => {
+  smtp.configuration = configurationValid;
+  smtp.transporter = {
+    sendMail: (conf) => conf,
+  };
+
+  const response = await smtp.triggerBatch([
+    {
+      id: 'container-1',
+      name: 'homeassistant',
+      watcher: 'local',
+      image: {
+        id: 'sha256:image',
+        registry: {
+          url: 'docker://local',
+        },
+        name: 'test',
+        tag: {
+          value: '2021.6.4',
+          semver: true,
+        },
+        digest: {
+          watch: false,
+        },
+        architecture: 'amd64',
+        os: 'linux',
+      },
+      updateKind: {
+        kind: 'tag',
+      },
+      notificationEvent: {
+        kind: 'update-applied',
+      },
+    },
+  ] as any);
+
+  expect(response.subject).toBe('1 updates applied');
+  expect(response.text).toBe('- Container homeassistant updated successfully\n');
+});

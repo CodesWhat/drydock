@@ -1292,6 +1292,120 @@ test('renderSimpleBody should use dedicated template for agent reconnect events'
   expect(trigger.renderSimpleBody(container)).toBe('Agent servicevault reconnected');
 });
 
+test('renderSimpleTitle should use dedicated template for update-applied events', () => {
+  const container = {
+    id: 'container-servicevault',
+    name: 'servicevault',
+    watcher: 'local',
+    status: 'running',
+    image: {
+      id: 'container-servicevault',
+      registry: {
+        name: 'docker',
+        url: 'docker://local',
+      },
+      name: 'servicevault',
+      tag: {
+        value: '1.0.0',
+        semver: true,
+      },
+      digest: {
+        watch: false,
+      },
+      architecture: 'amd64',
+      os: 'linux',
+    },
+    updateAvailable: false,
+    updateKind: {
+      kind: 'tag',
+    },
+    notificationEvent: {
+      kind: 'update-applied',
+    },
+  } as any;
+
+  expect(trigger.renderSimpleTitle(container)).toBe('Container servicevault updated successfully');
+});
+
+test('renderSimpleBody should use dedicated template for update-failed events', () => {
+  const container = {
+    id: 'container-servicevault',
+    name: 'servicevault',
+    watcher: 'local',
+    status: 'running',
+    image: {
+      id: 'container-servicevault',
+      registry: {
+        name: 'docker',
+        url: 'docker://local',
+      },
+      name: 'servicevault',
+      tag: {
+        value: '1.0.0',
+        semver: true,
+      },
+      digest: {
+        watch: false,
+      },
+      architecture: 'amd64',
+      os: 'linux',
+    },
+    updateAvailable: false,
+    updateKind: {
+      kind: 'tag',
+    },
+    notificationEvent: {
+      kind: 'update-failed',
+      error: 'pull access denied',
+    },
+  } as any;
+
+  expect(trigger.renderSimpleBody(container)).toBe(
+    'Container servicevault update failed: pull access denied',
+  );
+});
+
+test('renderSimpleBody should use dedicated template for security-alert events', () => {
+  const container = {
+    id: 'container-servicevault',
+    name: 'servicevault',
+    watcher: 'local',
+    status: 'running',
+    image: {
+      id: 'container-servicevault',
+      registry: {
+        name: 'docker',
+        url: 'docker://local',
+      },
+      name: 'servicevault',
+      tag: {
+        value: '1.0.0',
+        semver: true,
+      },
+      digest: {
+        watch: false,
+      },
+      architecture: 'amd64',
+      os: 'linux',
+    },
+    updateAvailable: true,
+    updateKind: {
+      kind: 'tag',
+      localValue: '1.0.0',
+      remoteValue: '1.1.0',
+    },
+    notificationEvent: {
+      kind: 'security-alert',
+      blockingCount: 2,
+      details: 'critical=1 high=1',
+    },
+  } as any;
+
+  expect(trigger.renderSimpleBody(container)).toBe(
+    'Security alert for container servicevault (2 blocking vulnerabilities)\ncritical=1 high=1',
+  );
+});
+
 test('renderSimpleTitle should fall back to the standard template for unsupported notification events', () => {
   const container = {
     id: 'container-servicevault',
@@ -1320,8 +1434,7 @@ test('renderSimpleTitle should fall back to the standard template for unsupporte
       kind: 'tag',
     },
     notificationEvent: {
-      kind: 'security-alert',
-      agentName: 'servicevault',
+      kind: 'unsupported-kind',
     },
   } as any;
 
@@ -1438,6 +1551,56 @@ test('renderBatchTitle should replace placeholders when called', async () => {
       },
     ]),
   ).toEqual('1 updates available');
+});
+
+test('renderBatchTitle should use dedicated template for update-applied events', async () => {
+  expect(
+    trigger.renderBatchTitle([
+      {
+        name: 'container-name',
+        updateKind: {
+          kind: 'tag',
+        },
+        notificationEvent: {
+          kind: 'update-applied',
+        },
+      },
+      {
+        name: 'container-name-2',
+        updateKind: {
+          kind: 'tag',
+        },
+        notificationEvent: {
+          kind: 'update-applied',
+        },
+      },
+    ] as any),
+  ).toEqual('2 updates applied');
+});
+
+test('renderBatchTitle should use dedicated template for security-alert events', async () => {
+  expect(
+    trigger.renderBatchTitle([
+      {
+        name: 'container-name',
+        updateKind: {
+          kind: 'tag',
+        },
+        notificationEvent: {
+          kind: 'security-alert',
+        },
+      },
+      {
+        name: 'container-name-2',
+        updateKind: {
+          kind: 'tag',
+        },
+        notificationEvent: {
+          kind: 'security-alert',
+        },
+      },
+    ] as any),
+  ).toEqual('2 security alerts');
 });
 
 test('renderBatchBody should replace placeholders when called', async () => {
@@ -1675,7 +1838,14 @@ test('handleContainerUpdateAppliedEvent should run trigger when rule allows and 
 
   await trigger.handleContainerUpdateAppliedEvent('local_container1');
 
-  expect(triggerSpy).toHaveBeenCalledWith(container);
+  expect(triggerSpy).toHaveBeenCalledWith(
+    expect.objectContaining({
+      name: 'container1',
+      notificationEvent: {
+        kind: 'update-applied',
+      },
+    }),
+  );
 });
 
 test('handleContainerUpdateAppliedEvent should skip when rule disables trigger dispatch', async () => {
@@ -1756,7 +1926,15 @@ test('handleContainerUpdateFailedEvent should run batch trigger when configured 
 
     await vi.runOnlyPendingTimersAsync();
 
-    expect(triggerBatchSpy).toHaveBeenCalledWith([container]);
+    expect(triggerBatchSpy).toHaveBeenCalledWith([
+      expect.objectContaining({
+        name: 'container1',
+        notificationEvent: {
+          kind: 'update-failed',
+          error: 'boom',
+        },
+      }),
+    ]);
   } finally {
     vi.useRealTimers();
   }
@@ -1820,7 +1998,15 @@ test('handleSecurityAlertEvent should dispatch using payload container when prov
     container,
   });
 
-  expect(triggerSpy).toHaveBeenCalledWith(container);
+  expect(triggerSpy).toHaveBeenCalledWith(
+    expect.objectContaining({
+      name: 'container1',
+      notificationEvent: {
+        kind: 'security-alert',
+        details: 'high=1',
+      },
+    }),
+  );
   expect(storeContainer.getContainers).not.toHaveBeenCalled();
 });
 
@@ -1839,7 +2025,15 @@ test('handleSecurityAlertEvent should resolve container from store when payload 
     details: 'high=1',
   });
 
-  expect(triggerSpy).toHaveBeenCalledWith(container);
+  expect(triggerSpy).toHaveBeenCalledWith(
+    expect.objectContaining({
+      name: 'container1',
+      notificationEvent: {
+        kind: 'security-alert',
+        details: 'high=1',
+      },
+    }),
+  );
 });
 
 test('handleSecurityAlertEvent should catch trigger execution errors', async () => {
@@ -1893,7 +2087,20 @@ test('handleContainerUpdateAppliedEvent should aggregate nearby update-applied e
     await vi.runOnlyPendingTimersAsync();
 
     expect(triggerBatchSpy).toHaveBeenCalledTimes(1);
-    expect(triggerBatchSpy).toHaveBeenCalledWith(containers);
+    expect(triggerBatchSpy).toHaveBeenCalledWith([
+      expect.objectContaining({
+        name: 'container1',
+        notificationEvent: {
+          kind: 'update-applied',
+        },
+      }),
+      expect.objectContaining({
+        name: 'container2',
+        notificationEvent: {
+          kind: 'update-applied',
+        },
+      }),
+    ]);
   } finally {
     vi.useRealTimers();
   }
@@ -1936,7 +2143,22 @@ test('handleSecurityAlertEvent should aggregate nearby security alerts in batch 
     await vi.runOnlyPendingTimersAsync();
 
     expect(triggerBatchSpy).toHaveBeenCalledTimes(1);
-    expect(triggerBatchSpy).toHaveBeenCalledWith(containers);
+    expect(triggerBatchSpy).toHaveBeenCalledWith([
+      expect.objectContaining({
+        name: 'container1',
+        notificationEvent: {
+          kind: 'security-alert',
+          details: 'high=1',
+        },
+      }),
+      expect.objectContaining({
+        name: 'container2',
+        notificationEvent: {
+          kind: 'security-alert',
+          details: 'high=2',
+        },
+      }),
+    ]);
   } finally {
     vi.useRealTimers();
   }
@@ -2072,7 +2294,14 @@ test('dispatchContainerForEvent should fallback to all threshold when threshold 
 
   await trigger.handleContainerUpdateAppliedEvent('local_container1');
 
-  expect(triggerSpy).toHaveBeenCalledWith(container);
+  expect(triggerSpy).toHaveBeenCalledWith(
+    expect.objectContaining({
+      name: 'container1',
+      notificationEvent: {
+        kind: 'update-applied',
+      },
+    }),
+  );
 });
 
 test('handleContainerReports should skip when update-available rule disables trigger dispatch', async () => {
@@ -3354,7 +3583,20 @@ describe('batch+digest mode', () => {
       await vi.runOnlyPendingTimersAsync();
 
       expect(triggerBatchSpy).toHaveBeenCalledTimes(1);
-      expect(triggerBatchSpy).toHaveBeenCalledWith(containers);
+      expect(triggerBatchSpy).toHaveBeenCalledWith([
+        expect.objectContaining({
+          name: 'container1',
+          notificationEvent: {
+            kind: 'update-applied',
+          },
+        }),
+        expect.objectContaining({
+          name: 'container2',
+          notificationEvent: {
+            kind: 'update-applied',
+          },
+        }),
+      ]);
     } finally {
       vi.useRealTimers();
     }
