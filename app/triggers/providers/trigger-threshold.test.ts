@@ -15,7 +15,7 @@ describe('trigger-threshold', () => {
     });
   });
 
-  test('isThresholdReached should return false for unknown update kind', () => {
+  test('isThresholdReached should return true for unknown update kind when threshold is all', () => {
     expect(
       isThresholdReached(
         {
@@ -25,6 +25,20 @@ describe('trigger-threshold', () => {
           },
         },
         'all',
+      ),
+    ).toBe(true);
+  });
+
+  test('isThresholdReached should return false for unknown update kind when threshold is not all', () => {
+    expect(
+      isThresholdReached(
+        {
+          updateKind: {
+            kind: 'unknown',
+            semverDiff: undefined,
+          },
+        },
+        'minor',
       ),
     ).toBe(false);
   });

@@ -74,16 +74,16 @@ export function isThresholdReached(containerResult: Container, threshold: string
     return false;
   }
 
+  if (isAllThreshold(thresholdBase)) {
+    return true;
+  }
+
   if (updateKind === 'unknown') {
     return false;
   }
 
   if (isDigestThreshold(thresholdBase)) {
     return updateKind === 'digest';
-  }
-
-  if (isAllThreshold(thresholdBase)) {
-    return true;
   }
 
   if (hasKnownTagSemver(updateKind, semverDiff)) {
