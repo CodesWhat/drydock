@@ -102,6 +102,8 @@ Any threshold can be suffixed with `-no-digest` to exclude digest-only updates (
 - Triggers sharing the same trigger name (e.g. `docker.update` and `discord.update`) can share `THRESHOLD`; if exactly one threshold value is defined among them, that value is used for the others unless they override it explicitly.
 - Setting `ONCE=false` with `MODE=batch` gives a report with all pending updates on every run.
 - `MODE=digest` accumulates update events in an in-memory buffer and flushes them as a single batch notification on the `DIGESTCRON` schedule. If the same container has multiple updates within the window, only the latest is included. Containers that are updated before the digest fires are automatically evicted from the buffer. Useful for daily email digests: `DD_TRIGGER_SMTP_GMAIL_MODE=digest` + `DD_TRIGGER_SMTP_GMAIL_DIGESTCRON=0 8 * * *`.
+- `MODE=batch+digest` enables both modes simultaneously — immediate batch emails on each scan cycle plus a scheduled digest summary. Requires `DIGESTCRON` to be set.
+- **Note:** Digest and batch modes still depend on the `update-available` notification rule being enabled (see below). If the trigger is excluded from `update-available` routing, no events reach the buffer.
 
 ## Notification Rules
 
