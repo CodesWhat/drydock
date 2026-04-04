@@ -3,6 +3,7 @@ import { DASHBOARD_WIDGET_IDS } from '@/views/dashboard/dashboardTypes';
 import {
   applyConstraints,
   createDefaultLayout,
+  createDefaultLayoutForBreakpoint,
   GRID_BREAKPOINTS,
   GRID_COLS,
   WIDGET_CONSTRAINTS,
@@ -131,6 +132,22 @@ describe('dashboardWidgetLayout', () => {
       const c = WIDGET_CONSTRAINTS['resource-usage'];
       expect(result[0].w).toBe(c.minW);
       expect(result[0].h).toBe(c.minH);
+    });
+
+    test('preserves valid single-column mobile layouts', () => {
+      const result = applyConstraints([{ i: 'resource-usage', x: 0, y: 4, w: 1, h: 8 }], 'sm');
+
+      expect(result[0]).toMatchObject({ x: 0, y: 4, w: 1, h: 8, minW: 1, maxW: 1 });
+    });
+  });
+
+  describe('createDefaultLayoutForBreakpoint', () => {
+    test('stacks all widgets full-width on single-column breakpoints', () => {
+      const layout = createDefaultLayoutForBreakpoint(DASHBOARD_WIDGET_IDS, 'sm');
+
+      expect(layout).toHaveLength(DASHBOARD_WIDGET_IDS.length);
+      expect(layout.every((item) => item.x === 0)).toBe(true);
+      expect(layout.every((item) => item.w === 1)).toBe(true);
     });
   });
 });

@@ -3,6 +3,9 @@ import type { RadiusPresetId } from './radius';
 
 export type ViewMode = 'table' | 'cards' | 'list';
 
+export const DASHBOARD_LAYOUT_BREAKPOINTS = ['xxs', 'xs', 'sm', 'md', 'lg'] as const;
+export type DashboardLayoutBreakpoint = (typeof DASHBOARD_LAYOUT_BREAKPOINTS)[number];
+
 export interface PersistedLayoutItem {
   i: string;
   x: number;
@@ -10,6 +13,10 @@ export interface PersistedLayoutItem {
   w: number;
   h: number;
 }
+
+export type PersistedResponsiveLayoutMap = Partial<
+  Record<DashboardLayoutBreakpoint, PersistedLayoutItem[]>
+>;
 
 export interface PreferencesSchema {
   schemaVersion: number;
@@ -33,7 +40,12 @@ export interface PreferencesSchema {
     };
     columns: string[];
   };
-  dashboard: { widgetOrder: string[]; hiddenWidgets: string[]; gridLayout: PersistedLayoutItem[] };
+  dashboard: {
+    widgetOrder: string[];
+    hiddenWidgets: string[];
+    gridLayout: PersistedLayoutItem[];
+    gridLayouts: PersistedResponsiveLayoutMap;
+  };
   views: {
     security: { mode: ViewMode; sortField: string; sortAsc: boolean };
     audit: { mode: ViewMode };
@@ -96,6 +108,7 @@ export const DEFAULTS: PreferencesSchema = {
     ],
     hiddenWidgets: [],
     gridLayout: [],
+    gridLayouts: {},
   },
   views: {
     security: { mode: 'table', sortField: 'critical', sortAsc: false },

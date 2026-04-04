@@ -2,6 +2,8 @@ import { deepMerge } from './deepMerge';
 import {
   CONTAINER_TABLE_COLUMN_KEYS,
   CONTAINER_TABLE_REQUIRED_COLUMN_KEYS,
+  DASHBOARD_LAYOUT_BREAKPOINTS,
+  type DashboardLayoutBreakpoint,
   DEFAULTS,
   type PreferencesSchema,
 } from './schema';
@@ -30,12 +32,72 @@ function deleteIfInvalid(obj: Record<string, unknown>, key: string, allow: Set<s
   }
 }
 
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return v !== null && typeof v === 'object' && !Array.isArray(v);
+}
+
+function isLegacySingleColumnGridLayout(layout: unknown[]): boolean {
+  return (
+    layout.length > 0 &&
+    layout.every((item) => {
+      if (!isRecord(item)) {
+        return false;
+      }
+      return item.x === 0 && item.w === 1;
+    })
+  );
+}
+
+function normalizeDashboardLayouts(data: Record<string, unknown>): void {
+  const dashboard = data.dashboard;
+  if (!isRecord(dashboard)) {
+    return;
+  }
+
+  if ('gridLayouts' in dashboard) {
+    if (!isRecord(dashboard.gridLayouts)) {
+      delete dashboard.gridLayouts;
+    } else {
+      for (const key of Object.keys(dashboard.gridLayouts)) {
+        if (
+          !(DASHBOARD_LAYOUT_BREAKPOINTS as readonly string[]).includes(key) ||
+          !Array.isArray(dashboard.gridLayouts[key])
+        ) {
+          delete dashboard.gridLayouts[key];
+        }
+      }
+    }
+  }
+
+  if (!Array.isArray(dashboard.gridLayout)) {
+    if ('gridLayout' in dashboard) {
+      delete dashboard.gridLayout;
+    }
+    return;
+  }
+
+  const responsiveLayouts = (
+    isRecord(dashboard.gridLayouts) ? dashboard.gridLayouts : {}
+  ) as Record<string, unknown>;
+  if (Object.keys(responsiveLayouts).length > 0) {
+    dashboard.gridLayouts = responsiveLayouts;
+    return;
+  }
+
+  const breakpoint: DashboardLayoutBreakpoint = isLegacySingleColumnGridLayout(dashboard.gridLayout)
+    ? 'sm'
+    : 'lg';
+  dashboard.gridLayouts = { [breakpoint]: dashboard.gridLayout };
+}
+
 /**
  * Remove invalid enum values from persisted preferences so that
  * deepMerge preserves defaults for those fields instead of
  * overwriting them with stale/renamed values (e.g. 'drydock' theme).
  */
 function sanitize(data: Record<string, unknown>): void {
+  normalizeDashboardLayouts(data);
+
   const theme = data.theme;
   if (theme && typeof theme === 'object') {
     const t = theme as Record<string, unknown>;

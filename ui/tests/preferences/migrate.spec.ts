@@ -165,6 +165,40 @@ describe('preferences migration', () => {
       expect(result.dashboard.gridLayout).toEqual(gridLayout);
     });
 
+    it('should migrate legacy desktop gridLayout into responsive dashboard layouts', () => {
+      const gridLayout = [
+        { i: 'host-status', x: 10, y: 11, w: 4, h: 6 },
+        { i: 'recent-updates', x: 0, y: 0, w: 12, h: 8 },
+      ];
+      const result = migrate({
+        schemaVersion: 1,
+        dashboard: {
+          widgetOrder: ['host-status', 'recent-updates'],
+          hiddenWidgets: [],
+          gridLayout,
+        },
+      });
+
+      expect(result.dashboard.gridLayouts.lg).toEqual(gridLayout);
+    });
+
+    it('should migrate legacy single-column gridLayout into mobile dashboard layouts', () => {
+      const gridLayout = [
+        { i: 'stat-containers', x: 0, y: 0, w: 1, h: 3 },
+        { i: 'recent-updates', x: 0, y: 3, w: 1, h: 10 },
+      ];
+      const result = migrate({
+        schemaVersion: 1,
+        dashboard: {
+          widgetOrder: ['stat-containers', 'recent-updates'],
+          hiddenWidgets: [],
+          gridLayout,
+        },
+      });
+
+      expect(result.dashboard.gridLayouts.sm).toEqual(gridLayout);
+    });
+
     it('should preserve all valid values through sanitization', () => {
       const input = {
         schemaVersion: 1,
