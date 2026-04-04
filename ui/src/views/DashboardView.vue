@@ -20,7 +20,11 @@ import {
   type RecentUpdateRow,
 } from './dashboard/dashboardTypes';
 import { useDashboardDragAutoScroll } from './dashboard/useDashboardDragAutoScroll';
-import { GRID_BREAKPOINTS, GRID_COLS, WIDGET_CONSTRAINTS } from './dashboard/dashboardWidgetLayout';
+import {
+  getWidgetBoundsForBreakpoint,
+  GRID_BREAKPOINTS,
+  GRID_COLS,
+} from './dashboard/dashboardWidgetLayout';
 import { useDashboardComputed } from './dashboard/useDashboardComputed';
 import { useDashboardData } from './dashboard/useDashboardData';
 import { useDashboardWidgetOrder } from './dashboard/useDashboardWidgetOrder';
@@ -69,13 +73,17 @@ onUnmounted(() => {
 });
 
 const {
+  currentBreakpoint,
+  gridInstanceKey,
   onWidgetDragEnd,
   onWidgetDragOver,
   onWidgetDragStart,
   onWidgetDrop,
+  onBreakpointChanged,
   editMode,
   isWidgetVisible,
   layout,
+  responsiveLayouts,
   resetAll,
   toggleEditMode,
   toggleWidgetVisibility,
@@ -422,12 +430,15 @@ function confirmDashboardUpdateAll() {
 
         <!-- Grid Layout -->
         <GridLayout
+          :key="gridInstanceKey"
           v-model:layout="layout"
           @pointerdown.capture="handleDashboardGridPointerDown"
+          @breakpoint-changed="onBreakpointChanged"
           :col-num="12"
           :row-height="30"
           :margin="gridMargin"
           :responsive="true"
+          :responsive-layouts="responsiveLayouts"
           :breakpoints="GRID_BREAKPOINTS"
           :cols="GRID_COLS"
           :class="{ 'dd-grid-ready': gridReady }"
@@ -447,10 +458,10 @@ function confirmDashboardUpdateAll() {
             :w="item.w"
             :h="item.h"
             :i="item.i"
-            :min-w="WIDGET_CONSTRAINTS[item.i as DashboardWidgetId]?.minW ?? 2"
-            :min-h="WIDGET_CONSTRAINTS[item.i as DashboardWidgetId]?.minH ?? 2"
-            :max-w="WIDGET_CONSTRAINTS[item.i as DashboardWidgetId]?.maxW ?? 12"
-            :max-h="WIDGET_CONSTRAINTS[item.i as DashboardWidgetId]?.maxH ?? 20"
+            :min-w="getWidgetBoundsForBreakpoint(item.i as DashboardWidgetId, currentBreakpoint).minW"
+            :min-h="getWidgetBoundsForBreakpoint(item.i as DashboardWidgetId, currentBreakpoint).minH"
+            :max-w="getWidgetBoundsForBreakpoint(item.i as DashboardWidgetId, currentBreakpoint).maxW"
+            :max-h="getWidgetBoundsForBreakpoint(item.i as DashboardWidgetId, currentBreakpoint).maxH"
             drag-ignore-from="input, textarea, button, a, select, .no-drag"
             drag-allow-from=".drag-handle"
             class="dd-grid-item"

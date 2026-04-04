@@ -108,7 +108,13 @@ export const DEFAULTS: PreferencesSchema = {
     ],
     hiddenWidgets: [],
     gridLayout: [],
-    gridLayouts: {},
+    gridLayouts: {
+      xxs: undefined,
+      xs: undefined,
+      sm: undefined,
+      md: undefined,
+      lg: undefined,
+    },
   },
   views: {
     security: { mode: 'table', sortField: 'critical', sortAsc: false },

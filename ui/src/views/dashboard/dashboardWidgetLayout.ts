@@ -128,14 +128,18 @@ export function applyConstraints(
   breakpoint: DashboardLayoutBreakpoint = 'lg',
 ): WidgetLayoutItem[] {
   const singleColumn = isSingleColumnBreakpoint(breakpoint);
-  const maxCols = GRID_COLS[breakpoint];
 
   return layout.map((item) => {
+    const constraints = WIDGET_CONSTRAINTS[item.i];
+    if (!constraints) {
+      return item;
+    }
+
     const bounds = getWidgetBoundsForBreakpoint(item.i, breakpoint);
     const width = singleColumn ? 1 : clamp(item.w, bounds.minW, bounds.maxW);
     return {
       ...item,
-      x: singleColumn ? 0 : clamp(item.x, 0, Math.max(0, maxCols - width)),
+      x: singleColumn ? 0 : item.x,
       w: width,
       h: clamp(item.h, bounds.minH, bounds.maxH),
       minW: bounds.minW,

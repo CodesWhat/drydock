@@ -28,7 +28,15 @@ describe('useDashboardWidgetOrder', () => {
   beforeEach(() => {
     localStorage.clear();
     preferences.dashboard.widgetOrder = [...DASHBOARD_WIDGET_IDS];
+    preferences.dashboard.hiddenWidgets = [];
     preferences.dashboard.gridLayout = [];
+    preferences.dashboard.gridLayouts = {
+      xxs: undefined,
+      xs: undefined,
+      sm: undefined,
+      md: undefined,
+      lg: undefined,
+    };
   });
 
   it('hydrates from preferences and falls back to defaults for non-array values', async () => {
@@ -100,26 +108,24 @@ describe('useDashboardWidgetOrder', () => {
     });
   });
 
-  it('falls back to the default layout when every persisted widget lands in column zero', async () => {
-    preferences.dashboard.gridLayout = DASHBOARD_WIDGET_IDS.map((id, index) => ({
+  it('preserves valid single-column layouts for the mobile breakpoint', async () => {
+    const mobileLayout = DASHBOARD_WIDGET_IDS.map((id, index) => ({
       i: id,
       x: 0,
       y: index,
       w: 1,
       h: 1,
     }));
+    preferences.dashboard.gridLayouts.sm = mobileLayout;
 
     const { state } = await mountWidgetOrderComposable();
+    state.onBreakpointChanged('sm', mobileLayout as any);
+    state.layout.value = mobileLayout as any;
+    await nextTick();
 
-    expect(state.layout.value).toEqual(
-      applyConstraints(
-        DASHBOARD_WIDGET_IDS.map((id) => {
-          const item = state.layout.value.find((layoutItem) => layoutItem.i === id);
-          return { ...item! };
-        }),
-      ),
-    );
-    expect(state.layout.value.some((item) => item.x !== 0)).toBe(true);
+    expect(state.currentBreakpoint.value).toBe('sm');
+    expect(state.layout.value.every((item) => item.x === 0)).toBe(true);
+    expect(state.layout.value.every((item) => item.w === 1)).toBe(true);
   });
 
   it('returns explicit style ordering and uses canonical fallback index for missing ids', async () => {
@@ -303,6 +309,9 @@ describe('useDashboardWidgetOrder', () => {
 
     // Before debounce fires, gridLayout should not yet be updated
     vi.advanceTimersByTime(300);
+    expect(preferences.dashboard.gridLayouts.lg).toEqual(
+      expect.arrayContaining([expect.objectContaining({ i: updated[0].i, x: 99 })]),
+    );
     expect(preferences.dashboard.gridLayout).toEqual(
       expect.arrayContaining([expect.objectContaining({ i: updated[0].i, x: 99 })]),
     );
