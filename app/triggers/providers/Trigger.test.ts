@@ -1236,6 +1236,55 @@ test('getNotificationEvent should return reconnect metadata for agent reconnect 
   });
 });
 
+test('getNotificationEvent should return undefined when notification metadata is missing', () => {
+  expect(getNotificationEvent({} as any)).toBeUndefined();
+});
+
+test('getNotificationEvent should omit invalid update-failed error values', () => {
+  expect(
+    getNotificationEvent({
+      notificationEvent: {
+        kind: 'update-failed',
+        error: '',
+      },
+    } as any),
+  ).toEqual({
+    kind: 'update-failed',
+    error: undefined,
+  });
+});
+
+test('getNotificationEvent should omit invalid security alert metadata', () => {
+  expect(
+    getNotificationEvent({
+      notificationEvent: {
+        kind: 'security-alert',
+        details: '',
+        status: '',
+        summary: 'invalid',
+        blockingCount: Number.POSITIVE_INFINITY,
+      },
+    } as any),
+  ).toEqual({
+    kind: 'security-alert',
+    details: undefined,
+    status: undefined,
+    summary: undefined,
+    blockingCount: undefined,
+  });
+});
+
+test('getNotificationEvent should return undefined for unsupported agent notification kinds', () => {
+  expect(
+    getNotificationEvent({
+      notificationEvent: {
+        kind: 'agent-error',
+        agentName: 'servicevault',
+      },
+    } as any),
+  ).toBeUndefined();
+});
+
 test('buildLiteralTemplateExpression should build literal template syntax', () => {
   expect(buildLiteralTemplateExpression('event.agentName')).toBe(`$\{event.agentName}`);
 });

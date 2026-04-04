@@ -144,6 +144,33 @@ describe('Docker Watcher', () => {
         changed: true,
       });
     });
+
+    test('should clear pending freshness when the update has already been cleared', async () => {
+      const container = {
+        id: '123',
+        name: 'test',
+        watcher: 'docker',
+        result: undefined,
+        updateAvailable: false,
+      };
+      const existingContainer = {
+        resultChanged: vi.fn().mockReturnValue(false),
+      };
+      docker.log = createMockLogWithChild(['debug']);
+      hStoreContainer.getContainer.mockReturnValue(existingContainer);
+      hStoreContainer.getPendingFreshStateAfterManualUpdateAt.mockReturnValue(500);
+      hStoreContainer.updateContainer.mockReturnValue(container);
+
+      const result = docker.mapContainerToContainerReport(container, 600);
+
+      expect(hStoreContainer.clearPendingFreshStateAfterManualUpdate).toHaveBeenCalledWith(
+        container,
+      );
+      expect(result).toEqual({
+        container,
+        changed: false,
+      });
+    });
   });
 
   describe('Utility Functions', () => {

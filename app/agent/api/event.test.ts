@@ -423,6 +423,21 @@ describe('agent API event', () => {
       expect(payload).not.toContain('"container"');
     });
 
+    test('security-alert handler should tolerate non-object payloads', () => {
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+      eventApi.initEvents();
+
+      const securityAlertHandler = event.registerSecurityAlert.mock.calls[0][0];
+      securityAlertHandler(undefined);
+
+      expect(res.write).toHaveBeenCalled();
+      const payload = res.write.mock.calls[0][0];
+      expect(payload).toContain('dd:security-alert');
+      expect(payload).not.toContain('"containerName"');
+      expect(payload).not.toContain('"details"');
+    });
+
     test('watcher-snapshot handler should send watcher identity and sanitized containers', () => {
       storeContainer.getContainerRaw.mockReturnValueOnce({
         id: 'c1',
