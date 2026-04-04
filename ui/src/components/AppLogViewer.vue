@@ -357,18 +357,6 @@ async function copyLogs(): Promise<void> {
             @click="newestFirst = !newestFirst"
           />
 
-          <AppButton size="none" variant="plain" weight="none"
-            type="button"
-            data-test="container-log-copy"
-            class="px-2 py-1 dd-rounded text-2xs font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-            @click="copyLogs"
-          >
-            <span class="inline-flex items-center gap-1">
-              <AppIcon :name="copySuccess ? 'check' : 'ph:copy'" :size="11" />
-              {{ copySuccess ? 'Copied' : 'Copy' }}
-            </span>
-          </AppButton>
-
           <slot name="toolbar-right" />
         </div>
       </div>
@@ -440,9 +428,18 @@ async function copyLogs(): Promise<void> {
       </div>
     </div>
 
+    <div class="relative flex-1 min-h-[120px] flex flex-col">
+      <AppIconButton
+        :icon="copySuccess ? 'check' : 'ph:copy'"
+        size="xs"
+        data-test="container-log-copy"
+        :tooltip="copySuccess ? 'Copied!' : 'Copy logs'"
+        class="absolute top-2 right-2 z-10 opacity-50 hover:opacity-100"
+        @click="copyLogs"
+      />
     <div
       ref="logViewport"
-      class="flex-1 min-h-[120px] overflow-y-auto overflow-x-hidden font-mono"
+      class="flex-1 min-h-0 overflow-y-auto overflow-x-hidden font-mono"
       :class="props.compact ? 'text-2xs' : 'text-2xs-plus'"
       @scroll="handleLogScroll"
     >
@@ -481,6 +478,7 @@ async function copyLogs(): Promise<void> {
           </span>
         </div>
       </div>
+    </div>
     </div>
 
     <div

@@ -281,12 +281,13 @@ describe('AppLogViewer', () => {
     expect(writeText).toHaveBeenCalledWith(
       '2026-03-19T00:00:00Z STDOUT api ready\n2026-03-19T00:00:01Z WARN worker retrying',
     );
-    expect(wrapper.get('[data-test="container-log-copy"]').text()).toContain('Copied');
+    const copyBtn = wrapper.getComponent('[data-test="container-log-copy"]');
+    expect(copyBtn.props('icon')).toBe('check');
 
     vi.advanceTimersByTime(2000);
     await nextTick();
 
-    expect(wrapper.get('[data-test="container-log-copy"]').text()).toContain('Copy');
+    expect(copyBtn.props('icon')).toBe('ph:copy');
   });
 
   describe('search filter mode', () => {
