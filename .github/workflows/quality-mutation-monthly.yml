@@ -1,0 +1,274 @@
+name: "🧬 Quality: Mutation Testing"
+run-name: >-
+  ${{
+    github.event_name == 'schedule' && '🧬 Quality: Mutation Testing — Monthly schedule' ||
+    format('🧬 Quality: Mutation Testing — Manual by {0}', github.actor)
+  }}
+
+# Keep mutation testing out of the push/PR fast path.
+# This workflow is a monthly/manual quality signal used to find weak assertions,
+# dead code, and refactor candidates after merges land on the integration branch.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '15 6 1 * *'  # Monthly on day 1 at 06:15 UTC
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mutation-testing-${{ github.workflow }}
+  cancel-in-progress: true
+
+jobs:
+  stryker:
+    name: "🧬 Quality: Stryker Advisory (${{ matrix.name }})"
+    runs-on: ubuntu-latest
+    environment: mutation
+    timeout-minutes: 360  # GitHub Actions maximum; mutation testing is expensive and advisory-only
+    continue-on-error: true  # advisory by policy; review results, then file focused follow-up work
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: app-core-api-container
+            package: app
+            incremental_file: reports/stryker-incremental-app-core-api-container.json
+            mutate: >-
+              api/container/**/*.ts,api/container.ts,api/container-actions.ts,!**/*.d.ts,!**/*.test.ts,!**/*.fuzz.test.ts,!**/*.typecheck.ts,!test/**,!dist/**,!coverage/**
+          - name: app-core-api-openapi
+            package: app
+            incremental_file: reports/stryker-incremental-app-core-api-openapi.json
+            mutate: >-
+              api/openapi/**/*.ts,api/openapi-contract.ts,api/openapi.ts,!**/*.d.ts,!**/*.test.ts,!**/*.fuzz.test.ts,!**/*.typecheck.ts,!test/**,!dist/**,!coverage/**
+          - name: app-core-api-webhooks
+            package: app
+            incremental_file: reports/stryker-incremental-app-core-api-webhooks.json
+            mutate: >-
+              api/webhooks/**/*.ts,api/webhook.ts,api/webhooks.ts,!**/*.d.ts,!**/*.test.ts,!**/*.fuzz.test.ts,!**/*.typecheck.ts,!test/**,!dist/**,!coverage/**
+          - name: app-core-api-auth
+            package: app
+            incremental_file: reports/stryker-incremental-app-core-api-auth.json
+            mutate: >-
+              authentications/providers/**/*.ts,api/auth*.ts,api/csrf.ts,api/destructive-confirmation.ts,api/json-content-type.ts,!**/*.d.ts,!**/*.test.ts,!**/*.fuzz.test.ts,!**/*.typecheck.ts,!test/**,!dist/**,!coverage/**
+          - name: app-core-agent-config
+            package: app
+            incremental_file: reports/stryker-incremental-app-core-agent-config.json
+            mutate: >-
+              agent/**/*.ts,configuration/**/*.ts,index.ts,!**/*.d.ts,!**/*.test.ts,!**/*.fuzz.test.ts,!**/*.typecheck.ts,!test/**,!dist/**,!coverage/**
+          - name: app-core-api-streaming
+            package: app
+            incremental_file: reports/stryker-incremental-app-core-api-streaming.json
+            mutate: >-
+              event/**/*.ts,api/sse*.ts,api/ws-upgrade-utils.ts,api/log-stream*.ts,log/**/*.ts,!**/*.d.ts,!**/*.test.ts,!**/*.fuzz.test.ts,!**/*.typecheck.ts,!test/**,!dist/**,!coverage/**
+          - name: app-core-api-routes
+            package: app
+            incremental_file: reports/stryker-incremental-app-core-api-routes.json
+            mutate: >-
+              api/agent.ts,api/api.ts,api/app.ts,api/audit*.ts,api/backup.ts,api/component.ts,api/debug.ts,api/docker-trigger.ts,api/error-response.ts,api/group.ts,api/header-value.ts,api/health.ts,api/helpers.ts,api/icons.ts,api/icons/**/*.ts,api/index.ts,api/log.ts,api/notification.ts,api/pagination-links.ts,api/preview.ts,api/prometheus.ts,api/rate-limit-key.ts,api/registry.ts,api/server.ts,api/settings.ts,api/store.ts,api/trigger.ts,api/ui.ts,api/watcher.ts,!**/*.d.ts,!**/*.test.ts,!**/*.fuzz.test.ts,!**/*.typecheck.ts,!test/**,!dist/**,!coverage/**
+          - name: app-core-domain-support
+            package: app
+            incremental_file: reports/stryker-incremental-app-core-domain-support.json
+            mutate: >-
+              debug/**/*.ts,model/**/*.ts,notifications/trigger-policy.ts,docker/legacy-label.ts,!**/*.d.ts,!**/*.test.ts,!**/*.fuzz.test.ts,!**/*.typecheck.ts,!test/**,!dist/**,!coverage/**
+          - name: app-orch-trigger-docker
+            package: app
+            incremental_file: reports/stryker-incremental-app-orch-trigger-docker.json
+            mutate: >-
+              triggers/providers/docker/**/*.ts,!**/*.d.ts,!**/*.test.ts,!**/*.fuzz.test.ts,!**/*.typecheck.ts,!test/**,!dist/**,!coverage/**
+          - name: app-orch-trigger-dockercompose
+            package: app
+            incremental_file: reports/stryker-incremental-app-orch-trigger-dockercompose.json
+            mutate: >-
+              triggers/providers/dockercompose/**/*.ts,!**/*.d.ts,!**/*.test.ts,!**/*.fuzz.test.ts,!**/*.typecheck.ts,!test/**,!dist/**,!coverage/**
+          - name: app-orch-trigger-runtime
+            package: app
+            incremental_file: reports/stryker-incremental-app-orch-trigger-runtime.json
+            mutate: >-
+              triggers/providers/Trigger.ts,triggers/providers/trigger-*.ts,triggers/hooks/**/*.ts,!**/*.d.ts,!**/*.test.ts,!**/*.fuzz.test.ts,!**/*.typecheck.ts,!test/**,!dist/**,!coverage/**
+          - name: app-orch-trigger-notify-primary
+            package: app
+            incremental_file: reports/stryker-incremental-app-orch-trigger-notify-primary.json
+            mutate: >-
+              triggers/providers/apprise/**/*.ts,triggers/providers/discord/**/*.ts,triggers/providers/googlechat/**/*.ts,triggers/providers/gotify/**/*.ts,triggers/providers/http/**/*.ts,triggers/providers/ifttt/**/*.ts,triggers/providers/kafka/**/*.ts,triggers/providers/matrix/**/*.ts,triggers/providers/mattermost/**/*.ts,!**/*.d.ts,!**/*.test.ts,!**/*.fuzz.test.ts,!**/*.typecheck.ts,!test/**,!dist/**,!coverage/**
+          - name: app-orch-trigger-notify-secondary
+            package: app
+            incremental_file: reports/stryker-incremental-app-orch-trigger-notify-secondary.json
+            mutate: >-
+              triggers/providers/command/**/*.ts,triggers/providers/mock/**/*.ts,triggers/providers/mqtt/**/*.ts,triggers/providers/ntfy/**/*.ts,triggers/providers/pushover/**/*.ts,triggers/providers/rocketchat/**/*.ts,triggers/providers/slack/**/*.ts,triggers/providers/smtp/**/*.ts,triggers/providers/teams/**/*.ts,triggers/providers/telegram/**/*.ts,release-notes/**/*.ts,registry/**/*.ts,runtime/**/*.ts,util/**/*.ts,tag/**/*.ts,!**/*.d.ts,!**/*.test.ts,!**/*.fuzz.test.ts,!**/*.typecheck.ts,!test/**,!dist/**,!coverage/**
+          - name: app-ops-watchers-runtime
+            package: app
+            incremental_file: reports/stryker-incremental-app-ops-watchers-runtime.json
+            mutate: >-
+              watchers/providers/docker/Docker.ts,watchers/providers/docker/Docker.containers.test.helpers.ts,watchers/providers/docker/container-*.ts,watchers/providers/docker/container-processing.ts,watchers/providers/docker/docker-helpers.ts,watchers/providers/docker/docker-image-details-orchestration.ts,watchers/providers/docker/image-comparison.ts,watchers/providers/docker/label.ts,watchers/providers/docker/runtime-details.ts,watchers/providers/docker/tag-candidates.ts,!**/*.d.ts,!**/*.test.ts,!**/*.fuzz.test.ts,!**/*.typecheck.ts,!test/**,!dist/**,!coverage/**
+          - name: app-ops-watchers-events
+            package: app
+            incremental_file: reports/stryker-incremental-app-ops-watchers-events.json
+            mutate: >-
+              watchers/Watcher.ts,watchers/registry-webhook-fresh.ts,watchers/providers/docker/digest-cache-lifecycle.ts,watchers/providers/docker/disable-socket-redirects.ts,watchers/providers/docker/docker-event-orchestration.ts,watchers/providers/docker/docker-events.ts,watchers/providers/docker/docker-remote-auth.ts,watchers/providers/docker/fallback-logger.ts,watchers/providers/docker/maintenance.ts,watchers/providers/docker/oidc.ts,watchers/providers/docker/recent-events.ts,watchers/providers/docker/release-notes-enrichment.ts,watchers/providers/docker/socket-version-probe.ts,!**/*.d.ts,!**/*.test.ts,!**/*.fuzz.test.ts,!**/*.typecheck.ts,!test/**,!dist/**,!coverage/**
+          - name: app-ops-store-security
+            package: app
+            incremental_file: reports/stryker-incremental-app-ops-store-security.json
+            mutate: >-
+              store/**/*.ts,security/**/*.ts,!**/*.d.ts,!**/*.test.ts,!**/*.fuzz.test.ts,!**/*.typecheck.ts,!test/**,!dist/**,!coverage/**
+          - name: app-ops-registries-core
+            package: app
+            incremental_file: reports/stryker-incremental-app-ops-registries-core.json
+            mutate: >-
+              registries/BaseRegistry.ts,registries/Registry.ts,registries/configuration.ts,registries/providers/custom/**/*.ts,registries/providers/shared/**/*.ts,!**/*.d.ts,!**/*.test.ts,!**/*.fuzz.test.ts,!**/*.typecheck.ts,!test/**,!dist/**,!coverage/**
+          - name: app-ops-registries-remote
+            package: app
+            incremental_file: reports/stryker-incremental-app-ops-registries-remote.json
+            mutate: >-
+              registries/providers/acr/**/*.ts,registries/providers/alicr/**/*.ts,registries/providers/artifactory/**/*.ts,registries/providers/codeberg/**/*.ts,registries/providers/dhi/**/*.ts,registries/providers/docr/**/*.ts,registries/providers/ecr/**/*.ts,registries/providers/forgejo/**/*.ts,registries/providers/gar/**/*.ts,registries/providers/gcr/**/*.ts,registries/providers/ghcr/**/*.ts,registries/providers/gitea/**/*.ts,registries/providers/gitlab/**/*.ts,registries/providers/harbor/**/*.ts,registries/providers/hub/**/*.ts,registries/providers/ibmcr/**/*.ts,registries/providers/lscr/**/*.ts,registries/providers/mau/**/*.ts,registries/providers/nexus/**/*.ts,registries/providers/ocir/**/*.ts,registries/providers/quay/**/*.ts,registries/providers/trueforge/**/*.ts,stats/**/*.ts,prometheus/**/*.ts,!**/*.d.ts,!**/*.test.ts,!**/*.fuzz.test.ts,!**/*.typecheck.ts,!test/**,!dist/**,!coverage/**
+          - name: ui-shell-and-data
+            package: ui
+            incremental_file: reports/stryker-incremental-ui-shell-and-data.json
+            mutate: >-
+              src/boot/**/*.ts,src/components/**/*.ts,src/composables/**/*.ts,src/layouts/**/*.ts,src/preferences/**/*.ts,src/services/**/*.ts,src/theme/**/*.ts,src/types/**/*.ts,src/utils/**/*.ts,src/main.ts,!**/*.d.ts,!**/*.test.ts,!**/*.fuzz.test.ts,!**/*.typecheck.ts,!dist/**,!coverage/**
+          - name: ui-views-and-navigation
+            package: ui
+            incremental_file: reports/stryker-incremental-ui-views-and-navigation.json
+            mutate: >-
+              src/views/**/*.ts,src/directives/**/*.ts,src/router/**/*.ts,src/icons.ts,!**/*.d.ts,!**/*.test.ts,!**/*.fuzz.test.ts,!**/*.typecheck.ts,!dist/**,!coverage/**
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594  # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f  # v6.3.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: ${{ matrix.package }}
+
+      - name: Restore Stryker incremental cache
+        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7  # v5.0.4
+        with:
+          path: ${{ matrix.package }}/${{ matrix.incremental_file }}
+          key: stryker-incremental-${{ matrix.name }}-${{ github.ref_name }}
+          restore-keys: |
+            stryker-incremental-${{ matrix.name }}-
+
+      - name: Run Stryker
+        shell: bash
+        run: |
+          set -euo pipefail
+          args=(run --incrementalFile "${{ matrix.incremental_file }}")
+          if [[ -n "${{ matrix.mutate }}" ]]; then
+            args+=(--mutate "${{ matrix.mutate }}")
+          fi
+          ./node_modules/.bin/stryker "${args[@]}"
+        working-directory: ${{ matrix.package }}
+
+      - name: Summarize advisory mode
+        if: always()
+        run: |
+          {
+            echo "### Mutation Testing"
+            echo "- Mode: ADVISORY (non-blocking)."
+            echo "- Trigger policy: monthly schedule plus manual dispatch only; not part of push or PR CI."
+            echo "- Scope: ${{ matrix.name }}."
+            echo "- Expected use: review surviving mutants and initial dry-run failures, then create focused follow-up work for real test gaps or brittle logic."
+            echo "- Dashboard badge publish: handled by the aggregate post-processing job after all shard artifacts are available."
+            echo "- Merge policy: do not block merges on mutation score."
+            echo "- Promotion criteria to stricter enforcement: clean dry-runs in every package, stable CI variance, and explicit team agreement."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload mutation report
+        if: always()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7.0.0
+        with:
+          name: mutation-report-${{ matrix.name }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ matrix.package }}/reports/mutation
+          if-no-files-found: warn
+          retention-days: 14
+
+  aggregate:
+    name: "🧬 Quality: Aggregate Mutation Score"
+    needs: stryker
+    if: always()
+    runs-on: ubuntu-latest
+    environment: mutation
+    continue-on-error: true
+    env:
+      STRYKER_DASHBOARD_API_KEY: ${{ secrets.STRYKER_DASHBOARD_API_KEY }}
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594  # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f  # v6.3.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Download mutation artifacts
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0  # v5.0.0
+        with:
+          path: artifacts/mutation
+
+      - name: Aggregate shard scores
+        run: |
+          node scripts/aggregate-stryker-score.mjs \
+            --input artifacts/mutation \
+            --expected-count 20 \
+            --summary-out artifacts/aggregate/summary.json \
+            --score-out artifacts/aggregate/mutation-score.json
+
+      - name: Summarize aggregate score
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f artifacts/aggregate/summary.json ]]; then
+            node scripts/aggregate-stryker-score.mjs \
+              --summarize artifacts/aggregate/summary.json \
+              >> "$GITHUB_STEP_SUMMARY"
+          else
+            {
+              echo "### Aggregate Mutation Score"
+              echo "- Aggregate score unavailable because one or more shard reports were missing."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Publish aggregate mutation score to dashboard
+        if: success() && env.STRYKER_DASHBOARD_API_KEY != ''
+        env:
+          REPO_SLUG: ${{ github.repository }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          curl \
+            --fail-with-body \
+            --request PUT \
+            --header "X-Api-Key: ${STRYKER_DASHBOARD_API_KEY}" \
+            --header "Content-Type: application/json" \
+            --data @artifacts/aggregate/mutation-score.json \
+            "https://dashboard.stryker-mutator.io/api/reports/github.com/${REPO_SLUG}/${REF_NAME}"
+
+      - name: Upload aggregate mutation summary
+        if: always()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7.0.0
+        with:
+          name: mutation-aggregate-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/aggregate
+          if-no-files-found: warn
+          retention-days: 14
