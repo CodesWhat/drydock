@@ -89,6 +89,7 @@ interface DashboardComputedOverrides {
   agents?: DashboardAgent[];
   containerSummary?: DashboardContainerSummary | null;
   containers?: Container[];
+  hidePinned?: boolean;
   maintenanceCountdownNow?: number;
   recentStatusByContainer?: Record<string, RecentAuditStatus>;
   registries?: unknown[];
@@ -97,10 +98,11 @@ interface DashboardComputedOverrides {
 }
 
 function createState(overrides: DashboardComputedOverrides = {}) {
-  return useDashboardComputed({
+  return (useDashboardComputed as any)({
     agents: ref(overrides.agents ?? []),
     containerSummary: ref(overrides.containerSummary ?? null),
     containers: ref(overrides.containers ?? []),
+    hidePinned: ref(overrides.hidePinned ?? false),
     maintenanceCountdownNow: ref(overrides.maintenanceCountdownNow ?? Date.now()),
     recentStatusByContainer: ref(overrides.recentStatusByContainer ?? {}),
     registries: ref(overrides.registries ?? []),
@@ -973,6 +975,42 @@ describe('useDashboardComputed recent updates', () => {
       'update-083',
       'update-251',
     ]);
+  });
+
+  it('hides pinned containers from dashboard update widgets when hidePinned is enabled', () => {
+    const state = createState({
+      hidePinned: true,
+      containers: [
+        makeBaseContainer({
+          id: 'floating-major',
+          name: 'floating-major',
+          newTag: '2.0.0',
+          updateKind: 'major',
+          tagPrecision: 'floating',
+          updateDetectedAt: '2026-03-04T10:00:00.000Z',
+        }),
+        makeBaseContainer({
+          id: 'pinned-minor',
+          name: 'pinned-minor',
+          newTag: '1.2.4',
+          updateKind: 'minor',
+          tagPrecision: 'specific',
+          updateDetectedAt: '2026-03-03T10:00:00.000Z',
+        }),
+      ],
+    });
+
+    expect(state.recentUpdates.value.map((row) => row.name)).toEqual(['floating-major']);
+    expect(state.totalUpdates.value).toBe(1);
+    expect(state.updateBreakdownBuckets.value.map(({ kind, count }) => ({ kind, count }))).toEqual([
+      { kind: 'major', count: 1 },
+      { kind: 'minor', count: 0 },
+      { kind: 'patch', count: 0 },
+      { kind: 'digest', count: 0 },
+    ]);
+    expect(state.stats.value.find((card) => card.id === 'stat-updates')).toMatchObject({
+      value: '1',
+    });
   });
 
   it('falls back to suppressed update defaults when tags or timestamps are invalid', () => {
