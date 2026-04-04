@@ -10,6 +10,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0-rc.5] — 2026-04-04
+
+### Added
+
+- **System log viewer overhaul** — Toolbar stays pinned at top (only log entries scroll), long lines wrap at viewport width, search matches component/level/channel fields, filter toggle (funnel icon) shows only matching entries, sort toggle switches between oldest-first and newest-first, auto-apply filters (no Apply/Reset buttons), copy button floats top-right of log content area, log entry columns aligned with fixed-width component and right-aligned line numbers. ([#259](https://github.com/CodesWhat/drydock/discussions/259), [#260](https://github.com/CodesWhat/drydock/discussions/260), [#263](https://github.com/CodesWhat/drydock/discussions/263), [#251](https://github.com/CodesWhat/drydock/discussions/251))
+- **Log component dropdown** — Component filter replaced with a `<select>` dropdown populated from new `GET /api/v1/log/components` endpoint that returns unique component names from the log buffer.
+- **Hide Pinned containers toggle** — Checkbox in the container list filter bar hides containers pinned to specific versions (`tagPrecision: specific`). Persisted in user preferences. ([#250](https://github.com/CodesWhat/drydock/discussions/250))
+- **Combined batch+digest notification mode** — Triggers can now use `MODE=batch+digest` to send both immediate batch emails and scheduled digest summaries. ([#254](https://github.com/CodesWhat/drydock/issues/254))
+- **Conditional reset button** — A reset icon appears in the system log toolbar only when level, tail, or component filters differ from defaults.
+
+### Changed
+
+- **Container filter labels** — Default dropdown options renamed for clarity: "Status" → "All Statuses", "Host" → "All Hosts", "Registry" → "All Registries", "Update" → "All Updates". ([#247](https://github.com/CodesWhat/drydock/discussions/247))
+- **Log viewer icons** — Pause, Pin, Sort, Filter, and Copy icons use the theme-aware icon map, so they change when the user switches icon themes in settings.
+
+### Fixed
+
+- **#248** — Update operation state survives container ID change during replacement updates (`newContainerId` lookup).
+- **#241** — Temporary rollback containers (`-old-{timestamp}`) hidden from container list API responses.
+- **#253** — `threshold=all` honored before rejecting `updateKind=unknown` in notification dispatch.
+- **#256** — Update operation state disambiguated by container ID instead of name (prevents cross-host bleed).
+- **#257** — Non-dashboard views (Containers, Security, Agents) refresh on SSE reconnect.
+- **#258** — Edge-to-edge scroll surface on DataViewLayout for mobile touch.
+- **#217** — Content-aware mode threshold for Host Status widget (full mode only when viewport fits all rows).
+- **#262** — Registry log calls use component child logger with image name context.
+- **#255** — Container event handler schedules refresh for any unknown-to-store container, not just renames.
+- **BaseRegistry** — Trusted host validation and `getImagePublishedAt` tag object creation hardened.
+- **ECR** — Public gallery hostname matching uses parsed URL comparison; private auth token structure validated before split.
+
 ## [1.5.0] — 2026-03-19
 
 ### Added

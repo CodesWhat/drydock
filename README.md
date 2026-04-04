@@ -150,10 +150,10 @@ See the [Quick Start guide](https://getdrydock.com/docs/quickstart) for Docker C
 
 <h2 align="center" id="recent-updates">🆕 Recent Updates</h2>
 
-- **Real-time container log viewer** — WebSocket-based live log streaming with ANSI color rendering, JSON syntax highlighting, regex search, and gzip download.
-- **Dashboard customization** — Drag-to-reorder, resize, and per-widget visibility toggles with a dedicated edit mode.
+- **System log viewer overhaul** — Pinned toolbar, line wrapping, sort toggle (newest/oldest), filter mode (funnel icon shows matches only), auto-apply filters, component dropdown from API, aligned columns, floating copy button.
+- **Hide Pinned containers** — Checkbox toggle in the container filter bar hides version-pinned containers. Persisted in user preferences.
+- **Combined batch+digest notifications** — `MODE=batch+digest` sends both immediate batch emails and scheduled digest summaries.
 - **Multi-host same-name container support** — Containers with identical names across different hosts no longer collide in the UI. Actions, logs, and detail panels route by container ID.
-- **Digest notifications** — Batch update events with `MODE=digest` and configurable `DIGESTCRON`.
 - **Lazy OIDC discovery** — SSO provider startup failures no longer block the server. Discovery retries on first use.
 - **Digest watch for Docker Hub** — Digest-pinned containers (e.g. Portainer Agent) now detect updates even when Docker recovers a tagged reference from inspect.
 - **Floating tag detection** — `tagPrecision` classifier warns when mutable aliases like `v3` are used without digest watching.
