@@ -93,6 +93,7 @@ const {
   regexSearch,
   searchError,
   matchedEntryIds,
+  matchedEntryIdSet,
   matchLabel,
   jumpToMatch,
   isMatchedEntry,
@@ -111,8 +112,7 @@ const searchFilterMode = ref(false);
 const displayEntries = computed(() => {
   let entries = props.entries;
   if (searchFilterMode.value && searchQuery.value) {
-    const matchedIds = new Set(matchedEntryIds.value);
-    entries = entries.filter((entry) => matchedIds.has(entry.id));
+    entries = entries.filter((entry) => matchedEntryIdSet.value.has(entry.id));
   }
   return newestFirst.value ? [...entries].reverse() : entries;
 });
@@ -191,6 +191,17 @@ function tokenizeJson(prettyJson: string): JsonToken[] {
   const tokens: JsonToken[] = [];
   let cursor = 0;
   const numberPattern = /^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/;
+  const hasEscapingBackslash = (value: string, index: number): boolean => {
+    let backslashCount = 0;
+    let cursor = index - 1;
+
+    while (cursor >= 0 && value[cursor] === '\\') {
+      backslashCount += 1;
+      cursor -= 1;
+    }
+
+    return backslashCount % 2 === 1;
+  };
 
   while (cursor < prettyJson.length) {
     const character = prettyJson[cursor];
@@ -214,7 +225,7 @@ function tokenizeJson(prettyJson: string): JsonToken[] {
     if (character === '"') {
       let end = cursor + 1;
       while (end < prettyJson.length) {
-        if (prettyJson[end] === '"' && prettyJson[end - 1] !== '\\') {
+        if (prettyJson[end] === '"' && !hasEscapingBackslash(prettyJson, end)) {
           end += 1;
           break;
         }

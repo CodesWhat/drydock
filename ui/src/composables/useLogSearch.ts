@@ -56,6 +56,8 @@ export function useLogSearch<TEntry extends SearchableLogEntry>(
       .map((entry) => entry.id);
   });
 
+  const matchedEntryIdSet = computed<Set<number>>(() => new Set(matchedEntryIds.value));
+
   const currentMatchEntryId = computed<number | null>(() => {
     const ids = matchedEntryIds.value;
     if (ids.length === 0) {
@@ -97,7 +99,7 @@ export function useLogSearch<TEntry extends SearchableLogEntry>(
   }
 
   function isMatchedEntry(entryId: number): boolean {
-    return matchedEntryIds.value.includes(entryId);
+    return matchedEntryIdSet.value.has(entryId);
   }
 
   function isCurrentMatch(entryId: number): boolean {
@@ -125,6 +127,7 @@ export function useLogSearch<TEntry extends SearchableLogEntry>(
     searchError,
     searchPattern,
     matchedEntryIds,
+    matchedEntryIdSet,
     currentMatchIndex,
     currentMatchEntryId,
     matchLabel,

@@ -145,6 +145,31 @@ describe('AppLogViewer', () => {
     expect(wrapper.findAll('.json-punctuation').length).toBeGreaterThan(0);
   });
 
+  it('keeps JSON strings with trailing escaped backslashes intact', () => {
+    const wrapper = mountViewer({
+      entries: [
+        makeEntry(1, {
+          plainLine: '{"path":"C:\\\\temp\\\\"}',
+          json: {
+            level: 'info',
+            value: {
+              path: 'C:\\temp\\',
+            },
+            pretty: '{\n  "path": "C:\\\\temp\\\\"\n}',
+          },
+          ansiSegments: [],
+        }),
+      ],
+    });
+
+    const stringTokens = wrapper.findAll('.json-string').map((token) => token.text());
+
+    expect(stringTokens).toContain('"C:\\\\temp\\\\"');
+    expect(stringTokens).not.toContain('"C:\\\\temp\\\\"}');
+    expect(wrapper.find('.json-key').text()).toContain('"path"');
+    expect(wrapper.findAll('.json-punctuation').some((token) => token.text() === '}')).toBe(true);
+  });
+
   it('emits pause and pin toggle events from toolbar controls', async () => {
     const wrapper = mountViewer({
       entries: [makeEntry(1)],
@@ -195,6 +220,46 @@ describe('AppLogViewer', () => {
     await wrapper.get('div.overflow-y-auto.font-mono').trigger('scroll');
 
     expect(wrapper.emitted('toggle-pin')).toHaveLength(1);
+  });
+
+  it('emits pin toggle on user scroll when newest-first mode returns near the top edge', async () => {
+    const wrapper = mountViewer({
+      entries: [makeEntry(1)],
+      autoScrollPinned: false,
+    });
+
+    await wrapper.get('[data-test="container-log-sort-toggle"]').trigger('click');
+
+    const viewport = wrapper.get('div.overflow-y-auto.font-mono').element as HTMLElement;
+    setViewportMetrics(viewport, {
+      scrollHeight: 1000,
+      clientHeight: 100,
+      scrollTop: 27,
+    });
+
+    await wrapper.get('div.overflow-y-auto.font-mono').trigger('scroll');
+
+    expect(wrapper.emitted('toggle-pin')).toHaveLength(1);
+  });
+
+  it('does not emit pin toggle at the newest-first near-edge boundary', async () => {
+    const wrapper = mountViewer({
+      entries: [makeEntry(1)],
+      autoScrollPinned: false,
+    });
+
+    await wrapper.get('[data-test="container-log-sort-toggle"]').trigger('click');
+
+    const viewport = wrapper.get('div.overflow-y-auto.font-mono').element as HTMLElement;
+    setViewportMetrics(viewport, {
+      scrollHeight: 1000,
+      clientHeight: 100,
+      scrollTop: 28,
+    });
+
+    await wrapper.get('div.overflow-y-auto.font-mono').trigger('scroll');
+
+    expect(wrapper.emitted('toggle-pin')).toBeUndefined();
   });
 
   it('supports search highlighting and next-match navigation with scroll targeting', async () => {
