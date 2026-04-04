@@ -7,6 +7,7 @@ vi.mock('../../release-notes/index.js', () => ({
     mockGetFullReleaseNotesForContainer(...args),
 }));
 
+import { isRollbackContainer } from '../../model/container.js';
 import { createCrudHandlers } from './crud.js';
 
 type CrudDependencies = Parameters<typeof createCrudHandlers>[0];
@@ -87,12 +88,16 @@ function filterAndSortContainers(
   containers: Record<string, unknown>[],
   query: Record<string, unknown>,
 ) {
-  const queryEntries = Object.entries(query || {});
-  const filteredContainers = containers.filter((container) =>
+  const { excludeRollbackContainers, ...exactMatchQuery } = query || {};
+  const queryEntries = Object.entries(exactMatchQuery);
+  let filteredContainers = containers.filter((container) =>
     queryEntries.every(
       ([queryPath, queryValue]) => getValueByPath(container, queryPath) === queryValue,
     ),
   );
+  if (excludeRollbackContainers === true) {
+    filteredContainers = filteredContainers.filter((container) => !isRollbackContainer(container));
+  }
   return [...filteredContainers].sort((leftContainer, rightContainer) => {
     const watcherCompare = `${leftContainer.watcher ?? ''}`.localeCompare(
       `${rightContainer.watcher ?? ''}`,
@@ -108,6 +113,13 @@ function filterAndSortContainers(
       `${rightContainer.image?.tag?.value ?? ''}`,
     );
   });
+}
+
+function buildVisibleContainersStoreQuery(query: Record<string, unknown> = {}) {
+  return {
+    excludeRollbackContainers: true,
+    ...query,
+  };
 }
 
 function createHarness(options: { containers?: any[] } = {}) {
@@ -304,7 +316,10 @@ describe('api/container/crud', () => {
 
       harness.handlers.getContainers({ query: '' } as any, res as any);
 
-      expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith({}, { limit: 0, offset: 0 });
+      expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith(
+        buildVisibleContainersStoreQuery(),
+        { limit: 0, offset: 0 },
+      );
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
         data: [expect.objectContaining({ id: 'c1' })],
@@ -356,7 +371,7 @@ describe('api/container/crud', () => {
       });
 
       expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith(
-        { watcher: 'local' },
+        buildVisibleContainersStoreQuery({ watcher: 'local' }),
         { limit: 0, offset: 0 },
       );
       expect(res.status).toHaveBeenCalledWith(200);
@@ -386,7 +401,7 @@ describe('api/container/crud', () => {
       });
 
       expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith(
-        { watcher: 'local' },
+        buildVisibleContainersStoreQuery({ watcher: 'local' }),
         { limit: 1, offset: 1 },
       );
       expect(res.status).toHaveBeenCalledWith(200);
@@ -399,6 +414,36 @@ describe('api/container/crud', () => {
         _links: {
           self: '/api/containers?watcher=local&includeVulnerabilities=false&limit=1&offset=1',
           next: '/api/containers?watcher=local&includeVulnerabilities=false&limit=1&offset=2',
+        },
+      });
+    });
+
+    test('hides temporary rollback containers from paginated list responses', () => {
+      const harness = createHarness({
+        containers: [
+          createContainer({ id: 'c1', name: 'service', displayName: 'service' }),
+          createContainer({
+            id: 'c2',
+            name: 'service-old-1773933154786',
+            displayName: 'service-old-1773933154786',
+          }),
+        ],
+      });
+
+      const res = callGetContainers(harness.handlers, {
+        limit: '10',
+        offset: '0',
+      });
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        data: [expect.objectContaining({ id: 'c1', name: 'service' })],
+        total: 1,
+        limit: 10,
+        offset: 0,
+        hasMore: false,
+        _links: {
+          self: '/api/containers?limit=10&offset=0',
         },
       });
     });
@@ -419,7 +464,7 @@ describe('api/container/crud', () => {
       });
 
       expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith(
-        { watcher: 'local' },
+        buildVisibleContainersStoreQuery({ watcher: 'local' }),
         { limit: 1, offset: 1 },
       );
     });
@@ -441,11 +486,13 @@ describe('api/container/crud', () => {
 
       expect(harness.deps.getContainersFromStore).toHaveBeenCalledTimes(1);
       expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith(
-        { watcher: 'local' },
+        buildVisibleContainersStoreQuery({ watcher: 'local' }),
         { limit: 1, offset: 1 },
       );
       expect(harness.deps.getContainerCountFromStore).toHaveBeenCalledTimes(1);
-      expect(harness.deps.getContainerCountFromStore).toHaveBeenCalledWith({ watcher: 'local' });
+      expect(harness.deps.getContainerCountFromStore).toHaveBeenCalledWith(
+        buildVisibleContainersStoreQuery({ watcher: 'local' }),
+      );
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
         data: [expect.objectContaining({ id: 'c2' })],
@@ -615,7 +662,10 @@ describe('api/container/crud', () => {
 
       const res = callGetContainers(harness.handlers, { sort: 'age' });
 
-      expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith({}, { limit: 0, offset: 0 });
+      expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith(
+        buildVisibleContainersStoreQuery(),
+        { limit: 0, offset: 0 },
+      );
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
         data: [
@@ -641,7 +691,10 @@ describe('api/container/crud', () => {
 
       const res = callGetContainers(harness.handlers, { maturity: 'mature' });
 
-      expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith({}, { limit: 0, offset: 0 });
+      expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith(
+        buildVisibleContainersStoreQuery(),
+        { limit: 0, offset: 0 },
+      );
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
         data: [expect.objectContaining({ id: 'c2' })],
@@ -914,7 +967,10 @@ describe('api/container/crud', () => {
 
       callGetContainers(harness.handlers, { sort: 'name', order: 'asc' });
 
-      expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith({}, { limit: 0, offset: 0 });
+      expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith(
+        buildVisibleContainersStoreQuery(),
+        { limit: 0, offset: 0 },
+      );
     });
 
     test('returns 400 for invalid order value', () => {
@@ -965,11 +1021,11 @@ describe('api/container/crud', () => {
       // status and kind are pushed down as store-level filters, so pagination
       // is forwarded to the store (fast path) instead of loading everything.
       expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith(
-        {
+        buildVisibleContainersStoreQuery({
           updateAvailable: true,
           'updateKind.semverDiff': 'major',
           watcher: 'local',
-        },
+        }),
         { limit: 0, offset: 0 },
       );
     });
@@ -984,9 +1040,9 @@ describe('api/container/crud', () => {
       });
 
       expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith(
-        {
+        buildVisibleContainersStoreQuery({
           updateAvailable: false,
-        },
+        }),
         { limit: 0, offset: 0 },
       );
     });
@@ -1001,9 +1057,9 @@ describe('api/container/crud', () => {
       });
 
       expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith(
-        {
+        buildVisibleContainersStoreQuery({
           status: 'running',
-        },
+        }),
         { limit: 0, offset: 0 },
       );
     });
@@ -1027,7 +1083,7 @@ describe('api/container/crud', () => {
 
       expect(res.status).toHaveBeenCalledWith(200);
       expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith(
-        { status: runtimeStatus },
+        buildVisibleContainersStoreQuery({ status: runtimeStatus }),
         { limit: 0, offset: 0 },
       );
     });
@@ -1042,9 +1098,9 @@ describe('api/container/crud', () => {
       });
 
       expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith(
-        {
+        buildVisibleContainersStoreQuery({
           'updateKind.kind': 'digest',
-        },
+        }),
         { limit: 0, offset: 0 },
       );
     });
@@ -1063,8 +1119,13 @@ describe('api/container/crud', () => {
         offset: '0',
       });
 
-      expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith({}, { limit: 1, offset: 0 });
-      expect(harness.deps.getContainerCountFromStore).toHaveBeenCalledWith({});
+      expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith(
+        buildVisibleContainersStoreQuery(),
+        { limit: 1, offset: 0 },
+      );
+      expect(harness.deps.getContainerCountFromStore).toHaveBeenCalledWith(
+        buildVisibleContainersStoreQuery(),
+      );
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json.mock.calls[0][0].total).toBe(2);
     });
@@ -1090,12 +1151,16 @@ describe('api/container/crud', () => {
       // Should forward pagination to the store (fast path) since status
       // and kind are store-level filters — no full-collection load needed.
       expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith(
-        { updateAvailable: true, 'updateKind.semverDiff': 'major' },
+        buildVisibleContainersStoreQuery({
+          updateAvailable: true,
+          'updateKind.semverDiff': 'major',
+        }),
         { limit: 5, offset: 0 },
       );
       // Should use getContainerCountFromStore for total instead of
       // loading all containers just to count them.
       expect(harness.deps.getContainerCountFromStore).toHaveBeenCalledWith({
+        excludeRollbackContainers: true,
         updateAvailable: true,
         'updateKind.semverDiff': 'major',
       });
@@ -1123,7 +1188,7 @@ describe('api/container/crud', () => {
 
       // Sort requires full collection for correct pagination order
       expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith(
-        { updateAvailable: true },
+        buildVisibleContainersStoreQuery({ updateAvailable: true }),
         { limit: 0, offset: 0 },
       );
       // Should NOT call getContainerCountFromStore — total comes from the sorted array
@@ -1199,10 +1264,10 @@ describe('api/container/crud', () => {
       });
 
       expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith(
-        {
+        buildVisibleContainersStoreQuery({
           labels: 'prod',
           watcher: 'local',
-        },
+        }),
         { limit: 0, offset: 0 },
       );
     });
@@ -2341,6 +2406,61 @@ describe('api/container/crud', () => {
             id: 'op-1',
             status: 'in-progress',
             phase: 'old-stopped',
+          }),
+        }),
+      );
+    });
+
+    test('includes active update-operation state after container replacement changes the Docker ID (#248)', () => {
+      const harness = createHarness({
+        containers: [createContainer({ id: 'new-c1', name: 'edge-api' })],
+      });
+      harness.deps.updateOperationStore.getInProgressOperationByContainerId.mockImplementation(
+        (id: string) =>
+          id === 'new-c1'
+            ? {
+                id: 'op-1',
+                containerId: 'old-c1',
+                newContainerId: 'new-c1',
+                status: 'in-progress',
+                phase: 'new-started',
+                updatedAt: '2026-04-03T12:00:00.000Z',
+                fromVersion: '1.0.0',
+                toVersion: '1.1.0',
+              }
+            : undefined,
+      );
+
+      const listRes = callGetContainers(harness.handlers);
+      const singleRes = callGetContainer(harness.handlers, 'new-c1');
+
+      expect(
+        harness.deps.updateOperationStore.getInProgressOperationByContainerId,
+      ).toHaveBeenCalledWith('new-c1');
+      expect(
+        harness.deps.updateOperationStore.getInProgressOperationByContainerName,
+      ).not.toHaveBeenCalled();
+      expect(listRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: [
+            expect.objectContaining({
+              updateOperation: expect.objectContaining({
+                id: 'op-1',
+                status: 'in-progress',
+                phase: 'new-started',
+                fromVersion: '1.0.0',
+                toVersion: '1.1.0',
+              }),
+            }),
+          ],
+        }),
+      );
+      expect(singleRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          updateOperation: expect.objectContaining({
+            id: 'op-1',
+            status: 'in-progress',
+            phase: 'new-started',
           }),
         }),
       );

@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import type { Container, ContainerUpdateOperationState } from '../../../model/container.js';
+import { isRollbackContainer } from '../../../model/container.js';
 import {
   isContainerUpdateOperationPhase,
   isContainerUpdateOperationStatus,
@@ -120,15 +121,16 @@ export function buildContainerListResponse(
     : undefined;
 
   const includeVulnerabilities = parseBooleanQueryParam(query.includeVulnerabilities, false);
-  const filteredQuery = {
+  const filteredQuery: Record<string, unknown> = {
     ...(removeContainerListControlParams(query) as Record<string, unknown>),
+    excludeRollbackContainers: true,
     ...(kindFilter || {}),
     ...(statusFilter?.updateAvailable !== undefined
       ? { updateAvailable: statusFilter.updateAvailable }
       : {}),
     ...(statusFilter?.runtimeStatus ? { status: statusFilter.runtimeStatus } : {}),
     ...(validatedQuery.watcher ? { watcher: validatedQuery.watcher } : {}),
-  } as Request['query'];
+  };
   const pagination = normalizeContainerListPagination(query);
 
   // Sort/order, maturity, and watched-kind filters require loading the full
@@ -178,17 +180,18 @@ export function buildContainerListResponse(
   const data = strippedContainers.map((container) =>
     attachInProgressUpdateOperation(context, container),
   );
-  const hasMore = pagination.limit > 0 && pagination.offset + data.length < total;
+  const visibleData = data.filter((container) => !isRollbackContainer(container));
+  const hasMore = pagination.limit > 0 && pagination.offset + visibleData.length < total;
   const links = buildPaginationLinks({
     basePath,
     query,
     limit: pagination.limit,
     offset: pagination.offset,
     total,
-    returnedCount: data.length,
+    returnedCount: visibleData.length,
   });
   return {
-    data,
+    data: visibleData,
     total,
     limit: pagination.limit,
     offset: pagination.offset,

@@ -22,6 +22,7 @@ const { parse: parseSemver, diff: diffSemver, transform: transformTag } = tag;
 const DEFAULT_UI_MATURITY_THRESHOLD_DAYS = 7;
 const ESTABLISHED_UPDATE_AGE_DAYS = 30;
 const UI_MATURITY_THRESHOLD_DAYS_ENV = 'DD_UI_MATURITY_THRESHOLD_DAYS';
+const OLD_ROLLBACK_CONTAINER_NAME_PATTERN = /-old-\d{10,}$/;
 
 export interface ContainerImage {
   id: string;
@@ -801,6 +802,14 @@ export function flatten(container: Container) {
  */
 export function fullName(container: Container) {
   return `${container.watcher}_${container.name}`;
+}
+
+export function isRollbackContainerName(name: unknown) {
+  return typeof name === 'string' && OLD_ROLLBACK_CONTAINER_NAME_PATTERN.test(name);
+}
+
+export function isRollbackContainer(container: { name?: unknown }) {
+  return isRollbackContainerName(container?.name);
 }
 
 // The following exports are meant for testing only

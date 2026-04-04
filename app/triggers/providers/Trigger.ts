@@ -1,7 +1,11 @@
 import cron, { type ScheduledTask } from 'node-cron';
 import { usesLegacyTriggerPrefix } from '../../configuration/index.js';
 import * as event from '../../event/index.js';
-import { type Container, fullName } from '../../model/container.js';
+import {
+  type Container,
+  fullName,
+  isRollbackContainer as isRollbackContainerHelper,
+} from '../../model/container.js';
 
 const RECREATED_ALIAS_RE = /^[a-f0-9]{12}_(.+)$/i;
 
@@ -15,8 +19,6 @@ import {
   parseThresholdWithDigestBehavior as parseThresholdWithDigestBehaviorHelper,
   SUPPORTED_THRESHOLDS,
 } from './trigger-threshold.js';
-
-const OLD_ROLLBACK_CONTAINER_NAME_PATTERN = /-old-\d{10,}$/;
 
 type SupportedThreshold = (typeof SUPPORTED_THRESHOLDS)[number];
 type TriggerAutoMode = 'all' | 'oninclude' | 'none';
@@ -847,10 +849,7 @@ class Trigger extends Component {
   }
 
   static isRollbackContainer(container: { name?: unknown }): boolean {
-    return (
-      typeof container?.name === 'string' &&
-      OLD_ROLLBACK_CONTAINER_NAME_PATTERN.test(container.name)
-    );
+    return isRollbackContainerHelper(container);
   }
 
   mustTrigger(containerResult: Container) {
