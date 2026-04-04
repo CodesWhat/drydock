@@ -16,15 +16,22 @@ interface TagCandidatesLogger {
   debug?: (message: string) => void;
 }
 
+function hasNonErrorStringMessage(error: unknown): error is { message: string } {
+  if (error instanceof Error) {
+    return false;
+  }
+  if (typeof error !== 'object' || error === null || !('message' in error)) {
+    return false;
+  }
+  return typeof (error as { message: unknown }).message === 'string';
+}
+
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error) {
     return error.message;
   }
-  if (typeof error === 'object' && error !== null && 'message' in error) {
-    const { message } = error as { message: unknown };
-    if (typeof message === 'string') {
-      return message;
-    }
+  if (hasNonErrorStringMessage(error)) {
+    return error.message;
   }
   return String(error);
 }
@@ -94,17 +101,12 @@ function applyIncludeExcludeFilters(
 /**
  * Filter tags by prefix to match the current tag's prefix convention.
  */
-function isDigitCode(charCode: number | undefined): boolean {
-  return charCode !== undefined && charCode >= 48 && charCode <= 57;
+function isAsciiDigit(value: string | undefined): boolean {
+  return value !== undefined && value >= '0' && value <= '9';
 }
 
 export function getFirstDigitIndex(value: string): number {
-  for (let i = 0; i < value.length; i += 1) {
-    if (isDigitCode(value.codePointAt(i))) {
-      return i;
-    }
-  }
-  return -1;
+  return value.search(/[0-9]/);
 }
 
 export function getCurrentPrefix(value: string): string {
@@ -113,7 +115,7 @@ export function getCurrentPrefix(value: string): string {
 }
 
 function startsWithDigit(value: string): boolean {
-  return isDigitCode(value.codePointAt(0));
+  return getFirstDigitIndex(value) === 0;
 }
 
 function getPrefixFilterWarning(currentPrefix: string): string {
@@ -153,15 +155,30 @@ interface TagCandidatesResult {
 }
 
 function getNumericTagShapeFromTransformedTag(transformedTag: string): NumericTagShape | null {
-  const tagShape = /^(.*?)(\d+(?:\.\d+)*)(.*)$/.exec(transformedTag);
-  if (!tagShape) {
+  if (transformedTag.includes('\n') || transformedTag.includes('\r')) {
     return null;
   }
-  const [, prefix, numericPart, suffix] = tagShape;
+
+  const numericStart = getFirstDigitIndex(transformedTag);
+  if (numericStart < 0) {
+    return null;
+  }
+
+  let numericEnd = numericStart;
+  while (isAsciiDigit(transformedTag[numericEnd])) {
+    numericEnd += 1;
+  }
+  while (transformedTag[numericEnd] === '.' && isAsciiDigit(transformedTag[numericEnd + 1])) {
+    numericEnd += 1;
+    while (isAsciiDigit(transformedTag[numericEnd])) {
+      numericEnd += 1;
+    }
+  }
+
   return {
-    prefix,
-    numericSegments: numericPart.split('.'),
-    suffix,
+    prefix: transformedTag.slice(0, numericStart),
+    numericSegments: transformedTag.slice(numericStart, numericEnd).split('.'),
+    suffix: transformedTag.slice(numericEnd),
   };
 }
 

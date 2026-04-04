@@ -67,3 +67,123 @@ describe('getPreferredLabelValue', () => {
     expect(warn).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('docker label constants', () => {
+  test('exports the expected preferred dd.* labels', async () => {
+    vi.resetModules();
+    const labels = await import('../watchers/providers/docker/label.js');
+
+    expect({
+      ddWatch: labels.ddWatch,
+      ddTagInclude: labels.ddTagInclude,
+      ddTagExclude: labels.ddTagExclude,
+      ddTagTransform: labels.ddTagTransform,
+      ddTagFamily: labels.ddTagFamily,
+      ddInspectTagPath: labels.ddInspectTagPath,
+      ddRegistryLookupImage: labels.ddRegistryLookupImage,
+      ddRegistryLookupUrl: labels.ddRegistryLookupUrl,
+      ddWatchDigest: labels.ddWatchDigest,
+      ddLinkTemplate: labels.ddLinkTemplate,
+      ddDisplayName: labels.ddDisplayName,
+      ddDisplayIcon: labels.ddDisplayIcon,
+      ddActionInclude: labels.ddActionInclude,
+      ddNotificationInclude: labels.ddNotificationInclude,
+      ddTriggerInclude: labels.ddTriggerInclude,
+      ddActionExclude: labels.ddActionExclude,
+      ddNotificationExclude: labels.ddNotificationExclude,
+      ddTriggerExclude: labels.ddTriggerExclude,
+      ddSourceRepo: labels.ddSourceRepo,
+      ddGroup: labels.ddGroup,
+      ddHookPre: labels.ddHookPre,
+      ddHookPost: labels.ddHookPost,
+      ddHookPreAbort: labels.ddHookPreAbort,
+      ddHookTimeout: labels.ddHookTimeout,
+      ddWebhookEnabled: labels.ddWebhookEnabled,
+      ddRollbackAuto: labels.ddRollbackAuto,
+      ddRollbackWindow: labels.ddRollbackWindow,
+      ddRollbackInterval: labels.ddRollbackInterval,
+    }).toEqual({
+      ddWatch: 'dd.watch',
+      ddTagInclude: 'dd.tag.include',
+      ddTagExclude: 'dd.tag.exclude',
+      ddTagTransform: 'dd.tag.transform',
+      ddTagFamily: 'dd.tag.family',
+      ddInspectTagPath: 'dd.inspect.tag.path',
+      ddRegistryLookupImage: 'dd.registry.lookup.image',
+      ddRegistryLookupUrl: 'dd.registry.lookup.url',
+      ddWatchDigest: 'dd.watch.digest',
+      ddLinkTemplate: 'dd.link.template',
+      ddDisplayName: 'dd.display.name',
+      ddDisplayIcon: 'dd.display.icon',
+      ddActionInclude: 'dd.action.include',
+      ddNotificationInclude: 'dd.notification.include',
+      ddTriggerInclude: 'dd.trigger.include',
+      ddActionExclude: 'dd.action.exclude',
+      ddNotificationExclude: 'dd.notification.exclude',
+      ddTriggerExclude: 'dd.trigger.exclude',
+      ddSourceRepo: 'dd.source.repo',
+      ddGroup: 'dd.group',
+      ddHookPre: 'dd.hook.pre',
+      ddHookPost: 'dd.hook.post',
+      ddHookPreAbort: 'dd.hook.pre.abort',
+      ddHookTimeout: 'dd.hook.timeout',
+      ddWebhookEnabled: 'dd.webhook.enabled',
+      ddRollbackAuto: 'dd.rollback.auto',
+      ddRollbackWindow: 'dd.rollback.window',
+      ddRollbackInterval: 'dd.rollback.interval',
+    });
+  });
+
+  test('exports the expected legacy wud.* fallback labels', async () => {
+    vi.resetModules();
+    const labels = await import('../watchers/providers/docker/label.js');
+
+    expect({
+      wudWatch: labels.wudWatch,
+      wudTagInclude: labels.wudTagInclude,
+      wudTagExclude: labels.wudTagExclude,
+      wudTagTransform: labels.wudTagTransform,
+      wudInspectTagPath: labels.wudInspectTagPath,
+      wudRegistryLookupImage: labels.wudRegistryLookupImage,
+      wudRegistryLookupUrl: labels.wudRegistryLookupUrl,
+      wudWatchDigest: labels.wudWatchDigest,
+      wudLinkTemplate: labels.wudLinkTemplate,
+      wudDisplayName: labels.wudDisplayName,
+      wudDisplayIcon: labels.wudDisplayIcon,
+      wudTriggerInclude: labels.wudTriggerInclude,
+      wudTriggerExclude: labels.wudTriggerExclude,
+      wudGroup: labels.wudGroup,
+      wudHookPre: labels.wudHookPre,
+      wudHookPost: labels.wudHookPost,
+      wudHookPreAbort: labels.wudHookPreAbort,
+      wudHookTimeout: labels.wudHookTimeout,
+      wudWebhookEnabled: labels.wudWebhookEnabled,
+      wudRollbackAuto: labels.wudRollbackAuto,
+      wudRollbackWindow: labels.wudRollbackWindow,
+      wudRollbackInterval: labels.wudRollbackInterval,
+    }).toEqual({
+      wudWatch: 'wud.watch',
+      wudTagInclude: 'wud.tag.include',
+      wudTagExclude: 'wud.tag.exclude',
+      wudTagTransform: 'wud.tag.transform',
+      wudInspectTagPath: 'wud.inspect.tag.path',
+      wudRegistryLookupImage: 'wud.registry.lookup.image',
+      wudRegistryLookupUrl: 'wud.registry.lookup.url',
+      wudWatchDigest: 'wud.watch.digest',
+      wudLinkTemplate: 'wud.link.template',
+      wudDisplayName: 'wud.display.name',
+      wudDisplayIcon: 'wud.display.icon',
+      wudTriggerInclude: 'wud.trigger.include',
+      wudTriggerExclude: 'wud.trigger.exclude',
+      wudGroup: 'wud.group',
+      wudHookPre: 'wud.hook.pre',
+      wudHookPost: 'wud.hook.post',
+      wudHookPreAbort: 'wud.hook.pre.abort',
+      wudHookTimeout: 'wud.hook.timeout',
+      wudWebhookEnabled: 'wud.webhook.enabled',
+      wudRollbackAuto: 'wud.rollback.auto',
+      wudRollbackWindow: 'wud.rollback.window',
+      wudRollbackInterval: 'wud.rollback.interval',
+    });
+  });
+});

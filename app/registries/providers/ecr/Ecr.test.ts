@@ -1,18 +1,29 @@
 import Ecr from './Ecr.js';
 
-vi.mock('@aws-sdk/client-ecr', () => ({
+const mockFetchEcrAuthorizationToken = vi.hoisted(() =>
+  vi.fn().mockResolvedValue({
+    authorizationData: [{ authorizationToken: 'QVdTOnh4eHg=' }],
+  }),
+);
+const mockEcrClient = vi.hoisted(() =>
   // biome-ignore lint/complexity/useArrowFunction: mock constructor requires function expression
-  ECRClient: vi.fn().mockImplementation(function () {
+  vi.fn().mockImplementation(function () {
     return {
-      send: vi.fn().mockResolvedValue({
-        authorizationData: [{ authorizationToken: 'QVdTOnh4eHg=' }],
-      }),
+      send: mockFetchEcrAuthorizationToken,
     };
   }),
+);
+const mockGetAuthorizationTokenCommand = vi.hoisted(() =>
   // biome-ignore lint/complexity/useArrowFunction: mock constructor requires function expression
-  GetAuthorizationTokenCommand: vi.fn().mockImplementation(function () {
+  vi.fn().mockImplementation(function () {
     return {};
   }),
+);
+const mockAxios = vi.hoisted(() => vi.fn());
+
+vi.mock('@aws-sdk/client-ecr', () => ({
+  ECRClient: mockEcrClient,
+  GetAuthorizationTokenCommand: mockGetAuthorizationTokenCommand,
 }));
 
 const ecr = new Ecr();
@@ -22,7 +33,14 @@ ecr.configuration = {
   region: 'region',
 };
 
-vi.mock('axios', () => ({ default: vi.fn() }));
+vi.mock('axios', () => ({ default: mockAxios }));
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  mockFetchEcrAuthorizationToken.mockResolvedValue({
+    authorizationData: [{ authorizationToken: 'QVdTOnh4eHg=' }],
+  });
+});
 
 test('validatedConfiguration should initialize when configuration is valid', async () => {
   expect(
@@ -36,6 +54,10 @@ test('validatedConfiguration should initialize when configuration is valid', asy
     secretaccesskey: 'secretaccesskey',
     region: 'region',
   });
+});
+
+test('validatedConfiguration should allow an empty string configuration', async () => {
+  expect(ecr.validateConfiguration('')).toStrictEqual({});
 });
 
 test('validatedConfiguration should throw error when accessKey is missing', async () => {
@@ -83,6 +105,26 @@ test('match should return false when registry url is not from ecr', async () => 
       },
     }),
   ).toBeFalsy();
+});
+
+test('match should reject hosts that only contain an ECR hostname as a substring', async () => {
+  expect(
+    ecr.match({
+      registry: {
+        url: 'prefix-123456789.dkr.ecr.eu-west-1.amazonaws.com.attacker.net',
+      },
+    }),
+  ).toBeFalsy();
+});
+
+test('match should accept protocol-less public ECR gallery host', async () => {
+  expect(
+    ecr.match({
+      registry: {
+        url: 'public.ecr.aws/v2',
+      },
+    }),
+  ).toBeTruthy();
 });
 
 test('maskConfiguration should mask configuration secrets', async () => {
@@ -143,9 +185,37 @@ test('normalizeImage should not mutate the input image object', async () => {
   );
 });
 
+test('fetchPrivateEcrAuthToken should construct the ECR client with configured credentials', async () => {
+  await expect(ecr.fetchPrivateEcrAuthToken()).resolves.toBe('QVdTOnh4eHg=');
+
+  expect(mockEcrClient).toHaveBeenCalledWith({
+    credentials: {
+      accessKeyId: 'accesskeyid',
+      secretAccessKey: 'secretaccesskey',
+    },
+    region: 'region',
+  });
+  expect(mockGetAuthorizationTokenCommand).toHaveBeenCalledWith({});
+});
+
 test('authenticate should call ecr auth endpoint', async () => {
   await expect(ecr.authenticate(undefined, { headers: {} })).resolves.toEqual({
     headers: {
+      Authorization: 'Basic QVdTOnh4eHg=',
+    },
+  });
+});
+
+test('authenticate should preserve existing headers for private ECR', async () => {
+  const result = await ecr.authenticate(undefined, {
+    headers: {
+      'X-Trace': 'trace-123',
+    },
+  });
+
+  expect(result).toEqual({
+    headers: {
+      'X-Trace': 'trace-123',
       Authorization: 'Basic QVdTOnh4eHg=',
     },
   });
@@ -174,9 +244,20 @@ test('getAuthPull should return decoded ECR credentials', async () => {
   });
 });
 
+test('getAuthPull should throw when the decoded ECR token is malformed', async () => {
+  const ecrPrivate = new Ecr();
+  ecrPrivate.configuration = {
+    accesskeyid: 'accesskeyid',
+    secretaccesskey: 'secretaccesskey',
+    region: 'region',
+  };
+  ecrPrivate.fetchPrivateEcrAuthToken = vi.fn().mockResolvedValue('Zm9v');
+
+  await expect(ecrPrivate.getAuthPull()).rejects.toThrow('ECR authorization token is malformed');
+});
+
 test('authenticate should fetch public ECR gallery token for public images', async () => {
-  const { default: axios } = await import('axios');
-  axios.mockResolvedValueOnce({ data: { token: 'public-token-123' } });
+  mockAxios.mockResolvedValueOnce({ data: { token: 'public-token-123' } });
 
   const ecrPublic = new Ecr();
   ecrPublic.configuration = {};
@@ -185,6 +266,13 @@ test('authenticate should fetch public ECR gallery token for public images', asy
     { registry: { url: 'https://public.ecr.aws/v2' } },
     { headers: {} },
   );
+  expect(mockAxios).toHaveBeenCalledWith({
+    method: 'GET',
+    url: 'https://public.ecr.aws/token/',
+    headers: {
+      Accept: 'application/json',
+    },
+  });
   expect(result).toEqual({
     headers: {
       Authorization: 'Bearer public-token-123',
@@ -192,9 +280,42 @@ test('authenticate should fetch public ECR gallery token for public images', asy
   });
 });
 
+test('authenticate should preserve existing headers for public ECR', async () => {
+  mockAxios.mockResolvedValueOnce({ data: { token: 'public-token-123' } });
+
+  const ecrPublic = new Ecr();
+  ecrPublic.configuration = {};
+
+  const result = await ecrPublic.authenticate(
+    { registry: { url: 'https://public.ecr.aws/v2' } },
+    { headers: { 'X-Trace': 'trace-123' } },
+  );
+
+  expect(result).toEqual({
+    headers: {
+      'X-Trace': 'trace-123',
+      Authorization: 'Bearer public-token-123',
+    },
+  });
+});
+
+test('authenticate should handle missing request options for public ECR', async () => {
+  mockAxios.mockResolvedValueOnce({ data: { token: 'public-token-123' } });
+
+  const ecrPublic = new Ecr();
+  ecrPublic.configuration = {};
+
+  await expect(
+    ecrPublic.authenticate({ registry: { url: 'public.ecr.aws/v2' } }, undefined),
+  ).resolves.toEqual({
+    headers: {
+      Authorization: 'Bearer public-token-123',
+    },
+  });
+});
+
 test('authenticate should throw when public ECR token is missing', async () => {
-  const { default: axios } = await import('axios');
-  axios.mockResolvedValueOnce({ data: {} });
+  mockAxios.mockResolvedValueOnce({ data: {} });
 
   const ecrPublic = new Ecr();
   ecrPublic.configuration = {};
@@ -229,10 +350,45 @@ test('authenticate should return unchanged options when neither private nor publ
   expect(result).toEqual({ headers: {} });
 });
 
+test('authenticate should return unchanged options when image is missing and no credentials are configured', async () => {
+  const ecrAnon = new Ecr();
+  ecrAnon.configuration = {};
+
+  await expect(ecrAnon.authenticate(undefined, undefined)).resolves.toEqual({
+    headers: {},
+  });
+});
+
+test('authenticate should not treat lookalike public ECR hosts as public gallery', async () => {
+  mockAxios.mockReset();
+  const ecrAnon = new Ecr();
+  ecrAnon.configuration = {};
+
+  const result = await ecrAnon.authenticate(
+    { registry: { url: 'https://public.ecr.aws.attacker.net/v2' } },
+    { headers: {} },
+  );
+
+  expect(mockAxios).not.toHaveBeenCalled();
+  expect(result).toEqual({ headers: {} });
+});
+
 test('getAuthPull should return undefined when no accesskeyid configured', async () => {
   const ecrAnon = new Ecr();
   ecrAnon.configuration = {};
   await expect(ecrAnon.getAuthPull()).resolves.toBeUndefined();
+});
+
+test('getAuthPull should throw when private ECR authorization token is missing', async () => {
+  const ecrPrivate = new Ecr();
+  ecrPrivate.configuration = {
+    accesskeyid: 'accesskeyid',
+    secretaccesskey: 'secretaccesskey',
+    region: 'region',
+  };
+  ecrPrivate.fetchPrivateEcrAuthToken = vi.fn().mockResolvedValue(undefined);
+
+  await expect(ecrPrivate.getAuthPull()).rejects.toThrow('ECR authorization token is missing');
 });
 
 test('match should return true for public ECR gallery', async () => {
