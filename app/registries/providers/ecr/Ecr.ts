@@ -5,6 +5,22 @@ import Registry from '../../Registry.js';
 
 const ECR_PUBLIC_GALLERY_HOSTNAME = 'public.ecr.aws';
 
+function getRegistryHost(registryUrl: string | undefined): string {
+  if (!registryUrl) {
+    return '';
+  }
+
+  try {
+    const withProtocol =
+      registryUrl.startsWith('http://') || registryUrl.startsWith('https://')
+        ? registryUrl
+        : `https://${registryUrl}`;
+    return new URL(withProtocol).hostname;
+  } catch {
+    return registryUrl.split('/')[0] || '';
+  }
+}
+
 /**
  * Elastic Container Registry integration.
  */
@@ -42,7 +58,7 @@ class Ecr extends Registry {
   match(image) {
     return (
       /^.*\.dkr\.ecr\..*\.amazonaws\.com$/.test(image.registry.url) ||
-      image.registry.url === ECR_PUBLIC_GALLERY_HOSTNAME
+      getRegistryHost(image.registry.url) === ECR_PUBLIC_GALLERY_HOSTNAME
     );
   }
 
@@ -59,7 +75,10 @@ class Ecr extends Registry {
         ...image.registry,
       },
     };
-    if (!imageNormalized.registry.url.startsWith('https://')) {
+    if (
+      !imageNormalized.registry.url.startsWith('https://') &&
+      !imageNormalized.registry.url.startsWith('http://')
+    ) {
       imageNormalized.registry.url = `https://${imageNormalized.registry.url}/v2`;
     }
     return imageNormalized;
@@ -96,7 +115,7 @@ class Ecr extends Registry {
       );
 
       // Public ECR gallery
-    } else if (image.registry.url.includes(ECR_PUBLIC_GALLERY_HOSTNAME)) {
+    } else if (getRegistryHost(image?.registry?.url) === ECR_PUBLIC_GALLERY_HOSTNAME) {
       const response = await axios({
         method: 'GET',
         url: 'https://public.ecr.aws/token/',
@@ -120,7 +139,13 @@ class Ecr extends Registry {
         await this.fetchPrivateEcrAuthToken(),
         `Unable to authenticate registry ${this.getId()}: ECR authorization token is missing`,
       );
-      const auth = Buffer.from(tokenValue, 'base64').toString().split(':');
+      const decodedToken = Buffer.from(tokenValue, 'base64').toString();
+      const auth = decodedToken.split(':');
+      if (auth.length !== 2 || !auth[0] || !auth[1]) {
+        throw new Error(
+          `Unable to authenticate registry ${this.getId()}: ECR authorization token is malformed`,
+        );
+      }
       return {
         username: auth[0],
         password: auth[1],
