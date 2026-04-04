@@ -171,6 +171,9 @@ describe('init', () => {
 
     expect(mockCronSchedule).not.toHaveBeenCalled();
     expect(isRunning()).toBe(false);
+    expect(mockLogInfo).toHaveBeenCalledWith(
+      'Scheduled security scanning not configured (DD_SECURITY_SCAN_CRON not set)',
+    );
   });
 
   test('should warn and return when cron expression is invalid', () => {
@@ -512,6 +515,7 @@ describe('runScheduledScans', () => {
       },
     });
     mockGetContainers.mockReturnValue([container1, container2]);
+    const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout');
     mockScanImageWithDedup.mockImplementation(
       () =>
         new Promise((resolve) => {
@@ -531,6 +535,11 @@ describe('runScheduledScans', () => {
     expect(mockLogInfo).toHaveBeenCalledWith(
       'Scanning 2 unique digests across 2 containers (concurrency: 1, batch timeout: 30ms)',
     );
+    expect(mockLogInfo).toHaveBeenCalledWith(
+      'Scheduled scan complete: 2 digests, 0 cached, 0 scanned fresh, 0 errors, 1 aborted, 1 skipped',
+    );
+    expect(clearTimeoutSpy).toHaveBeenCalledTimes(1);
+    clearTimeoutSpy.mockRestore();
   });
 
   test('should group containers by digest and scan unique digests', async () => {
@@ -675,6 +684,9 @@ describe('runScheduledScans', () => {
     // Only second container gets store update
     expect(mockUpdateContainer).toHaveBeenCalledTimes(1);
     expect(mockUpdateContainer).toHaveBeenCalledWith(expect.objectContaining({ id: 'c2' }));
+    expect(mockLogInfo).toHaveBeenCalledWith(
+      'Scheduled scan complete: 2 digests, 0 cached, 1 scanned fresh, 1 errors, 0 aborted, 0 skipped',
+    );
   });
 
   test('should handle non-Error thrown during scan', async () => {
@@ -798,18 +810,22 @@ describe('runScheduledScans', () => {
 
     // Only one scan call was made (second was skipped)
     expect(mockScanImageWithDedup).toHaveBeenCalledTimes(1);
+    expect(mockLogInfo).toHaveBeenCalledWith('Scheduled scan already in progress, skipping');
   });
 
   test('should skip when security scanner is disabled', async () => {
     mockGetSecurityConfiguration.mockReturnValue({
       ...createEnabledConfiguration(),
       enabled: false,
-      scanner: '',
+      scanner: 'trivy',
     });
 
     await runScheduledScans();
 
     expect(mockGetContainers).not.toHaveBeenCalled();
+    expect(mockLogInfo).toHaveBeenCalledWith(
+      'Security scanner not enabled, skipping scheduled scan',
+    );
   });
 
   test('should skip when scanner is not trivy', async () => {
@@ -821,6 +837,9 @@ describe('runScheduledScans', () => {
     await runScheduledScans();
 
     expect(mockGetContainers).not.toHaveBeenCalled();
+    expect(mockLogInfo).toHaveBeenCalledWith(
+      'Security scanner not enabled, skipping scheduled scan',
+    );
   });
 
   test('should filter out containers with non-string digest values', async () => {

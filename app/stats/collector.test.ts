@@ -1085,6 +1085,25 @@ describe('stats/collector', () => {
     release();
   });
 
+  test('does not call stats when watcher api is a primitive value', async () => {
+    const stats = vi.fn(async () => createMockStatsStream());
+    const collector = createContainerStatsCollector({
+      getContainerById: () => ({ id: 'c1', name: 'web', watcher: 'local' }) as any,
+      getWatchers: () => ({
+        'docker.local': 123 as any,
+      }),
+      intervalSeconds: 10,
+      historySize: 3,
+      now: () => Date.now(),
+    });
+
+    const release = collector.watch('c1');
+    await Promise.resolve();
+
+    expect(stats).not.toHaveBeenCalled();
+    release();
+  });
+
   test('gracefully handles invalid stream results and stream startup errors', async () => {
     const getContainer = vi.fn(() => ({ id: 'c1', name: 'web', watcher: 'local' }));
     const getWatchersNull = vi.fn(() => ({
@@ -1104,6 +1123,24 @@ describe('stats/collector', () => {
     const releaseNull = collectorNull.watch('c1');
     await Promise.resolve();
     releaseNull();
+
+    const getWatchersPrimitive = vi.fn(() => ({
+      'docker.local': {
+        dockerApi: {
+          getContainer: vi.fn(() => ({ stats: vi.fn(async () => 'not-a-stream') })),
+        },
+      },
+    }));
+    const collectorPrimitive = createContainerStatsCollector({
+      getContainerById: getContainer,
+      getWatchers: getWatchersPrimitive,
+      intervalSeconds: 10,
+      historySize: 3,
+      now: () => Date.now(),
+    });
+    const releasePrimitive = collectorPrimitive.watch('c1');
+    await Promise.resolve();
+    releasePrimitive();
 
     const getWatchersInvalid = vi.fn(() => ({
       'docker.local': {
@@ -1148,6 +1185,30 @@ describe('stats/collector', () => {
     expect(mockCollectorLogger.warn).toHaveBeenCalledWith(
       'Failed to start Docker stats stream for c1 (failed)',
     );
+  });
+
+  test('touch schedules rest touch timeout at three times the scan interval', async () => {
+    const stream = createMockStatsStream();
+    const setTimeoutFn = vi.fn(() => ({ id: 'rest-touch-timeout' }) as any);
+    const collector = createContainerStatsCollector({
+      getContainerById: () => ({ id: 'c1', name: 'web', watcher: 'local' }) as any,
+      getWatchers: () => ({
+        'docker.local': {
+          dockerApi: {
+            getContainer: () => ({ stats: vi.fn(async () => stream) }),
+          },
+        },
+      }),
+      intervalSeconds: 10,
+      historySize: 3,
+      now: () => Date.now(),
+      setTimeoutFn,
+    });
+
+    collector.touch('c1');
+    await Promise.resolve();
+
+    expect(setTimeoutFn).toHaveBeenCalledWith(expect.any(Function), 30_000);
   });
 
   test('detaches stream when listener attachment throws mid-way', async () => {

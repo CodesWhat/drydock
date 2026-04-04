@@ -127,6 +127,26 @@ test('match should accept protocol-less public ECR gallery host', async () => {
   ).toBeTruthy();
 });
 
+test('match should accept nested public ECR gallery paths', async () => {
+  expect(
+    ecr.match({
+      registry: {
+        url: 'public.ecr.aws/team/image',
+      },
+    }),
+  ).toBeTruthy();
+});
+
+test('match should reject invalid hosts that only fall back to a non-ECR path segment', async () => {
+  expect(
+    ecr.match({
+      registry: {
+        url: '://not-a-valid-registry',
+      },
+    }),
+  ).toBeFalsy();
+});
+
 test('maskConfiguration should mask configuration secrets', async () => {
   expect(ecr.maskConfiguration()).toEqual({
     accesskeyid: '[REDACTED]',
@@ -183,6 +203,22 @@ test('normalizeImage should not mutate the input image object', async () => {
   expect(normalized.registry.url).toBe(
     'https://123456789.dkr.ecr.eu-west-1.amazonaws.com/test/image/v2',
   );
+});
+
+test('normalizeImage should preserve explicit http urls', async () => {
+  expect(
+    ecr.normalizeImage({
+      name: 'test/image',
+      registry: {
+        url: 'http://123456789.dkr.ecr.eu-west-1.amazonaws.com/test/image',
+      },
+    }),
+  ).toStrictEqual({
+    name: 'test/image',
+    registry: {
+      url: 'http://123456789.dkr.ecr.eu-west-1.amazonaws.com/test/image',
+    },
+  });
 });
 
 test('fetchPrivateEcrAuthToken should construct the ECR client with configured credentials', async () => {
@@ -359,6 +395,15 @@ test('authenticate should return unchanged options when image is missing and no 
   });
 });
 
+test('authenticate should return unchanged options when registry metadata is missing and no credentials are configured', async () => {
+  const ecrAnon = new Ecr();
+  ecrAnon.configuration = {};
+
+  await expect(ecrAnon.authenticate({} as any, { headers: {} })).resolves.toEqual({
+    headers: {},
+  });
+});
+
 test('authenticate should not treat lookalike public ECR hosts as public gallery', async () => {
   mockAxios.mockReset();
   const ecrAnon = new Ecr();
@@ -389,6 +434,21 @@ test('getAuthPull should throw when private ECR authorization token is missing',
   ecrPrivate.fetchPrivateEcrAuthToken = vi.fn().mockResolvedValue(undefined);
 
   await expect(ecrPrivate.getAuthPull()).rejects.toThrow('ECR authorization token is missing');
+});
+
+test.each([
+  Buffer.from(':password-only').toString('base64'),
+  Buffer.from('username-only:').toString('base64'),
+])('getAuthPull should reject decoded credentials with a missing token segment (%s)', async (token) => {
+  const ecrPrivate = new Ecr();
+  ecrPrivate.configuration = {
+    accesskeyid: 'accesskeyid',
+    secretaccesskey: 'secretaccesskey',
+    region: 'region',
+  };
+  ecrPrivate.fetchPrivateEcrAuthToken = vi.fn().mockResolvedValue(token);
+
+  await expect(ecrPrivate.getAuthPull()).rejects.toThrow('ECR authorization token is malformed');
 });
 
 test('match should return true for public ECR gallery', async () => {
