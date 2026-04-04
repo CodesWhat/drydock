@@ -70,6 +70,7 @@ const UPDATE_OPERATION_COLLECTION_INDICES = [
   'data.id',
   'data.containerName',
   'data.containerId',
+  'data.newContainerId',
   'data.status',
 ];
 const DEFAULT_UPDATE_OPERATION_MAX_ENTRIES = getDefaultCacheMaxEntries();
@@ -230,11 +231,13 @@ export function getInProgressOperationByContainerId(
   }
 
   const operations = updateOperationCollection
-    .find({
-      'data.containerId': containerId,
-      'data.status': 'in-progress',
-    })
+    .find()
     .map((item) => item.data)
+    .filter(
+      (operation) =>
+        operation.status === 'in-progress' &&
+        (operation.containerId === containerId || operation.newContainerId === containerId),
+    )
     .sort((a, b) => getOperationTimestamp(b) - getOperationTimestamp(a));
 
   return operations.at(0);

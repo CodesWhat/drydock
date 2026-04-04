@@ -193,6 +193,22 @@ describe('Update Operation Store', () => {
     }
   });
 
+  test('getInProgressOperationByContainerId should match replacement container IDs stored in newContainerId', () => {
+    const operation = updateOperation.insertOperation({
+      containerName: 'web',
+      containerId: 'old-123',
+    });
+    updateOperation.updateOperation(operation.id, {
+      newContainerId: 'new-456',
+    });
+
+    const active = updateOperation.getInProgressOperationByContainerId('new-456');
+
+    expect(active?.id).toBe(operation.id);
+    expect(active?.containerId).toBe('old-123');
+    expect(active?.newContainerId).toBe('new-456');
+  });
+
   test('getInProgressOperationByContainerId should return undefined when uninitialized', async () => {
     vi.resetModules();
     const fresh = await import('./update-operation.js');
