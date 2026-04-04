@@ -207,6 +207,18 @@ test('init should register to container reports when batch mode enabled', async 
   expect(spy).toHaveBeenCalled();
 });
 
+test('mode capability helpers should treat batch+digest as both batch and digest capable', () => {
+  expect((Trigger as any).isBatchCapableMode('batch')).toBe(true);
+  expect((Trigger as any).isBatchCapableMode('batch+digest')).toBe(true);
+  expect((Trigger as any).isBatchCapableMode('digest')).toBe(false);
+  expect((Trigger as any).isBatchCapableMode(undefined)).toBe(false);
+
+  expect((Trigger as any).isDigestCapableMode('digest')).toBe(true);
+  expect((Trigger as any).isDigestCapableMode('batch+digest')).toBe(true);
+  expect((Trigger as any).isDigestCapableMode('batch')).toBe(false);
+  expect((Trigger as any).isDigestCapableMode(undefined)).toBe(false);
+});
+
 test('init should register handlers with trigger id and order', async () => {
   const spy = vi.spyOn(event, 'registerContainerReport');
   trigger.type = 'docker';

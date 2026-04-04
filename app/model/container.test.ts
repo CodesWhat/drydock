@@ -285,6 +285,30 @@ test('model should reject empty error message', async () => {
   }).toThrow('ValidationError: "error.message" is not allowed to be empty');
 });
 
+test.each([
+  ['service-old-0123456789', true],
+  ['service-old-01234567890', true],
+  ['service-old-012345678', false],
+  ['service-old-0123456789a', false],
+  ['service-old-01234-56789', false],
+  ['service-old-0123456789-extra', false],
+  ['service-OLD-0123456789', false],
+])('isRollbackContainerName(%s) returns %s', (name, expected) => {
+  expect(container.isRollbackContainerName(name)).toBe(expected);
+});
+
+test('isRollbackContainerName rejects non-string values', () => {
+  expect(container.isRollbackContainerName(undefined)).toBe(false);
+  expect(container.isRollbackContainerName(null)).toBe(false);
+  expect(container.isRollbackContainerName(1234567890)).toBe(false);
+});
+
+test('isRollbackContainer delegates to the container name matcher', () => {
+  expect(container.isRollbackContainer({ name: 'service-old-0123456789' })).toBe(true);
+  expect(container.isRollbackContainer({ name: 'service-old-012345678' })).toBe(false);
+  expect(container.isRollbackContainer({})).toBe(false);
+});
+
 test('model should flag updateAvailable when tag is different', async () => {
   const containerValidated = container.validate({
     id: 'container-123456789',

@@ -321,6 +321,18 @@ describe('api/container/filters', () => {
     expect(result).not.toHaveProperty('order');
   });
 
+  test('removeContainerListControlParams strips excludeRollbackContainers from query', () => {
+    const query = {
+      excludeRollbackContainers: 'false',
+      includeVulnerabilities: 'true',
+      name: 'nginx',
+    } as any;
+    const result = removeContainerListControlParams(query);
+    expect(result).toEqual({ name: 'nginx' });
+    expect(result).not.toHaveProperty('excludeRollbackContainers');
+    expect(result).not.toHaveProperty('includeVulnerabilities');
+  });
+
   test('validateContainerListQuery accepts watched kind values', () => {
     expect(validateContainerListQuery({ kind: 'watched' } as any).kind).toBe('watched');
     expect(validateContainerListQuery({ kind: 'unwatched' } as any).kind).toBe('unwatched');

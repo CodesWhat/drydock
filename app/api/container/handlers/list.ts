@@ -1,6 +1,5 @@
 import type { Request, Response } from 'express';
 import type { Container, ContainerUpdateOperationState } from '../../../model/container.js';
-import { isRollbackContainer } from '../../../model/container.js';
 import {
   isContainerUpdateOperationPhase,
   isContainerUpdateOperationStatus,
@@ -180,18 +179,17 @@ export function buildContainerListResponse(
   const data = strippedContainers.map((container) =>
     attachInProgressUpdateOperation(context, container),
   );
-  const visibleData = data.filter((container) => !isRollbackContainer(container));
-  const hasMore = pagination.limit > 0 && pagination.offset + visibleData.length < total;
+  const hasMore = pagination.limit > 0 && pagination.offset + data.length < total;
   const links = buildPaginationLinks({
     basePath,
     query,
     limit: pagination.limit,
     offset: pagination.offset,
     total,
-    returnedCount: visibleData.length,
+    returnedCount: data.length,
   });
   return {
-    data: visibleData,
+    data,
     total,
     limit: pagination.limit,
     offset: pagination.offset,

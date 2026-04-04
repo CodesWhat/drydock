@@ -268,6 +268,20 @@ class Trigger extends Component {
     return auto.toLowerCase() as TriggerAutoMode;
   }
 
+  private static normalizeMode(mode: TriggerConfiguration['mode']): string | undefined {
+    return typeof mode === 'string' ? mode.toLowerCase() : undefined;
+  }
+
+  private static isBatchCapableMode(mode: TriggerConfiguration['mode']): boolean {
+    const normalizedMode = Trigger.normalizeMode(mode);
+    return normalizedMode === 'batch' || normalizedMode === 'batch+digest';
+  }
+
+  private static isDigestCapableMode(mode: TriggerConfiguration['mode']): boolean {
+    const normalizedMode = Trigger.normalizeMode(mode);
+    return normalizedMode === 'digest' || normalizedMode === 'batch+digest';
+  }
+
   private getCategory() {
     return ACTION_TRIGGER_TYPES.has(this.type.toLowerCase()) ? 'action' : 'notification';
   }
@@ -503,9 +517,8 @@ class Trigger extends Component {
     try {
       // Agent connectivity notifications synthesize one-off container payloads and should always
       // dispatch immediately, even when the trigger itself is configured for batch updates.
-      const normalizedMode = this.configuration.mode?.toLowerCase();
       const shouldUseBatchMode =
-        (normalizedMode === 'batch' || normalizedMode === 'batch+digest') &&
+        Trigger.isBatchCapableMode(this.configuration.mode) &&
         getNotificationEvent(container) === undefined;
       if (shouldUseBatchMode) {
         this.queueEventBatchDispatch(ruleId, container);
@@ -876,11 +889,9 @@ class Trigger extends Component {
     await this.initTrigger();
     if (this.getAutoMode() !== 'none') {
       const autoMode = this.getAutoMode();
-      const normalizedMode = this.configuration.mode?.toLowerCase();
-      const shouldRegisterBatchHandler =
-        normalizedMode === 'batch' || normalizedMode === 'batch+digest';
-      const shouldRegisterDigestHandler =
-        normalizedMode === 'digest' || normalizedMode === 'batch+digest';
+      const normalizedMode = Trigger.normalizeMode(this.configuration.mode);
+      const shouldRegisterBatchHandler = Trigger.isBatchCapableMode(this.configuration.mode);
+      const shouldRegisterDigestHandler = Trigger.isDigestCapableMode(this.configuration.mode);
       this.log.info(
         autoMode === 'oninclude'
           ? 'Registering for auto execution (only containers with explicit include labels)'

@@ -1,6 +1,6 @@
 import type { Container } from '../../../model/container.js';
 import type { CrudHandlerContext } from '../crud-context.js';
-import { attachInProgressUpdateOperation } from './list.js';
+import { attachInProgressUpdateOperation, buildContainerListResponse } from './list.js';
 
 function createMockContext(operation?: unknown): CrudHandlerContext {
   return {
@@ -175,5 +175,46 @@ describe('attachInProgressUpdateOperation', () => {
     const result = attachInProgressUpdateOperation(context, container);
 
     expect(result.updateOperation?.id).toBe('op-legacy');
+  });
+});
+
+describe('buildContainerListResponse', () => {
+  test('preserves store-level rollback filtering after downstream transforms', () => {
+    const containers = [
+      createContainer({ id: 'c1', name: 'service', displayName: 'service' }),
+      createContainer({ id: 'c2', name: 'worker', displayName: 'worker' }),
+    ];
+    const context: CrudHandlerContext = {
+      ...createMockContext(),
+      getContainersFromStore: vi.fn(() => containers),
+      getContainerCountFromStore: vi.fn(() => 2),
+      redactContainersRuntimeEnv: vi.fn((items: Container[]) => [
+        items[0]!,
+        {
+          ...items[1]!,
+          name: 'worker-old-1773933154786',
+          displayName: 'worker-old-1773933154786',
+        },
+      ]),
+    };
+
+    const response = buildContainerListResponse(
+      context,
+      { limit: '10', offset: '0' } as any,
+      '/api/containers',
+    );
+
+    expect(context.getContainersFromStore).toHaveBeenCalledWith(
+      {
+        excludeRollbackContainers: true,
+      },
+      { limit: 10, offset: 0 },
+    );
+    expect(response.total).toBe(2);
+    expect(response.data).toHaveLength(2);
+    expect(response.hasMore).toBe(false);
+    expect(response._links).toEqual({
+      self: '/api/containers?limit=10&offset=0',
+    });
   });
 });
