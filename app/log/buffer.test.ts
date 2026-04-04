@@ -1,5 +1,6 @@
 import {
   addEntry,
+  getComponents,
   getEntries,
   getMinLevel,
   matchesComponent,
@@ -265,6 +266,25 @@ describe('Ring Buffer', () => {
       const entry = makeEntry({ component: 'api-server' });
       expect(matchesComponent(entry, 'api')).toBe(true);
       expect(matchesComponent(entry, 'watcher')).toBe(false);
+    });
+  });
+
+  describe('getComponents', () => {
+    test('returns sorted unique component names from the buffer', () => {
+      addEntry(makeEntry({ component: 'watcher.docker.local' }));
+      addEntry(makeEntry({ component: 'registry.ghcr' }));
+      addEntry(makeEntry({ component: 'trigger.mqtt.qa' }));
+      addEntry(makeEntry({ component: 'registry.ghcr' }));
+      addEntry(makeEntry({ component: 'drydock' }));
+
+      const components = getComponents();
+
+      expect(components).toEqual([
+        'drydock',
+        'registry.ghcr',
+        'trigger.mqtt.qa',
+        'watcher.docker.local',
+      ]);
     });
   });
 });
