@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
+import AppIconButton from '@/components/AppIconButton.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import AppLogViewer from '../AppLogViewer.vue';
 import type { AppLogEntry } from '../../types/log-entry';
@@ -53,6 +54,16 @@ const streamingEnabledModel = computed({
 });
 
 const autoScrollPinned = ref(true);
+
+const filtersModified = computed(
+  () => props.logLevelFilter !== 'all' || props.tail !== 100 || props.componentFilter !== '',
+);
+
+function resetFilters() {
+  emit('update:logLevelFilter', 'all');
+  emit('update:tail', 100);
+  emit('update:componentFilter', '');
+}
 
 const viewerPaused = computed(() => !props.streamingEnabled);
 const statusLabel = computed(() => {
@@ -168,6 +179,15 @@ function togglePin() {
               <option value="">All Components</option>
               <option v-for="comp in props.components" :key="comp" :value="comp">{{ comp }}</option>
             </select>
+          </template>
+
+          <template v-if="filtersModified" #toolbar-right>
+            <AppIconButton
+              icon="ph:arrow-counter-clockwise"
+              size="xs"
+              tooltip="Reset filters"
+              @click="resetFilters"
+            />
           </template>
 
           <template #footer-extra>
