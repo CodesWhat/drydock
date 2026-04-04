@@ -23,6 +23,14 @@ describe('DataListAccordion', () => {
       const w = factory();
       expect(w.findAll('.space-y-2 > div')).toHaveLength(3);
     });
+
+    it('top-aligns header content so tall names do not shift beside short badges and icons', () => {
+      const w = factory({}, { header: ({ item }: any) => `${item.name}` });
+      const header = w.find('.space-y-2 > div > .flex');
+
+      expect(header.classes()).toContain('items-start');
+      expect(header.classes()).not.toContain('items-center');
+    });
   });
 
   describe('item key', () => {
