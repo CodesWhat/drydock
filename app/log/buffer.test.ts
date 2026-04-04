@@ -33,6 +33,10 @@ describe('Ring Buffer', () => {
       const entries = getEntries();
       expect(entries).toEqual([]);
     });
+
+    test('should return no components when buffer is empty', () => {
+      expect(getComponents()).toEqual([]);
+    });
   });
 
   describe('addEntry and getEntries', () => {
@@ -285,6 +289,14 @@ describe('Ring Buffer', () => {
         'trigger.mqtt.qa',
         'watcher.docker.local',
       ]);
+    });
+
+    test('skips entries whose component is empty', () => {
+      addEntry(makeEntry({ component: '' }));
+      addEntry(makeEntry({ component: 'api.server' }));
+
+      expect(getComponents()).toContain('api.server');
+      expect(getComponents()).not.toContain('');
     });
   });
 });

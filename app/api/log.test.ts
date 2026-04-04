@@ -1,11 +1,13 @@
 import { createMockRequest, createMockResponse } from '../test/helpers.js';
 
-const { mockRouter, mockGetEntries, mockGetLogLevel, mockGetLogBufferEnabled } = vi.hoisted(() => ({
-  mockRouter: { use: vi.fn(), get: vi.fn() },
-  mockGetEntries: vi.fn(),
-  mockGetLogLevel: vi.fn(() => 'info'),
-  mockGetLogBufferEnabled: vi.fn(() => true),
-}));
+const { mockRouter, mockGetComponents, mockGetEntries, mockGetLogLevel, mockGetLogBufferEnabled } =
+  vi.hoisted(() => ({
+    mockRouter: { use: vi.fn(), get: vi.fn() },
+    mockGetComponents: vi.fn(),
+    mockGetEntries: vi.fn(),
+    mockGetLogLevel: vi.fn(() => 'info'),
+    mockGetLogBufferEnabled: vi.fn(() => true),
+  }));
 
 vi.mock('express', () => ({
   default: { Router: vi.fn(() => mockRouter) },
@@ -19,6 +21,7 @@ vi.mock('../configuration', () => ({
 }));
 
 vi.mock('../log/buffer', () => ({
+  getComponents: mockGetComponents,
   getEntries: mockGetEntries,
 }));
 
@@ -34,6 +37,7 @@ describe('Log Router', () => {
     vi.clearAllMocks();
     mockGetLogLevel.mockReturnValue('info');
     mockGetLogBufferEnabled.mockReturnValue(true);
+    mockGetComponents.mockReturnValue([]);
   });
 
   test('should initialize router with nocache and route', () => {
@@ -60,6 +64,7 @@ describe('Log Entries Route', () => {
     vi.clearAllMocks();
     mockGetLogLevel.mockReturnValue('info');
     mockGetLogBufferEnabled.mockReturnValue(true);
+    mockGetComponents.mockReturnValue([]);
   });
 
   test('should register /entries route', () => {
@@ -287,6 +292,45 @@ describe('Log Entries Route', () => {
 
     expect(mockGetLogBufferEnabled).toHaveBeenCalled();
     expect(mockGetEntries).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith([]);
+  });
+});
+
+describe('Log Components Route', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGetLogBufferEnabled.mockReturnValue(true);
+    mockGetComponents.mockReturnValue(['api', 'watcher']);
+  });
+
+  test('should register /components route', () => {
+    logRouter.init();
+    expect(mockRouter.get).toHaveBeenCalledWith('/components', expect.any(Function));
+  });
+
+  test('should return component names when log buffer is enabled', () => {
+    logRouter.init();
+    const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/components')[1];
+
+    const res = createResponse();
+    handler({}, res);
+
+    expect(mockGetLogBufferEnabled).toHaveBeenCalled();
+    expect(mockGetComponents).toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith(['api', 'watcher']);
+  });
+
+  test('should return an empty array when component names are requested with the log buffer disabled', () => {
+    mockGetLogBufferEnabled.mockReturnValue(false);
+    logRouter.init();
+    const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/components')[1];
+
+    const res = createResponse();
+    handler({}, res);
+
+    expect(mockGetComponents).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith([]);
   });

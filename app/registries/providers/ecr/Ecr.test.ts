@@ -137,11 +137,61 @@ test('match should accept nested public ECR gallery paths', async () => {
   ).toBeTruthy();
 });
 
+test('match should accept https public ECR gallery hosts', async () => {
+  expect(
+    ecr.match({
+      registry: {
+        url: 'https://public.ecr.aws/v2',
+      },
+    }),
+  ).toBeTruthy();
+});
+
+test('match should accept http public ECR gallery hosts', async () => {
+  expect(
+    ecr.match({
+      registry: {
+        url: 'http://public.ecr.aws/v2',
+      },
+    }),
+  ).toBeTruthy();
+});
+
 test('match should reject invalid hosts that only fall back to a non-ECR path segment', async () => {
   expect(
     ecr.match({
       registry: {
         url: '://not-a-valid-registry',
+      },
+    }),
+  ).toBeFalsy();
+});
+
+test('match should reject malformed percent-encoded registry hosts', async () => {
+  expect(
+    ecr.match({
+      registry: {
+        url: '%',
+      },
+    }),
+  ).toBeFalsy();
+});
+
+test('match should return empty string fallback for slash-only registry url', async () => {
+  expect(
+    ecr.match({
+      registry: {
+        url: '/',
+      },
+    }),
+  ).toBeFalsy();
+});
+
+test('match should reject malformed hosts whose fallback path segment is empty', async () => {
+  expect(
+    ecr.match({
+      registry: {
+        url: '///not-a-host',
       },
     }),
   ).toBeFalsy();

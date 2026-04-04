@@ -1,4 +1,4 @@
-import { getLog, getLogEntries } from '@/services/log';
+import { getLog, getLogComponents, getLogEntries } from '@/services/log';
 
 let fetchMock: ReturnType<typeof vi.fn>;
 
@@ -144,6 +144,32 @@ describe('Log Service', () => {
 
       const calledUrl = fetchMock.mock.calls[0][0];
       expect(calledUrl).toBe('/api/v1/log/entries');
+    });
+  });
+
+  describe('getLogComponents', () => {
+    it('should fetch log components', async () => {
+      const mockComponents = ['api', 'watcher'];
+      fetchMock.mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue(mockComponents),
+      });
+
+      const result = await getLogComponents();
+
+      expect(fetchMock).toHaveBeenCalledWith('/api/v1/log/components', {
+        credentials: 'include',
+      });
+      expect(result).toEqual(mockComponents);
+    });
+
+    it('should return an empty array when fetching components fails', async () => {
+      fetchMock.mockResolvedValue({
+        ok: false,
+        statusText: 'Internal Server Error',
+      });
+
+      await expect(getLogComponents()).resolves.toEqual([]);
     });
   });
 });

@@ -28,6 +28,12 @@ class MixedCaseTrustedAuthBaseRegistry extends TestBaseRegistry {
   }
 }
 
+class SparseTrustedAuthBaseRegistry extends TestBaseRegistry {
+  protected override getTrustedAuthHosts(): string[] {
+    return ['   ', undefined as unknown as string, 'auth.example.com'];
+  }
+}
+
 function getBearerTokenCacheSize(registry: BaseRegistry) {
   return (
     registry as unknown as {
@@ -290,6 +296,21 @@ test('authenticateBearerFromAuthUrl should normalize trusted auth hosts returned
   const { default: axios } = await import('axios');
   axios.mockResolvedValue({ data: { token: 'abc123' } });
   const registry = new MixedCaseTrustedAuthBaseRegistry();
+
+  await expect(
+    registry.authenticateBearerFromAuthUrl(
+      { headers: {}, url: 'https://registry.example.com/v2/library/nginx/manifests/latest' },
+      'https://auth.example.com/token',
+      undefined,
+    ),
+  ).resolves.toHaveProperty('headers.Authorization', 'Bearer abc123');
+  expect(axios).toHaveBeenCalledTimes(1);
+});
+
+test('authenticateBearerFromAuthUrl should ignore blank trusted auth hosts', async () => {
+  const { default: axios } = await import('axios');
+  axios.mockResolvedValue({ data: { token: 'abc123' } });
+  const registry = new SparseTrustedAuthBaseRegistry();
 
   await expect(
     registry.authenticateBearerFromAuthUrl(

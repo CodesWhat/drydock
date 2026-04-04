@@ -346,6 +346,18 @@ describe('docker tag candidates module', () => {
     compileSpy.mockRestore();
   });
 
+  test('stringifies object errors when the message field is missing', () => {
+    const compileSpy = vi.spyOn(RE2JS, 'compile').mockImplementation(() => {
+      throw { reason: 'custom compile failure' };
+    });
+    const log = { warn: vi.fn(), debug: vi.fn() };
+
+    getTagCandidates(createContainer({ includeTags: 'anything' }), ['1.0.1'], log);
+
+    expect(log.warn).toHaveBeenCalledWith(expect.stringContaining('[object Object]'));
+    compileSpy.mockRestore();
+  });
+
   test('extracts numeric tag shape with multi-digit segments and suffixes', () => {
     expect(getNumericTagShape('2025.11.1-alpine3.21', undefined)).toEqual({
       prefix: '',
