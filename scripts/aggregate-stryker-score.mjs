@@ -19,9 +19,7 @@ function summarizeToMarkdown(summaryPath) {
   const summary = JSON.parse(fs.readFileSync(summaryPath, 'utf8'));
   const totals = summary.totals;
   const expectedLabel =
-    summary.expectedReportCount != null
-      ? ` / ${summary.expectedReportCount} expected`
-      : '';
+    summary.expectedReportCount != null ? ` / ${summary.expectedReportCount} expected` : '';
   const lines = [
     '### Aggregate Mutation Score',
     `- Reports aggregated: ${summary.mutationReportCount}${expectedLabel}.`,
@@ -32,9 +30,7 @@ function summarizeToMarkdown(summaryPath) {
     `- Ignored: ${totals.ignored}.`,
   ];
   if (summary.isComplete === false && summary.missingReportCount > 0) {
-    lines.push(
-      `- Status: PARTIAL (${summary.missingReportCount} reports missing).`,
-    );
+    lines.push(`- Status: PARTIAL (${summary.missingReportCount} reports missing).`);
   }
   console.log(lines.join('\n'));
 }
@@ -255,7 +251,11 @@ function main() {
     throw new Error(`No mutation.json files found under ${inputPath}`);
   }
 
-  if (args.expectedCount !== null && mutationReports.length !== args.expectedCount && !args.allowMissing) {
+  if (
+    args.expectedCount !== null &&
+    mutationReports.length !== args.expectedCount &&
+    !args.allowMissing
+  ) {
     throw new Error(
       `Expected ${args.expectedCount} mutation reports under ${inputPath}, but found ${mutationReports.length}`,
     );
