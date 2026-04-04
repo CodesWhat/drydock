@@ -29,8 +29,6 @@ const emit = defineEmits<{
   (e: 'update:tail', value: number): void;
   (e: 'update:componentFilter', value: string): void;
   (e: 'update:streamingEnabled', value: boolean): void;
-  (e: 'refresh'): void;
-  (e: 'reset'): void;
   (e: 'toggle-pause'): void;
 }>();
 
@@ -170,24 +168,6 @@ function togglePin() {
               <option value="">All Components</option>
               <option v-for="comp in props.components" :key="comp" :value="comp">{{ comp }}</option>
             </select>
-          </template>
-
-          <template #filter-bar>
-            <AppButton size="none" variant="plain" weight="none"
-              class="px-3 py-1.5 dd-rounded text-2xs-plus font-semibold transition-colors dd-bg-elevated dd-text hover:opacity-90"
-              :class="props.loading ? 'opacity-50 pointer-events-none' : ''"
-              @click="emit('refresh')"
-            >
-              Apply
-            </AppButton>
-
-            <AppButton size="none" variant="plain" weight="none"
-              class="px-3 py-1.5 dd-rounded text-2xs-plus font-semibold transition-colors dd-text-muted hover:dd-text"
-              :class="props.loading ? 'opacity-50 pointer-events-none' : ''"
-              @click="emit('reset')"
-            >
-              Reset
-            </AppButton>
           </template>
 
           <template #footer-extra>

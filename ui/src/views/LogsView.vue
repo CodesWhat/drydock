@@ -121,16 +121,13 @@ function applyFilters() {
   }
 }
 
-function resetLogFilters() {
-  appLogLevelFilter.value = 'all';
-  appLogTail.value = 100;
-  appLogComponent.value = '';
-  applyFilters();
-}
-
 function toggleStreamingPause() {
   streamingEnabled.value = !streamingEnabled.value;
 }
+
+watch([appLogLevelFilter, appLogTail, appLogComponent], () => {
+  applyFilters();
+});
 
 watch(streamingEnabled, (enabled) => {
   if (enabled) {
@@ -180,8 +177,6 @@ onMounted(() => {
       @update:tail="appLogTail = $event"
       @update:component-filter="appLogComponent = $event"
       @update:streaming-enabled="streamingEnabled = $event"
-      @refresh="applyFilters"
-      @reset="resetLogFilters"
       @toggle-pause="toggleStreamingPause"
     />
   </div>
