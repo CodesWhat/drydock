@@ -3,7 +3,7 @@ import type { ViewMode } from './schema';
 import { preferences } from './store';
 import { isViewMode } from './validators';
 
-type ViewKey = keyof typeof preferences.views | 'containers';
+type ViewKey = Exclude<keyof typeof preferences.views, 'logs'> | 'containers';
 
 /**
  * Shorthand for binding a view's mode preference.

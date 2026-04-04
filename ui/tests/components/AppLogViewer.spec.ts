@@ -1,4 +1,4 @@
-import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
+import { flushPromises, mount } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import AppLogViewer from '@/components/AppLogViewer.vue';
 import type { AppLogEntry } from '@/types/log-entry';
@@ -41,14 +41,6 @@ function mountViewer(props: Record<string, unknown> = {}) {
       },
     },
   });
-}
-
-function getButtonByText(wrapper: VueWrapper, text: string) {
-  const button = wrapper.findAll('button').find((candidate) => candidate.text().includes(text));
-  if (!button) {
-    throw new Error(`Button not found: ${text}`);
-  }
-  return button;
 }
 
 function setViewportMetrics(
@@ -345,7 +337,12 @@ describe('AppLogViewer', () => {
     expect(writeText).toHaveBeenCalledWith(
       '2026-03-19T00:00:00Z STDOUT api ready\n2026-03-19T00:00:01Z WARN worker retrying',
     );
-    const copyBtn = wrapper.getComponent('[data-test="container-log-copy"]');
+    const copyBtn = wrapper
+      .findAllComponents({ name: 'AppIconButton' })
+      .find((component) => component.attributes('data-test') === 'container-log-copy');
+    if (!copyBtn) {
+      throw new Error('Copy button component not found');
+    }
     expect(copyBtn.props('icon')).toBe('check');
 
     vi.advanceTimersByTime(2000);

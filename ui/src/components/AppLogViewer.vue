@@ -14,6 +14,7 @@ interface JsonToken {
 const props = withDefaults(
   defineProps<{
     entries: AppLogEntry[];
+    newestFirst?: boolean;
     compact?: boolean;
     showLineNumbers?: boolean;
     emptyMessage?: string;
@@ -24,6 +25,7 @@ const props = withDefaults(
     lineCount?: number;
   }>(),
   {
+    newestFirst: false,
     compact: false,
     showLineNumbers: true,
     emptyMessage: 'No log entries yet',
@@ -36,6 +38,7 @@ const props = withDefaults(
 );
 
 const emit = defineEmits<{
+  (e: 'update:newestFirst', value: boolean): void;
   (e: 'toggle-pause'): void;
   (e: 'toggle-pin'): void;
 }>();
@@ -44,10 +47,8 @@ const lineElements = new Map<number, HTMLElement>();
 const logViewport = ref<HTMLElement | null>(null);
 const copySuccess = ref(false);
 
-const newestFirst = ref(false);
-
 function isNearEdge(element: HTMLElement): boolean {
-  if (newestFirst.value) {
+  if (props.newestFirst) {
     return element.scrollTop < 28;
   }
   return element.scrollHeight - element.scrollTop - element.clientHeight < 28;
@@ -57,7 +58,7 @@ function scrollToEdge(): void {
   if (!logViewport.value) {
     return;
   }
-  logViewport.value.scrollTop = newestFirst.value ? 0 : logViewport.value.scrollHeight;
+  logViewport.value.scrollTop = props.newestFirst ? 0 : logViewport.value.scrollHeight;
 }
 
 function handleLogScroll(): void {
@@ -114,7 +115,7 @@ const displayEntries = computed(() => {
   if (searchFilterMode.value && searchQuery.value) {
     entries = entries.filter((entry) => matchedEntryIdSet.value.has(entry.id));
   }
-  return newestFirst.value ? [...entries].reverse() : entries;
+  return props.newestFirst ? [...entries].reverse() : entries;
 });
 
 const renderedLineCount = computed(() => {
@@ -139,6 +140,15 @@ watch(
       }
     }
 
+    if (props.autoScrollPinned) {
+      void nextTick(() => scrollToEdge());
+    }
+  },
+);
+
+watch(
+  () => props.newestFirst,
+  () => {
     if (props.autoScrollPinned) {
       void nextTick(() => scrollToEdge());
     }
@@ -322,6 +332,10 @@ async function copyLogs(): Promise<void> {
     // Clipboard API may not be available in all contexts.
   }
 }
+
+function toggleSortOrder(): void {
+  emit('update:newestFirst', !props.newestFirst);
+}
 </script>
 
 <template>
@@ -354,11 +368,11 @@ async function copyLogs(): Promise<void> {
         />
 
         <AppIconButton
-          :icon="newestFirst ? 'sort-asc' : 'sort-desc'"
+          :icon="props.newestFirst ? 'sort-asc' : 'sort-desc'"
           size="xs"
           data-test="container-log-sort-toggle"
-          :tooltip="newestFirst ? 'Newest first' : 'Oldest first'"
-          @click="newestFirst = !newestFirst"
+          :tooltip="props.newestFirst ? 'Newest first' : 'Oldest first'"
+          @click="toggleSortOrder"
         />
 
         <slot name="toolbar-right" />

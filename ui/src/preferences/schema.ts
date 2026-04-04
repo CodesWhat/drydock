@@ -47,6 +47,7 @@ export interface PreferencesSchema {
     gridLayouts: PersistedResponsiveLayoutMap;
   };
   views: {
+    logs: { newestFirst: boolean };
     security: { mode: ViewMode; sortField: string; sortAsc: boolean };
     audit: { mode: ViewMode };
     agents: { mode: ViewMode; sortKey: string; sortAsc: boolean };
@@ -58,6 +59,8 @@ export interface PreferencesSchema {
     auth: { mode: ViewMode };
   };
 }
+
+export const CURRENT_SCHEMA_VERSION = 2;
 
 export const CONTAINER_TABLE_COLUMN_KEYS = [
   'icon',
@@ -73,7 +76,7 @@ export const CONTAINER_TABLE_COLUMN_KEYS = [
 export const CONTAINER_TABLE_REQUIRED_COLUMN_KEYS = ['icon', 'name'] as const;
 
 export const DEFAULTS: PreferencesSchema = {
-  schemaVersion: 1,
+  schemaVersion: CURRENT_SCHEMA_VERSION,
   theme: { family: 'one-dark', variant: 'dark' },
   font: { family: 'ibm-plex-mono' },
   icons: { library: 'ph-duotone', scale: 1 },
@@ -117,6 +120,7 @@ export const DEFAULTS: PreferencesSchema = {
     },
   },
   views: {
+    logs: { newestFirst: false },
     security: { mode: 'table', sortField: 'critical', sortAsc: false },
     audit: { mode: 'table' },
     agents: { mode: 'table', sortKey: 'name', sortAsc: true },
