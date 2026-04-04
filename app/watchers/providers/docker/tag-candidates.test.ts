@@ -6,6 +6,7 @@ import {
   filterBySegmentCount,
   getCurrentPrefix,
   getFirstDigitIndex,
+  getNumericTagShape,
   getTagCandidates,
 } from './tag-candidates.js';
 
@@ -139,6 +140,27 @@ describe('docker tag candidates module', () => {
     expect(result.tags).toEqual(['1.10.0', '1.9.0']);
   });
 
+  test('does not enable include-filter recovery when current semver tag matches include regex', () => {
+    const container = createContainer({
+      image: {
+        tag: {
+          value: '1.5.0',
+          semver: true,
+        },
+      },
+      includeTags: '^1\\..*',
+    });
+    const log = {
+      warn: vi.fn(),
+      debug: vi.fn(),
+    };
+
+    const result = getTagCandidates(container, ['1.4.0', '1.3.0'], log);
+
+    expect(result.tags).toEqual([]);
+    expect(log.warn).not.toHaveBeenCalled();
+  });
+
   test('returns no candidates for non-semver image without includeTags', () => {
     const container = createContainer({
       image: {
@@ -177,8 +199,57 @@ describe('docker tag candidates module', () => {
   test('exposes digit/prefix helpers', () => {
     expect(getFirstDigitIndex('release-v2026.3.0')).toBe(9);
     expect(getFirstDigitIndex('latest')).toBe(-1);
+    expect(getFirstDigitIndex('v0.0.1')).toBe(1);
+    expect(getFirstDigitIndex('v9.0.1')).toBe(1);
     expect(getCurrentPrefix('v2026.3.0')).toBe('v');
     expect(getCurrentPrefix('2026.3.0')).toBe('');
+  });
+
+  test('drops sha-prefixed tags by default when includeTags is not set', () => {
+    const log = {
+      warn: vi.fn(),
+      debug: vi.fn(),
+    };
+
+    const result = getTagCandidates(createContainer(), ['sha999', '1.0.1', '1.0.2'], log);
+
+    expect(result.tags).toEqual(['1.0.2', '1.0.1']);
+  });
+
+  test('applies excludeTags regex after include filtering', () => {
+    const log = {
+      warn: vi.fn(),
+      debug: vi.fn(),
+    };
+
+    const result = getTagCandidates(
+      createContainer({
+        includeTags: '^1\\..*',
+        excludeTags: 'beta',
+      }),
+      ['1.0.1', '1.0.2-beta', '1.0.3'],
+      log,
+    );
+
+    expect(result.tags).toEqual(['1.0.3', '1.0.1']);
+  });
+
+  test('drops .sig tags before semver candidate filtering', () => {
+    const log = {
+      warn: vi.fn(),
+      debug: vi.fn(),
+    };
+
+    const result = getTagCandidates(
+      createContainer({
+        includeTags: '^1\\..*',
+        transformTags: '^(.*)\\.sig$ => $1',
+      }),
+      ['1.0.1.sig', '1.0.2'],
+      log,
+    );
+
+    expect(result.tags).toEqual(['1.0.2']);
   });
 
   test('drops non-semver candidates during semver filtering', () => {
@@ -237,6 +308,32 @@ describe('docker tag candidates module', () => {
     compileSpy.mockRestore();
   });
 
+  test('falls back to String(error) for thrown null', () => {
+    const compileSpy = vi.spyOn(RE2JS, 'compile').mockImplementation(() => {
+      throw null;
+    });
+    const log = { warn: vi.fn(), debug: vi.fn() };
+
+    getTagCandidates(createContainer({ includeTags: 'anything' }), ['1.0.1'], log);
+
+    expect(log.warn).toHaveBeenCalledWith('Invalid regex pattern "anything": null');
+    compileSpy.mockRestore();
+  });
+
+  test('uses the native Error message text without stringifying the full Error object', () => {
+    const compileSpy = vi.spyOn(RE2JS, 'compile').mockImplementation(() => {
+      throw new Error('native compile failure');
+    });
+    const log = { warn: vi.fn(), debug: vi.fn() };
+
+    getTagCandidates(createContainer({ includeTags: 'anything' }), ['1.0.1'], log);
+
+    expect(log.warn).toHaveBeenCalledWith(
+      'Invalid regex pattern "anything": native compile failure',
+    );
+    compileSpy.mockRestore();
+  });
+
   test('stringifies object errors when the message field is not a string', () => {
     const compileSpy = vi.spyOn(RE2JS, 'compile').mockImplementation(() => {
       throw { message: { reason: 'custom compile failure' } };
@@ -247,6 +344,19 @@ describe('docker tag candidates module', () => {
 
     expect(log.warn).toHaveBeenCalledWith(expect.stringContaining('[object Object]'));
     compileSpy.mockRestore();
+  });
+
+  test('extracts numeric tag shape with multi-digit segments and suffixes', () => {
+    expect(getNumericTagShape('2025.11.1-alpine3.21', undefined)).toEqual({
+      prefix: '',
+      numericSegments: ['2025', '11', '1'],
+      suffix: '-alpine3.21',
+    });
+  });
+
+  test('rejects numeric tag shape parsing when the transformed tag contains newlines', () => {
+    expect(getNumericTagShape('\n1.2.3', undefined)).toBeNull();
+    expect(getNumericTagShape('1.2.3\nbeta', undefined)).toBeNull();
   });
 
   test('processes large tag lists within lightweight runtime budget', () => {

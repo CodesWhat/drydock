@@ -16,9 +16,29 @@ describe('registry-webhook-fresh state', () => {
     expect(consumeFreshContainerScheduledPollSkip('container-1')).toBe(false);
   });
 
+  test('reset clears pending container freshness', () => {
+    markContainerFreshForScheduledPollSkip('container-1');
+
+    _resetRegistryWebhookFreshStateForTests();
+
+    expect(consumeFreshContainerScheduledPollSkip('container-1')).toBe(false);
+  });
+
   test('ignores empty container ids', () => {
     markContainerFreshForScheduledPollSkip('');
 
     expect(consumeFreshContainerScheduledPollSkip('')).toBe(false);
+  });
+
+  test('ignores whitespace-only container ids', () => {
+    markContainerFreshForScheduledPollSkip('   ');
+
+    expect(consumeFreshContainerScheduledPollSkip('   ')).toBe(false);
+  });
+
+  test('ignores non-string container ids without throwing', () => {
+    expect(() => {
+      markContainerFreshForScheduledPollSkip(123 as unknown as string);
+    }).not.toThrow();
   });
 });
