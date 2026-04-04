@@ -6,6 +6,7 @@ import {
   parse as parseSemver,
   transform as transformTag,
 } from '../../../tag/index.js';
+import { getErrorMessage } from '../../../util/error.js';
 
 interface SafeRegex {
   test(s: string): boolean;
@@ -14,28 +15,6 @@ interface SafeRegex {
 interface TagCandidatesLogger {
   warn(message: string): void;
   debug?: (message: string) => void;
-}
-
-function hasNonErrorStringMessage(error: unknown): error is { message: string } {
-  if (
-    typeof error !== 'object' ||
-    error === null ||
-    error instanceof Error ||
-    !('message' in error)
-  ) {
-    return false;
-  }
-  return typeof (error as { message: unknown }).message === 'string';
-}
-
-function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  if (hasNonErrorStringMessage(error)) {
-    return error.message;
-  }
-  return String(error);
 }
 
 /**
@@ -57,7 +36,7 @@ function safeRegExp(pattern: string, logger: TagCandidatesLogger): SafeRegex | n
       },
     };
   } catch (e: unknown) {
-    logger.warn(`Invalid regex pattern "${pattern}": ${getErrorMessage(e)}`);
+    logger.warn(`Invalid regex pattern "${pattern}": ${getErrorMessage(e, String(e))}`);
     return null;
   }
 }
@@ -430,18 +409,7 @@ export function filterBySegmentCount(tags: string[], container: Container): stri
       return false;
     }
 
-    if (candidateShape.prefix !== referenceShape.prefix) {
-      return false;
-    }
-
-    if (!isSuffixCompatible(referenceShape.suffix, candidateShape.suffix)) {
-      return false;
-    }
-
-    return candidateShape.numericSegments.every(
-      (segment, index) =>
-        !(!hasLeadingZero(referenceShape.numericSegments[index]) && hasLeadingZero(segment)),
-    );
+    return isStrictFamilyMatch(referenceShape, candidateShape);
   });
 }
 

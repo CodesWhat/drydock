@@ -1,3 +1,4 @@
+import { getErrorMessage } from '../../../util/error.js';
 import {
   SELF_UPDATE_HEALTH_TIMEOUT_MS,
   SELF_UPDATE_POLL_INTERVAL_MS,
@@ -47,13 +48,6 @@ interface SelfUpdateTransitionDependencies {
     logContainer: SelfUpdateLogger,
   ) => Promise<SelfUpdateCreatedContainer>;
   createOperationId: () => string;
-}
-
-function getErrorMessage(error: unknown) {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return `${error}`;
 }
 
 function findDockerSocketBind(spec: SelfUpdateContainerSpec | undefined): string | undefined {
@@ -119,7 +113,9 @@ async function executeSelfUpdateTransition(
       logContainer,
     );
   } catch (e: unknown) {
-    logContainer.warn(`Failed to create new container, rolling back rename: ${getErrorMessage(e)}`);
+    logContainer.warn(
+      `Failed to create new container, rolling back rename: ${getErrorMessage(e, String(e))}`,
+    );
     await currentContainer.rename({ name: oldName });
     throw e;
   }
@@ -128,7 +124,9 @@ async function executeSelfUpdateTransition(
   try {
     newContainerId = (await newContainer.inspect()).Id;
   } catch (e: unknown) {
-    logContainer.warn(`Failed to inspect new container, rolling back: ${getErrorMessage(e)}`);
+    logContainer.warn(
+      `Failed to inspect new container, rolling back: ${getErrorMessage(e, String(e))}`,
+    );
     try {
       await newContainer.remove({ force: true });
     } catch {
@@ -169,7 +167,9 @@ async function executeSelfUpdateTransition(
       })
       .then((helperContainer) => helperContainer.start());
   } catch (e: unknown) {
-    logContainer.warn(`Failed to spawn helper container, rolling back: ${getErrorMessage(e)}`);
+    logContainer.warn(
+      `Failed to spawn helper container, rolling back: ${getErrorMessage(e, String(e))}`,
+    );
     try {
       await newContainer.remove({ force: true });
     } catch {

@@ -1,4 +1,5 @@
 import type { Container } from '../../../model/container.js';
+import { getErrorMessage } from '../../../util/error.js';
 
 import {
   canonicalizeContainerName,
@@ -24,17 +25,6 @@ function asUnknownRecord(value: unknown): UnknownRecord | null {
     return null;
   }
   return value as UnknownRecord;
-}
-
-function getErrorMessage(error: unknown): string {
-  if (typeof error === 'string') {
-    return error;
-  }
-  const errorRecord = asUnknownRecord(error);
-  if (!errorRecord) {
-    return 'unknown error';
-  }
-  return typeof errorRecord.message === 'string' ? errorRecord.message : 'unknown error';
 }
 
 const RECREATED_CONTAINER_NAME_PATTERN = /^([a-f0-9]{12})_(.+)$/i;

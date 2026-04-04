@@ -97,6 +97,22 @@ describe('docker tag candidates module', () => {
     expect(result.tags).toContain('2025.02.0');
   });
 
+  test('allows CalVer zero-padded month family matches in filterBySegmentCount', () => {
+    const filtered = filterBySegmentCount(
+      ['2026.02.0', '2026.2.0', '2026.02', 'v2026.02.0'],
+      createContainer({
+        image: {
+          tag: {
+            value: '2025.11.1',
+            semver: true,
+          },
+        },
+      }),
+    );
+
+    expect(filtered).toEqual(['2026.02.0', '2026.2.0']);
+  });
+
   test('still rejects zero-padded tags for non-CalVer semver in strict mode', () => {
     const container = createContainer({
       image: {

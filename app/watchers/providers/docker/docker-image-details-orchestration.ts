@@ -3,6 +3,7 @@ import * as registry from '../../../registry/index.js';
 import { detectSourceRepoFromImageMetadata } from '../../../release-notes/index.js';
 import * as storeContainer from '../../../store/container.js';
 import { parse as parseSemver, transform as transformTag } from '../../../tag/index.js';
+import { getErrorMessage } from '../../../util/error.js';
 import {
   getDockerWatcherRegistryId,
   getDockerWatcherSourceKey,
@@ -183,13 +184,6 @@ interface DockerImageDetailsHelpers {
 }
 
 type RuntimeDetails = ReturnType<typeof getRuntimeDetailsFromContainerSummary>;
-
-function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return `${error}`;
-}
 
 function refreshContainerIdentityFromSummary(
   containerInStore: Container,
@@ -391,7 +385,7 @@ async function inspectImageForContainer(
     return await watcher.dockerApi.getImage(imageName).inspect();
   } catch (error: unknown) {
     throw new Error(
-      `Unable to inspect image for container ${containerId}: ${getErrorMessage(error)}`,
+      `Unable to inspect image for container ${containerId}: ${getErrorMessage(error, String(error))}`,
     );
   }
 }

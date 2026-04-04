@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import yaml, { type Pair, type ParsedNode } from 'yaml';
+import { getErrorMessage } from '../../../util/error.js';
 
 export const YAML_MAX_ALIAS_COUNT = 10_000;
 export const COMPOSE_CACHE_MAX_ENTRIES = 256;
@@ -55,13 +56,6 @@ function formatReplacementImageValue(currentImageValueText: string, newImage: st
     return JSON.stringify(newImage);
   }
   return newImage;
-}
-
-function getErrorMessage(error: unknown) {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return String(error);
 }
 
 function parseComposeDocument(composeFileText: string) {
@@ -291,7 +285,7 @@ class ComposeFileParser {
       return fs.readFile(filePath);
     } catch (e: unknown) {
       this.getLog()?.error?.(
-        `Error when reading the docker-compose yaml file ${filePath} (${getErrorMessage(e)})`,
+        `Error when reading the docker-compose yaml file ${filePath} (${getErrorMessage(e, String(e))})`,
       );
       throw e;
     }
@@ -322,7 +316,10 @@ class ComposeFileParser {
       return compose;
     } catch (e: unknown) {
       this.getLog()?.error?.(
-        `Error when parsing the docker-compose yaml file ${configuredFilePath} (${getErrorMessage(e)})`,
+        `Error when parsing the docker-compose yaml file ${configuredFilePath} (${getErrorMessage(
+          e,
+          String(e),
+        )})`,
       );
       throw e;
     }
