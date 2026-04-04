@@ -12,7 +12,7 @@ vi.mock('@/components/containers/containersViewTemplateContext', () => ({
 }));
 
 const DataTableStub = defineComponent({
-  props: ['rows'],
+  props: ['rows', 'rowClass'],
   emits: ['update:sort-key', 'update:sort-asc', 'row-click'],
   setup(props, { emit }) {
     onMounted(() => {
@@ -25,7 +25,11 @@ const DataTableStub = defineComponent({
   },
   template: `
     <div class="data-table-stub">
-      <div v-for="row in rows" :key="row.name" class="table-row-stub">
+      <div
+        v-for="row in rows"
+        :key="row.name"
+        class="table-row-stub"
+        :class="typeof rowClass === 'function' ? rowClass(row) : ''">
         <slot name="cell-icon" :row="row" />
         <slot name="cell-name" :row="row" />
         <slot name="cell-version" :row="row" />
@@ -174,6 +178,8 @@ function makeContext(overrides: Record<string, unknown> = {}) {
     containerActionsEnabled,
     containerActionsDisabledReason: ref('Actions disabled by server configuration'),
     actionInProgress,
+    isContainerUpdateInProgress: (target: { id?: string; name?: string; _pending?: true }) =>
+      Boolean(target._pending) || actionInProgress.value.has(target.id ?? target.name ?? ''),
     updateAllInGroup: spies.updateAllInGroup,
     tt: (label: string) => ({ value: label, showDelay: 400 }),
     containerViewMode,
@@ -993,6 +999,73 @@ describe('ContainersGroupedViews', () => {
     refs.tableActionStyle.value = 'icons';
     refs.actionInProgress.value = new Set(['c-progress-3']);
     await nextTick();
+  });
+
+  it('shows an explicit updating status for in-progress table rows', () => {
+    const updatable = makeContainer({
+      id: 'c-progress-1',
+      name: 'alpha',
+      newTag: '2.0.0',
+      updateKind: 'major',
+      bouncer: 'safe',
+      status: 'running',
+    });
+
+    const { context, refs } = makeContext();
+    refs.filteredContainers.value = [updatable];
+    refs.displayContainers.value = [updatable];
+    refs.renderGroups.value = [
+      {
+        key: '__flat__',
+        name: null,
+        containers: [updatable],
+        containerCount: 1,
+        updatesAvailable: 1,
+        updatableCount: 1,
+      },
+    ];
+    refs.containerViewMode.value = 'table';
+    refs.actionInProgress.value = new Set(['c-progress-1']);
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+    const row = rowByName(wrapper, 'alpha');
+
+    expect(row.classes()).toContain('opacity-50');
+    expect(row.text()).toContain('Updating');
+  });
+
+  it('keeps ghost rows dimmed and labeled updating while pending', () => {
+    const pendingGhost = makeContainer({
+      id: 'c-pending-1',
+      name: 'alpha',
+      newTag: null,
+      status: 'running',
+      bouncer: 'safe',
+      _pending: true as const,
+    });
+
+    const { context, refs } = makeContext();
+    refs.filteredContainers.value = [pendingGhost];
+    refs.displayContainers.value = [pendingGhost];
+    refs.renderGroups.value = [
+      {
+        key: '__flat__',
+        name: null,
+        containers: [pendingGhost],
+        containerCount: 1,
+        updatesAvailable: 0,
+        updatableCount: 0,
+      },
+    ];
+    refs.containerViewMode.value = 'table';
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+    const row = rowByName(wrapper, 'alpha');
+
+    expect(row.classes()).toContain('opacity-50');
+    expect(row.text()).toContain('Updating');
   });
 
   it('covers card and list pending/disabled/update-kind branches', async () => {

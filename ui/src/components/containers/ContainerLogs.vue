@@ -132,7 +132,7 @@ function appendLogEntry(frame: ContainerLogStreamFrame): void {
   const json = parseJsonLogLine(frame.line);
   const entry: AppLogEntry = {
     id: nextEntryId.value,
-    timestamp: frame.ts,
+    timestamp: frame.displayTs,
     line: frame.line,
     plainLine: stripAnsiCodes(frame.line),
     ansiSegments: parseAnsiSegments(frame.line),

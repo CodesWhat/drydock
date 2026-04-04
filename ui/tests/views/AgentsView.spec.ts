@@ -167,6 +167,16 @@ describe('AgentsView', () => {
     expect(mockGetAgents).toHaveBeenCalledTimes(2);
   });
 
+  it('refreshes agents when the SSE connection is re-established', async () => {
+    await mountAgentsView();
+    expect(mockGetAgents).toHaveBeenCalledTimes(1);
+
+    globalThis.dispatchEvent(new CustomEvent('dd:sse-connected'));
+    await flushPromises();
+
+    expect(mockGetAgents).toHaveBeenCalledTimes(2);
+  });
+
   it('shows agent-specific watchers and triggers in detail panel', async () => {
     mockGetAgents.mockResolvedValue([makeAgent({ name: 'edge-1' })]);
     mockGetAllWatchers.mockResolvedValue([
@@ -195,6 +205,7 @@ describe('AgentsView', () => {
     mockGetLogEntries.mockResolvedValue([
       {
         timestamp: '2026-02-28T10:00:00.000Z',
+        displayTimestamp: '[10:00:00.000]',
         level: 'info',
         component: 'agent',
         msg: 'connected',
@@ -234,6 +245,8 @@ describe('AgentsView', () => {
       component: 'api',
       tail: 500,
     });
+
+    expect(wrapper.text()).toContain('[10:00:00.000]');
 
     await refreshButton.trigger('click');
     await flushPromises();

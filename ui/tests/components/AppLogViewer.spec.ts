@@ -145,6 +145,31 @@ describe('AppLogViewer', () => {
     expect(wrapper.findAll('.json-punctuation').length).toBeGreaterThan(0);
   });
 
+  it('keeps JSON strings with trailing escaped backslashes intact', () => {
+    const wrapper = mountViewer({
+      entries: [
+        makeEntry(1, {
+          plainLine: '{"path":"C:\\\\temp\\\\"}',
+          json: {
+            level: 'info',
+            value: {
+              path: 'C:\\temp\\',
+            },
+            pretty: '{\n  "path": "C:\\\\temp\\\\"\n}',
+          },
+          ansiSegments: [],
+        }),
+      ],
+    });
+
+    const stringTokens = wrapper.findAll('.json-string').map((token) => token.text());
+
+    expect(stringTokens).toContain('"C:\\\\temp\\\\"');
+    expect(stringTokens).not.toContain('"C:\\\\temp\\\\"}');
+    expect(wrapper.find('.json-key').text()).toContain('"path"');
+    expect(wrapper.findAll('.json-punctuation').some((token) => token.text() === '}')).toBe(true);
+  });
+
   it('emits pause and pin toggle events from toolbar controls', async () => {
     const wrapper = mountViewer({
       entries: [makeEntry(1)],
@@ -153,7 +178,7 @@ describe('AppLogViewer', () => {
     });
 
     await wrapper.get('[data-test="container-log-toggle-pause"]').trigger('click');
-    await getButtonByText(wrapper, 'Unpin').trigger('click');
+    await wrapper.get('[data-test="container-log-toggle-pin"]').trigger('click');
 
     expect(wrapper.emitted('toggle-pause')).toHaveLength(1);
     expect(wrapper.emitted('toggle-pin')).toHaveLength(1);
@@ -165,14 +190,14 @@ describe('AppLogViewer', () => {
       autoScrollPinned: false,
     });
 
-    const viewport = wrapper.get('div.overflow-auto.font-mono').element as HTMLElement;
+    const viewport = wrapper.get('div.overflow-y-auto.font-mono').element as HTMLElement;
     setViewportMetrics(viewport, {
       scrollHeight: 700,
       clientHeight: 100,
       scrollTop: 10,
     });
 
-    await getButtonByText(wrapper, 'Pin').trigger('click');
+    await wrapper.get('[data-test="container-log-toggle-pin"]').trigger('click');
     await nextTick();
 
     expect(wrapper.emitted('toggle-pin')).toHaveLength(1);
@@ -185,16 +210,56 @@ describe('AppLogViewer', () => {
       autoScrollPinned: true,
     });
 
-    const viewport = wrapper.get('div.overflow-auto.font-mono').element as HTMLElement;
+    const viewport = wrapper.get('div.overflow-y-auto.font-mono').element as HTMLElement;
     setViewportMetrics(viewport, {
       scrollHeight: 1000,
       clientHeight: 100,
       scrollTop: 100,
     });
 
-    await wrapper.get('div.overflow-auto.font-mono').trigger('scroll');
+    await wrapper.get('div.overflow-y-auto.font-mono').trigger('scroll');
 
     expect(wrapper.emitted('toggle-pin')).toHaveLength(1);
+  });
+
+  it('emits pin toggle on user scroll when newest-first mode returns near the top edge', async () => {
+    const wrapper = mountViewer({
+      entries: [makeEntry(1)],
+      autoScrollPinned: false,
+    });
+
+    await wrapper.get('[data-test="container-log-sort-toggle"]').trigger('click');
+
+    const viewport = wrapper.get('div.overflow-y-auto.font-mono').element as HTMLElement;
+    setViewportMetrics(viewport, {
+      scrollHeight: 1000,
+      clientHeight: 100,
+      scrollTop: 27,
+    });
+
+    await wrapper.get('div.overflow-y-auto.font-mono').trigger('scroll');
+
+    expect(wrapper.emitted('toggle-pin')).toHaveLength(1);
+  });
+
+  it('does not emit pin toggle at the newest-first near-edge boundary', async () => {
+    const wrapper = mountViewer({
+      entries: [makeEntry(1)],
+      autoScrollPinned: false,
+    });
+
+    await wrapper.get('[data-test="container-log-sort-toggle"]').trigger('click');
+
+    const viewport = wrapper.get('div.overflow-y-auto.font-mono').element as HTMLElement;
+    setViewportMetrics(viewport, {
+      scrollHeight: 1000,
+      clientHeight: 100,
+      scrollTop: 28,
+    });
+
+    await wrapper.get('div.overflow-y-auto.font-mono').trigger('scroll');
+
+    expect(wrapper.emitted('toggle-pin')).toBeUndefined();
   });
 
   it('supports search highlighting and next-match navigation with scroll targeting', async () => {
@@ -281,11 +346,177 @@ describe('AppLogViewer', () => {
     expect(writeText).toHaveBeenCalledWith(
       '2026-03-19T00:00:00Z STDOUT api ready\n2026-03-19T00:00:01Z WARN worker retrying',
     );
-    expect(wrapper.get('[data-test="container-log-copy"]').text()).toContain('Copied');
+    const copyBtn = wrapper.getComponent('[data-test="container-log-copy"]');
+    expect(copyBtn.props('icon')).toBe('check');
 
     vi.advanceTimersByTime(2000);
     await nextTick();
 
-    expect(wrapper.get('[data-test="container-log-copy"]').text()).toContain('Copy');
+    expect(copyBtn.props('icon')).toBe('copy');
+  });
+
+  describe('search filter mode', () => {
+    it('shows all entries in highlight mode (default)', async () => {
+      const wrapper = mountViewer({
+        entries: [
+          makeEntry(1, { plainLine: 'alpha started' }),
+          makeEntry(2, { plainLine: 'beta step' }),
+          makeEntry(3, { plainLine: 'alpha finished' }),
+        ],
+      });
+
+      await wrapper.get('[data-test="container-log-search-input"]').setValue('alpha');
+      await nextTick();
+
+      expect(wrapper.findAll('[data-test="container-log-row"]')).toHaveLength(3);
+    });
+
+    it('shows only matching entries when filter mode is active', async () => {
+      const wrapper = mountViewer({
+        entries: [
+          makeEntry(1, { plainLine: 'alpha started' }),
+          makeEntry(2, { plainLine: 'beta step' }),
+          makeEntry(3, { plainLine: 'alpha finished' }),
+        ],
+      });
+
+      await wrapper.get('[data-test="container-log-search-input"]').setValue('alpha');
+      await nextTick();
+      await wrapper.get('[data-test="container-log-filter-toggle"]').trigger('click');
+      await nextTick();
+
+      const rows = wrapper.findAll('[data-test="container-log-row"]');
+      expect(rows).toHaveLength(2);
+      expect(rows[0].text()).toContain('alpha started');
+      expect(rows[1].text()).toContain('alpha finished');
+    });
+
+    it('shows filtered line count in footer when filter mode is active', async () => {
+      const wrapper = mountViewer({
+        entries: [
+          makeEntry(1, { plainLine: 'alpha started' }),
+          makeEntry(2, { plainLine: 'beta step' }),
+          makeEntry(3, { plainLine: 'alpha finished' }),
+        ],
+      });
+
+      await wrapper.get('[data-test="container-log-search-input"]').setValue('alpha');
+      await nextTick();
+      await wrapper.get('[data-test="container-log-filter-toggle"]').trigger('click');
+      await nextTick();
+
+      expect(wrapper.get('[data-test="container-log-line-count"]').text()).toBe('2 / 3 lines');
+    });
+
+    it('restores all entries when filter mode is toggled off', async () => {
+      const wrapper = mountViewer({
+        entries: [
+          makeEntry(1, { plainLine: 'alpha started' }),
+          makeEntry(2, { plainLine: 'beta step' }),
+          makeEntry(3, { plainLine: 'alpha finished' }),
+        ],
+      });
+
+      await wrapper.get('[data-test="container-log-search-input"]').setValue('alpha');
+      await nextTick();
+      await wrapper.get('[data-test="container-log-filter-toggle"]').trigger('click');
+      await nextTick();
+
+      expect(wrapper.findAll('[data-test="container-log-row"]')).toHaveLength(2);
+
+      await wrapper.get('[data-test="container-log-filter-toggle"]').trigger('click');
+      await nextTick();
+
+      expect(wrapper.findAll('[data-test="container-log-row"]')).toHaveLength(3);
+    });
+
+    it('shows all entries when filter mode is on but search is cleared', async () => {
+      const wrapper = mountViewer({
+        entries: [
+          makeEntry(1, { plainLine: 'alpha started' }),
+          makeEntry(2, { plainLine: 'beta step' }),
+        ],
+      });
+
+      await wrapper.get('[data-test="container-log-search-input"]').setValue('alpha');
+      await nextTick();
+      await wrapper.get('[data-test="container-log-filter-toggle"]').trigger('click');
+      await nextTick();
+
+      expect(wrapper.findAll('[data-test="container-log-row"]')).toHaveLength(1);
+
+      await wrapper.get('[data-test="container-log-search-input"]').setValue('');
+      await nextTick();
+
+      expect(wrapper.findAll('[data-test="container-log-row"]')).toHaveLength(2);
+    });
+
+    it('shows empty state when filter mode is on with no matches', async () => {
+      const wrapper = mountViewer({
+        entries: [
+          makeEntry(1, { plainLine: 'alpha started' }),
+          makeEntry(2, { plainLine: 'beta step' }),
+        ],
+      });
+
+      await wrapper.get('[data-test="container-log-search-input"]').setValue('alpha');
+      await nextTick();
+      await wrapper.get('[data-test="container-log-filter-toggle"]').trigger('click');
+      await nextTick();
+
+      await wrapper.get('[data-test="container-log-search-input"]').setValue('zzzzz');
+      await nextTick();
+
+      expect(wrapper.findAll('[data-test="container-log-row"]')).toHaveLength(0);
+      expect(wrapper.text()).toContain('No matching entries');
+    });
+  });
+
+  describe('sort order toggle', () => {
+    it('displays entries oldest-first by default', () => {
+      const wrapper = mountViewer({
+        entries: [
+          makeEntry(1, { plainLine: 'first' }),
+          makeEntry(2, { plainLine: 'second' }),
+          makeEntry(3, { plainLine: 'third' }),
+        ],
+      });
+
+      const rows = wrapper.findAll('[data-test="container-log-row"]');
+      expect(rows[0].text()).toContain('first');
+      expect(rows[2].text()).toContain('third');
+    });
+
+    it('reverses entries to newest-first when sort toggle is clicked', async () => {
+      const wrapper = mountViewer({
+        entries: [
+          makeEntry(1, { plainLine: 'first' }),
+          makeEntry(2, { plainLine: 'second' }),
+          makeEntry(3, { plainLine: 'third' }),
+        ],
+      });
+
+      await wrapper.get('[data-test="container-log-sort-toggle"]').trigger('click');
+      await nextTick();
+
+      const rows = wrapper.findAll('[data-test="container-log-row"]');
+      expect(rows[0].text()).toContain('third');
+      expect(rows[2].text()).toContain('first');
+    });
+
+    it('restores oldest-first when toggled back', async () => {
+      const wrapper = mountViewer({
+        entries: [makeEntry(1, { plainLine: 'first' }), makeEntry(2, { plainLine: 'second' })],
+      });
+
+      await wrapper.get('[data-test="container-log-sort-toggle"]').trigger('click');
+      await nextTick();
+      await wrapper.get('[data-test="container-log-sort-toggle"]').trigger('click');
+      await nextTick();
+
+      const rows = wrapper.findAll('[data-test="container-log-row"]');
+      expect(rows[0].text()).toContain('first');
+      expect(rows[1].text()).toContain('second');
+    });
   });
 });

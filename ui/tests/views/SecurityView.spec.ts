@@ -323,6 +323,32 @@ describe('SecurityView', () => {
       expect(dt.attributes('data-rows')).toBe('1');
     });
 
+    it('refetches vulnerability data when the SSE connection is re-established', async () => {
+      vi.useFakeTimers();
+      try {
+        mockContainers([makeContainer()]);
+        const w = factory();
+        await vi.waitFor(() => {
+          expect(mockGetSecurityVulnerabilityOverview).toHaveBeenCalledOnce();
+        });
+        await flushPromises();
+        const callsBeforeReconnect = mockGetSecurityVulnerabilityOverview.mock.calls.length;
+
+        globalThis.dispatchEvent(new CustomEvent('dd:sse-connected'));
+        await flushPromises();
+        expect(mockGetSecurityVulnerabilityOverview.mock.calls.length).toBe(callsBeforeReconnect);
+
+        vi.advanceTimersByTime(800);
+        await flushPromises();
+        expect(mockGetSecurityVulnerabilityOverview.mock.calls.length).toBeGreaterThan(
+          callsBeforeReconnect,
+        );
+        w.unmount();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('skips containers without security scan data', async () => {
       mockContainers([
         makeContainer(),

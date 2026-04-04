@@ -151,6 +151,152 @@ describe('Update Operation Store', () => {
     }
   });
 
+  test('getInProgressOperationByContainerId should return operation matching the container ID', () => {
+    updateOperation.insertOperation({
+      containerName: 'portainer_agent',
+      containerId: 'host1-abc',
+    });
+    updateOperation.insertOperation({
+      containerName: 'portainer_agent',
+      containerId: 'host2-def',
+    });
+
+    const host1Op = updateOperation.getInProgressOperationByContainerId('host1-abc');
+    const host2Op = updateOperation.getInProgressOperationByContainerId('host2-def');
+    const missing = updateOperation.getInProgressOperationByContainerId('host3-ghi');
+
+    expect(host1Op).toBeDefined();
+    expect(host1Op!.containerId).toBe('host1-abc');
+    expect(host2Op).toBeDefined();
+    expect(host2Op!.containerId).toBe('host2-def');
+    expect(missing).toBeUndefined();
+  });
+
+  test('getInProgressOperationByContainerId should return latest when multiple ops exist', () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-02-23T00:00:00.000Z'));
+      updateOperation.insertOperation({
+        containerName: 'web',
+        containerId: 'c1',
+      });
+      vi.setSystemTime(new Date('2026-02-23T00:01:00.000Z'));
+      const second = updateOperation.insertOperation({
+        containerName: 'web',
+        containerId: 'c1',
+      });
+
+      const active = updateOperation.getInProgressOperationByContainerId('c1');
+      expect(active?.id).toBe(second.id);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('getInProgressOperationByContainerId should match replacement container IDs stored in newContainerId', () => {
+    const operation = updateOperation.insertOperation({
+      containerName: 'web',
+      containerId: 'old-123',
+    });
+    updateOperation.updateOperation(operation.id, {
+      newContainerId: 'new-456',
+    });
+
+    const active = updateOperation.getInProgressOperationByContainerId('new-456');
+
+    expect(active?.id).toBe(operation.id);
+    expect(active?.containerId).toBe('old-123');
+    expect(active?.newContainerId).toBe('new-456');
+  });
+
+  test('getInProgressOperationByContainerId should use targeted indexed queries instead of scanning', async () => {
+    vi.resetModules();
+    const fresh = await import('./update-operation.js');
+    const findQueries: Array<Record<string, string> | undefined> = [];
+    const db = {
+      getCollection: () => null,
+      addCollection: () => {
+        const docs: any[] = [];
+        const getByPath = (object: Record<string, unknown>, path: string) =>
+          path
+            .split('.')
+            .reduce<unknown>((acc, key) => (acc as Record<string, unknown>)?.[key], object);
+        const matchesQuery = (doc: Record<string, unknown>, query: Record<string, string> = {}) =>
+          Object.entries(query).every(([key, value]) => getByPath(doc, key) === value);
+
+        return {
+          insert: (doc: any) => {
+            docs.push(doc);
+          },
+          find: (query: Record<string, string> = {}) => {
+            findQueries.push(Object.keys(query).length === 0 ? undefined : query);
+            return docs.filter((doc) => matchesQuery(doc, query));
+          },
+          findOne: (query: Record<string, string>) =>
+            docs.find((doc) => matchesQuery(doc, query)) || null,
+          remove: (doc: any) => {
+            const index = docs.indexOf(doc);
+            if (index >= 0) {
+              docs.splice(index, 1);
+            }
+          },
+        };
+      },
+    };
+
+    fresh.createCollections(db as any);
+
+    const operation = fresh.insertOperation({
+      containerName: 'web',
+      containerId: 'old-123',
+    });
+    fresh.updateOperation(operation.id, {
+      newContainerId: 'new-456',
+    });
+    findQueries.length = 0;
+
+    const active = fresh.getInProgressOperationByContainerId('new-456');
+
+    expect(active?.id).toBe(operation.id);
+    expect(findQueries).toEqual([
+      {
+        'data.containerId': 'new-456',
+        'data.status': 'in-progress',
+      },
+      {
+        'data.newContainerId': 'new-456',
+        'data.status': 'in-progress',
+      },
+    ]);
+  });
+
+  test('getInProgressOperationByContainerId should return undefined when uninitialized', async () => {
+    vi.resetModules();
+    const fresh = await import('./update-operation.js');
+    expect(fresh.getInProgressOperationByContainerId('abc')).toBeUndefined();
+  });
+
+  test('getInProgressOperationByContainerId should return undefined for empty string', () => {
+    expect(updateOperation.getInProgressOperationByContainerId('')).toBeUndefined();
+  });
+
+  test('same-named containers should be disambiguated by container ID', () => {
+    const op = updateOperation.insertOperation({
+      containerName: 'portainer_agent',
+      containerId: 'host1-abc',
+    });
+
+    // Looking up by the WRONG container ID should NOT find the operation
+    expect(updateOperation.getInProgressOperationByContainerId('host2-def')).toBeUndefined();
+
+    // Looking up by NAME finds it (old behavior — this is the root cause of #256)
+    expect(updateOperation.getInProgressOperationByContainerName('portainer_agent')).toBeDefined();
+
+    // Looking up by the CORRECT container ID should find it
+    const found = updateOperation.getInProgressOperationByContainerId('host1-abc');
+    expect(found?.id).toBe(op.id);
+  });
+
   test('getOperationsByContainerName should return container operations sorted by latest update', () => {
     vi.useFakeTimers();
     try {

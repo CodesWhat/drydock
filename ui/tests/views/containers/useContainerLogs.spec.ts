@@ -160,6 +160,47 @@ describe('useContainerLogs', () => {
     expect(composable.getContainerLogs('web')).toEqual(['Loading logs...']);
   });
 
+  it('uses name aliases for object targets when an id is not available', async () => {
+    const target = makeContainer({ id: '', name: 'web' });
+    const { composable } = await mountLogsHarness({
+      containerIdMap: { web: 'container-1' },
+      selectedContainer: target,
+    });
+
+    await composable.loadContainerLogs(target, true);
+
+    expect(mocks.getContainerLogs).toHaveBeenCalledWith('container-1', 100);
+    expect(composable.getContainerLogs(target)).toEqual(['line-1', 'line-2']);
+  });
+
+  it('skips object targets that have no usable id or alias', async () => {
+    const orphanTarget = { id: '', name: 'orphan' } as unknown as Container;
+    const invalidNameTarget = { id: '', name: { label: 'bad' } } as unknown as Container;
+    const { composable } = await mountLogsHarness({
+      containerIdMap: {},
+      selectedContainer: null,
+    });
+
+    expect(composable.getContainerLogs(orphanTarget)).toEqual(['Loading logs...']);
+    await composable.loadContainerLogs(invalidNameTarget, true);
+    await flushPromises();
+
+    expect(mocks.getContainerLogs).not.toHaveBeenCalled();
+    expect(composable.getContainerLogs(invalidNameTarget)).toEqual(['Loading logs...']);
+  });
+
+  it('returns loading placeholders when a string target resolves to an empty cache key', async () => {
+    const { composable } = await mountLogsHarness({
+      containerIdMap: { '': 'container-1' },
+      selectedContainer: null,
+    });
+
+    await composable.loadContainerLogs('', true);
+
+    expect(mocks.getContainerLogs).not.toHaveBeenCalled();
+    expect(composable.getContainerLogs('')).toEqual(['Loading logs...']);
+  });
+
   it('auto-fetch refreshes logs for the selected container when interval is enabled', async () => {
     vi.useFakeTimers();
     Object.defineProperty(document, 'hidden', {
@@ -182,6 +223,32 @@ describe('useContainerLogs', () => {
 
     expect(mocks.getContainerLogs).toHaveBeenCalledWith('container-1', 100);
     expect(composable.getContainerLogs('web')).toEqual(['line-3']);
+    vi.useRealTimers();
+  });
+
+  it('auto-fetch refreshes the selected duplicate-name container by id when name aliases are ambiguous', async () => {
+    vi.useFakeTimers();
+    Object.defineProperty(document, 'hidden', {
+      configurable: true,
+      value: false,
+    });
+    const duplicate = makeContainer({
+      id: 'container-2',
+      name: 'tdarr_node',
+      server: 'Tmvault',
+    });
+    const { composable } = await mountLogsHarness({
+      containerIdMap: { 'container-2': 'container-2' },
+      selectedContainer: duplicate,
+      activeDetailTab: 'logs',
+    });
+
+    composable.containerAutoFetchInterval.value = 2000;
+    await nextTick();
+    vi.advanceTimersByTime(2100);
+    await flushPromises();
+
+    expect(mocks.getContainerLogs).toHaveBeenCalledWith('container-2', 100);
     vi.useRealTimers();
   });
 

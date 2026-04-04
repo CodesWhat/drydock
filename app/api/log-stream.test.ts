@@ -338,8 +338,18 @@ describe('api/log-stream', () => {
 
       await new Promise((resolve) => setImmediate(resolve));
       expect(ws.send).toHaveBeenCalledTimes(2);
-      expect(ws.send).toHaveBeenCalledWith(JSON.stringify(backfillEntries[0]));
-      expect(ws.send).toHaveBeenCalledWith(JSON.stringify(backfillEntries[1]));
+      expect(JSON.parse(ws.send.mock.calls[0][0])).toEqual(
+        expect.objectContaining({
+          ...backfillEntries[0],
+          displayTimestamp: expect.stringMatching(/^\[\d{2}:\d{2}:\d{2}\.\d{3}\]$/u),
+        }),
+      );
+      expect(JSON.parse(ws.send.mock.calls[1][0])).toEqual(
+        expect.objectContaining({
+          ...backfillEntries[1],
+          displayTimestamp: expect.stringMatching(/^\[\d{2}:\d{2}:\d{2}\.\d{3}\]$/u),
+        }),
+      );
       ws.emit('close');
       await upgradePromise;
     });
@@ -431,7 +441,12 @@ describe('api/log-stream', () => {
 
       // backfill sends 0, warn should be sent, debug should be filtered
       expect(ws.send).toHaveBeenCalledTimes(1);
-      expect(ws.send).toHaveBeenCalledWith(JSON.stringify(warnEntry));
+      expect(JSON.parse(ws.send.mock.calls[0][0])).toEqual(
+        expect.objectContaining({
+          ...warnEntry,
+          displayTimestamp: expect.stringMatching(/^\[\d{2}:\d{2}:\d{2}\.\d{3}\]$/u),
+        }),
+      );
       ws.emit('close');
       await upgradePromise;
     });

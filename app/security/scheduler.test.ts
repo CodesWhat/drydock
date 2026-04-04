@@ -171,6 +171,9 @@ describe('init', () => {
 
     expect(mockCronSchedule).not.toHaveBeenCalled();
     expect(isRunning()).toBe(false);
+    expect(mockLogInfo).toHaveBeenCalledWith(
+      'Scheduled security scanning not configured (DD_SECURITY_SCAN_CRON not set)',
+    );
   });
 
   test('should warn and return when cron expression is invalid', () => {
@@ -181,13 +184,16 @@ describe('init', () => {
     expect(mockCronValidate).toHaveBeenCalledWith('0 3 * * *');
     expect(mockCronSchedule).not.toHaveBeenCalled();
     expect(isRunning()).toBe(false);
+    expect(mockLogWarn).toHaveBeenCalledWith(
+      'Invalid cron expression for DD_SECURITY_SCAN_CRON: "0 3 * * *"',
+    );
   });
 
   test('should no-op when scanner is disabled', () => {
     mockGetSecurityConfiguration.mockReturnValue({
       ...createEnabledConfiguration(),
       enabled: false,
-      scanner: '',
+      scanner: 'trivy',
       scan: { cron: '0 3 * * *', jitter: 60000 },
     });
 
@@ -195,6 +201,9 @@ describe('init', () => {
 
     expect(mockCronSchedule).not.toHaveBeenCalled();
     expect(isRunning()).toBe(false);
+    expect(mockLogInfo).toHaveBeenCalledWith(
+      'Security scanner not enabled, scheduled scanning disabled',
+    );
   });
 
   test('should no-op when scanner is not trivy', () => {
@@ -208,6 +217,9 @@ describe('init', () => {
 
     expect(mockCronSchedule).not.toHaveBeenCalled();
     expect(isRunning()).toBe(false);
+    expect(mockLogInfo).toHaveBeenCalledWith(
+      'Security scanner not enabled, scheduled scanning disabled',
+    );
   });
 
   test('should invoke runScheduledScans when cron fires', async () => {
@@ -392,6 +404,101 @@ describe('runScheduledScans', () => {
     expect(mockUpdateContainer).toHaveBeenCalledTimes(3);
   });
 
+  test('should cap worker count to the number of digests', async () => {
+    mockGetSecurityConfiguration.mockReturnValue({
+      ...createEnabledConfiguration(),
+      scan: { cron: '0 3 * * *', jitter: 60000, concurrency: 5, batchTimeout: 0 },
+    });
+    const container1 = createContainer({ id: 'c1' });
+    const container2 = createContainer({
+      id: 'c2',
+      name: 'redis',
+      image: {
+        ...createContainer().image,
+        name: 'library/redis',
+        digest: { watch: true, value: 'sha256:def456' },
+      },
+    });
+    mockGetContainers.mockReturnValue([container1, container2]);
+
+    const resolvers: Array<() => void> = [];
+    let inFlight = 0;
+    let maxInFlight = 0;
+    mockScanImageWithDedup.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          inFlight += 1;
+          maxInFlight = Math.max(maxInFlight, inFlight);
+          resolvers.push(() => {
+            inFlight -= 1;
+            resolve({ scanResult: createScanResult(), fromCache: false });
+          });
+        }),
+    );
+
+    const scanPromise = runScheduledScans();
+
+    await vi.waitFor(() => {
+      expect(mockScanImageWithDedup).toHaveBeenCalledTimes(2);
+    });
+    expect(maxInFlight).toBe(2);
+
+    resolvers[0]?.();
+    resolvers[1]?.();
+
+    await scanPromise;
+    expect(mockScanImageWithDedup).toHaveBeenCalledTimes(2);
+  });
+
+  test('should clamp scan concurrency to at least one worker', async () => {
+    mockGetSecurityConfiguration.mockReturnValue({
+      ...createEnabledConfiguration(),
+      scan: { cron: '0 3 * * *', jitter: 60000, concurrency: 0, batchTimeout: 0 },
+    });
+    const container1 = createContainer({ id: 'c1' });
+    const container2 = createContainer({
+      id: 'c2',
+      name: 'redis',
+      image: {
+        ...createContainer().image,
+        name: 'library/redis',
+        digest: { watch: true, value: 'sha256:def456' },
+      },
+    });
+    mockGetContainers.mockReturnValue([container1, container2]);
+
+    const resolvers: Array<() => void> = [];
+    let inFlight = 0;
+    let maxInFlight = 0;
+    mockScanImageWithDedup.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          inFlight += 1;
+          maxInFlight = Math.max(maxInFlight, inFlight);
+          resolvers.push(() => {
+            inFlight -= 1;
+            resolve({ scanResult: createScanResult(), fromCache: false });
+          });
+        }),
+    );
+
+    const scanPromise = runScheduledScans();
+
+    await vi.waitFor(() => {
+      expect(mockScanImageWithDedup).toHaveBeenCalledTimes(1);
+    });
+    expect(maxInFlight).toBe(1);
+
+    resolvers[0]?.();
+
+    await vi.waitFor(() => {
+      expect(mockScanImageWithDedup).toHaveBeenCalledTimes(2);
+    });
+
+    resolvers[1]?.();
+    await scanPromise;
+  });
+
   test('should stop queueing new digest scans once batch timeout elapses', async () => {
     mockGetSecurityConfiguration.mockReturnValue({
       ...createEnabledConfiguration(),
@@ -408,6 +515,7 @@ describe('runScheduledScans', () => {
       },
     });
     mockGetContainers.mockReturnValue([container1, container2]);
+    const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout');
     mockScanImageWithDedup.mockImplementation(
       () =>
         new Promise((resolve) => {
@@ -423,6 +531,15 @@ describe('runScheduledScans', () => {
     expect(mockBroadcastScanStarted).toHaveBeenCalledWith('c1');
     expect(mockBroadcastScanStarted).not.toHaveBeenCalledWith('c2');
     expect(mockBroadcastScanCompleted).toHaveBeenCalledTimes(1);
+    expect(mockLogWarn).toHaveBeenCalledWith('Scheduled scan batch timed out after 30ms');
+    expect(mockLogInfo).toHaveBeenCalledWith(
+      'Scanning 2 unique digests across 2 containers (concurrency: 1, batch timeout: 30ms)',
+    );
+    expect(mockLogInfo).toHaveBeenCalledWith(
+      'Scheduled scan complete: 2 digests, 0 cached, 0 scanned fresh, 0 errors, 1 aborted, 1 skipped',
+    );
+    expect(clearTimeoutSpy).toHaveBeenCalledTimes(1);
+    clearTimeoutSpy.mockRestore();
   });
 
   test('should group containers by digest and scan unique digests', async () => {
@@ -510,6 +627,33 @@ describe('runScheduledScans', () => {
       }),
     );
     expect(mockBroadcastScanCompleted).toHaveBeenCalledWith('c1', 'passed');
+    expect(mockLogInfo).toHaveBeenCalledWith(
+      `Digest ${'sha256:abc123'.slice(0, 12)} unchanged, using cached scan`,
+    );
+  });
+
+  test('should log the final summary counts for cached and scanned digests', async () => {
+    const container1 = createContainer({ id: 'c1' });
+    const container2 = createContainer({
+      id: 'c2',
+      name: 'redis',
+      image: {
+        ...createContainer().image,
+        name: 'library/redis',
+        digest: { watch: true, value: 'sha256:def456' },
+      },
+    });
+    mockGetContainers.mockReturnValue([container1, container2]);
+    const scanResult = createScanResult();
+    mockScanImageWithDedup
+      .mockResolvedValueOnce({ scanResult, fromCache: true })
+      .mockResolvedValueOnce({ scanResult, fromCache: false });
+
+    await runScheduledScans();
+
+    expect(mockLogInfo).toHaveBeenCalledWith(
+      'Scheduled scan complete: 2 digests, 1 cached, 1 scanned fresh, 0 errors, 0 aborted, 0 skipped',
+    );
   });
 
   test('should continue scanning other digests when one fails', async () => {
@@ -540,6 +684,9 @@ describe('runScheduledScans', () => {
     // Only second container gets store update
     expect(mockUpdateContainer).toHaveBeenCalledTimes(1);
     expect(mockUpdateContainer).toHaveBeenCalledWith(expect.objectContaining({ id: 'c2' }));
+    expect(mockLogInfo).toHaveBeenCalledWith(
+      'Scheduled scan complete: 2 digests, 0 cached, 1 scanned fresh, 1 errors, 0 aborted, 0 skipped',
+    );
   });
 
   test('should handle non-Error thrown during scan', async () => {
@@ -597,6 +744,34 @@ describe('runScheduledScans', () => {
 
     expect(mockScanImageWithDedup).not.toHaveBeenCalled();
     expect(mockBroadcastScanStarted).not.toHaveBeenCalled();
+    expect(mockLogInfo).toHaveBeenCalledWith(
+      'No containers with digest values found, skipping scheduled scan',
+    );
+  });
+
+  test('should skip when digest values are empty strings', async () => {
+    const container = createContainer({
+      image: {
+        ...createContainer().image,
+        digest: { watch: true, value: '' },
+      },
+    });
+    const containerWithNullDigest = createContainer({
+      id: 'c2',
+      image: {
+        ...createContainer().image,
+        digest: { watch: true, value: null as unknown as string },
+      },
+    });
+    mockGetContainers.mockReturnValue([container, containerWithNullDigest]);
+
+    await runScheduledScans();
+
+    expect(mockScanImageWithDedup).not.toHaveBeenCalled();
+    expect(mockBroadcastScanStarted).not.toHaveBeenCalled();
+    expect(mockLogInfo).toHaveBeenCalledWith(
+      'No containers with digest values found, skipping scheduled scan',
+    );
   });
 
   test('should skip when containers list is empty', async () => {
@@ -635,18 +810,22 @@ describe('runScheduledScans', () => {
 
     // Only one scan call was made (second was skipped)
     expect(mockScanImageWithDedup).toHaveBeenCalledTimes(1);
+    expect(mockLogInfo).toHaveBeenCalledWith('Scheduled scan already in progress, skipping');
   });
 
   test('should skip when security scanner is disabled', async () => {
     mockGetSecurityConfiguration.mockReturnValue({
       ...createEnabledConfiguration(),
       enabled: false,
-      scanner: '',
+      scanner: 'trivy',
     });
 
     await runScheduledScans();
 
     expect(mockGetContainers).not.toHaveBeenCalled();
+    expect(mockLogInfo).toHaveBeenCalledWith(
+      'Security scanner not enabled, skipping scheduled scan',
+    );
   });
 
   test('should skip when scanner is not trivy', async () => {
@@ -658,6 +837,9 @@ describe('runScheduledScans', () => {
     await runScheduledScans();
 
     expect(mockGetContainers).not.toHaveBeenCalled();
+    expect(mockLogInfo).toHaveBeenCalledWith(
+      'Security scanner not enabled, skipping scheduled scan',
+    );
   });
 
   test('should filter out containers with non-string digest values', async () => {
@@ -676,6 +858,23 @@ describe('runScheduledScans', () => {
     await runScheduledScans();
 
     expect(mockScanImageWithDedup).toHaveBeenCalledTimes(1);
+  });
+
+  test('should filter out containers that are missing image data', async () => {
+    const validContainer = createContainer({ id: 'c1' });
+    const containerWithoutImage = {
+      ...createContainer({ id: 'c2' }),
+      image: undefined,
+    } as unknown as ReturnType<typeof createContainer>;
+    mockGetContainers.mockReturnValue([validContainer, containerWithoutImage]);
+    const scanResult = createScanResult();
+    mockScanImageWithDedup.mockResolvedValue({ scanResult, fromCache: false });
+
+    await runScheduledScans();
+
+    expect(mockScanImageWithDedup).toHaveBeenCalledTimes(1);
+    expect(mockBroadcastScanStarted).toHaveBeenCalledWith('c1');
+    expect(mockBroadcastScanStarted).not.toHaveBeenCalledWith('c2');
   });
 
   test('should pass correct scanIntervalMs based on cron expression for every-N-minutes', async () => {
@@ -786,6 +985,77 @@ describe('runScheduledScans', () => {
     );
   });
 
+  test('should use wrap-around shortest interval for cron with two-digit comma-separated hours', async () => {
+    mockGetSecurityConfiguration.mockReturnValue({
+      ...createEnabledConfiguration(),
+      scan: { cron: '15 2,10,22 * * *', jitter: 60000 },
+    });
+    const container = createContainer();
+    mockGetContainers.mockReturnValue([container]);
+    const scanResult = createScanResult();
+    mockScanImageWithDedup.mockResolvedValue({ scanResult, fromCache: false });
+
+    await runScheduledScans();
+
+    // 2 -> 10 -> 22 -> wrap to 2 gives a 4h gap.
+    expect(mockScanImageWithDedup).toHaveBeenCalledWith(
+      expect.objectContaining({ digest: 'sha256:abc123' }),
+      14400000,
+    );
+  });
+
+  test('should trim whitespace before parsing comma-separated hour lists', async () => {
+    const parseExpressionSpy = vi.spyOn(CronExpressionParser, 'parse');
+    mockGetSecurityConfiguration.mockReturnValue({
+      ...createEnabledConfiguration(),
+      scan: { cron: ' 15 2,10,22 * * * ', jitter: 60000 },
+    });
+    const container = createContainer();
+    mockGetContainers.mockReturnValue([container]);
+    const scanResult = createScanResult();
+    mockScanImageWithDedup.mockResolvedValue({ scanResult, fromCache: false });
+
+    try {
+      await runScheduledScans();
+    } finally {
+      parseExpressionSpy.mockRestore();
+    }
+
+    expect(parseExpressionSpy).not.toHaveBeenCalled();
+    expect(mockScanImageWithDedup).toHaveBeenCalledWith(
+      expect.objectContaining({ digest: 'sha256:abc123' }),
+      14400000,
+    );
+  });
+
+  test('should use the cron parser when extra suffix text prevents a simple hour list match', async () => {
+    const parseExpressionSpy = vi.spyOn(CronExpressionParser, 'parse');
+    parseExpressionSpy.mockReturnValue({
+      next: vi.fn(() => ({
+        toDate: () => new Date('2026-03-01T00:00:00.000Z'),
+      })),
+    } as any);
+    mockGetSecurityConfiguration.mockReturnValue({
+      ...createEnabledConfiguration(),
+      scan: { cron: '15 2,10,22 * * * extra', jitter: 60000 },
+    });
+    const container = createContainer();
+    mockGetContainers.mockReturnValue([container]);
+    const scanResult = createScanResult();
+    mockScanImageWithDedup.mockResolvedValue({ scanResult, fromCache: false });
+
+    try {
+      await runScheduledScans();
+    } finally {
+      parseExpressionSpy.mockRestore();
+    }
+
+    expect(mockScanImageWithDedup).toHaveBeenCalledWith(
+      expect.objectContaining({ digest: 'sha256:abc123' }),
+      86400000,
+    );
+  });
+
   test('should fallback to 24h for comma-separated hour cron when only one valid hour remains', async () => {
     mockGetSecurityConfiguration.mockReturnValue({
       ...createEnabledConfiguration(),
@@ -870,7 +1140,51 @@ describe('runScheduledScans', () => {
     await runScheduledScans();
 
     expect(mockScanImageWithDedup).not.toHaveBeenCalled();
+    expect(mockBroadcastScanCompleted).not.toHaveBeenCalled();
+    expect(mockLogWarn).not.toHaveBeenCalled();
     expect(_isScanInProgress()).toBe(false);
+  });
+
+  test('should log the cron interval parse failure and fall back to 24h', async () => {
+    mockGetSecurityConfiguration.mockReturnValue({
+      ...createEnabledConfiguration(),
+      scan: { cron: '0 3 15 * *', jitter: 60000 },
+    });
+    const parseExpressionSpy = vi.spyOn(CronExpressionParser, 'parse');
+    parseExpressionSpy.mockImplementation(() => {
+      throw new Error('cron parser exploded');
+    });
+    const container = createContainer();
+    mockGetContainers.mockReturnValue([container]);
+    const scanResult = createScanResult();
+    mockScanImageWithDedup.mockResolvedValue({ scanResult, fromCache: false });
+
+    try {
+      await runScheduledScans();
+    } finally {
+      parseExpressionSpy.mockRestore();
+    }
+
+    expect(mockLogDebug).toHaveBeenCalledWith(
+      'Could not derive cron interval from "0 3 15 * *": cron parser exploded',
+    );
+    expect(mockScanImageWithDedup).toHaveBeenCalledWith(
+      expect.objectContaining({ digest: 'sha256:abc123' }),
+      86400000,
+    );
+  });
+
+  test('should log the exact batch preparation message when batch timeout is disabled', async () => {
+    const container = createContainer();
+    mockGetContainers.mockReturnValue([container]);
+    const scanResult = createScanResult();
+    mockScanImageWithDedup.mockResolvedValue({ scanResult, fromCache: false });
+
+    await runScheduledScans();
+
+    expect(mockLogInfo).toHaveBeenCalledWith(
+      'Scanning 1 unique digests across 1 containers (concurrency: 1, batch timeout: disabled)',
+    );
   });
 
   test('should fallback to 24h for invalid */0 minute pattern', async () => {
@@ -948,6 +1262,19 @@ describe('runScheduledScans', () => {
       expect.objectContaining({ digest: 'sha256:abc123' }),
       86400000,
     );
+  });
+
+  test('should re-read cached security configuration after shutdown', async () => {
+    const container = createContainer();
+    mockGetContainers.mockReturnValue([container]);
+    const scanResult = createScanResult();
+    mockScanImageWithDedup.mockResolvedValue({ scanResult, fromCache: false });
+
+    await runScheduledScans();
+    shutdown();
+    await runScheduledScans();
+
+    expect(mockGetSecurityConfiguration).toHaveBeenCalledTimes(2);
   });
 
   test('should pass image and auth to scanImageWithDedup', async () => {

@@ -84,6 +84,7 @@ export function removeContainerListControlParams(query: Request['query']): Reque
   Object.entries(query || {}).forEach(([key, value]) => {
     if (
       key === 'includeVulnerabilities' ||
+      key === 'excludeRollbackContainers' ||
       key === 'limit' ||
       key === 'offset' ||
       key === 'sort' ||

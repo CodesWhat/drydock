@@ -94,6 +94,36 @@ function createSensor(discoveryTopic: string, stateTopic: string) {
   };
 }
 
+function buildMqttSensors(
+  discoveryTopicFactory: (kind: string, topic: string) => string,
+  topicBase: string,
+  includeTrackedUpdates = true,
+) {
+  const sensors = [
+    ['sensor', `${topicBase}/total_count`],
+    ['sensor', `${topicBase}/update_count`],
+    ['binary_sensor', `${topicBase}/update_status`],
+    ['sensor', `${topicBase}/alpha/total_count`],
+    ['sensor', `${topicBase}/alpha/update_count`],
+    ['binary_sensor', `${topicBase}/alpha/update_status`],
+    ['binary_sensor', `${topicBase}/alpha/running`],
+    ['sensor', `${topicBase}/beta/total_count`],
+    ['sensor', `${topicBase}/beta/update_count`],
+    ['binary_sensor', `${topicBase}/beta/update_status`],
+    ['binary_sensor', `${topicBase}/beta/running`],
+    ['sensor', `${topicBase}/delta/total_count`],
+    ['sensor', `${topicBase}/delta/update_count`],
+    ['binary_sensor', `${topicBase}/delta/update_status`],
+    ['binary_sensor', `${topicBase}/delta/running`],
+  ];
+
+  if (includeTrackedUpdates) {
+    sensors.push(['update', `${topicBase}/alpha-1`], ['update', `${topicBase}/beta-1`]);
+  }
+
+  return sensors.map(([kind, topic]) => createSensor(discoveryTopicFactory(kind, topic), topic));
+}
+
 function createFixture() {
   const alphaEnsureRemoteAuthHeaders = vi.fn().mockResolvedValue(undefined);
   const alphaVersion = vi.fn().mockResolvedValue({ version: '25.0.0' });
@@ -156,6 +186,12 @@ function createFixture() {
   const sharedDiscoveryTopic = vi.fn(
     ({ kind, topic }: DiscoveryTopicArgs) => `disc:${kind}:${topic}`,
   );
+  const emptyDiscoveryTopic = vi.fn(
+    ({ kind, topic }: DiscoveryTopicArgs) => `disc-empty:${kind}:${topic}`,
+  );
+  const httpDiscoveryTopic = vi.fn(
+    ({ kind, topic }: DiscoveryTopicArgs) => `disc-http:${kind}:${topic}`,
+  );
   const skipDiscoveryTopic = vi.fn(() => '');
 
   const state = {
@@ -205,6 +241,11 @@ function createFixture() {
         getRecentDockerEvents: deltaEvents,
         getRecentAliasFilterDecisions: deltaDecisions,
       },
+      'docker.epsilon': {
+        type: 'docker',
+        name: 'epsilon',
+        isDockerEventsListenerActive: false,
+      },
       'docker.gamma': {
         type: 'docker',
         name: 'gamma',
@@ -250,12 +291,27 @@ function createFixture() {
           getDiscoveryTopic: sharedDiscoveryTopic,
         },
       },
+      'mqtt.empty': {
+        type: 'mqtt',
+        name: 'empty',
+        configuration: { topic: '' },
+        hass: {
+          getDiscoveryTopic: emptyDiscoveryTopic,
+        },
+      },
       'mqtt.skip': {
         type: 'mqtt',
         name: 'skip',
         configuration: { topic: 'skip/base' },
         hass: {
           getDiscoveryTopic: skipDiscoveryTopic,
+        },
+      },
+      'http.with-hass': {
+        type: 'http',
+        name: 'with-hass',
+        hass: {
+          getDiscoveryTopic: httpDiscoveryTopic,
         },
       },
       'mqtt.none': {
@@ -418,12 +474,15 @@ describe('debug dump utilities', () => {
         { id: 'docker.alpha', kind: 'watcher', name: 'alpha' },
         { id: 'docker.beta', kind: 'watcher', name: 'beta' },
         { id: 'docker.delta', kind: 'watcher', name: 'delta' },
+        { id: 'docker.epsilon', kind: 'watcher', name: 'epsilon' },
         { id: 'docker.gamma', kind: 'watcher', name: 'gamma' },
       ],
       triggers: [
         { id: 'http.other', kind: 'trigger', name: 'other' },
+        { id: 'http.with-hass', kind: 'trigger', name: 'with-hass' },
         { id: 'mqtt.default', kind: 'trigger', name: 'default' },
         { id: 'mqtt.dup', kind: 'trigger', name: 'dup' },
+        { id: 'mqtt.empty', kind: 'trigger', name: 'empty' },
         { id: 'mqtt.main', kind: 'trigger', name: 'main' },
         { id: 'mqtt.nohass', kind: 'trigger', name: 'nohass' },
         { id: 'mqtt.none', kind: 'trigger', name: 'none' },
@@ -438,40 +497,9 @@ describe('debug dump utilities', () => {
     });
 
     const expectedSensors = [
-      ...[
-        ['sensor', 'custom/base/total_count'],
-        ['sensor', 'custom/base/update_count'],
-        ['binary_sensor', 'custom/base/update_status'],
-        ['sensor', 'custom/base/alpha/total_count'],
-        ['sensor', 'custom/base/alpha/update_count'],
-        ['binary_sensor', 'custom/base/alpha/update_status'],
-        ['binary_sensor', 'custom/base/alpha/running'],
-        ['sensor', 'custom/base/beta/total_count'],
-        ['sensor', 'custom/base/beta/update_count'],
-        ['binary_sensor', 'custom/base/beta/update_status'],
-        ['binary_sensor', 'custom/base/beta/running'],
-        ['sensor', 'custom/base/delta/total_count'],
-        ['sensor', 'custom/base/delta/update_count'],
-        ['binary_sensor', 'custom/base/delta/update_status'],
-        ['binary_sensor', 'custom/base/delta/running'],
-        ['update', 'custom/base/alpha-1'],
-        ['update', 'custom/base/beta-1'],
-        ['sensor', 'dd/container/total_count'],
-        ['sensor', 'dd/container/update_count'],
-        ['binary_sensor', 'dd/container/update_status'],
-        ['sensor', 'dd/container/alpha/total_count'],
-        ['sensor', 'dd/container/alpha/update_count'],
-        ['binary_sensor', 'dd/container/alpha/update_status'],
-        ['binary_sensor', 'dd/container/alpha/running'],
-        ['sensor', 'dd/container/beta/total_count'],
-        ['sensor', 'dd/container/beta/update_count'],
-        ['binary_sensor', 'dd/container/beta/update_status'],
-        ['binary_sensor', 'dd/container/beta/running'],
-        ['sensor', 'dd/container/delta/total_count'],
-        ['sensor', 'dd/container/delta/update_count'],
-        ['binary_sensor', 'dd/container/delta/update_status'],
-        ['binary_sensor', 'dd/container/delta/running'],
-      ].map(([kind, topic]) => createSensor(`disc:${kind}:${topic}`, topic)),
+      ...buildMqttSensors((kind, topic) => `disc:${kind}:${topic}`, 'custom/base'),
+      ...buildMqttSensors((kind, topic) => `disc:${kind}:${topic}`, 'dd/container', false),
+      ...buildMqttSensors((kind, topic) => `disc-empty:${kind}:${topic}`, 'dd/container', false),
     ].sort((left, right) => left.discoveryTopic.localeCompare(right.discoveryTopic));
 
     expect(dump.mqttHomeAssistant.sensors).toEqual(expectedSensors);
@@ -508,6 +536,10 @@ describe('debug dump utilities', () => {
         infoError: 'delta info failed',
       },
       {
+        watcherId: 'docker.epsilon',
+        watcherName: 'epsilon',
+      },
+      {
         watcherId: 'docker.gamma',
         watcherName: 'gamma',
       },
@@ -538,6 +570,16 @@ describe('debug dump utilities', () => {
         watcherId: 'docker.delta',
         watcherName: 'delta',
         watchEventsEnabled: true,
+        listenerActive: false,
+        streamActive: false,
+        reconnectScheduled: false,
+        reconnectAttempt: 0,
+        reconnectDelayMs: 0,
+      },
+      {
+        watcherId: 'docker.epsilon',
+        watcherName: 'epsilon',
+        watchEventsEnabled: false,
         listenerActive: false,
         streamActive: false,
         reconnectScheduled: false,

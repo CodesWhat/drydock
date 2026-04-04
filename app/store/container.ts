@@ -29,6 +29,7 @@ const DEFAULT_SECURITY_STATE_CACHE_MAX_ENTRIES = DEFAULT_CACHE_MAX_ENTRIES;
 const SECURITY_STATE_CACHE_PRUNE_SCAN_BUDGET = 10;
 const CONTAINER_COLLECTION_INDICES = ['data.watcher', 'data.status', 'data.updateAvailable'];
 const UNSAFE_QUERY_PATH_SEGMENTS = new Set(['__proto__', 'prototype', 'constructor']);
+const CONTAINER_QUERY_CONTROL_KEYS = new Set(['excludeRollbackContainers']);
 const STABLE_UNDEFINED_SENTINEL = '__undefined__';
 
 type SecurityStateCacheEntry = {
@@ -246,6 +247,10 @@ function getContainersQueryIndexValueKey(value) {
   }
 }
 
+function isContainerQueryControlKey(queryPath: string) {
+  return CONTAINER_QUERY_CONTROL_KEYS.has(queryPath);
+}
+
 function indexContainerQueryCacheKey(cacheKey) {
   const queryEntries = parseContainerQueryCacheKey(cacheKey);
   containersQueryCacheParsedEntries.set(cacheKey, queryEntries ?? null);
@@ -255,7 +260,10 @@ function indexContainerQueryCacheKey(cacheKey) {
     return;
   }
 
-  if (queryEntries.length === 0) {
+  if (
+    queryEntries.length === 0 ||
+    queryEntries.some(([queryPath]) => isContainerQueryControlKey(queryPath))
+  ) {
     containersQueryCacheAlwaysInvalidateKeys.add(cacheKey);
     return;
   }
@@ -751,11 +759,22 @@ function getCachedOrComputedContainersByQuery(query: Record<string, unknown> = {
     return cachedContainers;
   }
 
+  const excludeRollbackContainers = queryEntries.some(
+    ([queryPath, queryValue]) => queryPath === 'excludeRollbackContainers' && queryValue === true,
+  );
+  const exactMatchEntries = queryEntries.filter(
+    ([queryPath]) => !isContainerQueryControlKey(queryPath),
+  );
   const filter = {};
-  queryEntries.forEach(([queryKeyEntry, queryValue]) => {
+  exactMatchEntries.forEach(([queryKeyEntry, queryValue]) => {
     filter[`data.${queryKeyEntry}`] = queryValue;
   });
-  const containerList = containers.find(filter).map((item) => validateContainer(item.data));
+  let containerList = containers.find(filter).map((item) => validateContainer(item.data));
+  if (excludeRollbackContainers) {
+    containerList = containerList.filter(
+      (containerItem) => !container.isRollbackContainer(containerItem),
+    );
+  }
   const containerListSorted = containerList.sort(
     byValues([
       [(containerItem: container.Container) => containerItem.watcher, byString()],

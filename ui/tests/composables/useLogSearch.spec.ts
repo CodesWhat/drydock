@@ -113,8 +113,10 @@ describe('useLogSearch', () => {
     search.searchQuery.value = 'alpha';
     await nextTick();
 
+    expect(search.matchedEntryIdSet.value).toEqual(new Set([1, 3]));
     expect(search.currentMatchEntryId.value).toBe(1);
     expect(search.isMatchedEntry(1)).toBe(true);
+    expect(search.isMatchedEntry(2)).toBe(false);
     expect(search.isCurrentMatch(1)).toBe(true);
 
     search.jumpToMatch('next');

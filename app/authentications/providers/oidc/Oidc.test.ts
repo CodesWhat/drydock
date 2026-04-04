@@ -396,6 +396,79 @@ test('getStrategyDescription should return strategy description', async () => {
   });
 });
 
+test('getStrategyDescription should fall back to configured logouturl when discovery has not set one', async () => {
+  oidc.logoutUrl = undefined;
+  oidc.configuration = {
+    ...configurationValid,
+    logouturl: 'https://idp.example.com/logout',
+  };
+
+  expect(oidc.getStrategyDescription()).toEqual({
+    type: 'oidc',
+    name: oidc.name,
+    redirect: false,
+    logoutUrl: 'https://idp.example.com/logout',
+  });
+});
+
+test('getInitializedClient should throw when the client is not initialized', async () => {
+  oidc.client = undefined;
+
+  expect(() => oidc.getInitializedClient()).toThrowError('OIDC client is not initialized');
+});
+
+test('ensureClientInitialized should reuse an in-flight initialization promise', async () => {
+  oidc.client = undefined;
+  oidc.clientInitializationPromise = Promise.resolve();
+  const discoverClientSpy = vi.spyOn(oidc, 'discoverClient');
+
+  await oidc.ensureClientInitialized();
+
+  expect(discoverClientSpy).not.toHaveBeenCalled();
+});
+
+test('ensureClientInitialized should preserve a newer initialization promise when an older attempt settles', async () => {
+  oidc.client = undefined;
+  let resolveDiscovery!: () => void;
+  const discoveryPromise = new Promise<void>((resolve) => {
+    resolveDiscovery = resolve;
+  });
+  const discoverClientSpy = vi
+    .spyOn(oidc, 'discoverClient')
+    .mockReturnValue(discoveryPromise as Promise<any>);
+
+  const initialization = oidc.ensureClientInitialized();
+  const replacementPromise = Promise.resolve();
+  oidc.clientInitializationPromise = replacementPromise;
+  resolveDiscovery();
+
+  await initialization;
+
+  expect(discoverClientSpy).toHaveBeenCalledTimes(1);
+  expect(oidc.clientInitializationPromise).toBe(replacementPromise);
+});
+
+test('ensureClientInitialized should share a single discovery attempt across concurrent callers', async () => {
+  oidc.client = undefined;
+  let resolveDiscovery!: () => void;
+  const discoveryPromise = new Promise<void>((resolve) => {
+    resolveDiscovery = resolve;
+  });
+  const discoverClientSpy = vi
+    .spyOn(oidc, 'discoverClient')
+    .mockReturnValue(discoveryPromise as Promise<any>);
+
+  const firstInitialization = oidc.ensureClientInitialized();
+  const secondInitialization = oidc.ensureClientInitialized();
+  resolveDiscovery();
+
+  await expect(Promise.all([firstInitialization, secondInitialization])).resolves.toEqual([
+    undefined,
+    undefined,
+  ]);
+  expect(discoverClientSpy).toHaveBeenCalledTimes(1);
+});
+
 test('getAllowedAuthorizationRedirects should tolerate malformed urls and normalize root endpoint path', () => {
   oidc.configuration = {
     ...configurationValid,
@@ -1208,7 +1281,7 @@ test('redirect should respond with 500 when session save throws non-Error', asyn
   expect(res.status).toHaveBeenCalledWith(500);
   expect(res.json).toHaveBeenCalledWith({ error: 'Unable to initialize OIDC session' });
   expect(oidc.log.warn).toHaveBeenCalledWith(
-    expect.stringContaining('Unable to persist OIDC session checks (unknown error)'),
+    expect.stringContaining('Unable to initialize OIDC session (unknown error)'),
   );
 });
 
@@ -1262,6 +1335,8 @@ test('callback should return 401 when access_token is missing', async () => {
 });
 
 test('initAuthentication should discover and configure client', async () => {
+  oidc.client = undefined;
+  oidc.logoutUrl = undefined;
   const mockClient = {};
   openidClientMock.discovery = vi.fn().mockResolvedValue(mockClient);
   openidClientMock.buildEndSessionUrl = vi.fn().mockReturnValue(new URL('https://idp/logout'));
@@ -1275,7 +1350,38 @@ test('initAuthentication should discover and configure client', async () => {
   expect(oidc.logoutUrl).toBe('https://idp/logout');
 });
 
+test('initAuthentication should tolerate startup discovery failure and recover on a later redirect without restart', async () => {
+  oidc.client = undefined;
+  oidc.logoutUrl = undefined;
+  const mockClient = {};
+  openidClientMock.discovery = vi
+    .fn()
+    .mockRejectedValueOnce(new Error('idp unavailable during startup'))
+    .mockResolvedValueOnce(mockClient);
+  openidClientMock.buildEndSessionUrl = vi.fn().mockReturnValue(new URL('https://idp/logout'));
+
+  await expect(oidc.initAuthentication()).resolves.toBeUndefined();
+  expect(() => oidc.getStrategy(app)).not.toThrow();
+
+  const req = createReq({
+    session: {
+      save: vi.fn((cb) => cb()),
+    },
+  });
+  const res = createRes();
+
+  await oidc.redirect(req, res);
+
+  expect(openidClientMock.discovery).toHaveBeenCalledTimes(2);
+  expect(res.json).toHaveBeenCalledWith({ url: 'https://idp/auth' });
+  expect(oidc.log.warn).toHaveBeenCalledWith(
+    expect.stringContaining('Drydock will retry on the next authentication attempt'),
+  );
+});
+
 test('initAuthentication should pass allowInsecureRequests for HTTP discovery URLs', async () => {
+  oidc.client = undefined;
+  oidc.logoutUrl = undefined;
   oidc.configuration = {
     ...configurationValid,
     discovery: 'http://dex:5556/dex/.well-known/openid-configuration',
@@ -1293,6 +1399,8 @@ test('initAuthentication should pass allowInsecureRequests for HTTP discovery UR
 });
 
 test('initAuthentication should log deprecation warning for HTTP discovery URL', async () => {
+  oidc.client = undefined;
+  oidc.logoutUrl = undefined;
   oidc.configuration = {
     ...configurationValid,
     discovery: 'http://dex:5556/dex/.well-known/openid-configuration',
@@ -1308,6 +1416,8 @@ test('initAuthentication should log deprecation warning for HTTP discovery URL',
 });
 
 test('initAuthentication should handle missing end session url', async () => {
+  oidc.client = undefined;
+  oidc.logoutUrl = undefined;
   const mockClient = {};
   openidClientMock.discovery = vi.fn().mockResolvedValue(mockClient);
   openidClientMock.buildEndSessionUrl = vi.fn().mockImplementation(() => {
@@ -1323,6 +1433,8 @@ test('initAuthentication should handle missing end session url', async () => {
 });
 
 test('initAuthentication should handle non-Error end session url failure', async () => {
+  oidc.client = undefined;
+  oidc.logoutUrl = undefined;
   const mockClient = {};
   openidClientMock.discovery = vi.fn().mockResolvedValue(mockClient);
   openidClientMock.buildEndSessionUrl = vi.fn().mockImplementation(() => {
@@ -1338,6 +1450,8 @@ test('initAuthentication should handle non-Error end session url failure', async
 });
 
 test('initAuthentication should configure custom fetch when cafile is set', async () => {
+  oidc.client = undefined;
+  oidc.logoutUrl = undefined;
   const { caPath, cleanup } = await createTemporaryCaFile();
   const fetchSpy = vi
     .spyOn(globalThis, 'fetch')
@@ -1371,6 +1485,8 @@ test('initAuthentication should configure custom fetch when cafile is set', asyn
 });
 
 test('initAuthentication should configure custom fetch and warn when insecure TLS is enabled', async () => {
+  oidc.client = undefined;
+  oidc.logoutUrl = undefined;
   const fetchSpy = vi
     .spyOn(globalThis, 'fetch')
     .mockResolvedValue(new Response(null, { status: 200 }) as Response);

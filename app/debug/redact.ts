@@ -16,15 +16,19 @@ const SENSITIVE_KEY_TOKENS = new Set([
 const ENV_SENSITIVE_KEY_TOKENS = new Set(['auth', 'bearer', 'login']);
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
 }
 
 function getKeyTokens(key: string): string[] {
-  return key
-    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
-    .split(/[^a-zA-Z0-9]+/)
-    .map((segment) => segment.toLowerCase())
-    .filter(Boolean);
+  const normalizedKey = key.replace(/([a-z0-9])([A-Z])/g, '$1_$2');
+  // Stryker disable next-line ArrayDeclaration: empty fallback is equivalent because non-alphanumeric keys cannot match a sensitive token.
+  const segments = normalizedKey.match(/[a-zA-Z0-9]+/g) ?? [];
+  return segments.map((segment) => segment.toLowerCase());
 }
 
 function isEnvStyleKey(key: string): boolean {

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import AppButton from '../AppButton.vue';
-import { getContainerActionKey } from '../../utils/container-action-key';
+import { hasTrackedContainerAction } from '../../utils/container-action-key';
 import { useContainersViewTemplateContext } from './containersViewTemplateContext';
 
 const {
@@ -61,7 +61,7 @@ const {
 } = useContainersViewTemplateContext();
 
 function isActionInProgress(container: { id?: unknown; name?: unknown }) {
-  return actionInProgress.value.has(getContainerActionKey(container));
+  return hasTrackedContainerAction(actionInProgress.value, container);
 }
 </script>
 

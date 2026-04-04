@@ -2,6 +2,7 @@ import { type Ref, ref } from 'vue';
 import { useToast } from '../../composables/useToast';
 import { getBackups, rollback } from '../../services/backup';
 import { getContainerUpdateOperations as fetchContainerUpdateOperations } from '../../services/container';
+import type { ApiContainerUpdateOperation } from '../../types/api';
 import { errorMessage } from '../../utils/error';
 import { loadContainerDetailListState } from './loadContainerDetailListState';
 
@@ -72,7 +73,7 @@ export function getOperationStatusStyle(status: unknown) {
 
 async function loadDetailUpdateOperationsState(args: {
   containerId: string | undefined;
-  detailUpdateOperations: Ref<Record<string, unknown>[]>;
+  detailUpdateOperations: Ref<ApiContainerUpdateOperation[]>;
   updateOperationsLoading: Ref<boolean>;
   updateOperationsError: Ref<string | null>;
 }) {
@@ -85,9 +86,7 @@ async function loadDetailUpdateOperationsState(args: {
   args.updateOperationsLoading.value = true;
   args.updateOperationsError.value = null;
   try {
-    args.detailUpdateOperations.value = (await fetchContainerUpdateOperations(
-      args.containerId,
-    )) as Record<string, unknown>[];
+    args.detailUpdateOperations.value = await fetchContainerUpdateOperations(args.containerId);
   } catch (e: unknown) {
     args.detailUpdateOperations.value = [];
     args.updateOperationsError.value = errorMessage(e, 'Failed to load update operation history');
@@ -148,7 +147,7 @@ export function useContainerBackups(input: UseContainerBackupsInput) {
   const rollbackInProgress = ref<string | null>(null);
   const rollbackMessage = ref<string | null>(null);
   const rollbackError = ref<string | null>(null);
-  const detailUpdateOperations = ref<Record<string, unknown>[]>([]);
+  const detailUpdateOperations = ref<ApiContainerUpdateOperation[]>([]);
   const updateOperationsLoading = ref(false);
   const updateOperationsError = ref<string | null>(null);
 

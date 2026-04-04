@@ -545,9 +545,10 @@ describe('Docker Watcher', () => {
       );
     });
 
-    test('should skip updates when docker event container is not found in store', async () => {
+    test('should schedule refresh when docker event container is not found in store', async () => {
       await docker.register('watcher', 'docker', 'test', {});
       docker.log = createMockLogWithChild(['info', 'debug']);
+      docker.watchCronDebounced = vi.fn().mockResolvedValue(undefined);
       mockContainer.inspect.mockResolvedValue({
         Name: '/existing-container',
         State: { Status: 'running' },
@@ -558,6 +559,7 @@ describe('Docker Watcher', () => {
       await docker.onDockerEvent(Buffer.from('{"Action":"start","id":"container123"}\n'));
 
       expect(storeContainer.updateContainer).not.toHaveBeenCalled();
+      expect(docker.watchCronDebounced).toHaveBeenCalledTimes(1);
     });
 
     test('should handle malformed docker event payload', async () => {

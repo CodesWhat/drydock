@@ -119,3 +119,8 @@ set.ignored = true
 [[triage]]
 match.rules = ["markdownlint:MD060"]
 set.ignored = true
+
+# next@16.2.2 — no patch available as of 2026-04-02; latest stable is affected
+[[triage]]
+match.rules = ["osv-scanner:CVE-2025-59472"]
+set.ignored = true

@@ -14,3 +14,12 @@ function asNonEmptyString(value: unknown): string | undefined {
 export function getContainerActionKey(container: ContainerActionKeyInput): string {
   return asNonEmptyString(container.id) ?? asNonEmptyString(container.name) ?? '';
 }
+
+export function hasTrackedContainerAction(
+  trackedActions: Pick<Set<string>, 'has'>,
+  container: ContainerActionKeyInput,
+): boolean {
+  const id = asNonEmptyString(container.id);
+  const name = asNonEmptyString(container.name);
+  return Boolean((id && trackedActions.has(id)) || (name && trackedActions.has(name)));
+}

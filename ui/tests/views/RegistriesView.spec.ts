@@ -1,4 +1,5 @@
 import { flushPromises } from '@vue/test-utils';
+import { resetPreferences } from '@/preferences/store';
 import { getAllRegistries, getRegistry } from '@/services/registry';
 import RegistriesView from '@/views/RegistriesView.vue';
 import { dataViewStubs } from '../helpers/data-view-stubs';
@@ -47,6 +48,7 @@ async function mountRegistriesView() {
 describe('RegistriesView', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetPreferences();
     mockRoute.query = {};
     mockGetAllRegistries.mockResolvedValue([makeRegistry()]);
     mockGetRegistry.mockResolvedValue(makeRegistry());
@@ -115,5 +117,43 @@ describe('RegistriesView', () => {
     });
     expect(wrapper.text()).toContain('https://detail.example');
     expect(wrapper.text()).toContain('team-a');
+  });
+
+  it('opens registry details from list mode selections', async () => {
+    mockGetAllRegistries.mockResolvedValue([
+      makeRegistry({
+        id: 'registry-1',
+        name: 'AWS ECR',
+        type: 'ecr',
+        configuration: { url: 'https://list.example' },
+      }),
+    ]);
+    mockGetRegistry.mockResolvedValue(
+      makeRegistry({
+        id: 'registry-1',
+        name: 'AWS ECR',
+        type: 'ecr',
+        configuration: {
+          url: 'https://123456789012.dkr.ecr.us-east-1.amazonaws.com',
+          region: 'us-east-1',
+        },
+      }),
+    );
+
+    const wrapper = await mountRegistriesView();
+
+    await wrapper.find('.mode-list').trigger('click');
+    await flushPromises();
+    await wrapper.find('.list-click-first').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.find('.detail-panel').attributes('data-open')).toBe('true');
+    expect(mockGetRegistry).toHaveBeenCalledWith({
+      type: 'ecr',
+      name: 'AWS ECR',
+      agent: undefined,
+    });
+    expect(wrapper.text()).toContain('us-east-1');
+    expect(wrapper.text()).toContain('123456789012.dkr.ecr.us-east-1.amazonaws.com');
   });
 });

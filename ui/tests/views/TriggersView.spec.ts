@@ -1,4 +1,5 @@
 import { flushPromises } from '@vue/test-utils';
+import { resetPreferences } from '@/preferences/store';
 import { getAllTriggers, getTrigger, runTrigger } from '@/services/trigger';
 import TriggersView from '@/views/TriggersView.vue';
 import { dataViewStubs } from '../helpers/data-view-stubs';
@@ -53,6 +54,7 @@ function findButtonByText(wrapper: any, label: string) {
 describe('TriggersView', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetPreferences();
     mockRoute.query = {};
 
     mockGetAllTriggers.mockResolvedValue([
@@ -186,5 +188,43 @@ describe('TriggersView', () => {
     });
     expect(wrapper.text()).toContain('#detail-alerts');
     expect(wrapper.text()).toContain('3');
+  });
+
+  it('opens trigger details from list mode selections', async () => {
+    mockGetAllTriggers.mockResolvedValue([
+      makeTrigger({
+        id: 'trigger:webhook-fanout',
+        name: 'Webhook Fanout',
+        type: 'http',
+        configuration: { endpoint: 'https://ops.example.com/hooks/list' },
+      }),
+    ]);
+    mockGetTrigger.mockResolvedValue(
+      makeTrigger({
+        id: 'trigger:webhook-fanout',
+        name: 'Webhook Fanout',
+        type: 'http',
+        configuration: {
+          method: 'POST',
+          endpoint: 'https://ops.example.com/hooks/drydock',
+        },
+      }),
+    );
+
+    const wrapper = await mountTriggersView();
+
+    await wrapper.find('.mode-list').trigger('click');
+    await flushPromises();
+    await wrapper.find('.list-click-first').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.find('.detail-panel').attributes('data-open')).toBe('true');
+    expect(mockGetTrigger).toHaveBeenCalledWith({
+      type: 'http',
+      name: 'Webhook Fanout',
+      agent: undefined,
+    });
+    expect(wrapper.text()).toContain('method');
+    expect(wrapper.text()).toContain('https://ops.example.com/hooks/drydock');
   });
 });

@@ -38,6 +38,24 @@ function createMockStatsStream() {
   return stream;
 }
 
+function createStreamWithoutCleanupHooks() {
+  const listeners = new Map<string, StreamListener[]>();
+  const stream = {
+    on: vi.fn((event: string, handler: StreamListener) => {
+      const handlers = listeners.get(event) ?? [];
+      handlers.push(handler);
+      listeners.set(event, handlers);
+      return stream;
+    }),
+    emit(event: string, payload?: unknown) {
+      for (const handler of listeners.get(event) ?? []) {
+        handler(payload);
+      }
+    },
+  };
+  return stream;
+}
+
 function createHarness() {
   let nowMs = Date.parse('2026-03-14T12:00:00.000Z');
   const containersById = new Map<string, { id: string; name: string; watcher: string }>([
@@ -162,6 +180,41 @@ describe('stats/collector', () => {
     expect(harness.stream.destroy).toHaveBeenCalledTimes(1);
   });
 
+  test('duplicate release does not tear down another active watch', async () => {
+    const harness = createHarness();
+    const releaseOne = harness.collector.watch('c1');
+    await Promise.resolve();
+
+    const releaseTwo = harness.collector.watch('c1');
+    await Promise.resolve();
+
+    releaseOne();
+    expect(harness.stream.destroy).not.toHaveBeenCalled();
+
+    releaseOne();
+    expect(harness.stream.destroy).not.toHaveBeenCalled();
+
+    releaseTwo();
+    expect(harness.stream.destroy).toHaveBeenCalledTimes(1);
+  });
+
+  test('keeps the active stream running until the last watcher releases', async () => {
+    const harness = createHarness();
+    const releaseOne = harness.collector.watch('c1');
+    await Promise.resolve();
+
+    const releaseTwo = harness.collector.watch('c1');
+    await Promise.resolve();
+
+    expect(harness.stats).toHaveBeenCalledTimes(1);
+
+    releaseOne();
+    expect(harness.stream.destroy).not.toHaveBeenCalled();
+
+    releaseTwo();
+    expect(harness.stream.destroy).toHaveBeenCalledTimes(1);
+  });
+
   test('does not attach listeners when watch is released before async start resolves', async () => {
     const stream = createMockStatsStream();
     let resolveStats: ((value: typeof stream) => void) | undefined;
@@ -194,6 +247,95 @@ describe('stats/collector', () => {
 
     expect(stream.on).not.toHaveBeenCalled();
     expect(stream.destroy).toHaveBeenCalledTimes(1);
+  });
+
+  test('does not throw when async startup resolves to a stream without cleanup hooks after release', async () => {
+    const stream = {
+      on: vi.fn(() => stream),
+    };
+    let resolveStats: ((value: typeof stream) => void) | undefined;
+    const stats = vi.fn(
+      () =>
+        new Promise<typeof stream>((resolve) => {
+          resolveStats = resolve;
+        }),
+    );
+    const collector = createContainerStatsCollector({
+      getContainerById: () => ({ id: 'c1', name: 'web', watcher: 'local' }) as any,
+      getWatchers: () => ({
+        'docker.local': {
+          dockerApi: {
+            getContainer: () => ({ stats }),
+          },
+        },
+      }),
+      intervalSeconds: 10,
+      historySize: 3,
+      now: () => Date.now(),
+    });
+
+    const release = collector.watch('c1');
+    release();
+
+    expect(() => resolveStats?.(stream)).not.toThrow();
+    await Promise.resolve();
+  });
+
+  test('does not require cleanup hooks when a released watch resolves late', async () => {
+    const stream = createStreamWithoutCleanupHooks();
+    let resolveStats: ((value: typeof stream) => void) | undefined;
+    const stats = vi.fn(
+      () =>
+        new Promise<typeof stream>((resolve) => {
+          resolveStats = resolve;
+        }),
+    );
+    const collector = createContainerStatsCollector({
+      getContainerById: () => ({ id: 'c1', name: 'web', watcher: 'local' }) as any,
+      getWatchers: () => ({
+        'docker.local': {
+          dockerApi: {
+            getContainer: () => ({ stats }),
+          },
+        },
+      }),
+      intervalSeconds: 10,
+      historySize: 3,
+      now: () => Date.now(),
+    });
+
+    const release = collector.watch('c1');
+    expect(stats).toHaveBeenCalledTimes(1);
+
+    release();
+    resolveStats?.(stream);
+    await Promise.resolve();
+
+    expect(stream.on).not.toHaveBeenCalled();
+  });
+
+  test('does not throw when release cleanup hooks are absent on the stream', async () => {
+    const stream = {
+      on: vi.fn(() => stream),
+    };
+    const collector = createContainerStatsCollector({
+      getContainerById: () => ({ id: 'c1', name: 'web', watcher: 'local' }) as any,
+      getWatchers: () => ({
+        'docker.local': {
+          dockerApi: {
+            getContainer: () => ({ stats: vi.fn(async () => stream) }),
+          },
+        },
+      }),
+      intervalSeconds: 10,
+      historySize: 3,
+      now: () => Date.now(),
+    });
+
+    const release = collector.watch('c1');
+    await Promise.resolve();
+
+    expect(() => release()).not.toThrow();
   });
 
   test('reuses the pending stream start when a watch is reacquired before startup resolves', async () => {
@@ -237,6 +379,23 @@ describe('stats/collector', () => {
     expect(stream.destroy).toHaveBeenCalledTimes(1);
   });
 
+  test('does not start a second stream while one is already active', async () => {
+    const harness = createHarness();
+
+    const releaseFirstWatch = harness.collector.watch('c1');
+    await Promise.resolve();
+
+    const releaseSecondWatch = harness.collector.watch('c1');
+    await Promise.resolve();
+
+    expect(harness.stats).toHaveBeenCalledTimes(1);
+
+    releaseSecondWatch();
+    releaseFirstWatch();
+
+    expect(harness.stream.destroy).toHaveBeenCalledTimes(1);
+  });
+
   test('destroys the resolved stream when all concurrent watches release before startup resolves', async () => {
     const stream = createMockStatsStream();
     let resolveStats: ((value: typeof stream) => void) | undefined;
@@ -274,6 +433,53 @@ describe('stats/collector', () => {
     expect(stream.destroy).toHaveBeenCalledTimes(1);
   });
 
+  test('returns early when no stats target can be resolved', async () => {
+    const getWatchers = vi.fn(() => ({
+      'docker.local': {
+        dockerApi: {
+          getContainer: vi.fn(),
+        },
+      },
+    }));
+    const collector = createContainerStatsCollector({
+      getContainerById: vi.fn(() => undefined),
+      getWatchers,
+      intervalSeconds: 10,
+      historySize: 3,
+      now: () => Date.now(),
+    });
+
+    const release = collector.watch('missing');
+    await Promise.resolve();
+
+    expect(getWatchers).not.toHaveBeenCalled();
+    expect(() => release()).not.toThrow();
+  });
+
+  test('returns early when docker stats API resolves to a non-stream value', async () => {
+    const stats = vi.fn(async () => ({ not: 'a-stream' }));
+    const collector = createContainerStatsCollector({
+      getContainerById: () => ({ id: 'c1', name: 'web', watcher: 'local' }) as any,
+      getWatchers: () => ({
+        'docker.local': {
+          dockerApi: {
+            getContainer: () => ({ stats }),
+          },
+        },
+      }),
+      intervalSeconds: 10,
+      historySize: 3,
+      now: () => Date.now(),
+    });
+
+    const release = collector.watch('c1');
+    await Promise.resolve();
+
+    expect(stats).toHaveBeenCalledTimes(1);
+    expect(mockCollectorLogger.warn).not.toHaveBeenCalled();
+    expect(() => release()).not.toThrow();
+  });
+
   test('collects snapshots, throttles by interval, and notifies subscribers', async () => {
     const harness = createHarness();
     const onSnapshot = vi.fn();
@@ -307,6 +513,23 @@ describe('stats/collector', () => {
     release();
   });
 
+  test('unsubscribe stops future listener notifications', async () => {
+    const harness = createHarness();
+    const onSnapshot = vi.fn();
+    const release = harness.collector.watch('c1');
+    const unsubscribe = harness.collector.subscribe('c1', onSnapshot);
+    await Promise.resolve();
+
+    harness.emitStats(100, 1000);
+    unsubscribe();
+    harness.advanceNowByMs(10_000);
+    harness.emitStats(200, 1100);
+
+    expect(onSnapshot).toHaveBeenCalledTimes(1);
+
+    release();
+  });
+
   test('logs trace when dropping a throttled stats sample', async () => {
     const harness = createHarness();
     const release = harness.collector.watch('c1');
@@ -325,6 +548,88 @@ describe('stats/collector', () => {
       'Dropping throttled container stats sample',
     );
 
+    release();
+  });
+
+  test('logs and detaches the stream when listener attachment throws', async () => {
+    const stream = {
+      on: vi.fn(() => {
+        throw new Error('attach-failed');
+      }),
+      removeAllListeners: vi.fn(),
+      destroy: vi.fn(),
+    };
+    const collector = createContainerStatsCollector({
+      getContainerById: () => ({ id: 'c1', name: 'web', watcher: 'local' }) as any,
+      getWatchers: () => ({
+        'docker.local': {
+          dockerApi: {
+            getContainer: () => ({ stats: vi.fn(async () => stream) }),
+          },
+        },
+      }),
+      intervalSeconds: 10,
+      historySize: 3,
+      now: () => Date.now(),
+    });
+
+    collector.watch('c1');
+    await Promise.resolve();
+
+    expect(mockCollectorLogger.warn).toHaveBeenCalledWith(
+      'Failed to attach stats stream listeners for c1 (attach-failed)',
+    );
+    expect(stream.removeAllListeners).toHaveBeenCalledTimes(1);
+    expect(stream.destroy).toHaveBeenCalledTimes(1);
+  });
+
+  test('logs when starting the docker stats stream throws', async () => {
+    const collector = createContainerStatsCollector({
+      getContainerById: () => ({ id: 'c1', name: 'web', watcher: 'local' }) as any,
+      getWatchers: () => ({
+        'docker.local': {
+          dockerApi: {
+            getContainer: () => ({
+              stats: vi.fn(() => {
+                throw new Error('start-failed');
+              }),
+            }),
+          },
+        },
+      }),
+      intervalSeconds: 10,
+      historySize: 3,
+      now: () => Date.now(),
+    });
+
+    collector.watch('c1');
+    await Promise.resolve();
+
+    expect(mockCollectorLogger.warn).toHaveBeenCalledWith(
+      'Failed to start Docker stats stream for c1 (start-failed)',
+    );
+  });
+
+  test('accepts a stats sample exactly at the throttling interval boundary', async () => {
+    const harness = createHarness();
+    const onSnapshot = vi.fn();
+    const release = harness.collector.watch('c1');
+    const unsubscribe = harness.collector.subscribe('c1', onSnapshot);
+    await Promise.resolve();
+
+    harness.emitStats(100, 1000);
+    harness.advanceNowByMs(10_000);
+    harness.emitStats(200, 1100);
+
+    expect(onSnapshot).toHaveBeenCalledTimes(2);
+    expect(harness.collector.getLatest('c1')).toEqual(
+      expect.objectContaining({
+        containerId: 'c1',
+        cpuPercent: 200,
+      }),
+    );
+
+    unsubscribe();
     release();
   });
 
@@ -442,6 +747,67 @@ describe('stats/collector', () => {
     expect(harness.stream.destroy).toHaveBeenCalledTimes(1);
   });
 
+  test('touch clears the previous timeout handle before scheduling a new one', async () => {
+    const firstTimeout = { id: 'first-timeout' };
+    const secondTimeout = { id: 'second-timeout' };
+    const setTimeoutFn = vi
+      .fn()
+      .mockReturnValueOnce(firstTimeout as any)
+      .mockReturnValueOnce(secondTimeout as any);
+    const clearTimeoutFn = vi.fn();
+    const collector = createContainerStatsCollector({
+      getContainerById: () => ({ id: 'c1', name: 'web', watcher: 'local' }) as any,
+      getWatchers: () => ({
+        'docker.local': {
+          dockerApi: {
+            getContainer: () => ({ stats: vi.fn(async () => createMockStatsStream()) }),
+          },
+        },
+      }),
+      intervalSeconds: 10,
+      historySize: 3,
+      now: () => Date.now(),
+      setTimeoutFn: setTimeoutFn as any,
+      clearTimeoutFn: clearTimeoutFn as any,
+    });
+
+    collector.touch('c1');
+    collector.touch('c1');
+
+    expect(setTimeoutFn).toHaveBeenCalledTimes(2);
+    expect(clearTimeoutFn).toHaveBeenCalledTimes(1);
+    expect(clearTimeoutFn).toHaveBeenCalledWith(firstTimeout);
+  });
+
+  test('touch honors the minimum rest-touch ttl floor for short scan intervals', async () => {
+    const stream = createMockStatsStream();
+    const stats = vi.fn(async () => stream);
+    const collector = createContainerStatsCollector({
+      getContainerById: () => ({ id: 'c1', name: 'web', watcher: 'local' }) as any,
+      getWatchers: () => ({
+        'docker.local': {
+          dockerApi: {
+            getContainer: () => ({ stats }),
+          },
+        },
+      }),
+      intervalSeconds: 2,
+      historySize: 3,
+      now: () => Date.now(),
+    });
+
+    collector.touch('c1');
+    await Promise.resolve();
+
+    expect(stats).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(14_999);
+    expect(stream.destroy).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(stream.destroy).toHaveBeenCalledTimes(1);
+  });
+
   test('reuses one deleted-state sweep interval and keeps it running while other states remain', async () => {
     const intervalHandle = { id: 'deleted-state-sweep' };
     let runDeletedStateSweep: (() => void) | undefined;
@@ -483,11 +849,56 @@ describe('stats/collector', () => {
     runDeletedStateSweep?.();
 
     expect(clearIntervalFn).not.toHaveBeenCalled();
+    containersById.set('c1', { id: 'c1', name: 'web', watcher: 'local' });
+    const reusedRelease = collector.watch('c1');
+    await Promise.resolve();
+    expect(collector.getHistory('c1')).toEqual([]);
+    reusedRelease();
 
     releaseSecond();
     containersById.delete('c2');
     runDeletedStateSweep?.();
     expect(setIntervalFn).toHaveBeenCalledTimes(1);
+  });
+
+  test('stops the deleted-state sweep once the last inactive state is pruned', async () => {
+    const intervalHandle = { id: 'deleted-state-sweep' };
+    let runDeletedStateSweep: (() => void) | undefined;
+    const setIntervalFn = vi.fn((callback: () => void) => {
+      runDeletedStateSweep = callback;
+      return intervalHandle as any;
+    });
+    const clearIntervalFn = vi.fn();
+    const containersById = new Map<string, { id: string; name: string; watcher: string }>([
+      ['c1', { id: 'c1', name: 'web', watcher: 'local' }],
+    ]);
+    const collector = createContainerStatsCollector({
+      getContainerById: (containerId: string) => containersById.get(containerId) as any,
+      getWatchers: () => ({
+        'docker.local': {
+          dockerApi: {
+            getContainer: () => ({
+              stats: vi.fn(async () => createMockStatsStream()),
+            }),
+          },
+        },
+      }),
+      intervalSeconds: 10,
+      historySize: 3,
+      now: () => Date.now(),
+      setIntervalFn,
+      clearIntervalFn,
+    });
+
+    const release = collector.watch('c1');
+    await Promise.resolve();
+
+    release();
+    containersById.delete('c1');
+    runDeletedStateSweep?.();
+    await Promise.resolve();
+
+    expect(clearIntervalFn).toHaveBeenCalledTimes(1);
   });
 
   test('handles error/close/end stream lifecycle events', async () => {
@@ -498,6 +909,9 @@ describe('stats/collector', () => {
 
     // Error triggers cleanup + restart — listeners are removed before new stream starts
     harness.stream.emit('error', new Error('stream-error'));
+    expect(mockCollectorLogger.warn).toHaveBeenCalledWith(
+      'Docker stats stream error for c1 (stream-error)',
+    );
     expect(harness.stream.removeAllListeners).toHaveBeenCalledTimes(1);
     expect(harness.stream.destroy).toHaveBeenCalledTimes(1);
 
@@ -652,6 +1066,44 @@ describe('stats/collector', () => {
     releaseUnsupported();
   });
 
+  test('does not call stats when watcher api is missing', async () => {
+    const stats = vi.fn(async () => createMockStatsStream());
+    const collector = createContainerStatsCollector({
+      getContainerById: () => ({ id: 'c1', name: 'web', watcher: 'local' }) as any,
+      getWatchers: () => ({
+        'docker.local': {},
+      }),
+      intervalSeconds: 10,
+      historySize: 3,
+      now: () => Date.now(),
+    });
+
+    const release = collector.watch('c1');
+    await Promise.resolve();
+
+    expect(stats).not.toHaveBeenCalled();
+    release();
+  });
+
+  test('does not call stats when watcher api is a primitive value', async () => {
+    const stats = vi.fn(async () => createMockStatsStream());
+    const collector = createContainerStatsCollector({
+      getContainerById: () => ({ id: 'c1', name: 'web', watcher: 'local' }) as any,
+      getWatchers: () => ({
+        'docker.local': 123 as any,
+      }),
+      intervalSeconds: 10,
+      historySize: 3,
+      now: () => Date.now(),
+    });
+
+    const release = collector.watch('c1');
+    await Promise.resolve();
+
+    expect(stats).not.toHaveBeenCalled();
+    release();
+  });
+
   test('gracefully handles invalid stream results and stream startup errors', async () => {
     const getContainer = vi.fn(() => ({ id: 'c1', name: 'web', watcher: 'local' }));
     const getWatchersNull = vi.fn(() => ({
@@ -671,6 +1123,24 @@ describe('stats/collector', () => {
     const releaseNull = collectorNull.watch('c1');
     await Promise.resolve();
     releaseNull();
+
+    const getWatchersPrimitive = vi.fn(() => ({
+      'docker.local': {
+        dockerApi: {
+          getContainer: vi.fn(() => ({ stats: vi.fn(async () => 'not-a-stream') })),
+        },
+      },
+    }));
+    const collectorPrimitive = createContainerStatsCollector({
+      getContainerById: getContainer,
+      getWatchers: getWatchersPrimitive,
+      intervalSeconds: 10,
+      historySize: 3,
+      now: () => Date.now(),
+    });
+    const releasePrimitive = collectorPrimitive.watch('c1');
+    await Promise.resolve();
+    releasePrimitive();
 
     const getWatchersInvalid = vi.fn(() => ({
       'docker.local': {
@@ -711,6 +1181,34 @@ describe('stats/collector', () => {
     const releaseThrow = collectorThrow.watch('c1');
     await Promise.resolve();
     releaseThrow();
+
+    expect(mockCollectorLogger.warn).toHaveBeenCalledWith(
+      'Failed to start Docker stats stream for c1 (failed)',
+    );
+  });
+
+  test('touch schedules rest touch timeout at three times the scan interval', async () => {
+    const stream = createMockStatsStream();
+    const setTimeoutFn = vi.fn(() => ({ id: 'rest-touch-timeout' }) as any);
+    const collector = createContainerStatsCollector({
+      getContainerById: () => ({ id: 'c1', name: 'web', watcher: 'local' }) as any,
+      getWatchers: () => ({
+        'docker.local': {
+          dockerApi: {
+            getContainer: () => ({ stats: vi.fn(async () => stream) }),
+          },
+        },
+      }),
+      intervalSeconds: 10,
+      historySize: 3,
+      now: () => Date.now(),
+      setTimeoutFn,
+    });
+
+    collector.touch('c1');
+    await Promise.resolve();
+
+    expect(setTimeoutFn).toHaveBeenCalledWith(expect.any(Function), 30_000);
   });
 
   test('detaches stream when listener attachment throws mid-way', async () => {
@@ -744,10 +1242,43 @@ describe('stats/collector', () => {
     await Promise.resolve();
 
     // First .on() succeeded, second threw — stream should be cleaned up
+    expect(mockCollectorLogger.warn).toHaveBeenCalledWith(
+      'Failed to attach stats stream listeners for c1 (stream destroyed)',
+    );
     expect(stream.removeAllListeners).toHaveBeenCalledTimes(1);
     expect(stream.destroy).toHaveBeenCalledTimes(1);
 
     release();
+  });
+
+  test('unsubscribe stops later snapshots from reaching the removed listener', async () => {
+    const harness = createHarness();
+    const onSnapshot = vi.fn();
+    const release = harness.collector.watch('c1');
+    const unsubscribe = harness.collector.subscribe('c1', onSnapshot);
+    await Promise.resolve();
+
+    harness.emitStats(100, 1000);
+    unsubscribe();
+    harness.advanceNowByMs(10_000);
+    harness.emitStats(200, 1100);
+
+    expect(onSnapshot).toHaveBeenCalledTimes(1);
+
+    release();
+  });
+
+  test('unsubscribe prunes deleted listener-only state', () => {
+    const harness = createHarness();
+    const listener = vi.fn();
+
+    const unsubscribe = harness.collector.subscribe('c1', listener);
+    harness.getContainer.mockReturnValue(undefined);
+
+    unsubscribe();
+
+    expect(harness.collector.getLatest('c1')).toBeUndefined();
+    expect(harness.collector.getHistory('c1')).toEqual([]);
   });
 
   test('uses default configuration fallbacks and avoids duplicate start while pending', async () => {
@@ -810,5 +1341,19 @@ describe('stats/collector', () => {
         process.env.DD_STATS_HISTORY_SIZE = previousHistory;
       }
     }
+  });
+
+  test('does not start a duplicate stream once one is already active', async () => {
+    const harness = createHarness();
+    const releaseOne = harness.collector.watch('c1');
+    await Promise.resolve();
+
+    const releaseTwo = harness.collector.watch('c1');
+    await Promise.resolve();
+
+    expect(harness.stats).toHaveBeenCalledTimes(1);
+
+    releaseOne();
+    releaseTwo();
   });
 });

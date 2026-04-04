@@ -2,7 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import ConfigLogsTab from '../components/config/ConfigLogsTab.vue';
 import { useSystemLogStream } from '../composables/useSystemLogStream';
-import { getLog, getLogEntries } from '../services/log';
+import { getLog, getLogComponents, getLogEntries } from '../services/log';
 import type { SystemLogEntry } from '../services/system-log-stream';
 import type { AppLogEntry } from '../types/log-entry';
 import { errorMessage } from '../utils/error';
@@ -10,6 +10,7 @@ import { toAppLogEntry } from '../utils/system-log-adapter';
 
 interface ApiLogEntry {
   timestamp?: string | number;
+  displayTimestamp?: string;
   level?: string;
   component?: string;
   msg?: string;
@@ -33,6 +34,7 @@ const appLogsError = ref('');
 const appLogLevelFilter = ref('all');
 const appLogTail = ref(100);
 const appLogComponent = ref('');
+const appLogComponents = ref<string[]>([]);
 
 const isStreaming = computed(() => streamingEnabled.value && streamStatus.value === 'connected');
 
@@ -62,6 +64,7 @@ function toTimestampMs(value: string | number | undefined): number {
 function toSystemLogEntry(entry: ApiLogEntry): SystemLogEntry {
   return {
     timestamp: toTimestampMs(entry.timestamp),
+    displayTimestamp: entry.displayTimestamp ?? '-',
     level: entry.level || 'info',
     component: entry.component || '-',
     msg: entry.msg || entry.message || '',
@@ -118,16 +121,13 @@ function applyFilters() {
   }
 }
 
-function resetLogFilters() {
-  appLogLevelFilter.value = 'all';
-  appLogTail.value = 100;
-  appLogComponent.value = '';
-  applyFilters();
-}
-
 function toggleStreamingPause() {
   streamingEnabled.value = !streamingEnabled.value;
 }
+
+watch([appLogLevelFilter, appLogTail, appLogComponent], () => {
+  applyFilters();
+});
 
 watch(streamingEnabled, (enabled) => {
   if (enabled) {
@@ -147,6 +147,11 @@ onMounted(() => {
     .catch(() => {
       appLogLevel.value = 'unknown';
     });
+  void getLogComponents()
+    .then((components) => {
+      appLogComponents.value = components;
+    })
+    .catch(() => {});
   if (streamingEnabled.value) {
     startStreaming();
   } else {
@@ -156,7 +161,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="flex-1 min-h-0 min-w-0 overflow-y-auto pr-2 sm:pr-[15px]">
+  <div class="flex-1 min-h-0 min-w-0 flex flex-col overflow-hidden pr-2 sm:pr-[15px]">
     <ConfigLogsTab
       :log-level="appLogLevel"
       :entries="displayEntries"
@@ -165,14 +170,13 @@ onMounted(() => {
       :log-level-filter="appLogLevelFilter"
       :tail="appLogTail"
       :component-filter="appLogComponent"
+      :components="appLogComponents"
       :streaming-enabled="streamingEnabled"
       :streaming-connected="isStreaming"
       @update:log-level-filter="appLogLevelFilter = $event"
       @update:tail="appLogTail = $event"
       @update:component-filter="appLogComponent = $event"
       @update:streaming-enabled="streamingEnabled = $event"
-      @refresh="applyFilters"
-      @reset="resetLogFilters"
       @toggle-pause="toggleStreamingPause"
     />
   </div>

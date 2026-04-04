@@ -8,7 +8,7 @@ import UpdateMaturityBadge from './UpdateMaturityBadge.vue';
 import SuggestedTagBadge from './SuggestedTagBadge.vue';
 import FloatingTagBadge from './FloatingTagBadge.vue';
 import ReleaseNotesLink from './ReleaseNotesLink.vue';
-import { getContainerActionKey } from '../../utils/container-action-key';
+import { hasTrackedContainerAction } from '../../utils/container-action-key';
 import { revealContainerEnv } from '../../services/container';
 import { errorMessage } from '../../utils/error';
 import { useContainersViewTemplateContext } from './containersViewTemplateContext';
@@ -150,7 +150,7 @@ const {
 } = useContainersViewTemplateContext();
 
 function isActionInProgress(container: { id?: unknown; name?: unknown }) {
-  return actionInProgress.value.has(getContainerActionKey(container));
+  return hasTrackedContainerAction(actionInProgress.value, container);
 }
 </script>
 

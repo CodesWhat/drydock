@@ -9,38 +9,68 @@ interface UseContainerLogsInput {
   selectedContainer: Readonly<Ref<Container | null | undefined>>;
 }
 
+type LogTarget = string | Pick<Container, 'id' | 'name'>;
+
+function resolveLogTarget(
+  target: LogTarget,
+  containerIdMap: Record<string, string>,
+): { cacheKey: string; containerId?: string } {
+  if (typeof target === 'string') {
+    return {
+      cacheKey: target,
+      containerId: containerIdMap[target],
+    };
+  }
+
+  const id = typeof target.id === 'string' && target.id.length > 0 ? target.id : undefined;
+  const name = typeof target.name === 'string' ? target.name : '';
+  const aliasId = name ? containerIdMap[name] : undefined;
+  const containerId = id ?? aliasId;
+  return {
+    cacheKey: name && aliasId === containerId ? name : (containerId ?? name),
+    containerId,
+  };
+}
+
 export function useContainerLogs(input: UseContainerLogsInput) {
   const containerLogsCache = ref<Record<string, string[]>>({});
   const containerLogsLoading = ref<Record<string, boolean>>({});
 
-  async function loadContainerLogs(containerName: string, force = false) {
-    const containerId = input.containerIdMap.value[containerName];
+  async function loadContainerLogs(target: LogTarget, force = false) {
+    const { cacheKey, containerId } = resolveLogTarget(target, input.containerIdMap.value);
     if (!containerId) {
       return;
     }
-    if (!force && containerLogsCache.value[containerName]) {
+    if (!cacheKey) {
       return;
     }
-    containerLogsLoading.value[containerName] = true;
+    if (!force && containerLogsCache.value[cacheKey]) {
+      return;
+    }
+    containerLogsLoading.value[cacheKey] = true;
     try {
       const result = await fetchContainerLogs(containerId, 100);
       const logs = result?.logs ?? '';
-      containerLogsCache.value[containerName] = logs
+      containerLogsCache.value[cacheKey] = logs
         ? logs.split('\n').filter((line: string) => line.length > 0)
         : ['No logs available for this container'];
     } catch {
-      containerLogsCache.value[containerName] = ['Failed to load container logs'];
+      containerLogsCache.value[cacheKey] = ['Failed to load container logs'];
     } finally {
-      containerLogsLoading.value[containerName] = false;
+      containerLogsLoading.value[cacheKey] = false;
     }
   }
 
-  function getContainerLogs(containerName: string): string[] {
-    if (!containerLogsCache.value[containerName]) {
-      void loadContainerLogs(containerName);
+  function getContainerLogs(target: LogTarget): string[] {
+    const { cacheKey } = resolveLogTarget(target, input.containerIdMap.value);
+    if (!cacheKey) {
       return ['Loading logs...'];
     }
-    return containerLogsCache.value[containerName];
+    if (!containerLogsCache.value[cacheKey]) {
+      void loadContainerLogs(target);
+      return ['Loading logs...'];
+    }
+    return containerLogsCache.value[cacheKey];
   }
 
   const {
@@ -53,7 +83,7 @@ export function useContainerLogs(input: UseContainerLogsInput) {
 
   async function refreshCurrentContainerLogs() {
     if (input.selectedContainer.value) {
-      await loadContainerLogs(input.selectedContainer.value.name, true);
+      await loadContainerLogs(input.selectedContainer.value, true);
     }
   }
 

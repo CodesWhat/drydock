@@ -143,7 +143,9 @@ class BaseRegistry extends Registry {
     }
 
     for (const host of this.getTrustedAuthHosts()) {
-      hosts.add(host);
+      if (typeof host === 'string' && host.trim().length > 0) {
+        hosts.add(this.getRegistryHostname(host));
+      }
     }
 
     return Array.from(hosts);
@@ -429,8 +431,11 @@ class BaseRegistry extends Registry {
   async getImagePublishedAt(image, tag?: string): Promise<string | undefined> {
     const imageToInspect = structuredClone(image);
     const tagToLookup = typeof tag === 'string' && tag.length > 0 ? tag : imageToInspect.tag?.value;
-    if (typeof tagToLookup === 'string' && tagToLookup.length > 0 && imageToInspect.tag) {
-      imageToInspect.tag.value = tagToLookup;
+    if (typeof tagToLookup === 'string' && tagToLookup.length > 0) {
+      imageToInspect.tag = {
+        ...(imageToInspect.tag || {}),
+        value: tagToLookup,
+      };
     }
 
     const manifest = await this.getImageManifestDigest(imageToInspect);

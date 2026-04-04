@@ -90,6 +90,7 @@ onMounted(() => {
   document.addEventListener('pointerdown', handleClickOutside);
   globalThis.addEventListener('dd:sse-container-changed', handleSseEvent);
   globalThis.addEventListener('dd:sse-scan-completed', handleSseEvent);
+  globalThis.addEventListener('dd:sse-connected', handleSseEvent);
 });
 
 onUnmounted(() => {
@@ -97,6 +98,7 @@ onUnmounted(() => {
   document.removeEventListener('pointerdown', handleClickOutside);
   globalThis.removeEventListener('dd:sse-container-changed', handleSseEvent);
   globalThis.removeEventListener('dd:sse-scan-completed', handleSseEvent);
+  globalThis.removeEventListener('dd:sse-connected', handleSseEvent);
 });
 
 function versionSummary(entry: AuditEntry): string {

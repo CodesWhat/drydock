@@ -4,6 +4,10 @@ import { flushPromises, type VueWrapper } from '@vue/test-utils';
 import DataTable from '@/components/DataTable.vue';
 import type { Container } from '@/types/container';
 import DashboardView from '@/views/DashboardView.vue';
+import {
+  clampDashboardScroll,
+  computeDashboardDragScrollDelta,
+} from '@/views/dashboard/dashboardDragAutoScroll';
 import { mountWithPlugins } from '../helpers/mount';
 
 const dashboardViewSource = readFileSync(
@@ -93,6 +97,8 @@ const mockGetAllWatchers = getAllWatchers as ReturnType<typeof vi.fn>;
 const mockGetAllRegistries = getAllRegistries as ReturnType<typeof vi.fn>;
 const PREFERENCES_STORAGE_KEY = 'dd-preferences';
 const mountedWrappers: VueWrapper[] = [];
+const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
+const originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
 
 function makeContainer(overrides: Partial<Container> = {}): Container {
   return {
@@ -200,11 +206,34 @@ describe('DashboardView', () => {
     for (const wrapper of mountedWrappers.splice(0)) {
       wrapper.unmount();
     }
+    Object.defineProperty(globalThis, 'requestAnimationFrame', {
+      configurable: true,
+      value: originalRequestAnimationFrame,
+      writable: true,
+    });
+    Object.defineProperty(globalThis, 'cancelAnimationFrame', {
+      configurable: true,
+      value: originalCancelAnimationFrame,
+      writable: true,
+    });
     vi.useRealTimers();
   });
 
   describe('layout spacing', () => {
-    it('applies pr-[15px] on the scrollable container for scrollbar centering', () => {
+    it('extends scroll container edge-to-edge via negative margins on root', () => {
+      mockGetAllContainers.mockReturnValue(new Promise(() => {}));
+      mockGetAgents.mockReturnValue(new Promise(() => {}));
+      mockGetServer.mockReturnValue(new Promise(() => {}));
+
+      const wrapper = mountDashboardView();
+      const root = wrapper.find('.flex.flex-col.flex-1.min-h-0');
+      expect(root.exists()).toBe(true);
+      expect(root.classes()).toContain('-ml-4');
+      expect(root.classes()).toContain('-mr-2');
+      expect(root.classes()).toContain('-my-4');
+    });
+
+    it('applies internal padding on the scroll container for visual spacing', () => {
       mockGetAllContainers.mockReturnValue(new Promise(() => {}));
       mockGetAgents.mockReturnValue(new Promise(() => {}));
       mockGetServer.mockReturnValue(new Promise(() => {}));
@@ -212,19 +241,9 @@ describe('DashboardView', () => {
       const wrapper = mountDashboardView();
       const scrollArea = wrapper.find('.overflow-y-auto');
       expect(scrollArea.exists()).toBe(true);
-      expect(scrollArea.classes()).toContain('sm:pr-[15px]');
-    });
-
-    it('does not use legacy scrollbar compensation padding', () => {
-      mockGetAllContainers.mockReturnValue(new Promise(() => {}));
-      mockGetAgents.mockReturnValue(new Promise(() => {}));
-      mockGetServer.mockReturnValue(new Promise(() => {}));
-
-      const wrapper = mountDashboardView();
-      const scrollArea = wrapper.find('.overflow-y-auto');
-      expect(scrollArea.classes()).not.toContain('sm:pr-2');
-      expect(scrollArea.classes()).not.toContain('sm:pr-4');
-      expect(scrollArea.classes()).not.toContain('sm:pr-5');
+      expect(scrollArea.classes()).toContain('px-2');
+      expect(scrollArea.classes()).toContain('py-1');
+      expect(scrollArea.classes()).toContain('sm:pr-6');
     });
 
     it('limits edit-mode dragging to explicit drag handles', async () => {
@@ -242,6 +261,94 @@ describe('DashboardView', () => {
 
       const widget = wrapper.find('[data-widget-id="recent-updates"]');
       expect(widget.attributes('style')).toContain('touch-action: pan-y');
+    });
+
+    it('computes a positive auto-scroll delta near the dashboard bottom edge', () => {
+      const delta = computeDashboardDragScrollDelta(395, { top: 0, bottom: 400 } as DOMRect);
+
+      expect(delta).toBeGreaterThan(0);
+      expect(clampDashboardScroll(100 + delta, 0, 800)).toBeGreaterThan(100);
+    });
+
+    it('computes a negative auto-scroll delta near the dashboard top edge', () => {
+      const delta = computeDashboardDragScrollDelta(5, { top: 0, bottom: 400 } as DOMRect);
+
+      expect(delta).toBeLessThan(0);
+      expect(clampDashboardScroll(180 + delta, 0, 800)).toBeLessThan(180);
+    });
+
+    it('does not auto-scroll when the pointer stays away from the dashboard edges', () => {
+      expect(computeDashboardDragScrollDelta(200, { top: 0, bottom: 400 } as DOMRect)).toBe(0);
+    });
+
+    it('does not queue another drag auto-scroll frame after drag cleanup occurs mid-frame', async () => {
+      const frameCallbacks: FrameRequestCallback[] = [];
+      const requestAnimationFrameMock = vi.fn((callback: FrameRequestCallback) => {
+        frameCallbacks.push(callback);
+        return frameCallbacks.length;
+      });
+      const cancelAnimationFrameMock = vi.fn();
+      Object.defineProperty(globalThis, 'requestAnimationFrame', {
+        configurable: true,
+        value: requestAnimationFrameMock,
+        writable: true,
+      });
+      Object.defineProperty(globalThis, 'cancelAnimationFrame', {
+        configurable: true,
+        value: cancelAnimationFrameMock,
+        writable: true,
+      });
+
+      const wrapper = await mountDashboard([makeContainer({ newTag: '2.0.0' })]);
+      const editToggle = document.querySelector('[data-test="dashboard-edit-toggle"]');
+      expect(editToggle).not.toBeNull();
+      (editToggle as HTMLButtonElement).click();
+      await flushPromises();
+
+      const scrollArea = wrapper.find('.overflow-y-auto').element as HTMLElement;
+      let pointerEnded = false;
+      const getBoundingClientRectSpy = vi
+        .spyOn(scrollArea, 'getBoundingClientRect')
+        .mockImplementation(() => {
+          if (!pointerEnded) {
+            pointerEnded = true;
+            const pointerUpEvent = new Event('pointerup', { bubbles: true, cancelable: true });
+            Object.defineProperties(pointerUpEvent, {
+              pointerId: { value: 1 },
+              clientY: { value: 395 },
+            });
+            window.dispatchEvent(pointerUpEvent);
+          }
+          return { top: 0, bottom: 400 } as DOMRect;
+        });
+
+      try {
+        const dragHandle = wrapper.find('.drag-handle');
+        expect(dragHandle.exists()).toBe(true);
+        const frameCountBeforeDrag = frameCallbacks.length;
+
+        const pointerDownEvent = new Event('pointerdown', { bubbles: true, cancelable: true });
+        Object.defineProperties(pointerDownEvent, {
+          pointerId: { value: 1 },
+          clientY: { value: 390 },
+        });
+        dragHandle.element.dispatchEvent(pointerDownEvent);
+
+        const pointerMoveEvent = new Event('pointermove', { bubbles: true, cancelable: true });
+        Object.defineProperties(pointerMoveEvent, {
+          pointerId: { value: 1 },
+          clientY: { value: 395 },
+        });
+        window.dispatchEvent(pointerMoveEvent);
+
+        expect(frameCallbacks.length).toBe(frameCountBeforeDrag + 1);
+        frameCallbacks[frameCountBeforeDrag](0);
+        await flushPromises();
+
+        expect(frameCallbacks.length).toBe(frameCountBeforeDrag + 1);
+      } finally {
+        getBoundingClientRectSpy.mockRestore();
+      }
     });
   });
 
@@ -1455,6 +1562,128 @@ describe('DashboardView', () => {
       expect(wrapper.find('[data-widget-id="recent-updates"]').text()).toContain(
         'No updates available',
       );
+    });
+
+    it('keeps a live dashboard row in Updating while the backend reports an in-progress operation', async () => {
+      const updatingContainer = makeContainer({
+        id: 'c-pending',
+        name: 'nginx',
+        newTag: null,
+        updateKind: null,
+        status: 'stopped',
+        updateOperation: {
+          id: 'op-1',
+          status: 'in-progress',
+          phase: 'old-stopped',
+          updatedAt: '2026-04-01T12:00:00.000Z',
+          fromVersion: '1.0.0',
+          toVersion: '1.1.0',
+        },
+      });
+
+      const wrapper = await mountDashboard([updatingContainer]);
+
+      const widget = wrapper.find('[data-widget-id="recent-updates"]');
+      expect(widget.text()).toContain('Updating');
+      expect(widget.find('[data-test="dashboard-update-btn"]').exists()).toBe(false);
+    });
+
+    it('keeps a dashboard row visible as updating until the container reappears', async () => {
+      vi.useFakeTimers();
+      try {
+        const updatedContainer = makeContainer({
+          id: pendingContainer.id,
+          name: pendingContainer.name,
+          newTag: null,
+          updateKind: null,
+        });
+        mockUpdateContainer.mockResolvedValueOnce({});
+
+        const wrapper = await mountDashboard(
+          [pendingContainer],
+          [],
+          {},
+          {
+            recentStatuses: { nginx: 'pending' },
+          },
+        );
+        const { mapApiContainers } = await import('@/utils/container-mapper');
+
+        mockGetAllContainers.mockResolvedValueOnce([]);
+        mockGetContainerRecentStatus.mockResolvedValueOnce({ statuses: {} });
+        (mapApiContainers as ReturnType<typeof vi.fn>).mockReturnValueOnce([]);
+
+        const { useConfirmDialog } = await import('@/composables/useConfirmDialog');
+        const confirm = useConfirmDialog();
+
+        await wrapper.find('[data-test="dashboard-update-btn"]').trigger('click');
+        await confirm.accept();
+        await flushPromises();
+
+        expect(wrapper.find('[data-widget-id="recent-updates"]').text()).toContain('Updating');
+
+        mockGetAllContainers.mockResolvedValueOnce([updatedContainer]);
+        mockGetContainerRecentStatus.mockResolvedValueOnce({ statuses: {} });
+        (mapApiContainers as ReturnType<typeof vi.fn>).mockReturnValueOnce([updatedContainer]);
+
+        vi.advanceTimersByTime(2_000);
+        await flushPromises();
+
+        expect(wrapper.find('[data-widget-id="recent-updates"]').text()).not.toContain('Updating');
+        expect(wrapper.find('[data-widget-id="recent-updates"]').text()).toContain(
+          'No updates available',
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('backs off dashboard pending-update polling when only ghost updating rows remain', async () => {
+      vi.useFakeTimers();
+      try {
+        mockUpdateContainer.mockResolvedValueOnce({});
+
+        const wrapper = await mountDashboard(
+          [pendingContainer],
+          [],
+          {},
+          {
+            recentStatuses: { nginx: 'pending' },
+          },
+        );
+        const { mapApiContainers } = await import('@/utils/container-mapper');
+
+        mockGetAllContainers.mockResolvedValueOnce([]);
+        mockGetContainerRecentStatus.mockResolvedValueOnce({ statuses: {} });
+        (mapApiContainers as ReturnType<typeof vi.fn>).mockReturnValueOnce([]);
+
+        mockGetAllContainers.mockResolvedValueOnce([]);
+        mockGetContainerRecentStatus.mockResolvedValueOnce({ statuses: {} });
+        (mapApiContainers as ReturnType<typeof vi.fn>).mockReturnValueOnce([]);
+
+        const { useConfirmDialog } = await import('@/composables/useConfirmDialog');
+        const confirm = useConfirmDialog();
+
+        await wrapper.find('[data-test="dashboard-update-btn"]').trigger('click');
+        await confirm.accept();
+        await flushPromises();
+
+        const fetchCountAfterImmediateRefresh = mockGetAllContainers.mock.calls.length;
+
+        vi.advanceTimersByTime(2_000);
+        await flushPromises();
+        expect(mockGetAllContainers.mock.calls.length).toBe(fetchCountAfterImmediateRefresh + 1);
+
+        vi.advanceTimersByTime(2_000);
+        await flushPromises();
+        expect(mockGetAllContainers.mock.calls.length).toBe(fetchCountAfterImmediateRefresh + 1);
+
+        vi.advanceTimersByTime(2_000);
+        await flushPromises();
+        expect(mockGetAllContainers.mock.calls.length).toBe(fetchCountAfterImmediateRefresh + 2);
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('shows an inline error when update failure only contains the stale-update text as a substring', async () => {

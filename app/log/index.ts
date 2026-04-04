@@ -3,6 +3,7 @@ import pino from 'pino';
 import pinoPretty from 'pino-pretty';
 import { getLogBufferEnabled, getLogFormat, getLogLevel } from '../configuration/index.js';
 import { addEntry } from './buffer.js';
+import { TEXT_LOG_TIMESTAMP_TRANSLATE_TIME } from './display-timestamp.js';
 import { setWarnLogger } from './warn.js';
 
 export function parseLogChunk(chunk: Buffer | string) {
@@ -34,7 +35,7 @@ function createMainLogStream() {
     colorize: Boolean(process.stdout.isTTY),
     sync: true,
     singleLine: true,
-    translateTime: 'SYS:HH:MM:ss.l',
+    translateTime: TEXT_LOG_TIMESTAMP_TRANSLATE_TIME,
   });
 }
 

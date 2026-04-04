@@ -217,7 +217,7 @@ Coverage enforcement runs in the `pre-commit` hook (not pre-push). When coverage
 
 ### Mutation testing
 
-Stryker runs weekly (`.github/workflows/quality-mutation-weekly.yml`), advisory only. Use it as a quality signal, not a score target.
+Stryker runs monthly (`.github/workflows/quality-mutation-monthly.yml`), advisory only. Use it as a quality signal, not a score target.
 
 ### Paid security scans
 

@@ -1414,6 +1414,67 @@ test('getContainers should reuse cache for equivalent queries with different key
   expect(collection.find).toHaveBeenCalledTimes(1);
 });
 
+test('getContainers should exclude temporary rollback containers when requested by internal query flag', async () => {
+  const collection = createFilterableCollection([
+    {
+      data: createContainerFixture({
+        id: 'visible-container',
+        name: 'service',
+      }),
+    },
+    {
+      data: createContainerFixture({
+        id: 'rollback-container',
+        name: 'service-old-1773933154786',
+      }),
+    },
+  ]);
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => null,
+  };
+  container.createCollections(db);
+
+  const results = container.getContainers({ excludeRollbackContainers: true });
+  const total = container.getContainerCount({ excludeRollbackContainers: true });
+
+  expect(collection.find).toHaveBeenCalledWith({});
+  expect(results.map((item) => item.name)).toEqual(['service']);
+  expect(total).toBe(1);
+});
+
+test('getContainers should invalidate excludeRollbackContainers query caches after rollback-name transitions', async () => {
+  const collection = createFilterableCollection([
+    {
+      data: createContainerFixture({
+        id: 'transitioning-container',
+        name: 'service',
+      }),
+    },
+  ]);
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => null,
+  };
+  container.createCollections(db);
+
+  expect(container.getContainerCount({ excludeRollbackContainers: true })).toBe(1);
+  const readCountAfterWarm = collection.find.mock.calls.length;
+
+  expect(container.getContainerCount({ excludeRollbackContainers: true })).toBe(1);
+  expect(collection.find.mock.calls.length).toBe(readCountAfterWarm);
+
+  container.updateContainer(
+    createContainerFixture({
+      id: 'transitioning-container',
+      name: 'service-old-1773933154786',
+    }),
+  );
+
+  expect(container.getContainerCount({ excludeRollbackContainers: true })).toBe(0);
+  expect(collection.find.mock.calls.length).toBeGreaterThan(readCountAfterWarm);
+});
+
 test('getContainers cache invalidation should safely handle query paths that traverse non-objects', async () => {
   const collection = createFilterableCollection([
     {

@@ -2,14 +2,7 @@ const dashboardReporterEnabled = Boolean(process.env.STRYKER_DASHBOARD_API_KEY);
 
 /** @type {import('@stryker-mutator/api/core').PartialStrykerOptions} */
 const config = {
-  mutate: [
-    'src/**/*.ts',
-    '!src/**/*.stories.ts',
-    '!src/**/*.typecheck.ts',
-    '!src/**/*.d.ts',
-    '!dist/**',
-    '!coverage/**',
-  ],
+  mutate: ['src/**/*.ts', '!src/**/*.typecheck.ts', '!src/**/*.d.ts', '!dist/**', '!coverage/**'],
   testRunner: 'vitest',
   checkers: ['typescript'],
   tsconfigFile: 'tsconfig.json',

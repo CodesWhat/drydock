@@ -16,6 +16,24 @@ class TestBaseRegistry extends BaseRegistry {
   }
 }
 
+class TrustedAuthBaseRegistry extends TestBaseRegistry {
+  protected override getTrustedAuthHosts(): string[] {
+    return ['auth.example.com'];
+  }
+}
+
+class MixedCaseTrustedAuthBaseRegistry extends TestBaseRegistry {
+  protected override getTrustedAuthHosts(): string[] {
+    return ['AUTH.EXAMPLE.COM'];
+  }
+}
+
+class SparseTrustedAuthBaseRegistry extends TestBaseRegistry {
+  protected override getTrustedAuthHosts(): string[] {
+    return ['   ', undefined as unknown as string, 'auth.example.com'];
+  }
+}
+
 function getBearerTokenCacheSize(registry: BaseRegistry) {
   return (
     registry as unknown as {
@@ -259,6 +277,51 @@ test('authenticateBearerFromAuthUrl should trust host from configured registry u
   expect(result.headers.Authorization).toBe('Bearer abc123');
 });
 
+test('authenticateBearerFromAuthUrl should trust hosts returned by getTrustedAuthHosts', async () => {
+  const { default: axios } = await import('axios');
+  axios.mockResolvedValue({ data: { token: 'abc123' } });
+  const registry = new TrustedAuthBaseRegistry();
+
+  const result = await registry.authenticateBearerFromAuthUrl(
+    { headers: {}, url: 'https://registry.example.com/v2/library/nginx/manifests/latest' },
+    'https://auth.example.com/token',
+    undefined,
+  );
+
+  expect(axios).toHaveBeenCalledTimes(1);
+  expect(result.headers.Authorization).toBe('Bearer abc123');
+});
+
+test('authenticateBearerFromAuthUrl should normalize trusted auth hosts returned in mixed case', async () => {
+  const { default: axios } = await import('axios');
+  axios.mockResolvedValue({ data: { token: 'abc123' } });
+  const registry = new MixedCaseTrustedAuthBaseRegistry();
+
+  await expect(
+    registry.authenticateBearerFromAuthUrl(
+      { headers: {}, url: 'https://registry.example.com/v2/library/nginx/manifests/latest' },
+      'https://auth.example.com/token',
+      undefined,
+    ),
+  ).resolves.toHaveProperty('headers.Authorization', 'Bearer abc123');
+  expect(axios).toHaveBeenCalledTimes(1);
+});
+
+test('authenticateBearerFromAuthUrl should ignore blank trusted auth hosts', async () => {
+  const { default: axios } = await import('axios');
+  axios.mockResolvedValue({ data: { token: 'abc123' } });
+  const registry = new SparseTrustedAuthBaseRegistry();
+
+  await expect(
+    registry.authenticateBearerFromAuthUrl(
+      { headers: {}, url: 'https://registry.example.com/v2/library/nginx/manifests/latest' },
+      'https://auth.example.com/token',
+      undefined,
+    ),
+  ).resolves.toHaveProperty('headers.Authorization', 'Bearer abc123');
+  expect(axios).toHaveBeenCalledTimes(1);
+});
+
 test('authenticateBearerFromAuthUrl should fail closed when registry host cannot be inferred', async () => {
   const { default: axios } = await import('axios');
   axios.mockResolvedValue({ data: { token: 'abc123' } });
@@ -433,6 +496,36 @@ test('authenticateBearerFromAuthUrl should reuse cached token within configured 
   vi.useRealTimers();
 });
 
+test('authenticateBearerFromAuthUrl should cache tokens separately per credentials', async () => {
+  const { default: axios } = await import('axios');
+  vi.useFakeTimers();
+  axios
+    .mockResolvedValueOnce({ data: { token: 'abc123' } })
+    .mockResolvedValueOnce({ data: { token: 'def456' } });
+  const startedAtMs = new Date('2026-03-05T10:00:00.000Z').getTime();
+
+  try {
+    vi.setSystemTime(startedAtMs);
+    const firstResult = await baseRegistry.authenticateBearerFromAuthUrl(
+      { headers: {}, url: 'https://auth.example.com/v2/library/nginx/manifests/latest' },
+      'https://auth.example.com/token',
+      'dXNlcjpwYXNz',
+    );
+
+    const secondResult = await baseRegistry.authenticateBearerFromAuthUrl(
+      { headers: {}, url: 'https://auth.example.com/v2/library/nginx/manifests/latest' },
+      'https://auth.example.com/token',
+      'ZGlmZmVyZW50LWNyZWRlbnRpYWxz',
+    );
+
+    expect(axios).toHaveBeenCalledTimes(2);
+    expect(firstResult.headers.Authorization).toBe('Bearer abc123');
+    expect(secondResult.headers.Authorization).toBe('Bearer def456');
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 test('authenticateBearerFromAuthUrl should refresh cached token after configured ttl', async () => {
   const { default: axios } = await import('axios');
   vi.useFakeTimers();
@@ -498,6 +591,77 @@ test('authenticateBearerFromAuthUrl should evict expired cache entries from othe
   }
 });
 
+test('authenticateBearer should preserve an existing httpsAgent when TLS configuration is present', async () => {
+  const readFileSyncSpy = vi.spyOn(fs, 'readFileSync');
+  const customHttpsAgent = { custom: true } as any;
+
+  try {
+    baseRegistry.configuration = { cafile: '/tmp/test-ca.pem' };
+
+    const result = await baseRegistry.authenticateBearer(
+      { headers: {}, httpsAgent: customHttpsAgent },
+      'token-value',
+    );
+
+    expect(readFileSyncSpy).not.toHaveBeenCalled();
+    expect(result.httpsAgent).toBe(customHttpsAgent);
+    expect(result.headers.Authorization).toBe('Bearer token-value');
+  } finally {
+    readFileSyncSpy.mockRestore();
+  }
+});
+
+test('authenticateBearer should return request options unchanged when TLS is not configured', async () => {
+  const requestOptions = {
+    headers: { 'X-Trace': 'trace-123' },
+  };
+
+  const result = await baseRegistry.authenticateBearer(requestOptions, 'token-value');
+
+  expect(result).toEqual({
+    headers: {
+      'X-Trace': 'trace-123',
+      Authorization: 'Bearer token-value',
+    },
+  });
+  expect(result).not.toHaveProperty('httpsAgent');
+});
+
+test('authenticateBearer should create and reuse a mutual TLS agent from client cert and key', async () => {
+  const certPath = '/tmp/client-cert.pem';
+  const keyPath = '/tmp/client-key.pem';
+  const readFileSyncSpy = vi.spyOn(fs, 'readFileSync').mockImplementation((path) => {
+    if (path === certPath) {
+      return Buffer.from('client-cert');
+    }
+    if (path === keyPath) {
+      return Buffer.from('client-key');
+    }
+    throw new Error(`unexpected path ${String(path)}`);
+  });
+
+  try {
+    baseRegistry.configuration = {
+      clientcert: certPath,
+      clientkey: keyPath,
+    };
+
+    const firstResult = await baseRegistry.authenticateBearer({ headers: {} }, 'token-value');
+    const secondResult = await baseRegistry.authenticateBearer({ headers: {} }, 'token-value');
+
+    expect(readFileSyncSpy).toHaveBeenCalledTimes(2);
+    expect(readFileSyncSpy).toHaveBeenNthCalledWith(1, certPath);
+    expect(readFileSyncSpy).toHaveBeenNthCalledWith(2, keyPath);
+    expect(firstResult.httpsAgent).toBeDefined();
+    expect(firstResult.httpsAgent).toBe(secondResult.httpsAgent);
+    expect(firstResult.httpsAgent.options.rejectUnauthorized).toBe(true);
+    expect(firstResult.httpsAgent.options.cert.toString('utf-8')).toBe('client-cert');
+    expect(firstResult.httpsAgent.options.key.toString('utf-8')).toBe('client-key');
+  } finally {
+    readFileSyncSpy.mockRestore();
+  }
+});
+
 test('getImagePublishedAt should return created date from manifest metadata', async () => {
   const getImageManifestDigestSpy = vi
     .spyOn(baseRegistry, 'getImageManifestDigest')
@@ -542,6 +706,59 @@ test('getImagePublishedAt should use provided tag override for lookup', async ()
       tag: { value: '1.26.0' },
     }),
   );
+});
+
+test('getImagePublishedAt should apply a tag override even when the image has no tag metadata', async () => {
+  const getImageManifestDigestSpy = vi
+    .spyOn(baseRegistry, 'getImageManifestDigest')
+    .mockResolvedValue({
+      created: '2026-03-06T08:00:00.000Z',
+    });
+
+  await baseRegistry.getImagePublishedAt(
+    {
+      name: 'library/nginx',
+      registry: { url: 'https://registry.example.com/v2' },
+    } as any,
+    '1.26.0',
+  );
+
+  expect(getImageManifestDigestSpy).toHaveBeenCalledWith(
+    expect.objectContaining({
+      tag: { value: '1.26.0' },
+    }),
+  );
+});
+
+test('getImageManifestDigest should not cache responses when digest is undefined', async () => {
+  const superGetImageManifestDigestSpy = vi
+    .spyOn(Registry.prototype, 'getImageManifestDigest')
+    .mockResolvedValue({
+      digest: undefined,
+      created: '2026-03-10T12:00:00.000Z',
+      version: 2,
+    });
+
+  baseRegistry.startDigestCachePollCycle();
+  const image = {
+    name: 'library/postgres',
+    tag: { value: '16' },
+    architecture: 'amd64',
+    os: 'linux',
+    registry: { url: 'docker.io' },
+  };
+
+  await baseRegistry.getImageManifestDigest(image);
+  await baseRegistry.getImageManifestDigest(image);
+
+  expect(superGetImageManifestDigestSpy).toHaveBeenCalledTimes(2);
+  expect(
+    (
+      baseRegistry as unknown as {
+        digestManifestCache: Map<string, unknown>;
+      }
+    ).digestManifestCache.size,
+  ).toBe(0);
 });
 
 test('getImagePublishedAt should return undefined when manifest metadata has no created field', async () => {
@@ -1147,6 +1364,48 @@ test('endDigestCachePollCycle should return zero hit rate when no requests were 
     misses: 0,
     hitRate: 0,
   });
+});
+
+test('endDigestCachePollCycle should return exact digest cache accounting and log it', async () => {
+  const superGetImageManifestDigestSpy = vi
+    .spyOn(Registry.prototype, 'getImageManifestDigest')
+    .mockResolvedValue({
+      digest: 'sha256:manifest-stats',
+      created: '2026-03-10T12:00:00.000Z',
+      version: 2,
+    });
+  const debug = vi.fn();
+  baseRegistry.type = 'registry';
+  baseRegistry.name = 'base';
+  baseRegistry.log = {
+    debug,
+  } as any;
+
+  baseRegistry.startDigestCachePollCycle();
+  await baseRegistry.getImageManifestDigest({
+    name: 'library/postgres',
+    tag: { value: '16' },
+    architecture: 'amd64',
+    os: 'linux',
+    registry: { url: 'docker.io' },
+  });
+  await baseRegistry.getImageManifestDigest({
+    name: 'library/postgres',
+    tag: { value: '16' },
+    architecture: 'amd64',
+    os: 'linux',
+    registry: { url: 'docker.io' },
+  });
+
+  expect(baseRegistry.endDigestCachePollCycle()).toEqual({
+    hits: 1,
+    misses: 1,
+    hitRate: 50,
+  });
+  expect(debug).toHaveBeenCalledWith(
+    'registry.base digest cache hit rate 50.00% (1 hits, 1 misses)',
+  );
+  expect(superGetImageManifestDigestSpy).toHaveBeenCalledTimes(1);
 });
 
 test('endDigestCachePollCycle should log debug hit rate summary', async () => {

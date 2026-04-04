@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { type RouteLocationRaw, useRouter } from 'vue-router';
 import { GridItem, GridLayout } from 'grid-layout-plus';
 import AppIconButton from '@/components/AppIconButton.vue';
@@ -19,6 +19,7 @@ import {
   type DashboardWidgetId,
   type RecentUpdateRow,
 } from './dashboard/dashboardTypes';
+import { useDashboardDragAutoScroll } from './dashboard/useDashboardDragAutoScroll';
 import { GRID_BREAKPOINTS, GRID_COLS, WIDGET_CONSTRAINTS } from './dashboard/dashboardWidgetLayout';
 import { useDashboardComputed } from './dashboard/useDashboardComputed';
 import { useDashboardData } from './dashboard/useDashboardData';
@@ -27,6 +28,7 @@ import { useDashboardWidgetOrder } from './dashboard/useDashboardWidgetOrder';
 const router = useRouter();
 const confirm = useConfirmDialog();
 const { isMobile, windowNarrow } = useBreakpoints();
+const dashboardScrollEl = ref<HTMLElement | null>(null);
 // Responsive grid margins: slightly wider vertical gaps on touch screens for scroll room
 const gridMargin = computed<[number, number]>(() => {
   if (isMobile.value) return [10, 20]; // < 768px: tighter horizontal, taller vertical for touch
@@ -36,6 +38,15 @@ const gridMargin = computed<[number, number]>(() => {
 const dashboardUpdateInProgress = ref<string | null>(null);
 const dashboardUpdateAllInProgress = ref(false);
 const dashboardUpdateError = ref<string | null>(null);
+const dashboardPendingUpdateRows = ref<Map<string, { row: RecentUpdateRow; startedAt: number }>>(
+  new Map(),
+);
+const dashboardPendingUpdatePollTimer = ref<ReturnType<typeof setTimeout> | null>(null);
+const dashboardPendingUpdatePollInFlight = ref(false);
+const dashboardPendingUpdatePollDelayMs = ref(2_000);
+const DASHBOARD_PENDING_UPDATE_POLL_INTERVAL_MS = 2_000;
+const DASHBOARD_PENDING_UPDATE_POLL_MAX_INTERVAL_MS = 16_000;
+const DASHBOARD_PENDING_UPDATE_TIMEOUT_MS = 30_000;
 
 function isStaleDashboardUpdateError(error: unknown): boolean {
   return isNoUpdateAvailableError(error);
@@ -70,12 +81,19 @@ const {
   toggleWidgetVisibility,
   widgetOrderIndex,
 } = useDashboardWidgetOrder();
+const { handleDashboardGridPointerDown, stopDashboardDragAutoScroll } = useDashboardDragAutoScroll({
+  editMode,
+  dashboardScrollEl,
+});
 
 // Widget panel visibility (separate from edit mode so it's opt-in on mobile)
 const showWidgetPanel = ref(false);
 
 function handleToggleEditMode() {
   toggleEditMode();
+  if (!editMode.value) {
+    stopDashboardDragAutoScroll();
+  }
   // On desktop, auto-open panel when entering edit mode; on mobile, leave it closed
   showWidgetPanel.value = editMode.value && !isMobile.value;
 }
@@ -91,6 +109,7 @@ function closeWidgetPanel() {
 // Exit edit mode on Escape key
 function onKeydown(event: KeyboardEvent) {
   if (event.key === 'Escape' && editMode.value) {
+    stopDashboardDragAutoScroll();
     editMode.value = false;
     showWidgetPanel.value = false;
   }
@@ -154,11 +173,112 @@ const pendingUpdates = computed(() =>
   recentUpdates.value.filter((r) => r.status === 'pending' && !r.blocked),
 );
 
+const displayRecentUpdates = computed<RecentUpdateRow[]>(() => {
+  const liveRowNames = new Set(recentUpdates.value.map((row) => row.name));
+  const ghosts = [...dashboardPendingUpdateRows.value.values()]
+    .filter(({ row }) => !liveRowNames.has(row.name))
+    .map(({ row }) => row);
+  return [...recentUpdates.value, ...ghosts];
+});
+
+function stopDashboardPendingUpdatePolling() {
+  if (!dashboardPendingUpdatePollTimer.value) {
+    dashboardPendingUpdatePollDelayMs.value = DASHBOARD_PENDING_UPDATE_POLL_INTERVAL_MS;
+    return;
+  }
+  clearTimeout(dashboardPendingUpdatePollTimer.value);
+  dashboardPendingUpdatePollTimer.value = null;
+  dashboardPendingUpdatePollDelayMs.value = DASHBOARD_PENDING_UPDATE_POLL_INTERVAL_MS;
+}
+
+function clearDashboardPendingUpdateRow(name: string) {
+  dashboardPendingUpdateRows.value.delete(name);
+}
+
+function pruneDashboardPendingUpdateRows(now: number = Date.now()) {
+  const liveContainerNames = new Set(containers.value.map((container) => container.name));
+  for (const [name, pendingRow] of dashboardPendingUpdateRows.value.entries()) {
+    if (
+      liveContainerNames.has(name) ||
+      now - pendingRow.startedAt > DASHBOARD_PENDING_UPDATE_TIMEOUT_MS
+    ) {
+      clearDashboardPendingUpdateRow(name);
+    }
+  }
+  if (dashboardPendingUpdateRows.value.size === 0) {
+    stopDashboardPendingUpdatePolling();
+  }
+}
+
+async function pollDashboardPendingUpdateRows() {
+  if (dashboardPendingUpdatePollInFlight.value) {
+    return;
+  }
+  dashboardPendingUpdatePollInFlight.value = true;
+  try {
+    await fetchDashboardData({ background: true });
+  } finally {
+    pruneDashboardPendingUpdateRows();
+    dashboardPendingUpdatePollInFlight.value = false;
+    if (dashboardPendingUpdateRows.value.size > 0) {
+      dashboardPendingUpdatePollDelayMs.value =
+        pendingUpdates.value.length > 0
+          ? DASHBOARD_PENDING_UPDATE_POLL_INTERVAL_MS
+          : Math.min(
+              dashboardPendingUpdatePollDelayMs.value * 2,
+              DASHBOARD_PENDING_UPDATE_POLL_MAX_INTERVAL_MS,
+            );
+      startDashboardPendingUpdatePolling();
+    }
+  }
+}
+
+function startDashboardPendingUpdatePolling() {
+  if (dashboardPendingUpdatePollTimer.value) {
+    return;
+  }
+  dashboardPendingUpdatePollTimer.value = setTimeout(() => {
+    dashboardPendingUpdatePollTimer.value = null;
+    void pollDashboardPendingUpdateRows();
+  }, dashboardPendingUpdatePollDelayMs.value);
+}
+
+function capturePendingDashboardRows(rows: RecentUpdateRow[]) {
+  const liveContainerNames = new Set(containers.value.map((container) => container.name));
+  for (const row of rows) {
+    if (liveContainerNames.has(row.name)) {
+      continue;
+    }
+    const existing = dashboardPendingUpdateRows.value.get(row.name);
+    dashboardPendingUpdateRows.value.set(row.name, {
+      row: {
+        ...row,
+        status: 'updating',
+      },
+      startedAt: existing?.startedAt ?? Date.now(),
+    });
+  }
+  if (dashboardPendingUpdateRows.value.size > 0) {
+    stopDashboardPendingUpdatePolling();
+    dashboardPendingUpdatePollDelayMs.value = DASHBOARD_PENDING_UPDATE_POLL_INTERVAL_MS;
+    startDashboardPendingUpdatePolling();
+  }
+  pruneDashboardPendingUpdateRows();
+}
+
 // Stat card data lookup by widget id
 const statById = computed(() => {
   const map = new Map<string, (typeof stats.value)[number]>();
   for (const s of stats.value) map.set(s.id, s);
   return map;
+});
+
+watch(containers, () => {
+  pruneDashboardPendingUpdateRows();
+});
+
+onUnmounted(() => {
+  stopDashboardPendingUpdatePolling();
 });
 
 // Widget metadata for customize panel
@@ -195,7 +315,7 @@ function isStatWidget(id: string): boolean {
   return id.startsWith('stat-');
 }
 
-function confirmDashboardUpdate(row: Pick<RecentUpdateRow, 'id' | 'name'>) {
+function confirmDashboardUpdate(row: RecentUpdateRow) {
   confirm.require({
     header: 'Update Container',
     message: `Update ${row.name} now? This will apply the latest discovered image.`,
@@ -208,6 +328,7 @@ function confirmDashboardUpdate(row: Pick<RecentUpdateRow, 'id' | 'name'>) {
       try {
         await updateContainer(row.id);
         await fetchDashboardData();
+        capturePendingDashboardRows([row]);
       } catch (e: unknown) {
         if (isStaleDashboardUpdateError(e)) {
           await fetchDashboardData();
@@ -229,13 +350,17 @@ function confirmDashboardUpdateAll() {
     acceptLabel: 'Update All',
     rejectLabel: 'Cancel',
     accept: async () => {
+      const pendingRowsSnapshot = pendingUpdates.value.filter((row) => !row.blocked);
       dashboardUpdateAllInProgress.value = true;
       dashboardUpdateError.value = null;
       try {
         const updateResults = await Promise.allSettled(
-          pendingUpdates.value.map((row) => updateContainer(row.id)),
+          pendingRowsSnapshot.map((row) => updateContainer(row.id)),
         );
         await fetchDashboardData();
+        capturePendingDashboardRows(
+          pendingRowsSnapshot.filter((_, index) => updateResults[index]?.status === 'fulfilled'),
+        );
         const firstRejectedUpdate = updateResults.find((result) => result.status === 'rejected');
         if (firstRejectedUpdate?.status === 'rejected') {
           dashboardUpdateError.value = errorMessage(
@@ -252,10 +377,10 @@ function confirmDashboardUpdateAll() {
 </script>
 
 <template>
-  <div class="flex flex-col flex-1 min-h-0">
+  <div class="flex flex-col flex-1 min-h-0 -ml-4 -mr-2 -my-4 sm:-ml-6 sm:-mr-[9px] sm:-my-6">
     <div class="flex gap-2 min-w-0 flex-1 min-h-0">
     <!-- Main dashboard content -->
-    <div class="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden px-1 sm:pr-[15px] dd-touch-scroll">
+    <div ref="dashboardScrollEl" class="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden px-2 py-1 sm:pl-7 sm:pr-6 sm:py-6 dd-touch-scroll">
       <div v-if="loading" class="flex items-center justify-center py-16">
         <div class="text-sm dd-text-muted">Loading dashboard...</div>
       </div>
@@ -298,6 +423,7 @@ function confirmDashboardUpdateAll() {
         <!-- Grid Layout -->
         <GridLayout
           v-model:layout="layout"
+          @pointerdown.capture="handleDashboardGridPointerDown"
           :col-num="12"
           :row-height="30"
           :margin="gridMargin"
@@ -372,7 +498,7 @@ function confirmDashboardUpdateAll() {
             <DashboardRecentUpdatesWidget
               v-else-if="item.i === 'recent-updates'"
               class="h-full"
-              :recent-updates="recentUpdates"
+              :recent-updates="displayRecentUpdates"
               :pending-updates-count="pendingUpdates.length"
               :dashboard-update-error="dashboardUpdateError"
               :dashboard-update-in-progress="dashboardUpdateInProgress"

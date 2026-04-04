@@ -50,6 +50,26 @@ curl "http://drydock:3000/api/v1/log/entries?level=error&tail=50"
 ]
 ```
 
+## Get log component names
+
+Returns sorted unique component names from the in-memory log ring buffer.
+Useful for populating a component filter dropdown in the UI.
+
+If `DD_LOG_BUFFER_ENABLED=false`, this endpoint returns an empty array.
+
+```bash
+curl http://drydock:3000/api/v1/log/components
+
+[
+  "api",
+  "registry.ghcr.private",
+  "registry.hub.public",
+  "trigger.mqtt.qa",
+  "trigger.slack.myslack",
+  "watcher.docker.local"
+]
+```
+
 ## Stream application logs (WebSocket)
 
 Streams system log entries over WebSocket. The server first sends a filtered backfill from the in-memory buffer, then pushes new entries in real time.

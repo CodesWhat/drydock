@@ -1,5 +1,6 @@
 import {
   addEntry,
+  getComponents,
   getEntries,
   getMinLevel,
   matchesComponent,
@@ -31,6 +32,10 @@ describe('Ring Buffer', () => {
     test('should return empty array when buffer is empty', () => {
       const entries = getEntries();
       expect(entries).toEqual([]);
+    });
+
+    test('should return no components when buffer is empty', () => {
+      expect(getComponents()).toEqual([]);
     });
   });
 
@@ -265,6 +270,33 @@ describe('Ring Buffer', () => {
       const entry = makeEntry({ component: 'api-server' });
       expect(matchesComponent(entry, 'api')).toBe(true);
       expect(matchesComponent(entry, 'watcher')).toBe(false);
+    });
+  });
+
+  describe('getComponents', () => {
+    test('returns sorted unique component names from the buffer', () => {
+      addEntry(makeEntry({ component: 'watcher.docker.local' }));
+      addEntry(makeEntry({ component: 'registry.ghcr' }));
+      addEntry(makeEntry({ component: 'trigger.mqtt.qa' }));
+      addEntry(makeEntry({ component: 'registry.ghcr' }));
+      addEntry(makeEntry({ component: 'drydock' }));
+
+      const components = getComponents();
+
+      expect(components).toEqual([
+        'drydock',
+        'registry.ghcr',
+        'trigger.mqtt.qa',
+        'watcher.docker.local',
+      ]);
+    });
+
+    test('skips entries whose component is empty', () => {
+      addEntry(makeEntry({ component: '' }));
+      addEntry(makeEntry({ component: 'api.server' }));
+
+      expect(getComponents()).toContain('api.server');
+      expect(getComponents()).not.toContain('');
     });
   });
 });

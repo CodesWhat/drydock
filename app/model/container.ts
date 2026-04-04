@@ -7,6 +7,10 @@ import type {
   ContainerSignatureVerification,
 } from '../security/scan.js';
 import * as tag from '../tag/index.js';
+import type {
+  ContainerUpdateOperationPhase,
+  ContainerUpdateOperationStatus,
+} from './container-update-operation.js';
 import {
   MATURITY_MIN_AGE_DAYS_MAX,
   MATURITY_MIN_AGE_DAYS_MIN,
@@ -18,6 +22,27 @@ const { parse: parseSemver, diff: diffSemver, transform: transformTag } = tag;
 const DEFAULT_UI_MATURITY_THRESHOLD_DAYS = 7;
 const ESTABLISHED_UPDATE_AGE_DAYS = 30;
 const UI_MATURITY_THRESHOLD_DAYS_ENV = 'DD_UI_MATURITY_THRESHOLD_DAYS';
+const OLD_ROLLBACK_CONTAINER_NAME_PATTERN = /-old-\d{10,}$/;
+const UPDATE_KIND_UNKNOWN_VALUE: string = 'unknown';
+const UPDATE_KIND_TAG_VALUE: string = 'tag';
+const UPDATE_KIND_DIGEST_VALUE: string = 'digest';
+
+function createUnknownUpdateKind(): ContainerUpdateKind {
+  return {
+    kind: UPDATE_KIND_UNKNOWN_VALUE as ContainerUpdateKind['kind'],
+    localValue: undefined,
+    remoteValue: undefined,
+    semverDiff: UPDATE_KIND_UNKNOWN_VALUE as ContainerUpdateKind['semverDiff'],
+  };
+}
+
+function isTagUpdateKind(updateKind: ContainerUpdateKind): boolean {
+  return updateKind.kind === UPDATE_KIND_TAG_VALUE;
+}
+
+function isDigestUpdateKind(updateKind: ContainerUpdateKind): boolean {
+  return updateKind.kind === UPDATE_KIND_DIGEST_VALUE;
+}
 
 export interface ContainerImage {
   id: string;
@@ -98,6 +123,16 @@ export interface ContainerRuntimeDetails {
   env: ContainerRuntimeEnv[];
 }
 
+export interface ContainerUpdateOperationState {
+  id: string;
+  status: ContainerUpdateOperationStatus;
+  phase: ContainerUpdateOperationPhase;
+  updatedAt: string;
+  fromVersion?: string;
+  toVersion?: string;
+  targetImage?: string;
+}
+
 export interface Container {
   id: string;
   name: string;
@@ -127,6 +162,7 @@ export interface Container {
   firstSeenAt?: string;
   updateAge?: number;
   updateMaturityLevel?: 'hot' | 'mature' | 'established';
+  updateOperation?: ContainerUpdateOperationState;
   labels?: Record<string, string>;
   sourceRepo?: string;
   details?: ContainerRuntimeDetails;
@@ -282,10 +318,10 @@ const schema = joi.object({
   updateAvailable: joi.boolean().default(false),
   updateKind: joi
     .object({
-      kind: joi.string().allow('tag', 'digest', 'unknown').required(),
+      kind: joi.string().valid('tag', 'digest', 'unknown').required(),
       localValue: joi.string(),
       remoteValue: joi.string(),
-      semverDiff: joi.string().allow('major', 'minor', 'patch', 'prerelease', 'unknown'),
+      semverDiff: joi.string().valid('major', 'minor', 'patch', 'prerelease', 'unknown'),
     })
     .default({ kind: 'unknown' }),
   updateDetectedAt: joi.string().isoDate(),
@@ -311,12 +347,7 @@ const schema = joi.object({
 });
 
 function getRawTagUpdate(container: Container): ContainerUpdateKind {
-  const updateKind: ContainerUpdateKind = {
-    kind: 'unknown',
-    localValue: undefined,
-    remoteValue: undefined,
-    semverDiff: 'unknown',
-  };
+  const updateKind = createUnknownUpdateKind();
   if (!container.image || !container.result) {
     return updateKind;
   }
@@ -376,7 +407,7 @@ function getRawTagUpdate(container: Container): ContainerUpdateKind {
   }
 
   return {
-    kind: 'tag',
+    kind: UPDATE_KIND_TAG_VALUE as ContainerUpdateKind['kind'],
     localValue: container.image.tag.value,
     remoteValue: container.result.tag,
     semverDiff: semverDiffResult,
@@ -384,12 +415,7 @@ function getRawTagUpdate(container: Container): ContainerUpdateKind {
 }
 
 function getRawDigestUpdate(container: Container): ContainerUpdateKind {
-  const updateKind: ContainerUpdateKind = {
-    kind: 'unknown',
-    localValue: undefined,
-    remoteValue: undefined,
-    semverDiff: 'unknown',
-  };
+  const updateKind = createUnknownUpdateKind();
   if (!container.image || !container.result) {
     return updateKind;
   }
@@ -400,22 +426,17 @@ function getRawDigestUpdate(container: Container): ContainerUpdateKind {
     container.image.digest.value !== container.result.digest
   ) {
     return {
-      kind: 'digest',
+      kind: UPDATE_KIND_DIGEST_VALUE as ContainerUpdateKind['kind'],
       localValue: container.image.digest.value,
       remoteValue: container.result.digest,
-      semverDiff: 'unknown',
+      semverDiff: UPDATE_KIND_UNKNOWN_VALUE as ContainerUpdateKind['semverDiff'],
     };
   }
   return updateKind;
 }
 
 function getRawUpdateKind(container: Container): ContainerUpdateKind {
-  const unknownUpdateKind: ContainerUpdateKind = {
-    kind: 'unknown',
-    localValue: undefined,
-    remoteValue: undefined,
-    semverDiff: 'unknown',
-  };
+  const unknownUpdateKind = createUnknownUpdateKind();
   if (!container.image || !container.result) {
     return unknownUpdateKind;
   }
@@ -423,7 +444,7 @@ function getRawUpdateKind(container: Container): ContainerUpdateKind {
   // Prefer explicit tag updates when both tag and digest changes are present.
   // Digest updates still apply when there is no tag update.
   const tagUpdate = getRawTagUpdate(container);
-  if (tagUpdate.kind === 'tag') {
+  if (isTagUpdateKind(tagUpdate)) {
     return tagUpdate;
   }
 
@@ -433,7 +454,7 @@ function getRawUpdateKind(container: Container): ContainerUpdateKind {
     container.result.digest !== undefined
   ) {
     const digestUpdate = getRawDigestUpdate(container);
-    if (digestUpdate.kind === 'digest') {
+    if (isDigestUpdateKind(digestUpdate)) {
       return digestUpdate;
     }
   }
@@ -493,12 +514,16 @@ function isUpdateSuppressed(container: Container, updateKind: ContainerUpdateKin
     }
   }
 
-  if (updateKind.kind === 'tag' && updateKind.remoteValue && Array.isArray(updatePolicy.skipTags)) {
+  if (
+    isTagUpdateKind(updateKind) &&
+    updateKind.remoteValue &&
+    Array.isArray(updatePolicy.skipTags)
+  ) {
     return updatePolicy.skipTags.includes(updateKind.remoteValue);
   }
 
   if (
-    updateKind.kind === 'digest' &&
+    isDigestUpdateKind(updateKind) &&
     updateKind.remoteValue &&
     Array.isArray(updatePolicy.skipDigests)
   ) {
@@ -788,6 +813,14 @@ export function fullName(container: Container) {
   return `${container.watcher}_${container.name}`;
 }
 
+export function isRollbackContainerName(name: unknown) {
+  return typeof name === 'string' && OLD_ROLLBACK_CONTAINER_NAME_PATTERN.test(name);
+}
+
+export function isRollbackContainer(container: { name?: unknown }) {
+  return isRollbackContainerName(container?.name);
+}
+
 // The following exports are meant for testing only
 export {
   addLinkProperty as testable_addLinkProperty,
@@ -795,4 +828,9 @@ export {
   getLink as testable_getLink,
   getRawDigestUpdate as testable_getRawDigestUpdate,
   getRawTagUpdate as testable_getRawTagUpdate,
+  getRawUpdateAge as testable_getRawUpdateAge,
+  getRawUpdateKind as testable_getRawUpdateKind,
+  hasRawUpdate as testable_hasRawUpdate,
+  isUpdateSuppressed as testable_isUpdateSuppressed,
+  resultChangedFunction as testable_resultChangedFunction,
 };

@@ -323,7 +323,9 @@ describe('Agent API index', () => {
 
       test('should return entries with empty query', async () => {
         const { getEntries } = await import('../../log/buffer.js');
-        getEntries.mockReturnValue([{ msg: 'test' }]);
+        getEntries.mockReturnValue([
+          { timestamp: 1000, level: 'info', component: 'drydock', msg: 'test' },
+        ]);
         const req = { query: {} };
         const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
         logEntriesHandler(req, res);
@@ -334,7 +336,15 @@ describe('Agent API index', () => {
           since: undefined,
         });
         expect(res.status).toHaveBeenCalledWith(200);
-        expect(res.json).toHaveBeenCalledWith([{ msg: 'test' }]);
+        expect(res.json).toHaveBeenCalledWith([
+          expect.objectContaining({
+            timestamp: 1000,
+            level: 'info',
+            component: 'drydock',
+            msg: 'test',
+            displayTimestamp: expect.stringMatching(/^\[\d{2}:\d{2}:\d{2}\.\d{3}\]$/u),
+          }),
+        ]);
       });
 
       test('should parse all query params', async () => {

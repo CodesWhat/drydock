@@ -140,6 +140,7 @@ const SELF_UPDATE_ORCHESTRATOR_METHODS = [
   'insertContainerImageBackup',
 ] as const;
 const CONTAINER_UPDATE_ORCHESTRATOR_METHODS = [
+  'getRollbackConfig',
   'stopContainer',
   'waitContainerRemoved',
   'removeContainer',
@@ -973,9 +974,13 @@ class Docker extends Trigger {
     return !!(containerSpec?.Config?.Healthcheck || containerSpec?.State?.Health);
   }
 
-  async waitForContainerHealthy(containerToCheck, containerName, logContainer) {
+  async waitForContainerHealthy(containerToCheck, containerName, logContainer, timeoutMs?) {
+    const healthGateTimeoutMs =
+      Number.isFinite(timeoutMs) && timeoutMs > 0
+        ? Math.max(NON_SELF_UPDATE_HEALTH_TIMEOUT_MS, timeoutMs)
+        : NON_SELF_UPDATE_HEALTH_TIMEOUT_MS;
     const startedAt = Date.now();
-    while (Date.now() - startedAt < NON_SELF_UPDATE_HEALTH_TIMEOUT_MS) {
+    while (Date.now() - startedAt < healthGateTimeoutMs) {
       const inspection = await containerToCheck.inspect();
       const healthState = inspection?.State?.Health;
       const healthStatus = healthState?.Status;
@@ -1003,7 +1008,7 @@ class Docker extends Trigger {
     }
 
     throw new Error(
-      `Health gate timed out after ${NON_SELF_UPDATE_HEALTH_TIMEOUT_MS}ms for container ${containerName}`,
+      `Health gate timed out after ${healthGateTimeoutMs}ms for container ${containerName}`,
     );
   }
 

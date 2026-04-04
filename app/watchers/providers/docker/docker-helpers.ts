@@ -418,6 +418,8 @@ export function isContainerToWatch(watchLabelValue: string, watchByDefault: bool
  * @param {object} parsedImage - object containing at least `domain` property
  * @param {boolean} isSemver - true if the current image tag is a semver tag
  * @param {TagPrecision} tagPrecision - whether the tag is specific or floating
+ * @param {string} currentTag - the resolved current tag value, if any
+ * @param {string} summaryImageReference - the raw image reference from container summary, if any
  * @returns {boolean}
  */
 export function isDigestToWatch(
@@ -426,6 +428,7 @@ export function isDigestToWatch(
   isSemver: boolean,
   tagPrecision: TagPrecision,
   currentTag?: string,
+  summaryImageReference?: string,
 ) {
   const domain = parsedImage.domain;
   const isDockerHub =
@@ -449,6 +452,20 @@ export function isDigestToWatch(
   // Digest-pinned images have no meaningful tag-comparison path, so enable
   // digest watching even on Docker Hub when the current ref is already sha256-based.
   if (typeof currentTag === 'string' && currentTag.startsWith('sha256:')) {
+    return true;
+  }
+
+  // Some runtimes expose digest-backed summary image refs while container inspect
+  // still recovers the configured floating tag (for example `:latest`).
+  // Keep digest watch enabled for that special case so update detection does not
+  // regress back to "suggested tag only" on Docker Hub.
+  if (
+    typeof summaryImageReference === 'string' &&
+    summaryImageReference.includes('sha256:') &&
+    typeof currentTag === 'string' &&
+    currentTag !== '' &&
+    currentTag !== 'unknown'
+  ) {
     return true;
   }
 

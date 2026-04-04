@@ -1,3 +1,4 @@
+import type { ApiContainerUpdateOperation } from '../types/api';
 import { extractCollectionData } from '../utils/api';
 import type { ApiContainerInput } from '../utils/container-mapper';
 import { ApiError, errorMessage } from '../utils/error';
@@ -236,7 +237,9 @@ async function getContainerLogs(containerId: string, tail: number = 100) {
   return response.json();
 }
 
-async function getContainerUpdateOperations(containerId: string) {
+async function getContainerUpdateOperations(
+  containerId: string,
+): Promise<ApiContainerUpdateOperation[]> {
   const response = await fetch(`/api/v1/containers/${containerId}/update-operations`, {
     credentials: 'include',
   });
@@ -246,7 +249,7 @@ async function getContainerUpdateOperations(containerId: string) {
     );
   }
   const payload = await response.json();
-  return extractCollectionData<Record<string, unknown>>(payload);
+  return extractCollectionData<ApiContainerUpdateOperation>(payload);
 }
 
 async function getContainerVulnerabilities(containerId: string) {

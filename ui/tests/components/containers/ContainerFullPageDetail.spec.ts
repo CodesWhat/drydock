@@ -24,6 +24,7 @@ const confirmRestart = vi.fn();
 const scanContainer = vi.fn();
 const confirmUpdate = vi.fn();
 const confirmDelete = vi.fn();
+const isContainerUpdateInProgress = vi.fn(() => false);
 
 vi.mock('@/components/containers/containersViewTemplateContext', () => ({
   useContainersViewTemplateContext: () => ({
@@ -35,6 +36,7 @@ vi.mock('@/components/containers/containersViewTemplateContext', () => ({
     scanContainer,
     confirmUpdate,
     confirmDelete,
+    isContainerUpdateInProgress,
     actionInProgress,
     registryColorBg: () => '#eee',
     registryColorText: () => '#333',
@@ -60,6 +62,8 @@ describe('ContainerFullPageDetail', () => {
   afterEach(() => {
     activeDetailTab.value = 'overview';
     actionInProgress.value = new Set();
+    isContainerUpdateInProgress.mockReset();
+    isContainerUpdateInProgress.mockReturnValue(false);
     selectedContainer.value = {
       id: 'container-1',
       name: 'nginx',
@@ -93,6 +97,12 @@ describe('ContainerFullPageDetail', () => {
   it('renders container name', () => {
     const wrapper = factory();
     expect(wrapper.text()).toContain('nginx');
+  });
+
+  it('shows Updating when the selected container is still mid-update', () => {
+    isContainerUpdateInProgress.mockReturnValue(true);
+    const wrapper = factory();
+    expect(wrapper.text()).toContain('Updating');
   });
 
   it('renders Back button that calls closeFullPage', async () => {

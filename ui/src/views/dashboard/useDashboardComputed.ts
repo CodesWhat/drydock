@@ -68,6 +68,7 @@ function getRecentUpdateStatusColor(status: RecentUpdateRow['status']): string {
     case 'updated':
       return 'var(--dd-success)';
     case 'pending':
+    case 'updating':
       return 'var(--dd-warning)';
     case 'snoozed':
       return 'var(--dd-primary)';
@@ -86,6 +87,7 @@ function getRecentUpdateStatusMutedColor(status: RecentUpdateRow['status']): str
     case 'updated':
       return 'var(--dd-success-muted)';
     case 'pending':
+    case 'updating':
       return 'var(--dd-warning-muted)';
     case 'snoozed':
       return 'var(--dd-primary-muted)';
@@ -104,6 +106,7 @@ function getRecentUpdateStatusIcon(status: RecentUpdateRow['status']): string {
     case 'updated':
       return 'check';
     case 'pending':
+    case 'updating':
       return 'pending';
     case 'snoozed':
       return 'pending';
@@ -166,6 +169,9 @@ function deriveRecentUpdateStatus(
   container: Container,
   recentStatusByContainer: Record<string, RecentAuditStatus>,
 ): RecentUpdateRow['status'] {
+  if (container.updateOperation?.status === 'in-progress') {
+    return 'updating';
+  }
   if (container.updatePolicyState === 'snoozed') {
     return 'snoozed';
   }
@@ -178,9 +184,16 @@ function deriveRecentUpdateStatus(
   return recentStatusByContainer[container.name] ?? 'pending';
 }
 
+function deriveCurrentVersion(container: Container): string {
+  return container.updateOperation?.fromVersion ?? container.currentTag;
+}
+
 function deriveRecentUpdateVersion(container: Container): string {
   if (container.newTag) {
     return container.newTag;
+  }
+  if (container.updateOperation?.toVersion) {
+    return container.updateOperation.toVersion;
   }
   return container.suppressedUpdateTag ?? '';
 }
@@ -532,7 +545,11 @@ function useStatsComputed(
 }
 
 function isPendingRecentUpdateContainer(container: Container): boolean {
-  return !!container.newTag || !!container.updatePolicyState;
+  return (
+    container.updateOperation?.status === 'in-progress' ||
+    !!container.newTag ||
+    !!container.updatePolicyState
+  );
 }
 
 function toPendingRecentUpdateCandidate(
@@ -547,7 +564,7 @@ function toPendingRecentUpdateCandidate(
       name: container.name,
       image: container.image,
       icon: container.icon,
-      oldVer: container.currentTag,
+      oldVer: deriveCurrentVersion(container),
       newVer: deriveRecentUpdateVersion(container),
       releaseLink: container.releaseLink,
       status: deriveRecentUpdateStatus(container, recentStatusByContainer),

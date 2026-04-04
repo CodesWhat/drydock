@@ -83,6 +83,7 @@ function createExecutor(overrides = {}) {
   return new ContainerUpdateExecutor({
     getConfiguration: () => ({ dryrun: false }),
     getTriggerId: vi.fn(() => 'docker.update'),
+    getRollbackConfig: vi.fn(() => ({ autoRollback: false })),
     stopContainer: vi.fn().mockResolvedValue(undefined),
     waitContainerRemoved: vi.fn().mockResolvedValue(undefined),
     removeContainer: vi.fn().mockResolvedValue(undefined),
@@ -110,6 +111,7 @@ describe('ContainerUpdateExecutor', () => {
   test('constructor provides default configuration fallback', () => {
     const executor = new ContainerUpdateExecutor({
       getTriggerId: vi.fn(() => 'docker.update'),
+      getRollbackConfig: vi.fn(() => ({ autoRollback: false })),
       stopContainer: vi.fn(),
       waitContainerRemoved: vi.fn(),
       removeContainer: vi.fn(),
@@ -451,6 +453,24 @@ describe('ContainerUpdateExecutor', () => {
     expect(pullImage).toHaveBeenCalled();
   });
 
+  test('execute records pull failures before rethrowing the error', async () => {
+    const pullImage = vi.fn().mockRejectedValue(new Error('pull failed'));
+    const executor = createExecutor({ pullImage });
+
+    await expect(executor.execute(createContext(), createContainer(), createLog())).rejects.toThrow(
+      'pull failed',
+    );
+
+    expect(mockUpdateOperation).toHaveBeenCalledWith(
+      'op-1',
+      expect.objectContaining({
+        status: 'failed',
+        phase: 'pull-failed',
+        lastError: 'pull failed',
+      }),
+    );
+  });
+
   test('execute performs successful update without runtime start when old container is stopped', async () => {
     const context = createContext({
       currentContainerSpec: createCurrentContainerSpec({
@@ -484,6 +504,37 @@ describe('ContainerUpdateExecutor', () => {
     );
   });
 
+  test('execute health-gates when healthcheck exists even if auto-rollback is disabled', async () => {
+    const context = createContext({
+      currentContainerSpec: createCurrentContainerSpec({
+        State: { Running: true },
+        HostConfig: { AutoRemove: false },
+      }),
+    });
+    const executor = createExecutor({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      getRollbackConfig: vi.fn(() => ({ autoRollback: false })),
+      hasHealthcheckConfigured: vi.fn(() => true),
+    });
+    const log = createLog();
+
+    await expect(executor.execute(context, createContainer(), log)).resolves.toBe(true);
+
+    expect(executor.startContainer).toHaveBeenCalledWith(context.newContainer, 'web', log);
+    expect(executor.waitForContainerHealthy).toHaveBeenCalledWith(
+      context.newContainer,
+      'web',
+      log,
+      120_000,
+    );
+    expect(mockUpdateOperation).toHaveBeenCalledWith(
+      'op-1',
+      expect.objectContaining({
+        phase: 'health-gate-passed',
+      }),
+    );
+  });
+
   test('execute runs stop/start/health and auto-remove cleanup when old container was running', async () => {
     const context = createContext({
       currentContainerSpec: createCurrentContainerSpec({
@@ -494,6 +545,7 @@ describe('ContainerUpdateExecutor', () => {
     context.newContainer.inspect.mockRejectedValue(new Error('inspect unavailable'));
     const executor = createExecutor({
       createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      getRollbackConfig: vi.fn(() => ({ autoRollback: true })),
       hasHealthcheckConfigured: vi.fn(() => true),
       isContainerNotFoundError: vi.fn((error) => error?.message === 'gone'),
       waitContainerRemoved: vi.fn().mockRejectedValue(new Error('gone')),
@@ -504,7 +556,12 @@ describe('ContainerUpdateExecutor', () => {
 
     expect(executor.stopContainer).toHaveBeenCalled();
     expect(executor.startContainer).toHaveBeenCalledWith(context.newContainer, 'web', log);
-    expect(executor.waitForContainerHealthy).toHaveBeenCalledWith(context.newContainer, 'web', log);
+    expect(executor.waitForContainerHealthy).toHaveBeenCalledWith(
+      context.newContainer,
+      'web',
+      log,
+      120_000,
+    );
     expect(executor.waitContainerRemoved).toHaveBeenCalled();
     expect(log.info).toHaveBeenCalledWith(
       expect.stringContaining('was already removed during cleanup'),
@@ -517,6 +574,30 @@ describe('ContainerUpdateExecutor', () => {
       expect.objectContaining({
         phase: 'health-gate-passed',
       }),
+    );
+  });
+
+  test('execute passes rollback window to health gate when auto-rollback is enabled', async () => {
+    const context = createContext({
+      currentContainerSpec: createCurrentContainerSpec({
+        State: { Running: true },
+        HostConfig: { AutoRemove: false },
+      }),
+    });
+    const executor = createExecutor({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      getRollbackConfig: vi.fn(() => ({ autoRollback: true, rollbackWindow: 300_000 })),
+      hasHealthcheckConfigured: vi.fn(() => true),
+    });
+    const log = createLog();
+
+    await expect(executor.execute(context, createContainer(), log)).resolves.toBe(true);
+
+    expect(executor.waitForContainerHealthy).toHaveBeenCalledWith(
+      context.newContainer,
+      'web',
+      log,
+      300_000,
     );
   });
 

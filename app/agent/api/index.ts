@@ -6,6 +6,7 @@ import express, { type NextFunction, type Request, type Response } from 'express
 import { sendErrorResponse } from '../../api/error-response.js';
 import { getServerConfiguration } from '../../configuration/index.js';
 import { getEntries } from '../../log/buffer.js';
+import { toDisplayLogEntry } from '../../log/display-timestamp.js';
 import logger from '../../log/index.js';
 import { sanitizeLogParam } from '../../log/sanitize.js';
 import { hashToken } from '../../util/crypto.js';
@@ -151,7 +152,9 @@ export async function init() {
 
     const tail = req.query.tail ? Number.parseInt(req.query.tail as string, 10) : undefined;
     const since = req.query.since ? Number.parseInt(req.query.since as string, 10) : undefined;
-    res.status(200).json(getEntries({ level, component, tail, since }));
+    res
+      .status(200)
+      .json(getEntries({ level, component, tail, since }).map((entry) => toDisplayLogEntry(entry)));
   });
   app.get('/api/containers', containerApi.getContainers);
   app.get('/api/containers/:id/logs', containerApi.getContainerLogs);

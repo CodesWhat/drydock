@@ -371,7 +371,7 @@ describe('docker image details orchestration module', () => {
       digest: {
         repo: undefined,
         value: 'sha256:cached-value',
-        watch: false,
+        watch: true,
       },
       architecture: 'amd64',
       os: 'linux',

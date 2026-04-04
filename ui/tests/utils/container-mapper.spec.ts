@@ -51,6 +51,100 @@ describe('container-mapper', () => {
     });
   });
 
+  describe('deriveUpdateOperation', () => {
+    it('maps active update-operation metadata when present', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateOperation: {
+            id: 'op-1',
+            status: 'in-progress',
+            phase: 'old-stopped',
+            updatedAt: '2026-04-01T12:00:00.000Z',
+            fromVersion: '1.0.0',
+            toVersion: '1.1.0',
+          },
+        }),
+      );
+
+      expect(c.updateOperation).toEqual({
+        id: 'op-1',
+        status: 'in-progress',
+        phase: 'old-stopped',
+        updatedAt: '2026-04-01T12:00:00.000Z',
+        fromVersion: '1.0.0',
+        toVersion: '1.1.0',
+      });
+    });
+
+    it('drops malformed update-operation payloads missing required fields', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateOperation: {
+            id: 'op-1',
+            status: 'in-progress',
+            phase: 'old-stopped',
+          },
+        }),
+      );
+
+      expect(c.updateOperation).toBeUndefined();
+    });
+
+    it('drops update-operation payloads when status is not a string literal', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateOperation: {
+            id: 'op-1',
+            status: 123,
+            phase: 'old-stopped',
+            updatedAt: '2026-04-01T12:00:00.000Z',
+          },
+        }),
+      );
+
+      expect(c.updateOperation).toBeUndefined();
+    });
+
+    it('drops update-operation payloads when phase is not a string literal', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateOperation: {
+            id: 'op-1',
+            status: 'in-progress',
+            phase: { value: 'old-stopped' },
+            updatedAt: '2026-04-01T12:00:00.000Z',
+          },
+        }),
+      );
+
+      expect(c.updateOperation).toBeUndefined();
+    });
+
+    it('keeps only optional string metadata from update-operation payloads', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateOperation: {
+            id: 'op-1',
+            status: 'in-progress',
+            phase: 'old-stopped',
+            updatedAt: '2026-04-01T12:00:00.000Z',
+            fromVersion: 123,
+            toVersion: null,
+            targetImage: 'nginx:1.1.0',
+          },
+        }),
+      );
+
+      expect(c.updateOperation).toEqual({
+        id: 'op-1',
+        status: 'in-progress',
+        phase: 'old-stopped',
+        updatedAt: '2026-04-01T12:00:00.000Z',
+        targetImage: 'nginx:1.1.0',
+      });
+    });
+  });
+
   describe('deriveRegistry', () => {
     it('detects dockerhub from registry name', () => {
       const c = mapApiContainer(makeApiContainer());

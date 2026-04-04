@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
+import AppIconButton from '@/components/AppIconButton.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import AppLogViewer from '../AppLogViewer.vue';
 import type { AppLogEntry } from '../../types/log-entry';
@@ -13,10 +14,12 @@ const props = withDefaults(
     logLevelFilter: string;
     tail: number;
     componentFilter: string;
+    components?: string[];
     streamingEnabled?: boolean;
     streamingConnected?: boolean;
   }>(),
   {
+    components: () => [],
     streamingEnabled: false,
     streamingConnected: false,
   },
@@ -27,8 +30,6 @@ const emit = defineEmits<{
   (e: 'update:tail', value: number): void;
   (e: 'update:componentFilter', value: string): void;
   (e: 'update:streamingEnabled', value: boolean): void;
-  (e: 'refresh'): void;
-  (e: 'reset'): void;
   (e: 'toggle-pause'): void;
 }>();
 
@@ -53,6 +54,16 @@ const streamingEnabledModel = computed({
 });
 
 const autoScrollPinned = ref(true);
+
+const filtersModified = computed(
+  () => props.logLevelFilter !== 'all' || props.tail !== 100 || props.componentFilter !== '',
+);
+
+function resetFilters() {
+  emit('update:logLevelFilter', 'all');
+  emit('update:tail', 100);
+  emit('update:componentFilter', '');
+}
 
 const viewerPaused = computed(() => !props.streamingEnabled);
 const statusLabel = computed(() => {
@@ -161,42 +172,40 @@ function togglePin() {
               <option :value="1000">Tail 1000</option>
             </select>
 
-            <input
+            <select
               v-model="componentFilterModel"
-              type="text"
-              placeholder="Filter by component..."
-              class="flex-1 min-w-[160px] max-w-[260px] px-2.5 py-1.5 dd-rounded text-2xs-plus font-medium outline-none dd-bg dd-text dd-placeholder"
-              @keyup.enter="emit('refresh')"
+              class="px-2 py-1.5 dd-rounded text-2xs-plus font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text"
+            >
+              <option value="">All Components</option>
+              <option v-for="comp in props.components" :key="comp" :value="comp">{{ comp }}</option>
+            </select>
+          </template>
+
+          <template v-if="filtersModified" #toolbar-right>
+            <AppIconButton
+              icon="restart"
+              size="xs"
+              tooltip="Reset filters"
+              @click="resetFilters"
             />
           </template>
 
-          <template #filter-bar>
-            <AppButton size="none" variant="plain" weight="none"
-              class="px-3 py-1.5 dd-rounded text-2xs-plus font-semibold transition-colors dd-bg-elevated dd-text hover:opacity-90"
-              :class="props.loading ? 'opacity-50 pointer-events-none' : ''"
-              @click="emit('refresh')"
-            >
-              Apply
-            </AppButton>
-
-            <AppButton size="none" variant="plain" weight="none"
-              class="px-3 py-1.5 dd-rounded text-2xs-plus font-semibold transition-colors dd-text-muted hover:dd-text"
-              :class="props.loading ? 'opacity-50 pointer-events-none' : ''"
-              @click="emit('reset')"
-            >
-              Reset
-            </AppButton>
-
-            <div class="ml-auto text-2xs dd-text-muted">
-              Server Level: <span class="font-semibold dd-text capitalize">{{ props.logLevel }}</span>
-            </div>
+          <template #footer-extra>
+            <span
+              class="px-1.5 py-0.5 dd-rounded text-3xs font-bold uppercase tracking-wider dd-text-muted cursor-default"
+              style="background-color: var(--dd-log-footer-bg); border: 1px solid var(--dd-log-divider)"
+              v-tooltip="`Server log level: ${props.logLevel}. Only messages at this level or above are captured.`"
+            >{{ props.logLevel }}</span>
           </template>
 
           <template #entry-prefix="{ entry }">
-            <span class="shrink-0 uppercase font-semibold text-2xs" :style="{ color: levelColor(entry.level) }">
+            <span class="shrink-0 w-10 uppercase font-semibold text-2xs" :style="{ color: levelColor(entry.level) }">
               {{ entry.level || 'info' }}
             </span>
-            <span class="shrink-0 dd-text-secondary">{{ entry.component || '-' }}</span>
+            <span
+              class="shrink-0 w-44 truncate dd-text-secondary"
+              v-tooltip="entry.component"
+            >{{ entry.component || '-' }}</span>
           </template>
         </AppLogViewer>
       </div>

@@ -1,7 +1,11 @@
 import cron, { type ScheduledTask } from 'node-cron';
 import { usesLegacyTriggerPrefix } from '../../configuration/index.js';
 import * as event from '../../event/index.js';
-import { type Container, fullName } from '../../model/container.js';
+import {
+  type Container,
+  fullName,
+  isRollbackContainer as isRollbackContainerHelper,
+} from '../../model/container.js';
 
 const RECREATED_ALIAS_RE = /^[a-f0-9]{12}_(.+)$/i;
 
@@ -15,8 +19,6 @@ import {
   parseThresholdWithDigestBehavior as parseThresholdWithDigestBehaviorHelper,
   SUPPORTED_THRESHOLDS,
 } from './trigger-threshold.js';
-
-const OLD_ROLLBACK_CONTAINER_NAME_PATTERN = /-old-\d{10,}$/;
 
 type SupportedThreshold = (typeof SUPPORTED_THRESHOLDS)[number];
 type TriggerAutoMode = 'all' | 'oninclude' | 'none';
@@ -73,11 +75,14 @@ const AUTO_TRIGGER_ERROR_SUPPRESSION_RETENTION_MS = AUTO_TRIGGER_ERROR_SUPPRESSI
 const AUTO_EVENT_BATCH_FLUSH_DELAY_MS = 250;
 const TRIGGER_RELEASE_NOTES_BODY_MAX_LENGTH = 500;
 const ACTION_TRIGGER_TYPES = new Set(['command', 'docker', 'dockercompose']);
-const AGENT_DISCONNECT_SIMPLE_TITLE_TEMPLATE = 'Agent ${event.agentName} disconnected';
-const AGENT_DISCONNECT_SIMPLE_BODY_TEMPLATE =
-  'Agent ${event.agentName} disconnected${event.reason ? ": " + event.reason : ""}';
-const AGENT_RECONNECT_SIMPLE_TITLE_TEMPLATE = 'Agent ${event.agentName} reconnected';
-const AGENT_RECONNECT_SIMPLE_BODY_TEMPLATE = 'Agent ${event.agentName} reconnected';
+export function buildLiteralTemplateExpression(expression: string): string {
+  return `\${${expression}}`;
+}
+
+const AGENT_DISCONNECT_SIMPLE_TITLE_TEMPLATE = `Agent ${buildLiteralTemplateExpression('event.agentName')} disconnected`;
+const AGENT_DISCONNECT_SIMPLE_BODY_TEMPLATE = `Agent ${buildLiteralTemplateExpression('event.agentName')} disconnected${buildLiteralTemplateExpression('event.reason ? ": " + event.reason : ""')}`;
+const AGENT_RECONNECT_SIMPLE_TITLE_TEMPLATE = `Agent ${buildLiteralTemplateExpression('event.agentName')} reconnected`;
+const AGENT_RECONNECT_SIMPLE_BODY_TEMPLATE = `Agent ${buildLiteralTemplateExpression('event.agentName')} reconnected`;
 const AGENT_SIMPLE_TITLE_TEMPLATES: Record<TriggerNotificationEvent['kind'], string> = {
   'agent-disconnect': AGENT_DISCONNECT_SIMPLE_TITLE_TEMPLATE,
   'agent-reconnect': AGENT_RECONNECT_SIMPLE_TITLE_TEMPLATE,
@@ -177,7 +182,7 @@ export function getNotificationEvent(container: Container): TriggerNotificationE
   };
 }
 
-function resolveNotificationTemplate(
+export function resolveNotificationTemplate(
   notificationEvent: TriggerNotificationEvent | undefined,
   templates: Record<TriggerNotificationEvent['kind'], string>,
   fallback: string,
@@ -243,6 +248,7 @@ class Trigger extends Component {
   private readonly eventBatchDispatches: Map<NotificationRuleId, EventBatchDispatchState> =
     new Map();
   private digestCronTask?: ScheduledTask;
+  private isDigestFlushInProgress = false;
 
   static getSupportedThresholds() {
     return [...SUPPORTED_THRESHOLDS];
@@ -260,6 +266,20 @@ class Trigger extends Component {
       return 'all';
     }
     return auto.toLowerCase() as TriggerAutoMode;
+  }
+
+  private static normalizeMode(mode: TriggerConfiguration['mode']): string | undefined {
+    return typeof mode === 'string' ? mode.toLowerCase() : undefined;
+  }
+
+  private static isBatchCapableMode(mode: TriggerConfiguration['mode']): boolean {
+    const normalizedMode = Trigger.normalizeMode(mode);
+    return normalizedMode === 'batch' || normalizedMode === 'batch+digest';
+  }
+
+  private static isDigestCapableMode(mode: TriggerConfiguration['mode']): boolean {
+    const normalizedMode = Trigger.normalizeMode(mode);
+    return normalizedMode === 'digest' || normalizedMode === 'batch+digest';
   }
 
   private getCategory() {
@@ -498,7 +518,7 @@ class Trigger extends Component {
       // Agent connectivity notifications synthesize one-off container payloads and should always
       // dispatch immediately, even when the trigger itself is configured for batch updates.
       const shouldUseBatchMode =
-        this.configuration.mode?.toLowerCase() === 'batch' &&
+        Trigger.isBatchCapableMode(this.configuration.mode) &&
         getNotificationEvent(container) === undefined;
       if (shouldUseBatchMode) {
         this.queueEventBatchDispatch(ruleId, container);
@@ -764,21 +784,32 @@ class Trigger extends Component {
    * accumulated containers, then clear the buffer.
    */
   async flushDigestBuffer() {
+    if (this.isDigestFlushInProgress) {
+      this.log.debug('Digest flush already in progress');
+      return;
+    }
     if (this.digestBuffer.size === 0) {
       this.log.debug('Digest cron fired — buffer empty, nothing to send');
       return;
     }
-    const containers = Array.from(this.digestBuffer.values());
-    this.digestBuffer.clear();
+    const bufferedEntries = Array.from(this.digestBuffer.entries());
+    const containers = bufferedEntries.map(([, container]) => container);
     this.log.info(`Digest flush: sending ${containers.length} update(s)`);
     let status: 'success' | 'error' = 'error';
+    this.isDigestFlushInProgress = true;
     try {
       await this.triggerBatch(containers);
       status = 'success';
+      for (const [containerName, bufferedContainer] of bufferedEntries) {
+        if (this.digestBuffer.get(containerName) === bufferedContainer) {
+          this.digestBuffer.delete(containerName);
+        }
+      }
     } catch (e: unknown) {
       this.log.warn(`Digest flush failed (${Trigger.getErrorMessage(e)})`);
       this.log.debug(e);
     } finally {
+      this.isDigestFlushInProgress = false;
       this.incrementTriggerCounter(status);
     }
   }
@@ -831,10 +862,7 @@ class Trigger extends Component {
   }
 
   static isRollbackContainer(container: { name?: unknown }): boolean {
-    return (
-      typeof container?.name === 'string' &&
-      OLD_ROLLBACK_CONTAINER_NAME_PATTERN.test(container.name)
-    );
+    return isRollbackContainerHelper(container);
   }
 
   mustTrigger(containerResult: Container) {
@@ -861,12 +889,15 @@ class Trigger extends Component {
     await this.initTrigger();
     if (this.getAutoMode() !== 'none') {
       const autoMode = this.getAutoMode();
+      const normalizedMode = Trigger.normalizeMode(this.configuration.mode);
+      const shouldRegisterBatchHandler = Trigger.isBatchCapableMode(this.configuration.mode);
+      const shouldRegisterDigestHandler = Trigger.isDigestCapableMode(this.configuration.mode);
       this.log.info(
         autoMode === 'oninclude'
           ? 'Registering for auto execution (only containers with explicit include labels)'
           : 'Registering for auto execution (all watched containers)',
       );
-      if (this.configuration.mode?.toLowerCase() === 'simple') {
+      if (normalizedMode === 'simple') {
         this.unregisterContainerReport = event.registerContainerReport(
           async (containerReport) => this.handleContainerReport(containerReport),
           {
@@ -875,7 +906,7 @@ class Trigger extends Component {
           },
         );
       }
-      if (this.configuration.mode?.toLowerCase() === 'batch') {
+      if (shouldRegisterBatchHandler) {
         this.unregisterContainerReports = event.registerContainerReports(
           async (containersReports) => this.handleContainerReports(containersReports),
           {
@@ -884,7 +915,7 @@ class Trigger extends Component {
           },
         );
       }
-      if (this.configuration.mode?.toLowerCase() === 'digest') {
+      if (shouldRegisterDigestHandler) {
         this.unregisterContainerReport = event.registerContainerReport(
           async (containerReport) => this.handleContainerReportDigest(containerReport),
           {
@@ -972,6 +1003,7 @@ class Trigger extends Component {
 
     this.digestCronTask?.stop();
     this.digestCronTask = undefined;
+    this.isDigestFlushInProgress = false;
     this.digestBuffer.clear();
     this.clearEventBatchDispatches();
 
@@ -996,7 +1028,11 @@ class Trigger extends Component {
         .insensitive()
         .valid(...Trigger.getSupportedThresholds())
         .default('all'),
-      mode: this.joi.string().insensitive().valid('simple', 'batch', 'digest').default('simple'),
+      mode: this.joi
+        .string()
+        .insensitive()
+        .valid('simple', 'batch', 'digest', 'batch+digest')
+        .default('simple'),
       once: this.joi.boolean().default(true),
       digestcron: this.joi
         .string()
@@ -1226,4 +1262,3 @@ class Trigger extends Component {
 }
 
 export default Trigger;
-export const testable_resolveNotificationTemplate = resolveNotificationTemplate;

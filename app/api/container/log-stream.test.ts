@@ -667,13 +667,12 @@ describe('api/container/log-stream', () => {
         Buffer.alloc(0),
       );
 
-      expect(ws.send).toHaveBeenCalledWith(
-        JSON.stringify({
-          type: 'stdout',
-          ts: '2026-01-01T00:00:00.000000000Z',
-          line: 'hello',
-        }),
-      );
+      expect(JSON.parse(ws.send.mock.calls[0][0])).toEqual({
+        type: 'stdout',
+        ts: '2026-01-01T00:00:00.000000000Z',
+        displayTs: expect.stringMatching(/^\[\d{2}:\d{2}:\d{2}\.\d{3}\]$/u),
+        line: 'hello',
+      });
       expect(ws.close).toHaveBeenCalledWith(1000, 'Stream complete');
     });
 
@@ -1096,13 +1095,12 @@ describe('api/container/log-stream', () => {
       );
       dockerStream.emit('end');
 
-      expect(ws.send).toHaveBeenCalledWith(
-        JSON.stringify({
-          type: 'stdout',
-          ts: '2026-01-01T00:00:00.000000000Z',
-          line: 'hello from stream',
-        }),
-      );
+      expect(JSON.parse(ws.send.mock.calls[0][0])).toEqual({
+        type: 'stdout',
+        ts: '2026-01-01T00:00:00.000000000Z',
+        displayTs: expect.stringMatching(/^\[\d{2}:\d{2}:\d{2}\.\d{3}\]$/u),
+        line: 'hello from stream',
+      });
       expect(ws.close).toHaveBeenCalledWith(1000, 'Stream ended');
       expect(dockerStream.destroy).toHaveBeenCalledTimes(1);
     });

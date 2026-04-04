@@ -1,3 +1,4 @@
+import { RE2JS } from 're2js';
 import log from '../../../log/index.js';
 import {
   type Container,
@@ -29,6 +30,91 @@ export interface ContainerWatchLogger {
   error: (message: string) => void;
   warn: (message: string) => void;
   debug: (message: string) => void;
+}
+
+interface SafeRegex {
+  test(value: string): boolean;
+}
+
+function safeRegExp(
+  pattern: string | undefined,
+  logContainer: Pick<ContainerWatchLogger, 'warn'>,
+): SafeRegex | null {
+  if (!pattern) {
+    return null;
+  }
+
+  try {
+    const compiled = RE2JS.compile(pattern);
+    return {
+      test(value: string) {
+        return compiled.matcher(value).find();
+      },
+    };
+  } catch (error: unknown) {
+    logContainer.warn(`Invalid regex pattern "${pattern}": ${getErrorMessage(error)}`);
+    return null;
+  }
+}
+
+function filterTagsForDigestComparison(
+  container: Container,
+  tags: string[],
+  logContainer: Pick<ContainerWatchLogger, 'warn'>,
+): string[] {
+  let filteredTags = tags.filter(
+    (tag) => tag !== '' && !tag.startsWith('sha') && !tag.endsWith('.sig'),
+  );
+
+  const includeTagsRegex = safeRegExp(container.includeTags, logContainer);
+  if (includeTagsRegex) {
+    filteredTags = filteredTags.filter((tag) => includeTagsRegex.test(tag));
+  }
+
+  const excludeTagsRegex = safeRegExp(container.excludeTags, logContainer);
+  if (excludeTagsRegex) {
+    filteredTags = filteredTags.filter((tag) => !excludeTagsRegex.test(tag));
+  }
+
+  return filteredTags;
+}
+
+function resolveDigestComparisonTag(
+  container: Container,
+  tags: string[],
+  logContainer: ContainerWatchLogger,
+): string | undefined {
+  const filteredTags = filterTagsForDigestComparison(container, tags, logContainer);
+  if (filteredTags.length === 0) {
+    return undefined;
+  }
+
+  const latestTag = filteredTags.find((tag) => tag.toLowerCase() === 'latest');
+  if (latestTag) {
+    return latestTag;
+  }
+
+  const suggestedTag = suggestTag(
+    {
+      includeTags: container.includeTags,
+      excludeTags: container.excludeTags,
+      image: {
+        ...container.image,
+        tag: {
+          ...container.image.tag,
+          value: 'latest',
+          semver: false,
+        },
+      },
+    },
+    filteredTags,
+    logContainer,
+  );
+  if (suggestedTag) {
+    return suggestedTag;
+  }
+
+  return [...filteredTags].sort((left, right) => right.localeCompare(left))[0];
 }
 
 function getRegistries(): Record<string, Registry> {
@@ -115,7 +201,14 @@ export async function findNewVersion(
     result.noUpdateReason = 'Running by digest — no tag to compare';
 
     if (container.image.digest.watch && container.image.digest.repo) {
-      await handleDigestWatch(container, registryProvider, [], result);
+      const tags = await registryProvider.getTags(container.image);
+      const comparisonTag = resolveDigestComparisonTag(container, tags, logContainer);
+
+      if (comparisonTag) {
+        await handleDigestWatch(container, registryProvider, [comparisonTag], result);
+      } else {
+        logContainer.debug('Digest-only image — no registry tag candidate available');
+      }
     }
 
     return result;

@@ -1068,7 +1068,7 @@ describe('executeContainerUpdate', () => {
     expect(docker.waitContainerRemoved).not.toHaveBeenCalled();
   });
 
-  test('should health-gate new container before removing old one when HEALTHCHECK is configured', async () => {
+  test('should health-gate when HEALTHCHECK is configured even if auto-rollback is disabled', async () => {
     const context = createContainerUpdateContext({
       currentContainerSpec: {
         Id: 'old-container-id',
@@ -1088,6 +1088,37 @@ describe('executeContainerUpdate', () => {
       context._mockNewContainer,
       'container-name',
       logContainer,
+      300_000,
+    );
+  });
+
+  test('should health-gate new container before removing old one when auto-rollback is enabled', async () => {
+    const context = createContainerUpdateContext({
+      currentContainerSpec: {
+        Id: 'old-container-id',
+        Name: '/container-name',
+        Config: { Image: 'my-registry/test/test:1.0.0', Healthcheck: { Test: ['CMD', 'true'] } },
+        State: { Running: true },
+        HostConfig: { AutoRemove: false },
+        NetworkSettings: { Networks: {} },
+      },
+    });
+    const logContainer = createMockLog('info', 'warn', 'debug');
+    const waitForHealthySpy = vi.spyOn(docker, 'waitForContainerHealthy').mockResolvedValue();
+
+    await docker.executeContainerUpdate(
+      context,
+      createTriggerContainer({
+        labels: { 'dd.rollback.auto': 'true' },
+      }),
+      logContainer,
+    );
+
+    expect(waitForHealthySpy).toHaveBeenCalledWith(
+      context._mockNewContainer,
+      'container-name',
+      logContainer,
+      300_000,
     );
     expect(mockUpdateOperation).toHaveBeenCalledWith(
       expect.any(String),
@@ -1095,7 +1126,7 @@ describe('executeContainerUpdate', () => {
     );
   });
 
-  test('should rollback when health gate fails', async () => {
+  test('should rollback when health gate fails and auto-rollback is enabled', async () => {
     const context = createContainerUpdateContext({
       currentContainerSpec: {
         Id: 'old-container-id',
@@ -1115,7 +1146,13 @@ describe('executeContainerUpdate', () => {
       .mockResolvedValueOnce(undefined);
 
     await expect(
-      docker.executeContainerUpdate(context, createTriggerContainer(), logContainer),
+      docker.executeContainerUpdate(
+        context,
+        createTriggerContainer({
+          labels: { 'dd.rollback.auto': 'true' },
+        }),
+        logContainer,
+      ),
     ).rejects.toThrow('Health gate failed: unhealthy');
 
     expect(context._mockNewContainer.stop).toHaveBeenCalled();

@@ -1,3 +1,8 @@
+import type {
+  ContainerUpdateOperationPhase,
+  ContainerUpdateOperationStatus,
+} from './update-operation';
+
 /** Shared UI container type used across views, composables, and templates. */
 
 export interface ContainerDetails {
@@ -33,6 +38,16 @@ export interface ContainerReleaseNotes {
   provider: string;
 }
 
+export interface ContainerUpdateOperation {
+  id: string;
+  status: ContainerUpdateOperationStatus;
+  phase: ContainerUpdateOperationPhase;
+  updatedAt: string;
+  fromVersion?: string;
+  toVersion?: string;
+  targetImage?: string;
+}
+
 export interface Container {
   id: string;
   name: string;
@@ -55,6 +70,7 @@ export interface Container {
   registryUrl?: string;
   updateKind: 'major' | 'minor' | 'patch' | 'digest' | null;
   updateDetectedAt?: string;
+  updateOperation?: ContainerUpdateOperation;
   updateMaturity: 'fresh' | 'settled' | null;
   updateMaturityTooltip?: string;
   updatePolicyState?: 'snoozed' | 'skipped' | 'maturity-blocked';

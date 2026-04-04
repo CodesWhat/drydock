@@ -1,4 +1,6 @@
 > [!IMPORTANT]
+> **Axios npm Supply Chain Compromise (March 31, 2026):** Drydock is **not affected**. Our lockfile pinned axios at v1.13.6; the compromised versions (1.14.1, 0.30.4) were never installed. All dependency versions are now pinned to exact versions as defense-in-depth. [Full advisory &rarr;](https://getdrydock.com/security/axios-supply-chain-march-2026)
+>
 > **Trivy Supply Chain Compromise (GHSA-69fq-xp46-6x23):** Drydock is **not affected**. We do not use the compromised GitHub Actions, the bundled Trivy binary is pinned to a safe version (v0.69.3), and all CI actions are SHA-pinned. No compromised code was ever pulled or shipped. [Full advisory &rarr;](https://getdrydock.com/security/trivy-supply-chain-march-2026)
 
 <div align="center">
@@ -148,14 +150,14 @@ See the [Quick Start guide](https://getdrydock.com/docs/quickstart) for Docker C
 
 <h2 align="center" id="recent-updates">🆕 Recent Updates</h2>
 
-- **Real-time container log viewer** — WebSocket-based live log streaming with ANSI color rendering, JSON syntax highlighting, regex search, and gzip download.
-- **Dashboard customization** — Drag-to-reorder, resize, and per-widget visibility toggles with a dedicated edit mode.
-- **Digest notifications** — Batch update events with `MODE=digest` and configurable `DIGESTCRON`.
-- **Design system components** — `AppIconButton`, `AppBadge`, `StatusDot`, `DetailField`, `AppTabBar` with WCAG 2.5.8 touch targets.
+- **System log viewer overhaul** — Pinned toolbar, line wrapping, sort toggle (newest/oldest), filter mode (funnel icon shows matches only), auto-apply filters, component dropdown from API, aligned columns, floating copy button.
+- **Hide Pinned containers** — Checkbox toggle in the container filter bar hides version-pinned containers. Persisted in user preferences.
+- **Combined batch+digest notifications** — `MODE=batch+digest` sends both immediate batch emails and scheduled digest summaries.
+- **Multi-host same-name container support** — Containers with identical names across different hosts no longer collide in the UI. Actions, logs, and detail panels route by container ID.
+- **Lazy OIDC discovery** — SSO provider startup failures no longer block the server. Discovery retries on first use.
+- **Digest watch for Docker Hub** — Digest-pinned containers (e.g. Portainer Agent) now detect updates even when Docker recovers a tagged reference from inspect.
 - **Floating tag detection** — `tagPrecision` classifier warns when mutable aliases like `v3` are used without digest watching.
 - **Podman compatibility** — API version negotiation prevents `EAI_AGAIN` crashes with Podman socket connections.
-- **Bearer token auth for `/metrics`** — `DD_SERVER_METRICS_TOKEN` for Prometheus scrapers without session auth.
-- **Toast notifications** — Success/error feedback for all container actions with auto-dismiss.
 
 <hr>
 

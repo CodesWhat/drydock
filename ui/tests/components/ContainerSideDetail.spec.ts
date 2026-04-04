@@ -26,6 +26,7 @@ const confirmRestart = vi.fn();
 const scanContainer = vi.fn();
 const confirmUpdate = vi.fn();
 const confirmDelete = vi.fn();
+const isContainerUpdateInProgress = vi.fn(() => false);
 const tt = (value: string) => value;
 
 vi.mock('@/components/containers/containersViewTemplateContext', () => ({
@@ -44,6 +45,7 @@ vi.mock('@/components/containers/containersViewTemplateContext', () => ({
     scanContainer,
     confirmUpdate,
     confirmDelete,
+    isContainerUpdateInProgress,
     actionInProgress: ref(new Set<string>()),
     tt,
   }),
@@ -71,6 +73,8 @@ describe('ContainerSideDetail', () => {
     scanContainer.mockReset();
     confirmUpdate.mockReset();
     confirmDelete.mockReset();
+    isContainerUpdateInProgress.mockReset();
+    isContainerUpdateInProgress.mockReturnValue(false);
   });
 
   it('updates panel width when size controls are clicked', async () => {
@@ -127,5 +131,26 @@ describe('ContainerSideDetail', () => {
     expect(title).toBeDefined();
     expect(title?.classes()).toContain('text-sm');
     expect(title?.classes()).toContain('font-bold');
+  });
+
+  it('shows Updating when the selected container is still mid-update', () => {
+    isContainerUpdateInProgress.mockReturnValue(true);
+
+    const wrapper = mount(ContainerSideDetail, {
+      global: {
+        components: {
+          DetailPanel,
+        },
+        stubs: {
+          AppIcon: { template: '<span class="app-icon-stub" />' },
+          ContainerSideTabContent: { template: '<div class="side-tab-content-stub" />' },
+        },
+        directives: {
+          tooltip: {},
+        },
+      },
+    });
+
+    expect(wrapper.text()).toContain('Updating');
   });
 });

@@ -1,5 +1,9 @@
 import type { Request, Response } from 'express';
-import type { Container } from '../../../model/container.js';
+import type { Container, ContainerUpdateOperationState } from '../../../model/container.js';
+import {
+  isContainerUpdateOperationPhase,
+  isContainerUpdateOperationStatus,
+} from '../../../model/container-update-operation.js';
 import { sendErrorResponse } from '../../error-response.js';
 import { buildPaginationLinks } from '../../pagination-links.js';
 import type { ContainerListResponse, CrudHandlerContext } from '../crud-context.js';
@@ -46,6 +50,59 @@ function stripContainerVulnerabilityArrays(container: Container): Container {
   };
 }
 
+function sanitizeInProgressUpdateOperation(
+  operation: unknown,
+): ContainerUpdateOperationState | undefined {
+  if (!operation || typeof operation !== 'object') {
+    return undefined;
+  }
+
+  const candidate = operation as Record<string, unknown>;
+
+  const id = typeof candidate.id === 'string' ? candidate.id : undefined;
+  const status = isContainerUpdateOperationStatus(candidate.status) ? candidate.status : undefined;
+  const phase = isContainerUpdateOperationPhase(candidate.phase) ? candidate.phase : undefined;
+  const updatedAt = typeof candidate.updatedAt === 'string' ? candidate.updatedAt : undefined;
+
+  if (!id || !status || !phase || !updatedAt) {
+    return undefined;
+  }
+
+  return {
+    id,
+    status,
+    phase,
+    updatedAt,
+    ...(typeof candidate.fromVersion === 'string' ? { fromVersion: candidate.fromVersion } : {}),
+    ...(typeof candidate.toVersion === 'string' ? { toVersion: candidate.toVersion } : {}),
+    ...(typeof candidate.targetImage === 'string' ? { targetImage: candidate.targetImage } : {}),
+  };
+}
+
+export function attachInProgressUpdateOperation(
+  context: CrudHandlerContext,
+  container: Container,
+): Container {
+  const byId = context.updateOperationStore.getInProgressOperationByContainerId(container.id);
+  // Name-based fallback only for legacy operations that predate the containerId field.
+  const byName = byId
+    ? undefined
+    : context.updateOperationStore.getInProgressOperationByContainerName(container.name);
+  const isLegacyOperation =
+    byName && typeof byName === 'object' && !('containerId' in (byName as Record<string, unknown>));
+  const matched = byId ?? (isLegacyOperation ? byName : undefined);
+  const operation = sanitizeInProgressUpdateOperation(matched);
+
+  if (!operation) {
+    return container;
+  }
+
+  return {
+    ...container,
+    updateOperation: operation,
+  };
+}
+
 export function buildContainerListResponse(
   context: CrudHandlerContext,
   query: Request['query'],
@@ -63,15 +120,16 @@ export function buildContainerListResponse(
     : undefined;
 
   const includeVulnerabilities = parseBooleanQueryParam(query.includeVulnerabilities, false);
-  const filteredQuery = {
+  const filteredQuery: Record<string, unknown> = {
     ...(removeContainerListControlParams(query) as Record<string, unknown>),
+    excludeRollbackContainers: true,
     ...(kindFilter || {}),
     ...(statusFilter?.updateAvailable !== undefined
       ? { updateAvailable: statusFilter.updateAvailable }
       : {}),
     ...(statusFilter?.runtimeStatus ? { status: statusFilter.runtimeStatus } : {}),
     ...(validatedQuery.watcher ? { watcher: validatedQuery.watcher } : {}),
-  } as Request['query'];
+  };
   const pagination = normalizeContainerListPagination(query);
 
   // Sort/order, maturity, and watched-kind filters require loading the full
@@ -115,9 +173,12 @@ export function buildContainerListResponse(
   }
 
   const redactedContainers = context.redactContainersRuntimeEnv(pagedContainers);
-  const data = includeVulnerabilities
+  const strippedContainers = includeVulnerabilities
     ? redactedContainers
     : redactedContainers.map((container) => stripContainerVulnerabilityArrays(container));
+  const data = strippedContainers.map((container) =>
+    attachInProgressUpdateOperation(context, container),
+  );
   const hasMore = pagination.limit > 0 && pagination.offset + data.length < total;
   const links = buildPaginationLinks({
     basePath,

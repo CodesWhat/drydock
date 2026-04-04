@@ -97,7 +97,9 @@ describe('logs service', () => {
       expect(MockWebSocket.instances).toHaveLength(1);
       const socket = MockWebSocket.instances[0];
       socket.emitOpen();
-      socket.emitMessage('{"type":"stdout","ts":"2026-03-15T00:00:00Z","line":"hello"}');
+      socket.emitMessage(
+        '{"type":"stdout","ts":"2026-03-15T00:00:00Z","displayTs":"[00:00:00.000]","line":"hello"}',
+      );
       socket.emitMessage('{"type":"invalid","ts":"2026-03-15T00:00:00Z","line":"ignored"}');
       socket.emitMessage('"primitive-json"');
       socket.emitMessage({ unexpected: true });
@@ -108,11 +110,52 @@ describe('logs service', () => {
       expect(onMessage).toHaveBeenCalledWith({
         type: 'stdout',
         ts: '2026-03-15T00:00:00Z',
+        displayTs: '[00:00:00.000]',
         line: 'hello',
       });
 
       connection.close();
       expect(socket.close).toHaveBeenCalledWith(1000, 'manual-close');
+    });
+
+    it('ignores frames with invalid display timestamp metadata', () => {
+      const onMessage = vi.fn();
+
+      createContainerLogStreamConnection({
+        containerId: 'container-1',
+        onMessage,
+        webSocketFactory: (url) => new MockWebSocket(url) as unknown as WebSocket,
+        location: {
+          protocol: 'http:',
+          host: 'localhost:3000',
+        } as Location,
+      });
+
+      const socket = MockWebSocket.instances[0];
+      socket.emitMessage(
+        '{"type":"stdout","ts":"2026-03-15T00:00:00Z","displayTs":123,"line":"ignored"}',
+      );
+
+      expect(onMessage).not.toHaveBeenCalled();
+    });
+
+    it('ignores frames missing the server display timestamp metadata', () => {
+      const onMessage = vi.fn();
+
+      createContainerLogStreamConnection({
+        containerId: 'container-1',
+        onMessage,
+        webSocketFactory: (url) => new MockWebSocket(url) as unknown as WebSocket,
+        location: {
+          protocol: 'http:',
+          host: 'localhost:3000',
+        } as Location,
+      });
+
+      const socket = MockWebSocket.instances[0];
+      socket.emitMessage('{"type":"stdout","ts":"2026-03-15T00:00:00Z","line":"hello"}');
+
+      expect(onMessage).not.toHaveBeenCalled();
     });
 
     it('supports update, pause, and resume lifecycle controls', () => {
@@ -268,9 +311,13 @@ describe('logs service', () => {
       const secondSocket = MockWebSocket.instances[1];
 
       firstSocket.emitOpen();
-      firstSocket.emitMessage('{"type":"stdout","ts":"2026-03-15T00:00:00Z","line":"stale"}');
+      firstSocket.emitMessage(
+        '{"type":"stdout","ts":"2026-03-15T00:00:00Z","displayTs":"[00:00:00.000]","line":"stale"}',
+      );
       secondSocket.emitOpen();
-      secondSocket.emitMessage('{"type":"stderr","ts":"2026-03-15T00:00:01Z","line":"fresh"}');
+      secondSocket.emitMessage(
+        '{"type":"stderr","ts":"2026-03-15T00:00:01Z","displayTs":"[00:00:01.000]","line":"fresh"}',
+      );
 
       expect(onStatus).toHaveBeenCalledTimes(1);
       expect(onStatus).toHaveBeenCalledWith('connected');
@@ -278,6 +325,7 @@ describe('logs service', () => {
       expect(onMessage).toHaveBeenCalledWith({
         type: 'stderr',
         ts: '2026-03-15T00:00:01Z',
+        displayTs: '[00:00:01.000]',
         line: 'fresh',
       });
     });

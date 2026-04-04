@@ -62,6 +62,8 @@ vi.mock('../store/audit', () => ({
 
 vi.mock('../store/update-operation', () => ({
   getOperationsByContainerName: (...args: unknown[]) => mockGetOperationsByContainerName(...args),
+  getInProgressOperationByContainerName: vi.fn(() => undefined),
+  getInProgressOperationByContainerId: vi.fn(() => undefined),
 }));
 
 vi.mock('../registry', () => ({
@@ -354,13 +356,21 @@ describe('Container Router', () => {
   });
 
   describe('getContainers', () => {
+    const visibleContainersStoreQuery = (query: Record<string, unknown> = {}) => ({
+      excludeRollbackContainers: true,
+      ...query,
+    });
+
     test('should return containers from store', () => {
       storeContainer.getContainers.mockReturnValue([{ id: 'c1' }]);
       const handler = getHandler('get', '/');
       const res = createResponse();
       handler({ query: {} }, res);
 
-      expect(storeContainer.getContainers).toHaveBeenCalledWith({}, { limit: 0, offset: 0 });
+      expect(storeContainer.getContainers).toHaveBeenCalledWith(visibleContainersStoreQuery(), {
+        limit: 0,
+        offset: 0,
+      });
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
         data: [{ id: 'c1' }],
@@ -377,7 +387,10 @@ describe('Container Router', () => {
       const res = createResponse();
       handler({ query: '' }, res);
 
-      expect(storeContainer.getContainers).toHaveBeenCalledWith({}, { limit: 0, offset: 0 });
+      expect(storeContainer.getContainers).toHaveBeenCalledWith(visibleContainersStoreQuery(), {
+        limit: 0,
+        offset: 0,
+      });
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
         data: [{ id: 'c1' }],
@@ -461,7 +474,10 @@ describe('Container Router', () => {
       const res = createResponse();
       handler({ query: { includeVulnerabilities: 'true' } }, res);
 
-      expect(storeContainer.getContainers).toHaveBeenCalledWith({}, { limit: 0, offset: 0 });
+      expect(storeContainer.getContainers).toHaveBeenCalledWith(visibleContainersStoreQuery(), {
+        limit: 0,
+        offset: 0,
+      });
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
         data: [container],
@@ -531,10 +547,12 @@ describe('Container Router', () => {
       );
 
       expect(storeContainer.getContainers).toHaveBeenCalledWith(
-        { watcher: 'docker' },
+        visibleContainersStoreQuery({ watcher: 'docker' }),
         { limit: 1, offset: 1 },
       );
-      expect(storeContainer.getContainerCount).toHaveBeenCalledWith({ watcher: 'docker' });
+      expect(storeContainer.getContainerCount).toHaveBeenCalledWith(
+        visibleContainersStoreQuery({ watcher: 'docker' }),
+      );
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
         data: [{ id: 'c2' }],
@@ -577,10 +595,12 @@ describe('Container Router', () => {
       );
 
       expect(storeContainer.getContainers).toHaveBeenCalledWith(
-        { watcher: 'docker' },
+        visibleContainersStoreQuery({ watcher: 'docker' }),
         { limit: 0, offset: 2 },
       );
-      expect(storeContainer.getContainerCount).toHaveBeenCalledWith({ watcher: 'docker' });
+      expect(storeContainer.getContainerCount).toHaveBeenCalledWith(
+        visibleContainersStoreQuery({ watcher: 'docker' }),
+      );
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
         data: [{ id: 'c3' }, { id: 'c4' }],
@@ -1410,6 +1430,8 @@ describe('Container Router', () => {
           },
           updateOperationStore: {
             getOperationsByContainerName: vi.fn(() => []),
+            getInProgressOperationByContainerName: vi.fn(() => undefined),
+            getInProgressOperationByContainerId: vi.fn(() => undefined),
           },
         },
         agentApi: {

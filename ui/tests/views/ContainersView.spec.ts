@@ -436,6 +436,28 @@ describe('ContainersView', () => {
       vm.selectedContainer = containers[0];
       expect(vm.selectedContainerId).toBe('c1');
     });
+
+    it('keeps duplicate display-name aliases out of id and meta lookup maps', async () => {
+      const datavaultNode = makeContainer({
+        id: 'c1',
+        name: 'tdarr_node',
+        server: 'Datavault',
+      });
+      const tmvaultNode = makeContainer({
+        id: 'c2',
+        name: 'tdarr_node',
+        server: 'Tmvault',
+      });
+      const wrapper = await mountContainersView([datavaultNode, tmvaultNode]);
+      const vm = wrapper.vm as any;
+
+      expect(vm.containerIdMap.c1).toBe('c1');
+      expect(vm.containerIdMap.c2).toBe('c2');
+      expect(vm.containerIdMap.tdarr_node).toBeUndefined();
+      expect(vm.containerMetaMap.c1).toMatchObject({ id: 'c1', name: 'tdarr_node' });
+      expect(vm.containerMetaMap.c2).toMatchObject({ id: 'c2', name: 'tdarr_node' });
+      expect(vm.containerMetaMap.tdarr_node).toBeUndefined();
+    });
   });
 
   describe('route query filters', () => {
@@ -1735,6 +1757,16 @@ describe('ContainersView', () => {
       expect(names).toContain('ghost');
     });
 
+    it('reloads containers when the SSE connection is re-established', async () => {
+      await mountContainersView([makeContainer({ id: 'c1', name: 'nginx' })]);
+      const callsBeforeReconnect = mockGetAllContainers.mock.calls.length;
+
+      globalThis.dispatchEvent(new CustomEvent('dd:sse-connected'));
+      await flushPromises();
+
+      expect(mockGetAllContainers.mock.calls.length).toBeGreaterThan(callsBeforeReconnect);
+    });
+
     it('covers loadGroups success/skip/error paths', async () => {
       const wrapper = await mountContainersView([makeContainer({ name: 'nginx' })]);
       const vm = wrapper.vm as any;
@@ -1889,9 +1921,13 @@ describe('ContainersView', () => {
       vm.selectedContainer = null;
       globalThis.dispatchEvent(new Event('dd:sse-scan-completed'));
       await flushPromises();
+      globalThis.dispatchEvent(new Event('dd:sse-container-changed'));
+      await flushPromises();
 
       vm.selectedContainer = c;
       globalThis.dispatchEvent(new Event('dd:sse-scan-completed'));
+      await flushPromises();
+      globalThis.dispatchEvent(new Event('dd:sse-container-changed'));
       await flushPromises();
       expect(mockGetAllContainers.mock.calls.length).toBeGreaterThan(1);
 

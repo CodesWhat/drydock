@@ -2,6 +2,7 @@ import axios from 'axios';
 import { ddEnvVars } from '../configuration/index.js';
 import logger from '../log/index.js';
 import type { Container } from '../model/container.js';
+import { getErrorMessage } from '../util/error.js';
 import GithubProvider from './providers/GithubProvider.js';
 import type { ReleaseNotes, ReleaseNotesProviderClient } from './types.js';
 
@@ -35,19 +36,6 @@ type CacheLookup<T> =
 const releaseNotesCache = new Map<string, CacheEntry<ReleaseNotes | null>>();
 const sourceRepoCache = new Map<string, CacheEntry<string | null>>();
 const providers: ReleaseNotesProviderClient[] = [new GithubProvider()];
-
-function getErrorMessage(error: unknown) {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  if (typeof error === 'object' && error !== null && 'message' in error) {
-    const { message } = error as { message: unknown };
-    if (typeof message === 'string') {
-      return message;
-    }
-  }
-  return String(error);
-}
 
 function pruneExpiredCache<T>(cache: Map<string, CacheEntry<T>>) {
   const now = Date.now();
@@ -200,7 +188,7 @@ async function lookupSourceRepoFromDockerHubTagMetadata(imageName: string, tag: 
       return sourceRepoCandidate;
     }
   } catch (error: unknown) {
-    log.debug(`Unable to query Docker Hub tag metadata (${getErrorMessage(error)})`);
+    log.debug(`Unable to query Docker Hub tag metadata (${getErrorMessage(error, String(error))})`);
   }
 
   try {
@@ -210,7 +198,9 @@ async function lookupSourceRepoFromDockerHubTagMetadata(imageName: string, tag: 
     );
     return normalizeSourceRepo(getSourceRepoFromHubPayload(repositoryResponse?.data));
   } catch (error: unknown) {
-    log.debug(`Unable to query Docker Hub repository metadata (${getErrorMessage(error)})`);
+    log.debug(
+      `Unable to query Docker Hub repository metadata (${getErrorMessage(error, String(error))})`,
+    );
   }
 
   return undefined;

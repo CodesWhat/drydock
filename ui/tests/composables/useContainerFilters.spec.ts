@@ -317,4 +317,58 @@ describe('useContainerFilters', () => {
       expect(raw.containers.filters.registry).toBe('all');
     });
   });
+
+  describe('hidePinned filter', () => {
+    it('hides containers with tagPrecision specific when enabled', async () => {
+      const mixed = ref<Container[]>([
+        makeContainer({ id: 'c1', name: 'floating', tagPrecision: 'floating' }),
+        makeContainer({ id: 'c2', name: 'pinned', tagPrecision: 'specific' }),
+        makeContainer({ id: 'c3', name: 'unset' }),
+      ]);
+      const mod = await import('@/composables/useContainerFilters');
+      const filters = mod.useContainerFilters(mixed);
+
+      filters.filterHidePinned.value = true;
+      await nextTick();
+
+      expect(filters.filteredContainers.value.map((c) => c.name)).toEqual(['floating', 'unset']);
+    });
+
+    it('persists hidePinned to preferences', async () => {
+      const filters = await loadFilters();
+      const { flushPreferences, preferences } = await import('@/preferences/store');
+
+      expect(preferences.containers.filters.hidePinned).toBe(false);
+
+      filters.filterHidePinned.value = true;
+      await nextTick();
+
+      expect(preferences.containers.filters.hidePinned).toBe(true);
+
+      flushPreferences();
+      const raw = JSON.parse(localStorage.getItem('dd-preferences') ?? '{}');
+      expect(raw.containers.filters.hidePinned).toBe(true);
+    });
+
+    it('counts hidePinned in active filter count', async () => {
+      const filters = await loadFilters();
+      expect(filters.activeFilterCount.value).toBe(0);
+
+      filters.filterHidePinned.value = true;
+      await nextTick();
+
+      expect(filters.activeFilterCount.value).toBe(1);
+    });
+
+    it('resets hidePinned on clearFilters', async () => {
+      const filters = await loadFilters();
+      filters.filterHidePinned.value = true;
+      await nextTick();
+
+      filters.clearFilters();
+      await nextTick();
+
+      expect(filters.filterHidePinned.value).toBe(false);
+    });
+  });
 });

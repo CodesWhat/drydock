@@ -26,13 +26,14 @@
   "repository": "CodesWhat/drydock",
   "license": "AGPL-3.0-only",
   "dependencies": {
-    "@cucumber/cucumber": "^12.7.0",
-    "socket.io-parser": "^4.2.6"
+    "@cucumber/cucumber": "12.7.0",
+    "socket.io-parser": "4.2.6"
   },
   "devDependencies": {
     "@dotenvx/dotenvx": "1.57.1",
-    "@playwright/test": "^1.58.2",
-    "artillery": "2.0.30"
+    "@playwright/test": "1.58.2",
+    "artillery": "2.0.30",
+    "lodash": "^4.18.1"
   },
   "overrides": {
     "brace-expansion": "5.0.5",

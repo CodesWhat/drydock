@@ -26,6 +26,7 @@ describe('notification trigger policy', () => {
       Array.from(
         getNotificationTriggerIdsFromState({
           'slack.ops': { type: 'slack' },
+          'missing.ops': undefined,
           'docker.update': { type: 'docker' },
           'dockercompose.update': { type: 'dockercompose' },
           'smtp.ops': { type: 'smtp' },
@@ -39,10 +40,10 @@ describe('notification trigger policy', () => {
   });
 
   test('normalizeNotificationTriggerIds should filter, dedupe and sort ids', () => {
-    const allowedTriggerIds = new Set(['slack.ops', 'smtp.ops']);
+    const allowedTriggerIds = new Set(['slack.ops', 'smtp.ops', '']);
     expect(
       normalizeNotificationTriggerIds(
-        ['smtp.ops', 'docker.update', 'slack.ops', 'smtp.ops', ''],
+        [' smtp.ops ', 'docker.update', 'slack.ops', '', 123 as unknown as string],
         allowedTriggerIds,
       ),
     ).toEqual(['slack.ops', 'smtp.ops']);

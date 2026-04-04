@@ -655,6 +655,123 @@ describe('getImageManifestDigest', () => {
   });
 });
 
+describe('getImageManifestDigest logging', () => {
+  test('should use child logger and include image name for schemaVersion 2 manifest resolution', async () => {
+    const registryMocked = new Registry();
+    await registryMocked.register('registry', 'hub', 'test', {});
+    const childDebug = vi.fn();
+    registryMocked.log = { debug: childDebug } as any;
+    const rootDebugSpy = vi.spyOn(log, 'debug').mockImplementation(() => undefined);
+
+    registryMocked.callRegistry = headDigestThenBody(
+      'sha256:resolved',
+      manifestListResponse([
+        platformManifest(
+          'amd64',
+          'linux',
+          'sha256:matched',
+          'application/vnd.docker.distribution.manifest.v2+json',
+        ),
+      ]),
+    );
+
+    await expect(
+      registryMocked.getImageManifestDigest(imageInput({ name: 'library/nginx' })),
+    ).resolves.toStrictEqual({
+      version: 2,
+      digest: 'sha256:resolved',
+    });
+
+    expect(rootDebugSpy).not.toHaveBeenCalled();
+    expect(childDebug).toHaveBeenCalled();
+    for (const [message] of childDebug.mock.calls) {
+      expect(message).toContain('library/nginx');
+    }
+
+    rootDebugSpy.mockRestore();
+  });
+
+  test('should use child logger and include image name for schemaVersion 1 manifest resolution', async () => {
+    const registryMocked = new Registry();
+    await registryMocked.register('registry', 'hub', 'test', {});
+    const childDebug = vi.fn();
+    registryMocked.log = { debug: childDebug } as any;
+    const rootDebugSpy = vi.spyOn(log, 'debug').mockImplementation(() => undefined);
+
+    registryMocked.callRegistry = () => ({
+      schemaVersion: 1,
+      history: [
+        {
+          v1Compatibility: JSON.stringify({
+            config: { Image: 'sha256:legacy' },
+            created: '2026-03-04T11:22:33.000Z',
+          }),
+        },
+      ],
+    });
+
+    await expect(
+      registryMocked.getImageManifestDigest(imageInput({ name: 'library/nginx' })),
+    ).resolves.toStrictEqual({
+      version: 1,
+      digest: 'sha256:legacy',
+      created: '2026-03-04T11:22:33.000Z',
+    });
+
+    expect(rootDebugSpy).not.toHaveBeenCalled();
+    expect(childDebug).toHaveBeenCalled();
+    for (const [message] of childDebug.mock.calls) {
+      expect(message).toContain('library/nginx');
+    }
+
+    rootDebugSpy.mockRestore();
+  });
+
+  test('should keep manifest-config fallback debug logs on the child logger', async () => {
+    const registryMocked = new Registry();
+    await registryMocked.register('registry', 'hub', 'test', {});
+    const childDebug = vi.fn();
+    registryMocked.log = { debug: childDebug } as any;
+    const rootDebugSpy = vi.spyOn(log, 'debug').mockImplementation(() => undefined);
+
+    registryMocked.callRegistry = vi.fn((options) => {
+      if (options.method === 'head') {
+        return { headers: { 'docker-content-digest': 'sha256:manifest' } };
+      }
+      if (options.url === 'url/image/manifests/tag') {
+        return {
+          schemaVersion: 2,
+          mediaType: 'application/vnd.docker.distribution.manifest.v2+json',
+        };
+      }
+      if (
+        options.url === 'url/image/manifests/sha256:manifest' &&
+        options.method === 'get' &&
+        options.headers?.Accept === 'application/vnd.docker.distribution.manifest.v2+json'
+      ) {
+        throw new Error('manifest config unavailable');
+      }
+      throw new Error(`Unexpected request: ${JSON.stringify(options)}`);
+    });
+
+    await expect(
+      registryMocked.getImageManifestDigest(imageInput({ name: 'image' })),
+    ).resolves.toStrictEqual({
+      version: 2,
+      digest: 'sha256:manifest',
+    });
+
+    expect(rootDebugSpy).not.toHaveBeenCalled();
+    expect(childDebug).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'Unable to fetch manifest config created date for url/image@sha256:manifest',
+      ),
+    );
+
+    rootDebugSpy.mockRestore();
+  });
+});
+
 // --- getImagePublishedAt tests ---
 
 describe('getImagePublishedAt', () => {

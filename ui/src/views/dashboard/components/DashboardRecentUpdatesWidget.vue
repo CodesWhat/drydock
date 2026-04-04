@@ -26,9 +26,18 @@ interface Props {
 
 const props = defineProps<Props>();
 
-function getRowClass(row: Record<string, unknown>): string {
+function isRowUpdating(row: Record<string, unknown>): boolean {
   const id = row.id as string;
-  if (props.dashboardUpdateInProgress === id || props.dashboardUpdateAllInProgress) {
+  const status = row.status as string | undefined;
+  return (
+    status === 'updating' ||
+    props.dashboardUpdateInProgress === id ||
+    props.dashboardUpdateAllInProgress
+  );
+}
+
+function getRowClass(row: Record<string, unknown>): string {
+  if (isRowUpdating(row)) {
     return 'opacity-50 pointer-events-none transition-opacity duration-300';
   }
   return '';
@@ -148,11 +157,25 @@ watchEffect(() => {
           fixed-layout
           compact>
           <template #cell-icon="{ row }">
-            <ContainerIcon :icon="row.icon" :size="28" />
+            <AppIcon
+              v-if="isRowUpdating(row)"
+              name="spinner"
+              :size="18"
+              class="dd-spin dd-text-muted" />
+            <ContainerIcon v-else :icon="row.icon" :size="28" />
           </template>
 
           <template #cell-container="{ row }">
-            <div class="font-medium dd-text leading-tight">{{ row.name }}</div>
+            <div class="flex items-center gap-2 flex-wrap">
+              <div class="font-medium dd-text leading-tight">{{ row.name }}</div>
+              <AppBadge
+                v-if="isRowUpdating(row)"
+                size="xs"
+                :custom="{ bg: 'var(--dd-warning-muted)', text: 'var(--dd-warning)' }">
+                <AppIcon name="spinner" :size="12" class="mr-1 dd-spin" />
+                Updating
+              </AppBadge>
+            </div>
             <div class="text-2xs dd-text-muted mt-0.5 truncate">{{ row.image }}</div>
             <div v-if="row.registryError" class="text-2xs mt-0.5 truncate" style="color: var(--dd-danger);">
               {{ row.registryError }}
@@ -222,7 +245,13 @@ watchEffect(() => {
           <template #cell-actions="{ row }">
             <div class="flex justify-center">
             <span
-              v-if="row.blocked"
+              v-if="isRowUpdating(row)"
+              class="w-7 h-7 dd-rounded-sm flex items-center justify-center dd-text-muted"
+              v-tooltip.top="'Updating'">
+              <AppIcon name="spinner" :size="14" class="dd-spin" />
+            </span>
+            <span
+              v-else-if="row.blocked"
               class="w-7 h-7 dd-rounded-sm flex items-center justify-center dd-text-muted opacity-60 cursor-not-allowed"
               v-tooltip.top="'Security blocked'">
               <AppIcon name="lock" :size="14" />

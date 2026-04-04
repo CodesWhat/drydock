@@ -1,4 +1,5 @@
 import type { Container } from '../../../model/container.js';
+import { getErrorMessage } from '../../../util/error.js';
 
 import {
   canonicalizeContainerName,
@@ -24,17 +25,6 @@ function asUnknownRecord(value: unknown): UnknownRecord | null {
     return null;
   }
   return value as UnknownRecord;
-}
-
-function getErrorMessage(error: unknown): string {
-  if (typeof error === 'string') {
-    return error;
-  }
-  const errorRecord = asUnknownRecord(error);
-  if (!errorRecord) {
-    return 'unknown error';
-  }
-  return typeof errorRecord.message === 'string' ? errorRecord.message : 'unknown error';
 }
 
 const RECREATED_CONTAINER_NAME_PATTERN = /^([a-f0-9]{12})_(.+)$/i;
@@ -164,9 +154,12 @@ export async function processDockerEvent(
 
     if (containerFound) {
       dependencies.updateContainerFromInspect(containerFound, containerInspect);
-    } else if (action === 'rename') {
-      // Rename can race with create and happen before the new container is in store.
-      // Schedule a full refresh so the final human-readable name is captured.
+    } else {
+      // Container exists in Docker but not in the store. Schedule a refresh so
+      // the next watch cycle picks it up. This covers rename races (the original
+      // case) and containers that started after the initial create-event refresh
+      // ran before the container was ready (e.g. transient errors during compose
+      // updates where listContainers missed the not-yet-running container).
       await dependencies.watchCronDebounced();
     }
   } catch (e: unknown) {

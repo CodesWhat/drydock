@@ -2,6 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { nextTick, ref } from 'vue';
 import ContainerSideTabContent from '@/components/containers/ContainerSideTabContent.vue';
+import type { ApiContainerUpdateOperation } from '@/types/api';
 import type { Container } from '@/types/container';
 
 const mockRevealContainerEnv = vi.fn();
@@ -133,19 +134,7 @@ const rollbackInProgress = ref<string | null>(null);
 const rollbackMessage = ref<string | null>(null);
 const rollbackError = ref<string | null>(null);
 const updateOperationsLoading = ref(false);
-const detailUpdateOperations = ref<
-  Array<{
-    id: string;
-    status: string;
-    phase: string;
-    fromVersion?: string;
-    toVersion?: string;
-    rollbackReason?: string;
-    lastError?: string;
-    updatedAt?: string;
-    createdAt?: string;
-  }>
->([]);
+const detailUpdateOperations = ref<ApiContainerUpdateOperation[]>([]);
 const updateOperationsError = ref<string | null>(null);
 const mockScanContainer = vi.fn();
 const mockConfirmUpdate = vi.fn();
@@ -654,8 +643,8 @@ describe('ContainerSideTabContent - Environment Variables', () => {
     detailUpdateOperations.value = [
       {
         id: 'op-1',
-        status: 'success',
-        phase: 'completed',
+        status: 'succeeded',
+        phase: 'succeeded',
         fromVersion: '1.0',
         toVersion: '1.1',
         rollbackReason: 'manual',
@@ -675,8 +664,8 @@ describe('ContainerSideTabContent - Environment Variables', () => {
     expect(wrapper.text()).toContain('agent: watcher');
     expect(wrapper.text()).toContain('nginx:1.0');
     expect(wrapper.text()).toContain('op-1');
-    expect(wrapper.text()).toContain('success');
-    expect(wrapper.text()).toContain('completed');
+    expect(wrapper.text()).toContain('succeeded');
+    expect(wrapper.text()).toContain('succeeded');
     expect(wrapper.text()).toContain('manual');
 
     await runButton?.trigger('click');
@@ -1034,14 +1023,16 @@ describe('ContainerSideTabContent - Environment Variables', () => {
       {
         id: 'op-a',
         status: 'failed',
-        phase: 'rollback',
+        phase: 'rollback-started',
+        updatedAt: '2026-03-01T00:00:00Z',
         toVersion: '2.0.0',
         createdAt: '2026-03-01T00:00:00Z',
       },
       {
         id: 'op-b',
         status: 'failed',
-        phase: 'rollback',
+        phase: 'rollback-started',
+        updatedAt: '2026-03-02T00:00:00Z',
         fromVersion: '1.0.0',
         rollbackReason: 'manual',
         lastError: 'timeout',
@@ -1089,8 +1080,9 @@ describe('ContainerSideTabContent - Environment Variables', () => {
     detailUpdateOperations.value = [
       {
         id: 'op-no-versions',
-        status: 'success',
-        phase: 'completed',
+        status: 'succeeded',
+        phase: 'succeeded',
+        updatedAt: '2026-03-02T00:00:00Z',
         createdAt: '2026-03-02T00:00:00Z',
       },
     ];

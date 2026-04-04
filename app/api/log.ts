@@ -1,7 +1,8 @@
 import express from 'express';
 import nocache from 'nocache';
 import { getLogBufferEnabled, getLogLevel } from '../configuration/index.js';
-import { getEntries } from '../log/buffer.js';
+import { getComponents, getEntries } from '../log/buffer.js';
+import { toDisplayLogEntry } from '../log/display-timestamp.js';
 import { sendErrorResponse } from './error-response.js';
 
 const router = express.Router();
@@ -71,8 +72,21 @@ function getLogEntries(req, res) {
 
   const tail = req.query.tail ? Number.parseInt(req.query.tail as string, 10) : undefined;
   const since = req.query.since ? Number.parseInt(req.query.since as string, 10) : undefined;
-  const entries = getEntries({ level, component, tail, since });
+  const entries = getEntries({ level, component, tail, since }).map((entry) =>
+    toDisplayLogEntry(entry),
+  );
   res.status(200).json(entries);
+}
+
+/**
+ * Get unique component names from the log ring buffer.
+ */
+function getLogComponents(_req, res) {
+  if (!getLogBufferEnabled()) {
+    res.status(200).json([]);
+    return;
+  }
+  res.status(200).json(getComponents());
 }
 
 /**
@@ -83,5 +97,6 @@ export function init() {
   router.use(nocache());
   router.get('/', getLog);
   router.get('/entries', getLogEntries);
+  router.get('/components', getLogComponents);
   return router;
 }

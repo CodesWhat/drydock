@@ -1,4 +1,3 @@
-import type { Request } from 'express';
 import type { AgentClient } from '../../agent/AgentClient.js';
 import type { Container, ContainerReport } from '../../model/container.js';
 import type { PaginationLinks } from '../pagination-links.js';
@@ -28,6 +27,8 @@ export interface WatchContainersBody {
 
 export interface UpdateOperationStoreApi {
   getOperationsByContainerName: (containerName: string) => unknown[];
+  getInProgressOperationByContainerName: (containerName: string) => unknown | undefined;
+  getInProgressOperationByContainerId: (containerId: string) => unknown | undefined;
 }
 
 export interface ServerConfiguration {
@@ -55,10 +56,10 @@ export interface AuditStoreApi {
 export interface CrudHandlerDependencies {
   storeApi: {
     getContainersFromStore: (
-      query: Request['query'],
+      query: Record<string, unknown>,
       pagination?: ContainerListPagination,
     ) => Container[];
-    getContainerCountFromStore: (query: Request['query']) => number;
+    getContainerCountFromStore: (query: Record<string, unknown>) => number;
     storeContainer: CrudStoreContainerApi;
     updateOperationStore: UpdateOperationStoreApi;
     getContainerRaw?: (id: string) => Container | undefined;

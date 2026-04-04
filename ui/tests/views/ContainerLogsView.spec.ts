@@ -74,8 +74,8 @@ describe('ContainerLogsView', () => {
       expect(root.classes()).toContain('flex-1');
       expect(root.classes()).toContain('min-h-0');
       expect(root.classes()).toContain('min-w-0');
-      expect(root.classes()).toContain('overflow-y-auto');
-      expect(root.classes()).toContain('sm:pr-[15px]');
+      expect(root.classes()).toContain('overflow-hidden');
+      expect(root.classes()).toContain('flex-col');
     });
   });
 

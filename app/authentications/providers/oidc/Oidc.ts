@@ -335,7 +335,8 @@ function getMaxConcurrentSessionsPerUser(): number {
  */
 class Oidc extends Authentication {
   openidClient: typeof openidClientLibrary = openidClientLibrary;
-  client!: openidClientLibrary.Configuration;
+  client?: openidClientLibrary.Configuration;
+  clientInitializationPromise?: Promise<void>;
   logoutUrl?: string;
 
   getSessionKey() {
@@ -392,7 +393,7 @@ class Oidc extends Authentication {
     };
   }
 
-  async initAuthentication() {
+  private async discoverClient(): Promise<void> {
     this.log.debug(`Discovering configuration from ${this.configuration.discovery}`);
     const openidClient = await this.getOpenIdClient();
     const timeoutSeconds = Math.ceil(this.configuration.timeout / 1000);
@@ -446,6 +447,47 @@ class Oidc extends Authentication {
     }
   }
 
+  async ensureClientInitialized(): Promise<void> {
+    if (this.client) {
+      return;
+    }
+
+    if (!this.clientInitializationPromise) {
+      const initializationAttempt = this.discoverClient()
+        .catch((error: unknown) => {
+          this.client = undefined;
+          throw error;
+        })
+        .finally(() => {
+          if (this.clientInitializationPromise === initializationAttempt) {
+            this.clientInitializationPromise = undefined;
+          }
+        });
+      this.clientInitializationPromise = initializationAttempt;
+    }
+
+    await this.clientInitializationPromise;
+  }
+
+  async initAuthentication() {
+    this.logoutUrl = this.configuration.logouturl;
+
+    try {
+      await this.ensureClientInitialized();
+    } catch (e: unknown) {
+      this.log.warn(
+        `OIDC discovery unavailable during startup (${getErrorMessage(e)}). Drydock will retry on the next authentication attempt.`,
+      );
+    }
+  }
+
+  getInitializedClient(): openidClientLibrary.Configuration {
+    if (!this.client) {
+      throw new Error('OIDC client is not initialized');
+    }
+    return this.client;
+  }
+
   /**
    * Return passport strategy.
    * @param app
@@ -487,7 +529,7 @@ class Oidc extends Authentication {
       type: 'oidc',
       name: this.name,
       redirect: this.configuration.redirect,
-      logoutUrl: this.logoutUrl,
+      logoutUrl: this.logoutUrl || this.configuration.logouturl,
     };
   }
 
@@ -528,37 +570,38 @@ class Oidc extends Authentication {
   }
 
   async redirect(req: OidcRedirectRequest, res: Response): Promise<void> {
-    const openidClient = await this.getOpenIdClient();
-    const codeVerifier = openidClient.randomPKCECodeVerifier();
-    const codeChallenge = await openidClient.calculatePKCECodeChallenge(codeVerifier);
-    const state = uuid();
-    const sessionKey = this.getSessionKey();
-    const sessionLockKey =
-      typeof req.sessionID === 'string' && req.sessionID !== '' ? req.sessionID : undefined;
-
-    if (!req.session) {
-      this.log.warn('Unable to initialize OIDC checks because no session is available');
-      res.status(500).json({ error: 'Unable to initialize OIDC session' });
-      return;
-    }
-    const authUrl = openidClient.buildAuthorizationUrl(this.client, {
-      redirect_uri: `${getPublicUrl(req)}/auth/oidc/${this.name}/cb`,
-      scope: 'openid email profile',
-      code_challenge_method: 'S256',
-      code_challenge: codeChallenge,
-      state,
-    }).href;
-    this.log.debug(`Build redirection url [${redactUrlParams(authUrl)}]`);
-    const parsedAuthUrl = parseHttpUrl(authUrl);
-    if (!parsedAuthUrl || !this.isAllowedAuthorizationRedirect(parsedAuthUrl)) {
-      this.log.warn(
-        `OIDC authorization redirect URL is not allowed for strategy ${sessionKey} (${redactUrlParams(authUrl)})`,
-      );
-      res.status(500).json({ error: 'Unable to initialize OIDC session' });
-      return;
-    }
-
     try {
+      await this.ensureClientInitialized();
+      const openidClient = await this.getOpenIdClient();
+      const codeVerifier = openidClient.randomPKCECodeVerifier();
+      const codeChallenge = await openidClient.calculatePKCECodeChallenge(codeVerifier);
+      const state = uuid();
+      const sessionKey = this.getSessionKey();
+      const sessionLockKey =
+        typeof req.sessionID === 'string' && req.sessionID !== '' ? req.sessionID : undefined;
+
+      if (!req.session) {
+        this.log.warn('Unable to initialize OIDC checks because no session is available');
+        res.status(500).json({ error: 'Unable to initialize OIDC session' });
+        return;
+      }
+      const authUrl = openidClient.buildAuthorizationUrl(this.getInitializedClient(), {
+        redirect_uri: `${getPublicUrl(req)}/auth/oidc/${this.name}/cb`,
+        scope: 'openid email profile',
+        code_challenge_method: 'S256',
+        code_challenge: codeChallenge,
+        state,
+      }).href;
+      this.log.debug(`Build redirection url [${redactUrlParams(authUrl)}]`);
+      const parsedAuthUrl = parseHttpUrl(authUrl);
+      if (!parsedAuthUrl || !this.isAllowedAuthorizationRedirect(parsedAuthUrl)) {
+        this.log.warn(
+          `OIDC authorization redirect URL is not allowed for strategy ${sessionKey} (${redactUrlParams(authUrl)})`,
+        );
+        res.status(500).json({ error: 'Unable to initialize OIDC session' });
+        return;
+      }
+
       const persistOidcChecks = async () => {
         await reloadSessionIfPossible(req.session);
 
@@ -583,15 +626,13 @@ class Oidc extends Authentication {
       } else {
         await persistOidcChecks();
       }
+      res.json({
+        url: authUrl,
+      });
     } catch (e: unknown) {
-      this.log.warn(`Unable to persist OIDC session checks (${getErrorMessage(e)})`);
+      this.log.warn(`Unable to initialize OIDC session (${getErrorMessage(e)})`);
       res.status(500).json({ error: 'Unable to initialize OIDC session' });
-      return;
     }
-
-    res.json({
-      url: authUrl,
-    });
   }
 
   async callback(req: OidcCallbackRequest, res: Response): Promise<void> {
@@ -607,8 +648,9 @@ class Oidc extends Authentication {
         return;
       }
 
+      await this.ensureClientInitialized();
       const tokenSet = await openidClient.authorizationCodeGrant(
-        this.client,
+        this.getInitializedClient(),
         callbackData.callbackUrl,
         {
           pkceCodeVerifier: callbackData.oidcCheck.codeVerifier,
@@ -827,8 +869,9 @@ class Oidc extends Authentication {
 
   async getUserFromAccessToken(accessToken: string): Promise<OidcAuthenticatedUser> {
     const openidClient = await this.getOpenIdClient();
+    await this.ensureClientInitialized();
     const userInfo = await openidClient.fetchUserInfo(
-      this.client,
+      this.getInitializedClient(),
       accessToken,
       openidClient.skipSubjectCheck,
     );

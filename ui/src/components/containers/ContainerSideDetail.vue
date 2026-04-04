@@ -3,7 +3,7 @@ import AppIconButton from '@/components/AppIconButton.vue';
 import AppBadge from '@/components/AppBadge.vue';
 import AppTabBar from '@/components/AppTabBar.vue';
 import StatusDot from '@/components/StatusDot.vue';
-import { getContainerActionKey } from '../../utils/container-action-key';
+import { hasTrackedContainerAction } from '../../utils/container-action-key';
 import ContainerSideTabContent from './ContainerSideTabContent.vue';
 import { useContainersViewTemplateContext } from './containersViewTemplateContext';
 
@@ -17,6 +17,7 @@ const {
   detailTabs,
   activeDetailTab,
   actionInProgress,
+  isContainerUpdateInProgress,
   confirmStop,
   startContainer,
   confirmRestart,
@@ -27,7 +28,22 @@ const {
 } = useContainersViewTemplateContext();
 
 function isActionInProgress(container: { id?: unknown; name?: unknown }) {
-  return actionInProgress.value.has(getContainerActionKey(container));
+  return (
+    hasTrackedContainerAction(actionInProgress.value, container) ||
+    isContainerUpdateInProgress(container)
+  );
+}
+
+function getStatusLabel(container: { id?: unknown; name?: unknown; status?: string }) {
+  return isActionInProgress(container) ? 'Updating' : (container.status ?? 'unknown');
+}
+
+function getStatusTone(container: { id?: unknown; name?: unknown; status?: string }) {
+  return isActionInProgress(container)
+    ? 'warning'
+    : container.status === 'running'
+      ? 'success'
+      : 'danger';
 }
 </script>
 
@@ -103,8 +119,9 @@ function isActionInProgress(container: { id?: unknown; name?: unknown }) {
       <template #header>
         <div class="flex items-center gap-2 min-w-0">
           <StatusDot
-            :status="selectedContainer.status === 'running' ? 'running' : 'stopped'"
-            v-tooltip.top="selectedContainer.status"
+            :status="isActionInProgress(selectedContainer) ? 'warning' : selectedContainer.status === 'running' ? 'running' : 'stopped'"
+            :pulse="isActionInProgress(selectedContainer)"
+            v-tooltip.top="getStatusLabel(selectedContainer)"
             size="lg" />
           <span class="text-sm font-bold truncate dd-text">
             {{ selectedContainer.name }}
@@ -116,9 +133,14 @@ function isActionInProgress(container: { id?: unknown; name?: unknown }) {
           {{ selectedContainer.image }}:{{ selectedContainer.currentTag }}
         </span>
         <AppBadge
-          :tone="selectedContainer.status === 'running' ? 'success' : 'danger'"
+          :tone="getStatusTone(selectedContainer)"
           size="xs">
-          {{ selectedContainer.status }}
+          <AppIcon
+            v-if="isActionInProgress(selectedContainer)"
+            name="spinner"
+            :size="12"
+            class="mr-1 dd-spin" />
+          {{ getStatusLabel(selectedContainer) }}
         </AppBadge>
         <AppBadge tone="neutral" size="xs">
           {{ selectedContainer.server }}

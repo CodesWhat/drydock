@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import AppIconButton from '@/components/AppIconButton.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { useLogSearch } from '../composables/useLogSearch';
 import type { AppLogEntry } from '../types/log-entry';
@@ -43,15 +44,20 @@ const lineElements = new Map<number, HTMLElement>();
 const logViewport = ref<HTMLElement | null>(null);
 const copySuccess = ref(false);
 
-function isNearBottom(element: HTMLElement): boolean {
+const newestFirst = ref(false);
+
+function isNearEdge(element: HTMLElement): boolean {
+  if (newestFirst.value) {
+    return element.scrollTop < 28;
+  }
   return element.scrollHeight - element.scrollTop - element.clientHeight < 28;
 }
 
-function scrollToBottom(): void {
+function scrollToEdge(): void {
   if (!logViewport.value) {
     return;
   }
-  logViewport.value.scrollTop = logViewport.value.scrollHeight;
+  logViewport.value.scrollTop = newestFirst.value ? 0 : logViewport.value.scrollHeight;
 }
 
 function handleLogScroll(): void {
@@ -59,8 +65,8 @@ function handleLogScroll(): void {
     return;
   }
 
-  const nearBottom = isNearBottom(logViewport.value);
-  if (nearBottom !== props.autoScrollPinned) {
+  const nearEdge = isNearEdge(logViewport.value);
+  if (nearEdge !== props.autoScrollPinned) {
     emit('toggle-pin');
   }
 }
@@ -69,7 +75,7 @@ function togglePin(): void {
   const wasPinned = props.autoScrollPinned;
   emit('toggle-pin');
   if (!wasPinned) {
-    void nextTick(() => scrollToBottom());
+    void nextTick(() => scrollToEdge());
   }
 }
 
@@ -87,6 +93,7 @@ const {
   regexSearch,
   searchError,
   matchedEntryIds,
+  matchedEntryIdSet,
   matchLabel,
   jumpToMatch,
   isMatchedEntry,
@@ -94,9 +101,33 @@ const {
 } = useLogSearch({
   visibleEntries: computed(() => props.entries),
   lineElements,
+  searchTextForEntry: (entry) =>
+    [entry.timestamp, entry.level, entry.channel, entry.component, entry.plainLine]
+      .filter(Boolean)
+      .join(' '),
 });
 
-const renderedLineCount = computed(() => props.lineCount ?? props.entries.length);
+const searchFilterMode = ref(false);
+
+const displayEntries = computed(() => {
+  let entries = props.entries;
+  if (searchFilterMode.value && searchQuery.value) {
+    entries = entries.filter((entry) => matchedEntryIdSet.value.has(entry.id));
+  }
+  return newestFirst.value ? [...entries].reverse() : entries;
+});
+
+const renderedLineCount = computed(() => {
+  const total = props.lineCount ?? props.entries.length;
+  if (
+    searchFilterMode.value &&
+    searchQuery.value &&
+    displayEntries.value.length < props.entries.length
+  ) {
+    return `${displayEntries.value.length} / ${total}`;
+  }
+  return `${total}`;
+});
 
 watch(
   () => props.entries.length,
@@ -109,14 +140,14 @@ watch(
     }
 
     if (props.autoScrollPinned) {
-      void nextTick(() => scrollToBottom());
+      void nextTick(() => scrollToEdge());
     }
   },
 );
 
 onMounted(() => {
   if (props.autoScrollPinned) {
-    void nextTick(() => scrollToBottom());
+    void nextTick(() => scrollToEdge());
   }
 });
 
@@ -160,6 +191,17 @@ function tokenizeJson(prettyJson: string): JsonToken[] {
   const tokens: JsonToken[] = [];
   let cursor = 0;
   const numberPattern = /^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/;
+  const hasEscapingBackslash = (value: string, index: number): boolean => {
+    let backslashCount = 0;
+    let cursor = index - 1;
+
+    while (cursor >= 0 && value[cursor] === '\\') {
+      backslashCount += 1;
+      cursor -= 1;
+    }
+
+    return backslashCount % 2 === 1;
+  };
 
   while (cursor < prettyJson.length) {
     const character = prettyJson[cursor];
@@ -183,7 +225,7 @@ function tokenizeJson(prettyJson: string): JsonToken[] {
     if (character === '"') {
       let end = cursor + 1;
       while (end < prettyJson.length) {
-        if (prettyJson[end] === '"' && prettyJson[end - 1] !== '\\') {
+        if (prettyJson[end] === '"' && !hasEscapingBackslash(prettyJson, end)) {
           end += 1;
           break;
         }
@@ -284,54 +326,42 @@ async function copyLogs(): Promise<void> {
 
 <template>
   <div
-    class="dd-rounded overflow-hidden flex flex-col min-h-[300px] flex-1"
+    class="dd-rounded overflow-hidden flex flex-col flex-1 min-h-0"
     :style="{ backgroundColor: 'var(--dd-bg-code)' }"
     data-test="app-log-viewer"
   >
     <div
-      class="px-3 py-2.5 flex flex-col gap-2"
+      class="px-3 py-2.5 flex flex-col gap-2 shrink-0"
       :style="{ borderBottom: '1px solid var(--dd-log-divider)' }"
     >
-      <div class="flex items-center gap-2 justify-between">
-        <div class="flex items-center gap-2 min-w-0">
-          <slot name="toolbar-left" />
-        </div>
+      <div class="flex items-center gap-1.5 flex-wrap">
+        <slot name="toolbar-left" />
 
-        <div class="flex items-center gap-1.5">
-          <AppButton size="none" variant="plain" weight="none"
-            type="button"
-            data-test="container-log-toggle-pause"
-            class="px-2 py-1 dd-rounded text-2xs font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-            @click="emit('toggle-pause')"
-          >
-            <span class="inline-flex items-center gap-1">
-              <AppIcon :name="props.paused ? 'play' : 'pause'" :size="11" />
-              {{ props.paused ? 'Resume' : 'Pause' }}
-            </span>
-          </AppButton>
+        <AppIconButton
+          :icon="props.paused ? 'play' : 'pause'"
+          size="xs"
+          data-test="container-log-toggle-pause"
+          :tooltip="props.paused ? 'Resume' : 'Pause'"
+          @click="emit('toggle-pause')"
+        />
 
-          <AppButton size="none" variant="plain" weight="none"
-            type="button"
-            class="px-2 py-1 dd-rounded text-2xs font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-            @click="togglePin"
-          >
-            {{ props.autoScrollPinned ? 'Unpin' : 'Pin' }}
-          </AppButton>
+        <AppIconButton
+          :icon="props.autoScrollPinned ? 'unpin' : 'pin'"
+          size="xs"
+          data-test="container-log-toggle-pin"
+          :tooltip="props.autoScrollPinned ? 'Unpin auto-scroll' : 'Pin auto-scroll'"
+          @click="togglePin"
+        />
 
-          <AppButton size="none" variant="plain" weight="none"
-            type="button"
-            data-test="container-log-copy"
-            class="px-2 py-1 dd-rounded text-2xs font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-            @click="copyLogs"
-          >
-            <span class="inline-flex items-center gap-1">
-              <AppIcon :name="copySuccess ? 'check' : 'ph:copy'" :size="11" />
-              {{ copySuccess ? 'Copied' : 'Copy' }}
-            </span>
-          </AppButton>
+        <AppIconButton
+          :icon="newestFirst ? 'sort-asc' : 'sort-desc'"
+          size="xs"
+          data-test="container-log-sort-toggle"
+          :tooltip="newestFirst ? 'Newest first' : 'Oldest first'"
+          @click="newestFirst = !newestFirst"
+        />
 
-          <slot name="toolbar-right" />
-        </div>
+        <slot name="toolbar-right" />
       </div>
 
       <div class="flex flex-wrap items-center gap-2">
@@ -360,6 +390,16 @@ async function copyLogs(): Promise<void> {
         >
           .* Regex
         </AppButton>
+
+        <AppIconButton
+          icon="filter"
+          size="xs"
+          :variant="searchFilterMode ? 'secondary' : 'muted'"
+          data-test="container-log-filter-toggle"
+          :tooltip="searchFilterMode ? 'Showing matches only' : 'Show matches only'"
+          :class="searchFilterMode ? 'dd-bg-elevated' : ''"
+          @click="searchFilterMode = !searchFilterMode"
+        />
 
         <template v-if="searchQuery">
           <AppButton size="none" variant="plain" weight="none"
@@ -391,18 +431,27 @@ async function copyLogs(): Promise<void> {
       </div>
     </div>
 
+    <div class="relative flex-1 min-h-[120px] flex flex-col">
+      <AppIconButton
+        :icon="copySuccess ? 'check' : 'copy'"
+        size="xs"
+        data-test="container-log-copy"
+        :tooltip="copySuccess ? 'Copied!' : 'Copy logs'"
+        class="absolute top-2 right-2 z-10 opacity-50 hover:opacity-100"
+        @click="copyLogs"
+      />
     <div
       ref="logViewport"
-      class="flex-1 min-h-0 overflow-auto font-mono"
+      class="flex-1 min-h-0 overflow-y-auto overflow-x-hidden font-mono"
       :class="props.compact ? 'text-2xs' : 'text-2xs-plus'"
       @scroll="handleLogScroll"
     >
-      <div v-if="props.entries.length === 0" class="px-3 py-5 text-center text-2xs-plus dd-text-muted">
-        {{ props.emptyMessage }}
+      <div v-if="displayEntries.length === 0" class="px-3 py-5 text-center text-2xs-plus dd-text-muted">
+        {{ searchFilterMode && searchQuery ? 'No matching entries' : props.emptyMessage }}
       </div>
 
       <div
-        v-for="(entry, index) in props.entries"
+        v-for="(entry, index) in displayEntries"
         :key="entry.id"
         :ref="(element) => setLineElement(entry.id, element as Element | null)"
         data-test="container-log-row"
@@ -412,9 +461,9 @@ async function copyLogs(): Promise<void> {
           isCurrentMatch(entry.id) ? 'bg-drydock-secondary/10' : '',
         ]"
       >
-        <div class="flex items-center gap-2 whitespace-nowrap">
-          <span v-if="props.showLineNumbers" class="shrink-0 tabular-nums dd-text-muted">{{ index + 1 }}</span>
-          <span class="shrink-0 tabular-nums" style="color: var(--dd-log-text-muted)">{{ entry.timestamp || '-' }}</span>
+        <div class="flex items-start gap-2">
+          <span v-if="props.showLineNumbers" class="shrink-0 w-8 text-right whitespace-nowrap tabular-nums dd-text-muted">{{ index + 1 }}</span>
+          <span class="shrink-0 whitespace-nowrap tabular-nums" style="color: var(--dd-log-text-muted)">{{ entry.timestamp || '-' }}</span>
 
           <slot name="entry-prefix" :entry="entry" />
 
@@ -423,7 +472,7 @@ async function copyLogs(): Promise<void> {
             class="min-w-0 flex-1 whitespace-pre-wrap break-words"
             style="color: var(--dd-log-text)"
           ><span v-for="(token, tokenIndex) in tokenizeJson(entry.json.pretty)" :key="`${entry.id}-${tokenIndex}`" :class="tokenClassName(token)">{{ token.text }}</span></pre>
-          <span v-else class="min-w-0 flex-1" style="color: var(--dd-log-text)">
+          <span v-else class="min-w-0 flex-1 whitespace-pre-wrap break-words" style="color: var(--dd-log-text)">
             <span
               v-for="(segment, segmentIndex) in entry.ansiSegments"
               :key="`${entry.id}-${segmentIndex}`"
@@ -433,13 +482,14 @@ async function copyLogs(): Promise<void> {
         </div>
       </div>
     </div>
+    </div>
 
     <div
       class="px-3 py-1.5 flex items-center justify-between text-2xs gap-2"
       :style="{ borderTop: '1px solid var(--dd-log-divider)', backgroundColor: 'var(--dd-log-footer-bg)' }"
     >
       <div class="flex items-center gap-2 min-w-0">
-        <span class="dd-text-muted font-mono">{{ renderedLineCount }} lines</span>
+        <span class="dd-text-muted font-mono" data-test="container-log-line-count">{{ renderedLineCount }} lines</span>
         <slot name="footer-extra" />
       </div>
 

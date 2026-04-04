@@ -79,6 +79,7 @@ type PreparedContainerUpdateExecution = {
   tempName: string;
   wasRunning: boolean;
   shouldHealthGate: boolean;
+  healthGateTimeoutMs?: number;
   operationId: string;
 };
 
@@ -97,6 +98,12 @@ type RollbackTelemetryPayload = {
   toVersion?: string;
 };
 
+type RollbackConfig = {
+  autoRollback?: boolean;
+  rollbackWindow?: number;
+  [key: string]: unknown;
+};
+
 type PendingContainerUpdateOperation = NonNullable<
   ReturnType<typeof updateOperationStore.getInProgressOperationByContainerName>
 >;
@@ -104,6 +111,7 @@ type PendingContainerUpdateOperation = NonNullable<
 type ContainerUpdateExecutorDependencies = {
   getConfiguration: () => { dryrun?: boolean; [key: string]: unknown };
   getTriggerId: () => string;
+  getRollbackConfig: (container: ContainerForUpdate) => RollbackConfig;
   stopContainer: (
     container: DockerContainerHandle,
     containerName: string,
@@ -164,6 +172,7 @@ type ContainerUpdateExecutorDependencies = {
     container: DockerContainerHandle,
     containerName: string,
     logContainer: ContainerUpdateLogger,
+    timeoutMs?: number,
   ) => Promise<void>;
 };
 
@@ -174,8 +183,11 @@ type ContainerUpdateExecutorConstructorOptions = Omit<
   getConfiguration?: ContainerUpdateExecutorDependencies['getConfiguration'];
 };
 
+const DEFAULT_HEALTH_GATE_TIMEOUT_MS = 120_000;
+
 const REQUIRED_CONTAINER_UPDATE_EXECUTOR_DEPENDENCY_KEYS = [
   'getTriggerId',
+  'getRollbackConfig',
   'stopContainer',
   'waitContainerRemoved',
   'removeContainer',
@@ -210,10 +222,18 @@ function getErrorMessage(error: unknown): string {
   return String(error);
 }
 
+function getHealthGateTimeoutMs(rollbackConfig: RollbackConfig): number {
+  return Number.isFinite(rollbackConfig.rollbackWindow) && rollbackConfig.rollbackWindow > 0
+    ? rollbackConfig.rollbackWindow
+    : DEFAULT_HEALTH_GATE_TIMEOUT_MS;
+}
+
 class ContainerUpdateExecutor {
   getConfiguration: ContainerUpdateExecutorDependencies['getConfiguration'];
 
   getTriggerId: ContainerUpdateExecutorDependencies['getTriggerId'];
+
+  getRollbackConfig: ContainerUpdateExecutorDependencies['getRollbackConfig'];
 
   stopContainer: ContainerUpdateExecutorDependencies['stopContainer'];
 
@@ -504,24 +524,15 @@ class ContainerUpdateExecutor {
     const configuration = this.getConfiguration();
 
     await this.reconcileInProgressContainerUpdateOperation(dockerApi, container, logContainer);
-    await this.pullImage(dockerApi, auth, newImage, logContainer);
-
-    if (configuration.dryrun) {
-      logContainer.info('Do not replace the existing container because dry-run mode is enabled');
-      return undefined;
-    }
-
-    const cloneRuntimeConfigOptions = await this.getCloneRuntimeConfigOptions(
-      dockerApi,
-      currentContainerSpec,
-      newImage,
-      logContainer,
-    );
 
     const oldName = currentContainerSpec.Name.replace(/^\//, '');
     const tempName = `${oldName}-old-${Date.now()}`;
     const wasRunning = currentContainerSpec.State.Running;
+    const rollbackConfig = this.getRollbackConfig(container);
     const shouldHealthGate = wasRunning && this.hasHealthcheckConfigured(currentContainerSpec);
+    const healthGateTimeoutMs = shouldHealthGate
+      ? getHealthGateTimeoutMs(rollbackConfig)
+      : undefined;
 
     const operation = updateOperationStore.insertOperation({
       containerId: container.id,
@@ -536,8 +547,37 @@ class ContainerUpdateExecutor {
       toVersion: container.updateKind.remoteValue ?? container.image.tag.value,
       targetImage: newImage,
       status: 'in-progress',
-      phase: 'prepare',
+      phase: 'pulling',
     });
+
+    try {
+      await this.pullImage(dockerApi, auth, newImage, logContainer);
+    } catch (pullError: unknown) {
+      updateOperationStore.updateOperation(operation.id, {
+        status: 'failed',
+        phase: 'pull-failed',
+        lastError: getErrorMessage(pullError),
+      });
+      throw pullError;
+    }
+
+    if (configuration.dryrun) {
+      logContainer.info('Do not replace the existing container because dry-run mode is enabled');
+      updateOperationStore.updateOperation(operation.id, {
+        status: 'succeeded',
+        phase: 'dryrun',
+      });
+      return undefined;
+    }
+
+    const cloneRuntimeConfigOptions = await this.getCloneRuntimeConfigOptions(
+      dockerApi,
+      currentContainerSpec,
+      newImage,
+      logContainer,
+    );
+
+    updateOperationStore.updateOperation(operation.id, { phase: 'prepare' });
 
     logContainer.info(`Rename container ${oldName} to ${tempName}`);
     await currentContainer.rename({ name: tempName });
@@ -553,6 +593,7 @@ class ContainerUpdateExecutor {
       tempName,
       wasRunning,
       shouldHealthGate,
+      healthGateTimeoutMs,
       operationId: operation.id,
     };
   }
@@ -645,7 +686,12 @@ class ContainerUpdateExecutor {
 
     attemptState.failureReason = 'health_gate_failed';
     updateOperationStore.updateOperation(preparedExecution.operationId, { phase: 'health-gate' });
-    await this.waitForContainerHealthy(newContainer, preparedExecution.oldName, logContainer);
+    await this.waitForContainerHealthy(
+      newContainer,
+      preparedExecution.oldName,
+      logContainer,
+      preparedExecution.healthGateTimeoutMs,
+    );
     updateOperationStore.updateOperation(preparedExecution.operationId, {
       phase: 'health-gate-passed',
     });

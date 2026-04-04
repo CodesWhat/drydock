@@ -10,6 +10,7 @@ import {
   meetsMinLevel,
   onEntry,
 } from '../log/buffer.js';
+import { toDisplayLogEntry } from '../log/display-timestamp.js';
 import {
   applySessionMiddleware,
   createFixedWindowRateLimiter,
@@ -109,7 +110,7 @@ function matchesFilter(entry: LogEntry, minLevel: number, component?: string): b
 
 function trySendLogEntry(webSocket: WebSocketLike, entry: LogEntry): boolean {
   try {
-    webSocket.send(JSON.stringify(entry));
+    webSocket.send(JSON.stringify(toDisplayLogEntry(entry)));
     return true;
   } catch {
     return false;

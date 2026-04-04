@@ -9,7 +9,7 @@ function usage(message) {
     console.error('');
   }
   console.error(
-    'Usage: node scripts/aggregate-stryker-score.mjs --input <dir> [--expected-count <n>] --summary-out <file> --score-out <file>',
+    'Usage: node scripts/aggregate-stryker-score.mjs --input <dir> [--expected-count <n>] [--allow-missing] --summary-out <file> --score-out <file>',
   );
   console.error('       node scripts/aggregate-stryker-score.mjs --summarize <summary.json>');
   process.exit(1);
@@ -18,20 +18,26 @@ function usage(message) {
 function summarizeToMarkdown(summaryPath) {
   const summary = JSON.parse(fs.readFileSync(summaryPath, 'utf8'));
   const totals = summary.totals;
+  const expectedLabel =
+    summary.expectedReportCount != null ? ` / ${summary.expectedReportCount} expected` : '';
   const lines = [
     '### Aggregate Mutation Score',
-    `- Reports aggregated: ${summary.mutationReportCount}.`,
+    `- Reports aggregated: ${summary.mutationReportCount}${expectedLabel}.`,
     `- Mutation score: ${totals.mutationScore.toFixed(2)}%.`,
     `- Detected / valid: ${totals.detected} / ${totals.valid}.`,
     `- Undetected: ${totals.undetected}.`,
     `- Invalid: ${totals.invalid}.`,
     `- Ignored: ${totals.ignored}.`,
   ];
+  if (summary.isComplete === false && summary.missingReportCount > 0) {
+    lines.push(`- Status: PARTIAL (${summary.missingReportCount} reports missing).`);
+  }
   console.log(lines.join('\n'));
 }
 
 function parseArgs(argv) {
   const args = {
+    allowMissing: false,
     expectedCount: null,
     input: null,
     scoreOut: null,
@@ -78,6 +84,9 @@ function parseArgs(argv) {
         }
         args.summaryOut = next;
         index += 1;
+        break;
+      case '--allow-missing':
+        args.allowMissing = true;
         break;
       default:
         usage(`Unknown argument: ${arg}`);
@@ -238,11 +247,15 @@ function main() {
   }
 
   const mutationReports = collectMutationReports(inputPath);
-  if (mutationReports.length === 0) {
+  if (mutationReports.length === 0 && !args.allowMissing) {
     throw new Error(`No mutation.json files found under ${inputPath}`);
   }
 
-  if (args.expectedCount !== null && mutationReports.length !== args.expectedCount) {
+  if (
+    args.expectedCount !== null &&
+    mutationReports.length !== args.expectedCount &&
+    !args.allowMissing
+  ) {
     throw new Error(
       `Expected ${args.expectedCount} mutation reports under ${inputPath}, but found ${mutationReports.length}`,
     );
@@ -269,10 +282,18 @@ function main() {
 
   finalizeCounts(totals);
 
+  const missingReportCount =
+    args.expectedCount !== null ? Math.max(args.expectedCount - mutationReports.length, 0) : 0;
+
   const summaryOutput = {
     generatedAt: new Date().toISOString(),
     input: inputPath,
     mutationReportCount: mutationReports.length,
+    ...(args.expectedCount !== null && {
+      expectedReportCount: args.expectedCount,
+      missingReportCount,
+      isComplete: missingReportCount === 0,
+    }),
     totals,
     reports,
   };

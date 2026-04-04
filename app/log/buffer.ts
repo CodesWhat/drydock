@@ -121,3 +121,18 @@ export function getEntries(options?: GetEntriesOptions): LogEntry[] {
   }
   return applyFilters(drainBuffer(), options);
 }
+
+export function getComponents(): string[] {
+  if (count === 0) {
+    return [];
+  }
+  const components = new Set<string>();
+  const start = getStartIndex(head, count, MAX_SIZE);
+  for (let i = 0; i < count; i++) {
+    const entry = buffer[(start + i) % MAX_SIZE];
+    if (entry?.component) {
+      components.add(entry.component);
+    }
+  }
+  return Array.from(components).sort();
+}

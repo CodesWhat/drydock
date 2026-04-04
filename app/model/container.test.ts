@@ -56,6 +56,396 @@ function createContainerWithSecurity(security: Record<string, unknown>) {
   };
 }
 
+function createValidContainer(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'container-123456789',
+    name: 'test',
+    watcher: 'test',
+    image: {
+      id: 'image-123456789',
+      registry: {
+        name: 'hub',
+        url: 'https://hub',
+      },
+      name: 'organization/image',
+      tag: {
+        value: '1.0.0',
+        semver: true,
+      },
+      digest: {
+        watch: false,
+      },
+      architecture: 'arch',
+      os: 'os',
+    },
+    ...overrides,
+  };
+}
+
+const UNKNOWN_UPDATE_KIND = {
+  kind: 'unknown',
+  localValue: undefined,
+  remoteValue: undefined,
+  semverDiff: 'unknown',
+};
+
+test('testable_getRawTagUpdate should return unknown for missing tags and created-only differences', () => {
+  expect(
+    container.testable_getRawTagUpdate({
+      image: {
+        tag: { semver: true },
+      },
+      result: {
+        tag: '1.0.1',
+      },
+    }),
+  ).toEqual(UNKNOWN_UPDATE_KIND);
+
+  expect(
+    container.testable_getRawTagUpdate({
+      image: {
+        tag: { value: '1.0.0', semver: true },
+        created: '2024-01-01T00:00:00.000Z',
+      },
+      result: {
+        created: '2024-02-01T00:00:00.000Z',
+      },
+    }),
+  ).toEqual(UNKNOWN_UPDATE_KIND);
+});
+
+test('testable_getRawDigestUpdate should require watch mode, both digests, and a changed digest', () => {
+  expect(
+    container.testable_getRawDigestUpdate({
+      image: {
+        digest: {
+          watch: false,
+          value: 'sha256:current',
+        },
+      },
+      result: {
+        digest: 'sha256:next',
+      },
+    }),
+  ).toEqual(UNKNOWN_UPDATE_KIND);
+
+  expect(
+    container.testable_getRawDigestUpdate({
+      image: {
+        digest: {
+          watch: true,
+          value: 'sha256:current',
+        },
+      },
+      result: {
+        digest: 'sha256:next',
+      },
+    }),
+  ).toEqual({
+    kind: 'digest',
+    localValue: 'sha256:current',
+    remoteValue: 'sha256:next',
+    semverDiff: 'unknown',
+  });
+});
+
+test('testable_getRawUpdateKind should prefer tag updates and otherwise fall back to digest updates', () => {
+  expect(
+    container.testable_getRawUpdateKind({
+      image: {
+        tag: { value: '1.0.0', semver: true },
+        digest: { watch: true, value: 'sha256:current' },
+      },
+      result: {
+        tag: '1.0.1',
+        digest: 'sha256:next',
+      },
+    }),
+  ).toEqual({
+    kind: 'tag',
+    localValue: '1.0.0',
+    remoteValue: '1.0.1',
+    semverDiff: 'patch',
+  });
+
+  expect(
+    container.testable_getRawUpdateKind({
+      image: {
+        tag: { value: 'latest', semver: false },
+        digest: { watch: true, value: 'sha256:current' },
+      },
+      result: {
+        tag: 'latest',
+        digest: 'sha256:next',
+      },
+    }),
+  ).toEqual({
+    kind: 'digest',
+    localValue: 'sha256:current',
+    remoteValue: 'sha256:next',
+    semverDiff: 'unknown',
+  });
+});
+
+test('testable_hasRawUpdate should account for created-date and digest branches', () => {
+  expect(
+    container.testable_hasRawUpdate({
+      image: {
+        tag: { value: '1.0.0', semver: true },
+        digest: { watch: false },
+        created: '2024-01-01T00:00:00.000Z',
+      },
+      result: {
+        tag: '1.0.0',
+        created: '2024-02-01T00:00:00.000Z',
+      },
+    }),
+  ).toBe(true);
+
+  expect(
+    container.testable_hasRawUpdate({
+      image: {
+        tag: { value: 'latest', semver: false },
+        digest: { watch: true, value: 'sha256:current' },
+      },
+      result: {
+        tag: 'latest',
+        digest: 'sha256:current',
+      },
+    }),
+  ).toBe(false);
+
+  expect(
+    container.testable_hasRawUpdate({
+      image: {
+        tag: { value: 'latest', semver: false },
+        digest: { watch: true, value: 'sha256:current' },
+      },
+      result: {
+        tag: 'latest',
+        digest: 'sha256:next',
+      },
+    }),
+  ).toBe(true);
+});
+
+test('testable_isUpdateSuppressed should handle snooze, skip-tags, and skip-digests directly', () => {
+  const futureSnooze = new Date(Date.now() + daysToMs(1)).toISOString();
+
+  expect(
+    container.testable_isUpdateSuppressed(
+      {
+        updatePolicy: {
+          snoozeUntil: futureSnooze,
+        },
+      },
+      {
+        kind: 'tag',
+        remoteValue: '1.0.1',
+        semverDiff: 'patch',
+      },
+    ),
+  ).toBe(true);
+
+  expect(
+    container.testable_isUpdateSuppressed(
+      {
+        updatePolicy: {
+          skipTags: ['1.0.1'],
+        },
+      },
+      {
+        kind: 'tag',
+        remoteValue: '1.0.1',
+        semverDiff: 'patch',
+      },
+    ),
+  ).toBe(true);
+
+  expect(
+    container.testable_isUpdateSuppressed(
+      {
+        updatePolicy: {
+          skipDigests: ['sha256:next'],
+        },
+      },
+      {
+        kind: 'digest',
+        remoteValue: 'sha256:next',
+        semverDiff: 'unknown',
+      },
+    ),
+  ).toBe(true);
+});
+
+test('testable_isUpdateSuppressed should return false when no suppression rule applies', () => {
+  const pastSnooze = new Date(Date.now() - daysToMs(1)).toISOString();
+  const matureEnough = new Date(Date.now() - daysToMs(10)).toISOString();
+
+  expect(
+    container.testable_isUpdateSuppressed(
+      {},
+      {
+        kind: 'tag',
+        remoteValue: '1.0.1',
+        semverDiff: 'patch',
+      },
+    ),
+  ).toBe(false);
+
+  expect(
+    container.testable_isUpdateSuppressed(
+      {
+        updatePolicy: {
+          snoozeUntil: pastSnooze,
+        },
+      },
+      {
+        kind: 'tag',
+        remoteValue: '1.0.1',
+        semverDiff: 'patch',
+      },
+    ),
+  ).toBe(false);
+
+  expect(
+    container.testable_isUpdateSuppressed(
+      {
+        updatePolicy: {
+          snoozeUntil: 'not-a-date',
+        },
+      },
+      {
+        kind: 'tag',
+        remoteValue: '1.0.1',
+        semverDiff: 'patch',
+      },
+    ),
+  ).toBe(false);
+
+  expect(
+    container.testable_isUpdateSuppressed(
+      {
+        updateDetectedAt: matureEnough,
+        updatePolicy: {
+          maturityMode: 'mature',
+          maturityMinAgeDays: 7,
+        },
+      },
+      {
+        kind: 'tag',
+        remoteValue: '1.0.1',
+        semverDiff: 'patch',
+      },
+    ),
+  ).toBe(false);
+});
+
+test('testable_isUpdateSuppressed should ignore skip lists without matching kinds and remote values', () => {
+  expect(
+    container.testable_isUpdateSuppressed(
+      {
+        updatePolicy: {
+          skipTags: ['1.0.1'],
+        },
+      },
+      {
+        kind: 'tag',
+        semverDiff: 'patch',
+      },
+    ),
+  ).toBe(false);
+
+  expect(
+    container.testable_isUpdateSuppressed(
+      {
+        updatePolicy: {
+          skipDigests: ['sha256:next'],
+        },
+      },
+      {
+        kind: 'digest',
+        semverDiff: 'unknown',
+      },
+    ),
+  ).toBe(false);
+
+  expect(
+    container.testable_isUpdateSuppressed(
+      {
+        updatePolicy: {
+          skipTags: ['1.0.1'],
+          skipDigests: ['sha256:next'],
+        },
+      },
+      {
+        kind: 'unknown',
+        remoteValue: '1.0.1',
+        semverDiff: 'unknown',
+      },
+    ),
+  ).toBe(false);
+});
+
+test('testable_getRawUpdateAge should use the earliest known timestamp and ignore missing update state', () => {
+  const now = Date.now();
+  const firstSeenAt = new Date(now - daysToMs(3)).toISOString();
+  const publishedAt = new Date(now - daysToMs(1)).toISOString();
+
+  expect(
+    container.testable_getRawUpdateAge({
+      updateAvailable: true,
+      firstSeenAt,
+      result: {
+        publishedAt,
+      },
+    }),
+  ).toBeGreaterThanOrEqual(daysToMs(3) - 5_000);
+
+  expect(
+    container.testable_getRawUpdateAge({
+      updateAvailable: false,
+      firstSeenAt,
+      result: {
+        publishedAt,
+      },
+    }),
+  ).toBeUndefined();
+});
+
+test('testable_resultChangedFunction should compare created timestamps and handle missing comparators', () => {
+  const self = {
+    result: {
+      tag: '1.0.0',
+      suggestedTag: '1.0.1',
+      digest: 'sha256:current',
+      created: '2024-01-01T00:00:00.000Z',
+    },
+  };
+
+  expect(container.testable_resultChangedFunction.call(self, undefined)).toBe(true);
+  expect(
+    container.testable_resultChangedFunction.call(self, {
+      result: {
+        tag: '1.0.0',
+        suggestedTag: '1.0.1',
+        digest: 'sha256:current',
+        created: '2024-01-01T00:00:00.000Z',
+      },
+    }),
+  ).toBe(false);
+  expect(
+    container.testable_resultChangedFunction.call(self, {
+      result: {
+        tag: '1.0.0',
+        suggestedTag: '1.0.1',
+        digest: 'sha256:current',
+        created: '2024-02-01T00:00:00.000Z',
+      },
+    }),
+  ).toBe(true);
+});
+
 test('model should be validated when compliant', async () => {
   const containerValidated = container.validate({
     id: 'container-123456789',
@@ -135,26 +525,12 @@ test('model should be validated when compliant', async () => {
 
 test('model should accept sourceRepo and releaseNotes metadata', async () => {
   const containerValidated = container.validate({
+    ...createValidContainer(),
     id: 'container-release-notes-123',
-    name: 'test',
-    watcher: 'test',
     sourceRepo: 'github.com/acme/service',
     image: {
+      ...createValidContainer().image,
       id: 'image-release-notes-123',
-      registry: {
-        name: 'hub',
-        url: 'https://hub',
-      },
-      name: 'organization/image',
-      tag: {
-        value: '1.0.0',
-        semver: true,
-      },
-      digest: {
-        watch: false,
-      },
-      architecture: 'arch',
-      os: 'os',
     },
     result: {
       tag: '1.1.0',
@@ -176,6 +552,150 @@ test('model should accept sourceRepo and releaseNotes metadata', async () => {
     publishedAt: '2026-03-01T00:00:00.000Z',
     provider: 'github',
   });
+});
+
+test.each([
+  [
+    'updatePolicy.maturityMode',
+    createValidContainer({
+      id: 'container-invalid-maturity-mode',
+      updatePolicy: { maturityMode: 'fresh' },
+    }),
+    'updatePolicy.maturityMode',
+  ],
+  [
+    'updatePolicy.maturityMinAgeDays minimum',
+    createValidContainer({
+      id: 'container-invalid-maturity-min',
+      updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 0 },
+    }),
+    'updatePolicy.maturityMinAgeDays',
+  ],
+  [
+    'updatePolicy.maturityMinAgeDays maximum',
+    createValidContainer({
+      id: 'container-invalid-maturity-max',
+      updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 366 },
+    }),
+    'updatePolicy.maturityMinAgeDays',
+  ],
+  [
+    'result.releaseNotes.provider',
+    createValidContainer({
+      id: 'container-invalid-release-notes-provider',
+      result: {
+        tag: '1.1.0',
+        releaseNotes: {
+          title: 'v1.1.0',
+          body: 'Release body',
+          url: 'https://example.invalid/releases/v1.1.0',
+          publishedAt: '2026-03-01T00:00:00.000Z',
+          provider: 'bitbucket',
+        },
+      },
+    }),
+    'result.releaseNotes.provider',
+  ],
+  [
+    'updateKind.kind',
+    createValidContainer({
+      id: 'container-invalid-update-kind',
+      updateKind: {
+        kind: 'build',
+      },
+    }),
+    'updateKind.kind',
+  ],
+  [
+    'updateKind.semverDiff',
+    createValidContainer({
+      id: 'container-invalid-semver-diff',
+      updateKind: {
+        kind: 'tag',
+        semverDiff: 'build',
+      },
+    }),
+    'updateKind.semverDiff',
+  ],
+  [
+    'updateMaturityLevel',
+    createValidContainer({
+      id: 'container-invalid-update-maturity-level',
+      updateMaturityLevel: 'cold',
+    }),
+    'updateMaturityLevel',
+  ],
+  [
+    'details.env value type',
+    createValidContainer({
+      id: 'container-invalid-details-env',
+      details: {
+        ports: [],
+        volumes: [],
+        env: [{ key: 'TOKEN', value: 123 as unknown as string }],
+      },
+    }),
+    'details.env',
+  ],
+])('model should reject invalid schema payloads for %s', (_label, invalidContainer, errorPath) => {
+  expect(() => container.validate(invalidContainer)).toThrow(errorPath);
+});
+
+test('model should migrate legacy lookupUrl only when lookupImage is absent', () => {
+  const migrated = container.validate({
+    id: 'container-lookup-url',
+    name: 'test',
+    watcher: 'test',
+    image: {
+      id: 'image-lookup-url',
+      registry: {
+        name: 'hub',
+        url: 'https://hub',
+        lookupUrl: 'legacy/image',
+      },
+      name: 'organization/image',
+      tag: {
+        value: '1.0.0',
+        semver: true,
+      },
+      digest: {
+        watch: false,
+      },
+      architecture: 'arch',
+      os: 'os',
+    },
+  });
+
+  expect(migrated.image.registry.lookupImage).toBe('legacy/image');
+  expect(migrated.image.registry.lookupUrl).toBeUndefined();
+
+  const preserved = container.validate({
+    id: 'container-lookup-image',
+    name: 'test',
+    watcher: 'test',
+    image: {
+      id: 'image-lookup-image',
+      registry: {
+        name: 'hub',
+        url: 'https://hub',
+        lookupImage: 'preferred/image',
+        lookupUrl: 'legacy/image',
+      },
+      name: 'organization/image',
+      tag: {
+        value: '1.0.0',
+        semver: true,
+      },
+      digest: {
+        watch: false,
+      },
+      architecture: 'arch',
+      os: 'os',
+    },
+  });
+
+  expect(preserved.image.registry.lookupImage).toBe('preferred/image');
+  expect(preserved.image.registry.lookupUrl).toBeUndefined();
 });
 
 test.each([
@@ -283,6 +803,31 @@ test('model should reject empty error message', async () => {
   expect(() => {
     container.validate(createContainerWithError(''));
   }).toThrow('ValidationError: "error.message" is not allowed to be empty');
+});
+
+test.each([
+  ['service-old-0123456789', true],
+  ['service-old-01234567890', true],
+  ['service-old-012345678', false],
+  ['service-old-0123456789a', false],
+  ['service-old-01234-56789', false],
+  ['service-old-0123456789-extra', false],
+  ['service-OLD-0123456789', false],
+])('isRollbackContainerName(%s) returns %s', (name, expected) => {
+  expect(container.isRollbackContainerName(name)).toBe(expected);
+});
+
+test('isRollbackContainerName rejects non-string values', () => {
+  expect(container.isRollbackContainerName(undefined)).toBe(false);
+  expect(container.isRollbackContainerName(null)).toBe(false);
+  expect(container.isRollbackContainerName(1234567890)).toBe(false);
+});
+
+test('isRollbackContainer delegates to the container name matcher', () => {
+  expect(container.isRollbackContainer({ name: 'service-old-0123456789' })).toBe(true);
+  expect(container.isRollbackContainer({ name: 'service-old-012345678' })).toBe(false);
+  expect(container.isRollbackContainer({})).toBe(false);
+  expect(container.isRollbackContainer(undefined as unknown as { name?: unknown })).toBe(false);
 });
 
 test('model should flag updateAvailable when tag is different', async () => {

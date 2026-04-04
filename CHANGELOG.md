@@ -10,6 +10,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0-rc.5] — 2026-04-04
+
+### Added
+
+- **System log viewer overhaul** — Toolbar stays pinned at top (only log entries scroll), long lines wrap at viewport width, search matches component/level/channel fields, filter toggle (funnel icon) shows only matching entries, sort toggle switches between oldest-first and newest-first, auto-apply filters (no Apply/Reset buttons), copy button floats top-right of log content area, log entry columns aligned with fixed-width component and right-aligned line numbers. ([#259](https://github.com/CodesWhat/drydock/discussions/259), [#260](https://github.com/CodesWhat/drydock/discussions/260), [#263](https://github.com/CodesWhat/drydock/discussions/263), [#251](https://github.com/CodesWhat/drydock/discussions/251))
+- **Log component dropdown** — Component filter replaced with a `<select>` dropdown populated from new `GET /api/v1/log/components` endpoint that returns unique component names from the log buffer.
+- **Hide Pinned containers toggle** — Checkbox in the container list filter bar hides containers pinned to specific versions (`tagPrecision: specific`). Persisted in user preferences. ([#250](https://github.com/CodesWhat/drydock/discussions/250))
+- **Combined batch+digest notification mode** — Triggers can now use `MODE=batch+digest` to send both immediate batch emails and scheduled digest summaries. ([#254](https://github.com/CodesWhat/drydock/issues/254))
+- **Conditional reset button** — A reset icon appears in the system log toolbar only when level, tail, or component filters differ from defaults.
+
+### Changed
+
+- **Container filter labels** — Default dropdown options renamed for clarity: "Status" → "All Statuses", "Host" → "All Hosts", "Registry" → "All Registries", "Update" → "All Updates". ([#247](https://github.com/CodesWhat/drydock/discussions/247))
+- **Log viewer icons** — Pause, Pin, Sort, Filter, and Copy icons use the theme-aware icon map, so they change when the user switches icon themes in settings.
+
+### Fixed
+
+- **#248** — Update operation state survives container ID change during replacement updates (`newContainerId` lookup).
+- **#241** — Temporary rollback containers (`-old-{timestamp}`) hidden from container list API responses.
+- **#253** — `threshold=all` honored before rejecting `updateKind=unknown` in notification dispatch.
+- **#256** — Update operation state disambiguated by container ID instead of name (prevents cross-host bleed).
+- **#257** — Non-dashboard views (Containers, Security, Agents) refresh on SSE reconnect.
+- **#258** — Edge-to-edge scroll surface on DataViewLayout for mobile touch.
+- **#217** — Content-aware mode threshold for Host Status widget (full mode only when viewport fits all rows).
+- **#262** — Registry log calls use component child logger with image name context.
+- **#255** — Container event handler schedules refresh for any unknown-to-store container, not just renames.
+- **BaseRegistry** — Trusted host validation and `getImagePublishedAt` tag object creation hardened.
+- **ECR** — Public gallery hostname matching uses parsed URL comparison; private auth token structure validated before split.
+
 ## [1.5.0] — 2026-03-19
 
 ### Added
@@ -65,6 +94,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Dashboard customize panel responsive on mobile** — Panel is opt-in on mobile (sliders icon to open), full-screen overlay with backdrop dismiss. Desktop behavior unchanged. ([#222](https://github.com/CodesWhat/drydock/issues/222))
 - **Socket version probe hardened** — Added 64KB body cap on socket probe response, timer cleanup via `onScopeDispose`/`onUnmounted`, and typed `gridLayout` as `PersistedLayoutItem[]`.
 - **Action trigger default mode** — Action triggers (`docker`, `dockercompose`, `command`) now default to `auto=oninclude` instead of `auto=all`, requiring an explicit `dd.trigger.include` label before auto-updating containers. ([#213](https://github.com/CodesWhat/drydock/issues/213))
+- **Agent reconnect notification** — New opt-in `agent-reconnect` notification rule that fires when a remote agent reconnects after losing connection. Disabled by default.
+- **Auth lockout hardening** — Expired unlocked entries cleaned proactively, max tracked identities configurable via `DD_AUTH_LOCKOUT_MAX_TRACKED_IDENTITIES`.
 
 ### Fixed
 
@@ -109,6 +140,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Podman pod infra containers skipped** — Watchers now skip Podman pod infrastructure containers that have an empty `Image` field instead of failing during version comparison. ([#182](https://github.com/CodesWhat/drydock/issues/182))
 - **Dashboard scroll and layout fixes** — Removed scroll trap from Security Overview widget ([#216](https://github.com/CodesWhat/drydock/issues/216)), prevented dashboard widget scroll layout shift ([#217](https://github.com/CodesWhat/drydock/issues/217)), stopped table resize handles from bleeding through modals, and discarded corrupted single-column grid layouts on load.
 - **Stale updateAvailable overwrite after remote trigger** — Agent controller no longer overwrites cleared `updateAvailable` flags with stale snapshot data after a remote trigger completes. ([#229](https://github.com/CodesWhat/drydock/issues/229))
+- **MQTT HASS sensor preserved during container recreate** — `removeContainerSensor()` now checks for a same-name replacement via `replacementExpected` flag before publishing the empty retained discovery payload, preventing the HA entity from briefly disappearing during Docker recreate. ([#156](https://github.com/CodesWhat/drydock/issues/156))
+- **Container actions route by ID instead of display name** — UI grouping, action dispatch, and policy state now keyed by container ID, fixing cross-host collisions where same-named containers on different hosts overwrote each other in the name-keyed map. ([#183](https://github.com/CodesWhat/drydock/issues/183))
+- **Digest-pinned update detection** — Digest-only images (`sha256:…`) now run digest watch when `dd.watch.digest=true` instead of dead-ending. Docker trigger uses the remote digest for digest-pinned container updates. ([#192](https://github.com/CodesWhat/drydock/issues/192))
+- **Container inspect Config.Image fallback** — When Docker summary only exposes a `sha256:…` image ID (no RepoTags), container discovery falls back to container inspect `Config.Image` to recover the original tagged reference. Stale cached entries self-heal on the next watcher cycle. ([#238](https://github.com/CodesWhat/drydock/issues/238))
+- **Updates Available 6-row cap regression** — The `RECENT_UPDATES_LIMIT` slice that was removed for rc.1 was accidentally reintroduced in rc.2. Removed again with regression tests. ([#208](https://github.com/CodesWhat/drydock/issues/208))
+- **Host Status widget scroll shift** — Rows changed from `items-center` to `items-start` with pinned badges, fixing asymmetric clipping at scroll edge where badges disappeared before text. ([#217](https://github.com/CodesWhat/drydock/issues/217))
+- **Human-readable log timestamps** — Explicit `translateTime: 'SYS:HH:MM:ss.l'` in pino-pretty config for local-time formatted output. ([Discussion #221](https://github.com/CodesWhat/drydock/discussions/221))
+- **Dashboard edit-mode mobile scroll** — Widget dragging restricted to `.drag-handle` via `dragAllowFrom`, and widget body keeps `touch-action: pan-y` so vertical swipes scroll during edit mode. ([#222](https://github.com/CodesWhat/drydock/issues/222))
+- **Spurious SMTP emails after update** — `clearDetectedUpdateState()` now clears raw `result`/`updateKind` data instead of the derived `updateAvailable` boolean, which was immediately recomputed back to true by model validation. ([#228](https://github.com/CodesWhat/drydock/issues/228), [#229](https://github.com/CodesWhat/drydock/issues/229))
+- **Update All button hidden for bouncer-blocked stacks** — Visibility check changed from `updatableCount` to `updatesAvailable` so the button renders as disabled with a lock icon when all containers are security-blocked. ([#237](https://github.com/CodesWhat/drydock/issues/237))
+- **Docs site JS hydration blocked by SRI** — Removed `experimental.sri` from Next.js config; the integrity manifest was not generated on Vercel, causing browsers to block dynamically injected scripts. ([Discussion #236](https://github.com/CodesWhat/drydock/discussions/236))
+- **Update state lost on navigation/refetch** — Backend list endpoint now enriches containers with in-progress update operation state. UI mapper and action composables consume it to restore "Updating" visual state after refetch or navigation. ([#248](https://github.com/CodesWhat/drydock/issues/248))
+- **Unified display-timestamp module** — Extracted shared display-timestamp formatting across all log surfaces; system log viewer was still showing raw ISO timestamps. ([Discussion #221](https://github.com/CodesWhat/drydock/discussions/221))
+- **Dashboard scroll dead zones on mobile** — Scroll container extended edge-to-edge via negative margins into `<main>` padding, eliminating gutter dead zones on all sides. Mobile padding tightened for near-flush widget layout. ([#222](https://github.com/CodesWhat/drydock/issues/222))
+- **OIDC SSO broken after upgrade/restart** — OIDC discovery made lazy so startup failure no longer drops the provider. Redirect, callback, and token paths retry on first use. ([#246](https://github.com/CodesWhat/drydock/issues/246))
+- **Container update fails with 500 error when no healthcheck** — Health gate now skipped when `dd.rollback.auto` is not set. Pre-healthy timeout uses `max(120s, dd.rollback.window)` instead of a fixed value. ([#245](https://github.com/CodesWhat/drydock/issues/245))
+- **Same-name container collision in ID/meta maps** — `containerIdMap` and `containerMetaMap` no longer overwrite entries when the same container name exists across multiple hosts. Log refresh uses container ID when name aliases are ambiguous. ([#183](https://github.com/CodesWhat/drydock/issues/183))
+- **Digest mode buffer lost on failed flush** — Digest buffer entries are now retained when a batch send fails instead of being cleared. Overlapping flush guard prevents concurrent digest dispatches. ([#249](https://github.com/CodesWhat/drydock/issues/249))
+- **Host Status widget scroll snapping** — `snap-y snap-mandatory` plus trailing spacer so the widget always settles on a full row instead of resting on partial rows. ([#217](https://github.com/CodesWhat/drydock/issues/217))
+- **Digest watch lost for Docker Hub containers with recovered tags** — Digest watch now stays enabled when Docker summary exposes a `sha256:…` image but container inspect recovers a tagged reference like `:latest`. Prevents update detection from regressing to "suggested tag only" on Docker Hub. ([#192](https://github.com/CodesWhat/drydock/issues/192))
+- **Dashboard drag-scroll orphaned loops** — Auto-scroll rAF loop now tracks an explicit active flag, cleared on edit-mode exit and Escape keypress. Prevents orphaned scroll loops when edit mode is toggled rapidly.
+- **Pending update settlement status** — `isPendingUpdateSettled` now derives expected status from snapshot or live container (not snapshot-only), fixing cases where the settlement check short-circuited when no snapshot was captured. ([#248](https://github.com/CodesWhat/drydock/issues/248))
+- **Dashboard pending update poll backoff** — Polling switches from fixed-interval `setInterval` to chained `setTimeout` with exponential backoff (2s → 16s cap), reducing unnecessary fetches for slow updates.
 
 ### Accessibility
 
@@ -122,6 +176,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **WebSocket origin and lockout hardening** — Added stricter WebSocket origin validation and safer lockout file-permission handling.
 - **Trivy supply chain advisory** — Published advisory page and site banner for Trivy supply chain compromise. Pinned Trivy versions and corrected advisory details.
 - **Security bouncer enforcement on container updates** — Update and Update All actions now enforce the security bouncer gate, surfacing blocked-update reasons in the UI instead of silently failing.
+- **Agent log entry sanitization** — Agent log proxy endpoint now uses an allowlist-based normalizer that only forwards known fields (timestamp, level, component, msg, message, displayTimestamp), preventing unexpected or sensitive properties from leaking through.
 
 ### Dependencies
 
@@ -129,6 +184,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Vite 7.3 upgraded to 8.0** — Migrated to Vite 8.0 with Rolldown bundler.
 - **Patch/minor dependency bumps** — Updated all patch/minor dependencies and upgraded knip to v6.
 - **Vulnerable transitive dependency patches** — nodemailer 8.0.3→8.0.4, picomatch→4.0.4, brace-expansion→5.0.5, smol-toml→1.6.1, yaml→2.8.3.
+- **next 16.2.1→16.2.2** — CVE-2025-59472 (GHSA-5f7q-jpqc-wp7h).
+- **lodash 4.17.23→4.18.1** — CVE-2026-2950 (GHSA-f23m-r3pf-42rh), CVE-2026-4800 (GHSA-r5fr-rjxr-66jc).
 
 ### Testing
 
@@ -1058,7 +1115,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.5.0-rc.5...HEAD
+[1.5.0-rc.5]: https://github.com/CodesWhat/drydock/compare/v1.5.0...v1.5.0-rc.5
 [1.5.0]: https://github.com/CodesWhat/drydock/compare/v1.4.5...v1.5.0
 [1.4.5]: https://github.com/CodesWhat/drydock/compare/v1.4.4...v1.4.5
 [1.4.4]: https://github.com/CodesWhat/drydock/compare/v1.4.3...v1.4.4
