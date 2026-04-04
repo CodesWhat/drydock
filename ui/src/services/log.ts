@@ -25,4 +25,12 @@ async function getLogEntries(
   return response.json();
 }
 
-export { getLog, getLogEntries };
+async function getLogComponents(): Promise<string[]> {
+  const response = await fetch('/api/v1/log/components', { credentials: 'include' });
+  if (!response.ok) {
+    return [];
+  }
+  return response.json();
+}
+
+export { getLog, getLogComponents, getLogEntries };

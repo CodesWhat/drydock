@@ -13,10 +13,12 @@ const props = withDefaults(
     logLevelFilter: string;
     tail: number;
     componentFilter: string;
+    components?: string[];
     streamingEnabled?: boolean;
     streamingConnected?: boolean;
   }>(),
   {
+    components: () => [],
     streamingEnabled: false,
     streamingConnected: false,
   },
@@ -161,13 +163,13 @@ function togglePin() {
               <option :value="1000">Tail 1000</option>
             </select>
 
-            <input
+            <select
               v-model="componentFilterModel"
-              type="text"
-              placeholder="Filter by component..."
-              class="flex-1 min-w-[160px] max-w-[260px] px-2.5 py-1.5 dd-rounded text-2xs-plus font-medium outline-none dd-bg dd-text dd-placeholder"
-              @keyup.enter="emit('refresh')"
-            />
+              class="px-2 py-1.5 dd-rounded text-2xs-plus font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text"
+            >
+              <option value="">All Components</option>
+              <option v-for="comp in props.components" :key="comp" :value="comp">{{ comp }}</option>
+            </select>
           </template>
 
           <template #filter-bar>

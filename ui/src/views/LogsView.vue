@@ -2,7 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import ConfigLogsTab from '../components/config/ConfigLogsTab.vue';
 import { useSystemLogStream } from '../composables/useSystemLogStream';
-import { getLog, getLogEntries } from '../services/log';
+import { getLog, getLogComponents, getLogEntries } from '../services/log';
 import type { SystemLogEntry } from '../services/system-log-stream';
 import type { AppLogEntry } from '../types/log-entry';
 import { errorMessage } from '../utils/error';
@@ -34,6 +34,7 @@ const appLogsError = ref('');
 const appLogLevelFilter = ref('all');
 const appLogTail = ref(100);
 const appLogComponent = ref('');
+const appLogComponents = ref<string[]>([]);
 
 const isStreaming = computed(() => streamingEnabled.value && streamStatus.value === 'connected');
 
@@ -149,6 +150,11 @@ onMounted(() => {
     .catch(() => {
       appLogLevel.value = 'unknown';
     });
+  void getLogComponents()
+    .then((components) => {
+      appLogComponents.value = components;
+    })
+    .catch(() => {});
   if (streamingEnabled.value) {
     startStreaming();
   } else {
@@ -167,6 +173,7 @@ onMounted(() => {
       :log-level-filter="appLogLevelFilter"
       :tail="appLogTail"
       :component-filter="appLogComponent"
+      :components="appLogComponents"
       :streaming-enabled="streamingEnabled"
       :streaming-connected="isStreaming"
       @update:log-level-filter="appLogLevelFilter = $event"

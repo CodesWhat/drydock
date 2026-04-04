@@ -4,6 +4,7 @@ import LogsView from '@/views/LogsView.vue';
 vi.mock('@/services/log', () => ({
   getLog: vi.fn().mockResolvedValue({ level: 'info' }),
   getLogEntries: vi.fn().mockResolvedValue([]),
+  getLogComponents: vi.fn().mockResolvedValue([]),
 }));
 
 vi.mock('@/composables/useSystemLogStream', () => ({
