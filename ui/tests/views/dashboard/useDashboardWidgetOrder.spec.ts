@@ -1,3 +1,6 @@
+import { readFile } from 'node:fs/promises';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { mount } from '@vue/test-utils';
 import { defineComponent, h, nextTick } from 'vue';
 import { preferences } from '@/preferences/store';
@@ -525,5 +528,15 @@ describe('useDashboardWidgetOrder', () => {
     });
 
     expect(rebuilt.lg?.map((item) => item.i)).toEqual(DASHBOARD_WIDGET_IDS);
+  });
+
+  it('delegates responsive layout state to useDashboardResponsiveLayouts', async () => {
+    const specDir = dirname(fileURLToPath(import.meta.url));
+    const source = await readFile(
+      resolve(specDir, '../../../src/views/dashboard/useDashboardWidgetOrder.ts'),
+      'utf8',
+    );
+
+    expect(source).toContain("from './useDashboardResponsiveLayouts'");
   });
 });

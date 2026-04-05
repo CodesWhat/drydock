@@ -263,6 +263,21 @@ describe('DashboardView', () => {
       expect(widget.attributes('style')).toContain('touch-action: pan-y');
     });
 
+    it('caches widget breakpoint bounds instead of calling getWidgetBoundsForBreakpoint in each GridItem size prop', () => {
+      expect(dashboardViewSource).not.toContain(
+        ':min-w="getWidgetBoundsForBreakpoint(item.i as DashboardWidgetId, currentBreakpoint).minW"',
+      );
+      expect(dashboardViewSource).not.toContain(
+        ':min-h="getWidgetBoundsForBreakpoint(item.i as DashboardWidgetId, currentBreakpoint).minH"',
+      );
+      expect(dashboardViewSource).not.toContain(
+        ':max-w="getWidgetBoundsForBreakpoint(item.i as DashboardWidgetId, currentBreakpoint).maxW"',
+      );
+      expect(dashboardViewSource).not.toContain(
+        ':max-h="getWidgetBoundsForBreakpoint(item.i as DashboardWidgetId, currentBreakpoint).maxH"',
+      );
+    });
+
     it('computes a positive auto-scroll delta near the dashboard bottom edge', () => {
       const delta = computeDashboardDragScrollDelta(395, { top: 0, bottom: 400 } as DOMRect);
 

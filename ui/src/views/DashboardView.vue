@@ -90,6 +90,17 @@ const {
   toggleWidgetVisibility,
   widgetOrderIndex,
 } = useDashboardWidgetOrder();
+
+const layoutWithBreakpointBounds = computed(() =>
+  layout.value.map((item) => ({
+    ...item,
+    breakpointBounds: getWidgetBoundsForBreakpoint(
+      item.i as DashboardWidgetId,
+      currentBreakpoint.value,
+    ),
+  })),
+);
+
 const { handleDashboardGridPointerDown, stopDashboardDragAutoScroll } = useDashboardDragAutoScroll({
   editMode,
   dashboardScrollEl,
@@ -449,7 +460,7 @@ function confirmDashboardUpdateAll() {
           :vertical-compact="true"
           :use-css-transforms="true">
           <GridItem
-            v-for="item in layout"
+            v-for="item in layoutWithBreakpointBounds"
             v-show="isWidgetVisible(item.i as DashboardWidgetId)"
             :key="item.i"
             :data-widget-id="item.i"
@@ -460,10 +471,10 @@ function confirmDashboardUpdateAll() {
             :w="item.w"
             :h="item.h"
             :i="item.i"
-            :min-w="getWidgetBoundsForBreakpoint(item.i as DashboardWidgetId, currentBreakpoint).minW"
-            :min-h="getWidgetBoundsForBreakpoint(item.i as DashboardWidgetId, currentBreakpoint).minH"
-            :max-w="getWidgetBoundsForBreakpoint(item.i as DashboardWidgetId, currentBreakpoint).maxW"
-            :max-h="getWidgetBoundsForBreakpoint(item.i as DashboardWidgetId, currentBreakpoint).maxH"
+            :min-w="item.breakpointBounds.minW"
+            :min-h="item.breakpointBounds.minH"
+            :max-w="item.breakpointBounds.maxW"
+            :max-h="item.breakpointBounds.maxH"
             drag-ignore-from="input, textarea, button, a, select, .no-drag"
             drag-allow-from=".drag-handle"
             class="dd-grid-item"
