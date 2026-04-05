@@ -36,7 +36,7 @@ const sizeClasses: Record<ButtonSize, string> = {
 
 const variantClasses: Record<ButtonVariant, string> = {
   muted: 'dd-text-muted hover:dd-text hover:dd-bg-elevated',
-  outlined: 'dd-text-secondary dd-border-strong border hover:dd-text hover:dd-bg-elevated',
+  outlined: 'dd-bg-button dd-text hover:opacity-85',
   secondary: 'dd-text-secondary hover:dd-text hover:dd-bg-elevated',
   elevated: 'dd-bg-elevated dd-text hover:opacity-90',
   'text-muted': 'dd-text-muted hover:dd-text',
