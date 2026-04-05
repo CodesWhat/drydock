@@ -78,7 +78,7 @@ interface SecurityAlertNotificationEvent {
 }
 
 interface AgentDisconnectedNotificationEvent {
-  kind: 'agent-disconnect' | 'agent-reconnect';
+  kind: 'agent-disconnect';
   agentName: string;
   reason?: string;
 }
@@ -94,6 +94,14 @@ type TriggerNotificationEvent =
   | SecurityAlertNotificationEvent
   | AgentDisconnectedNotificationEvent
   | AgentReconnectedNotificationEvent;
+
+type TriggerContainer = Container & {
+  notificationEvent?: TriggerNotificationEvent;
+};
+
+export type TriggerNotificationContainer = Container & {
+  notificationEvent: TriggerNotificationEvent;
+};
 
 interface EventDispatchOptions extends notificationStore.NotificationRuleDispatchOptions {
   skipThreshold?: boolean;
@@ -173,7 +181,7 @@ function buildAgentContainer(
   state: 'connected' | 'disconnected',
   eventKind: TriggerNotificationEvent['kind'],
   reason?: string,
-): Container {
+): TriggerNotificationContainer {
   return {
     id: `agent-${agentName}`,
     name: agentName,
@@ -213,25 +221,28 @@ function buildAgentContainer(
       agentName,
       reason: eventKind === 'agent-disconnect' ? reason : undefined,
     },
-  } as Container;
+  };
 }
 
-function buildAgentDisconnectedContainer(agentName: string, reason?: string): Container {
+function buildAgentDisconnectedContainer(
+  agentName: string,
+  reason?: string,
+): TriggerNotificationContainer {
   return buildAgentContainer(agentName, 'disconnected', 'agent-disconnect', reason);
 }
 
-function buildAgentReconnectedContainer(agentName: string): Container {
+function buildAgentReconnectedContainer(agentName: string): TriggerNotificationContainer {
   return buildAgentContainer(agentName, 'connected', 'agent-reconnect');
 }
 
 function withNotificationEvent(
   container: Container,
   notificationEvent: TriggerNotificationEvent,
-): Container {
+): TriggerNotificationContainer {
   return {
     ...container,
     notificationEvent,
-  } as Container;
+  };
 }
 
 function safeGet(target: unknown, property: string): unknown {
@@ -295,7 +306,9 @@ function getAgentNotificationEvent(
   };
 }
 
-export function getNotificationEvent(container: Container): TriggerNotificationEvent | undefined {
+export function getNotificationEvent(
+  container: TriggerContainer,
+): TriggerNotificationEvent | undefined {
   const notificationEvent = getObjectProperty<Record<string, unknown>>(
     container,
     'notificationEvent',
@@ -527,7 +540,7 @@ class Trigger extends Component {
 
   private findContainerByBusinessId(containerName: string): Container | undefined {
     return storeContainer
-      .getContainers()
+      .getContainersRaw()
       .find((container) => fullName(container) === containerName);
   }
 
@@ -639,7 +652,7 @@ class Trigger extends Component {
 
   private async dispatchContainerForEvent(
     ruleId: NotificationRuleId,
-    container: Container | undefined,
+    container: TriggerContainer | undefined,
     options: EventDispatchOptions = {},
   ) {
     if (!this.isTriggerEnabledForRule(ruleId, options)) {
@@ -1008,7 +1021,7 @@ class Trigger extends Component {
     const bufferedEntries = Array.from(this.digestBuffer.entries());
     const currentContainersByBusinessId = new Map<string, Container>(
       storeContainer
-        .getContainers()
+        .getContainersRaw()
         .map((container) => [fullName(container as Container), container as Container] as const),
     );
     const dispatchEntries = bufferedEntries.flatMap(([containerName, bufferedContainer]) => {
@@ -1496,7 +1509,7 @@ class Trigger extends Component {
    */
   renderBatchTitle(containers: Container[]) {
     const notificationEvent =
-      containers.length > 0 ? getNotificationEvent(containers[0] as Container) : undefined;
+      containers.length > 0 ? getNotificationEvent(containers[0]) : undefined;
     const template = resolveNotificationTemplate(
       notificationEvent,
       NOTIFICATION_BATCH_TITLE_TEMPLATES,
