@@ -23,10 +23,16 @@ const bellPanelStyle = ref<Record<string, string>>({});
 const entries = ref<AuditEntry[]>([]);
 const loading = ref(false);
 const lastSeen = useStorageRef('dd-bell-last-seen', '');
+const clearedAt = useStorageRef('dd-bell-cleared-at', '');
+
+const visibleEntries = computed(() => {
+  if (!clearedAt.value) return entries.value;
+  return entries.value.filter((e) => e.timestamp > clearedAt.value);
+});
 
 const unreadCount = computed(() => {
-  if (!lastSeen.value) return entries.value.length;
-  return entries.value.filter((e) => e.timestamp > lastSeen.value).length;
+  if (!lastSeen.value) return visibleEntries.value.length;
+  return visibleEntries.value.filter((e) => e.timestamp > lastSeen.value).length;
 });
 
 async function fetchEntries() {
@@ -67,6 +73,12 @@ function viewAll() {
 
 function markAllRead() {
   lastSeen.value = new Date().toISOString();
+}
+
+function clearAll() {
+  const now = new Date().toISOString();
+  clearedAt.value = now;
+  lastSeen.value = now;
 }
 
 function handleClickOutside(e: PointerEvent) {
@@ -138,22 +150,30 @@ function isUnread(entry: AuditEntry): boolean {
         <div class="flex items-center justify-between px-3 py-2"
              :style="{ borderBottom: '1px solid var(--dd-border)' }">
           <span class="text-2xs-plus font-semibold uppercase tracking-wider dd-text-muted">Notifications</span>
-          <AppButton size="none" variant="plain" weight="none" v-if="unreadCount > 0"
-                  class="text-2xs font-medium dd-text-secondary hover:dd-text transition-colors"
-                  @click="markAllRead">
-            Mark all read
-          </AppButton>
+          <div class="flex items-center gap-2">
+            <AppButton size="none" variant="plain" weight="none" v-if="unreadCount > 0"
+                    class="text-2xs font-medium dd-text-secondary hover:dd-text transition-colors"
+                    @click="markAllRead">
+              Mark all read
+            </AppButton>
+            <AppButton size="none" variant="plain" weight="none" v-if="visibleEntries.length > 0"
+                    class="text-2xs font-medium dd-text-secondary hover:dd-text transition-colors"
+                    data-test="clear-all-btn"
+                    @click="clearAll">
+              Clear all
+            </AppButton>
+          </div>
         </div>
 
         <!-- Scrollable list -->
         <div class="max-h-[400px] overflow-y-auto">
-          <div v-if="loading && entries.length === 0" class="px-3 py-6 text-center text-2xs-plus dd-text-muted">
+          <div v-if="loading && visibleEntries.length === 0" class="px-3 py-6 text-center text-2xs-plus dd-text-muted">
             Loading...
           </div>
-          <div v-else-if="entries.length === 0" class="px-3 py-6 text-center text-2xs-plus dd-text-muted">
+          <div v-else-if="visibleEntries.length === 0" class="px-3 py-6 text-center text-2xs-plus dd-text-muted">
             No notifications yet
           </div>
-          <AppButton size="none" variant="plain" weight="none" v-for="entry in entries"
+          <AppButton size="none" variant="plain" weight="none" v-for="entry in visibleEntries"
                   :key="entry.id"
                   class="w-full text-left px-3 py-2 flex items-start gap-2.5 transition-colors hover:dd-bg-elevated"
                   :style="{ borderBottom: '1px solid var(--dd-border)' }"
