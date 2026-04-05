@@ -82,6 +82,37 @@ function triggerNameById(id: string) {
   return triggersById.value[id]?.name ?? id;
 }
 
+function isImplicitAllTriggersRule(rule: NotificationRule | null | undefined) {
+  return rule?.id === 'update-available';
+}
+
+function usesImplicitAllTriggers(rule: NotificationRule | null | undefined) {
+  return !!rule && isImplicitAllTriggersRule(rule) && rule.triggers.length === 0;
+}
+
+function triggerAssignmentSummary(rule: NotificationRule | null | undefined) {
+  if (!rule) {
+    return '';
+  }
+  if (usesImplicitAllTriggers(rule)) {
+    return 'All notification triggers';
+  }
+  if (rule.triggers.length === 0) {
+    return 'No triggers';
+  }
+  return '';
+}
+
+function detailTriggerHelpText(rule: NotificationRule | null | undefined) {
+  if (!rule) {
+    return '';
+  }
+  if (isImplicitAllTriggersRule(rule)) {
+    return 'Leave this empty to send this event to all notification triggers. Selecting any trigger turns this rule into an allow-list.';
+  }
+  return 'Only selected triggers will receive this event. Leave it empty to suppress this event for all triggers.';
+}
+
 function normalizeTriggerIds(triggerIds: string[]) {
   return Array.from(new Set(triggerIds)).sort();
 }
@@ -346,7 +377,9 @@ onMounted(async () => {
                     :custom="{ bg: 'var(--dd-neutral-muted)', text: 'var(--dd-text-secondary)' }" size="xs" :uppercase="false">
             {{ triggerNameById(triggerId) }}
           </AppBadge>
-          <span v-if="row.triggers.length === 0" class="text-2xs italic dd-text-muted">None</span>
+          <span v-if="triggerAssignmentSummary(row)" class="text-2xs italic dd-text-muted">
+            {{ triggerAssignmentSummary(row) }}
+          </span>
         </div>
       </template>
       <template #empty>
@@ -387,8 +420,8 @@ onMounted(async () => {
                     :custom="{ bg: 'var(--dd-neutral-muted)', text: 'var(--dd-text-secondary)' }" size="xs" :uppercase="false">
             {{ triggerNameById(triggerId) }}
           </AppBadge>
-          <span v-if="notif.triggers.length === 0" class="text-2xs italic dd-text-muted">
-            No triggers
+          <span v-if="triggerAssignmentSummary(notif)" class="text-2xs italic dd-text-muted">
+            {{ triggerAssignmentSummary(notif) }}
           </span>
         </div>
       </template>
@@ -418,7 +451,9 @@ onMounted(async () => {
                     :custom="{ bg: 'var(--dd-neutral-muted)', text: 'var(--dd-text-secondary)' }" size="xs" :uppercase="false">
             {{ triggerNameById(triggerId) }}
           </AppBadge>
-          <span v-if="notif.triggers.length === 0" class="text-2xs italic dd-text-muted">No triggers</span>
+          <span v-if="triggerAssignmentSummary(notif)" class="text-2xs italic dd-text-muted">
+            {{ triggerAssignmentSummary(notif) }}
+          </span>
         </div>
       </template>
       <template #details="{ item: notif }">
@@ -476,6 +511,9 @@ onMounted(async () => {
             <div>
               <div class="text-2xs font-semibold uppercase tracking-wider mb-2 dd-text-muted">
                 Assigned Triggers
+              </div>
+              <div class="text-2xs-plus mb-2 dd-text-muted">
+                {{ detailTriggerHelpText(selectedRule) }}
               </div>
               <div v-if="triggersSorted.length === 0" class="text-2xs-plus dd-text-muted">
                 No triggers configured. Add triggers on the <RouterLink to="/triggers"
