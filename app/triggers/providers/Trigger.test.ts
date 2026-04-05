@@ -3074,6 +3074,43 @@ describe('digest mode', () => {
     triggerBatchSpy.mockRestore();
   });
 
+  test('handleContainerReportDigest should canonicalize recreate aliases before negative eviction', async () => {
+    await trigger.register('trigger', 'test', 'digest-trigger', {
+      ...configurationValid,
+      mode: 'digest',
+    });
+    trigger.init();
+
+    await trigger.handleContainerReportDigest({
+      container: {
+        id: 'c1',
+        name: '0123456789ab_app',
+        watcher: 'test',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      },
+      changed: true,
+    });
+
+    await trigger.handleContainerReportDigest({
+      container: {
+        id: 'c1',
+        name: 'app',
+        watcher: 'test',
+        updateAvailable: false,
+        updateKind: { kind: 'tag', localValue: '2.0', remoteValue: '2.0' },
+      },
+      changed: true,
+    });
+
+    const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+    await trigger.flushDigestBuffer();
+
+    expect(trigger.digestBuffer.size).toBe(0);
+    expect(triggerBatchSpy).not.toHaveBeenCalled();
+    triggerBatchSpy.mockRestore();
+  });
+
   test('handleContainerReportDigest should return early when threshold is not reached', async () => {
     await trigger.register('trigger', 'test', 'digest-trigger', {
       ...configurationValid,

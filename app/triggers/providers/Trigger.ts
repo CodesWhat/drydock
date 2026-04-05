@@ -931,6 +931,8 @@ class Trigger extends Component {
    * Handle container report (digest mode — single container from simple event).
    */
   async handleContainerReportDigest(containerReport: ContainerReport) {
+    Trigger.canonicalizeReportName(containerReport);
+
     const { container } = containerReport;
     const containerName = fullName(container);
 
