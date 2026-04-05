@@ -1006,8 +1006,10 @@ class Trigger extends Component {
       return;
     }
     const bufferedEntries = Array.from(this.digestBuffer.entries());
-    const currentContainersByBusinessId = new Map(
-      storeContainer.getContainers().map((container) => [fullName(container), container] as const),
+    const currentContainersByBusinessId = new Map<string, Container>(
+      storeContainer
+        .getContainers()
+        .map((container) => [fullName(container as Container), container as Container] as const),
     );
     const dispatchEntries = bufferedEntries.flatMap(([containerName, bufferedContainer]) => {
       const currentContainer = currentContainersByBusinessId.get(containerName);
