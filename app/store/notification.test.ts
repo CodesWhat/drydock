@@ -378,6 +378,52 @@ describe('Notification Store', () => {
     ).toBe(false);
   });
 
+  test('getTriggerDispatchDecisionForRule should expose whether a trigger was excluded by allow-list routing', () => {
+    const collection = createCollection();
+    const db = {
+      getCollection: vi.fn(() => collection),
+      addCollection: vi.fn(() => collection),
+    };
+
+    notification.createCollections(db);
+    notification.updateNotificationRule('update-available', {
+      enabled: true,
+      triggers: ['pushover.mobile'],
+    });
+
+    expect(
+      notification.getTriggerDispatchDecisionForRule('update-available', 'smtp.gmail', {
+        allowAllWhenNoTriggers: true,
+      }),
+    ).toEqual({
+      enabled: false,
+      reason: 'excluded-from-allow-list',
+    });
+  });
+
+  test('getTriggerDispatchDecisionForRule should treat empty update-available triggers as allow-all when requested', () => {
+    const collection = createCollection();
+    const db = {
+      getCollection: vi.fn(() => collection),
+      addCollection: vi.fn(() => collection),
+    };
+
+    notification.createCollections(db);
+    notification.updateNotificationRule('update-available', {
+      enabled: true,
+      triggers: [],
+    });
+
+    expect(
+      notification.getTriggerDispatchDecisionForRule('update-available', 'smtp.gmail', {
+        allowAllWhenNoTriggers: true,
+      }),
+    ).toEqual({
+      enabled: true,
+      reason: 'allow-all-when-empty',
+    });
+  });
+
   test('isTriggerEnabledForRule should use missing-rule fallback option', () => {
     expect(
       notification.isTriggerEnabledForRule('missing-rule', 'docker.update', {

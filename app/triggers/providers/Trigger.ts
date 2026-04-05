@@ -342,6 +342,7 @@ class Trigger extends Component {
   private unregisterContainerUpdateAppliedForResolution?: () => void;
   private readonly notificationResults: Map<string, unknown> = new Map();
   private readonly autoTriggerErrorSeenAt: Map<string, number> = new Map();
+  private readonly notificationRuleWarningsSeen: Set<string> = new Set();
   private readonly digestBuffer: Map<string, Container> = new Map();
   private readonly eventBatchDispatches: Map<NotificationRuleId, EventBatchDispatchState> =
     new Map();
@@ -732,12 +733,48 @@ class Trigger extends Component {
   }
 
   private isUpdateAvailableAutoTriggerEnabled() {
-    // Keep backward compatibility: if update-available has no explicit trigger
-    // allow-list yet, legacy auto trigger behavior remains enabled.
-    return this.isTriggerEnabledForRule('update-available', {
-      allowAllWhenNoTriggers: true,
-      defaultWhenRuleMissing: true,
-    });
+    const dispatchDecision = notificationStore.getTriggerDispatchDecisionForRule(
+      'update-available',
+      this.getId(),
+      {
+        // Keep backward compatibility: if update-available has no explicit trigger
+        // allow-list yet, legacy auto trigger behavior remains enabled.
+        allowAllWhenNoTriggers: true,
+        defaultWhenRuleMissing: true,
+      },
+    );
+    this.warnIfDigestRoutingIsSuppressed(dispatchDecision);
+    return dispatchDecision.enabled;
+  }
+
+  private warnIfDigestRoutingIsSuppressed(
+    dispatchDecision: notificationStore.NotificationRuleDispatchDecision,
+  ) {
+    if (!Trigger.isDigestCapableMode(this.configuration.mode) || dispatchDecision.enabled) {
+      return;
+    }
+
+    let message: string | undefined;
+    if (dispatchDecision.reason === 'rule-disabled') {
+      message =
+        `Digest mode is configured for ${this.getId()}, but the update-available notification rule is disabled; ` +
+        'no update-available events will be buffered until the rule is enabled.';
+    } else if (dispatchDecision.reason === 'excluded-from-allow-list') {
+      message =
+        `Digest mode is configured for ${this.getId()}, but the update-available notification rule excludes this trigger; ` +
+        'no update-available events will be buffered. Add this trigger to the rule or clear the rule trigger assignments to allow all notification triggers.';
+    }
+
+    if (!message) {
+      return;
+    }
+
+    const warningKey = `update-available|${dispatchDecision.reason}|${this.getId()}`;
+    if (this.notificationRuleWarningsSeen.has(warningKey)) {
+      return;
+    }
+    this.notificationRuleWarningsSeen.add(warningKey);
+    this.log.warn(message);
   }
 
   private shouldHandleSimpleContainerReport(containerReport: ContainerReport) {

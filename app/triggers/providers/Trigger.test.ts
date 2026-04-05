@@ -16,6 +16,10 @@ vi.mock('../../log');
 vi.mock('../../event');
 vi.mock('../../store/notification.js', () => ({
   isTriggerEnabledForRule: vi.fn(() => true),
+  getTriggerDispatchDecisionForRule: vi.fn(() => ({
+    enabled: true,
+    reason: 'matched-allow-list',
+  })),
 }));
 vi.mock('../../store/container.js', () => ({
   getContainers: vi.fn(() => []),
@@ -46,6 +50,10 @@ const configurationValid = {
 beforeEach(async () => {
   vi.resetAllMocks();
   notificationStore.isTriggerEnabledForRule.mockReturnValue(true);
+  notificationStore.getTriggerDispatchDecisionForRule.mockReturnValue({
+    enabled: true,
+    reason: 'matched-allow-list',
+  });
   storeContainer.getContainers.mockReturnValue([]);
   trigger = new Trigger();
   trigger.log = log;
@@ -1860,6 +1868,10 @@ test('handleContainerReport should skip when update-available rule suppresses th
   notificationStore.isTriggerEnabledForRule.mockImplementation(
     (ruleId) => ruleId !== 'update-available',
   );
+  notificationStore.getTriggerDispatchDecisionForRule.mockReturnValue({
+    enabled: false,
+    reason: 'excluded-from-allow-list',
+  });
   const spy = vi.spyOn(trigger, 'trigger');
 
   await trigger.handleContainerReport({
@@ -1873,6 +1885,37 @@ test('handleContainerReport should skip when update-available rule suppresses th
   });
 
   expect(spy).not.toHaveBeenCalled();
+});
+
+test('handleContainerReportDigest should warn once when update-available routing excludes a digest trigger', async () => {
+  await trigger.register('trigger', 'smtp', 'gmail', {
+    ...configurationValid,
+    mode: 'digest',
+  });
+  notificationStore.getTriggerDispatchDecisionForRule.mockReturnValue({
+    enabled: false,
+    reason: 'excluded-from-allow-list',
+  });
+  const warnSpy = vi.spyOn(log, 'warn');
+  const report = {
+    changed: true,
+    container: {
+      watcher: 'local',
+      name: 'container1',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', semverDiff: 'major' },
+    },
+  };
+
+  await trigger.handleContainerReportDigest(report);
+  await trigger.handleContainerReportDigest(report);
+
+  expect(trigger.digestBuffer.size).toBe(0);
+  expect(warnSpy).toHaveBeenCalledTimes(1);
+  expect(warnSpy).toHaveBeenCalledWith(
+    expect.stringContaining('no update-available events will be buffered'),
+  );
+  expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('smtp.gmail'));
 });
 
 test('handleContainerUpdateAppliedEvent should run trigger when rule allows and container is found', async () => {
@@ -2357,6 +2400,10 @@ test('handleContainerReports should skip when update-available rule disables tri
   notificationStore.isTriggerEnabledForRule.mockImplementation(
     (ruleId) => ruleId !== 'update-available',
   );
+  notificationStore.getTriggerDispatchDecisionForRule.mockReturnValue({
+    enabled: false,
+    reason: 'excluded-from-allow-list',
+  });
   const spy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
 
   await trigger.handleContainerReports([
@@ -2944,6 +2991,10 @@ describe('digest mode', () => {
     });
     trigger.init();
     notificationStore.isTriggerEnabledForRule.mockReturnValue(false);
+    notificationStore.getTriggerDispatchDecisionForRule.mockReturnValue({
+      enabled: false,
+      reason: 'rule-disabled',
+    });
 
     const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
     await trigger.handleContainerReportDigest({
