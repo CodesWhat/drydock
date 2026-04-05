@@ -99,6 +99,28 @@ export function toSafeFileName(value: string): string {
   return value.replace(/[^a-zA-Z0-9._-]+/g, '-');
 }
 
+export function toSafeExternalUrl(value: string | null | undefined): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmedValue = value.trim();
+  if (trimmedValue.length === 0) {
+    return null;
+  }
+
+  try {
+    const url = new URL(trimmedValue);
+    if (url.protocol === 'http:' || url.protocol === 'https:') {
+      return trimmedValue;
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
 export function buildSecurityEmptyState(input: SecurityViewEmptyStateInput): SecurityEmptyState {
   if (!input.hasVulnerabilityData) {
     if (input.scannerSetupNeeded) {
@@ -129,10 +151,15 @@ export function buildSecurityEmptyState(input: SecurityViewEmptyStateInput): Sec
 export type VulnExportFormat = 'json' | 'csv';
 
 function escapeCsvField(value: string): string {
-  if (value.includes(',') || value.includes('"') || value.includes('\n')) {
-    return `"${value.replace(/"/g, '""')}"`;
+  const sanitizedValue = /^[=+\-@]/.test(value) ? `'${value}` : value;
+  if (
+    sanitizedValue.includes(',') ||
+    sanitizedValue.includes('"') ||
+    sanitizedValue.includes('\n')
+  ) {
+    return `"${sanitizedValue.replace(/"/g, '""')}"`;
   }
-  return value;
+  return sanitizedValue;
 }
 
 const VULN_CSV_COLUMNS = [

@@ -246,6 +246,23 @@ describe('securityViewUtils', () => {
       expect(lines[1]).toContain('"Overflow, use-after-free"');
       expect(lines[1]).toContain('"lib""ssl"""');
     });
+
+    it('prefixes formula-leading fields to prevent spreadsheet execution', () => {
+      const vuln: Vulnerability = {
+        ...baseVuln,
+        id: '=CVE-2026-1234',
+        severity: '+HIGH',
+        package: '-openssl',
+        version: '@1.1.1',
+      };
+
+      const csv = vulnReportToCsv([vuln]);
+      const lines = csv.split('\n');
+
+      expect(lines[1]).toBe(
+        "'=CVE-2026-1234,'+HIGH,'-openssl,'@1.1.1,1.1.2,Buffer overflow,usr/lib/libssl.so,https://nvd.nist.gov/vuln/detail/CVE-2026-1234",
+      );
+    });
   });
 
   describe('vulnReportToJson', () => {

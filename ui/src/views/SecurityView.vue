@@ -23,6 +23,7 @@ import {
   severityColor,
   severityIcon,
   statusBadgeTone,
+  toSafeExternalUrl,
 } from './security/securityViewUtils';
 
 const { isMobile, windowNarrow: isCompact } = useBreakpoints();
@@ -646,7 +647,7 @@ onUnmounted(() => {
                 <span v-else class="ml-auto text-2xs dd-text-muted">No fix</span>
               </div>
               <div
-                v-if="vuln.title || vuln.target || vuln.primaryUrl"
+                v-if="vuln.title || vuln.target || toSafeExternalUrl(vuln.primaryUrl)"
                 class="ml-5 mt-1.5 space-y-1"
               >
                 <div v-if="vuln.title" class="text-2xs dd-text">
@@ -657,8 +658,8 @@ onUnmounted(() => {
                   <span class="font-mono dd-text">{{ vuln.target }}</span>
                 </div>
                 <a
-                  v-if="vuln.primaryUrl"
-                  :href="vuln.primaryUrl"
+                  v-if="toSafeExternalUrl(vuln.primaryUrl)"
+                  :href="toSafeExternalUrl(vuln.primaryUrl) || undefined"
                   target="_blank"
                   rel="noopener noreferrer"
                   class="inline-flex text-2xs underline hover:no-underline break-all"
