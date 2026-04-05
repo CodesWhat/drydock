@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Hide Pinned containers toggle** — Checkbox in the container list filter bar hides containers pinned to specific versions (`tagPrecision: specific`). Persisted in user preferences. ([#250](https://github.com/CodesWhat/drydock/discussions/250))
 - **Combined batch+digest notification mode** — Triggers can now use `MODE=batch+digest` to send both immediate batch emails and scheduled digest summaries. ([#254](https://github.com/CodesWhat/drydock/issues/254))
 - **Conditional reset button** — A reset icon appears in the system log toolbar only when level, tail, or component filters differ from defaults.
+- **Security scan export** — Detail panel has export controls (CSV/JSON) for vulnerability reports and SBOM download at the top of the panel. ([#269](https://github.com/CodesWhat/drydock/discussions/269))
 
 ### Changed
 
@@ -36,6 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **#217** — Content-aware mode threshold for Host Status widget (full mode only when viewport fits all rows).
 - **#262** — Registry log calls use component child logger with image name context.
 - **#255** — Container event handler schedules refresh for any unknown-to-store container, not just renames.
+- **#269** — SBOM download button was silently failing unless the "View SBOM" toggle was active; now serializes directly.
 - **BaseRegistry** — Trusted host validation and `getImagePublishedAt` tag object creation hardened.
 - **ECR** — Public gallery hostname matching uses parsed URL comparison; private auth token structure validated before split.
 

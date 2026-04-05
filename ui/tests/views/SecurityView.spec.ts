@@ -548,8 +548,8 @@ describe('SecurityView', () => {
         expect(mockGetContainerSbom).toHaveBeenCalledWith('container-1', 'spdx-json');
       });
 
-      expect(w.text()).toContain('View SBOM');
-      expect(w.text()).toContain('Download SBOM');
+      expect(w.text()).toContain('Download Report');
+      expect(w.text()).toContain('Download');
     });
   });
 

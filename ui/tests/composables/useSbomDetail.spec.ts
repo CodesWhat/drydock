@@ -385,12 +385,18 @@ describe('useSbomDetail', () => {
     }
   });
 
-  it('returns early when document display is disabled and payload is empty', () => {
-    const createObjectUrl = vi.fn();
+  it('downloads sbom even when document display toggle is off', () => {
+    const createObjectUrl = vi.fn(() => 'blob:test');
+    const revokeObjectUrl = vi.fn();
     const originalCreateObjectURL = URL.createObjectURL;
+    const originalRevokeObjectURL = URL.revokeObjectURL;
     Object.defineProperty(URL, 'createObjectURL', {
       configurable: true,
       value: createObjectUrl,
+    });
+    Object.defineProperty(URL, 'revokeObjectURL', {
+      configurable: true,
+      value: revokeObjectUrl,
     });
 
     try {
@@ -407,11 +413,15 @@ describe('useSbomDetail', () => {
       };
 
       state.downloadDetailSbom();
-      expect(createObjectUrl).not.toHaveBeenCalled();
+      expect(createObjectUrl).toHaveBeenCalledOnce();
     } finally {
       Object.defineProperty(URL, 'createObjectURL', {
         configurable: true,
         value: originalCreateObjectURL,
+      });
+      Object.defineProperty(URL, 'revokeObjectURL', {
+        configurable: true,
+        value: originalRevokeObjectURL,
       });
     }
   });
