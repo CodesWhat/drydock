@@ -112,6 +112,35 @@ describe('trigger-expression-parser', () => {
     } as any);
     expect(output).toBe('Release title');
   });
+
+  test('renderSimple should expose currentTag variable from container image tag', () => {
+    const output = renderSimple('Tag is ${currentTag}', {
+      ...baseContainer,
+      image: { tag: { value: 'latest' } },
+    } as any);
+    expect(output).toBe('Tag is latest');
+  });
+
+  test('renderSimple should set isDigestUpdate to true for digest updates', () => {
+    const output = renderSimple('${isDigestUpdate ? "digest" : "not digest"}', {
+      ...baseContainer,
+      updateKind: { kind: 'digest', localValue: 'sha256:abc', remoteValue: 'sha256:def' },
+    } as any);
+    expect(output).toBe('digest');
+  });
+
+  test('renderSimple should set isDigestUpdate to false for tag updates', () => {
+    const output = renderSimple(
+      '${isDigestUpdate ? "digest" : "not digest"}',
+      baseContainer as any,
+    );
+    expect(output).toBe('not digest');
+  });
+
+  test('renderSimple should default currentTag to empty when image has no tag', () => {
+    const output = renderSimple('Tag=[${currentTag}]', baseContainer as any);
+    expect(output).toBe('Tag=[]');
+  });
 });
 
 describe('legacy template variable deprecation warnings', () => {

@@ -38,10 +38,11 @@ const configurationValid = {
   mode: 'simple',
   auto: true,
   order: 100,
-  simpletitle: 'New ${container.updateKind.kind} found for container ${container.name}',
+  simpletitle:
+    '${isDigestUpdate ? "New image available for container " + container.name + " (tag " + currentTag + ")" : "New " + container.updateKind.kind + " found for container " + container.name}',
 
   simplebody:
-    'Container ${container.name} running with ${container.updateKind.kind} ${container.updateKind.localValue} can be updated to ${container.updateKind.kind} ${container.updateKind.remoteValue}${container.result && container.result.link ? "\\n" + container.result.link : ""}',
+    '${isDigestUpdate ? "Container " + container.name + " running tag " + currentTag + " has a newer image available" : "Container " + container.name + " running with " + container.updateKind.kind + " " + container.updateKind.localValue + " can be updated to " + container.updateKind.kind + " " + container.updateKind.remoteValue}${container.result && container.result.link ? "\\n" + container.result.link : ""}',
 
   batchtitle: '${containers.length} updates available',
   resolvenotifications: false,
@@ -1052,6 +1053,20 @@ test('renderSimpleTitle should replace placeholders when called', async () => {
   ).toEqual('New tag found for container container-name');
 });
 
+test('renderSimpleTitle should show tag for digest updates', async () => {
+  expect(
+    trigger.renderSimpleTitle({
+      name: 'container-name',
+      image: { tag: { value: 'latest' } },
+      updateKind: {
+        kind: 'digest',
+        localValue: 'sha256:abc123',
+        remoteValue: 'sha256:def456',
+      },
+    }),
+  ).toEqual('New image available for container container-name (tag latest)');
+});
+
 test('renderSimpleBody should replace placeholders when called', async () => {
   expect(
     trigger.renderSimpleBody({
@@ -1068,6 +1083,23 @@ test('renderSimpleBody should replace placeholders when called', async () => {
   ).toEqual(
     'Container container-name running with tag 1.0.0 can be updated to tag 2.0.0\nhttp://test',
   );
+});
+
+test('renderSimpleBody should show tag instead of raw digest for digest updates', async () => {
+  expect(
+    trigger.renderSimpleBody({
+      name: 'container-name',
+      image: { tag: { value: 'latest' } },
+      updateKind: {
+        kind: 'digest',
+        localValue: 'sha256:abc123',
+        remoteValue: 'sha256:def456',
+      },
+      result: {
+        link: 'http://test',
+      },
+    }),
+  ).toEqual('Container container-name running tag latest has a newer image available\nhttp://test');
 });
 
 test('renderSimpleBody should replace placeholders when template is a customized one', async () => {

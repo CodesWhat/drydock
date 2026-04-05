@@ -1262,11 +1262,13 @@ class Trigger extends Component {
         .messages({ 'string.pattern.base': 'digestcron must be a valid cron expression' }),
       simpletitle: this.joi
         .string()
-        .default('New ${container.updateKind.kind} found for container ${container.name}'),
+        .default(
+          '${isDigestUpdate ? "New image available for container " + container.name + " (tag " + currentTag + ")" : "New " + container.updateKind.kind + " found for container " + container.name}',
+        ),
       simplebody: this.joi
         .string()
         .default(
-          'Container ${container.name} running with ${container.updateKind.kind} ${container.updateKind.localValue} can be updated to ${container.updateKind.kind} ${container.updateKind.remoteValue}${container.result && container.result.link ? "\\n" + container.result.link : ""}',
+          '${isDigestUpdate ? "Container " + container.name + " running tag " + currentTag + " has a newer image available" : "Container " + container.name + " running with " + container.updateKind.kind + " " + container.updateKind.localValue + " can be updated to " + container.updateKind.kind + " " + container.updateKind.remoteValue}${container.result && container.result.link ? "\\n" + container.result.link : ""}',
         ),
       batchtitle: this.joi.string().default('${containers.length} updates available'),
       resolvenotifications: this.joi.boolean().default(false),
