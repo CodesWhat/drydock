@@ -22,7 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **Container filter labels** — Default dropdown options renamed for clarity: "Status" → "All Statuses", "Host" → "All Hosts", "Registry" → "All Registries", "Update" → "All Updates". ([#247](https://github.com/CodesWhat/drydock/discussions/247))
+- **Container filter labels** — Default dropdown options renamed for clarity: "Status" → "All Statuses", "Host" → "All Hosts", "Registry" → "All Registries", "Update" → "All Containers". ([#247](https://github.com/CodesWhat/drydock/discussions/247))
 - **Log viewer icons** — Pause, Pin, Sort, Filter, and Copy icons use the theme-aware icon map, so they change when the user switches icon themes in settings.
 
 ### Fixed

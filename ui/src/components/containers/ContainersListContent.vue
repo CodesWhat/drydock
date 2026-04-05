@@ -95,7 +95,7 @@ const {
         <select
           v-model="filterKind"
           class="px-2 py-1.5 dd-rounded text-2xs-plus font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text">
-          <option value="all">All Updates</option>
+          <option value="all">All Containers</option>
           <option value="any">Has Update</option>
           <option value="major">Major</option>
           <option value="minor">Minor</option>
