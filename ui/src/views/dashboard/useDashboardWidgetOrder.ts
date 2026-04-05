@@ -336,6 +336,15 @@ export function useDashboardWidgetOrder() {
 
   let layoutPersistTimer: ReturnType<typeof setTimeout> | undefined;
 
+  function flushPendingLayoutPersist() {
+    if (layoutPersistTimer === undefined) {
+      return;
+    }
+    clearTimeout(layoutPersistTimer);
+    layoutPersistTimer = undefined;
+    persistDashboardLayouts(layout.value);
+  }
+
   watch(
     layout,
     (nextLayout) => {
@@ -356,6 +365,7 @@ export function useDashboardWidgetOrder() {
 
       clearTimeout(layoutPersistTimer);
       layoutPersistTimer = setTimeout(() => {
+        layoutPersistTimer = undefined;
         persistDashboardLayouts(nextLayout);
       }, 300);
     },
@@ -365,7 +375,8 @@ export function useDashboardWidgetOrder() {
   watch(hiddenWidgets, persistHiddenWidgets, { deep: true });
 
   onScopeDispose(() => {
-    clearTimeout(layoutPersistTimer);
+    flushPendingLayoutPersist();
+    persistHiddenWidgets();
   });
 
   function isWidgetVisible(widgetId: DashboardWidgetId): boolean {
