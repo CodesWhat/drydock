@@ -11,7 +11,7 @@ Feature: Drydock Trigger API Exposure
     And response body path $.data[0].configuration.threshold should be all
     And response body path $.data[0].configuration.mode should be simple
     And response body path $.data[0].configuration.once should be true
-    And response body path $.data[0].configuration.simpletitle should be New ${container.updateKind.kind} found for container ${container.name}
+    And response body path $.data[0].configuration.simpletitle should be ${isDigestUpdate ? "New image available for container " + container.name + " (tag " + currentTag + ")" : "New " + container.updateKind.kind + " found for container " + container.name}
     And response body path $.data[0].configuration.batchtitle should be ${containers.length} updates available
     And response body path $.data[0].configuration.mock should be mock
 
@@ -25,6 +25,6 @@ Feature: Drydock Trigger API Exposure
     And response body path $.configuration.threshold should be all
     And response body path $.configuration.mode should be simple
     And response body path $.configuration.once should be true
-    And response body path $.configuration.simpletitle should be New ${container.updateKind.kind} found for container ${container.name}
+    And response body path $.configuration.simpletitle should be ${isDigestUpdate ? "New image available for container " + container.name + " (tag " + currentTag + ")" : "New " + container.updateKind.kind + " found for container " + container.name}
     And response body path $.configuration.batchtitle should be ${containers.length} updates available
     And response body path $.configuration.mock should be mock
