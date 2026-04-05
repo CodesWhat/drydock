@@ -83,6 +83,11 @@ const DEFAULT_LAYOUT: WidgetLayoutItem[] = [
 
 const DEFAULT_LAYOUT_BY_ID = new Map(DEFAULT_LAYOUT.map((item) => [item.i, item] as const));
 
+function getDefaultLayoutItem(widgetId: string): WidgetLayoutItem | null {
+  const item = DEFAULT_LAYOUT_BY_ID.get(widgetId as DashboardWidgetId);
+  return item ? { ...item } : null;
+}
+
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
@@ -160,19 +165,26 @@ export function createDefaultLayoutForBreakpoint(
 ): WidgetLayoutItem[] {
   if (!isSingleColumnBreakpoint(breakpoint)) {
     return applyConstraints(
-      order.map((id) => ({ ...DEFAULT_LAYOUT_BY_ID.get(id)! })),
+      order
+        .map((id) => getDefaultLayoutItem(id))
+        .filter((item): item is WidgetLayoutItem => item !== null),
       breakpoint,
     );
   }
 
   let nextY = 0;
   return applyConstraints(
-    order.map((id) => {
-      const fallback = DEFAULT_LAYOUT_BY_ID.get(id)!;
-      const item: WidgetLayoutItem = { i: id, x: 0, y: nextY, w: 1, h: fallback.h };
-      nextY += item.h;
-      return item;
-    }),
+    order
+      .map((id) => {
+        const fallback = getDefaultLayoutItem(id);
+        if (!fallback) {
+          return null;
+        }
+        const item: WidgetLayoutItem = { i: id, x: 0, y: nextY, w: 1, h: fallback.h };
+        nextY += item.h;
+        return item;
+      })
+      .filter((item): item is WidgetLayoutItem => item !== null),
     breakpoint,
   );
 }

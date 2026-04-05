@@ -159,5 +159,27 @@ describe('dashboardWidgetLayout', () => {
       expect(layout.every((item) => item.x === 0)).toBe(true);
       expect(layout.every((item) => item.w === 1)).toBe(true);
     });
+
+    test('ignores unknown widget ids on multi-column breakpoints', () => {
+      const layout = createDefaultLayoutForBreakpoint(
+        [...DASHBOARD_WIDGET_IDS, 'unknown-widget' as any],
+        'lg',
+      );
+
+      expect(layout).toHaveLength(DASHBOARD_WIDGET_IDS.length);
+      expect(layout.map((item) => item.i)).toEqual(DASHBOARD_WIDGET_IDS);
+    });
+
+    test('ignores unknown widget ids on single-column breakpoints', () => {
+      const layout = createDefaultLayoutForBreakpoint(
+        ['stat-containers', 'unknown-widget' as any, 'recent-updates'],
+        'sm',
+      );
+
+      expect(layout.map((item) => item.i)).toEqual(['stat-containers', 'recent-updates']);
+      expect(layout.map((item) => item.y)).toEqual([0, 3]);
+      expect(layout.every((item) => item.x === 0)).toBe(true);
+      expect(layout.every((item) => item.w === 1)).toBe(true);
+    });
   });
 });

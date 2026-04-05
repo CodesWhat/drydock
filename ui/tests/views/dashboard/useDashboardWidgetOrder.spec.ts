@@ -357,6 +357,36 @@ describe('useDashboardWidgetOrder', () => {
     vi.useRealTimers();
   });
 
+  it('reuses unchanged breakpoint layouts in responsiveLayouts when persisting current breakpoint changes', async () => {
+    vi.useFakeTimers();
+    const mobileLayout = DASHBOARD_WIDGET_IDS.map((id, index) => ({
+      i: id,
+      x: 0,
+      y: index,
+      w: 1,
+      h: 1,
+    }));
+    preferences.dashboard.gridLayouts.sm = mobileLayout;
+
+    const { state } = await mountWidgetOrderComposable();
+    const beforeSm = state.responsiveLayouts.value.sm;
+    const beforeLg = state.responsiveLayouts.value.lg;
+
+    const updated = state.layout.value.map((item) => ({ ...item }));
+    updated[0] = { ...updated[0], x: 99 };
+    state.layout.value = updated;
+    await nextTick();
+
+    vi.advanceTimersByTime(300);
+    await nextTick();
+
+    expect(state.responsiveLayouts.value.sm).toBe(beforeSm);
+    expect(state.responsiveLayouts.value.lg).not.toBe(beforeLg);
+    expect(state.responsiveLayouts.value.lg?.[0].x).toBe(99);
+
+    vi.useRealTimers();
+  });
+
   it('flushes pending layout persistence when the composable is disposed before debounce fires', async () => {
     vi.useFakeTimers();
     const { state, wrapper } = await mountWidgetOrderComposable();

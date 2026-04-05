@@ -82,14 +82,67 @@ function cloneLayout(layout: readonly WidgetLayoutItem[]): WidgetLayoutItem[] {
   return layout.map(cloneLayoutItem);
 }
 
-function cloneResponsiveLayouts(layouts: ResponsiveWidgetLayouts): ResponsiveWidgetLayouts {
-  const result: ResponsiveWidgetLayouts = {};
-  for (const breakpoint of RESPONSIVE_BREAKPOINTS) {
-    if (layouts[breakpoint]?.length) {
-      result[breakpoint] = cloneLayout(layouts[breakpoint]!);
-    }
+function layoutItemsEqual(left: WidgetLayoutItem, right: WidgetLayoutItem): boolean {
+  return (
+    left.i === right.i &&
+    left.x === right.x &&
+    left.y === right.y &&
+    left.w === right.w &&
+    left.h === right.h &&
+    left.minW === right.minW &&
+    left.minH === right.minH &&
+    left.maxW === right.maxW &&
+    left.maxH === right.maxH
+  );
+}
+
+function layoutsShallowEqual(
+  left: readonly WidgetLayoutItem[] | undefined,
+  right: readonly WidgetLayoutItem[] | undefined,
+): boolean {
+  if (left === right) {
+    return true;
   }
-  return result;
+  if (!left || !right || left.length !== right.length) {
+    return false;
+  }
+  return left.every((item, index) => layoutItemsEqual(item, right[index]!));
+}
+
+function createResponsiveLayoutsMemo() {
+  let previousResult: ResponsiveWidgetLayouts = {};
+
+  return (layouts: ResponsiveWidgetLayouts): ResponsiveWidgetLayouts => {
+    let changed = false;
+    const nextResult: ResponsiveWidgetLayouts = {};
+
+    for (const breakpoint of RESPONSIVE_BREAKPOINTS) {
+      const source = layouts[breakpoint];
+      const previous = previousResult[breakpoint];
+
+      if (!source?.length) {
+        if (previous?.length) {
+          changed = true;
+        }
+        continue;
+      }
+
+      if (layoutsShallowEqual(source, previous)) {
+        nextResult[breakpoint] = previous;
+        continue;
+      }
+
+      nextResult[breakpoint] = cloneLayout(source);
+      changed = true;
+    }
+
+    if (!changed) {
+      return previousResult;
+    }
+
+    previousResult = nextResult;
+    return previousResult;
+  };
 }
 
 function stripLayout(layout: readonly WidgetLayoutItem[]): PersistedLayoutItem[] {
@@ -248,6 +301,7 @@ export function moveWidget(
 }
 
 export function useDashboardWidgetOrder() {
+  const getResponsiveLayouts = createResponsiveLayoutsMemo();
   const widgetOrder = ref<DashboardWidgetId[]>(
     sanitizeWidgetOrder(preferences.dashboard.widgetOrder),
   );
@@ -259,7 +313,7 @@ export function useDashboardWidgetOrder() {
         createLayoutFromOrder(widgetOrder.value, currentBreakpoint.value),
     ),
   );
-  const responsiveLayouts = computed(() => cloneResponsiveLayouts(layoutsByBreakpoint.value));
+  const responsiveLayouts = computed(() => getResponsiveLayouts(layoutsByBreakpoint.value));
   const gridInstanceKey = ref(0);
   const hiddenWidgets = ref<DashboardWidgetId[]>(
     sanitizeHiddenWidgets(preferences.dashboard.hiddenWidgets),
