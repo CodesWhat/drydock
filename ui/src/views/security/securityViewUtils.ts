@@ -3,6 +3,7 @@ import type {
   SecurityRuntimeToolStatus,
   SecurityViewEmptyStateInput,
   SeveritySummaryCounts,
+  Vulnerability,
 } from './securityViewTypes';
 
 export const severityOrder: Record<string, number> = {
@@ -123,4 +124,57 @@ export function buildSecurityEmptyState(input: SecurityViewEmptyStateInput): Sec
     showSetupGuide: false,
     showScanButton: false,
   };
+}
+
+export type VulnExportFormat = 'json' | 'csv';
+
+function escapeCsvField(value: string): string {
+  if (value.includes(',') || value.includes('"') || value.includes('\n')) {
+    return `"${value.replace(/"/g, '""')}"`;
+  }
+  return value;
+}
+
+const VULN_CSV_COLUMNS = [
+  'ID',
+  'Severity',
+  'Package',
+  'Version',
+  'Fixed In',
+  'Title',
+  'Target',
+  'URL',
+] as const;
+
+export function vulnReportToCsv(vulns: Vulnerability[]): string {
+  const rows = [VULN_CSV_COLUMNS.join(',')];
+  for (const v of vulns) {
+    rows.push(
+      [
+        escapeCsvField(v.id),
+        escapeCsvField(v.severity),
+        escapeCsvField(v.package),
+        escapeCsvField(v.version),
+        escapeCsvField(v.fixedIn ?? ''),
+        escapeCsvField(v.title ?? ''),
+        escapeCsvField(v.target ?? ''),
+        escapeCsvField(v.primaryUrl ?? ''),
+      ].join(','),
+    );
+  }
+  return rows.join('\n');
+}
+
+export function vulnReportToJson(vulns: Vulnerability[]): string {
+  const exported = vulns.map((v) => ({
+    id: v.id,
+    severity: v.severity,
+    package: v.package,
+    version: v.version,
+    fixedIn: v.fixedIn,
+    title: v.title ?? null,
+    target: v.target ?? null,
+    url: v.primaryUrl ?? null,
+  }));
+  return JSON.stringify(exported, null, 2);
 }
