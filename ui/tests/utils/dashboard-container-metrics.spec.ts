@@ -170,6 +170,46 @@ describe('buildDashboardContainerMetrics', () => {
     expect(metrics.freshUpdates).toBe(1);
   });
 
+  it('uses updateContainers option for update counts without affecting base container metrics', () => {
+    const now = Date.now();
+    const twoHoursAgo = new Date(now - 2 * 60 * 60 * 1000).toISOString();
+    const tenDaysAgo = new Date(now - daysToMs(10)).toISOString();
+
+    const containers = [
+      makeContainer({
+        id: 'c1',
+        image: 'nginx',
+        status: 'running',
+        updateKind: 'major',
+        updateDetectedAt: tenDaysAgo,
+        bouncer: 'blocked',
+      }),
+      makeContainer({
+        id: 'c2',
+        image: 'redis',
+        status: 'stopped',
+      }),
+    ];
+
+    const metrics = buildDashboardContainerMetrics(containers, {
+      updateContainers: [
+        makeContainer({
+          id: 'c3',
+          image: 'ghcr.io/acme/api',
+          updateKind: 'minor',
+          updateDetectedAt: twoHoursAgo,
+        }),
+      ],
+    });
+
+    expect(metrics.totalContainers).toBe(2);
+    expect(metrics.runningContainers).toBe(1);
+    expect(metrics.securityIssueImageCount).toBe(1);
+    expect(metrics.securityByImage.map((aggregate) => aggregate.key)).toEqual(['nginx', 'redis']);
+    expect(metrics.updatesAvailable).toBe(1);
+    expect(metrics.freshUpdates).toBe(1);
+  });
+
   it('keeps hasIssue false for scanned summaries with zero counts and safe bouncer', () => {
     const metrics = buildDashboardContainerMetrics([
       makeContainer({
