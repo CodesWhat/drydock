@@ -108,6 +108,23 @@ export function buildLiteralTemplateExpression(expression: string): string {
   return `\${${expression}}`;
 }
 
+const DEFAULT_SIMPLE_TITLE_DIGEST_EXPRESSION =
+  '"New image available for container " + container.name + " (tag " + currentTag + ")"';
+const DEFAULT_SIMPLE_TITLE_UPDATE_EXPRESSION =
+  '"New " + container.updateKind.kind + " found for container " + container.name';
+const DEFAULT_SIMPLE_BODY_DIGEST_EXPRESSION =
+  '"Container " + container.name + " running tag " + currentTag + " has a newer image available"';
+const DEFAULT_SIMPLE_BODY_UPDATE_EXPRESSION =
+  '"Container " + container.name + " running with " + container.updateKind.kind + " " + container.updateKind.localValue + " can be updated to " + container.updateKind.kind + " " + container.updateKind.remoteValue';
+const DEFAULT_SIMPLE_BODY_RESULT_LINK_EXPRESSION =
+  'container.result && container.result.link ? "\\n" + container.result.link : ""';
+const DEFAULT_SIMPLE_TITLE_TEMPLATE = buildLiteralTemplateExpression(
+  `isDigestUpdate ? ${DEFAULT_SIMPLE_TITLE_DIGEST_EXPRESSION} : ${DEFAULT_SIMPLE_TITLE_UPDATE_EXPRESSION}`,
+);
+const DEFAULT_SIMPLE_BODY_TEMPLATE = `${buildLiteralTemplateExpression(
+  `isDigestUpdate ? ${DEFAULT_SIMPLE_BODY_DIGEST_EXPRESSION} : ${DEFAULT_SIMPLE_BODY_UPDATE_EXPRESSION}`,
+)}${buildLiteralTemplateExpression(DEFAULT_SIMPLE_BODY_RESULT_LINK_EXPRESSION)}`;
+
 const AGENT_DISCONNECT_SIMPLE_TITLE_TEMPLATE = `Agent ${buildLiteralTemplateExpression('event.agentName')} disconnected`;
 const AGENT_DISCONNECT_SIMPLE_BODY_TEMPLATE = `Agent ${buildLiteralTemplateExpression('event.agentName')} disconnected${buildLiteralTemplateExpression('event.reason ? ": " + event.reason : ""')}`;
 const AGENT_RECONNECT_SIMPLE_TITLE_TEMPLATE = `Agent ${buildLiteralTemplateExpression('event.agentName')} reconnected`;
@@ -142,10 +159,6 @@ const NOTIFICATION_BATCH_TITLE_TEMPLATES: Partial<
   'update-applied': `${buildLiteralTemplateExpression('containers.length')} updates applied`,
   'update-failed': `${buildLiteralTemplateExpression('containers.length')} updates failed`,
   'security-alert': `${buildLiteralTemplateExpression('containers.length')} security alerts`,
-};
-const AGENT_SIMPLE_TITLE_TEMPLATES: Partial<Record<TriggerNotificationEvent['kind'], string>> = {
-  'agent-disconnect': AGENT_DISCONNECT_SIMPLE_TITLE_TEMPLATE,
-  'agent-reconnect': AGENT_RECONNECT_SIMPLE_TITLE_TEMPLATE,
 };
 
 function truncateReleaseNotesBody(body: string, maxLength: number) {
@@ -221,48 +234,52 @@ function withNotificationEvent(
   } as Container;
 }
 
-export function getNotificationEvent(container: Container): TriggerNotificationEvent | undefined {
-  const notificationEvent = Reflect.get(new Object(container), 'notificationEvent');
-  if (!notificationEvent || typeof notificationEvent !== 'object') {
-    return undefined;
-  }
+function safeGet(target: unknown, property: string): unknown {
+  return Reflect.get(Object(target), property);
+}
 
-  const kind = Reflect.get(new Object(notificationEvent), 'kind');
-  if (kind === 'update-applied') {
-    return { kind };
-  }
+function getNonEmptyString(target: unknown, property: string): string | undefined {
+  const value = safeGet(target, property);
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
 
-  if (kind === 'update-failed') {
-    const error = Reflect.get(new Object(notificationEvent), 'error');
-    return {
-      kind,
-      error: typeof error === 'string' && error.length > 0 ? error : undefined,
-    };
-  }
+function getFiniteNumber(target: unknown, property: string): number | undefined {
+  const value = safeGet(target, property);
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
 
-  if (kind === 'security-alert') {
-    const details = Reflect.get(new Object(notificationEvent), 'details');
-    const status = Reflect.get(new Object(notificationEvent), 'status');
-    const summary = Reflect.get(new Object(notificationEvent), 'summary');
-    const blockingCount = Reflect.get(new Object(notificationEvent), 'blockingCount');
-    return {
-      kind,
-      details: typeof details === 'string' && details.length > 0 ? details : undefined,
-      status: typeof status === 'string' && status.length > 0 ? status : undefined,
-      summary:
-        summary && typeof summary === 'object'
-          ? (summary as SecurityAlertPayload['summary'])
-          : undefined,
-      blockingCount:
-        typeof blockingCount === 'number' && Number.isFinite(blockingCount)
-          ? blockingCount
-          : undefined,
-    };
-  }
+function getObjectProperty<T extends object>(target: unknown, property: string): T | undefined {
+  const value = safeGet(target, property);
+  return value && typeof value === 'object' ? (value as T) : undefined;
+}
 
-  const agentName = Reflect.get(new Object(notificationEvent), 'agentName');
-  const reason = Reflect.get(new Object(notificationEvent), 'reason');
-  if (typeof agentName !== 'string' || agentName.length === 0) {
+function getUpdateFailedNotificationEvent(
+  notificationEvent: unknown,
+): UpdateFailedNotificationEvent {
+  return {
+    kind: 'update-failed',
+    error: getNonEmptyString(notificationEvent, 'error'),
+  };
+}
+
+function getSecurityAlertNotificationEvent(
+  notificationEvent: unknown,
+): SecurityAlertNotificationEvent {
+  return {
+    kind: 'security-alert',
+    details: getNonEmptyString(notificationEvent, 'details'),
+    status: getNonEmptyString(notificationEvent, 'status'),
+    summary: getObjectProperty<SecurityAlertPayload['summary']>(notificationEvent, 'summary'),
+    blockingCount: getFiniteNumber(notificationEvent, 'blockingCount'),
+  };
+}
+
+function getAgentNotificationEvent(
+  kind: unknown,
+  notificationEvent: unknown,
+): AgentDisconnectedNotificationEvent | AgentReconnectedNotificationEvent | undefined {
+  const agentName = getNonEmptyString(notificationEvent, 'agentName');
+  if (!agentName) {
     return undefined;
   }
 
@@ -274,10 +291,33 @@ export function getNotificationEvent(container: Container): TriggerNotificationE
     kind,
     agentName,
     reason:
-      kind === 'agent-disconnect' && typeof reason === 'string' && reason.length > 0
-        ? reason
-        : undefined,
+      kind === 'agent-disconnect' ? getNonEmptyString(notificationEvent, 'reason') : undefined,
   };
+}
+
+export function getNotificationEvent(container: Container): TriggerNotificationEvent | undefined {
+  const notificationEvent = getObjectProperty<Record<string, unknown>>(
+    container,
+    'notificationEvent',
+  );
+  if (!notificationEvent || typeof notificationEvent !== 'object') {
+    return undefined;
+  }
+
+  const kind = safeGet(notificationEvent, 'kind');
+  if (kind === 'update-applied') {
+    return { kind };
+  }
+
+  if (kind === 'update-failed') {
+    return getUpdateFailedNotificationEvent(notificationEvent);
+  }
+
+  if (kind === 'security-alert') {
+    return getSecurityAlertNotificationEvent(notificationEvent);
+  }
+
+  return getAgentNotificationEvent(kind, notificationEvent);
 }
 
 export function resolveNotificationTemplate(
@@ -652,36 +692,30 @@ class Trigger extends Component {
       this.log.debug(`Evicted ${containerName} from digest buffer (update applied)`);
     }
 
-    await this.dispatchContainerForEvent(
-      'update-applied',
-      (() => {
-        const container = this.findContainerByBusinessId(containerName);
-        return container ? withNotificationEvent(container, { kind: 'update-applied' }) : undefined;
-      })(),
-      {
-        allowAllWhenNoTriggers: false,
-        defaultWhenRuleMissing: false,
-      },
-    );
+    const container = this.findContainerByBusinessId(containerName);
+    const notificationContainer = container
+      ? withNotificationEvent(container, { kind: 'update-applied' })
+      : undefined;
+
+    await this.dispatchContainerForEvent('update-applied', notificationContainer, {
+      allowAllWhenNoTriggers: false,
+      defaultWhenRuleMissing: false,
+    });
   }
 
   async handleContainerUpdateFailedEvent(payload: ContainerUpdateFailedPayload) {
-    await this.dispatchContainerForEvent(
-      'update-failed',
-      (() => {
-        const container = this.findContainerByBusinessId(payload.containerName);
-        return container
-          ? withNotificationEvent(container, {
-              kind: 'update-failed',
-              error: payload.error,
-            })
-          : undefined;
-      })(),
-      {
-        allowAllWhenNoTriggers: false,
-        defaultWhenRuleMissing: false,
-      },
-    );
+    const container = this.findContainerByBusinessId(payload.containerName);
+    const notificationContainer = container
+      ? withNotificationEvent(container, {
+          kind: 'update-failed',
+          error: payload.error,
+        })
+      : undefined;
+
+    await this.dispatchContainerForEvent('update-failed', notificationContainer, {
+      allowAllWhenNoTriggers: false,
+      defaultWhenRuleMissing: false,
+    });
   }
 
   async handleSecurityAlertEvent(payload: SecurityAlertPayload) {
@@ -1224,6 +1258,7 @@ class Trigger extends Component {
     this.clearEventBatchDispatches();
 
     this.autoTriggerErrorSeenAt.clear();
+    this.notificationRuleWarningsSeen.clear();
   }
 
   /**
@@ -1260,16 +1295,8 @@ class Trigger extends Component {
           return value;
         })
         .messages({ 'string.pattern.base': 'digestcron must be a valid cron expression' }),
-      simpletitle: this.joi
-        .string()
-        .default(
-          '${isDigestUpdate ? "New image available for container " + container.name + " (tag " + currentTag + ")" : "New " + container.updateKind.kind + " found for container " + container.name}',
-        ),
-      simplebody: this.joi
-        .string()
-        .default(
-          '${isDigestUpdate ? "Container " + container.name + " running tag " + currentTag + " has a newer image available" : "Container " + container.name + " running with " + container.updateKind.kind + " " + container.updateKind.localValue + " can be updated to " + container.updateKind.kind + " " + container.updateKind.remoteValue}${container.result && container.result.link ? "\\n" + container.result.link : ""}',
-        ),
+      simpletitle: this.joi.string().default(DEFAULT_SIMPLE_TITLE_TEMPLATE),
+      simplebody: this.joi.string().default(DEFAULT_SIMPLE_BODY_TEMPLATE),
       batchtitle: this.joi.string().default('${containers.length} updates available'),
       resolvenotifications: this.joi.boolean().default(false),
     });

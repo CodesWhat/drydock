@@ -1950,6 +1950,34 @@ test('handleContainerReportDigest should warn once when update-available routing
   expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('smtp.gmail'));
 });
 
+test('deregisterComponent should clear digest warning suppression state', async () => {
+  await trigger.register('trigger', 'smtp', 'gmail', {
+    ...configurationValid,
+    mode: 'digest',
+  });
+  notificationStore.getTriggerDispatchDecisionForRule.mockReturnValue({
+    enabled: false,
+    reason: 'excluded-from-allow-list',
+  });
+  const warnSpy = vi.spyOn(log, 'warn');
+  const report = {
+    changed: true,
+    container: {
+      watcher: 'local',
+      name: 'container1',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', semverDiff: 'major' },
+    },
+  };
+
+  await trigger.handleContainerReportDigest(report);
+  await trigger.handleContainerReportDigest(report);
+  await trigger.deregisterComponent();
+  await trigger.handleContainerReportDigest(report);
+
+  expect(warnSpy).toHaveBeenCalledTimes(2);
+});
+
 test('handleContainerUpdateAppliedEvent should run trigger when rule allows and container is found', async () => {
   const container = {
     watcher: 'local',
