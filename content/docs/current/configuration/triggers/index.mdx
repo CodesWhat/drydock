@@ -91,7 +91,7 @@ All implemented triggers, in addition to their specific configuration, also supp
 | `patch` | Any semver change that is not major or minor (patch, prerelease) |
 | `digest` | Digest changes only |
 
-Any threshold can be suffixed with `-no-digest` to exclude digest-only updates (e.g. `major-no-digest`, `minor-only-no-digest`). Updates with an `unknown` update kind are always filtered out regardless of the threshold setting.
+Any threshold can be suffixed with `-no-digest` to exclude digest-only updates (e.g. `major-no-digest`, `minor-only-no-digest`). Updates with an `unknown` update kind (e.g. created-date-only changes) are passed through when `threshold=all`, but filtered out for all other threshold values.
 
 ### Notes
 
@@ -116,12 +116,13 @@ Notification rules control which events fire which triggers. Each rule correspon
 | `update-failed` | Yes | An update failed or was rolled back |
 | `security-alert` | Yes | Critical/high vulnerability detected during pre-update scan |
 | `agent-disconnect` | No | A remote agent lost its connection |
+| `agent-reconnect` | No | A remote agent reconnected after losing connection |
 
 **Dispatch behavior:**
 
 - **`update-available`** -- for backward compatibility, when its trigger list is empty all triggers fire (existing behavior is preserved). Once you assign specific triggers, only those fire.
 - **`update-applied`**, **`update-failed`**, **`security-alert`** -- these require explicit trigger assignments. They are enabled by default but will not fire any trigger until you add trigger IDs to their rules.
-- **`agent-disconnect`** -- disabled by default. Enable it and assign triggers to receive disconnect alerts. This event always fires regardless of the threshold setting.
+- **`agent-disconnect`**, **`agent-reconnect`** -- disabled by default. Enable them and assign triggers to receive disconnect/reconnect alerts. These events always fire regardless of the threshold setting.
 
 Rules are managed via `GET /api/v1/notifications` and `PATCH /api/v1/notifications/:id` (update `enabled` and/or `triggers` fields), or through the **Notifications** view in the UI.
 
@@ -135,6 +136,7 @@ Beyond the classic `update-available` event, triggers can fire on additional eve
 - **`update-failed`** -- fires when an update fails or is rolled back. Carries the container name and error message.
 - **`security-alert`** -- fires when the [Update Bouncer](/docs/configuration/security) detects critical or high vulnerabilities during a pre-update scan. Includes a vulnerability summary.
 - **`agent-disconnect`** -- fires when a remote agent loses its connection. This event **skips threshold checks** (always fires).
+- **`agent-reconnect`** -- fires when a remote agent reconnects after losing connection. Only fires on true reconnects, not the initial startup connection. This event **skips threshold checks** (always fires).
 
 <Callout type="info">To receive notifications for these events, add the desired trigger IDs to the corresponding notification rule via the API or UI.</Callout>
 
