@@ -931,13 +931,22 @@ class Trigger extends Component {
    * Handle container report (digest mode — single container from simple event).
    */
   async handleContainerReportDigest(containerReport: ContainerReport) {
+    const { container } = containerReport;
+    const containerName = fullName(container);
+
+    if (!container.updateAvailable) {
+      if (this.digestBuffer.delete(containerName)) {
+        this.log.debug(`Evicted ${containerName} from digest buffer (update no longer available)`);
+      }
+      return;
+    }
+
     if (!this.isUpdateAvailableAutoTriggerEnabled()) {
       return;
     }
     if (!this.shouldHandleSimpleContainerReport(containerReport)) {
       return;
     }
-    const { container } = containerReport;
     if (!Trigger.isThresholdReached(container, this.getSimpleModeThreshold())) {
       return;
     }
@@ -961,14 +970,51 @@ class Trigger extends Component {
       return;
     }
     const bufferedEntries = Array.from(this.digestBuffer.entries());
-    const containers = bufferedEntries.map(([, container]) => container);
+    const currentContainersByBusinessId = new Map(
+      storeContainer.getContainers().map((container) => [fullName(container), container] as const),
+    );
+    const dispatchEntries = bufferedEntries.flatMap(([containerName, bufferedContainer]) => {
+      const currentContainer = currentContainersByBusinessId.get(containerName);
+
+      if (!currentContainer) {
+        return [
+          {
+            containerName,
+            bufferedContainer,
+            currentContainer: bufferedContainer,
+          },
+        ];
+      }
+
+      if (currentContainer.updateAvailable) {
+        return [
+          {
+            containerName,
+            bufferedContainer,
+            currentContainer,
+          },
+        ];
+      }
+
+      if (this.digestBuffer.get(containerName) === bufferedContainer) {
+        this.digestBuffer.delete(containerName);
+      }
+      return [];
+    });
+
+    if (dispatchEntries.length === 0) {
+      this.log.debug('Digest cron fired — no buffered updates remain after revalidation');
+      return;
+    }
+
+    const containers = dispatchEntries.map(({ currentContainer }) => currentContainer);
     this.log.info(`Digest flush: sending ${containers.length} update(s)`);
     let status: 'success' | 'error' = 'error';
     this.isDigestFlushInProgress = true;
     try {
       await this.triggerBatch(containers);
       status = 'success';
-      for (const [containerName, bufferedContainer] of bufferedEntries) {
+      for (const { containerName, bufferedContainer } of dispatchEntries) {
         if (this.digestBuffer.get(containerName) === bufferedContainer) {
           this.digestBuffer.delete(containerName);
         }
