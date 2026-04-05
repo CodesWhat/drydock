@@ -162,6 +162,34 @@ describe('NotificationsView', () => {
     expect(wrapper.text()).toContain('Selecting any trigger turns this rule into an allow-list.');
   });
 
+  it('renders the non-update-available trigger summary and detail help text', async () => {
+    mockGetAllNotificationRules.mockResolvedValue([
+      makeRule({
+        id: 'security-alert',
+        name: 'Security Alert',
+        description: 'Critical vulnerabilities detected',
+        triggers: [],
+      }),
+    ]);
+
+    const wrapper = await mountNotificationsView();
+
+    await wrapper.find('.mode-cards').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('No triggers');
+
+    await wrapper.find('.card-click-first').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain(
+      'Only selected triggers will receive this event. Leave it empty to suppress this event for all triggers.',
+    );
+    expect(wrapper.text()).not.toContain(
+      'Leave this empty to send this event to all notification triggers. Selecting any trigger turns this rule into an allow-list.',
+    );
+  });
+
   it('renders shared switch controls in table, cards, list, and detail contexts', async () => {
     const wrapper = await mountNotificationsView({
       DataTable: defineComponent({

@@ -111,6 +111,10 @@ const {
 const searchFilterMode = ref(false);
 
 const displayEntries = shallowRef<AppLogEntry[]>(props.entries);
+// Log polling usually appends to the tail of `props.entries`. In newest-first mode,
+// rebuilding `[...entries].reverse()` on every update turns that append-only case
+// into repeated O(n) work, so we reuse the previous reversed array whenever the
+// existing prefix is unchanged and only reverse/prepend the newly appended tail.
 let cachedNewestFirstSource: AppLogEntry[] | null = null;
 let cachedNewestFirstLength = 0;
 let cachedNewestFirstEntries: AppLogEntry[] = [];

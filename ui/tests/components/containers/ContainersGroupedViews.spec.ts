@@ -112,6 +112,7 @@ function makeContext(overrides: Record<string, unknown> = {}) {
   const containerSortKey = ref('name');
   const containerSortAsc = ref(true);
   const selectedContainer = ref<Container | null>(null);
+  const activeDetailTab = ref('overview');
   const isCompact = ref(false);
   const tableActionStyle = ref<'icons' | 'buttons'>('icons');
   const openActionsMenu = ref<string | null>(null);
@@ -187,6 +188,7 @@ function makeContext(overrides: Record<string, unknown> = {}) {
     containerSortKey,
     containerSortAsc,
     selectedContainer,
+    activeDetailTab,
     isCompact,
     selectContainer: spies.selectContainer,
     tableActionStyle,
@@ -248,6 +250,7 @@ function makeContext(overrides: Record<string, unknown> = {}) {
       containerActionsEnabled,
       actionInProgress,
       selectedContainer,
+      activeDetailTab,
       isCompact,
     },
     spies,
@@ -554,6 +557,7 @@ describe('ContainersGroupedViews', () => {
     await clickMenuAction('c-m2', 'Scan');
     await clickMenuAction('c-m2', 'Force update');
     await clickMenuAction('c-m2', 'Skip this update');
+    await clickMenuAction('c-m2', 'Rollback');
     await clickMenuAction('c-m2', 'Delete');
 
     expect(spies.closeActionsMenu).toHaveBeenCalled();
@@ -569,6 +573,10 @@ describe('ContainersGroupedViews', () => {
     expect(spies.skipUpdate).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'c-m2', name: 'beta' }),
     );
+    expect(spies.selectContainer).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'c-m2', name: 'beta' }),
+    );
+    expect(refs.activeDetailTab.value).toBe('actions');
     expect(spies.confirmDelete).toHaveBeenCalled();
   });
 
