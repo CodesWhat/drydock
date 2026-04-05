@@ -1692,6 +1692,11 @@ test('renderBatchTitle should use dedicated template for security-alert events',
   ).toEqual('2 security alerts');
 });
 
+test('renderBatchTitle should return fallback template result when containers is empty', () => {
+  const result = trigger.renderBatchTitle([]);
+  expect(result).toBe('0 updates available');
+});
+
 test('renderBatchBody should replace placeholders when called', async () => {
   expect(
     trigger.renderBatchBody([
@@ -1950,6 +1955,32 @@ test('handleContainerReportDigest should warn once when update-available routing
   expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('smtp.gmail'));
 });
 
+test('handleContainerReportDigest should silently return when dispatch reason is unrecognised and trigger is suppressed', async () => {
+  await trigger.register('trigger', 'smtp', 'gmail', {
+    ...configurationValid,
+    mode: 'digest',
+  });
+  notificationStore.getTriggerDispatchDecisionForRule.mockReturnValue({
+    enabled: false,
+    reason: 'empty-trigger-list',
+  });
+  const warnSpy = vi.spyOn(log, 'warn');
+  const report = {
+    changed: true,
+    container: {
+      watcher: 'local',
+      name: 'container1',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', semverDiff: 'major' },
+    },
+  };
+
+  await trigger.handleContainerReportDigest(report);
+
+  expect(trigger.digestBuffer.size).toBe(0);
+  expect(warnSpy).not.toHaveBeenCalled();
+});
+
 test('deregisterComponent should clear digest warning suppression state', async () => {
   await trigger.register('trigger', 'smtp', 'gmail', {
     ...configurationValid,
@@ -2135,6 +2166,18 @@ test('handleContainerUpdateFailedEvent should skip when mustTrigger returns fals
   expect(triggerSpy).not.toHaveBeenCalled();
 });
 
+test('handleContainerUpdateFailedEvent should not trigger when container is not found in store', async () => {
+  storeContainer.getContainers.mockReturnValue([]);
+  const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+  await trigger.handleContainerUpdateFailedEvent({
+    containerName: 'local_nonexistent',
+    error: 'boom',
+  });
+
+  expect(triggerSpy).not.toHaveBeenCalled();
+});
+
 test('handleSecurityAlertEvent should dispatch using payload container when provided', async () => {
   const container = {
     watcher: 'local',
@@ -2207,6 +2250,19 @@ test('handleSecurityAlertEvent should catch trigger execution errors', async () 
 
   expect(warnSpy).toHaveBeenCalledWith('Error handling security-alert event (dispatch failed)');
   expect(debugSpy).toHaveBeenCalledWith(expect.any(Error));
+});
+
+test('handleSecurityAlertEvent should not trigger when neither payload container nor store container is found', async () => {
+  storeContainer.getContainers.mockReturnValue([]);
+  const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+  await trigger.handleSecurityAlertEvent({
+    containerName: 'local_nonexistent',
+    details: 'high=1',
+    container: undefined,
+  });
+
+  expect(triggerSpy).not.toHaveBeenCalled();
 });
 
 test('handleContainerUpdateAppliedEvent should aggregate nearby update-applied events in batch mode', async () => {
@@ -3134,6 +3190,27 @@ describe('digest mode', () => {
     triggerBatchSpy.mockRestore();
   });
 
+  test('handleContainerReportDigest should not buffer when changed is false and once is true', async () => {
+    await trigger.register('trigger', 'test', 'digest-trigger', {
+      ...configurationValid,
+      mode: 'digest',
+    });
+    trigger.init();
+
+    await trigger.handleContainerReportDigest({
+      container: {
+        id: 'c1',
+        name: 'app',
+        watcher: 'test',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      },
+      changed: false,
+    });
+
+    expect(trigger.digestBuffer.size).toBe(0);
+  });
+
   test('handleContainerReportDigest should canonicalize recreate aliases before negative eviction', async () => {
     await trigger.register('trigger', 'test', 'digest-trigger', {
       ...configurationValid,
@@ -3351,6 +3428,102 @@ describe('digest mode', () => {
 
     expect(trigger.digestBuffer.size).toBe(0);
     expect(triggerBatchSpy).not.toHaveBeenCalled();
+    triggerBatchSpy.mockRestore();
+  });
+
+  test('flushDigestBuffer should not delete replacement when buffer entry is swapped during revalidation', async () => {
+    await trigger.register('trigger', 'test', 'digest-trigger', {
+      ...configurationValid,
+      mode: 'digest',
+    });
+    trigger.init();
+
+    // Buffer the original container for 'test_app'
+    await trigger.handleContainerReportDigest({
+      container: {
+        id: 'c1',
+        name: 'app',
+        watcher: 'test',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      },
+      changed: true,
+    });
+
+    const replacement = {
+      id: 'c3',
+      name: 'app',
+      watcher: 'test',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', localValue: '2.0', remoteValue: '3.0' },
+    };
+
+    // The store returns updateAvailable=false so the revalidation falls through
+    // to the identity check at line 1035. Use the getContainers mock to inject a
+    // replacement into the buffer AFTER the snapshot is taken (the snapshot uses
+    // Array.from, which runs before getContainers is called for the store lookup).
+    storeContainer.getContainers.mockImplementation(() => {
+      // Replace the buffer entry mid-revalidation — simulates a concurrent report
+      trigger.digestBuffer.set('test_app', replacement);
+      return [
+        {
+          id: 'c1',
+          name: 'app',
+          watcher: 'test',
+          updateAvailable: false,
+          updateKind: { kind: 'tag', localValue: '2.0', remoteValue: '2.0' },
+        },
+      ];
+    });
+
+    const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+    await trigger.flushDigestBuffer();
+
+    // The replacement should NOT have been deleted — the identity check prevents it
+    expect(trigger.digestBuffer.size).toBe(1);
+    expect(trigger.digestBuffer.get('test_app')).toBe(replacement);
+    // No dispatch because the store container has updateAvailable=false
+    expect(triggerBatchSpy).not.toHaveBeenCalled();
+    triggerBatchSpy.mockRestore();
+  });
+
+  test('flushDigestBuffer should use current store container when it still has an update', async () => {
+    await trigger.register('trigger', 'test', 'digest-trigger', {
+      ...configurationValid,
+      mode: 'digest',
+    });
+    trigger.init();
+
+    await trigger.handleContainerReportDigest({
+      container: {
+        id: 'c1',
+        name: 'app',
+        watcher: 'test',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      },
+      changed: true,
+    });
+
+    const storeContainer2 = {
+      id: 'c1',
+      name: 'app',
+      watcher: 'test',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '3.0' },
+    };
+    storeContainer.getContainers.mockReturnValue([storeContainer2]);
+
+    const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+    await trigger.flushDigestBuffer();
+
+    expect(triggerBatchSpy).toHaveBeenCalledWith([
+      expect.objectContaining({
+        name: 'app',
+        updateKind: expect.objectContaining({ remoteValue: '3.0' }),
+      }),
+    ]);
+    expect(trigger.digestBuffer.size).toBe(0);
     triggerBatchSpy.mockRestore();
   });
 

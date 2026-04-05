@@ -954,6 +954,12 @@ describe('AgentClient', () => {
       expect(event.emitContainerUpdateApplied).toHaveBeenCalledWith('local_nginx');
     });
 
+    test('should ignore update-applied when data is an empty string', async () => {
+      await client.handleEvent('dd:update-applied', '');
+
+      expect(event.emitContainerUpdateApplied).not.toHaveBeenCalled();
+    });
+
     test('should emit update-failed when agent sends dd:update-failed', async () => {
       await client.handleEvent('dd:update-failed', {
         containerName: 'local_nginx',
