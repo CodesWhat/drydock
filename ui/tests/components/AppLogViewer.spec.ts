@@ -1,5 +1,5 @@
 import { flushPromises, mount } from '@vue/test-utils';
-import { nextTick } from 'vue';
+import { defineComponent, nextTick, ref } from 'vue';
 import AppLogViewer from '@/components/AppLogViewer.vue';
 import type { AppLogEntry } from '@/types/log-entry';
 
@@ -495,6 +495,45 @@ describe('AppLogViewer', () => {
 
       const rows = wrapper.findAll('[data-test="container-log-row"]');
       expect(rows[0].text()).toContain('third');
+      expect(rows[2].text()).toContain('first');
+    });
+
+    it('reuses the newest-first display array when streamed entries are appended', async () => {
+      const entries = ref([
+        makeEntry(1, { plainLine: 'first' }),
+        makeEntry(2, { plainLine: 'second' }),
+      ]);
+      const Harness = defineComponent({
+        components: { AppLogViewer },
+        setup() {
+          return { entries };
+        },
+        template: '<AppLogViewer :entries="entries" :newest-first="true" />',
+      });
+      const wrapper = mount(Harness, {
+        global: {
+          stubs: {
+            AppIcon: {
+              template: '<span class="app-icon-stub" />',
+            },
+          },
+        },
+      });
+      const viewer = wrapper.getComponent(AppLogViewer);
+      const initialDisplayEntries = (viewer.vm.$ as any).setupState.displayEntries
+        .value as AppLogEntry[];
+
+      entries.value.push(makeEntry(3, { plainLine: 'third' }));
+      await nextTick();
+
+      const nextDisplayEntries = (viewer.vm.$ as any).setupState.displayEntries
+        .value as AppLogEntry[];
+      expect(nextDisplayEntries).toBe(initialDisplayEntries);
+
+      const rows = viewer.findAll('[data-test="container-log-row"]');
+      expect(rows).toHaveLength(3);
+      expect(rows[0].text()).toContain('third');
+      expect(rows[1].text()).toContain('second');
       expect(rows[2].text()).toContain('first');
     });
 
