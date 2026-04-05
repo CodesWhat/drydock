@@ -244,6 +244,32 @@ describe('preferences store', () => {
     );
   });
 
+  it('should cancel the scheduled idle callback when flush is triggered by visibilitychange', async () => {
+    const cancelIdleCallbackSpy = vi.fn();
+    (globalThis as any).requestIdleCallback = vi.fn(() => 42);
+    (globalThis as any).cancelIdleCallback = cancelIdleCallbackSpy;
+
+    const { preferences } = await loadStore();
+    (globalThis as any).requestIdleCallback.mockClear();
+    cancelIdleCallbackSpy.mockClear();
+
+    preferences.theme.family = 'github';
+    await nextTick();
+
+    expect((globalThis as any).requestIdleCallback).toHaveBeenCalledTimes(1);
+
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => 'hidden',
+    });
+    document.dispatchEvent(new Event('visibilitychange'));
+
+    expect(cancelIdleCallbackSpy).toHaveBeenCalledWith(42);
+
+    const raw = JSON.parse(localStorage.getItem('dd-preferences') ?? '{}');
+    expect(raw.theme.family).toBe('github');
+  });
+
   it('should flush pending writes when the page becomes hidden before idle work runs', async () => {
     (globalThis as any).requestIdleCallback = vi.fn(() => 1);
 

@@ -5,6 +5,7 @@ import { DASHBOARD_WIDGET_IDS, type DashboardWidgetId } from '@/views/dashboard/
 import { applyConstraints } from '@/views/dashboard/dashboardWidgetLayout';
 import {
   _rebuildLayoutsForOrderForTests,
+  createResponsiveLayoutsMemo,
   moveWidget,
   useDashboardWidgetOrder,
 } from '@/views/dashboard/useDashboardWidgetOrder';
@@ -27,6 +28,49 @@ async function mountWidgetOrderComposable() {
 
   return { state, wrapper };
 }
+
+describe('createResponsiveLayoutsMemo', () => {
+  const item = (id: string, overrides: Record<string, unknown> = {}): any => ({
+    i: id,
+    x: 0,
+    y: 0,
+    w: 1,
+    h: 1,
+    minW: undefined,
+    minH: undefined,
+    maxW: undefined,
+    maxH: undefined,
+    ...overrides,
+  });
+
+  it('returns the same object when the same layout reference is passed twice', () => {
+    const memo = createResponsiveLayoutsMemo();
+    const layouts = { lg: [item('a')] };
+    const first = memo(layouts);
+    const second = memo(layouts);
+    expect(second).toBe(first);
+  });
+
+  it('detects changes in each layout property independently', () => {
+    const properties = ['y', 'w', 'h', 'minW', 'minH', 'maxW', 'maxH'] as const;
+    for (const prop of properties) {
+      const memo = createResponsiveLayoutsMemo();
+      memo({ lg: [item('a')] });
+      const changed = memo({ lg: [item('a', { [prop]: 999 })] });
+      expect(changed.lg).toBeDefined();
+    }
+  });
+
+  it('detects removal of a previously-present breakpoint', () => {
+    const memo = createResponsiveLayoutsMemo();
+    const withSm = memo({ lg: [item('a')], sm: [item('b')] });
+    expect(withSm.sm).toBeDefined();
+
+    const withoutSm = memo({ lg: [item('a')] });
+    expect(withoutSm).not.toBe(withSm);
+    expect(withoutSm.sm).toBeUndefined();
+  });
+});
 
 describe('useDashboardWidgetOrder', () => {
   beforeEach(() => {

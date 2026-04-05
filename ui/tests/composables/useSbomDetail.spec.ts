@@ -650,4 +650,33 @@ describe('useSbomDetail', () => {
 
     expect(state.detailSbomDocumentJson.value).toBe('');
   });
+
+  it('does not trigger download when sbom document serialization fails', () => {
+    const createObjectUrl = vi.fn();
+    const originalCreateObjectURL = URL.createObjectURL;
+    Object.defineProperty(URL, 'createObjectURL', {
+      configurable: true,
+      value: createObjectUrl,
+    });
+
+    try {
+      const state = useSbomDetail({
+        containerIdsByImage: ref({ nginx: ['container-1'] }),
+      });
+      state.selectedImage.value = makeSummary();
+      state.showSbomDocument.value = true;
+      const circular: Record<string, unknown> = {};
+      circular.self = circular;
+      state.detailSbomResult.value = { document: circular };
+
+      state.downloadDetailSbom();
+
+      expect(createObjectUrl).not.toHaveBeenCalled();
+    } finally {
+      Object.defineProperty(URL, 'createObjectURL', {
+        configurable: true,
+        value: originalCreateObjectURL,
+      });
+    }
+  });
 });

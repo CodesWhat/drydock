@@ -10,6 +10,7 @@ import {
   severityColor,
   severityIcon,
   statusBadgeTone,
+  toSafeExternalUrl,
   toSafeFileName,
   vulnReportToCsv,
   vulnReportToJson,
@@ -192,6 +193,35 @@ describe('securityViewUtils', () => {
 
     it('sanitizes filenames for sbom downloads', () => {
       expect(toSafeFileName('ghcr.io/org/image:1.2.3')).toBe('ghcr.io-org-image-1.2.3');
+    });
+  });
+
+  describe('toSafeExternalUrl', () => {
+    it('returns null for non-string values', () => {
+      expect(toSafeExternalUrl(null)).toBeNull();
+      expect(toSafeExternalUrl(undefined)).toBeNull();
+    });
+
+    it('returns null for empty or whitespace-only strings', () => {
+      expect(toSafeExternalUrl('')).toBeNull();
+      expect(toSafeExternalUrl('   ')).toBeNull();
+    });
+
+    it('returns the URL for http and https protocols', () => {
+      expect(toSafeExternalUrl('https://nvd.nist.gov/vuln/detail/CVE-2026-1234')).toBe(
+        'https://nvd.nist.gov/vuln/detail/CVE-2026-1234',
+      );
+      expect(toSafeExternalUrl('http://example.com')).toBe('http://example.com');
+    });
+
+    it('returns null for disallowed protocols', () => {
+      expect(toSafeExternalUrl('javascript:alert(1)')).toBeNull();
+      expect(toSafeExternalUrl('ftp://example.com')).toBeNull();
+      expect(toSafeExternalUrl('data:text/html,<h1>hi</h1>')).toBeNull();
+    });
+
+    it('returns null for invalid URLs', () => {
+      expect(toSafeExternalUrl('not-a-url')).toBeNull();
     });
   });
 

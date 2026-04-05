@@ -312,6 +312,17 @@ describe('preferences migration', () => {
       expect(result.views.logs).toEqual(DEFAULTS.views.logs);
     });
 
+    it('should delete non-record logs value during sanitization of current schema data', () => {
+      const result = migrate({
+        schemaVersion: DEFAULTS.schemaVersion,
+        views: {
+          logs: 42 as any,
+        },
+      });
+
+      expect(result.views.logs).toEqual(DEFAULTS.views.logs);
+    });
+
     it('should reset invalid log newestFirst values to defaults', () => {
       const result = migrate({
         schemaVersion: 1,
