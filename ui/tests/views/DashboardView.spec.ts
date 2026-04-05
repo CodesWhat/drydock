@@ -644,6 +644,44 @@ describe('DashboardView', () => {
       expect(updatesCard?.text()).toContain('1');
     });
 
+    it('hides pinned updates across dashboard update widgets when hidePinned preference is enabled', async () => {
+      const { flushPreferences, preferences } = await import('@/preferences/store');
+      preferences.containers.filters.hidePinned = true;
+      flushPreferences();
+
+      const wrapper = await mountDashboard([
+        makeContainer({
+          id: 'floating',
+          name: 'floating',
+          updateKind: 'major',
+          newTag: '2.0.0',
+          tagPrecision: 'floating',
+        }),
+        makeContainer({
+          id: 'pinned',
+          name: 'pinned',
+          updateKind: 'minor',
+          newTag: '1.2.4',
+          tagPrecision: 'specific',
+        }),
+      ]);
+
+      const statCards = wrapper.findAll('.stat-card');
+      const updatesCard = statCards.find((c) => c.text().includes('Updates Available'));
+      expect(updatesCard?.text()).toContain('1');
+      expect(updatesCard?.text()).not.toContain('2');
+
+      const recentUpdatesWidget = wrapper.find('[data-widget-id="recent-updates"]');
+      expect(recentUpdatesWidget.text()).toContain('floating');
+      expect(recentUpdatesWidget.text()).not.toContain('pinned');
+
+      const updateBreakdownWidget = wrapper.find('[data-widget-id="update-breakdown"]');
+      expect(updateBreakdownWidget.text()).toContain('1');
+      expect(updateBreakdownWidget.text()).toContain('Major');
+      expect(updateBreakdownWidget.text()).toContain('0');
+      expect(updateBreakdownWidget.text()).toContain('Minor');
+    });
+
     it('computes security issues count from blocked and unsafe', async () => {
       const containers = [
         makeContainer({ bouncer: 'blocked' }),

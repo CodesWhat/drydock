@@ -5,6 +5,7 @@ import { GridItem, GridLayout } from 'grid-layout-plus';
 import AppIconButton from '@/components/AppIconButton.vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
 import { useConfirmDialog } from '../composables/useConfirmDialog';
+import { preferences } from '../preferences/store';
 import { ROUTES } from '../router/routes';
 import { updateContainer } from '../services/container-actions';
 import { errorMessage, isNoUpdateAvailableError } from '../utils/error';
@@ -170,6 +171,7 @@ const {
   agents,
   containerSummary,
   containers,
+  hidePinned: computed(() => preferences.containers.filters.hidePinned),
   maintenanceCountdownNow,
   recentStatusByContainer,
   registries,

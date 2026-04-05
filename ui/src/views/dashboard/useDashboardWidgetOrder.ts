@@ -221,6 +221,8 @@ function rebuildLayoutsForOrder(
   return nextLayouts;
 }
 
+export const _rebuildLayoutsForOrderForTests = rebuildLayoutsForOrder;
+
 function getDragSource(event: DragEvent): DashboardWidgetId | null {
   const rawSource = event.dataTransfer?.getData('text/plain');
   return isDashboardWidgetId(rawSource) ? rawSource : null;

@@ -98,7 +98,7 @@ interface DashboardComputedOverrides {
 }
 
 function createState(overrides: DashboardComputedOverrides = {}) {
-  return (useDashboardComputed as any)({
+  return useDashboardComputed({
     agents: ref(overrides.agents ?? []),
     containerSummary: ref(overrides.containerSummary ?? null),
     containers: ref(overrides.containers ?? []),

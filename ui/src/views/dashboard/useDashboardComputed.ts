@@ -5,6 +5,7 @@ import {
   buildDashboardContainerMetrics,
   type ImageSecurityAggregate,
 } from '../../utils/dashboard-container-metrics';
+import { filterContainersByHidePinned } from '../../utils/hide-pinned';
 import type {
   DashboardAgent,
   DashboardContainerSummary,
@@ -242,6 +243,7 @@ interface UseDashboardComputedInput {
   agents: Ref<DashboardAgent[]>;
   containerSummary: Ref<DashboardContainerSummary | null>;
   containers: Ref<Container[]>;
+  hidePinned: Ref<boolean>;
   maintenanceCountdownNow: Ref<number>;
   recentStatusByContainer: Ref<Record<string, RecentAuditStatus>>;
   registries: Ref<unknown[]>;
@@ -394,7 +396,14 @@ function computeSecurityArcLength(partialCount: number, totalCount: number): num
 }
 
 function useSecurityComputed(input: UseDashboardComputedInput) {
-  const containerMetrics = computed(() => buildDashboardContainerMetrics(input.containers.value));
+  const updateContainers = computed(() =>
+    filterContainersByHidePinned(input.containers.value, input.hidePinned.value),
+  );
+  const containerMetrics = computed(() =>
+    buildDashboardContainerMetrics(input.containers.value, {
+      updateContainers: updateContainers.value,
+    }),
+  );
 
   const securityByImage = computed<ImageSecurityAggregate[]>(
     () => containerMetrics.value.securityByImage,
@@ -428,6 +437,7 @@ function useSecurityComputed(input: UseDashboardComputedInput) {
 
   return {
     containerMetrics,
+    updateContainers,
     securityCleanArcLength,
     securityCleanCount,
     securityIssueArcLength,
@@ -602,9 +612,12 @@ function buildRecentUpdateRows(
   return candidates.map((candidate) => candidate.row);
 }
 
-function useRecentUpdatesComputed(input: UseDashboardComputedInput) {
+function useRecentUpdatesComputed(
+  updateContainers: ComputedRef<Container[]>,
+  input: UseDashboardComputedInput,
+) {
   return computed<RecentUpdateRow[]>(() =>
-    buildRecentUpdateRows(input.containers.value, input.recentStatusByContainer.value),
+    buildRecentUpdateRows(updateContainers.value, input.recentStatusByContainer.value),
   );
 }
 
@@ -764,9 +777,9 @@ function buildUpdateKindCounts(containers: Container[]): Record<UpdateKind, numb
   return counts;
 }
 
-function useUpdateBreakdownComputed(input: UseDashboardComputedInput) {
+function useUpdateBreakdownComputed(updateContainers: ComputedRef<Container[]>) {
   const updateBreakdownBuckets = computed<UpdateBreakdownBucket[]>(() => {
-    const counts = buildUpdateKindCounts(input.containers.value);
+    const counts = buildUpdateKindCounts(updateContainers.value);
     return UPDATE_BREAKDOWN_BUCKETS.map((bucket) => ({
       ...bucket,
       count: counts[bucket.kind],
@@ -774,7 +787,7 @@ function useUpdateBreakdownComputed(input: UseDashboardComputedInput) {
   });
 
   const totalUpdates = computed(
-    () => input.containers.value.filter((container) => container.updateKind).length,
+    () => updateContainers.value.filter((container) => container.updateKind).length,
   );
 
   return {
@@ -788,6 +801,7 @@ export function useDashboardComputed(input: UseDashboardComputedInput) {
     useMaintenanceComputed(input);
   const {
     containerMetrics,
+    updateContainers,
     securityCleanArcLength,
     securityCleanCount,
     securityIssueArcLength,
@@ -799,10 +813,10 @@ export function useDashboardComputed(input: UseDashboardComputedInput) {
     showSecuritySeverityBreakdown,
   } = useSecurityComputed(input);
   const stats = useStatsComputed(input, containerMetrics, securityTotalCount);
-  const recentUpdates = useRecentUpdatesComputed(input);
+  const recentUpdates = useRecentUpdatesComputed(updateContainers, input);
   const vulnerabilities = useVulnerabilitiesComputed(input);
   const servers = useServersComputed(input);
-  const { totalUpdates, updateBreakdownBuckets } = useUpdateBreakdownComputed(input);
+  const { totalUpdates, updateBreakdownBuckets } = useUpdateBreakdownComputed(updateContainers);
 
   return {
     DONUT_CIRCUMFERENCE,
