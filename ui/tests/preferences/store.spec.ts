@@ -2,14 +2,25 @@ import { nextTick } from 'vue';
 
 describe('preferences store', () => {
   const originalRequestIdleCallback = (globalThis as any).requestIdleCallback;
+  let originalVisibilityState: PropertyDescriptor | undefined;
 
   beforeEach(() => {
     localStorage.clear();
     vi.resetModules();
+    originalVisibilityState = Object.getOwnPropertyDescriptor(document, 'visibilityState');
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => 'visible',
+    });
   });
 
   afterEach(() => {
     vi.useRealTimers();
+    if (originalVisibilityState) {
+      Object.defineProperty(document, 'visibilityState', originalVisibilityState);
+    } else {
+      Reflect.deleteProperty(document, 'visibilityState');
+    }
     if (originalRequestIdleCallback === undefined) {
       delete (globalThis as any).requestIdleCallback;
     } else {
@@ -217,5 +228,51 @@ describe('preferences store', () => {
     // Re-running the queued callback should be a no-op once dirty state is flushed.
     idleCallbacks[0]({ didTimeout: false, timeRemaining: () => 50 } as IdleDeadline);
     expect(setItemSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('should request an idle flush with a timeout so writes are not deferred indefinitely', async () => {
+    (globalThis as any).requestIdleCallback = vi.fn(() => 1);
+
+    const { preferences } = await loadStore();
+    (globalThis as any).requestIdleCallback.mockClear();
+    preferences.theme.family = 'github';
+    await nextTick();
+
+    expect((globalThis as any).requestIdleCallback).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.objectContaining({ timeout: expect.any(Number) }),
+    );
+  });
+
+  it('should flush pending writes when the page becomes hidden before idle work runs', async () => {
+    (globalThis as any).requestIdleCallback = vi.fn(() => 1);
+
+    const { preferences } = await loadStore();
+    (globalThis as any).requestIdleCallback.mockClear();
+    preferences.theme.family = 'github';
+    await nextTick();
+
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => 'hidden',
+    });
+    document.dispatchEvent(new Event('visibilitychange'));
+
+    const raw = JSON.parse(localStorage.getItem('dd-preferences') ?? '{}');
+    expect(raw.theme.family).toBe('github');
+  });
+
+  it('should flush pending writes on pagehide before idle work runs', async () => {
+    (globalThis as any).requestIdleCallback = vi.fn(() => 1);
+
+    const { preferences } = await loadStore();
+    (globalThis as any).requestIdleCallback.mockClear();
+    preferences.theme.family = 'github';
+    await nextTick();
+
+    globalThis.dispatchEvent(new Event('pagehide'));
+
+    const raw = JSON.parse(localStorage.getItem('dd-preferences') ?? '{}');
+    expect(raw.theme.family).toBe('github');
   });
 });
