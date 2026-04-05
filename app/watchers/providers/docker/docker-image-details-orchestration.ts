@@ -3,14 +3,17 @@ import * as registry from '../../../registry/index.js';
 import { detectSourceRepoFromImageMetadata } from '../../../release-notes/index.js';
 import * as storeContainer from '../../../store/container.js';
 import { parse as parseSemver, transform as transformTag } from '../../../tag/index.js';
-import { classifyTagPrecision, getNumericTagShape } from '../../../tag/precision.js';
+import {
+  classifyTagPrecision,
+  getNumericTagShape,
+  type TagPrecision,
+} from '../../../tag/precision.js';
 import { getErrorMessage } from '../../../util/error.js';
 import {
   getDockerWatcherRegistryId,
   getDockerWatcherSourceKey,
   isDockerWatcher,
 } from './container-init.js';
-import type { TagPrecision } from './docker-helpers.js';
 import {
   canonicalizeContainerName,
   getContainerDisplayName,
