@@ -131,11 +131,13 @@ const {
   detailSbomGeneratedAt,
   detailSbomLoading,
   downloadDetailSbom,
+  downloadVulnReport,
   handleDetailOpenChange,
   loadDetailSbom,
   openDetail: openSbomDetail,
   selectedImage,
   selectedSbomFormat,
+  selectedVulnExportFormat,
   showSbomDocument,
 } = useSbomDetail({
   containerIdsByImage,
@@ -554,6 +556,74 @@ onUnmounted(() => {
         </template>
 
         <template v-if="selectedImage" #default>
+          <!-- Export controls -->
+          <div class="px-4 py-3 space-y-2" :style="{ borderBottom: '1px solid var(--dd-border)' }">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="text-2xs font-semibold uppercase tracking-wide dd-text-muted">Export</span>
+              <select v-model="selectedVulnExportFormat"
+                      class="px-2 py-1 dd-rounded text-2xs font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text">
+                <option value="csv">CSV</option>
+                <option value="json">JSON</option>
+              </select>
+              <AppButton size="xs" variant="secondary" :disabled="selectedImageVulns.length === 0"
+                      @click="downloadVulnReport">
+                Download Report
+              </AppButton>
+            </div>
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="text-2xs font-semibold uppercase tracking-wide dd-text-muted">SBOM</span>
+              <select v-model="selectedSbomFormat"
+                      class="px-2 py-1 dd-rounded text-2xs font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text"
+                      @change="loadDetailSbom">
+                <option value="spdx-json">spdx-json</option>
+                <option value="cyclonedx-json">cyclonedx-json</option>
+              </select>
+              <AppButton size="xs" variant="secondary" :disabled="detailSbomLoading"
+                      @click="loadDetailSbom">
+                {{ detailSbomLoading ? 'Loading...' : 'Refresh' }}
+              </AppButton>
+              <AppButton size="xs" variant="secondary" :disabled="!detailSbomDocument"
+                      @click="showSbomDocument = !showSbomDocument">
+                {{ showSbomDocument ? 'Hide' : 'View' }}
+              </AppButton>
+              <AppButton size="xs" variant="secondary" :disabled="!detailSbomDocument"
+                      @click="downloadDetailSbom">
+                Download
+              </AppButton>
+            </div>
+
+            <div v-if="detailSbomError"
+                 class="px-2.5 py-1.5 dd-rounded text-2xs-plus"
+                 :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
+              {{ detailSbomError }}
+            </div>
+            <div v-else-if="detailSbomLoading"
+                 class="px-2.5 py-1.5 dd-rounded text-2xs-plus dd-text-muted"
+                 :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+              Loading SBOM document...
+            </div>
+            <div v-else-if="detailSbomDocument"
+                 class="px-2.5 py-1.5 dd-rounded text-2xs space-y-0.5"
+                 :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+              <div class="dd-text-muted">
+                format:
+                <span class="dd-text font-mono">{{ selectedSbomFormat }}</span>
+              </div>
+              <div v-if="typeof detailSbomComponentCount === 'number'" class="dd-text-muted">
+                components:
+                <span class="dd-text">{{ detailSbomComponentCount }}</span>
+              </div>
+              <div v-if="detailSbomGeneratedAt" class="dd-text-muted">
+                generated:
+                <span class="dd-text">{{ formatTimestamp(detailSbomGeneratedAt) }}</span>
+              </div>
+            </div>
+
+            <pre v-if="showSbomDocument && detailSbomDocumentJson"
+                 class="p-2 dd-rounded text-2xs overflow-auto max-h-64 font-mono"
+                 :style="{ backgroundColor: 'var(--dd-bg-code)' }">{{ detailSbomDocumentJson }}</pre>
+          </div>
+
           <!-- Vulnerability list -->
           <div class="divide-y" :style="{ borderColor: 'var(--dd-border)' }">
             <div v-for="vuln in selectedImageVulns" :key="vuln.id + vuln.package"
@@ -598,66 +668,6 @@ onUnmounted(() => {
                 </a>
               </div>
             </div>
-          </div>
-
-          <div class="px-4 py-3 space-y-2" :style="{ borderTop: '1px solid var(--dd-border)' }">
-            <div class="flex items-center gap-2 flex-wrap">
-              <span class="text-2xs font-semibold uppercase tracking-wide dd-text-muted">SBOM</span>
-              <select v-model="selectedSbomFormat"
-                      class="px-2 py-1 dd-rounded text-2xs font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text"
-                      @change="loadDetailSbom">
-                <option value="spdx-json">spdx-json</option>
-                <option value="cyclonedx-json">cyclonedx-json</option>
-              </select>
-              <AppButton size="xs" variant="secondary" :disabled="detailSbomLoading"
-                      @click="loadDetailSbom">
-                {{ detailSbomLoading ? 'Loading SBOM...' : 'Refresh SBOM' }}
-              </AppButton>
-              <AppButton size="xs" variant="secondary" :disabled="!detailSbomDocument"
-                      @click="showSbomDocument = !showSbomDocument">
-                {{ showSbomDocument ? 'Hide SBOM' : 'View SBOM' }}
-              </AppButton>
-              <AppButton size="xs" variant="secondary" :disabled="!detailSbomDocument"
-                      @click="downloadDetailSbom">
-                Download SBOM
-              </AppButton>
-            </div>
-
-            <div v-if="detailSbomError"
-                 class="px-2.5 py-1.5 dd-rounded text-2xs-plus"
-                 :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
-              {{ detailSbomError }}
-            </div>
-            <div v-else-if="detailSbomLoading"
-                 class="px-2.5 py-1.5 dd-rounded text-2xs-plus dd-text-muted"
-                 :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-              Loading SBOM document...
-            </div>
-            <div v-else-if="detailSbomDocument"
-                 class="px-2.5 py-1.5 dd-rounded text-2xs space-y-0.5"
-                 :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-              <div class="dd-text-muted">
-                format:
-                <span class="dd-text font-mono">{{ selectedSbomFormat }}</span>
-              </div>
-              <div v-if="typeof detailSbomComponentCount === 'number'" class="dd-text-muted">
-                components:
-                <span class="dd-text">{{ detailSbomComponentCount }}</span>
-              </div>
-              <div v-if="detailSbomGeneratedAt" class="dd-text-muted">
-                generated:
-                <span class="dd-text">{{ formatTimestamp(detailSbomGeneratedAt) }}</span>
-              </div>
-            </div>
-            <div v-else
-                 class="px-2.5 py-1.5 dd-rounded text-2xs-plus dd-text-muted italic"
-                 :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-              SBOM document is not available yet.
-            </div>
-
-            <pre v-if="showSbomDocument && detailSbomDocumentJson"
-                 class="p-2 dd-rounded text-2xs overflow-auto max-h-64 font-mono"
-                 :style="{ backgroundColor: 'var(--dd-bg-code)' }">{{ detailSbomDocumentJson }}</pre>
           </div>
         </template>
       </DetailPanel>
