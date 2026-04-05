@@ -18,7 +18,9 @@ function getFirstDigitIndex(value: string): number {
   return value.search(/[0-9]/);
 }
 
-function getNumericTagShapeFromTransformedTag(transformedTag: string): NumericTagShape | null {
+export function getNumericTagShapeFromTransformedTag(
+  transformedTag: string,
+): NumericTagShape | null {
   if (transformedTag.includes('\n') || transformedTag.includes('\r')) {
     return null;
   }

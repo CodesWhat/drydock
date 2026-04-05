@@ -2,6 +2,7 @@ import { performance } from 'node:perf_hooks';
 import { RE2JS } from 're2js';
 import { describe, expect, test, vi } from 'vitest';
 
+import { getNumericTagShape as getSharedNumericTagShape } from '../../../tag/precision.js';
 import {
   filterBySegmentCount,
   getCurrentPrefix,
@@ -380,6 +381,10 @@ describe('docker tag candidates module', () => {
       numericSegments: ['2025', '11', '1'],
       suffix: '-alpine3.21',
     });
+  });
+
+  test('reuses the shared numeric tag shape parser from tag/precision', () => {
+    expect(getNumericTagShape).toBe(getSharedNumericTagShape);
   });
 
   test('rejects numeric tag shape parsing when the transformed tag contains newlines', () => {

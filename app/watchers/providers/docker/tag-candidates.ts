@@ -6,6 +6,11 @@ import {
   parse as parseSemver,
   transform as transformTag,
 } from '../../../tag/index.js';
+import {
+  getNumericTagShapeFromTransformedTag,
+  getNumericTagShape as getSharedNumericTagShape,
+  type NumericTagShape,
+} from '../../../tag/precision.js';
 import { getErrorMessage } from '../../../util/error.js';
 
 interface SafeRegex {
@@ -79,13 +84,6 @@ function applyIncludeExcludeFilters(
   return { filteredTags, allowIncludeFilterRecovery };
 }
 
-/**
- * Filter tags by prefix to match the current tag's prefix convention.
- */
-function isAsciiDigit(value: string | undefined): boolean {
-  return value !== undefined && value >= '0' && value <= '9';
-}
-
 export function getFirstDigitIndex(value: string): number {
   return value.search(/[0-9]/);
 }
@@ -110,11 +108,7 @@ function hasLeadingZero(value: string): boolean {
   return value.length > 1 && value.startsWith('0');
 }
 
-export interface NumericTagShape {
-  prefix: string;
-  numericSegments: string[];
-  suffix: string;
-}
+export const getNumericTagShape = getSharedNumericTagShape;
 
 type TagFamilyPolicy = 'strict' | 'loose';
 
@@ -133,42 +127,6 @@ interface SemverCandidateFilterStats {
 interface TagCandidatesResult {
   tags: string[];
   noUpdateReason?: string;
-}
-
-function getNumericTagShapeFromTransformedTag(transformedTag: string): NumericTagShape | null {
-  if (transformedTag.includes('\n') || transformedTag.includes('\r')) {
-    return null;
-  }
-
-  const numericStart = getFirstDigitIndex(transformedTag);
-  if (numericStart < 0) {
-    return null;
-  }
-
-  let numericEnd = numericStart;
-  while (isAsciiDigit(transformedTag[numericEnd])) {
-    numericEnd += 1;
-  }
-  while (transformedTag[numericEnd] === '.' && isAsciiDigit(transformedTag[numericEnd + 1])) {
-    numericEnd += 1;
-    while (isAsciiDigit(transformedTag[numericEnd])) {
-      numericEnd += 1;
-    }
-  }
-
-  return {
-    prefix: transformedTag.slice(0, numericStart),
-    numericSegments: transformedTag.slice(numericStart, numericEnd).split('.'),
-    suffix: transformedTag.slice(numericEnd),
-  };
-}
-
-export function getNumericTagShape(
-  tag: string,
-  transformTags: string | undefined,
-): NumericTagShape | null {
-  const transformedTag = transformTag(transformTags, tag);
-  return getNumericTagShapeFromTransformedTag(transformedTag);
 }
 
 function normalizeSuffixTemplate(suffix: string): string {
