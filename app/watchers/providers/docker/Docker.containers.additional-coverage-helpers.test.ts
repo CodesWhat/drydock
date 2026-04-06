@@ -22,7 +22,12 @@ vi.mock('../../../event');
 vi.mock('../../../store/container.js');
 vi.mock('../../../registry/index.js');
 vi.mock('../../../model/container');
-vi.mock('../../../tag');
+vi.mock('../../../tag', () => ({
+  isGreater: vi.fn(),
+  parse: vi.fn(),
+  diff: vi.fn(),
+  transform: vi.fn((_formula, tag) => tag),
+}));
 vi.mock('../../../prometheus/watcher');
 vi.mock('parse-docker-image-name');
 vi.mock('node:fs');
