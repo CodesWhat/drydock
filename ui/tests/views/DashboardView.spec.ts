@@ -268,6 +268,21 @@ describe('DashboardView', () => {
       expect(widget.attributes('style')).toContain('touch-action: pan-y');
     });
 
+    it('applies shared scroll containment utilities to the customize panel viewport', async () => {
+      const wrapper = await mountDashboard([makeContainer({ newTag: '2.0.0' })]);
+
+      const editToggle = document.querySelector('[data-test="dashboard-edit-toggle"]');
+      expect(editToggle).not.toBeNull();
+      (editToggle as HTMLButtonElement).click();
+      await flushPromises();
+
+      const scrollViewport = wrapper.find('aside .overflow-y-auto');
+      expect(scrollViewport.exists()).toBe(true);
+      expect(scrollViewport.classes()).toContain('overscroll-contain');
+      expect(scrollViewport.classes()).toContain('dd-scroll-stable');
+      expect(scrollViewport.classes()).toContain('dd-touch-scroll');
+    });
+
     it('caches widget breakpoint bounds instead of calling getWidgetBoundsForBreakpoint in each GridItem size prop', () => {
       expect(dashboardViewSource).not.toContain(
         ':min-w="getWidgetBoundsForBreakpoint(item.i as DashboardWidgetId, currentBreakpoint).minW"',
@@ -1126,6 +1141,23 @@ describe('DashboardView', () => {
       // Top Vulnerabilities section lists at most 5
       const vulnItems = wrapper.findAll('.space-y-2\\.5 > div');
       expect(vulnItems.length).toBe(5);
+    });
+
+    it('applies shared scroll containment utilities to the top vulnerabilities list', async () => {
+      const containers = Array.from({ length: 8 }, (_, i) =>
+        makeContainer({
+          id: `c${i}`,
+          name: `vuln-${i}`,
+          bouncer: 'blocked',
+        }),
+      );
+      const wrapper = await mountDashboard(containers);
+      const scrollViewport = wrapper.find('[data-widget-id="security-overview"] .overflow-y-auto');
+
+      expect(scrollViewport.exists()).toBe(true);
+      expect(scrollViewport.classes()).toContain('overscroll-contain');
+      expect(scrollViewport.classes()).toContain('dd-scroll-stable');
+      expect(scrollViewport.classes()).toContain('dd-touch-scroll');
     });
 
     it('shows an empty state when there are no security issues', async () => {

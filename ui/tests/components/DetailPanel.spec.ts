@@ -225,6 +225,38 @@ describe('DetailPanel', () => {
       const w = factory({ open: true, isMobile: true });
       expect(w.find('aside').classes()).not.toContain('mr-[15px]');
     });
+
+    it('applies top margin on desktop to align with DataViewLayout content padding', () => {
+      const w = factory({ open: true, isMobile: false });
+      const aside = w.find('aside');
+      expect(aside.classes()).toContain('mt-4');
+      expect(aside.classes()).toContain('sm:mt-6');
+    });
+
+    it('does not apply top margin on mobile', () => {
+      const w = factory({ open: true, isMobile: true });
+      const aside = w.find('aside');
+      expect(aside.classes()).not.toContain('mt-4');
+      expect(aside.classes()).not.toContain('sm:mt-6');
+    });
+
+    it('subtracts top margin from desktop height to prevent overflow', () => {
+      const w = factory({ open: true, isMobile: false });
+      const style = w.find('aside').attributes('style');
+      expect(style).toContain('calc(100vh - var(--dd-layout-main-viewport-offset) - 1.5rem)');
+    });
+  });
+
+  describe('scroll containment', () => {
+    it('applies shared scroll containment utilities to the main scroll viewport', () => {
+      const w = factory({}, { default: '<div class="test-content">Content</div>' });
+      const scrollViewport = w.find('aside .overflow-y-auto');
+
+      expect(scrollViewport.exists()).toBe(true);
+      expect(scrollViewport.classes()).toContain('overscroll-contain');
+      expect(scrollViewport.classes()).toContain('dd-scroll-stable');
+      expect(scrollViewport.classes()).toContain('dd-touch-scroll');
+    });
   });
 
   describe('slots', () => {
