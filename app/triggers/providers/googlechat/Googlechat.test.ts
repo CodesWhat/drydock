@@ -42,6 +42,31 @@ test('validateConfiguration should throw error when invalid', async () => {
   }).toThrowError(joi.ValidationError);
 });
 
+test('validateConfiguration should reject non-https webhook URLs', async () => {
+  expect(() => {
+    googlechat.validateConfiguration({
+      url: 'git://chat.googleapis.com/v1/spaces/AAA/messages?key=key123&token=token123',
+    });
+  }).toThrowError(joi.ValidationError);
+});
+
+test('validateConfiguration should accept the fallback reply option', async () => {
+  const validatedConfiguration = googlechat.validateConfiguration({
+    ...configurationValid,
+    messagereplyoption: 'REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD',
+  });
+
+  expect(validatedConfiguration.messagereplyoption).toBe('REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD');
+});
+
+test('validateConfiguration should default disabletitle to false', async () => {
+  const validatedConfiguration = googlechat.validateConfiguration({
+    url: configurationValid.url,
+  });
+
+  expect(validatedConfiguration.disabletitle).toBe(false);
+});
+
 test('maskConfiguration should mask sensitive data', async () => {
   googlechat.configuration = configurationValid;
   const masked = googlechat.maskConfiguration();

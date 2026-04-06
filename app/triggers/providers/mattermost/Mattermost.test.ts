@@ -45,9 +45,33 @@ test('validateConfiguration should apply default username when missing', async (
   expect(validatedConfiguration.username).toEqual('drydock');
 });
 
+test('validateConfiguration should apply default disabletitle when missing', async () => {
+  const validatedConfiguration = mattermost.validateConfiguration({
+    url: configurationValid.url,
+  });
+  expect(validatedConfiguration.disabletitle).toBe(false);
+});
+
 test('validateConfiguration should throw error when invalid', async () => {
   expect(() => {
     mattermost.validateConfiguration({});
+  }).toThrowError(joi.ValidationError);
+});
+
+test('validateConfiguration should throw error when url scheme is unsupported', async () => {
+  expect(() => {
+    mattermost.validateConfiguration({
+      url: 'git://mattermost.example.com/hooks/abcdefghijklmnopqrstuvwxyz',
+    });
+  }).toThrowError(joi.ValidationError);
+});
+
+test('validateConfiguration should throw error when iconurl scheme is unsupported', async () => {
+  expect(() => {
+    mattermost.validateConfiguration({
+      url: configurationValid.url,
+      iconurl: 'ftp://example.com/whale.png',
+    });
   }).toThrowError(joi.ValidationError);
 });
 
@@ -76,7 +100,7 @@ test('buildMessageBody should omit optional fields when not configured', async (
   mattermost.configuration = {
     url: configurationValid.url,
   };
-  expect(mattermost.buildMessageBody('Test message')).toEqual({
+  expect(mattermost.buildMessageBody('Test message')).toStrictEqual({
     text: 'Test message',
   });
 });

@@ -51,6 +51,15 @@ describe('HTTP Trigger', () => {
     expect(() => http.validateConfiguration(config)).toThrow('"auth.user" is required');
   });
 
+  test('should fail validation when BASIC auth is missing password', async () => {
+    const config = {
+      url: 'https://example.com/webhook',
+      auth: { type: 'BASIC', user: 'user' },
+    };
+
+    expect(() => http.validateConfiguration(config)).toThrow('"auth.password" is required');
+  });
+
   test('should fail validation when BEARER auth is missing token', async () => {
     const config = {
       url: 'https://example.com/webhook',
@@ -84,7 +93,7 @@ describe('HTTP Trigger', () => {
       auth: { type: 'BASIC', user: 'user', password: 'pass' },
     };
 
-    expect(() => http.validateConfiguration(config)).not.toThrow();
+    expect(http.validateConfiguration(config)).toMatchObject(config);
   });
 
   test('should validate configuration with complete BEARER auth', async () => {
@@ -93,7 +102,63 @@ describe('HTTP Trigger', () => {
       auth: { type: 'BEARER', bearer: 'token' },
     };
 
-    expect(() => http.validateConfiguration(config)).not.toThrow();
+    expect(http.validateConfiguration(config)).toMatchObject(config);
+  });
+
+  test('should reject unsupported URL schemes', async () => {
+    const config = {
+      url: 'ftp://example.com/webhook',
+    };
+
+    expect(() => http.validateConfiguration(config)).toThrow();
+  });
+
+  test('should validate GET method explicitly', async () => {
+    const config = {
+      url: 'https://example.com/webhook',
+      method: 'GET',
+    };
+
+    expect(http.validateConfiguration(config)).toMatchObject(config);
+  });
+
+  test('should validate POST method explicitly', async () => {
+    const config = {
+      url: 'https://example.com/webhook',
+      method: 'POST',
+    };
+
+    expect(http.validateConfiguration(config)).toMatchObject(config);
+  });
+
+  test('should reject unsupported HTTP methods', async () => {
+    const config = {
+      url: 'https://example.com/webhook',
+      method: 'PUT',
+    };
+
+    expect(() => http.validateConfiguration(config)).toThrow();
+  });
+
+  test('should default auth type to BASIC during validation', async () => {
+    const config = {
+      url: 'https://example.com/webhook',
+      auth: { user: 'user', password: 'pass' },
+    };
+
+    expect(http.validateConfiguration(config)).toMatchObject({
+      ...config,
+      auth: { type: 'BASIC', user: 'user', password: 'pass' },
+    });
+  });
+
+  test('should reject unsupported auth types', async () => {
+    const config = {
+      url: 'https://example.com/webhook',
+      auth: { type: 'TOKEN' },
+    };
+
+    expect(() => http.validateConfiguration(config)).toThrow();
   });
 
   test('should throw error when URL is missing', async () => {
@@ -285,6 +350,19 @@ describe('HTTP Trigger', () => {
     });
   });
 
+  test('should fail closed when BASIC auth username is missing', async () => {
+    const { default: axios } = await import('axios');
+    axios.mockResolvedValue({ data: {} });
+    http.configuration = {
+      url: 'https://example.com/webhook',
+      method: 'POST',
+      auth: { type: 'BASIC', password: 'pass' },
+    };
+
+    await expect(http.trigger({ name: 'test' })).rejects.toThrow('basic auth username is missing');
+    expect(axios).not.toHaveBeenCalled();
+  });
+
   test('should omit data and params for non-GET/POST methods', async () => {
     const { default: axios } = await import('axios');
     axios.mockResolvedValue({ data: {} });
@@ -319,6 +397,23 @@ describe('HTTP Trigger', () => {
       data: container,
       proxy: { host: 'proxy', port: 8080 },
     });
+  });
+
+  test('should use default http proxy port when none is specified', async () => {
+    const { default: axios } = await import('axios');
+    axios.mockResolvedValue({ data: {} });
+    await http.register('trigger', 'http', 'test', {
+      url: 'https://example.com/webhook',
+      proxy: 'http://proxy',
+    });
+
+    await http.trigger({ name: 'test' });
+
+    expect(axios).toHaveBeenCalledWith(
+      expect.objectContaining({
+        proxy: { host: 'proxy', port: 80 },
+      }),
+    );
   });
 
   test('should use default https proxy port when none is specified', async () => {
