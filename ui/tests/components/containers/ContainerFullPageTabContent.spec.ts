@@ -755,6 +755,7 @@ describe('ContainerFullPageTabContent', () => {
     expect(wrapper.text()).toContain('No triggers associated with this container');
     expect(wrapper.text()).toContain('No backups available yet');
     expect(wrapper.text()).toContain('No update operations recorded yet');
+    expect(findButtonByText(wrapper, 'Rollback Latest')?.attributes('disabled')).toBeDefined();
   });
 
   it('renders overview rich-state branches and wires security refresh controls', async () => {

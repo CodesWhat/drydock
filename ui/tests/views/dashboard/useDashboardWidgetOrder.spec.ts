@@ -452,6 +452,56 @@ describe('useDashboardWidgetOrder', () => {
     vi.useRealTimers();
   });
 
+  it('flushes pending layout persistence when the page becomes hidden before debounce fires', async () => {
+    vi.useFakeTimers();
+    const { state } = await mountWidgetOrderComposable();
+    const originalVisibilityState = Object.getOwnPropertyDescriptor(document, 'visibilityState');
+
+    try {
+      const updated = state.layout.value.map((item) => ({ ...item }));
+      updated[0] = { ...updated[0], x: 99 };
+      state.layout.value = updated;
+      await nextTick();
+
+      Object.defineProperty(document, 'visibilityState', {
+        configurable: true,
+        get: () => 'hidden',
+      });
+      document.dispatchEvent(new Event('visibilitychange'));
+
+      expect(preferences.dashboard.gridLayouts.lg).toEqual(
+        expect.arrayContaining([expect.objectContaining({ i: updated[0].i, x: 99 })]),
+      );
+    } finally {
+      if (originalVisibilityState) {
+        Object.defineProperty(document, 'visibilityState', originalVisibilityState);
+      } else {
+        Reflect.deleteProperty(document, 'visibilityState');
+      }
+      vi.useRealTimers();
+    }
+  });
+
+  it('flushes pending layout persistence on pagehide before debounce fires', async () => {
+    vi.useFakeTimers();
+    const { state } = await mountWidgetOrderComposable();
+
+    try {
+      const updated = state.layout.value.map((item) => ({ ...item }));
+      updated[0] = { ...updated[0], x: 99 };
+      state.layout.value = updated;
+      await nextTick();
+
+      globalThis.dispatchEvent(new Event('pagehide'));
+
+      expect(preferences.dashboard.gridLayouts.lg).toEqual(
+        expect.arrayContaining([expect.objectContaining({ i: updated[0].i, x: 99 })]),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('returns the original order when asked to move invalid or no-op widget pairs', () => {
     const original = [...DASHBOARD_WIDGET_IDS];
     expect(moveWidget(original, 'stat-containers', 'stat-containers')).toEqual(original);
