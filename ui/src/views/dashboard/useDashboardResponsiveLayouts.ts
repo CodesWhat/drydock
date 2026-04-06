@@ -150,6 +150,7 @@ function getCurrentBreakpointLayout(
   order: readonly DashboardWidgetId[],
   breakpoint: DashboardLayoutBreakpoint,
 ): WidgetLayoutItem[] {
+  /* v8 ignore next -- defensive fallback for missing breakpoint */
   return cloneLayout(layouts[breakpoint] ?? createLayoutFromOrder(order, breakpoint));
 }
 

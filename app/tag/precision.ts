@@ -53,6 +53,9 @@ export function getNumericTagShape(
   transformTags: string | undefined,
 ): NumericTagShape | null {
   const transformedTag = transformTag(transformTags, tag);
+  if (typeof transformedTag !== 'string') {
+    return null;
+  }
   return getNumericTagShapeFromTransformedTag(transformedTag);
 }
 
