@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { flushPromises, type VueWrapper } from '@vue/test-utils';
 import DataTable from '@/components/DataTable.vue';
+import { useToast } from '@/composables/useToast';
 import type { Container } from '@/types/container';
 import DashboardView from '@/views/DashboardView.vue';
 import {
@@ -197,6 +198,10 @@ describe('DashboardView', () => {
     vi.clearAllMocks();
     mockRouterPush.mockClear();
     mockBuildDashboardContainerMetrics.mockClear();
+    const { toasts, dismissToast } = useToast();
+    for (const toast of [...toasts.value]) {
+      dismissToast(toast.id);
+    }
     localStorage.removeItem(PREFERENCES_STORAGE_KEY);
     const { resetPreferences } = await import('@/preferences/store');
     resetPreferences();
@@ -1581,6 +1586,29 @@ describe('DashboardView', () => {
       expect(updateError.text()).toContain('update exploded');
     });
 
+    it('shows a success toast when a single dashboard update starts successfully', async () => {
+      mockUpdateContainer.mockResolvedValueOnce({});
+      const wrapper = await mountDashboard(
+        [pendingContainer],
+        [],
+        {},
+        {
+          recentStatuses: { nginx: 'pending' },
+        },
+      );
+      const { useConfirmDialog } = await import('@/composables/useConfirmDialog');
+      const confirm = useConfirmDialog();
+      const { toasts } = useToast();
+
+      await wrapper.find('[data-test="dashboard-update-btn"]').trigger('click');
+      await confirm.accept();
+      await flushPromises();
+
+      expect(
+        toasts.value.some((toast) => toast.tone === 'success' && toast.title === 'Updated: nginx'),
+      ).toBe(true);
+    });
+
     it('refreshes immediately and removes a stale dashboard row when update reports no update available', async () => {
       mockUpdateContainer.mockRejectedValueOnce(
         new Error('No update available for this container'),
@@ -1615,6 +1643,39 @@ describe('DashboardView', () => {
       expect(wrapper.find('[data-widget-id="recent-updates"]').text()).toContain(
         'No updates available',
       );
+    });
+
+    it('shows an info toast when a dashboard update is already up to date', async () => {
+      mockUpdateContainer.mockRejectedValueOnce(
+        new Error('No update available for this container'),
+      );
+
+      const wrapper = await mountDashboard(
+        [pendingContainer],
+        [],
+        {},
+        {
+          recentStatuses: { nginx: 'pending' },
+        },
+      );
+      mockGetAllContainers.mockResolvedValueOnce([upToDateContainer]);
+      mockGetContainerRecentStatus.mockResolvedValueOnce({ statuses: {} });
+      const { mapApiContainers } = await import('@/utils/container-mapper');
+      (mapApiContainers as ReturnType<typeof vi.fn>).mockReturnValueOnce([upToDateContainer]);
+
+      const { useConfirmDialog } = await import('@/composables/useConfirmDialog');
+      const confirm = useConfirmDialog();
+      const { toasts } = useToast();
+
+      await wrapper.find('[data-test="dashboard-update-btn"]').trigger('click');
+      await confirm.accept();
+      await flushPromises();
+
+      expect(
+        toasts.value.some(
+          (toast) => toast.tone === 'info' && toast.title === 'Already up to date: nginx',
+        ),
+      ).toBe(true);
     });
 
     it('keeps a live dashboard row in Updating while the backend reports an in-progress operation', async () => {
@@ -1791,6 +1852,51 @@ describe('DashboardView', () => {
       await confirm.accept();
       await flushPromises();
       expect(wrapper.find('[data-test="dashboard-update-error"]').exists()).toBe(false);
+    });
+
+    it('shows a success toast with the number of containers started from dashboard update all', async () => {
+      const containers = [
+        makeContainer({
+          id: 'c-success-1',
+          name: 'nginx',
+          newTag: '1.1.0',
+          updateKind: 'minor',
+        }),
+        makeContainer({
+          id: 'c-success-2',
+          name: 'postgres',
+          image: 'postgres',
+          newTag: '16.1.0',
+          updateKind: 'minor',
+        }),
+      ];
+      mockUpdateContainer.mockResolvedValue({});
+
+      const wrapper = await mountDashboard(
+        containers,
+        [],
+        {},
+        {
+          recentStatuses: {
+            nginx: 'pending',
+            postgres: 'pending',
+          },
+        },
+      );
+      const updateAllBtn = wrapper.find('[data-test="dashboard-update-all-btn"]');
+      const { useConfirmDialog } = await import('@/composables/useConfirmDialog');
+      const confirm = useConfirmDialog();
+      const { toasts } = useToast();
+
+      await updateAllBtn.trigger('click');
+      await confirm.accept();
+      await flushPromises();
+
+      expect(
+        toasts.value.some(
+          (toast) => toast.tone === 'success' && toast.title === 'Updated 2 containers',
+        ),
+      ).toBe(true);
     });
   });
 });
