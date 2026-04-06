@@ -226,24 +226,14 @@ describe('DetailPanel', () => {
       expect(w.find('aside').classes()).not.toContain('mr-[15px]');
     });
 
-    it('applies top margin on desktop to align with DataViewLayout content padding', () => {
+    it('stretches to full viewport height on desktop without extra margin', () => {
       const w = factory({ open: true, isMobile: false });
       const aside = w.find('aside');
-      expect(aside.classes()).toContain('mt-4');
-      expect(aside.classes()).toContain('sm:mt-6');
-    });
-
-    it('does not apply top margin on mobile', () => {
-      const w = factory({ open: true, isMobile: true });
-      const aside = w.find('aside');
+      const style = aside.attributes('style');
+      expect(style).toContain('calc(100vh - var(--dd-layout-main-viewport-offset))');
+      expect(style).not.toContain('1.5rem');
       expect(aside.classes()).not.toContain('mt-4');
       expect(aside.classes()).not.toContain('sm:mt-6');
-    });
-
-    it('subtracts top margin from desktop height to prevent overflow', () => {
-      const w = factory({ open: true, isMobile: false });
-      const style = w.find('aside').attributes('style');
-      expect(style).toContain('calc(100vh - var(--dd-layout-main-viewport-offset) - 1.5rem)');
     });
   });
 

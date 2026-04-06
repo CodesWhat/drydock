@@ -59,13 +59,13 @@ onUnmounted(() => globalThis.removeEventListener('keydown', handleKeydown));
          :aria-modal="isMobile ? 'true' : undefined"
          aria-label="Detail panel"
          class="detail-panel-inline flex flex-col min-w-0 overflow-clip transition-[flex-basis,width,max-width,color,background-color,border-color,opacity,transform,box-shadow] duration-300 ease-in-out"
-         :class="isMobile ? 'fixed top-0 right-0 h-full z-50 dd-rounded' : 'sticky top-0 mt-4 sm:mt-6 mr-[15px]'"
+         :class="isMobile ? 'fixed top-0 right-0 h-full z-50 dd-rounded' : 'sticky top-0 mr-[15px]'"
          :style="{
            flex: isMobile ? undefined : `0 0 ${panelDesktopWidth}`,
            width: isMobile ? '100%' : panelDesktopWidth,
            maxWidth: isMobile ? '100%' : 'min(calc(100vw - 32px), 920px)',
            backgroundColor: 'var(--dd-bg-card)',
-           height: isMobile ? '100vh' : 'calc(100vh - var(--dd-layout-main-viewport-offset) - 1.5rem)',
+           height: isMobile ? '100vh' : 'calc(100vh - var(--dd-layout-main-viewport-offset))',
            minHeight: '480px',
            borderTopLeftRadius: 'var(--dd-radius)',
            borderTopRightRadius: 'var(--dd-radius)',
