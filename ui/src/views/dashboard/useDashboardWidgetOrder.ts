@@ -147,6 +147,23 @@ export function useDashboardWidgetOrder() {
     persistDashboardLayouts(layout.value);
   }
 
+  const visibilitychangeListener = () => {
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+      flushPendingLayoutPersist();
+    }
+  };
+  const pagehideListener = () => {
+    flushPendingLayoutPersist();
+  };
+
+  /* v8 ignore next 6 -- SSR guard: document/addEventListener always exist in JSDOM */
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', visibilitychangeListener);
+  }
+  if (typeof globalThis.addEventListener === 'function') {
+    globalThis.addEventListener('pagehide', pagehideListener);
+  }
+
   watch(
     layout,
     (nextLayout) => {
@@ -177,6 +194,13 @@ export function useDashboardWidgetOrder() {
   watch(hiddenWidgets, persistHiddenWidgets, { deep: true });
 
   onScopeDispose(() => {
+    /* v8 ignore next 6 -- SSR guard: mirrors registration above */
+    if (typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', visibilitychangeListener);
+    }
+    if (typeof globalThis.removeEventListener === 'function') {
+      globalThis.removeEventListener('pagehide', pagehideListener);
+    }
     flushPendingLayoutPersist();
     persistHiddenWidgets();
   });
