@@ -199,6 +199,51 @@ When a container has an available update, clicking **Scan Now** (or calling `POS
 
 This differs from the pre-update Update Bouncer flow, which only scans the candidate image as a gate before applying an update. Dual-slot scanning is informational and does not block updates.
 
+## Vulnerability report export
+
+The Security detail panel includes an **Export** section for downloading vulnerability scan results in CSV or JSON format — useful for sharing with upstream image maintainers or importing into issue trackers.
+
+### UI export
+
+1. Open the Security detail panel for a container (click any container row in the Security view)
+2. Select a format from the **Export vulnerabilities** dropdown: **CSV** or **JSON**
+3. Click **Download Report**
+
+### CSV format
+
+The CSV includes one row per vulnerability with these columns:
+
+| Column | Description |
+| --- | --- |
+| ID | CVE or advisory identifier (e.g. `CVE-2024-1234`) |
+| Severity | `CRITICAL`, `HIGH`, `MEDIUM`, `LOW`, or `UNKNOWN` |
+| Package | Affected package name |
+| Version | Installed version |
+| Fixed In | Version that resolves the vulnerability (empty if no fix available) |
+| Title | Short vulnerability description |
+| Target | Scan target (e.g. OS package db, language lockfile) |
+| URL | Link to the advisory |
+
+<Callout type="info">CSV fields are sanitized against formula injection — values starting with `=`, `+`, `-`, or `@` are automatically escaped so the file is safe to open in spreadsheet applications.</Callout>
+
+### JSON format
+
+The JSON export is an array of objects with the same fields as the CSV (`id`, `severity`, `package`, `version`, `fixedIn`, `title`, `target`, `url`).
+
+### API
+
+Vulnerability data is also available programmatically:
+
+- **Single container:** `GET /api/v1/containers/:id/vulnerabilities`
+- **All containers (paginated):** `GET /api/v1/containers/security/vulnerabilities?limit=100&offset=0`
+
+## SBOM download
+
+SBOM documents can be downloaded from the Security detail panel or via the API:
+
+- **UI:** Open the Security detail panel → click **Download SBOM** (works regardless of whether the SBOM viewer toggle is active)
+- **API:** `GET /api/v1/containers/:id/sbom?format={format}` where `format` is `spdx-json` or `cyclonedx-json`
+
 ## Full example (scanning + signatures + SBOM)
 
 ```yaml

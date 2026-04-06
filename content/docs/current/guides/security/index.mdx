@@ -1,0 +1,403 @@
+---
+title: "Security Hardening Guide"
+description: "A walkthrough for securing your Drydock deployment — from Docker socket isolation to vulnerability scanning, image signatures, and secret management."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+import { Step, Steps } from 'fumadocs-ui/components/steps';
+
+Drydock ships with a full security stack: vulnerability scanning, image signature verification, SBOM generation, report export, and multiple Docker socket isolation options. This guide walks through each layer so you can build up a defense-in-depth deployment.
+
+<Steps>
+<Step>
+
+## Isolate the Docker socket
+
+The Docker socket gives full control over the host's containers. Never mount it directly in production — use a socket proxy to expose only the API endpoints Drydock needs.
+
+```yaml
+services:
+  socket-proxy:
+    image: tecnativa/docker-socket-proxy
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - CONTAINERS=1
+      - IMAGES=1
+      - EVENTS=1
+      - POST=1        # required for update actions
+      - NETWORKS=1     # required for container recreation
+    healthcheck:
+      test: wget --spider http://localhost:2375/version || exit 1
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+  drydock:
+    image: codeswhat/drydock
+    depends_on:
+      socket-proxy:
+        condition: service_healthy
+    environment:
+      - DD_WATCHER_LOCAL_HOST=socket-proxy
+      - DD_WATCHER_LOCAL_PORT=2375
+```
+
+The proxy's environment variables (`CONTAINERS=1`, `EVENTS=1`, etc.) are the security boundary — they control which Docker API endpoints are forwarded. Everything else is blocked.
+
+**Other options:** If a socket proxy doesn't fit your environment, Drydock also supports remote Docker over mTLS and rootless Docker. See the [full comparison table](/docs/configuration/watchers#docker-socket-security) for trade-offs.
+
+</Step>
+<Step>
+
+## Require authentication
+
+Since v1.4.0, authentication is required by default. If you haven't configured it yet, you'll see a setup prompt on first access.
+
+<Tabs items={["Basic Auth", "OIDC (SSO)"]}>
+<Tab value="Basic Auth">
+
+Generate an Argon2id hash for your password:
+
+```bash
+npx argon2-cli "your-password" --type argon2id
+```
+
+Then configure:
+
+```yaml
+environment:
+  - DD_AUTH_BASIC_ADMIN_USER=admin
+  - DD_AUTH_BASIC_ADMIN_HASH=$argon2id$v=19$m=65536,t=3,p=4$...
+```
+
+</Tab>
+<Tab value="OIDC (SSO)">
+
+Connect to any OpenID Connect provider (Authelia, Authentik, Auth0, Dex, etc.):
+
+```yaml
+environment:
+  - DD_AUTH_OIDC_ISSUER=https://auth.example.com
+  - DD_AUTH_OIDC_CLIENT_ID=drydock
+  - DD_AUTH_OIDC_CLIENT_SECRET=xxxxx
+  - DD_AUTH_OIDC_REDIRECT_URI=https://drydock.example.com/api/v1/auth/oidc/callback
+```
+
+</Tab>
+</Tabs>
+
+**Brute-force protection:** Drydock enforces login lockout after repeated failed attempts. No additional configuration is needed.
+
+**Docs:** [Authentication configuration](/docs/configuration/authentications)
+
+</Step>
+<Step>
+
+## Manage secrets safely
+
+Never put secrets directly in compose files that get committed to version control. Use Docker secrets or file-based injection:
+
+### Docker secrets
+
+```yaml
+services:
+  drydock:
+    environment:
+      - DD_AUTH_BASIC_ADMIN_HASH__FILE=/run/secrets/admin_hash
+      - DD_REGISTRY_HUB_PRIVATE_TOKEN__FILE=/run/secrets/hub_token
+    secrets:
+      - admin_hash
+      - hub_token
+
+secrets:
+  admin_hash:
+    file: ./secrets/admin_hash.txt
+  hub_token:
+    file: ./secrets/hub_token.txt
+```
+
+The `__FILE` suffix tells Drydock to read the value from the file path instead of using the environment variable directly. This works for **any** `DD_*` environment variable.
+
+### Environment file
+
+For non-orchestrated setups, use an `.env` file with restrictive permissions:
+
+```bash
+chmod 600 .env
+```
+
+```yaml
+services:
+  drydock:
+    env_file: .env
+```
+
+<Callout type="warn">Add `.env` and `secrets/` to your `.gitignore`. Never commit credentials to version control.</Callout>
+
+</Step>
+<Step>
+
+## Enable vulnerability scanning
+
+Drydock's Update Bouncer scans candidate images for known vulnerabilities before allowing updates. Critical and high severity CVEs block updates by default.
+
+```yaml
+environment:
+  - DD_SECURITY_SCANNER=trivy
+  - DD_SECURITY_BLOCK_SEVERITY=CRITICAL,HIGH
+```
+
+The official Drydock image bundles Trivy — no additional installation needed.
+
+### Scan modes
+
+| Mode | When it runs | What it does |
+| --- | --- | --- |
+| **Update Bouncer** | Before any update | Blocks the update if blocking-severity CVEs are found |
+| **On-demand** | UI button or `POST /api/v1/containers/:id/scan` | Scans current image (and update image if available) |
+| **Scheduled** | Cron schedule | Background scans all watched containers |
+| **Dual-slot** | On-demand when update is available | Compares current vs update image side-by-side |
+
+### Advisory-only mode
+
+To scan without blocking updates, set severity to `NONE`:
+
+```yaml
+environment:
+  - DD_SECURITY_BLOCK_SEVERITY=NONE
+```
+
+Scan results still appear in the UI and audit log — you just won't be blocked from updating.
+
+### Scheduled background scans
+
+Run automatic scans on a schedule:
+
+```yaml
+environment:
+  - DD_SECURITY_SCAN_CRON=0 3 * * *        # daily at 3 AM
+  - DD_SECURITY_SCAN_CONCURRENCY=4          # parallel scans
+  - DD_SECURITY_SCAN_BATCH_TIMEOUT=1800000  # 30 min max
+```
+
+### High-volume environments
+
+For environments with many containers, use a dedicated Trivy server to avoid repeated vulnerability database downloads:
+
+```yaml
+services:
+  trivy:
+    image: aquasec/trivy:latest
+    command: server --listen 0.0.0.0:4954
+
+  drydock:
+    depends_on:
+      - trivy
+    environment:
+      - DD_SECURITY_SCANNER=trivy
+      - DD_SECURITY_TRIVY_SERVER=http://trivy:4954
+```
+
+**Docs:** [Update Bouncer reference](/docs/configuration/security)
+
+</Step>
+<Step>
+
+## Verify image signatures
+
+Require that candidate images are signed before updates proceed. Unsigned or tampered images are rejected.
+
+<Tabs items={["Keyless (Sigstore)", "Key-based"]}>
+<Tab value="Keyless (Sigstore)">
+
+Verify against Sigstore's public transparency log — no keys to manage:
+
+```yaml
+environment:
+  - DD_SECURITY_VERIFY_SIGNATURES=true
+  - DD_SECURITY_COSIGN_IDENTITY=https://github.com/myorg/myrepo/.github/workflows/release.yml@refs/tags/*
+  - DD_SECURITY_COSIGN_ISSUER=https://token.actions.githubusercontent.com
+```
+
+</Tab>
+<Tab value="Key-based">
+
+Verify against a specific public key:
+
+```yaml
+environment:
+  - DD_SECURITY_VERIFY_SIGNATURES=true
+  - DD_SECURITY_COSIGN_KEY=/keys/cosign.pub
+volumes:
+  - ./cosign.pub:/keys/cosign.pub:ro
+```
+
+</Tab>
+</Tabs>
+
+**Docs:** [Signature verification reference](/docs/configuration/security#signature-verification-cosign)
+
+</Step>
+<Step>
+
+## Generate SBOMs
+
+Software Bill of Materials (SBOM) documents list every package in a container image. Enable them for compliance, auditing, or feeding into supply chain tools:
+
+```yaml
+environment:
+  - DD_SECURITY_SBOM_ENABLED=true
+  - DD_SECURITY_SBOM_FORMATS=spdx-json,cyclonedx-json
+```
+
+SBOMs are generated during scanning and available via:
+
+- **UI:** Open the Security detail panel → click **Download SBOM**
+- **API:** `GET /api/v1/containers/:id/sbom?format=spdx-json`
+
+Both [SPDX](https://spdx.dev/) and [CycloneDX](https://cyclonedx.org/) formats are supported — use whichever your compliance tooling expects.
+
+**Docs:** [SBOM reference](/docs/configuration/security#sbom-generation)
+
+</Step>
+<Step>
+
+## Export and share vulnerability reports
+
+Scan results can be exported as CSV or JSON for sharing with upstream image maintainers or importing into vulnerability tracking systems.
+
+### From the UI
+
+1. Open the Security detail panel for any container
+2. Select **CSV** or **JSON** from the export dropdown
+3. Click **Download Report**
+
+The CSV includes columns for ID, Severity, Package, Version, Fixed In, Title, Target, and URL — suitable for opening in a spreadsheet or importing into Jira, Linear, GitHub Issues, etc.
+
+### From the API
+
+```bash
+# Single container vulnerabilities
+curl -s http://drydock:3000/api/v1/containers/{id}/vulnerabilities | jq .
+
+# All containers (paginated)
+curl -s "http://drydock:3000/api/v1/containers/security/vulnerabilities?limit=100&offset=0"
+```
+
+### Workflow: sharing reports with developers
+
+1. Run an on-demand scan from the Security view
+2. Export the vulnerability report as CSV
+3. Share it with the image maintainer along with the current and fixed-in versions
+4. Track remediation — re-scan after the maintainer publishes a patched image
+
+</Step>
+<Step>
+
+## Configure your reverse proxy
+
+If you run Drydock behind a reverse proxy (Traefik, Nginx, Caddy, etc.), configure trust-proxy so CSRF validation and session cookies work correctly:
+
+```yaml
+environment:
+  - DD_SERVER_TRUSTPROXY=1
+```
+
+Your proxy must forward `X-Forwarded-Proto` — most do this by default. Without it, Drydock sees `http://` internally while your browser sends `https://` origins, causing CSRF 403 errors.
+
+**Docs:** [Reverse proxy setup](/docs/faq#csrf-validation-failed-403-behind-a-reverse-proxy) | [Server configuration](/docs/configuration/server)
+
+</Step>
+</Steps>
+
+## Complete hardened example
+
+Putting it all together — socket proxy, auth, scanning, signatures, SBOM, scheduled scans, and secret management:
+
+```yaml
+services:
+  socket-proxy:
+    image: tecnativa/docker-socket-proxy
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - CONTAINERS=1
+      - IMAGES=1
+      - EVENTS=1
+      - POST=1
+      - NETWORKS=1
+    healthcheck:
+      test: wget --spider http://localhost:2375/version || exit 1
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+  trivy:
+    image: aquasec/trivy:latest
+    command: server --listen 0.0.0.0:4954
+
+  drydock:
+    image: codeswhat/drydock
+    depends_on:
+      socket-proxy:
+        condition: service_healthy
+      trivy:
+        condition: service_started
+    volumes:
+      - /opt/drydock/store:/store
+    environment:
+      # Socket proxy
+      - DD_WATCHER_LOCAL_HOST=socket-proxy
+      - DD_WATCHER_LOCAL_PORT=2375
+      - DD_WATCHER_LOCAL_CRON=0 */6 * * *
+
+      # Authentication
+      - DD_AUTH_BASIC_ADMIN_USER=admin
+      - DD_AUTH_BASIC_ADMIN_HASH__FILE=/run/secrets/admin_hash
+
+      # Vulnerability scanning
+      - DD_SECURITY_SCANNER=trivy
+      - DD_SECURITY_BLOCK_SEVERITY=CRITICAL,HIGH
+      - DD_SECURITY_TRIVY_SERVER=http://trivy:4954
+      - DD_SECURITY_SCAN_CRON=0 3 * * *
+
+      # Image signatures
+      - DD_SECURITY_VERIFY_SIGNATURES=true
+      - DD_SECURITY_COSIGN_IDENTITY=https://github.com/myorg/myrepo/.github/workflows/release.yml@refs/tags/*
+      - DD_SECURITY_COSIGN_ISSUER=https://token.actions.githubusercontent.com
+
+      # SBOM
+      - DD_SECURITY_SBOM_ENABLED=true
+      - DD_SECURITY_SBOM_FORMATS=spdx-json,cyclonedx-json
+
+      # Reverse proxy support
+      - DD_SERVER_TRUSTPROXY=1
+    ports:
+      - 3000:3000
+    secrets:
+      - admin_hash
+
+secrets:
+  admin_hash:
+    file: ./secrets/admin_hash.txt
+```
+
+## Security checklist
+
+Use this checklist to verify your deployment covers each layer:
+
+| Layer | What to check | Reference |
+| --- | --- | --- |
+| Socket isolation | Using socket proxy or remote TLS — not a direct mount | [Watchers](/docs/configuration/watchers#docker-socket-security) |
+| Authentication | Basic Auth or OIDC configured and enforced | [Authentication](/docs/configuration/authentications) |
+| Secret management | All credentials use `__FILE` or Docker secrets — none in compose files | [Configuration](/docs/configuration) |
+| Vulnerability scanning | `DD_SECURITY_SCANNER=trivy` set, blocking severities configured | [Update Bouncer](/docs/configuration/security) |
+| Scheduled scans | `DD_SECURITY_SCAN_CRON` set for regular background scanning | [Update Bouncer](/docs/configuration/security#scheduled-scanning) |
+| Signature verification | `DD_SECURITY_VERIFY_SIGNATURES=true` for supply chain integrity | [Update Bouncer](/docs/configuration/security#signature-verification-cosign) |
+| SBOM generation | `DD_SECURITY_SBOM_ENABLED=true` for compliance and auditing | [Update Bouncer](/docs/configuration/security#sbom-generation) |
+| Reverse proxy | `DD_SERVER_TRUSTPROXY` set if behind TLS-terminating proxy | [Server](/docs/configuration/server) |
+| Non-root operation | Default — no `DD_RUN_AS_ROOT` unless break-glass override needed | [FAQ](/docs/faq#socket-permission-errors-eacces) |

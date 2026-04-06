@@ -302,6 +302,58 @@ curl http://drydock:3000/api/v1/server/security/runtime
 
 If you build a custom image, ensure Trivy and Cosign are installed in your Dockerfile. See [Security](/docs/configuration/security) for scanning configuration.
 
+## Vulnerability report download button does nothing
+
+If the **Download Report** button in the Security detail panel doesn't trigger a download, check that a vulnerability scan has completed for that container. The button is disabled when there are no scan results to export.
+
+**Steps:** Run an on-demand scan first (click the shield icon on the container row), then open the detail panel and try the export again.
+
+See the [vulnerability report export](/docs/configuration/security#vulnerability-report-export) documentation and the [Security Guide](/docs/guides/security) for a full walkthrough.
+
+## How do I share scan results with my team?
+
+Export vulnerability reports as CSV or JSON from the Security detail panel:
+
+1. Open the Security view and click a container row
+2. Select **CSV** or **JSON** from the export dropdown
+3. Click **Download Report**
+
+The CSV is formatted for spreadsheets and tracking tools (Jira, Linear, GitHub Issues). The JSON is suitable for programmatic consumption.
+
+For API-based workflows, use `GET /api/v1/containers/:id/vulnerabilities`. See the [Security Guide](/docs/guides/security#export-and-share-vulnerability-reports) for a full sharing workflow.
+
+## Keeping secrets out of compose files
+
+Never put credentials directly in `docker-compose.yml` files committed to version control. Drydock supports two patterns:
+
+**Docker secrets (recommended):**
+
+```yaml
+environment:
+  - DD_REGISTRY_HUB_PRIVATE_TOKEN__FILE=/run/secrets/hub_token
+secrets:
+  hub_token:
+    file: ./secrets/hub_token.txt
+```
+
+**Environment file:**
+
+```yaml
+services:
+  drydock:
+    env_file: .env
+```
+
+The `__FILE` suffix works on any `DD_*` variable. Add `.env` and `secrets/` to your `.gitignore`. See the [Security Guide](/docs/guides/security#manage-secrets-safely) for details.
+
+## Scans are slow or timing out
+
+If scans take a long time or fail with timeout errors:
+
+1. **Increase the timeout:** Set `DD_SECURITY_TRIVY_TIMEOUT=300000` (5 minutes). The default is 2 minutes, which may not be enough for large images on the first scan.
+2. **Use a Trivy server:** A dedicated Trivy server caches the vulnerability database, avoiding repeated downloads. See [Trivy server mode](/docs/configuration/security#server-mode-trivy-server).
+3. **Tune concurrency:** For scheduled scans, lower `DD_SECURITY_SCAN_CONCURRENCY` if the host is resource-constrained.
+
 ## Temporary container names during recreation (hex prefix aliases)
 
 When Docker recreates a container — for example via Portainer, Docker Compose `up --force-recreate`, or a Drydock Docker trigger — Docker temporarily renames the old container to a name like `fcdb966987a0_myapp` (a 12-character hex prefix matching the container ID, followed by an underscore and the original name). This alias is transient and disappears once the recreation completes.
