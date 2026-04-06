@@ -82,10 +82,6 @@ onUnmounted(() => {
 const {
   currentBreakpoint,
   gridInstanceKey,
-  onWidgetDragEnd,
-  onWidgetDragOver,
-  onWidgetDragStart,
-  onWidgetDrop,
   onBreakpointChanged,
   editMode,
   isWidgetVisible,
@@ -490,7 +486,6 @@ function confirmDashboardUpdateAll() {
             :key="item.i"
             :data-widget-id="item.i"
             :data-widget-order="widgetOrderIndex(item.i as DashboardWidgetId)"
-            :draggable="editMode"
             :x="item.x"
             :y="item.y"
             :w="item.w"
@@ -504,10 +499,6 @@ function confirmDashboardUpdateAll() {
             drag-allow-from=".drag-handle"
             class="dd-grid-item"
             :style="editMode ? { touchAction: 'pan-y' } : undefined"
-            @dragstart="onWidgetDragStart(item.i as DashboardWidgetId, $event)"
-            @dragover="onWidgetDragOver(item.i as DashboardWidgetId, $event)"
-            @drop="onWidgetDrop(item.i as DashboardWidgetId, $event)"
-            @dragend="onWidgetDragEnd"
             :class="editMode ? 'dd-grid-edit' : ''">
 
             <!-- Stat Cards -->
@@ -635,7 +626,7 @@ function confirmDashboardUpdateAll() {
           @click="closeWidgetPanel" />
       </div>
 
-      <div class="flex-1 overflow-y-auto p-3 space-y-1">
+      <div class="flex-1 overflow-y-auto overscroll-contain dd-scroll-stable dd-touch-scroll p-3 space-y-1">
         <label
           v-for="widget in allWidgetMeta"
           :key="widget.id"
