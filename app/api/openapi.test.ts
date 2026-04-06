@@ -1,4 +1,5 @@
 import appPackageJson from '../package.json';
+import { errorResponse, jsonResponse, paginationQueryParams } from './openapi/common.js';
 import { openApiDocument as openApiDocumentFromIndex } from './openapi/index.js';
 import { openApiDocument } from './openapi.js';
 
@@ -144,6 +145,44 @@ describe('OpenAPI document', () => {
     expect(openApiDocument.paths['/api/registries/{agent}/{type}/{name}']).toBeUndefined();
     expect(openApiDocument.paths['/api/authentications/{type}/{name}/{agent}']?.get).toBeDefined();
     expect(openApiDocument.paths['/api/authentications/{agent}/{type}/{name}']).toBeUndefined();
+  });
+
+  test('should describe component collection endpoints with pagination and auth errors', () => {
+    const componentCollections = [
+      {
+        path: '/api/watchers',
+        tag: 'Watchers',
+        nounPlural: 'watchers',
+        operationId: 'watcherList',
+      },
+      {
+        path: '/api/registries',
+        tag: 'Registries',
+        nounPlural: 'registries',
+        operationId: 'registryList',
+      },
+      {
+        path: '/api/authentications',
+        tag: 'Authentications',
+        nounPlural: 'authentications',
+        operationId: 'authenticationList',
+      },
+    ] as const;
+
+    for (const { path, tag, nounPlural, operationId } of componentCollections) {
+      expect(openApiDocument.paths[path]?.get).toStrictEqual({
+        tags: [tag],
+        summary: `List ${nounPlural}`,
+        operationId,
+        parameters: paginationQueryParams,
+        responses: {
+          200: jsonResponse(`List of ${nounPlural}`, {
+            $ref: '#/components/schemas/PaginatedResult',
+          }),
+          401: errorResponse('Authentication required'),
+        },
+      });
+    }
   });
 
   test('should avoid GenericObject for successful JSON responses', () => {
