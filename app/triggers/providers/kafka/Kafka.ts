@@ -13,6 +13,9 @@ const AUTH_TYPE_TO_SASL_MECHANISM = {
   'SCRAM-SHA-256': 'scram-sha-256',
   'SCRAM-SHA-512': 'scram-sha-512',
 } as const;
+const SUPPORTED_AUTH_TYPES = Object.keys(
+  AUTH_TYPE_TO_SASL_MECHANISM,
+) as (keyof typeof AUTH_TYPE_TO_SASL_MECHANISM)[];
 const DEPRECATED_CLIENT_ID_KEY = 'clientId';
 const warnedLegacyConfigurationKeys = new Set<string>();
 
@@ -42,7 +45,7 @@ function normalizeLegacyConfiguration(
   if (!warnedLegacyConfigurationKeys.has(DEPRECATED_CLIENT_ID_KEY)) {
     warnedLegacyConfigurationKeys.add(DEPRECATED_CLIENT_ID_KEY);
     warn(
-      'Kafka trigger configuration key "clientId" is deprecated and will be removed in v1.6.0. Use "clientid" instead.',
+      `Kafka trigger configuration key "${DEPRECATED_CLIENT_ID_KEY}" is deprecated and will be removed in v1.6.0. Use "clientid" instead.`,
     );
   }
 
@@ -75,9 +78,7 @@ class Kafka extends Trigger {
       authentication: this.joi.object({
         type: this.joi
           .string()
-          .allow('PLAIN')
-          .allow('SCRAM-SHA-256')
-          .allow('SCRAM-SHA-512')
+          .valid(...SUPPORTED_AUTH_TYPES)
           .default('PLAIN'),
         user: this.joi.string().required(),
         password: this.joi.string().required(),

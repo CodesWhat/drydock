@@ -31,22 +31,34 @@ class Http extends Trigger {
           scheme: ['http', 'https'],
         })
         .required(),
-      method: this.joi.string().allow('GET').allow('POST').default('POST'),
-      auth: this.joi.object({
-        type: this.joi.string().uppercase().allow('BASIC').allow('BEARER').default('BASIC'),
-        user: this.joi.string().when('type', {
-          is: 'BASIC',
-          then: this.joi.required(),
+      method: this.joi.string().valid('GET', 'POST').default('POST'),
+      auth: this.joi
+        .object({
+          type: this.joi.string().uppercase().valid('BASIC', 'BEARER').default('BASIC'),
+          user: this.joi.string(),
+          password: this.joi.string(),
+          bearer: this.joi.string(),
+        })
+        .custom((auth, helpers) => {
+          const authType = auth.type as 'BASIC' | 'BEARER';
+          if (authType === 'BASIC') {
+            if (!auth.user) {
+              return helpers.error('auth.basic.userMissing');
+            }
+            if (!auth.password) {
+              return helpers.error('auth.basic.passwordMissing');
+            }
+          } else if (!auth.bearer) {
+            return helpers.error('auth.bearer.missing');
+          }
+
+          return auth;
+        }, 'HTTP auth validation')
+        .messages({
+          'auth.basic.userMissing': '"auth.user" is required',
+          'auth.basic.passwordMissing': '"auth.password" is required',
+          'auth.bearer.missing': '"auth.bearer" is required',
         }),
-        password: this.joi.string().when('type', {
-          is: 'BASIC',
-          then: this.joi.required(),
-        }),
-        bearer: this.joi.string().when('type', {
-          is: 'BEARER',
-          then: this.joi.required(),
-        }),
-      }),
       proxy: this.joi.string(),
     });
   }
