@@ -5,6 +5,7 @@ import { GridItem, GridLayout } from 'grid-layout-plus';
 import AppIconButton from '@/components/AppIconButton.vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
 import { useConfirmDialog } from '../composables/useConfirmDialog';
+import { useToast } from '../composables/useToast';
 import { preferences } from '../preferences/store';
 import { ROUTES } from '../router/routes';
 import { updateContainer } from '../services/container-actions';
@@ -32,6 +33,7 @@ import { useDashboardWidgetOrder } from './dashboard/useDashboardWidgetOrder';
 
 const router = useRouter();
 const confirm = useConfirmDialog();
+const toast = useToast();
 const { isMobile, windowNarrow } = useBreakpoints();
 const dashboardScrollEl = ref<HTMLElement | null>(null);
 // Responsive grid margins: slightly wider vertical gaps on touch screens for scroll room
@@ -59,6 +61,10 @@ function isStaleDashboardUpdateError(error: unknown): boolean {
 
 function navigateTo(route: RouteLocationRaw) {
   router.push(route);
+}
+
+function formatContainerCount(count: number): string {
+  return `${count} container${count === 1 ? '' : 's'}`;
 }
 
 // Delay enabling grid transitions to prevent fly-in on initial load
@@ -350,9 +356,11 @@ function confirmDashboardUpdate(row: RecentUpdateRow) {
         await updateContainer(row.id);
         await fetchDashboardData();
         capturePendingDashboardRows([row]);
+        toast.success(`Updated: ${row.name}`);
       } catch (e: unknown) {
         if (isStaleDashboardUpdateError(e)) {
           await fetchDashboardData();
+          toast.info(`Already up to date: ${row.name}`);
         } else {
           dashboardUpdateError.value = errorMessage(e, `Failed to update ${row.name}`);
         }
@@ -378,11 +386,28 @@ function confirmDashboardUpdateAll() {
         const updateResults = await Promise.allSettled(
           pendingRowsSnapshot.map((row) => updateContainer(row.id)),
         );
-        await fetchDashboardData();
-        capturePendingDashboardRows(
-          pendingRowsSnapshot.filter((_, index) => updateResults[index]?.status === 'fulfilled'),
+        const successfulRows = pendingRowsSnapshot.filter(
+          (_, index) => updateResults[index]?.status === 'fulfilled',
         );
-        const firstRejectedUpdate = updateResults.find((result) => result.status === 'rejected');
+        const staleRows = pendingRowsSnapshot.filter((_, index) => {
+          const result = updateResults[index];
+          return result?.status === 'rejected' && isStaleDashboardUpdateError(result.reason);
+        });
+        await fetchDashboardData();
+        capturePendingDashboardRows(successfulRows);
+        if (successfulRows.length > 0) {
+          toast.success(`Updated ${formatContainerCount(successfulRows.length)}`);
+        }
+        if (staleRows.length > 0) {
+          toast.info(
+            staleRows.length === 1
+              ? `Already up to date: ${staleRows[0]!.name}`
+              : `${formatContainerCount(staleRows.length)} already up to date`,
+          );
+        }
+        const firstRejectedUpdate = updateResults.find(
+          (result) => result.status === 'rejected' && !isStaleDashboardUpdateError(result.reason),
+        );
         if (firstRejectedUpdate?.status === 'rejected') {
           dashboardUpdateError.value = errorMessage(
             firstRejectedUpdate.reason,
