@@ -3,6 +3,11 @@ import * as registry from '../../../registry/index.js';
 import { detectSourceRepoFromImageMetadata } from '../../../release-notes/index.js';
 import * as storeContainer from '../../../store/container.js';
 import { parse as parseSemver, transform as transformTag } from '../../../tag/index.js';
+import {
+  classifyTagPrecision,
+  getNumericTagShape,
+  type TagPrecision,
+} from '../../../tag/precision.js';
 import { getErrorMessage } from '../../../util/error.js';
 import {
   getDockerWatcherRegistryId,
@@ -17,7 +22,6 @@ import {
   isDigestToWatch,
   type ResolvedImgset,
   shouldUpdateDisplayNameFromContainerName,
-  type TagPrecision,
 } from './docker-helpers.js';
 import {
   areRuntimeDetailsEqual,
@@ -26,20 +30,6 @@ import {
   mergeRuntimeDetails,
   normalizeRuntimeDetails,
 } from './runtime-details.js';
-import { getNumericTagShape } from './tag-candidates.js';
-
-const MIN_SPECIFIC_SEGMENTS = 3;
-
-function classifyTagPrecision(
-  tag: string,
-  transformTags: string | undefined,
-  parsedTag: unknown,
-): TagPrecision {
-  if (!parsedTag) return 'floating';
-  const shape = getNumericTagShape(tag, transformTags);
-  if (!shape) return 'floating';
-  return shape.numericSegments.length >= MIN_SPECIFIC_SEGMENTS ? 'specific' : 'floating';
-}
 
 export interface ContainerLabelOverrides {
   includeTags?: string;
@@ -306,6 +296,13 @@ async function refreshStoredContainerImageFields(
         containerInStore.sourceRepo = refreshedContainer.sourceRepo;
         return;
       }
+    }
+
+    if (containerInStore.image?.tag && containerInStore.image.tag.tagPrecision === undefined) {
+      containerInStore.image.tag.tagPrecision = classifyTagPrecision(
+        containerInStore.image.tag.value,
+        containerInStore.transformTags,
+      );
     }
 
     // Keep local digest value populated for digest-watch containers, even when

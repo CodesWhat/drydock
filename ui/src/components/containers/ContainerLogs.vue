@@ -15,6 +15,8 @@ import {
   parseLogTimestampToUnixSeconds,
   stripAnsiCodes,
 } from '../../utils/container-logs';
+import { preferences } from '../../preferences/store';
+import { usePreference } from '../../preferences/usePreference';
 import type { AppLogEntry } from '../../types/log-entry';
 
 type TailOption = 100 | 500 | 1000 | 'all';
@@ -42,6 +44,12 @@ const downloadInProgress = ref(false);
 const downloadError = ref<string | null>(null);
 const nextEntryId = ref(1);
 const lastSince = ref<number | undefined>(undefined);
+const newestFirst = usePreference(
+  () => preferences.views.logs.newestFirst,
+  (value) => {
+    preferences.views.logs.newestFirst = value;
+  },
+);
 
 let streamConnection: ContainerLogStreamConnection | null = null;
 
@@ -254,6 +262,7 @@ onBeforeUnmount(() => {
 <template>
   <div data-test="container-logs" class="min-h-0 flex flex-col flex-1">
     <AppLogViewer
+      v-model:newest-first="newestFirst"
       :entries="visibleEntries"
       :compact="props.compact"
       :paused="streamPaused"

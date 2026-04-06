@@ -27,7 +27,7 @@
 <template>
   <div class="flex flex-col flex-1 min-h-0 -ml-4 -mr-2 -my-4 sm:-ml-6 sm:-mr-[9px] sm:-my-6">
     <div class="flex gap-2 min-w-0 flex-1 min-h-0">
-      <div class="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden pl-4 pr-4 py-4 sm:pl-6 sm:pr-[24px] sm:py-6 dd-touch-scroll">
+      <div class="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden overscroll-contain pl-4 pr-4 py-4 sm:pl-6 sm:pr-[24px] sm:py-6 dd-touch-scroll dd-scroll-stable">
         <slot />
       </div>
       <slot name="panel" />

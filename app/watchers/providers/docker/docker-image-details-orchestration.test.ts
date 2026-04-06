@@ -431,6 +431,55 @@ describe('docker image details orchestration module', () => {
     expect(containerInStore.image.created).toBe('2025-01-01T00:00:00.000Z');
   });
 
+  test('backfills missing tagPrecision for stored containers during refresh without repairing image refs', async () => {
+    const containerInStore = {
+      id: 'container-1',
+      transformTags: '^v(.*) => $1',
+      error: undefined,
+      details: {
+        ports: [],
+        volumes: [],
+        env: [],
+      },
+      image: {
+        id: 'image-same',
+        tag: {
+          value: 'v1.2.3',
+          semver: true,
+        },
+        digest: {
+          repo: 'sha256:same',
+          value: 'sha256:same',
+        },
+        created: '2025-01-01T00:00:00.000Z',
+      },
+    };
+    vi.spyOn(storeContainer, 'getContainer').mockReturnValue(containerInStore as any);
+
+    const { watcher, inspectImage } = createWatcher({
+      configuration: {
+        watchevents: true,
+      },
+    });
+    inspectImage.mockResolvedValue({
+      Id: 'image-same',
+      RepoDigests: ['ghcr.io/acme/service@sha256:same'],
+      Created: '2026-03-01T00:00:00.000Z',
+    });
+
+    await addImageDetailsToContainerOrchestration(
+      watcher as any,
+      createDockerSummaryContainer(),
+      { transformTags: '^v(.*) => $1' },
+      createHelpers({
+        resolveTagName: vi.fn().mockReturnValue('v1.2.3'),
+      }) as any,
+    );
+
+    expect(watcher.dockerApi.getContainer).not.toHaveBeenCalled();
+    expect(containerInStore.image.tag.tagPrecision).toBe('specific');
+  });
+
   test('still inspects stored digest-only containers when docker events are enabled to repair image references', async () => {
     const containerInStore = {
       id: 'container-1',

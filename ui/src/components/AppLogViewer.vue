@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, ref, shallowRef, triggerRef, watch } from 'vue';
 import AppIconButton from '@/components/AppIconButton.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { useLogSearch } from '../composables/useLogSearch';
@@ -14,6 +14,7 @@ interface JsonToken {
 const props = withDefaults(
   defineProps<{
     entries: AppLogEntry[];
+    newestFirst?: boolean;
     compact?: boolean;
     showLineNumbers?: boolean;
     emptyMessage?: string;
@@ -24,6 +25,7 @@ const props = withDefaults(
     lineCount?: number;
   }>(),
   {
+    newestFirst: false,
     compact: false,
     showLineNumbers: true,
     emptyMessage: 'No log entries yet',
@@ -36,6 +38,7 @@ const props = withDefaults(
 );
 
 const emit = defineEmits<{
+  (e: 'update:newestFirst', value: boolean): void;
   (e: 'toggle-pause'): void;
   (e: 'toggle-pin'): void;
 }>();
@@ -44,10 +47,8 @@ const lineElements = new Map<number, HTMLElement>();
 const logViewport = ref<HTMLElement | null>(null);
 const copySuccess = ref(false);
 
-const newestFirst = ref(false);
-
 function isNearEdge(element: HTMLElement): boolean {
-  if (newestFirst.value) {
+  if (props.newestFirst) {
     return element.scrollTop < 28;
   }
   return element.scrollHeight - element.scrollTop - element.clientHeight < 28;
@@ -57,7 +58,7 @@ function scrollToEdge(): void {
   if (!logViewport.value) {
     return;
   }
-  logViewport.value.scrollTop = newestFirst.value ? 0 : logViewport.value.scrollHeight;
+  logViewport.value.scrollTop = props.newestFirst ? 0 : logViewport.value.scrollHeight;
 }
 
 function handleLogScroll(): void {
@@ -109,13 +110,80 @@ const {
 
 const searchFilterMode = ref(false);
 
-const displayEntries = computed(() => {
-  let entries = props.entries;
-  if (searchFilterMode.value && searchQuery.value) {
-    entries = entries.filter((entry) => matchedEntryIdSet.value.has(entry.id));
+const displayEntries = shallowRef<AppLogEntry[]>(props.entries);
+// Log polling usually appends to the tail of `props.entries`. In newest-first mode,
+// rebuilding `[...entries].reverse()` on every update turns that append-only case
+// into repeated O(n) work, so we reuse the previous reversed array whenever the
+// existing prefix is unchanged and only reverse/prepend the newly appended tail.
+let cachedNewestFirstSource: AppLogEntry[] | null = null;
+let cachedNewestFirstLength = 0;
+let cachedNewestFirstEntries: AppLogEntry[] = [];
+
+function setDisplayEntries(entries: AppLogEntry[]): void {
+  if (displayEntries.value === entries) {
+    triggerRef(displayEntries);
+    return;
   }
-  return newestFirst.value ? [...entries].reverse() : entries;
-});
+
+  displayEntries.value = entries;
+}
+
+function canAppendToNewestFirstCache(entries: AppLogEntry[]): boolean {
+  if (!cachedNewestFirstSource || entries.length < cachedNewestFirstLength) {
+    return false;
+  }
+
+  for (let index = 0; index < cachedNewestFirstLength; index += 1) {
+    if (entries[index] !== cachedNewestFirstSource[index]) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function syncDisplayEntries(): void {
+  if (searchFilterMode.value && searchQuery.value) {
+    const filteredEntries = props.entries.filter((entry) => matchedEntryIdSet.value.has(entry.id));
+    setDisplayEntries(props.newestFirst ? filteredEntries.reverse() : filteredEntries);
+    return;
+  }
+
+  if (!props.newestFirst) {
+    setDisplayEntries(props.entries);
+    return;
+  }
+
+  if (canAppendToNewestFirstCache(props.entries)) {
+    const appendedEntries = props.entries.slice(cachedNewestFirstLength).reverse();
+    if (appendedEntries.length > 0) {
+      cachedNewestFirstEntries.splice(0, 0, ...appendedEntries);
+    }
+
+    cachedNewestFirstSource = props.entries;
+    cachedNewestFirstLength = props.entries.length;
+    setDisplayEntries(cachedNewestFirstEntries);
+    return;
+  }
+
+  cachedNewestFirstSource = props.entries;
+  cachedNewestFirstLength = props.entries.length;
+  cachedNewestFirstEntries = [...props.entries].reverse();
+  setDisplayEntries(cachedNewestFirstEntries);
+}
+
+watch(
+  [
+    () => props.entries,
+    () => props.entries.length,
+    () => props.newestFirst,
+    searchFilterMode,
+    searchQuery,
+    matchedEntryIds,
+  ],
+  syncDisplayEntries,
+  { immediate: true },
+);
 
 const renderedLineCount = computed(() => {
   const total = props.lineCount ?? props.entries.length;
@@ -139,6 +207,15 @@ watch(
       }
     }
 
+    if (props.autoScrollPinned) {
+      void nextTick(() => scrollToEdge());
+    }
+  },
+);
+
+watch(
+  () => props.newestFirst,
+  () => {
     if (props.autoScrollPinned) {
       void nextTick(() => scrollToEdge());
     }
@@ -322,6 +399,10 @@ async function copyLogs(): Promise<void> {
     // Clipboard API may not be available in all contexts.
   }
 }
+
+function toggleSortOrder(): void {
+  emit('update:newestFirst', !props.newestFirst);
+}
 </script>
 
 <template>
@@ -354,11 +435,11 @@ async function copyLogs(): Promise<void> {
         />
 
         <AppIconButton
-          :icon="newestFirst ? 'sort-asc' : 'sort-desc'"
+          :icon="props.newestFirst ? 'sort-asc' : 'sort-desc'"
           size="xs"
           data-test="container-log-sort-toggle"
-          :tooltip="newestFirst ? 'Newest first' : 'Oldest first'"
-          @click="newestFirst = !newestFirst"
+          :tooltip="props.newestFirst ? 'Newest first' : 'Oldest first'"
+          @click="toggleSortOrder"
         />
 
         <slot name="toolbar-right" />

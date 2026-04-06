@@ -101,6 +101,8 @@ describe('DataViewLayout', () => {
     const scrollArea = wrapper.find('.overflow-y-auto');
     expect(scrollArea.classes()).toContain('dd-touch-scroll');
     expect(scrollArea.classes()).toContain('overflow-x-hidden');
+    expect(scrollArea.classes()).toContain('overscroll-contain');
+    expect(scrollArea.classes()).toContain('dd-scroll-stable');
   });
 
   it('restores internal page padding inside the scrollable content area', () => {

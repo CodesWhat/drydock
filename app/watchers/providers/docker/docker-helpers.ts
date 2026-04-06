@@ -3,9 +3,8 @@ import parse from 'parse-docker-image-name';
 import log from '../../../log/index.js';
 import type { Container, ContainerImage } from '../../../model/container.js';
 import { parse as parseSemver, transform as transformTag } from '../../../tag/index.js';
+import type { TagPrecision } from '../../../tag/precision.js';
 import { getErrorMessage as getSharedErrorMessage } from '../../../util/error.js';
-
-export type TagPrecision = 'specific' | 'floating';
 
 const UNKNOWN_CONTAINER_PROCESSING_ERROR = 'Unexpected container processing error';
 

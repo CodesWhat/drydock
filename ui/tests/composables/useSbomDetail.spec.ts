@@ -8,6 +8,7 @@ vi.mock('@/services/container', () => ({
 
 import { useSbomDetail } from '@/composables/useSbomDetail';
 import type { ImageSummaryWithVulns } from '@/composables/useVulnerabilities';
+import { vulnReportToCsv, vulnReportToJson } from '@/views/security/securityViewUtils';
 
 function makeSummary(overrides: Partial<ImageSummaryWithVulns> = {}): ImageSummaryWithVulns {
   return {
@@ -40,6 +41,16 @@ function makeSummary(overrides: Partial<ImageSummaryWithVulns> = {}): ImageSumma
       },
     ],
     ...overrides,
+  };
+}
+
+async function readDownloadedBlob(createObjectUrl: ReturnType<typeof vi.fn>) {
+  expect(createObjectUrl).toHaveBeenCalledOnce();
+  const blob = createObjectUrl.mock.calls[0][0] as Blob;
+  expect(blob).toBeInstanceOf(Blob);
+  return {
+    blob,
+    text: await blob.text(),
   };
 }
 
@@ -385,12 +396,18 @@ describe('useSbomDetail', () => {
     }
   });
 
-  it('returns early when document display is disabled and payload is empty', () => {
-    const createObjectUrl = vi.fn();
+  it('downloads sbom even when document display toggle is off', () => {
+    const createObjectUrl = vi.fn(() => 'blob:test');
+    const revokeObjectUrl = vi.fn();
     const originalCreateObjectURL = URL.createObjectURL;
+    const originalRevokeObjectURL = URL.revokeObjectURL;
     Object.defineProperty(URL, 'createObjectURL', {
       configurable: true,
       value: createObjectUrl,
+    });
+    Object.defineProperty(URL, 'revokeObjectURL', {
+      configurable: true,
+      value: revokeObjectUrl,
     });
 
     try {
@@ -407,13 +424,167 @@ describe('useSbomDetail', () => {
       };
 
       state.downloadDetailSbom();
-      expect(createObjectUrl).not.toHaveBeenCalled();
+      expect(createObjectUrl).toHaveBeenCalledOnce();
     } finally {
       Object.defineProperty(URL, 'createObjectURL', {
         configurable: true,
         value: originalCreateObjectURL,
       });
+      Object.defineProperty(URL, 'revokeObjectURL', {
+        configurable: true,
+        value: originalRevokeObjectURL,
+      });
     }
+  });
+
+  describe('downloadVulnReport', () => {
+    it('returns early when no image is selected', () => {
+      const createObjectUrl = vi.fn();
+      const originalCreateObjectURL = URL.createObjectURL;
+      Object.defineProperty(URL, 'createObjectURL', {
+        configurable: true,
+        value: createObjectUrl,
+      });
+
+      try {
+        const state = useSbomDetail({
+          containerIdsByImage: ref({ nginx: ['container-1'] }),
+        });
+
+        state.downloadVulnReport();
+
+        expect(createObjectUrl).not.toHaveBeenCalled();
+      } finally {
+        Object.defineProperty(URL, 'createObjectURL', {
+          configurable: true,
+          value: originalCreateObjectURL,
+        });
+      }
+    });
+
+    it('returns early when the selected image has no vulnerabilities', () => {
+      const createObjectUrl = vi.fn();
+      const originalCreateObjectURL = URL.createObjectURL;
+      Object.defineProperty(URL, 'createObjectURL', {
+        configurable: true,
+        value: createObjectUrl,
+      });
+
+      try {
+        const state = useSbomDetail({
+          containerIdsByImage: ref({ nginx: ['container-1'] }),
+        });
+        state.selectedImage.value = makeSummary({
+          vulns: [],
+          critical: 0,
+          high: 0,
+          medium: 0,
+          low: 0,
+          total: 0,
+          fixable: 0,
+        });
+
+        state.downloadVulnReport();
+
+        expect(createObjectUrl).not.toHaveBeenCalled();
+      } finally {
+        Object.defineProperty(URL, 'createObjectURL', {
+          configurable: true,
+          value: originalCreateObjectURL,
+        });
+      }
+    });
+
+    it('downloads vulnerabilities as csv by default', async () => {
+      const createObjectUrl = vi.fn().mockReturnValue('blob:vulns-csv');
+      const revokeObjectUrl = vi.fn();
+      const appendChildSpy = vi.spyOn(document.body, 'appendChild');
+      const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+      const originalCreateObjectURL = URL.createObjectURL;
+      const originalRevokeObjectURL = URL.revokeObjectURL;
+      Object.defineProperty(URL, 'createObjectURL', {
+        configurable: true,
+        value: createObjectUrl,
+      });
+      Object.defineProperty(URL, 'revokeObjectURL', {
+        configurable: true,
+        value: revokeObjectUrl,
+      });
+
+      try {
+        const state = useSbomDetail({
+          containerIdsByImage: ref({ 'ghcr.io/org/image:1.2.3': ['container-1'] }),
+        });
+        state.selectedImage.value = makeSummary({ image: 'ghcr.io/org/image:1.2.3' });
+
+        state.downloadVulnReport();
+
+        const { blob, text } = await readDownloadedBlob(createObjectUrl);
+        expect(blob.type).toBe('text/csv');
+        expect(text).toBe(vulnReportToCsv(state.selectedImageVulns.value));
+
+        const link = appendChildSpy.mock.calls[0][0] as HTMLAnchorElement;
+        expect(link.download).toBe('ghcr.io-org-image-1.2.3.vulnerabilities.csv');
+        expect(link.getAttribute('href')).toBe('blob:vulns-csv');
+        expect(clickSpy).toHaveBeenCalledOnce();
+        expect(revokeObjectUrl).toHaveBeenCalledWith('blob:vulns-csv');
+      } finally {
+        Object.defineProperty(URL, 'createObjectURL', {
+          configurable: true,
+          value: originalCreateObjectURL,
+        });
+        Object.defineProperty(URL, 'revokeObjectURL', {
+          configurable: true,
+          value: originalRevokeObjectURL,
+        });
+      }
+    });
+
+    it('downloads vulnerabilities as json when selected', async () => {
+      const createObjectUrl = vi.fn().mockReturnValue('blob:vulns-json');
+      const revokeObjectUrl = vi.fn();
+      const appendChildSpy = vi.spyOn(document.body, 'appendChild');
+      const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+      const originalCreateObjectURL = URL.createObjectURL;
+      const originalRevokeObjectURL = URL.revokeObjectURL;
+      Object.defineProperty(URL, 'createObjectURL', {
+        configurable: true,
+        value: createObjectUrl,
+      });
+      Object.defineProperty(URL, 'revokeObjectURL', {
+        configurable: true,
+        value: revokeObjectUrl,
+      });
+
+      try {
+        const state = useSbomDetail({
+          containerIdsByImage: ref({ 'ghcr.io/org/image:1.2.3': ['container-1'] }),
+        });
+        state.selectedImage.value = makeSummary({ image: 'ghcr.io/org/image:1.2.3' });
+        state.selectedVulnExportFormat.value = 'json';
+
+        state.downloadVulnReport();
+
+        const { blob, text } = await readDownloadedBlob(createObjectUrl);
+        expect(blob.type).toBe('application/json');
+        expect(text).toBe(vulnReportToJson(state.selectedImageVulns.value));
+
+        const link = appendChildSpy.mock.calls[0][0] as HTMLAnchorElement;
+        expect(link.download).toBe('ghcr.io-org-image-1.2.3.vulnerabilities.json');
+        expect(link.getAttribute('href')).toBe('blob:vulns-json');
+        expect(clickSpy).toHaveBeenCalledOnce();
+        expect(revokeObjectUrl).toHaveBeenCalledWith('blob:vulns-json');
+      } finally {
+        Object.defineProperty(URL, 'createObjectURL', {
+          configurable: true,
+          value: originalCreateObjectURL,
+        });
+        Object.defineProperty(URL, 'revokeObjectURL', {
+          configurable: true,
+          value: originalRevokeObjectURL,
+        });
+      }
+    });
   });
 
   it('clears selected detail state when panel closes', () => {
@@ -478,5 +649,34 @@ describe('useSbomDetail', () => {
     state.detailSbomResult.value = { document: circular };
 
     expect(state.detailSbomDocumentJson.value).toBe('');
+  });
+
+  it('does not trigger download when sbom document serialization fails', () => {
+    const createObjectUrl = vi.fn();
+    const originalCreateObjectURL = URL.createObjectURL;
+    Object.defineProperty(URL, 'createObjectURL', {
+      configurable: true,
+      value: createObjectUrl,
+    });
+
+    try {
+      const state = useSbomDetail({
+        containerIdsByImage: ref({ nginx: ['container-1'] }),
+      });
+      state.selectedImage.value = makeSummary();
+      state.showSbomDocument.value = true;
+      const circular: Record<string, unknown> = {};
+      circular.self = circular;
+      state.detailSbomResult.value = { document: circular };
+
+      state.downloadDetailSbom();
+
+      expect(createObjectUrl).not.toHaveBeenCalled();
+    } finally {
+      Object.defineProperty(URL, 'createObjectURL', {
+        configurable: true,
+        value: originalCreateObjectURL,
+      });
+    }
   });
 });

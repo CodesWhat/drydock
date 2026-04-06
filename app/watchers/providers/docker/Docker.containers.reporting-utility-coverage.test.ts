@@ -73,6 +73,104 @@ describe('Docker Watcher', () => {
 
       expect(result.changed).toBe(false);
     });
+
+    test('should preserve a cleared update when the watch started before a manual update completed', async () => {
+      const staleWatchStartedAtMs = 499;
+      const manualClearAtMs = 500;
+      const container = {
+        id: '123',
+        name: 'test',
+        watcher: 'docker',
+        result: { tag: '2.0.0' },
+        updateAvailable: true,
+      };
+      const clearedContainer = {
+        ...container,
+        result: undefined,
+        updateAvailable: false,
+      };
+      const existingContainer = {
+        resultChanged: vi.fn().mockReturnValue(false),
+      };
+      docker.log = createMockLogWithChild(['debug']);
+      hStoreContainer.getContainer.mockReturnValue(existingContainer);
+      hStoreContainer.getPendingFreshStateAfterManualUpdateAt.mockReturnValue(manualClearAtMs);
+      hStoreContainer.updateContainer.mockReturnValue(clearedContainer);
+
+      const result = docker.mapContainerToContainerReport(container, staleWatchStartedAtMs);
+
+      expect(hStoreContainer.updateContainer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: '123',
+          name: 'test',
+          watcher: 'docker',
+          result: undefined,
+          updateAvailable: false,
+        }),
+      );
+      expect(hStoreContainer.clearPendingFreshStateAfterManualUpdate).not.toHaveBeenCalled();
+      expect(result).toEqual({
+        container: clearedContainer,
+        changed: false,
+      });
+    });
+
+    test('should accept a post-clear watch result once the watch started after the manual update completed', async () => {
+      const freshWatchStartedAtMs = 501;
+      const manualClearAtMs = 500;
+      const container = {
+        id: '123',
+        name: 'test',
+        watcher: 'docker',
+        result: { tag: '2.0.0' },
+        updateAvailable: true,
+      };
+      const existingContainer = {
+        resultChanged: vi.fn().mockReturnValue(true),
+      };
+      docker.log = createMockLogWithChild(['debug']);
+      hStoreContainer.getContainer.mockReturnValue(existingContainer);
+      hStoreContainer.getPendingFreshStateAfterManualUpdateAt.mockReturnValue(manualClearAtMs);
+      hStoreContainer.updateContainer.mockReturnValue(container);
+
+      const result = docker.mapContainerToContainerReport(container, freshWatchStartedAtMs);
+
+      expect(hStoreContainer.updateContainer).toHaveBeenCalledWith(container);
+      expect(hStoreContainer.clearPendingFreshStateAfterManualUpdate).toHaveBeenCalledWith(
+        container,
+      );
+      expect(result).toEqual({
+        container,
+        changed: true,
+      });
+    });
+
+    test('should clear pending freshness when the update has already been cleared', async () => {
+      const container = {
+        id: '123',
+        name: 'test',
+        watcher: 'docker',
+        result: undefined,
+        updateAvailable: false,
+      };
+      const existingContainer = {
+        resultChanged: vi.fn().mockReturnValue(false),
+      };
+      docker.log = createMockLogWithChild(['debug']);
+      hStoreContainer.getContainer.mockReturnValue(existingContainer);
+      hStoreContainer.getPendingFreshStateAfterManualUpdateAt.mockReturnValue(500);
+      hStoreContainer.updateContainer.mockReturnValue(container);
+
+      const result = docker.mapContainerToContainerReport(container, 600);
+
+      expect(hStoreContainer.clearPendingFreshStateAfterManualUpdate).toHaveBeenCalledWith(
+        container,
+      );
+      expect(result).toEqual({
+        container,
+        changed: false,
+      });
+    });
   });
 
   describe('Utility Functions', () => {

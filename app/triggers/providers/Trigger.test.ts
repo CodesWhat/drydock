@@ -16,9 +16,14 @@ vi.mock('../../log');
 vi.mock('../../event');
 vi.mock('../../store/notification.js', () => ({
   isTriggerEnabledForRule: vi.fn(() => true),
+  getTriggerDispatchDecisionForRule: vi.fn(() => ({
+    enabled: true,
+    reason: 'matched-allow-list',
+  })),
 }));
 vi.mock('../../store/container.js', () => ({
   getContainers: vi.fn(() => []),
+  getContainersRaw: vi.fn(() => []),
 }));
 vi.mock('../../prometheus/trigger', () => ({
   getTriggerCounter: () => ({
@@ -34,10 +39,11 @@ const configurationValid = {
   mode: 'simple',
   auto: true,
   order: 100,
-  simpletitle: 'New ${container.updateKind.kind} found for container ${container.name}',
+  simpletitle:
+    '${isDigestUpdate ? "New image available for container " + container.name + " (tag " + currentTag + ")" : "New " + container.updateKind.kind + " found for container " + container.name}',
 
   simplebody:
-    'Container ${container.name} running with ${container.updateKind.kind} ${container.updateKind.localValue} can be updated to ${container.updateKind.kind} ${container.updateKind.remoteValue}${container.result && container.result.link ? "\\n" + container.result.link : ""}',
+    '${isDigestUpdate ? "Container " + container.name + " running tag " + currentTag + " has a newer image available" : "Container " + container.name + " running with " + container.updateKind.kind + " " + container.updateKind.localValue + " can be updated to " + container.updateKind.kind + " " + container.updateKind.remoteValue}${container.result && container.result.link ? "\\n" + container.result.link : ""}',
 
   batchtitle: '${containers.length} updates available',
   resolvenotifications: false,
@@ -46,7 +52,14 @@ const configurationValid = {
 beforeEach(async () => {
   vi.resetAllMocks();
   notificationStore.isTriggerEnabledForRule.mockReturnValue(true);
+  notificationStore.getTriggerDispatchDecisionForRule.mockReturnValue({
+    enabled: true,
+    reason: 'matched-allow-list',
+  });
   storeContainer.getContainers.mockReturnValue([]);
+  storeContainer.getContainersRaw.mockImplementation((query, pagination) =>
+    storeContainer.getContainers(query, pagination),
+  );
   trigger = new Trigger();
   trigger.log = log;
   trigger.configuration = { ...configurationValid };
@@ -1044,6 +1057,20 @@ test('renderSimpleTitle should replace placeholders when called', async () => {
   ).toEqual('New tag found for container container-name');
 });
 
+test('renderSimpleTitle should show tag for digest updates', async () => {
+  expect(
+    trigger.renderSimpleTitle({
+      name: 'container-name',
+      image: { tag: { value: 'latest' } },
+      updateKind: {
+        kind: 'digest',
+        localValue: 'sha256:abc123',
+        remoteValue: 'sha256:def456',
+      },
+    }),
+  ).toEqual('New image available for container container-name (tag latest)');
+});
+
 test('renderSimpleBody should replace placeholders when called', async () => {
   expect(
     trigger.renderSimpleBody({
@@ -1060,6 +1087,23 @@ test('renderSimpleBody should replace placeholders when called', async () => {
   ).toEqual(
     'Container container-name running with tag 1.0.0 can be updated to tag 2.0.0\nhttp://test',
   );
+});
+
+test('renderSimpleBody should show tag instead of raw digest for digest updates', async () => {
+  expect(
+    trigger.renderSimpleBody({
+      name: 'container-name',
+      image: { tag: { value: 'latest' } },
+      updateKind: {
+        kind: 'digest',
+        localValue: 'sha256:abc123',
+        remoteValue: 'sha256:def456',
+      },
+      result: {
+        link: 'http://test',
+      },
+    }),
+  ).toEqual('Container container-name running tag latest has a newer image available\nhttp://test');
 });
 
 test('renderSimpleBody should replace placeholders when template is a customized one', async () => {
@@ -1236,6 +1280,55 @@ test('getNotificationEvent should return reconnect metadata for agent reconnect 
   });
 });
 
+test('getNotificationEvent should return undefined when notification metadata is missing', () => {
+  expect(getNotificationEvent({} as any)).toBeUndefined();
+});
+
+test('getNotificationEvent should omit invalid update-failed error values', () => {
+  expect(
+    getNotificationEvent({
+      notificationEvent: {
+        kind: 'update-failed',
+        error: '',
+      },
+    } as any),
+  ).toEqual({
+    kind: 'update-failed',
+    error: undefined,
+  });
+});
+
+test('getNotificationEvent should omit invalid security alert metadata', () => {
+  expect(
+    getNotificationEvent({
+      notificationEvent: {
+        kind: 'security-alert',
+        details: '',
+        status: '',
+        summary: 'invalid',
+        blockingCount: Number.POSITIVE_INFINITY,
+      },
+    } as any),
+  ).toEqual({
+    kind: 'security-alert',
+    details: undefined,
+    status: undefined,
+    summary: undefined,
+    blockingCount: undefined,
+  });
+});
+
+test('getNotificationEvent should return undefined for unsupported agent notification kinds', () => {
+  expect(
+    getNotificationEvent({
+      notificationEvent: {
+        kind: 'agent-error',
+        agentName: 'servicevault',
+      },
+    } as any),
+  ).toBeUndefined();
+});
+
 test('buildLiteralTemplateExpression should build literal template syntax', () => {
   expect(buildLiteralTemplateExpression('event.agentName')).toBe(`$\{event.agentName}`);
 });
@@ -1292,6 +1385,120 @@ test('renderSimpleBody should use dedicated template for agent reconnect events'
   expect(trigger.renderSimpleBody(container)).toBe('Agent servicevault reconnected');
 });
 
+test('renderSimpleTitle should use dedicated template for update-applied events', () => {
+  const container = {
+    id: 'container-servicevault',
+    name: 'servicevault',
+    watcher: 'local',
+    status: 'running',
+    image: {
+      id: 'container-servicevault',
+      registry: {
+        name: 'docker',
+        url: 'docker://local',
+      },
+      name: 'servicevault',
+      tag: {
+        value: '1.0.0',
+        semver: true,
+      },
+      digest: {
+        watch: false,
+      },
+      architecture: 'amd64',
+      os: 'linux',
+    },
+    updateAvailable: false,
+    updateKind: {
+      kind: 'tag',
+    },
+    notificationEvent: {
+      kind: 'update-applied',
+    },
+  } as any;
+
+  expect(trigger.renderSimpleTitle(container)).toBe('Container servicevault updated successfully');
+});
+
+test('renderSimpleBody should use dedicated template for update-failed events', () => {
+  const container = {
+    id: 'container-servicevault',
+    name: 'servicevault',
+    watcher: 'local',
+    status: 'running',
+    image: {
+      id: 'container-servicevault',
+      registry: {
+        name: 'docker',
+        url: 'docker://local',
+      },
+      name: 'servicevault',
+      tag: {
+        value: '1.0.0',
+        semver: true,
+      },
+      digest: {
+        watch: false,
+      },
+      architecture: 'amd64',
+      os: 'linux',
+    },
+    updateAvailable: false,
+    updateKind: {
+      kind: 'tag',
+    },
+    notificationEvent: {
+      kind: 'update-failed',
+      error: 'pull access denied',
+    },
+  } as any;
+
+  expect(trigger.renderSimpleBody(container)).toBe(
+    'Container servicevault update failed: pull access denied',
+  );
+});
+
+test('renderSimpleBody should use dedicated template for security-alert events', () => {
+  const container = {
+    id: 'container-servicevault',
+    name: 'servicevault',
+    watcher: 'local',
+    status: 'running',
+    image: {
+      id: 'container-servicevault',
+      registry: {
+        name: 'docker',
+        url: 'docker://local',
+      },
+      name: 'servicevault',
+      tag: {
+        value: '1.0.0',
+        semver: true,
+      },
+      digest: {
+        watch: false,
+      },
+      architecture: 'amd64',
+      os: 'linux',
+    },
+    updateAvailable: true,
+    updateKind: {
+      kind: 'tag',
+      localValue: '1.0.0',
+      remoteValue: '1.1.0',
+    },
+    notificationEvent: {
+      kind: 'security-alert',
+      blockingCount: 2,
+      details: 'critical=1 high=1',
+    },
+  } as any;
+
+  expect(trigger.renderSimpleBody(container)).toBe(
+    'Security alert for container servicevault (2 blocking vulnerabilities)\ncritical=1 high=1',
+  );
+});
+
 test('renderSimpleTitle should fall back to the standard template for unsupported notification events', () => {
   const container = {
     id: 'container-servicevault',
@@ -1320,8 +1527,7 @@ test('renderSimpleTitle should fall back to the standard template for unsupporte
       kind: 'tag',
     },
     notificationEvent: {
-      kind: 'security-alert',
-      agentName: 'servicevault',
+      kind: 'unsupported-kind',
     },
   } as any;
 
@@ -1438,6 +1644,86 @@ test('renderBatchTitle should replace placeholders when called', async () => {
       },
     ]),
   ).toEqual('1 updates available');
+});
+
+test('renderBatchTitle should use dedicated template for update-applied events', async () => {
+  expect(
+    trigger.renderBatchTitle([
+      {
+        name: 'container-name',
+        updateKind: {
+          kind: 'tag',
+        },
+        notificationEvent: {
+          kind: 'update-applied',
+        },
+      },
+      {
+        name: 'container-name-2',
+        updateKind: {
+          kind: 'tag',
+        },
+        notificationEvent: {
+          kind: 'update-applied',
+        },
+      },
+    ] as any),
+  ).toEqual('2 updates applied');
+});
+
+test('renderBatchTitle should use dedicated template for update-failed events', async () => {
+  expect(
+    trigger.renderBatchTitle([
+      {
+        name: 'container-name',
+        updateKind: {
+          kind: 'tag',
+        },
+        notificationEvent: {
+          kind: 'update-failed',
+        },
+      },
+      {
+        name: 'container-name-2',
+        updateKind: {
+          kind: 'tag',
+        },
+        notificationEvent: {
+          kind: 'update-failed',
+        },
+      },
+    ] as any),
+  ).toEqual('2 updates failed');
+});
+
+test('renderBatchTitle should use dedicated template for security-alert events', async () => {
+  expect(
+    trigger.renderBatchTitle([
+      {
+        name: 'container-name',
+        updateKind: {
+          kind: 'tag',
+        },
+        notificationEvent: {
+          kind: 'security-alert',
+        },
+      },
+      {
+        name: 'container-name-2',
+        updateKind: {
+          kind: 'tag',
+        },
+        notificationEvent: {
+          kind: 'security-alert',
+        },
+      },
+    ] as any),
+  ).toEqual('2 security alerts');
+});
+
+test('renderBatchTitle should return fallback template result when containers is empty', () => {
+  const result = trigger.renderBatchTitle([]);
+  expect(result).toBe('0 updates available');
 });
 
 test('renderBatchBody should replace placeholders when called', async () => {
@@ -1648,6 +1934,10 @@ test('handleContainerReport should skip when update-available rule suppresses th
   notificationStore.isTriggerEnabledForRule.mockImplementation(
     (ruleId) => ruleId !== 'update-available',
   );
+  notificationStore.getTriggerDispatchDecisionForRule.mockReturnValue({
+    enabled: false,
+    reason: 'excluded-from-allow-list',
+  });
   const spy = vi.spyOn(trigger, 'trigger');
 
   await trigger.handleContainerReport({
@@ -1663,6 +1953,91 @@ test('handleContainerReport should skip when update-available rule suppresses th
   expect(spy).not.toHaveBeenCalled();
 });
 
+test('handleContainerReportDigest should warn once when update-available routing excludes a digest trigger', async () => {
+  await trigger.register('trigger', 'smtp', 'gmail', {
+    ...configurationValid,
+    mode: 'digest',
+  });
+  notificationStore.getTriggerDispatchDecisionForRule.mockReturnValue({
+    enabled: false,
+    reason: 'excluded-from-allow-list',
+  });
+  const warnSpy = vi.spyOn(log, 'warn');
+  const report = {
+    changed: true,
+    container: {
+      watcher: 'local',
+      name: 'container1',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', semverDiff: 'major' },
+    },
+  };
+
+  await trigger.handleContainerReportDigest(report);
+  await trigger.handleContainerReportDigest(report);
+
+  expect(trigger.digestBuffer.size).toBe(0);
+  expect(warnSpy).toHaveBeenCalledTimes(1);
+  expect(warnSpy).toHaveBeenCalledWith(
+    expect.stringContaining('no update-available events will be buffered'),
+  );
+  expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('smtp.gmail'));
+});
+
+test('handleContainerReportDigest should silently return when dispatch reason is unrecognised and trigger is suppressed', async () => {
+  await trigger.register('trigger', 'smtp', 'gmail', {
+    ...configurationValid,
+    mode: 'digest',
+  });
+  notificationStore.getTriggerDispatchDecisionForRule.mockReturnValue({
+    enabled: false,
+    reason: 'empty-trigger-list',
+  });
+  const warnSpy = vi.spyOn(log, 'warn');
+  const report = {
+    changed: true,
+    container: {
+      watcher: 'local',
+      name: 'container1',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', semverDiff: 'major' },
+    },
+  };
+
+  await trigger.handleContainerReportDigest(report);
+
+  expect(trigger.digestBuffer.size).toBe(0);
+  expect(warnSpy).not.toHaveBeenCalled();
+});
+
+test('deregisterComponent should clear digest warning suppression state', async () => {
+  await trigger.register('trigger', 'smtp', 'gmail', {
+    ...configurationValid,
+    mode: 'digest',
+  });
+  notificationStore.getTriggerDispatchDecisionForRule.mockReturnValue({
+    enabled: false,
+    reason: 'excluded-from-allow-list',
+  });
+  const warnSpy = vi.spyOn(log, 'warn');
+  const report = {
+    changed: true,
+    container: {
+      watcher: 'local',
+      name: 'container1',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', semverDiff: 'major' },
+    },
+  };
+
+  await trigger.handleContainerReportDigest(report);
+  await trigger.handleContainerReportDigest(report);
+  await trigger.deregisterComponent();
+  await trigger.handleContainerReportDigest(report);
+
+  expect(warnSpy).toHaveBeenCalledTimes(2);
+});
+
 test('handleContainerUpdateAppliedEvent should run trigger when rule allows and container is found', async () => {
   const container = {
     watcher: 'local',
@@ -1675,7 +2050,43 @@ test('handleContainerUpdateAppliedEvent should run trigger when rule allows and 
 
   await trigger.handleContainerUpdateAppliedEvent('local_container1');
 
-  expect(triggerSpy).toHaveBeenCalledWith(container);
+  expect(triggerSpy).toHaveBeenCalledWith(
+    expect.objectContaining({
+      name: 'container1',
+      notificationEvent: {
+        kind: 'update-applied',
+      },
+    }),
+  );
+});
+
+test('handleContainerUpdateAppliedEvent should resolve containers from raw store data', async () => {
+  const container = {
+    watcher: 'local',
+    name: 'container1',
+    updateAvailable: true,
+    updateKind: { kind: 'tag', semverDiff: 'major' },
+    env: {
+      SECRET_TOKEN: 'raw-secret',
+    },
+  };
+  storeContainer.getContainersRaw.mockReturnValue([container]);
+  const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+  await trigger.handleContainerUpdateAppliedEvent('local_container1');
+
+  expect(storeContainer.getContainersRaw).toHaveBeenCalledWith();
+  expect(storeContainer.getContainers).not.toHaveBeenCalled();
+  expect(triggerSpy).toHaveBeenCalledWith(
+    expect.objectContaining({
+      env: expect.objectContaining({
+        SECRET_TOKEN: 'raw-secret',
+      }),
+      notificationEvent: {
+        kind: 'update-applied',
+      },
+    }),
+  );
 });
 
 test('handleContainerUpdateAppliedEvent should skip when rule disables trigger dispatch', async () => {
@@ -1756,7 +2167,15 @@ test('handleContainerUpdateFailedEvent should run batch trigger when configured 
 
     await vi.runOnlyPendingTimersAsync();
 
-    expect(triggerBatchSpy).toHaveBeenCalledWith([container]);
+    expect(triggerBatchSpy).toHaveBeenCalledWith([
+      expect.objectContaining({
+        name: 'container1',
+        notificationEvent: {
+          kind: 'update-failed',
+          error: 'boom',
+        },
+      }),
+    ]);
   } finally {
     vi.useRealTimers();
   }
@@ -1805,6 +2224,18 @@ test('handleContainerUpdateFailedEvent should skip when mustTrigger returns fals
   expect(triggerSpy).not.toHaveBeenCalled();
 });
 
+test('handleContainerUpdateFailedEvent should not trigger when container is not found in store', async () => {
+  storeContainer.getContainers.mockReturnValue([]);
+  const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+  await trigger.handleContainerUpdateFailedEvent({
+    containerName: 'local_nonexistent',
+    error: 'boom',
+  });
+
+  expect(triggerSpy).not.toHaveBeenCalled();
+});
+
 test('handleSecurityAlertEvent should dispatch using payload container when provided', async () => {
   const container = {
     watcher: 'local',
@@ -1820,7 +2251,15 @@ test('handleSecurityAlertEvent should dispatch using payload container when prov
     container,
   });
 
-  expect(triggerSpy).toHaveBeenCalledWith(container);
+  expect(triggerSpy).toHaveBeenCalledWith(
+    expect.objectContaining({
+      name: 'container1',
+      notificationEvent: {
+        kind: 'security-alert',
+        details: 'high=1',
+      },
+    }),
+  );
   expect(storeContainer.getContainers).not.toHaveBeenCalled();
 });
 
@@ -1839,7 +2278,15 @@ test('handleSecurityAlertEvent should resolve container from store when payload 
     details: 'high=1',
   });
 
-  expect(triggerSpy).toHaveBeenCalledWith(container);
+  expect(triggerSpy).toHaveBeenCalledWith(
+    expect.objectContaining({
+      name: 'container1',
+      notificationEvent: {
+        kind: 'security-alert',
+        details: 'high=1',
+      },
+    }),
+  );
 });
 
 test('handleSecurityAlertEvent should catch trigger execution errors', async () => {
@@ -1861,6 +2308,19 @@ test('handleSecurityAlertEvent should catch trigger execution errors', async () 
 
   expect(warnSpy).toHaveBeenCalledWith('Error handling security-alert event (dispatch failed)');
   expect(debugSpy).toHaveBeenCalledWith(expect.any(Error));
+});
+
+test('handleSecurityAlertEvent should not trigger when neither payload container nor store container is found', async () => {
+  storeContainer.getContainers.mockReturnValue([]);
+  const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+  await trigger.handleSecurityAlertEvent({
+    containerName: 'local_nonexistent',
+    details: 'high=1',
+    container: undefined,
+  });
+
+  expect(triggerSpy).not.toHaveBeenCalled();
 });
 
 test('handleContainerUpdateAppliedEvent should aggregate nearby update-applied events in batch mode', async () => {
@@ -1893,7 +2353,20 @@ test('handleContainerUpdateAppliedEvent should aggregate nearby update-applied e
     await vi.runOnlyPendingTimersAsync();
 
     expect(triggerBatchSpy).toHaveBeenCalledTimes(1);
-    expect(triggerBatchSpy).toHaveBeenCalledWith(containers);
+    expect(triggerBatchSpy).toHaveBeenCalledWith([
+      expect.objectContaining({
+        name: 'container1',
+        notificationEvent: {
+          kind: 'update-applied',
+        },
+      }),
+      expect.objectContaining({
+        name: 'container2',
+        notificationEvent: {
+          kind: 'update-applied',
+        },
+      }),
+    ]);
   } finally {
     vi.useRealTimers();
   }
@@ -1936,7 +2409,22 @@ test('handleSecurityAlertEvent should aggregate nearby security alerts in batch 
     await vi.runOnlyPendingTimersAsync();
 
     expect(triggerBatchSpy).toHaveBeenCalledTimes(1);
-    expect(triggerBatchSpy).toHaveBeenCalledWith(containers);
+    expect(triggerBatchSpy).toHaveBeenCalledWith([
+      expect.objectContaining({
+        name: 'container1',
+        notificationEvent: {
+          kind: 'security-alert',
+          details: 'high=1',
+        },
+      }),
+      expect.objectContaining({
+        name: 'container2',
+        notificationEvent: {
+          kind: 'security-alert',
+          details: 'high=2',
+        },
+      }),
+    ]);
   } finally {
     vi.useRealTimers();
   }
@@ -2072,13 +2560,24 @@ test('dispatchContainerForEvent should fallback to all threshold when threshold 
 
   await trigger.handleContainerUpdateAppliedEvent('local_container1');
 
-  expect(triggerSpy).toHaveBeenCalledWith(container);
+  expect(triggerSpy).toHaveBeenCalledWith(
+    expect.objectContaining({
+      name: 'container1',
+      notificationEvent: {
+        kind: 'update-applied',
+      },
+    }),
+  );
 });
 
 test('handleContainerReports should skip when update-available rule disables trigger dispatch', async () => {
   notificationStore.isTriggerEnabledForRule.mockImplementation(
     (ruleId) => ruleId !== 'update-available',
   );
+  notificationStore.getTriggerDispatchDecisionForRule.mockReturnValue({
+    enabled: false,
+    reason: 'excluded-from-allow-list',
+  });
   const spy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
 
   await trigger.handleContainerReports([
@@ -2666,6 +3165,11 @@ describe('digest mode', () => {
     });
     trigger.init();
     notificationStore.isTriggerEnabledForRule.mockReturnValue(false);
+    notificationStore.getTriggerDispatchDecisionForRule.mockReturnValue({
+      enabled: false,
+      reason: 'rule-disabled',
+    });
+    const warnSpy = vi.spyOn(log, 'warn');
 
     const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
     await trigger.handleContainerReportDigest({
@@ -2681,6 +3185,10 @@ describe('digest mode', () => {
     await trigger.flushDigestBuffer();
 
     expect(triggerBatchSpy).not.toHaveBeenCalled();
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(warnSpy).toHaveBeenCalledWith(
+      'Digest mode is configured for test.digest-trigger, but the update-available notification rule is disabled; no update-available events will be buffered until the rule is enabled.',
+    );
     triggerBatchSpy.mockRestore();
   });
 
@@ -2704,6 +3212,101 @@ describe('digest mode', () => {
     });
     await trigger.flushDigestBuffer();
 
+    expect(triggerBatchSpy).not.toHaveBeenCalled();
+    triggerBatchSpy.mockRestore();
+  });
+
+  test('handleContainerReportDigest should evict a buffered container when a later report clears updateAvailable', async () => {
+    await trigger.register('trigger', 'test', 'digest-trigger', {
+      ...configurationValid,
+      mode: 'digest',
+    });
+    trigger.init();
+
+    await trigger.handleContainerReportDigest({
+      container: {
+        id: 'c1',
+        name: 'app',
+        watcher: 'test',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      },
+      changed: true,
+    });
+
+    await trigger.handleContainerReportDigest({
+      container: {
+        id: 'c1',
+        name: 'app',
+        watcher: 'test',
+        updateAvailable: false,
+        updateKind: { kind: 'tag', localValue: '2.0', remoteValue: '2.0' },
+      },
+      changed: true,
+    });
+
+    const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+    await trigger.flushDigestBuffer();
+
+    expect(trigger.digestBuffer.size).toBe(0);
+    expect(triggerBatchSpy).not.toHaveBeenCalled();
+    triggerBatchSpy.mockRestore();
+  });
+
+  test('handleContainerReportDigest should not buffer when changed is false and once is true', async () => {
+    await trigger.register('trigger', 'test', 'digest-trigger', {
+      ...configurationValid,
+      mode: 'digest',
+    });
+    trigger.init();
+
+    await trigger.handleContainerReportDigest({
+      container: {
+        id: 'c1',
+        name: 'app',
+        watcher: 'test',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      },
+      changed: false,
+    });
+
+    expect(trigger.digestBuffer.size).toBe(0);
+  });
+
+  test('handleContainerReportDigest should canonicalize recreate aliases before negative eviction', async () => {
+    await trigger.register('trigger', 'test', 'digest-trigger', {
+      ...configurationValid,
+      mode: 'digest',
+    });
+    trigger.init();
+
+    await trigger.handleContainerReportDigest({
+      container: {
+        id: 'c1',
+        name: '0123456789ab_app',
+        watcher: 'test',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      },
+      changed: true,
+    });
+
+    await trigger.handleContainerReportDigest({
+      container: {
+        id: 'c1',
+        name: 'app',
+        watcher: 'test',
+        updateAvailable: false,
+        updateKind: { kind: 'tag', localValue: '2.0', remoteValue: '2.0' },
+      },
+      changed: true,
+    });
+
+    const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+    await trigger.flushDigestBuffer();
+
+    expect(trigger.digestBuffer.size).toBe(0);
     expect(triggerBatchSpy).not.toHaveBeenCalled();
     triggerBatchSpy.mockRestore();
   });
@@ -2852,6 +3455,184 @@ describe('digest mode', () => {
     await trigger.flushDigestBuffer();
     await trigger.flushDigestBuffer(); // second flush should be no-op
     expect(triggerBatchSpy).toHaveBeenCalledTimes(1);
+    triggerBatchSpy.mockRestore();
+  });
+
+  test('flushDigestBuffer should skip buffered containers that no longer have an update in store state', async () => {
+    await trigger.register('trigger', 'test', 'digest-trigger', {
+      ...configurationValid,
+      mode: 'digest',
+    });
+    trigger.init();
+
+    await trigger.handleContainerReportDigest({
+      container: {
+        id: 'c1',
+        name: 'app',
+        watcher: 'test',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      },
+      changed: true,
+    });
+
+    storeContainer.getContainers.mockReturnValue([
+      {
+        id: 'c1',
+        name: 'app',
+        watcher: 'test',
+        updateAvailable: false,
+        updateKind: { kind: 'tag', localValue: '2.0', remoteValue: '2.0' },
+      },
+    ]);
+
+    const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+    await trigger.flushDigestBuffer();
+
+    expect(trigger.digestBuffer.size).toBe(0);
+    expect(triggerBatchSpy).not.toHaveBeenCalled();
+    triggerBatchSpy.mockRestore();
+  });
+
+  test('flushDigestBuffer should not delete replacement when buffer entry is swapped during revalidation', async () => {
+    await trigger.register('trigger', 'test', 'digest-trigger', {
+      ...configurationValid,
+      mode: 'digest',
+    });
+    trigger.init();
+
+    // Buffer the original container for 'test_app'
+    await trigger.handleContainerReportDigest({
+      container: {
+        id: 'c1',
+        name: 'app',
+        watcher: 'test',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      },
+      changed: true,
+    });
+
+    const replacement = {
+      id: 'c3',
+      name: 'app',
+      watcher: 'test',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', localValue: '2.0', remoteValue: '3.0' },
+    };
+
+    // The store returns updateAvailable=false so the revalidation falls through
+    // to the identity check at line 1035. Use the getContainers mock to inject a
+    // replacement into the buffer AFTER the snapshot is taken (the snapshot uses
+    // Array.from, which runs before getContainers is called for the store lookup).
+    storeContainer.getContainers.mockImplementation(() => {
+      // Replace the buffer entry mid-revalidation — simulates a concurrent report
+      trigger.digestBuffer.set('test_app', replacement);
+      return [
+        {
+          id: 'c1',
+          name: 'app',
+          watcher: 'test',
+          updateAvailable: false,
+          updateKind: { kind: 'tag', localValue: '2.0', remoteValue: '2.0' },
+        },
+      ];
+    });
+
+    const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+    await trigger.flushDigestBuffer();
+
+    // The replacement should NOT have been deleted — the identity check prevents it
+    expect(trigger.digestBuffer.size).toBe(1);
+    expect(trigger.digestBuffer.get('test_app')).toBe(replacement);
+    // No dispatch because the store container has updateAvailable=false
+    expect(triggerBatchSpy).not.toHaveBeenCalled();
+    triggerBatchSpy.mockRestore();
+  });
+
+  test('flushDigestBuffer should use current store container when it still has an update', async () => {
+    await trigger.register('trigger', 'test', 'digest-trigger', {
+      ...configurationValid,
+      mode: 'digest',
+    });
+    trigger.init();
+
+    await trigger.handleContainerReportDigest({
+      container: {
+        id: 'c1',
+        name: 'app',
+        watcher: 'test',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      },
+      changed: true,
+    });
+
+    const storeContainer2 = {
+      id: 'c1',
+      name: 'app',
+      watcher: 'test',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '3.0' },
+    };
+    storeContainer.getContainers.mockReturnValue([storeContainer2]);
+
+    const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+    await trigger.flushDigestBuffer();
+
+    expect(triggerBatchSpy).toHaveBeenCalledWith([
+      expect.objectContaining({
+        name: 'app',
+        updateKind: expect.objectContaining({ remoteValue: '3.0' }),
+      }),
+    ]);
+    expect(trigger.digestBuffer.size).toBe(0);
+    triggerBatchSpy.mockRestore();
+  });
+
+  test('flushDigestBuffer should revalidate against raw store containers without redaction', async () => {
+    await trigger.register('trigger', 'test', 'digest-trigger', {
+      ...configurationValid,
+      mode: 'digest',
+    });
+    trigger.init();
+
+    await trigger.handleContainerReportDigest({
+      container: {
+        id: 'c1',
+        name: 'app',
+        watcher: 'test',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      },
+      changed: true,
+    });
+
+    storeContainer.getContainersRaw.mockReturnValue([
+      {
+        id: 'c1',
+        name: 'app',
+        watcher: 'test',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '3.0' },
+        env: {
+          SECRET_TOKEN: 'raw-secret',
+        },
+      },
+    ]);
+
+    const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+    await trigger.flushDigestBuffer();
+
+    expect(storeContainer.getContainersRaw).toHaveBeenCalledWith();
+    expect(storeContainer.getContainers).not.toHaveBeenCalled();
+    expect(triggerBatchSpy).toHaveBeenCalledWith([
+      expect.objectContaining({
+        env: expect.objectContaining({
+          SECRET_TOKEN: 'raw-secret',
+        }),
+      }),
+    ]);
     triggerBatchSpy.mockRestore();
   });
 
@@ -3354,7 +4135,20 @@ describe('batch+digest mode', () => {
       await vi.runOnlyPendingTimersAsync();
 
       expect(triggerBatchSpy).toHaveBeenCalledTimes(1);
-      expect(triggerBatchSpy).toHaveBeenCalledWith(containers);
+      expect(triggerBatchSpy).toHaveBeenCalledWith([
+        expect.objectContaining({
+          name: 'container1',
+          notificationEvent: {
+            kind: 'update-applied',
+          },
+        }),
+        expect.objectContaining({
+          name: 'container2',
+          notificationEvent: {
+            kind: 'update-applied',
+          },
+        }),
+      ]);
     } finally {
       vi.useRealTimers();
     }

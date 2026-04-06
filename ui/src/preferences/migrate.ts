@@ -2,6 +2,9 @@ import { deepMerge } from './deepMerge';
 import {
   CONTAINER_TABLE_COLUMN_KEYS,
   CONTAINER_TABLE_REQUIRED_COLUMN_KEYS,
+  CURRENT_SCHEMA_VERSION,
+  DASHBOARD_LAYOUT_BREAKPOINTS,
+  type DashboardLayoutBreakpoint,
   DEFAULTS,
   type PreferencesSchema,
 } from './schema';
@@ -30,12 +33,72 @@ function deleteIfInvalid(obj: Record<string, unknown>, key: string, allow: Set<s
   }
 }
 
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return v !== null && typeof v === 'object' && !Array.isArray(v);
+}
+
+function isLegacySingleColumnGridLayout(layout: unknown[]): boolean {
+  return (
+    layout.length > 0 &&
+    layout.every((item) => {
+      if (!isRecord(item)) {
+        return false;
+      }
+      return item.x === 0 && item.w === 1;
+    })
+  );
+}
+
+function normalizeDashboardLayouts(data: Record<string, unknown>): void {
+  const dashboard = data.dashboard;
+  if (!isRecord(dashboard)) {
+    return;
+  }
+
+  if ('gridLayouts' in dashboard) {
+    if (!isRecord(dashboard.gridLayouts)) {
+      delete dashboard.gridLayouts;
+    } else {
+      for (const key of Object.keys(dashboard.gridLayouts)) {
+        if (
+          !(DASHBOARD_LAYOUT_BREAKPOINTS as readonly string[]).includes(key) ||
+          !Array.isArray(dashboard.gridLayouts[key])
+        ) {
+          delete dashboard.gridLayouts[key];
+        }
+      }
+    }
+  }
+
+  if (!Array.isArray(dashboard.gridLayout)) {
+    if ('gridLayout' in dashboard) {
+      delete dashboard.gridLayout;
+    }
+    return;
+  }
+
+  const responsiveLayouts = (
+    isRecord(dashboard.gridLayouts) ? dashboard.gridLayouts : {}
+  ) as Record<string, unknown>;
+  if (Object.keys(responsiveLayouts).length > 0) {
+    dashboard.gridLayouts = responsiveLayouts;
+    return;
+  }
+
+  const breakpoint: DashboardLayoutBreakpoint = isLegacySingleColumnGridLayout(dashboard.gridLayout)
+    ? 'sm'
+    : 'lg';
+  dashboard.gridLayouts = { [breakpoint]: dashboard.gridLayout };
+}
+
 /**
  * Remove invalid enum values from persisted preferences so that
  * deepMerge preserves defaults for those fields instead of
  * overwriting them with stale/renamed values (e.g. 'drydock' theme).
  */
 function sanitize(data: Record<string, unknown>): void {
+  normalizeDashboardLayouts(data);
+
   const theme = data.theme;
   if (theme && typeof theme === 'object') {
     const t = theme as Record<string, unknown>;
@@ -82,6 +145,21 @@ function sanitize(data: Record<string, unknown>): void {
             visible.has(key) ||
             (CONTAINER_TABLE_REQUIRED_COLUMN_KEYS as readonly string[]).includes(key),
         );
+      }
+    }
+  }
+
+  const views = data.views;
+  if (views && typeof views === 'object') {
+    const v = views as Record<string, unknown>;
+    if ('logs' in v) {
+      if (!isRecord(v.logs)) {
+        delete v.logs;
+      } else {
+        const logs = v.logs as Record<string, unknown>;
+        if ('newestFirst' in logs && !isBoolean(logs.newestFirst)) {
+          delete logs.newestFirst;
+        }
       }
     }
   }
@@ -430,7 +508,7 @@ function persistMigratedPreferences(result: PreferencesSchema): void {
 }
 
 export function migrateFromLegacyKeys(): PreferencesSchema {
-  const prefs: Record<string, unknown> = { schemaVersion: 1 };
+  const prefs: Record<string, unknown> = { schemaVersion: CURRENT_SCHEMA_VERSION };
   const theme = migrateThemePreference();
   if (theme) {
     prefs.theme = theme;
@@ -479,9 +557,20 @@ export function migrateFromLegacyKeys(): PreferencesSchema {
 
 /** Run schema version migrations on existing preferences data. */
 export function migrate(data: Record<string, unknown>): PreferencesSchema {
-  // Future migrations:
-  // if (data.schemaVersion === 1) { data = migrateV1toV2(data); }
-  // if (data.schemaVersion === 2) { data = migrateV2toV3(data); }
+  if (data.schemaVersion === 1) {
+    data = {
+      ...data,
+      schemaVersion: CURRENT_SCHEMA_VERSION,
+      views: {
+        ...(isRecord(data.views) ? data.views : {}),
+        logs: {
+          newestFirst: DEFAULTS.views.logs.newestFirst,
+          ...(isRecord(data.views) && isRecord(data.views.logs) ? data.views.logs : {}),
+        },
+      },
+    };
+  }
+
   sanitize(data);
   return mergeDefaults(data);
 }

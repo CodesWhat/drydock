@@ -1,3 +1,4 @@
+import type { Vulnerability } from '@/views/security/securityViewTypes';
 import {
   buildSecurityEmptyState,
   chooseLatestTimestamp,
@@ -9,7 +10,10 @@ import {
   severityColor,
   severityIcon,
   statusBadgeTone,
+  toSafeExternalUrl,
   toSafeFileName,
+  vulnReportToCsv,
+  vulnReportToJson,
 } from '@/views/security/securityViewUtils';
 
 describe('securityViewUtils', () => {
@@ -189,6 +193,160 @@ describe('securityViewUtils', () => {
 
     it('sanitizes filenames for sbom downloads', () => {
       expect(toSafeFileName('ghcr.io/org/image:1.2.3')).toBe('ghcr.io-org-image-1.2.3');
+    });
+  });
+
+  describe('toSafeExternalUrl', () => {
+    it('returns null for non-string values', () => {
+      expect(toSafeExternalUrl(null)).toBeNull();
+      expect(toSafeExternalUrl(undefined)).toBeNull();
+    });
+
+    it('returns null for empty or whitespace-only strings', () => {
+      expect(toSafeExternalUrl('')).toBeNull();
+      expect(toSafeExternalUrl('   ')).toBeNull();
+    });
+
+    it('returns the URL for http and https protocols', () => {
+      expect(toSafeExternalUrl('https://nvd.nist.gov/vuln/detail/CVE-2026-1234')).toBe(
+        'https://nvd.nist.gov/vuln/detail/CVE-2026-1234',
+      );
+      expect(toSafeExternalUrl('http://example.com')).toBe('http://example.com');
+    });
+
+    it('returns null for disallowed protocols', () => {
+      expect(toSafeExternalUrl('javascript:alert(1)')).toBeNull();
+      expect(toSafeExternalUrl('ftp://example.com')).toBeNull();
+      expect(toSafeExternalUrl('data:text/html,<h1>hi</h1>')).toBeNull();
+    });
+
+    it('returns null for invalid URLs', () => {
+      expect(toSafeExternalUrl('not-a-url')).toBeNull();
+    });
+  });
+
+  describe('vulnReportToCsv', () => {
+    const baseVuln: Vulnerability = {
+      id: 'CVE-2026-1234',
+      severity: 'HIGH',
+      package: 'openssl',
+      version: '1.1.1',
+      fixedIn: '1.1.2',
+      title: 'Buffer overflow',
+      target: 'usr/lib/libssl.so',
+      primaryUrl: 'https://nvd.nist.gov/vuln/detail/CVE-2026-1234',
+      image: 'nginx:latest',
+      publishedDate: '2026-01-15',
+    };
+
+    it('returns only header row for empty array', () => {
+      expect(vulnReportToCsv([])).toBe('ID,Severity,Package,Version,Fixed In,Title,Target,URL');
+    });
+
+    it('formats a single vulnerability as CSV', () => {
+      const csv = vulnReportToCsv([baseVuln]);
+      const lines = csv.split('\n');
+      expect(lines).toHaveLength(2);
+      expect(lines[1]).toBe(
+        'CVE-2026-1234,HIGH,openssl,1.1.1,1.1.2,Buffer overflow,usr/lib/libssl.so,https://nvd.nist.gov/vuln/detail/CVE-2026-1234',
+      );
+    });
+
+    it('handles null and undefined optional fields', () => {
+      const vuln: Vulnerability = {
+        ...baseVuln,
+        fixedIn: null,
+        title: undefined,
+        target: undefined,
+        primaryUrl: undefined,
+      };
+      const csv = vulnReportToCsv([vuln]);
+      const lines = csv.split('\n');
+      expect(lines[1]).toBe('CVE-2026-1234,HIGH,openssl,1.1.1,,,,');
+    });
+
+    it('escapes fields containing commas and quotes', () => {
+      const vuln: Vulnerability = {
+        ...baseVuln,
+        title: 'Overflow, use-after-free',
+        package: 'lib"ssl"',
+      };
+      const csv = vulnReportToCsv([vuln]);
+      const lines = csv.split('\n');
+      expect(lines[1]).toContain('"Overflow, use-after-free"');
+      expect(lines[1]).toContain('"lib""ssl"""');
+    });
+
+    it('prefixes formula-leading fields to prevent spreadsheet execution', () => {
+      const vuln: Vulnerability = {
+        ...baseVuln,
+        id: '=CVE-2026-1234',
+        severity: '+HIGH',
+        package: '-openssl',
+        version: '@1.1.1',
+      };
+
+      const csv = vulnReportToCsv([vuln]);
+      const lines = csv.split('\n');
+
+      expect(lines[1]).toBe(
+        "'=CVE-2026-1234,'+HIGH,'-openssl,'@1.1.1,1.1.2,Buffer overflow,usr/lib/libssl.so,https://nvd.nist.gov/vuln/detail/CVE-2026-1234",
+      );
+    });
+  });
+
+  describe('vulnReportToJson', () => {
+    const baseVuln: Vulnerability = {
+      id: 'CVE-2026-5678',
+      severity: 'CRITICAL',
+      package: 'zlib',
+      version: '1.2.11',
+      fixedIn: '1.2.12',
+      title: 'Heap corruption',
+      target: 'usr/lib/libz.so',
+      primaryUrl: 'https://nvd.nist.gov/vuln/detail/CVE-2026-5678',
+      image: 'alpine:3.18',
+      publishedDate: '2026-02-20',
+    };
+
+    it('returns empty array json for no vulns', () => {
+      expect(vulnReportToJson([])).toBe('[]');
+    });
+
+    it('exports fields in the expected shape', () => {
+      const parsed = JSON.parse(vulnReportToJson([baseVuln]));
+      expect(parsed).toHaveLength(1);
+      expect(parsed[0]).toEqual({
+        id: 'CVE-2026-5678',
+        severity: 'CRITICAL',
+        package: 'zlib',
+        version: '1.2.11',
+        fixedIn: '1.2.12',
+        title: 'Heap corruption',
+        target: 'usr/lib/libz.so',
+        url: 'https://nvd.nist.gov/vuln/detail/CVE-2026-5678',
+      });
+    });
+
+    it('maps missing optional fields to null', () => {
+      const vuln: Vulnerability = {
+        ...baseVuln,
+        fixedIn: null,
+        title: undefined,
+        target: undefined,
+        primaryUrl: undefined,
+      };
+      const parsed = JSON.parse(vulnReportToJson([vuln]));
+      expect(parsed[0].fixedIn).toBeNull();
+      expect(parsed[0].title).toBeNull();
+      expect(parsed[0].target).toBeNull();
+      expect(parsed[0].url).toBeNull();
+    });
+
+    it('excludes image and publishedDate from export', () => {
+      const parsed = JSON.parse(vulnReportToJson([baseVuln]));
+      expect(parsed[0]).not.toHaveProperty('image');
+      expect(parsed[0]).not.toHaveProperty('publishedDate');
     });
   });
 });

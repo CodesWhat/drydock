@@ -27,6 +27,9 @@ vi.mock('../../event/index.js', () => ({
   registerContainerUpdated: vi.fn(),
   registerContainerRemoved: vi.fn(),
   registerWatcherSnapshot: vi.fn(),
+  registerContainerUpdateApplied: vi.fn(),
+  registerContainerUpdateFailed: vi.fn(),
+  registerSecurityAlert: vi.fn(),
 }));
 
 vi.mock('../../configuration/index.js', () => ({
@@ -207,6 +210,9 @@ describe('agent API event', () => {
       expect(event.registerContainerUpdated).toHaveBeenCalledWith(expect.any(Function));
       expect(event.registerContainerRemoved).toHaveBeenCalledWith(expect.any(Function));
       expect(event.registerWatcherSnapshot).toHaveBeenCalledWith(expect.any(Function));
+      expect(event.registerContainerUpdateApplied).toHaveBeenCalledWith(expect.any(Function));
+      expect(event.registerContainerUpdateFailed).toHaveBeenCalledWith(expect.any(Function));
+      expect(event.registerSecurityAlert).toHaveBeenCalledWith(expect.any(Function));
     });
 
     test('container-added handler should send SSE to connected clients', () => {
@@ -359,6 +365,77 @@ describe('agent API event', () => {
       expect(res.write).toHaveBeenCalled();
       const payload = res.write.mock.calls[0][0];
       expect(payload).toContain('dd:container-removed');
+    });
+
+    test('update-applied handler should send SSE to connected clients', () => {
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+      eventApi.initEvents();
+
+      const updateAppliedHandler = event.registerContainerUpdateApplied.mock.calls[0][0];
+      updateAppliedHandler('local_nginx');
+
+      expect(res.write).toHaveBeenCalled();
+      const payload = res.write.mock.calls[0][0];
+      expect(payload).toContain('dd:update-applied');
+      expect(payload).toContain('"local_nginx"');
+    });
+
+    test('update-failed handler should send SSE to connected clients', () => {
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+      eventApi.initEvents();
+
+      const updateFailedHandler = event.registerContainerUpdateFailed.mock.calls[0][0];
+      updateFailedHandler({
+        containerName: 'local_nginx',
+        error: 'compose pull failed',
+      });
+
+      expect(res.write).toHaveBeenCalled();
+      const payload = res.write.mock.calls[0][0];
+      expect(payload).toContain('dd:update-failed');
+      expect(payload).toContain('"containerName":"local_nginx"');
+      expect(payload).toContain('"error":"compose pull failed"');
+    });
+
+    test('security-alert handler should omit container payload so controller resolves its own store state', () => {
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+      eventApi.initEvents();
+
+      const securityAlertHandler = event.registerSecurityAlert.mock.calls[0][0];
+      securityAlertHandler({
+        containerName: 'local_nginx',
+        details: '1 critical vulnerability',
+        status: 'blocked',
+        blockingCount: 1,
+        container: { id: 'c1', name: 'nginx' },
+      });
+
+      expect(res.write).toHaveBeenCalled();
+      const payload = res.write.mock.calls[0][0];
+      expect(payload).toContain('dd:security-alert');
+      expect(payload).toContain('"containerName":"local_nginx"');
+      expect(payload).toContain('"details":"1 critical vulnerability"');
+      expect(payload).toContain('"status":"blocked"');
+      expect(payload).toContain('"blockingCount":1');
+      expect(payload).not.toContain('"container"');
+    });
+
+    test('security-alert handler should tolerate non-object payloads', () => {
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+      eventApi.initEvents();
+
+      const securityAlertHandler = event.registerSecurityAlert.mock.calls[0][0];
+      securityAlertHandler(undefined);
+
+      expect(res.write).toHaveBeenCalled();
+      const payload = res.write.mock.calls[0][0];
+      expect(payload).toContain('dd:security-alert');
+      expect(payload).not.toContain('"containerName"');
+      expect(payload).not.toContain('"details"');
     });
 
     test('watcher-snapshot handler should send watcher identity and sanitized containers', () => {

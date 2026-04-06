@@ -7,8 +7,9 @@ const mockGetContainerSbom = vi.fn();
 const mockGetSecurityRuntime = vi.fn();
 const mockIsMobile = { value: false };
 const mockWindowNarrow = { value: false };
-const { mockComputeSecurityDelta } = vi.hoisted(() => ({
+const { mockComputeSecurityDelta, mockToSafeExternalUrl } = vi.hoisted(() => ({
   mockComputeSecurityDelta: vi.fn(),
+  mockToSafeExternalUrl: vi.fn(),
 }));
 
 vi.mock('@/services/container', () => ({
@@ -34,6 +35,19 @@ vi.mock('@/utils/container-mapper', async () => {
   return {
     ...actual,
     computeSecurityDelta: mockComputeSecurityDelta,
+  };
+});
+
+vi.mock('@/views/security/securityViewUtils', async () => {
+  const actual = await vi.importActual<typeof import('@/views/security/securityViewUtils')>(
+    '@/views/security/securityViewUtils',
+  );
+  return {
+    ...actual,
+    toSafeExternalUrl: (...args: Parameters<typeof actual.toSafeExternalUrl>) => {
+      mockToSafeExternalUrl(...args);
+      return actual.toSafeExternalUrl(...args);
+    },
   };
 });
 
@@ -465,6 +479,80 @@ describe('SecurityView', () => {
       expect(w.find('a[href="https://avd.aquasec.com/nvd/cve-2026-9999"]').exists()).toBe(true);
     });
 
+    it('computes safe vulnerability URLs once per vulnerability instead of per binding', async () => {
+      mockContainers([
+        makeContainer({
+          id: 'container-1',
+          displayName: 'nginx',
+          security: {
+            scan: {
+              vulnerabilities: [
+                {
+                  id: 'CVE-2026-9999',
+                  severity: 'CRITICAL',
+                  packageName: 'openssl',
+                  installedVersion: '3.0.0',
+                  fixedVersion: '3.0.10',
+                  title: 'OpenSSL buffer overflow',
+                  target: 'usr/lib/libcrypto.so',
+                  primaryUrl: 'https://avd.aquasec.com/nvd/cve-2026-9999',
+                },
+              ],
+            },
+          },
+        }),
+      ]);
+
+      const w = factory();
+      await vi.waitFor(() => expect(mockGetSecurityVulnerabilityOverview).toHaveBeenCalledOnce());
+      await flushPromises();
+
+      const vm = w.vm as any;
+      vm.openDetail(vm.filteredSummaries[0]);
+      await flushPromises();
+
+      expect(mockToSafeExternalUrl).toHaveBeenCalledTimes(1);
+      expect(mockToSafeExternalUrl).toHaveBeenCalledWith(
+        'https://avd.aquasec.com/nvd/cve-2026-9999',
+      );
+    });
+
+    it('does not render vulnerability links for disallowed URL protocols', async () => {
+      mockContainers([
+        makeContainer({
+          id: 'container-1',
+          displayName: 'nginx',
+          security: {
+            scan: {
+              vulnerabilities: [
+                {
+                  id: 'CVE-2026-9998',
+                  severity: 'HIGH',
+                  packageName: 'openssl',
+                  installedVersion: '3.0.0',
+                  fixedVersion: '3.0.10',
+                  title: 'Unsafe reference URL',
+                  primaryUrl: 'javascript:alert(1)',
+                },
+              ],
+            },
+          },
+        }),
+      ]);
+
+      const w = factory();
+      await vi.waitFor(() => expect(mockGetSecurityVulnerabilityOverview).toHaveBeenCalledOnce());
+      await flushPromises();
+
+      const vm = w.vm as any;
+      vm.openDetail(vm.filteredSummaries[0]);
+      await nextTick();
+
+      expect(w.text()).toContain('Unsafe reference URL');
+      expect(w.find('a[href="javascript:alert(1)"]').exists()).toBe(false);
+      expect(w.find('a').exists()).toBe(false);
+    });
+
     it('groups multiple containers into separate image summaries', async () => {
       mockContainers([
         makeContainer({ name: 'nginx', displayName: 'nginx' }),
@@ -548,8 +636,8 @@ describe('SecurityView', () => {
         expect(mockGetContainerSbom).toHaveBeenCalledWith('container-1', 'spdx-json');
       });
 
-      expect(w.text()).toContain('View SBOM');
-      expect(w.text()).toContain('Download SBOM');
+      expect(w.text()).toContain('Download Report');
+      expect(w.text()).toContain('Download');
     });
   });
 

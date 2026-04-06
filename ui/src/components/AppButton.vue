@@ -36,13 +36,23 @@ const sizeClasses: Record<ButtonSize, string> = {
 
 const variantClasses: Record<ButtonVariant, string> = {
   muted: 'dd-text-muted hover:dd-text hover:dd-bg-elevated',
-  outlined:
-    'dd-text-muted dd-border border hover:dd-text hover:dd-bg-elevated hover:dd-border-strong',
+  outlined: 'dd-bg-button dd-text hover:opacity-85',
   secondary: 'dd-text-secondary hover:dd-text hover:dd-bg-elevated',
   elevated: 'dd-bg-elevated dd-text hover:opacity-90',
   'text-muted': 'dd-text-muted hover:dd-text',
   'text-secondary': 'dd-text-secondary hover:dd-text',
   'link-secondary': 'text-drydock-secondary hover:underline',
+  plain: '',
+};
+
+const disabledVariantClasses: Record<ButtonVariant, string> = {
+  muted: 'dd-text-muted',
+  outlined: 'dd-bg-button dd-text',
+  secondary: 'dd-text-secondary',
+  elevated: 'dd-bg-elevated dd-text',
+  'text-muted': 'dd-text-muted',
+  'text-secondary': 'dd-text-secondary',
+  'link-secondary': 'text-drydock-secondary',
   plain: '',
 };
 
@@ -99,11 +109,16 @@ const resolvedTitle = computed(() => {
   return undefined;
 });
 
+const isDisabled = computed(() => {
+  const disabled = attrs.disabled;
+  return disabled === '' || disabled === true || disabled === 'true' || disabled === 'disabled';
+});
+
 const buttonClasses = computed(() => [
-  'dd-rounded transition-colors',
+  'dd-rounded transition-colors disabled:cursor-not-allowed disabled:opacity-60',
   sizeClasses[props.size],
   weightClasses[props.weight],
-  variantClasses[props.variant],
+  isDisabled.value ? disabledVariantClasses[props.variant] : variantClasses[props.variant],
 ]);
 </script>
 

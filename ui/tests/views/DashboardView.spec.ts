@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { flushPromises, type VueWrapper } from '@vue/test-utils';
 import DataTable from '@/components/DataTable.vue';
+import { useToast } from '@/composables/useToast';
 import type { Container } from '@/types/container';
 import DashboardView from '@/views/DashboardView.vue';
 import {
@@ -197,6 +198,10 @@ describe('DashboardView', () => {
     vi.clearAllMocks();
     mockRouterPush.mockClear();
     mockBuildDashboardContainerMetrics.mockClear();
+    const { toasts, dismissToast } = useToast();
+    for (const toast of [...toasts.value]) {
+      dismissToast(toast.id);
+    }
     localStorage.removeItem(PREFERENCES_STORAGE_KEY);
     const { resetPreferences } = await import('@/preferences/store');
     resetPreferences();
@@ -261,6 +266,21 @@ describe('DashboardView', () => {
 
       const widget = wrapper.find('[data-widget-id="recent-updates"]');
       expect(widget.attributes('style')).toContain('touch-action: pan-y');
+    });
+
+    it('caches widget breakpoint bounds instead of calling getWidgetBoundsForBreakpoint in each GridItem size prop', () => {
+      expect(dashboardViewSource).not.toContain(
+        ':min-w="getWidgetBoundsForBreakpoint(item.i as DashboardWidgetId, currentBreakpoint).minW"',
+      );
+      expect(dashboardViewSource).not.toContain(
+        ':min-h="getWidgetBoundsForBreakpoint(item.i as DashboardWidgetId, currentBreakpoint).minH"',
+      );
+      expect(dashboardViewSource).not.toContain(
+        ':max-w="getWidgetBoundsForBreakpoint(item.i as DashboardWidgetId, currentBreakpoint).maxW"',
+      );
+      expect(dashboardViewSource).not.toContain(
+        ':max-h="getWidgetBoundsForBreakpoint(item.i as DashboardWidgetId, currentBreakpoint).maxH"',
+      );
     });
 
     it('computes a positive auto-scroll delta near the dashboard bottom edge', () => {
@@ -642,6 +662,44 @@ describe('DashboardView', () => {
       const statCards = wrapper.findAll('.stat-card');
       const updatesCard = statCards.find((c) => c.text().includes('Updates Available'));
       expect(updatesCard?.text()).toContain('1');
+    });
+
+    it('hides pinned updates across dashboard update widgets when hidePinned preference is enabled', async () => {
+      const { flushPreferences, preferences } = await import('@/preferences/store');
+      preferences.containers.filters.hidePinned = true;
+      flushPreferences();
+
+      const wrapper = await mountDashboard([
+        makeContainer({
+          id: 'floating',
+          name: 'floating',
+          updateKind: 'major',
+          newTag: '2.0.0',
+          tagPrecision: 'floating',
+        }),
+        makeContainer({
+          id: 'pinned',
+          name: 'pinned',
+          updateKind: 'minor',
+          newTag: '1.2.4',
+          tagPrecision: 'specific',
+        }),
+      ]);
+
+      const statCards = wrapper.findAll('.stat-card');
+      const updatesCard = statCards.find((c) => c.text().includes('Updates Available'));
+      expect(updatesCard?.text()).toContain('1');
+      expect(updatesCard?.text()).not.toContain('2');
+
+      const recentUpdatesWidget = wrapper.find('[data-widget-id="recent-updates"]');
+      expect(recentUpdatesWidget.text()).toContain('floating');
+      expect(recentUpdatesWidget.text()).not.toContain('pinned');
+
+      const updateBreakdownWidget = wrapper.find('[data-widget-id="update-breakdown"]');
+      expect(updateBreakdownWidget.text()).toContain('1');
+      expect(updateBreakdownWidget.text()).toContain('Major');
+      expect(updateBreakdownWidget.text()).toContain('0');
+      expect(updateBreakdownWidget.text()).toContain('Minor');
     });
 
     it('computes security issues count from blocked and unsafe', async () => {
@@ -1528,6 +1586,29 @@ describe('DashboardView', () => {
       expect(updateError.text()).toContain('update exploded');
     });
 
+    it('shows a success toast when a single dashboard update starts successfully', async () => {
+      mockUpdateContainer.mockResolvedValueOnce({});
+      const wrapper = await mountDashboard(
+        [pendingContainer],
+        [],
+        {},
+        {
+          recentStatuses: { nginx: 'pending' },
+        },
+      );
+      const { useConfirmDialog } = await import('@/composables/useConfirmDialog');
+      const confirm = useConfirmDialog();
+      const { toasts } = useToast();
+
+      await wrapper.find('[data-test="dashboard-update-btn"]').trigger('click');
+      await confirm.accept();
+      await flushPromises();
+
+      expect(
+        toasts.value.some((toast) => toast.tone === 'success' && toast.title === 'Updated: nginx'),
+      ).toBe(true);
+    });
+
     it('refreshes immediately and removes a stale dashboard row when update reports no update available', async () => {
       mockUpdateContainer.mockRejectedValueOnce(
         new Error('No update available for this container'),
@@ -1562,6 +1643,39 @@ describe('DashboardView', () => {
       expect(wrapper.find('[data-widget-id="recent-updates"]').text()).toContain(
         'No updates available',
       );
+    });
+
+    it('shows an info toast when a dashboard update is already up to date', async () => {
+      mockUpdateContainer.mockRejectedValueOnce(
+        new Error('No update available for this container'),
+      );
+
+      const wrapper = await mountDashboard(
+        [pendingContainer],
+        [],
+        {},
+        {
+          recentStatuses: { nginx: 'pending' },
+        },
+      );
+      mockGetAllContainers.mockResolvedValueOnce([upToDateContainer]);
+      mockGetContainerRecentStatus.mockResolvedValueOnce({ statuses: {} });
+      const { mapApiContainers } = await import('@/utils/container-mapper');
+      (mapApiContainers as ReturnType<typeof vi.fn>).mockReturnValueOnce([upToDateContainer]);
+
+      const { useConfirmDialog } = await import('@/composables/useConfirmDialog');
+      const confirm = useConfirmDialog();
+      const { toasts } = useToast();
+
+      await wrapper.find('[data-test="dashboard-update-btn"]').trigger('click');
+      await confirm.accept();
+      await flushPromises();
+
+      expect(
+        toasts.value.some(
+          (toast) => toast.tone === 'info' && toast.title === 'Already up to date: nginx',
+        ),
+      ).toBe(true);
     });
 
     it('keeps a live dashboard row in Updating while the backend reports an in-progress operation', async () => {
@@ -1738,6 +1852,51 @@ describe('DashboardView', () => {
       await confirm.accept();
       await flushPromises();
       expect(wrapper.find('[data-test="dashboard-update-error"]').exists()).toBe(false);
+    });
+
+    it('shows a success toast with the number of containers started from dashboard update all', async () => {
+      const containers = [
+        makeContainer({
+          id: 'c-success-1',
+          name: 'nginx',
+          newTag: '1.1.0',
+          updateKind: 'minor',
+        }),
+        makeContainer({
+          id: 'c-success-2',
+          name: 'postgres',
+          image: 'postgres',
+          newTag: '16.1.0',
+          updateKind: 'minor',
+        }),
+      ];
+      mockUpdateContainer.mockResolvedValue({});
+
+      const wrapper = await mountDashboard(
+        containers,
+        [],
+        {},
+        {
+          recentStatuses: {
+            nginx: 'pending',
+            postgres: 'pending',
+          },
+        },
+      );
+      const updateAllBtn = wrapper.find('[data-test="dashboard-update-all-btn"]');
+      const { useConfirmDialog } = await import('@/composables/useConfirmDialog');
+      const confirm = useConfirmDialog();
+      const { toasts } = useToast();
+
+      await updateAllBtn.trigger('click');
+      await confirm.accept();
+      await flushPromises();
+
+      expect(
+        toasts.value.some(
+          (toast) => toast.tone === 'success' && toast.title === 'Updated 2 containers',
+        ),
+      ).toBe(true);
     });
   });
 });

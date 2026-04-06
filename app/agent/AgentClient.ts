@@ -3,11 +3,19 @@ import https from 'node:https';
 import { StringDecoder } from 'node:string_decoder';
 import axios, { type AxiosRequestConfig } from 'axios';
 import type { Logger } from 'pino';
+import type {
+  ContainerUpdateFailedEventPayload,
+  SecurityAlertEventPayload,
+  SecurityAlertSummary,
+} from '../event/index.js';
 import {
   emitAgentConnected,
   emitAgentDisconnected,
   emitContainerReport,
   emitContainerReports,
+  emitContainerUpdateApplied,
+  emitContainerUpdateFailed,
+  emitSecurityAlert,
 } from '../event/index.js';
 import logger from '../log/index.js';
 import { sanitizeLogParam } from '../log/sanitize.js';
@@ -75,6 +83,8 @@ interface RemoteTriggerErrorPayload {
   error?: unknown;
   details?: unknown;
 }
+
+const SECURITY_ALERT_SUMMARY_KEYS = ['unknown', 'low', 'medium', 'high', 'critical'] as const;
 
 const INITIAL_SSE_RECONNECT_DELAY_MS = 1_000;
 const MAX_SSE_RECONNECT_DELAY_MS = 60_000;
@@ -505,6 +515,77 @@ export class AgentClient {
     }
   }
 
+  private parseUpdateFailedEventPayload(
+    data: unknown,
+  ): ContainerUpdateFailedEventPayload | undefined {
+    if (!data || typeof data !== 'object') {
+      return undefined;
+    }
+
+    const payload = data as Record<string, unknown>;
+    if (
+      typeof payload.containerName !== 'string' ||
+      payload.containerName.length === 0 ||
+      typeof payload.error !== 'string' ||
+      payload.error.length === 0
+    ) {
+      return undefined;
+    }
+
+    return {
+      containerName: payload.containerName,
+      error: payload.error,
+    };
+  }
+
+  private parseSecurityAlertSummary(data: unknown): SecurityAlertSummary | undefined {
+    if (!data || typeof data !== 'object') {
+      return undefined;
+    }
+
+    const summary = data as Record<string, unknown>;
+    const parsedSummary = {} as SecurityAlertSummary;
+    for (const key of SECURITY_ALERT_SUMMARY_KEYS) {
+      if (!Number.isFinite(summary[key])) {
+        return undefined;
+      }
+      parsedSummary[key] = Number(summary[key]);
+    }
+    return parsedSummary;
+  }
+
+  private parseSecurityAlertEventPayload(data: unknown): SecurityAlertEventPayload | undefined {
+    if (!data || typeof data !== 'object') {
+      return undefined;
+    }
+
+    const payload = data as Record<string, unknown>;
+    if (
+      typeof payload.containerName !== 'string' ||
+      payload.containerName.length === 0 ||
+      typeof payload.details !== 'string' ||
+      payload.details.length === 0
+    ) {
+      return undefined;
+    }
+
+    const parsedPayload: SecurityAlertEventPayload = {
+      containerName: payload.containerName,
+      details: payload.details,
+    };
+    if (typeof payload.status === 'string' && payload.status.length > 0) {
+      parsedPayload.status = payload.status;
+    }
+    if (Number.isFinite(payload.blockingCount)) {
+      parsedPayload.blockingCount = Number(payload.blockingCount);
+    }
+    const summary = this.parseSecurityAlertSummary(payload.summary);
+    if (summary) {
+      parsedPayload.summary = summary;
+    }
+    return parsedPayload;
+  }
+
   async handleEvent(eventName: string, data: unknown) {
     switch (eventName) {
       case 'dd:ack':
@@ -520,6 +601,25 @@ export class AgentClient {
       case 'dd:watcher-snapshot':
         await this.handleWatcherSnapshotEvent(data);
         return;
+      case 'dd:update-applied':
+        if (typeof data === 'string' && data.length > 0) {
+          await emitContainerUpdateApplied(data);
+        }
+        return;
+      case 'dd:update-failed': {
+        const payload = this.parseUpdateFailedEventPayload(data);
+        if (payload) {
+          await emitContainerUpdateFailed(payload);
+        }
+        return;
+      }
+      case 'dd:security-alert': {
+        const payload = this.parseSecurityAlertEventPayload(data);
+        if (payload) {
+          await emitSecurityAlert(payload);
+        }
+        return;
+      }
       default:
         return;
     }

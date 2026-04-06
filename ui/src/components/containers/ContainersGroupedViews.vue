@@ -28,6 +28,7 @@ const {
   selectedContainer,
   isCompact,
   selectContainer,
+  activeDetailTab,
   tableActionStyle,
   openActionsMenu,
   toggleActionsMenu,
@@ -752,6 +753,12 @@ function getContainerStatusIconStyle(container: { id?: unknown; name?: unknown; 
               Skip this update
             </AppButton>
           </template>
+          <div class="my-1" :style="{ borderTop: '1px solid var(--dd-border)' }" />
+          <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text"
+                  @click="selectContainer(openActionsContainer!); activeDetailTab = 'actions'; closeActionsMenu()">
+            <AppIcon name="recent-updates" :size="12" class="w-3 text-center inline-flex justify-center dd-text-muted" />
+            Rollback
+          </AppButton>
           <div class="my-1" :style="{ borderTop: '1px solid var(--dd-border)' }" />
           <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2" style="color: var(--dd-danger);"
                   @click="confirmDelete(openActionsContainer); closeActionsMenu()">

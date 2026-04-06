@@ -69,7 +69,7 @@ function onItemKeydown(event: KeyboardEvent, item: Record<string, unknown>) {
          @keydown="onItemKeydown($event, item)"
          @click="activateItem(item)">
       <!-- Header -->
-      <div class="flex items-center gap-3 px-5 py-3 transition-colors hover:dd-bg-elevated rounded-[inherit]">
+      <div class="flex items-start gap-3 px-5 py-3 transition-colors hover:dd-bg-elevated rounded-[inherit]">
         <slot name="header" :item="item" :expanded="expandable && isExpanded(item)" />
         <AppIcon v-if="expandable"
                  :name="isExpanded(item) ? 'chevron-up' : 'chevron-down'"

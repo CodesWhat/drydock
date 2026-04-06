@@ -397,4 +397,97 @@ describe('NotificationBell', () => {
     const markBtn = wrapper.findAll('button').find((b) => b.text().includes('Mark all read'));
     expect(markBtn).toBeUndefined();
   });
+
+  describe('clear all', () => {
+    it('shows clear all button when there are visible entries', async () => {
+      const wrapper = factory();
+      await flushPromises();
+      await openBell(wrapper);
+      const clearBtn = wrapper.find('[data-test="clear-all-btn"]');
+      expect(clearBtn.exists()).toBe(true);
+      expect(clearBtn.text()).toBe('Clear all');
+    });
+
+    it('hides clear all button when no visible entries', async () => {
+      mockGetAuditLog.mockResolvedValue({ entries: [] });
+      const wrapper = factory();
+      await flushPromises();
+      await openBell(wrapper);
+      expect(wrapper.find('[data-test="clear-all-btn"]').exists()).toBe(false);
+    });
+
+    it('removes all entries from the dropdown when clicked', async () => {
+      const wrapper = factory();
+      await flushPromises();
+      await openBell(wrapper);
+      expect(findEntryRows(wrapper)).toHaveLength(2);
+
+      await wrapper.find('[data-test="clear-all-btn"]').trigger('click');
+      await nextTick();
+      expect(findEntryRows(wrapper)).toHaveLength(0);
+      expect(wrapper.text()).toContain('No notifications yet');
+    });
+
+    it('also marks all as read (clears badge)', async () => {
+      const wrapper = factory();
+      await flushPromises();
+      expect(wrapper.find('.badge-pulse').exists()).toBe(true);
+
+      await openBell(wrapper);
+      await wrapper.find('[data-test="clear-all-btn"]').trigger('click');
+      await nextTick();
+      expect(wrapper.find('.badge-pulse').exists()).toBe(false);
+    });
+
+    it('hides clear all button after clearing', async () => {
+      const wrapper = factory();
+      await flushPromises();
+      await openBell(wrapper);
+      await wrapper.find('[data-test="clear-all-btn"]').trigger('click');
+      await nextTick();
+      expect(wrapper.find('[data-test="clear-all-btn"]').exists()).toBe(false);
+    });
+
+    it('persists cleared state across re-opens via localStorage', async () => {
+      const wrapper = factory();
+      await flushPromises();
+      await openBell(wrapper);
+      await wrapper.find('[data-test="clear-all-btn"]').trigger('click');
+      await nextTick();
+
+      // Close and re-open
+      await wrapper.find('button[aria-label="Notifications"]').trigger('click');
+      await nextTick();
+      expect(findDropdown(wrapper).exists()).toBe(false);
+
+      await openBell(wrapper);
+      expect(findEntryRows(wrapper)).toHaveLength(0);
+    });
+
+    it('shows new entries that arrive after clearing', async () => {
+      const wrapper = factory();
+      await flushPromises();
+      await openBell(wrapper);
+      await wrapper.find('[data-test="clear-all-btn"]').trigger('click');
+      await nextTick();
+      expect(findEntryRows(wrapper)).toHaveLength(0);
+
+      // Simulate a new entry arriving after the clear timestamp
+      const futureEntry = {
+        id: '99',
+        timestamp: new Date(Date.now() + 60_000).toISOString(),
+        action: 'update-available',
+        containerName: 'postgres',
+        status: 'info' as const,
+      };
+      mockGetAuditLog.mockResolvedValue({ entries: [...mockEntries, futureEntry] });
+
+      // Close and re-open to trigger refetch
+      await wrapper.find('button[aria-label="Notifications"]').trigger('click');
+      await nextTick();
+      await openBell(wrapper);
+      expect(findEntryRows(wrapper)).toHaveLength(1);
+      expect(wrapper.text()).toContain('postgres');
+    });
+  });
 });

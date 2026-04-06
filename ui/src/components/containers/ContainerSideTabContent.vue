@@ -597,8 +597,7 @@ function isActionInProgress(container: { id?: unknown; name?: unknown }) {
                     <AppIcon name="lock" :size="10" class="mr-1 inline" />Force Update
                   </AppButton>
                   <AppButton v-else
-                          size="sm"
-
+                          size="sm" variant="outlined"
                           :disabled="!selectedContainer.newTag || isActionInProgress(selectedContainer)"
                           @click="confirmUpdate(selectedContainer)">
                     Update Now

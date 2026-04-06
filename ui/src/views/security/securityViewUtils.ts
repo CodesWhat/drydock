@@ -3,6 +3,7 @@ import type {
   SecurityRuntimeToolStatus,
   SecurityViewEmptyStateInput,
   SeveritySummaryCounts,
+  Vulnerability,
 } from './securityViewTypes';
 
 export const severityOrder: Record<string, number> = {
@@ -98,6 +99,28 @@ export function toSafeFileName(value: string): string {
   return value.replace(/[^a-zA-Z0-9._-]+/g, '-');
 }
 
+export function toSafeExternalUrl(value: string | null | undefined): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmedValue = value.trim();
+  if (trimmedValue.length === 0) {
+    return null;
+  }
+
+  try {
+    const url = new URL(trimmedValue);
+    if (url.protocol === 'http:' || url.protocol === 'https:') {
+      return trimmedValue;
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
 export function buildSecurityEmptyState(input: SecurityViewEmptyStateInput): SecurityEmptyState {
   if (!input.hasVulnerabilityData) {
     if (input.scannerSetupNeeded) {
@@ -123,4 +146,62 @@ export function buildSecurityEmptyState(input: SecurityViewEmptyStateInput): Sec
     showSetupGuide: false,
     showScanButton: false,
   };
+}
+
+export type VulnExportFormat = 'json' | 'csv';
+
+function escapeCsvField(value: string): string {
+  const sanitizedValue = /^[=+\-@]/.test(value) ? `'${value}` : value;
+  if (
+    sanitizedValue.includes(',') ||
+    sanitizedValue.includes('"') ||
+    sanitizedValue.includes('\n')
+  ) {
+    return `"${sanitizedValue.replace(/"/g, '""')}"`;
+  }
+  return sanitizedValue;
+}
+
+const VULN_CSV_COLUMNS = [
+  'ID',
+  'Severity',
+  'Package',
+  'Version',
+  'Fixed In',
+  'Title',
+  'Target',
+  'URL',
+] as const;
+
+export function vulnReportToCsv(vulns: Vulnerability[]): string {
+  const rows = [VULN_CSV_COLUMNS.join(',')];
+  for (const v of vulns) {
+    rows.push(
+      [
+        escapeCsvField(v.id),
+        escapeCsvField(v.severity),
+        escapeCsvField(v.package),
+        escapeCsvField(v.version),
+        escapeCsvField(v.fixedIn ?? ''),
+        escapeCsvField(v.title ?? ''),
+        escapeCsvField(v.target ?? ''),
+        escapeCsvField(v.primaryUrl ?? ''),
+      ].join(','),
+    );
+  }
+  return rows.join('\n');
+}
+
+export function vulnReportToJson(vulns: Vulnerability[]): string {
+  const exported = vulns.map((v) => ({
+    id: v.id,
+    severity: v.severity,
+    package: v.package,
+    version: v.version,
+    fixedIn: v.fixedIn,
+    title: v.title ?? null,
+    target: v.target ?? null,
+    url: v.primaryUrl ?? null,
+  }));
+  return JSON.stringify(exported, null, 2);
 }

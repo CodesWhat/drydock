@@ -60,11 +60,48 @@ interface AgentConnectedPayload {
   reconnected: boolean;
 }
 
-interface TriggerNotificationEvent {
-  kind: 'agent-disconnect' | 'agent-reconnect';
+interface UpdateAppliedNotificationEvent {
+  kind: 'update-applied';
+}
+
+interface UpdateFailedNotificationEvent {
+  kind: 'update-failed';
+  error?: string;
+}
+
+interface SecurityAlertNotificationEvent {
+  kind: 'security-alert';
+  details?: string;
+  status?: string;
+  summary?: SecurityAlertPayload['summary'];
+  blockingCount?: number;
+}
+
+interface AgentDisconnectedNotificationEvent {
+  kind: 'agent-disconnect';
   agentName: string;
   reason?: string;
 }
+
+interface AgentReconnectedNotificationEvent {
+  kind: 'agent-reconnect';
+  agentName: string;
+}
+
+type TriggerNotificationEvent =
+  | UpdateAppliedNotificationEvent
+  | UpdateFailedNotificationEvent
+  | SecurityAlertNotificationEvent
+  | AgentDisconnectedNotificationEvent
+  | AgentReconnectedNotificationEvent;
+
+type TriggerContainer = Container & {
+  notificationEvent?: TriggerNotificationEvent;
+};
+
+export type TriggerNotificationContainer = Container & {
+  notificationEvent: TriggerNotificationEvent;
+};
 
 interface EventDispatchOptions extends notificationStore.NotificationRuleDispatchOptions {
   skipThreshold?: boolean;
@@ -79,17 +116,57 @@ export function buildLiteralTemplateExpression(expression: string): string {
   return `\${${expression}}`;
 }
 
+const DEFAULT_SIMPLE_TITLE_DIGEST_EXPRESSION =
+  '"New image available for container " + container.name + " (tag " + currentTag + ")"';
+const DEFAULT_SIMPLE_TITLE_UPDATE_EXPRESSION =
+  '"New " + container.updateKind.kind + " found for container " + container.name';
+const DEFAULT_SIMPLE_BODY_DIGEST_EXPRESSION =
+  '"Container " + container.name + " running tag " + currentTag + " has a newer image available"';
+const DEFAULT_SIMPLE_BODY_UPDATE_EXPRESSION =
+  '"Container " + container.name + " running with " + container.updateKind.kind + " " + container.updateKind.localValue + " can be updated to " + container.updateKind.kind + " " + container.updateKind.remoteValue';
+const DEFAULT_SIMPLE_BODY_RESULT_LINK_EXPRESSION =
+  'container.result && container.result.link ? "\\n" + container.result.link : ""';
+const DEFAULT_SIMPLE_TITLE_TEMPLATE = buildLiteralTemplateExpression(
+  `isDigestUpdate ? ${DEFAULT_SIMPLE_TITLE_DIGEST_EXPRESSION} : ${DEFAULT_SIMPLE_TITLE_UPDATE_EXPRESSION}`,
+);
+const DEFAULT_SIMPLE_BODY_TEMPLATE = `${buildLiteralTemplateExpression(
+  `isDigestUpdate ? ${DEFAULT_SIMPLE_BODY_DIGEST_EXPRESSION} : ${DEFAULT_SIMPLE_BODY_UPDATE_EXPRESSION}`,
+)}${buildLiteralTemplateExpression(DEFAULT_SIMPLE_BODY_RESULT_LINK_EXPRESSION)}`;
+
 const AGENT_DISCONNECT_SIMPLE_TITLE_TEMPLATE = `Agent ${buildLiteralTemplateExpression('event.agentName')} disconnected`;
 const AGENT_DISCONNECT_SIMPLE_BODY_TEMPLATE = `Agent ${buildLiteralTemplateExpression('event.agentName')} disconnected${buildLiteralTemplateExpression('event.reason ? ": " + event.reason : ""')}`;
 const AGENT_RECONNECT_SIMPLE_TITLE_TEMPLATE = `Agent ${buildLiteralTemplateExpression('event.agentName')} reconnected`;
 const AGENT_RECONNECT_SIMPLE_BODY_TEMPLATE = `Agent ${buildLiteralTemplateExpression('event.agentName')} reconnected`;
-const AGENT_SIMPLE_TITLE_TEMPLATES: Record<TriggerNotificationEvent['kind'], string> = {
+const UPDATE_APPLIED_SIMPLE_TITLE_TEMPLATE = `Container ${buildLiteralTemplateExpression('container.name')} updated successfully`;
+const UPDATE_APPLIED_SIMPLE_BODY_TEMPLATE = `Container ${buildLiteralTemplateExpression('container.name')} updated successfully`;
+const UPDATE_FAILED_SIMPLE_TITLE_TEMPLATE = `Container ${buildLiteralTemplateExpression('container.name')} update failed`;
+const UPDATE_FAILED_SIMPLE_BODY_TEMPLATE = `Container ${buildLiteralTemplateExpression('container.name')} update failed${buildLiteralTemplateExpression('event.error ? ": " + event.error : ""')}`;
+const SECURITY_ALERT_SIMPLE_TITLE_TEMPLATE = `Security alert for container ${buildLiteralTemplateExpression('container.name')}`;
+const SECURITY_ALERT_SIMPLE_BODY_TEMPLATE = `Security alert for container ${buildLiteralTemplateExpression('container.name')}${buildLiteralTemplateExpression('event.blockingCount ? " (" + event.blockingCount + " blocking vulnerabilities)" : ""')}${buildLiteralTemplateExpression('event.details ? "\\n" + event.details : ""')}`;
+const NOTIFICATION_SIMPLE_TITLE_TEMPLATES: Partial<
+  Record<TriggerNotificationEvent['kind'], string>
+> = {
+  'update-applied': UPDATE_APPLIED_SIMPLE_TITLE_TEMPLATE,
+  'update-failed': UPDATE_FAILED_SIMPLE_TITLE_TEMPLATE,
+  'security-alert': SECURITY_ALERT_SIMPLE_TITLE_TEMPLATE,
   'agent-disconnect': AGENT_DISCONNECT_SIMPLE_TITLE_TEMPLATE,
   'agent-reconnect': AGENT_RECONNECT_SIMPLE_TITLE_TEMPLATE,
 };
-const AGENT_SIMPLE_BODY_TEMPLATES: Record<TriggerNotificationEvent['kind'], string> = {
+const NOTIFICATION_SIMPLE_BODY_TEMPLATES: Partial<
+  Record<TriggerNotificationEvent['kind'], string>
+> = {
+  'update-applied': UPDATE_APPLIED_SIMPLE_BODY_TEMPLATE,
+  'update-failed': UPDATE_FAILED_SIMPLE_BODY_TEMPLATE,
+  'security-alert': SECURITY_ALERT_SIMPLE_BODY_TEMPLATE,
   'agent-disconnect': AGENT_DISCONNECT_SIMPLE_BODY_TEMPLATE,
   'agent-reconnect': AGENT_RECONNECT_SIMPLE_BODY_TEMPLATE,
+};
+const NOTIFICATION_BATCH_TITLE_TEMPLATES: Partial<
+  Record<TriggerNotificationEvent['kind'], string>
+> = {
+  'update-applied': `${buildLiteralTemplateExpression('containers.length')} updates applied`,
+  'update-failed': `${buildLiteralTemplateExpression('containers.length')} updates failed`,
+  'security-alert': `${buildLiteralTemplateExpression('containers.length')} security alerts`,
 };
 
 function truncateReleaseNotesBody(body: string, maxLength: number) {
@@ -104,7 +181,7 @@ function buildAgentContainer(
   state: 'connected' | 'disconnected',
   eventKind: TriggerNotificationEvent['kind'],
   reason?: string,
-): Container {
+): TriggerNotificationContainer {
   return {
     id: `agent-${agentName}`,
     name: agentName,
@@ -144,30 +221,79 @@ function buildAgentContainer(
       agentName,
       reason: eventKind === 'agent-disconnect' ? reason : undefined,
     },
-  } as Container;
+  };
 }
 
-function buildAgentDisconnectedContainer(agentName: string, reason?: string): Container {
+function buildAgentDisconnectedContainer(
+  agentName: string,
+  reason?: string,
+): TriggerNotificationContainer {
   return buildAgentContainer(agentName, 'disconnected', 'agent-disconnect', reason);
 }
 
-function buildAgentReconnectedContainer(agentName: string): Container {
+function buildAgentReconnectedContainer(agentName: string): TriggerNotificationContainer {
   return buildAgentContainer(agentName, 'connected', 'agent-reconnect');
 }
 
-export function getNotificationEvent(container: Container): TriggerNotificationEvent | undefined {
-  const notificationEvent = Reflect.get(new Object(container), 'notificationEvent');
-  if (!notificationEvent || typeof notificationEvent !== 'object') {
+function withNotificationEvent(
+  container: Container,
+  notificationEvent: TriggerNotificationEvent,
+): TriggerNotificationContainer {
+  return {
+    ...container,
+    notificationEvent,
+  };
+}
+
+function safeGet(target: unknown, property: string): unknown {
+  return Reflect.get(Object(target), property);
+}
+
+function getNonEmptyString(target: unknown, property: string): string | undefined {
+  const value = safeGet(target, property);
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function getFiniteNumber(target: unknown, property: string): number | undefined {
+  const value = safeGet(target, property);
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function getObjectProperty<T extends object>(target: unknown, property: string): T | undefined {
+  const value = safeGet(target, property);
+  return value && typeof value === 'object' ? (value as T) : undefined;
+}
+
+function getUpdateFailedNotificationEvent(
+  notificationEvent: unknown,
+): UpdateFailedNotificationEvent {
+  return {
+    kind: 'update-failed',
+    error: getNonEmptyString(notificationEvent, 'error'),
+  };
+}
+
+function getSecurityAlertNotificationEvent(
+  notificationEvent: unknown,
+): SecurityAlertNotificationEvent {
+  return {
+    kind: 'security-alert',
+    details: getNonEmptyString(notificationEvent, 'details'),
+    status: getNonEmptyString(notificationEvent, 'status'),
+    summary: getObjectProperty<SecurityAlertPayload['summary']>(notificationEvent, 'summary'),
+    blockingCount: getFiniteNumber(notificationEvent, 'blockingCount'),
+  };
+}
+
+function getAgentNotificationEvent(
+  kind: unknown,
+  notificationEvent: unknown,
+): AgentDisconnectedNotificationEvent | AgentReconnectedNotificationEvent | undefined {
+  const agentName = getNonEmptyString(notificationEvent, 'agentName');
+  if (!agentName) {
     return undefined;
   }
 
-  const agentName = Reflect.get(new Object(notificationEvent), 'agentName');
-  const reason = Reflect.get(new Object(notificationEvent), 'reason');
-  if (typeof agentName !== 'string' || agentName.length === 0) {
-    return undefined;
-  }
-
-  const kind = Reflect.get(new Object(notificationEvent), 'kind');
   if (kind !== 'agent-disconnect' && kind !== 'agent-reconnect') {
     return undefined;
   }
@@ -176,15 +302,40 @@ export function getNotificationEvent(container: Container): TriggerNotificationE
     kind,
     agentName,
     reason:
-      kind === 'agent-disconnect' && typeof reason === 'string' && reason.length > 0
-        ? reason
-        : undefined,
+      kind === 'agent-disconnect' ? getNonEmptyString(notificationEvent, 'reason') : undefined,
   };
+}
+
+export function getNotificationEvent(
+  container: TriggerContainer,
+): TriggerNotificationEvent | undefined {
+  const notificationEvent = getObjectProperty<Record<string, unknown>>(
+    container,
+    'notificationEvent',
+  );
+  if (!notificationEvent || typeof notificationEvent !== 'object') {
+    return undefined;
+  }
+
+  const kind = safeGet(notificationEvent, 'kind');
+  if (kind === 'update-applied') {
+    return { kind };
+  }
+
+  if (kind === 'update-failed') {
+    return getUpdateFailedNotificationEvent(notificationEvent);
+  }
+
+  if (kind === 'security-alert') {
+    return getSecurityAlertNotificationEvent(notificationEvent);
+  }
+
+  return getAgentNotificationEvent(kind, notificationEvent);
 }
 
 export function resolveNotificationTemplate(
   notificationEvent: TriggerNotificationEvent | undefined,
-  templates: Record<TriggerNotificationEvent['kind'], string>,
+  templates: Partial<Record<TriggerNotificationEvent['kind'], string>>,
   fallback: string,
 ) {
   if (!notificationEvent) {
@@ -244,6 +395,7 @@ class Trigger extends Component {
   private unregisterContainerUpdateAppliedForResolution?: () => void;
   private readonly notificationResults: Map<string, unknown> = new Map();
   private readonly autoTriggerErrorSeenAt: Map<string, number> = new Map();
+  private readonly notificationRuleWarningsSeen: Set<string> = new Set();
   private readonly digestBuffer: Map<string, Container> = new Map();
   private readonly eventBatchDispatches: Map<NotificationRuleId, EventBatchDispatchState> =
     new Map();
@@ -388,7 +540,7 @@ class Trigger extends Component {
 
   private findContainerByBusinessId(containerName: string): Container | undefined {
     return storeContainer
-      .getContainers()
+      .getContainersRaw()
       .find((container) => fullName(container) === containerName);
   }
 
@@ -489,9 +641,18 @@ class Trigger extends Component {
     this.eventBatchDispatches.clear();
   }
 
+  private shouldDispatchNotificationEventInBatch(
+    notificationEvent: TriggerNotificationEvent | undefined,
+  ) {
+    return (
+      notificationEvent?.kind !== 'agent-disconnect' &&
+      notificationEvent?.kind !== 'agent-reconnect'
+    );
+  }
+
   private async dispatchContainerForEvent(
     ruleId: NotificationRuleId,
-    container: Container | undefined,
+    container: TriggerContainer | undefined,
     options: EventDispatchOptions = {},
   ) {
     if (!this.isTriggerEnabledForRule(ruleId, options)) {
@@ -515,11 +676,12 @@ class Trigger extends Component {
     }
 
     try {
+      const notificationEvent = getNotificationEvent(container);
       // Agent connectivity notifications synthesize one-off container payloads and should always
       // dispatch immediately, even when the trigger itself is configured for batch updates.
       const shouldUseBatchMode =
         Trigger.isBatchCapableMode(this.configuration.mode) &&
-        getNotificationEvent(container) === undefined;
+        this.shouldDispatchNotificationEventInBatch(notificationEvent);
       if (shouldUseBatchMode) {
         this.queueEventBatchDispatch(ruleId, container);
       } else {
@@ -543,33 +705,50 @@ class Trigger extends Component {
       this.log.debug(`Evicted ${containerName} from digest buffer (update applied)`);
     }
 
-    await this.dispatchContainerForEvent(
-      'update-applied',
-      this.findContainerByBusinessId(containerName),
-      {
-        allowAllWhenNoTriggers: false,
-        defaultWhenRuleMissing: false,
-      },
-    );
+    const container = this.findContainerByBusinessId(containerName);
+    const notificationContainer = container
+      ? withNotificationEvent(container, { kind: 'update-applied' })
+      : undefined;
+
+    await this.dispatchContainerForEvent('update-applied', notificationContainer, {
+      allowAllWhenNoTriggers: false,
+      defaultWhenRuleMissing: false,
+    });
   }
 
   async handleContainerUpdateFailedEvent(payload: ContainerUpdateFailedPayload) {
-    await this.dispatchContainerForEvent(
-      'update-failed',
-      this.findContainerByBusinessId(payload.containerName),
-      {
-        allowAllWhenNoTriggers: false,
-        defaultWhenRuleMissing: false,
-      },
-    );
+    const container = this.findContainerByBusinessId(payload.containerName);
+    const notificationContainer = container
+      ? withNotificationEvent(container, {
+          kind: 'update-failed',
+          error: payload.error,
+        })
+      : undefined;
+
+    await this.dispatchContainerForEvent('update-failed', notificationContainer, {
+      allowAllWhenNoTriggers: false,
+      defaultWhenRuleMissing: false,
+    });
   }
 
   async handleSecurityAlertEvent(payload: SecurityAlertPayload) {
     const container = payload.container || this.findContainerByBusinessId(payload.containerName);
-    await this.dispatchContainerForEvent('security-alert', container, {
-      allowAllWhenNoTriggers: false,
-      defaultWhenRuleMissing: false,
-    });
+    await this.dispatchContainerForEvent(
+      'security-alert',
+      container
+        ? withNotificationEvent(container, {
+            kind: 'security-alert',
+            details: payload.details,
+            status: payload.status,
+            summary: payload.summary,
+            blockingCount: payload.blockingCount,
+          })
+        : undefined,
+      {
+        allowAllWhenNoTriggers: false,
+        defaultWhenRuleMissing: false,
+      },
+    );
   }
 
   async handleAgentDisconnectedEvent(payload: AgentDisconnectedPayload) {
@@ -601,12 +780,48 @@ class Trigger extends Component {
   }
 
   private isUpdateAvailableAutoTriggerEnabled() {
-    // Keep backward compatibility: if update-available has no explicit trigger
-    // allow-list yet, legacy auto trigger behavior remains enabled.
-    return this.isTriggerEnabledForRule('update-available', {
-      allowAllWhenNoTriggers: true,
-      defaultWhenRuleMissing: true,
-    });
+    const dispatchDecision = notificationStore.getTriggerDispatchDecisionForRule(
+      'update-available',
+      this.getId(),
+      {
+        // Keep backward compatibility: if update-available has no explicit trigger
+        // allow-list yet, legacy auto trigger behavior remains enabled.
+        allowAllWhenNoTriggers: true,
+        defaultWhenRuleMissing: true,
+      },
+    );
+    this.warnIfDigestRoutingIsSuppressed(dispatchDecision);
+    return dispatchDecision.enabled;
+  }
+
+  private warnIfDigestRoutingIsSuppressed(
+    dispatchDecision: notificationStore.NotificationRuleDispatchDecision,
+  ) {
+    if (!Trigger.isDigestCapableMode(this.configuration.mode) || dispatchDecision.enabled) {
+      return;
+    }
+
+    let message: string | undefined;
+    if (dispatchDecision.reason === 'rule-disabled') {
+      message =
+        `Digest mode is configured for ${this.getId()}, but the update-available notification rule is disabled; ` +
+        'no update-available events will be buffered until the rule is enabled.';
+    } else if (dispatchDecision.reason === 'excluded-from-allow-list') {
+      message =
+        `Digest mode is configured for ${this.getId()}, but the update-available notification rule excludes this trigger; ` +
+        'no update-available events will be buffered. Add this trigger to the rule or clear the rule trigger assignments to allow all notification triggers.';
+    }
+
+    if (!message) {
+      return;
+    }
+
+    const warningKey = `update-available|${dispatchDecision.reason}|${this.getId()}`;
+    if (this.notificationRuleWarningsSeen.has(warningKey)) {
+      return;
+    }
+    this.notificationRuleWarningsSeen.add(warningKey);
+    this.log.warn(message);
   }
 
   private shouldHandleSimpleContainerReport(containerReport: ContainerReport) {
@@ -763,13 +978,24 @@ class Trigger extends Component {
    * Handle container report (digest mode — single container from simple event).
    */
   async handleContainerReportDigest(containerReport: ContainerReport) {
+    Trigger.canonicalizeReportName(containerReport);
+
+    const { container } = containerReport;
+    const containerName = fullName(container);
+
+    if (!container.updateAvailable) {
+      if (this.digestBuffer.delete(containerName)) {
+        this.log.debug(`Evicted ${containerName} from digest buffer (update no longer available)`);
+      }
+      return;
+    }
+
     if (!this.isUpdateAvailableAutoTriggerEnabled()) {
       return;
     }
     if (!this.shouldHandleSimpleContainerReport(containerReport)) {
       return;
     }
-    const { container } = containerReport;
     if (!Trigger.isThresholdReached(container, this.getSimpleModeThreshold())) {
       return;
     }
@@ -793,14 +1019,53 @@ class Trigger extends Component {
       return;
     }
     const bufferedEntries = Array.from(this.digestBuffer.entries());
-    const containers = bufferedEntries.map(([, container]) => container);
+    const currentContainersByBusinessId = new Map<string, Container>(
+      storeContainer
+        .getContainersRaw()
+        .map((container) => [fullName(container as Container), container as Container] as const),
+    );
+    const dispatchEntries = bufferedEntries.flatMap(([containerName, bufferedContainer]) => {
+      const currentContainer = currentContainersByBusinessId.get(containerName);
+
+      if (!currentContainer) {
+        return [
+          {
+            containerName,
+            bufferedContainer,
+            currentContainer: bufferedContainer,
+          },
+        ];
+      }
+
+      if (currentContainer.updateAvailable) {
+        return [
+          {
+            containerName,
+            bufferedContainer,
+            currentContainer,
+          },
+        ];
+      }
+
+      if (this.digestBuffer.get(containerName) === bufferedContainer) {
+        this.digestBuffer.delete(containerName);
+      }
+      return [];
+    });
+
+    if (dispatchEntries.length === 0) {
+      this.log.debug('Digest cron fired — no buffered updates remain after revalidation');
+      return;
+    }
+
+    const containers = dispatchEntries.map(({ currentContainer }) => currentContainer);
     this.log.info(`Digest flush: sending ${containers.length} update(s)`);
     let status: 'success' | 'error' = 'error';
     this.isDigestFlushInProgress = true;
     try {
       await this.triggerBatch(containers);
       status = 'success';
-      for (const [containerName, bufferedContainer] of bufferedEntries) {
+      for (const { containerName, bufferedContainer } of dispatchEntries) {
         if (this.digestBuffer.get(containerName) === bufferedContainer) {
           this.digestBuffer.delete(containerName);
         }
@@ -1008,6 +1273,7 @@ class Trigger extends Component {
     this.clearEventBatchDispatches();
 
     this.autoTriggerErrorSeenAt.clear();
+    this.notificationRuleWarningsSeen.clear();
   }
 
   /**
@@ -1044,14 +1310,8 @@ class Trigger extends Component {
           return value;
         })
         .messages({ 'string.pattern.base': 'digestcron must be a valid cron expression' }),
-      simpletitle: this.joi
-        .string()
-        .default('New ${container.updateKind.kind} found for container ${container.name}'),
-      simplebody: this.joi
-        .string()
-        .default(
-          'Container ${container.name} running with ${container.updateKind.kind} ${container.updateKind.localValue} can be updated to ${container.updateKind.kind} ${container.updateKind.remoteValue}${container.result && container.result.link ? "\\n" + container.result.link : ""}',
-        ),
+      simpletitle: this.joi.string().default(DEFAULT_SIMPLE_TITLE_TEMPLATE),
+      simplebody: this.joi.string().default(DEFAULT_SIMPLE_BODY_TEMPLATE),
       batchtitle: this.joi.string().default('${containers.length} updates available'),
       resolvenotifications: this.joi.boolean().default(false),
     });
@@ -1221,7 +1481,7 @@ class Trigger extends Component {
     const notificationEvent = getNotificationEvent(container);
     const template = resolveNotificationTemplate(
       notificationEvent,
-      AGENT_SIMPLE_TITLE_TEMPLATES,
+      NOTIFICATION_SIMPLE_TITLE_TEMPLATES,
       this.configuration.simpletitle ?? '',
     );
     return renderSimple(template, this.getTemplateContainer(container));
@@ -1236,7 +1496,7 @@ class Trigger extends Component {
     const notificationEvent = getNotificationEvent(container);
     const template = resolveNotificationTemplate(
       notificationEvent,
-      AGENT_SIMPLE_BODY_TEMPLATES,
+      NOTIFICATION_SIMPLE_BODY_TEMPLATES,
       this.configuration.simplebody ?? '',
     );
     return renderSimple(template, this.getTemplateContainer(container));
@@ -1248,7 +1508,14 @@ class Trigger extends Component {
    * @returns {*}
    */
   renderBatchTitle(containers: Container[]) {
-    return renderBatch(this.configuration.batchtitle ?? '', containers);
+    const notificationEvent =
+      containers.length > 0 ? getNotificationEvent(containers[0]) : undefined;
+    const template = resolveNotificationTemplate(
+      notificationEvent,
+      NOTIFICATION_BATCH_TITLE_TEMPLATES,
+      this.configuration.batchtitle ?? '',
+    );
+    return renderBatch(template, containers);
   }
 
   /**

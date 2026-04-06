@@ -23,6 +23,7 @@ import {
   severityColor,
   severityIcon,
   statusBadgeTone,
+  toSafeExternalUrl,
 } from './security/securityViewUtils';
 
 const { isMobile, windowNarrow: isCompact } = useBreakpoints();
@@ -131,11 +132,13 @@ const {
   detailSbomGeneratedAt,
   detailSbomLoading,
   downloadDetailSbom,
+  downloadVulnReport,
   handleDetailOpenChange,
   loadDetailSbom,
   openDetail: openSbomDetail,
   selectedImage,
   selectedSbomFormat,
+  selectedVulnExportFormat,
   showSbomDocument,
 } = useSbomDetail({
   containerIdsByImage,
@@ -145,6 +148,13 @@ const selectedImageVulns = computed(() => {
   if (!selectedImage.value) return [];
   return vulnerabilitiesByImage.value[selectedImage.value.image] || [];
 });
+
+const selectedImageVulnsWithSafeUrl = computed(() =>
+  selectedImageVulns.value.map((vuln) => ({
+    ...vuln,
+    safePrimaryUrl: toSafeExternalUrl(vuln.primaryUrl),
+  })),
+);
 
 function openDetail(summary: ImageSummary) {
   const vulnerabilities = vulnerabilitiesByImage.value[summary.image] || [];
@@ -554,53 +564,20 @@ onUnmounted(() => {
         </template>
 
         <template v-if="selectedImage" #default>
-          <!-- Vulnerability list -->
-          <div class="divide-y" :style="{ borderColor: 'var(--dd-border)' }">
-            <div v-for="vuln in selectedImageVulns" :key="vuln.id + vuln.package"
-                 class="px-4 py-3 hover:dd-bg-hover transition-colors">
-              <div class="flex items-center gap-2 mb-1.5">
-                <AppIcon :name="severityIcon(vuln.severity)" :size="12"
-                         :style="{ color: severityColor(vuln.severity).text }" />
-                <AppBadge :custom="{ bg: severityColor(vuln.severity).bg, text: severityColor(vuln.severity).text }" size="xs" class="px-1.5 py-0">
-                  {{ vuln.severity }}
-                </AppBadge>
-                <span class="font-mono text-2xs-plus font-semibold dd-text truncate">{{ vuln.id }}</span>
-              </div>
-              <div class="flex items-center gap-2 text-2xs-plus ml-5">
-                <span class="font-medium dd-text">{{ vuln.package }}</span>
-                <span class="dd-text-muted">{{ vuln.version }}</span>
-                <AppBadge v-if="vuln.fixedIn" tone="success" size="xs" class="ml-auto px-1.5 py-0">
-                  <AppIcon name="check" :size="9" class="mr-0.5" />
-                  {{ vuln.fixedIn }}
-                </AppBadge>
-                <span v-else class="ml-auto text-2xs dd-text-muted">No fix</span>
-              </div>
-              <div
-                v-if="vuln.title || vuln.target || vuln.primaryUrl"
-                class="ml-5 mt-1.5 space-y-1"
-              >
-                <div v-if="vuln.title" class="text-2xs dd-text">
-                  {{ vuln.title }}
-                </div>
-                <div v-if="vuln.target" class="text-2xs dd-text-muted">
-                  Target:
-                  <span class="font-mono dd-text">{{ vuln.target }}</span>
-                </div>
-                <a
-                  v-if="vuln.primaryUrl"
-                  :href="vuln.primaryUrl"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  class="inline-flex text-2xs underline hover:no-underline break-all"
-                  style="color: var(--dd-info);"
-                >
-                  {{ vuln.primaryUrl }}
-                </a>
-              </div>
+          <!-- Export controls -->
+          <div class="px-4 py-3 space-y-2" :style="{ borderBottom: '1px solid var(--dd-border)' }">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="text-2xs font-semibold uppercase tracking-wide dd-text-muted">Export</span>
+              <select v-model="selectedVulnExportFormat"
+                      class="px-2 py-1 dd-rounded text-2xs font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text">
+                <option value="csv">CSV</option>
+                <option value="json">JSON</option>
+              </select>
+              <AppButton size="xs" variant="secondary" :disabled="selectedImageVulns.length === 0"
+                      @click="downloadVulnReport">
+                Download Report
+              </AppButton>
             </div>
-          </div>
-
-          <div class="px-4 py-3 space-y-2" :style="{ borderTop: '1px solid var(--dd-border)' }">
             <div class="flex items-center gap-2 flex-wrap">
               <span class="text-2xs font-semibold uppercase tracking-wide dd-text-muted">SBOM</span>
               <select v-model="selectedSbomFormat"
@@ -611,15 +588,15 @@ onUnmounted(() => {
               </select>
               <AppButton size="xs" variant="secondary" :disabled="detailSbomLoading"
                       @click="loadDetailSbom">
-                {{ detailSbomLoading ? 'Loading SBOM...' : 'Refresh SBOM' }}
+                {{ detailSbomLoading ? 'Loading...' : 'Refresh' }}
               </AppButton>
               <AppButton size="xs" variant="secondary" :disabled="!detailSbomDocument"
                       @click="showSbomDocument = !showSbomDocument">
-                {{ showSbomDocument ? 'Hide SBOM' : 'View SBOM' }}
+                {{ showSbomDocument ? 'Hide' : 'View' }}
               </AppButton>
               <AppButton size="xs" variant="secondary" :disabled="!detailSbomDocument"
                       @click="downloadDetailSbom">
-                Download SBOM
+                Download
               </AppButton>
             </div>
 
@@ -649,15 +626,56 @@ onUnmounted(() => {
                 <span class="dd-text">{{ formatTimestamp(detailSbomGeneratedAt) }}</span>
               </div>
             </div>
-            <div v-else
-                 class="px-2.5 py-1.5 dd-rounded text-2xs-plus dd-text-muted italic"
-                 :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-              SBOM document is not available yet.
-            </div>
 
             <pre v-if="showSbomDocument && detailSbomDocumentJson"
                  class="p-2 dd-rounded text-2xs overflow-auto max-h-64 font-mono"
                  :style="{ backgroundColor: 'var(--dd-bg-code)' }">{{ detailSbomDocumentJson }}</pre>
+          </div>
+
+          <!-- Vulnerability list -->
+          <div class="divide-y" :style="{ borderColor: 'var(--dd-border)' }">
+            <div v-for="vuln in selectedImageVulnsWithSafeUrl" :key="vuln.id + vuln.package"
+                 class="px-4 py-3 hover:dd-bg-hover transition-colors">
+              <div class="flex items-center gap-2 mb-1.5">
+                <AppIcon :name="severityIcon(vuln.severity)" :size="12"
+                         :style="{ color: severityColor(vuln.severity).text }" />
+                <AppBadge :custom="{ bg: severityColor(vuln.severity).bg, text: severityColor(vuln.severity).text }" size="xs" class="px-1.5 py-0">
+                  {{ vuln.severity }}
+                </AppBadge>
+                <span class="font-mono text-2xs-plus font-semibold dd-text truncate">{{ vuln.id }}</span>
+              </div>
+              <div class="flex items-center gap-2 text-2xs-plus ml-5">
+                <span class="font-medium dd-text">{{ vuln.package }}</span>
+                <span class="dd-text-muted">{{ vuln.version }}</span>
+                <AppBadge v-if="vuln.fixedIn" tone="success" size="xs" class="ml-auto px-1.5 py-0">
+                  <AppIcon name="check" :size="9" class="mr-0.5" />
+                  {{ vuln.fixedIn }}
+                </AppBadge>
+                <span v-else class="ml-auto text-2xs dd-text-muted">No fix</span>
+              </div>
+              <div
+                v-if="vuln.title || vuln.target || vuln.safePrimaryUrl"
+                class="ml-5 mt-1.5 space-y-1"
+              >
+                <div v-if="vuln.title" class="text-2xs dd-text">
+                  {{ vuln.title }}
+                </div>
+                <div v-if="vuln.target" class="text-2xs dd-text-muted">
+                  Target:
+                  <span class="font-mono dd-text">{{ vuln.target }}</span>
+                </div>
+                <a
+                  v-if="vuln.safePrimaryUrl"
+                  :href="vuln.safePrimaryUrl"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="inline-flex text-2xs underline hover:no-underline break-all"
+                  style="color: var(--dd-info);"
+                >
+                  {{ vuln.primaryUrl }}
+                </a>
+              </div>
+            </div>
           </div>
         </template>
       </DetailPanel>

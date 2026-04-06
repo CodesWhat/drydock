@@ -196,6 +196,8 @@ async function updateContainer(req: Request, res: Response) {
       containerAfterTrigger &&
       (containerAfterTrigger.result || containerAfterTrigger.updateAvailable)
     ) {
+      const clearedAtMs = Date.now();
+      storeContainer.markPendingFreshStateAfterManualUpdate(containerAfterTrigger, clearedAtMs);
       storeContainer.updateContainer(clearDetectedUpdateState(containerAfterTrigger));
     }
     const updatedContainer = storeContainer.getContainer(id);

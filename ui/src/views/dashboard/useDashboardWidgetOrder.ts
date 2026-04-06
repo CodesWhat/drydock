@@ -2,10 +2,12 @@ import { onScopeDispose, ref, watch } from 'vue';
 import { preferences } from '../../preferences/store';
 import { DASHBOARD_WIDGET_IDS, type DashboardWidgetId } from './dashboardTypes';
 import {
-  applyConstraints,
-  createDefaultLayout,
-  type WidgetLayoutItem,
-} from './dashboardWidgetLayout';
+  _rebuildLayoutsForOrderForTests,
+  createResponsiveLayoutsMemo,
+  useDashboardResponsiveLayouts,
+} from './useDashboardResponsiveLayouts';
+
+export { _rebuildLayoutsForOrderForTests, createResponsiveLayoutsMemo };
 
 function isDashboardWidgetId(value: unknown): value is DashboardWidgetId {
   return typeof value === 'string' && (DASHBOARD_WIDGET_IDS as readonly string[]).includes(value);
@@ -49,59 +51,6 @@ function sanitizeWidgetOrder(rawOrder: unknown): DashboardWidgetId[] {
   return sanitized;
 }
 
-const defaultLayout = createDefaultLayout();
-const defaultLayoutById = new Map(defaultLayout.map((item) => [item.i, item] as const));
-
-function isValidLayoutItem(value: unknown): value is WidgetLayoutItem {
-  if (!value || typeof value !== 'object') return false;
-  const item = value as Record<string, unknown>;
-  return (
-    isDashboardWidgetId(item.i) &&
-    typeof item.x === 'number' &&
-    typeof item.y === 'number' &&
-    typeof item.w === 'number' &&
-    typeof item.h === 'number'
-  );
-}
-
-function loadPersistedLayout(order: readonly DashboardWidgetId[]): WidgetLayoutItem[] {
-  const rawLayout = preferences.dashboard.gridLayout;
-  if (!Array.isArray(rawLayout)) {
-    return createLayoutFromOrder(order);
-  }
-
-  const persisted = new Map<string, WidgetLayoutItem>();
-  for (const item of rawLayout) {
-    if (isValidLayoutItem(item)) {
-      persisted.set(item.i, { i: item.i, x: item.x, y: item.y, w: item.w, h: item.h });
-    }
-  }
-
-  // Use persisted positions if available, fall back to defaults
-  const result = order.map((id) => {
-    const saved = persisted.get(id);
-    if (saved) return saved;
-    const fallback = defaultLayoutById.get(id);
-    return { ...fallback! };
-  });
-
-  // Sanity check: if every widget is at x=0 with narrow widths, the layout was
-  // likely corrupted by a breakpoint mismatch — discard and use defaults
-  const allColumnZero = result.length > 1 && result.every((item) => item.x === 0);
-  if (allColumnZero) {
-    return createLayoutFromOrder(order);
-  }
-
-  return applyConstraints(result);
-}
-
-function createLayoutFromOrder(order: readonly DashboardWidgetId[]): WidgetLayoutItem[] {
-  return order.map((id) => {
-    const item = defaultLayoutById.get(id);
-    return { ...item! };
-  });
-}
-
 function getDragSource(event: DragEvent): DashboardWidgetId | null {
   const rawSource = event.dataTransfer?.getData('text/plain');
   return isDashboardWidgetId(rawSource) ? rawSource : null;
@@ -130,7 +79,17 @@ export function useDashboardWidgetOrder() {
   const widgetOrder = ref<DashboardWidgetId[]>(
     sanitizeWidgetOrder(preferences.dashboard.widgetOrder),
   );
-  const layout = ref<WidgetLayoutItem[]>(loadPersistedLayout(widgetOrder.value));
+  const {
+    currentBreakpoint,
+    layout,
+    onBreakpointChanged,
+    persistDashboardLayouts,
+    rebuildLayoutsForCurrentOrder,
+    resetLayoutsToDefaults,
+    responsiveLayouts,
+    syncCurrentLayoutFromResponsiveLayouts,
+  } = useDashboardResponsiveLayouts({ widgetOrder });
+  const gridInstanceKey = ref(0);
   const hiddenWidgets = ref<DashboardWidgetId[]>(
     sanitizeHiddenWidgets(preferences.dashboard.hiddenWidgets),
   );
@@ -139,16 +98,8 @@ export function useDashboardWidgetOrder() {
 
   let syncing = false;
 
-  function persistWidgetOrder() {
-    preferences.dashboard.widgetOrder = [...widgetOrder.value];
-    // Persist full grid layout (x, y, w, h) so positions and sizes survive reload
-    preferences.dashboard.gridLayout = layout.value.map((item) => ({
-      i: item.i,
-      x: item.x,
-      y: item.y,
-      w: item.w,
-      h: item.h,
-    }));
+  function refreshGridInstance() {
+    gridInstanceKey.value += 1;
   }
 
   function persistHiddenWidgets() {
@@ -158,8 +109,10 @@ export function useDashboardWidgetOrder() {
   function applyWidgetOrder(nextOrder: readonly DashboardWidgetId[]) {
     syncing = true;
     widgetOrder.value = [...nextOrder];
-    layout.value = loadPersistedLayout(widgetOrder.value);
-    persistWidgetOrder();
+    rebuildLayoutsForCurrentOrder();
+    syncCurrentLayoutFromResponsiveLayouts();
+    persistDashboardLayouts(layout.value);
+    refreshGridInstance();
     queueMicrotask(() => {
       syncing = false;
     });
@@ -172,8 +125,10 @@ export function useDashboardWidgetOrder() {
         return;
       }
       syncing = true;
-      layout.value = loadPersistedLayout(nextOrder);
-      persistWidgetOrder();
+      rebuildLayoutsForCurrentOrder();
+      syncCurrentLayoutFromResponsiveLayouts();
+      persistDashboardLayouts(layout.value);
+      refreshGridInstance();
       queueMicrotask(() => {
         syncing = false;
       });
@@ -181,8 +136,34 @@ export function useDashboardWidgetOrder() {
     { deep: true },
   );
 
-  // Debounced persist for layout changes (grid-layout-plus fires many updates during drag/resize)
   let layoutPersistTimer: ReturnType<typeof setTimeout> | undefined;
+
+  function flushPendingLayoutPersist() {
+    if (layoutPersistTimer === undefined) {
+      return;
+    }
+    clearTimeout(layoutPersistTimer);
+    layoutPersistTimer = undefined;
+    persistDashboardLayouts(layout.value);
+  }
+
+  const visibilitychangeListener = () => {
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+      flushPendingLayoutPersist();
+    }
+  };
+  const pagehideListener = () => {
+    flushPendingLayoutPersist();
+  };
+
+  /* v8 ignore start -- SSR guard: document/addEventListener always exist in JSDOM */
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', visibilitychangeListener);
+  }
+  if (typeof globalThis.addEventListener === 'function') {
+    globalThis.addEventListener('pagehide', pagehideListener);
+  }
+  /* v8 ignore stop */
 
   watch(
     layout,
@@ -191,21 +172,22 @@ export function useDashboardWidgetOrder() {
         return;
       }
 
-      // Sync order if it changed
       const nextOrder = nextLayout.map((item) => item.i);
       if (!arraysEqual(nextOrder, widgetOrder.value)) {
         syncing = true;
         widgetOrder.value = nextOrder;
-        persistWidgetOrder();
+        persistDashboardLayouts(nextLayout);
         queueMicrotask(() => {
           syncing = false;
         });
         return;
       }
 
-      // Debounce position/size persistence (x, y, w, h changes from drag/resize)
       clearTimeout(layoutPersistTimer);
-      layoutPersistTimer = setTimeout(persistWidgetOrder, 300);
+      layoutPersistTimer = setTimeout(() => {
+        layoutPersistTimer = undefined;
+        persistDashboardLayouts(nextLayout);
+      }, 300);
     },
     { deep: true },
   );
@@ -213,7 +195,16 @@ export function useDashboardWidgetOrder() {
   watch(hiddenWidgets, persistHiddenWidgets, { deep: true });
 
   onScopeDispose(() => {
-    clearTimeout(layoutPersistTimer);
+    /* v8 ignore start -- SSR guard: mirrors registration above */
+    if (typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', visibilitychangeListener);
+    }
+    if (typeof globalThis.removeEventListener === 'function') {
+      globalThis.removeEventListener('pagehide', pagehideListener);
+    }
+    /* v8 ignore stop */
+    flushPendingLayoutPersist();
+    persistHiddenWidgets();
   });
 
   function isWidgetVisible(widgetId: DashboardWidgetId): boolean {
@@ -277,11 +268,16 @@ export function useDashboardWidgetOrder() {
   function toggleWidgetVisibility(widgetId: DashboardWidgetId) {
     const index = hiddenWidgets.value.indexOf(widgetId);
     if (index >= 0) {
+      syncing = true;
       hiddenWidgets.value = hiddenWidgets.value.filter((id) => id !== widgetId);
-      if (!layout.value.some((item) => item.i === widgetId)) {
-        const defaultItem = defaultLayoutById.get(widgetId);
-        layout.value = [...layout.value, { ...defaultItem! }];
-      }
+      widgetOrder.value = sanitizeWidgetOrder([...widgetOrder.value, widgetId]);
+      rebuildLayoutsForCurrentOrder();
+      syncCurrentLayoutFromResponsiveLayouts();
+      persistDashboardLayouts(layout.value);
+      refreshGridInstance();
+      queueMicrotask(() => {
+        syncing = false;
+      });
       return;
     }
 
@@ -293,8 +289,16 @@ export function useDashboardWidgetOrder() {
   }
 
   function resetAll() {
+    syncing = true;
     hiddenWidgets.value = [];
-    resetWidgetOrder();
+    widgetOrder.value = [...DASHBOARD_WIDGET_IDS];
+    resetLayoutsToDefaults();
+    persistHiddenWidgets();
+    persistDashboardLayouts(layout.value);
+    refreshGridInstance();
+    queueMicrotask(() => {
+      syncing = false;
+    });
   }
 
   function toggleEditMode() {
@@ -302,17 +306,21 @@ export function useDashboardWidgetOrder() {
   }
 
   return {
+    currentBreakpoint,
     draggedWidgetId,
     editMode,
+    gridInstanceKey,
     hiddenWidgets,
     isWidgetVisible,
     layout,
+    onBreakpointChanged,
     onWidgetDragEnd,
     onWidgetDragOver,
     onWidgetDragStart,
     onWidgetDrop,
     resetAll,
     resetWidgetOrder,
+    responsiveLayouts,
     toggleEditMode,
     toggleWidgetVisibility,
     widgetOrder,

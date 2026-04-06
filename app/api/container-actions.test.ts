@@ -5,6 +5,7 @@ const {
   mockRouter,
   mockGetContainer,
   mockUpdateContainer,
+  mockMarkPendingFreshStateAfterManualUpdate,
   mockGetState,
   mockInsertAudit,
   mockGetAuditCounter,
@@ -14,6 +15,7 @@ const {
   mockRouter: { use: vi.fn(), post: vi.fn() },
   mockGetContainer: vi.fn(),
   mockUpdateContainer: vi.fn((c) => c),
+  mockMarkPendingFreshStateAfterManualUpdate: vi.fn(),
   mockGetState: vi.fn(),
   mockInsertAudit: vi.fn(),
   mockGetAuditCounter: vi.fn(),
@@ -30,6 +32,7 @@ vi.mock('nocache', () => ({ default: vi.fn(() => 'nocache-middleware') }));
 vi.mock('../store/container', () => ({
   getContainer: mockGetContainer,
   updateContainer: mockUpdateContainer,
+  markPendingFreshStateAfterManualUpdate: mockMarkPendingFreshStateAfterManualUpdate,
 }));
 
 vi.mock('../registry', () => ({
@@ -440,6 +443,10 @@ describe('Container Actions Router', () => {
       expect(mockUpdateContainer).toHaveBeenCalledWith(
         expect.objectContaining({ result: undefined, updateAvailable: false }),
       );
+      expect(mockMarkPendingFreshStateAfterManualUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'c1', name: 'nginx' }),
+        expect.any(Number),
+      );
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
         message: 'Container updated successfully',
@@ -478,6 +485,10 @@ describe('Container Actions Router', () => {
       expect(mockTriggerFn).toHaveBeenCalledWith(container);
       expect(mockUpdateContainer).toHaveBeenCalledWith(
         expect.objectContaining({ result: undefined, updateAvailable: false }),
+      );
+      expect(mockMarkPendingFreshStateAfterManualUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'c1', name: 'nginx' }),
+        expect.any(Number),
       );
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({

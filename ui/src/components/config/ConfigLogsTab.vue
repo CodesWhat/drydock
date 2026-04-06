@@ -3,6 +3,8 @@ import { computed, ref } from 'vue';
 import AppIconButton from '@/components/AppIconButton.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import AppLogViewer from '../AppLogViewer.vue';
+import { preferences } from '../../preferences/store';
+import { usePreference } from '../../preferences/usePreference';
 import type { AppLogEntry } from '../../types/log-entry';
 
 const props = withDefaults(
@@ -52,6 +54,13 @@ const streamingEnabledModel = computed({
   get: () => props.streamingEnabled,
   set: (value: boolean) => emit('update:streamingEnabled', value),
 });
+
+const newestFirst = usePreference(
+  () => preferences.views.logs.newestFirst,
+  (value) => {
+    preferences.views.logs.newestFirst = value;
+  },
+);
 
 const autoScrollPinned = ref(true);
 
@@ -122,6 +131,7 @@ function togglePin() {
 
         <AppLogViewer
           v-else
+          v-model:newest-first="newestFirst"
           class="flex-1 min-h-0"
           :entries="props.entries"
           empty-message="No log entries found for current filters."

@@ -1,16 +1,28 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watchEffect } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watchEffect } from 'vue';
 import AppBadge from '@/components/AppBadge.vue';
 import AppIconButton from '@/components/AppIconButton.vue';
+import { useBreakpoints } from '@/composables/useBreakpoints';
 import type { RecentUpdateRow, UpdateKind } from '../dashboardTypes';
 
-const UPDATE_TABLE_COLUMNS = [
-  { key: 'icon', label: '', icon: true, width: '6%' },
-  { key: 'container', label: 'Container', sortable: false, width: '38%' },
-  { key: 'version', label: 'Version', sortable: false, align: 'text-center', width: '28%' },
-  { key: 'type', label: 'Type', sortable: false, width: '16%' },
-  { key: 'actions', label: 'Actions', sortable: false, align: 'text-center', width: '12%' },
-] as const;
+const { isMobile } = useBreakpoints();
+
+const tableColumns = computed(() =>
+  isMobile.value
+    ? [
+        { key: 'container', label: 'Container', sortable: false, width: '55%' },
+        { key: 'version', label: 'Version', sortable: false, align: 'text-center', width: '22%' },
+        { key: 'type', label: '', sortable: false, width: '11%' },
+        { key: 'actions', label: '', sortable: false, align: 'text-center', width: '12%' },
+      ]
+    : [
+        { key: 'icon', label: '', icon: true, width: '6%' },
+        { key: 'container', label: 'Container', sortable: false, width: '38%' },
+        { key: 'version', label: 'Version', sortable: false, align: 'text-center', width: '28%' },
+        { key: 'type', label: 'Type', sortable: false, width: '16%' },
+        { key: 'actions', label: 'Actions', sortable: false, align: 'text-center', width: '12%' },
+      ],
+);
 
 interface Props {
   dashboardUpdateAllInProgress: boolean;
@@ -97,7 +109,7 @@ watchEffect(() => {
     :style="{ backgroundColor: 'var(--dd-bg-card)' }">
 
     <!-- Header — hides when compact -->
-    <div v-if="showHeader" class="shrink-0 flex items-center justify-between px-5 py-3.5" :style="{ borderBottom: '1px solid var(--dd-border)' }">
+    <div v-if="showHeader" class="shrink-0 flex items-center justify-between px-3 py-2.5 sm:px-5 sm:py-3.5" :style="{ borderBottom: '1px solid var(--dd-border)' }">
       <div class="flex items-center gap-2">
         <div v-if="editMode" class="drag-handle dd-drag-handle" v-tooltip.top="'Drag to reorder'"><AppIcon name="ph:dots-six-vertical" :size="14" /></div>
         <AppIcon name="recent-updates" :size="14" class="text-drydock-secondary" />
@@ -143,14 +155,14 @@ watchEffect(() => {
       <div
         v-if="dashboardUpdateError"
         data-test="dashboard-update-error"
-        class="mx-5 mt-3 px-3 py-2 text-2xs-plus dd-rounded"
+        class="mx-3 sm:mx-5 mt-3 px-3 py-2 text-2xs-plus dd-rounded"
         :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
         {{ dashboardUpdateError }}
       </div>
 
-      <div class="flex-1 min-h-0 overflow-y-auto overscroll-contain dd-scroll-stable">
+      <div class="flex-1 min-h-0 overflow-y-auto overscroll-contain dd-scroll-stable" :class="{ 'mobile-updates-table': isMobile }">
         <DataTable
-          :columns="UPDATE_TABLE_COLUMNS"
+          :columns="tableColumns"
           :rows="recentUpdates"
           row-key="id"
           :row-class="getRowClass"
@@ -166,29 +178,37 @@ watchEffect(() => {
           </template>
 
           <template #cell-container="{ row }">
-            <div class="flex items-center gap-2 flex-wrap">
-              <div class="font-medium dd-text leading-tight">{{ row.name }}</div>
-              <AppBadge
-                v-if="isRowUpdating(row)"
-                size="xs"
-                :custom="{ bg: 'var(--dd-warning-muted)', text: 'var(--dd-warning)' }">
-                <AppIcon name="spinner" :size="12" class="mr-1 dd-spin" />
-                Updating
-              </AppBadge>
+            <div class="flex items-start gap-2">
+              <div v-if="isMobile" class="shrink-0 mt-0.5">
+                <AppIcon v-if="isRowUpdating(row)" name="spinner" :size="16" class="dd-spin dd-text-muted" />
+                <ContainerIcon v-else :icon="row.icon" :size="20" />
+              </div>
+              <div class="min-w-0">
+                <div class="flex items-center gap-1.5 flex-wrap">
+                  <div class="font-medium dd-text leading-tight truncate">{{ row.name }}</div>
+                  <AppBadge
+                    v-if="isRowUpdating(row)"
+                    size="xs"
+                    :custom="{ bg: 'var(--dd-warning-muted)', text: 'var(--dd-warning)' }">
+                    <AppIcon name="spinner" :size="12" class="mr-1 dd-spin" />
+                    Updating
+                  </AppBadge>
+                </div>
+                <div class="text-2xs dd-text-muted mt-0.5 truncate">{{ row.image }}</div>
+                <div v-if="row.registryError" class="text-2xs mt-0.5 truncate" style="color: var(--dd-danger);">
+                  {{ row.registryError }}
+                </div>
+                <a
+                  v-if="row.releaseLink"
+                  :href="row.releaseLink"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="text-2xs mt-0.5 inline-flex underline hover:no-underline"
+                  style="color: var(--dd-info);">
+                  Release notes
+                </a>
+              </div>
             </div>
-            <div class="text-2xs dd-text-muted mt-0.5 truncate">{{ row.image }}</div>
-            <div v-if="row.registryError" class="text-2xs mt-0.5 truncate" style="color: var(--dd-danger);">
-              {{ row.registryError }}
-            </div>
-            <a
-              v-if="row.releaseLink"
-              :href="row.releaseLink"
-              target="_blank"
-              rel="noopener noreferrer"
-              class="text-2xs mt-0.5 inline-flex underline hover:no-underline"
-              style="color: var(--dd-info);">
-              Release notes
-            </a>
           </template>
 
           <template #cell-version="{ row }">
@@ -299,3 +319,11 @@ watchEffect(() => {
     </div>
   </div>
 </template>
+
+<style scoped>
+.mobile-updates-table :deep(td),
+.mobile-updates-table :deep(th) {
+  padding-left: 0.5rem !important;
+  padding-right: 0.5rem !important;
+}
+</style>

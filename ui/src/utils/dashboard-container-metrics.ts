@@ -23,6 +23,10 @@ interface DashboardContainerMetrics {
   securityByImage: ImageSecurityAggregate[];
 }
 
+interface DashboardContainerMetricsOptions {
+  updateContainers?: readonly Container[];
+}
+
 function getContainerSecurityGroup(container: Container): { mapKey: string; key: string } {
   const image = container.image.trim();
   if (image.length > 0) {
@@ -105,22 +109,27 @@ function updateImageSecurityAggregate(
 
 export function buildDashboardContainerMetrics(
   containers: readonly Container[],
+  options: DashboardContainerMetricsOptions = {},
 ): DashboardContainerMetrics {
   let runningContainers = 0;
   let updatesAvailable = 0;
   let freshUpdates = 0;
   const securityIssueImages = new Set<string>();
   const securityByImageMap = new Map<string, ImageSecurityAggregate>();
+  const updateContainers = options.updateContainers ?? containers;
 
-  for (const container of containers) {
-    if (container.status === 'running') {
-      runningContainers += 1;
-    }
+  for (const container of updateContainers) {
     if (container.updateKind) {
       updatesAvailable += 1;
       if (getUpdateMaturity(container.updateDetectedAt, true) === 'fresh') {
         freshUpdates += 1;
       }
+    }
+  }
+
+  for (const container of containers) {
+    if (container.status === 'running') {
+      runningContainers += 1;
     }
 
     const securityGroup = getContainerSecurityGroup(container);

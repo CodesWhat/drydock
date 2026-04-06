@@ -1,6 +1,7 @@
 import { computed, type Ref, ref, watch } from 'vue';
 import { preferences } from '../preferences/store';
 import type { Container } from '../types/container';
+import { matchesHidePinnedFilter } from '../utils/hide-pinned';
 
 const DEFAULT_FILTER_VALUE = 'all';
 
@@ -89,7 +90,7 @@ const CONTAINER_FILTER_MATCHERS: readonly ContainerFilterMatcher[] = [
   (container, criteria) => matchesExactFilter(criteria.bouncer, container.bouncer),
   (container, criteria) => matchesExactFilter(criteria.server, container.server),
   (container, criteria) => matchesKindFilter(container, criteria.kind),
-  (container, criteria) => !criteria.hidePinned || container.tagPrecision !== 'specific',
+  (container, criteria) => matchesHidePinnedFilter(container, criteria.hidePinned),
 ];
 
 function matchesContainerFilters(container: Container, criteria: ContainerFilterCriteria): boolean {

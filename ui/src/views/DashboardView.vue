@@ -5,6 +5,8 @@ import { GridItem, GridLayout } from 'grid-layout-plus';
 import AppIconButton from '@/components/AppIconButton.vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
 import { useConfirmDialog } from '../composables/useConfirmDialog';
+import { useToast } from '../composables/useToast';
+import { preferences } from '../preferences/store';
 import { ROUTES } from '../router/routes';
 import { updateContainer } from '../services/container-actions';
 import { errorMessage, isNoUpdateAvailableError } from '../utils/error';
@@ -20,13 +22,18 @@ import {
   type RecentUpdateRow,
 } from './dashboard/dashboardTypes';
 import { useDashboardDragAutoScroll } from './dashboard/useDashboardDragAutoScroll';
-import { GRID_BREAKPOINTS, GRID_COLS, WIDGET_CONSTRAINTS } from './dashboard/dashboardWidgetLayout';
+import {
+  getWidgetBoundsForBreakpoint,
+  GRID_BREAKPOINTS,
+  GRID_COLS,
+} from './dashboard/dashboardWidgetLayout';
 import { useDashboardComputed } from './dashboard/useDashboardComputed';
 import { useDashboardData } from './dashboard/useDashboardData';
 import { useDashboardWidgetOrder } from './dashboard/useDashboardWidgetOrder';
 
 const router = useRouter();
 const confirm = useConfirmDialog();
+const toast = useToast();
 const { isMobile, windowNarrow } = useBreakpoints();
 const dashboardScrollEl = ref<HTMLElement | null>(null);
 // Responsive grid margins: slightly wider vertical gaps on touch screens for scroll room
@@ -56,6 +63,10 @@ function navigateTo(route: RouteLocationRaw) {
   router.push(route);
 }
 
+function formatContainerCount(count: number): string {
+  return `${count} container${count === 1 ? '' : 's'}`;
+}
+
 // Delay enabling grid transitions to prevent fly-in on initial load
 const gridReady = ref(false);
 let gridReadyTimer: ReturnType<typeof setTimeout> | undefined;
@@ -69,18 +80,33 @@ onUnmounted(() => {
 });
 
 const {
+  currentBreakpoint,
+  gridInstanceKey,
   onWidgetDragEnd,
   onWidgetDragOver,
   onWidgetDragStart,
   onWidgetDrop,
+  onBreakpointChanged,
   editMode,
   isWidgetVisible,
   layout,
+  responsiveLayouts,
   resetAll,
   toggleEditMode,
   toggleWidgetVisibility,
   widgetOrderIndex,
 } = useDashboardWidgetOrder();
+
+const layoutWithBreakpointBounds = computed(() =>
+  layout.value.map((item) => ({
+    ...item,
+    breakpointBounds: getWidgetBoundsForBreakpoint(
+      item.i as DashboardWidgetId,
+      currentBreakpoint.value,
+    ),
+  })),
+);
+
 const { handleDashboardGridPointerDown, stopDashboardDragAutoScroll } = useDashboardDragAutoScroll({
   editMode,
   dashboardScrollEl,
@@ -162,6 +188,7 @@ const {
   agents,
   containerSummary,
   containers,
+  hidePinned: computed(() => preferences.containers.filters.hidePinned),
   maintenanceCountdownNow,
   recentStatusByContainer,
   registries,
@@ -329,9 +356,11 @@ function confirmDashboardUpdate(row: RecentUpdateRow) {
         await updateContainer(row.id);
         await fetchDashboardData();
         capturePendingDashboardRows([row]);
+        toast.success(`Updated: ${row.name}`);
       } catch (e: unknown) {
         if (isStaleDashboardUpdateError(e)) {
           await fetchDashboardData();
+          toast.info(`Already up to date: ${row.name}`);
         } else {
           dashboardUpdateError.value = errorMessage(e, `Failed to update ${row.name}`);
         }
@@ -357,11 +386,28 @@ function confirmDashboardUpdateAll() {
         const updateResults = await Promise.allSettled(
           pendingRowsSnapshot.map((row) => updateContainer(row.id)),
         );
-        await fetchDashboardData();
-        capturePendingDashboardRows(
-          pendingRowsSnapshot.filter((_, index) => updateResults[index]?.status === 'fulfilled'),
+        const successfulRows = pendingRowsSnapshot.filter(
+          (_, index) => updateResults[index]?.status === 'fulfilled',
         );
-        const firstRejectedUpdate = updateResults.find((result) => result.status === 'rejected');
+        const staleRows = pendingRowsSnapshot.filter((_, index) => {
+          const result = updateResults[index];
+          return result?.status === 'rejected' && isStaleDashboardUpdateError(result.reason);
+        });
+        await fetchDashboardData();
+        capturePendingDashboardRows(successfulRows);
+        if (successfulRows.length > 0) {
+          toast.success(`Updated ${formatContainerCount(successfulRows.length)}`);
+        }
+        if (staleRows.length > 0) {
+          toast.info(
+            staleRows.length === 1
+              ? `Already up to date: ${staleRows[0]!.name}`
+              : `${formatContainerCount(staleRows.length)} already up to date`,
+          );
+        }
+        const firstRejectedUpdate = updateResults.find(
+          (result) => result.status === 'rejected' && !isStaleDashboardUpdateError(result.reason),
+        );
         if (firstRejectedUpdate?.status === 'rejected') {
           dashboardUpdateError.value = errorMessage(
             firstRejectedUpdate.reason,
@@ -422,12 +468,15 @@ function confirmDashboardUpdateAll() {
 
         <!-- Grid Layout -->
         <GridLayout
+          :key="gridInstanceKey"
           v-model:layout="layout"
           @pointerdown.capture="handleDashboardGridPointerDown"
+          @breakpoint-changed="onBreakpointChanged"
           :col-num="12"
           :row-height="30"
           :margin="gridMargin"
           :responsive="true"
+          :responsive-layouts="responsiveLayouts"
           :breakpoints="GRID_BREAKPOINTS"
           :cols="GRID_COLS"
           :class="{ 'dd-grid-ready': gridReady }"
@@ -436,7 +485,7 @@ function confirmDashboardUpdateAll() {
           :vertical-compact="true"
           :use-css-transforms="true">
           <GridItem
-            v-for="item in layout"
+            v-for="item in layoutWithBreakpointBounds"
             v-show="isWidgetVisible(item.i as DashboardWidgetId)"
             :key="item.i"
             :data-widget-id="item.i"
@@ -447,10 +496,10 @@ function confirmDashboardUpdateAll() {
             :w="item.w"
             :h="item.h"
             :i="item.i"
-            :min-w="WIDGET_CONSTRAINTS[item.i as DashboardWidgetId]?.minW ?? 2"
-            :min-h="WIDGET_CONSTRAINTS[item.i as DashboardWidgetId]?.minH ?? 2"
-            :max-w="WIDGET_CONSTRAINTS[item.i as DashboardWidgetId]?.maxW ?? 12"
-            :max-h="WIDGET_CONSTRAINTS[item.i as DashboardWidgetId]?.maxH ?? 20"
+            :min-w="item.breakpointBounds.minW"
+            :min-h="item.breakpointBounds.minH"
+            :max-w="item.breakpointBounds.maxW"
+            :max-h="item.breakpointBounds.maxH"
             drag-ignore-from="input, textarea, button, a, select, .no-drag"
             drag-allow-from=".drag-handle"
             class="dd-grid-item"

@@ -2,7 +2,13 @@ import { computed, type Ref, ref } from 'vue';
 import { getContainerSbom } from '../services/container';
 import { errorMessage } from '../utils/error';
 import type { SbomFormat } from '../views/security/securityViewTypes';
-import { severityOrder, toSafeFileName } from '../views/security/securityViewUtils';
+import {
+  severityOrder,
+  toSafeFileName,
+  type VulnExportFormat,
+  vulnReportToCsv,
+  vulnReportToJson,
+} from '../views/security/securityViewUtils';
 import type { ImageSummaryWithVulns } from './useVulnerabilities';
 
 interface UseSbomDetailOptions {
@@ -121,16 +127,28 @@ function downloadSbomDocument({
   detailSbomDocument,
   selectedImage,
   selectedSbomFormat,
-  detailSbomDocumentJson,
 }: {
   detailSbomDocument: unknown;
   selectedImage: ImageSummaryWithVulns | null;
   selectedSbomFormat: SbomFormat;
-  detailSbomDocumentJson: string;
 }): void {
   if (!detailSbomDocument || !selectedImage) {
     return;
   }
+  let json: string;
+  try {
+    json = JSON.stringify(detailSbomDocument, null, 2);
+  } catch {
+    return;
+  }
+  triggerBlobDownload(
+    json,
+    'application/json',
+    `${toSafeFileName(selectedImage.image)}.${selectedSbomFormat}.sbom.json`,
+  );
+}
+
+function triggerBlobDownload(content: string, mimeType: string, filename: string): void {
   const runtimeDocument = globalThis.document;
   const createObjectUrl = globalThis.URL?.createObjectURL;
   const revokeObjectUrl = globalThis.URL?.revokeObjectURL;
@@ -141,14 +159,11 @@ function downloadSbomDocument({
   ) {
     return;
   }
-  if (!detailSbomDocumentJson) {
-    return;
-  }
-  const blob = new Blob([detailSbomDocumentJson], { type: 'application/json' });
+  const blob = new Blob([content], { type: mimeType });
   const objectUrl = createObjectUrl(blob);
   const link = runtimeDocument.createElement('a');
   link.href = objectUrl;
-  link.download = `${toSafeFileName(selectedImage.image)}.${selectedSbomFormat}.sbom.json`;
+  link.download = filename;
   runtimeDocument.body.appendChild(link);
   try {
     link.click();
@@ -202,8 +217,28 @@ export function useSbomDetail({ containerIdsByImage }: UseSbomDetailOptions) {
       detailSbomDocument: detailSbomDocument.value,
       selectedImage: selectedImage.value,
       selectedSbomFormat: selectedSbomFormat.value,
-      detailSbomDocumentJson: detailSbomDocumentJson.value,
     });
+  }
+
+  const selectedVulnExportFormat = ref<VulnExportFormat>('csv');
+
+  function downloadVulnReport() {
+    if (!selectedImage.value) {
+      return;
+    }
+    const vulns = selectedImageVulns.value;
+    if (vulns.length === 0) {
+      return;
+    }
+    const format = selectedVulnExportFormat.value;
+    const content = format === 'csv' ? vulnReportToCsv(vulns) : vulnReportToJson(vulns);
+    const mimeType = format === 'csv' ? 'text/csv' : 'application/json';
+    const ext = format === 'csv' ? 'csv' : 'json';
+    triggerBlobDownload(
+      content,
+      mimeType,
+      `${toSafeFileName(selectedImage.value.image)}.vulnerabilities.${ext}`,
+    );
   }
 
   function openDetail(summary: ImageSummaryWithVulns) {
@@ -221,6 +256,7 @@ export function useSbomDetail({ containerIdsByImage }: UseSbomDetailOptions) {
     selectedImage,
     detailOpen,
     selectedSbomFormat,
+    selectedVulnExportFormat,
     detailSbomResult,
     detailSbomLoading,
     detailSbomError,
@@ -232,6 +268,7 @@ export function useSbomDetail({ containerIdsByImage }: UseSbomDetailOptions) {
     detailSbomDocumentJson,
     loadDetailSbom,
     downloadDetailSbom,
+    downloadVulnReport,
     openDetail,
     handleDetailOpenChange,
   };

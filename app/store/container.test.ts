@@ -2604,3 +2604,48 @@ test('updateContainer should not emit when container data is unchanged', async (
   expect(collection.update).toHaveBeenCalledTimes(1);
   expect(spyEvent).not.toHaveBeenCalled();
 });
+
+test('pending fresh state helpers should ignore invalid container identities', () => {
+  container.markPendingFreshStateAfterManualUpdate({}, 100);
+  container.markPendingFreshStateAfterManualUpdate({ watcher: '', name: 'nginx' }, 200);
+
+  expect(container.getPendingFreshStateAfterManualUpdateAt({ watcher: 'docker', name: '' })).toBe(
+    undefined,
+  );
+  expect(container._getPendingFreshStateAfterManualUpdateForTests().size).toBe(0);
+
+  container.clearPendingFreshStateAfterManualUpdate({ watcher: 'docker', name: '' });
+  expect(container._getPendingFreshStateAfterManualUpdateForTests().size).toBe(0);
+});
+
+test('pending fresh state helpers should store and clear agent-qualified keys', () => {
+  container.markPendingFreshStateAfterManualUpdate(
+    { agent: 'edge-a', watcher: 'docker', name: 'nginx' },
+    123,
+  );
+  container.markPendingFreshStateAfterManualUpdate({ watcher: 'docker', name: 'redis' }, 456);
+
+  expect(
+    container.getPendingFreshStateAfterManualUpdateAt({
+      agent: 'edge-a',
+      watcher: 'docker',
+      name: 'nginx',
+    }),
+  ).toBe(123);
+  expect(
+    container.getPendingFreshStateAfterManualUpdateAt({ watcher: 'docker', name: 'redis' }),
+  ).toBe(456);
+  expect([...container._getPendingFreshStateAfterManualUpdateForTests().entries()]).toEqual([
+    ['edge-a::docker::nginx', 123],
+    ['::docker::redis', 456],
+  ]);
+
+  container.clearPendingFreshStateAfterManualUpdate({
+    agent: 'edge-a',
+    watcher: 'docker',
+    name: 'nginx',
+  });
+  container.clearPendingFreshStateAfterManualUpdate({ watcher: 'docker', name: 'redis' });
+
+  expect(container._getPendingFreshStateAfterManualUpdateForTests().size).toBe(0);
+});

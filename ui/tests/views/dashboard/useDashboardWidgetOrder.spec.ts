@@ -1,9 +1,17 @@
+import { readFile } from 'node:fs/promises';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { mount } from '@vue/test-utils';
 import { defineComponent, h, nextTick } from 'vue';
 import { preferences } from '@/preferences/store';
 import { DASHBOARD_WIDGET_IDS, type DashboardWidgetId } from '@/views/dashboard/dashboardTypes';
 import { applyConstraints } from '@/views/dashboard/dashboardWidgetLayout';
-import { moveWidget, useDashboardWidgetOrder } from '@/views/dashboard/useDashboardWidgetOrder';
+import {
+  _rebuildLayoutsForOrderForTests,
+  createResponsiveLayoutsMemo,
+  moveWidget,
+  useDashboardWidgetOrder,
+} from '@/views/dashboard/useDashboardWidgetOrder';
 
 async function mountWidgetOrderComposable() {
   let state: ReturnType<typeof useDashboardWidgetOrder> | undefined;
@@ -24,11 +32,62 @@ async function mountWidgetOrderComposable() {
   return { state, wrapper };
 }
 
+describe('createResponsiveLayoutsMemo', () => {
+  const item = (id: string, overrides: Record<string, unknown> = {}): any => ({
+    i: id,
+    x: 0,
+    y: 0,
+    w: 1,
+    h: 1,
+    minW: undefined,
+    minH: undefined,
+    maxW: undefined,
+    maxH: undefined,
+    ...overrides,
+  });
+
+  it('returns the same object when the same layout reference is passed twice', () => {
+    const memo = createResponsiveLayoutsMemo();
+    const layouts = { lg: [item('a')] };
+    const first = memo(layouts);
+    const second = memo(layouts);
+    expect(second).toBe(first);
+  });
+
+  it('detects changes in each layout property independently', () => {
+    const properties = ['y', 'w', 'h', 'minW', 'minH', 'maxW', 'maxH'] as const;
+    for (const prop of properties) {
+      const memo = createResponsiveLayoutsMemo();
+      memo({ lg: [item('a')] });
+      const changed = memo({ lg: [item('a', { [prop]: 999 })] });
+      expect(changed.lg).toBeDefined();
+    }
+  });
+
+  it('detects removal of a previously-present breakpoint', () => {
+    const memo = createResponsiveLayoutsMemo();
+    const withSm = memo({ lg: [item('a')], sm: [item('b')] });
+    expect(withSm.sm).toBeDefined();
+
+    const withoutSm = memo({ lg: [item('a')] });
+    expect(withoutSm).not.toBe(withSm);
+    expect(withoutSm.sm).toBeUndefined();
+  });
+});
+
 describe('useDashboardWidgetOrder', () => {
   beforeEach(() => {
     localStorage.clear();
     preferences.dashboard.widgetOrder = [...DASHBOARD_WIDGET_IDS];
+    preferences.dashboard.hiddenWidgets = [];
     preferences.dashboard.gridLayout = [];
+    preferences.dashboard.gridLayouts = {
+      xxs: undefined,
+      xs: undefined,
+      sm: undefined,
+      md: undefined,
+      lg: undefined,
+    };
   });
 
   it('hydrates from preferences and falls back to defaults for non-array values', async () => {
@@ -100,26 +159,24 @@ describe('useDashboardWidgetOrder', () => {
     });
   });
 
-  it('falls back to the default layout when every persisted widget lands in column zero', async () => {
-    preferences.dashboard.gridLayout = DASHBOARD_WIDGET_IDS.map((id, index) => ({
+  it('preserves valid single-column layouts for the mobile breakpoint', async () => {
+    const mobileLayout = DASHBOARD_WIDGET_IDS.map((id, index) => ({
       i: id,
       x: 0,
       y: index,
       w: 1,
       h: 1,
     }));
+    preferences.dashboard.gridLayouts.sm = mobileLayout;
 
     const { state } = await mountWidgetOrderComposable();
+    state.onBreakpointChanged('sm', mobileLayout as any);
+    state.layout.value = mobileLayout as any;
+    await nextTick();
 
-    expect(state.layout.value).toEqual(
-      applyConstraints(
-        DASHBOARD_WIDGET_IDS.map((id) => {
-          const item = state.layout.value.find((layoutItem) => layoutItem.i === id);
-          return { ...item! };
-        }),
-      ),
-    );
-    expect(state.layout.value.some((item) => item.x !== 0)).toBe(true);
+    expect(state.currentBreakpoint.value).toBe('sm');
+    expect(state.layout.value.every((item) => item.x === 0)).toBe(true);
+    expect(state.layout.value.every((item) => item.w === 1)).toBe(true);
   });
 
   it('returns explicit style ordering and uses canonical fallback index for missing ids', async () => {
@@ -291,6 +348,40 @@ describe('useDashboardWidgetOrder', () => {
     expect(state.editMode.value).toBe(true);
   });
 
+  it('ignores invalid breakpoints and falls back to default layouts for invalid breakpoint payloads', async () => {
+    const { state } = await mountWidgetOrderComposable();
+
+    state.onBreakpointChanged('invalid-breakpoint' as any);
+    expect(state.currentBreakpoint.value).toBe('lg');
+
+    state.onBreakpointChanged('md', 'invalid-layout' as any);
+    await nextTick();
+
+    expect(state.currentBreakpoint.value).toBe('md');
+    expect(state.responsiveLayouts.value.md?.map((item) => item.i)).toEqual(DASHBOARD_WIDGET_IDS);
+  });
+
+  it('resetAll rebuilds the current non-desktop breakpoint layout', async () => {
+    const mobileLayout = DASHBOARD_WIDGET_IDS.map((id, index) => ({
+      i: id,
+      x: 0,
+      y: index * 2,
+      w: 1,
+      h: 2,
+    }));
+    const { state } = await mountWidgetOrderComposable();
+
+    state.onBreakpointChanged('sm', mobileLayout as any);
+    state.layout.value = mobileLayout as any;
+    await nextTick();
+
+    state.resetAll();
+    await nextTick();
+
+    expect(state.currentBreakpoint.value).toBe('sm');
+    expect(state.responsiveLayouts.value.sm?.every((item) => item.w === 1)).toBe(true);
+  });
+
   it('debounces position/size persistence when layout changes without order change', async () => {
     vi.useFakeTimers();
     const { state } = await mountWidgetOrderComposable();
@@ -303,11 +394,112 @@ describe('useDashboardWidgetOrder', () => {
 
     // Before debounce fires, gridLayout should not yet be updated
     vi.advanceTimersByTime(300);
+    expect(preferences.dashboard.gridLayouts.lg).toEqual(
+      expect.arrayContaining([expect.objectContaining({ i: updated[0].i, x: 99 })]),
+    );
     expect(preferences.dashboard.gridLayout).toEqual(
       expect.arrayContaining([expect.objectContaining({ i: updated[0].i, x: 99 })]),
     );
 
     vi.useRealTimers();
+  });
+
+  it('reuses unchanged breakpoint layouts in responsiveLayouts when persisting current breakpoint changes', async () => {
+    vi.useFakeTimers();
+    const mobileLayout = DASHBOARD_WIDGET_IDS.map((id, index) => ({
+      i: id,
+      x: 0,
+      y: index,
+      w: 1,
+      h: 1,
+    }));
+    preferences.dashboard.gridLayouts.sm = mobileLayout;
+
+    const { state } = await mountWidgetOrderComposable();
+    const beforeSm = state.responsiveLayouts.value.sm;
+    const beforeLg = state.responsiveLayouts.value.lg;
+
+    const updated = state.layout.value.map((item) => ({ ...item }));
+    updated[0] = { ...updated[0], x: 99 };
+    state.layout.value = updated;
+    await nextTick();
+
+    vi.advanceTimersByTime(300);
+    await nextTick();
+
+    expect(state.responsiveLayouts.value.sm).toBe(beforeSm);
+    expect(state.responsiveLayouts.value.lg).not.toBe(beforeLg);
+    expect(state.responsiveLayouts.value.lg?.[0].x).toBe(99);
+
+    vi.useRealTimers();
+  });
+
+  it('flushes pending layout persistence when the composable is disposed before debounce fires', async () => {
+    vi.useFakeTimers();
+    const { state, wrapper } = await mountWidgetOrderComposable();
+
+    const updated = state.layout.value.map((item) => ({ ...item }));
+    updated[0] = { ...updated[0], x: 99 };
+    state.layout.value = updated;
+    await nextTick();
+
+    wrapper.unmount();
+
+    expect(preferences.dashboard.gridLayouts.lg).toEqual(
+      expect.arrayContaining([expect.objectContaining({ i: updated[0].i, x: 99 })]),
+    );
+
+    vi.useRealTimers();
+  });
+
+  it('flushes pending layout persistence when the page becomes hidden before debounce fires', async () => {
+    vi.useFakeTimers();
+    const { state } = await mountWidgetOrderComposable();
+    const originalVisibilityState = Object.getOwnPropertyDescriptor(document, 'visibilityState');
+
+    try {
+      const updated = state.layout.value.map((item) => ({ ...item }));
+      updated[0] = { ...updated[0], x: 99 };
+      state.layout.value = updated;
+      await nextTick();
+
+      Object.defineProperty(document, 'visibilityState', {
+        configurable: true,
+        get: () => 'hidden',
+      });
+      document.dispatchEvent(new Event('visibilitychange'));
+
+      expect(preferences.dashboard.gridLayouts.lg).toEqual(
+        expect.arrayContaining([expect.objectContaining({ i: updated[0].i, x: 99 })]),
+      );
+    } finally {
+      if (originalVisibilityState) {
+        Object.defineProperty(document, 'visibilityState', originalVisibilityState);
+      } else {
+        Reflect.deleteProperty(document, 'visibilityState');
+      }
+      vi.useRealTimers();
+    }
+  });
+
+  it('flushes pending layout persistence on pagehide before debounce fires', async () => {
+    vi.useFakeTimers();
+    const { state } = await mountWidgetOrderComposable();
+
+    try {
+      const updated = state.layout.value.map((item) => ({ ...item }));
+      updated[0] = { ...updated[0], x: 99 };
+      state.layout.value = updated;
+      await nextTick();
+
+      globalThis.dispatchEvent(new Event('pagehide'));
+
+      expect(preferences.dashboard.gridLayouts.lg).toEqual(
+        expect.arrayContaining([expect.objectContaining({ i: updated[0].i, x: 99 })]),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('returns the original order when asked to move invalid or no-op widget pairs', () => {
@@ -370,5 +562,31 @@ describe('useDashboardWidgetOrder', () => {
   it('leaves unknown layout items untouched when applying constraints', () => {
     const item = { i: 'unknown-widget', x: 1, y: 2, w: 3, h: 4 } as never;
     expect(applyConstraints([item])).toEqual([item]);
+  });
+
+  it('rebuilds a desktop layout when responsive layouts omit the lg breakpoint', () => {
+    const mobileLayout = DASHBOARD_WIDGET_IDS.map((id, index) => ({
+      i: id,
+      x: 0,
+      y: index,
+      w: 1,
+      h: 1,
+    }));
+
+    const rebuilt = _rebuildLayoutsForOrderForTests(DASHBOARD_WIDGET_IDS, {
+      sm: mobileLayout,
+    });
+
+    expect(rebuilt.lg?.map((item) => item.i)).toEqual(DASHBOARD_WIDGET_IDS);
+  });
+
+  it('delegates responsive layout state to useDashboardResponsiveLayouts', async () => {
+    const specDir = dirname(fileURLToPath(import.meta.url));
+    const source = await readFile(
+      resolve(specDir, '../../../src/views/dashboard/useDashboardWidgetOrder.ts'),
+      'utf8',
+    );
+
+    expect(source).toContain("from './useDashboardResponsiveLayouts'");
   });
 });

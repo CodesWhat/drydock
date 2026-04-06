@@ -197,6 +197,9 @@ html.dd-font-comic-mono {
 .dd-bg-elevated {
   background-color: var(--dd-bg-elevated);
 }
+.dd-bg-button {
+  background-color: var(--dd-border-strong);
+}
 .dd-bg-inset {
   background-color: var(--dd-bg-inset);
 }

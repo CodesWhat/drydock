@@ -36,6 +36,21 @@ export interface NotificationRuleDispatchOptions {
   defaultWhenRuleMissing?: boolean;
 }
 
+export type NotificationRuleDispatchReason =
+  | 'invalid-input'
+  | 'missing-rule'
+  | 'default-when-rule-missing'
+  | 'rule-disabled'
+  | 'allow-all-when-empty'
+  | 'empty-trigger-list'
+  | 'matched-allow-list'
+  | 'excluded-from-allow-list';
+
+export interface NotificationRuleDispatchDecision {
+  enabled: boolean;
+  reason: NotificationRuleDispatchReason;
+}
+
 export const DEFAULT_NOTIFICATION_RULES: NotificationRule[] = [
   {
     id: 'update-available',
@@ -235,6 +250,55 @@ export function updateNotificationRule(
 }
 
 /**
+ * Explain whether a trigger should execute for a given notification rule.
+ */
+export function getTriggerDispatchDecisionForRule(
+  ruleId: string,
+  triggerId: string,
+  options: NotificationRuleDispatchOptions = {},
+): NotificationRuleDispatchDecision {
+  const ruleIdNormalized = ruleId?.toLowerCase();
+  const triggerIdNormalized = triggerId?.toLowerCase();
+  if (!ruleIdNormalized || !triggerIdNormalized) {
+    return {
+      enabled: false,
+      reason: 'invalid-input',
+    };
+  }
+
+  const { allowAllWhenNoTriggers = false, defaultWhenRuleMissing = false } = options;
+  const rule = getNotificationRule(ruleIdNormalized);
+  if (!rule) {
+    return {
+      enabled: defaultWhenRuleMissing,
+      reason: defaultWhenRuleMissing ? 'default-when-rule-missing' : 'missing-rule',
+    };
+  }
+
+  if (!rule.enabled) {
+    return {
+      enabled: false,
+      reason: 'rule-disabled',
+    };
+  }
+
+  if (rule.triggers.length === 0) {
+    return {
+      enabled: allowAllWhenNoTriggers,
+      reason: allowAllWhenNoTriggers ? 'allow-all-when-empty' : 'empty-trigger-list',
+    };
+  }
+
+  const matched = rule.triggers.some(
+    (configuredTriggerId) => configuredTriggerId.toLowerCase() === triggerIdNormalized,
+  );
+  return {
+    enabled: matched,
+    reason: matched ? 'matched-allow-list' : 'excluded-from-allow-list',
+  };
+}
+
+/**
  * Return true when a trigger should execute for a given notification rule.
  */
 export function isTriggerEnabledForRule(
@@ -242,27 +306,5 @@ export function isTriggerEnabledForRule(
   triggerId: string,
   options: NotificationRuleDispatchOptions = {},
 ): boolean {
-  const ruleIdNormalized = ruleId?.toLowerCase();
-  const triggerIdNormalized = triggerId?.toLowerCase();
-  if (!ruleIdNormalized || !triggerIdNormalized) {
-    return false;
-  }
-
-  const { allowAllWhenNoTriggers = false, defaultWhenRuleMissing = false } = options;
-  const rule = getNotificationRule(ruleIdNormalized);
-  if (!rule) {
-    return defaultWhenRuleMissing;
-  }
-
-  if (!rule.enabled) {
-    return false;
-  }
-
-  if (rule.triggers.length === 0) {
-    return allowAllWhenNoTriggers;
-  }
-
-  return rule.triggers.some(
-    (configuredTriggerId) => configuredTriggerId.toLowerCase() === triggerIdNormalized,
-  );
+  return getTriggerDispatchDecisionForRule(ruleId, triggerId, options).enabled;
 }

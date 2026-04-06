@@ -74,9 +74,9 @@ describe('preferences migration', () => {
   });
 
   describe('migrate', () => {
-    it('should return merged defaults for schemaVersion 1 data', () => {
+    it('should return merged defaults for schemaVersion 1 data and upgrade the schema version', () => {
       const result = migrate({ schemaVersion: 1, theme: { family: 'dracula' } });
-      expect(result.schemaVersion).toBe(1);
+      expect(result.schemaVersion).toBe(DEFAULTS.schemaVersion);
       expect(result.theme.family).toBe('dracula');
       expect(result.theme.variant).toBe('dark');
       expect(result.containers.viewMode).toBe('table');
@@ -165,6 +165,105 @@ describe('preferences migration', () => {
       expect(result.dashboard.gridLayout).toEqual(gridLayout);
     });
 
+    it('should migrate legacy desktop gridLayout into responsive dashboard layouts', () => {
+      const gridLayout = [
+        { i: 'host-status', x: 10, y: 11, w: 4, h: 6 },
+        { i: 'recent-updates', x: 0, y: 0, w: 12, h: 8 },
+      ];
+      const result = migrate({
+        schemaVersion: 1,
+        dashboard: {
+          widgetOrder: ['host-status', 'recent-updates'],
+          hiddenWidgets: [],
+          gridLayout,
+        },
+      });
+
+      expect(result.dashboard.gridLayouts.lg).toEqual(gridLayout);
+    });
+
+    it('should migrate legacy single-column gridLayout into mobile dashboard layouts', () => {
+      const gridLayout = [
+        { i: 'stat-containers', x: 0, y: 0, w: 1, h: 3 },
+        { i: 'recent-updates', x: 0, y: 3, w: 1, h: 10 },
+      ];
+      const result = migrate({
+        schemaVersion: 1,
+        dashboard: {
+          widgetOrder: ['stat-containers', 'recent-updates'],
+          hiddenWidgets: [],
+          gridLayout,
+        },
+      });
+
+      expect(result.dashboard.gridLayouts.sm).toEqual(gridLayout);
+    });
+
+    it('should treat non-record legacy grid items as desktop layouts', () => {
+      const gridLayout = [null, { i: 'recent-updates', x: 0, y: 3, w: 1, h: 10 }] as any;
+      const result = migrate({
+        schemaVersion: 1,
+        dashboard: {
+          widgetOrder: ['recent-updates'],
+          hiddenWidgets: [],
+          gridLayout,
+        },
+      });
+
+      expect(result.dashboard.gridLayouts.lg).toEqual(gridLayout);
+    });
+
+    it('should drop non-object responsive gridLayouts before migrating legacy layouts', () => {
+      const gridLayout = [{ i: 'host-status', x: 8, y: 3, w: 4, h: 6 }];
+      const result = migrate({
+        schemaVersion: 1,
+        dashboard: {
+          widgetOrder: ['host-status'],
+          hiddenWidgets: [],
+          gridLayout,
+          gridLayouts: 'invalid-layouts' as any,
+        },
+      });
+
+      expect(result.dashboard.gridLayouts.lg).toEqual(gridLayout);
+    });
+
+    it('should keep valid responsive dashboard layouts and discard invalid entries', () => {
+      const desktopLayout = [{ i: 'host-status', x: 8, y: 3, w: 4, h: 6 }];
+      const result = migrate({
+        schemaVersion: 1,
+        dashboard: {
+          widgetOrder: ['host-status'],
+          hiddenWidgets: [],
+          gridLayout: [{ i: 'host-status', x: 0, y: 0, w: 1, h: 3 }],
+          gridLayouts: {
+            lg: desktopLayout,
+            invalid: desktopLayout,
+            sm: 'not-an-array',
+          },
+        },
+      });
+
+      expect(result.dashboard.gridLayouts).toEqual({
+        ...DEFAULTS.dashboard.gridLayouts,
+        lg: desktopLayout,
+      });
+    });
+
+    it('should drop non-array legacy gridLayout values', () => {
+      const result = migrate({
+        schemaVersion: 1,
+        dashboard: {
+          widgetOrder: ['host-status'],
+          hiddenWidgets: [],
+          gridLayout: { i: 'host-status' } as any,
+        },
+      });
+
+      expect(result.dashboard.gridLayout).toEqual(DEFAULTS.dashboard.gridLayout);
+      expect(result.dashboard.gridLayouts).toEqual(DEFAULTS.dashboard.gridLayouts);
+    });
+
     it('should preserve all valid values through sanitization', () => {
       const input = {
         schemaVersion: 1,
@@ -182,6 +281,57 @@ describe('preferences migration', () => {
       expect(result.appearance.fontSize).toBe(1.15);
       expect(result.containers.viewMode).toBe('cards');
       expect(result.containers.tableActions).toBe('buttons');
+    });
+
+    it('should add the shared log sort preference when migrating older schema data', () => {
+      const result = migrate({ schemaVersion: 1, views: { triggers: { mode: 'cards' } } });
+
+      expect(result.views.logs.newestFirst).toBe(DEFAULTS.views.logs.newestFirst);
+      expect(result.views.triggers.mode).toBe('cards');
+    });
+
+    it('should preserve the shared log sort preference in current schema data', () => {
+      const result = migrate({
+        schemaVersion: DEFAULTS.schemaVersion,
+        views: {
+          logs: { newestFirst: true },
+        },
+      });
+
+      expect(result.views.logs.newestFirst).toBe(true);
+    });
+
+    it('should reset invalid log view objects to defaults', () => {
+      const result = migrate({
+        schemaVersion: 1,
+        views: {
+          logs: 'invalid' as any,
+        },
+      });
+
+      expect(result.views.logs).toEqual(DEFAULTS.views.logs);
+    });
+
+    it('should delete non-record logs value during sanitization of current schema data', () => {
+      const result = migrate({
+        schemaVersion: DEFAULTS.schemaVersion,
+        views: {
+          logs: 42 as any,
+        },
+      });
+
+      expect(result.views.logs).toEqual(DEFAULTS.views.logs);
+    });
+
+    it('should reset invalid log newestFirst values to defaults', () => {
+      const result = migrate({
+        schemaVersion: 1,
+        views: {
+          logs: { newestFirst: 'yes' as any },
+        },
+      });
+
+      expect(result.views.logs.newestFirst).toBe(DEFAULTS.views.logs.newestFirst);
     });
   });
 

@@ -10,6 +10,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0-rc.6] — 2026-04-05
+
+### Added
+
+- **Rollback shortcut in container actions menu** — Quick rollback option directly from the container row actions dropdown. ([#5137b99a](https://github.com/CodesWhat/drydock/commit/5137b99a))
+- **Clear all button in notification bell** — One-click dismiss of all notification bell entries. ([#6785e2a4](https://github.com/CodesWhat/drydock/commit/6785e2a4))
+- **Info toast when no pending update** — Container update check now shows an informational toast when the container is already at its latest version. ([#08864936](https://github.com/CodesWhat/drydock/commit/08864936))
+- **Typed notification event templates** — Every event type (update-available, update-applied, update-failed, security-alert, agent-reconnect) now has a dedicated default template with type-safe variable placeholders. ([#69f85c36](https://github.com/CodesWhat/drydock/commit/69f85c36))
+- **Digest-aware default notification templates** — Default templates now indicate when a notification was delivered via digest accumulation. ([#f7668d44](https://github.com/CodesWhat/drydock/commit/f7668d44))
+- **Structured dispatch decisions with digest routing** — Trigger dispatch returns structured decision objects with digest routing warnings for debugging notification flow. ([#fd82adc8](https://github.com/CodesWhat/drydock/commit/fd82adc8))
+- **Agent SSE event relay** — Controller now relays `update-applied`, `update-failed`, and `security-alert` events from remote agents over SSE to connected UI clients. ([#f497ac75](https://github.com/CodesWhat/drydock/commit/f497ac75))
+- **Implicit all-triggers semantics label** — Notification rule editor shows helper text when an `update-available` rule implicitly applies to all triggers. ([#ba43a870](https://github.com/CodesWhat/drydock/commit/ba43a870))
+
+### Changed
+
+- **Responsive dashboard layout persistence** — Dashboard widget bounds and layout are now breakpoint-aware, persisting separate layouts per viewport tier. ([#d16a3d0f](https://github.com/CodesWhat/drydock/commit/d16a3d0f), [#2deac1c3](https://github.com/CodesWhat/drydock/commit/2deac1c3))
+- **Tag precision module consolidation** — `TagPrecision` type and numeric tag shape parser deduplicated into `tag/precision` module. ([#857fcb7a](https://github.com/CodesWhat/drydock/commit/857fcb7a), [#f2cc81e0](https://github.com/CodesWhat/drydock/commit/f2cc81e0))
+- **Trigger notification internals** — Extracted notification event helpers, hoisted default templates, type-safe container access in store. ([#3e81f378](https://github.com/CodesWhat/drydock/commit/3e81f378), [#42f5c7aa](https://github.com/CodesWhat/drydock/commit/42f5c7aa))
+- **Outlined button styling** — Filled background and improved contrast for outlined action buttons across all views. ([#b901295e](https://github.com/CodesWhat/drydock/commit/b901295e), [#898b6195](https://github.com/CodesWhat/drydock/commit/898b6195))
+- **Axios supply chain advisory retired** — Removed from README and website security documentation. ([#c782d3dc](https://github.com/CodesWhat/drydock/commit/c782d3dc))
+
+### Fixed
+
+- **#270** — Hide-pinned filter now applies to dashboard update widgets; `tagPrecision` backfilled for existing containers on migration. ([#f2e36ce4](https://github.com/CodesWhat/drydock/commit/f2e36ce4), [#972f7af1](https://github.com/CodesWhat/drydock/commit/972f7af1))
+- **#271** — Log sort order persists across navigation. ([#dbc42186](https://github.com/CodesWhat/drydock/commit/dbc42186))
+- **#265** — Stale update detection suppressed from pre-clear watcher scans. ([#06e8a4ee](https://github.com/CodesWhat/drydock/commit/06e8a4ee))
+- **#217** — Data rows top-aligned with scroll containment for container views. ([#a97bd0a9](https://github.com/CodesWhat/drydock/commit/a97bd0a9))
+- **Dashboard mobile responsive layout** — Recent updates widget layout fixed on mobile viewports. ([#e686bdef](https://github.com/CodesWhat/drydock/commit/e686bdef))
+- **Dashboard layout hardening** — Unknown widgets handled gracefully; unnecessary re-renders suppressed. ([#37a33a80](https://github.com/CodesWhat/drydock/commit/37a33a80))
+- **Preference persistence on page exit** — Pending dashboard layout and preference writes flushed on `pagehide` and `visibilitychange`. ([#554b7c37](https://github.com/CodesWhat/drydock/commit/554b7c37), [#1cffd21e](https://github.com/CodesWhat/drydock/commit/1cffd21e))
+- **Disabled button hover affordance** — Disabled outlined buttons no longer show hover state. ([#89ca53d3](https://github.com/CodesWhat/drydock/commit/89ca53d3))
+- **Tag precision backfill guard** — `tagPrecision` backfill skipped when upgrading past v1.5.0. ([#9deb3ba1](https://github.com/CodesWhat/drydock/commit/9deb3ba1))
+- **Tag shape parser crash** — `getNumericTagShape` guarded against undefined `transformTag` result. ([#eedc01bf](https://github.com/CodesWhat/drydock/commit/eedc01bf))
+- **Digest buffer stale entries** — Container name canonicalized before digest buffer eviction; stale entries evicted before flush. ([#547a3f15](https://github.com/CodesWhat/drydock/commit/547a3f15), [#2776a2d6](https://github.com/CodesWhat/drydock/commit/2776a2d6))
+- **Digest buffer type safety** — `flushDigestBuffer` store container map typed as `Container`. ([#d256e3af](https://github.com/CodesWhat/drydock/commit/d256e3af))
+
+### Performance
+
+- **Log viewer cache** — Incremental newest-first cache for log viewer avoids full re-sort on new entries. ([#3340b7c1](https://github.com/CodesWhat/drydock/commit/3340b7c1))
+- **Vulnerability list URL memoization** — Safe URL computation memoized to avoid redundant parsing. ([#d9bcbe5d](https://github.com/CodesWhat/drydock/commit/d9bcbe5d))
+
+### Security
+
+- **Vulnerability URL and CSV sanitization** — Vulnerability URLs validated before rendering; CSV export fields sanitized against formula injection. ([#c9ecf1e6](https://github.com/CodesWhat/drydock/commit/c9ecf1e6))
+
 ## [1.5.0-rc.5] — 2026-04-04
 
 ### Added
@@ -19,10 +64,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Hide Pinned containers toggle** — Checkbox in the container list filter bar hides containers pinned to specific versions (`tagPrecision: specific`). Persisted in user preferences. ([#250](https://github.com/CodesWhat/drydock/discussions/250))
 - **Combined batch+digest notification mode** — Triggers can now use `MODE=batch+digest` to send both immediate batch emails and scheduled digest summaries. ([#254](https://github.com/CodesWhat/drydock/issues/254))
 - **Conditional reset button** — A reset icon appears in the system log toolbar only when level, tail, or component filters differ from defaults.
+- **Security scan export** — Detail panel has export controls (CSV/JSON) for vulnerability reports and SBOM download at the top of the panel. ([#269](https://github.com/CodesWhat/drydock/discussions/269))
 
 ### Changed
 
-- **Container filter labels** — Default dropdown options renamed for clarity: "Status" → "All Statuses", "Host" → "All Hosts", "Registry" → "All Registries", "Update" → "All Updates". ([#247](https://github.com/CodesWhat/drydock/discussions/247))
+- **Container filter labels** — Default dropdown options renamed for clarity: "Status" → "All Statuses", "Host" → "All Hosts", "Registry" → "All Registries", "Update" → "All Containers". ([#247](https://github.com/CodesWhat/drydock/discussions/247))
 - **Log viewer icons** — Pause, Pin, Sort, Filter, and Copy icons use the theme-aware icon map, so they change when the user switches icon themes in settings.
 
 ### Fixed
@@ -36,6 +82,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **#217** — Content-aware mode threshold for Host Status widget (full mode only when viewport fits all rows).
 - **#262** — Registry log calls use component child logger with image name context.
 - **#255** — Container event handler schedules refresh for any unknown-to-store container, not just renames.
+- **#269** — SBOM download button was silently failing unless the "View SBOM" toggle was active; now serializes directly.
 - **BaseRegistry** — Trusted host validation and `getImagePublishedAt` tag object creation hardened.
 - **ECR** — Public gallery hostname matching uses parsed URL comparison; private auth token structure validated before split.
 

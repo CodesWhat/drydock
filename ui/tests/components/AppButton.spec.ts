@@ -49,8 +49,31 @@ describe('AppButton', () => {
     expect(button.classes()).toContain('text-2xs');
     expect(button.classes()).toContain('font-medium');
     expect(button.classes()).toContain('dd-text-secondary');
-    expect(button.classes()).toContain('hover:dd-text');
-    expect(button.classes()).toContain('hover:dd-bg-elevated');
+    expect(button.classes()).toContain('disabled:cursor-not-allowed');
+    expect(button.classes()).toContain('disabled:opacity-60');
+    expect(button.classes()).not.toContain('hover:dd-text');
+    expect(button.classes()).not.toContain('hover:dd-bg-elevated');
+  });
+
+  it('omits hover affordance classes when disabled', () => {
+    const wrapper = mount(AppButton, {
+      props: {
+        variant: 'outlined',
+      },
+      attrs: {
+        disabled: true,
+      },
+      slots: {
+        default: 'Rollback Latest',
+      },
+    });
+
+    const button = wrapper.get('button');
+
+    expect(button.attributes('disabled')).toBeDefined();
+    expect(button.classes()).toContain('dd-bg-button');
+    expect(button.classes()).toContain('dd-text');
+    expect(button.classes()).not.toContain('hover:opacity-85');
   });
 
   it('uses plain variant and icon-xs size for compact icon controls', () => {

@@ -1,5 +1,5 @@
-import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
-import { nextTick } from 'vue';
+import { flushPromises, mount } from '@vue/test-utils';
+import { defineComponent, nextTick, ref } from 'vue';
 import AppLogViewer from '@/components/AppLogViewer.vue';
 import type { AppLogEntry } from '@/types/log-entry';
 
@@ -30,6 +30,7 @@ function mountViewer(props: Record<string, unknown> = {}) {
   return mount(AppLogViewer, {
     props: {
       entries: [],
+      newestFirst: false,
       ...props,
     },
     global: {
@@ -40,14 +41,6 @@ function mountViewer(props: Record<string, unknown> = {}) {
       },
     },
   });
-}
-
-function getButtonByText(wrapper: VueWrapper, text: string) {
-  const button = wrapper.findAll('button').find((candidate) => candidate.text().includes(text));
-  if (!button) {
-    throw new Error(`Button not found: ${text}`);
-  }
-  return button;
 }
 
 function setViewportMetrics(
@@ -226,9 +219,8 @@ describe('AppLogViewer', () => {
     const wrapper = mountViewer({
       entries: [makeEntry(1)],
       autoScrollPinned: false,
+      newestFirst: true,
     });
-
-    await wrapper.get('[data-test="container-log-sort-toggle"]').trigger('click');
 
     const viewport = wrapper.get('div.overflow-y-auto.font-mono').element as HTMLElement;
     setViewportMetrics(viewport, {
@@ -246,9 +238,8 @@ describe('AppLogViewer', () => {
     const wrapper = mountViewer({
       entries: [makeEntry(1)],
       autoScrollPinned: false,
+      newestFirst: true,
     });
-
-    await wrapper.get('[data-test="container-log-sort-toggle"]').trigger('click');
 
     const viewport = wrapper.get('div.overflow-y-auto.font-mono').element as HTMLElement;
     setViewportMetrics(viewport, {
@@ -346,7 +337,12 @@ describe('AppLogViewer', () => {
     expect(writeText).toHaveBeenCalledWith(
       '2026-03-19T00:00:00Z STDOUT api ready\n2026-03-19T00:00:01Z WARN worker retrying',
     );
-    const copyBtn = wrapper.getComponent('[data-test="container-log-copy"]');
+    const copyBtn = wrapper
+      .findAllComponents({ name: 'AppIconButton' })
+      .find((component) => component.attributes('data-test') === 'container-log-copy');
+    if (!copyBtn) {
+      throw new Error('Copy button component not found');
+    }
     expect(copyBtn.props('icon')).toBe('check');
 
     vi.advanceTimersByTime(2000);
@@ -487,36 +483,71 @@ describe('AppLogViewer', () => {
       expect(rows[2].text()).toContain('third');
     });
 
-    it('reverses entries to newest-first when sort toggle is clicked', async () => {
+    it('renders entries newest-first when controlled by the parent', () => {
       const wrapper = mountViewer({
         entries: [
           makeEntry(1, { plainLine: 'first' }),
           makeEntry(2, { plainLine: 'second' }),
           makeEntry(3, { plainLine: 'third' }),
         ],
+        newestFirst: true,
       });
-
-      await wrapper.get('[data-test="container-log-sort-toggle"]').trigger('click');
-      await nextTick();
 
       const rows = wrapper.findAll('[data-test="container-log-row"]');
       expect(rows[0].text()).toContain('third');
       expect(rows[2].text()).toContain('first');
     });
 
-    it('restores oldest-first when toggled back', async () => {
+    it('reuses the newest-first display array when streamed entries are appended', async () => {
+      const entries = ref([
+        makeEntry(1, { plainLine: 'first' }),
+        makeEntry(2, { plainLine: 'second' }),
+      ]);
+      const Harness = defineComponent({
+        components: { AppLogViewer },
+        setup() {
+          return { entries };
+        },
+        template: '<AppLogViewer :entries="entries" :newest-first="true" />',
+      });
+      const wrapper = mount(Harness, {
+        global: {
+          stubs: {
+            AppIcon: {
+              template: '<span class="app-icon-stub" />',
+            },
+          },
+        },
+      });
+      const viewer = wrapper.getComponent(AppLogViewer);
+      const initialDisplayEntries = (viewer.vm.$ as any).setupState.displayEntries
+        .value as AppLogEntry[];
+
+      entries.value.push(makeEntry(3, { plainLine: 'third' }));
+      await nextTick();
+
+      const nextDisplayEntries = (viewer.vm.$ as any).setupState.displayEntries
+        .value as AppLogEntry[];
+      expect(nextDisplayEntries).toBe(initialDisplayEntries);
+
+      const rows = viewer.findAll('[data-test="container-log-row"]');
+      expect(rows).toHaveLength(3);
+      expect(rows[0].text()).toContain('third');
+      expect(rows[1].text()).toContain('second');
+      expect(rows[2].text()).toContain('first');
+    });
+
+    it('emits newestFirst updates when sort toggle is clicked', async () => {
       const wrapper = mountViewer({
         entries: [makeEntry(1, { plainLine: 'first' }), makeEntry(2, { plainLine: 'second' })],
       });
 
       await wrapper.get('[data-test="container-log-sort-toggle"]').trigger('click');
-      await nextTick();
-      await wrapper.get('[data-test="container-log-sort-toggle"]').trigger('click');
-      await nextTick();
+      expect(wrapper.emitted('update:newestFirst')).toEqual([[true]]);
 
-      const rows = wrapper.findAll('[data-test="container-log-row"]');
-      expect(rows[0].text()).toContain('first');
-      expect(rows[1].text()).toContain('second');
+      await wrapper.setProps({ newestFirst: true });
+      await wrapper.get('[data-test="container-log-sort-toggle"]').trigger('click');
+      expect(wrapper.emitted('update:newestFirst')).toEqual([[true], [false]]);
     });
   });
 });

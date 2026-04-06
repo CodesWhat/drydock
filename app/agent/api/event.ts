@@ -159,6 +159,21 @@ function sanitizeWatcherSnapshotPayloadForAgentSse(payload: unknown): unknown {
   };
 }
 
+function sanitizeSecurityAlertPayloadForAgentSse(payload: unknown): unknown {
+  if (!payload || typeof payload !== 'object') {
+    return payload;
+  }
+
+  const securityAlertPayload = payload as Record<string, unknown>;
+  return {
+    containerName: securityAlertPayload.containerName,
+    details: securityAlertPayload.details,
+    status: securityAlertPayload.status,
+    summary: securityAlertPayload.summary,
+    blockingCount: securityAlertPayload.blockingCount,
+  };
+}
+
 function computeContainerSummary(): ContainerSummary {
   const containers = storeContainer.getContainers();
   const containerStatus = getContainerStatusSummary(containers);
@@ -247,6 +262,15 @@ export function initEvents() {
   );
   event.registerWatcherSnapshot((payload: event.WatcherSnapshotEventPayload) =>
     sendSseEvent('dd:watcher-snapshot', sanitizeWatcherSnapshotPayloadForAgentSse(payload)),
+  );
+  event.registerContainerUpdateApplied((containerName: string) =>
+    sendSseEvent('dd:update-applied', containerName),
+  );
+  event.registerContainerUpdateFailed((payload: event.ContainerUpdateFailedEventPayload) =>
+    sendSseEvent('dd:update-failed', payload),
+  );
+  event.registerSecurityAlert((payload: event.SecurityAlertEventPayload) =>
+    sendSseEvent('dd:security-alert', sanitizeSecurityAlertPayloadForAgentSse(payload)),
   );
 }
 
