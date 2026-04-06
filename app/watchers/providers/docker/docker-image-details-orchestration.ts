@@ -230,6 +230,15 @@ function reconcileStoredContainerStatus(
   }
 }
 
+function backfillStoredTagPrecision(containerInStore: Container) {
+  if (containerInStore.image?.tag && containerInStore.image.tag.tagPrecision === undefined) {
+    containerInStore.image.tag.tagPrecision = classifyTagPrecision(
+      containerInStore.image.tag.value,
+      containerInStore.transformTags,
+    );
+  }
+}
+
 async function refreshStoredContainerImageFields(
   watcher: DockerImageDetailsWatcher,
   container: DockerContainerSummary,
@@ -239,6 +248,8 @@ async function refreshStoredContainerImageFields(
   containerInStore: Container,
   containerInspect: DockerContainerInspectPayload | undefined,
 ) {
+  backfillStoredTagPrecision(containerInStore);
+
   try {
     const currentImage = await watcher.dockerApi.getImage(container.Image).inspect();
     const freshDigestRepo = getRepoDigest(currentImage);
@@ -296,13 +307,6 @@ async function refreshStoredContainerImageFields(
         containerInStore.sourceRepo = refreshedContainer.sourceRepo;
         return;
       }
-    }
-
-    if (containerInStore.image?.tag && containerInStore.image.tag.tagPrecision === undefined) {
-      containerInStore.image.tag.tagPrecision = classifyTagPrecision(
-        containerInStore.image.tag.value,
-        containerInStore.transformTags,
-      );
     }
 
     // Keep local digest value populated for digest-watch containers, even when
