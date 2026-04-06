@@ -141,6 +141,7 @@ async function executeContainerActionState(args: {
   activeDetailTab: string;
   refreshActionTabData: () => Promise<void>;
   successMessage?: string;
+  staleMessage?: string;
   treatNoUpdateAsStale?: boolean;
   pendingLifecycleMode?: PendingActionLifecycleMode;
 }): Promise<boolean> {
@@ -201,6 +202,10 @@ async function executeContainerActionState(args: {
       if (shouldReloadContainers) {
         await args.loadContainers();
       }
+      if (args.staleMessage) {
+        const toast = useToast();
+        toast.info(args.staleMessage);
+      }
       return false;
     }
     const msg = errorMessage(e, `Action failed for ${args.name}`);
@@ -246,6 +251,7 @@ async function updateAllInGroupState(args: {
       containerId?: string;
       reloadContainers?: boolean;
       successMessage?: string;
+      staleMessage?: string;
       treatNoUpdateAsStale?: boolean;
       pendingLifecycleMode?: PendingActionLifecycleMode;
     },
@@ -501,6 +507,7 @@ function createConfirmHandlers(args: {
       containerId?: string;
       reloadContainers?: boolean;
       successMessage?: string;
+      staleMessage?: string;
       treatNoUpdateAsStale?: boolean;
       pendingLifecycleMode?: PendingActionLifecycleMode;
     },
@@ -643,6 +650,7 @@ function createContainerActionHandlers(args: {
       containerId?: string;
       reloadContainers?: boolean;
       successMessage?: string;
+      staleMessage?: string;
       treatNoUpdateAsStale?: boolean;
       pendingLifecycleMode?: PendingActionLifecycleMode;
     },
@@ -667,6 +675,7 @@ function createContainerActionHandlers(args: {
     const name = typeof target === 'string' ? target : target.name;
     await args.executeAction(target, apiUpdateContainer, {
       successMessage: `Updated: ${name}`,
+      staleMessage: `Already up to date: ${name}`,
       treatNoUpdateAsStale: true,
       pendingLifecycleMode: 'update',
     });
@@ -704,6 +713,7 @@ function createContainerActionHandlers(args: {
     await args.applyPolicy(target, 'clear', {}, `Cleared update policy for ${name}`);
     await args.executeAction(target, apiUpdateContainer, {
       successMessage: `Force updated: ${name}`,
+      staleMessage: `Already up to date: ${name}`,
       treatNoUpdateAsStale: true,
       pendingLifecycleMode: 'update',
     });
@@ -893,6 +903,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
       containerId?: string;
       reloadContainers?: boolean;
       successMessage?: string;
+      staleMessage?: string;
       treatNoUpdateAsStale?: boolean;
       pendingLifecycleMode?: PendingActionLifecycleMode;
     },
@@ -923,6 +934,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
       activeDetailTab: input.activeDetailTab.value,
       refreshActionTabData,
       successMessage: options?.successMessage,
+      staleMessage: options?.staleMessage,
       treatNoUpdateAsStale: options?.treatNoUpdateAsStale,
       pendingLifecycleMode: options?.pendingLifecycleMode,
     });

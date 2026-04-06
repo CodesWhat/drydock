@@ -13,6 +13,7 @@ import {
 const mocks = vi.hoisted(() => ({
   toastSuccess: vi.fn(),
   toastError: vi.fn(),
+  toastInfo: vi.fn(),
   confirmRequire: vi.fn(),
   getBackups: vi.fn(),
   rollback: vi.fn(),
@@ -66,8 +67,8 @@ vi.mock('@/composables/useToast', () => ({
   useToast: () => ({
     success: mocks.toastSuccess,
     error: mocks.toastError,
+    info: mocks.toastInfo,
     warning: vi.fn(),
-    info: vi.fn(),
     toasts: { value: [] },
     addToast: vi.fn(),
     dismissToast: vi.fn(),
@@ -407,6 +408,7 @@ describe('useContainerActions', () => {
     expect(loadContainers).toHaveBeenCalledTimes(1);
     expect(error.value).toBeNull();
     expect(mocks.toastError).not.toHaveBeenCalled();
+    expect(mocks.toastInfo).toHaveBeenCalledWith('Already up to date: web');
     expect(mocks.toastSuccess).not.toHaveBeenCalledWith('Updated: web');
   });
 
