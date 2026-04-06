@@ -1386,7 +1386,6 @@ onUnmounted(() => {
 
           <nav class="flex items-center gap-1.5 text-xs-plus">
             <AppIcon :name="currentPageIcon" :size="16" class="leading-none dd-text-muted" />
-            <AppIcon name="chevron-right" :size="13" class="leading-none dd-text-muted" />
             <span class="font-medium leading-none dd-text">
               {{ currentPageLabel }}
             </span>
