@@ -9,8 +9,8 @@ const reconnectEvent: ReconnectEvent = {
   agentName: 'servicevault',
 };
 
-reconnectEvent.agentName;
-const reconnectEventWithReason: ReconnectEvent = {
+void reconnectEvent.agentName;
+const _reconnectEventWithReason: ReconnectEvent = {
   kind: 'agent-reconnect',
   agentName: 'servicevault',
   // @ts-expect-error reconnect events should not accept disconnect reasons.
@@ -26,7 +26,7 @@ const disconnectEvent = getNotificationEvent({
 } as any);
 
 if (disconnectEvent && disconnectEvent.kind === 'agent-disconnect') {
-  disconnectEvent.reason;
+  void disconnectEvent.reason;
 }
 
 const typedDisconnectEvent: DisconnectEvent = {
@@ -35,7 +35,7 @@ const typedDisconnectEvent: DisconnectEvent = {
   reason: 'SSE connection lost',
 };
 
-typedDisconnectEvent.reason;
+void typedDisconnectEvent.reason;
 
 type NotificationField = TriggerNotificationContainer['notificationEvent'];
 
@@ -43,4 +43,4 @@ const updateAppliedNotification: NotificationField = {
   kind: 'update-applied',
 };
 
-updateAppliedNotification.kind;
+void updateAppliedNotification.kind;
