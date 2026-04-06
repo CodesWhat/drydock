@@ -89,6 +89,16 @@ test('migrate should backfill missing image.tag.tagPrecision for existing contai
   );
 });
 
+test('migrate should skip tagPrecision backfill when target version is below 1.5.0', () => {
+  migrate.migrate('1.4.0', '1.4.9');
+  expect(container.getContainersRaw).not.toHaveBeenCalled();
+});
+
+test('migrate should skip tagPrecision backfill when from version is not a string', () => {
+  migrate.migrate(undefined, '1.5.0');
+  expect(container.getContainersRaw).not.toHaveBeenCalled();
+});
+
 test('migrate should skip tagPrecision backfill after crossing version 1.5.0', async () => {
   container.getContainersRaw.mockReturnValue([
     {
