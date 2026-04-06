@@ -45,6 +45,17 @@ const variantClasses: Record<ButtonVariant, string> = {
   plain: '',
 };
 
+const disabledVariantClasses: Record<ButtonVariant, string> = {
+  muted: 'dd-text-muted',
+  outlined: 'dd-bg-button dd-text',
+  secondary: 'dd-text-secondary',
+  elevated: 'dd-bg-elevated dd-text',
+  'text-muted': 'dd-text-muted',
+  'text-secondary': 'dd-text-secondary',
+  'link-secondary': 'text-drydock-secondary',
+  plain: '',
+};
+
 const weightClasses: Record<ButtonWeight, string> = {
   none: '',
   medium: 'font-medium',
@@ -98,11 +109,16 @@ const resolvedTitle = computed(() => {
   return undefined;
 });
 
+const isDisabled = computed(() => {
+  const disabled = attrs.disabled;
+  return disabled === '' || disabled === true || disabled === 'true' || disabled === 'disabled';
+});
+
 const buttonClasses = computed(() => [
-  'dd-rounded transition-colors',
+  'dd-rounded transition-colors disabled:cursor-not-allowed disabled:opacity-60',
   sizeClasses[props.size],
   weightClasses[props.weight],
-  variantClasses[props.variant],
+  isDisabled.value ? disabledVariantClasses[props.variant] : variantClasses[props.variant],
 ]);
 </script>
 
