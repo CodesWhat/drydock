@@ -99,6 +99,36 @@ test('migrate should skip tagPrecision backfill when from version is not a strin
   expect(container.getContainersRaw).not.toHaveBeenCalled();
 });
 
+test('migrate should backfill tagPrecision when from version is not a valid semver', () => {
+  container.getContainersRaw.mockReturnValue([
+    {
+      id: 'invalid-from-version',
+      image: {
+        tag: {
+          value: 'latest',
+          semver: false,
+        },
+      },
+    },
+  ]);
+
+  migrate.migrate('not-a-semver', '1.5.0');
+
+  expect(container.getContainersRaw).toHaveBeenCalledTimes(1);
+  expect(container.updateContainer).toHaveBeenCalledTimes(1);
+  expect(container.updateContainer).toHaveBeenCalledWith(
+    expect.objectContaining({
+      id: 'invalid-from-version',
+      image: expect.objectContaining({
+        tag: expect.objectContaining({
+          value: 'latest',
+          tagPrecision: 'floating',
+        }),
+      }),
+    }),
+  );
+});
+
 test('migrate should skip tagPrecision backfill after crossing version 1.5.0', async () => {
   container.getContainersRaw.mockReturnValue([
     {
