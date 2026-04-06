@@ -56,6 +56,22 @@ test('createCollections should call migrate when versions are different', async 
   expect(migrate.migrate).toHaveBeenCalledWith('1.0.0', '2.0.0');
 });
 
+test('createCollections should run startup repair even when versions are different', async () => {
+  const db = {
+    getCollection: () => ({
+      findOne: () => ({
+        name: 'drydock',
+        version: '1.0.0',
+      }),
+      insert: () => {},
+      remove: () => {},
+    }),
+    addCollection: () => null,
+  };
+  app.createCollections(db);
+  expect(migrate.repairDataOnStartup).toHaveBeenCalledTimes(1);
+});
+
 test('createCollections should not call migrate when versions are identical', async () => {
   const db = {
     getCollection: () => ({
@@ -70,6 +86,23 @@ test('createCollections should not call migrate when versions are identical', as
   };
   app.createCollections(db);
   expect(migrate.migrate).not.toHaveBeenCalled();
+});
+
+test('createCollections should run startup repair when versions are identical', async () => {
+  const db = {
+    getCollection: () => ({
+      findOne: () => ({
+        name: 'drydock',
+        version: '2.0.0',
+      }),
+      insert: () => {},
+      remove: () => {},
+    }),
+    addCollection: () => null,
+  };
+  app.createCollections(db);
+  expect(migrate.migrate).not.toHaveBeenCalled();
+  expect(migrate.repairDataOnStartup).toHaveBeenCalledTimes(1);
 });
 
 test('getAppInfos should return collection content', async () => {

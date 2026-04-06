@@ -60,7 +60,7 @@ test('migrate should backfill missing image.tag.tagPrecision for existing contai
     },
   ]);
 
-  migrate.migrate('1.5.0-rc.5', '1.5.0');
+  migrate.migrate('1.4.9', '1.5.0');
 
   expect(container.updateContainer).toHaveBeenCalledTimes(2);
   expect(container.updateContainer).toHaveBeenNthCalledWith(
@@ -79,6 +79,35 @@ test('migrate should backfill missing image.tag.tagPrecision for existing contai
     2,
     expect.objectContaining({
       id: 'floating-release',
+      image: expect.objectContaining({
+        tag: expect.objectContaining({
+          value: 'latest',
+          tagPrecision: 'floating',
+        }),
+      }),
+    }),
+  );
+});
+
+test('repairDataOnStartup should backfill missing image.tag.tagPrecision for existing containers', () => {
+  container.getContainersRaw.mockReturnValue([
+    {
+      id: 'startup-repair',
+      image: {
+        tag: {
+          value: 'latest',
+          semver: false,
+        },
+      },
+    },
+  ]);
+
+  migrate.repairDataOnStartup();
+
+  expect(container.getContainersRaw).toHaveBeenCalledTimes(1);
+  expect(container.updateContainer).toHaveBeenCalledWith(
+    expect.objectContaining({
+      id: 'startup-repair',
       image: expect.objectContaining({
         tag: expect.objectContaining({
           value: 'latest',
