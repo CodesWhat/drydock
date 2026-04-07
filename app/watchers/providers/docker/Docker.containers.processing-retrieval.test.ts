@@ -43,6 +43,38 @@ describe('Docker Watcher', () => {
       expect(hEvent.emitContainerReport).toHaveBeenCalled();
     });
 
+    test('should wait for container report handlers before resolving watchContainer', async () => {
+      const container = { id: 'test123', name: 'test' };
+      const mockLog = createMockLogWithChild(['debug']);
+      docker.log = mockLog;
+      docker.findNewVersion = vi.fn().mockResolvedValue({ tag: '2.0.0' });
+      docker.mapContainerToContainerReport = vi.fn().mockReturnValue({ container, changed: false });
+
+      let releaseEmitContainerReport: (() => void) | undefined;
+      hEvent.emitContainerReport.mockImplementation(
+        () =>
+          new Promise<void>((resolve) => {
+            releaseEmitContainerReport = resolve;
+          }),
+      );
+
+      let resolved = false;
+      const watchPromise = docker.watchContainer(container).then(() => {
+        resolved = true;
+      });
+
+      await vi.waitFor(() => {
+        expect(hEvent.emitContainerReport).toHaveBeenCalled();
+      });
+
+      expect(resolved).toBe(false);
+
+      releaseEmitContainerReport?.();
+      await watchPromise;
+
+      expect(resolved).toBe(true);
+    });
+
     test('should handle container processing error', async () => {
       const container = { id: 'test123', name: 'test' };
       const mockLog = createMockLogWithChild(['warn', 'debug']);
