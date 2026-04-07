@@ -49,6 +49,25 @@ describe('notification trigger policy', () => {
     ).toEqual(['slack.ops', 'smtp.ops']);
   });
 
+  test('normalizeNotificationTriggerIds should resolve shorthand references to canonical ids', () => {
+    const allowedTriggerIds = new Set(['edge.pushover.mobile', 'smtp.gmail']);
+    expect(
+      normalizeNotificationTriggerIds([' pushover.mobile ', 'gmail'], allowedTriggerIds),
+    ).toEqual(['edge.pushover.mobile', 'smtp.gmail']);
+  });
+
+  test('normalizeNotificationTriggerIds should expand shorthand references when multiple ids match', () => {
+    const allowedTriggerIds = new Set([
+      'alpha.pushover.mobile',
+      'beta.pushover.mobile',
+      'smtp.gmail',
+    ]);
+    expect(normalizeNotificationTriggerIds(['mobile'], allowedTriggerIds)).toEqual([
+      'alpha.pushover.mobile',
+      'beta.pushover.mobile',
+    ]);
+  });
+
   test('normalizeNotificationTriggerIds should return empty list for non-array payloads', () => {
     const allowedTriggerIds = new Set(['slack.ops']);
     expect(normalizeNotificationTriggerIds(undefined, allowedTriggerIds)).toEqual([]);

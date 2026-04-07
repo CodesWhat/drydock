@@ -146,6 +146,77 @@ describe('Notification Router', () => {
     });
   });
 
+  test('should canonicalize shorthand trigger references when updating a notification rule', () => {
+    mockGetRegistryState.mockReturnValueOnce({
+      trigger: {
+        'edge.pushover.mobile': { type: 'pushover', name: 'mobile' },
+        'smtp.gmail': { type: 'smtp', name: 'gmail' },
+      },
+    });
+
+    notificationRouter.init();
+    const handler = mockRouter.patch.mock.calls.find((call) => call[0] === '/:id')[1];
+    const res = createMockResponse();
+
+    handler(
+      {
+        params: { id: 'update-available' },
+        body: {
+          triggers: ['mobile', 'smtp.gmail'],
+        },
+      },
+      res,
+    );
+
+    expect(mockUpdateNotificationRule).toHaveBeenCalledWith('update-available', {
+      triggers: ['edge.pushover.mobile', 'smtp.gmail'],
+    });
+    expect(res.json).toHaveBeenCalledWith({
+      id: 'update-available',
+      name: 'Update Available',
+      enabled: true,
+      triggers: ['edge.pushover.mobile', 'smtp.gmail'],
+      description: 'When a container has a new version',
+    });
+  });
+
+  test('should expand shorthand trigger references when listing persisted rules', () => {
+    mockGetRegistryState.mockReturnValueOnce({
+      trigger: {
+        'edge.pushover.mobile': { type: 'pushover', name: 'mobile' },
+        'fallback.pushover.mobile': { type: 'pushover', name: 'mobile' },
+      },
+    });
+    mockGetNotificationRules.mockReturnValueOnce([
+      {
+        id: 'update-available',
+        name: 'Update Available',
+        enabled: true,
+        triggers: ['mobile'],
+        description: 'When a container has a new version',
+      },
+    ]);
+
+    notificationRouter.init();
+    const handler = mockRouter.get.mock.calls.find((call) => call[0] === '/')[1];
+    const res = createMockResponse();
+
+    handler({}, res);
+
+    expect(res.json).toHaveBeenCalledWith({
+      data: [
+        {
+          id: 'update-available',
+          name: 'Update Available',
+          enabled: true,
+          triggers: ['edge.pushover.mobile', 'fallback.pushover.mobile'],
+          description: 'When a container has a new version',
+        },
+      ],
+      total: 1,
+    });
+  });
+
   test('should reject unsupported trigger ids when updating a notification rule', () => {
     notificationRouter.init();
     const handler = mockRouter.patch.mock.calls.find((call) => call[0] === '/:id')[1];

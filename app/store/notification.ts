@@ -3,6 +3,7 @@
  */
 import joi from 'joi';
 import { byString } from 'sort-es';
+import { doesNotificationTriggerReferenceMatchId } from '../notifications/trigger-policy.js';
 import { uniqStrings } from '../util/string-array.js';
 import { initCollection } from './util.js';
 
@@ -289,8 +290,8 @@ export function getTriggerDispatchDecisionForRule(
     };
   }
 
-  const matched = rule.triggers.some(
-    (configuredTriggerId) => configuredTriggerId.toLowerCase() === triggerIdNormalized,
+  const matched = rule.triggers.some((configuredTriggerId) =>
+    doesNotificationTriggerReferenceMatchId(configuredTriggerId, triggerIdNormalized),
   );
   return {
     enabled: matched,
