@@ -2094,6 +2094,49 @@ test('handleContainerReport should skip when update-available rule suppresses th
   expect(spy).not.toHaveBeenCalled();
 });
 
+test('handleContainerReport should debug log when update-available rule suppresses this trigger', async () => {
+  notificationStore.isTriggerEnabledForRule.mockImplementation(
+    (ruleId) => ruleId !== 'update-available',
+  );
+  notificationStore.getTriggerDispatchDecisionForRule.mockReturnValue({
+    enabled: false,
+    reason: 'excluded-from-allow-list',
+  });
+  const debugSpy = vi.spyOn(log, 'debug');
+
+  await trigger.handleContainerReport({
+    changed: true,
+    container: {
+      watcher: 'local',
+      name: 'container1',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', semverDiff: 'major' },
+    },
+  });
+
+  expect(debugSpy).toHaveBeenCalledWith(
+    'Skipping update-available notification for local_container1 (excluded-from-allow-list)',
+  );
+});
+
+test('handleContainerReport should debug log when simple mode skips an unchanged update', async () => {
+  const debugSpy = vi.spyOn(log, 'debug');
+
+  await trigger.handleContainerReport({
+    changed: false,
+    container: {
+      watcher: 'local',
+      name: 'container1',
+      updateAvailable: true,
+      updateKind: { kind: 'digest', semverDiff: 'unknown' },
+    },
+  });
+
+  expect(debugSpy).toHaveBeenCalledWith(
+    'Skipping update-available notification for local_container1 (changed=false, once=true, updateAvailable=true)',
+  );
+});
+
 test('handleContainerReportDigest should warn once when update-available routing excludes a digest trigger', async () => {
   await trigger.register('trigger', 'smtp', 'gmail', {
     ...configurationValid,
@@ -2933,6 +2976,31 @@ test('handleContainerReport should debug log when mustTrigger returns false', as
     },
   });
   expect(spy).not.toHaveBeenCalled();
+});
+
+test('handleContainerReport should include trigger filter context when mustTrigger returns false', async () => {
+  trigger.configuration = {
+    threshold: 'all',
+    mode: 'simple',
+  };
+  trigger.type = 'pushover';
+  trigger.name = 'mobile';
+  const debugSpy = vi.spyOn(log, 'debug');
+
+  await trigger.handleContainerReport({
+    changed: true,
+    container: {
+      watcher: 'local',
+      name: 'container1',
+      updateAvailable: true,
+      triggerExclude: 'mobile',
+      updateKind: { kind: 'tag', semverDiff: 'major' },
+    },
+  });
+
+  expect(debugSpy).toHaveBeenCalledWith(
+    'Trigger conditions not met => ignore (triggerInclude=<none>, triggerExclude=mobile, included=true, excluded=true)',
+  );
 });
 
 test('handleContainerReport should fallback to parent logger when child logger is unavailable', async () => {

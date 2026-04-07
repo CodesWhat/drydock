@@ -544,6 +544,21 @@ class Trigger extends Component {
     return notificationStore.isTriggerEnabledForRule(ruleId, this.getId(), options);
   }
 
+  private getUpdateAvailableAutoTriggerDispatchDecision() {
+    const dispatchDecision = notificationStore.getTriggerDispatchDecisionForRule(
+      'update-available',
+      this.getId(),
+      {
+        // Keep backward compatibility: if update-available has no explicit trigger
+        // allow-list yet, legacy auto trigger behavior remains enabled.
+        allowAllWhenNoTriggers: true,
+        defaultWhenRuleMissing: true,
+      },
+    );
+    this.warnIfDigestRoutingIsSuppressed(dispatchDecision);
+    return dispatchDecision;
+  }
+
   private findContainerByBusinessId(containerName: string): Container | undefined {
     return storeContainer
       .getContainersRaw()
@@ -676,8 +691,11 @@ class Trigger extends Component {
       return;
     }
 
-    if (!this.mustTrigger(container)) {
-      this.log.debug(`Trigger conditions not met for ${ruleId} event => ignore`);
+    const mustTriggerDecision = this.getMustTriggerDecision(container);
+    if (!mustTriggerDecision.allowed) {
+      this.log.debug(
+        `Trigger conditions not met for ${ruleId} event => ignore (${mustTriggerDecision.reason})`,
+      );
       return;
     }
 
@@ -786,18 +804,7 @@ class Trigger extends Component {
   }
 
   private isUpdateAvailableAutoTriggerEnabled() {
-    const dispatchDecision = notificationStore.getTriggerDispatchDecisionForRule(
-      'update-available',
-      this.getId(),
-      {
-        // Keep backward compatibility: if update-available has no explicit trigger
-        // allow-list yet, legacy auto trigger behavior remains enabled.
-        allowAllWhenNoTriggers: true,
-        defaultWhenRuleMissing: true,
-      },
-    );
-    this.warnIfDigestRoutingIsSuppressed(dispatchDecision);
-    return dispatchDecision.enabled;
+    return this.getUpdateAvailableAutoTriggerDispatchDecision().enabled;
   }
 
   private warnIfDigestRoutingIsSuppressed(
@@ -847,6 +854,42 @@ class Trigger extends Component {
 
   private getSimpleModeThreshold() {
     return (this.configuration.threshold ?? 'all').toLowerCase();
+  }
+
+  private getMustTriggerDecision(containerResult: Container) {
+    if (Trigger.isRollbackContainer(containerResult)) {
+      return {
+        allowed: false,
+        reason: 'rollback-container',
+      };
+    }
+    if (this.agent && this.agent !== containerResult.agent) {
+      return {
+        allowed: false,
+        reason: `agent mismatch expected=${this.agent} actual=${containerResult.agent ?? '<none>'}`,
+      };
+    }
+    if (this.strictAgentMatch && this.agent !== containerResult.agent) {
+      return {
+        allowed: false,
+        reason: `strict agent mismatch expected=${this.agent ?? '<none>'} actual=${containerResult.agent ?? '<none>'}`,
+      };
+    }
+
+    const { triggerInclude, triggerExclude } = containerResult;
+    const included = this.isTriggerIncluded(containerResult, triggerInclude);
+    const excluded = this.isTriggerExcluded(containerResult, triggerExclude);
+
+    if (!included || excluded) {
+      return {
+        allowed: false,
+        reason: `triggerInclude=${triggerInclude ?? '<none>'}, triggerExclude=${triggerExclude ?? '<none>'}, included=${included}, excluded=${excluded}`,
+      };
+    }
+
+    return {
+      allowed: true,
+    };
   }
 
   private isPureBatchMode() {
@@ -926,12 +969,15 @@ class Trigger extends Component {
     logContainer: Component['log'],
   ) {
     if (!Trigger.isThresholdReached(container, this.getSimpleModeThreshold())) {
-      logContainer.debug('Threshold not reached => ignore');
+      logContainer.debug(
+        `Threshold not reached => ignore (threshold=${this.getSimpleModeThreshold()}, updateKind=${container.updateKind?.kind ?? 'unknown'}, semverDiff=${container.updateKind?.semverDiff ?? 'unknown'})`,
+      );
       return;
     }
 
-    if (!this.mustTrigger(container)) {
-      logContainer.debug('Trigger conditions not met => ignore');
+    const mustTriggerDecision = this.getMustTriggerDecision(container);
+    if (!mustTriggerDecision.allowed) {
+      logContainer.debug(`Trigger conditions not met => ignore (${mustTriggerDecision.reason})`);
       return;
     }
 
@@ -970,15 +1016,22 @@ class Trigger extends Component {
    * @returns {Promise<void>}
    */
   async handleContainerReport(containerReport: ContainerReport) {
-    if (!this.isUpdateAvailableAutoTriggerEnabled()) {
-      return;
-    }
-
     // Strip Docker recreate alias prefixes before any trigger processing
     Trigger.canonicalizeReportName(containerReport);
 
+    const dispatchDecision = this.getUpdateAvailableAutoTriggerDispatchDecision();
+    if (!dispatchDecision.enabled) {
+      this.log.debug(
+        `Skipping update-available notification for ${fullName(containerReport.container)} (${dispatchDecision.reason})`,
+      );
+      return;
+    }
+
     // Filter on changed containers with update available and passing trigger threshold
     if (!this.shouldHandleSimpleContainerReport(containerReport)) {
+      this.log.debug(
+        `Skipping update-available notification for ${fullName(containerReport.container)} (changed=${containerReport.changed}, once=${this.configuration.once ?? false}, updateAvailable=${containerReport.container.updateAvailable})`,
+      );
       return;
     }
 
@@ -1235,20 +1288,7 @@ class Trigger extends Component {
   }
 
   mustTrigger(containerResult: Container) {
-    if (Trigger.isRollbackContainer(containerResult)) {
-      return false;
-    }
-    if (this.agent && this.agent !== containerResult.agent) {
-      return false;
-    }
-    if (this.strictAgentMatch && this.agent !== containerResult.agent) {
-      return false;
-    }
-    const { triggerInclude, triggerExclude } = containerResult;
-    return (
-      this.isTriggerIncluded(containerResult, triggerInclude) &&
-      !this.isTriggerExcluded(containerResult, triggerExclude)
-    );
+    return this.getMustTriggerDecision(containerResult).allowed;
   }
 
   /**
