@@ -3,6 +3,7 @@ import mockCron from 'node-cron';
 import * as configuration from '../../configuration/index.js';
 import * as event from '../../event/index.js';
 import log from '../../log/index.js';
+import * as auditStore from '../../store/audit.js';
 import * as storeContainer from '../../store/container.js';
 import * as notificationStore from '../../store/notification.js';
 import Trigger, {
@@ -11,9 +12,14 @@ import Trigger, {
   resolveNotificationTemplate,
 } from './Trigger.js';
 
+const mockTriggerCounterInc = vi.hoisted(() => vi.fn());
+
 vi.mock('node-cron');
 vi.mock('../../log');
 vi.mock('../../event');
+vi.mock('../../store/audit.js', () => ({
+  insertAudit: vi.fn(),
+}));
 vi.mock('../../store/notification.js', () => ({
   isTriggerEnabledForRule: vi.fn(() => true),
   getTriggerDispatchDecisionForRule: vi.fn(() => ({
@@ -27,7 +33,7 @@ vi.mock('../../store/container.js', () => ({
 }));
 vi.mock('../../prometheus/trigger', () => ({
   getTriggerCounter: () => ({
-    inc: () => ({}),
+    inc: mockTriggerCounterInc,
   }),
 }));
 
@@ -51,6 +57,7 @@ const configurationValid = {
 
 beforeEach(async () => {
   vi.resetAllMocks();
+  mockTriggerCounterInc.mockReset();
   notificationStore.isTriggerEnabledForRule.mockReturnValue(true);
   notificationStore.getTriggerDispatchDecisionForRule.mockReturnValue({
     enabled: true,
@@ -3073,6 +3080,138 @@ test('handleContainerReports should warn when triggerBatch fails', async () => {
   expect(spyLog).toHaveBeenCalledWith('Error (batch fail)');
 });
 
+test('handleContainerReports should retain failed batch deliveries for retry on later watcher cycles', async () => {
+  trigger.configuration = {
+    threshold: 'all',
+    once: true,
+    mode: 'batch',
+  };
+  trigger.triggerBatch = vi
+    .fn()
+    .mockRejectedValueOnce(new Error('batch fail'))
+    .mockResolvedValueOnce(undefined);
+  await trigger.init();
+
+  const container = {
+    name: 'c1',
+    watcher: 'local',
+    updateAvailable: true,
+    updateKind: { kind: 'tag', semverDiff: 'major' },
+  };
+  storeContainer.getContainersRaw.mockReturnValue([container]);
+
+  await trigger.handleContainerReports([
+    {
+      changed: true,
+      container,
+    },
+  ]);
+
+  await trigger.handleContainerReports([
+    {
+      changed: false,
+      container,
+    },
+  ]);
+
+  expect(trigger.triggerBatch).toHaveBeenCalledTimes(2);
+  expect(trigger.triggerBatch).toHaveBeenLastCalledWith([container]);
+});
+
+test('handleContainerReports should increment trigger counter when batch send succeeds', async () => {
+  trigger.type = 'smtp';
+  trigger.name = 'gmail';
+  trigger.configuration = {
+    threshold: 'all',
+    once: true,
+    mode: 'batch',
+  };
+  trigger.triggerBatch = vi.fn().mockResolvedValue(undefined);
+
+  await trigger.handleContainerReports([
+    {
+      changed: true,
+      container: {
+        name: 'c1',
+        watcher: 'local',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', semverDiff: 'major' },
+      },
+    },
+  ]);
+
+  expect(mockTriggerCounterInc).toHaveBeenCalledWith({
+    type: 'smtp',
+    name: 'gmail',
+    status: 'success',
+  });
+});
+
+test('handleContainerReports should increment trigger counter when batch send fails', async () => {
+  trigger.type = 'smtp';
+  trigger.name = 'gmail';
+  trigger.configuration = {
+    threshold: 'all',
+    once: true,
+    mode: 'batch',
+  };
+  trigger.triggerBatch = vi.fn().mockRejectedValue(new Error('batch fail'));
+
+  await trigger.handleContainerReports([
+    {
+      changed: true,
+      container: {
+        name: 'c1',
+        watcher: 'local',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', semverDiff: 'major' },
+      },
+    },
+  ]);
+
+  expect(mockTriggerCounterInc).toHaveBeenCalledWith({
+    type: 'smtp',
+    name: 'gmail',
+    status: 'error',
+  });
+});
+
+test('handleContainerReports should audit failed batch deliveries', async () => {
+  trigger.type = 'smtp';
+  trigger.name = 'gmail';
+  trigger.configuration = {
+    threshold: 'all',
+    once: true,
+    mode: 'batch',
+  };
+  trigger.triggerBatch = vi.fn().mockRejectedValue(new Error('SMTP timeout'));
+
+  await trigger.handleContainerReports([
+    {
+      changed: true,
+      container: {
+        name: 'c1',
+        watcher: 'local',
+        image: {
+          name: 'library/nginx',
+        },
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0.0', remoteValue: '2.0.0', semverDiff: 'major' },
+      },
+    },
+  ]);
+
+  expect(auditStore.insertAudit).toHaveBeenCalledWith(
+    expect.objectContaining({
+      action: 'notification-delivery-failed',
+      containerName: 'local_c1',
+      triggerName: 'smtp.gmail',
+      status: 'error',
+      details: 'SMTP timeout',
+    }),
+  );
+});
+
 test('handleContainerReports should suppress repeated identical batch errors during a short burst', async () => {
   trigger.configuration = {
     threshold: 'all',
@@ -3103,6 +3242,46 @@ test('handleContainerReports should suppress repeated identical batch errors dur
 
   expect(warnSpy).toHaveBeenCalledTimes(1);
   expect(debugSpy).toHaveBeenCalledWith('Suppressed repeated error (batch fail)');
+});
+
+test('handleContainerReports should not suppress identical batch errors across different watchers', async () => {
+  trigger.configuration = {
+    threshold: 'all',
+    mode: 'batch',
+  };
+  trigger.triggerBatch = vi.fn().mockRejectedValue(new Error('batch fail'));
+  await trigger.init();
+  const warnSpy = vi.spyOn(log, 'warn');
+  const debugSpy = vi.spyOn(log, 'debug');
+  let now = 1_000;
+  vi.spyOn(Date, 'now').mockImplementation(() => now);
+
+  await trigger.handleContainerReports([
+    {
+      changed: true,
+      container: {
+        name: 'c1',
+        watcher: 'local',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', semverDiff: 'major' },
+      },
+    },
+  ]);
+  now = 1_500;
+  await trigger.handleContainerReports([
+    {
+      changed: true,
+      container: {
+        name: 'c1',
+        watcher: 'servicevault',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', semverDiff: 'major' },
+      },
+    },
+  ]);
+
+  expect(warnSpy).toHaveBeenCalledTimes(2);
+  expect(debugSpy).not.toHaveBeenCalledWith('Suppressed repeated error (batch fail)');
 });
 
 test('flushEventBatchDispatch should warn when auto event batch dispatch fails', async () => {

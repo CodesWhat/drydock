@@ -11,6 +11,7 @@ const RECREATED_ALIAS_RE = /^[a-f0-9]{12}_(.+)$/i;
 
 import { getTriggerCounter } from '../../prometheus/trigger.js';
 import Component, { type ComponentConfiguration } from '../../registry/Component.js';
+import * as auditStore from '../../store/audit.js';
 import * as storeContainer from '../../store/container.js';
 import * as notificationStore from '../../store/notification.js';
 import { renderBatch, renderSimple } from './trigger-expression-parser.js';
@@ -401,6 +402,7 @@ class Trigger extends Component {
   private readonly autoTriggerErrorSeenAt: Map<string, number> = new Map();
   private readonly notificationRuleWarningsSeen: Set<string> = new Set();
   private readonly digestBuffer: Map<string, Container> = new Map();
+  private readonly batchRetryBuffer: Map<string, Container> = new Map();
   private readonly eventBatchDispatches: Map<NotificationRuleId, EventBatchDispatchState> =
     new Map();
   private digestCronTask?: ScheduledTask;
@@ -847,6 +849,78 @@ class Trigger extends Component {
     return (this.configuration.threshold ?? 'all').toLowerCase();
   }
 
+  private isPureBatchMode() {
+    return Trigger.normalizeMode(this.configuration.mode) === 'batch';
+  }
+
+  private shouldDispatchUpdateAvailableContainer(container: Container) {
+    return (
+      container.updateAvailable &&
+      Trigger.isThresholdReached(container, this.getSimpleModeThreshold()) &&
+      this.mustTrigger(container)
+    );
+  }
+
+  private shouldHandleBatchContainerReport(containerReport: ContainerReport) {
+    return (
+      (containerReport.changed || !this.configuration.once) &&
+      this.shouldDispatchUpdateAvailableContainer(containerReport.container)
+    );
+  }
+
+  private getBatchRetryContainers(containerReports: ContainerReport[]) {
+    if (!this.isPureBatchMode() || this.batchRetryBuffer.size === 0) {
+      return [];
+    }
+
+    const currentReportsByBusinessId = new Map<string, ContainerReport>(
+      containerReports.map(
+        (containerReport) => [fullName(containerReport.container), containerReport] as const,
+      ),
+    );
+    const currentContainersByBusinessId = new Map<string, Container>(
+      storeContainer
+        .getContainersRaw()
+        .map((container) => [fullName(container as Container), container as Container] as const),
+    );
+
+    for (const [containerName, bufferedContainer] of this.batchRetryBuffer.entries()) {
+      const currentContainer =
+        currentReportsByBusinessId.get(containerName)?.container ??
+        currentContainersByBusinessId.get(containerName);
+
+      if (!currentContainer || !this.shouldDispatchUpdateAvailableContainer(currentContainer)) {
+        if (this.batchRetryBuffer.get(containerName) === bufferedContainer) {
+          this.batchRetryBuffer.delete(containerName);
+        }
+        continue;
+      }
+
+      this.batchRetryBuffer.set(containerName, currentContainer);
+    }
+
+    return Array.from(this.batchRetryBuffer.values());
+  }
+
+  private recordBatchDeliveryFailure(containers: Container[], errorMessage: string) {
+    const timestamp = new Date().toISOString();
+
+    for (const container of containers) {
+      auditStore.insertAudit({
+        id: '',
+        timestamp,
+        action: 'notification-delivery-failed',
+        containerName: fullName(container),
+        containerImage: container.image?.name,
+        fromVersion: container.updateKind?.localValue,
+        toVersion: container.updateKind?.remoteValue,
+        triggerName: this.getId(),
+        status: 'error',
+        details: errorMessage,
+      });
+    }
+  }
+
   private async runUpdateAvailableSimpleTrigger(
     container: Container,
     logContainer: Component['log'],
@@ -937,39 +1011,58 @@ class Trigger extends Component {
     }
 
     // Filter on containers with update available and passing trigger threshold
-    try {
-      const containerReportsFiltered = containerReports
-        .filter((containerReport) => containerReport.changed || !this.configuration.once)
-        .filter((containerReport) => containerReport.container.updateAvailable)
-        .filter((containerReport) => this.mustTrigger(containerReport.container))
-        .filter((containerReport) =>
-          Trigger.isThresholdReached(
-            containerReport.container,
-            (this.configuration.threshold || 'all').toLowerCase(),
-          ),
+    const containersToSendByBusinessId = new Map<string, Container>();
+    for (const container of this.getBatchRetryContainers(containerReports)) {
+      containersToSendByBusinessId.set(fullName(container), container);
+    }
+    for (const containerReport of containerReports) {
+      if (this.shouldHandleBatchContainerReport(containerReport)) {
+        containersToSendByBusinessId.set(
+          fullName(containerReport.container),
+          containerReport.container,
         );
-      const containersFiltered = containerReportsFiltered.map(
-        (containerReport) => containerReport.container,
-      );
-      if (containersFiltered.length > 0) {
-        this.log.debug('Run batch');
-        await this.triggerBatch(containersFiltered);
-        // In batch+digest mode, evict successfully-batched containers from the
-        // digest buffer so they are not sent again at the next digest flush.
-        if (this.digestBuffer.size > 0) {
-          for (const container of containersFiltered) {
-            this.digestBuffer.delete(fullName(container));
-          }
+      }
+    }
+    const containersToSend = Array.from(containersToSendByBusinessId.values());
+    if (containersToSend.length === 0) {
+      return;
+    }
+
+    let status: 'success' | 'error' = 'error';
+    try {
+      this.log.debug('Run batch');
+      await this.triggerBatch(containersToSend);
+      status = 'success';
+      // In batch+digest mode, evict successfully-batched containers from the
+      // digest buffer so they are not sent again at the next digest flush.
+      if (this.digestBuffer.size > 0) {
+        for (const container of containersToSend) {
+          this.digestBuffer.delete(fullName(container));
+        }
+      }
+      if (this.batchRetryBuffer.size > 0) {
+        for (const container of containersToSend) {
+          this.batchRetryBuffer.delete(fullName(container));
         }
       }
     } catch (e: unknown) {
       const errorMessage = Trigger.getErrorMessage(e);
-      if (this.shouldSuppressAutoTriggerError('update-available', undefined, errorMessage)) {
+      if (this.isPureBatchMode()) {
+        for (const container of containersToSend) {
+          this.batchRetryBuffer.set(fullName(container), container);
+        }
+      }
+      this.recordBatchDeliveryFailure(containersToSend, errorMessage);
+      if (
+        this.shouldSuppressAutoTriggerError('update-available', containersToSend[0], errorMessage)
+      ) {
         this.log.debug(`Suppressed repeated error (${errorMessage})`);
       } else {
         this.log.warn(`Error (${errorMessage})`);
       }
       this.log.debug(e);
+    } finally {
+      this.incrementTriggerCounter(status);
     }
   }
 
@@ -1281,6 +1374,7 @@ class Trigger extends Component {
     this.digestCronTask = undefined;
     this.isDigestFlushInProgress = false;
     this.digestBuffer.clear();
+    this.batchRetryBuffer.clear();
     this.clearEventBatchDispatches();
 
     this.autoTriggerErrorSeenAt.clear();
