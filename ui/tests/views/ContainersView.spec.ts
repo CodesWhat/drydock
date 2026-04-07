@@ -1883,55 +1883,120 @@ describe('ContainersView', () => {
     });
 
     it('covers menu/picker/global/sse handlers and registry fallback tooltip', async () => {
-      const c = makeContainer({ id: 'c1', name: 'nginx' });
-      const wrapper = await mountContainersView(
-        [c],
-        [{ id: 'c1', name: 'nginx', displayName: 'nginx' }],
-      );
-      const vm = wrapper.vm as any;
+      vi.useFakeTimers();
+      try {
+        const c = makeContainer({ id: 'c1', name: 'nginx' });
+        const wrapper = await mountContainersView(
+          [c],
+          [{ id: 'c1', name: 'nginx', displayName: 'nginx' }],
+        );
+        const vm = wrapper.vm as any;
 
-      const event = {
-        currentTarget: {
-          getBoundingClientRect: () => ({ bottom: 120, right: 400, left: 80 }),
-        },
-      } as unknown as MouseEvent;
+        const event = {
+          currentTarget: {
+            getBoundingClientRect: () => ({ bottom: 120, right: 400, left: 80 }),
+          },
+        } as unknown as MouseEvent;
 
-      vm.toggleActionsMenu('nginx', event);
-      expect(vm.openActionsMenu).toBe('nginx');
-      vm.toggleActionsMenu('nginx', event);
-      expect(vm.openActionsMenu).toBeNull();
-      vm.toggleActionsMenu('nginx', event);
-      expect(vm.actionsMenuStyle.top).toBe('124px');
-      vm.closeActionsMenu();
-      expect(vm.openActionsMenu).toBeNull();
+        vm.toggleActionsMenu('nginx', event);
+        expect(vm.openActionsMenu).toBe('nginx');
+        vm.toggleActionsMenu('nginx', event);
+        expect(vm.openActionsMenu).toBeNull();
+        vm.toggleActionsMenu('nginx', event);
+        expect(vm.actionsMenuStyle.top).toBe('124px');
+        vm.closeActionsMenu();
+        expect(vm.openActionsMenu).toBeNull();
 
-      vm.toggleColumnPicker(event);
-      expect(vm.showColumnPicker).toBe(true);
-      expect(vm.columnPickerStyle.left).toBe('80px');
-      vm.toggleColumnPicker(event);
-      expect(vm.showColumnPicker).toBe(false);
+        vm.toggleColumnPicker(event);
+        expect(vm.showColumnPicker).toBe(true);
+        expect(vm.columnPickerStyle.left).toBe('80px');
+        vm.toggleColumnPicker(event);
+        expect(vm.showColumnPicker).toBe(false);
 
-      vm.openActionsMenu = 'nginx';
-      vm.showColumnPicker = true;
-      document.dispatchEvent(new MouseEvent('click'));
-      await flushPromises();
-      expect(vm.openActionsMenu).toBeNull();
-      expect(vm.showColumnPicker).toBe(false);
+        vm.openActionsMenu = 'nginx';
+        vm.showColumnPicker = true;
+        document.dispatchEvent(new MouseEvent('click'));
+        await flushPromises();
+        expect(vm.openActionsMenu).toBeNull();
+        expect(vm.showColumnPicker).toBe(false);
 
-      vm.selectedContainer = null;
-      globalThis.dispatchEvent(new Event('dd:sse-scan-completed'));
-      await flushPromises();
-      globalThis.dispatchEvent(new Event('dd:sse-container-changed'));
-      await flushPromises();
+        vm.selectedContainer = null;
+        globalThis.dispatchEvent(new Event('dd:sse-scan-completed'));
+        await flushPromises();
+        globalThis.dispatchEvent(new Event('dd:sse-container-changed'));
+        await flushPromises();
+        vi.advanceTimersByTime(500);
+        await flushPromises();
 
-      vm.selectedContainer = c;
-      globalThis.dispatchEvent(new Event('dd:sse-scan-completed'));
-      await flushPromises();
-      globalThis.dispatchEvent(new Event('dd:sse-container-changed'));
-      await flushPromises();
-      expect(mockGetAllContainers.mock.calls.length).toBeGreaterThan(1);
+        vm.selectedContainer = c;
+        globalThis.dispatchEvent(new Event('dd:sse-scan-completed'));
+        await flushPromises();
+        globalThis.dispatchEvent(new Event('dd:sse-container-changed'));
+        await flushPromises();
+        vi.advanceTimersByTime(500);
+        await flushPromises();
+        expect(mockGetAllContainers.mock.calls.length).toBeGreaterThan(1);
 
-      expect(vm.registryErrorTooltip(c)).toBe('Registry error');
+        expect(vm.registryErrorTooltip(c)).toBe('Registry error');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('debounces burst dd:sse-container-changed events into one refresh cycle', async () => {
+      vi.useFakeTimers();
+      const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
+      try {
+        const c = makeContainer({ id: 'c1', name: 'nginx' });
+        const wrapper = await mountContainersView(
+          [c],
+          [{ id: 'c1', name: 'nginx', displayName: 'nginx' }],
+        );
+        const vm = wrapper.vm as any;
+        const containerChangedListener = addEventListenerSpy.mock.calls.findLast(
+          ([eventName]) => eventName === 'dd:sse-container-changed',
+        )?.[1] as EventListener | undefined;
+
+        expect(containerChangedListener).toBeTypeOf('function');
+
+        vm.groupByStack = true;
+        vm.selectedContainer = c;
+        await flushPromises();
+
+        vi.clearAllTimers();
+        mockGetAllContainers.mockClear();
+        mockGetContainerGroups.mockClear();
+        mockGetContainerVulnerabilities.mockClear();
+        mockGetContainerSbom.mockClear();
+
+        containerChangedListener?.(new Event('dd:sse-container-changed'));
+        containerChangedListener?.(new Event('dd:sse-container-changed'));
+        containerChangedListener?.(new Event('dd:sse-container-changed'));
+        await flushPromises();
+
+        expect(mockGetAllContainers).not.toHaveBeenCalled();
+        expect(mockGetContainerGroups).not.toHaveBeenCalled();
+        expect(mockGetContainerVulnerabilities).not.toHaveBeenCalled();
+        expect(mockGetContainerSbom).not.toHaveBeenCalled();
+
+        vi.advanceTimersByTime(499);
+        await flushPromises();
+        expect(mockGetAllContainers).not.toHaveBeenCalled();
+        expect(mockGetContainerGroups).not.toHaveBeenCalled();
+
+        vi.advanceTimersByTime(1);
+        await flushPromises();
+
+        expect(mockGetAllContainers).toHaveBeenCalledTimes(1);
+        expect(mockGetContainerGroups).toHaveBeenCalledTimes(1);
+        expect(mockGetContainerVulnerabilities).toHaveBeenCalledTimes(1);
+        expect(mockGetContainerSbom).toHaveBeenCalledTimes(1);
+
+        wrapper.unmount();
+      } finally {
+        addEventListenerSpy.mockRestore();
+        vi.useRealTimers();
+      }
     });
   });
 });

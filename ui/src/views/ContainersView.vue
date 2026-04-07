@@ -968,6 +968,17 @@ function handleGlobalClick() {
   showColumnPicker.value = false;
 }
 
+const SSE_CONTAINER_CHANGED_DEBOUNCE_MS = 500;
+let sseContainerChangedTimer: ReturnType<typeof setTimeout> | undefined;
+
+function clearSseContainerChangedTimer() {
+  if (sseContainerChangedTimer === undefined) {
+    return;
+  }
+  clearTimeout(sseContainerChangedTimer);
+  sseContainerChangedTimer = undefined;
+}
+
 async function handleSseScanCompleted() {
   await loadContainers();
   if (selectedContainerId.value) {
@@ -976,7 +987,13 @@ async function handleSseScanCompleted() {
 }
 
 const sseScanCompletedListener = handleSseScanCompleted as EventListener;
-const sseContainerChangedListener = handleSseScanCompleted as EventListener;
+const sseContainerChangedListener = (() => {
+  clearSseContainerChangedTimer();
+  sseContainerChangedTimer = setTimeout(() => {
+    sseContainerChangedTimer = undefined;
+    void handleSseScanCompleted();
+  }, SSE_CONTAINER_CHANGED_DEBOUNCE_MS);
+}) as EventListener;
 const sseConnectedListener = handleSseScanCompleted as EventListener;
 onMounted(() => {
   document.addEventListener('click', handleGlobalClick);
@@ -985,6 +1002,7 @@ onMounted(() => {
   globalThis.addEventListener('dd:sse-connected', sseConnectedListener);
 });
 onUnmounted(() => {
+  clearSseContainerChangedTimer();
   document.removeEventListener('click', handleGlobalClick);
   globalThis.removeEventListener('dd:sse-scan-completed', sseScanCompletedListener);
   globalThis.removeEventListener('dd:sse-container-changed', sseContainerChangedListener);
