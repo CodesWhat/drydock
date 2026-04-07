@@ -4,8 +4,30 @@
 
 import { errorMessage } from '../utils/error';
 
-// Current logged user
-let user = undefined;
+export const AUTH_USER_CACHE_TTL_MS = 5_000;
+
+let cachedUser: unknown = undefined;
+let cachedUserExpiresAt = 0;
+let hasCachedUser = false;
+let pendingUserRequest: Promise<unknown> | undefined;
+
+function setCachedUser(user: unknown, now = Date.now()) {
+  cachedUser = user;
+  cachedUserExpiresAt = now + AUTH_USER_CACHE_TTL_MS;
+  hasCachedUser = true;
+  return user;
+}
+
+function clearCachedUser() {
+  cachedUser = undefined;
+  cachedUserExpiresAt = 0;
+  hasCachedUser = false;
+  pendingUserRequest = undefined;
+}
+
+function hasFreshUserCache(now = Date.now()) {
+  return hasCachedUser && cachedUserExpiresAt > now;
+}
 
 function getPayloadErrorMessage(payload: unknown): string {
   if (typeof payload !== 'object' || payload === null) {
@@ -39,23 +61,33 @@ async function getStrategies(): Promise<{
  * @returns {Promise<*>}
  */
 async function getUser() {
-  try {
-    const response = await fetch('/auth/user', {
-      redirect: 'manual',
-      credentials: 'include',
-    });
-    if (response.ok) {
-      user = await response.json();
-      return user;
-    } else {
-      user = undefined;
-      return undefined;
-    }
-  } catch (e: unknown) {
-    console.debug(`Unable to fetch current user: ${errorMessage(e)}`);
-    user = undefined;
-    return undefined;
+  if (hasFreshUserCache()) {
+    return cachedUser;
   }
+
+  if (pendingUserRequest) {
+    return pendingUserRequest;
+  }
+
+  pendingUserRequest = (async () => {
+    try {
+      const response = await fetch('/auth/user', {
+        redirect: 'manual',
+        credentials: 'include',
+      });
+      if (response.ok) {
+        return setCachedUser(await response.json());
+      }
+      return setCachedUser(undefined);
+    } catch (e: unknown) {
+      console.debug(`Unable to fetch current user: ${errorMessage(e)}`);
+      return setCachedUser(undefined);
+    } finally {
+      pendingUserRequest = undefined;
+    }
+  })();
+
+  return pendingUserRequest;
 }
 
 /**
@@ -90,8 +122,7 @@ async function loginBasic(username: string, password: string, remember: boolean 
 
     throw new Error(message || 'Username or password error');
   }
-  user = await response.json();
-  return user;
+  return setCachedUser(await response.json());
 }
 
 /**
@@ -112,8 +143,7 @@ async function setRememberMe(remember: boolean) {
  */
 async function getOidcRedirection(name: string) {
   const response = await fetch(`/auth/oidc/${name}/redirect`, { credentials: 'include' });
-  user = await response.json();
-  return user;
+  return response.json();
 }
 
 /**
@@ -126,7 +156,7 @@ async function logout() {
     credentials: 'include',
     redirect: 'manual',
   });
-  user = undefined;
+  clearCachedUser();
   return response.json();
 }
 
