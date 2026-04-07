@@ -300,14 +300,9 @@ export function useDashboardResponsiveLayouts(options: {
   }
 
   function resetLayoutsToDefaults() {
-    const nextLayouts: ResponsiveWidgetLayouts = {
-      lg: createLayoutFromOrder(widgetOrder.value, 'lg'),
-    };
-    if (currentBreakpoint.value !== 'lg') {
-      nextLayouts[currentBreakpoint.value] = createLayoutFromOrder(
-        widgetOrder.value,
-        currentBreakpoint.value,
-      );
+    const nextLayouts: ResponsiveWidgetLayouts = {};
+    for (const breakpoint of RESPONSIVE_BREAKPOINTS) {
+      nextLayouts[breakpoint] = createLayoutFromOrder(widgetOrder.value, breakpoint);
     }
     layoutsByBreakpoint.value = nextLayouts;
     syncCurrentLayoutFromResponsiveLayouts();

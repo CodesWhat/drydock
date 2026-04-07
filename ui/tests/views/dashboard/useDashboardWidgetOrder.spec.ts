@@ -382,6 +382,35 @@ describe('useDashboardWidgetOrder', () => {
     expect(state.responsiveLayouts.value.sm?.every((item) => item.w === 1)).toBe(true);
   });
 
+  it('resetAll populates all breakpoints so the grid cannot derive stale layouts (#280)', async () => {
+    const { state } = await mountWidgetOrderComposable();
+
+    // Simulate being on a mobile breakpoint with a custom layout
+    const customLayout = DASHBOARD_WIDGET_IDS.map((id, index) => ({
+      i: id,
+      x: 0,
+      y: index * 5,
+      w: 1,
+      h: 5,
+    }));
+    state.onBreakpointChanged('xxs', customLayout as any);
+    state.layout.value = customLayout as any;
+    await nextTick();
+
+    state.resetAll();
+    await nextTick();
+
+    // Every responsive breakpoint must have a default layout so grid-layout-plus
+    // never falls back to deriving from lg (which produces wrong positions).
+    const breakpoints = ['xxs', 'xs', 'sm', 'md', 'lg'] as const;
+    for (const bp of breakpoints) {
+      expect(state.responsiveLayouts.value[bp]).toBeDefined();
+      expect(state.responsiveLayouts.value[bp]!.map((item) => item.i)).toEqual(
+        DASHBOARD_WIDGET_IDS,
+      );
+    }
+  });
+
   it('debounces position/size persistence when layout changes without order change', async () => {
     vi.useFakeTimers();
     const { state } = await mountWidgetOrderComposable();
