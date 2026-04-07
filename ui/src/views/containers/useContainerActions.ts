@@ -237,12 +237,29 @@ function setGroupUpdateStateValue(
   groupUpdateInProgress.value = next;
 }
 
+function setGroupUpdateQueueValue(
+  groupUpdateQueue: Ref<Set<string>>,
+  containerIds: string[],
+  queued: boolean,
+) {
+  const next = new Set(groupUpdateQueue.value);
+  for (const id of containerIds) {
+    if (queued) {
+      next.add(id);
+    } else {
+      next.delete(id);
+    }
+  }
+  groupUpdateQueue.value = next;
+}
+
 async function updateAllInGroupState(args: {
   containerActionsEnabled: boolean;
   containerActionsDisabledReason: string;
   containers: Readonly<Ref<Container[]>>;
   inputError: Ref<string | null>;
   groupUpdateInProgress: Ref<Set<string>>;
+  groupUpdateQueue: Ref<Set<string>>;
   group: ContainerActionGroup;
   executeAction: (
     target: ContainerActionTarget,
@@ -276,9 +293,12 @@ async function updateAllInGroupState(args: {
     return;
   }
   setGroupUpdateStateValue(args.groupUpdateInProgress, args.group.key, true);
+  const queuedIds = frozenUpdateTargets.map((t) => t.id);
+  setGroupUpdateQueueValue(args.groupUpdateQueue, queuedIds, true);
   try {
     let updatedCount = 0;
     for (const target of frozenUpdateTargets) {
+      setGroupUpdateQueueValue(args.groupUpdateQueue, [target.id], false);
       const currentContainer = args.containers.value.find(
         (container) => container.id === target.id,
       );
@@ -303,6 +323,7 @@ async function updateAllInGroupState(args: {
       );
     }
   } finally {
+    setGroupUpdateQueueValue(args.groupUpdateQueue, queuedIds, false);
     setGroupUpdateStateValue(args.groupUpdateInProgress, args.group.key, false);
   }
 }
@@ -833,6 +854,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
   const pendingActionsPollTimer = ref<ReturnType<typeof setInterval> | null>(null);
   const pendingActionsPollInFlight = ref(false);
   const groupUpdateInProgress = ref(new Set<string>());
+  const groupUpdateQueue = ref(new Set<string>());
   const POLL_TIMEOUT = 30000;
 
   function stopPendingActionsPolling() {
@@ -896,6 +918,11 @@ export function useContainerActions(input: UseContainerActionsInput) {
     );
   }
 
+  function isContainerUpdateQueued(target: ContainerActionTarget) {
+    const id = typeof target === 'string' ? undefined : target.id;
+    return id !== undefined && groupUpdateQueue.value.has(id);
+  }
+
   async function executeAction(
     target: ContainerActionTarget,
     action: (id: string) => Promise<unknown>,
@@ -947,6 +974,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
       containers: input.containers,
       inputError: input.error,
       groupUpdateInProgress,
+      groupUpdateQueue,
       group,
       executeAction,
       loadContainers: input.loadContainers,
@@ -1034,7 +1062,9 @@ export function useContainerActions(input: UseContainerActionsInput) {
     getOperationStatusStyle: backups.getOperationStatusStyle,
     getTriggerKey: triggers.getTriggerKey,
     groupUpdateInProgress,
+    groupUpdateQueue,
     isContainerUpdateInProgress,
+    isContainerUpdateQueued,
     policyError: policy.policyError,
     policyInProgress: policy.policyInProgress,
     policyMessage: policy.policyMessage,

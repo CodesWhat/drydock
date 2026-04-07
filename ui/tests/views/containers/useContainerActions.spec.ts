@@ -2343,6 +2343,111 @@ describe('useContainerActions', () => {
     await Promise.all([first, second]);
   });
 
+  it('tracks queued containers during sequential group update', async () => {
+    const proxyA = makeContainer({
+      id: 'container-a',
+      name: 'socket-proxy',
+      newTag: '2.0.0',
+      server: 'Datavault',
+    });
+    const proxyB = makeContainer({
+      id: 'container-b',
+      name: 'socket-proxy',
+      newTag: '2.0.0',
+      server: 'Tmvault',
+    });
+    const proxyC = makeContainer({
+      id: 'container-c',
+      name: 'socket-proxy',
+      newTag: '2.0.0',
+      server: 'Mediavault',
+    });
+    const { composable } = await mountActionsHarness({
+      containers: [proxyA, proxyB, proxyC],
+      containerIdMap: {
+        'socket-proxy': 'container-a',
+      },
+    });
+
+    let resolveFirst: (() => void) | undefined;
+    let resolveSecond: (() => void) | undefined;
+    let resolveThird: (() => void) | undefined;
+    let callCount = 0;
+    mocks.updateContainer.mockImplementation(() => {
+      callCount += 1;
+      return new Promise<void>((resolve) => {
+        if (callCount === 1) resolveFirst = resolve;
+        else if (callCount === 2) resolveSecond = resolve;
+        else resolveThird = resolve;
+      });
+    });
+
+    const updatePromise = composable.updateAllInGroup({
+      key: 'proxy-stack',
+      containers: [proxyA, proxyB, proxyC],
+    });
+    await nextTick();
+
+    expect(composable.groupUpdateInProgress.value.has('proxy-stack')).toBe(true);
+    expect(composable.isContainerUpdateInProgress(proxyA)).toBe(true);
+    expect(composable.isContainerUpdateQueued(proxyB)).toBe(true);
+    expect(composable.isContainerUpdateQueued(proxyC)).toBe(true);
+    expect(composable.isContainerUpdateQueued(proxyA)).toBe(false);
+
+    resolveFirst?.();
+    await flushPromises();
+
+    expect(composable.isContainerUpdateInProgress(proxyB)).toBe(true);
+    expect(composable.isContainerUpdateQueued(proxyC)).toBe(true);
+    expect(composable.isContainerUpdateQueued(proxyA)).toBe(false);
+    expect(composable.isContainerUpdateQueued(proxyB)).toBe(false);
+
+    resolveSecond?.();
+    await flushPromises();
+
+    expect(composable.isContainerUpdateInProgress(proxyC)).toBe(true);
+    expect(composable.isContainerUpdateQueued(proxyA)).toBe(false);
+    expect(composable.isContainerUpdateQueued(proxyB)).toBe(false);
+    expect(composable.isContainerUpdateQueued(proxyC)).toBe(false);
+
+    resolveThird?.();
+    await updatePromise;
+
+    expect(composable.groupUpdateInProgress.value.has('proxy-stack')).toBe(false);
+    expect(composable.groupUpdateQueue.value.size).toBe(0);
+  });
+
+  it('clears group update queue on error', async () => {
+    const proxyA = makeContainer({
+      id: 'container-a',
+      name: 'socket-proxy',
+      newTag: '2.0.0',
+      server: 'Datavault',
+    });
+    const proxyB = makeContainer({
+      id: 'container-b',
+      name: 'socket-proxy',
+      newTag: '2.0.0',
+      server: 'Tmvault',
+    });
+    const { composable } = await mountActionsHarness({
+      containers: [proxyA, proxyB],
+      containerIdMap: {
+        'socket-proxy': 'container-a',
+      },
+    });
+
+    mocks.updateContainer.mockRejectedValue(new Error('update failed'));
+
+    await composable.updateAllInGroup({
+      key: 'proxy-stack',
+      containers: [proxyA, proxyB],
+    });
+
+    expect(composable.groupUpdateInProgress.value.has('proxy-stack')).toBe(false);
+    expect(composable.groupUpdateQueue.value.size).toBe(0);
+  });
+
   it('fails closed for action handlers when container actions are disabled', async () => {
     mocks.containerActionsEnabled.value = false;
     const container = makeContainer({ id: 'container-1', name: 'web' });

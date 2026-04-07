@@ -102,6 +102,7 @@ function makeContext(overrides: Record<string, unknown> = {}) {
   const groupByStack = ref(false);
   const collapsedGroups = ref(new Set<string>());
   const groupUpdateInProgress = ref(new Set<string>());
+  const groupUpdateQueue = ref(new Set<string>());
   const containerActionsEnabled = ref(true);
   const actionInProgress = ref(new Set<string>());
   const containerViewMode = ref<'table' | 'cards' | 'list'>('table');
@@ -176,11 +177,14 @@ function makeContext(overrides: Record<string, unknown> = {}) {
     toggleGroupCollapse: spies.toggleGroupCollapse,
     collapsedGroups,
     groupUpdateInProgress,
+    groupUpdateQueue,
     containerActionsEnabled,
     containerActionsDisabledReason: ref('Actions disabled by server configuration'),
     actionInProgress,
     isContainerUpdateInProgress: (target: { id?: string; name?: string; _pending?: true }) =>
       Boolean(target._pending) || actionInProgress.value.has(target.id ?? target.name ?? ''),
+    isContainerUpdateQueued: (target: { id?: string; name?: string }) =>
+      groupUpdateQueue.value.has(target.id ?? ''),
     updateAllInGroup: spies.updateAllInGroup,
     tt: (label: string) => ({ value: label, showDelay: 400 }),
     containerViewMode,
@@ -241,6 +245,7 @@ function makeContext(overrides: Record<string, unknown> = {}) {
       renderGroups,
       groupByStack,
       groupUpdateInProgress,
+      groupUpdateQueue,
       containerViewMode,
       tableActionStyle,
       openActionsMenu,
