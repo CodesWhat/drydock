@@ -40,10 +40,10 @@ const configurationValid = {
   auto: true,
   order: 100,
   simpletitle:
-    '${isDigestUpdate ? "New image available for container " + container.name + " (tag " + currentTag + ")" : "New " + container.updateKind.kind + " found for container " + container.name}',
+    '${isDigestUpdate ? "New image available for container " + container.name + container.notificationWatcherSuffix + " (tag " + currentTag + ")" : "New " + container.updateKind.kind + " found for container " + container.name + container.notificationWatcherSuffix}',
 
   simplebody:
-    '${isDigestUpdate ? "Container " + container.name + " running tag " + currentTag + " has a newer image available" : "Container " + container.name + " running with " + container.updateKind.kind + " " + container.updateKind.localValue + " can be updated to " + container.updateKind.kind + " " + container.updateKind.remoteValue}${container.result && container.result.link ? "\\n" + container.result.link : ""}',
+    '${isDigestUpdate ? "Container " + container.name + container.notificationWatcherSuffix + " running tag " + currentTag + " has a newer image available" : "Container " + container.name + container.notificationWatcherSuffix + " running with " + container.updateKind.kind + " " + container.updateKind.localValue + " can be updated to " + container.updateKind.kind + " " + container.updateKind.remoteValue}${container.result && container.result.link ? "\\n" + container.result.link : ""}',
 
   batchtitle: '${containers.length} updates available',
   resolvenotifications: false,
@@ -1089,6 +1089,44 @@ test('renderSimpleBody should replace placeholders when called', async () => {
   );
 });
 
+test('renderSimpleBody should include watcher context for non-local watchers', async () => {
+  expect(
+    trigger.renderSimpleBody({
+      name: 'container-name',
+      watcher: 'servicevault',
+      updateKind: {
+        kind: 'tag',
+        localValue: '1.0.0',
+        remoteValue: '2.0.0',
+      },
+      result: {
+        link: 'http://test',
+      },
+    }),
+  ).toEqual(
+    'Container container-name (servicevault) running with tag 1.0.0 can be updated to tag 2.0.0\nhttp://test',
+  );
+});
+
+test('renderSimpleBody should omit watcher context for local watchers', async () => {
+  expect(
+    trigger.renderSimpleBody({
+      name: 'container-name',
+      watcher: 'local',
+      updateKind: {
+        kind: 'tag',
+        localValue: '1.0.0',
+        remoteValue: '2.0.0',
+      },
+      result: {
+        link: 'http://test',
+      },
+    }),
+  ).toEqual(
+    'Container container-name running with tag 1.0.0 can be updated to tag 2.0.0\nhttp://test',
+  );
+});
+
 test('renderSimpleBody should show tag instead of raw digest for digest updates', async () => {
   expect(
     trigger.renderSimpleBody({
@@ -1104,6 +1142,36 @@ test('renderSimpleBody should show tag instead of raw digest for digest updates'
       },
     }),
   ).toEqual('Container container-name running tag latest has a newer image available\nhttp://test');
+});
+
+test('renderSimpleTitle should include watcher context for non-local watchers by default', () => {
+  expect(
+    trigger.renderSimpleTitle({
+      name: 'docker-socket-proxy',
+      watcher: 'servicevault',
+      updateKind: {
+        kind: 'tag',
+        localValue: '1.0.0',
+        remoteValue: '2.0.0',
+      },
+    }),
+  ).toBe('New tag found for container docker-socket-proxy (servicevault)');
+});
+
+test('renderSimpleBody should include watcher context for non-local watchers by default', () => {
+  expect(
+    trigger.renderSimpleBody({
+      name: 'docker-socket-proxy',
+      watcher: 'servicevault',
+      updateKind: {
+        kind: 'tag',
+        localValue: '1.0.0',
+        remoteValue: '2.0.0',
+      },
+    }),
+  ).toBe(
+    'Container docker-socket-proxy (servicevault) running with tag 1.0.0 can be updated to tag 2.0.0',
+  );
 });
 
 test('renderSimpleBody should replace placeholders when template is a customized one', async () => {
@@ -1743,6 +1811,72 @@ test('renderBatchBody should replace placeholders when called', async () => {
     ]),
   ).toEqual(
     '- Container container-name running with tag 1.0.0 can be updated to tag 2.0.0\nhttp://test\n',
+  );
+});
+
+test('renderBatchBody should disambiguate identical container names from different watchers', () => {
+  expect(
+    trigger.renderBatchBody([
+      {
+        name: 'socket-proxy',
+        watcher: 'servicevault',
+        updateKind: {
+          kind: 'tag',
+          localValue: '1.0.0',
+          remoteValue: '2.0.0',
+        },
+      },
+      {
+        name: 'socket-proxy',
+        watcher: 'mediavault',
+        updateKind: {
+          kind: 'tag',
+          localValue: '1.0.0',
+          remoteValue: '2.0.0',
+        },
+      },
+    ]),
+  ).toEqual(
+    '- Container socket-proxy (servicevault) running with tag 1.0.0 can be updated to tag 2.0.0\n\n- Container socket-proxy (mediavault) running with tag 1.0.0 can be updated to tag 2.0.0\n',
+  );
+});
+
+test('renderBatchBody should keep identical container names distinct across watchers', () => {
+  expect(
+    trigger.renderBatchBody([
+      {
+        name: 'docker-socket-proxy',
+        watcher: 'servicevault',
+        updateKind: {
+          kind: 'digest',
+          localValue: 'sha256:abc123',
+          remoteValue: 'sha256:def456',
+        },
+        image: {
+          tag: {
+            value: 'latest',
+          },
+        },
+      },
+      {
+        name: 'docker-socket-proxy',
+        watcher: 'mediavault',
+        updateKind: {
+          kind: 'digest',
+          localValue: 'sha256:abc123',
+          remoteValue: 'sha256:def456',
+        },
+        image: {
+          tag: {
+            value: 'latest',
+          },
+        },
+      },
+    ]),
+  ).toBe(
+    '- Container docker-socket-proxy (servicevault) running tag latest has a newer image available\n' +
+      '\n' +
+      '- Container docker-socket-proxy (mediavault) running tag latest has a newer image available\n',
   );
 });
 

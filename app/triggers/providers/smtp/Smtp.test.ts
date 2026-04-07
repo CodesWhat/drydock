@@ -18,10 +18,10 @@ const configurationValid = {
   auto: 'all',
   order: 100,
   simpletitle:
-    '${isDigestUpdate ? "New image available for container " + container.name + " (tag " + currentTag + ")" : "New " + container.updateKind.kind + " found for container " + container.name}',
+    '${isDigestUpdate ? "New image available for container " + container.name + container.notificationWatcherSuffix + " (tag " + currentTag + ")" : "New " + container.updateKind.kind + " found for container " + container.name + container.notificationWatcherSuffix}',
 
   simplebody:
-    '${isDigestUpdate ? "Container " + container.name + " running tag " + currentTag + " has a newer image available" : "Container " + container.name + " running with " + container.updateKind.kind + " " + container.updateKind.localValue + " can be updated to " + container.updateKind.kind + " " + container.updateKind.remoteValue}${container.result && container.result.link ? "\\n" + container.result.link : ""}',
+    '${isDigestUpdate ? "Container " + container.name + container.notificationWatcherSuffix + " running tag " + currentTag + " has a newer image available" : "Container " + container.name + container.notificationWatcherSuffix + " running with " + container.updateKind.kind + " " + container.updateKind.localValue + " can be updated to " + container.updateKind.kind + " " + container.updateKind.remoteValue}${container.result && container.result.link ? "\\n" + container.result.link : ""}',
 
   batchtitle: '${containers.length} updates available',
   resolvenotifications: false,
@@ -388,6 +388,74 @@ test('triggerBatch should format mail as expected', async () => {
   ]);
   expect(response.text).toEqual(
     '- Container homeassistant running with tag 1.0.0 can be updated to tag 2.0.0\nhttps://test-2.0.0/changelog\n\n- Container homeassistant running with tag 1.0.0 can be updated to tag 2.0.0\nhttps://test-2.0.0/changelog\n',
+  );
+});
+
+test('triggerBatch should include watcher context for same container names on different watchers', async () => {
+  smtp.configuration = configurationValid;
+  smtp.transporter = {
+    sendMail: (conf) => conf,
+  };
+
+  const response = await smtp.triggerBatch([
+    {
+      id: 'container-1',
+      name: 'docker-socket-proxy',
+      watcher: 'servicevault',
+      image: {
+        id: 'sha256:image-1',
+        registry: {
+          url: 'docker://servicevault',
+        },
+        name: 'socket-proxy',
+        tag: {
+          value: 'latest',
+          semver: false,
+        },
+        digest: {
+          watch: false,
+        },
+        architecture: 'amd64',
+        os: 'linux',
+      },
+      updateKind: {
+        kind: 'digest',
+        localValue: 'sha256:old-1',
+        remoteValue: 'sha256:new-1',
+      },
+    },
+    {
+      id: 'container-2',
+      name: 'docker-socket-proxy',
+      watcher: 'mediavault',
+      image: {
+        id: 'sha256:image-2',
+        registry: {
+          url: 'docker://mediavault',
+        },
+        name: 'socket-proxy',
+        tag: {
+          value: 'latest',
+          semver: false,
+        },
+        digest: {
+          watch: false,
+        },
+        architecture: 'amd64',
+        os: 'linux',
+      },
+      updateKind: {
+        kind: 'digest',
+        localValue: 'sha256:old-2',
+        remoteValue: 'sha256:new-2',
+      },
+    },
+  ] as any);
+
+  expect(response.text).toBe(
+    '- Container docker-socket-proxy (servicevault) running tag latest has a newer image available\n' +
+      '\n' +
+      '- Container docker-socket-proxy (mediavault) running tag latest has a newer image available\n',
   );
 });
 

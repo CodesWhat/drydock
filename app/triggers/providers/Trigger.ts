@@ -103,6 +103,10 @@ export type TriggerNotificationContainer = Container & {
   notificationEvent: TriggerNotificationEvent;
 };
 
+type TriggerTemplateContainer = Container & {
+  notificationWatcherSuffix: string;
+};
+
 interface EventDispatchOptions extends notificationStore.NotificationRuleDispatchOptions {
   skipThreshold?: boolean;
 }
@@ -117,13 +121,13 @@ export function buildLiteralTemplateExpression(expression: string): string {
 }
 
 const DEFAULT_SIMPLE_TITLE_DIGEST_EXPRESSION =
-  '"New image available for container " + container.name + " (tag " + currentTag + ")"';
+  '"New image available for container " + container.name + container.notificationWatcherSuffix + " (tag " + currentTag + ")"';
 const DEFAULT_SIMPLE_TITLE_UPDATE_EXPRESSION =
-  '"New " + container.updateKind.kind + " found for container " + container.name';
+  '"New " + container.updateKind.kind + " found for container " + container.name + container.notificationWatcherSuffix';
 const DEFAULT_SIMPLE_BODY_DIGEST_EXPRESSION =
-  '"Container " + container.name + " running tag " + currentTag + " has a newer image available"';
+  '"Container " + container.name + container.notificationWatcherSuffix + " running tag " + currentTag + " has a newer image available"';
 const DEFAULT_SIMPLE_BODY_UPDATE_EXPRESSION =
-  '"Container " + container.name + " running with " + container.updateKind.kind + " " + container.updateKind.localValue + " can be updated to " + container.updateKind.kind + " " + container.updateKind.remoteValue';
+  '"Container " + container.name + container.notificationWatcherSuffix + " running with " + container.updateKind.kind + " " + container.updateKind.localValue + " can be updated to " + container.updateKind.kind + " " + container.updateKind.remoteValue';
 const DEFAULT_SIMPLE_BODY_RESULT_LINK_EXPRESSION =
   'container.result && container.result.link ? "\\n" + container.result.link : ""';
 const DEFAULT_SIMPLE_TITLE_TEMPLATE = buildLiteralTemplateExpression(
@@ -1454,14 +1458,27 @@ class Trigger extends Component {
    * Build the container template context used by trigger body/title rendering.
    * Release notes bodies are shortened for notifications to avoid excessively long payloads.
    */
-  private getTemplateContainer(container: Container): Container {
+  private getNotificationWatcherSuffix(container: Container): string {
+    const watcher = typeof container.watcher === 'string' ? container.watcher.trim() : '';
+    if (!watcher || watcher === 'local' || watcher === 'agent') {
+      return '';
+    }
+    return ` (${watcher})`;
+  }
+
+  private getTemplateContainer(container: Container): TriggerTemplateContainer {
+    const notificationWatcherSuffix = this.getNotificationWatcherSuffix(container);
     const releaseNotes = container.result?.releaseNotes;
     if (!releaseNotes || typeof releaseNotes.body !== 'string') {
-      return container;
+      return {
+        ...container,
+        notificationWatcherSuffix,
+      };
     }
 
     return {
       ...container,
+      notificationWatcherSuffix,
       result: {
         ...container.result,
         releaseNotes: {
