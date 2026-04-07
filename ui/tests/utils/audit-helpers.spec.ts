@@ -56,6 +56,7 @@ describe('audit-helpers', () => {
       ['update-available', 'updates'],
       ['update-applied', 'check'],
       ['update-failed', 'xmark'],
+      ['notification-delivery-failed', 'xmark'],
       ['security-alert', 'security'],
       ['agent-disconnect', 'network'],
       ['rollback', 'restart'],
