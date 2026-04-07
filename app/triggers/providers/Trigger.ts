@@ -954,6 +954,13 @@ class Trigger extends Component {
       if (containersFiltered.length > 0) {
         this.log.debug('Run batch');
         await this.triggerBatch(containersFiltered);
+        // In batch+digest mode, evict successfully-batched containers from the
+        // digest buffer so they are not sent again at the next digest flush.
+        if (this.digestBuffer.size > 0) {
+          for (const container of containersFiltered) {
+            this.digestBuffer.delete(fullName(container));
+          }
+        }
       }
     } catch (e: unknown) {
       const errorMessage = Trigger.getErrorMessage(e);

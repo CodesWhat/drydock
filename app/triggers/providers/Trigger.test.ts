@@ -4133,6 +4133,94 @@ describe('batch+digest mode', () => {
     expect(triggerBatchSpy).toHaveBeenCalledWith([report.container]);
   });
 
+  test('batch handler should evict sent containers from digest buffer in batch+digest mode', async () => {
+    let batchCallback;
+    vi.mocked(event.registerContainerReports).mockImplementation((cb) => {
+      batchCallback = cb;
+      return vi.fn();
+    });
+
+    await trigger.register('trigger', 'test', 'combined-trigger', {
+      ...configurationValid,
+      mode: 'batch+digest',
+    });
+
+    const container = {
+      id: 'c1',
+      name: 'app',
+      watcher: 'test',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+    };
+
+    // Pre-populate the digest buffer (as if the digest handler already buffered it)
+    await trigger.handleContainerReportDigest({
+      container,
+      changed: true,
+    } as any);
+
+    const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+
+    // Batch handler fires for the same container
+    await batchCallback?.([{ container, changed: true }] as any);
+
+    expect(triggerBatchSpy).toHaveBeenCalledWith([container]);
+
+    // The digest buffer should now be empty — batch evicted the entry
+    const cronCallback = vi.mocked(mockCron.schedule).mock.calls[0]?.[1];
+    triggerBatchSpy.mockClear();
+    cronCallback?.();
+    await Promise.resolve();
+
+    // Digest flush should NOT send because the buffer was evicted
+    expect(triggerBatchSpy).not.toHaveBeenCalled();
+  });
+
+  test('batch handler should not evict from digest buffer when batch send fails', async () => {
+    let batchCallback;
+    vi.mocked(event.registerContainerReports).mockImplementation((cb) => {
+      batchCallback = cb;
+      return vi.fn();
+    });
+
+    await trigger.register('trigger', 'test', 'combined-trigger', {
+      ...configurationValid,
+      mode: 'batch+digest',
+    });
+
+    const container = {
+      id: 'c1',
+      name: 'app',
+      watcher: 'test',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+    };
+
+    // Pre-populate the digest buffer
+    await trigger.handleContainerReportDigest({
+      container,
+      changed: true,
+    } as any);
+
+    // Batch send fails
+    const triggerBatchSpy = vi
+      .spyOn(trigger, 'triggerBatch')
+      .mockRejectedValue(new Error('SMTP timeout'));
+
+    await batchCallback?.([{ container, changed: true }] as any);
+
+    // Buffer should still have the entry since batch failed
+    triggerBatchSpy.mockResolvedValue(undefined);
+    storeContainer.getContainersRaw.mockReturnValue([container]);
+
+    const cronCallback = vi.mocked(mockCron.schedule).mock.calls[0]?.[1];
+    cronCallback?.();
+    await Promise.resolve();
+
+    // Digest flush SHOULD still send because batch failed — entry was retained
+    expect(triggerBatchSpy).toHaveBeenCalledWith([container]);
+  });
+
   test('digest handler should buffer containers and flush them on cron in batch+digest mode', async () => {
     let digestCallback;
     vi.mocked(event.registerContainerReport).mockImplementation((cb) => {
