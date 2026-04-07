@@ -85,6 +85,23 @@ describe('OpenAPI document', () => {
     });
   });
 
+  test('should document accepted container updates with an operation id response', () => {
+    expect(openApiDocument.components.schemas.ContainerUpdateAcceptedResponse).toMatchObject({
+      type: 'object',
+      properties: {
+        message: { type: 'string' },
+        operationId: { type: 'string' },
+      },
+      required: ['message', 'operationId'],
+    });
+
+    expect(openApiDocument.paths['/api/containers/{id}/update']?.post?.responses?.[202]).toEqual(
+      jsonResponse('Container update accepted', {
+        $ref: '#/components/schemas/ContainerUpdateAcceptedResponse',
+      }),
+    );
+  });
+
   test('should expose PATCH /api/settings and keep PUT as deprecated compatibility alias', () => {
     expect(openApiDocument.paths['/api/settings']?.patch).toBeDefined();
     expect(openApiDocument.paths['/api/settings']?.put).toBeDefined();

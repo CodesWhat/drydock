@@ -1,9 +1,11 @@
+import crypto from 'node:crypto';
 import express, { type Request, type Response } from 'express';
 import nocache from 'nocache';
 import { getServerConfiguration } from '../configuration/index.js';
 import logger from '../log/index.js';
+import { sanitizeLogParam } from '../log/sanitize.js';
 import type { AuditEntry } from '../model/audit.js';
-import { clearDetectedUpdateState } from '../model/container.js';
+import { type Container, clearDetectedUpdateState } from '../model/container.js';
 import { getContainerActionsCounter } from '../prometheus/container-actions.js';
 import * as registry from '../registry/index.js';
 import * as storeContainer from '../store/container.js';
@@ -44,6 +46,29 @@ type DockerWatcher = {
     getContainer: (id: string) => DockerContainerHandle;
   };
 };
+
+function clearManualUpdateDetectionState(id: string) {
+  const containerAfterTrigger = storeContainer.getContainer(id);
+  if (
+    containerAfterTrigger &&
+    (containerAfterTrigger.result || containerAfterTrigger.updateAvailable)
+  ) {
+    const clearedAtMs = Date.now();
+    storeContainer.markPendingFreshStateAfterManualUpdate(containerAfterTrigger, clearedAtMs);
+    storeContainer.updateContainer(clearDetectedUpdateState(containerAfterTrigger));
+  }
+}
+
+function recordAcceptedUpdateFailure(id: string, container: Container, error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  log.warn(`Error updating container ${sanitizeLogParam(id)} (${sanitizeLogParam(message)})`);
+  recordAuditEvent({
+    action: 'container-update',
+    container,
+    status: 'error',
+    details: message,
+  });
+}
 
 /**
  * Execute a container action (start, stop, restart).
@@ -187,35 +212,20 @@ async function updateContainer(req: Request, res: Response) {
     return;
   }
 
-  try {
-    await trigger.trigger(container);
-    // Drop stale raw update data so the next store validation recomputes this
-    // container as up to date until the watcher performs an authoritative rescan.
-    const containerAfterTrigger = storeContainer.getContainer(id);
-    if (
-      containerAfterTrigger &&
-      (containerAfterTrigger.result || containerAfterTrigger.updateAvailable)
-    ) {
-      const clearedAtMs = Date.now();
-      storeContainer.markPendingFreshStateAfterManualUpdate(containerAfterTrigger, clearedAtMs);
-      storeContainer.updateContainer(clearDetectedUpdateState(containerAfterTrigger));
+  const operationId = crypto.randomUUID();
+  getContainerActionsCounter()?.inc({ action: 'container-update' });
+
+  void (async () => {
+    try {
+      await trigger.trigger(container, { operationId });
+      clearManualUpdateDetectionState(id);
+      recordAuditEvent({ action: 'container-update', container, status: 'success' });
+    } catch (e: unknown) {
+      recordAcceptedUpdateFailure(id, container, e);
     }
-    const updatedContainer = storeContainer.getContainer(id);
-    recordAuditEvent({ action: 'container-update', container, status: 'success' });
-    getContainerActionsCounter()?.inc({ action: 'container-update' });
-    res.status(200).json({ message: 'Container updated successfully', result: updatedContainer });
-  } catch (e: unknown) {
-    handleContainerActionError({
-      error: e,
-      action: 'container-update',
-      actionLabel: 'updating',
-      id,
-      container,
-      log,
-      res,
-    });
-    getContainerActionsCounter()?.inc({ action: 'container-update' });
-  }
+  })();
+
+  res.status(202).json({ message: 'Container update accepted', operationId });
 }
 
 /**

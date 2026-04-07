@@ -139,7 +139,7 @@ describe('Container Actions Service', () => {
     it('posts to update endpoint', async () => {
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ message: 'Container updated successfully' }),
+        json: async () => ({ message: 'Container update accepted', operationId: 'op-123' }),
       } as any);
 
       const result = await updateContainer('abc123');
@@ -148,7 +148,7 @@ describe('Container Actions Service', () => {
         method: 'POST',
         credentials: 'include',
       });
-      expect(result).toEqual({ message: 'Container updated successfully' });
+      expect(result).toEqual({ message: 'Container update accepted', operationId: 'op-123' });
     });
 
     it('throws with server error message on failure', async () => {

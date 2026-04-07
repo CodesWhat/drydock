@@ -1151,8 +1151,11 @@ class Docker extends Trigger {
     this.insertContainerImageBackup(context, container);
   }
 
-  async executeContainerUpdate(context, container, logContainer) {
-    return this.containerUpdateExecutor.execute(context, container, logContainer);
+  async executeContainerUpdate(context, container, logContainer, runtimeContext?: unknown) {
+    if (runtimeContext === undefined) {
+      return this.containerUpdateExecutor.execute(context, container, logContainer);
+    }
+    return this.containerUpdateExecutor.execute(context, container, logContainer, runtimeContext);
   }
 
   /**
@@ -1160,8 +1163,11 @@ class Docker extends Trigger {
    * Subclasses (e.g. Dockercompose) override this to use their own runtime
    * mechanics while reusing the shared lifecycle orchestrator.
    */
-  async performContainerUpdate(context, container, logContainer, _runtimeContext?: unknown) {
-    const updated = await this.executeContainerUpdate(context, container, logContainer);
+  async performContainerUpdate(context, container, logContainer, runtimeContext?: unknown) {
+    const updated =
+      runtimeContext === undefined
+        ? await this.executeContainerUpdate(context, container, logContainer)
+        : await this.executeContainerUpdate(context, container, logContainer, runtimeContext);
     if (updated && container.updateKind?.kind === 'tag') {
       await syncComposeFileTag({
         labels: context.currentContainerSpec?.Config?.Labels,

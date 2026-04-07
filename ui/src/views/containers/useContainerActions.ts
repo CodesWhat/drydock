@@ -299,7 +299,7 @@ async function updateAllInGroupState(args: {
     if (updatedCount > 0) {
       const toast = useToast();
       toast.success(
-        `Updated ${updatedCount} container${updatedCount === 1 ? '' : 's'} in ${args.group.key}`,
+        `Started update${updatedCount === 1 ? '' : 's'} for ${updatedCount} container${updatedCount === 1 ? '' : 's'} in ${args.group.key}`,
       );
     }
   } finally {
@@ -581,7 +581,7 @@ function createConfirmHandlers(args: {
       severity: 'warn',
       accept: () =>
         args.executeAction(target, apiUpdateContainer, {
-          successMessage: `Updated: ${name}`,
+          successMessage: `Update started: ${name}`,
           treatNoUpdateAsStale: true,
           pendingLifecycleMode: 'update',
         }) as unknown as Promise<void>,
@@ -674,7 +674,7 @@ function createContainerActionHandlers(args: {
   async function updateContainer(target: ContainerActionTarget) {
     const name = typeof target === 'string' ? target : target.name;
     await args.executeAction(target, apiUpdateContainer, {
-      successMessage: `Updated: ${name}`,
+      successMessage: `Update started: ${name}`,
       staleMessage: `Already up to date: ${name}`,
       treatNoUpdateAsStale: true,
       pendingLifecycleMode: 'update',
@@ -712,7 +712,7 @@ function createContainerActionHandlers(args: {
     const name = typeof target === 'string' ? target : target.name;
     await args.applyPolicy(target, 'clear', {}, `Cleared update policy for ${name}`);
     await args.executeAction(target, apiUpdateContainer, {
-      successMessage: `Force updated: ${name}`,
+      successMessage: `Force update started: ${name}`,
       staleMessage: `Already up to date: ${name}`,
       treatNoUpdateAsStale: true,
       pendingLifecycleMode: 'update',

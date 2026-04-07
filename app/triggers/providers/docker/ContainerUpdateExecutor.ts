@@ -69,6 +69,11 @@ type ContainerUpdateContext = {
   currentContainerSpec: ContainerSpecLike;
 };
 
+type ContainerUpdateRuntimeContext = {
+  operationId?: string;
+  [key: string]: unknown;
+};
+
 type PreparedContainerUpdateExecution = {
   dockerApi: DockerApiLike;
   newImage: string;
@@ -226,6 +231,20 @@ function getHealthGateTimeoutMs(rollbackConfig: RollbackConfig): number {
   return Number.isFinite(rollbackConfig.rollbackWindow) && rollbackConfig.rollbackWindow > 0
     ? rollbackConfig.rollbackWindow
     : DEFAULT_HEALTH_GATE_TIMEOUT_MS;
+}
+
+function getRequestedOperationId(runtimeContext?: unknown): string | undefined {
+  if (!runtimeContext || typeof runtimeContext !== 'object') {
+    return undefined;
+  }
+
+  const operationId = (runtimeContext as ContainerUpdateRuntimeContext).operationId;
+  if (typeof operationId !== 'string') {
+    return undefined;
+  }
+
+  const trimmedOperationId = operationId.trim();
+  return trimmedOperationId.length > 0 ? trimmedOperationId : undefined;
 }
 
 class ContainerUpdateExecutor {
@@ -479,11 +498,13 @@ class ContainerUpdateExecutor {
     context: ContainerUpdateContext,
     container: ContainerForUpdate,
     logContainer: ContainerUpdateLogger,
+    runtimeContext?: unknown,
   ) {
     const preparedExecution = await this.prepareContainerUpdateExecution(
       context,
       container,
       logContainer,
+      runtimeContext,
     );
     if (!preparedExecution) {
       return false;
@@ -519,9 +540,11 @@ class ContainerUpdateExecutor {
     context: ContainerUpdateContext,
     container: ContainerForUpdate,
     logContainer: ContainerUpdateLogger,
+    runtimeContext?: unknown,
   ): Promise<PreparedContainerUpdateExecution | undefined> {
     const { dockerApi, auth, newImage, currentContainer, currentContainerSpec } = context;
     const configuration = this.getConfiguration();
+    const requestedOperationId = getRequestedOperationId(runtimeContext);
 
     await this.reconcileInProgressContainerUpdateOperation(dockerApi, container, logContainer);
 
@@ -535,6 +558,7 @@ class ContainerUpdateExecutor {
       : undefined;
 
     const operation = updateOperationStore.insertOperation({
+      ...(requestedOperationId ? { id: requestedOperationId } : {}),
       containerId: container.id,
       containerName: container.name,
       triggerName: this.getTriggerId(),

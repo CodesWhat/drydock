@@ -68,6 +68,11 @@ function getHandler(method, path) {
   return call[1];
 }
 
+async function flushAcceptedUpdateWork() {
+  await Promise.resolve();
+  await Promise.resolve();
+}
+
 function createDockerTrigger(overrides = {}) {
   const mockDockerContainer = {
     start: vi.fn().mockResolvedValue(undefined),
@@ -91,7 +96,8 @@ function createDockerTrigger(overrides = {}) {
 
 describe('Container Actions Router', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
+    mockUpdateContainer.mockImplementation((c) => c);
     mockGetServerConfiguration.mockReturnValue({ feature: { containeractions: true } });
     const mockAuditInc = vi.fn();
     mockGetAuditCounter.mockReturnValue({ inc: mockAuditInc });
@@ -411,7 +417,7 @@ describe('Container Actions Router', () => {
   });
 
   describe('updateContainer', () => {
-    test('should update container successfully', async () => {
+    test('should accept update immediately and clear detected update state after trigger succeeds', async () => {
       const container = {
         id: 'c1',
         name: 'nginx',
@@ -439,7 +445,17 @@ describe('Container Actions Router', () => {
       const res = createMockResponse();
       await handler(req, res);
 
-      expect(mockTriggerFn).toHaveBeenCalledWith(container);
+      expect(res.status).toHaveBeenCalledWith(202);
+      expect(res.json).toHaveBeenCalledWith({
+        message: 'Container update accepted',
+        operationId: expect.any(String),
+      });
+      const accepted = res.json.mock.calls[0][0];
+      expect(mockTriggerFn).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'c1', name: 'nginx' }),
+        expect.objectContaining({ operationId: accepted.operationId }),
+      );
+      await flushAcceptedUpdateWork();
       expect(mockUpdateContainer).toHaveBeenCalledWith(
         expect.objectContaining({ result: undefined, updateAvailable: false }),
       );
@@ -447,14 +463,24 @@ describe('Container Actions Router', () => {
         expect.objectContaining({ id: 'c1', name: 'nginx' }),
         expect.any(Number),
       );
-      expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith({
-        message: 'Container updated successfully',
-        result: clearedContainer,
+      expect(mockInsertAudit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'container-update',
+          containerName: 'nginx',
+          status: 'success',
+        }),
+      );
+      const contractValidation = validateOpenApiJsonResponse({
+        path: '/api/containers/{id}/update',
+        method: 'post',
+        statusCode: '202',
+        payload: accepted,
       });
+      expect(contractValidation.valid).toBe(true);
+      expect(contractValidation.errors).toStrictEqual([]);
     });
 
-    test('should update container successfully with a dockercompose trigger', async () => {
+    test('should accept update immediately with a dockercompose trigger', async () => {
       const container = {
         id: 'c1',
         name: 'nginx',
@@ -482,7 +508,13 @@ describe('Container Actions Router', () => {
       const res = createMockResponse();
       await handler(req, res);
 
-      expect(mockTriggerFn).toHaveBeenCalledWith(container);
+      expect(res.status).toHaveBeenCalledWith(202);
+      const accepted = res.json.mock.calls[0][0];
+      expect(mockTriggerFn).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'c1', name: 'nginx' }),
+        expect.objectContaining({ operationId: accepted.operationId }),
+      );
+      await flushAcceptedUpdateWork();
       expect(mockUpdateContainer).toHaveBeenCalledWith(
         expect.objectContaining({ result: undefined, updateAvailable: false }),
       );
@@ -490,11 +522,6 @@ describe('Container Actions Router', () => {
         expect.objectContaining({ id: 'c1', name: 'nginx' }),
         expect.any(Number),
       );
-      expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith({
-        message: 'Container updated successfully',
-        result: clearedContainer,
-      });
     });
 
     test('should not clear updateAvailable when the post-trigger container is already up to date', async () => {
@@ -522,13 +549,14 @@ describe('Container Actions Router', () => {
       const res = createMockResponse();
       await handler(req, res);
 
-      expect(mockTriggerFn).toHaveBeenCalledWith(container);
+      expect(res.status).toHaveBeenCalledWith(202);
+      const accepted = res.json.mock.calls[0][0];
+      expect(mockTriggerFn).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'c1', name: 'nginx' }),
+        expect.objectContaining({ operationId: accepted.operationId }),
+      );
+      await flushAcceptedUpdateWork();
       expect(mockUpdateContainer).not.toHaveBeenCalled();
-      expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith({
-        message: 'Container updated successfully',
-        result: updatedContainer,
-      });
     });
 
     test('should select the dockercompose trigger matching container compose labels', async () => {
@@ -572,9 +600,14 @@ describe('Container Actions Router', () => {
       const res = createMockResponse();
       await handler(req, res);
 
-      expect(monitoringTriggerFn).toHaveBeenCalledWith(container);
+      expect(res.status).toHaveBeenCalledWith(202);
+      const accepted = res.json.mock.calls[0][0];
+      expect(monitoringTriggerFn).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'c1', name: 'apprise' }),
+        expect.objectContaining({ operationId: accepted.operationId }),
+      );
       expect(mysqlTriggerFn).not.toHaveBeenCalled();
-      expect(res.status).toHaveBeenCalledWith(200);
+      await flushAcceptedUpdateWork();
     });
 
     test('should return 404 when container not found', async () => {
@@ -689,7 +722,7 @@ describe('Container Actions Router', () => {
       expect(res.json).toHaveBeenCalledWith({ error: 'Container actions are disabled' });
     });
 
-    test('should return 500 when trigger throws error', async () => {
+    test('should accept update and record an error when trigger fails asynchronously', async () => {
       const container = {
         id: 'c1',
         name: 'nginx',
@@ -706,8 +739,19 @@ describe('Container Actions Router', () => {
       const res = createMockResponse();
       await handler(req, res);
 
-      expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith({ error: 'pull failed' });
+      expect(res.status).toHaveBeenCalledWith(202);
+      expect(res.json).toHaveBeenCalledWith({
+        message: 'Container update accepted',
+        operationId: expect.any(String),
+      });
+      await flushAcceptedUpdateWork();
+      expect(mockInsertAudit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'container-update',
+          status: 'error',
+          details: 'pull failed',
+        }),
+      );
     });
 
     test('should insert audit entry on success', async () => {
@@ -727,6 +771,8 @@ describe('Container Actions Router', () => {
       const res = createMockResponse();
       await handler(req, res);
 
+      expect(res.status).toHaveBeenCalledWith(202);
+      await flushAcceptedUpdateWork();
       expect(mockInsertAudit).toHaveBeenCalledWith(
         expect.objectContaining({
           action: 'container-update',
@@ -753,6 +799,8 @@ describe('Container Actions Router', () => {
       const res = createMockResponse();
       await handler(req, res);
 
+      expect(res.status).toHaveBeenCalledWith(202);
+      await flushAcceptedUpdateWork();
       expect(mockInsertAudit).toHaveBeenCalledWith(
         expect.objectContaining({
           action: 'container-update',
@@ -784,11 +832,13 @@ describe('Container Actions Router', () => {
       const res = createMockResponse();
       await handler(req, res);
 
+      expect(res.status).toHaveBeenCalledWith(202);
+      await flushAcceptedUpdateWork();
       expect(mockAuditInc).toHaveBeenCalledWith({ action: 'container-update' });
       expect(mockActionsInc).toHaveBeenCalledWith({ action: 'container-update' });
     });
 
-    test('should stringify non-Error trigger failures', async () => {
+    test('should stringify non-Error trigger failures after accepting the update request', async () => {
       const container = {
         id: 'c1',
         name: 'nginx',
@@ -805,8 +855,15 @@ describe('Container Actions Router', () => {
       const res = createMockResponse();
       await handler(req, res);
 
-      expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith({ error: 'update failed as string' });
+      expect(res.status).toHaveBeenCalledWith(202);
+      await flushAcceptedUpdateWork();
+      expect(mockInsertAudit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'container-update',
+          status: 'error',
+          details: 'update failed as string',
+        }),
+      );
     });
   });
 });

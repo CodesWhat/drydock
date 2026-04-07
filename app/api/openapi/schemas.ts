@@ -588,6 +588,15 @@ export const openApiSchemas = {
     required: ['message', 'result'],
     additionalProperties: true,
   },
+  ContainerUpdateAcceptedResponse: {
+    type: 'object',
+    properties: {
+      message: { type: 'string' },
+      operationId: { type: 'string' },
+    },
+    required: ['message', 'operationId'],
+    additionalProperties: false,
+  },
   ComponentItem: {
     type: 'object',
     properties: {
