@@ -1349,10 +1349,10 @@ describe('DashboardView', () => {
 
       expect(
         wrapper.find('[data-widget-id="update-breakdown"]').attributes('data-widget-order'),
-      ).toBe('4');
+      ).toBe('8');
       expect(
         wrapper.find('[data-widget-id="recent-updates"]').attributes('data-widget-order'),
-      ).toBe('5');
+      ).toBe('4');
       const { flushPreferences } = await import('@/preferences/store');
       flushPreferences();
       const prefs = JSON.parse(localStorage.getItem(PREFERENCES_STORAGE_KEY) || '{}');
@@ -1361,11 +1361,11 @@ describe('DashboardView', () => {
         'stat-updates',
         'stat-security',
         'stat-registries',
-        'update-breakdown',
         'recent-updates',
         'security-overview',
         'resource-usage',
         'host-status',
+        'update-breakdown',
       ]);
     });
 
@@ -1388,10 +1388,10 @@ describe('DashboardView', () => {
 
       expect(
         wrapper.find('[data-widget-id="stat-registries"]').attributes('data-widget-order'),
-      ).toBe('0');
+      ).toBe('3');
       expect(
         wrapper.find('[data-widget-id="stat-containers"]').attributes('data-widget-order'),
-      ).toBe('1');
+      ).toBe('0');
     });
   });
 
