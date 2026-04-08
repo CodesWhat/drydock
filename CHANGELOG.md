@@ -10,6 +10,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0-rc.7] — 2026-04-08
+
+### Added
+
+- **Multi-server notification identification (#283)** — Notifications automatically include a `[server-name]` prefix when agents are registered, identifying which server (controller or agent) each update comes from. Controller name configurable via `DD_SERVER_NAME` (defaults to `os.hostname()`). Custom templates can use `container.notificationServerName` and `container.notificationAgentPrefix`. ([#14365870](https://github.com/CodesWhat/drydock/commit/14365870), [#5880b4c8](https://github.com/CodesWhat/drydock/commit/5880b4c8))
+- **Infrastructure update mode** — `dd.update.mode=infrastructure` label for socket proxy containers enables helper-swap update path bypassing the socket proxy. ([#0e8f620d](https://github.com/CodesWhat/drydock/commit/0e8f620d))
+
+### Changed
+
+- **SSE debug logging** — Connect/disconnect log messages now include client ID and IP address. ([#12942ee4](https://github.com/CodesWhat/drydock/commit/12942ee4))
+
+### Security
+
+- **Vite CVE patches** — Updated vite to 8.0.7 (ui) and 7.3.2 (demo) to fix CVE-2026-39363, CVE-2026-39364, CVE-2026-39365 (dev server file read vulnerabilities). ([#15abb919](https://github.com/CodesWhat/drydock/commit/15abb919))
+
 ## [1.5.0-rc.6] — 2026-04-05
 
 ### Added
