@@ -1564,28 +1564,26 @@ class Dockercompose extends Docker {
         firstContainerByService.set(mapping.service, mapping);
       }
     }
-    await Promise.all(
-      [...firstContainerByService.entries()].map(async ([service, mapping]) => {
-        const runtimeContainer = mapping.container;
-        const logContainer = this.log.child({
-          container: runtimeContainer.name,
-        });
-        const watcher = this.getWatcher(runtimeContainer);
-        const { dockerApi } = watcher;
-        const registry = this.resolveRegistryManager(runtimeContainer, logContainer, {
-          allowAnonymousFallback: true,
-        });
-        const auth = await registry.getAuthPull();
-        const newImage = this.getNewImageFullName(registry, runtimeContainer);
-        composeFileOnceRuntimeContextByService.set(service, {
-          dockerApi,
-          registry,
-          auth,
-          newImage,
-        });
-        await this.pullImage(dockerApi, auth, newImage, logContainer);
-      }),
-    );
+    for (const [service, mapping] of firstContainerByService.entries()) {
+      const runtimeContainer = mapping.container;
+      const logContainer = this.log.child({
+        container: runtimeContainer.name,
+      });
+      const watcher = this.getWatcher(runtimeContainer);
+      const { dockerApi } = watcher;
+      const registry = this.resolveRegistryManager(runtimeContainer, logContainer, {
+        allowAnonymousFallback: true,
+      });
+      const auth = await registry.getAuthPull();
+      const newImage = this.getNewImageFullName(registry, runtimeContainer);
+      composeFileOnceRuntimeContextByService.set(service, {
+        dockerApi,
+        registry,
+        auth,
+        newImage,
+      });
+      await this.pullImage(dockerApi, auth, newImage, logContainer);
+    }
     return composeFileOnceRuntimeContextByService;
   }
 

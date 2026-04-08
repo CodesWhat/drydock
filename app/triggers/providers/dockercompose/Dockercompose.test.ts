@@ -4198,6 +4198,69 @@ describe('Dockercompose Trigger', () => {
     );
   });
 
+  test('processComposeFile should serialize compose-file-once pre-pulls across distinct services', async () => {
+    trigger.configuration.dryrun = false;
+    trigger.configuration.prune = false;
+    trigger.configuration.composeFileOnce = true;
+
+    const nginxContainer = makeContainer({
+      labels: { 'com.docker.compose.service': 'nginx' },
+    });
+    const redisContainer = makeContainer({
+      name: 'redis',
+      imageName: 'redis',
+      tagValue: '7.0.0',
+      remoteValue: '7.1.0',
+      labels: { 'com.docker.compose.service': 'redis' },
+    });
+
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({
+        nginx: { image: 'nginx:1.0.0' },
+        redis: { image: 'redis:7.0.0' },
+      }),
+    );
+    vi.spyOn(trigger, 'getComposeFile').mockResolvedValue(
+      Buffer.from(
+        [
+          'services:',
+          '  nginx:',
+          '    image: nginx:1.0.0',
+          '  redis:',
+          '    image: redis:7.0.0',
+          '',
+        ].join('\n'),
+      ),
+    );
+    vi.spyOn(trigger, 'writeComposeFile').mockResolvedValue();
+    vi.spyOn(trigger, 'runContainerUpdateLifecycle').mockResolvedValue();
+
+    let pullCallCount = 0;
+    let resolveFirstPull: (() => void) | undefined;
+    const pullImageSpy = vi.spyOn(trigger, 'pullImage').mockImplementation(() => {
+      pullCallCount += 1;
+      if (pullCallCount === 1) {
+        return new Promise<void>((resolve) => {
+          resolveFirstPull = resolve;
+        });
+      }
+      return Promise.resolve();
+    });
+
+    const processPromise = trigger.processComposeFile('/opt/drydock/test/stack.yml', [
+      nginxContainer,
+      redisContainer,
+    ]);
+    await vi.waitFor(() => {
+      expect(pullImageSpy).toHaveBeenCalledTimes(1);
+    });
+
+    resolveFirstPull?.();
+    await processPromise;
+
+    expect(pullImageSpy).toHaveBeenCalledTimes(2);
+  });
+
   test('processComposeFile should prune images for digest-only updates when prune is enabled', async () => {
     trigger.configuration.dryrun = false;
     trigger.configuration.prune = true;
