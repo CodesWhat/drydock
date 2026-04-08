@@ -253,6 +253,32 @@ describe('ContainerUpdateExecutor', () => {
     );
   });
 
+  test('reconcile records successful cleanup details when stale temp container is removed', async () => {
+    const pending = {
+      id: 'op-1',
+      oldName: 'web',
+      tempName: 'web-old-1',
+      fromVersion: '1.0.0',
+      toVersion: '1.0.1',
+    };
+    mockGetInProgressOperationByContainerName.mockReturnValue(pending);
+
+    const executor = createExecutor();
+    vi.spyOn(executor, 'inspectContainerByIdentifier')
+      .mockResolvedValueOnce({ container: {}, inspection: {} })
+      .mockResolvedValueOnce({ container: {}, inspection: {} });
+    vi.spyOn(executor, 'stopAndRemoveContainerBestEffort').mockResolvedValueOnce(true);
+
+    await executor.reconcileInProgressContainerUpdateOperation({}, createContainer(), createLog());
+
+    expect(executor.recordRollbackTelemetry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reason: 'startup_reconcile_cleanup_temp',
+        details: 'Recovered stale renamed container web-old-1',
+      }),
+    );
+  });
+
   test('reconcile restores old name when only temp container exists and restart is needed', async () => {
     const pending = {
       id: 'op-1',
@@ -641,6 +667,27 @@ describe('ContainerUpdateExecutor', () => {
     ).resolves.toBe(true);
 
     expect(mockInsertOperation.mock.calls.at(-1)?.[0]?.id).toBeUndefined();
+  });
+
+  test('execute trims and reuses valid requested operation ids in runtime context', async () => {
+    const context = createContext({
+      currentContainerSpec: createCurrentContainerSpec({
+        State: { Running: false },
+        HostConfig: { AutoRemove: false },
+      }),
+    });
+    const executor = createExecutor({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      hasHealthcheckConfigured: vi.fn(() => false),
+    });
+
+    await expect(
+      executor.execute(context, createContainer(), createLog(), {
+        operationId: ' custom-op ',
+      }),
+    ).resolves.toBe(true);
+
+    expect(mockInsertOperation.mock.calls.at(-1)?.[0]?.id).toBe('custom-op');
   });
 
   test('execute rolls back and rethrows original error when rollback succeeds', async () => {

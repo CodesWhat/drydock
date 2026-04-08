@@ -2391,7 +2391,25 @@ test('handleContainerReport should debug log when simple mode skips an unchanged
   );
 });
 
-test('handleContainerReport should treat an unset once flag as false in skip logs', async () => {
+test('handleContainerReport should debug log when simple mode skips a report without an available update', async () => {
+  const debugSpy = vi.spyOn(log, 'debug');
+
+  await trigger.handleContainerReport({
+    changed: true,
+    container: {
+      watcher: 'local',
+      name: 'container1',
+      updateAvailable: false,
+      updateKind: { kind: 'digest', semverDiff: 'unknown' },
+    },
+  });
+
+  expect(debugSpy).toHaveBeenCalledWith(
+    'Skipping update-available notification for local_container1 (changed=true, once=true, updateAvailable=false)',
+  );
+});
+
+test('handleContainerReport should show once=false in skip logs when once is unset', async () => {
   trigger.configuration.once = undefined;
   const debugSpy = vi.spyOn(log, 'debug');
 
@@ -2400,13 +2418,13 @@ test('handleContainerReport should treat an unset once flag as false in skip log
     container: {
       watcher: 'local',
       name: 'container1',
-      updateAvailable: true,
+      updateAvailable: false,
       updateKind: { kind: 'digest', semverDiff: 'unknown' },
     },
   });
 
   expect(debugSpy).toHaveBeenCalledWith(
-    'Skipping update-available notification for local_container1 (changed=false, once=false, updateAvailable=true)',
+    'Skipping update-available notification for local_container1 (changed=false, once=false, updateAvailable=false)',
   );
 });
 
@@ -3135,12 +3153,31 @@ test('mustTrigger should return false when agent does not match', async () => {
   expect(trigger.mustTrigger({ agent: 'local-agent' })).toBe(false);
 });
 
+test('getMustTriggerDecision should describe agent mismatches when the container agent is missing', () => {
+  trigger.agent = 'remote-agent';
+
+  expect((trigger as any).getMustTriggerDecision({})).toEqual({
+    allowed: false,
+    reason: 'agent mismatch expected=remote-agent actual=<none>',
+  });
+});
+
 test('mustTrigger should return false when strictAgentMatch and agent mismatch', async () => {
   trigger.strictAgentMatch = true;
   trigger.agent = undefined;
   trigger.type = 'docker';
   trigger.name = 'update';
   expect(trigger.mustTrigger({ agent: 'remote-agent' })).toBe(false);
+});
+
+test('getMustTriggerDecision should describe strict agent mismatches when the container agent is missing', () => {
+  trigger.strictAgentMatch = true;
+  trigger.agent = 'controller-agent';
+
+  expect((trigger as any).getMustTriggerDecision({})).toEqual({
+    allowed: false,
+    reason: 'strict agent mismatch expected=controller-agent actual=<none>',
+  });
 });
 
 test('isTriggerIncludedOrExcluded should return false when trigger not found in list', () => {
@@ -3273,6 +3310,28 @@ test('handleContainerReport should include trigger filter context when mustTrigg
 
   expect(debugSpy).toHaveBeenCalledWith(
     'Trigger conditions not met => ignore (triggerInclude=<none>, triggerExclude=mobile, included=true, excluded=true)',
+  );
+});
+
+test('handleContainerReport should debug log when threshold is not reached', async () => {
+  trigger.configuration = {
+    threshold: 'major',
+    mode: 'simple',
+  };
+  const debugSpy = vi.spyOn(log, 'debug');
+
+  await trigger.handleContainerReport({
+    changed: true,
+    container: {
+      watcher: 'local',
+      name: 'container1',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', semverDiff: 'minor' },
+    },
+  });
+
+  expect(debugSpy).toHaveBeenCalledWith(
+    'Threshold not reached => ignore (threshold=major, updateKind=tag, semverDiff=minor)',
   );
 });
 
