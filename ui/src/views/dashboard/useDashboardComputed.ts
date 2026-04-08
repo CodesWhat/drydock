@@ -69,6 +69,7 @@ function getRecentUpdateStatusColor(status: RecentUpdateRow['status']): string {
     case 'updated':
       return 'var(--dd-success)';
     case 'pending':
+    case 'queued':
     case 'updating':
       return 'var(--dd-warning)';
     case 'snoozed':
@@ -88,6 +89,7 @@ function getRecentUpdateStatusMutedColor(status: RecentUpdateRow['status']): str
     case 'updated':
       return 'var(--dd-success-muted)';
     case 'pending':
+    case 'queued':
     case 'updating':
       return 'var(--dd-warning-muted)';
     case 'snoozed':
@@ -107,6 +109,7 @@ function getRecentUpdateStatusIcon(status: RecentUpdateRow['status']): string {
     case 'updated':
       return 'check';
     case 'pending':
+    case 'queued':
     case 'updating':
       return 'pending';
     case 'snoozed':
@@ -172,6 +175,9 @@ function deriveRecentUpdateStatus(
 ): RecentUpdateRow['status'] {
   if (container.updateOperation?.status === 'in-progress') {
     return 'updating';
+  }
+  if (container.updateOperation?.status === 'queued') {
+    return 'queued';
   }
   if (container.updatePolicyState === 'snoozed') {
     return 'snoozed';
@@ -556,6 +562,7 @@ function useStatsComputed(
 
 function isPendingRecentUpdateContainer(container: Container): boolean {
   return (
+    container.updateOperation?.status === 'queued' ||
     container.updateOperation?.status === 'in-progress' ||
     !!container.newTag ||
     !!container.updatePolicyState

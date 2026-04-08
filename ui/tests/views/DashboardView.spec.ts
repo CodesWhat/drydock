@@ -1596,6 +1596,139 @@ describe('DashboardView', () => {
       expect(mockGetAllContainers.mock.calls.length).toBe(initialFetchCount + 1);
     });
 
+    it('shows Updating 1 of N and Queued 2 of N immediately after dashboard update all starts', async () => {
+      const containers = [
+        makeContainer({
+          id: 'c-success-1',
+          name: 'nginx',
+          newTag: '1.1.0',
+          updateKind: 'minor',
+        }),
+        makeContainer({
+          id: 'c-success-2',
+          name: 'postgres',
+          image: 'postgres',
+          newTag: '16.1.0',
+          updateKind: 'minor',
+        }),
+      ];
+      mockUpdateContainer.mockResolvedValue({});
+
+      const wrapper = await mountDashboard(
+        containers,
+        [],
+        {},
+        {
+          recentStatuses: {
+            nginx: 'pending',
+            postgres: 'pending',
+          },
+        },
+      );
+      const { mapApiContainers } = await import('@/utils/container-mapper');
+      mockGetAllContainers.mockResolvedValueOnce([]);
+      mockGetContainerRecentStatus.mockResolvedValueOnce({ statuses: {} });
+      (mapApiContainers as ReturnType<typeof vi.fn>).mockReturnValueOnce([]);
+
+      const updateAllBtn = wrapper.find('[data-test="dashboard-update-all-btn"]');
+      const { useConfirmDialog } = await import('@/composables/useConfirmDialog');
+      const confirm = useConfirmDialog();
+
+      await updateAllBtn.trigger('click');
+      await confirm.accept();
+      await flushPromises();
+
+      const widgetText = wrapper.find('[data-widget-id="recent-updates"]').text();
+      expect(widgetText).toContain('Updating 1 of 2');
+      expect(widgetText).toContain('Queued 2 of 2');
+    });
+
+    it('advances the dashboard queue label when the next bulk update becomes active', async () => {
+      vi.useFakeTimers();
+      try {
+        const firstPendingContainer = makeContainer({
+          id: 'c-success-1',
+          name: 'nginx',
+          newTag: '1.1.0',
+          updateKind: 'minor',
+        });
+        const secondPendingContainer = makeContainer({
+          id: 'c-success-2',
+          name: 'postgres',
+          image: 'postgres',
+          newTag: '16.1.0',
+          updateKind: 'minor',
+        });
+        const secondUpdatingContainer = makeContainer({
+          id: 'c-success-2',
+          name: 'postgres',
+          image: 'postgres',
+          newTag: null,
+          updateKind: null,
+          status: 'stopped',
+          updateOperation: {
+            id: 'op-2',
+            status: 'in-progress',
+            phase: 'old-stopped',
+            updatedAt: '2026-04-01T12:00:02.000Z',
+            fromVersion: '15.0.0',
+            toVersion: '16.1.0',
+          },
+        });
+        const firstUpdatedContainer = makeContainer({
+          id: 'c-success-1',
+          name: 'nginx',
+          newTag: null,
+          updateKind: null,
+        });
+        mockUpdateContainer.mockResolvedValue({});
+
+        const wrapper = await mountDashboard(
+          [firstPendingContainer, secondPendingContainer],
+          [],
+          {},
+          {
+            recentStatuses: {
+              nginx: 'pending',
+              postgres: 'pending',
+            },
+          },
+        );
+        const { mapApiContainers } = await import('@/utils/container-mapper');
+
+        mockGetAllContainers.mockResolvedValueOnce([]);
+        mockGetContainerRecentStatus.mockResolvedValueOnce({ statuses: {} });
+        (mapApiContainers as ReturnType<typeof vi.fn>).mockReturnValueOnce([]);
+
+        mockGetAllContainers.mockResolvedValueOnce([
+          firstUpdatedContainer,
+          secondUpdatingContainer,
+        ]);
+        mockGetContainerRecentStatus.mockResolvedValueOnce({ statuses: {} });
+        (mapApiContainers as ReturnType<typeof vi.fn>).mockReturnValueOnce([
+          firstUpdatedContainer,
+          secondUpdatingContainer,
+        ]);
+
+        const updateAllBtn = wrapper.find('[data-test="dashboard-update-all-btn"]');
+        const { useConfirmDialog } = await import('@/composables/useConfirmDialog');
+        const confirm = useConfirmDialog();
+
+        await updateAllBtn.trigger('click');
+        await confirm.accept();
+        await flushPromises();
+
+        vi.advanceTimersByTime(2_000);
+        await flushPromises();
+
+        const widgetText = wrapper.find('[data-widget-id="recent-updates"]').text();
+        expect(widgetText).toContain('Updating 2 of 2');
+        expect(widgetText).not.toContain('Queued 2 of 2');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('shows an inline error when a single dashboard update fails', async () => {
       mockUpdateContainer.mockRejectedValueOnce(new Error('update exploded'));
       const wrapper = await mountDashboard(

@@ -18,6 +18,7 @@ import DashboardSecurityOverviewWidget from './dashboard/components/DashboardSec
 import DashboardUpdateBreakdownWidget from './dashboard/components/DashboardUpdateBreakdownWidget.vue';
 import {
   DASHBOARD_WIDGET_META,
+  type DashboardUpdateSequenceEntry,
   type DashboardWidgetId,
   type RecentUpdateRow,
 } from './dashboard/dashboardTypes';
@@ -48,6 +49,7 @@ const dashboardUpdateError = ref<string | null>(null);
 const dashboardPendingUpdateRows = ref<Map<string, { row: RecentUpdateRow; startedAt: number }>>(
   new Map(),
 );
+const dashboardUpdateSequence = ref<Map<string, DashboardUpdateSequenceEntry>>(new Map());
 const dashboardPendingUpdatePollTimer = ref<ReturnType<typeof setTimeout> | null>(null);
 const dashboardPendingUpdatePollInFlight = ref(false);
 const dashboardPendingUpdatePollDelayMs = ref(2_000);
@@ -193,7 +195,10 @@ const {
 });
 
 const pendingUpdates = computed(() =>
-  recentUpdates.value.filter((r) => r.status === 'pending' && !r.blocked),
+  recentUpdates.value.filter(
+    (row) =>
+      row.status === 'pending' && !row.blocked && !dashboardUpdateSequence.value.has(row.name),
+  ),
 );
 
 const displayRecentUpdates = computed<RecentUpdateRow[]>(() => {
@@ -214,8 +219,59 @@ function stopDashboardPendingUpdatePolling() {
   dashboardPendingUpdatePollDelayMs.value = DASHBOARD_PENDING_UPDATE_POLL_INTERVAL_MS;
 }
 
+function hasDashboardTrackedUpdates() {
+  return dashboardPendingUpdateRows.value.size > 0 || dashboardUpdateSequence.value.size > 0;
+}
+
+function getVisibleDashboardTrackedUpdateNames() {
+  const names = new Set(recentUpdates.value.map((row) => row.name));
+  for (const name of dashboardPendingUpdateRows.value.keys()) {
+    names.add(name);
+  }
+  return names;
+}
+
+function startDashboardPendingUpdateTracking() {
+  if (!hasDashboardTrackedUpdates()) {
+    stopDashboardPendingUpdatePolling();
+    return;
+  }
+  stopDashboardPendingUpdatePolling();
+  dashboardPendingUpdatePollDelayMs.value = DASHBOARD_PENDING_UPDATE_POLL_INTERVAL_MS;
+  startDashboardPendingUpdatePolling();
+}
+
+function syncDashboardUpdateSequenceValue(rowNames: string[], acceptedRowNames: string[]) {
+  const next = new Map(dashboardUpdateSequence.value);
+  for (const name of rowNames) {
+    next.delete(name);
+  }
+  for (const [index, name] of acceptedRowNames.entries()) {
+    next.set(name, {
+      position: index + 1,
+      total: acceptedRowNames.length,
+    });
+  }
+  dashboardUpdateSequence.value = next;
+}
+
+function pruneDashboardUpdateSequence() {
+  const visibleNames = getVisibleDashboardTrackedUpdateNames();
+  if (dashboardUpdateAllInProgress.value && visibleNames.size === 0) {
+    return;
+  }
+  const next = new Map(dashboardUpdateSequence.value);
+  for (const name of dashboardUpdateSequence.value.keys()) {
+    if (!visibleNames.has(name)) {
+      next.delete(name);
+    }
+  }
+  dashboardUpdateSequence.value = next;
+}
+
 function clearDashboardPendingUpdateRow(name: string) {
   dashboardPendingUpdateRows.value.delete(name);
+  pruneDashboardUpdateSequence();
 }
 
 function pruneDashboardPendingUpdateRows(now: number = Date.now()) {
@@ -228,7 +284,8 @@ function pruneDashboardPendingUpdateRows(now: number = Date.now()) {
       clearDashboardPendingUpdateRow(name);
     }
   }
-  if (dashboardPendingUpdateRows.value.size === 0) {
+  pruneDashboardUpdateSequence();
+  if (!hasDashboardTrackedUpdates()) {
     stopDashboardPendingUpdatePolling();
   }
 }
@@ -243,9 +300,9 @@ async function pollDashboardPendingUpdateRows() {
   } finally {
     pruneDashboardPendingUpdateRows();
     dashboardPendingUpdatePollInFlight.value = false;
-    if (dashboardPendingUpdateRows.value.size > 0) {
+    if (hasDashboardTrackedUpdates()) {
       dashboardPendingUpdatePollDelayMs.value =
-        pendingUpdates.value.length > 0
+        dashboardUpdateSequence.value.size > 0 || pendingUpdates.value.length > 0
           ? DASHBOARD_PENDING_UPDATE_POLL_INTERVAL_MS
           : Math.min(
               dashboardPendingUpdatePollDelayMs.value * 2,
@@ -281,12 +338,8 @@ function capturePendingDashboardRows(rows: RecentUpdateRow[]) {
       startedAt: existing?.startedAt ?? Date.now(),
     });
   }
-  if (dashboardPendingUpdateRows.value.size > 0) {
-    stopDashboardPendingUpdatePolling();
-    dashboardPendingUpdatePollDelayMs.value = DASHBOARD_PENDING_UPDATE_POLL_INTERVAL_MS;
-    startDashboardPendingUpdatePolling();
-  }
   pruneDashboardPendingUpdateRows();
+  startDashboardPendingUpdateTracking();
 }
 
 // Stat card data lookup by widget id
@@ -298,6 +351,7 @@ const statById = computed(() => {
 
 watch(containers, () => {
   pruneDashboardPendingUpdateRows();
+  pruneDashboardUpdateSequence();
 });
 
 onUnmounted(() => {
@@ -378,17 +432,31 @@ function confirmDashboardUpdateAll() {
       const pendingRowsSnapshot = pendingUpdates.value.filter((row) => !row.blocked);
       dashboardUpdateAllInProgress.value = true;
       dashboardUpdateError.value = null;
+      const snapshotRowNames = pendingRowsSnapshot.map((row) => row.name);
+      let acceptedRowNames = [...snapshotRowNames];
+      syncDashboardUpdateSequenceValue(snapshotRowNames, acceptedRowNames);
+      startDashboardPendingUpdateTracking();
       try {
-        const updateResults = await Promise.allSettled(
-          pendingRowsSnapshot.map((row) => updateContainer(row.id)),
-        );
-        const successfulRows = pendingRowsSnapshot.filter(
-          (_, index) => updateResults[index]?.status === 'fulfilled',
-        );
-        const staleRows = pendingRowsSnapshot.filter((_, index) => {
-          const result = updateResults[index];
-          return result?.status === 'rejected' && isStaleDashboardUpdateError(result.reason);
-        });
+        const successfulRows: RecentUpdateRow[] = [];
+        const staleRows: RecentUpdateRow[] = [];
+        let firstRejectedUpdate: unknown;
+
+        for (const row of pendingRowsSnapshot) {
+          try {
+            await updateContainer(row.id);
+            successfulRows.push(row);
+          } catch (e: unknown) {
+            acceptedRowNames = acceptedRowNames.filter((name) => name !== row.name);
+            syncDashboardUpdateSequenceValue(snapshotRowNames, acceptedRowNames);
+
+            if (isStaleDashboardUpdateError(e)) {
+              staleRows.push(row);
+            } else if (!firstRejectedUpdate) {
+              firstRejectedUpdate = e;
+            }
+          }
+        }
+
         await fetchDashboardData();
         capturePendingDashboardRows(successfulRows);
         if (successfulRows.length > 0) {
@@ -401,16 +469,17 @@ function confirmDashboardUpdateAll() {
               : `${formatContainerCount(staleRows.length)} already up to date`,
           );
         }
-        const firstRejectedUpdate = updateResults.find(
-          (result) => result.status === 'rejected' && !isStaleDashboardUpdateError(result.reason),
-        );
-        if (firstRejectedUpdate?.status === 'rejected') {
+        if (firstRejectedUpdate) {
           dashboardUpdateError.value = errorMessage(
-            firstRejectedUpdate.reason,
+            firstRejectedUpdate,
             'Failed to update all containers',
           );
         }
       } finally {
+        if (acceptedRowNames.length === 0) {
+          syncDashboardUpdateSequenceValue(snapshotRowNames, []);
+          pruneDashboardUpdateSequence();
+        }
         dashboardUpdateAllInProgress.value = false;
       }
     },
@@ -543,6 +612,7 @@ function confirmDashboardUpdateAll() {
               :dashboard-update-error="dashboardUpdateError"
               :dashboard-update-in-progress="dashboardUpdateInProgress"
               :dashboard-update-all-in-progress="dashboardUpdateAllInProgress"
+              :dashboard-update-sequence="dashboardUpdateSequence"
               :get-update-kind-color="getUpdateKindColor"
               :get-update-kind-icon="getUpdateKindIcon"
               :get-update-kind-muted-color="getUpdateKindMutedColor"

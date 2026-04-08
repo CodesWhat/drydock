@@ -148,11 +148,17 @@ export interface RecentUpdateRow {
     | 'snoozed'
     | 'skipped'
     | 'maturity-blocked'
+    | 'queued'
     | 'updating';
   updateKind: UpdateKind | null;
   running: boolean;
   registryError?: string;
   blocked: boolean;
+}
+
+export interface DashboardUpdateSequenceEntry {
+  position: number;
+  total: number;
 }
 
 export interface DashboardServerRow {
