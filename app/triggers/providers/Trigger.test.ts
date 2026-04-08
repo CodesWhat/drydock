@@ -1495,6 +1495,22 @@ test('renderSimpleTitle should use dedicated template for update-applied events'
   expect(trigger.renderSimpleTitle(container)).toBe('Container servicevault updated successfully');
 });
 
+test('renderSimpleTitle should use notification templates when simpletitle is unset', () => {
+  trigger.configuration.simpletitle = undefined;
+
+  expect(
+    trigger.renderSimpleTitle({
+      name: 'servicevault',
+      updateKind: {
+        kind: 'tag',
+      },
+      notificationEvent: {
+        kind: 'update-applied',
+      },
+    } as any),
+  ).toBe('Container servicevault updated successfully');
+});
+
 test('renderSimpleBody should use dedicated template for update-failed events', () => {
   const container = {
     id: 'container-servicevault',
@@ -1531,6 +1547,23 @@ test('renderSimpleBody should use dedicated template for update-failed events', 
   expect(trigger.renderSimpleBody(container)).toBe(
     'Container servicevault update failed: pull access denied',
   );
+});
+
+test('renderSimpleBody should use notification templates when simplebody is unset', () => {
+  trigger.configuration.simplebody = undefined;
+
+  expect(
+    trigger.renderSimpleBody({
+      name: 'servicevault',
+      updateKind: {
+        kind: 'tag',
+      },
+      notificationEvent: {
+        kind: 'update-failed',
+        error: 'pull access denied',
+      },
+    } as any),
+  ).toBe('Container servicevault update failed: pull access denied');
 });
 
 test('renderSimpleBody should use dedicated template for security-alert events', () => {
@@ -1772,6 +1805,33 @@ test('renderBatchTitle should use dedicated template for update-failed events', 
 });
 
 test('renderBatchTitle should use dedicated template for security-alert events', async () => {
+  expect(
+    trigger.renderBatchTitle([
+      {
+        name: 'container-name',
+        updateKind: {
+          kind: 'tag',
+        },
+        notificationEvent: {
+          kind: 'security-alert',
+        },
+      },
+      {
+        name: 'container-name-2',
+        updateKind: {
+          kind: 'tag',
+        },
+        notificationEvent: {
+          kind: 'security-alert',
+        },
+      },
+    ] as any),
+  ).toEqual('2 security alerts');
+});
+
+test('renderBatchTitle should use notification templates when batchtitle is unset', async () => {
+  trigger.configuration.batchtitle = undefined;
+
   expect(
     trigger.renderBatchTitle([
       {
@@ -2328,6 +2388,25 @@ test('handleContainerReport should debug log when simple mode skips an unchanged
 
   expect(debugSpy).toHaveBeenCalledWith(
     'Skipping update-available notification for local_container1 (changed=false, once=true, updateAvailable=true)',
+  );
+});
+
+test('handleContainerReport should treat an unset once flag as false in skip logs', async () => {
+  trigger.configuration.once = undefined;
+  const debugSpy = vi.spyOn(log, 'debug');
+
+  await trigger.handleContainerReport({
+    changed: false,
+    container: {
+      watcher: 'local',
+      name: 'container1',
+      updateAvailable: true,
+      updateKind: { kind: 'digest', semverDiff: 'unknown' },
+    },
+  });
+
+  expect(debugSpy).toHaveBeenCalledWith(
+    'Skipping update-available notification for local_container1 (changed=false, once=false, updateAvailable=true)',
   );
 });
 

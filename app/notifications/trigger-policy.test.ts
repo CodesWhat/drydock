@@ -1,4 +1,5 @@
 import {
+  doesNotificationTriggerReferenceMatchId,
   getNotificationTriggerIdsFromState,
   isNotificationTriggerType,
   normalizeNotificationTriggerIds,
@@ -74,5 +75,15 @@ describe('notification trigger policy', () => {
     expect(
       normalizeNotificationTriggerIds('slack.ops' as unknown as string[], allowedTriggerIds),
     ).toEqual([]);
+  });
+
+  test('doesNotificationTriggerReferenceMatchId should match exact ids and reject ids without a terminal name', () => {
+    expect(doesNotificationTriggerReferenceMatchId(' Slack.Ops ', 'slack.ops')).toBe(true);
+    expect(doesNotificationTriggerReferenceMatchId('ops', '.')).toBe(false);
+  });
+
+  test('doesNotificationTriggerReferenceMatchId should reject missing references and single-segment ids that do not match', () => {
+    expect(doesNotificationTriggerReferenceMatchId(undefined, 'slack.ops')).toBe(false);
+    expect(doesNotificationTriggerReferenceMatchId('ops', 'slack')).toBe(false);
   });
 });

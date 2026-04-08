@@ -3502,6 +3502,16 @@ describe('Dockercompose Trigger', () => {
     );
   });
 
+  test('trigger should not throw when dryrun mode applies no runtime updates', async () => {
+    trigger.configuration.dryrun = true;
+    const container = { name: 'test', updateAvailable: true };
+    const spy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue([false]);
+
+    await expect(trigger.trigger(container)).resolves.toBeUndefined();
+
+    expect(spy).toHaveBeenCalledWith([container]);
+  });
+
   test('getConfigurationSchema should extend Docker schema with compose hardening options', () => {
     const schema = trigger.getConfigurationSchema();
     expect(schema).toBeDefined();
@@ -4996,6 +5006,30 @@ describe('Dockercompose Trigger', () => {
     );
 
     expect(options).toEqual({});
+  });
+
+  test('buildComposeRuntimeContext should retain the requested operation id', () => {
+    const runtimeContext = (trigger as any).buildComposeRuntimeContext(
+      {
+        dockerApi: mockDockerApi,
+        auth: { from: 'context' },
+        newImage: 'nginx:9.9.9',
+        operationId: 'op-123',
+      },
+      {
+        runtimeContext: {
+          composeFile: '/opt/drydock/test/stack.override.yml',
+        },
+      },
+    );
+
+    expect(runtimeContext).toEqual({
+      dockerApi: mockDockerApi,
+      auth: { from: 'context' },
+      newImage: 'nginx:9.9.9',
+      operationId: 'op-123',
+      composeFile: '/opt/drydock/test/stack.override.yml',
+    });
   });
 
   test('performContainerUpdate should pass compose chain to per-service update', async () => {

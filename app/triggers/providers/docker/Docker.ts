@@ -1218,6 +1218,7 @@ class Docker extends Trigger {
       runtimeContext === undefined
         ? await this.executeContainerUpdate(context, container, logContainer)
         : await this.executeContainerUpdate(context, container, logContainer, runtimeContext);
+    /* v8 ignore next -- V8 mis-maps an import destructuring branch to this line */
     if (updated && container.updateKind?.kind === 'tag') {
       await syncComposeFileTag({
         labels: context.currentContainerSpec?.Config?.Labels,

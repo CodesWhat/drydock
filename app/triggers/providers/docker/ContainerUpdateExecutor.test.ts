@@ -601,6 +601,48 @@ describe('ContainerUpdateExecutor', () => {
     );
   });
 
+  test('execute ignores non-string requested operation ids in runtime context', async () => {
+    const context = createContext({
+      currentContainerSpec: createCurrentContainerSpec({
+        State: { Running: false },
+        HostConfig: { AutoRemove: false },
+      }),
+    });
+    const executor = createExecutor({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      hasHealthcheckConfigured: vi.fn(() => false),
+    });
+
+    await expect(
+      executor.execute(context, createContainer(), createLog(), {
+        operationId: 123,
+      }),
+    ).resolves.toBe(true);
+
+    expect(mockInsertOperation.mock.calls.at(-1)?.[0]?.id).toBeUndefined();
+  });
+
+  test('execute ignores blank requested operation ids in runtime context', async () => {
+    const context = createContext({
+      currentContainerSpec: createCurrentContainerSpec({
+        State: { Running: false },
+        HostConfig: { AutoRemove: false },
+      }),
+    });
+    const executor = createExecutor({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      hasHealthcheckConfigured: vi.fn(() => false),
+    });
+
+    await expect(
+      executor.execute(context, createContainer(), createLog(), {
+        operationId: '   ',
+      }),
+    ).resolves.toBe(true);
+
+    expect(mockInsertOperation.mock.calls.at(-1)?.[0]?.id).toBeUndefined();
+  });
+
   test('execute rolls back and rethrows original error when rollback succeeds', async () => {
     const context = createContext();
     const createContainerError = new Error('create failed');
