@@ -194,7 +194,7 @@ function eventsHandler(req: Request, res: Response): void {
   client.flush?.();
 
   clients.add(client);
-  logger.debug(`SSE client connected (${clients.size} total)`);
+  logger.debug(`SSE client connected: ${activeClient.clientId} from ${ip} (${clients.size} total)`);
   startSharedHeartbeatIntervalIfNeeded();
 
   let disconnected = false;
@@ -222,7 +222,9 @@ function eventsHandler(req: Request, res: Response): void {
     } else {
       connectionsPerSession.set(sessionKey, sessionCount - 1);
     }
-    logger.debug(`SSE client disconnected (${clients.size} total)`);
+    logger.debug(
+      `SSE client disconnected: ${activeClient.clientId} from ${ip} (${clients.size} total)`,
+    );
   };
 
   req.on('close', cleanup);
