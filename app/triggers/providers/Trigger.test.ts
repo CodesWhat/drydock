@@ -3170,13 +3170,13 @@ test('mustTrigger should return false when strictAgentMatch and agent mismatch',
   expect(trigger.mustTrigger({ agent: 'remote-agent' })).toBe(false);
 });
 
-test('getMustTriggerDecision should describe strict agent mismatches when the container agent is missing', () => {
+test('getMustTriggerDecision should describe strict agent mismatches when the trigger agent is missing', () => {
   trigger.strictAgentMatch = true;
-  trigger.agent = 'controller-agent';
+  trigger.agent = undefined;
 
-  expect((trigger as any).getMustTriggerDecision({})).toEqual({
+  expect((trigger as any).getMustTriggerDecision({ agent: 'remote-agent' })).toEqual({
     allowed: false,
-    reason: 'strict agent mismatch expected=controller-agent actual=<none>',
+    reason: 'strict agent mismatch expected=<none> actual=remote-agent',
   });
 });
 
@@ -3315,7 +3315,7 @@ test('handleContainerReport should include trigger filter context when mustTrigg
 
 test('handleContainerReport should debug log when threshold is not reached', async () => {
   trigger.configuration = {
-    threshold: 'major',
+    threshold: 'major-only',
     mode: 'simple',
   };
   const debugSpy = vi.spyOn(log, 'debug');
@@ -3331,7 +3331,7 @@ test('handleContainerReport should debug log when threshold is not reached', asy
   });
 
   expect(debugSpy).toHaveBeenCalledWith(
-    'Threshold not reached => ignore (threshold=major, updateKind=tag, semverDiff=minor)',
+    'Threshold not reached => ignore (threshold=major-only, updateKind=tag, semverDiff=minor)',
   );
 });
 
@@ -3610,6 +3610,45 @@ test('handleContainerReports should audit failed batch deliveries', async () => 
       details: 'SMTP timeout',
     }),
   );
+});
+
+test('getBatchRetryContainers should keep a newer retry-buffer entry when iteration sees stale state', () => {
+  trigger.configuration = {
+    threshold: 'all',
+    once: true,
+    mode: 'batch',
+  };
+
+  const staleContainer = {
+    id: 'stale-id',
+    watcher: 'local',
+    name: 'container1',
+    updateAvailable: true,
+    updateKind: { kind: 'tag', semverDiff: 'major' },
+  } as any;
+  const replacementContainer = {
+    id: 'replacement-id',
+    watcher: 'local',
+    name: 'container1',
+    updateAvailable: true,
+    updateKind: { kind: 'tag', semverDiff: 'major' },
+  } as any;
+
+  trigger.batchRetryBuffer.set('local_container1', staleContainer);
+  const originalGet = trigger.batchRetryBuffer.get.bind(trigger.batchRetryBuffer);
+  trigger.batchRetryBuffer.get = vi.fn((key: string) => {
+    if (key === 'local_container1') {
+      return replacementContainer;
+    }
+    return originalGet(key);
+  });
+  storeContainer.getContainersRaw.mockReturnValue([]);
+
+  const retryContainers = (trigger as any).getBatchRetryContainers([]);
+
+  expect(retryContainers).toEqual([staleContainer]);
+  expect(trigger.batchRetryBuffer.size).toBe(1);
+  expect(trigger.batchRetryBuffer.get('local_container1')).toBe(replacementContainer);
 });
 
 test('handleContainerReports should suppress repeated identical batch errors during a short burst', async () => {
