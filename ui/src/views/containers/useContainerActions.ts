@@ -912,6 +912,17 @@ export function useContainerActions(input: UseContainerActionsInput) {
   );
 
   function isContainerUpdateInProgress(target: ContainerActionTarget) {
+    // Backend queue status takes precedence — a queued container is not yet
+    // in-progress even if local tracking optimistically marked it.
+    if (typeof target !== 'string') {
+      const freshContainer = input.containers.value.find((c) => c.id === target.id);
+      if (
+        target.updateOperation?.status === 'queued' ||
+        freshContainer?.updateOperation?.status === 'queued'
+      ) {
+        return false;
+      }
+    }
     return (
       hasTrackedContainerAction(
         actionInProgress.value,
