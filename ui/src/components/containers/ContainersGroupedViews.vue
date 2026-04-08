@@ -20,6 +20,7 @@ const {
   containerActionsDisabledReason,
   isContainerUpdateInProgress,
   isContainerUpdateQueued,
+  getContainerUpdateSequenceLabel,
   updateAllInGroup,
   tt,
   containerViewMode,
@@ -71,12 +72,20 @@ function isContainerQueued(container: { id?: unknown; name?: unknown }) {
   return isContainerUpdateQueued(container);
 }
 
+function formatContainerUpdateLabel(
+  container: { id?: unknown; name?: unknown },
+  baseLabel: 'Updating' | 'Queued',
+) {
+  const sequence = getContainerUpdateSequenceLabel(container);
+  return sequence ? `${baseLabel} ${sequence}` : baseLabel;
+}
+
 function getContainerStatusLabel(container: { id?: unknown; name?: unknown; status?: string }) {
   if (isContainerUpdating(container)) {
-    return 'Updating';
+    return formatContainerUpdateLabel(container, 'Updating');
   }
   if (isContainerQueued(container)) {
-    return 'Queued';
+    return formatContainerUpdateLabel(container, 'Queued');
   }
   return container.status ?? 'unknown';
 }
@@ -173,8 +182,8 @@ function getContainerStatusIconStyle(container: { id?: unknown; name?: unknown; 
                  @row-click="selectContainer($event)">
         <!-- Container icon (own column) -->
         <template #cell-icon="{ row: c }">
-          <AppIcon v-if="isContainerUpdating(c)" name="spinner" :size="14" class="dd-spin dd-text-muted" v-tooltip.top="tt('Updating')" />
-          <AppIcon v-else-if="isContainerQueued(c)" name="clock" :size="14" class="dd-text-muted" v-tooltip.top="tt('Queued')" />
+          <AppIcon v-if="isContainerUpdating(c)" name="spinner" :size="14" class="dd-spin dd-text-muted" v-tooltip.top="tt(getContainerStatusLabel(c))" />
+          <AppIcon v-else-if="isContainerQueued(c)" name="clock" :size="14" class="dd-text-muted" v-tooltip.top="tt(getContainerStatusLabel(c))" />
           <ContainerIcon v-else :icon="c.icon" :size="20" />
         </template>
 
@@ -566,13 +575,13 @@ function getContainerStatusIconStyle(container: { id?: unknown; name?: unknown; 
               class="mt-2 inline-flex items-center gap-1 text-2xs"
               style="color: var(--dd-warning);">
               <AppIcon name="spinner" :size="12" class="dd-spin shrink-0" />
-              Updating
+              {{ formatContainerUpdateLabel(c, 'Updating') }}
             </div>
             <div
               v-else-if="isContainerQueued(c)"
               class="mt-2 inline-flex items-center gap-1 text-2xs dd-text-muted">
               <AppIcon name="clock" :size="12" class="shrink-0" />
-              Queued
+              {{ formatContainerUpdateLabel(c, 'Queued') }}
             </div>
             <div v-if="c.suggestedTag || c.releaseNotes || c.releaseLink" class="flex items-center gap-2 flex-wrap mt-2">
               <SuggestedTagBadge :tag="c.suggestedTag" :current-tag="c.currentTag" />
@@ -652,13 +661,13 @@ function getContainerStatusIconStyle(container: { id?: unknown; name?: unknown; 
               class="text-2xs mt-0.5 inline-flex items-center gap-1"
               style="color: var(--dd-warning);">
               <AppIcon name="spinner" :size="10" class="dd-spin shrink-0" />
-              Updating
+              {{ formatContainerUpdateLabel(c, 'Updating') }}
             </div>
             <div
               v-else-if="isContainerQueued(c)"
               class="text-2xs mt-0.5 inline-flex items-center gap-1 dd-text-muted">
               <AppIcon name="clock" :size="10" class="shrink-0" />
-              Queued
+              {{ formatContainerUpdateLabel(c, 'Queued') }}
             </div>
             <div
               v-else-if="!c.newTag && c.noUpdateReason"

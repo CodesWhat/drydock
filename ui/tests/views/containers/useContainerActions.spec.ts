@@ -2407,14 +2407,69 @@ describe('useContainerActions', () => {
 
     expect(composable.isContainerUpdateInProgress(proxyC)).toBe(true);
     expect(composable.isContainerUpdateQueued(proxyA)).toBe(false);
-    expect(composable.isContainerUpdateQueued(proxyB)).toBe(false);
+    expect(composable.isContainerUpdateQueued(proxyB)).toBe(true);
     expect(composable.isContainerUpdateQueued(proxyC)).toBe(false);
 
     resolveThird?.();
     await updatePromise;
 
     expect(composable.groupUpdateInProgress.value.has('proxy-stack')).toBe(false);
-    expect(composable.groupUpdateQueue.value.size).toBe(0);
+    expect(composable.groupUpdateQueue.value.size).toBe(2);
+  });
+
+  it('keeps later group updates queued when requests resolve before the first refresh', async () => {
+    const proxyA = makeContainer({
+      id: 'container-a',
+      name: 'socket-proxy',
+      newTag: '2.0.0',
+      server: 'Datavault',
+    });
+    const proxyB = makeContainer({
+      id: 'container-b',
+      name: 'socket-proxy',
+      newTag: '2.0.0',
+      server: 'Tmvault',
+    });
+    const proxyC = makeContainer({
+      id: 'container-c',
+      name: 'socket-proxy',
+      newTag: '2.0.0',
+      server: 'Mediavault',
+    });
+    const { composable, loadContainers } = await mountActionsHarness({
+      containers: [proxyA, proxyB, proxyC],
+      containerIdMap: {
+        'socket-proxy': 'container-a',
+      },
+    });
+
+    let resolveLoadContainers: (() => void) | undefined;
+    loadContainers.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveLoadContainers = resolve;
+        }),
+    );
+    mocks.updateContainer.mockResolvedValue({});
+
+    const updatePromise = composable.updateAllInGroup({
+      key: 'proxy-stack',
+      containers: [proxyA, proxyB, proxyC],
+    });
+    await flushPromises();
+
+    expect(composable.isContainerUpdateInProgress(proxyA)).toBe(true);
+    expect(composable.isContainerUpdateQueued(proxyA)).toBe(false);
+    expect(composable.getContainerUpdateSequenceLabel(proxyA)).toBe('1 of 3');
+    expect(composable.isContainerUpdateInProgress(proxyB)).toBe(false);
+    expect(composable.isContainerUpdateQueued(proxyB)).toBe(true);
+    expect(composable.getContainerUpdateSequenceLabel(proxyB)).toBe('2 of 3');
+    expect(composable.isContainerUpdateInProgress(proxyC)).toBe(false);
+    expect(composable.isContainerUpdateQueued(proxyC)).toBe(true);
+    expect(composable.getContainerUpdateSequenceLabel(proxyC)).toBe('3 of 3');
+
+    resolveLoadContainers?.();
+    await updatePromise;
   });
 
   it('clears group update queue on error', async () => {

@@ -27,6 +27,8 @@ const scanContainer = vi.fn();
 const confirmUpdate = vi.fn();
 const confirmDelete = vi.fn();
 const isContainerUpdateInProgress = vi.fn(() => false);
+const isContainerUpdateQueued = vi.fn(() => false);
+const getContainerUpdateSequenceLabel = vi.fn(() => null);
 const tt = (value: string) => value;
 
 vi.mock('@/components/containers/containersViewTemplateContext', () => ({
@@ -46,6 +48,8 @@ vi.mock('@/components/containers/containersViewTemplateContext', () => ({
     confirmUpdate,
     confirmDelete,
     isContainerUpdateInProgress,
+    isContainerUpdateQueued,
+    getContainerUpdateSequenceLabel,
     actionInProgress: ref(new Set<string>()),
     tt,
   }),
@@ -75,6 +79,10 @@ describe('ContainerSideDetail', () => {
     confirmDelete.mockReset();
     isContainerUpdateInProgress.mockReset();
     isContainerUpdateInProgress.mockReturnValue(false);
+    isContainerUpdateQueued.mockReset();
+    isContainerUpdateQueued.mockReturnValue(false);
+    getContainerUpdateSequenceLabel.mockReset();
+    getContainerUpdateSequenceLabel.mockReturnValue(null);
   });
 
   it('updates panel width when size controls are clicked', async () => {
@@ -152,5 +160,26 @@ describe('ContainerSideDetail', () => {
     });
 
     expect(wrapper.text()).toContain('Updating');
+  });
+
+  it('shows Queued when the selected container is still queued for update', () => {
+    isContainerUpdateQueued.mockReturnValue(true);
+
+    const wrapper = mount(ContainerSideDetail, {
+      global: {
+        components: {
+          DetailPanel,
+        },
+        stubs: {
+          AppIcon: { template: '<span class="app-icon-stub" />' },
+          ContainerSideTabContent: { template: '<div class="side-tab-content-stub" />' },
+        },
+        directives: {
+          tooltip: {},
+        },
+      },
+    });
+
+    expect(wrapper.text()).toContain('Queued');
   });
 });

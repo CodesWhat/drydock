@@ -185,6 +185,7 @@ function makeContext(overrides: Record<string, unknown> = {}) {
       Boolean(target._pending) || actionInProgress.value.has(target.id ?? target.name ?? ''),
     isContainerUpdateQueued: (target: { id?: string; name?: string }) =>
       groupUpdateQueue.value.has(target.id ?? ''),
+    getContainerUpdateSequenceLabel: () => null,
     updateAllInGroup: spies.updateAllInGroup,
     tt: (label: string) => ({ value: label, showDelay: 400 }),
     containerViewMode,
@@ -1079,6 +1080,41 @@ describe('ContainersGroupedViews', () => {
 
     expect(row.classes()).toContain('opacity-50');
     expect(row.text()).toContain('Updating');
+  });
+
+  it('renders grouped queue positions in status labels', () => {
+    const queued = makeContainer({
+      id: 'c-queued-1',
+      name: 'alpha',
+      newTag: '2.0.0',
+      updateKind: 'major',
+      status: 'running',
+    });
+
+    const { context, refs } = makeContext({
+      getContainerUpdateSequenceLabel: (target: { id?: string }) =>
+        target.id === 'c-queued-1' ? '2 of 3' : null,
+    });
+    refs.filteredContainers.value = [queued];
+    refs.displayContainers.value = [queued];
+    refs.renderGroups.value = [
+      {
+        key: '__flat__',
+        name: null,
+        containers: [queued],
+        containerCount: 1,
+        updatesAvailable: 1,
+        updatableCount: 1,
+      },
+    ];
+    refs.containerViewMode.value = 'table';
+    refs.groupUpdateQueue.value = new Set(['c-queued-1']);
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+    const row = rowByName(wrapper, 'alpha');
+
+    expect(row.text()).toContain('Queued 2 of 3');
   });
 
   it('covers card and list pending/disabled/update-kind branches', async () => {

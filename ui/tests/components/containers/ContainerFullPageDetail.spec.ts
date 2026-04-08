@@ -25,6 +25,8 @@ const scanContainer = vi.fn();
 const confirmUpdate = vi.fn();
 const confirmDelete = vi.fn();
 const isContainerUpdateInProgress = vi.fn(() => false);
+const isContainerUpdateQueued = vi.fn(() => false);
+const getContainerUpdateSequenceLabel = vi.fn(() => null);
 
 vi.mock('@/components/containers/containersViewTemplateContext', () => ({
   useContainersViewTemplateContext: () => ({
@@ -37,6 +39,8 @@ vi.mock('@/components/containers/containersViewTemplateContext', () => ({
     confirmUpdate,
     confirmDelete,
     isContainerUpdateInProgress,
+    isContainerUpdateQueued,
+    getContainerUpdateSequenceLabel,
     actionInProgress,
     registryColorBg: () => '#eee',
     registryColorText: () => '#333',
@@ -64,6 +68,10 @@ describe('ContainerFullPageDetail', () => {
     actionInProgress.value = new Set();
     isContainerUpdateInProgress.mockReset();
     isContainerUpdateInProgress.mockReturnValue(false);
+    isContainerUpdateQueued.mockReset();
+    isContainerUpdateQueued.mockReturnValue(false);
+    getContainerUpdateSequenceLabel.mockReset();
+    getContainerUpdateSequenceLabel.mockReturnValue(null);
     selectedContainer.value = {
       id: 'container-1',
       name: 'nginx',
@@ -103,6 +111,12 @@ describe('ContainerFullPageDetail', () => {
     isContainerUpdateInProgress.mockReturnValue(true);
     const wrapper = factory();
     expect(wrapper.text()).toContain('Updating');
+  });
+
+  it('shows Queued when the selected container is still queued for update', () => {
+    isContainerUpdateQueued.mockReturnValue(true);
+    const wrapper = factory();
+    expect(wrapper.text()).toContain('Queued');
   });
 
   it('renders Back button that calls closeFullPage', async () => {
