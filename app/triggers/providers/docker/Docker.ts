@@ -1246,7 +1246,7 @@ class Docker extends Trigger {
    * subclasses can override.
    */
   async runContainerUpdateLifecycle(container, runtimeContext?: unknown) {
-    return this.updateLifecycleExecutor.run(container, runtimeContext);
+    return this._updateLimit(() => this.updateLifecycleExecutor.run(container, runtimeContext));
   }
 
   /**
@@ -1255,7 +1255,7 @@ class Docker extends Trigger {
    * @returns {Promise<void>}
    */
   async trigger(container, runtimeContext?: unknown) {
-    await this._updateLimit(() => this.runContainerUpdateLifecycle(container, runtimeContext));
+    await this.runContainerUpdateLifecycle(container, runtimeContext);
   }
 
   /**
