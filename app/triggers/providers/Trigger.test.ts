@@ -3180,6 +3180,16 @@ test('getMustTriggerDecision should describe strict agent mismatches when the tr
   });
 });
 
+test('getMustTriggerDecision should treat null strict-agent values as missing in the reason string', () => {
+  trigger.strictAgentMatch = true;
+  trigger.agent = undefined;
+
+  expect((trigger as any).getMustTriggerDecision({ agent: null })).toEqual({
+    allowed: false,
+    reason: 'strict agent mismatch expected=<none> actual=<none>',
+  });
+});
+
 test('isTriggerIncludedOrExcluded should return false when trigger not found in list', () => {
   trigger.type = 'docker';
   trigger.name = 'update';
@@ -3332,6 +3342,28 @@ test('handleContainerReport should debug log when threshold is not reached', asy
 
   expect(debugSpy).toHaveBeenCalledWith(
     'Threshold not reached => ignore (threshold=major-only, updateKind=tag, semverDiff=minor)',
+  );
+});
+
+test('handleContainerReport should use unknown placeholders when threshold logging lacks update details', async () => {
+  trigger.configuration = {
+    threshold: 'major-only',
+    mode: 'simple',
+  };
+  vi.spyOn(Trigger, 'isThresholdReached').mockReturnValue(false);
+  const debugSpy = vi.spyOn(log, 'debug');
+
+  await trigger.handleContainerReport({
+    changed: true,
+    container: {
+      watcher: 'local',
+      name: 'container1',
+      updateAvailable: true,
+    },
+  });
+
+  expect(debugSpy).toHaveBeenCalledWith(
+    'Threshold not reached => ignore (threshold=major-only, updateKind=unknown, semverDiff=unknown)',
   );
 });
 
