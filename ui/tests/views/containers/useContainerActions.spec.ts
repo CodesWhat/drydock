@@ -2448,6 +2448,11 @@ describe('useContainerActions', () => {
     expect(composable.groupUpdateQueue.value.size).toBe(0);
   });
 
+  it('returns false for isContainerUpdateQueued when target is a string', async () => {
+    const { composable } = await mountActionsHarness({});
+    expect(composable.isContainerUpdateQueued('some-container-name')).toBe(false);
+  });
+
   it('fails closed for action handlers when container actions are disabled', async () => {
     mocks.containerActionsEnabled.value = false;
     const container = makeContainer({ id: 'container-1', name: 'web' });
