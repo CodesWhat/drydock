@@ -1887,6 +1887,200 @@ test('renderBatchBody should keep identical container names distinct across watc
   );
 });
 
+test('renderSimpleTitle should include agent prefix when container has agent set', () => {
+  const { simpletitle, ...rest } = configurationValid;
+  trigger.configuration = trigger.validateConfiguration(rest);
+  expect(
+    trigger.renderSimpleTitle({
+      name: 'nginx',
+      agent: 'prod-server',
+      updateKind: {
+        kind: 'tag',
+      },
+    }),
+  ).toBe('[prod-server] New tag found for container nginx');
+});
+
+test('renderSimpleTitle should omit agent prefix when container has no agent', () => {
+  const { simpletitle, ...rest } = configurationValid;
+  trigger.configuration = trigger.validateConfiguration(rest);
+  expect(
+    trigger.renderSimpleTitle({
+      name: 'nginx',
+      updateKind: {
+        kind: 'tag',
+      },
+    }),
+  ).toBe('New tag found for container nginx');
+});
+
+test('renderSimpleBody should include agent prefix when container has agent set', () => {
+  const { simplebody, ...rest } = configurationValid;
+  trigger.configuration = trigger.validateConfiguration(rest);
+  expect(
+    trigger.renderSimpleBody({
+      name: 'nginx',
+      agent: 'prod-server',
+      updateKind: {
+        kind: 'tag',
+        localValue: '1.0.0',
+        remoteValue: '2.0.0',
+      },
+    }),
+  ).toBe('[prod-server] Container nginx running with tag 1.0.0 can be updated to tag 2.0.0');
+});
+
+test('renderSimpleTitle should include agent prefix for digest updates', () => {
+  const { simpletitle, ...rest } = configurationValid;
+  trigger.configuration = trigger.validateConfiguration(rest);
+  expect(
+    trigger.renderSimpleTitle({
+      name: 'nginx',
+      agent: 'staging',
+      image: { tag: { value: 'latest' } },
+      updateKind: {
+        kind: 'digest',
+        localValue: 'sha256:abc123',
+        remoteValue: 'sha256:def456',
+      },
+    }),
+  ).toBe('[staging] New image available for container nginx (tag latest)');
+});
+
+test('renderSimpleTitle should include agent prefix for update-applied events', () => {
+  const container = {
+    id: 'container-nginx',
+    name: 'nginx',
+    agent: 'prod-server',
+    watcher: 'local',
+    status: 'running',
+    image: {
+      id: 'container-nginx',
+      registry: { name: 'docker', url: 'docker://local' },
+      name: 'nginx',
+      tag: { value: '1.0.0', semver: true },
+      digest: { watch: false },
+      architecture: 'amd64',
+      os: 'linux',
+    },
+    updateAvailable: false,
+    updateKind: { kind: 'tag' },
+    notificationEvent: { kind: 'update-applied' },
+  } as any;
+
+  expect(trigger.renderSimpleTitle(container)).toBe(
+    '[prod-server] Container nginx updated successfully',
+  );
+});
+
+test('renderSimpleBody should include agent prefix for update-failed events', () => {
+  const container = {
+    id: 'container-nginx',
+    name: 'nginx',
+    agent: 'prod-server',
+    watcher: 'local',
+    status: 'running',
+    image: {
+      id: 'container-nginx',
+      registry: { name: 'docker', url: 'docker://local' },
+      name: 'nginx',
+      tag: { value: '1.0.0', semver: true },
+      digest: { watch: false },
+      architecture: 'amd64',
+      os: 'linux',
+    },
+    updateAvailable: false,
+    updateKind: { kind: 'tag' },
+    notificationEvent: {
+      kind: 'update-failed',
+      error: 'pull access denied',
+    },
+  } as any;
+
+  expect(trigger.renderSimpleBody(container)).toBe(
+    '[prod-server] Container nginx update failed: pull access denied',
+  );
+});
+
+test('renderSimpleBody should include agent prefix for security-alert events', () => {
+  const container = {
+    id: 'container-nginx',
+    name: 'nginx',
+    agent: 'prod-server',
+    watcher: 'local',
+    status: 'running',
+    image: {
+      id: 'container-nginx',
+      registry: { name: 'docker', url: 'docker://local' },
+      name: 'nginx',
+      tag: { value: '1.0.0', semver: true },
+      digest: { watch: false },
+      architecture: 'amd64',
+      os: 'linux',
+    },
+    updateAvailable: true,
+    updateKind: { kind: 'tag', localValue: '1.0.0', remoteValue: '1.1.0' },
+    notificationEvent: {
+      kind: 'security-alert',
+      blockingCount: 2,
+      details: 'critical=1 high=1',
+    },
+  } as any;
+
+  expect(trigger.renderSimpleBody(container)).toBe(
+    '[prod-server] Security alert for container nginx (2 blocking vulnerabilities)\ncritical=1 high=1',
+  );
+});
+
+test('renderSimpleBody should combine agent prefix and watcher suffix', () => {
+  const { simplebody, ...rest } = configurationValid;
+  trigger.configuration = trigger.validateConfiguration(rest);
+  expect(
+    trigger.renderSimpleBody({
+      name: 'nginx',
+      agent: 'prod-server',
+      watcher: 'servicevault',
+      updateKind: {
+        kind: 'tag',
+        localValue: '1.0.0',
+        remoteValue: '2.0.0',
+      },
+    }),
+  ).toBe(
+    '[prod-server] Container nginx (servicevault) running with tag 1.0.0 can be updated to tag 2.0.0',
+  );
+});
+
+test('renderBatchBody should include agent prefix per container in batch', () => {
+  const { simplebody, ...rest } = configurationValid;
+  trigger.configuration = trigger.validateConfiguration(rest);
+  expect(
+    trigger.renderBatchBody([
+      {
+        name: 'nginx',
+        agent: 'prod-server',
+        updateKind: {
+          kind: 'tag',
+          localValue: '1.0.0',
+          remoteValue: '2.0.0',
+        },
+      },
+      {
+        name: 'nginx',
+        agent: 'staging-server',
+        updateKind: {
+          kind: 'tag',
+          localValue: '1.0.0',
+          remoteValue: '2.0.0',
+        },
+      },
+    ]),
+  ).toBe(
+    '- [prod-server] Container nginx running with tag 1.0.0 can be updated to tag 2.0.0\n\n' +
+      '- [staging-server] Container nginx running with tag 1.0.0 can be updated to tag 2.0.0\n',
+  );
+});
+
 test('composeMessage should include title and body when disabletitle is false', () => {
   trigger.configuration.disabletitle = false;
   trigger.configuration.simpletitle = 'Title for ${container.name}';
