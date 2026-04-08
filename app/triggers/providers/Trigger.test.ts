@@ -13,10 +13,22 @@ import Trigger, {
 } from './Trigger.js';
 
 const mockTriggerCounterInc = vi.hoisted(() => vi.fn());
+const mockGetAgents = vi.hoisted(() => vi.fn(() => []));
+const mockGetServerName = vi.hoisted(() => vi.fn(() => 'controller-host'));
 
 vi.mock('node-cron');
 vi.mock('../../log');
 vi.mock('../../event');
+vi.mock('../../agent/manager.js', () => ({
+  getAgents: mockGetAgents,
+}));
+vi.mock('../../configuration/index.js', async (importOriginal) => {
+  const original = await importOriginal();
+  return {
+    ...(original as Record<string, unknown>),
+    getServerName: mockGetServerName,
+  };
+});
 vi.mock('../../store/audit.js', () => ({
   insertAudit: vi.fn(),
 }));
@@ -2139,6 +2151,113 @@ test('renderBatchBody should include agent prefix per container in batch', () =>
     '- [prod-server] Container nginx running with tag 1.0.0 can be updated to tag 2.0.0\n\n' +
       '- [staging-server] Container nginx running with tag 1.0.0 can be updated to tag 2.0.0\n',
   );
+});
+
+test('renderSimpleTitle should include controller prefix when agents are registered and container has no agent', () => {
+  const { simpletitle, ...rest } = configurationValid;
+  trigger.configuration = trigger.validateConfiguration(rest);
+  mockGetAgents.mockReturnValue([{ name: 'remote-1' }]);
+
+  expect(
+    trigger.renderSimpleTitle({
+      name: 'nginx',
+      updateKind: {
+        kind: 'tag',
+      },
+    }),
+  ).toBe('[controller-host] New tag found for container nginx');
+
+  mockGetAgents.mockReturnValue([]);
+});
+
+test('renderSimpleTitle should not include controller prefix when no agents are registered', () => {
+  const { simpletitle, ...rest } = configurationValid;
+  trigger.configuration = trigger.validateConfiguration(rest);
+  mockGetAgents.mockReturnValue([]);
+
+  expect(
+    trigger.renderSimpleTitle({
+      name: 'nginx',
+      updateKind: {
+        kind: 'tag',
+      },
+    }),
+  ).toBe('New tag found for container nginx');
+});
+
+test('renderSimpleBody should include controller prefix when agents exist and container is local', () => {
+  const { simplebody, ...rest } = configurationValid;
+  trigger.configuration = trigger.validateConfiguration(rest);
+  mockGetAgents.mockReturnValue([{ name: 'remote-1' }]);
+
+  expect(
+    trigger.renderSimpleBody({
+      name: 'nginx',
+      updateKind: {
+        kind: 'tag',
+        localValue: '1.0.0',
+        remoteValue: '2.0.0',
+      },
+    }),
+  ).toBe('[controller-host] Container nginx running with tag 1.0.0 can be updated to tag 2.0.0');
+
+  mockGetAgents.mockReturnValue([]);
+});
+
+test('renderSimpleTitle should use agent name over controller name when both are available', () => {
+  const { simpletitle, ...rest } = configurationValid;
+  trigger.configuration = trigger.validateConfiguration(rest);
+  mockGetAgents.mockReturnValue([{ name: 'remote-1' }]);
+
+  expect(
+    trigger.renderSimpleTitle({
+      name: 'nginx',
+      agent: 'remote-1',
+      updateKind: {
+        kind: 'tag',
+      },
+    }),
+  ).toBe('[remote-1] New tag found for container nginx');
+
+  mockGetAgents.mockReturnValue([]);
+});
+
+test('renderSimpleBody should expose notificationServerName as controller name for local containers', () => {
+  mockGetAgents.mockReturnValue([{ name: 'remote-1' }]);
+  trigger.configuration.simplebody = '${container.notificationServerName}';
+
+  expect(
+    trigger.renderSimpleBody({
+      name: 'nginx',
+      updateKind: { kind: 'tag' },
+    }),
+  ).toBe('controller-host');
+
+  mockGetAgents.mockReturnValue([]);
+});
+
+test('renderSimpleBody should expose notificationServerName as agent name for agent containers', () => {
+  trigger.configuration.simplebody = '${container.notificationServerName}';
+
+  expect(
+    trigger.renderSimpleBody({
+      name: 'nginx',
+      agent: 'prod-server',
+      updateKind: { kind: 'tag' },
+    }),
+  ).toBe('prod-server');
+});
+
+test('renderSimpleBody should expose notificationServerName as controller name even without agents', () => {
+  mockGetAgents.mockReturnValue([]);
+  trigger.configuration.simplebody = '${container.notificationServerName}';
+
+  expect(
+    trigger.renderSimpleBody({
+      name: 'nginx',
+      updateKind: { kind: 'tag' },
+    }),
+  ).toBe('controller-host');
 });
 
 test('composeMessage should include title and body when disabletitle is false', () => {

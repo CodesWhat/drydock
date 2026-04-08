@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import { readFile } from 'node:fs/promises';
+import { hostname } from 'node:os';
 import type { Request } from 'express';
 import joi from 'joi';
 import setValue from 'set-value';
@@ -129,6 +130,18 @@ export function getVersion() {
   }
 
   return packageVersionCache || 'unknown';
+}
+
+/**
+ * Get the server name used to identify this Drydock instance in notifications.
+ * Configured via DD_SERVER_NAME, falls back to os.hostname().
+ */
+export function getServerName(): string {
+  const configured = ddEnvVars.DD_SERVER_NAME?.trim();
+  if (configured) {
+    return configured;
+  }
+  return hostname();
 }
 
 export function getLogLevel() {

@@ -1,5 +1,6 @@
 import cron, { type ScheduledTask } from 'node-cron';
-import { usesLegacyTriggerPrefix } from '../../configuration/index.js';
+import { getAgents } from '../../agent/manager.js';
+import { getServerName, usesLegacyTriggerPrefix } from '../../configuration/index.js';
 import * as event from '../../event/index.js';
 import {
   type Container,
@@ -107,6 +108,7 @@ export type TriggerNotificationContainer = Container & {
 type TriggerTemplateContainer = Container & {
   notificationWatcherSuffix: string;
   notificationAgentPrefix: string;
+  notificationServerName: string;
 };
 
 interface EventDispatchOptions extends notificationStore.NotificationRuleDispatchOptions {
@@ -1610,21 +1612,29 @@ class Trigger extends Component {
 
   private getNotificationAgentPrefix(container: Container): string {
     const agent = typeof container.agent === 'string' ? container.agent.trim() : '';
-    if (!agent) {
-      return '';
+    if (agent) {
+      return `[${agent}] `;
     }
-    return `[${agent}] `;
+    if (getAgents().length > 0) {
+      return `[${getServerName()}] `;
+    }
+    return '';
   }
 
   private getTemplateContainer(container: Container): TriggerTemplateContainer {
     const notificationWatcherSuffix = this.getNotificationWatcherSuffix(container);
     const notificationAgentPrefix = this.getNotificationAgentPrefix(container);
+    const notificationServerName =
+      typeof container.agent === 'string' && container.agent.trim()
+        ? container.agent.trim()
+        : getServerName();
     const releaseNotes = container.result?.releaseNotes;
     if (!releaseNotes || typeof releaseNotes.body !== 'string') {
       return {
         ...container,
         notificationWatcherSuffix,
         notificationAgentPrefix,
+        notificationServerName,
       };
     }
 
@@ -1632,6 +1642,7 @@ class Trigger extends Component {
       ...container,
       notificationWatcherSuffix,
       notificationAgentPrefix,
+      notificationServerName,
       result: {
         ...container.result,
         releaseNotes: {
