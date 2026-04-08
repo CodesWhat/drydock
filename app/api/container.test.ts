@@ -62,8 +62,11 @@ vi.mock('../store/audit', () => ({
 
 vi.mock('../store/update-operation', () => ({
   getOperationsByContainerName: (...args: unknown[]) => mockGetOperationsByContainerName(...args),
+  getOperationById: vi.fn(() => undefined),
   getInProgressOperationByContainerName: vi.fn(() => undefined),
   getInProgressOperationByContainerId: vi.fn(() => undefined),
+  getActiveOperationByContainerName: vi.fn(() => undefined),
+  getActiveOperationByContainerId: vi.fn(() => undefined),
 }));
 
 vi.mock('../registry', () => ({
@@ -1432,6 +1435,8 @@ describe('Container Router', () => {
             getOperationsByContainerName: vi.fn(() => []),
             getInProgressOperationByContainerName: vi.fn(() => undefined),
             getInProgressOperationByContainerId: vi.fn(() => undefined),
+            getActiveOperationByContainerName: vi.fn(() => undefined),
+            getActiveOperationByContainerId: vi.fn(() => undefined),
           },
         },
         agentApi: {

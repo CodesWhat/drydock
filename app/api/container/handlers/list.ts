@@ -83,11 +83,11 @@ export function attachInProgressUpdateOperation(
   context: CrudHandlerContext,
   container: Container,
 ): Container {
-  const byId = context.updateOperationStore.getInProgressOperationByContainerId(container.id);
+  const byId = context.updateOperationStore.getActiveOperationByContainerId(container.id);
   // Name-based fallback only for legacy operations that predate the containerId field.
   const byName = byId
     ? undefined
-    : context.updateOperationStore.getInProgressOperationByContainerName(container.name);
+    : context.updateOperationStore.getActiveOperationByContainerName(container.name);
   const isLegacyOperation =
     byName && typeof byName === 'object' && !('containerId' in (byName as Record<string, unknown>));
   const matched = byId ?? (isLegacyOperation ? byName : undefined);

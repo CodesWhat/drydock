@@ -233,6 +233,8 @@ class Docker extends Trigger {
 
   containerUpdateExecutor: ContainerUpdateExecutor;
 
+  private readonly _updateLimit = pLimit(1);
+
   updateLifecycleExecutor: UpdateLifecycleExecutor;
 
   rollbackMonitor: RollbackMonitor;
@@ -1253,7 +1255,7 @@ class Docker extends Trigger {
    * @returns {Promise<void>}
    */
   async trigger(container, runtimeContext?: unknown) {
-    await this.runContainerUpdateLifecycle(container, runtimeContext);
+    await this._updateLimit(() => this.runContainerUpdateLifecycle(container, runtimeContext));
   }
 
   /**

@@ -415,6 +415,7 @@ export function isPendingUpdateSettled(args: {
   const observedLifecycleSignal =
     !args.liveContainer ||
     args.liveContainer.updateOperation?.status === 'in-progress' ||
+    args.liveContainer.updateOperation?.status === 'queued' ||
     args.liveContainer.status !== expectedStatus;
   if (observedLifecycleSignal) {
     const nextObserved = new Set(args.actionPendingLifecycleObserved.value);
@@ -426,7 +427,10 @@ export function isPendingUpdateSettled(args: {
     return false;
   }
 
-  if (args.liveContainer.updateOperation?.status === 'in-progress') {
+  if (
+    args.liveContainer.updateOperation?.status === 'in-progress' ||
+    args.liveContainer.updateOperation?.status === 'queued'
+  ) {
     return false;
   }
 
@@ -919,8 +923,19 @@ export function useContainerActions(input: UseContainerActionsInput) {
   }
 
   function isContainerUpdateQueued(target: ContainerActionTarget) {
+    if (typeof target !== 'string' && target.updateOperation?.status === 'queued') {
+      return true;
+    }
     const id = typeof target === 'string' ? undefined : target.id;
-    return id !== undefined && groupUpdateQueue.value.has(id);
+    if (id !== undefined && groupUpdateQueue.value.has(id)) {
+      return true;
+    }
+    if (typeof target === 'string') {
+      return false;
+    }
+    return input.containers.value.some((container) => {
+      return container.id === target.id && container.updateOperation?.status === 'queued';
+    });
   }
 
   async function executeAction(

@@ -90,12 +90,19 @@ vi.mock('../../../prometheus/rollback.js', () => ({
 
 const mockInsertOperation = vi.hoisted(() => vi.fn());
 const mockUpdateOperation = vi.hoisted(() => vi.fn());
+const mockGetOperationById = vi.hoisted(() => vi.fn());
 const mockGetInProgressOperationByContainerName = vi.hoisted(() => vi.fn());
+const mockGetActiveOperationByContainerName = vi.hoisted(() => vi.fn());
+const mockGetActiveOperationByContainerId = vi.hoisted(() => vi.fn());
 vi.mock('../../../store/update-operation.js', () => ({
   insertOperation: (...args: any[]) => mockInsertOperation(...args),
   updateOperation: (...args: any[]) => mockUpdateOperation(...args),
+  getOperationById: (...args: any[]) => mockGetOperationById(...args),
   getInProgressOperationByContainerName: (...args: any[]) =>
     mockGetInProgressOperationByContainerName(...args),
+  getActiveOperationByContainerName: (...args: any[]) =>
+    mockGetActiveOperationByContainerName(...args),
+  getActiveOperationByContainerId: (...args: any[]) => mockGetActiveOperationByContainerId(...args),
 }));
 
 const mockSyncComposeFileTag = vi.hoisted(() => vi.fn().mockResolvedValue(false));
@@ -430,7 +437,10 @@ export function getDockerTestMocks() {
     mockGetRollbackCounter,
     mockInsertOperation,
     mockUpdateOperation,
+    mockGetOperationById,
     mockGetInProgressOperationByContainerName,
+    mockGetActiveOperationByContainerName,
+    mockGetActiveOperationByContainerId,
     mockSyncComposeFileTag,
   };
 }

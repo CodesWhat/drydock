@@ -576,8 +576,7 @@ class ContainerUpdateExecutor {
       ? getHealthGateTimeoutMs(rollbackConfig)
       : undefined;
 
-    const operation = updateOperationStore.insertOperation({
-      ...(requestedOperationId ? { id: requestedOperationId } : {}),
+    const operationFields = {
       containerId: container.id,
       containerName: container.name,
       triggerName: this.getTriggerId(),
@@ -589,9 +588,22 @@ class ContainerUpdateExecutor {
       fromVersion: container.updateKind.localValue ?? container.image.tag.value,
       toVersion: container.updateKind.remoteValue ?? container.image.tag.value,
       targetImage: newImage,
-      status: 'in-progress',
-      phase: 'pulling',
-    });
+      status: 'in-progress' as const,
+      phase: 'pulling' as const,
+    };
+
+    // If a queued operation was pre-created by the API handler, transition it
+    // to in-progress instead of inserting a duplicate.
+    const existingQueued = requestedOperationId
+      ? updateOperationStore.getOperationById(requestedOperationId)
+      : undefined;
+    const operation =
+      existingQueued?.status === 'queued'
+        ? updateOperationStore.updateOperation(requestedOperationId!, operationFields)!
+        : updateOperationStore.insertOperation({
+            ...(requestedOperationId ? { id: requestedOperationId } : {}),
+            ...operationFields,
+          });
 
     try {
       await this.pullImage(dockerApi, auth, newImage, logContainer);

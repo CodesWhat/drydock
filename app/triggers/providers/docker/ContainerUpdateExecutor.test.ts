@@ -1,16 +1,28 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 
-const { mockGetInProgressOperationByContainerName, mockInsertOperation, mockUpdateOperation } =
-  vi.hoisted(() => ({
-    mockGetInProgressOperationByContainerName: vi.fn(),
-    mockInsertOperation: vi.fn(),
-    mockUpdateOperation: vi.fn(),
-  }));
+const {
+  mockGetInProgressOperationByContainerName,
+  mockGetOperationById,
+  mockInsertOperation,
+  mockUpdateOperation,
+  mockGetActiveOperationByContainerName,
+  mockGetActiveOperationByContainerId,
+} = vi.hoisted(() => ({
+  mockGetInProgressOperationByContainerName: vi.fn(),
+  mockGetOperationById: vi.fn(),
+  mockInsertOperation: vi.fn(),
+  mockUpdateOperation: vi.fn(),
+  mockGetActiveOperationByContainerName: vi.fn(),
+  mockGetActiveOperationByContainerId: vi.fn(),
+}));
 
 vi.mock('../../../store/update-operation.js', () => ({
   getInProgressOperationByContainerName: mockGetInProgressOperationByContainerName,
+  getOperationById: mockGetOperationById,
   insertOperation: mockInsertOperation,
   updateOperation: mockUpdateOperation,
+  getActiveOperationByContainerName: mockGetActiveOperationByContainerName,
+  getActiveOperationByContainerId: mockGetActiveOperationByContainerId,
 }));
 
 import ContainerUpdateExecutor from './ContainerUpdateExecutor.js';

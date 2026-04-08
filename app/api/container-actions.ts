@@ -9,6 +9,7 @@ import { type Container, clearDetectedUpdateState } from '../model/container.js'
 import { getContainerActionsCounter } from '../prometheus/container-actions.js';
 import * as registry from '../registry/index.js';
 import * as storeContainer from '../store/container.js';
+import * as updateOperationStore from '../store/update-operation.js';
 import Trigger from '../triggers/providers/Trigger.js';
 import { recordAuditEvent } from './audit-events.js';
 import { findDockerTriggerForContainer, NO_DOCKER_TRIGGER_FOUND_ERROR } from './docker-trigger.js';
@@ -214,6 +215,14 @@ async function updateContainer(req: Request, res: Response) {
 
   const operationId = crypto.randomUUID();
   getContainerActionsCounter()?.inc({ action: 'container-update' });
+
+  updateOperationStore.insertOperation({
+    id: operationId,
+    containerId: container.id,
+    containerName: container.name,
+    status: 'queued',
+    phase: 'queued',
+  });
 
   void (async () => {
     try {

@@ -29,6 +29,8 @@ export interface UpdateOperationStoreApi {
   getOperationsByContainerName: (containerName: string) => unknown[];
   getInProgressOperationByContainerName: (containerName: string) => unknown | undefined;
   getInProgressOperationByContainerId: (containerId: string) => unknown | undefined;
+  getActiveOperationByContainerName: (containerName: string) => unknown | undefined;
+  getActiveOperationByContainerId: (containerId: string) => unknown | undefined;
 }
 
 export interface ServerConfiguration {

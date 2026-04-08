@@ -44,7 +44,9 @@ type UpdateOperationQuery =
   | { 'data.id': string }
   | { 'data.containerName': string }
   | { 'data.containerName': string; 'data.status': ContainerUpdateOperationStatus }
+  | { 'data.containerId': string }
   | { 'data.containerId': string; 'data.status': ContainerUpdateOperationStatus }
+  | { 'data.newContainerId': string }
   | { 'data.newContainerId': string; 'data.status': ContainerUpdateOperationStatus };
 
 interface UpdateOperationCollection {
@@ -171,6 +173,17 @@ export function insertOperation(operation: InsertUpdateOperationInput): UpdateOp
 }
 
 /**
+ * Return a single operation by its unique ID.
+ */
+export function getOperationById(id: string): UpdateOperation | undefined {
+  if (!updateOperationCollection || !id) {
+    return undefined;
+  }
+
+  return updateOperationCollection.findOne({ 'data.id': id })?.data;
+}
+
+/**
  * Update an operation by id.
  */
 export function updateOperation(
@@ -245,6 +258,58 @@ export function getInProgressOperationByContainerId(
     'data.status': 'in-progress',
   })) {
     operationsById.set(document.data.id, document.data);
+  }
+
+  const operations = [...operationsById.values()].sort(
+    (a, b) => getOperationTimestamp(b) - getOperationTimestamp(a),
+  );
+
+  return operations.at(0);
+}
+
+const ACTIVE_STATUSES = ['in-progress', 'queued'] as const;
+
+/**
+ * Return the latest active (in-progress OR queued) operation for a container name.
+ */
+export function getActiveOperationByContainerName(
+  containerName: string,
+): UpdateOperation | undefined {
+  if (!updateOperationCollection) {
+    return undefined;
+  }
+
+  const operations = updateOperationCollection
+    .find({ 'data.containerName': containerName })
+    .filter((item) => (ACTIVE_STATUSES as readonly string[]).includes(item.data.status))
+    .map((item) => item.data)
+    .sort((a, b) => getOperationTimestamp(b) - getOperationTimestamp(a));
+
+  return operations.at(0);
+}
+
+/**
+ * Return the latest active (in-progress OR queued) operation for a container ID.
+ */
+export function getActiveOperationByContainerId(containerId: string): UpdateOperation | undefined {
+  if (!updateOperationCollection || !containerId) {
+    return undefined;
+  }
+
+  const operationsById = new Map<string, UpdateOperation>();
+
+  for (const document of updateOperationCollection.find({ 'data.containerId': containerId })) {
+    if ((ACTIVE_STATUSES as readonly string[]).includes(document.data.status)) {
+      operationsById.set(document.data.id, document.data);
+    }
+  }
+
+  for (const document of updateOperationCollection.find({
+    'data.newContainerId': containerId,
+  })) {
+    if ((ACTIVE_STATUSES as readonly string[]).includes(document.data.status)) {
+      operationsById.set(document.data.id, document.data);
+    }
   }
 
   const operations = [...operationsById.values()].sort(

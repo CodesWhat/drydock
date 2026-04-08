@@ -56,6 +56,17 @@ vi.mock('../configuration', () => ({
   getVersion: vi.fn(() => 'test-version'),
 }));
 
+vi.mock('../store/update-operation', () => ({
+  insertOperation: vi.fn((op) => ({ id: op.id || 'op-mock', ...op })),
+  updateOperation: vi.fn(),
+  getOperationById: vi.fn(),
+  getOperationsByContainerName: vi.fn(() => []),
+  getInProgressOperationByContainerName: vi.fn(),
+  getInProgressOperationByContainerId: vi.fn(),
+  getActiveOperationByContainerName: vi.fn(),
+  getActiveOperationByContainerId: vi.fn(),
+}));
+
 vi.mock('../log', () => ({
   default: { child: vi.fn(() => ({ info: vi.fn(), warn: vi.fn(), debug: vi.fn() })) },
 }));

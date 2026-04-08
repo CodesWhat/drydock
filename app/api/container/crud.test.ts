@@ -158,6 +158,8 @@ function createHarness(options: { containers?: any[] } = {}) {
       getOperationsByContainerName: vi.fn(() => []),
       getInProgressOperationByContainerName: vi.fn(() => undefined),
       getInProgressOperationByContainerId: vi.fn(() => undefined),
+      getActiveOperationByContainerName: vi.fn(() => undefined),
+      getActiveOperationByContainerId: vi.fn(() => undefined),
     },
     getServerConfiguration: vi.fn(() => ({ feature: { delete: true } })),
     getAgent: vi.fn(),
@@ -2370,7 +2372,7 @@ describe('api/container/crud', () => {
       const harness = createHarness({
         containers: [createContainer({ id: 'c1', name: 'edge-api' })],
       });
-      harness.deps.updateOperationStore.getInProgressOperationByContainerName.mockReturnValue({
+      harness.deps.updateOperationStore.getActiveOperationByContainerName.mockReturnValue({
         id: 'op-1',
         status: 'in-progress',
         phase: 'old-stopped',
@@ -2383,7 +2385,7 @@ describe('api/container/crud', () => {
       const singleRes = callGetContainer(harness.handlers, 'c1');
 
       expect(
-        harness.deps.updateOperationStore.getInProgressOperationByContainerName,
+        harness.deps.updateOperationStore.getActiveOperationByContainerName,
       ).toHaveBeenCalledWith('edge-api');
       expect(listRes.json).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -2415,7 +2417,7 @@ describe('api/container/crud', () => {
       const harness = createHarness({
         containers: [createContainer({ id: 'new-c1', name: 'edge-api' })],
       });
-      harness.deps.updateOperationStore.getInProgressOperationByContainerId.mockImplementation(
+      harness.deps.updateOperationStore.getActiveOperationByContainerId.mockImplementation(
         (id: string) =>
           id === 'new-c1'
             ? {
@@ -2435,10 +2437,10 @@ describe('api/container/crud', () => {
       const singleRes = callGetContainer(harness.handlers, 'new-c1');
 
       expect(
-        harness.deps.updateOperationStore.getInProgressOperationByContainerId,
+        harness.deps.updateOperationStore.getActiveOperationByContainerId,
       ).toHaveBeenCalledWith('new-c1');
       expect(
-        harness.deps.updateOperationStore.getInProgressOperationByContainerName,
+        harness.deps.updateOperationStore.getActiveOperationByContainerName,
       ).not.toHaveBeenCalled();
       expect(listRes.json).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -2470,7 +2472,7 @@ describe('api/container/crud', () => {
       const harness = createHarness({
         containers: [createContainer({ id: 'c1', name: 'edge-api' })],
       });
-      harness.deps.updateOperationStore.getInProgressOperationByContainerName.mockReturnValue({
+      harness.deps.updateOperationStore.getActiveOperationByContainerName.mockReturnValue({
         id: 'op-1',
         status: 'success',
         phase: 'complete',

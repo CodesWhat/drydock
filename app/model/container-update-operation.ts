@@ -1,4 +1,5 @@
 export const CONTAINER_UPDATE_OPERATION_STATUSES = [
+  'queued',
   'in-progress',
   'succeeded',
   'rolled-back',
@@ -8,6 +9,7 @@ export const CONTAINER_UPDATE_OPERATION_STATUSES = [
 export type ContainerUpdateOperationStatus = (typeof CONTAINER_UPDATE_OPERATION_STATUSES)[number];
 
 export const CONTAINER_UPDATE_OPERATION_PHASES = [
+  'queued',
   'pulling',
   'pull-failed',
   'prepare',
