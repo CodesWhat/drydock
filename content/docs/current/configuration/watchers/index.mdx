@@ -730,6 +730,7 @@ To fine-tune the behaviour of drydock _per container_, you can add labels on the
 | `dd.rollback.auto` | ⚪ | Automatically rollback the container if the health check fails after an update | Valid Boolean | `false` |
 | `dd.rollback.window` | ⚪ | Health monitoring window in milliseconds after an update (how long to watch for failures) | integer | `300000` |
 | `dd.rollback.interval` | ⚪ | Health polling interval in milliseconds during the rollback window | integer | `10000` |
+| `dd.update.mode` | ⚪ | Update routing mode for infrastructure containers (socket proxies, etc.) | `infrastructure` | standard update path |
 | `dd.runtime.entrypoint.origin` | ⚪ | Tracks whether the container's entrypoint was explicitly set or inherited from the image. Used during updates to decide whether to preserve the current entrypoint or let the new image defaults apply. | `explicit`, `inherited`, `unknown` | auto-detected |
 | `dd.runtime.cmd.origin` | ⚪ | Tracks whether the container's cmd was explicitly set or inherited from the image. Used during updates to decide whether to preserve the current cmd or let the new image defaults apply. | `explicit`, `inherited`, `unknown` | auto-detected |
 
@@ -742,6 +743,8 @@ To fine-tune the behaviour of drydock _per container_, you can add labels on the
 <Callout type="info">**Update hooks** (`dd.hook.pre` / `dd.hook.post`) let you run arbitrary shell commands before and after a container update. If `dd.hook.pre.abort` is `true` (the default) and the pre-hook exits non-zero, the update is cancelled. Use `dd.hook.timeout` to control how long the hook is allowed to run before being killed.</Callout>
 
 <Callout type="info">**Automatic rollback** (`dd.rollback.auto`) monitors the container's health check after an update. If the health check fails within the `dd.rollback.window` (default 5 minutes, polled every `dd.rollback.interval` = 10 seconds), drydock automatically rolls the container back to its previous image.</Callout>
+
+<Callout type="info">**Infrastructure update mode** (`dd.update.mode=infrastructure`) is for containers that Drydock depends on for its Docker API connection, such as a socket proxy. When set, the container is updated through a helper-container path that connects directly to `/var/run/docker.sock`, bypassing the proxy so the connection isn't severed mid-update. See [Infrastructure Update Mode](/docs/configuration/triggers/docker#infrastructure-update-mode) for details.</Callout>
 
 ## Label examples
 
