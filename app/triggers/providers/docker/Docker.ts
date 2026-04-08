@@ -161,6 +161,7 @@ const UPDATE_LIFECYCLE_ORCHESTRATOR_METHODS = [
   'recordHookConfigurationAudit',
   'runPreUpdateHook',
   'isSelfUpdate',
+  'isInfrastructureUpdate',
   'maybeNotifySelfUpdate',
   'executeSelfUpdate',
   'runPreRuntimeUpdateLifecycle',
@@ -261,6 +262,22 @@ class Docker extends Trigger {
       runtimeConfigManager: this.runtimeConfigManager,
       ...pickOrchestratorCallbacks(this, SELF_UPDATE_ORCHESTRATOR_METHODS),
       emitSelfUpdateStarting,
+      resolveHelperImage: (container) => {
+        if (this.selfUpdateOrchestrator.isSelfUpdate(container)) {
+          return undefined;
+        }
+        const drydockContainer = storeContainer
+          .getContainers()
+          .find((c) => c.image?.name === 'drydock' || c.image?.name?.endsWith('/drydock'));
+        if (!drydockContainer) {
+          return undefined;
+        }
+        const { name, tag, registry } = drydockContainer.image ?? {};
+        if (!name || !tag?.value) {
+          return undefined;
+        }
+        return registry?.url ? `${registry.url}/${name}:${tag.value}` : `${name}:${tag.value}`;
+      },
     });
     this.containerUpdateExecutor = new ContainerUpdateExecutor({
       getConfiguration: () => this.configuration,
@@ -268,6 +285,34 @@ class Docker extends Trigger {
       ...pickOrchestratorCallbacks(this, CONTAINER_UPDATE_ORCHESTRATOR_METHODS),
       getCloneRuntimeConfigOptions,
       buildRuntimeConfigCompatibilityError,
+      scheduleDeferredReconciliation: (containerName, _operationId, delayMs) => {
+        setTimeout(async () => {
+          try {
+            const container = storeContainer.getContainers().find((c) => c.name === containerName);
+            if (!container) {
+              return;
+            }
+            const watcher = this.getWatcher(container);
+            const dockerApi = watcher.dockerApi as Parameters<
+              typeof this.containerUpdateExecutor.reconcileInProgressContainerUpdateOperation
+            >[0];
+            const logContainer = this.log?.child?.({ container: containerName }) ?? {
+              info: () => {},
+              warn: () => {},
+              debug: () => {},
+            };
+            await this.containerUpdateExecutor.reconcileInProgressContainerUpdateOperation(
+              dockerApi,
+              container,
+              logContainer,
+            );
+          } catch (e: unknown) {
+            this.log?.warn?.(
+              `Deferred reconciliation failed for ${containerName}: ${String((e as Error)?.message ?? e)}`,
+            );
+          }
+        }, delayMs);
+      },
     });
     this.rollbackMonitor = new RollbackMonitor({
       getPreferredLabelValue,
@@ -299,6 +344,7 @@ class Docker extends Trigger {
       },
       selfUpdate: {
         isSelfUpdate: updateLifecycleCallbacks.isSelfUpdate,
+        isInfrastructureUpdate: updateLifecycleCallbacks.isInfrastructureUpdate,
         maybeNotifySelfUpdate: updateLifecycleCallbacks.maybeNotifySelfUpdate,
         executeSelfUpdate: updateLifecycleCallbacks.executeSelfUpdate,
       },
@@ -1061,6 +1107,10 @@ class Docker extends Trigger {
 
   isSelfUpdate(container) {
     return this.selfUpdateOrchestrator.isSelfUpdate(container);
+  }
+
+  isInfrastructureUpdate(container) {
+    return this.selfUpdateOrchestrator.isInfrastructureUpdate(container);
   }
 
   findDockerSocketBind(spec) {

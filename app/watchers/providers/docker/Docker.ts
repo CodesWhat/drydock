@@ -559,6 +559,10 @@ class Docker extends Watcher {
     await initWatcherWithRemoteAuth(this.asRemoteAuthWatcher());
   }
 
+  async recreateDockerClient() {
+    await initWatcherWithRemoteAuth(this.asRemoteAuthWatcher());
+  }
+
   isHttpsRemoteWatcher(options: Dockerode.DockerOptions) {
     if (options.protocol === 'https') {
       return true;

@@ -179,6 +179,11 @@ type ContainerUpdateExecutorDependencies = {
     logContainer: ContainerUpdateLogger,
     timeoutMs?: number,
   ) => Promise<void>;
+  scheduleDeferredReconciliation?: (
+    containerName: string,
+    operationId: string,
+    delayMs: number,
+  ) => void;
 };
 
 type ContainerUpdateExecutorConstructorOptions = Omit<
@@ -225,6 +230,18 @@ function getErrorMessage(error: unknown): string {
     return String(error.message ?? error);
   }
   return String(error);
+}
+
+const DEFERRED_RECONCILIATION_DELAY_MS = 10_000;
+
+function isConnectionError(error: unknown): boolean {
+  const message = getErrorMessage(error).toLowerCase();
+  return (
+    message.includes('econnrefused') ||
+    message.includes('econnreset') ||
+    message.includes('socket hang up') ||
+    message.includes('connect etimedout')
+  );
 }
 
 function getHealthGateTimeoutMs(rollbackConfig: RollbackConfig): number {
@@ -279,6 +296,8 @@ class ContainerUpdateExecutor {
   hasHealthcheckConfigured: ContainerUpdateExecutorDependencies['hasHealthcheckConfigured'];
 
   waitForContainerHealthy: ContainerUpdateExecutorDependencies['waitForContainerHealthy'];
+
+  scheduleDeferredReconciliation?: ContainerUpdateExecutorDependencies['scheduleDeferredReconciliation'];
 
   constructor(options: ContainerUpdateExecutorConstructorOptions) {
     const dependencies = resolveFunctionDependencies<ContainerUpdateExecutorDependencies>(options, {
@@ -790,23 +809,45 @@ class ContainerUpdateExecutor {
       logContainer,
     );
 
-    updateOperationStore.updateOperation(preparedExecution.operationId, {
-      status: rollbackSucceeded ? 'rolled-back' : 'failed',
-      phase: rollbackSucceeded ? 'rolled-back' : 'rollback-failed',
-      oldContainerStopped: attemptState.oldContainerStopped,
-      rollbackReason: attemptState.failureReason,
-      lastError: getErrorMessage(error),
-    });
+    const shouldDeferReconciliation =
+      !rollbackSucceeded && isConnectionError(error) && this.scheduleDeferredReconciliation;
+
+    if (shouldDeferReconciliation) {
+      updateOperationStore.updateOperation(preparedExecution.operationId, {
+        status: 'in-progress',
+        phase: 'rollback-deferred',
+        oldContainerStopped: attemptState.oldContainerStopped,
+        rollbackReason: attemptState.failureReason,
+        lastError: getErrorMessage(error),
+      });
+      this.scheduleDeferredReconciliation(
+        preparedExecution.oldName,
+        preparedExecution.operationId,
+        DEFERRED_RECONCILIATION_DELAY_MS,
+      );
+    } else {
+      updateOperationStore.updateOperation(preparedExecution.operationId, {
+        status: rollbackSucceeded ? 'rolled-back' : 'failed',
+        phase: rollbackSucceeded ? 'rolled-back' : 'rollback-failed',
+        oldContainerStopped: attemptState.oldContainerStopped,
+        rollbackReason: attemptState.failureReason,
+        lastError: getErrorMessage(error),
+      });
+    }
 
     this.recordRollbackTelemetry({
       container,
       outcome: rollbackSucceeded ? 'success' : 'error',
       reason: rollbackSucceeded
         ? attemptState.failureReason
-        : `${attemptState.failureReason}_rollback_failed`,
+        : shouldDeferReconciliation
+          ? `${attemptState.failureReason}_rollback_deferred`
+          : `${attemptState.failureReason}_rollback_failed`,
       details: rollbackSucceeded
         ? `Rollback completed after ${attemptState.failureReason} during container update`
-        : `Rollback failed after ${attemptState.failureReason}: ${getErrorMessage(error)}`,
+        : shouldDeferReconciliation
+          ? `Rollback deferred after ${attemptState.failureReason}: Docker API unavailable, scheduled reconciliation in ${DEFERRED_RECONCILIATION_DELAY_MS}ms`
+          : `Rollback failed after ${attemptState.failureReason}: ${getErrorMessage(error)}`,
       fromVersion: container.updateKind.remoteValue ?? container.image.tag.value,
       toVersion: container.updateKind.localValue ?? container.image.tag.value,
     });

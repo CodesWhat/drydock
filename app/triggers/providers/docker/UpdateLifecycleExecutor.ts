@@ -49,6 +49,7 @@ type UpdateLifecycleExecutorCallbacks = {
     logger: UpdateLifecycleOperationLogger,
   ) => Promise<void>;
   isSelfUpdate: (container: UpdateLifecycleContainer) => boolean;
+  isInfrastructureUpdate: (container: UpdateLifecycleContainer) => boolean;
   maybeNotifySelfUpdate: (
     container: UpdateLifecycleContainer,
     logger: UpdateLifecycleOperationLogger,
@@ -116,7 +117,7 @@ type UpdateLifecycleHookServices = Pick<
 
 type UpdateLifecycleSelfUpdateServices = Pick<
   UpdateLifecycleExecutorCallbacks,
-  'isSelfUpdate' | 'maybeNotifySelfUpdate' | 'executeSelfUpdate'
+  'isSelfUpdate' | 'isInfrastructureUpdate' | 'maybeNotifySelfUpdate' | 'executeSelfUpdate'
 >;
 
 type UpdateLifecycleRuntimeUpdateServices = Pick<
@@ -164,7 +165,12 @@ const REQUIRED_UPDATE_LIFECYCLE_EXECUTOR_DEPENDENCY_KEYS = {
     'runPreUpdateHook',
     'runPostUpdateHook',
   ],
-  selfUpdate: ['isSelfUpdate', 'maybeNotifySelfUpdate', 'executeSelfUpdate'],
+  selfUpdate: [
+    'isSelfUpdate',
+    'isInfrastructureUpdate',
+    'maybeNotifySelfUpdate',
+    'executeSelfUpdate',
+  ],
   runtimeUpdate: ['runPreRuntimeUpdateLifecycle', 'performContainerUpdate'],
   postUpdate: ['cleanupOldImages', 'getRollbackConfig', 'maybeStartAutoRollbackMonitor'],
   telemetry: ['emitContainerUpdateApplied', 'emitContainerUpdateFailed'],
@@ -252,7 +258,10 @@ class UpdateLifecycleExecutor {
       this.hooks.recordHookConfigurationAudit(container, hookConfig);
       await this.hooks.runPreUpdateHook(container, hookConfig, containerLogger);
 
-      if (this.selfUpdate.isSelfUpdate(container)) {
+      if (
+        this.selfUpdate.isSelfUpdate(container) ||
+        this.selfUpdate.isInfrastructureUpdate(container)
+      ) {
         const selfUpdateOperationId = crypto.randomUUID();
         await this.selfUpdate.maybeNotifySelfUpdate(
           container,

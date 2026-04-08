@@ -21,6 +21,7 @@ export const CONTAINER_UPDATE_OPERATION_PHASES = [
   'succeeded',
   'rollback-started',
   'rolled-back',
+  'rollback-deferred',
   'rollback-failed',
 ] as const;
 

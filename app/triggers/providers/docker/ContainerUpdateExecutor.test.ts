@@ -774,4 +774,125 @@ describe('ContainerUpdateExecutor', () => {
       }),
     );
   });
+
+  test('execute defers reconciliation when rollback fails due to connection error', async () => {
+    const context = createContext({
+      currentContainerSpec: createCurrentContainerSpec({
+        State: { Running: true },
+      }),
+    });
+
+    const connectionError = new Error('connect ECONNREFUSED 127.0.0.1:2375');
+
+    const startContainer = vi
+      .fn()
+      .mockRejectedValueOnce(connectionError)
+      .mockRejectedValueOnce(connectionError);
+
+    context.currentContainer.rename
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(connectionError);
+
+    const scheduleDeferredReconciliation = vi.fn();
+    const executor = createExecutor({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      stopContainer: vi.fn().mockResolvedValue(undefined),
+      startContainer,
+      scheduleDeferredReconciliation,
+    });
+
+    await expect(executor.execute(context, createContainer(), createLog())).rejects.toThrow(
+      'ECONNREFUSED',
+    );
+
+    expect(mockUpdateOperation).toHaveBeenCalledWith(
+      'op-1',
+      expect.objectContaining({
+        status: 'in-progress',
+        phase: 'rollback-deferred',
+      }),
+    );
+    expect(scheduleDeferredReconciliation).toHaveBeenCalledWith('web', 'op-1', 10_000);
+    expect(executor.recordRollbackTelemetry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reason: 'start_new_failed_rollback_deferred',
+        details: expect.stringContaining('Rollback deferred'),
+      }),
+    );
+  });
+
+  test('execute does not defer reconciliation for non-connection errors', async () => {
+    const context = createContext({
+      currentContainerSpec: createCurrentContainerSpec({
+        State: { Running: true },
+      }),
+    });
+
+    const startContainer = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('container not found'))
+      .mockRejectedValueOnce(new Error('restart also failed'));
+
+    context.currentContainer.rename
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('rename failed'));
+
+    const scheduleDeferredReconciliation = vi.fn();
+    const executor = createExecutor({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      stopContainer: vi.fn().mockResolvedValue(undefined),
+      startContainer,
+      scheduleDeferredReconciliation,
+    });
+
+    await expect(executor.execute(context, createContainer(), createLog())).rejects.toThrow(
+      'container not found',
+    );
+
+    expect(mockUpdateOperation).toHaveBeenCalledWith(
+      'op-1',
+      expect.objectContaining({
+        status: 'failed',
+        phase: 'rollback-failed',
+      }),
+    );
+    expect(scheduleDeferredReconciliation).not.toHaveBeenCalled();
+  });
+
+  test('execute does not defer reconciliation when callback is not provided', async () => {
+    const context = createContext({
+      currentContainerSpec: createCurrentContainerSpec({
+        State: { Running: true },
+      }),
+    });
+
+    const connectionError = new Error('connect ECONNREFUSED 127.0.0.1:2375');
+
+    const startContainer = vi
+      .fn()
+      .mockRejectedValueOnce(connectionError)
+      .mockRejectedValueOnce(connectionError);
+
+    context.currentContainer.rename
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(connectionError);
+
+    const executor = createExecutor({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      stopContainer: vi.fn().mockResolvedValue(undefined),
+      startContainer,
+    });
+
+    await expect(executor.execute(context, createContainer(), createLog())).rejects.toThrow(
+      'ECONNREFUSED',
+    );
+
+    expect(mockUpdateOperation).toHaveBeenCalledWith(
+      'op-1',
+      expect.objectContaining({
+        status: 'failed',
+        phase: 'rollback-failed',
+      }),
+    );
+  });
 });

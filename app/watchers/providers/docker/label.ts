@@ -132,6 +132,13 @@ export const ddWebhookEnabled = 'dd.webhook.enabled';
 export const wudWebhookEnabled = 'wud.webhook.enabled';
 
 /**
+ * Update mode for infrastructure containers (e.g. 'infrastructure' for socket proxies).
+ * When set to 'infrastructure', the container is updated via the helper-swap path
+ * which connects directly to /var/run/docker.sock, bypassing any socket proxy.
+ */
+export const ddUpdateMode = 'dd.update.mode';
+
+/**
  * Whether to automatically rollback on health check failure (default: false).
  */
 export const ddRollbackAuto = 'dd.rollback.auto';

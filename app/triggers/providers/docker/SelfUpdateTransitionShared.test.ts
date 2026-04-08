@@ -157,4 +157,70 @@ describe('SelfUpdateTransitionShared', () => {
       }),
     );
   });
+
+  test('uses resolveHelperImage for helper container when provided', async () => {
+    const context = createContext();
+    const dependencies = createDependencies({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      resolveHelperImage: () => 'custom-drydock:3.0.0',
+    });
+    const log = { info: vi.fn(), warn: vi.fn() };
+
+    await executeSelfUpdateTransition(dependencies, context, createContainer(), log);
+
+    expect(context.dockerApi.createContainer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Image: 'custom-drydock:3.0.0',
+      }),
+    );
+  });
+
+  test('falls back to newImage when resolveHelperImage returns undefined', async () => {
+    const context = createContext();
+    const dependencies = createDependencies({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      resolveHelperImage: () => undefined,
+    });
+    const log = { info: vi.fn(), warn: vi.fn() };
+
+    await executeSelfUpdateTransition(dependencies, context, createContainer(), log);
+
+    expect(context.dockerApi.createContainer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Image: 'ghcr.io/acme/drydock:2.0.0',
+      }),
+    );
+  });
+
+  test('falls back to newImage when resolveHelperImage is not provided', async () => {
+    const context = createContext();
+    const dependencies = createDependencies({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+    });
+    const log = { info: vi.fn(), warn: vi.fn() };
+
+    await executeSelfUpdateTransition(dependencies, context, createContainer(), log);
+
+    expect(context.dockerApi.createContainer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Image: 'ghcr.io/acme/drydock:2.0.0',
+      }),
+    );
+  });
+
+  test('uses container name for temp rename prefix instead of hardcoded drydock', async () => {
+    const context = createContext({
+      currentContainerSpec: createCurrentContainerSpec({ Name: '/socket-proxy' }),
+    });
+    const dependencies = createDependencies({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+    });
+    const log = { info: vi.fn(), warn: vi.fn() };
+
+    await executeSelfUpdateTransition(dependencies, context, createContainer(), log);
+
+    expect(context.currentContainer.rename).toHaveBeenCalledWith({
+      name: expect.stringMatching(/^socket-proxy-old-\d+$/),
+    });
+  });
 });
