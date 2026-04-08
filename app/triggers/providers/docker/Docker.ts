@@ -39,6 +39,13 @@ const PULL_PROGRESS_LOG_INTERVAL_MS = 2000;
 const NON_SELF_UPDATE_HEALTH_TIMEOUT_MS = 120_000;
 const NON_SELF_UPDATE_HEALTH_POLL_INTERVAL_MS = 1_000;
 const TRIGGER_BATCH_CONCURRENCY = 3;
+
+/**
+ * Module-level update concurrency limiter shared across all Docker/Dockercompose
+ * trigger instances. Ensures only one container update executes at a time
+ * regardless of which trigger instance dispatches it.
+ */
+const updateConcurrencyLimit = pLimit(1);
 const warnedLegacyTriggerLabelFallbacks = new Set<string>();
 
 type ContainerFullNameReference = {
@@ -232,8 +239,6 @@ class Docker extends Trigger {
   selfUpdateOrchestrator: SelfUpdateOrchestrator;
 
   containerUpdateExecutor: ContainerUpdateExecutor;
-
-  private readonly _updateLimit = pLimit(1);
 
   updateLifecycleExecutor: UpdateLifecycleExecutor;
 
@@ -1246,7 +1251,9 @@ class Docker extends Trigger {
    * subclasses can override.
    */
   async runContainerUpdateLifecycle(container, runtimeContext?: unknown) {
-    return this._updateLimit(() => this.updateLifecycleExecutor.run(container, runtimeContext));
+    return updateConcurrencyLimit(() =>
+      this.updateLifecycleExecutor.run(container, runtimeContext),
+    );
   }
 
   /**
