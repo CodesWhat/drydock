@@ -280,6 +280,88 @@ describe('Update Operation Store', () => {
     expect(updateOperation.getInProgressOperationByContainerId('')).toBeUndefined();
   });
 
+  test('getActiveOperationByContainerName should expire stale queued operations', async () => {
+    vi.resetModules();
+    const previousActiveTtlMs = process.env.DD_UPDATE_OPERATION_ACTIVE_TTL_MS;
+    process.env.DD_UPDATE_OPERATION_ACTIVE_TTL_MS = '60000';
+    vi.useFakeTimers();
+
+    try {
+      const fresh = await import('./update-operation.js');
+      fresh.createCollections(createDb());
+
+      vi.setSystemTime(new Date('2026-02-23T00:00:00.000Z'));
+      const queued = fresh.insertOperation({
+        containerName: 'web',
+        status: 'queued',
+        phase: 'queued',
+      });
+
+      vi.setSystemTime(new Date('2026-02-23T00:01:01.000Z'));
+      const active = fresh.getActiveOperationByContainerName('web');
+
+      expect(active).toBeUndefined();
+      expect(fresh.getOperationById(queued.id)).toEqual(
+        expect.objectContaining({
+          id: queued.id,
+          status: 'failed',
+          phase: 'queued',
+          lastError: expect.stringContaining('active update TTL'),
+        }),
+      );
+    } finally {
+      vi.useRealTimers();
+      if (previousActiveTtlMs === undefined) {
+        delete process.env.DD_UPDATE_OPERATION_ACTIVE_TTL_MS;
+      } else {
+        process.env.DD_UPDATE_OPERATION_ACTIVE_TTL_MS = previousActiveTtlMs;
+      }
+    }
+  });
+
+  test('getActiveOperationByContainerId should expire stale in-progress replacement operations', async () => {
+    vi.resetModules();
+    const previousActiveTtlMs = process.env.DD_UPDATE_OPERATION_ACTIVE_TTL_MS;
+    process.env.DD_UPDATE_OPERATION_ACTIVE_TTL_MS = '60000';
+    vi.useFakeTimers();
+
+    try {
+      const fresh = await import('./update-operation.js');
+      fresh.createCollections(createDb());
+
+      vi.setSystemTime(new Date('2026-02-23T00:00:00.000Z'));
+      const operation = fresh.insertOperation({
+        containerName: 'web',
+        containerId: 'old-123',
+        status: 'in-progress',
+        phase: 'pulling',
+      });
+      fresh.updateOperation(operation.id, {
+        newContainerId: 'new-456',
+      });
+
+      vi.setSystemTime(new Date('2026-02-23T00:01:01.000Z'));
+      const active = fresh.getActiveOperationByContainerId('new-456');
+
+      expect(active).toBeUndefined();
+      expect(fresh.getOperationById(operation.id)).toEqual(
+        expect.objectContaining({
+          id: operation.id,
+          status: 'failed',
+          phase: 'pulling',
+          lastError: expect.stringContaining('active update TTL'),
+        }),
+      );
+    } finally {
+      vi.useRealTimers();
+      if (previousActiveTtlMs === undefined) {
+        delete process.env.DD_UPDATE_OPERATION_ACTIVE_TTL_MS;
+      } else {
+        process.env.DD_UPDATE_OPERATION_ACTIVE_TTL_MS = previousActiveTtlMs;
+      }
+    }
+  });
+
   test('same-named containers should be disambiguated by container ID', () => {
     const op = updateOperation.insertOperation({
       containerName: 'portainer_agent',
@@ -496,6 +578,60 @@ describe('Update Operation Store', () => {
       expect(operations.find((operation) => operation.id === inProgress.id)?.status).toBe(
         'in-progress',
       );
+      expect(operations.find((operation) => operation.id === latestTerminal.id)?.status).toBe(
+        'failed',
+      );
+    } finally {
+      vi.useRealTimers();
+      if (previousMaxEntries === undefined) {
+        delete process.env.DD_UPDATE_OPERATION_MAX_ENTRIES;
+      } else {
+        process.env.DD_UPDATE_OPERATION_MAX_ENTRIES = previousMaxEntries;
+      }
+      if (previousRetentionDays === undefined) {
+        delete process.env.DD_UPDATE_OPERATION_RETENTION_DAYS;
+      } else {
+        process.env.DD_UPDATE_OPERATION_RETENTION_DAYS = previousRetentionDays;
+      }
+    }
+  });
+
+  test('retention should not prune queued operations', async () => {
+    vi.resetModules();
+    const previousMaxEntries = process.env.DD_UPDATE_OPERATION_MAX_ENTRIES;
+    const previousRetentionDays = process.env.DD_UPDATE_OPERATION_RETENTION_DAYS;
+    process.env.DD_UPDATE_OPERATION_MAX_ENTRIES = '1';
+    process.env.DD_UPDATE_OPERATION_RETENTION_DAYS = '365';
+    vi.useFakeTimers();
+
+    try {
+      const fresh = await import('./update-operation.js');
+      fresh.createCollections(createDb());
+
+      vi.setSystemTime(new Date('2026-02-01T00:00:00.000Z'));
+      const queued = fresh.insertOperation({
+        containerName: 'web',
+        status: 'queued',
+        phase: 'queued',
+      });
+
+      vi.setSystemTime(new Date('2026-02-01T00:00:01.000Z'));
+      const latestTerminal = fresh.insertOperation({
+        containerName: 'web',
+        status: 'failed',
+        phase: 'rollback-failed',
+      });
+
+      for (let i = 0; i < 98; i += 1) {
+        vi.setSystemTime(new Date(2026, 1, 1, 0, 1, i));
+        fresh.updateOperation(latestTerminal.id, {
+          lastError: `error-${i}`,
+        });
+      }
+
+      const operations = fresh.getOperationsByContainerName('web');
+      expect(operations).toHaveLength(2);
+      expect(operations.find((operation) => operation.id === queued.id)?.status).toBe('queued');
       expect(operations.find((operation) => operation.id === latestTerminal.id)?.status).toBe(
         'failed',
       );

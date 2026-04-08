@@ -78,8 +78,10 @@ const UPDATE_OPERATION_COLLECTION_INDICES = [
 ];
 const DEFAULT_UPDATE_OPERATION_MAX_ENTRIES = getDefaultCacheMaxEntries();
 const DEFAULT_UPDATE_OPERATION_RETENTION_DAYS = 30;
+const DEFAULT_UPDATE_OPERATION_ACTIVE_TTL_MS = 30 * 60 * 1000;
 const UPDATE_OPERATION_PRUNE_MUTATION_INTERVAL = 100;
 let updateOperationMutationsSincePrune = 0;
+const ACTIVE_STATUSES = ['in-progress', 'queued'] as const;
 
 const UPDATE_OPERATION_MAX_ENTRIES = toPositiveInteger(
   process.env.DD_UPDATE_OPERATION_MAX_ENTRIES,
@@ -89,10 +91,57 @@ const UPDATE_OPERATION_RETENTION_DAYS = toPositiveInteger(
   process.env.DD_UPDATE_OPERATION_RETENTION_DAYS,
   DEFAULT_UPDATE_OPERATION_RETENTION_DAYS,
 );
+const UPDATE_OPERATION_ACTIVE_TTL_MS = toPositiveInteger(
+  process.env.DD_UPDATE_OPERATION_ACTIVE_TTL_MS,
+  DEFAULT_UPDATE_OPERATION_ACTIVE_TTL_MS,
+);
 
 function getOperationTimestamp(operation: UpdateOperation): number {
   const timestamp = Date.parse(operation.updatedAt || operation.createdAt);
   return Number.isNaN(timestamp) ? 0 : timestamp;
+}
+
+function isActiveOperationStatus(status: unknown): status is (typeof ACTIVE_STATUSES)[number] {
+  return typeof status === 'string' && (ACTIVE_STATUSES as readonly string[]).includes(status);
+}
+
+function isStaleActiveOperation(operation: UpdateOperation, nowMs = Date.now()): boolean {
+  return nowMs - getOperationTimestamp(operation) > UPDATE_OPERATION_ACTIVE_TTL_MS;
+}
+
+function getStaleActiveOperationMessage(operation: UpdateOperation): string {
+  return `Marked failed after exceeding active update TTL (${UPDATE_OPERATION_ACTIVE_TTL_MS}ms) while ${operation.status === 'queued' ? 'queued' : 'in progress'}`;
+}
+
+function expireStaleActiveOperation(operation: UpdateOperation): UpdateOperation | undefined {
+  if (!updateOperationCollection) {
+    return undefined;
+  }
+
+  const existing = updateOperationCollection.findOne({ 'data.id': operation.id })?.data;
+  if (!existing || !isActiveOperationStatus(existing.status)) {
+    return existing;
+  }
+
+  const staleMessage = getStaleActiveOperationMessage(existing);
+  return updateOperation(existing.id, {
+    status: 'failed',
+    lastError: existing.lastError ? `${existing.lastError}; ${staleMessage}` : staleMessage,
+  });
+}
+
+function getFreshActiveOperation(
+  operation: UpdateOperation,
+  nowMs = Date.now(),
+): UpdateOperation | undefined {
+  if (!isActiveOperationStatus(operation.status)) {
+    return undefined;
+  }
+  if (!isStaleActiveOperation(operation, nowMs)) {
+    return operation;
+  }
+  expireStaleActiveOperation(operation);
+  return undefined;
 }
 
 function pruneOperationsForRetention(
@@ -109,7 +158,7 @@ function pruneOperationsForRetention(
 
   const retainedTerminalIds = new Set(
     documents
-      .filter((document) => document.data.status !== 'in-progress')
+      .filter((document) => !isActiveOperationStatus(document.data.status))
       .filter((document) => getOperationTimestamp(document.data) >= cutoffTimestamp)
       .sort((a, b) => getOperationTimestamp(b.data) - getOperationTimestamp(a.data))
       .slice(0, UPDATE_OPERATION_MAX_ENTRIES)
@@ -117,7 +166,7 @@ function pruneOperationsForRetention(
   );
 
   const toRemove = documents.filter((document) => {
-    if (document.data.status === 'in-progress') {
+    if (isActiveOperationStatus(document.data.status)) {
       return false;
     }
     return !retainedTerminalIds.has(document.data.id);
@@ -267,8 +316,6 @@ export function getInProgressOperationByContainerId(
   return operations.at(0);
 }
 
-const ACTIVE_STATUSES = ['in-progress', 'queued'] as const;
-
 /**
  * Return the latest active (in-progress OR queued) operation for a container name.
  */
@@ -281,8 +328,8 @@ export function getActiveOperationByContainerName(
 
   const operations = updateOperationCollection
     .find({ 'data.containerName': containerName })
-    .filter((item) => (ACTIVE_STATUSES as readonly string[]).includes(item.data.status))
-    .map((item) => item.data)
+    .map((item) => getFreshActiveOperation(item.data))
+    .filter((item): item is UpdateOperation => Boolean(item))
     .sort((a, b) => getOperationTimestamp(b) - getOperationTimestamp(a));
 
   return operations.at(0);
@@ -297,18 +344,21 @@ export function getActiveOperationByContainerId(containerId: string): UpdateOper
   }
 
   const operationsById = new Map<string, UpdateOperation>();
+  const nowMs = Date.now();
 
   for (const document of updateOperationCollection.find({ 'data.containerId': containerId })) {
-    if ((ACTIVE_STATUSES as readonly string[]).includes(document.data.status)) {
-      operationsById.set(document.data.id, document.data);
+    const operation = getFreshActiveOperation(document.data, nowMs);
+    if (operation) {
+      operationsById.set(operation.id, operation);
     }
   }
 
   for (const document of updateOperationCollection.find({
     'data.newContainerId': containerId,
   })) {
-    if ((ACTIVE_STATUSES as readonly string[]).includes(document.data.status)) {
-      operationsById.set(document.data.id, document.data);
+    const operation = getFreshActiveOperation(document.data, nowMs);
+    if (operation) {
+      operationsById.set(operation.id, operation);
     }
   }
 

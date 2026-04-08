@@ -765,6 +765,43 @@ describe('Container Actions Router', () => {
       );
     });
 
+    test('should mark a still-queued accepted update as failed when the trigger throws early', async () => {
+      const container = {
+        id: 'c1',
+        name: 'nginx',
+        image: { name: 'nginx' },
+        updateAvailable: true,
+      };
+      mockGetContainer.mockReturnValue(container);
+      const mockTriggerFn = vi.fn().mockRejectedValue(new Error('Security scan blocked update'));
+      const trigger = { type: 'docker', trigger: mockTriggerFn };
+      mockGetState.mockReturnValue({ trigger: { 'docker.default': trigger } });
+      const updateOperationStore = await import('../store/update-operation');
+      (updateOperationStore.getOperationById as ReturnType<typeof vi.fn>).mockImplementation(
+        (id: string) => ({
+          id,
+          status: 'queued',
+          phase: 'queued',
+        }),
+      );
+
+      const handler = getHandler('post', '/:id/update');
+      const req = createMockRequest({ params: { id: 'c1' } });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      const accepted = res.json.mock.calls[0][0];
+      await flushAcceptedUpdateWork();
+
+      expect(updateOperationStore.updateOperation).toHaveBeenCalledWith(
+        accepted.operationId,
+        expect.objectContaining({
+          status: 'failed',
+          lastError: 'Security scan blocked update',
+        }),
+      );
+    });
+
     test('should insert audit entry on success', async () => {
       const container = {
         id: 'c1',

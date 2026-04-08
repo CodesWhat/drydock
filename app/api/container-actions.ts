@@ -71,6 +71,19 @@ function recordAcceptedUpdateFailure(id: string, container: Container, error: un
   });
 }
 
+function markAcceptedQueuedOperationFailed(operationId: string, error: unknown) {
+  const operation = updateOperationStore.getOperationById(operationId);
+  if (operation?.status !== 'queued') {
+    return;
+  }
+
+  const message = error instanceof Error ? error.message : String(error);
+  updateOperationStore.updateOperation(operationId, {
+    status: 'failed',
+    lastError: message,
+  });
+}
+
 /**
  * Execute a container action (start, stop, restart).
  *
@@ -230,6 +243,7 @@ async function updateContainer(req: Request, res: Response) {
       clearManualUpdateDetectionState(id);
       recordAuditEvent({ action: 'container-update', container, status: 'success' });
     } catch (e: unknown) {
+      markAcceptedQueuedOperationFailed(operationId, e);
       recordAcceptedUpdateFailure(id, container, e);
     }
   })();
