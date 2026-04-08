@@ -574,6 +574,10 @@ function toPendingRecentUpdateCandidate(
   recentStatusByContainer: Record<string, RecentAuditStatus>,
   blocked: boolean,
 ): PendingRecentUpdateCandidate {
+  const batchId = container.updateOperation?.batchId;
+  const queuePosition = container.updateOperation?.queuePosition;
+  const queueTotal = container.updateOperation?.queueTotal;
+
   return {
     detectedAt: parseDetectedAt(container.updateDetectedAt),
     row: {
@@ -589,6 +593,13 @@ function toPendingRecentUpdateCandidate(
       running: container.status === 'running',
       registryError: undefined,
       blocked,
+      ...(batchId && queuePosition && queueTotal && queuePosition <= queueTotal
+        ? {
+            batchId,
+            queuePosition,
+            queueTotal,
+          }
+        : {}),
     },
   };
 }

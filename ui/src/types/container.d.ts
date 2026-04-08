@@ -43,6 +43,9 @@ export interface ContainerUpdateOperation {
   status: ContainerUpdateOperationStatus;
   phase: ContainerUpdateOperationPhase;
   updatedAt: string;
+  batchId?: string;
+  queuePosition?: number;
+  queueTotal?: number;
   fromVersion?: string;
   toVersion?: string;
   targetImage?: string;

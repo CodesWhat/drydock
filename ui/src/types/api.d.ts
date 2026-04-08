@@ -72,6 +72,9 @@ export interface ApiContainerUpdateOperation {
   phase: ApiContainerUpdateOperationPhase;
   createdAt: string;
   updatedAt: string;
+  batchId?: string;
+  queuePosition?: number;
+  queueTotal?: number;
   containerId?: string;
   containerName?: string;
   triggerName?: string;

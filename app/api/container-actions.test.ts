@@ -491,6 +491,42 @@ describe('Container Actions Router', () => {
       expect(contractValidation.errors).toStrictEqual([]);
     });
 
+    test('should persist provided batch queue metadata on accepted updates', async () => {
+      const container = {
+        id: 'c1',
+        name: 'nginx',
+        image: { name: 'nginx' },
+        updateAvailable: true,
+      };
+      mockGetContainer.mockReturnValue(container);
+      const mockTriggerFn = vi.fn().mockResolvedValue(undefined);
+      const trigger = { type: 'docker', trigger: mockTriggerFn };
+      mockGetState.mockReturnValue({ trigger: { 'docker.default': trigger } });
+      const updateOperationStore = await import('../store/update-operation');
+
+      const handler = getHandler('post', '/:id/update');
+      const req = createMockRequest({
+        params: { id: 'c1' },
+        body: {
+          batchId: 'batch-1',
+          queuePosition: 2,
+          queueTotal: 4,
+        },
+      });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(updateOperationStore.insertOperation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          batchId: 'batch-1',
+          queuePosition: 2,
+          queueTotal: 4,
+          status: 'queued',
+          phase: 'queued',
+        }),
+      );
+    });
+
     test('should accept update immediately with a dockercompose trigger', async () => {
       const container = {
         id: 'c1',

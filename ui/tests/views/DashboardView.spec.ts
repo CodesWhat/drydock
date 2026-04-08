@@ -1590,9 +1590,33 @@ describe('DashboardView', () => {
       await flushPromises();
 
       expect(mockUpdateContainer).toHaveBeenCalledTimes(3);
-      expect(mockUpdateContainer).toHaveBeenCalledWith('c-success-1');
-      expect(mockUpdateContainer).toHaveBeenCalledWith('c-fail');
-      expect(mockUpdateContainer).toHaveBeenCalledWith('c-success-2');
+      const updateCalls = mockUpdateContainer.mock.calls;
+      expect(updateCalls).toEqual([
+        [
+          'c-success-1',
+          expect.objectContaining({
+            batchId: expect.any(String),
+            queuePosition: 1,
+            queueTotal: 3,
+          }),
+        ],
+        [
+          'c-success-2',
+          expect.objectContaining({
+            batchId: updateCalls[0]?.[1]?.batchId,
+            queuePosition: 2,
+            queueTotal: 3,
+          }),
+        ],
+        [
+          'c-fail',
+          expect.objectContaining({
+            batchId: updateCalls[0]?.[1]?.batchId,
+            queuePosition: 3,
+            queueTotal: 3,
+          }),
+        ],
+      ]);
       expect(mockGetAllContainers.mock.calls.length).toBe(initialFetchCount + 1);
     });
 
@@ -1865,6 +1889,52 @@ describe('DashboardView', () => {
       const widget = wrapper.find('[data-widget-id="recent-updates"]');
       expect(widget.text()).toContain('Updating');
       expect(widget.find('[data-test="dashboard-update-btn"]').exists()).toBe(false);
+    });
+
+    it('renders persisted backend queue labels after a dashboard reload', async () => {
+      const queuedFirstContainer = makeContainer({
+        id: 'c-first',
+        name: 'nginx',
+        newTag: null,
+        updateKind: null,
+        status: 'stopped',
+        updateOperation: {
+          id: 'op-1',
+          status: 'queued',
+          phase: 'queued',
+          updatedAt: '2026-04-01T12:00:00.000Z',
+          fromVersion: '1.0.0',
+          toVersion: '1.1.0',
+          batchId: 'batch-1',
+          queuePosition: 1,
+          queueTotal: 2,
+        },
+      });
+      const queuedSecondContainer = makeContainer({
+        id: 'c-second',
+        name: 'postgres',
+        image: 'postgres',
+        newTag: null,
+        updateKind: null,
+        status: 'stopped',
+        updateOperation: {
+          id: 'op-2',
+          status: 'queued',
+          phase: 'queued',
+          updatedAt: '2026-04-01T12:00:00.000Z',
+          fromVersion: '15.0.0',
+          toVersion: '16.1.0',
+          batchId: 'batch-1',
+          queuePosition: 2,
+          queueTotal: 2,
+        },
+      });
+
+      const wrapper = await mountDashboard([queuedFirstContainer, queuedSecondContainer]);
+
+      const widgetText = wrapper.find('[data-widget-id="recent-updates"]').text();
+      expect(widgetText).toContain('Updating 1 of 2');
+      expect(widgetText).toContain('Queued 2 of 2');
     });
 
     it('keeps a dashboard row visible as updating until the container reappears', async () => {

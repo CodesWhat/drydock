@@ -48,6 +48,45 @@ type DockerWatcher = {
   };
 };
 
+type UpdateQueueBatchMetadata = {
+  batchId: string;
+  queuePosition: number;
+  queueTotal: number;
+};
+
+function parsePositiveInteger(value: unknown): number | undefined {
+  if (typeof value === 'number') {
+    return Number.isSafeInteger(value) && value > 0 ? value : undefined;
+  }
+  if (typeof value !== 'string' || !/^\d+$/.test(value)) {
+    return undefined;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : undefined;
+}
+
+function parseUpdateQueueBatchMetadata(body: unknown): UpdateQueueBatchMetadata | undefined {
+  if (!body || typeof body !== 'object') {
+    return undefined;
+  }
+
+  const candidate = body as Record<string, unknown>;
+  const batchId = typeof candidate.batchId === 'string' ? candidate.batchId.trim() : '';
+  const queuePosition = parsePositiveInteger(candidate.queuePosition);
+  const queueTotal = parsePositiveInteger(candidate.queueTotal);
+
+  if (!batchId || !queuePosition || !queueTotal || queuePosition > queueTotal) {
+    return undefined;
+  }
+
+  return {
+    batchId,
+    queuePosition,
+    queueTotal,
+  };
+}
+
 function clearManualUpdateDetectionState(id: string) {
   const containerAfterTrigger = storeContainer.getContainer(id);
   if (
@@ -227,6 +266,7 @@ async function updateContainer(req: Request, res: Response) {
   }
 
   const operationId = crypto.randomUUID();
+  const batchMetadata = parseUpdateQueueBatchMetadata(req.body);
   getContainerActionsCounter()?.inc({ action: 'container-update' });
 
   updateOperationStore.insertOperation({
@@ -235,6 +275,7 @@ async function updateContainer(req: Request, res: Response) {
     containerName: container.name,
     status: 'queued',
     phase: 'queued',
+    ...batchMetadata,
   });
 
   void (async () => {

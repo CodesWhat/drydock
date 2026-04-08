@@ -50,9 +50,22 @@ type GroupUpdateSequenceEntry = {
   position: number;
   total: number;
 };
+type PersistedUpdateBatchSequence = {
+  batchId: string;
+  position: number;
+  total: number;
+  status: 'queued' | 'in-progress';
+};
 
 function isStaleUpdateError(error: unknown): boolean {
   return isNoUpdateAvailableError(error);
+}
+
+function createUpdateBatchId(): string {
+  const randomUUID = globalThis.crypto?.randomUUID;
+  return typeof randomUUID === 'function'
+    ? randomUUID.call(globalThis.crypto)
+    : `dd-update-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
 function resolveContainerActionTargetKey(target: ContainerActionTarget): string {
@@ -294,6 +307,82 @@ function getGroupUpdateHeadPosition(
   return headPosition;
 }
 
+function getPersistedUpdateBatchSequence(
+  operation?: Pick<
+    NonNullable<Container['updateOperation']>,
+    'status' | 'batchId' | 'queuePosition' | 'queueTotal'
+  >,
+): PersistedUpdateBatchSequence | undefined {
+  if (!operation || (operation.status !== 'queued' && operation.status !== 'in-progress')) {
+    return undefined;
+  }
+
+  const { batchId, queuePosition, queueTotal } = operation;
+  if (
+    !batchId ||
+    !Number.isSafeInteger(queuePosition) ||
+    !Number.isSafeInteger(queueTotal) ||
+    queuePosition <= 0 ||
+    queueTotal <= 0 ||
+    queuePosition > queueTotal
+  ) {
+    return undefined;
+  }
+
+  return {
+    batchId,
+    position: queuePosition,
+    total: queueTotal,
+    status: operation.status,
+  };
+}
+
+function getPersistedBatchHeadPosition(containers: readonly Container[], batchId: string) {
+  let queuedHeadPosition: number | null = null;
+  let inProgressHeadPosition: number | null = null;
+
+  for (const container of containers) {
+    const sequence = getPersistedUpdateBatchSequence(container.updateOperation);
+    if (!sequence || sequence.batchId !== batchId) {
+      continue;
+    }
+
+    if (sequence.status === 'in-progress') {
+      if (inProgressHeadPosition === null || sequence.position < inProgressHeadPosition) {
+        inProgressHeadPosition = sequence.position;
+      }
+      continue;
+    }
+
+    if (queuedHeadPosition === null || sequence.position < queuedHeadPosition) {
+      queuedHeadPosition = sequence.position;
+    }
+  }
+
+  return inProgressHeadPosition ?? queuedHeadPosition;
+}
+
+function getPersistedTargetSequence(
+  target: Exclude<ContainerActionTarget, string>,
+  containers: readonly Container[],
+) {
+  const liveContainer =
+    containers.find((container) => container.id === target.id) ??
+    containers.find((container) => container.name === target.name);
+  const sequence = getPersistedUpdateBatchSequence(
+    liveContainer?.updateOperation ?? target.updateOperation,
+  );
+  if (!sequence) {
+    return undefined;
+  }
+
+  const headPosition = getPersistedBatchHeadPosition(containers, sequence.batchId);
+  return {
+    ...sequence,
+    isHead: headPosition === sequence.position,
+  };
+}
+
 async function updateAllInGroupState(args: {
   containerActionsEnabled: boolean;
   containerActionsDisabledReason: string;
@@ -336,6 +425,8 @@ async function updateAllInGroupState(args: {
   }
   setGroupUpdateStateValue(args.groupUpdateInProgress, args.group.key, true);
   const groupContainerIds = frozenUpdateTargets.map((t) => t.id);
+  const batchId = createUpdateBatchId();
+  const batchSize = frozenUpdateTargets.length;
   let activeTargetIds = [...groupContainerIds];
   const initiallyQueuedTargetIds = groupContainerIds.slice(1);
   setGroupUpdateQueueValue(args.groupUpdateQueue, initiallyQueuedTargetIds, true);
@@ -348,7 +439,7 @@ async function updateAllInGroupState(args: {
   const acceptedTargetIds: string[] = [];
   try {
     let updatedCount = 0;
-    for (const target of frozenUpdateTargets) {
+    for (const [index, target] of frozenUpdateTargets.entries()) {
       const currentContainer = args.containers.value.find(
         (container) => container.id === target.id,
       );
@@ -364,11 +455,20 @@ async function updateAllInGroupState(args: {
         continue;
       }
 
-      const updated = await args.executeAction(target, apiUpdateContainer, {
-        reloadContainers: false,
-        treatNoUpdateAsStale: true,
-        pendingLifecycleMode: 'update',
-      });
+      const updated = await args.executeAction(
+        target,
+        (id) =>
+          apiUpdateContainer(id, {
+            batchId,
+            queuePosition: index + 1,
+            queueTotal: batchSize,
+          }),
+        {
+          reloadContainers: false,
+          treatNoUpdateAsStale: true,
+          pendingLifecycleMode: 'update',
+        },
+      );
       if (updated) {
         updatedCount += 1;
         acceptedTargetIds.push(target.id);
@@ -1018,6 +1118,10 @@ export function useContainerActions(input: UseContainerActionsInput) {
       if (hasTrackedAction) {
         return true;
       }
+      const persistedSequence = getPersistedTargetSequence(target, input.containers.value);
+      if (persistedSequence) {
+        return persistedSequence.isHead;
+      }
       if (
         target.updateOperation?.status === 'queued' ||
         freshContainer?.updateOperation?.status === 'queued' ||
@@ -1051,6 +1155,10 @@ export function useContainerActions(input: UseContainerActionsInput) {
     ) {
       return false;
     }
+    const persistedSequence = getPersistedTargetSequence(target, input.containers.value);
+    if (persistedSequence) {
+      return !persistedSequence.isHead;
+    }
     if (
       target.updateOperation?.status === 'queued' ||
       freshContainer?.updateOperation?.status === 'queued'
@@ -1064,7 +1172,9 @@ export function useContainerActions(input: UseContainerActionsInput) {
     if (typeof target === 'string') {
       return null;
     }
-    const sequence = groupUpdateSequence.value.get(target.id);
+    const sequence =
+      groupUpdateSequence.value.get(target.id) ??
+      getPersistedTargetSequence(target, input.containers.value);
     if (!sequence || sequence.total < 2) {
       return null;
     }

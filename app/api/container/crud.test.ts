@@ -2379,6 +2379,9 @@ describe('api/container/crud', () => {
         updatedAt: '2026-04-01T12:00:00.000Z',
         fromVersion: '1.0.0',
         toVersion: '1.1.0',
+        batchId: 'batch-1',
+        queuePosition: 1,
+        queueTotal: 3,
       });
 
       const listRes = callGetContainers(harness.handlers);
@@ -2397,6 +2400,9 @@ describe('api/container/crud', () => {
                 phase: 'old-stopped',
                 fromVersion: '1.0.0',
                 toVersion: '1.1.0',
+                batchId: 'batch-1',
+                queuePosition: 1,
+                queueTotal: 3,
               }),
             }),
           ],
@@ -2408,6 +2414,9 @@ describe('api/container/crud', () => {
             id: 'op-1',
             status: 'in-progress',
             phase: 'old-stopped',
+            batchId: 'batch-1',
+            queuePosition: 1,
+            queueTotal: 3,
           }),
         }),
       );

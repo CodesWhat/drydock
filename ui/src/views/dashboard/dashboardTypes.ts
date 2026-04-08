@@ -140,6 +140,9 @@ export interface RecentUpdateRow {
   oldVer: string;
   newVer: string;
   releaseLink?: string;
+  batchId?: string;
+  queuePosition?: number;
+  queueTotal?: number;
   status:
     | 'updated'
     | 'pending'

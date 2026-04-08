@@ -57,6 +57,13 @@ const DASHBOARD_PENDING_UPDATE_POLL_INTERVAL_MS = 2_000;
 const DASHBOARD_PENDING_UPDATE_POLL_MAX_INTERVAL_MS = 16_000;
 const DASHBOARD_PENDING_UPDATE_TIMEOUT_MS = 30_000;
 
+function createUpdateBatchId(): string {
+  const randomUUID = globalThis.crypto?.randomUUID;
+  return typeof randomUUID === 'function'
+    ? randomUUID.call(globalThis.crypto)
+    : `dd-update-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
 function isStaleDashboardUpdateError(error: unknown): boolean {
   return isNoUpdateAvailableError(error);
 }
@@ -433,6 +440,8 @@ function confirmDashboardUpdateAll() {
       dashboardUpdateAllInProgress.value = true;
       dashboardUpdateError.value = null;
       const snapshotRowNames = pendingRowsSnapshot.map((row) => row.name);
+      const batchId = createUpdateBatchId();
+      const queueTotal = pendingRowsSnapshot.length;
       let acceptedRowNames = [...snapshotRowNames];
       syncDashboardUpdateSequenceValue(snapshotRowNames, acceptedRowNames);
       startDashboardPendingUpdateTracking();
@@ -441,9 +450,13 @@ function confirmDashboardUpdateAll() {
         const staleRows: RecentUpdateRow[] = [];
         let firstRejectedUpdate: unknown;
 
-        for (const row of pendingRowsSnapshot) {
+        for (const [index, row] of pendingRowsSnapshot.entries()) {
           try {
-            await updateContainer(row.id);
+            await updateContainer(row.id, {
+              batchId,
+              queuePosition: index + 1,
+              queueTotal,
+            });
             successfulRows.push(row);
           } catch (e: unknown) {
             acceptedRowNames = acceptedRowNames.filter((name) => name !== row.name);

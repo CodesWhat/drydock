@@ -162,6 +162,18 @@ function asNonEmptyString(value: unknown): string | undefined {
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
+function asPositiveInteger(value: unknown): number | undefined {
+  if (typeof value === 'number') {
+    return Number.isSafeInteger(value) && value > 0 ? value : undefined;
+  }
+  if (typeof value !== 'string' || !/^\d+$/.test(value)) {
+    return undefined;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : undefined;
+}
+
 function asOptionalBoolean(value: unknown): boolean | undefined {
   return typeof value === 'boolean' ? value : undefined;
 }
@@ -590,6 +602,9 @@ function deriveUpdateOperation(
   const status = asContainerUpdateOperationStatus(operation.status);
   const phase = asContainerUpdateOperationPhase(operation.phase);
   const updatedAt = asNonEmptyString(operation.updatedAt);
+  const batchId = asNonEmptyString(operation.batchId);
+  const queuePosition = asPositiveInteger(operation.queuePosition);
+  const queueTotal = asPositiveInteger(operation.queueTotal);
 
   if (!id || !status || !phase || !updatedAt) {
     return undefined;
@@ -608,6 +623,9 @@ function deriveUpdateOperation(
       : {}),
     ...(asNonEmptyString(operation.targetImage)
       ? { targetImage: asNonEmptyString(operation.targetImage) }
+      : {}),
+    ...(batchId && queuePosition && queueTotal && queuePosition <= queueTotal
+      ? { batchId, queuePosition, queueTotal }
       : {}),
   };
 }
