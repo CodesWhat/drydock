@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Multi-server notification identification (#283)** — Notifications automatically include a `[server-name]` prefix when agents are registered, identifying which server (controller or agent) each update comes from. Controller name configurable via `DD_SERVER_NAME` (defaults to `os.hostname()`). Custom templates can use `container.notificationServerName` and `container.notificationAgentPrefix`. ([Discussion #283](https://github.com/CodesWhat/drydock/discussions/283))
 - **Infrastructure container update mode** — New `dd.update.mode=infrastructure` label for socket proxy and similar infrastructure containers. Routes updates through a helper-container path that bypasses the proxy, enabling safe in-place updates without severing Drydock's Docker API connection. ([Discussion #285](https://github.com/CodesWhat/drydock/discussions/285))
 - **Docker client auto-recreation on reconnect** — When the Docker event stream reconnects (e.g. after a socket proxy restart), Drydock now recreates the Dockerode client with a fresh connection instead of reusing the stale one.
 - **Deferred reconciliation for stuck containers** — When a container update fails and rollback also fails due to a lost Docker API connection, Drydock now schedules a delayed recovery attempt instead of leaving containers in an inconsistent state.

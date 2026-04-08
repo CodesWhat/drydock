@@ -156,6 +156,8 @@ Template strings use `${expression}` placeholders. Drydock provides two sets of 
 | `container.status` | Container runtime status | `running` |
 | `container.watcher` | Watcher name | `local` |
 | `container.agent` | Agent name (when using distributed agents) | `remote-1` |
+| `container.notificationAgentPrefix` | Server identification prefix: `[agentName]` + space for agent containers, `[controllerName]` + space for controller containers when agents exist, empty for single-server setups | `[prod-server]` |
+| `container.notificationServerName` | Server identity — agent name for agent containers, controller name (from `DD_SERVER_NAME` or hostname) for controller containers. Always resolved regardless of setup | `prod-server` |
 | `container.image.name` | Image name | `library/nginx` |
 | `container.image.registry.name` | Registry provider name | `hub` |
 | `container.image.registry.url` | Registry URL | `https://registry-1.docker.io` |
