@@ -10,6 +10,7 @@ export interface ApiComponent {
   name: string;
   configuration: Record<string, unknown>;
   agent?: string;
+  metadata?: Record<string, unknown>;
 }
 
 /** Agent shape returned by GET /api/agents. */

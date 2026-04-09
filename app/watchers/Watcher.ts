@@ -12,9 +12,14 @@ abstract class Watcher extends Component {
     super();
   }
 
+  getNextRunAt(): string | undefined {
+    return undefined;
+  }
+
   getMetadata(): Record<string, unknown> {
     return {
       lastRunAt: this.lastRunAt,
+      nextRunAt: this.getNextRunAt(),
     };
   }
 

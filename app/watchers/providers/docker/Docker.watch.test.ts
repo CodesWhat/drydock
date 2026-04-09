@@ -346,11 +346,67 @@ describe('Docker Watcher', () => {
     test('should expose lastRunAt via getMetadata', async () => {
       docker.getContainers = vi.fn().mockResolvedValue([]);
 
-      expect(docker.getMetadata()).toStrictEqual({ lastRunAt: undefined });
+      expect(docker.getMetadata()).toStrictEqual({
+        lastRunAt: undefined,
+        nextRunAt: undefined,
+      });
 
       await docker.watch();
 
       expect(docker.getMetadata().lastRunAt).toBeDefined();
+    });
+
+    test('should expose nextRunAt via getMetadata when cron is scheduled', async () => {
+      mockCron.createTask.mockReturnValue({
+        timeMatcher: {
+          getNextMatch: vi.fn(() => new Date('2026-02-13T03:00:00.000Z')),
+        },
+      });
+
+      await docker.register('watcher', 'docker', 'test', {
+        cron: '0 * * * *',
+      });
+
+      expect(docker.getMetadata().nextRunAt).toBe('2026-02-13T03:00:00.000Z');
+    });
+
+    test('should expose queued maintenance window as the next run', async () => {
+      maintenance.getNextMaintenanceWindow.mockReturnValue(new Date('2026-02-13T04:00:00.000Z'));
+      mockCron.createTask.mockReturnValue({
+        timeMatcher: {
+          getNextMatch: vi.fn(() => new Date('2026-02-13T03:00:00.000Z')),
+        },
+      });
+
+      await docker.register('watcher', 'docker', 'test', {
+        cron: '0 * * * *',
+        maintenancewindow: '0 4 * * *',
+        maintenancewindowtz: 'UTC',
+      });
+      docker.maintenanceWindowWatchQueued = true;
+
+      expect(docker.getMetadata().nextRunAt).toBe('2026-02-13T04:00:00.000Z');
+    });
+
+    test('should expose the next maintenance window when the next cron falls outside it', async () => {
+      maintenance.isInMaintenanceWindow.mockImplementation(
+        (_cronExpression, _tz, atDate) =>
+          !(atDate instanceof Date && atDate.toISOString() === '2026-02-13T03:00:00.000Z'),
+      );
+      maintenance.getNextMaintenanceWindow.mockReturnValue(new Date('2026-02-13T04:00:00.000Z'));
+      mockCron.createTask.mockReturnValue({
+        timeMatcher: {
+          getNextMatch: vi.fn(() => new Date('2026-02-13T03:00:00.000Z')),
+        },
+      });
+
+      await docker.register('watcher', 'docker', 'test', {
+        cron: '0 * * * *',
+        maintenancewindow: '0 4 * * *',
+        maintenancewindowtz: 'UTC',
+      });
+
+      expect(docker.getMetadata().nextRunAt).toBe('2026-02-13T04:00:00.000Z');
     });
 
     test('should start and end digest cache poll cycle for cache-aware registries', async () => {

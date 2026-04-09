@@ -40,6 +40,23 @@ function watcherStatusColor(status: string) {
   return 'var(--dd-neutral)';
 }
 
+function timeUntil(isoString: string): string {
+  const then = new Date(isoString).getTime();
+  if (Number.isNaN(then)) return isoString;
+
+  const diffMs = then - Date.now();
+  if (diffMs <= 0) return 'soon';
+
+  const totalMinutes = Math.max(1, Math.ceil(diffMs / 60_000));
+  const days = Math.floor(totalMinutes / (24 * 60));
+  const hours = Math.floor((totalMinutes % (24 * 60)) / 60);
+  const minutes = totalMinutes % 60;
+
+  if (days > 0) return `${days}d ${hours}h`;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  return `${minutes}m`;
+}
+
 const searchQuery = ref('');
 const showFilters = ref(false);
 const activeFilterCount = computed(() => (searchQuery.value ? 1 : 0));
@@ -62,10 +79,11 @@ const filteredWatchers = computed(() => {
 });
 
 const tableColumns = [
-  { key: 'name', label: 'Watcher', width: '35%', sortable: false },
-  { key: 'status', label: 'Status', width: '15%', sortable: false },
-  { key: 'containers', label: 'Containers', width: '15%', sortable: false },
-  { key: 'cron', label: 'Schedule', width: '20%', sortable: false },
+  { key: 'name', label: 'Watcher', width: '28%', sortable: false },
+  { key: 'status', label: 'Status', width: '12%', sortable: false },
+  { key: 'containers', label: 'Containers', width: '12%', sortable: false },
+  { key: 'cron', label: 'Schedule', width: '18%', sortable: false },
+  { key: 'nextRun', label: 'Next Run', width: '15%', sortable: false },
   { key: 'lastRun', label: 'Last Run', width: '15%', align: 'text-right', sortable: false },
 ];
 
@@ -77,6 +95,7 @@ function mapWatcher(watcher: ApiComponent, status = 'watching') {
     status,
     containers: containerCounts.value[watcher.name] ?? 0,
     cron: watcher.configuration?.cron ?? '',
+    nextRun: watcher.metadata?.nextRunAt ? timeUntil(String(watcher.metadata.nextRunAt)) : '\u2014',
     lastRun: watcher.metadata?.lastRunAt ? timeAgo(String(watcher.metadata.lastRunAt)) : '\u2014',
     config: Object.fromEntries(
       Object.entries(watcher.configuration ?? {}).sort(([a], [b]) => a.localeCompare(b)),
@@ -207,6 +226,9 @@ onMounted(async () => {
       <template #cell-cron="{ row }">
         <span class="font-mono text-2xs dd-text-secondary">{{ row.cron }}</span>
       </template>
+      <template #cell-nextRun="{ row }">
+        <span class="dd-text-secondary">{{ row.nextRun }}</span>
+      </template>
       <template #cell-lastRun="{ row }">
         <span class="dd-text-muted">{{ row.lastRun }}</span>
       </template>
@@ -241,6 +263,10 @@ onMounted(async () => {
             <div>
               <span class="dd-text-muted">Containers</span>
               <span class="ml-1 font-semibold dd-text">{{ watcher.containers }}</span>
+            </div>
+            <div>
+              <span class="dd-text-muted">Next run</span>
+              <span class="ml-1 font-semibold dd-text">{{ watcher.nextRun }}</span>
             </div>
             <div>
               <span class="dd-text-muted">Last run</span>
@@ -340,6 +366,7 @@ onMounted(async () => {
               </AppButton>
             </DetailField>
             <DetailField label="Schedule" mono>{{ selectedWatcher.cron || '\u2014' }}</DetailField>
+            <DetailField label="Next Run">{{ selectedWatcher.nextRun }}</DetailField>
             <DetailField label="Last Run">{{ selectedWatcher.lastRun }}</DetailField>
             <DetailField v-for="(val, key) in selectedWatcher.config" :key="key" :label="String(key)" mono>{{ val }}</DetailField>
           </div>

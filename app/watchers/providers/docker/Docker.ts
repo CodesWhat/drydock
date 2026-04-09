@@ -180,6 +180,12 @@ interface DockerEventsStream {
   destroy?: () => void;
 }
 
+interface CronTaskWithNextMatch {
+  timeMatcher: {
+    getNextMatch: (fromDate: Date) => unknown;
+  };
+}
+
 interface DockerApiWithMutableModemHeaders {
   modem?: {
     headers?: Record<string, string>;
@@ -465,6 +471,52 @@ class Docker extends Watcher {
       this.configuration.maintenancewindowtz,
       fromDate,
     );
+  }
+
+  getNextScheduledRunDate(fromDate: Date = new Date()) {
+    if (!this.configuration.cron) {
+      return undefined;
+    }
+
+    try {
+      const task = cron.createTask(
+        this.configuration.cron,
+        () => {},
+      ) as unknown as CronTaskWithNextMatch;
+      const nextMatch = task.timeMatcher.getNextMatch(fromDate);
+      return nextMatch instanceof Date ? nextMatch : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  override getNextRunAt(): string | undefined {
+    const now = new Date();
+
+    if (!this.configuration.maintenancewindow) {
+      return this.getNextScheduledRunDate(now)?.toISOString();
+    }
+
+    if (this.maintenanceWindowWatchQueued) {
+      return this.getNextMaintenanceWindowDate(now)?.toISOString();
+    }
+
+    const nextScheduledRun = this.getNextScheduledRunDate(now);
+    if (!nextScheduledRun) {
+      return undefined;
+    }
+
+    if (
+      isInMaintenanceWindow(
+        this.configuration.maintenancewindow,
+        this.configuration.maintenancewindowtz,
+        nextScheduledRun,
+      )
+    ) {
+      return nextScheduledRun.toISOString();
+    }
+
+    return this.getNextMaintenanceWindowDate(nextScheduledRun)?.toISOString();
   }
 
   clearMaintenanceWindowQueue() {

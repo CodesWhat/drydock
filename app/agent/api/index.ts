@@ -160,6 +160,7 @@ export async function init() {
   app.get('/api/containers/:id/logs', containerApi.getContainerLogs);
   app.delete('/api/containers/:id', containerApi.deleteContainer);
   app.get('/api/watchers', watcherApi.getWatchers);
+  app.get('/api/watchers/:type/:name', watcherApi.getWatcher);
   app.get('/api/triggers', triggerApi.getTriggers);
   app.get('/api/events', eventApi.subscribeEvents);
   app.post('/api/triggers/:type/:name', triggerApi.runTrigger);
