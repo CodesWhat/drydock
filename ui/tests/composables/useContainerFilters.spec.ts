@@ -319,10 +319,16 @@ describe('useContainerFilters', () => {
   });
 
   describe('hidePinned filter', () => {
-    it('hides containers with tagPrecision specific when enabled', async () => {
+    it('hides pinned containers even when they use floating version aliases', async () => {
       const mixed = ref<Container[]>([
-        makeContainer({ id: 'c1', name: 'floating', tagPrecision: 'floating' }),
-        makeContainer({ id: 'c2', name: 'pinned', tagPrecision: 'specific' }),
+        makeContainer({ id: 'c1', name: 'floating', currentTag: 'latest', tagPinned: false }),
+        makeContainer({
+          id: 'c2',
+          name: 'pinned',
+          currentTag: '16-alpine',
+          tagPrecision: 'floating',
+          tagPinned: true,
+        }),
         makeContainer({ id: 'c3', name: 'unset' }),
       ]);
       const mod = await import('@/composables/useContainerFilters');

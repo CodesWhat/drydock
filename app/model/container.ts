@@ -7,6 +7,7 @@ import type {
   ContainerSignatureVerification,
 } from '../security/scan.js';
 import * as tag from '../tag/index.js';
+import { isTagPinned } from '../tag/precision.js';
 import type {
   ContainerUpdateOperationPhase,
   ContainerUpdateOperationStatus,
@@ -152,6 +153,7 @@ export interface Container {
   link?: string;
   triggerInclude?: string;
   triggerExclude?: string;
+  tagPinned?: boolean;
   updatePolicy?: ContainerUpdatePolicy;
   security?: ContainerSecurityState;
   image: ContainerImage;
@@ -248,6 +250,7 @@ const schema = joi.object({
   link: joi.string(),
   triggerInclude: joi.string(),
   triggerExclude: joi.string(),
+  tagPinned: joi.boolean(),
   updatePolicy: joi.object({
     skipTags: joi.array().items(joi.string()),
     skipDigests: joi.array().items(joi.string()),
@@ -626,6 +629,15 @@ function getLink(container: Container, originalTagValue: string) {
   );
 }
 
+function addTagPinnedProperty(container: Container) {
+  Object.defineProperty(container, 'tagPinned', {
+    enumerable: true,
+    get(this: Container) {
+      return isTagPinned(this.image.tag.value, this.transformTags);
+    },
+  });
+}
+
 /**
  * Computed function to check whether there is an update.
  * @param container
@@ -755,6 +767,7 @@ export function validate(container: unknown): Container {
   delete containerValidated.image?.registry?.lookupUrl;
 
   // Add computed properties
+  addTagPinnedProperty(containerValidated);
   addUpdateAvailableProperty(containerValidated);
   addUpdateKindProperty(containerValidated);
   addUpdateAgeProperty(containerValidated);

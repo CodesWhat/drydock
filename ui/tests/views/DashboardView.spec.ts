@@ -691,13 +691,16 @@ describe('DashboardView', () => {
           updateKind: 'major',
           newTag: '2.0.0',
           tagPrecision: 'floating',
+          tagPinned: false,
         }),
         makeContainer({
           id: 'pinned',
           name: 'pinned',
           updateKind: 'minor',
           newTag: '1.2.4',
-          tagPrecision: 'specific',
+          currentTag: '16-alpine',
+          tagPrecision: 'floating',
+          tagPinned: true,
         }),
       ]);
 

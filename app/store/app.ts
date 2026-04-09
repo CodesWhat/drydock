@@ -48,6 +48,9 @@ function saveAppInfosAndMigrate() {
 
 export function createCollections(db: AppStoreDb) {
   app = initCollection(db, 'app') as AppCollection;
+}
+
+export function completeStartupInitialization() {
   saveAppInfosAndMigrate();
 }
 

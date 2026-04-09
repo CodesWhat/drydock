@@ -1024,6 +1024,20 @@ describe('container-mapper', () => {
       expect(c.tagPrecision).toBe('floating');
     });
 
+    it('maps tagPinned when present in API response', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          tagPinned: true,
+          image: {
+            registry: { name: 'hub', url: 'https://registry-1.docker.io' },
+            name: 'nginx',
+            tag: { value: '16-alpine', tagPrecision: 'floating' },
+          },
+        }),
+      );
+      expect(c.tagPinned).toBe(true);
+    });
+
     it('maps tagPrecision as specific when set', () => {
       const c = mapApiContainer(
         makeApiContainer({

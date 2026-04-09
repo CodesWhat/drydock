@@ -40,7 +40,7 @@ const {
   }
 
   function createCollectionsMock() {
-    return { createCollections: vi.fn() };
+    return { createCollections: vi.fn(), completeStartupInitialization: vi.fn() };
   }
 
   function createLogMock() {
@@ -124,6 +124,7 @@ describe('Store Module', () => {
     expect(notification.createCollections).toHaveBeenCalled();
     expect(settings.createCollections).toHaveBeenCalled();
     expect(updateOperation.createCollections).toHaveBeenCalled();
+    expect(app.completeStartupInitialization).toHaveBeenCalled();
   });
 
   test('should create directory if it does not exist', async () => {
@@ -173,6 +174,7 @@ describe('Store Module', () => {
     expect(notification.createCollections).toHaveBeenCalled();
     expect(settings.createCollections).toHaveBeenCalled();
     expect(updateOperation.createCollections).toHaveBeenCalled();
+    expect(app.completeStartupInitialization).toHaveBeenCalled();
   });
 
   test('should save database when persistence is enabled', async () => {

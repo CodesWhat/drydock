@@ -987,6 +987,7 @@ describe('useDashboardComputed recent updates', () => {
           newTag: '2.0.0',
           updateKind: 'major',
           tagPrecision: 'floating',
+          tagPinned: false,
           updateDetectedAt: '2026-03-04T10:00:00.000Z',
         }),
         makeBaseContainer({
@@ -994,7 +995,9 @@ describe('useDashboardComputed recent updates', () => {
           name: 'pinned-minor',
           newTag: '1.2.4',
           updateKind: 'minor',
-          tagPrecision: 'specific',
+          currentTag: '16-alpine',
+          tagPrecision: 'floating',
+          tagPinned: true,
           updateDetectedAt: '2026-03-03T10:00:00.000Z',
         }),
       ],

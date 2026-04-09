@@ -1,4 +1,4 @@
-import { classifyTagPrecision, getNumericTagShape } from './precision.js';
+import { classifyTagPrecision, getNumericTagShape, isTagPinned } from './precision.js';
 
 describe('tag/precision', () => {
   describe('getNumericTagShape', () => {
@@ -52,6 +52,18 @@ describe('tag/precision', () => {
           patch: 3,
         }),
       ).toBe('specific');
+    });
+  });
+
+  describe('isTagPinned', () => {
+    test('treats numeric version aliases as pinned', () => {
+      expect(isTagPinned('16-alpine', undefined)).toBe(true);
+      expect(isTagPinned('1.2.3', undefined)).toBe(true);
+    });
+
+    test('treats rolling channel aliases as not pinned', () => {
+      expect(isTagPinned('latest', undefined)).toBe(false);
+      expect(isTagPinned('stable', undefined)).toBe(false);
     });
   });
 });

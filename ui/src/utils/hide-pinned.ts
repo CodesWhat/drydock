@@ -1,7 +1,7 @@
 import type { Container } from '../types/container';
 
 export function matchesHidePinnedFilter(container: Container, hidePinned: boolean): boolean {
-  return !hidePinned || container.tagPrecision !== 'specific';
+  return !hidePinned || container.tagPinned !== true;
 }
 
 export function filterContainersByHidePinned(

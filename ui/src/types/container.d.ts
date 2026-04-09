@@ -63,6 +63,7 @@ export interface Container {
   imageDigestWatch?: boolean;
   imageTagSemver?: boolean;
   tagPrecision?: 'specific' | 'floating';
+  tagPinned?: boolean;
   releaseLink?: string;
   suggestedTag?: string;
   sourceRepo?: string;
