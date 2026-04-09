@@ -1,6 +1,7 @@
-import { onScopeDispose, ref, watch } from 'vue';
+import { nextTick, onScopeDispose, ref, watch } from 'vue';
 import { preferences } from '../../preferences/store';
 import { DASHBOARD_WIDGET_IDS, type DashboardWidgetId } from './dashboardTypes';
+import type { WidgetLayoutItem } from './dashboardWidgetLayout';
 import {
   _rebuildLayoutsForOrderForTests,
   createResponsiveLayoutsMemo,
@@ -75,6 +76,17 @@ export function moveWidget(
   return next;
 }
 
+interface LayoutSnapshot {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+function rectsOverlap(a: LayoutSnapshot, b: LayoutSnapshot): boolean {
+  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+}
+
 export function useDashboardWidgetOrder() {
   const widgetOrder = ref<DashboardWidgetId[]>(
     sanitizeWidgetOrder(preferences.dashboard.widgetOrder),
@@ -95,6 +107,10 @@ export function useDashboardWidgetOrder() {
   );
   const editMode = ref(false);
   const draggedWidgetId = ref<DashboardWidgetId | null>(null);
+
+  // --- Swap-on-drop drag tracking ---
+  const gridDragActiveId = ref<DashboardWidgetId | null>(null);
+  const preDragSnapshot = ref<Map<DashboardWidgetId, LayoutSnapshot> | null>(null);
 
   let syncing = false;
 
@@ -305,6 +321,95 @@ export function useDashboardWidgetOrder() {
     editMode.value = !editMode.value;
   }
 
+  // --- Grid-level swap-on-drop handlers ---
+
+  /**
+   * Called on every GridItem `move` event (fires each drag frame).
+   * On the first call per drag we capture a snapshot of all positions
+   * so we can compute the swap target when the drag ends.
+   *
+   * Crucially, the GridItem emits `move` synchronously *before*
+   * grid-layout-plus processes the corresponding `dragEvent`, so the
+   * layout is still in its pre-move state when this runs.
+   */
+  function onGridItemMove(id: DashboardWidgetId) {
+    if (!editMode.value || gridDragActiveId.value !== null) return;
+    gridDragActiveId.value = id;
+    preDragSnapshot.value = new Map(
+      layout.value.map((item) => [
+        item.i,
+        { x: item.x, y: item.y, w: item.w, h: item.h },
+      ]),
+    );
+  }
+
+  /**
+   * Called when a GridItem drag ends (`moved` event).
+   * We defer swap processing to `nextTick` because `moved` fires
+   * before the library's final `dragEvent('dragend')` processing.
+   * By the next tick the layout has been fully compacted.
+   */
+  function onGridItemMoved(id: DashboardWidgetId) {
+    const snapshot = preDragSnapshot.value;
+    gridDragActiveId.value = null;
+    preDragSnapshot.value = null;
+
+    if (!snapshot || !editMode.value) return;
+
+    nextTick(() => {
+      const draggedOriginal = snapshot.get(id);
+      if (!draggedOriginal) return;
+
+      const draggedCurrent = layout.value.find((item) => item.i === id);
+      if (!draggedCurrent) return;
+
+      // Nothing to swap if the item returned to its original cell
+      if (draggedCurrent.x === draggedOriginal.x && draggedCurrent.y === draggedOriginal.y) return;
+
+      // Find the item whose *original* position overlaps with where the
+      // dragged item ended up — that's our swap candidate.
+      let swapTargetId: DashboardWidgetId | null = null;
+      for (const [itemId, originalPos] of snapshot.entries()) {
+        if (itemId === id) continue;
+        if (!isWidgetVisible(itemId)) continue;
+        if (rectsOverlap(draggedCurrent, originalPos)) {
+          swapTargetId = itemId;
+          break;
+        }
+      }
+      if (!swapTargetId) return;
+
+      // Safety: verify the swap target fits at the dragged item's original
+      // position without overlapping any other (non-participant) widget.
+      const swapTarget = layout.value.find((item) => item.i === swapTargetId);
+      if (!swapTarget) return;
+
+      const swappedRect: LayoutSnapshot = {
+        x: draggedOriginal.x,
+        y: draggedOriginal.y,
+        w: swapTarget.w,
+        h: swapTarget.h,
+      };
+      const wouldOverlap = layout.value.some((item) => {
+        if (item.i === swapTargetId || item.i === id) return false;
+        if (!isWidgetVisible(item.i)) return false;
+        return rectsOverlap(swappedRect, item);
+      });
+      if (wouldOverlap) return;
+
+      // Apply the swap: move the displaced widget to the dragged item's
+      // original position, keeping its own size.
+      syncing = true;
+      swapTarget.x = draggedOriginal.x;
+      swapTarget.y = draggedOriginal.y;
+      persistDashboardLayouts(layout.value);
+      refreshGridInstance();
+      queueMicrotask(() => {
+        syncing = false;
+      });
+    });
+  }
+
   return {
     currentBreakpoint,
     draggedWidgetId,
@@ -314,6 +419,8 @@ export function useDashboardWidgetOrder() {
     isWidgetVisible,
     layout,
     onBreakpointChanged,
+    onGridItemMove,
+    onGridItemMoved,
     onWidgetDragEnd,
     onWidgetDragOver,
     onWidgetDragStart,

@@ -82,6 +82,8 @@ onUnmounted(() => {
 const {
   currentBreakpoint,
   gridInstanceKey,
+  onGridItemMove,
+  onGridItemMoved,
   onWidgetDragEnd,
   onWidgetDragOver,
   onWidgetDragStart,
@@ -504,6 +506,8 @@ function confirmDashboardUpdateAll() {
             drag-allow-from=".drag-handle"
             class="dd-grid-item"
             :style="editMode ? { touchAction: 'pan-y' } : undefined"
+            @move="(i: string) => onGridItemMove(i as DashboardWidgetId)"
+            @moved="(i: string) => onGridItemMoved(i as DashboardWidgetId)"
             @dragstart="onWidgetDragStart(item.i as DashboardWidgetId, $event)"
             @dragover="onWidgetDragOver(item.i as DashboardWidgetId, $event)"
             @drop="onWidgetDrop(item.i as DashboardWidgetId, $event)"

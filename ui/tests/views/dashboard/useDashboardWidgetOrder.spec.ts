@@ -589,4 +589,208 @@ describe('useDashboardWidgetOrder', () => {
 
     expect(source).toContain("from './useDashboardResponsiveLayouts'");
   });
+
+  describe('swap-on-drop (onGridItemMove / onGridItemMoved)', () => {
+    it('swaps widget positions when a same-sized widget is dragged onto another', async () => {
+      const { state } = await mountWidgetOrderComposable();
+      state.editMode.value = true;
+      await nextTick();
+
+      // Default layout puts stat cards on the same row:
+      //   stat-containers (0,0,3,3)  stat-security (3,0,3,3)
+      const containers = state.layout.value.find((i) => i.i === 'stat-containers')!;
+      const security = state.layout.value.find((i) => i.i === 'stat-security')!;
+      const origContainersPos = { x: containers.x, y: containers.y };
+      const origSecurityPos = { x: security.x, y: security.y };
+
+      // 1. First `move` event captures the pre-drag snapshot
+      state.onGridItemMove('stat-containers');
+
+      // 2. Simulate grid-layout-plus push: dragged item takes the target's
+      //    cell and the target is shoved down.
+      containers.x = origSecurityPos.x;
+      containers.y = origSecurityPos.y;
+      security.y = 3; // pushed down by the library
+
+      // 3. `moved` fires when drag ends – triggers swap via nextTick
+      state.onGridItemMoved('stat-containers');
+      await nextTick();
+      await nextTick();
+
+      // security should have been moved to containers' original position
+      const updated = state.layout.value.find((i) => i.i === 'stat-security')!;
+      expect(updated.x).toBe(origContainersPos.x);
+      expect(updated.y).toBe(origContainersPos.y);
+    });
+
+    it('does nothing when the dragged item returns to its original position', async () => {
+      const { state } = await mountWidgetOrderComposable();
+      state.editMode.value = true;
+      await nextTick();
+
+      const containers = state.layout.value.find((i) => i.i === 'stat-containers')!;
+      const origX = containers.x;
+      const origY = containers.y;
+
+      state.onGridItemMove('stat-containers');
+
+      // Item didn't actually move
+      state.onGridItemMoved('stat-containers');
+      await nextTick();
+      await nextTick();
+
+      expect(containers.x).toBe(origX);
+      expect(containers.y).toBe(origY);
+    });
+
+    it('does nothing when the dragged item lands on empty space (no swap target)', async () => {
+      const { state } = await mountWidgetOrderComposable();
+      state.editMode.value = true;
+      await nextTick();
+
+      const containers = state.layout.value.find((i) => i.i === 'stat-containers')!;
+      const snapshotBefore = state.layout.value.map((i) => ({ i: i.i, x: i.x, y: i.y }));
+
+      state.onGridItemMove('stat-containers');
+
+      // Move to a position that doesn't overlap with any widget's original position
+      containers.x = 0;
+      containers.y = 50;
+
+      state.onGridItemMoved('stat-containers');
+      await nextTick();
+      await nextTick();
+
+      // No other item should have moved
+      for (const before of snapshotBefore) {
+        if (before.i === 'stat-containers') continue;
+        const after = state.layout.value.find((i) => i.i === before.i)!;
+        expect(after.x).toBe(before.x);
+        expect(after.y).toBe(before.y);
+      }
+    });
+
+    it('ignores subsequent move events after the first (only one snapshot per drag)', async () => {
+      const { state } = await mountWidgetOrderComposable();
+      state.editMode.value = true;
+      await nextTick();
+
+      const containers = state.layout.value.find((i) => i.i === 'stat-containers')!;
+      const security = state.layout.value.find((i) => i.i === 'stat-security')!;
+      const origContainersPos = { x: containers.x, y: containers.y };
+
+      // First move captures snapshot
+      state.onGridItemMove('stat-containers');
+
+      // Simulate library modifying layout during drag
+      containers.x = 3;
+      security.y = 3;
+
+      // Second move should be ignored (snapshot already captured)
+      state.onGridItemMove('stat-containers');
+
+      // The swap should still use the original positions from the first snapshot
+      state.onGridItemMoved('stat-containers');
+      await nextTick();
+      await nextTick();
+
+      const updated = state.layout.value.find((i) => i.i === 'stat-security')!;
+      expect(updated.x).toBe(origContainersPos.x);
+      expect(updated.y).toBe(origContainersPos.y);
+    });
+
+    it('does not swap when edit mode is off', async () => {
+      const { state } = await mountWidgetOrderComposable();
+      // editMode is false by default
+
+      const containers = state.layout.value.find((i) => i.i === 'stat-containers')!;
+      const security = state.layout.value.find((i) => i.i === 'stat-security')!;
+      const origSecurityY = security.y;
+
+      state.onGridItemMove('stat-containers');
+      containers.x = 3;
+      security.y = 3;
+      state.onGridItemMoved('stat-containers');
+      await nextTick();
+      await nextTick();
+
+      // security should NOT have been swapped (edit mode was off, so no snapshot)
+      expect(security.y).toBe(3);
+    });
+
+    it('prevents swap when the displaced widget would overlap a third widget at the target position', async () => {
+      const { state } = await mountWidgetOrderComposable();
+      state.editMode.value = true;
+      await nextTick();
+
+      // Create a scenario where swap would cause overlap:
+      // Widget A at (0,0,3,3), Widget B at (3,0,6,3), Widget C (blocker) at (0,3,3,3)
+      const widgetA = state.layout.value.find((i) => i.i === 'stat-containers')!;
+      const widgetB = state.layout.value.find((i) => i.i === 'recent-updates')!;
+      const blocker = state.layout.value.find((i) => i.i === 'stat-security')!;
+
+      widgetA.x = 0;
+      widgetA.y = 0;
+      widgetA.w = 3;
+      widgetA.h = 3;
+
+      widgetB.x = 3;
+      widgetB.y = 0;
+      widgetB.w = 6;
+      widgetB.h = 3;
+
+      blocker.x = 0;
+      blocker.y = 0;
+      blocker.w = 3;
+      blocker.h = 3;
+
+      // Move all other widgets far away so they don't interfere
+      for (const item of state.layout.value) {
+        if (!['stat-containers', 'recent-updates', 'stat-security'].includes(item.i)) {
+          item.y = 100;
+        }
+      }
+
+      await nextTick();
+
+      state.onGridItemMove('stat-containers');
+
+      // Simulate drag: widgetA moves to widgetB's position
+      widgetA.x = 3;
+      widgetA.y = 0;
+      widgetB.y = 10; // pushed down by library
+
+      // Swap would put widgetB at (0,0,6,3) which overlaps with blocker at (0,0,3,3)
+      state.onGridItemMoved('stat-containers');
+      await nextTick();
+      await nextTick();
+
+      // widgetB should NOT have been swapped (would overlap blocker)
+      expect(widgetB.y).toBe(10); // stays where the library pushed it
+    });
+
+    it('does not swap with hidden widgets', async () => {
+      const { state } = await mountWidgetOrderComposable();
+      state.editMode.value = true;
+      state.toggleWidgetVisibility('stat-security'); // hide it
+      await nextTick();
+
+      const containers = state.layout.value.find((i) => i.i === 'stat-containers')!;
+      const security = state.layout.value.find((i) => i.i === 'stat-security')!;
+
+      state.onGridItemMove('stat-containers');
+
+      // Drag containers to security's original position
+      containers.x = security.x;
+      containers.y = security.y;
+      security.y = 3; // pushed
+
+      state.onGridItemMoved('stat-containers');
+      await nextTick();
+      await nextTick();
+
+      // security is hidden, so it should NOT be swapped
+      expect(security.y).toBe(3);
+    });
+  });
 });
