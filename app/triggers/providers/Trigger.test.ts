@@ -2123,6 +2123,43 @@ test('renderSimpleBody should combine agent prefix and watcher suffix', () => {
   );
 });
 
+test('renderSimpleBody should omit watcher suffix when it matches the agent prefix', () => {
+  const { simplebody, ...rest } = configurationValid;
+  trigger.configuration = trigger.validateConfiguration(rest);
+  expect(
+    trigger.renderSimpleBody({
+      name: 'nginx',
+      agent: 'mediavault',
+      watcher: 'mediavault',
+      updateKind: {
+        kind: 'tag',
+        localValue: '1.0.0',
+        remoteValue: '2.0.0',
+      },
+    }),
+  ).toBe('[mediavault] Container nginx running with tag 1.0.0 can be updated to tag 2.0.0');
+});
+
+test('renderSimpleBody should omit watcher suffix when it matches the controller prefix', () => {
+  const { simplebody, ...rest } = configurationValid;
+  trigger.configuration = trigger.validateConfiguration(rest);
+  mockGetAgents.mockReturnValue([{ name: 'remote-1' }]);
+
+  expect(
+    trigger.renderSimpleBody({
+      name: 'nginx',
+      watcher: 'controller-host',
+      updateKind: {
+        kind: 'tag',
+        localValue: '1.0.0',
+        remoteValue: '2.0.0',
+      },
+    }),
+  ).toBe('[controller-host] Container nginx running with tag 1.0.0 can be updated to tag 2.0.0');
+
+  mockGetAgents.mockReturnValue([]);
+});
+
 test('renderBatchBody should include agent prefix per container in batch', () => {
   const { simplebody, ...rest } = configurationValid;
   trigger.configuration = trigger.validateConfiguration(rest);

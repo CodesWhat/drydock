@@ -1602,11 +1602,28 @@ class Trigger extends Component {
    * Build the container template context used by trigger body/title rendering.
    * Release notes bodies are shortened for notifications to avoid excessively long payloads.
    */
-  private getNotificationWatcherSuffix(container: Container): string {
+  private getNotificationServerName(container: Container): string {
+    const agent = typeof container.agent === 'string' ? container.agent.trim() : '';
+    return agent || getServerName();
+  }
+
+  private getNotificationWatcherSuffix(
+    container: Container,
+    notificationAgentPrefix: string,
+    notificationServerName: string,
+  ): string {
     const watcher = typeof container.watcher === 'string' ? container.watcher.trim() : '';
     if (!watcher || watcher === 'local' || watcher === 'agent') {
       return '';
     }
+
+    if (
+      notificationAgentPrefix &&
+      watcher.toLowerCase() === notificationServerName.trim().toLowerCase()
+    ) {
+      return '';
+    }
+
     return ` (${watcher})`;
   }
 
@@ -1622,12 +1639,13 @@ class Trigger extends Component {
   }
 
   private getTemplateContainer(container: Container): TriggerTemplateContainer {
-    const notificationWatcherSuffix = this.getNotificationWatcherSuffix(container);
     const notificationAgentPrefix = this.getNotificationAgentPrefix(container);
-    const notificationServerName =
-      typeof container.agent === 'string' && container.agent.trim()
-        ? container.agent.trim()
-        : getServerName();
+    const notificationServerName = this.getNotificationServerName(container);
+    const notificationWatcherSuffix = this.getNotificationWatcherSuffix(
+      container,
+      notificationAgentPrefix,
+      notificationServerName,
+    );
     const releaseNotes = container.result?.releaseNotes;
     if (!releaseNotes || typeof releaseNotes.body !== 'string') {
       return {
