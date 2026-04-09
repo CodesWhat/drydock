@@ -2462,6 +2462,25 @@ test('handleContainerUpdateApplied should call dismiss for stored notification',
   expect(trigger.notificationResults.has('docker.local/nginx')).toBe(false);
 });
 
+test('handleContainerUpdateApplied should dismiss for object payloads', async () => {
+  const mockResult = { messageId: '123' };
+  trigger.notificationResults = new Map();
+  trigger.notificationResults.set('docker.local/nginx', mockResult);
+  trigger.dismiss = vi.fn().mockResolvedValue(undefined);
+
+  await trigger.handleContainerUpdateApplied({
+    containerName: 'docker.local/nginx',
+    container: {
+      id: 'c1',
+      name: 'nginx',
+      watcher: 'local',
+    },
+  } as any);
+
+  expect(trigger.dismiss).toHaveBeenCalledWith('docker.local/nginx', mockResult);
+  expect(trigger.notificationResults.has('docker.local/nginx')).toBe(false);
+});
+
 test('handleContainerUpdateApplied should return early when no stored notification', async () => {
   trigger.notificationResults = new Map();
   trigger.dismiss = vi.fn();
@@ -2712,6 +2731,37 @@ test('handleContainerUpdateAppliedEvent should resolve containers from raw store
     expect.objectContaining({
       env: expect.objectContaining({
         SECRET_TOKEN: 'raw-secret',
+      }),
+      notificationEvent: {
+        kind: 'update-applied',
+      },
+    }),
+  );
+});
+
+test('handleContainerUpdateAppliedEvent should use event payload container when store lookup misses', async () => {
+  const container = {
+    watcher: 'local',
+    name: 'container1',
+    updateAvailable: true,
+    updateKind: { kind: 'tag', semverDiff: 'major' },
+    env: {
+      SECRET_TOKEN: 'payload-secret',
+    },
+  };
+  storeContainer.getContainersRaw.mockReturnValue([]);
+  const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+  await trigger.handleContainerUpdateAppliedEvent({
+    containerName: 'local_container1',
+    container,
+  } as any);
+
+  expect(triggerSpy).toHaveBeenCalledWith(
+    expect.objectContaining({
+      name: 'container1',
+      env: expect.objectContaining({
+        SECRET_TOKEN: 'payload-secret',
       }),
       notificationEvent: {
         kind: 'update-applied',

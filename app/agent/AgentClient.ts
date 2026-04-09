@@ -4,6 +4,7 @@ import { StringDecoder } from 'node:string_decoder';
 import axios, { type AxiosRequestConfig } from 'axios';
 import type { Logger } from 'pino';
 import type {
+  ContainerUpdateAppliedEventPayload,
   ContainerUpdateFailedEventPayload,
   SecurityAlertEventPayload,
   SecurityAlertSummary,
@@ -51,9 +52,12 @@ interface AgentClientRuntimeInfo {
 }
 
 interface AgentComponentDescriptor {
+  id?: string;
   type: string;
   name: string;
   configuration: Record<string, unknown>;
+  agent?: string;
+  metadata?: Record<string, unknown>;
 }
 
 interface AgentRuntimeAckPayload {
@@ -89,6 +93,17 @@ const SECURITY_ALERT_SUMMARY_KEYS = ['unknown', 'low', 'medium', 'high', 'critic
 const INITIAL_SSE_RECONNECT_DELAY_MS = 1_000;
 const MAX_SSE_RECONNECT_DELAY_MS = 60_000;
 const REMOTE_UPDATE_TRIGGER_TYPES = new Set(['docker', 'dockercompose']);
+
+function isContainerUpdateAppliedEventPayload(
+  data: unknown,
+): data is ContainerUpdateAppliedEventPayload {
+  if (!data || typeof data !== 'object') {
+    return false;
+  }
+
+  const containerName = (data as { containerName?: unknown }).containerName;
+  return typeof containerName === 'string' && containerName.length > 0;
+}
 
 export class AgentClient {
   public name: string;
@@ -604,6 +619,17 @@ export class AgentClient {
       case 'dd:update-applied':
         if (typeof data === 'string' && data.length > 0) {
           await emitContainerUpdateApplied(data);
+        } else if (isContainerUpdateAppliedEventPayload(data)) {
+          await emitContainerUpdateApplied({
+            containerName: data.containerName,
+            container:
+              data.container && typeof data.container === 'object'
+                ? {
+                    ...data.container,
+                    agent: this.name,
+                  }
+                : undefined,
+          });
         }
         return;
       case 'dd:update-failed': {
@@ -738,6 +764,21 @@ export class AgentClient {
       );
     } catch (error: unknown) {
       this.log.error(`Error deleting container on agent: ${getErrorMessage(error)}`);
+      throw error;
+    }
+  }
+
+  async getWatcher(watcherType: string, watcherName: string) {
+    try {
+      const response = await axios.get<AgentComponentDescriptor>(
+        `${this.baseUrl}/api/watchers/${encodeURIComponent(watcherType)}/${encodeURIComponent(watcherName)}`,
+        this.axiosOptions,
+      );
+      return response.data;
+    } catch (error: unknown) {
+      this.log.error(
+        `Error fetching watcher on agent: ${sanitizeLogParam(getErrorMessage(error))}`,
+      );
       throw error;
     }
   }

@@ -954,6 +954,29 @@ describe('AgentClient', () => {
       expect(event.emitContainerUpdateApplied).toHaveBeenCalledWith('local_nginx');
     });
 
+    test('should emit update-applied payload with agent context when agent sends object payload', async () => {
+      await client.handleEvent('dd:update-applied', {
+        containerName: 'local_nginx',
+        container: {
+          id: 'c1',
+          name: 'nginx',
+          watcher: 'local',
+          updateAvailable: true,
+          updateKind: { kind: 'tag', semverDiff: 'major' },
+        },
+      });
+
+      expect(event.emitContainerUpdateApplied).toHaveBeenCalledWith({
+        containerName: 'local_nginx',
+        container: expect.objectContaining({
+          id: 'c1',
+          name: 'nginx',
+          watcher: 'local',
+          agent: 'test-agent',
+        }),
+      });
+    });
+
     test('should ignore update-applied when data is an empty string', async () => {
       await client.handleEvent('dd:update-applied', '');
 
@@ -1366,6 +1389,40 @@ describe('AgentClient', () => {
     test('should throw on failure', async () => {
       axios.post.mockRejectedValue(new Error('watch failed'));
       await expect(client.watch('docker', 'local')).rejects.toThrow('watch failed');
+    });
+  });
+
+  describe('getWatcher', () => {
+    test('should fetch watcher detail from the agent', async () => {
+      axios.get.mockResolvedValue({
+        data: {
+          id: 'docker.local',
+          type: 'docker',
+          name: 'local',
+          configuration: { cron: '0 * * * *' },
+          metadata: { nextRunAt: '2026-04-09T13:00:00.000Z' },
+        },
+      });
+
+      const result = await client.getWatcher('docker', 'local');
+
+      expect(axios.get).toHaveBeenCalledWith(
+        expect.stringContaining('/api/watchers/docker/local'),
+        expect.any(Object),
+      );
+      expect(result).toEqual({
+        id: 'docker.local',
+        type: 'docker',
+        name: 'local',
+        configuration: { cron: '0 * * * *' },
+        metadata: { nextRunAt: '2026-04-09T13:00:00.000Z' },
+      });
+    });
+
+    test('should throw when fetching watcher detail fails', async () => {
+      axios.get.mockRejectedValue(new Error('watcher fetch failed'));
+
+      await expect(client.getWatcher('docker', 'local')).rejects.toThrow('watcher fetch failed');
     });
   });
 

@@ -69,6 +69,13 @@ export interface ContainerUpdateFailedEventPayload {
   error: string;
 }
 
+export interface ContainerUpdateAppliedEventPayload {
+  containerName: string;
+  container?: Container | Record<string, unknown>;
+}
+
+export type ContainerUpdateAppliedEvent = string | ContainerUpdateAppliedEventPayload;
+
 export interface SecurityAlertSummary {
   unknown: number;
   low: number;
@@ -112,7 +119,10 @@ export type ContainerLifecycleEventPayload = Partial<Omit<Container, 'image'>> &
 const containerReportHandlers = new Map<number, OrderedEventHandler<ContainerReport>>();
 const containerReportsHandlers = new Map<number, OrderedEventHandler<ContainerReport[]>>();
 const watcherSnapshotHandlers = new Map<number, OrderedEventHandler<WatcherSnapshotEventPayload>>();
-const containerUpdateAppliedHandlers = new Map<number, OrderedEventHandler<string>>();
+const containerUpdateAppliedHandlers = new Map<
+  number,
+  OrderedEventHandler<ContainerUpdateAppliedEvent>
+>();
 const containerUpdateFailedHandlers = new Map<
   number,
   OrderedEventHandler<ContainerUpdateFailedEventPayload>
@@ -229,10 +239,27 @@ export function registerContainerReport(
 
 /**
  * Emit ContainerUpdateApplied event.
- * @param containerId
+ * @param payload
  */
-export async function emitContainerUpdateApplied(containerId: string): Promise<void> {
-  await emitOrderedHandlers(containerUpdateAppliedHandlers, containerId);
+export async function emitContainerUpdateApplied(
+  payload: ContainerUpdateAppliedEvent,
+): Promise<void> {
+  await emitOrderedHandlers(containerUpdateAppliedHandlers, payload);
+}
+
+export function getContainerUpdateAppliedEventContainerName(
+  payload: ContainerUpdateAppliedEvent,
+): string | undefined {
+  if (typeof payload === 'string') {
+    return payload || undefined;
+  }
+
+  if (!payload || typeof payload !== 'object') {
+    return undefined;
+  }
+
+  const containerName = payload.containerName;
+  return typeof containerName === 'string' && containerName !== '' ? containerName : undefined;
 }
 
 /**
@@ -240,7 +267,7 @@ export async function emitContainerUpdateApplied(containerId: string): Promise<v
  * @param handler
  */
 export function registerContainerUpdateApplied(
-  handler: OrderedEventHandlerFn<string>,
+  handler: OrderedEventHandlerFn<ContainerUpdateAppliedEvent>,
   options: EventHandlerRegistrationOptions = {},
 ): () => void {
   return registerOrderedEventHandler(containerUpdateAppliedHandlers, handler, options);

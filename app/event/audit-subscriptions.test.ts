@@ -8,6 +8,7 @@ import {
 import type {
   AgentDisconnectedEventPayload,
   ContainerLifecycleEventPayload,
+  ContainerUpdateAppliedEvent,
   ContainerUpdateFailedEventPayload,
   SecurityAlertEventPayload,
 } from './index.js';
@@ -54,7 +55,7 @@ function setupAuditSubscriptions(): {
 
   const registrars: AuditSubscriptionRegistrars = {
     registerContainerReport: registerOrdered<ContainerReport>(() => {}),
-    registerContainerUpdateApplied: registerOrdered<string>(() => {}),
+    registerContainerUpdateApplied: registerOrdered<ContainerUpdateAppliedEvent>(() => {}),
     registerContainerUpdateFailed: registerOrdered<ContainerUpdateFailedEventPayload>(() => {}),
     registerSecurityAlert: registerOrdered<SecurityAlertEventPayload>((handler) => {
       handlers.securityAlert = handler;

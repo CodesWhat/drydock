@@ -141,7 +141,13 @@ describe('UpdateLifecycleExecutor', () => {
     });
 
     await expect(executor.run(createContainer())).resolves.toBeUndefined();
-    expect(emitContainerUpdateApplied).toHaveBeenCalledWith('name');
+    expect(emitContainerUpdateApplied).toHaveBeenCalledWith({
+      containerName: 'name',
+      container: expect.objectContaining({
+        id: 'container-id',
+        name: 'web',
+      }),
+    });
   });
 
   test('constructor provides logger fallback when omitted', () => {
@@ -221,7 +227,13 @@ describe('UpdateLifecycleExecutor', () => {
     });
 
     await expect(executor.run(createContainer())).resolves.toBeUndefined();
-    expect(emitContainerUpdateApplied).toHaveBeenCalledWith('name');
+    expect(emitContainerUpdateApplied).toHaveBeenCalledWith({
+      containerName: 'name',
+      container: expect.objectContaining({
+        id: 'container-id',
+        name: 'web',
+      }),
+    });
   });
 
   test('constructor provides prune/getBackup defaults when omitted', async () => {
@@ -267,7 +279,13 @@ describe('UpdateLifecycleExecutor', () => {
     });
 
     await expect(executor.run(createContainer())).resolves.toBeUndefined();
-    expect(emitContainerUpdateApplied).toHaveBeenCalledWith('name');
+    expect(emitContainerUpdateApplied).toHaveBeenCalledWith({
+      containerName: 'name',
+      container: expect.objectContaining({
+        id: 'container-id',
+        name: 'web',
+      }),
+    });
   });
 
   test('constructor should throw when required dependencies are missing', () => {
@@ -382,7 +400,13 @@ describe('UpdateLifecycleExecutor', () => {
       { autoRollback: true, rollbackWindow: 1, rollbackInterval: 2 },
       expect.anything(),
     );
-    expect(harness.emitContainerUpdateApplied).toHaveBeenCalledWith('docker.local_web');
+    expect(harness.emitContainerUpdateApplied).toHaveBeenCalledWith({
+      containerName: 'docker.local_web',
+      container: expect.objectContaining({
+        id: 'container-id',
+        name: 'web',
+      }),
+    });
     expect(harness.pruneOldBackups).toHaveBeenCalledWith('web', 5);
   });
 

@@ -62,6 +62,8 @@ interface AgentConnectedPayload {
   reconnected: boolean;
 }
 
+type ContainerUpdateAppliedEventPayload = event.ContainerUpdateAppliedEvent;
+
 interface UpdateAppliedNotificationEvent {
   kind: 'update-applied';
 }
@@ -118,6 +120,22 @@ interface EventDispatchOptions extends notificationStore.NotificationRuleDispatc
 const AUTO_TRIGGER_ERROR_SUPPRESSION_WINDOW_MS = 15_000;
 const AUTO_TRIGGER_ERROR_SUPPRESSION_RETENTION_MS = AUTO_TRIGGER_ERROR_SUPPRESSION_WINDOW_MS * 4;
 const AUTO_EVENT_BATCH_FLUSH_DELAY_MS = 250;
+
+function getContainerUpdateAppliedEventContainerName(
+  payload: ContainerUpdateAppliedEventPayload,
+): string | undefined {
+  if (typeof payload === 'string') {
+    return payload || undefined;
+  }
+
+  if (!payload || typeof payload !== 'object') {
+    return undefined;
+  }
+
+  return typeof payload.containerName === 'string' && payload.containerName !== ''
+    ? payload.containerName
+    : undefined;
+}
 const TRIGGER_RELEASE_NOTES_BODY_MAX_LENGTH = 500;
 const ACTION_TRIGGER_TYPES = new Set(['command', 'docker', 'dockercompose']);
 export function buildLiteralTemplateExpression(expression: string): string {
@@ -725,14 +743,24 @@ class Trigger extends Component {
     }
   }
 
-  async handleContainerUpdateAppliedEvent(containerName: string) {
+  async handleContainerUpdateAppliedEvent(payload: ContainerUpdateAppliedEventPayload) {
+    const containerName = getContainerUpdateAppliedEventContainerName(payload);
+    if (!containerName) {
+      this.log.debug('Skipping update-applied event because container name is missing');
+      return;
+    }
+
     // Evict from digest buffer — container is already updated, no need to notify.
     // containerName is the full business ID (watcher_name), matching the buffer key.
     if (this.digestBuffer.delete(containerName)) {
       this.log.debug(`Evicted ${containerName} from digest buffer (update applied)`);
     }
 
-    const container = this.findContainerByBusinessId(containerName);
+    const payloadContainer =
+      typeof payload === 'object' && payload !== null && 'container' in payload
+        ? (payload.container as Container | undefined)
+        : undefined;
+    const container = payloadContainer || this.findContainerByBusinessId(containerName);
     const notificationContainer = container
       ? withNotificationEvent(container, { kind: 'update-applied' })
       : undefined;
@@ -1520,7 +1548,12 @@ class Trigger extends Component {
    * Dismiss the stored notification for the updated container.
    * @param containerId
    */
-  async handleContainerUpdateApplied(containerId: string) {
+  async handleContainerUpdateApplied(payload: ContainerUpdateAppliedEventPayload) {
+    const containerId = getContainerUpdateAppliedEventContainerName(payload);
+    if (!containerId) {
+      return;
+    }
+
     const triggerResult = this.notificationResults.get(containerId);
     if (!triggerResult) {
       return;
