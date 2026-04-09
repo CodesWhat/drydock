@@ -1778,7 +1778,7 @@ describe('DashboardView', () => {
       expect(updateError.text()).toContain('update exploded');
     });
 
-    it('shows a success toast when a single dashboard update starts successfully', async () => {
+    it('shows the shared update-started toast when a single dashboard update starts successfully', async () => {
       mockUpdateContainer.mockResolvedValueOnce({});
       const wrapper = await mountDashboard(
         [pendingContainer],
@@ -1797,7 +1797,9 @@ describe('DashboardView', () => {
       await flushPromises();
 
       expect(
-        toasts.value.some((toast) => toast.tone === 'success' && toast.title === 'Updated: nginx'),
+        toasts.value.some(
+          (toast) => toast.tone === 'success' && toast.title === 'Update started: nginx',
+        ),
       ).toBe(true);
     });
 
@@ -2092,7 +2094,7 @@ describe('DashboardView', () => {
       expect(wrapper.find('[data-test="dashboard-update-error"]').exists()).toBe(false);
     });
 
-    it('shows a success toast with the number of containers started from dashboard update all', async () => {
+    it('shows the shared batch update-started toast from dashboard update all', async () => {
       const containers = [
         makeContainer({
           id: 'c-success-1',
@@ -2132,7 +2134,7 @@ describe('DashboardView', () => {
 
       expect(
         toasts.value.some(
-          (toast) => toast.tone === 'success' && toast.title === 'Updated 2 containers',
+          (toast) => toast.tone === 'success' && toast.title === 'Started updates for 2 containers',
         ),
       ).toBe(true);
     });

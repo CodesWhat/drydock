@@ -9,7 +9,16 @@ import { useToast } from '../composables/useToast';
 import { preferences } from '../preferences/store';
 import { ROUTES } from '../router/routes';
 import { updateContainer } from '../services/container-actions';
-import { errorMessage, isNoUpdateAvailableError } from '../utils/error';
+import {
+  createContainerUpdateBatchId,
+  formatContainerUpdateStartedCountMessage,
+  formatContainersAlreadyUpToDateMessage,
+  getContainerAlreadyUpToDateMessage,
+  getContainerUpdateStartedMessage,
+  isStaleContainerUpdateError,
+  runContainerUpdateRequest,
+} from '../utils/container-update';
+import { errorMessage } from '../utils/error';
 import { summarizeContainerResourceUsage } from '../utils/stats-summary';
 import DashboardHostStatusWidget from './dashboard/components/DashboardHostStatusWidget.vue';
 import DashboardRecentUpdatesWidget from './dashboard/components/DashboardRecentUpdatesWidget.vue';
@@ -57,23 +66,8 @@ const DASHBOARD_PENDING_UPDATE_POLL_INTERVAL_MS = 2_000;
 const DASHBOARD_PENDING_UPDATE_POLL_MAX_INTERVAL_MS = 16_000;
 const DASHBOARD_PENDING_UPDATE_TIMEOUT_MS = 30_000;
 
-function createUpdateBatchId(): string {
-  const randomUUID = globalThis.crypto?.randomUUID;
-  return typeof randomUUID === 'function'
-    ? randomUUID.call(globalThis.crypto)
-    : `dd-update-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-}
-
-function isStaleDashboardUpdateError(error: unknown): boolean {
-  return isNoUpdateAvailableError(error);
-}
-
 function navigateTo(route: RouteLocationRaw) {
   router.push(route);
-}
-
-function formatContainerCount(count: number): string {
-  return `${count} container${count === 1 ? '' : 's'}`;
 }
 
 // Delay enabling grid transitions to prevent fly-in on initial load
@@ -410,17 +404,24 @@ function confirmDashboardUpdate(row: RecentUpdateRow) {
       dashboardUpdateInProgress.value = row.id;
       dashboardUpdateError.value = null;
       try {
-        await updateContainer(row.id);
-        await fetchDashboardData();
-        capturePendingDashboardRows([row]);
-        toast.success(`Updated: ${row.name}`);
-      } catch (e: unknown) {
-        if (isStaleDashboardUpdateError(e)) {
-          await fetchDashboardData();
-          toast.info(`Already up to date: ${row.name}`);
+        const result = await runContainerUpdateRequest({
+          request: () => updateContainer(row.id),
+          onAccepted: async () => {
+            await fetchDashboardData();
+            capturePendingDashboardRows([row]);
+          },
+          onStale: async () => {
+            await fetchDashboardData();
+          },
+          isStaleError: isStaleContainerUpdateError,
+        });
+        if (result === 'accepted') {
+          toast.success(getContainerUpdateStartedMessage(row.name));
         } else {
-          dashboardUpdateError.value = errorMessage(e, `Failed to update ${row.name}`);
+          toast.info(getContainerAlreadyUpToDateMessage(row.name));
         }
+      } catch (e: unknown) {
+        dashboardUpdateError.value = errorMessage(e, `Failed to update ${row.name}`);
       } finally {
         dashboardUpdateInProgress.value = null;
       }
@@ -440,7 +441,7 @@ function confirmDashboardUpdateAll() {
       dashboardUpdateAllInProgress.value = true;
       dashboardUpdateError.value = null;
       const snapshotRowNames = pendingRowsSnapshot.map((row) => row.name);
-      const batchId = createUpdateBatchId();
+      const batchId = createContainerUpdateBatchId();
       const queueTotal = pendingRowsSnapshot.length;
       let acceptedRowNames = [...snapshotRowNames];
       syncDashboardUpdateSequenceValue(snapshotRowNames, acceptedRowNames);
@@ -452,19 +453,26 @@ function confirmDashboardUpdateAll() {
 
         for (const [index, row] of pendingRowsSnapshot.entries()) {
           try {
-            await updateContainer(row.id, {
-              batchId,
-              queuePosition: index + 1,
-              queueTotal,
+            const result = await runContainerUpdateRequest({
+              request: () =>
+                updateContainer(row.id, {
+                  batchId,
+                  queuePosition: index + 1,
+                  queueTotal,
+                }),
+              isStaleError: isStaleContainerUpdateError,
             });
-            successfulRows.push(row);
+            if (result === 'accepted') {
+              successfulRows.push(row);
+              continue;
+            }
+            acceptedRowNames = acceptedRowNames.filter((name) => name !== row.name);
+            syncDashboardUpdateSequenceValue(snapshotRowNames, acceptedRowNames);
+            staleRows.push(row);
           } catch (e: unknown) {
             acceptedRowNames = acceptedRowNames.filter((name) => name !== row.name);
             syncDashboardUpdateSequenceValue(snapshotRowNames, acceptedRowNames);
-
-            if (isStaleDashboardUpdateError(e)) {
-              staleRows.push(row);
-            } else if (!firstRejectedUpdate) {
+            if (!firstRejectedUpdate) {
               firstRejectedUpdate = e;
             }
           }
@@ -473,13 +481,13 @@ function confirmDashboardUpdateAll() {
         await fetchDashboardData();
         capturePendingDashboardRows(successfulRows);
         if (successfulRows.length > 0) {
-          toast.success(`Updated ${formatContainerCount(successfulRows.length)}`);
+          toast.success(formatContainerUpdateStartedCountMessage(successfulRows.length));
         }
         if (staleRows.length > 0) {
           toast.info(
             staleRows.length === 1
-              ? `Already up to date: ${staleRows[0]!.name}`
-              : `${formatContainerCount(staleRows.length)} already up to date`,
+              ? getContainerAlreadyUpToDateMessage(staleRows[0]!.name)
+              : formatContainersAlreadyUpToDateMessage(staleRows.length),
           );
         }
         if (firstRejectedUpdate) {
