@@ -30,6 +30,10 @@ const props = withDefaults(
     maxHeight?: string;
     /** Optional function returning extra CSS classes for a row (e.g. dim during actions) */
     rowClass?: (row: Record<string, unknown>) => string;
+    /** Optional function marking rows that should render a single full-width cell */
+    fullWidthRow?: (row: Record<string, unknown>) => boolean;
+    /** Optional function controlling whether a row should behave like a clickable/selectable data row */
+    rowInteractive?: (row: Record<string, unknown>) => boolean;
   }>(),
   {
     showActions: false,
@@ -325,6 +329,17 @@ function handleRowKeydown(event: KeyboardEvent, row: Record<string, unknown>) {
   }
 }
 
+function isFullWidthRow(row: Record<string, unknown>): boolean {
+  return props.fullWidthRow?.(row) ?? false;
+}
+
+function isInteractiveRow(row: Record<string, unknown>): boolean {
+  if (props.rowInteractive) {
+    return props.rowInteractive(row);
+  }
+  return !isFullWidthRow(row);
+}
+
 function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
   if (resizing.value || !isSortableColumn(col)) {
     return;
@@ -398,30 +413,41 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
             <td :colspan="totalColumnCount" class="p-0 border-0" :style="{ height: `${topSpacerHeight}px` }" />
           </tr>
           <tr v-for="(row, i) in visibleRows" :key="getRowKey(row, rowKey)"
-              class="cursor-pointer transition-colors hover:dd-bg-hover"
               :class="[
-                selectedKey != null && getRowKey(row, rowKey) === selectedKey ? 'ring-1 ring-inset ring-drydock-secondary' : '',
+                isInteractiveRow(row) ? 'cursor-pointer transition-colors hover:dd-bg-hover' : '',
+                isInteractiveRow(row) && selectedKey != null && getRowKey(row, rowKey) === selectedKey
+                  ? 'ring-1 ring-inset ring-drydock-secondary'
+                  : '',
                 rowClass?.(row) ?? '',
               ]"
               :style="{
-                backgroundColor: selectedKey != null && getRowKey(row, rowKey) === selectedKey
-                  ? 'var(--dd-bg-elevated)'
-                  : (rowAbsoluteIndex(i) % 2 === 0 ? 'var(--dd-bg-card)' : 'var(--dd-bg-inset)'),
+                backgroundColor: isFullWidthRow(row)
+                  ? 'transparent'
+                  : selectedKey != null && getRowKey(row, rowKey) === selectedKey
+                    ? 'var(--dd-bg-elevated)'
+                    : (rowAbsoluteIndex(i) % 2 === 0 ? 'var(--dd-bg-card)' : 'var(--dd-bg-inset)'),
                 borderBottom: 'none',
               }"
-              tabindex="0"
-              @keydown="handleRowKeydown($event, row)"
-              @click="emit('row-click', row)">
-            <td v-for="col in columns" :key="col.key"
-                class="py-3 align-top"
-                :class="col.icon ? 'text-center pl-5 pr-0' : ['overflow-hidden text-ellipsis', col.align ?? 'text-center', 'px-5']">
-              <slot :name="'cell-' + col.key" :row="row" :value="row[col.key]">
-                {{ row[col.key] }}
-              </slot>
-            </td>
-            <td v-if="showActions" class="px-3 py-3 text-right whitespace-nowrap relative">
-              <slot name="actions" :row="row" />
-            </td>
+              :tabindex="isInteractiveRow(row) ? 0 : undefined"
+              @keydown="isInteractiveRow(row) && handleRowKeydown($event, row)"
+              @click="isInteractiveRow(row) && emit('row-click', row)">
+            <template v-if="isFullWidthRow(row)">
+              <td :colspan="totalColumnCount" class="p-0 border-0">
+                <slot name="full-row" :row="row" :index="rowAbsoluteIndex(i)" />
+              </td>
+            </template>
+            <template v-else>
+              <td v-for="col in columns" :key="col.key"
+                  class="py-3 align-top"
+                  :class="col.icon ? 'text-center pl-5 pr-0' : ['overflow-hidden text-ellipsis', col.align ?? 'text-center', 'px-5']">
+                <slot :name="'cell-' + col.key" :row="row" :value="row[col.key]">
+                  {{ row[col.key] }}
+                </slot>
+              </td>
+              <td v-if="showActions" class="px-3 py-3 text-right whitespace-nowrap relative">
+                <slot name="actions" :row="row" />
+              </td>
+            </template>
           </tr>
           <tr
             v-if="bottomSpacerHeight > 0"

@@ -2,12 +2,14 @@
 import { computed } from 'vue';
 import AppBadge from '../AppBadge.vue';
 import AppIconButton from '../AppIconButton.vue';
+import type { ContainersViewRenderGroup } from './containersViewTemplateContext';
 import { useContainersViewTemplateContext } from './containersViewTemplateContext';
 import { getContainerViewKey } from '../../utils/container-view-key';
 import { imageAge } from '../../utils/audit-helpers';
 import UpdateMaturityBadge from './UpdateMaturityBadge.vue';
 import SuggestedTagBadge from './SuggestedTagBadge.vue';
 import ReleaseNotesLink from './ReleaseNotesLink.vue';
+import ContainersGroupHeader from './ContainersGroupHeader.vue';
 
 const {
   filteredContainers,
@@ -62,6 +64,68 @@ const {
 
 const openActionsContainer = computed(
   () => displayContainers.value.find((container) => container.id === openActionsMenu.value) ?? null,
+);
+
+type DisplayContainer = (typeof displayContainers.value)[number];
+
+interface GroupHeaderTableRow {
+  __rowType: 'group';
+  __rowKey: string;
+  group: ContainersViewRenderGroup;
+  isFirst: boolean;
+}
+
+type ContainerTableRow = DisplayContainer & {
+  __rowType: 'container';
+  __rowKey: string;
+  __groupKey: string;
+  __source: DisplayContainer;
+};
+
+type GroupedTableRow = GroupHeaderTableRow | ContainerTableRow;
+
+function isGroupHeaderTableRow(row: GroupedTableRow): row is GroupHeaderTableRow {
+  return row.__rowType === 'group';
+}
+
+function isContainerTableRow(row: GroupedTableRow): row is ContainerTableRow {
+  return row.__rowType === 'container';
+}
+
+function makeContainerTableRow(container: DisplayContainer, groupKey: string): ContainerTableRow {
+  return {
+    ...container,
+    __rowType: 'container',
+    __rowKey: getContainerViewKey(container),
+    __groupKey: groupKey,
+    __source: container,
+  };
+}
+
+const tableRows = computed<GroupedTableRow[]>(() => {
+  if (!groupByStack.value) {
+    return displayContainers.value.map((container) => makeContainerTableRow(container, '__flat__'));
+  }
+
+  const rows: GroupedTableRow[] = [];
+  renderGroups.value.forEach((group, index) => {
+    rows.push({
+      __rowType: 'group',
+      __rowKey: `group:${group.key}`,
+      group,
+      isFirst: index === 0,
+    });
+    if (!collapsedGroups.value.has(group.key)) {
+      rows.push(
+        ...group.containers.map((container) => makeContainerTableRow(container, group.key)),
+      );
+    }
+  });
+  return rows;
+});
+
+const selectedContainerKey = computed(() =>
+  selectedContainer.value ? getContainerViewKey(selectedContainer.value) : null,
 );
 
 function isContainerUpdating(container: { id?: unknown; name?: unknown }) {
@@ -121,65 +185,75 @@ function getContainerStatusIconStyle(container: { id?: unknown; name?: unknown; 
     color: container.status === 'running' ? 'var(--dd-success)' : 'var(--dd-danger)',
   };
 }
+
+function isTableRowFullWidth(row: Record<string, unknown>) {
+  return isGroupHeaderTableRow(row as GroupedTableRow);
+}
+
+function isTableRowInteractive(row: Record<string, unknown>) {
+  return isContainerTableRow(row as GroupedTableRow);
+}
+
+function tableRowClass(row: Record<string, unknown>) {
+  const typedRow = row as GroupedTableRow;
+  if (!isContainerTableRow(typedRow)) {
+    return '';
+  }
+  return isContainerUpdating(typedRow) ||
+    isContainerQueued(typedRow) ||
+    groupUpdateInProgress.value.has(typedRow.__groupKey)
+    ? 'opacity-50 pointer-events-none transition-opacity duration-300'
+    : '';
+}
+
+function getTableRowKey(row: Record<string, unknown>) {
+  return (row as GroupedTableRow).__rowKey;
+}
+
+function selectTableRow(row: Record<string, unknown>) {
+  const typedRow = row as GroupedTableRow;
+  if (!isContainerTableRow(typedRow)) {
+    return;
+  }
+  selectContainer(typedRow.__source);
+}
 </script>
 
 <template>
   <div data-test="containers-grouped-views">
-      <!-- GROUPED / FLAT CONTAINER VIEWS -->
-      <template v-if="filteredContainers.length > 0">
-      <template v-for="group in renderGroups" :key="group.key">
-
-        <!-- Group header (only shown when grouping is active) -->
-        <div v-if="groupByStack && group.key !== '__flat__'"
-             class="flex items-center gap-2 px-3 py-2.5 mb-3 cursor-pointer select-none dd-rounded transition-colors hover:dd-bg-elevated"
-             :style="{ backgroundColor: 'var(--dd-bg-elevated)' }"
-             :class="group.key === renderGroups[0]?.key ? '' : 'mt-6'"
-             role="button"
-             tabindex="0"
-             @keydown.enter.space.prevent="toggleGroupCollapse(group.key)"
-             @click="toggleGroupCollapse(group.key)">
-          <AppIcon :name="collapsedGroups.has(group.key) ? 'chevron-right' : 'chevron-down'" :size="10" class="dd-text-muted shrink-0" />
-          <AppIcon name="stack" :size="12" class="dd-text-muted shrink-0" />
-          <span class="text-xs font-semibold dd-text">{{ group.name ?? 'Ungrouped' }}</span>
-          <AppBadge size="xs" :custom="{ bg: 'var(--dd-bg-elevated)', text: 'var(--dd-text-muted)' }">{{ group.containerCount }}</AppBadge>
-          <AppBadge v-if="group.updatesAvailable > 0" tone="success" size="xs">
-            {{ group.updatesAvailable }} update{{ group.updatesAvailable === 1 ? '' : 's' }}
-          </AppBadge>
-          <AppButton size="none" variant="plain" weight="none"
-            v-if="group.updatesAvailable > 0 || !containerActionsEnabled"
-            class="ml-auto inline-flex items-center justify-center px-2 py-1 dd-rounded border text-2xs font-semibold transition-colors"
-            :class="!containerActionsEnabled || groupUpdateInProgress.has(group.key)
-              ? 'dd-text-muted cursor-not-allowed opacity-60'
-              : 'dd-text hover:dd-bg-elevated'"
-            :disabled="!containerActionsEnabled || group.updatableCount === 0 || groupUpdateInProgress.has(group.key)"
-            v-tooltip.top="tt(!containerActionsEnabled ? containerActionsDisabledReason : group.updatableCount === 0 ? 'All updates blocked by security scan' : 'Update all in group')"
-            @click.stop="updateAllInGroup(group)">
-            <AppIcon
-              :name="!containerActionsEnabled || group.updatableCount === 0 ? 'lock' : groupUpdateInProgress.has(group.key) ? 'spinner' : 'cloud-download'"
-              :size="14"
-              class="mr-1"
-              :class="!containerActionsEnabled ? '' : groupUpdateInProgress.has(group.key) ? 'dd-spin' : ''" />
-            {{ containerActionsEnabled ? 'Update all' : 'Actions disabled' }}
-          </AppButton>
-        </div>
-
-        <!-- Group body (collapsible) -->
-        <div v-show="!collapsedGroups.has(group.key)">
-
-      <!-- TABLE VIEW -->
-      <DataTable v-if="containerViewMode === 'table'"
-                 :columns="tableColumns"
-                 :rows="group.containers"
-                 :row-key="getContainerViewKey"
-                 :sort-key="containerSortKey"
-                 :sort-asc="containerSortAsc"
-                 :selected-key="selectedContainer ? getContainerViewKey(selectedContainer) : null"
-                 :show-actions="true"
-                 :virtual-scroll="false"
-                 :row-class="(row) => isContainerUpdating(row) || isContainerQueued(row) || groupUpdateInProgress.has(group.key) ? 'opacity-50 pointer-events-none transition-opacity duration-300' : ''"
-                 @update:sort-key="containerSortKey = $event"
-                 @update:sort-asc="containerSortAsc = $event"
-                 @row-click="selectContainer($event)">
+    <!-- GROUPED / FLAT CONTAINER VIEWS -->
+    <template v-if="filteredContainers.length > 0">
+      <DataTable
+        v-if="containerViewMode === 'table'"
+        :columns="tableColumns"
+        :rows="tableRows"
+        :row-key="getTableRowKey"
+        :sort-key="containerSortKey"
+        :sort-asc="containerSortAsc"
+        :selected-key="selectedContainerKey"
+        :show-actions="true"
+        :virtual-scroll="false"
+        :full-width-row="isTableRowFullWidth"
+        :row-interactive="isTableRowInteractive"
+        :row-class="tableRowClass"
+        @update:sort-key="containerSortKey = $event"
+        @update:sort-asc="containerSortAsc = $event"
+        @row-click="selectTableRow($event)"
+      >
+        <template #full-row="{ row }">
+          <ContainersGroupHeader
+            v-if="isGroupHeaderTableRow(row)"
+            :group="row.group"
+            :is-first="row.isFirst"
+            :collapsed="collapsedGroups.has(row.group.key)"
+            :container-actions-enabled="containerActionsEnabled"
+            :container-actions-disabled-reason="containerActionsDisabledReason"
+            :in-progress="groupUpdateInProgress.has(row.group.key)"
+            :tt="tt"
+            @toggle="toggleGroupCollapse"
+            @update-all="updateAllInGroup($event)"
+          />
+        </template>
         <!-- Container icon (own column) -->
         <template #cell-icon="{ row: c }">
           <AppIcon v-if="isContainerUpdating(c)" name="spinner" :size="14" class="dd-spin dd-text-muted" v-tooltip.top="tt(getContainerStatusLabel(c))" />
@@ -462,6 +536,24 @@ function getContainerStatusIconStyle(container: { id?: unknown; name?: unknown; 
         </template>
       </DataTable>
 
+      <template v-else>
+        <template v-for="group in renderGroups" :key="group.key">
+          <ContainersGroupHeader
+            v-if="groupByStack && group.key !== '__flat__'"
+            :group="group"
+            :is-first="group.key === renderGroups[0]?.key"
+            :collapsed="collapsedGroups.has(group.key)"
+            :container-actions-enabled="containerActionsEnabled"
+            :container-actions-disabled-reason="containerActionsDisabledReason"
+            :in-progress="groupUpdateInProgress.has(group.key)"
+            :tt="tt"
+            @toggle="toggleGroupCollapse"
+            @update-all="updateAllInGroup($event)"
+          />
+
+          <!-- Group body (collapsible) -->
+          <div v-show="!collapsedGroups.has(group.key)">
+
       <!-- CONTAINER CARD GRID -->
       <DataCardGrid v-if="containerViewMode === 'cards'"
                     :items="group.containers"
@@ -741,9 +833,10 @@ function getContainerStatusIconStyle(container: { id?: unknown; name?: unknown; 
         </template>
       </DataListAccordion>
 
-        </div><!-- /group body -->
-      </template><!-- /v-for group -->
-      </template><!-- /filteredContainers.length > 0 -->
+          </div><!-- /group body -->
+        </template><!-- /v-for group -->
+      </template>
+    </template><!-- /filteredContainers.length > 0 -->
 
       <!-- Actions dropdown (teleported to body so it renders in all view modes) -->
       <Teleport to="body">

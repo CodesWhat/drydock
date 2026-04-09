@@ -233,15 +233,21 @@ const childStubs = {
       'virtualScroll',
       'virtualRowHeight',
       'virtualMaxHeight',
+      'fullWidthRow',
+      'rowInteractive',
+      'rowClass',
     ],
     template: `
       <div class="data-table">
-        <div v-if="rows?.[0]" class="data-table-first-row">
-          <slot name="cell-name" :row="rows[0]" />
-          <slot name="cell-version" :row="rows[0]" />
-          <slot name="cell-status" :row="rows[0]" />
-          <slot name="cell-registry" :row="rows[0]" />
-          <slot name="actions" :row="rows[0]" />
+        <div v-for="row in rows" :key="rowKey ? (typeof rowKey === 'function' ? rowKey(row) : row[rowKey]) : row.id ?? row.name">
+          <slot v-if="typeof fullWidthRow === 'function' && fullWidthRow(row)" name="full-row" :row="row" />
+          <div v-else class="data-table-first-row">
+            <slot name="cell-name" :row="row" />
+            <slot name="cell-version" :row="row" />
+            <slot name="cell-status" :row="row" />
+            <slot name="cell-registry" :row="row" />
+            <slot name="actions" :row="row" />
+          </div>
         </div>
       </div>
     `,
