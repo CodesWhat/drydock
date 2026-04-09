@@ -2422,6 +2422,88 @@ describe('api/container/crud', () => {
       );
     });
 
+    test('coerces string queue metadata on active update-operation responses', () => {
+      const harness = createHarness({
+        containers: [createContainer({ id: 'c1', name: 'edge-api' })],
+      });
+      harness.deps.updateOperationStore.getActiveOperationByContainerName.mockReturnValue({
+        id: 'op-1',
+        status: 'queued',
+        phase: 'queued',
+        updatedAt: '2026-04-01T12:00:00.000Z',
+        batchId: 'batch-2',
+        queuePosition: '2',
+        queueTotal: '3',
+      });
+
+      const listRes = callGetContainers(harness.handlers);
+      const singleRes = callGetContainer(harness.handlers, 'c1');
+
+      expect(listRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: [
+            expect.objectContaining({
+              updateOperation: expect.objectContaining({
+                batchId: 'batch-2',
+                queuePosition: 2,
+                queueTotal: 3,
+              }),
+            }),
+          ],
+        }),
+      );
+      expect(singleRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          updateOperation: expect.objectContaining({
+            batchId: 'batch-2',
+            queuePosition: 2,
+            queueTotal: 3,
+          }),
+        }),
+      );
+    });
+
+    test('omits invalid queue metadata from active update-operation responses', () => {
+      const harness = createHarness({
+        containers: [createContainer({ id: 'c1', name: 'edge-api' })],
+      });
+      harness.deps.updateOperationStore.getActiveOperationByContainerName.mockReturnValue({
+        id: 'op-1',
+        status: 'queued',
+        phase: 'queued',
+        updatedAt: '2026-04-01T12:00:00.000Z',
+        batchId: 'batch-3',
+        queuePosition: 'not-a-number',
+        queueTotal: '2',
+      });
+
+      const listRes = callGetContainers(harness.handlers);
+      const singleRes = callGetContainer(harness.handlers, 'c1');
+
+      expect(listRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: [
+            expect.objectContaining({
+              updateOperation: expect.not.objectContaining({
+                batchId: expect.anything(),
+                queuePosition: expect.anything(),
+                queueTotal: expect.anything(),
+              }),
+            }),
+          ],
+        }),
+      );
+      expect(singleRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          updateOperation: expect.not.objectContaining({
+            batchId: expect.anything(),
+            queuePosition: expect.anything(),
+            queueTotal: expect.anything(),
+          }),
+        }),
+      );
+    });
+
     test('includes active update-operation state after container replacement changes the Docker ID (#248)', () => {
       const harness = createHarness({
         containers: [createContainer({ id: 'new-c1', name: 'edge-api' })],

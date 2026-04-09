@@ -2527,6 +2527,49 @@ describe('useContainerActions', () => {
     await updatePromise;
   });
 
+  it('falls back to timestamp-based batch ids when crypto.randomUUID is unavailable', async () => {
+    const proxyA = makeContainer({
+      id: 'container-a',
+      name: 'socket-proxy-a',
+      newTag: '2.0.0',
+    });
+    const proxyB = makeContainer({
+      id: 'container-b',
+      name: 'socket-proxy-b',
+      newTag: '2.0.0',
+    });
+    const { composable } = await mountActionsHarness({
+      containers: [proxyA, proxyB],
+    });
+
+    vi.stubGlobal('crypto', { randomUUID: undefined });
+    try {
+      await composable.updateAllInGroup({
+        key: 'proxy-stack',
+        containers: [proxyA, proxyB],
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+
+    const firstBatch = mocks.updateContainer.mock.calls[0]?.[1];
+    const secondBatch = mocks.updateContainer.mock.calls[1]?.[1];
+    expect(firstBatch).toEqual(
+      expect.objectContaining({
+        batchId: expect.stringMatching(/^dd-update-/),
+        queuePosition: 1,
+        queueTotal: 2,
+      }),
+    );
+    expect(secondBatch).toEqual(
+      expect.objectContaining({
+        batchId: firstBatch?.batchId,
+        queuePosition: 2,
+        queueTotal: 2,
+      }),
+    );
+  });
+
   it('clears group update queue on error', async () => {
     const proxyA = makeContainer({
       id: 'container-a',
@@ -2606,6 +2649,269 @@ describe('useContainerActions', () => {
     expect(composable.isContainerUpdateInProgress(proxyB)).toBe(false);
     expect(composable.isContainerUpdateQueued(proxyB)).toBe(true);
     expect(composable.getContainerUpdateSequenceLabel(proxyB)).toBe('2 of 2');
+  });
+
+  it('treats queued update operations as queued before any persisted batch head is selected', async () => {
+    const queued = makeContainer({
+      id: 'container-a',
+      name: 'socket-proxy-a',
+      updateOperation: {
+        id: 'op-a',
+        status: 'queued',
+        phase: 'queued',
+        updatedAt: '2026-04-01T12:00:00.000Z',
+      },
+    });
+    const { composable } = await mountActionsHarness({
+      containers: [queued],
+    });
+
+    expect(composable.isContainerUpdateQueued(queued)).toBe(true);
+    expect(composable.isContainerUpdateInProgress(queued)).toBe(false);
+  });
+
+  it('returns null for string targets when resolving update sequence labels', async () => {
+    const { composable } = await mountActionsHarness({});
+
+    expect(composable.getContainerUpdateSequenceLabel('socket-proxy-a')).toBeNull();
+  });
+
+  it('treats targets carrying their own in-progress operation as updating', async () => {
+    const ghost = makeContainer({
+      id: 'ghost-a',
+      name: 'ghost-proxy-a',
+      updateOperation: {
+        id: 'op-ghost-a',
+        status: 'in-progress',
+        phase: 'pulling',
+        updatedAt: '2026-04-01T12:00:00.000Z',
+      },
+    });
+    const { composable } = await mountActionsHarness({
+      containers: [],
+    });
+
+    expect(composable.isContainerUpdateInProgress(ghost)).toBe(true);
+    expect(composable.isContainerUpdateQueued(ghost)).toBe(false);
+  });
+
+  it('ignores queued sequence entries from other groups when determining a local queue head', async () => {
+    const proxyA = makeContainer({
+      id: 'container-a',
+      name: 'socket-proxy-a',
+      newTag: '2.0.0',
+    });
+    const proxyB = makeContainer({
+      id: 'container-b',
+      name: 'socket-proxy-b',
+      newTag: '2.0.0',
+    });
+    const worker = makeContainer({
+      id: 'container-c',
+      name: 'worker',
+      newTag: '2.0.0',
+    });
+    const { composable } = await mountActionsHarness({
+      containers: [proxyA, proxyB, worker],
+    });
+
+    const resolvers: Array<() => void> = [];
+    mocks.updateContainer.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolvers.push(resolve);
+        }),
+    );
+
+    const proxyUpdatePromise = composable.updateAllInGroup({
+      key: 'proxy-stack',
+      containers: [proxyA, proxyB],
+    });
+    await nextTick();
+
+    const workerUpdatePromise = composable.updateAllInGroup({
+      key: 'worker-stack',
+      containers: [worker],
+    });
+    await nextTick();
+
+    expect(composable.isContainerUpdateInProgress(proxyA)).toBe(true);
+    expect(composable.isContainerUpdateQueued(proxyB)).toBe(true);
+    expect(composable.getContainerUpdateSequenceLabel(proxyB)).toBe('2 of 2');
+    expect(composable.isContainerUpdateInProgress(worker)).toBe(true);
+
+    resolvers[0]?.();
+    await flushPromises();
+    resolvers[1]?.();
+    await flushPromises();
+    resolvers[2]?.();
+
+    await Promise.all([proxyUpdatePromise, workerUpdatePromise]);
+  });
+
+  it('prefers in-progress persisted batch entries when choosing the head position', async () => {
+    const queued = makeContainer({
+      id: 'container-a',
+      name: 'socket-proxy-a',
+      updateOperation: {
+        id: 'op-a',
+        status: 'queued',
+        phase: 'queued',
+        updatedAt: '2026-04-01T12:00:00.000Z',
+        batchId: 'batch-1',
+        queuePosition: 1,
+        queueTotal: 2,
+      },
+    });
+    const inProgress = makeContainer({
+      id: 'container-b',
+      name: 'socket-proxy-b',
+      updateOperation: {
+        id: 'op-b',
+        status: 'in-progress',
+        phase: 'pulling',
+        updatedAt: '2026-04-01T12:00:00.000Z',
+        batchId: 'batch-1',
+        queuePosition: 2,
+        queueTotal: 2,
+      },
+    });
+    const { composable } = await mountActionsHarness({
+      containers: [queued, inProgress],
+    });
+
+    expect(composable.isContainerUpdateQueued(queued)).toBe(true);
+    expect(composable.getContainerUpdateSequenceLabel(queued)).toBe('1 of 2');
+    expect(composable.isContainerUpdateQueued(inProgress)).toBe(false);
+    expect(composable.getContainerUpdateSequenceLabel(inProgress)).toBe('2 of 2');
+  });
+
+  it('keeps the earliest in-progress persisted batch entry as the head position', async () => {
+    const inProgressHead = makeContainer({
+      id: 'container-a',
+      name: 'socket-proxy-a',
+      updateOperation: {
+        id: 'op-a',
+        status: 'in-progress',
+        phase: 'pulling',
+        updatedAt: '2026-04-01T12:00:00.000Z',
+        batchId: 'batch-1',
+        queuePosition: 1,
+        queueTotal: 3,
+      },
+    });
+    const inProgressLater = makeContainer({
+      id: 'container-b',
+      name: 'socket-proxy-b',
+      updateOperation: {
+        id: 'op-b',
+        status: 'in-progress',
+        phase: 'health-gate',
+        updatedAt: '2026-04-01T12:00:00.000Z',
+        batchId: 'batch-1',
+        queuePosition: 2,
+        queueTotal: 3,
+      },
+    });
+    const queued = makeContainer({
+      id: 'container-c',
+      name: 'socket-proxy-c',
+      updateOperation: {
+        id: 'op-c',
+        status: 'queued',
+        phase: 'queued',
+        updatedAt: '2026-04-01T12:00:00.000Z',
+        batchId: 'batch-1',
+        queuePosition: 3,
+        queueTotal: 3,
+      },
+    });
+    const { composable } = await mountActionsHarness({
+      containers: [inProgressHead, inProgressLater, queued],
+    });
+
+    expect(composable.isContainerUpdateInProgress(inProgressHead)).toBe(true);
+    expect(composable.isContainerUpdateQueued(inProgressLater)).toBe(false);
+    expect(composable.isContainerUpdateQueued(queued)).toBe(true);
+    expect(composable.getContainerUpdateSequenceLabel(queued)).toBe('3 of 3');
+  });
+
+  it('ignores unrelated persisted batch entries when determining queued state', async () => {
+    const head = makeContainer({
+      id: 'container-head',
+      name: 'socket-proxy-head',
+      updateOperation: {
+        id: 'op-head',
+        status: 'queued',
+        phase: 'queued',
+        updatedAt: '2026-04-01T12:00:00.000Z',
+        batchId: 'batch-1',
+        queuePosition: 1,
+        queueTotal: 2,
+      },
+    });
+    const queued = makeContainer({
+      id: 'container-a',
+      name: 'socket-proxy-a',
+      updateOperation: {
+        id: 'op-a',
+        status: 'queued',
+        phase: 'queued',
+        updatedAt: '2026-04-01T12:00:00.000Z',
+        batchId: 'batch-1',
+        queuePosition: 2,
+        queueTotal: 2,
+      },
+    });
+    const otherBatch = makeContainer({
+      id: 'container-b',
+      name: 'socket-proxy-b',
+      updateOperation: {
+        id: 'op-b',
+        status: 'in-progress',
+        phase: 'pulling',
+        updatedAt: '2026-04-01T12:00:00.000Z',
+        batchId: 'batch-2',
+        queuePosition: 1,
+        queueTotal: 1,
+      },
+    });
+    const noSequence = makeContainer({
+      id: 'container-c',
+      name: 'socket-proxy-c',
+    });
+    const { composable } = await mountActionsHarness({
+      containers: [head, queued, otherBatch, noSequence],
+    });
+
+    expect(composable.isContainerUpdateInProgress(head)).toBe(true);
+    expect(composable.isContainerUpdateQueued(queued)).toBe(true);
+    expect(composable.getContainerUpdateSequenceLabel(queued)).toBe('2 of 2');
+  });
+
+  it('clears pending action state when the stored snapshot no longer has an id', async () => {
+    vi.useFakeTimers();
+    const web = makeContainer({ id: 'container-1', name: 'web' });
+    const { composable, containers, loadContainers } = await mountActionsHarness({
+      containers: [web],
+      containerIdMap: { web: 'container-1' },
+    });
+    let loadCallCount = 0;
+    loadContainers.mockImplementation(async () => {
+      loadCallCount += 1;
+      containers.value =
+        loadCallCount === 1 ? [] : [makeContainer({ id: 'container-1', name: 'web' })];
+    });
+
+    await composable.startContainer('web');
+    expect(composable.actionPending.value.has('web')).toBe(true);
+
+    composable.actionPending.value.set('web', makeContainer({ id: '', name: 'web' }));
+
+    vi.advanceTimersByTime(PENDING_ACTIONS_POLL_INTERVAL_MS);
+    await flushPromises();
+
+    expect(composable.actionPending.value.has('web')).toBe(false);
   });
 
   it('fails closed for action handlers when container actions are disabled', async () => {

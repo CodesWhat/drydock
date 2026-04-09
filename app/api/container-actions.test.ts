@@ -527,6 +527,162 @@ describe('Container Actions Router', () => {
       );
     });
 
+    test('should persist provided batch queue metadata from string inputs on accepted updates', async () => {
+      const container = {
+        id: 'c1',
+        name: 'nginx',
+        image: { name: 'nginx' },
+        updateAvailable: true,
+      };
+      mockGetContainer.mockReturnValue(container);
+      const mockTriggerFn = vi.fn().mockResolvedValue(undefined);
+      const trigger = { type: 'docker', trigger: mockTriggerFn };
+      mockGetState.mockReturnValue({ trigger: { 'docker.default': trigger } });
+      const updateOperationStore = await import('../store/update-operation');
+
+      const handler = getHandler('post', '/:id/update');
+      const req = createMockRequest({
+        params: { id: 'c1' },
+        body: {
+          batchId: 'batch-2',
+          queuePosition: '2',
+          queueTotal: '4',
+        },
+      });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(updateOperationStore.insertOperation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          batchId: 'batch-2',
+          queuePosition: 2,
+          queueTotal: 4,
+          status: 'queued',
+          phase: 'queued',
+        }),
+      );
+    });
+
+    test('should ignore malformed batch queue metadata on accepted updates', async () => {
+      const container = {
+        id: 'c1',
+        name: 'nginx',
+        image: { name: 'nginx' },
+        updateAvailable: true,
+      };
+      mockGetContainer.mockReturnValue(container);
+      const mockTriggerFn = vi.fn().mockResolvedValue(undefined);
+      const trigger = { type: 'docker', trigger: mockTriggerFn };
+      mockGetState.mockReturnValue({ trigger: { 'docker.default': trigger } });
+      const updateOperationStore = await import('../store/update-operation');
+
+      const handler = getHandler('post', '/:id/update');
+      const req = createMockRequest({
+        params: { id: 'c1' },
+        body: {
+          batchId: 123,
+          queuePosition: 'abc',
+          queueTotal: '2',
+        },
+      });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(updateOperationStore.insertOperation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          containerId: 'c1',
+          containerName: 'nginx',
+          status: 'queued',
+          phase: 'queued',
+        }),
+      );
+      expect(updateOperationStore.insertOperation).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          batchId: expect.any(String),
+        }),
+      );
+    });
+
+    test('should ignore zero numeric batch queue metadata on accepted updates', async () => {
+      const container = {
+        id: 'c1',
+        name: 'nginx',
+        image: { name: 'nginx' },
+        updateAvailable: true,
+      };
+      mockGetContainer.mockReturnValue(container);
+      const mockTriggerFn = vi.fn().mockResolvedValue(undefined);
+      const trigger = { type: 'docker', trigger: mockTriggerFn };
+      mockGetState.mockReturnValue({ trigger: { 'docker.default': trigger } });
+      const updateOperationStore = await import('../store/update-operation');
+
+      const handler = getHandler('post', '/:id/update');
+      const req = createMockRequest({
+        params: { id: 'c1' },
+        body: {
+          batchId: 123,
+          queuePosition: 0,
+          queueTotal: 2,
+        },
+      });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(updateOperationStore.insertOperation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          containerId: 'c1',
+          containerName: 'nginx',
+          status: 'queued',
+          phase: 'queued',
+        }),
+      );
+      expect(updateOperationStore.insertOperation).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          batchId: expect.any(String),
+        }),
+      );
+    });
+
+    test('should ignore zero string batch queue metadata on accepted updates', async () => {
+      const container = {
+        id: 'c1',
+        name: 'nginx',
+        image: { name: 'nginx' },
+        updateAvailable: true,
+      };
+      mockGetContainer.mockReturnValue(container);
+      const mockTriggerFn = vi.fn().mockResolvedValue(undefined);
+      const trigger = { type: 'docker', trigger: mockTriggerFn };
+      mockGetState.mockReturnValue({ trigger: { 'docker.default': trigger } });
+      const updateOperationStore = await import('../store/update-operation');
+
+      const handler = getHandler('post', '/:id/update');
+      const req = createMockRequest({
+        params: { id: 'c1' },
+        body: {
+          batchId: 123,
+          queuePosition: '0',
+          queueTotal: '2',
+        },
+      });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(updateOperationStore.insertOperation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          containerId: 'c1',
+          containerName: 'nginx',
+          status: 'queued',
+          phase: 'queued',
+        }),
+      );
+      expect(updateOperationStore.insertOperation).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          batchId: expect.any(String),
+        }),
+      );
+    });
+
     test('should accept update immediately with a dockercompose trigger', async () => {
       const container = {
         id: 'c1',
@@ -810,6 +966,43 @@ describe('Container Actions Router', () => {
       };
       mockGetContainer.mockReturnValue(container);
       const mockTriggerFn = vi.fn().mockRejectedValue(new Error('Security scan blocked update'));
+      const trigger = { type: 'docker', trigger: mockTriggerFn };
+      mockGetState.mockReturnValue({ trigger: { 'docker.default': trigger } });
+      const updateOperationStore = await import('../store/update-operation');
+      (updateOperationStore.getOperationById as ReturnType<typeof vi.fn>).mockImplementation(
+        (id: string) => ({
+          id,
+          status: 'queued',
+          phase: 'queued',
+        }),
+      );
+
+      const handler = getHandler('post', '/:id/update');
+      const req = createMockRequest({ params: { id: 'c1' } });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      const accepted = res.json.mock.calls[0][0];
+      await flushAcceptedUpdateWork();
+
+      expect(updateOperationStore.updateOperation).toHaveBeenCalledWith(
+        accepted.operationId,
+        expect.objectContaining({
+          status: 'failed',
+          lastError: 'Security scan blocked update',
+        }),
+      );
+    });
+
+    test('should stringify a still-queued accepted update failure when the trigger throws a string', async () => {
+      const container = {
+        id: 'c1',
+        name: 'nginx',
+        image: { name: 'nginx' },
+        updateAvailable: true,
+      };
+      mockGetContainer.mockReturnValue(container);
+      const mockTriggerFn = vi.fn().mockRejectedValue('Security scan blocked update');
       const trigger = { type: 'docker', trigger: mockTriggerFn };
       mockGetState.mockReturnValue({ trigger: { 'docker.default': trigger } });
       const updateOperationStore = await import('../store/update-operation');

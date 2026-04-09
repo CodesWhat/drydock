@@ -1540,8 +1540,27 @@ describe('ContainersView', () => {
       await vm.updateAllInGroup(vm.groupedContainers[0]);
 
       expect(mockApiUpdate).toHaveBeenCalledTimes(2);
-      expect(mockApiUpdate).toHaveBeenNthCalledWith(1, 'c1');
-      expect(mockApiUpdate).toHaveBeenNthCalledWith(2, 'c3');
+      expect(mockApiUpdate).toHaveBeenNthCalledWith(
+        1,
+        'c1',
+        expect.objectContaining({
+          batchId: expect.any(String),
+          queuePosition: 1,
+          queueTotal: 2,
+        }),
+      );
+      expect(mockApiUpdate).toHaveBeenNthCalledWith(
+        2,
+        'c3',
+        expect.objectContaining({
+          batchId: expect.any(String),
+          queuePosition: 2,
+          queueTotal: 2,
+        }),
+      );
+      expect(mockApiUpdate.mock.calls[0]?.[1]?.batchId).toBe(
+        mockApiUpdate.mock.calls[1]?.[1]?.batchId,
+      );
     });
 
     it('tracks group update-all loading state during execution', async () => {

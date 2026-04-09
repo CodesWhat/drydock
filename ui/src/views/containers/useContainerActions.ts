@@ -100,10 +100,6 @@ function hasInProgressUpdateOperation(
   target: ContainerActionTarget,
   containers: Readonly<Ref<Container[]>>,
 ) {
-  if (typeof target !== 'string' && target.updateOperation?.status === 'in-progress') {
-    return true;
-  }
-
   const targetId = typeof target === 'string' ? undefined : target.id;
   const targetName = typeof target === 'string' ? target : target.name;
 

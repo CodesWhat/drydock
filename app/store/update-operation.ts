@@ -114,11 +114,7 @@ function getStaleActiveOperationMessage(operation: UpdateOperation): string {
 }
 
 function expireStaleActiveOperation(operation: UpdateOperation): UpdateOperation | undefined {
-  if (!updateOperationCollection) {
-    return undefined;
-  }
-
-  const existing = updateOperationCollection.findOne({ 'data.id': operation.id })?.data;
+  const existing = updateOperationCollection!.findOne({ 'data.id': operation.id })?.data;
   if (!existing || !isActiveOperationStatus(existing.status)) {
     return existing;
   }

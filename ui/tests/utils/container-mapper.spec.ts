@@ -62,6 +62,9 @@ describe('container-mapper', () => {
             updatedAt: '2026-04-01T12:00:00.000Z',
             fromVersion: '1.0.0',
             toVersion: '1.1.0',
+            batchId: 'batch-1',
+            queuePosition: 2,
+            queueTotal: 4,
           },
         }),
       );
@@ -73,6 +76,58 @@ describe('container-mapper', () => {
         updatedAt: '2026-04-01T12:00:00.000Z',
         fromVersion: '1.0.0',
         toVersion: '1.1.0',
+        batchId: 'batch-1',
+        queuePosition: 2,
+        queueTotal: 4,
+      });
+    });
+
+    it('normalizes string batch queue metadata to positive integers', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateOperation: {
+            id: 'op-2',
+            status: 'queued',
+            phase: 'queued',
+            updatedAt: '2026-04-01T12:00:00.000Z',
+            batchId: ' batch-2 ',
+            queuePosition: '2',
+            queueTotal: '4',
+          },
+        }),
+      );
+
+      expect(c.updateOperation).toEqual({
+        id: 'op-2',
+        status: 'queued',
+        phase: 'queued',
+        updatedAt: '2026-04-01T12:00:00.000Z',
+        batchId: 'batch-2',
+        queuePosition: 2,
+        queueTotal: 4,
+      });
+    });
+
+    it('drops batch queue metadata when queue values are not positive integers', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateOperation: {
+            id: 'op-3',
+            status: 'queued',
+            phase: 'queued',
+            updatedAt: '2026-04-01T12:00:00.000Z',
+            batchId: 'batch-3',
+            queuePosition: 0,
+            queueTotal: '0',
+          },
+        }),
+      );
+
+      expect(c.updateOperation).toEqual({
+        id: 'op-3',
+        status: 'queued',
+        phase: 'queued',
+        updatedAt: '2026-04-01T12:00:00.000Z',
       });
     });
 

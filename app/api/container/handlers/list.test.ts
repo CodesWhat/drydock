@@ -122,6 +122,78 @@ describe('attachInProgressUpdateOperation', () => {
     });
   });
 
+  test('parses string batch queue metadata from active operations', () => {
+    const container = createContainer();
+    const context = createMockContext({
+      id: 'op-1',
+      status: 'queued',
+      phase: 'queued',
+      updatedAt: '2026-04-01T12:00:00.000Z',
+      batchId: 'batch-1',
+      queuePosition: '2',
+      queueTotal: '4',
+    });
+
+    expect(attachInProgressUpdateOperation(context, container)).toEqual({
+      ...container,
+      updateOperation: {
+        id: 'op-1',
+        status: 'queued',
+        phase: 'queued',
+        updatedAt: '2026-04-01T12:00:00.000Z',
+        batchId: 'batch-1',
+        queuePosition: 2,
+        queueTotal: 4,
+      },
+    });
+  });
+
+  test('ignores zero numeric batch queue metadata from active operations', () => {
+    const container = createContainer();
+    const context = createMockContext({
+      id: 'op-1',
+      status: 'queued',
+      phase: 'queued',
+      updatedAt: '2026-04-01T12:00:00.000Z',
+      batchId: 'batch-1',
+      queuePosition: 0,
+      queueTotal: 4,
+    });
+
+    expect(attachInProgressUpdateOperation(context, container)).toEqual({
+      ...container,
+      updateOperation: {
+        id: 'op-1',
+        status: 'queued',
+        phase: 'queued',
+        updatedAt: '2026-04-01T12:00:00.000Z',
+      },
+    });
+  });
+
+  test('ignores zero string batch queue metadata from active operations', () => {
+    const container = createContainer();
+    const context = createMockContext({
+      id: 'op-1',
+      status: 'queued',
+      phase: 'queued',
+      updatedAt: '2026-04-01T12:00:00.000Z',
+      batchId: 'batch-1',
+      queuePosition: '0',
+      queueTotal: '4',
+    });
+
+    expect(attachInProgressUpdateOperation(context, container)).toEqual({
+      ...container,
+      updateOperation: {
+        id: 'op-1',
+        status: 'queued',
+        phase: 'queued',
+        updatedAt: '2026-04-01T12:00:00.000Z',
+      },
+    });
+  });
+
   test('prefers container-ID lookup over name-based lookup', () => {
     const container = createContainer({ id: 'c1', name: 'portainer_agent' });
     const byIdResult = {

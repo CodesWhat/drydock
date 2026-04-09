@@ -118,6 +118,7 @@ describe('ContainerUpdateExecutor', () => {
     vi.clearAllMocks();
     mockInsertOperation.mockReturnValue({ id: 'op-1' });
     mockGetInProgressOperationByContainerName.mockReturnValue(undefined);
+    mockGetOperationById.mockReturnValue(undefined);
   });
 
   test('constructor provides default configuration fallback', () => {
@@ -509,6 +510,39 @@ describe('ContainerUpdateExecutor', () => {
     );
   });
 
+  test('execute updates a pre-created queued operation when runtime context provides an operation id', async () => {
+    mockGetOperationById.mockReturnValue({
+      id: 'queued-op',
+      status: 'queued',
+    });
+    mockUpdateOperation.mockReturnValue({ id: 'queued-op' });
+    const context = createContext({
+      currentContainerSpec: createCurrentContainerSpec({
+        State: { Running: false },
+        HostConfig: { AutoRemove: false },
+      }),
+    });
+    const executor = createExecutor({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      hasHealthcheckConfigured: vi.fn(() => false),
+    });
+
+    await expect(
+      executor.execute(context, createContainer(), createLog(), { operationId: ' queued-op ' }),
+    ).resolves.toBe(true);
+
+    expect(mockGetOperationById).toHaveBeenCalledWith('queued-op');
+    expect(mockUpdateOperation).toHaveBeenCalledWith(
+      'queued-op',
+      expect.objectContaining({
+        containerId: 'container-id',
+        status: 'in-progress',
+        phase: 'pulling',
+      }),
+    );
+    expect(mockInsertOperation).not.toHaveBeenCalled();
+  });
+
   test('execute performs successful update without runtime start when old container is stopped', async () => {
     const context = createContext({
       currentContainerSpec: createCurrentContainerSpec({
@@ -700,6 +734,45 @@ describe('ContainerUpdateExecutor', () => {
     ).resolves.toBe(true);
 
     expect(mockInsertOperation.mock.calls.at(-1)?.[0]?.id).toBe('custom-op');
+  });
+
+  test('execute reuses a queued pre-created operation instead of inserting a new one', async () => {
+    const context = createContext({
+      currentContainerSpec: createCurrentContainerSpec({
+        State: { Running: false },
+        HostConfig: { AutoRemove: false },
+      }),
+    });
+    mockGetOperationById.mockReturnValue({
+      id: 'queued-op-1',
+      status: 'queued',
+    });
+    mockUpdateOperation.mockReturnValue({ id: 'queued-op-1' });
+    const executor = createExecutor({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      hasHealthcheckConfigured: vi.fn(() => false),
+    });
+
+    await expect(
+      executor.execute(context, createContainer(), createLog(), {
+        operationId: 'queued-op-1',
+      }),
+    ).resolves.toBe(true);
+
+    expect(mockUpdateOperation.mock.calls[0]?.[0]).toBe('queued-op-1');
+    expect(mockUpdateOperation.mock.calls[0]?.[1]).toEqual(
+      expect.objectContaining({
+        containerId: 'container-id',
+        containerName: 'web',
+        triggerName: 'docker.update',
+        oldContainerId: 'old-container-id',
+        oldName: 'web',
+        tempName: expect.stringMatching(/^web-old-/),
+        status: 'in-progress',
+        phase: 'pulling',
+      }),
+    );
+    expect(mockInsertOperation).not.toHaveBeenCalled();
   });
 
   test('execute rolls back and rethrows original error when rollback succeeds', async () => {
