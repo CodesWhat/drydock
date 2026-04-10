@@ -37,7 +37,7 @@ function getPersistedBatchHeadIds(
       continue;
     }
 
-    /* v8 ignore next 3 -- in-progress batch routing exercised via useContainerActions integration */
+    /* v8 ignore next 8 -- in-progress batch routing exercised via useContainerActions integration */
     const targetHeads = operation.status === 'in-progress' ? inProgressHeads : queuedHeads;
     const currentHead = targetHeads.get(operation.batchId);
     if (!currentHead || operation.queuePosition! < currentHead.position) {
