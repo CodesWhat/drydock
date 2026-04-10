@@ -969,6 +969,35 @@ describe('useDashboardComputed recent updates', () => {
     expect(rows.find((row) => row.id === 'remote-api')).toMatchObject({ status: 'failed' });
   });
 
+  it('falls back to pending when duplicate container names have no identity-keyed status', () => {
+    const nodeA = makeBaseContainer({
+      id: 'node-a',
+      identityKey: 'edge-a::docker-prod::tdarr_node',
+      name: 'tdarr_node',
+      newTag: '2.0.0',
+      updateDetectedAt: '2026-03-04T09:00:00.000Z',
+    });
+    const nodeB = makeBaseContainer({
+      id: 'node-b',
+      identityKey: 'edge-b::docker-prod::tdarr_node',
+      name: 'tdarr_node',
+      newTag: '2.0.0',
+      updateDetectedAt: '2026-03-04T08:00:00.000Z',
+    });
+
+    const state = createState({
+      containers: [nodeA, nodeB],
+      recentStatusByContainer: {
+        tdarr_node: 'updated',
+      },
+      recentStatusByIdentity: {},
+    });
+
+    const rows = state.recentUpdates.value;
+    expect(rows.find((row) => row.id === 'node-a')).toMatchObject({ status: 'pending' });
+    expect(rows.find((row) => row.id === 'node-b')).toMatchObject({ status: 'pending' });
+  });
+
   it('returns empty list when only registry failures exist', () => {
     const containers = Array.from({ length: 8 }, (_, index) =>
       makeBaseContainer({
