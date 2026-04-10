@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Notification delivery failure audit entries ([#282](https://github.com/CodesWhat/drydock/issues/282))** — Failed notification deliveries appear in the notification bell dropdown. ([#ae5309b3](https://github.com/CodesWhat/drydock/commit/ae5309b3))
 - **Container action operations** — Container actions (start, stop, restart, etc.) tracked with dashboard updates. ([#6615ccbf](https://github.com/CodesWhat/drydock/commit/6615ccbf))
 - **Identity-keyed container tracking** — Containers tracked by stable identity key (agent::watcher::name) across renames/replacements. Audit events include `containerIdentityKey`. Recent-status API returns `statusesByIdentity` for precise per-container status resolution. ([#8fb75070](https://github.com/CodesWhat/drydock/commit/8fb75070), [#ea413c34](https://github.com/CodesWhat/drydock/commit/ea413c34))
+- **Trigger buffer retention and capacity limits** — Digest and batch-retry buffers now enforce a 5,000-entry cap and 7-day retention window, evicting the oldest entries first and pruning stale entries before each access. Prevents unbounded memory growth on long-running controllers. ([#c6a9930c](https://github.com/CodesWhat/drydock/commit/c6a9930c))
+- **Update operation recovery phases** — New phases (`recovered-cleanup-temp`, `recovered-rollback`, `recovered-active`, `recovery-failed`, `recovery-missing-containers`) distinguish operations that completed via the deferred reconciliation recovery path from the primary update flow. ([#3ffe2f12](https://github.com/CodesWhat/drydock/commit/3ffe2f12))
 
 ### Changed
 
@@ -41,10 +43,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **[#217](https://github.com/CodesWhat/drydock/issues/217)** — Vulnerability rows top-aligned in detail panels. ([#431be5ea](https://github.com/CodesWhat/drydock/commit/431be5ea))
 - **Expired update operations** — Executor revives expired pre-created operations instead of inserting duplicate rows. ([#04e847ef](https://github.com/CodesWhat/drydock/commit/04e847ef))
 - **Static asset throttling** — SPA fallback rate limiter no longer throttles static assets. ([#bfe52038](https://github.com/CodesWhat/drydock/commit/bfe52038))
+- **Compound rolling tag aliases misclassified as pinned** — `isTagPinned` now treats aliases like `latest-alpine`, `stable_arm64`, and `dev.build` as floating even when their suffixes contain digits. ([#da613f70](https://github.com/CodesWhat/drydock/commit/da613f70))
+
+### Performance
+
+- **Virtual scrolling for grouped containers table** — Grouped container tables no longer render every row eagerly, keeping the DOM light on deployments with many containers. ([#606d5cc0](https://github.com/CodesWhat/drydock/commit/606d5cc0))
 
 ### Security
 
 - **Axios CVE-2025-62718** — Updated axios 1.13.6 → 1.15.0. ([#c4af5e4a](https://github.com/CodesWhat/drydock/commit/c4af5e4a))
+- **Healthcheck HTTPS probe hardening** — `/bin/healthcheck` no longer uses `popen()` with shell command interpolation to invoke `openssl`. The probe now locates the openssl binary explicitly, fork/execs it with pipes, and uses poll-driven I/O with SIGPIPE handling — eliminating any shell injection surface. ([#0173d7ed](https://github.com/CodesWhat/drydock/commit/0173d7ed))
+- **SSE log PII removal** — SSE connect/disconnect log lines and per-IP rate-limit warnings no longer echo raw client identifiers or source IP addresses. Reverses the rc.7 SSE debug logging change to eliminate PII leakage into the system log. ([#9e236745](https://github.com/CodesWhat/drydock/commit/9e236745))
+- **HTTP trigger proxy URL scheme validation** — HTTP trigger proxy URLs must now be `http://` or `https://` schemes. Invalid schemes are rejected at config-validation time and fail closed at runtime instead of silently constructing a broken proxy. ([#981f7f8e](https://github.com/CodesWhat/drydock/commit/981f7f8e))
+- **Vulnerability CSV export escape hardening** — Every CSV field (including column headers) is now quoted unconditionally, and tab/CR leading characters are escaped alongside `=+-@` to fully close the CSV formula-injection surface. ([#95de9f0e](https://github.com/CodesWhat/drydock/commit/95de9f0e))
 
 ## [1.5.0-rc.7] — 2026-04-08
 
