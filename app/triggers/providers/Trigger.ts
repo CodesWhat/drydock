@@ -121,6 +121,29 @@ const AUTO_TRIGGER_ERROR_SUPPRESSION_WINDOW_MS = 15_000;
 const AUTO_TRIGGER_ERROR_SUPPRESSION_RETENTION_MS = AUTO_TRIGGER_ERROR_SUPPRESSION_WINDOW_MS * 4;
 const AUTO_EVENT_BATCH_FLUSH_DELAY_MS = 250;
 
+function getContainerNotificationKey(
+  container: Pick<Container, 'id' | 'name' | 'watcher'> | undefined,
+): string | undefined {
+  if (!container || typeof container !== 'object') {
+    return undefined;
+  }
+
+  if (typeof container.id === 'string' && container.id !== '') {
+    return container.id;
+  }
+
+  if (
+    typeof container.watcher === 'string' &&
+    container.watcher !== '' &&
+    typeof container.name === 'string' &&
+    container.name !== ''
+  ) {
+    return fullName(container as Container);
+  }
+
+  return undefined;
+}
+
 function getContainerUpdateAppliedEventContainerName(
   payload: ContainerUpdateAppliedEventPayload,
 ): string | undefined {
@@ -135,6 +158,26 @@ function getContainerUpdateAppliedEventContainerName(
   return typeof payload.containerName === 'string' && payload.containerName !== ''
     ? payload.containerName
     : undefined;
+}
+
+function getContainerUpdateAppliedEventNotificationKey(
+  payload: ContainerUpdateAppliedEventPayload,
+): string | undefined {
+  if (typeof payload === 'string') {
+    return payload || undefined;
+  }
+
+  if (!payload || typeof payload !== 'object') {
+    return undefined;
+  }
+
+  const payloadContainer =
+    'container' in payload ? (payload.container as Container | undefined) : undefined;
+
+  return (
+    getContainerNotificationKey(payloadContainer) ??
+    getContainerUpdateAppliedEventContainerName(payload)
+  );
 }
 const TRIGGER_RELEASE_NOTES_BODY_MAX_LENGTH = 500;
 const ACTION_TRIGGER_TYPES = new Set(['command', 'docker', 'dockercompose']);
@@ -581,9 +624,10 @@ class Trigger extends Component {
   }
 
   private findContainerByBusinessId(containerName: string): Container | undefined {
-    return storeContainer
-      .getContainersRaw()
-      .find((container) => fullName(container) === containerName);
+    return storeContainer.getContainersRaw().find((container) => {
+      const notificationKey = getContainerNotificationKey(container);
+      return notificationKey === containerName || fullName(container) === containerName;
+    });
   }
 
   private buildAutoTriggerErrorSignature(
@@ -634,7 +678,7 @@ class Trigger extends Component {
   }
 
   private buildEventBatchDispatchKey(container: Container): string {
-    return container.id || fullName(container);
+    return getContainerNotificationKey(container) || fullName(container);
   }
 
   private async flushEventBatchDispatch(ruleId: NotificationRuleId, containers: Container[]) {
@@ -750,17 +794,29 @@ class Trigger extends Component {
       return;
     }
 
-    // Evict from digest buffer — container is already updated, no need to notify.
-    // containerName is the full business ID (watcher_name), matching the buffer key.
-    if (this.digestBuffer.delete(containerName)) {
-      this.log.debug(`Evicted ${containerName} from digest buffer (update applied)`);
-    }
-
     const payloadContainer =
       typeof payload === 'object' && payload !== null && 'container' in payload
         ? (payload.container as Container | undefined)
         : undefined;
     const container = payloadContainer || this.findContainerByBusinessId(containerName);
+    const notificationKey = getContainerNotificationKey(container) || containerName;
+
+    // Evict from digest buffer — container is already updated, no need to notify.
+    let evictedBufferedUpdate = this.digestBuffer.delete(notificationKey);
+    if (!evictedBufferedUpdate && containerName !== notificationKey) {
+      evictedBufferedUpdate = this.digestBuffer.delete(containerName);
+    }
+    if (!evictedBufferedUpdate) {
+      for (const [bufferKey, bufferedContainer] of this.digestBuffer.entries()) {
+        if (fullName(bufferedContainer) === containerName) {
+          this.digestBuffer.delete(bufferKey);
+          evictedBufferedUpdate = true;
+        }
+      }
+    }
+    if (evictedBufferedUpdate) {
+      this.log.debug(`Evicted ${notificationKey} from digest buffer (update applied)`);
+    }
     const notificationContainer = container
       ? withNotificationEvent(container, { kind: 'update-applied' })
       : undefined;
@@ -949,13 +1005,25 @@ class Trigger extends Component {
 
     const currentReportsByBusinessId = new Map<string, ContainerReport>(
       containerReports.map(
-        (containerReport) => [fullName(containerReport.container), containerReport] as const,
+        (containerReport) =>
+          [
+            getContainerNotificationKey(containerReport.container) ||
+              fullName(containerReport.container),
+            containerReport,
+          ] as const,
       ),
     );
     const currentContainersByBusinessId = new Map<string, Container>(
       storeContainer
         .getContainersRaw()
-        .map((container) => [fullName(container as Container), container as Container] as const),
+        .map(
+          (container) =>
+            [
+              getContainerNotificationKey(container as Container) ||
+                fullName(container as Container),
+              container as Container,
+            ] as const,
+        ),
     );
 
     for (const [containerName, bufferedContainer] of this.batchRetryBuffer.entries()) {
@@ -1015,7 +1083,10 @@ class Trigger extends Component {
     logContainer.debug('Run');
     const result = await this.trigger(container);
     if (this.configuration.resolvenotifications && result) {
-      this.notificationResults.set(fullName(container), result);
+      this.notificationResults.set(
+        getContainerNotificationKey(container) || fullName(container),
+        result,
+      );
     }
   }
 
@@ -1097,12 +1168,16 @@ class Trigger extends Component {
     // Filter on containers with update available and passing trigger threshold
     const containersToSendByBusinessId = new Map<string, Container>();
     for (const container of this.getBatchRetryContainers(containerReports)) {
-      containersToSendByBusinessId.set(fullName(container), container);
+      containersToSendByBusinessId.set(
+        getContainerNotificationKey(container) || fullName(container),
+        container,
+      );
     }
     for (const containerReport of containerReports) {
       if (this.shouldHandleBatchContainerReport(containerReport)) {
         containersToSendByBusinessId.set(
-          fullName(containerReport.container),
+          getContainerNotificationKey(containerReport.container) ||
+            fullName(containerReport.container),
           containerReport.container,
         );
       }
@@ -1121,19 +1196,24 @@ class Trigger extends Component {
       // digest buffer so they are not sent again at the next digest flush.
       if (this.digestBuffer.size > 0) {
         for (const container of containersToSend) {
-          this.digestBuffer.delete(fullName(container));
+          this.digestBuffer.delete(getContainerNotificationKey(container) || fullName(container));
         }
       }
       if (this.batchRetryBuffer.size > 0) {
         for (const container of containersToSend) {
-          this.batchRetryBuffer.delete(fullName(container));
+          this.batchRetryBuffer.delete(
+            getContainerNotificationKey(container) || fullName(container),
+          );
         }
       }
     } catch (e: unknown) {
       const errorMessage = Trigger.getErrorMessage(e);
       if (this.isPureBatchMode()) {
         for (const container of containersToSend) {
-          this.batchRetryBuffer.set(fullName(container), container);
+          this.batchRetryBuffer.set(
+            getContainerNotificationKey(container) || fullName(container),
+            container,
+          );
         }
       }
       this.recordBatchDeliveryFailure(containersToSend, errorMessage);
@@ -1151,15 +1231,14 @@ class Trigger extends Component {
   }
 
   /**
-   * Buffer a container for digest mode. Keyed by full name so the latest
-   * update for each container wins if multiple scans fire before the digest
-   * cron flushes.
+   * Buffer a container for digest mode. Keyed by stable container identity
+   * so same-name siblings do not overwrite each other before the digest cron
+   * flushes.
    */
   private bufferContainerForDigest(container: Container) {
-    this.digestBuffer.set(fullName(container), container);
-    this.log.debug(
-      `Buffered ${fullName(container)} for digest (${this.digestBuffer.size} buffered)`,
-    );
+    const containerKey = getContainerNotificationKey(container) || fullName(container);
+    this.digestBuffer.set(containerKey, container);
+    this.log.debug(`Buffered ${containerKey} for digest (${this.digestBuffer.size} buffered)`);
   }
 
   /**
@@ -1169,7 +1248,7 @@ class Trigger extends Component {
     Trigger.canonicalizeReportName(containerReport);
 
     const { container } = containerReport;
-    const containerName = fullName(container);
+    const containerName = getContainerNotificationKey(container) || fullName(container);
 
     if (!container.updateAvailable) {
       if (this.digestBuffer.delete(containerName)) {
@@ -1210,7 +1289,14 @@ class Trigger extends Component {
     const currentContainersByBusinessId = new Map<string, Container>(
       storeContainer
         .getContainersRaw()
-        .map((container) => [fullName(container as Container), container as Container] as const),
+        .map(
+          (container) =>
+            [
+              getContainerNotificationKey(container as Container) ||
+                fullName(container as Container),
+              container as Container,
+            ] as const,
+        ),
     );
     const dispatchEntries = bufferedEntries.flatMap(([containerName, bufferedContainer]) => {
       const currentContainer = currentContainersByBusinessId.get(containerName);
@@ -1549,7 +1635,17 @@ class Trigger extends Component {
    * @param containerId
    */
   async handleContainerUpdateApplied(payload: ContainerUpdateAppliedEventPayload) {
-    const containerId = getContainerUpdateAppliedEventContainerName(payload);
+    const containerName = getContainerUpdateAppliedEventContainerName(payload);
+    const payloadContainer =
+      typeof payload === 'object' && payload !== null && 'container' in payload
+        ? (payload.container as Container | undefined)
+        : undefined;
+    const containerId =
+      getContainerNotificationKey(payloadContainer) ||
+      (containerName
+        ? getContainerNotificationKey(this.findContainerByBusinessId(containerName))
+        : undefined) ||
+      getContainerUpdateAppliedEventNotificationKey(payload);
     if (!containerId) {
       return;
     }

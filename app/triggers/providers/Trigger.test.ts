@@ -2465,7 +2465,7 @@ test('handleContainerUpdateApplied should call dismiss for stored notification',
 test('handleContainerUpdateApplied should dismiss for object payloads', async () => {
   const mockResult = { messageId: '123' };
   trigger.notificationResults = new Map();
-  trigger.notificationResults.set('docker.local/nginx', mockResult);
+  trigger.notificationResults.set('c1', mockResult);
   trigger.dismiss = vi.fn().mockResolvedValue(undefined);
 
   await trigger.handleContainerUpdateApplied({
@@ -2477,8 +2477,8 @@ test('handleContainerUpdateApplied should dismiss for object payloads', async ()
     },
   } as any);
 
-  expect(trigger.dismiss).toHaveBeenCalledWith('docker.local/nginx', mockResult);
-  expect(trigger.notificationResults.has('docker.local/nginx')).toBe(false);
+  expect(trigger.dismiss).toHaveBeenCalledWith('c1', mockResult);
+  expect(trigger.notificationResults.has('c1')).toBe(false);
 });
 
 test('handleContainerUpdateApplied should return early when no stored notification', async () => {
@@ -2741,6 +2741,7 @@ test('handleContainerUpdateAppliedEvent should resolve containers from raw store
 
 test('handleContainerUpdateAppliedEvent should use event payload container when store lookup misses', async () => {
   const container = {
+    id: 'c1',
     watcher: 'local',
     name: 'container1',
     updateAvailable: true,
@@ -2759,6 +2760,7 @@ test('handleContainerUpdateAppliedEvent should use event payload container when 
 
   expect(triggerSpy).toHaveBeenCalledWith(
     expect.objectContaining({
+      id: 'c1',
       name: 'container1',
       env: expect.objectContaining({
         SECRET_TOKEN: 'payload-secret',
@@ -2768,6 +2770,35 @@ test('handleContainerUpdateAppliedEvent should use event payload container when 
       },
     }),
   );
+});
+
+test('handleContainerUpdateAppliedEvent should evict digest entries by container id when payload includes the container', async () => {
+  await trigger.handleContainerReportDigest({
+    container: {
+      id: 'c1',
+      name: 'tdarr_node',
+      watcher: 'mediavault',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+    },
+    changed: true,
+  } as any);
+
+  const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+
+  await trigger.handleContainerUpdateAppliedEvent({
+    containerName: 'mediavault_tdarr_node',
+    container: {
+      id: 'c1',
+      name: 'tdarr_node',
+      watcher: 'mediavault',
+      updateAvailable: false,
+    },
+  } as any);
+
+  await trigger.flushDigestBuffer();
+
+  expect(triggerBatchSpy).not.toHaveBeenCalled();
 });
 
 test('handleContainerUpdateAppliedEvent should skip when rule disables trigger dispatch', async () => {
@@ -4148,6 +4179,43 @@ describe('digest mode', () => {
     triggerBatchSpy.mockRestore();
   });
 
+  test('handleContainerReportDigest should keep same-name siblings distinct when ids differ', async () => {
+    await trigger.register('trigger', 'test', 'digest-trigger', {
+      ...configurationValid,
+      mode: 'digest',
+    });
+    trigger.init();
+
+    await trigger.handleContainerReportDigest({
+      container: {
+        id: 'c1',
+        name: 'tdarr_node',
+        watcher: 'mediavault',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      },
+      changed: true,
+    } as any);
+    await trigger.handleContainerReportDigest({
+      container: {
+        id: 'c2',
+        name: 'tdarr_node',
+        watcher: 'mediavault',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      },
+      changed: true,
+    } as any);
+
+    const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+    await trigger.flushDigestBuffer();
+
+    expect(triggerBatchSpy).toHaveBeenCalledWith([
+      expect.objectContaining({ id: 'c1', name: 'tdarr_node' }),
+      expect.objectContaining({ id: 'c2', name: 'tdarr_node' }),
+    ]);
+  });
+
   test('handleContainerReportDigest should return early when auto trigger is disabled', async () => {
     await trigger.register('trigger', 'test', 'digest-trigger', {
       ...configurationValid,
@@ -4987,6 +5055,49 @@ describe('batch+digest mode', () => {
     await batchCallback?.([report] as any);
 
     expect(triggerBatchSpy).toHaveBeenCalledWith([report.container]);
+  });
+
+  test('batch handler should keep same-name siblings distinct when ids differ', async () => {
+    let batchCallback;
+    vi.mocked(event.registerContainerReports).mockImplementation((cb) => {
+      batchCallback = cb;
+      return vi.fn();
+    });
+
+    await trigger.register('trigger', 'test', 'combined-trigger', {
+      ...configurationValid,
+      mode: 'batch+digest',
+    });
+
+    const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+
+    await batchCallback?.([
+      {
+        changed: true,
+        container: {
+          id: 'c1',
+          name: 'tdarr_node',
+          watcher: 'mediavault',
+          updateAvailable: true,
+          updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+        },
+      },
+      {
+        changed: true,
+        container: {
+          id: 'c2',
+          name: 'tdarr_node',
+          watcher: 'mediavault',
+          updateAvailable: true,
+          updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+        },
+      },
+    ] as any);
+
+    expect(triggerBatchSpy).toHaveBeenCalledWith([
+      expect.objectContaining({ id: 'c1', name: 'tdarr_node' }),
+      expect.objectContaining({ id: 'c2', name: 'tdarr_node' }),
+    ]);
   });
 
   test('batch handler should evict sent containers from digest buffer in batch+digest mode', async () => {
