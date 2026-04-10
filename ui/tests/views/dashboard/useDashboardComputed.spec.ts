@@ -1039,6 +1039,79 @@ describe('useDashboardComputed recent updates', () => {
     ]);
   });
 
+  it('treats a standalone queued update operation as updating when no other active update exists', () => {
+    const state = createState({
+      containers: [
+        makeBaseContainer({
+          id: 'queued-standalone',
+          name: 'queued-standalone',
+          newTag: null,
+          updateOperation: {
+            id: 'op-queued-standalone',
+            status: 'queued',
+            phase: 'queued',
+            updatedAt: '2026-04-04T10:00:00.000Z',
+            fromVersion: '1.0.0',
+            toVersion: '1.1.0',
+          },
+        }),
+      ],
+    });
+
+    expect(state.recentUpdates.value).toEqual([
+      expect.objectContaining({
+        name: 'queued-standalone',
+        status: 'updating',
+      }),
+    ]);
+  });
+
+  it('keeps a standalone queued update operation queued when another container is already updating', () => {
+    const state = createState({
+      containers: [
+        makeBaseContainer({
+          id: 'updating-head',
+          name: 'updating-head',
+          newTag: null,
+          updateOperation: {
+            id: 'op-updating-head',
+            status: 'in-progress',
+            phase: 'pulling',
+            updatedAt: '2026-04-04T10:00:00.000Z',
+            fromVersion: '1.0.0',
+            toVersion: '1.1.0',
+          },
+        }),
+        makeBaseContainer({
+          id: 'queued-tail',
+          name: 'queued-tail',
+          newTag: null,
+          updateOperation: {
+            id: 'op-queued-tail',
+            status: 'queued',
+            phase: 'queued',
+            updatedAt: '2026-04-04T10:00:01.000Z',
+            fromVersion: '2.0.0',
+            toVersion: '2.1.0',
+          },
+        }),
+      ],
+    });
+
+    expect(state.recentUpdates.value).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'updating-head',
+          status: 'updating',
+        }),
+        expect.objectContaining({
+          name: 'queued-tail',
+          status: 'queued',
+        }),
+      ]),
+    );
+  });
+
   it('maps mature-only suppressed updates to maturity-blocked status', () => {
     const state = createState({
       containers: [

@@ -2651,7 +2651,7 @@ describe('useContainerActions', () => {
     expect(composable.getContainerUpdateSequenceLabel(proxyB)).toBe('2 of 2');
   });
 
-  it('treats queued update operations as queued before any persisted batch head is selected', async () => {
+  it('treats a standalone queued update operation as updating when no other active update exists', async () => {
     const queued = makeContainer({
       id: 'container-a',
       name: 'socket-proxy-a',
@@ -2666,8 +2666,68 @@ describe('useContainerActions', () => {
       containers: [queued],
     });
 
+    expect(composable.isContainerUpdateQueued(queued)).toBe(false);
+    expect(composable.isContainerUpdateInProgress(queued)).toBe(true);
+  });
+
+  it('keeps a standalone queued update operation queued when another container is already updating', async () => {
+    const updating = makeContainer({
+      id: 'container-head',
+      name: 'socket-proxy-head',
+      updateOperation: {
+        id: 'op-head',
+        status: 'in-progress',
+        phase: 'pulling',
+        updatedAt: '2026-04-01T12:00:00.000Z',
+      },
+    });
+    const queued = makeContainer({
+      id: 'container-a',
+      name: 'socket-proxy-a',
+      updateOperation: {
+        id: 'op-a',
+        status: 'queued',
+        phase: 'queued',
+        updatedAt: '2026-04-01T12:00:00.000Z',
+      },
+    });
+    const { composable } = await mountActionsHarness({
+      containers: [updating, queued],
+    });
+
     expect(composable.isContainerUpdateQueued(queued)).toBe(true);
     expect(composable.isContainerUpdateInProgress(queued)).toBe(false);
+  });
+
+  it('treats only the oldest standalone queued update operation as updating before any active update exists', async () => {
+    const queuedHead = makeContainer({
+      id: 'container-head',
+      name: 'socket-proxy-head',
+      updateOperation: {
+        id: 'op-head',
+        status: 'queued',
+        phase: 'queued',
+        updatedAt: '2026-04-01T12:00:00.000Z',
+      },
+    });
+    const queuedTail = makeContainer({
+      id: 'container-tail',
+      name: 'socket-proxy-tail',
+      updateOperation: {
+        id: 'op-tail',
+        status: 'queued',
+        phase: 'queued',
+        updatedAt: '2026-04-01T12:00:01.000Z',
+      },
+    });
+    const { composable } = await mountActionsHarness({
+      containers: [queuedTail, queuedHead],
+    });
+
+    expect(composable.isContainerUpdateQueued(queuedHead)).toBe(false);
+    expect(composable.isContainerUpdateInProgress(queuedHead)).toBe(true);
+    expect(composable.isContainerUpdateQueued(queuedTail)).toBe(true);
+    expect(composable.isContainerUpdateInProgress(queuedTail)).toBe(false);
   });
 
   it('returns null for string targets when resolving update sequence labels', async () => {

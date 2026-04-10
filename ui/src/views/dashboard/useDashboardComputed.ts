@@ -1,6 +1,7 @@
 import { type ComputedRef, computed, type Ref } from 'vue';
 import { ROUTES } from '../../router/routes';
 import type { Container } from '../../types/container';
+import { shouldRenderStandaloneQueuedUpdateAsUpdating } from '../../utils/container-update';
 import {
   buildDashboardContainerMetrics,
   type ImageSecurityAggregate,
@@ -171,13 +172,20 @@ function getUpdateKindIcon(kind: UpdateKind | null): string {
 
 function deriveRecentUpdateStatus(
   container: Container,
+  containers: readonly Container[],
   recentStatusByContainer: Record<string, RecentAuditStatus>,
 ): RecentUpdateRow['status'] {
   if (container.updateOperation?.status === 'in-progress') {
     return 'updating';
   }
   if (container.updateOperation?.status === 'queued') {
-    return 'queued';
+    return shouldRenderStandaloneQueuedUpdateAsUpdating({
+      containers,
+      operation: container.updateOperation,
+      targetId: container.id,
+    })
+      ? 'updating'
+      : 'queued';
   }
   if (container.updatePolicyState === 'snoozed') {
     return 'snoozed';
@@ -571,6 +579,7 @@ function isPendingRecentUpdateContainer(container: Container): boolean {
 
 function toPendingRecentUpdateCandidate(
   container: Container,
+  containers: readonly Container[],
   recentStatusByContainer: Record<string, RecentAuditStatus>,
   blocked: boolean,
 ): PendingRecentUpdateCandidate {
@@ -588,7 +597,7 @@ function toPendingRecentUpdateCandidate(
       oldVer: deriveCurrentVersion(container),
       newVer: deriveRecentUpdateVersion(container),
       releaseLink: container.releaseLink,
-      status: deriveRecentUpdateStatus(container, recentStatusByContainer),
+      status: deriveRecentUpdateStatus(container, containers, recentStatusByContainer),
       updateKind: container.updateKind ?? null,
       running: container.status === 'running',
       registryError: undefined,
@@ -620,6 +629,7 @@ function buildRecentUpdateRows(
     candidates.push(
       toPendingRecentUpdateCandidate(
         container,
+        containers,
         recentStatusByContainer,
         container.bouncer === 'blocked',
       ),

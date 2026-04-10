@@ -22,6 +22,7 @@ import {
   getForceContainerUpdateStartedMessage,
   isStaleContainerUpdateError,
   runContainerUpdateRequest,
+  shouldRenderStandaloneQueuedUpdateAsUpdating,
 } from '../../utils/container-update';
 import { errorMessage } from '../../utils/error';
 import { useContainerBackups } from './useContainerBackups';
@@ -1108,6 +1109,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
     );
     if (typeof target !== 'string') {
       const freshContainer = input.containers.value.find((c) => c.id === target.id);
+      const liveOperation = freshContainer?.updateOperation ?? target.updateOperation;
       const sequence = groupUpdateSequence.value.get(target.id);
       const isGroupQueueHead =
         sequence !== undefined &&
@@ -1124,6 +1126,15 @@ export function useContainerActions(input: UseContainerActionsInput) {
       const persistedSequence = getPersistedTargetSequence(target, input.containers.value);
       if (persistedSequence) {
         return persistedSequence.isHead;
+      }
+      if (
+        shouldRenderStandaloneQueuedUpdateAsUpdating({
+          containers: input.containers.value,
+          operation: liveOperation,
+          targetId: target.id,
+        })
+      ) {
+        return true;
       }
       if (
         target.updateOperation?.status === 'queued' ||
@@ -1146,6 +1157,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
       return false;
     }
     const freshContainer = input.containers.value.find((container) => container.id === target.id);
+    const liveOperation = freshContainer?.updateOperation ?? target.updateOperation;
     const sequence = groupUpdateSequence.value.get(target.id);
     const isGroupQueueHead =
       sequence !== undefined &&
@@ -1161,6 +1173,15 @@ export function useContainerActions(input: UseContainerActionsInput) {
     const persistedSequence = getPersistedTargetSequence(target, input.containers.value);
     if (persistedSequence) {
       return !persistedSequence.isHead;
+    }
+    if (
+      shouldRenderStandaloneQueuedUpdateAsUpdating({
+        containers: input.containers.value,
+        operation: liveOperation,
+        targetId: target.id,
+      })
+    ) {
+      return false;
     }
     if (
       target.updateOperation?.status === 'queued' ||

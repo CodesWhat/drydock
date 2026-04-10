@@ -1,6 +1,77 @@
+import type { Container, ContainerUpdateOperation } from '../types/container';
 import { isNoUpdateAvailableError } from './error';
 
 export type ContainerUpdateRequestResult = 'accepted' | 'stale';
+
+type UpdateOperationSequenceLike = Pick<
+  ContainerUpdateOperation,
+  'status' | 'updatedAt' | 'batchId' | 'queuePosition' | 'queueTotal'
+>;
+
+type UpdateOperationContainerLike = Pick<Container, 'id' | 'updateOperation'>;
+
+function hasPersistedUpdateBatchSequence(operation?: UpdateOperationSequenceLike): boolean {
+  return Boolean(
+    operation?.batchId &&
+      Number.isSafeInteger(operation.queuePosition) &&
+      Number.isSafeInteger(operation.queueTotal) &&
+      operation.queuePosition > 0 &&
+      operation.queueTotal > 0 &&
+      operation.queuePosition <= operation.queueTotal,
+  );
+}
+
+function isStandaloneQueuedUpdateOperation(operation?: UpdateOperationSequenceLike): boolean {
+  return operation?.status === 'queued' && !hasPersistedUpdateBatchSequence(operation);
+}
+
+function parseUpdateOperationTimestamp(updatedAt?: string): number {
+  if (typeof updatedAt !== 'string') {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  const parsed = Date.parse(updatedAt);
+  return Number.isNaN(parsed) ? Number.POSITIVE_INFINITY : parsed;
+}
+
+export function shouldRenderStandaloneQueuedUpdateAsUpdating(args: {
+  containers: readonly UpdateOperationContainerLike[];
+  operation?: UpdateOperationSequenceLike;
+  targetId?: string;
+}): boolean {
+  if (!isStandaloneQueuedUpdateOperation(args.operation)) {
+    return false;
+  }
+
+  const hasActivePredecessor = args.containers.some(
+    (container) =>
+      container.id !== args.targetId && container.updateOperation?.status === 'in-progress',
+  );
+  if (hasActivePredecessor) {
+    return false;
+  }
+
+  let headId: string | undefined;
+  let headTimestamp = Number.POSITIVE_INFINITY;
+
+  for (const container of args.containers) {
+    if (!isStandaloneQueuedUpdateOperation(container.updateOperation)) {
+      continue;
+    }
+
+    const candidateTimestamp = parseUpdateOperationTimestamp(container.updateOperation?.updatedAt);
+    if (candidateTimestamp < headTimestamp) {
+      headTimestamp = candidateTimestamp;
+      headId = container.id;
+    }
+  }
+
+  if (!headId) {
+    return true;
+  }
+
+  return headId === args.targetId;
+}
 
 export function createContainerUpdateBatchId(): string {
   const randomUUID = globalThis.crypto?.randomUUID;
