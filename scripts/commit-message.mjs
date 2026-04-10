@@ -1,19 +1,28 @@
 const COMMIT_TYPES = {
-  feat: { emoji: '✨', purpose: 'new feature' },
-  fix: { emoji: '🐛', purpose: 'bug fix' },
-  docs: { emoji: '📝', purpose: 'documentation change' },
-  style: { emoji: '💄', purpose: 'style/cosmetic change' },
-  refactor: { emoji: '♻️', purpose: 'refactor without behavior change' },
-  perf: { emoji: '⚡', purpose: 'performance improvement' },
-  test: { emoji: '✅', purpose: 'test change' },
-  chore: { emoji: '🔧', purpose: 'tooling/config change' },
-  security: { emoji: '🔒', purpose: 'security fix' },
-  deps: { emoji: '⬆️', purpose: 'dependency change' },
-  revert: { emoji: '🗑️', purpose: 'intentional revert' },
+  feat: { emoji: '✨', aliases: [], purpose: 'new feature' },
+  fix: { emoji: '🐛', aliases: [], purpose: 'bug fix' },
+  docs: { emoji: '📝', aliases: [], purpose: 'documentation change' },
+  style: { emoji: '🎨', aliases: ['💄'], purpose: 'style/cosmetic change' },
+  refactor: { emoji: '🔄', aliases: ['♻️'], purpose: 'refactor without behavior change' },
+  perf: { emoji: '⚡', aliases: [], purpose: 'performance improvement' },
+  test: { emoji: '🧪', aliases: ['✅'], purpose: 'test change' },
+  chore: { emoji: '🔧', aliases: [], purpose: 'tooling/config change' },
+  security: { emoji: '🔒', aliases: [], purpose: 'security fix' },
+  deps: { emoji: '📦', aliases: ['⬆️'], purpose: 'dependency change' },
+  remove: { emoji: '🗑️', aliases: [], purpose: 'code removal' },
+  revert: { emoji: '🗑️', aliases: [], purpose: 'intentional revert' },
 };
 
+function getAcceptedEmojis(type) {
+  const meta = COMMIT_TYPES[type];
+  if (!meta) {
+    return [];
+  }
+  return [meta.emoji, ...meta.aliases];
+}
+
 const subjectRegex =
-  /^(?<emoji>✨|🐛|📝|💄|♻️|⚡|✅|🔧|🔒|⬆️|🗑️)\s(?<type>feat|fix|docs|style|refactor|perf|test|chore|security|deps|revert)(?:\((?<scope>[a-z0-9][a-z0-9._/-]*)\))?:\s(?<description>.+)$/u;
+  /^(?<emoji>✨|🐛|📝|🎨|💄|🔄|♻️|⚡|🧪|✅|🔧|🔒|📦|⬆️|🗑️)\s(?<type>feat|fix|docs|style|refactor|perf|test|chore|security|deps|remove|revert)(?:\((?<scope>[a-z0-9][a-z0-9._/-]*)\))?:\s(?<description>.+)$/u;
 
 export function validateCommitMessage(rawMessage) {
   const message = (rawMessage ?? '').trim();
@@ -35,7 +44,9 @@ export function validateCommitMessage(rawMessage) {
       errors.push('Missing required emoji (gitmoji) prefix.');
     }
     if (
-      !/\s(feat|fix|docs|style|refactor|perf|test|chore|security|deps|revert)(\(|:)/u.test(subject)
+      !/\s(feat|fix|docs|style|refactor|perf|test|chore|security|deps|remove|revert)(\(|:)/u.test(
+        subject,
+      )
     ) {
       errors.push('Missing or unsupported commit type.');
     }
@@ -45,11 +56,10 @@ export function validateCommitMessage(rawMessage) {
   }
 
   const { emoji, type, description } = match.groups;
-  const expectedEmoji = COMMIT_TYPES[type]?.emoji;
-  if (expectedEmoji && emoji !== expectedEmoji) {
-    errors.push(
-      `Invalid emoji/type pair. Expected "${expectedEmoji} ${type}" but got "${emoji} ${type}".`,
-    );
+  const acceptedEmojis = getAcceptedEmojis(type);
+  if (acceptedEmojis.length > 0 && !acceptedEmojis.includes(emoji)) {
+    const expected = acceptedEmojis.map((value) => `"${value} ${type}"`).join(' or ');
+    errors.push(`Invalid emoji/type pair. Expected ${expected} but got "${emoji} ${type}".`);
   }
 
   if (/^[A-Z]/u.test(description)) {
@@ -72,7 +82,11 @@ export function formatValidationFailure(rawMessage, errors) {
   const subject = message.split(/\r?\n/u, 1)[0] ?? '';
 
   const allowedPairs = Object.entries(COMMIT_TYPES)
-    .map(([type, meta]) => `  ${meta.emoji} ${type}: ${meta.purpose}`)
+    .map(([type, meta]) => {
+      const alternates =
+        meta.aliases.length > 0 ? ` (or ${meta.aliases.map((a) => `${a} ${type}`).join(', ')})` : '';
+      return `  ${meta.emoji} ${type}: ${meta.purpose}${alternates}`;
+    })
     .join('\n');
 
   const formattedErrors = errors.map((error) => `  - ${error}`).join('\n');
