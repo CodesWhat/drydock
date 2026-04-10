@@ -76,7 +76,9 @@ function parseLcovFile(repoRoot, lcovPath) {
     }
 
     if (line.startsWith('BRDA:')) {
-      const [lineNumberText, blockNumberText, branchNumberText, hitsText] = line.slice(5).split(',');
+      const [lineNumberText, blockNumberText, branchNumberText, hitsText] = line
+        .slice(5)
+        .split(',');
       const lineNumber = Number.parseInt(lineNumberText, 10);
       const hits = hitsText === '-' ? 0 : Number.parseInt(hitsText, 10);
       if (hits === 0) {
@@ -179,7 +181,7 @@ const repoRoot = process.cwd();
 const gaps = collectGaps(repoRoot, args.workspace);
 
 if (args.write) {
-  fs.writeFileSync(args.write, JSON.stringify(gaps, null, 2) + '\n');
+  fs.writeFileSync(args.write, `${JSON.stringify(gaps, null, 2)}\n`);
 }
 
 if (args.print) {
