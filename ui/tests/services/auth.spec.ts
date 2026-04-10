@@ -69,27 +69,20 @@ describe('Auth Service', () => {
       }
     });
 
-    it('reuses a fresh cached user without refetching', async () => {
-      vi.useFakeTimers();
-      const { AUTH_USER_CACHE_TTL_MS, getUser } = await loadAuthService();
+    it('revalidates a settled authenticated user on the next call', async () => {
+      const { getUser } = await loadAuthService();
       const mockUser = { username: 'cached-user', roles: ['admin'] };
       fetchMock.mockResolvedValueOnce({
         ok: true,
         json: async () => mockUser,
       });
-
-      expect(await getUser()).toEqual(mockUser);
-      expect(await getUser()).toEqual(mockUser);
-
-      expect(fetchMock).toHaveBeenCalledTimes(1);
-
-      vi.advanceTimersByTime(AUTH_USER_CACHE_TTL_MS + 1);
       fetchMock.mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockUser,
+        ok: false,
+        status: 401,
       });
 
       expect(await getUser()).toEqual(mockUser);
+      expect(await getUser()).toBeUndefined();
       expect(fetchMock).toHaveBeenCalledTimes(2);
     });
 
@@ -114,6 +107,23 @@ describe('Auth Service', () => {
 
       await expect(first).resolves.toEqual(mockUser);
       await expect(second).resolves.toEqual(mockUser);
+    });
+
+    it('does not keep an unauthenticated result cached after the request settles', async () => {
+      const { getUser } = await loadAuthService();
+      const mockUser = { username: 'fresh-user', roles: ['admin'] };
+      fetchMock.mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+      });
+      fetchMock.mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockUser,
+      });
+
+      expect(await getUser()).toBeUndefined();
+      expect(await getUser()).toEqual(mockUser);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
     });
   });
 

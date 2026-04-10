@@ -4,29 +4,10 @@
 
 import { errorMessage } from '../utils/error';
 
-export const AUTH_USER_CACHE_TTL_MS = 5_000;
-
-let cachedUser: unknown = undefined;
-let cachedUserExpiresAt = 0;
-let hasCachedUser = false;
 let pendingUserRequest: Promise<unknown> | undefined;
 
-function setCachedUser(user: unknown, now = Date.now()) {
-  cachedUser = user;
-  cachedUserExpiresAt = now + AUTH_USER_CACHE_TTL_MS;
-  hasCachedUser = true;
-  return user;
-}
-
 function clearCachedUser() {
-  cachedUser = undefined;
-  cachedUserExpiresAt = 0;
-  hasCachedUser = false;
   pendingUserRequest = undefined;
-}
-
-function hasFreshUserCache(now = Date.now()) {
-  return hasCachedUser && cachedUserExpiresAt > now;
 }
 
 function getPayloadErrorMessage(payload: unknown): string {
@@ -61,27 +42,25 @@ async function getStrategies(): Promise<{
  * @returns {Promise<*>}
  */
 async function getUser() {
-  if (hasFreshUserCache()) {
-    return cachedUser;
-  }
-
   if (pendingUserRequest) {
     return pendingUserRequest;
   }
 
   pendingUserRequest = (async () => {
     try {
+      // Only dedupe concurrent callers. Always revalidate settled auth state so
+      // logout/session expiry in another tab is reflected on the next check.
       const response = await fetch('/auth/user', {
         redirect: 'manual',
         credentials: 'include',
       });
       if (response.ok) {
-        return setCachedUser(await response.json());
+        return await response.json();
       }
-      return setCachedUser(undefined);
+      return undefined;
     } catch (e: unknown) {
       console.debug(`Unable to fetch current user: ${errorMessage(e)}`);
-      return setCachedUser(undefined);
+      return undefined;
     } finally {
       pendingUserRequest = undefined;
     }
@@ -122,7 +101,8 @@ async function loginBasic(username: string, password: string, remember: boolean 
 
     throw new Error(message || 'Username or password error');
   }
-  return setCachedUser(await response.json());
+  clearCachedUser();
+  return await response.json();
 }
 
 /**
