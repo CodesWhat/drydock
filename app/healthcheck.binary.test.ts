@@ -54,6 +54,71 @@ async function runProbe(binaryPath: string, port: number, env: NodeJS.ProcessEnv
   });
 }
 
+function compilePopenBlocker(sourcePath: string, libraryPath: string) {
+  const source =
+    process.platform === 'darwin'
+      ? [
+          '#include <errno.h>',
+          '#include <stdio.h>',
+          '',
+          '#define DYLD_INTERPOSE(_replacement, _replacee) \\',
+          '  __attribute__((used)) static struct { \\',
+          '    const void *replacement; \\',
+          '    const void *replacee; \\',
+          '  } _interpose_##_replacee \\',
+          '    __attribute__((section("__DATA,__interpose"))) = { \\',
+          '      (const void *)(unsigned long)&_replacement, \\',
+          '      (const void *)(unsigned long)&_replacee \\',
+          '    };',
+          '',
+          'static FILE *block_popen(const char *command, const char *type) {',
+          '  (void)command;',
+          '  (void)type;',
+          '  errno = EPERM;',
+          '  return NULL;',
+          '}',
+          '',
+          'DYLD_INTERPOSE(block_popen, popen);',
+          '',
+        ].join('\n')
+      : [
+          '#include <errno.h>',
+          '#include <stdio.h>',
+          '',
+          'FILE *popen(const char *command, const char *type) {',
+          '  (void)command;',
+          '  (void)type;',
+          '  errno = EPERM;',
+          '  return NULL;',
+          '}',
+          '',
+        ].join('\n');
+
+  fs.writeFileSync(sourcePath, source);
+
+  const args =
+    process.platform === 'darwin'
+      ? ['-dynamiclib', sourcePath, '-o', libraryPath]
+      : ['-shared', '-fPIC', sourcePath, '-o', libraryPath];
+
+  execFileSync('cc', args, { stdio: 'ignore' });
+}
+
+function withPopenBlocked(env: NodeJS.ProcessEnv, libraryPath: string): NodeJS.ProcessEnv {
+  if (process.platform === 'darwin') {
+    return {
+      ...env,
+      DYLD_FORCE_FLAT_NAMESPACE: '1',
+      DYLD_INSERT_LIBRARIES: libraryPath,
+    };
+  }
+
+  return {
+    ...env,
+    LD_PRELOAD: libraryPath,
+  };
+}
+
 const probeHandler: http.RequestListener = (req, res) => {
   if (req.url === '/health') {
     res.writeHead(200, { 'content-type': 'application/json' });
@@ -69,6 +134,11 @@ describe('/bin/healthcheck compatibility', () => {
   const binaryPath = path.join(tempDir, 'healthcheck');
   const keyPath = path.join(tempDir, 'key.pem');
   const certPath = path.join(tempDir, 'cert.pem');
+  const popenBlockerSourcePath = path.join(tempDir, 'block-popen.c');
+  const popenBlockerLibraryPath = path.join(
+    tempDir,
+    process.platform === 'darwin' ? 'block-popen.dylib' : 'block-popen.so',
+  );
   const sourcePath = path.resolve(import.meta.dirname, '..', 'healthcheck.c');
 
   beforeAll(() => {
@@ -93,6 +163,7 @@ describe('/bin/healthcheck compatibility', () => {
       { stdio: 'ignore' },
     );
     execFileSync('cc', ['-Os', sourcePath, '-o', binaryPath], { stdio: 'ignore' });
+    compilePopenBlocker(popenBlockerSourcePath, popenBlockerLibraryPath);
   });
 
   afterAll(() => {
@@ -122,6 +193,32 @@ describe('/bin/healthcheck compatibility', () => {
     try {
       expect(
         await runProbe(binaryPath, port, { ...process.env, DD_SERVER_TLS_ENABLED: 'true' }),
+      ).toBe(0);
+    } finally {
+      await close(server);
+    }
+  });
+
+  test('succeeds against HTTPS without relying on popen()', async () => {
+    const server = https.createServer(
+      {
+        key: fs.readFileSync(keyPath),
+        cert: fs.readFileSync(certPath),
+      },
+      probeHandler,
+    );
+
+    const port = await listen(server);
+    try {
+      expect(
+        await runProbe(
+          binaryPath,
+          port,
+          withPopenBlocked(
+            { ...process.env, DD_SERVER_TLS_ENABLED: 'true' },
+            popenBlockerLibraryPath,
+          ),
+        ),
       ).toBe(0);
     } finally {
       await close(server);
