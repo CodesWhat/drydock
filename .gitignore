@@ -27,6 +27,7 @@ coverage
 *.lcov
 .coverage-gaps*.json
 .coverage-logs/
+.build-logs/
 CLAUDE.md
 
 # nyc test coverage
