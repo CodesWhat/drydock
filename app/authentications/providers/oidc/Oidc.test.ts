@@ -1644,6 +1644,46 @@ test('stale lock cleanup timer should delete session lock when operation outlive
   vi.useRealTimers();
 });
 
+test('stale lock cleanup timer should skip deleting when a newer lock replaces the entry', async () => {
+  vi.useFakeTimers();
+
+  let firstReload: ((error?: unknown) => void) | undefined;
+  const firstReq = createReq({
+    sessionID: 'replaced-lock-session',
+    session: {
+      reload: vi.fn((cb) => {
+        firstReload = cb;
+      }),
+      save: vi.fn((cb) => cb()),
+    },
+  });
+  const secondReq = createReq({
+    sessionID: 'replaced-lock-session',
+    session: {
+      reload: vi.fn((cb) => cb()),
+      save: vi.fn((cb) => cb()),
+    },
+  });
+  const firstRes = createRes();
+  const secondRes = createRes();
+
+  try {
+    const firstRedirectPromise = oidc.redirect(firstReq, firstRes);
+    await vi.advanceTimersByTimeAsync(1);
+    const secondRedirectPromise = oidc.redirect(secondReq, secondRes);
+
+    await vi.advanceTimersByTimeAsync(59_999);
+
+    firstReload?.();
+    await Promise.all([firstRedirectPromise, secondRedirectPromise]);
+
+    expect(firstRes.json).toHaveBeenCalledWith({ url: 'https://idp/auth' });
+    expect(secondRes.json).toHaveBeenCalledWith({ url: 'https://idp/auth' });
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 test('callback should record oidc success metrics on successful authentication', async () => {
   mockSuccessfulGrant(openidClientMock);
   const { session } = await performRedirect(oidc, openidClientMock);

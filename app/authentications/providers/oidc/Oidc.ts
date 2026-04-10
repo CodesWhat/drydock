@@ -227,11 +227,9 @@ async function withOidcSessionLock<T>(sessionId: string, operation: () => Promis
   oidcSessionLocks.set(sessionId, nextLock);
 
   const staleLockCleanupTimer = setTimeout(() => {
-    /* v8 ignore start -- false branch unreachable: no concurrent lock replacement in tests */
     if (oidcSessionLocks.get(sessionId) === nextLock) {
       oidcSessionLocks.delete(sessionId);
     }
-    /* v8 ignore stop */
   }, OIDC_SESSION_LOCK_STALE_TTL_MS);
   staleLockCleanupTimer.unref?.();
 
