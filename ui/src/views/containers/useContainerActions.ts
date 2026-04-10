@@ -654,7 +654,7 @@ export function isPendingUpdateSettled(args: {
   );
 }
 
-function prunePendingActionsState(args: {
+export function prunePendingActionsState(args: {
   now: number;
   containers: Readonly<Ref<Container[]>>;
   actionPending: Ref<Map<string, Container>>;

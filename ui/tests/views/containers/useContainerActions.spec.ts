@@ -7,6 +7,7 @@ import {
   ACTION_TAB_DETAIL_REFRESH_DEBOUNCE_MS,
   isPendingUpdateSettled,
   PENDING_ACTIONS_POLL_INTERVAL_MS,
+  prunePendingActionsState,
   useContainerActions,
 } from '@/views/containers/useContainerActions';
 
@@ -2682,6 +2683,19 @@ describe('useContainerActions', () => {
     expect(composable.isContainerUpdateQueued('some-container-name')).toBe(false);
   });
 
+  it('returns false for malformed targets that do not resolve to a pending action identity', async () => {
+    const { composable } = await mountActionsHarness({});
+
+    expect(
+      composable.isContainerUpdateInProgress({
+        id: '',
+        name: '',
+        server: '',
+        updateOperation: undefined,
+      } as Container),
+    ).toBe(false);
+  });
+
   it('derives persisted queue labels from backend batch metadata after reload', async () => {
     const proxyA = makeContainer({
       id: 'container-a',
@@ -3048,6 +3062,75 @@ describe('useContainerActions', () => {
     await flushPromises();
 
     expect(composable.actionPending.value.has('web')).toBe(false);
+  });
+
+  it('times out malformed pending-action identities that cannot be re-matched during polling', async () => {
+    vi.useFakeTimers();
+    const web = makeContainer({ id: 'container-1', name: 'web' });
+    const malformedSnapshot = makeContainer({ id: '', name: '', server: '' });
+    const { composable, containers, loadContainers } = await mountActionsHarness({
+      containers: [web],
+      containerIdMap: { web: 'container-1' },
+    });
+    loadContainers.mockImplementation(async () => {
+      containers.value = [makeContainer({ id: '', name: '', server: '' })];
+    });
+
+    await composable.startContainer('web');
+    composable.actionPending.value.set('web', malformedSnapshot);
+
+    vi.advanceTimersByTime(30001);
+    await flushPromises();
+
+    expect(composable.actionPending.value.has('web')).toBe(false);
+  });
+
+  it('clears pending action state when the stored snapshot entry disappears before polling', async () => {
+    vi.useFakeTimers();
+    const web = makeContainer({ id: 'container-1', name: 'web' });
+    const { composable, loadContainers } = await mountActionsHarness({
+      containers: [web],
+      containerIdMap: { web: 'container-1' },
+    });
+    loadContainers.mockResolvedValue(undefined);
+
+    await composable.startContainer('web');
+    composable.actionPending.value.delete('web');
+
+    vi.advanceTimersByTime(PENDING_ACTIONS_POLL_INTERVAL_MS);
+    await flushPromises();
+    expect(loadContainers).toHaveBeenCalledTimes(1);
+
+    vi.advanceTimersByTime(PENDING_ACTIONS_POLL_INTERVAL_MS);
+    await flushPromises();
+
+    expect(loadContainers).toHaveBeenCalledTimes(1);
+  });
+
+  it('prunes timed-out pending actions when the snapshot entry is missing', () => {
+    const actionPending = ref(new Map<string, Container>());
+    const actionPendingStartTimes = ref(new Map<string, number>([['web', 0]]));
+    const actionPendingLifecycleModes = ref(new Map([['web', 'start' as const]]));
+    const actionPendingLifecycleObserved = ref(new Set<string>());
+    const groupUpdateQueue = ref(new Set<string>());
+    const groupUpdateSequence = ref(new Map());
+    const stopPendingActionsPolling = vi.fn();
+
+    prunePendingActionsState({
+      now: PENDING_ACTIONS_POLL_INTERVAL_MS + 1,
+      containers: ref([]),
+      actionPending,
+      actionPendingStartTimes,
+      actionPendingLifecycleModes,
+      actionPendingLifecycleObserved,
+      groupUpdateQueue,
+      groupUpdateSequence,
+      pollTimeout: 0,
+      stopPendingActionsPolling,
+    });
+
+    expect(actionPendingStartTimes.value.has('web')).toBe(false);
+    expect(stopPendingActionsPolling).toHaveBeenCalledTimes(1);
   });
 
   it('fails closed for action handlers when container actions are disabled', async () => {
