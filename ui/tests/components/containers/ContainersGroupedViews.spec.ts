@@ -12,7 +12,7 @@ vi.mock('@/components/containers/containersViewTemplateContext', () => ({
 }));
 
 const DataTableStub = defineComponent({
-  props: ['rows', 'rowClass', 'rowClickable', 'fullWidthRow', 'rowKey'],
+  props: ['rows', 'rowClass', 'rowClickable', 'fullWidthRow', 'rowKey', 'virtualScroll'],
   emits: ['update:sort-key', 'update:sort-asc', 'row-click'],
   setup(props, { emit }) {
     const isFullWidth = (row: Record<string, unknown>) =>
@@ -720,6 +720,38 @@ describe('ContainersGroupedViews', () => {
     expect(wrapper.findAll('.table-row-stub')).toHaveLength(2);
     expect(wrapper.text()).toContain('stack-a');
     expect(wrapper.text()).toContain('stack-b');
+  });
+
+  it('enables virtual scrolling for grouped table mode', async () => {
+    const alpha = makeContainer({
+      id: 'c-alpha',
+      name: 'alpha',
+      newTag: '1.1.0',
+      updateKind: 'minor',
+      status: 'running',
+    });
+
+    const { context } = makeContext();
+    context.groupByStack.value = true;
+    context.containerViewMode.value = 'table';
+    context.filteredContainers.value = [alpha];
+    context.displayContainers.value = [alpha];
+    context.renderGroups.value = [
+      {
+        key: 'stack-a',
+        name: 'stack-a',
+        containers: [alpha],
+        containerCount: 1,
+        updatesAvailable: 1,
+        updatableCount: 1,
+      },
+    ];
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+    await nextTick();
+
+    expect(wrapper.findComponent(DataTableStub).props('virtualScroll')).toBe(true);
   });
 
   it('covers card/list view events and footer action handlers', async () => {

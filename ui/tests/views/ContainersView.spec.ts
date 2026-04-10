@@ -635,10 +635,10 @@ describe('ContainersView', () => {
       expect(wrapper.findAll('button[disabled]').length).toBeGreaterThan(0);
     });
 
-    it('disables virtual scrolling so the table flows with the page', async () => {
+    it('enables virtual scrolling for the grouped containers table', async () => {
       const wrapper = await mountContainersView([makeContainer()]);
       const dataTable = wrapper.findComponent(childStubs.DataTable as any);
-      expect(dataTable.props('virtualScroll')).toBe(false);
+      expect(dataTable.props('virtualScroll')).toBe(true);
     });
 
     it('renders DataFilterBar', async () => {

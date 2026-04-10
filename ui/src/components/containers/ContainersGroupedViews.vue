@@ -232,7 +232,7 @@ function selectTableRow(row: Record<string, unknown>) {
         :sort-asc="containerSortAsc"
         :selected-key="selectedContainerKey"
         :show-actions="true"
-        :virtual-scroll="false"
+        :virtual-scroll="true"
         :full-width-row="isTableRowFullWidth"
         :row-interactive="isTableRowInteractive"
         :row-class="tableRowClass"
