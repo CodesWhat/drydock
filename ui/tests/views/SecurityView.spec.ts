@@ -477,6 +477,13 @@ describe('SecurityView', () => {
       expect(w.text()).toContain('OpenSSL buffer overflow');
       expect(w.text()).toContain('usr/lib/libcrypto.so');
       expect(w.find('a[href="https://avd.aquasec.com/nvd/cve-2026-9999"]').exists()).toBe(true);
+
+      const vulnerabilityRow = w.find('.divide-y > div');
+      const detailLines = vulnerabilityRow.findAll('.flex');
+      expect(detailLines[0].classes()).toContain('items-start');
+      expect(detailLines[0].classes()).not.toContain('items-center');
+      expect(detailLines[1].classes()).toContain('items-start');
+      expect(detailLines[1].classes()).not.toContain('items-center');
     });
 
     it('computes safe vulnerability URLs once per vulnerability instead of per binding', async () => {

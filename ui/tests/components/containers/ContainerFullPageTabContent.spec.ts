@@ -803,6 +803,12 @@ describe('ContainerFullPageTabContent', () => {
     expect(wrapper.text()).toContain('Abort on pre-update failure');
     expect(wrapper.text()).toContain('{{name}}');
     expect(wrapper.text()).toContain('CVE-2026-0001');
+    const vulnerabilityLabel = wrapper
+      .findAll('.font-mono')
+      .find((node) => node.text().includes('CVE-2026-0001'));
+    const vulnerabilityRow = vulnerabilityLabel?.element.parentElement;
+    expect(vulnerabilityRow?.classList.contains('items-start')).toBe(true);
+    expect(vulnerabilityRow?.classList.contains('items-center')).toBe(false);
     expect(wrapper.text()).toContain('components:');
     expect(wrapper.text()).toContain('generated:');
 

@@ -466,12 +466,12 @@ function isActionInProgress(container: { id?: unknown; name?: unknown }) {
                 </div>
                 <div v-if="vulnerabilityPreview.length > 0" class="space-y-1.5">
                   <div v-for="vulnerability in vulnerabilityPreview" :key="vulnerability.id"
-                       class="flex items-center gap-2 px-3 py-2 dd-rounded text-2xs-plus"
+                       class="flex items-start gap-2 px-3 py-2 dd-rounded text-2xs-plus"
                        :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-                    <AppBadge size="xs" :custom="severityStyle(normalizeSeverity(vulnerability.severity))">
+                    <AppBadge size="xs" class="mt-0.5 shrink-0" :custom="severityStyle(normalizeSeverity(vulnerability.severity))">
                       {{ normalizeSeverity(vulnerability.severity) }}
                     </AppBadge>
-                    <span class="font-mono dd-text truncate">{{ vulnerability.id }}</span>
+                    <span class="min-w-0 font-mono dd-text truncate">{{ vulnerability.id }}</span>
                     <span class="dd-text-muted truncate ml-auto">{{ getVulnerabilityPackage(vulnerability) }}</span>
                   </div>
                 </div>

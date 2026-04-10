@@ -636,22 +636,23 @@ onUnmounted(() => {
           <div class="divide-y" :style="{ borderColor: 'var(--dd-border)' }">
             <div v-for="vuln in selectedImageVulnsWithSafeUrl" :key="vuln.id + vuln.package"
                  class="px-4 py-3 hover:dd-bg-hover transition-colors">
-              <div class="flex items-center gap-2 mb-1.5">
+              <div class="flex items-start gap-2 mb-1.5">
                 <AppIcon :name="severityIcon(vuln.severity)" :size="12"
+                         class="mt-0.5 shrink-0"
                          :style="{ color: severityColor(vuln.severity).text }" />
-                <AppBadge :custom="{ bg: severityColor(vuln.severity).bg, text: severityColor(vuln.severity).text }" size="xs" class="px-1.5 py-0">
+                <AppBadge :custom="{ bg: severityColor(vuln.severity).bg, text: severityColor(vuln.severity).text }" size="xs" class="mt-0.5 shrink-0 px-1.5 py-0">
                   {{ vuln.severity }}
                 </AppBadge>
-                <span class="font-mono text-2xs-plus font-semibold dd-text truncate">{{ vuln.id }}</span>
+                <span class="min-w-0 font-mono text-2xs-plus font-semibold dd-text truncate">{{ vuln.id }}</span>
               </div>
-              <div class="flex items-center gap-2 text-2xs-plus ml-5">
+              <div class="flex items-start gap-2 text-2xs-plus ml-5 min-w-0">
                 <span class="font-medium dd-text">{{ vuln.package }}</span>
                 <span class="dd-text-muted">{{ vuln.version }}</span>
-                <AppBadge v-if="vuln.fixedIn" tone="success" size="xs" class="ml-auto px-1.5 py-0">
-                  <AppIcon name="check" :size="9" class="mr-0.5" />
+                <AppBadge v-if="vuln.fixedIn" tone="success" size="xs" class="ml-auto mt-0.5 shrink-0 px-1.5 py-0">
+                  <AppIcon name="check" :size="9" class="mr-0.5 shrink-0" />
                   {{ vuln.fixedIn }}
                 </AppBadge>
-                <span v-else class="ml-auto text-2xs dd-text-muted">No fix</span>
+                <span v-else class="ml-auto mt-0.5 shrink-0 text-2xs dd-text-muted">No fix</span>
               </div>
               <div
                 v-if="vuln.title || vuln.target || vuln.safePrimaryUrl"
