@@ -28,6 +28,7 @@ export interface AuditEntry {
     | 'auth-login'
     | 'env-reveal';
   containerName: string;
+  containerIdentityKey?: string;
   containerImage?: string;
   fromVersion?: string;
   toVersion?: string;

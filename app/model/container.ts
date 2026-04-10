@@ -174,6 +174,8 @@ export interface Container {
   resultChanged?: (otherContainer: Container | undefined) => boolean;
 }
 
+export type ContainerIdentity = Partial<Pick<Container, 'agent' | 'watcher' | 'name'>>;
+
 export interface ContainerReport {
   container: Container;
   changed: boolean;
@@ -818,6 +820,24 @@ export function flatten(container: Container) {
   });
   delete containerFlatten.result_changed;
   return containerFlatten;
+}
+
+export function getContainerIdentityKey(containerIdentity: ContainerIdentity) {
+  if (
+    !containerIdentity ||
+    typeof containerIdentity.watcher !== 'string' ||
+    containerIdentity.watcher.length === 0 ||
+    typeof containerIdentity.name !== 'string' ||
+    containerIdentity.name.length === 0
+  ) {
+    return undefined;
+  }
+
+  const agent =
+    typeof containerIdentity.agent === 'string' && containerIdentity.agent.length > 0
+      ? containerIdentity.agent
+      : '';
+  return `${agent}::${containerIdentity.watcher}::${containerIdentity.name}`;
 }
 
 /**

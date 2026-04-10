@@ -322,8 +322,15 @@ export const openApiSchemas = {
           enum: ['updated', 'pending', 'failed'],
         },
       },
+      statusesByIdentity: {
+        type: 'object',
+        additionalProperties: {
+          type: 'string',
+          enum: ['updated', 'pending', 'failed'],
+        },
+      },
     },
-    required: ['statuses'],
+    required: ['statuses', 'statusesByIdentity'],
     additionalProperties: false,
   },
   WatchContainersRequest: {
