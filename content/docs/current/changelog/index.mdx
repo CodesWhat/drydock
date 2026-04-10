@@ -128,24 +128,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Log component dropdown** — Component filter replaced with a `<select>` dropdown populated from new `GET /api/v1/log/components` endpoint that returns unique component names from the log buffer.
 - **Hide Pinned containers toggle** — Checkbox in the container list filter bar hides containers pinned to specific versions (`tagPrecision: specific`). Persisted in user preferences. ([#250](https://github.com/CodesWhat/drydock/discussions/250))
 - **Combined batch+digest notification mode** — Triggers can now use `MODE=batch+digest` to send both immediate batch emails and scheduled digest summaries. ([#254](https://github.com/CodesWhat/drydock/issues/254))
+- **Conditional reset button** — A reset icon appears in the system log toolbar only when level, tail, or component filters differ from defaults.
 - **Security scan export** — Detail panel has export controls (CSV/JSON) for vulnerability reports and SBOM download at the top of the panel. ([#269](https://github.com/CodesWhat/drydock/discussions/269))
 
 ### Changed
 
-- **Container filter labels** — Default dropdown options renamed for clarity: "Status" → "All Statuses", "Host" → "All Hosts", etc. ([#247](https://github.com/CodesWhat/drydock/discussions/247))
+- **Container filter labels** — Default dropdown options renamed for clarity: "Status" → "All Statuses", "Host" → "All Hosts", "Registry" → "All Registries", "Update" → "All Containers". ([#247](https://github.com/CodesWhat/drydock/discussions/247))
+- **Log viewer icons** — Pause, Pin, Sort, Filter, and Copy icons use the theme-aware icon map, so they change when the user switches icon themes in settings.
 
 ### Fixed
 
-- **#248** — Update operation state survives container ID change during replacement updates.
-- **#241** — Temporary rollback containers hidden from container list API responses.
+- **#248** — Update operation state survives container ID change during replacement updates (`newContainerId` lookup).
+- **#241** — Temporary rollback containers (`-old-{timestamp}`) hidden from container list API responses.
 - **#253** — `threshold=all` honored before rejecting `updateKind=unknown` in notification dispatch.
-- **#256** — Update operation state disambiguated by container ID instead of name.
-- **#257** — Non-dashboard views refresh on SSE reconnect.
-- **#258** — Edge-to-edge scroll on DataViewLayout for mobile touch.
-- **#217** — Content-aware mode threshold for Host Status widget.
+- **#256** — Update operation state disambiguated by container ID instead of name (prevents cross-host bleed).
+- **#257** — Non-dashboard views (Containers, Security, Agents) refresh on SSE reconnect.
+- **#258** — Edge-to-edge scroll surface on DataViewLayout for mobile touch.
+- **#217** — Content-aware mode threshold for Host Status widget (full mode only when viewport fits all rows).
 - **#262** — Registry log calls use component child logger with image name context.
-- **#269** — SBOM download button was silently failing unless the "View SBOM" toggle was active.
-- **#255** — Container event handler schedules refresh for unknown containers.
+- **#255** — Container event handler schedules refresh for any unknown-to-store container, not just renames.
+- **#269** — SBOM download button was silently failing unless the "View SBOM" toggle was active; now serializes directly.
+- **BaseRegistry** — Trusted host validation and `getImagePublishedAt` tag object creation hardened.
+- **ECR** — Public gallery hostname matching uses parsed URL comparison; private auth token structure validated before split.
 
 ## [1.5.0] — 2026-03-19
 
@@ -1223,7 +1227,10 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.5.0-rc.5...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.5.0-rc.8...HEAD
+[1.5.0-rc.8]: https://github.com/CodesWhat/drydock/compare/v1.5.0-rc.7...v1.5.0-rc.8
+[1.5.0-rc.7]: https://github.com/CodesWhat/drydock/compare/v1.5.0-rc.6...v1.5.0-rc.7
+[1.5.0-rc.6]: https://github.com/CodesWhat/drydock/compare/v1.5.0-rc.5...v1.5.0-rc.6
 [1.5.0-rc.5]: https://github.com/CodesWhat/drydock/compare/v1.5.0...v1.5.0-rc.5
 [1.5.0]: https://github.com/CodesWhat/drydock/compare/v1.4.5...v1.5.0
 [1.4.5]: https://github.com/CodesWhat/drydock/compare/v1.4.4...v1.4.5
