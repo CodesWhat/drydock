@@ -198,17 +198,25 @@ const {
 const pendingUpdates = computed(() =>
   recentUpdates.value.filter(
     (row) =>
-      row.status === 'pending' && !row.blocked && !dashboardUpdateSequence.value.has(row.name),
+      row.status === 'pending' &&
+      !row.blocked &&
+      !dashboardUpdateSequence.value.has(getDashboardRecentUpdateRowKey(row)),
   ),
 );
 
 const displayRecentUpdates = computed<RecentUpdateRow[]>(() => {
-  const liveRowNames = new Set(recentUpdates.value.map((row) => row.name));
+  const liveRowKeys = new Set(
+    recentUpdates.value.map((row) => getDashboardRecentUpdateRowKey(row)),
+  );
   const ghosts = [...dashboardPendingUpdateRows.value.values()]
-    .filter(({ row }) => !liveRowNames.has(row.name))
+    .filter(({ row }) => !liveRowKeys.has(getDashboardRecentUpdateRowKey(row)))
     .map(({ row }) => row);
   return [...recentUpdates.value, ...ghosts];
 });
+
+function getDashboardRecentUpdateRowKey(row: Pick<RecentUpdateRow, 'id' | 'name'>): string {
+  return row.id || row.name;
+}
 
 function stopDashboardPendingUpdatePolling() {
   if (!dashboardPendingUpdatePollTimer.value) {
@@ -224,12 +232,12 @@ function hasDashboardTrackedUpdates() {
   return dashboardPendingUpdateRows.value.size > 0 || dashboardUpdateSequence.value.size > 0;
 }
 
-function getVisibleDashboardTrackedUpdateNames() {
-  const names = new Set(recentUpdates.value.map((row) => row.name));
-  for (const name of dashboardPendingUpdateRows.value.keys()) {
-    names.add(name);
+function getVisibleDashboardTrackedUpdateKeys() {
+  const keys = new Set(recentUpdates.value.map((row) => getDashboardRecentUpdateRowKey(row)));
+  for (const key of dashboardPendingUpdateRows.value.keys()) {
+    keys.add(key);
   }
-  return names;
+  return keys;
 }
 
 function startDashboardPendingUpdateTracking() {
@@ -242,47 +250,49 @@ function startDashboardPendingUpdateTracking() {
   startDashboardPendingUpdatePolling();
 }
 
-function syncDashboardUpdateSequenceValue(rowNames: string[], acceptedRowNames: string[]) {
+function syncDashboardUpdateSequenceValue(rowKeys: string[], acceptedRowKeys: string[]) {
   const next = new Map(dashboardUpdateSequence.value);
-  for (const name of rowNames) {
-    next.delete(name);
+  for (const key of rowKeys) {
+    next.delete(key);
   }
-  for (const [index, name] of acceptedRowNames.entries()) {
-    next.set(name, {
+  for (const [index, key] of acceptedRowKeys.entries()) {
+    next.set(key, {
       position: index + 1,
-      total: acceptedRowNames.length,
+      total: acceptedRowKeys.length,
     });
   }
   dashboardUpdateSequence.value = next;
 }
 
 function pruneDashboardUpdateSequence() {
-  const visibleNames = getVisibleDashboardTrackedUpdateNames();
-  if (dashboardUpdateAllInProgress.value && visibleNames.size === 0) {
+  const visibleKeys = getVisibleDashboardTrackedUpdateKeys();
+  if (dashboardUpdateAllInProgress.value && visibleKeys.size === 0) {
     return;
   }
   const next = new Map(dashboardUpdateSequence.value);
-  for (const name of dashboardUpdateSequence.value.keys()) {
-    if (!visibleNames.has(name)) {
-      next.delete(name);
+  for (const key of dashboardUpdateSequence.value.keys()) {
+    if (!visibleKeys.has(key)) {
+      next.delete(key);
     }
   }
   dashboardUpdateSequence.value = next;
 }
 
-function clearDashboardPendingUpdateRow(name: string) {
-  dashboardPendingUpdateRows.value.delete(name);
+function clearDashboardPendingUpdateRow(key: string) {
+  dashboardPendingUpdateRows.value.delete(key);
   pruneDashboardUpdateSequence();
 }
 
 function pruneDashboardPendingUpdateRows(now: number = Date.now()) {
-  const liveContainerNames = new Set(containers.value.map((container) => container.name));
-  for (const [name, pendingRow] of dashboardPendingUpdateRows.value.entries()) {
+  const liveContainerKeys = new Set(
+    containers.value.map((container) => container.id || container.name),
+  );
+  for (const [key, pendingRow] of dashboardPendingUpdateRows.value.entries()) {
     if (
-      liveContainerNames.has(name) ||
+      liveContainerKeys.has(key) ||
       now - pendingRow.startedAt > DASHBOARD_PENDING_UPDATE_TIMEOUT_MS
     ) {
-      clearDashboardPendingUpdateRow(name);
+      clearDashboardPendingUpdateRow(key);
     }
   }
   pruneDashboardUpdateSequence();
@@ -325,13 +335,16 @@ function startDashboardPendingUpdatePolling() {
 }
 
 function capturePendingDashboardRows(rows: RecentUpdateRow[]) {
-  const liveContainerNames = new Set(containers.value.map((container) => container.name));
+  const liveContainerKeys = new Set(
+    containers.value.map((container) => container.id || container.name),
+  );
   for (const row of rows) {
-    if (liveContainerNames.has(row.name)) {
+    const key = getDashboardRecentUpdateRowKey(row);
+    if (liveContainerKeys.has(key)) {
       continue;
     }
-    const existing = dashboardPendingUpdateRows.value.get(row.name);
-    dashboardPendingUpdateRows.value.set(row.name, {
+    const existing = dashboardPendingUpdateRows.value.get(key);
+    dashboardPendingUpdateRows.value.set(key, {
       row: {
         ...row,
         status: 'updating',
@@ -440,11 +453,11 @@ function confirmDashboardUpdateAll() {
       const pendingRowsSnapshot = pendingUpdates.value.filter((row) => !row.blocked);
       dashboardUpdateAllInProgress.value = true;
       dashboardUpdateError.value = null;
-      const snapshotRowNames = pendingRowsSnapshot.map((row) => row.name);
+      const snapshotRowKeys = pendingRowsSnapshot.map((row) => getDashboardRecentUpdateRowKey(row));
       const batchId = createContainerUpdateBatchId();
       const queueTotal = pendingRowsSnapshot.length;
-      let acceptedRowNames = [...snapshotRowNames];
-      syncDashboardUpdateSequenceValue(snapshotRowNames, acceptedRowNames);
+      let acceptedRowKeys = [...snapshotRowKeys];
+      syncDashboardUpdateSequenceValue(snapshotRowKeys, acceptedRowKeys);
       startDashboardPendingUpdateTracking();
       try {
         const successfulRows: RecentUpdateRow[] = [];
@@ -466,12 +479,14 @@ function confirmDashboardUpdateAll() {
               successfulRows.push(row);
               continue;
             }
-            acceptedRowNames = acceptedRowNames.filter((name) => name !== row.name);
-            syncDashboardUpdateSequenceValue(snapshotRowNames, acceptedRowNames);
+            const rowKey = getDashboardRecentUpdateRowKey(row);
+            acceptedRowKeys = acceptedRowKeys.filter((key) => key !== rowKey);
+            syncDashboardUpdateSequenceValue(snapshotRowKeys, acceptedRowKeys);
             staleRows.push(row);
           } catch (e: unknown) {
-            acceptedRowNames = acceptedRowNames.filter((name) => name !== row.name);
-            syncDashboardUpdateSequenceValue(snapshotRowNames, acceptedRowNames);
+            const rowKey = getDashboardRecentUpdateRowKey(row);
+            acceptedRowKeys = acceptedRowKeys.filter((key) => key !== rowKey);
+            syncDashboardUpdateSequenceValue(snapshotRowKeys, acceptedRowKeys);
             if (!firstRejectedUpdate) {
               firstRejectedUpdate = e;
             }
@@ -497,8 +512,8 @@ function confirmDashboardUpdateAll() {
           );
         }
       } finally {
-        if (acceptedRowNames.length === 0) {
-          syncDashboardUpdateSequenceValue(snapshotRowNames, []);
+        if (acceptedRowKeys.length === 0) {
+          syncDashboardUpdateSequenceValue(snapshotRowKeys, []);
           pruneDashboardUpdateSequence();
         }
         dashboardUpdateAllInProgress.value = false;

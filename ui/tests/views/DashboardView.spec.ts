@@ -1670,6 +1670,56 @@ describe('DashboardView', () => {
       expect(widgetText).toContain('Queued 2 of 2');
     });
 
+    it('keeps same-name containers on different servers distinct during dashboard update all sequencing', async () => {
+      const containers = [
+        makeContainer({
+          id: 'c-local',
+          name: 'nginx',
+          server: 'Local',
+          newTag: '1.1.0',
+          updateKind: 'minor',
+        }),
+        makeContainer({
+          id: 'c-edge',
+          name: 'nginx',
+          server: 'edge-1',
+          newTag: '1.1.0',
+          updateKind: 'minor',
+        }),
+      ];
+      mockUpdateContainer.mockResolvedValue({});
+
+      const wrapper = await mountDashboard(
+        containers,
+        [],
+        {},
+        {
+          recentStatuses: {
+            nginx: 'pending',
+          },
+        },
+      );
+      const { mapApiContainers } = await import('@/utils/container-mapper');
+      mockGetAllContainers.mockResolvedValueOnce([]);
+      mockGetContainerRecentStatus.mockResolvedValueOnce({ statuses: {} });
+      (mapApiContainers as ReturnType<typeof vi.fn>).mockReturnValueOnce([]);
+
+      const updateAllBtn = wrapper.find('[data-test="dashboard-update-all-btn"]');
+      const { useConfirmDialog } = await import('@/composables/useConfirmDialog');
+      const confirm = useConfirmDialog();
+
+      await updateAllBtn.trigger('click');
+      await confirm.accept();
+      await flushPromises();
+
+      expect(mockUpdateContainer).toHaveBeenCalledTimes(2);
+      expect(mockUpdateContainer.mock.calls.map((call) => call[0])).toEqual(['c-local', 'c-edge']);
+
+      const widgetText = wrapper.find('[data-widget-id="recent-updates"]').text();
+      expect(widgetText).toContain('Updating 1 of 2');
+      expect(widgetText).toContain('Queued 2 of 2');
+    });
+
     it('advances the dashboard queue label when the next bulk update becomes active', async () => {
       vi.useFakeTimers();
       try {
