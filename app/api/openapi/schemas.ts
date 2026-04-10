@@ -191,6 +191,15 @@ export const openApiSchemas = {
     required: ['total', 'env', 'label'],
     additionalProperties: false,
   },
+  CurlHealthcheckOverrideCompatibility: {
+    type: 'object',
+    properties: {
+      detected: { type: 'boolean' },
+      commandPreview: { type: 'string' },
+    },
+    required: ['detected'],
+    additionalProperties: false,
+  },
   ServerInfoResponse: {
     type: 'object',
     properties: {
@@ -213,8 +222,11 @@ export const openApiSchemas = {
         type: 'object',
         properties: {
           legacyInputs: { $ref: '#/components/schemas/LegacyInputSummary' },
+          curlHealthcheckOverride: {
+            $ref: '#/components/schemas/CurlHealthcheckOverrideCompatibility',
+          },
         },
-        required: ['legacyInputs'],
+        required: ['legacyInputs', 'curlHealthcheckOverride'],
         additionalProperties: true,
       },
     },

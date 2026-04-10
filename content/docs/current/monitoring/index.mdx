@@ -25,7 +25,7 @@ If the application is healthy, the Http Response Status Code is `200` (`500` oth
 
 The official Docker image includes a built-in `HEALTHCHECK` that polls `/health` automatically — no additional configuration is needed in your compose file. The built-in probe uses a lightweight static binary (`/bin/healthcheck`) and handles TLS backends automatically.
 
-<Callout type="warn">**Deprecated:** Custom `curl`-based healthcheck overrides in compose files (e.g. `test: curl --fail http://localhost:3000/health`) are deprecated and will stop working in v1.6.0 when `curl` is removed from the image. Remove custom `healthcheck:` blocks from your drydock service to use the built-in probe.</Callout>
+<Callout type="warn">**Deprecated:** Custom `curl`-based healthcheck overrides in compose files (e.g. `test: curl --fail http://localhost:3000/health`) remain supported for backward compatibility in v1.5.x. When Drydock can inspect its own container through the local Docker socket, the UI shows a deprecation banner if it detects a curl-based override. v1.6.0 is the final warning release, and `curl` will be removed from the image in v1.7.0. Remove custom `healthcheck:` blocks from your drydock service to use the built-in probe.</Callout>
 
 If you need a custom healthcheck (for example, to change the interval), use the built-in binary:
 

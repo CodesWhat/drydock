@@ -17,6 +17,7 @@ HEALTHCHECK --interval=30s --timeout=5s CMD ["sh", "-c", "if [ -n \"$DD_SERVER_E
 # Install system packages, trivy, and cosign
 RUN apk add --no-cache \
     bash=5.3.3-r1 \
+    curl=8.14.1-r2 \
     git=2.52.0-r0 \
     jq=1.8.1-r0 \
     openssl=3.5.5-r0 \
@@ -70,11 +71,11 @@ ENV DD_LOG_FORMAT=text
 
 # Remove unnecessary network utilities (busybox symlinks) and npm to reduce attack surface.
 # curl is kept for backward compatibility with user-defined HEALTHCHECK overrides;
-# it will be removed in v1.6.0 — use the built-in /bin/healthcheck binary instead.
+# v1.6.0 is the final warning release, and removal is scheduled for v1.7.0.
 RUN rm -f /usr/bin/wget /usr/bin/nc \
     && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 
-# Copy healthcheck binary (65KB static, replaces curl for HEALTHCHECK probe)
+# Copy healthcheck binary (65KB static, default HEALTHCHECK probe)
 COPY --from=healthcheck-build /bin/healthcheck /bin/healthcheck
 
 # Default entrypoint

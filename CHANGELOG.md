@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Custom healthcheck backward compatibility restored** — The built-in `/bin/healthcheck` remains the default image probe and now handles TLS backends, while `curl` is again present in the Docker image for user-defined custom `healthcheck:` overrides during the v1.5.x deprecation window. v1.6.0 is the final warning release, and removal is now scheduled for v1.7.0. ([Discussion #287](https://github.com/CodesWhat/drydock/discussions/287))
+
 ## [1.5.0-rc.7] — 2026-04-08
 
 ### Added
@@ -145,7 +149,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Centralized rollback container guard** — `-old-{timestamp}` container rejection moved from Docker trigger to base Trigger class, covering all trigger types.
 - **Container list query internals modularized** — Extracted query-validation logic and split tests by concern.
 - **Container list filtering performance** — Status/kind filters avoid unnecessary full-collection loads; age/created sorting precomputes values.
-- **Healthcheck execution path optimized** — Default HEALTHCHECK probe replaced with a 65KB static C binary (`/bin/healthcheck`). curl is retained for backward compatibility with user-defined HEALTHCHECK overrides and will be removed in v1.6.0.
+- **Healthcheck execution path optimized** — Default HEALTHCHECK probe replaced with a 65KB static C binary (`/bin/healthcheck`). curl is retained for backward compatibility with user-defined HEALTHCHECK overrides during the deprecation window and is now scheduled for removal in v1.7.0, with v1.6.0 as the final warning release.
 - **Watcher event logging noise reduced** — First event-stream reconnect downgraded from `warn` to `info`.
 - **CI workflows renamed** — Dropped numeric prefixes from workflow filenames for clarity.
 - **Smoke load test profile removed** — Replaced with the ci profile for meaningful regression detection.
