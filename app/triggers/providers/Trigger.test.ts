@@ -4487,6 +4487,98 @@ describe('digest mode', () => {
     }
   });
 
+  test('pruneDigestBuffer should keep buffered entries when retention is disabled', () => {
+    trigger.digestBuffer.set('c1', {
+      id: 'c1',
+      name: 'app',
+      watcher: 'test',
+    } as any);
+    (trigger as any).digestBufferUpdatedAt = new Map([['c1', 1_000]]);
+    (trigger as any).bufferEntryRetentionMs = 0;
+
+    (trigger as any).pruneDigestBuffer(1_500);
+
+    expect(trigger.digestBuffer.size).toBe(1);
+    expect(trigger.digestBuffer.get('c1')).toMatchObject({ id: 'c1' });
+    expect((trigger as any).digestBufferUpdatedAt.get('c1')).toBe(1_000);
+  });
+
+  test('pruneDigestBuffer should clear buffered entries when max entries is zero', () => {
+    trigger.digestBuffer.set('c1', {
+      id: 'c1',
+      name: 'app',
+      watcher: 'test',
+    } as any);
+    (trigger as any).digestBufferUpdatedAt = new Map([['c1', 1_000]]);
+    (trigger as any).digestBufferMaxEntries = 0;
+
+    (trigger as any).pruneDigestBuffer(1_500);
+
+    expect(trigger.digestBuffer.size).toBe(0);
+    expect((trigger as any).digestBufferUpdatedAt.size).toBe(0);
+  });
+
+  test('enforceBufferedContainerLimit should stop when the oldest key is blank', () => {
+    const buffer = new Map<string, any>([
+      [
+        '',
+        {
+          id: 'blank',
+          name: 'blank',
+          watcher: 'test',
+        },
+      ],
+      [
+        'c2',
+        {
+          id: 'c2',
+          name: 'app',
+          watcher: 'test',
+        },
+      ],
+    ]);
+    const timestamps = new Map<string, number>([
+      ['', 1_000],
+      ['c2', 1_001],
+    ]);
+
+    (trigger as any).enforceBufferedContainerLimit('digest buffer', buffer, timestamps, 1);
+
+    expect([...buffer.keys()]).toEqual(['', 'c2']);
+    expect([...timestamps.keys()]).toEqual(['', 'c2']);
+    expect(log.warn).not.toHaveBeenCalled();
+  });
+
+  test('enforceBufferedContainerLimit should treat missing timestamps as the oldest entries', () => {
+    const buffer = new Map<string, any>([
+      [
+        'c1',
+        {
+          id: 'c1',
+          name: 'app-1',
+          watcher: 'test',
+        },
+      ],
+      [
+        'c2',
+        {
+          id: 'c2',
+          name: 'app-2',
+          watcher: 'test',
+        },
+      ],
+    ]);
+    const timestamps = new Map<string, number>([['c2', 1_001]]);
+
+    (trigger as any).enforceBufferedContainerLimit('digest buffer', buffer, timestamps, 1);
+
+    expect([...buffer.keys()]).toEqual(['c2']);
+    expect([...timestamps.keys()]).toEqual(['c2']);
+    expect(log.warn).toHaveBeenCalledWith(
+      'Evicted oldest digest buffer entry c1 after reaching the 1-entry limit',
+    );
+  });
+
   test('handleContainerReportDigest should return early when report is not eligible for simple handling', async () => {
     await trigger.register('trigger', 'test', 'digest-trigger', {
       ...configurationValid,

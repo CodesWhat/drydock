@@ -650,6 +650,58 @@ describe('getImageManifestDigest', () => {
     expect(result).toStrictEqual({ version: 1, digest: 'digest_x' });
   });
 
+  test('should include created date when legacy manifest config blob metadata is present', async () => {
+    const registryMocked = createMockedRegistry();
+    registryMocked.callRegistry = vi.fn((options) => {
+      if (options.headers?.Accept === ALL_MANIFEST_ACCEPT) {
+        return manifestListResponse([
+          platformManifest(
+            'amd64',
+            'linux',
+            'digest_x',
+            'application/vnd.docker.container.image.v1+json',
+          ),
+        ]);
+      }
+      if (options.url?.includes('/blobs/')) {
+        return {
+          created: '2026-04-10T12:34:56.000Z',
+        };
+      }
+      throw new Error(`Unexpected request: ${JSON.stringify(options)}`);
+    });
+
+    const result = await registryMocked.getImageManifestDigest(imageInput());
+    expect(result).toStrictEqual({
+      version: 1,
+      digest: 'digest_x',
+      created: '2026-04-10T12:34:56.000Z',
+    });
+  });
+
+  test('should omit created date when legacy manifest config blob metadata is missing', async () => {
+    const registryMocked = createMockedRegistry();
+    registryMocked.callRegistry = vi.fn((options) => {
+      if (options.headers?.Accept === ALL_MANIFEST_ACCEPT) {
+        return manifestListResponse([
+          platformManifest(
+            'amd64',
+            'linux',
+            'digest_x',
+            'application/vnd.docker.container.image.v1+json',
+          ),
+        ]);
+      }
+      if (options.url?.includes('/blobs/')) {
+        return {};
+      }
+      throw new Error(`Unexpected request: ${JSON.stringify(options)}`);
+    });
+
+    const result = await registryMocked.getImageManifestDigest(imageInput());
+    expect(result).toStrictEqual({ version: 1, digest: 'digest_x' });
+  });
+
   test('should propagate errors from head request during manifest digest resolution', async () => {
     const registryMocked = createMockedRegistry();
     let callCount = 0;
