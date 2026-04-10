@@ -204,7 +204,6 @@ function deriveRecentUpdateStatus(
     return identityStatus;
   }
 
-  /* v8 ignore next -- defensive: every container's name is in the counts map */
   if ((containerNameCounts.get(container.name) ?? 0) === 1) {
     return recentStatusByContainer[container.name] ?? 'pending';
   }

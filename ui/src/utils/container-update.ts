@@ -37,7 +37,6 @@ function getPersistedBatchHeadIds(
       continue;
     }
 
-    /* v8 ignore next 8 -- in-progress batch routing exercised via useContainerActions integration */
     const targetHeads = operation.status === 'in-progress' ? inProgressHeads : queuedHeads;
     const currentHead = targetHeads.get(operation.batchId);
     if (!currentHead || operation.queuePosition! < currentHead.position) {
@@ -52,7 +51,6 @@ function getPersistedBatchHeadIds(
   for (const [batchId, queuedHead] of queuedHeads.entries()) {
     headIds.add((inProgressHeads.get(batchId) ?? queuedHead).id);
   }
-  /* v8 ignore next 3 -- defensive: in-progress heads always pass through queued first */
   for (const inProgressHead of inProgressHeads.values()) {
     headIds.add(inProgressHead.id);
   }

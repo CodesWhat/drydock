@@ -267,7 +267,6 @@ function getErrorCode(error: unknown): string | undefined {
     return undefined;
   }
   const code = (error as { code?: unknown }).code;
-  /* v8 ignore next -- non-string fs/network error codes are defensive and treated as absent */
   return typeof code === 'string' ? code : undefined;
 }
 

@@ -135,7 +135,6 @@ function getErrorJsonMessage(error: unknown): string | undefined {
     return undefined;
   }
   const jsonMessage = (json as { message?: unknown }).message;
-  /* v8 ignore next -- json.message is typically string when present; non-string forms are defensive */
   return typeof jsonMessage === 'string' ? jsonMessage : undefined;
 }
 

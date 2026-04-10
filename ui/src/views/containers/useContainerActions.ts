@@ -693,7 +693,6 @@ export function prunePendingActionsState(args: {
       liveContainersByActionKey.set(actionKey, container);
     }
     const identityKey = getContainerActionIdentityKey(container);
-    /* v8 ignore next -- defensive: identityKey falls back to id/name */
     if (identityKey) {
       liveContainersByIdentityKey.set(identityKey, container);
     }
