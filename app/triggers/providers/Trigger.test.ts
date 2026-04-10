@@ -4012,6 +4012,92 @@ test('getBatchRetryContainers should match raw containers by fallback fullName w
   expect(trigger.batchRetryBuffer.get('undefined_container1')).toBe(currentContainer);
 });
 
+test('getBatchRetryContainers should evict stale retry-buffer entries before reuse', () => {
+  trigger.configuration = {
+    threshold: 'all',
+    once: true,
+    mode: 'batch',
+  };
+
+  const currentContainer = {
+    id: 'stale-id',
+    watcher: 'local',
+    name: 'container1',
+    updateAvailable: true,
+    updateKind: { kind: 'tag', semverDiff: 'major' },
+  } as any;
+
+  trigger.batchRetryBuffer.set('stale-id', currentContainer);
+  (trigger as any).batchRetryBufferUpdatedAt = new Map([['stale-id', 1_000]]);
+  (trigger as any).bufferEntryRetentionMs = 100;
+  storeContainer.getContainersRaw.mockReturnValue([currentContainer]);
+  const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(1_101);
+
+  try {
+    const retryContainers = (trigger as any).getBatchRetryContainers([]);
+
+    expect(retryContainers).toEqual([]);
+    expect(trigger.batchRetryBuffer.size).toBe(0);
+  } finally {
+    nowSpy.mockRestore();
+  }
+});
+
+test('handleContainerReports should cap retry-buffer growth by evicting the oldest entries', async () => {
+  trigger.configuration = {
+    threshold: 'all',
+    once: true,
+    mode: 'batch',
+  };
+  (trigger as any).batchRetryBufferMaxEntries = 2;
+  trigger.triggerBatch = vi.fn().mockRejectedValue(new Error('SMTP timeout'));
+
+  const nowSpy = vi
+    .spyOn(Date, 'now')
+    .mockReturnValueOnce(1_000)
+    .mockReturnValueOnce(1_001)
+    .mockReturnValueOnce(1_002);
+
+  try {
+    await trigger.handleContainerReports([
+      {
+        changed: true,
+        container: {
+          id: 'c1',
+          name: 'c1',
+          watcher: 'local',
+          updateAvailable: true,
+          updateKind: { kind: 'tag', semverDiff: 'major' },
+        },
+      },
+      {
+        changed: true,
+        container: {
+          id: 'c2',
+          name: 'c2',
+          watcher: 'local',
+          updateAvailable: true,
+          updateKind: { kind: 'tag', semverDiff: 'major' },
+        },
+      },
+      {
+        changed: true,
+        container: {
+          id: 'c3',
+          name: 'c3',
+          watcher: 'local',
+          updateAvailable: true,
+          updateKind: { kind: 'tag', semverDiff: 'major' },
+        },
+      },
+    ] as any);
+
+    expect([...trigger.batchRetryBuffer.keys()]).toEqual(['c2', 'c3']);
+  } finally {
+    nowSpy.mockRestore();
+  }
+});
+
 test('handleContainerReports should use fallback fullName keys for retry and digest cleanup when notification keys are missing', async () => {
   trigger.configuration = {
     threshold: 'all',
@@ -4370,6 +4456,37 @@ describe('digest mode', () => {
     triggerBatchSpy.mockRestore();
   });
 
+  test('bufferContainerForDigest should cap digest-buffer growth by evicting the oldest entries', () => {
+    (trigger as any).digestBufferMaxEntries = 2;
+    const nowSpy = vi
+      .spyOn(Date, 'now')
+      .mockReturnValueOnce(1_000)
+      .mockReturnValueOnce(1_001)
+      .mockReturnValueOnce(1_002);
+
+    try {
+      (trigger as any).bufferContainerForDigest({
+        id: 'c1',
+        name: 'app-1',
+        watcher: 'test',
+      });
+      (trigger as any).bufferContainerForDigest({
+        id: 'c2',
+        name: 'app-2',
+        watcher: 'test',
+      });
+      (trigger as any).bufferContainerForDigest({
+        id: 'c3',
+        name: 'app-3',
+        watcher: 'test',
+      });
+
+      expect([...trigger.digestBuffer.keys()]).toEqual(['c2', 'c3']);
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
   test('handleContainerReportDigest should return early when report is not eligible for simple handling', async () => {
     await trigger.register('trigger', 'test', 'digest-trigger', {
       ...configurationValid,
@@ -4558,6 +4675,36 @@ describe('digest mode', () => {
     await trigger.flushDigestBuffer();
     expect(triggerBatchSpy).not.toHaveBeenCalled();
     triggerBatchSpy.mockRestore();
+  });
+
+  test('flushDigestBuffer should evict stale buffered entries before dispatch', async () => {
+    await trigger.register('trigger', 'test', 'digest-trigger', {
+      ...configurationValid,
+      mode: 'digest',
+    });
+
+    const staleContainer = {
+      id: 'c1',
+      name: 'app',
+      watcher: 'test',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+    } as any;
+    trigger.digestBuffer.set('c1', staleContainer);
+    (trigger as any).digestBufferUpdatedAt = new Map([['c1', 1_000]]);
+    (trigger as any).bufferEntryRetentionMs = 100;
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(1_101);
+
+    try {
+      const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+      await trigger.flushDigestBuffer();
+
+      expect(trigger.digestBuffer.size).toBe(0);
+      expect(triggerBatchSpy).not.toHaveBeenCalled();
+      triggerBatchSpy.mockRestore();
+    } finally {
+      nowSpy.mockRestore();
+    }
   });
 
   test('flushDigestBuffer should return early when a digest flush is already in progress', async () => {
