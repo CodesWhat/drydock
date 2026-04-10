@@ -39,6 +39,13 @@ const PULL_PROGRESS_LOG_INTERVAL_MS = 2000;
 const NON_SELF_UPDATE_HEALTH_TIMEOUT_MS = 120_000;
 const NON_SELF_UPDATE_HEALTH_POLL_INTERVAL_MS = 1_000;
 const TRIGGER_BATCH_CONCURRENCY = 3;
+
+/**
+ * Module-level update concurrency limiter shared across all Docker/Dockercompose
+ * trigger instances. Ensures only one container update executes at a time
+ * regardless of which trigger instance dispatches it.
+ */
+const updateConcurrencyLimit = pLimit(1);
 const warnedLegacyTriggerLabelFallbacks = new Set<string>();
 
 type ContainerFullNameReference = {
@@ -128,7 +135,6 @@ function getErrorJsonMessage(error: unknown): string | undefined {
     return undefined;
   }
   const jsonMessage = (json as { message?: unknown }).message;
-  /* v8 ignore next -- json.message is typically string when present; non-string forms are defensive */
   return typeof jsonMessage === 'string' ? jsonMessage : undefined;
 }
 
@@ -161,6 +167,7 @@ const UPDATE_LIFECYCLE_ORCHESTRATOR_METHODS = [
   'recordHookConfigurationAudit',
   'runPreUpdateHook',
   'isSelfUpdate',
+  'isInfrastructureUpdate',
   'maybeNotifySelfUpdate',
   'executeSelfUpdate',
   'runPreRuntimeUpdateLifecycle',
@@ -261,6 +268,22 @@ class Docker extends Trigger {
       runtimeConfigManager: this.runtimeConfigManager,
       ...pickOrchestratorCallbacks(this, SELF_UPDATE_ORCHESTRATOR_METHODS),
       emitSelfUpdateStarting,
+      resolveHelperImage: (container) => {
+        if (this.selfUpdateOrchestrator.isSelfUpdate(container)) {
+          return undefined;
+        }
+        const drydockContainer = storeContainer
+          .getContainers()
+          .find((c) => c.image?.name === 'drydock' || c.image?.name?.endsWith('/drydock'));
+        if (!drydockContainer) {
+          return undefined;
+        }
+        const { name, tag, registry } = drydockContainer.image ?? {};
+        if (!name || !tag?.value) {
+          return undefined;
+        }
+        return registry?.url ? `${registry.url}/${name}:${tag.value}` : `${name}:${tag.value}`;
+      },
     });
     this.containerUpdateExecutor = new ContainerUpdateExecutor({
       getConfiguration: () => this.configuration,
@@ -268,6 +291,34 @@ class Docker extends Trigger {
       ...pickOrchestratorCallbacks(this, CONTAINER_UPDATE_ORCHESTRATOR_METHODS),
       getCloneRuntimeConfigOptions,
       buildRuntimeConfigCompatibilityError,
+      scheduleDeferredReconciliation: (containerName, _operationId, delayMs) => {
+        setTimeout(async () => {
+          try {
+            const container = storeContainer.getContainers().find((c) => c.name === containerName);
+            if (!container) {
+              return;
+            }
+            const watcher = this.getWatcher(container);
+            const dockerApi = watcher.dockerApi as Parameters<
+              typeof this.containerUpdateExecutor.reconcileInProgressContainerUpdateOperation
+            >[0];
+            const logContainer = this.log?.child?.({ container: containerName }) ?? {
+              info: () => {},
+              warn: () => {},
+              debug: () => {},
+            };
+            await this.containerUpdateExecutor.reconcileInProgressContainerUpdateOperation(
+              dockerApi,
+              container,
+              logContainer,
+            );
+          } catch (e: unknown) {
+            this.log?.warn?.(
+              `Deferred reconciliation failed for ${containerName}: ${String((e as Error)?.message ?? e)}`,
+            );
+          }
+        }, delayMs);
+      },
     });
     this.rollbackMonitor = new RollbackMonitor({
       getPreferredLabelValue,
@@ -299,6 +350,7 @@ class Docker extends Trigger {
       },
       selfUpdate: {
         isSelfUpdate: updateLifecycleCallbacks.isSelfUpdate,
+        isInfrastructureUpdate: updateLifecycleCallbacks.isInfrastructureUpdate,
         maybeNotifySelfUpdate: updateLifecycleCallbacks.maybeNotifySelfUpdate,
         executeSelfUpdate: updateLifecycleCallbacks.executeSelfUpdate,
       },
@@ -1063,6 +1115,10 @@ class Docker extends Trigger {
     return this.selfUpdateOrchestrator.isSelfUpdate(container);
   }
 
+  isInfrastructureUpdate(container) {
+    return this.selfUpdateOrchestrator.isInfrastructureUpdate(container);
+  }
+
   findDockerSocketBind(spec) {
     return this.selfUpdateOrchestrator.findDockerSocketBind(spec);
   }
@@ -1151,8 +1207,11 @@ class Docker extends Trigger {
     this.insertContainerImageBackup(context, container);
   }
 
-  async executeContainerUpdate(context, container, logContainer) {
-    return this.containerUpdateExecutor.execute(context, container, logContainer);
+  async executeContainerUpdate(context, container, logContainer, runtimeContext?: unknown) {
+    if (runtimeContext === undefined) {
+      return this.containerUpdateExecutor.execute(context, container, logContainer);
+    }
+    return this.containerUpdateExecutor.execute(context, container, logContainer, runtimeContext);
   }
 
   /**
@@ -1160,8 +1219,12 @@ class Docker extends Trigger {
    * Subclasses (e.g. Dockercompose) override this to use their own runtime
    * mechanics while reusing the shared lifecycle orchestrator.
    */
-  async performContainerUpdate(context, container, logContainer, _runtimeContext?: unknown) {
-    const updated = await this.executeContainerUpdate(context, container, logContainer);
+  async performContainerUpdate(context, container, logContainer, runtimeContext?: unknown) {
+    const updated =
+      runtimeContext === undefined
+        ? await this.executeContainerUpdate(context, container, logContainer)
+        : await this.executeContainerUpdate(context, container, logContainer, runtimeContext);
+    /* v8 ignore next -- V8 mis-maps an import destructuring branch to this line */
     if (updated && container.updateKind?.kind === 'tag') {
       await syncComposeFileTag({
         labels: context.currentContainerSpec?.Config?.Labels,
@@ -1187,7 +1250,9 @@ class Docker extends Trigger {
    * subclasses can override.
    */
   async runContainerUpdateLifecycle(container, runtimeContext?: unknown) {
-    return this.updateLifecycleExecutor.run(container, runtimeContext);
+    return updateConcurrencyLimit(() =>
+      this.updateLifecycleExecutor.run(container, runtimeContext),
+    );
   }
 
   /**

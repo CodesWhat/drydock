@@ -2443,6 +2443,41 @@ describe('Docker Watcher', () => {
   });
 
   describe('Additional Coverage - maintenance queue internals', () => {
+    test('getNextScheduledRunDate should return undefined when cron next match is not a Date', () => {
+      docker.configuration.cron = '*/5 * * * *';
+      mockCron.createTask.mockReturnValue({
+        timeMatcher: {
+          getNextMatch: vi.fn().mockReturnValue('not-a-date'),
+        },
+      });
+
+      expect(docker.getNextScheduledRunDate(new Date('2026-04-09T12:00:00.000Z'))).toBeUndefined();
+    });
+
+    test('getNextScheduledRunDate should tolerate executing the scheduled no-op callback', () => {
+      const nextRun = new Date('2026-04-09T12:05:00.000Z');
+      docker.configuration.cron = '*/5 * * * *';
+      mockCron.createTask.mockImplementation((_, callback) => {
+        callback();
+        return {
+          timeMatcher: {
+            getNextMatch: vi.fn().mockReturnValue(nextRun),
+          },
+        } as any;
+      });
+
+      expect(docker.getNextScheduledRunDate(new Date('2026-04-09T12:00:00.000Z'))).toEqual(nextRun);
+    });
+
+    test('getNextScheduledRunDate should return undefined when cron task creation throws', () => {
+      docker.configuration.cron = 'bad cron';
+      mockCron.createTask.mockImplementationOnce(() => {
+        throw new Error('invalid cron');
+      });
+
+      expect(docker.getNextScheduledRunDate(new Date('2026-04-09T12:00:00.000Z'))).toBeUndefined();
+    });
+
     test('should consider maintenance window open and next date undefined when no window is configured', () => {
       docker.configuration.maintenancewindow = undefined;
       expect(docker.isMaintenanceWindowOpen()).toBe(true);
@@ -2535,6 +2570,24 @@ describe('Docker Watcher', () => {
       docker.watchFromCron = vi.fn().mockRejectedValue(new Error('queued-failure'));
 
       await expect(docker.checkQueuedMaintenanceWindowWatch()).resolves.toBeUndefined();
+    });
+
+    test('getNextRunAt should return undefined when a maintenance window is configured but no cron match exists', () => {
+      docker.configuration.cron = '0 * * * *';
+      docker.configuration.maintenancewindow = '0 2 * * *';
+      vi.spyOn(docker, 'getNextScheduledRunDate').mockReturnValue(undefined);
+
+      expect(docker.getNextRunAt()).toBeUndefined();
+    });
+
+    test('getNextRunAt should return the scheduled run when it already falls inside the maintenance window', () => {
+      const nextRun = new Date('2026-04-09T12:00:00.000Z');
+      docker.configuration.cron = '0 * * * *';
+      docker.configuration.maintenancewindow = '0 2 * * *';
+      vi.spyOn(docker, 'getNextScheduledRunDate').mockReturnValue(nextRun);
+      maintenance.isInMaintenanceWindow.mockReturnValue(true);
+
+      expect(docker.getNextRunAt()).toBe(nextRun.toISOString());
     });
   });
 

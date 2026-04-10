@@ -34,6 +34,7 @@ function createHarness(overrides = {}) {
     recordHookConfigurationAudit: vi.fn(),
     runPreUpdateHook: vi.fn().mockResolvedValue(undefined),
     isSelfUpdate: vi.fn(() => false),
+    isInfrastructureUpdate: vi.fn(() => false),
     maybeNotifySelfUpdate: vi.fn().mockResolvedValue(undefined),
     executeSelfUpdate: vi.fn().mockResolvedValue(true),
     runPreRuntimeUpdateLifecycle: vi.fn().mockResolvedValue(undefined),
@@ -68,6 +69,7 @@ function createHarness(overrides = {}) {
     },
     selfUpdate: {
       isSelfUpdate: deps.isSelfUpdate,
+      isInfrastructureUpdate: deps.isInfrastructureUpdate,
       maybeNotifySelfUpdate: deps.maybeNotifySelfUpdate,
       executeSelfUpdate: deps.executeSelfUpdate,
     },
@@ -119,6 +121,7 @@ describe('UpdateLifecycleExecutor', () => {
       },
       selfUpdate: {
         isSelfUpdate: vi.fn(() => false),
+        isInfrastructureUpdate: vi.fn(() => false),
         maybeNotifySelfUpdate: vi.fn().mockResolvedValue(undefined),
         executeSelfUpdate: vi.fn().mockResolvedValue(true),
       },
@@ -138,7 +141,13 @@ describe('UpdateLifecycleExecutor', () => {
     });
 
     await expect(executor.run(createContainer())).resolves.toBeUndefined();
-    expect(emitContainerUpdateApplied).toHaveBeenCalledWith('name');
+    expect(emitContainerUpdateApplied).toHaveBeenCalledWith({
+      containerName: 'name',
+      container: expect.objectContaining({
+        id: 'container-id',
+        name: 'web',
+      }),
+    });
   });
 
   test('constructor provides logger fallback when omitted', () => {
@@ -158,6 +167,7 @@ describe('UpdateLifecycleExecutor', () => {
       },
       selfUpdate: {
         isSelfUpdate: vi.fn(() => false),
+        isInfrastructureUpdate: vi.fn(() => false),
         maybeNotifySelfUpdate: vi.fn(),
         executeSelfUpdate: vi.fn(),
       },
@@ -197,6 +207,7 @@ describe('UpdateLifecycleExecutor', () => {
       },
       selfUpdate: {
         isSelfUpdate: vi.fn(() => false),
+        isInfrastructureUpdate: vi.fn(() => false),
         maybeNotifySelfUpdate: vi.fn().mockResolvedValue(undefined),
         executeSelfUpdate: vi.fn().mockResolvedValue(true),
       },
@@ -216,7 +227,13 @@ describe('UpdateLifecycleExecutor', () => {
     });
 
     await expect(executor.run(createContainer())).resolves.toBeUndefined();
-    expect(emitContainerUpdateApplied).toHaveBeenCalledWith('name');
+    expect(emitContainerUpdateApplied).toHaveBeenCalledWith({
+      containerName: 'name',
+      container: expect.objectContaining({
+        id: 'container-id',
+        name: 'web',
+      }),
+    });
   });
 
   test('constructor provides prune/getBackup defaults when omitted', async () => {
@@ -242,6 +259,7 @@ describe('UpdateLifecycleExecutor', () => {
       },
       selfUpdate: {
         isSelfUpdate: vi.fn(() => false),
+        isInfrastructureUpdate: vi.fn(() => false),
         maybeNotifySelfUpdate: vi.fn().mockResolvedValue(undefined),
         executeSelfUpdate: vi.fn().mockResolvedValue(true),
       },
@@ -261,7 +279,13 @@ describe('UpdateLifecycleExecutor', () => {
     });
 
     await expect(executor.run(createContainer())).resolves.toBeUndefined();
-    expect(emitContainerUpdateApplied).toHaveBeenCalledWith('name');
+    expect(emitContainerUpdateApplied).toHaveBeenCalledWith({
+      containerName: 'name',
+      container: expect.objectContaining({
+        id: 'container-id',
+        name: 'web',
+      }),
+    });
   });
 
   test('constructor should throw when required dependencies are missing', () => {
@@ -308,6 +332,18 @@ describe('UpdateLifecycleExecutor', () => {
     );
     expect(harness.runPreRuntimeUpdateLifecycle).not.toHaveBeenCalled();
     expect(harness.emitContainerUpdateApplied).not.toHaveBeenCalled();
+  });
+
+  test('routes infrastructure update through self-update path', async () => {
+    const harness = createHarness({
+      isInfrastructureUpdate: vi.fn(() => true),
+      executeSelfUpdate: vi.fn().mockResolvedValue(true),
+    });
+
+    await harness.executor.run(createContainer());
+
+    expect(harness.executeSelfUpdate).toHaveBeenCalled();
+    expect(harness.performContainerUpdate).not.toHaveBeenCalled();
   });
 
   test('runs non-self-update path and emits update-applied on success', async () => {
@@ -364,7 +400,13 @@ describe('UpdateLifecycleExecutor', () => {
       { autoRollback: true, rollbackWindow: 1, rollbackInterval: 2 },
       expect.anything(),
     );
-    expect(harness.emitContainerUpdateApplied).toHaveBeenCalledWith('docker.local_web');
+    expect(harness.emitContainerUpdateApplied).toHaveBeenCalledWith({
+      containerName: 'docker.local_web',
+      container: expect.objectContaining({
+        id: 'container-id',
+        name: 'web',
+      }),
+    });
     expect(harness.pruneOldBackups).toHaveBeenCalledWith('web', 5);
   });
 

@@ -5,6 +5,7 @@ export interface AuditEntry {
     | 'update-available'
     | 'update-applied'
     | 'update-failed'
+    | 'notification-delivery-failed'
     | 'container-update'
     | 'security-alert'
     | 'agent-disconnect'
@@ -27,6 +28,7 @@ export interface AuditEntry {
     | 'auth-login'
     | 'env-reveal';
   containerName: string;
+  containerIdentityKey?: string;
   containerImage?: string;
   fromVersion?: string;
   toVersion?: string;

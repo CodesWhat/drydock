@@ -12,33 +12,67 @@ vi.mock('@/components/containers/containersViewTemplateContext', () => ({
 }));
 
 const DataTableStub = defineComponent({
-  props: ['rows', 'rowClass'],
+  props: ['rows', 'rowClass', 'rowClickable', 'fullWidthRow', 'rowKey', 'virtualScroll'],
   emits: ['update:sort-key', 'update:sort-asc', 'row-click'],
   setup(props, { emit }) {
+    const isFullWidth = (row: Record<string, unknown>) =>
+      typeof props.fullWidthRow === 'function' ? props.fullWidthRow(row) : false;
+    const isClickable = (row: Record<string, unknown>) =>
+      typeof props.rowClickable === 'function' ? props.rowClickable(row) : true;
+    const keyFor = (row: Record<string, unknown>) => {
+      if (typeof props.rowKey === 'function') {
+        return props.rowKey(row);
+      }
+      if (typeof props.rowKey === 'string' && row[props.rowKey] != null) {
+        return row[props.rowKey];
+      }
+      return row.name;
+    };
+
     onMounted(() => {
       emit('update:sort-key', 'status');
       emit('update:sort-asc', false);
-      if (Array.isArray(props.rows) && props.rows.length > 0) {
-        emit('row-click', props.rows[0]);
+      if (Array.isArray(props.rows)) {
+        const firstClickable = props.rows.find(
+          (row: Record<string, unknown>) => !isFullWidth(row) && isClickable(row),
+        );
+        if (firstClickable) {
+          emit('row-click', firstClickable);
+        }
       }
     });
+
+    return {
+      isFullWidth,
+      isClickable,
+      keyFor,
+    };
   },
   template: `
     <div class="data-table-stub">
       <div
         v-for="row in rows"
-        :key="row.name"
-        class="table-row-stub"
-        :class="typeof rowClass === 'function' ? rowClass(row) : ''">
-        <slot name="cell-icon" :row="row" />
-        <slot name="cell-name" :row="row" />
-        <slot name="cell-version" :row="row" />
-        <slot name="cell-kind" :row="row" />
-        <slot name="cell-status" :row="row" />
-        <slot name="cell-bouncer" :row="row" />
-        <slot name="cell-server" :row="row" />
-        <slot name="cell-registry" :row="row" />
-        <slot name="actions" :row="row" />
+        :key="keyFor(row)"
+        :class="[
+          isFullWidth(row) ? 'full-row-stub' : 'table-row-stub',
+          !isFullWidth(row) && typeof rowClass === 'function' ? rowClass(row) : '',
+        ]">
+        <template v-if="isFullWidth(row)">
+          <slot name="full-row" :row="row" />
+        </template>
+        <template v-else>
+          <div>
+            <slot name="cell-icon" :row="row" />
+            <slot name="cell-name" :row="row" />
+            <slot name="cell-version" :row="row" />
+            <slot name="cell-kind" :row="row" />
+            <slot name="cell-status" :row="row" />
+            <slot name="cell-bouncer" :row="row" />
+            <slot name="cell-server" :row="row" />
+            <slot name="cell-registry" :row="row" />
+            <slot name="actions" :row="row" />
+          </div>
+        </template>
       </div>
     </div>
   `,
@@ -102,6 +136,7 @@ function makeContext(overrides: Record<string, unknown> = {}) {
   const groupByStack = ref(false);
   const collapsedGroups = ref(new Set<string>());
   const groupUpdateInProgress = ref(new Set<string>());
+  const groupUpdateQueue = ref(new Set<string>());
   const containerActionsEnabled = ref(true);
   const actionInProgress = ref(new Set<string>());
   const containerViewMode = ref<'table' | 'cards' | 'list'>('table');
@@ -176,11 +211,15 @@ function makeContext(overrides: Record<string, unknown> = {}) {
     toggleGroupCollapse: spies.toggleGroupCollapse,
     collapsedGroups,
     groupUpdateInProgress,
+    groupUpdateQueue,
     containerActionsEnabled,
     containerActionsDisabledReason: ref('Actions disabled by server configuration'),
     actionInProgress,
     isContainerUpdateInProgress: (target: { id?: string; name?: string; _pending?: true }) =>
       Boolean(target._pending) || actionInProgress.value.has(target.id ?? target.name ?? ''),
+    isContainerUpdateQueued: (target: { id?: string; name?: string }) =>
+      groupUpdateQueue.value.has(target.id ?? ''),
+    getContainerUpdateSequenceLabel: () => null,
     updateAllInGroup: spies.updateAllInGroup,
     tt: (label: string) => ({ value: label, showDelay: 400 }),
     containerViewMode,
@@ -241,6 +280,7 @@ function makeContext(overrides: Record<string, unknown> = {}) {
       renderGroups,
       groupByStack,
       groupUpdateInProgress,
+      groupUpdateQueue,
       containerViewMode,
       tableActionStyle,
       openActionsMenu,
@@ -629,6 +669,89 @@ describe('ContainersGroupedViews', () => {
       .findAll('button')
       .filter((button) => button.text().trim() === 'Delete');
     expect(deleteButtons).toHaveLength(1);
+  });
+
+  it('flattens grouped table mode into a single data table with group rows', async () => {
+    const alpha = makeContainer({
+      id: 'c-alpha',
+      name: 'alpha',
+      newTag: '2.0.0',
+      updateKind: 'major',
+      status: 'running',
+    });
+    const beta = makeContainer({
+      id: 'c-beta',
+      name: 'beta',
+      newTag: '1.1.0',
+      updateKind: 'minor',
+      status: 'stopped',
+    });
+
+    const { context } = makeContext();
+    context.groupByStack.value = true;
+    context.containerViewMode.value = 'table';
+    context.filteredContainers.value = [alpha, beta];
+    context.displayContainers.value = [alpha, beta];
+    context.renderGroups.value = [
+      {
+        key: 'stack-a',
+        name: 'stack-a',
+        containers: [alpha],
+        containerCount: 1,
+        updatesAvailable: 1,
+        updatableCount: 1,
+      },
+      {
+        key: 'stack-b',
+        name: 'stack-b',
+        containers: [beta],
+        containerCount: 1,
+        updatesAvailable: 1,
+        updatableCount: 1,
+      },
+    ];
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+    await nextTick();
+
+    expect(wrapper.findAll('.data-table-stub')).toHaveLength(1);
+    expect(wrapper.findAll('.full-row-stub')).toHaveLength(2);
+    expect(wrapper.findAll('.table-row-stub')).toHaveLength(2);
+    expect(wrapper.text()).toContain('stack-a');
+    expect(wrapper.text()).toContain('stack-b');
+  });
+
+  it('enables virtual scrolling for grouped table mode', async () => {
+    const alpha = makeContainer({
+      id: 'c-alpha',
+      name: 'alpha',
+      newTag: '1.1.0',
+      updateKind: 'minor',
+      status: 'running',
+    });
+
+    const { context } = makeContext();
+    context.groupByStack.value = true;
+    context.containerViewMode.value = 'table';
+    context.filteredContainers.value = [alpha];
+    context.displayContainers.value = [alpha];
+    context.renderGroups.value = [
+      {
+        key: 'stack-a',
+        name: 'stack-a',
+        containers: [alpha],
+        containerCount: 1,
+        updatesAvailable: 1,
+        updatableCount: 1,
+      },
+    ];
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+    await nextTick();
+
+    expect(wrapper.findComponent(DataTableStub).props('virtualScroll')).toBe(true);
   });
 
   it('covers card/list view events and footer action handlers', async () => {
@@ -1074,6 +1197,41 @@ describe('ContainersGroupedViews', () => {
 
     expect(row.classes()).toContain('opacity-50');
     expect(row.text()).toContain('Updating');
+  });
+
+  it('renders grouped queue positions in status labels', () => {
+    const queued = makeContainer({
+      id: 'c-queued-1',
+      name: 'alpha',
+      newTag: '2.0.0',
+      updateKind: 'major',
+      status: 'running',
+    });
+
+    const { context, refs } = makeContext({
+      getContainerUpdateSequenceLabel: (target: { id?: string }) =>
+        target.id === 'c-queued-1' ? '2 of 3' : null,
+    });
+    refs.filteredContainers.value = [queued];
+    refs.displayContainers.value = [queued];
+    refs.renderGroups.value = [
+      {
+        key: '__flat__',
+        name: null,
+        containers: [queued],
+        containerCount: 1,
+        updatesAvailable: 1,
+        updatableCount: 1,
+      },
+    ];
+    refs.containerViewMode.value = 'table';
+    refs.groupUpdateQueue.value = new Set(['c-queued-1']);
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+    const row = rowByName(wrapper, 'alpha');
+
+    expect(row.text()).toContain('Queued 2 of 3');
   });
 
   it('covers card and list pending/disabled/update-kind branches', async () => {

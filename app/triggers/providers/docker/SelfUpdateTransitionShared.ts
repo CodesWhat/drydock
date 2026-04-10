@@ -48,6 +48,7 @@ interface SelfUpdateTransitionDependencies {
     logContainer: SelfUpdateLogger,
   ) => Promise<SelfUpdateCreatedContainer>;
   createOperationId: () => string;
+  resolveHelperImage?: () => string | undefined;
 }
 
 function findDockerSocketBind(spec: SelfUpdateContainerSpec | undefined): string | undefined {
@@ -94,7 +95,7 @@ async function executeSelfUpdateTransition(
   );
 
   const oldName = currentContainerSpec.Name.replace(/^\//, '');
-  const tempName = `drydock-old-${Date.now()}`;
+  const tempName = `${oldName}-old-${Date.now()}`;
 
   logContainer.info(`Rename container ${oldName} to ${tempName}`);
   await currentContainer.rename({ name: tempName });
@@ -144,7 +145,7 @@ async function executeSelfUpdateTransition(
   try {
     await dockerApi
       .createContainer({
-        Image: newImage,
+        Image: dependencies.resolveHelperImage?.() ?? newImage,
         Cmd: ['node', 'dist/triggers/providers/docker/self-update-controller-entrypoint.js'],
         Env: [
           `DD_SELF_UPDATE_OP_ID=${selfUpdateOperationId}`,

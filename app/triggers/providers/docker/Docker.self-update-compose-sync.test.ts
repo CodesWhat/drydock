@@ -867,4 +867,31 @@ describe('performContainerUpdate compose file sync', () => {
 
     executeUpdateSpy.mockRestore();
   });
+
+  test('should not call syncComposeFileTag when updateKind is missing', async () => {
+    const executeUpdateSpy = vi.spyOn(docker, 'executeContainerUpdate').mockResolvedValue(true);
+
+    const context = {
+      currentContainerSpec: {
+        Config: {
+          Labels: {
+            'com.docker.compose.project.config_files': '/app/docker-compose.yml',
+            'com.docker.compose.service': 'web',
+          },
+        },
+      },
+      newImage: 'myapp:v2',
+    };
+
+    const container = {};
+
+    const logContainer = { info: vi.fn(), warn: vi.fn(), debug: vi.fn(), error: vi.fn() };
+
+    const result = await docker.performContainerUpdate(context, container, logContainer);
+
+    expect(result).toBe(true);
+    expect(mockSyncComposeFileTag).not.toHaveBeenCalled();
+
+    executeUpdateSpy.mockRestore();
+  });
 });

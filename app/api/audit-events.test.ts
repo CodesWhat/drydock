@@ -27,7 +27,9 @@ describe('recordAuditEvent', () => {
       action: 'rollback',
       status: 'success',
       container: {
+        agent: 'edge-a',
         name: 'nginx',
+        watcher: 'docker-prod',
         image: { name: 'library/nginx' },
       },
       fromVersion: '1.24.0',
@@ -40,6 +42,7 @@ describe('recordAuditEvent', () => {
         action: 'rollback',
         status: 'success',
         containerName: 'nginx',
+        containerIdentityKey: 'edge-a::docker-prod::nginx',
         containerImage: 'library/nginx',
         fromVersion: '1.24.0',
         toVersion: '1.23.0',
@@ -62,5 +65,22 @@ describe('recordAuditEvent', () => {
     ).not.toThrow();
 
     expect(mockInsertAudit).toHaveBeenCalled();
+  });
+
+  test('should omit containerIdentityKey when the container has no watcher identity', () => {
+    recordAuditEvent({
+      action: 'container-update',
+      status: 'success',
+      container: {
+        name: 'nginx',
+        image: { name: 'library/nginx' },
+      },
+    });
+
+    expect(mockInsertAudit).toHaveBeenCalledWith(
+      expect.not.objectContaining({
+        containerIdentityKey: expect.any(String),
+      }),
+    );
   });
 });

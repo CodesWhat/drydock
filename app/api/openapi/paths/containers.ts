@@ -22,12 +22,14 @@ function createContainerIdActionPost({
   operationId,
   successDescription,
   successSchemaRef,
+  successStatus = 200,
   errorResponses,
 }: {
   summary: string;
   operationId: string;
   successDescription: string;
   successSchemaRef: string;
+  successStatus?: 200 | 202;
   errorResponses: ErrorResponses;
 }) {
   return {
@@ -37,7 +39,7 @@ function createContainerIdActionPost({
       operationId,
       parameters: CONTAINER_ID_ACTION_PARAMETERS,
       responses: {
-        200: jsonResponse(successDescription, {
+        [successStatus]: jsonResponse(successDescription, {
           $ref: successSchemaRef,
         }),
         ...errorResponses,
@@ -51,19 +53,24 @@ function createRuntimeContainerActionPath({
   operationId,
   successDescription,
   failureDescription,
+  successSchemaRef = CONTAINER_ACTION_RESPONSE_SCHEMA,
+  successStatus = 200,
   additionalErrorResponses = {},
 }: {
   summary: string;
   operationId: string;
   successDescription: string;
   failureDescription: string;
+  successSchemaRef?: string;
+  successStatus?: 200 | 202;
   additionalErrorResponses?: ErrorResponses;
 }) {
   return createContainerIdActionPost({
     summary,
     operationId,
     successDescription,
-    successSchemaRef: CONTAINER_ACTION_RESPONSE_SCHEMA,
+    successSchemaRef,
+    successStatus,
     errorResponses: {
       ...additionalErrorResponses,
       401: errorResponse('Authentication required'),
@@ -641,10 +648,15 @@ export const containerPaths = {
   '/api/containers/{id}/update': createRuntimeContainerActionPath({
     summary: 'Update container to latest available image',
     operationId: 'updateContainer',
-    successDescription: 'Container updated',
+    successDescription: 'Container update accepted',
     failureDescription: 'Container update failed',
+    successSchemaRef: '#/components/schemas/ContainerUpdateAcceptedResponse',
+    successStatus: 202,
     additionalErrorResponses: {
       400: errorResponse('No update available for container'),
+      409: errorResponse(
+        'Container update already queued or in progress, blocked by security, or targeting a rollback container',
+      ),
     },
   }),
 } as const;

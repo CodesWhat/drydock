@@ -121,16 +121,6 @@ This variable is a no-op — watching at startup has been the default since v1.3
 | **Detection** | Startup log warning |
 | **Migration** | Remove the variable from your configuration |
 
-### `curl` in Docker image
-
-The official Docker image previously included `curl` for custom healthcheck overrides. The built-in `HEALTHCHECK` now uses a lightweight static binary (`/bin/healthcheck`).
-
-| | |
-| --- | --- |
-| **Deprecated since** | v1.5.0 |
-| **Detection** | Not runtime-detectable (Docker executes healthchecks outside the application) |
-| **Migration** | Remove custom `healthcheck:` blocks from your drydock compose service — the image handles it automatically. If you need custom intervals, use `test: /bin/healthcheck ${DD_SERVER_PORT:-3000}`. See [Monitoring](/docs/monitoring) |
-
 ### Registry `PUBLIC_TOKEN` configuration
 
 Token-based authentication for public registries has been replaced by password-based authentication for consistency.
@@ -142,6 +132,16 @@ Token-based authentication for public registries has been replaced by password-b
 | **Migration** | Replace `DD_REGISTRY_HUB_PUBLIC_TOKEN` with `DD_REGISTRY_HUB_PUBLIC_PASSWORD`. Replace `DD_REGISTRY_DHI_TOKEN` with `DD_REGISTRY_DHI_PASSWORD` |
 
 ## Removal in v1.7.0
+
+### `curl` in Docker image
+
+The official Docker image keeps `curl` available in v1.5.x and v1.6.x for backward compatibility with custom healthcheck overrides. The default built-in `HEALTHCHECK` uses the lightweight static binary (`/bin/healthcheck`) instead.
+
+| | |
+| --- | --- |
+| **Deprecated since** | v1.5.0 |
+| **Detection** | UI deprecation banner when Drydock can inspect its own container via the local Docker socket; otherwise manual config review |
+| **Migration** | Custom `curl`-based healthcheck overrides remain supported in v1.5.x. v1.6.0 is the final warning release. Removal is scheduled for v1.7.0. Prefer the built-in image healthcheck, or switch custom intervals to `test: /bin/healthcheck ${DD_SERVER_PORT:-3000}`. See [Monitoring](/docs/monitoring) |
 
 ### `DD_TRIGGER_*` environment variable prefix
 
@@ -170,7 +170,7 @@ Drydock provides multiple channels for discovering deprecated feature usage:
 | Channel | Covers |
 | --- | --- |
 | **Startup log warnings** | All runtime-detectable deprecations |
-| **UI deprecation banners** | Legacy config, legacy API paths, OIDC HTTP, legacy password hashes |
+| **UI deprecation banners** | Legacy config, legacy API paths, OIDC HTTP, legacy password hashes, detected curl healthcheck overrides |
 | **Prometheus counters** | `dd_legacy_input_total{source,key}` for env vars, labels, and API paths |
 | **HTTP response headers** | `Deprecation` and `Sunset` on `PUT /api/settings` |
 | **Migration CLI** | `drydock config migrate --dry-run` previews all env var and label renames |

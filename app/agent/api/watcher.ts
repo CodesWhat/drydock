@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import { mapComponentsToList } from '../../api/component.js';
+import { mapComponentsToList, mapComponentToItem } from '../../api/component.js';
 import { sendErrorResponse } from '../../api/error-response.js';
 import logger from '../../log/index.js';
 import { sanitizeLogParam } from '../../log/sanitize.js';
@@ -38,6 +38,23 @@ export function getWatchers(req: Request, res: Response) {
   const localWatchers = registry.getState().watcher;
   const items = mapComponentsToList(localWatchers);
   res.json(items);
+}
+
+/**
+ * Get a specific watcher.
+ */
+export function getWatcher(req: Request, res: Response) {
+  const type = req.params.type as string;
+  const name = req.params.name as string;
+  const watcherId = `${type.toLowerCase()}.${name.toLowerCase()}`;
+  const watcher = registry.getState().watcher[watcherId];
+
+  if (!watcher) {
+    sendErrorResponse(res, 404, `Watcher ${name} not found`);
+    return;
+  }
+
+  res.status(200).json(mapComponentToItem(watcherId, watcher, 'watcher'));
 }
 
 /**

@@ -225,6 +225,27 @@ test('deregistration of containerUpdateApplied handler should work', async () =>
   expect(handler).not.toHaveBeenCalled();
 });
 
+test('getContainerUpdateAppliedEventContainerName should normalize supported payload shapes', () => {
+  expect(event.getContainerUpdateAppliedEventContainerName('container-123')).toBe('container-123');
+  expect(event.getContainerUpdateAppliedEventContainerName('')).toBeUndefined();
+  expect(
+    event.getContainerUpdateAppliedEventContainerName(null as unknown as string),
+  ).toBeUndefined();
+  expect(
+    event.getContainerUpdateAppliedEventContainerName(42 as unknown as string),
+  ).toBeUndefined();
+  expect(
+    event.getContainerUpdateAppliedEventContainerName({ containerName: '' } as {
+      containerName: string;
+    }),
+  ).toBeUndefined();
+  expect(
+    event.getContainerUpdateAppliedEventContainerName({ containerName: 'web' } as {
+      containerName: string;
+    }),
+  ).toBe('web');
+});
+
 test('emitContainerUpdateFailed should call registered handlers', async () => {
   const handler = vi.fn();
   const payload = {

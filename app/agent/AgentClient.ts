@@ -4,6 +4,7 @@ import { StringDecoder } from 'node:string_decoder';
 import axios, { type AxiosRequestConfig } from 'axios';
 import type { Logger } from 'pino';
 import type {
+  ContainerUpdateAppliedEventPayload,
   ContainerUpdateFailedEventPayload,
   SecurityAlertEventPayload,
   SecurityAlertSummary,
@@ -51,9 +52,12 @@ interface AgentClientRuntimeInfo {
 }
 
 interface AgentComponentDescriptor {
+  id?: string;
   type: string;
   name: string;
   configuration: Record<string, unknown>;
+  agent?: string;
+  metadata?: Record<string, unknown>;
 }
 
 interface AgentRuntimeAckPayload {
@@ -89,6 +93,17 @@ const SECURITY_ALERT_SUMMARY_KEYS = ['unknown', 'low', 'medium', 'high', 'critic
 const INITIAL_SSE_RECONNECT_DELAY_MS = 1_000;
 const MAX_SSE_RECONNECT_DELAY_MS = 60_000;
 const REMOTE_UPDATE_TRIGGER_TYPES = new Set(['docker', 'dockercompose']);
+
+function isContainerUpdateAppliedEventPayload(
+  data: unknown,
+): data is ContainerUpdateAppliedEventPayload {
+  if (!data || typeof data !== 'object') {
+    return false;
+  }
+
+  const containerName = (data as { containerName?: unknown }).containerName;
+  return typeof containerName === 'string' && containerName.length > 0;
+}
 
 export class AgentClient {
   public name: string;
@@ -249,7 +264,7 @@ export class AgentClient {
     for (const container of containers) {
       containerReports.push(await this.processAuthoritativeContainer(container));
     }
-    void emitContainerReports(containerReports);
+    await emitContainerReports(containerReports);
     return containerReports;
   }
 
@@ -360,7 +375,7 @@ export class AgentClient {
     }
 
     // Emit report so Triggers can fire if changed
-    void emitContainerReport(containerReport);
+    await emitContainerReport(containerReport);
     return containerReport;
   }
 
@@ -394,28 +409,34 @@ export class AgentClient {
     }, reconnectDelay);
   }
 
-  private parseSseLine(line: string) {
+  private async parseSseLine(line: string) {
     if (!line.startsWith('data: ')) {
       return;
     }
     try {
       const payload = JSON.parse(line.substring(6)) as AgentSsePayload;
       if (payload.type && payload.data) {
-        this.handleEvent(payload.type as string, payload.data);
+        try {
+          await this.handleEvent(payload.type as string, payload.data);
+        } catch (error: unknown) {
+          this.log.error(
+            `Error handling SSE event ${sanitizeLogParam(String(payload.type))} (${getErrorMessage(error)})`,
+          );
+        }
       }
     } catch (error: unknown) {
       this.log.warn(`Error parsing SSE data: ${getErrorMessage(error)}`);
     }
   }
 
-  private processSseBuffer(buffer: string): string {
+  private async processSseBuffer(buffer: string): Promise<string> {
     const messages = buffer.split('\n\n');
     // The last element is either empty (if buffer ended with \n\n) or incomplete
     const remainder = messages.pop() || '';
 
     for (const message of messages) {
       for (const line of message.split('\n')) {
-        this.parseSseLine(line);
+        await this.parseSseLine(line);
       }
     }
     return remainder;
@@ -424,10 +445,22 @@ export class AgentClient {
   private attachStreamHandlers(stream: NodeJS.EventEmitter) {
     const decoder = new StringDecoder('utf8');
     let buffer = '';
+    let sseProcessing = Promise.resolve();
 
     stream.on('data', (chunk: Buffer) => {
-      buffer += decoder.write(chunk);
-      buffer = this.processSseBuffer(buffer);
+      const decodedChunk = decoder.write(chunk);
+      if (!decodedChunk) {
+        return;
+      }
+
+      sseProcessing = sseProcessing
+        .then(async () => {
+          buffer += decodedChunk;
+          buffer = await this.processSseBuffer(buffer);
+        })
+        .catch((error: unknown) => {
+          this.log.error(`SSE data processing failed: ${getErrorMessage(error)}`);
+        });
     });
     stream.on('error', (e: Error) => {
       this.log.error(`SSE Connection failed: ${e.message}`);
@@ -604,6 +637,17 @@ export class AgentClient {
       case 'dd:update-applied':
         if (typeof data === 'string' && data.length > 0) {
           await emitContainerUpdateApplied(data);
+        } else if (isContainerUpdateAppliedEventPayload(data)) {
+          await emitContainerUpdateApplied({
+            containerName: data.containerName,
+            container:
+              data.container && typeof data.container === 'object'
+                ? {
+                    ...data.container,
+                    agent: this.name,
+                  }
+                : undefined,
+          });
         }
         return;
       case 'dd:update-failed': {
@@ -738,6 +782,21 @@ export class AgentClient {
       );
     } catch (error: unknown) {
       this.log.error(`Error deleting container on agent: ${getErrorMessage(error)}`);
+      throw error;
+    }
+  }
+
+  async getWatcher(watcherType: string, watcherName: string) {
+    try {
+      const response = await axios.get<AgentComponentDescriptor>(
+        `${this.baseUrl}/api/watchers/${encodeURIComponent(watcherType)}/${encodeURIComponent(watcherName)}`,
+        this.axiosOptions,
+      );
+      return response.data;
+    } catch (error: unknown) {
+      this.log.error(
+        `Error fetching watcher on agent: ${sanitizeLogParam(getErrorMessage(error))}`,
+      );
       throw error;
     }
   }

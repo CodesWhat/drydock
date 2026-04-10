@@ -30,6 +30,12 @@ vi.mock('../prometheus/compatibility.js', () => ({
   })),
 }));
 
+vi.mock('../compatibility/curl-healthcheck.js', () => ({
+  getCurlHealthcheckOverrideCompatibility: vi.fn(async () => ({
+    detected: false,
+  })),
+}));
+
 // Mock express modules
 vi.mock('express', () => ({
   default: {
@@ -60,6 +66,9 @@ describe('Server Router', () => {
 
   test('should call getServerConfiguration when route handler is called', async () => {
     const { getServerConfiguration } = await import('../configuration/index.js');
+    const { getCurlHealthcheckOverrideCompatibility } = await import(
+      '../compatibility/curl-healthcheck.js'
+    );
     const router = serverRouter.init();
 
     // Get the route handler function
@@ -69,9 +78,10 @@ describe('Server Router', () => {
       json: vi.fn(),
     };
 
-    routeHandler({}, mockRes);
+    await routeHandler({}, mockRes);
 
     expect(getServerConfiguration).toHaveBeenCalled();
+    expect(getCurlHealthcheckOverrideCompatibility).toHaveBeenCalled();
     expect(mockRes.status).toHaveBeenCalledWith(200);
     expect(mockRes.json).toHaveBeenCalledWith({
       configuration: {
@@ -87,6 +97,9 @@ describe('Server Router', () => {
           total: 3,
           env: { total: 1, keys: ['WUD_SERVER_PORT'] },
           label: { total: 2, keys: ['wud.watch'] },
+        },
+        curlHealthcheckOverride: {
+          detected: false,
         },
       },
     });
@@ -113,7 +126,7 @@ describe('Server Router', () => {
       json: vi.fn(),
     };
 
-    routeHandler({}, mockRes);
+    await routeHandler({}, mockRes);
 
     const payload = mockRes.json.mock.calls[0][0];
     expect(payload.configuration.tls).toEqual({
@@ -140,7 +153,7 @@ describe('Server Router', () => {
       json: vi.fn(),
     };
 
-    routeHandler({}, mockRes);
+    await routeHandler({}, mockRes);
 
     const payload = mockRes.json.mock.calls[0][0];
     expect(payload.configuration.tls).toBe(false);

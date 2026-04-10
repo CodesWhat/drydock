@@ -1,4 +1,5 @@
 import type { AuditEntry } from '../model/audit.js';
+import { getContainerIdentityKey } from '../model/container.js';
 import { getAuditCounter } from '../prometheus/audit.js';
 import * as auditStore from '../store/audit.js';
 
@@ -14,6 +15,8 @@ type RecordAuditEventArgs = {
   | {
       container: {
         name: AuditEntry['containerName'];
+        watcher?: string;
+        agent?: string;
         image?: { name?: AuditContainerImage };
       };
       containerName?: AuditEntry['containerName'];
@@ -42,12 +45,14 @@ export function recordAuditEvent({
   fromVersion,
   toVersion,
 }: RecordAuditEventArgs) {
+  const containerIdentityKey = container ? getContainerIdentityKey(container) : undefined;
   const entry: AuditEntry = {
     id: '',
     timestamp: new Date().toISOString(),
     action,
     containerName,
     containerImage,
+    ...(containerIdentityKey !== undefined ? { containerIdentityKey } : {}),
     status,
     ...(details !== undefined ? { details } : {}),
     ...(fromVersion !== undefined ? { fromVersion } : {}),

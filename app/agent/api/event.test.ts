@@ -381,6 +381,28 @@ describe('agent API event', () => {
       expect(payload).toContain('"local_nginx"');
     });
 
+    test('update-applied handler should send object payloads to connected clients', () => {
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+      eventApi.initEvents();
+
+      const updateAppliedHandler = event.registerContainerUpdateApplied.mock.calls[0][0];
+      updateAppliedHandler({
+        containerName: 'local_nginx',
+        container: {
+          id: 'c1',
+          name: 'nginx',
+          watcher: 'local',
+        },
+      });
+
+      expect(res.write).toHaveBeenCalled();
+      const payload = res.write.mock.calls[0][0];
+      expect(payload).toContain('dd:update-applied');
+      expect(payload).toContain('"containerName":"local_nginx"');
+      expect(payload).toContain('"name":"nginx"');
+    });
+
     test('update-failed handler should send SSE to connected clients', () => {
       eventApi.subscribeEvents(req, res);
       res.write.mockClear();

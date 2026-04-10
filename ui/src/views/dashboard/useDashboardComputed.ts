@@ -1,6 +1,7 @@
 import { type ComputedRef, computed, type Ref } from 'vue';
 import { ROUTES } from '../../router/routes';
 import type { Container } from '../../types/container';
+import { shouldRenderStandaloneQueuedUpdateAsUpdating } from '../../utils/container-update';
 import {
   buildDashboardContainerMetrics,
   type ImageSecurityAggregate,
@@ -69,6 +70,7 @@ function getRecentUpdateStatusColor(status: RecentUpdateRow['status']): string {
     case 'updated':
       return 'var(--dd-success)';
     case 'pending':
+    case 'queued':
     case 'updating':
       return 'var(--dd-warning)';
     case 'snoozed':
@@ -88,6 +90,7 @@ function getRecentUpdateStatusMutedColor(status: RecentUpdateRow['status']): str
     case 'updated':
       return 'var(--dd-success-muted)';
     case 'pending':
+    case 'queued':
     case 'updating':
       return 'var(--dd-warning-muted)';
     case 'snoozed':
@@ -107,6 +110,7 @@ function getRecentUpdateStatusIcon(status: RecentUpdateRow['status']): string {
     case 'updated':
       return 'check';
     case 'pending':
+    case 'queued':
     case 'updating':
       return 'pending';
     case 'snoozed':
@@ -168,10 +172,22 @@ function getUpdateKindIcon(kind: UpdateKind | null): string {
 
 function deriveRecentUpdateStatus(
   container: Container,
+  containers: readonly Container[],
   recentStatusByContainer: Record<string, RecentAuditStatus>,
+  recentStatusByIdentity: Record<string, RecentAuditStatus>,
+  containerNameCounts: ReadonlyMap<string, number>,
 ): RecentUpdateRow['status'] {
   if (container.updateOperation?.status === 'in-progress') {
     return 'updating';
+  }
+  if (container.updateOperation?.status === 'queued') {
+    return shouldRenderStandaloneQueuedUpdateAsUpdating({
+      containers,
+      operation: container.updateOperation,
+      targetId: container.id,
+    })
+      ? 'updating'
+      : 'queued';
   }
   if (container.updatePolicyState === 'snoozed') {
     return 'snoozed';
@@ -182,7 +198,17 @@ function deriveRecentUpdateStatus(
   if (container.updatePolicyState === 'maturity-blocked') {
     return 'maturity-blocked';
   }
-  return recentStatusByContainer[container.name] ?? 'pending';
+
+  const identityStatus = recentStatusByIdentity[container.identityKey];
+  if (identityStatus) {
+    return identityStatus;
+  }
+
+  if ((containerNameCounts.get(container.name) ?? 0) === 1) {
+    return recentStatusByContainer[container.name] ?? 'pending';
+  }
+
+  return 'pending';
 }
 
 function deriveCurrentVersion(container: Container): string {
@@ -246,6 +272,7 @@ interface UseDashboardComputedInput {
   hidePinned: Ref<boolean>;
   maintenanceCountdownNow: Ref<number>;
   recentStatusByContainer: Ref<Record<string, RecentAuditStatus>>;
+  recentStatusByIdentity: Ref<Record<string, RecentAuditStatus>>;
   registries: Ref<unknown[]>;
   serverInfo: Ref<DashboardServerInfo | null>;
   watchers: Ref<unknown[]>;
@@ -556,6 +583,7 @@ function useStatsComputed(
 
 function isPendingRecentUpdateContainer(container: Container): boolean {
   return (
+    container.updateOperation?.status === 'queued' ||
     container.updateOperation?.status === 'in-progress' ||
     !!container.newTag ||
     !!container.updatePolicyState
@@ -564,37 +592,69 @@ function isPendingRecentUpdateContainer(container: Container): boolean {
 
 function toPendingRecentUpdateCandidate(
   container: Container,
+  containers: readonly Container[],
   recentStatusByContainer: Record<string, RecentAuditStatus>,
+  recentStatusByIdentity: Record<string, RecentAuditStatus>,
+  containerNameCounts: ReadonlyMap<string, number>,
   blocked: boolean,
 ): PendingRecentUpdateCandidate {
+  const batchId = container.updateOperation?.batchId;
+  const queuePosition = container.updateOperation?.queuePosition;
+  const queueTotal = container.updateOperation?.queueTotal;
+
   return {
     detectedAt: parseDetectedAt(container.updateDetectedAt),
     row: {
       id: container.id,
+      identityKey: container.identityKey,
       name: container.name,
       image: container.image,
       icon: container.icon,
       oldVer: deriveCurrentVersion(container),
       newVer: deriveRecentUpdateVersion(container),
       releaseLink: container.releaseLink,
-      status: deriveRecentUpdateStatus(container, recentStatusByContainer),
+      status: deriveRecentUpdateStatus(
+        container,
+        containers,
+        recentStatusByContainer,
+        recentStatusByIdentity,
+        containerNameCounts,
+      ),
       updateKind: container.updateKind ?? null,
       running: container.status === 'running',
       registryError: undefined,
       blocked,
+      ...(batchId && queuePosition && queueTotal && queuePosition <= queueTotal
+        ? {
+            batchId,
+            queuePosition,
+            queueTotal,
+          }
+        : {}),
     },
   };
 }
 
+function buildContainerNameCounts(containers: readonly Container[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const container of containers) {
+    counts.set(container.name, (counts.get(container.name) ?? 0) + 1);
+  }
+  return counts;
+}
+
 function buildRecentUpdateRows(
-  containers: Container[],
+  visibleContainers: Container[],
+  allContainers: Container[],
   recentStatusByContainer: Record<string, RecentAuditStatus>,
+  recentStatusByIdentity: Record<string, RecentAuditStatus>,
 ): RecentUpdateRow[] {
   // Only show containers with actual available updates — registry failures
   // ("check failed") are surfaced elsewhere and should not appear in the
   // "Updates Available" widget (#186).
   const candidates: PendingRecentUpdateCandidate[] = [];
-  for (const container of containers) {
+  const containerNameCounts = buildContainerNameCounts(allContainers);
+  for (const container of visibleContainers) {
     if (!isPendingRecentUpdateContainer(container)) {
       continue;
     }
@@ -602,7 +662,10 @@ function buildRecentUpdateRows(
     candidates.push(
       toPendingRecentUpdateCandidate(
         container,
+        allContainers,
         recentStatusByContainer,
+        recentStatusByIdentity,
+        containerNameCounts,
         container.bouncer === 'blocked',
       ),
     );
@@ -617,7 +680,12 @@ function useRecentUpdatesComputed(
   input: UseDashboardComputedInput,
 ) {
   return computed<RecentUpdateRow[]>(() =>
-    buildRecentUpdateRows(updateContainers.value, input.recentStatusByContainer.value),
+    buildRecentUpdateRows(
+      updateContainers.value,
+      input.containers.value,
+      input.recentStatusByContainer.value,
+      input.recentStatusByIdentity.value,
+    ),
   );
 }
 

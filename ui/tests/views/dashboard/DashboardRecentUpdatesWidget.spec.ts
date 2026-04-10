@@ -1,7 +1,10 @@
 import type { VueWrapper } from '@vue/test-utils';
 import { defineComponent, nextTick } from 'vue';
 import DashboardRecentUpdatesWidget from '@/views/dashboard/components/DashboardRecentUpdatesWidget.vue';
-import type { RecentUpdateRow } from '@/views/dashboard/dashboardTypes';
+import type {
+  DashboardUpdateSequenceEntry,
+  RecentUpdateRow,
+} from '@/views/dashboard/dashboardTypes';
 import { mountWithPlugins } from '../../helpers/mount';
 
 let resizeObserverCallback: ResizeObserverCallback | undefined;
@@ -26,9 +29,12 @@ class ResizeObserverTestMock {
   }
 }
 
-function makeRecentUpdate(overrides: Partial<RecentUpdateRow> = {}): RecentUpdateRow {
+function makeRecentUpdate<T extends Record<string, unknown> = Record<string, never>>(
+  overrides: Partial<RecentUpdateRow> & T = {} as Partial<RecentUpdateRow> & T,
+): RecentUpdateRow & T {
   return {
     id: 'c1',
+    identityKey: '::local::nginx',
     name: 'nginx',
     image: 'nginx:1.0.0',
     icon: 'docker',
@@ -39,7 +45,7 @@ function makeRecentUpdate(overrides: Partial<RecentUpdateRow> = {}): RecentUpdat
     running: true,
     blocked: false,
     ...overrides,
-  };
+  } as RecentUpdateRow & T;
 }
 
 function triggerResize(height: number) {
@@ -75,6 +81,7 @@ function mountWidget(
       dashboardUpdateAllInProgress: false,
       dashboardUpdateError: null,
       dashboardUpdateInProgress: null,
+      dashboardUpdateSequence: new Map(),
       editMode: false,
       getUpdateKindColor: vi.fn(() => 'var(--dd-warning)'),
       getUpdateKindIcon: vi.fn(() => 'updates'),
@@ -165,5 +172,77 @@ describe('DashboardRecentUpdatesWidget', () => {
     const row = wrapper.find('.dashboard-row-stub');
     expect(row.classes()).toContain('opacity-50');
     expect(wrapper.text()).toContain('Updating');
+  });
+
+  it('shows queued and updating labels for local dashboard update sequences', () => {
+    const wrapper = mountWidget({
+      pendingUpdatesCount: 2,
+      recentUpdates: [
+        makeRecentUpdate(),
+        makeRecentUpdate({ id: 'c2', name: 'redis', image: 'redis:7.0.0' }),
+      ],
+      dashboardUpdateSequence: new Map<string, DashboardUpdateSequenceEntry>([
+        ['c1', { position: 1, total: 2 }],
+        ['c2', { position: 2, total: 2 }],
+      ]),
+    });
+
+    const rows = wrapper.findAll('.dashboard-row-stub');
+    expect(rows).toHaveLength(2);
+    expect(rows[0]?.classes()).toContain('opacity-50');
+    expect(rows[1]?.classes()).toContain('opacity-50');
+    expect(wrapper.text()).toContain('Updating 1 of 2');
+    expect(wrapper.text()).toContain('Queued 2 of 2');
+    expect(
+      wrapper.find('[data-test="dashboard-update-all-btn"]').attributes('disabled'),
+    ).toBeDefined();
+  });
+
+  it('keeps duplicate-name rows distinct when local dashboard sequencing is keyed by row id', () => {
+    const wrapper = mountWidget({
+      pendingUpdatesCount: 2,
+      recentUpdates: [
+        makeRecentUpdate({ id: 'c-local', name: 'nginx', image: 'nginx:1.0.0' }),
+        makeRecentUpdate({ id: 'c-edge', name: 'nginx', image: 'nginx:1.0.0' }),
+      ],
+      dashboardUpdateSequence: new Map<string, DashboardUpdateSequenceEntry>([
+        ['c-local', { position: 1, total: 2 }],
+        ['c-edge', { position: 2, total: 2 }],
+      ]),
+    });
+
+    const rows = wrapper.findAll('.dashboard-row-stub');
+    expect(rows).toHaveLength(2);
+    expect(wrapper.text()).toContain('Updating 1 of 2');
+    expect(wrapper.text()).toContain('Queued 2 of 2');
+  });
+
+  it('derives persisted backend queue state from batch metadata', () => {
+    const wrapper = mountWidget({
+      pendingUpdatesCount: 2,
+      recentUpdates: [
+        makeRecentUpdate({
+          status: 'queued' as RecentUpdateRow['status'],
+          batchId: 'batch-1',
+          queuePosition: 1,
+          queueTotal: 2,
+        }),
+        makeRecentUpdate({
+          id: 'c2',
+          name: 'redis',
+          image: 'redis:7.0.0',
+          status: 'updating' as RecentUpdateRow['status'],
+          batchId: 'batch-1',
+          queuePosition: 2,
+          queueTotal: 2,
+        }),
+      ],
+    });
+
+    expect(wrapper.text()).toContain('Queued 1 of 2');
+    expect(wrapper.text()).toContain('Updating 2 of 2');
+    expect(
+      wrapper.find('[data-test="dashboard-update-all-btn"]').attributes('disabled'),
+    ).toBeDefined();
   });
 });

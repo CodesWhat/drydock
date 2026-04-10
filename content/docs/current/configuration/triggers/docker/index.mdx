@@ -128,6 +128,43 @@ If any step fails, Drydock falls back to the previous container automatically.
 
 <Callout type="warn">Self-update requires the Docker socket to be bind-mounted at `/var/run/docker.sock` and a Docker trigger to be enabled.</Callout>
 
+## Infrastructure Update Mode
+
+When Drydock connects to the Docker API through a socket proxy (like `tecnativa/docker-socket-proxy` or `lscr.io/linuxserver/socket-proxy`), updating that proxy through the normal update path severs Drydock's API connection mid-update — leaving the old container running and the new one stuck in `created` state.
+
+The `dd.update.mode=infrastructure` label solves this by routing the update through the same helper-container path used for self-updates. The helper connects directly to `/var/run/docker.sock`, bypassing the proxy entirely, so the proxy can be safely stopped and replaced.
+
+```yaml
+services:
+  socket-proxy:
+    image: lscr.io/linuxserver/socket-proxy:latest
+    container_name: drydock-socket-proxy
+    labels:
+      - dd.watch=true
+      - dd.update.mode=infrastructure
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - CONTAINERS=1
+      - IMAGES=1
+      - EVENTS=1
+    restart: unless-stopped
+```
+
+The update sequence for infrastructure containers:
+
+1. Pulls the new image while the current proxy is still running
+2. Renames the old container to `{name}-old-{timestamp}`
+3. Creates a new container with the original name and new image
+4. Spawns a helper container (using the Drydock image) that stops the old proxy and starts the new one via the raw Docker socket
+5. Drydock automatically reconnects to the new proxy instance
+
+If any step fails, the helper rolls back to the previous container automatically.
+
+<Callout type="warn">Infrastructure update mode requires the target container to have `/var/run/docker.sock` bind-mounted (which socket proxies do by default). Drydock must also be watching itself so it can resolve its own image for the helper container.</Callout>
+
+<Callout type="info">This works in both standalone and [agent](/docs/configuration/agents) deployments. Agents handle their own infrastructure updates automatically — no controller-side coordination is needed.</Callout>
+
 ## Examples
 
 <Tabs items={["Docker Compose", "Docker"]}>
@@ -170,6 +207,26 @@ services:
       interval: 10s
       timeout: 5s
       retries: 3
+```
+
+### Infrastructure container (socket proxy)
+
+Enable safe auto-updates for a Docker socket proxy:
+
+```yaml
+services:
+  socket-proxy:
+    image: lscr.io/linuxserver/socket-proxy:latest
+    labels:
+      - dd.watch=true
+      - dd.update.mode=infrastructure
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - CONTAINERS=1
+      - IMAGES=1
+      - EVENTS=1
+    restart: unless-stopped
 ```
 
 ### Lifecycle hooks

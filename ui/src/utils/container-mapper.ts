@@ -30,6 +30,7 @@ import {
   type ContainerUpdateOperationStatus,
 } from '../types/update-operation';
 import { normalizeSeverityCount } from '../views/security/securityViewUtils';
+import { buildContainerIdentityKey } from './container-action-key';
 import {
   maturityMinAgeDaysToMilliseconds,
   normalizeMaturityMode,
@@ -144,6 +145,7 @@ export interface ApiContainerInput {
   transformTags?: unknown;
   triggerInclude?: unknown;
   triggerExclude?: unknown;
+  tagPinned?: unknown;
   sourceRepo?: unknown;
   error?: { message?: unknown } | null;
   ports?: unknown;
@@ -160,6 +162,18 @@ function asNonEmptyString(value: unknown): string | undefined {
   }
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function asPositiveInteger(value: unknown): number | undefined {
+  if (typeof value === 'number') {
+    return Number.isSafeInteger(value) && value > 0 ? value : undefined;
+  }
+  if (typeof value !== 'string' || !/^\d+$/.test(value)) {
+    return undefined;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : undefined;
 }
 
 function asOptionalBoolean(value: unknown): boolean | undefined {
@@ -590,6 +604,9 @@ function deriveUpdateOperation(
   const status = asContainerUpdateOperationStatus(operation.status);
   const phase = asContainerUpdateOperationPhase(operation.phase);
   const updatedAt = asNonEmptyString(operation.updatedAt);
+  const batchId = asNonEmptyString(operation.batchId);
+  const queuePosition = asPositiveInteger(operation.queuePosition);
+  const queueTotal = asPositiveInteger(operation.queueTotal);
 
   if (!id || !status || !phase || !updatedAt) {
     return undefined;
@@ -608,6 +625,9 @@ function deriveUpdateOperation(
       : {}),
     ...(asNonEmptyString(operation.targetImage)
       ? { targetImage: asNonEmptyString(operation.targetImage) }
+      : {}),
+    ...(batchId && queuePosition && queueTotal && queuePosition <= queueTotal
+      ? { batchId, queuePosition, queueTotal }
       : {}),
   };
 }
@@ -628,6 +648,7 @@ export function mapApiContainer(apiContainer: ApiContainerInput): Container {
 
   return {
     id,
+    identityKey: buildContainerIdentityKey(apiContainer) || id || name,
     name: displayName ?? name,
     image: imageName,
     icon: getEffectiveDisplayIcon(displayIcon, imageName),
@@ -638,6 +659,7 @@ export function mapApiContainer(apiContainer: ApiContainerInput): Container {
     imageDigestWatch: asOptionalBoolean(apiContainer.image?.digest?.watch),
     imageTagSemver: asOptionalBoolean(apiContainer.image?.tag?.semver),
     tagPrecision: apiContainer.image?.tag?.tagPrecision as 'specific' | 'floating' | undefined,
+    tagPinned: asOptionalBoolean(apiContainer.tagPinned),
     suggestedTag: asNonEmptyString(apiContainer.result?.suggestedTag),
     sourceRepo: asNonEmptyString(apiContainer.sourceRepo),
     releaseNotes: deriveReleaseNotes(apiContainer),

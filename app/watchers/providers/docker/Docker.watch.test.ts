@@ -346,11 +346,67 @@ describe('Docker Watcher', () => {
     test('should expose lastRunAt via getMetadata', async () => {
       docker.getContainers = vi.fn().mockResolvedValue([]);
 
-      expect(docker.getMetadata()).toStrictEqual({ lastRunAt: undefined });
+      expect(docker.getMetadata()).toStrictEqual({
+        lastRunAt: undefined,
+        nextRunAt: undefined,
+      });
 
       await docker.watch();
 
       expect(docker.getMetadata().lastRunAt).toBeDefined();
+    });
+
+    test('should expose nextRunAt via getMetadata when cron is scheduled', async () => {
+      mockCron.createTask.mockReturnValue({
+        timeMatcher: {
+          getNextMatch: vi.fn(() => new Date('2026-02-13T03:00:00.000Z')),
+        },
+      });
+
+      await docker.register('watcher', 'docker', 'test', {
+        cron: '0 * * * *',
+      });
+
+      expect(docker.getMetadata().nextRunAt).toBe('2026-02-13T03:00:00.000Z');
+    });
+
+    test('should expose queued maintenance window as the next run', async () => {
+      maintenance.getNextMaintenanceWindow.mockReturnValue(new Date('2026-02-13T04:00:00.000Z'));
+      mockCron.createTask.mockReturnValue({
+        timeMatcher: {
+          getNextMatch: vi.fn(() => new Date('2026-02-13T03:00:00.000Z')),
+        },
+      });
+
+      await docker.register('watcher', 'docker', 'test', {
+        cron: '0 * * * *',
+        maintenancewindow: '0 4 * * *',
+        maintenancewindowtz: 'UTC',
+      });
+      docker.maintenanceWindowWatchQueued = true;
+
+      expect(docker.getMetadata().nextRunAt).toBe('2026-02-13T04:00:00.000Z');
+    });
+
+    test('should expose the next maintenance window when the next cron falls outside it', async () => {
+      maintenance.isInMaintenanceWindow.mockImplementation(
+        (_cronExpression, _tz, atDate) =>
+          !(atDate instanceof Date && atDate.toISOString() === '2026-02-13T03:00:00.000Z'),
+      );
+      maintenance.getNextMaintenanceWindow.mockReturnValue(new Date('2026-02-13T04:00:00.000Z'));
+      mockCron.createTask.mockReturnValue({
+        timeMatcher: {
+          getNextMatch: vi.fn(() => new Date('2026-02-13T03:00:00.000Z')),
+        },
+      });
+
+      await docker.register('watcher', 'docker', 'test', {
+        cron: '0 * * * *',
+        maintenancewindow: '0 4 * * *',
+        maintenancewindowtz: 'UTC',
+      });
+
+      expect(docker.getMetadata().nextRunAt).toBe('2026-02-13T04:00:00.000Z');
     });
 
     test('should start and end digest cache poll cycle for cache-aware registries', async () => {
@@ -458,6 +514,69 @@ describe('Docker Watcher', () => {
         watcher: { type: docker.type, name: docker.name },
         containers: result.map((report) => report.container),
       });
+    });
+
+    test('should await async fallback, batch, and snapshot emitters during watch', async () => {
+      docker.log = createMockLog(['warn']);
+      docker.getContainers = vi.fn().mockResolvedValue([{ id: 'failed' }]);
+      docker.watchContainer = vi.fn().mockRejectedValue(new Error('Processing failed'));
+
+      let resolveFallbackEmit;
+      let resolveBatchEmit;
+      let resolveSnapshotEmit;
+      const fallbackEmitPromise = new Promise<void>((resolve) => {
+        resolveFallbackEmit = resolve;
+      });
+      const batchEmitPromise = new Promise<void>((resolve) => {
+        resolveBatchEmit = resolve;
+      });
+      const snapshotEmitPromise = new Promise<void>((resolve) => {
+        resolveSnapshotEmit = resolve;
+      });
+
+      event.emitContainerReport.mockReturnValueOnce(fallbackEmitPromise);
+      event.emitContainerReports.mockReturnValueOnce(batchEmitPromise);
+      event.emitWatcherSnapshot.mockReturnValueOnce(snapshotEmitPromise);
+
+      let resolved = false;
+      const watchPromise = docker.watch().then((result) => {
+        resolved = true;
+        return result;
+      });
+
+      await vi.waitFor(() =>
+        expect(event.emitContainerReport).toHaveBeenCalledWith(
+          expect.objectContaining({
+            container: expect.objectContaining({ id: 'failed' }),
+            changed: false,
+          }),
+        ),
+      );
+      expect(event.emitContainerReports).not.toHaveBeenCalled();
+      expect(event.emitWatcherSnapshot).not.toHaveBeenCalled();
+      expect(resolved).toBe(false);
+
+      resolveFallbackEmit();
+      await vi.waitFor(() => expect(event.emitContainerReports).toHaveBeenCalledTimes(1));
+      expect(event.emitWatcherSnapshot).not.toHaveBeenCalled();
+      expect(resolved).toBe(false);
+
+      resolveBatchEmit();
+      await vi.waitFor(() => expect(event.emitWatcherSnapshot).toHaveBeenCalledTimes(1));
+      expect(resolved).toBe(false);
+
+      resolveSnapshotEmit();
+      await watchPromise;
+      expect(resolved).toBe(true);
+    });
+
+    test('should surface async container report batch emitter failures during watch', async () => {
+      docker.getContainers = vi.fn().mockResolvedValue([]);
+      event.emitContainerReports.mockRejectedValueOnce(new Error('batch emit failed'));
+
+      await expect(docker.watch()).rejects.toThrow('batch emit failed');
+      expect(event.emitWatcherSnapshot).not.toHaveBeenCalled();
+      expect(event.emitWatcherStop).toHaveBeenCalledWith(docker);
     });
 
     test('should skip containers refreshed by registry webhooks on the next scheduled poll', async () => {

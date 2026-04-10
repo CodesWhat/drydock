@@ -23,6 +23,7 @@ function makeContainer(
 ): Container {
   const container: Container = {
     id: `c-${id}`,
+    identityKey: `::watcher-${server.toLowerCase()}::container-${id}`,
     name: `container-${id}`,
     image: `image-${id}`,
     icon: 'docker',
@@ -58,9 +59,12 @@ function makeContainer(
 }
 
 function makeBaseContainer(overrides: Partial<Container> = {}): Container {
+  const defaultId = overrides.id ?? 'c-0';
+  const defaultName = overrides.name ?? 'container-0';
   return {
-    id: 'c-0',
-    name: 'container-0',
+    id: defaultId,
+    identityKey: overrides.identityKey ?? `::local::${defaultName}`,
+    name: defaultName,
     image: 'image-0',
     icon: 'docker',
     currentTag: '1.0.0',
@@ -92,6 +96,7 @@ interface DashboardComputedOverrides {
   hidePinned?: boolean;
   maintenanceCountdownNow?: number;
   recentStatusByContainer?: Record<string, RecentAuditStatus>;
+  recentStatusByIdentity?: Record<string, RecentAuditStatus>;
   registries?: unknown[];
   serverInfo?: DashboardServerInfo | null;
   watchers?: unknown[];
@@ -105,6 +110,7 @@ function createState(overrides: DashboardComputedOverrides = {}) {
     hidePinned: ref(overrides.hidePinned ?? false),
     maintenanceCountdownNow: ref(overrides.maintenanceCountdownNow ?? Date.now()),
     recentStatusByContainer: ref(overrides.recentStatusByContainer ?? {}),
+    recentStatusByIdentity: ref(overrides.recentStatusByIdentity ?? {}),
     registries: ref(overrides.registries ?? []),
     serverInfo: ref(overrides.serverInfo ?? null),
     watchers: ref(overrides.watchers ?? []),
@@ -931,6 +937,127 @@ describe('useDashboardComputed recent updates', () => {
     });
   });
 
+  it('prefers identity-keyed recent status when duplicate container names exist', () => {
+    const localApi = makeBaseContainer({
+      id: 'local-api',
+      identityKey: 'edge-a::docker-prod::api',
+      name: 'api',
+      newTag: '2.0.0',
+      updateDetectedAt: '2026-03-04T09:00:00.000Z',
+    });
+    const remoteApi = makeBaseContainer({
+      id: 'remote-api',
+      identityKey: 'edge-b::docker-prod::api',
+      name: 'api',
+      newTag: '2.1.0',
+      updateDetectedAt: '2026-03-04T08:00:00.000Z',
+    });
+
+    const state = createState({
+      containers: [localApi, remoteApi],
+      recentStatusByContainer: {
+        api: 'failed',
+      },
+      recentStatusByIdentity: {
+        'edge-a::docker-prod::api': 'updated',
+        'edge-b::docker-prod::api': 'failed',
+      },
+    });
+
+    const rows = state.recentUpdates.value;
+    expect(rows.find((row) => row.id === 'local-api')).toMatchObject({ status: 'updated' });
+    expect(rows.find((row) => row.id === 'remote-api')).toMatchObject({ status: 'failed' });
+  });
+
+  it('uses the container-name recent status when a container name is unique', () => {
+    const state = createState({
+      containers: [
+        makeBaseContainer({
+          id: 'solo-api',
+          identityKey: 'edge-a::docker-prod::api',
+          name: 'api',
+          newTag: '2.0.0',
+          updateDetectedAt: '2026-03-04T09:00:00.000Z',
+        }),
+      ],
+      recentStatusByContainer: {
+        api: 'updated',
+      },
+      recentStatusByIdentity: {},
+    });
+
+    expect(state.recentUpdates.value).toEqual([
+      expect.objectContaining({
+        id: 'solo-api',
+        status: 'updated',
+      }),
+    ]);
+  });
+
+  it('falls back to pending when duplicate container names have no identity-keyed status', () => {
+    const nodeA = makeBaseContainer({
+      id: 'node-a',
+      identityKey: 'edge-a::docker-prod::tdarr_node',
+      name: 'tdarr_node',
+      newTag: '2.0.0',
+      updateDetectedAt: '2026-03-04T09:00:00.000Z',
+    });
+    const nodeB = makeBaseContainer({
+      id: 'node-b',
+      identityKey: 'edge-b::docker-prod::tdarr_node',
+      name: 'tdarr_node',
+      newTag: '2.0.0',
+      updateDetectedAt: '2026-03-04T08:00:00.000Z',
+    });
+
+    const state = createState({
+      containers: [nodeA, nodeB],
+      recentStatusByContainer: {
+        tdarr_node: 'updated',
+      },
+      recentStatusByIdentity: {},
+    });
+
+    const rows = state.recentUpdates.value;
+    expect(rows.find((row) => row.id === 'node-a')).toMatchObject({ status: 'pending' });
+    expect(rows.find((row) => row.id === 'node-b')).toMatchObject({ status: 'pending' });
+  });
+
+  it('falls back to pending when the precomputed name counts miss the rendered name', () => {
+    const unstableNameContainer = makeBaseContainer({
+      id: 'flaky-name',
+      identityKey: 'edge-a::docker-prod::flaky-name',
+      name: 'flaky-counted',
+      newTag: '2.0.0',
+      updateDetectedAt: '2026-03-04T09:00:00.000Z',
+    });
+    let nameReads = 0;
+    Object.defineProperty(unstableNameContainer, 'name', {
+      configurable: true,
+      enumerable: true,
+      get() {
+        nameReads += 1;
+        return nameReads === 1 ? 'flaky-counted' : 'flaky-rendered';
+      },
+    });
+
+    const state = createState({
+      containers: [unstableNameContainer],
+      recentStatusByContainer: {
+        'flaky-counted': 'updated',
+        'flaky-rendered': 'failed',
+      },
+      recentStatusByIdentity: {},
+    });
+
+    expect(state.recentUpdates.value).toEqual([
+      expect.objectContaining({
+        id: 'flaky-name',
+        status: 'pending',
+      }),
+    ]);
+  });
+
   it('returns empty list when only registry failures exist', () => {
     const containers = Array.from({ length: 8 }, (_, index) =>
       makeBaseContainer({
@@ -987,6 +1114,7 @@ describe('useDashboardComputed recent updates', () => {
           newTag: '2.0.0',
           updateKind: 'major',
           tagPrecision: 'floating',
+          tagPinned: false,
           updateDetectedAt: '2026-03-04T10:00:00.000Z',
         }),
         makeBaseContainer({
@@ -994,7 +1122,9 @@ describe('useDashboardComputed recent updates', () => {
           name: 'pinned-minor',
           newTag: '1.2.4',
           updateKind: 'minor',
-          tagPrecision: 'specific',
+          currentTag: '16-alpine',
+          tagPrecision: 'floating',
+          tagPinned: true,
           updateDetectedAt: '2026-03-03T10:00:00.000Z',
         }),
       ],
@@ -1011,6 +1141,48 @@ describe('useDashboardComputed recent updates', () => {
     expect(state.stats.value.find((card) => card.id === 'stat-updates')).toMatchObject({
       value: '1',
     });
+  });
+
+  it('keeps later visible standalone queued rows queued when a hidden pinned predecessor is first', () => {
+    const hiddenPinnedHead = makeBaseContainer({
+      id: 'pinned-head',
+      identityKey: '::local::pinned-head',
+      name: 'pinned-head',
+      tagPinned: true,
+      updateOperation: {
+        id: 'op-pinned-head',
+        status: 'queued',
+        phase: 'queued',
+        updatedAt: '2026-04-04T10:00:00.000Z',
+        fromVersion: '1.0.0',
+        toVersion: '1.1.0',
+      },
+    });
+    const visibleQueued = makeBaseContainer({
+      id: 'visible-tail',
+      identityKey: '::local::visible-tail',
+      name: 'visible-tail',
+      updateOperation: {
+        id: 'op-visible-tail',
+        status: 'queued',
+        phase: 'queued',
+        updatedAt: '2026-04-04T10:00:01.000Z',
+        fromVersion: '2.0.0',
+        toVersion: '2.1.0',
+      },
+    });
+
+    const state = createState({
+      hidePinned: true,
+      containers: [hiddenPinnedHead, visibleQueued],
+    });
+
+    expect(state.recentUpdates.value).toEqual([
+      expect.objectContaining({
+        id: 'visible-tail',
+        status: 'queued',
+      }),
+    ]);
   });
 
   it('falls back to suppressed update defaults when tags or timestamps are invalid', () => {
@@ -1034,6 +1206,79 @@ describe('useDashboardComputed recent updates', () => {
         status: 'skipped',
       }),
     ]);
+  });
+
+  it('treats a standalone queued update operation as updating when no other active update exists', () => {
+    const state = createState({
+      containers: [
+        makeBaseContainer({
+          id: 'queued-standalone',
+          name: 'queued-standalone',
+          newTag: null,
+          updateOperation: {
+            id: 'op-queued-standalone',
+            status: 'queued',
+            phase: 'queued',
+            updatedAt: '2026-04-04T10:00:00.000Z',
+            fromVersion: '1.0.0',
+            toVersion: '1.1.0',
+          },
+        }),
+      ],
+    });
+
+    expect(state.recentUpdates.value).toEqual([
+      expect.objectContaining({
+        name: 'queued-standalone',
+        status: 'updating',
+      }),
+    ]);
+  });
+
+  it('keeps a standalone queued update operation queued when another container is already updating', () => {
+    const state = createState({
+      containers: [
+        makeBaseContainer({
+          id: 'updating-head',
+          name: 'updating-head',
+          newTag: null,
+          updateOperation: {
+            id: 'op-updating-head',
+            status: 'in-progress',
+            phase: 'pulling',
+            updatedAt: '2026-04-04T10:00:00.000Z',
+            fromVersion: '1.0.0',
+            toVersion: '1.1.0',
+          },
+        }),
+        makeBaseContainer({
+          id: 'queued-tail',
+          name: 'queued-tail',
+          newTag: null,
+          updateOperation: {
+            id: 'op-queued-tail',
+            status: 'queued',
+            phase: 'queued',
+            updatedAt: '2026-04-04T10:00:01.000Z',
+            fromVersion: '2.0.0',
+            toVersion: '2.1.0',
+          },
+        }),
+      ],
+    });
+
+    expect(state.recentUpdates.value).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'updating-head',
+          status: 'updating',
+        }),
+        expect.objectContaining({
+          name: 'queued-tail',
+          status: 'queued',
+        }),
+      ]),
+    );
   });
 
   it('maps mature-only suppressed updates to maturity-blocked status', () => {

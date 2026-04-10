@@ -4,7 +4,7 @@
 #
 # Only runs tests related to changes (vitest --changed HEAD), not the full suite.
 # No --coverage flag — global thresholds would fail on partial runs.
-# Full coverage enforcement happens in pre-push via build-and-test.
+# Full coverage enforcement happens in the pre-push `coverage` step.
 # Fails fast on first workspace failure.
 
 set -euo pipefail

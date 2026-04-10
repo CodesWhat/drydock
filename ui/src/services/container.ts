@@ -32,6 +32,7 @@ type ContainerRecentStatus = 'updated' | 'pending' | 'failed';
 
 interface ContainerRecentStatusResponse {
   statuses: Record<string, ContainerRecentStatus>;
+  statusesByIdentity: Record<string, ContainerRecentStatus>;
 }
 
 interface GetAllContainersOptions {

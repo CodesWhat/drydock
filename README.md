@@ -148,14 +148,16 @@ See the [Quick Start guide](https://getdrydock.com/docs/quickstart) for Docker C
 
 <h2 align="center" id="recent-updates">🆕 Recent Updates</h2>
 
+- **Backend-driven update queue** — Container updates queued server-side with per-trigger concurrency limits. UI shows Queued → Updating → Updated progression with sequence labels (e.g. "Updating 1 of 3").
+- **Identity-keyed container tracking** — Containers tracked by stable identity key (agent::watcher::name) across renames/replacements, preventing cross-host status contamination.
+- **Watcher next-run schedule visibility** — Watcher API and Agents view now show when each watcher will next poll for updates.
+- **Notification delivery failure audit trail** — Failed notification deliveries surface in the notification bell dropdown for visibility without leaving the UI.
+- **Multi-server notification identification** — Notifications automatically include `[server-name]` prefix when agents are registered, identifying which server each update comes from. Configurable via `DD_SERVER_NAME` (defaults to hostname). Custom templates can use `container.notificationServerName`.
 - **System log viewer overhaul** — Pinned toolbar, line wrapping, sort toggle (newest/oldest), filter mode (funnel icon shows matches only), auto-apply filters, component dropdown from API, aligned columns, floating copy button.
 - **Hide Pinned containers** — Checkbox toggle in the container filter bar hides version-pinned containers. Persisted in user preferences.
 - **Combined batch+digest notifications** — `MODE=batch+digest` sends both immediate batch emails and scheduled digest summaries.
 - **Multi-host same-name container support** — Containers with identical names across different hosts no longer collide in the UI. Actions, logs, and detail panels route by container ID.
 - **Lazy OIDC discovery** — SSO provider startup failures no longer block the server. Discovery retries on first use.
-- **Digest watch for Docker Hub** — Digest-pinned containers (e.g. Portainer Agent) now detect updates even when Docker recovers a tagged reference from inspect.
-- **Floating tag detection** — `tagPrecision` classifier warns when mutable aliases like `v3` are used without digest watching.
-- **Podman compatibility** — API version negotiation prevents `EAI_AGAIN` crashes with Podman socket connections.
 
 <hr>
 
@@ -388,7 +390,7 @@ Drop-in replacement — swap the image, restart, done. All `WUD_*` env vars and 
 | **v1.4.3** ✅ | DNS & Security | Configurable DNS result ordering for Alpine EAI_AGAIN fix (#161), Docker socket security guide, zizmor blocking in CI, scoped GitHub environments |
 | **v1.4.4** ✅ | UI Polish & Hardening | Alias dedup hardening with 30s transient window (#156), dashboard host-status for remote watchers (#155), tooltip viewport fix (#165), click-to-copy version tags (#164), Simple Icons dark mode inversion, theme switcher fix, search button polish, URL rebrand to getdrydock.com |
 | **v1.5.0** ✅ | Observability & User-Requested Features | Real-time WebSocket log viewer with ANSI colors + JSON syntax highlighting, dashboard customization (grid layout, drag, resize, widget visibility), container resource monitoring (CPU/memory stats + dashboard widget), diagnostic debug dump, registry webhook receiver, trigger env var aliases (`DD_ACTION_*`/`DD_NOTIFICATION_*`), digest notification mode, design system components (WCAG touch targets, shared primitives), floating tag detection + auto digest watching, bearer token auth for `/metrics`, Podman API version negotiation, toast notifications for all container actions, UI standardization (margins, text sizes, deprecation banners) |
-| **v1.5.1** | Scanner Decoupling | Backend-based scanner execution (docker/remote), Grype provider, scanner asset lifecycle |
+| **v1.5.1** | Scanner Decoupling & Dashboard | Backend-based scanner execution (docker/remote), Grype provider, scanner asset lifecycle, custom zero-dependency dashboard grid (replaces grid-layout-plus, #281) |
 | **v1.6.0** | Notifications & Release Intel | Notification templates, release notes in notifications, notification preferences UI, cross-device preference sync, software version column, bidirectional MQTT for HA, remove all deprecated compatibility aliases (see [DEPRECATIONS.md](DEPRECATIONS.md)) |
 | **v1.7.0** | Smart Updates & UX | Dependency-aware ordering, clickable port links, image prune, static image monitoring, image maturity indicator, keyboard shortcuts, container uptime display, PWA support, debounced container discovery |
 | **v1.8.0** | Fleet Management & Live Config | YAML config, live UI config panels, volume browser, parallel updates, SQLite store migration + ID-based container identity, i18n framework + Crowdin integration |

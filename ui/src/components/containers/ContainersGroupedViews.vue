@@ -2,12 +2,14 @@
 import { computed } from 'vue';
 import AppBadge from '../AppBadge.vue';
 import AppIconButton from '../AppIconButton.vue';
+import type { ContainersViewRenderGroup } from './containersViewTemplateContext';
 import { useContainersViewTemplateContext } from './containersViewTemplateContext';
 import { getContainerViewKey } from '../../utils/container-view-key';
 import { imageAge } from '../../utils/audit-helpers';
 import UpdateMaturityBadge from './UpdateMaturityBadge.vue';
 import SuggestedTagBadge from './SuggestedTagBadge.vue';
 import ReleaseNotesLink from './ReleaseNotesLink.vue';
+import ContainersGroupHeader from './ContainersGroupHeader.vue';
 
 const {
   filteredContainers,
@@ -19,6 +21,8 @@ const {
   containerActionsEnabled,
   containerActionsDisabledReason,
   isContainerUpdateInProgress,
+  isContainerUpdateQueued,
+  getContainerUpdateSequenceLabel,
   updateAllInGroup,
   tt,
   containerViewMode,
@@ -62,105 +66,204 @@ const openActionsContainer = computed(
   () => displayContainers.value.find((container) => container.id === openActionsMenu.value) ?? null,
 );
 
+type DisplayContainer = (typeof displayContainers.value)[number];
+
+interface GroupHeaderTableRow {
+  __rowType: 'group';
+  __rowKey: string;
+  group: ContainersViewRenderGroup;
+  isFirst: boolean;
+}
+
+type ContainerTableRow = DisplayContainer & {
+  __rowType: 'container';
+  __rowKey: string;
+  __groupKey: string;
+  __source: DisplayContainer;
+};
+
+type GroupedTableRow = GroupHeaderTableRow | ContainerTableRow;
+
+function isGroupHeaderTableRow(row: GroupedTableRow): row is GroupHeaderTableRow {
+  return row.__rowType === 'group';
+}
+
+function isContainerTableRow(row: GroupedTableRow): row is ContainerTableRow {
+  return row.__rowType === 'container';
+}
+
+function makeContainerTableRow(container: DisplayContainer, groupKey: string): ContainerTableRow {
+  return {
+    ...container,
+    __rowType: 'container',
+    __rowKey: getContainerViewKey(container),
+    __groupKey: groupKey,
+    __source: container,
+  };
+}
+
+const tableRows = computed<GroupedTableRow[]>(() => {
+  if (!groupByStack.value) {
+    return displayContainers.value.map((container) => makeContainerTableRow(container, '__flat__'));
+  }
+
+  const rows: GroupedTableRow[] = [];
+  renderGroups.value.forEach((group, index) => {
+    rows.push({
+      __rowType: 'group',
+      __rowKey: `group:${group.key}`,
+      group,
+      isFirst: index === 0,
+    });
+    if (!collapsedGroups.value.has(group.key)) {
+      rows.push(
+        ...group.containers.map((container) => makeContainerTableRow(container, group.key)),
+      );
+    }
+  });
+  return rows;
+});
+
+const selectedContainerKey = computed(() =>
+  selectedContainer.value ? getContainerViewKey(selectedContainer.value) : null,
+);
+
 function isContainerUpdating(container: { id?: unknown; name?: unknown }) {
   return isContainerUpdateInProgress(container);
 }
 
+function isContainerQueued(container: { id?: unknown; name?: unknown }) {
+  return isContainerUpdateQueued(container);
+}
+
+function formatContainerUpdateLabel(
+  container: { id?: unknown; name?: unknown },
+  baseLabel: 'Updating' | 'Queued',
+) {
+  const sequence = getContainerUpdateSequenceLabel(container);
+  return sequence ? `${baseLabel} ${sequence}` : baseLabel;
+}
+
 function getContainerStatusLabel(container: { id?: unknown; name?: unknown; status?: string }) {
-  return isContainerUpdating(container) ? 'Updating' : (container.status ?? 'unknown');
+  if (isContainerUpdating(container)) {
+    return formatContainerUpdateLabel(container, 'Updating');
+  }
+  if (isContainerQueued(container)) {
+    return formatContainerUpdateLabel(container, 'Queued');
+  }
+  return container.status ?? 'unknown';
 }
 
 function getContainerStatusTone(container: { id?: unknown; name?: unknown; status?: string }) {
   if (isContainerUpdating(container)) {
     return 'warning';
   }
+  if (isContainerQueued(container)) {
+    return 'neutral';
+  }
   return container.status === 'running' ? 'success' : 'danger';
 }
 
 function getContainerStatusIcon(container: { id?: unknown; name?: unknown; status?: string }) {
-  return isContainerUpdating(container)
-    ? 'spinner'
-    : container.status === 'running'
-      ? 'play'
-      : 'stop';
+  if (isContainerUpdating(container)) {
+    return 'spinner';
+  }
+  if (isContainerQueued(container)) {
+    return 'clock';
+  }
+  return container.status === 'running' ? 'play' : 'stop';
 }
 
 function getContainerStatusIconStyle(container: { id?: unknown; name?: unknown; status?: string }) {
   if (isContainerUpdating(container)) {
     return { color: 'var(--dd-warning)' };
   }
+  if (isContainerQueued(container)) {
+    return { color: 'var(--dd-text-muted)' };
+  }
   return {
     color: container.status === 'running' ? 'var(--dd-success)' : 'var(--dd-danger)',
   };
+}
+
+function isTableRowFullWidth(row: Record<string, unknown>) {
+  return isGroupHeaderTableRow(row as GroupedTableRow);
+}
+
+function isTableRowInteractive(row: Record<string, unknown>) {
+  return isContainerTableRow(row as GroupedTableRow);
+}
+
+function tableRowClass(row: Record<string, unknown>) {
+  const typedRow = row as GroupedTableRow;
+  if (!isContainerTableRow(typedRow)) {
+    return '';
+  }
+  return isContainerUpdating(typedRow) ||
+    isContainerQueued(typedRow) ||
+    groupUpdateInProgress.value.has(typedRow.__groupKey)
+    ? 'opacity-50 pointer-events-none transition-opacity duration-300'
+    : '';
+}
+
+function getTableRowKey(row: Record<string, unknown>) {
+  return (row as GroupedTableRow).__rowKey;
+}
+
+function selectTableRow(row: Record<string, unknown>) {
+  const typedRow = row as GroupedTableRow;
+  if (!isContainerTableRow(typedRow)) {
+    return;
+  }
+  selectContainer(typedRow.__source);
 }
 </script>
 
 <template>
   <div data-test="containers-grouped-views">
-      <!-- GROUPED / FLAT CONTAINER VIEWS -->
-      <template v-if="filteredContainers.length > 0">
-      <template v-for="group in renderGroups" :key="group.key">
-
-        <!-- Group header (only shown when grouping is active) -->
-        <div v-if="groupByStack && group.key !== '__flat__'"
-             class="flex items-center gap-2 px-3 py-2.5 mb-3 cursor-pointer select-none dd-rounded transition-colors hover:dd-bg-elevated"
-             :style="{ backgroundColor: 'var(--dd-bg-elevated)' }"
-             :class="group.key === renderGroups[0]?.key ? '' : 'mt-6'"
-             role="button"
-             tabindex="0"
-             @keydown.enter.space.prevent="toggleGroupCollapse(group.key)"
-             @click="toggleGroupCollapse(group.key)">
-          <AppIcon :name="collapsedGroups.has(group.key) ? 'chevron-right' : 'chevron-down'" :size="10" class="dd-text-muted shrink-0" />
-          <AppIcon name="stack" :size="12" class="dd-text-muted shrink-0" />
-          <span class="text-xs font-semibold dd-text">{{ group.name ?? 'Ungrouped' }}</span>
-          <AppBadge size="xs" :custom="{ bg: 'var(--dd-bg-elevated)', text: 'var(--dd-text-muted)' }">{{ group.containerCount }}</AppBadge>
-          <AppBadge v-if="group.updatesAvailable > 0" tone="success" size="xs">
-            {{ group.updatesAvailable }} update{{ group.updatesAvailable === 1 ? '' : 's' }}
-          </AppBadge>
-          <AppButton size="none" variant="plain" weight="none"
-            v-if="group.updatesAvailable > 0 || !containerActionsEnabled"
-            class="ml-auto inline-flex items-center justify-center px-2 py-1 dd-rounded border text-2xs font-semibold transition-colors"
-            :class="!containerActionsEnabled || groupUpdateInProgress.has(group.key)
-              ? 'dd-text-muted cursor-not-allowed opacity-60'
-              : 'dd-text hover:dd-bg-elevated'"
-            :disabled="!containerActionsEnabled || group.updatableCount === 0 || groupUpdateInProgress.has(group.key)"
-            v-tooltip.top="tt(!containerActionsEnabled ? containerActionsDisabledReason : group.updatableCount === 0 ? 'All updates blocked by security scan' : 'Update all in group')"
-            @click.stop="updateAllInGroup(group)">
-            <AppIcon
-              :name="!containerActionsEnabled || group.updatableCount === 0 ? 'lock' : groupUpdateInProgress.has(group.key) ? 'spinner' : 'cloud-download'"
-              :size="14"
-              class="mr-1"
-              :class="!containerActionsEnabled ? '' : groupUpdateInProgress.has(group.key) ? 'dd-spin' : ''" />
-            {{ containerActionsEnabled ? 'Update all' : 'Actions disabled' }}
-          </AppButton>
-        </div>
-
-        <!-- Group body (collapsible) -->
-        <div v-show="!collapsedGroups.has(group.key)">
-
-      <!-- TABLE VIEW -->
-      <DataTable v-if="containerViewMode === 'table'"
-                 :columns="tableColumns"
-                 :rows="group.containers"
-                 :row-key="getContainerViewKey"
-                 :sort-key="containerSortKey"
-                 :sort-asc="containerSortAsc"
-                 :selected-key="selectedContainer ? getContainerViewKey(selectedContainer) : null"
-                 :show-actions="true"
-                 :virtual-scroll="false"
-                 :row-class="(row) => isContainerUpdating(row) || groupUpdateInProgress.has(group.key) ? 'opacity-50 pointer-events-none transition-opacity duration-300' : ''"
-                 @update:sort-key="containerSortKey = $event"
-                 @update:sort-asc="containerSortAsc = $event"
-                 @row-click="selectContainer($event)">
+    <!-- GROUPED / FLAT CONTAINER VIEWS -->
+    <template v-if="filteredContainers.length > 0">
+      <DataTable
+        v-if="containerViewMode === 'table'"
+        :columns="tableColumns"
+        :rows="tableRows"
+        :row-key="getTableRowKey"
+        :sort-key="containerSortKey"
+        :sort-asc="containerSortAsc"
+        :selected-key="selectedContainerKey"
+        :show-actions="true"
+        :virtual-scroll="true"
+        :full-width-row="isTableRowFullWidth"
+        :row-interactive="isTableRowInteractive"
+        :row-class="tableRowClass"
+        @update:sort-key="containerSortKey = $event"
+        @update:sort-asc="containerSortAsc = $event"
+        @row-click="selectTableRow($event)"
+      >
+        <template #full-row="{ row }">
+          <ContainersGroupHeader
+            v-if="isGroupHeaderTableRow(row)"
+            :group="row.group"
+            :is-first="row.isFirst"
+            :collapsed="collapsedGroups.has(row.group.key)"
+            :container-actions-enabled="containerActionsEnabled"
+            :container-actions-disabled-reason="containerActionsDisabledReason"
+            :in-progress="groupUpdateInProgress.has(row.group.key)"
+            :tt="tt"
+            @toggle="toggleGroupCollapse"
+            @update-all="updateAllInGroup($event)"
+          />
+        </template>
         <!-- Container icon (own column) -->
         <template #cell-icon="{ row: c }">
-          <AppIcon v-if="isContainerUpdating(c)" name="spinner" :size="14" class="dd-spin dd-text-muted" v-tooltip.top="tt('Updating')" />
+          <AppIcon v-if="isContainerUpdating(c)" name="spinner" :size="14" class="dd-spin dd-text-muted" v-tooltip.top="tt(getContainerStatusLabel(c))" />
+          <AppIcon v-else-if="isContainerQueued(c)" name="clock" :size="14" class="dd-text-muted" v-tooltip.top="tt(getContainerStatusLabel(c))" />
           <ContainerIcon v-else :icon="c.icon" :size="20" />
         </template>
 
         <!-- Container name + image (+ compact actions & badges) -->
         <template #cell-name="{ row: c }">
-          <div class="min-w-0" :class="{ 'opacity-50': isContainerUpdating(c) }">
+          <div class="min-w-0" :class="{ 'opacity-50': isContainerUpdating(c) || isContainerQueued(c) }">
               <div class="flex items-center gap-2">
                 <div class="font-medium truncate dd-text flex-1">{{ c.name }}</div>
               </div>
@@ -302,6 +405,7 @@ function getContainerStatusIconStyle(container: { id?: unknown; name?: unknown; 
                    v-tooltip.top="tt(getContainerStatusLabel(c))" />
           <AppBadge class="max-md:!hidden" size="xs" :tone="getContainerStatusTone(c)">
             <AppIcon v-if="isContainerUpdating(c)" name="spinner" :size="12" class="mr-1 dd-spin" />
+            <AppIcon v-else-if="isContainerQueued(c)" name="clock" :size="12" class="mr-1" />
             {{ getContainerStatusLabel(c) }}
           </AppBadge>
         </template>
@@ -355,26 +459,26 @@ function getContainerStatusIconStyle(container: { id?: unknown; name?: unknown; 
                       :tooltip="tt('Blocked by Bouncer')" @click.stop />
               <AppIconButton v-else-if="c.newTag" icon="cloud-download" size="sm" variant="muted"
                       class="transition-[color,background-color,border-color,opacity,transform,box-shadow]"
-                      :class="isContainerUpdating(c) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-success hover:dd-bg-hover hover:scale-110 active:scale-95'"
-                      :disabled="isContainerUpdating(c)"
+                      :class="isContainerUpdating(c) || isContainerQueued(c) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-success hover:dd-bg-hover hover:scale-110 active:scale-95'"
+                      :disabled="isContainerUpdating(c) || isContainerQueued(c)"
                       :tooltip="tt('Update')" @click.stop="confirmUpdate(c)" />
               <AppIconButton v-else-if="c.status === 'running'" icon="stop" size="sm" variant="muted"
                       class="transition-[color,background-color,border-color,opacity,transform,box-shadow]"
-                      :class="isContainerUpdating(c) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-danger hover:dd-bg-hover hover:scale-110 active:scale-95'"
-                      :disabled="isContainerUpdating(c)"
+                      :class="isContainerUpdating(c) || isContainerQueued(c) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-danger hover:dd-bg-hover hover:scale-110 active:scale-95'"
+                      :disabled="isContainerUpdating(c) || isContainerQueued(c)"
                       :tooltip="tt('Stop')" @click.stop="confirmStop(c)" />
               <AppIconButton v-else icon="play" size="sm" variant="muted"
                       class="transition-[color,background-color,border-color,opacity,transform,box-shadow]"
-                      :class="isContainerUpdating(c) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-success hover:dd-bg-hover hover:scale-110 active:scale-95'"
-                      :disabled="isContainerUpdating(c)"
+                      :class="isContainerUpdating(c) || isContainerQueued(c) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-success hover:dd-bg-hover hover:scale-110 active:scale-95'"
+                      :disabled="isContainerUpdating(c) || isContainerQueued(c)"
                       :tooltip="tt('Start')" @click.stop="startContainer(c)" />
               <AppIconButton icon="more" size="sm" variant="muted"
                       class="transition-[color,background-color,border-color,opacity,transform,box-shadow]"
                       :class="[
-                        isContainerUpdating(c) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text hover:dd-bg-hover hover:scale-110 active:scale-95',
-                        openActionsMenu === c.id && !isContainerUpdating(c) ? 'dd-bg-elevated dd-text' : '',
+                        isContainerUpdating(c) || isContainerQueued(c) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text hover:dd-bg-hover hover:scale-110 active:scale-95',
+                        openActionsMenu === c.id && !isContainerUpdating(c) && !isContainerQueued(c) ? 'dd-bg-elevated dd-text' : '',
                       ]"
-                      :disabled="isContainerUpdating(c)"
+                      :disabled="isContainerUpdating(c) || isContainerQueued(c)"
                       :tooltip="tt('More')" @click.stop="toggleActionsMenu(c.id, $event)" />
             </div>
           </template>
@@ -397,20 +501,20 @@ function getContainerStatusIconStyle(container: { id?: unknown; name?: unknown; 
               </div>
               <!-- Updatable: split button -->
               <div v-else class="inline-flex dd-rounded overflow-hidden"
-                   :class="isContainerUpdating(c) ? 'opacity-50' : ''"
+                   :class="isContainerUpdating(c) || isContainerQueued(c) ? 'opacity-50' : ''"
                    :style="{ border: '1px solid var(--dd-success)' }">
                 <AppButton size="none" variant="plain" weight="none" class="inline-flex items-center justify-center whitespace-nowrap px-3 py-1.5 text-2xs-plus font-bold tracking-wide transition-colors"
-                        :class="isContainerUpdating(c) ? 'cursor-not-allowed' : ''"
+                        :class="isContainerUpdating(c) || isContainerQueued(c) ? 'cursor-not-allowed' : ''"
                         :style="{ backgroundColor: 'var(--dd-success-muted)', color: 'var(--dd-success)' }"
-                        :disabled="isContainerUpdating(c)"
+                        :disabled="isContainerUpdating(c) || isContainerQueued(c)"
                         @click.stop="confirmUpdate(c)">
                   <AppIcon name="cloud-download" :size="14" class="mr-1" /> Update
                 </AppButton>
                 <AppIconButton icon="chevron-down" size="toolbar" variant="plain"
                         class="transition-colors"
-                        :class="isContainerUpdating(c) ? 'cursor-not-allowed' : openActionsMenu === c.id ? 'brightness-125' : ''"
+                        :class="isContainerUpdating(c) || isContainerQueued(c) ? 'cursor-not-allowed' : openActionsMenu === c.id ? 'brightness-125' : ''"
                         :style="{ backgroundColor: 'var(--dd-success-muted)', color: 'var(--dd-success)', borderLeft: '1px solid var(--dd-success)' }"
-                        :disabled="isContainerUpdating(c)"
+                        :disabled="isContainerUpdating(c) || isContainerQueued(c)"
                         aria-label="Open update actions menu"
                         @click.stop="toggleActionsMenu(c.id, $event)" />
               </div>
@@ -418,19 +522,37 @@ function getContainerStatusIconStyle(container: { id?: unknown; name?: unknown; 
             <div v-else class="flex items-center justify-end gap-1">
               <AppIconButton v-if="c.status === 'running'"
                       icon="stop" size="toolbar" variant="danger"
-                      :disabled="isContainerUpdating(c)"
+                      :disabled="isContainerUpdating(c) || isContainerQueued(c)"
                       :tooltip="tt('Stop')" @click.stop="confirmStop(c)" />
               <AppIconButton v-else
                       icon="play" size="toolbar" variant="success"
-                      :disabled="isContainerUpdating(c)"
+                      :disabled="isContainerUpdating(c) || isContainerQueued(c)"
                       :tooltip="tt('Start')" @click.stop="startContainer(c)" />
               <AppIconButton icon="restart" size="toolbar" variant="muted"
-                      :disabled="isContainerUpdating(c)"
+                      :disabled="isContainerUpdating(c) || isContainerQueued(c)"
                       :tooltip="tt('Restart')" @click.stop="confirmRestart(c)" />
             </div>
           </template>
         </template>
       </DataTable>
+
+      <template v-else>
+        <template v-for="group in renderGroups" :key="group.key">
+          <ContainersGroupHeader
+            v-if="groupByStack && group.key !== '__flat__'"
+            :group="group"
+            :is-first="group.key === renderGroups[0]?.key"
+            :collapsed="collapsedGroups.has(group.key)"
+            :container-actions-enabled="containerActionsEnabled"
+            :container-actions-disabled-reason="containerActionsDisabledReason"
+            :in-progress="groupUpdateInProgress.has(group.key)"
+            :tt="tt"
+            @toggle="toggleGroupCollapse"
+            @update-all="updateAllInGroup($event)"
+          />
+
+          <!-- Group body (collapsible) -->
+          <div v-show="!collapsedGroups.has(group.key)">
 
       <!-- CONTAINER CARD GRID -->
       <DataCardGrid v-if="containerViewMode === 'cards'"
@@ -440,9 +562,10 @@ function getContainerStatusIconStyle(container: { id?: unknown; name?: unknown; 
                     @item-click="selectContainer($event)">
         <template #card="{ item: c }">
           <!-- Card header -->
-          <div class="px-4 pt-4 pb-2 flex items-start justify-between" :class="{ 'opacity-50': isContainerUpdating(c) || groupUpdateInProgress.has(group.key) }">
+          <div class="px-4 pt-4 pb-2 flex items-start justify-between" :class="{ 'opacity-50': isContainerUpdating(c) || isContainerQueued(c) || groupUpdateInProgress.has(group.key) }">
             <div class="flex items-center gap-2.5 min-w-0">
               <AppIcon v-if="isContainerUpdating(c)" name="spinner" :size="16" class="dd-spin dd-text-muted shrink-0" />
+              <AppIcon v-else-if="isContainerQueued(c)" name="clock" :size="16" class="dd-text-muted shrink-0" />
               <ContainerIcon v-else :icon="c.icon" :size="24" class="shrink-0" />
               <div class="min-w-0">
                 <div class="text-sm-plus font-semibold truncate dd-text">
@@ -489,7 +612,7 @@ function getContainerStatusIconStyle(container: { id?: unknown; name?: unknown; 
           </div>
 
           <!-- Card body -- inline Current / Latest -->
-          <div class="px-4 py-3 min-w-0" :class="{ 'opacity-50': isContainerUpdating(c) || groupUpdateInProgress.has(group.key) }">
+          <div class="px-4 py-3 min-w-0" :class="{ 'opacity-50': isContainerUpdating(c) || isContainerQueued(c) || groupUpdateInProgress.has(group.key) }">
             <div class="flex items-center gap-2 flex-wrap min-w-0">
               <span class="text-2xs-plus dd-text-muted shrink-0">Current</span>
               <CopyableTag :tag="c.currentTag" class="text-xs font-bold dd-text truncate max-w-[120px]" @click.stop>
@@ -544,7 +667,13 @@ function getContainerStatusIconStyle(container: { id?: unknown; name?: unknown; 
               class="mt-2 inline-flex items-center gap-1 text-2xs"
               style="color: var(--dd-warning);">
               <AppIcon name="spinner" :size="12" class="dd-spin shrink-0" />
-              Updating
+              {{ formatContainerUpdateLabel(c, 'Updating') }}
+            </div>
+            <div
+              v-else-if="isContainerQueued(c)"
+              class="mt-2 inline-flex items-center gap-1 text-2xs dd-text-muted">
+              <AppIcon name="clock" :size="12" class="shrink-0" />
+              {{ formatContainerUpdateLabel(c, 'Queued') }}
             </div>
             <div v-if="c.suggestedTag || c.releaseNotes || c.releaseLink" class="flex items-center gap-2 flex-wrap mt-2">
               <SuggestedTagBadge :tag="c.suggestedTag" :current-tag="c.currentTag" />
@@ -563,33 +692,34 @@ function getContainerStatusIconStyle(container: { id?: unknown; name?: unknown; 
             </AppBadge>
             <AppBadge class="max-md:!hidden" size="xs" :tone="getContainerStatusTone(c)">
               <AppIcon v-if="isContainerUpdating(c)" name="spinner" :size="12" class="mr-1 dd-spin" />
+              <AppIcon v-else-if="isContainerQueued(c)" name="clock" :size="12" class="mr-1" />
               {{ getContainerStatusLabel(c) }}
             </AppBadge>
             <div class="flex items-center gap-1.5">
               <template v-if="containerActionsEnabled">
                 <AppIconButton v-if="c.status === 'running'" icon="stop" size="xs" variant="muted"
-                        :class="isContainerUpdating(c) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-danger hover:dd-bg-elevated'"
-                        :disabled="isContainerUpdating(c)"
+                        :class="isContainerUpdating(c) || isContainerQueued(c) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-danger hover:dd-bg-elevated'"
+                        :disabled="isContainerUpdating(c) || isContainerQueued(c)"
                       :tooltip="tt('Stop')" @click.stop="confirmStop(c)" />
                 <AppIconButton v-else icon="play" size="xs" variant="muted"
-                        :class="isContainerUpdating(c) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-success hover:dd-bg-elevated'"
-                        :disabled="isContainerUpdating(c)"
+                        :class="isContainerUpdating(c) || isContainerQueued(c) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-success hover:dd-bg-elevated'"
+                        :disabled="isContainerUpdating(c) || isContainerQueued(c)"
                         :tooltip="tt('Start')" @click.stop="startContainer(c)" />
                 <AppIconButton icon="restart" size="xs" variant="muted"
-                        :class="isContainerUpdating(c) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text hover:dd-bg-elevated'"
-                        :disabled="isContainerUpdating(c)"
+                        :class="isContainerUpdating(c) || isContainerQueued(c) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text hover:dd-bg-elevated'"
+                        :disabled="isContainerUpdating(c) || isContainerQueued(c)"
                         :tooltip="tt('Restart')" @click.stop="confirmRestart(c)" />
                 <AppIconButton icon="security" size="xs" variant="muted"
-                        :class="isContainerUpdating(c) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-secondary hover:dd-bg-elevated'"
-                        :disabled="isContainerUpdating(c)"
+                        :class="isContainerUpdating(c) || isContainerQueued(c) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-secondary hover:dd-bg-elevated'"
+                        :disabled="isContainerUpdating(c) || isContainerQueued(c)"
                         :tooltip="tt('Scan')" @click.stop="scanContainer(c)" />
                 <AppIconButton v-if="c.newTag && c.bouncer === 'blocked'" icon="lock" size="xs" variant="muted"
                         class="opacity-60 cursor-not-allowed"
                         :disabled="true"
                         :tooltip="tt('Security blocked')" />
                 <AppIconButton v-else-if="c.newTag" icon="cloud-download" size="xs" variant="muted"
-                        :class="isContainerUpdating(c) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-success hover:dd-bg-elevated'"
-                        :disabled="isContainerUpdating(c)"
+                        :class="isContainerUpdating(c) || isContainerQueued(c) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-success hover:dd-bg-elevated'"
+                        :disabled="isContainerUpdating(c) || isContainerQueued(c)"
                         :tooltip="tt('Update')" @click.stop="confirmUpdate(c)" />
               </template>
               <template v-else>
@@ -613,8 +743,9 @@ function getContainerStatusIconStyle(container: { id?: unknown; name?: unknown; 
                          @item-click="selectContainer($event)">
         <template #header="{ item: c }">
           <AppIcon v-if="isContainerUpdating(c)" name="spinner" :size="14" class="dd-spin dd-text-muted shrink-0" />
+          <AppIcon v-else-if="isContainerQueued(c)" name="clock" :size="14" class="dd-text-muted shrink-0" />
           <ContainerIcon v-else :icon="c.icon" :size="18" class="shrink-0" />
-          <div class="min-w-0 flex-1" :class="{ 'opacity-50': isContainerUpdating(c) }">
+          <div class="min-w-0 flex-1" :class="{ 'opacity-50': isContainerUpdating(c) || isContainerQueued(c) }">
             <div class="text-sm font-semibold truncate dd-text">{{ c.name }}</div>
             <div class="text-2xs mt-0.5 truncate dd-text-muted" v-tooltip.top="`${c.image}:${c.currentTag}`">{{ c.image }}:{{ c.currentTag }}</div>
             <div
@@ -622,7 +753,13 @@ function getContainerStatusIconStyle(container: { id?: unknown; name?: unknown; 
               class="text-2xs mt-0.5 inline-flex items-center gap-1"
               style="color: var(--dd-warning);">
               <AppIcon name="spinner" :size="10" class="dd-spin shrink-0" />
-              Updating
+              {{ formatContainerUpdateLabel(c, 'Updating') }}
+            </div>
+            <div
+              v-else-if="isContainerQueued(c)"
+              class="text-2xs mt-0.5 inline-flex items-center gap-1 dd-text-muted">
+              <AppIcon name="clock" :size="10" class="shrink-0" />
+              {{ formatContainerUpdateLabel(c, 'Queued') }}
             </div>
             <div
               v-else-if="!c.newTag && c.noUpdateReason"
@@ -652,6 +789,7 @@ function getContainerStatusIconStyle(container: { id?: unknown; name?: unknown; 
                      :style="getContainerStatusIconStyle(c)" />
             <AppBadge class="max-md:!hidden" size="xs" :tone="getContainerStatusTone(c)">
               <AppIcon v-if="isContainerUpdating(c)" name="spinner" :size="12" class="mr-1 dd-spin" />
+              <AppIcon v-else-if="isContainerQueued(c)" name="clock" :size="12" class="mr-1" />
               {{ getContainerStatusLabel(c) }}
             </AppBadge>
             <span v-if="hasRegistryError(c)"
@@ -695,9 +833,10 @@ function getContainerStatusIconStyle(container: { id?: unknown; name?: unknown; 
         </template>
       </DataListAccordion>
 
-        </div><!-- /group body -->
-      </template><!-- /v-for group -->
-      </template><!-- /filteredContainers.length > 0 -->
+          </div><!-- /group body -->
+        </template><!-- /v-for group -->
+      </template>
+    </template><!-- /filteredContainers.length > 0 -->
 
       <!-- Actions dropdown (teleported to body so it renders in all view modes) -->
       <Teleport to="body">

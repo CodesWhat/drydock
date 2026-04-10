@@ -102,9 +102,12 @@ const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
 const originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
 
 function makeContainer(overrides: Partial<Container> = {}): Container {
+  const defaultId = overrides.id ?? 'c1';
+  const defaultName = overrides.name ?? 'nginx';
   return {
-    id: 'c1',
-    name: 'nginx',
+    id: defaultId,
+    identityKey: overrides.identityKey ?? `::local::${defaultName}`,
+    name: defaultName,
     image: 'nginx',
     icon: 'docker',
     currentTag: '1.0.0',
@@ -125,6 +128,7 @@ interface DashboardDataOverrides {
   registries?: any[];
   auditEntries?: any[];
   recentStatuses?: Record<string, string>;
+  recentStatusesByIdentity?: Record<string, string>;
   containerStats?: any[];
 }
 
@@ -172,6 +176,7 @@ async function mountDashboard(
   mockGetContainerRecentStatus.mockResolvedValue({
     statuses:
       overrides.recentStatuses ?? mapAuditEntriesToRecentStatuses(overrides.auditEntries ?? []),
+    statusesByIdentity: overrides.recentStatusesByIdentity ?? {},
   });
 
   const { mapApiContainers } = await import('@/utils/container-mapper');
@@ -266,6 +271,21 @@ describe('DashboardView', () => {
 
       const widget = wrapper.find('[data-widget-id="recent-updates"]');
       expect(widget.attributes('style')).toContain('touch-action: pan-y');
+    });
+
+    it('applies shared scroll containment utilities to the customize panel viewport', async () => {
+      const wrapper = await mountDashboard([makeContainer({ newTag: '2.0.0' })]);
+
+      const editToggle = document.querySelector('[data-test="dashboard-edit-toggle"]');
+      expect(editToggle).not.toBeNull();
+      (editToggle as HTMLButtonElement).click();
+      await flushPromises();
+
+      const scrollViewport = wrapper.find('aside .overflow-y-auto');
+      expect(scrollViewport.exists()).toBe(true);
+      expect(scrollViewport.classes()).toContain('overscroll-contain');
+      expect(scrollViewport.classes()).toContain('dd-scroll-stable');
+      expect(scrollViewport.classes()).toContain('dd-touch-scroll');
     });
 
     it('caches widget breakpoint bounds instead of calling getWidgetBoundsForBreakpoint in each GridItem size prop', () => {
@@ -676,13 +696,16 @@ describe('DashboardView', () => {
           updateKind: 'major',
           newTag: '2.0.0',
           tagPrecision: 'floating',
+          tagPinned: false,
         }),
         makeContainer({
           id: 'pinned',
           name: 'pinned',
           updateKind: 'minor',
           newTag: '1.2.4',
-          tagPrecision: 'specific',
+          currentTag: '16-alpine',
+          tagPrecision: 'floating',
+          tagPinned: true,
         }),
       ]);
 
@@ -1128,6 +1151,23 @@ describe('DashboardView', () => {
       expect(vulnItems.length).toBe(5);
     });
 
+    it('applies shared scroll containment utilities to the top vulnerabilities list', async () => {
+      const containers = Array.from({ length: 8 }, (_, i) =>
+        makeContainer({
+          id: `c${i}`,
+          name: `vuln-${i}`,
+          bouncer: 'blocked',
+        }),
+      );
+      const wrapper = await mountDashboard(containers);
+      const scrollViewport = wrapper.find('[data-widget-id="security-overview"] .overflow-y-auto');
+
+      expect(scrollViewport.exists()).toBe(true);
+      expect(scrollViewport.classes()).toContain('overscroll-contain');
+      expect(scrollViewport.classes()).toContain('dd-scroll-stable');
+      expect(scrollViewport.classes()).toContain('dd-touch-scroll');
+    });
+
     it('shows an empty state when there are no security issues', async () => {
       const wrapper = await mountDashboard([makeContainer({ bouncer: 'safe' })]);
       const securityWidget = wrapper.find('[data-widget-id="security-overview"]');
@@ -1317,10 +1357,10 @@ describe('DashboardView', () => {
 
       expect(
         wrapper.find('[data-widget-id="update-breakdown"]').attributes('data-widget-order'),
-      ).toBe('4');
+      ).toBe('8');
       expect(
         wrapper.find('[data-widget-id="recent-updates"]').attributes('data-widget-order'),
-      ).toBe('5');
+      ).toBe('4');
       const { flushPreferences } = await import('@/preferences/store');
       flushPreferences();
       const prefs = JSON.parse(localStorage.getItem(PREFERENCES_STORAGE_KEY) || '{}');
@@ -1329,11 +1369,11 @@ describe('DashboardView', () => {
         'stat-updates',
         'stat-security',
         'stat-registries',
-        'update-breakdown',
         'recent-updates',
         'security-overview',
         'resource-usage',
         'host-status',
+        'update-breakdown',
       ]);
     });
 
@@ -1356,10 +1396,10 @@ describe('DashboardView', () => {
 
       expect(
         wrapper.find('[data-widget-id="stat-registries"]').attributes('data-widget-order'),
-      ).toBe('0');
+      ).toBe('3');
       expect(
         wrapper.find('[data-widget-id="stat-containers"]').attributes('data-widget-order'),
-      ).toBe('1');
+      ).toBe('0');
     });
   });
 
@@ -1558,10 +1598,219 @@ describe('DashboardView', () => {
       await flushPromises();
 
       expect(mockUpdateContainer).toHaveBeenCalledTimes(3);
-      expect(mockUpdateContainer).toHaveBeenCalledWith('c-success-1');
-      expect(mockUpdateContainer).toHaveBeenCalledWith('c-fail');
-      expect(mockUpdateContainer).toHaveBeenCalledWith('c-success-2');
+      const updateCalls = mockUpdateContainer.mock.calls;
+      expect(updateCalls).toEqual([
+        [
+          'c-success-1',
+          expect.objectContaining({
+            batchId: expect.any(String),
+            queuePosition: 1,
+            queueTotal: 3,
+          }),
+        ],
+        [
+          'c-success-2',
+          expect.objectContaining({
+            batchId: updateCalls[0]?.[1]?.batchId,
+            queuePosition: 2,
+            queueTotal: 3,
+          }),
+        ],
+        [
+          'c-fail',
+          expect.objectContaining({
+            batchId: updateCalls[0]?.[1]?.batchId,
+            queuePosition: 3,
+            queueTotal: 3,
+          }),
+        ],
+      ]);
       expect(mockGetAllContainers.mock.calls.length).toBe(initialFetchCount + 1);
+    });
+
+    it('shows Updating 1 of N and Queued 2 of N immediately after dashboard update all starts', async () => {
+      const containers = [
+        makeContainer({
+          id: 'c-success-1',
+          name: 'nginx',
+          newTag: '1.1.0',
+          updateKind: 'minor',
+        }),
+        makeContainer({
+          id: 'c-success-2',
+          name: 'postgres',
+          image: 'postgres',
+          newTag: '16.1.0',
+          updateKind: 'minor',
+        }),
+      ];
+      mockUpdateContainer.mockResolvedValue({});
+
+      const wrapper = await mountDashboard(
+        containers,
+        [],
+        {},
+        {
+          recentStatuses: {
+            nginx: 'pending',
+            postgres: 'pending',
+          },
+        },
+      );
+      const { mapApiContainers } = await import('@/utils/container-mapper');
+      mockGetAllContainers.mockResolvedValueOnce([]);
+      mockGetContainerRecentStatus.mockResolvedValueOnce({ statuses: {} });
+      (mapApiContainers as ReturnType<typeof vi.fn>).mockReturnValueOnce([]);
+
+      const updateAllBtn = wrapper.find('[data-test="dashboard-update-all-btn"]');
+      const { useConfirmDialog } = await import('@/composables/useConfirmDialog');
+      const confirm = useConfirmDialog();
+
+      await updateAllBtn.trigger('click');
+      await confirm.accept();
+      await flushPromises();
+
+      const widgetText = wrapper.find('[data-widget-id="recent-updates"]').text();
+      expect(widgetText).toContain('Updating 1 of 2');
+      expect(widgetText).toContain('Queued 2 of 2');
+    });
+
+    it('keeps same-name containers on different servers distinct during dashboard update all sequencing', async () => {
+      const containers = [
+        makeContainer({
+          id: 'c-local',
+          identityKey: 'edge-a::watcher-a::nginx',
+          name: 'nginx',
+          server: 'Local',
+          newTag: '1.1.0',
+          updateKind: 'minor',
+        }),
+        makeContainer({
+          id: 'c-edge',
+          identityKey: 'edge-b::watcher-b::nginx',
+          name: 'nginx',
+          server: 'edge-1',
+          newTag: '1.1.0',
+          updateKind: 'minor',
+        }),
+      ];
+      mockUpdateContainer.mockResolvedValue({});
+
+      const wrapper = await mountDashboard(
+        containers,
+        [],
+        {},
+        {
+          recentStatuses: {
+            nginx: 'pending',
+          },
+        },
+      );
+      const { mapApiContainers } = await import('@/utils/container-mapper');
+      mockGetAllContainers.mockResolvedValueOnce([]);
+      mockGetContainerRecentStatus.mockResolvedValueOnce({ statuses: {} });
+      (mapApiContainers as ReturnType<typeof vi.fn>).mockReturnValueOnce([]);
+
+      const updateAllBtn = wrapper.find('[data-test="dashboard-update-all-btn"]');
+      const { useConfirmDialog } = await import('@/composables/useConfirmDialog');
+      const confirm = useConfirmDialog();
+
+      await updateAllBtn.trigger('click');
+      await confirm.accept();
+      await flushPromises();
+
+      expect(mockUpdateContainer).toHaveBeenCalledTimes(2);
+      expect(mockUpdateContainer.mock.calls.map((call) => call[0])).toEqual(['c-local', 'c-edge']);
+
+      const widgetText = wrapper.find('[data-widget-id="recent-updates"]').text();
+      expect(widgetText).toContain('Updating 1 of 2');
+      expect(widgetText).toContain('Queued 2 of 2');
+    });
+
+    it('advances the dashboard queue label when the next bulk update becomes active', async () => {
+      vi.useFakeTimers();
+      try {
+        const firstPendingContainer = makeContainer({
+          id: 'c-success-1',
+          name: 'nginx',
+          newTag: '1.1.0',
+          updateKind: 'minor',
+        });
+        const secondPendingContainer = makeContainer({
+          id: 'c-success-2',
+          name: 'postgres',
+          image: 'postgres',
+          newTag: '16.1.0',
+          updateKind: 'minor',
+        });
+        const secondUpdatingContainer = makeContainer({
+          id: 'c-success-2',
+          name: 'postgres',
+          image: 'postgres',
+          newTag: null,
+          updateKind: null,
+          status: 'stopped',
+          updateOperation: {
+            id: 'op-2',
+            status: 'in-progress',
+            phase: 'old-stopped',
+            updatedAt: '2026-04-01T12:00:02.000Z',
+            fromVersion: '15.0.0',
+            toVersion: '16.1.0',
+          },
+        });
+        const firstUpdatedContainer = makeContainer({
+          id: 'c-success-1',
+          name: 'nginx',
+          newTag: null,
+          updateKind: null,
+        });
+        mockUpdateContainer.mockResolvedValue({});
+
+        const wrapper = await mountDashboard(
+          [firstPendingContainer, secondPendingContainer],
+          [],
+          {},
+          {
+            recentStatuses: {
+              nginx: 'pending',
+              postgres: 'pending',
+            },
+          },
+        );
+        const { mapApiContainers } = await import('@/utils/container-mapper');
+
+        mockGetAllContainers.mockResolvedValueOnce([]);
+        mockGetContainerRecentStatus.mockResolvedValueOnce({ statuses: {} });
+        (mapApiContainers as ReturnType<typeof vi.fn>).mockReturnValueOnce([]);
+
+        mockGetAllContainers.mockResolvedValueOnce([
+          firstUpdatedContainer,
+          secondUpdatingContainer,
+        ]);
+        mockGetContainerRecentStatus.mockResolvedValueOnce({ statuses: {} });
+        (mapApiContainers as ReturnType<typeof vi.fn>).mockReturnValueOnce([
+          firstUpdatedContainer,
+          secondUpdatingContainer,
+        ]);
+
+        const updateAllBtn = wrapper.find('[data-test="dashboard-update-all-btn"]');
+        const { useConfirmDialog } = await import('@/composables/useConfirmDialog');
+        const confirm = useConfirmDialog();
+
+        await updateAllBtn.trigger('click');
+        await confirm.accept();
+        await flushPromises();
+
+        vi.advanceTimersByTime(2_000);
+        await flushPromises();
+
+        const widgetText = wrapper.find('[data-widget-id="recent-updates"]').text();
+        expect(widgetText).toContain('Updating 2 of 2');
+        expect(widgetText).not.toContain('Queued 2 of 2');
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('shows an inline error when a single dashboard update fails', async () => {
@@ -1586,7 +1835,7 @@ describe('DashboardView', () => {
       expect(updateError.text()).toContain('update exploded');
     });
 
-    it('shows a success toast when a single dashboard update starts successfully', async () => {
+    it('shows the shared update-started toast when a single dashboard update starts successfully', async () => {
       mockUpdateContainer.mockResolvedValueOnce({});
       const wrapper = await mountDashboard(
         [pendingContainer],
@@ -1605,7 +1854,9 @@ describe('DashboardView', () => {
       await flushPromises();
 
       expect(
-        toasts.value.some((toast) => toast.tone === 'success' && toast.title === 'Updated: nginx'),
+        toasts.value.some(
+          (toast) => toast.tone === 'success' && toast.title === 'Update started: nginx',
+        ),
       ).toBe(true);
     });
 
@@ -1702,11 +1953,58 @@ describe('DashboardView', () => {
       expect(widget.find('[data-test="dashboard-update-btn"]').exists()).toBe(false);
     });
 
+    it('renders persisted backend queue labels after a dashboard reload', async () => {
+      const queuedFirstContainer = makeContainer({
+        id: 'c-first',
+        name: 'nginx',
+        newTag: null,
+        updateKind: null,
+        status: 'stopped',
+        updateOperation: {
+          id: 'op-1',
+          status: 'queued',
+          phase: 'queued',
+          updatedAt: '2026-04-01T12:00:00.000Z',
+          fromVersion: '1.0.0',
+          toVersion: '1.1.0',
+          batchId: 'batch-1',
+          queuePosition: 1,
+          queueTotal: 2,
+        },
+      });
+      const queuedSecondContainer = makeContainer({
+        id: 'c-second',
+        name: 'postgres',
+        image: 'postgres',
+        newTag: null,
+        updateKind: null,
+        status: 'stopped',
+        updateOperation: {
+          id: 'op-2',
+          status: 'queued',
+          phase: 'queued',
+          updatedAt: '2026-04-01T12:00:00.000Z',
+          fromVersion: '15.0.0',
+          toVersion: '16.1.0',
+          batchId: 'batch-1',
+          queuePosition: 2,
+          queueTotal: 2,
+        },
+      });
+
+      const wrapper = await mountDashboard([queuedFirstContainer, queuedSecondContainer]);
+
+      const widgetText = wrapper.find('[data-widget-id="recent-updates"]').text();
+      expect(widgetText).toContain('Updating 1 of 2');
+      expect(widgetText).toContain('Queued 2 of 2');
+    });
+
     it('keeps a dashboard row visible as updating until the container reappears', async () => {
       vi.useFakeTimers();
       try {
         const updatedContainer = makeContainer({
-          id: pendingContainer.id,
+          id: 'c-pending-recreated',
+          identityKey: pendingContainer.identityKey,
           name: pendingContainer.name,
           newTag: null,
           updateKind: null,
@@ -1854,7 +2152,7 @@ describe('DashboardView', () => {
       expect(wrapper.find('[data-test="dashboard-update-error"]').exists()).toBe(false);
     });
 
-    it('shows a success toast with the number of containers started from dashboard update all', async () => {
+    it('shows the shared batch update-started toast from dashboard update all', async () => {
       const containers = [
         makeContainer({
           id: 'c-success-1',
@@ -1894,7 +2192,7 @@ describe('DashboardView', () => {
 
       expect(
         toasts.value.some(
-          (toast) => toast.tone === 'success' && toast.title === 'Updated 2 containers',
+          (toast) => toast.tone === 'success' && toast.title === 'Started updates for 2 containers',
         ),
       ).toBe(true);
     });

@@ -13,6 +13,13 @@ vi.mock('../../registry/index.js', () => ({
 
 vi.mock('../../api/component.js', () => ({
   mapComponentsToList: vi.fn().mockReturnValue([]),
+  mapComponentToItem: vi.fn().mockImplementation((key, component) => ({
+    id: key,
+    type: component.type,
+    name: component.name,
+    configuration: component.configuration ?? {},
+    metadata: component.metadata,
+  })),
 }));
 
 vi.mock('../../store/container.js', () => ({
@@ -91,6 +98,45 @@ describe('agent API watcher', () => {
       expect(res.status).toHaveBeenCalledWith(500);
       expect(res.json).toHaveBeenCalledWith(
         expect.objectContaining({ error: 'watch failed as plain object' }),
+      );
+    });
+  });
+
+  describe('getWatcher', () => {
+    test('should return a specific watcher', () => {
+      req.params = { type: 'docker', name: 'local' };
+      registry.getState.mockReturnValue({
+        watcher: {
+          'docker.local': {
+            type: 'docker',
+            name: 'local',
+            configuration: { cron: '0 * * * *' },
+            metadata: { nextRunAt: '2026-04-09T13:00:00.000Z' },
+          },
+        },
+      });
+
+      watcherApi.getWatcher(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        id: 'docker.local',
+        type: 'docker',
+        name: 'local',
+        configuration: { cron: '0 * * * *' },
+        metadata: { nextRunAt: '2026-04-09T13:00:00.000Z' },
+      });
+    });
+
+    test('should return 404 when the watcher detail is missing', () => {
+      req.params = { type: 'docker', name: 'missing' };
+      registry.getState.mockReturnValue({ watcher: {} });
+
+      watcherApi.getWatcher(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: 'Watcher missing not found' }),
       );
     });
   });

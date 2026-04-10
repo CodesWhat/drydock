@@ -20,7 +20,11 @@ function createMaintenanceWindowTask(cronExpr: string, tz: string): MaintenanceW
  * @param tz - IANA timezone string (defaults to 'UTC')
  * @returns true if now is inside the maintenance window
  */
-export function isInMaintenanceWindow(cronExpr: string, tz: string = 'UTC'): boolean {
+export function isInMaintenanceWindow(
+  cronExpr: string,
+  tz: string = 'UTC',
+  atDate: Date = new Date(),
+): boolean {
   if (!cronExpr || !cron.validate(cronExpr)) {
     return false;
   }
@@ -30,7 +34,7 @@ export function isInMaintenanceWindow(cronExpr: string, tz: string = 'UTC'): boo
   // node-cron's timeMatcher.match() checks seconds too; for 5-field cron
   // the seconds expression defaults to [0], so we normalize to second 0
   // to get a pure minute-level match.
-  const now = new Date();
+  const now = new Date(atDate);
   now.setSeconds(0);
   now.setMilliseconds(0);
 

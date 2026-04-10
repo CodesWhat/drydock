@@ -50,6 +50,10 @@ const router = express.Router();
 const RECENT_STATUS_AUDIT_LIMIT = 100;
 
 type RecentContainerStatus = 'updated' | 'pending' | 'failed';
+type RecentContainerStatusResponse = {
+  statuses: Record<string, RecentContainerStatus>;
+  statusesByIdentity: Record<string, RecentContainerStatus>;
+};
 
 function mapAuditActionToRecentStatus(action: unknown): RecentContainerStatus | null {
   if (action === 'update-applied') return 'updated';
@@ -58,26 +62,44 @@ function mapAuditActionToRecentStatus(action: unknown): RecentContainerStatus | 
   return null;
 }
 
-function buildRecentStatusByContainer(entries: unknown): Record<string, RecentContainerStatus> {
-  if (!Array.isArray(entries)) return {};
+function buildRecentStatusResponse(entries: unknown): RecentContainerStatusResponse {
+  if (!Array.isArray(entries)) {
+    return {
+      statuses: {},
+      statusesByIdentity: {},
+    };
+  }
+
   const statusByContainer: Record<string, RecentContainerStatus> = {};
+  const statusByIdentity: Record<string, RecentContainerStatus> = {};
   for (const entry of entries) {
     if (!entry || typeof entry !== 'object') continue;
-    const containerNameRaw = (entry as { containerName?: unknown }).containerName;
-    const containerName = typeof containerNameRaw === 'string' ? containerNameRaw.trim() : '';
-    if (!containerName || statusByContainer[containerName]) continue;
     const mappedStatus = mapAuditActionToRecentStatus((entry as { action?: unknown }).action);
     if (!mappedStatus) continue;
-    statusByContainer[containerName] = mappedStatus;
+
+    const containerNameRaw = (entry as { containerName?: unknown }).containerName;
+    const containerName = typeof containerNameRaw === 'string' ? containerNameRaw.trim() : '';
+    if (containerName && !statusByContainer[containerName]) {
+      statusByContainer[containerName] = mappedStatus;
+    }
+
+    const containerIdentityKeyRaw = (entry as { containerIdentityKey?: unknown })
+      .containerIdentityKey;
+    const containerIdentityKey =
+      typeof containerIdentityKeyRaw === 'string' ? containerIdentityKeyRaw.trim() : '';
+    if (containerIdentityKey && !statusByIdentity[containerIdentityKey]) {
+      statusByIdentity[containerIdentityKey] = mappedStatus;
+    }
   }
-  return statusByContainer;
+  return {
+    statuses: statusByContainer,
+    statusesByIdentity: statusByIdentity,
+  };
 }
 
 function getContainerRecentStatus(_req: Request, res: Response) {
   const recentEntries = auditStore.getRecentEntries(RECENT_STATUS_AUDIT_LIMIT);
-  res.status(200).json({
-    statuses: buildRecentStatusByContainer(recentEntries),
-  });
+  res.status(200).json(buildRecentStatusResponse(recentEntries));
 }
 
 /**

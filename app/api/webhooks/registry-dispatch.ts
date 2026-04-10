@@ -36,11 +36,9 @@ function normalizeHost(value: unknown): string | undefined {
 
   try {
     const parsed = raw.includes('://') ? new URL(raw) : new URL(`https://${raw}`);
-    /* v8 ignore next -- URL parsing always yields hostname/host for valid URL inputs */
     host = parsed.hostname || parsed.host || host;
   } catch {
     const withoutScheme = raw.replace(/^https?:\/\//, '');
-    /* v8 ignore next -- split fallback only applies to degenerate malformed inputs */
     host = withoutScheme.split('/')[0] || withoutScheme;
   }
 

@@ -44,6 +44,7 @@ function createCollections() {
   notification.createCollections(db);
   settings.createCollections(db);
   updateOperation.createCollections(db);
+  app.completeStartupInitialization();
 }
 
 /**

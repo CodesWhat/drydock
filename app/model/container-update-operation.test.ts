@@ -14,6 +14,8 @@ describe('container update operation guards', () => {
 
   test('accepts known phases and rejects non-phase values', () => {
     expect(isContainerUpdateOperationPhase('pulling')).toBe(true);
+    expect(isContainerUpdateOperationPhase('recovered-rollback')).toBe(true);
+    expect(isContainerUpdateOperationPhase('rollback-deferred')).toBe(true);
     expect(isContainerUpdateOperationPhase('rollback-failed')).toBe(true);
     expect(isContainerUpdateOperationPhase('unknown')).toBe(false);
     expect(isContainerUpdateOperationPhase(123)).toBe(false);

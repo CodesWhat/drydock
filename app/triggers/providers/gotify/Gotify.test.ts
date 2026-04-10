@@ -1,6 +1,15 @@
-vi.mock('axios');
-
+import { GotifyClient } from 'gotify-client';
 import Gotify from './Gotify.js';
+
+vi.mock('axios');
+vi.mock('gotify-client', () => ({
+  GotifyClient: vi.fn().mockImplementation(() => ({
+    message: {
+      createMessage: vi.fn(),
+      deleteMessage: vi.fn(),
+    },
+  })),
+}));
 
 const gotify = new Gotify();
 
@@ -14,9 +23,9 @@ const configurationValid = {
   auto: 'all',
   order: 100,
   simpletitle:
-    '${isDigestUpdate ? "New image available for container " + container.name + " (tag " + currentTag + ")" : "New " + container.updateKind.kind + " found for container " + container.name}',
+    '${isDigestUpdate ? container.notificationAgentPrefix + "New image available for container " + container.name + container.notificationWatcherSuffix + " (tag " + currentTag + ")" : container.notificationAgentPrefix + "New " + container.updateKind.kind + " found for container " + container.name + container.notificationWatcherSuffix}',
   simplebody:
-    '${isDigestUpdate ? "Container " + container.name + " running tag " + currentTag + " has a newer image available" : "Container " + container.name + " running with " + container.updateKind.kind + " " + container.updateKind.localValue + " can be updated to " + container.updateKind.kind + " " + container.updateKind.remoteValue}${container.result && container.result.link ? "\\n" + container.result.link : ""}',
+    '${isDigestUpdate ? container.notificationAgentPrefix + "Container " + container.name + container.notificationWatcherSuffix + " running tag " + currentTag + " has a newer image available" : container.notificationAgentPrefix + "Container " + container.name + container.notificationWatcherSuffix + " running with " + container.updateKind.kind + " " + container.updateKind.localValue + " can be updated to " + container.updateKind.kind + " " + container.updateKind.remoteValue}${container.result && container.result.link ? "\\n" + container.result.link : ""}',
 
   batchtitle: '${containers.length} updates available',
   resolvenotifications: false,
@@ -47,6 +56,15 @@ test('validateConfiguration should throw error when invalid', async () => {
   };
   expect(() => {
     gotify.validateConfiguration(configuration);
+  }).toThrow();
+});
+
+test('validateConfiguration should reject non-http webhook URLs', async () => {
+  expect(() => {
+    gotify.validateConfiguration({
+      url: 'git://xxx.com',
+      token: 'xxx',
+    });
   }).toThrow();
 });
 
@@ -100,6 +118,9 @@ test('should initialize Gotify client on register', async () => {
   });
 
   expect(gotifyInstance.client).toBeDefined();
+  expect(GotifyClient).toHaveBeenCalledWith('http://gotify.example.com', {
+    app: 'test-token',
+  });
 });
 
 test('triggerBatch should send batch notification', async () => {
@@ -137,7 +158,13 @@ test('dismiss should delete Gotify message by id', async () => {
       deleteMessage: vi.fn().mockResolvedValue({}),
     },
   };
+  (gotify as any).log = {
+    info: vi.fn(),
+  };
   await gotify.dismiss('watcher_container1', { id: 42 });
+  expect((gotify as any).log.info).toHaveBeenCalledWith(
+    'Deleting Gotify message 42 for container watcher_container1',
+  );
   expect(gotify.client.message.deleteMessage).toHaveBeenCalledWith(42);
 });
 

@@ -16,9 +16,12 @@ Control drydock's own log output with environment variables.
 | `DD_LOG_LEVEL` | ⚪ | Log level | `fatal`, `error`, `warn`, `info`, `debug`, `trace` | `info` |
 | `DD_LOG_FORMAT` | ⚪ | Log format | text json | `text` |
 | `DD_LOG_BUFFER_ENABLED` | ⚪ | Enable in-memory log ring buffer used by UI/API log viewer | `true`, `false` | `true` |
+| `DD_SSE_DEBUG_LOG_IP` | ⚪ | Log raw client IPs in SSE connection lifecycle and rate-limit log lines. When unset or `false`, IPs are replaced with a per-process hashed identifier (`h:xxxxxxxx`) that allows correlating connect/disconnect for the same host without persisting the raw address. Enable only for short-lived troubleshooting. | `true`, `false` | `false` |
 
 The official image sets `DD_LOG_FORMAT=text` by default for pretty, human-readable logs. Set `DD_LOG_FORMAT=json` when you want structured output for log aggregators.
 Set `DD_LOG_BUFFER_ENABLED=false` to disable the in-memory ring buffer (reduces per-log processing overhead).
+
+By default, SSE connect/disconnect and per-IP rate-limit log lines include the internal client ID (for lifecycle correlation) and a short hashed identifier for the client's IP address. The hash is derived from a random salt generated at process start, so hashes cannot be correlated across restarts and the raw IP is never written to logs. Set `DD_SSE_DEBUG_LOG_IP=true` only during short-lived troubleshooting to temporarily log raw IPs.
 
 ### Examples
 

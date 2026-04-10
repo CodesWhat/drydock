@@ -1,5 +1,6 @@
 import cron, { type ScheduledTask } from 'node-cron';
-import { usesLegacyTriggerPrefix } from '../../configuration/index.js';
+import { getAgents } from '../../agent/manager.js';
+import { getServerName, usesLegacyTriggerPrefix } from '../../configuration/index.js';
 import * as event from '../../event/index.js';
 import {
   type Container,
@@ -11,6 +12,7 @@ const RECREATED_ALIAS_RE = /^[a-f0-9]{12}_(.+)$/i;
 
 import { getTriggerCounter } from '../../prometheus/trigger.js';
 import Component, { type ComponentConfiguration } from '../../registry/Component.js';
+import * as auditStore from '../../store/audit.js';
 import * as storeContainer from '../../store/container.js';
 import * as notificationStore from '../../store/notification.js';
 import { renderBatch, renderSimple } from './trigger-expression-parser.js';
@@ -60,6 +62,8 @@ interface AgentConnectedPayload {
   reconnected: boolean;
 }
 
+type ContainerUpdateAppliedEventPayload = event.ContainerUpdateAppliedEvent;
+
 interface UpdateAppliedNotificationEvent {
   kind: 'update-applied';
 }
@@ -103,6 +107,12 @@ export type TriggerNotificationContainer = Container & {
   notificationEvent: TriggerNotificationEvent;
 };
 
+type TriggerTemplateContainer = Container & {
+  notificationWatcherSuffix: string;
+  notificationAgentPrefix: string;
+  notificationServerName: string;
+};
+
 interface EventDispatchOptions extends notificationStore.NotificationRuleDispatchOptions {
   skipThreshold?: boolean;
 }
@@ -110,6 +120,65 @@ interface EventDispatchOptions extends notificationStore.NotificationRuleDispatc
 const AUTO_TRIGGER_ERROR_SUPPRESSION_WINDOW_MS = 15_000;
 const AUTO_TRIGGER_ERROR_SUPPRESSION_RETENTION_MS = AUTO_TRIGGER_ERROR_SUPPRESSION_WINDOW_MS * 4;
 const AUTO_EVENT_BATCH_FLUSH_DELAY_MS = 250;
+
+function getContainerNotificationKey(
+  container: Pick<Container, 'id' | 'name' | 'watcher'> | undefined,
+): string | undefined {
+  if (!container || typeof container !== 'object') {
+    return undefined;
+  }
+
+  if (typeof container.id === 'string' && container.id !== '') {
+    return container.id;
+  }
+
+  if (
+    typeof container.watcher === 'string' &&
+    container.watcher !== '' &&
+    typeof container.name === 'string' &&
+    container.name !== ''
+  ) {
+    return fullName(container as Container);
+  }
+
+  return undefined;
+}
+
+function getContainerUpdateAppliedEventContainerName(
+  payload: ContainerUpdateAppliedEventPayload,
+): string | undefined {
+  if (typeof payload === 'string') {
+    return payload || undefined;
+  }
+
+  if (!payload || typeof payload !== 'object') {
+    return undefined;
+  }
+
+  return typeof payload.containerName === 'string' && payload.containerName !== ''
+    ? payload.containerName
+    : undefined;
+}
+
+function getContainerUpdateAppliedEventNotificationKey(
+  payload: ContainerUpdateAppliedEventPayload,
+): string | undefined {
+  if (typeof payload === 'string') {
+    return payload || undefined;
+  }
+
+  if (!payload || typeof payload !== 'object') {
+    return undefined;
+  }
+
+  const payloadContainer =
+    'container' in payload ? (payload.container as Container | undefined) : undefined;
+
+  return (
+    getContainerNotificationKey(payloadContainer) ??
+    getContainerUpdateAppliedEventContainerName(payload)
+  );
+}
 const TRIGGER_RELEASE_NOTES_BODY_MAX_LENGTH = 500;
 const ACTION_TRIGGER_TYPES = new Set(['command', 'docker', 'dockercompose']);
 export function buildLiteralTemplateExpression(expression: string): string {
@@ -117,13 +186,13 @@ export function buildLiteralTemplateExpression(expression: string): string {
 }
 
 const DEFAULT_SIMPLE_TITLE_DIGEST_EXPRESSION =
-  '"New image available for container " + container.name + " (tag " + currentTag + ")"';
+  'container.notificationAgentPrefix + "New image available for container " + container.name + container.notificationWatcherSuffix + " (tag " + currentTag + ")"';
 const DEFAULT_SIMPLE_TITLE_UPDATE_EXPRESSION =
-  '"New " + container.updateKind.kind + " found for container " + container.name';
+  'container.notificationAgentPrefix + "New " + container.updateKind.kind + " found for container " + container.name + container.notificationWatcherSuffix';
 const DEFAULT_SIMPLE_BODY_DIGEST_EXPRESSION =
-  '"Container " + container.name + " running tag " + currentTag + " has a newer image available"';
+  'container.notificationAgentPrefix + "Container " + container.name + container.notificationWatcherSuffix + " running tag " + currentTag + " has a newer image available"';
 const DEFAULT_SIMPLE_BODY_UPDATE_EXPRESSION =
-  '"Container " + container.name + " running with " + container.updateKind.kind + " " + container.updateKind.localValue + " can be updated to " + container.updateKind.kind + " " + container.updateKind.remoteValue';
+  'container.notificationAgentPrefix + "Container " + container.name + container.notificationWatcherSuffix + " running with " + container.updateKind.kind + " " + container.updateKind.localValue + " can be updated to " + container.updateKind.kind + " " + container.updateKind.remoteValue';
 const DEFAULT_SIMPLE_BODY_RESULT_LINK_EXPRESSION =
   'container.result && container.result.link ? "\\n" + container.result.link : ""';
 const DEFAULT_SIMPLE_TITLE_TEMPLATE = buildLiteralTemplateExpression(
@@ -137,12 +206,12 @@ const AGENT_DISCONNECT_SIMPLE_TITLE_TEMPLATE = `Agent ${buildLiteralTemplateExpr
 const AGENT_DISCONNECT_SIMPLE_BODY_TEMPLATE = `Agent ${buildLiteralTemplateExpression('event.agentName')} disconnected${buildLiteralTemplateExpression('event.reason ? ": " + event.reason : ""')}`;
 const AGENT_RECONNECT_SIMPLE_TITLE_TEMPLATE = `Agent ${buildLiteralTemplateExpression('event.agentName')} reconnected`;
 const AGENT_RECONNECT_SIMPLE_BODY_TEMPLATE = `Agent ${buildLiteralTemplateExpression('event.agentName')} reconnected`;
-const UPDATE_APPLIED_SIMPLE_TITLE_TEMPLATE = `Container ${buildLiteralTemplateExpression('container.name')} updated successfully`;
-const UPDATE_APPLIED_SIMPLE_BODY_TEMPLATE = `Container ${buildLiteralTemplateExpression('container.name')} updated successfully`;
-const UPDATE_FAILED_SIMPLE_TITLE_TEMPLATE = `Container ${buildLiteralTemplateExpression('container.name')} update failed`;
-const UPDATE_FAILED_SIMPLE_BODY_TEMPLATE = `Container ${buildLiteralTemplateExpression('container.name')} update failed${buildLiteralTemplateExpression('event.error ? ": " + event.error : ""')}`;
-const SECURITY_ALERT_SIMPLE_TITLE_TEMPLATE = `Security alert for container ${buildLiteralTemplateExpression('container.name')}`;
-const SECURITY_ALERT_SIMPLE_BODY_TEMPLATE = `Security alert for container ${buildLiteralTemplateExpression('container.name')}${buildLiteralTemplateExpression('event.blockingCount ? " (" + event.blockingCount + " blocking vulnerabilities)" : ""')}${buildLiteralTemplateExpression('event.details ? "\\n" + event.details : ""')}`;
+const UPDATE_APPLIED_SIMPLE_TITLE_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Container ${buildLiteralTemplateExpression('container.name')} updated successfully`;
+const UPDATE_APPLIED_SIMPLE_BODY_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Container ${buildLiteralTemplateExpression('container.name')} updated successfully`;
+const UPDATE_FAILED_SIMPLE_TITLE_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Container ${buildLiteralTemplateExpression('container.name')} update failed`;
+const UPDATE_FAILED_SIMPLE_BODY_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Container ${buildLiteralTemplateExpression('container.name')} update failed${buildLiteralTemplateExpression('event.error ? ": " + event.error : ""')}`;
+const SECURITY_ALERT_SIMPLE_TITLE_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Security alert for container ${buildLiteralTemplateExpression('container.name')}`;
+const SECURITY_ALERT_SIMPLE_BODY_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Security alert for container ${buildLiteralTemplateExpression('container.name')}${buildLiteralTemplateExpression('event.blockingCount ? " (" + event.blockingCount + " blocking vulnerabilities)" : ""')}${buildLiteralTemplateExpression('event.details ? "\\n" + event.details : ""')}`;
 const NOTIFICATION_SIMPLE_TITLE_TEMPLATES: Partial<
   Record<TriggerNotificationEvent['kind'], string>
 > = {
@@ -372,6 +441,9 @@ interface EventBatchDispatchState {
   timer?: ReturnType<typeof setTimeout>;
 }
 
+type BufferedContainerMap = Map<string, Container>;
+type BufferedContainerTimestamps = Map<string, number>;
+
 function splitAndTrimCommaSeparatedList(value: string): string[] {
   return value
     .split(',')
@@ -397,6 +469,12 @@ class Trigger extends Component {
   private readonly autoTriggerErrorSeenAt: Map<string, number> = new Map();
   private readonly notificationRuleWarningsSeen: Set<string> = new Set();
   private readonly digestBuffer: Map<string, Container> = new Map();
+  private readonly batchRetryBuffer: Map<string, Container> = new Map();
+  private digestBufferUpdatedAt: Map<string, number> = new Map();
+  private batchRetryBufferUpdatedAt: Map<string, number> = new Map();
+  private bufferEntryRetentionMs = 7 * 24 * 60 * 60 * 1000;
+  private digestBufferMaxEntries = 5_000;
+  private batchRetryBufferMaxEntries = 5_000;
   private readonly eventBatchDispatches: Map<NotificationRuleId, EventBatchDispatchState> =
     new Map();
   private digestCronTask?: ScheduledTask;
@@ -538,10 +616,26 @@ class Trigger extends Component {
     return notificationStore.isTriggerEnabledForRule(ruleId, this.getId(), options);
   }
 
+  private getUpdateAvailableAutoTriggerDispatchDecision() {
+    const dispatchDecision = notificationStore.getTriggerDispatchDecisionForRule(
+      'update-available',
+      this.getId(),
+      {
+        // Keep backward compatibility: if update-available has no explicit trigger
+        // allow-list yet, legacy auto trigger behavior remains enabled.
+        allowAllWhenNoTriggers: true,
+        defaultWhenRuleMissing: true,
+      },
+    );
+    this.warnIfDigestRoutingIsSuppressed(dispatchDecision);
+    return dispatchDecision;
+  }
+
   private findContainerByBusinessId(containerName: string): Container | undefined {
-    return storeContainer
-      .getContainersRaw()
-      .find((container) => fullName(container) === containerName);
+    return storeContainer.getContainersRaw().find((container) => {
+      const notificationKey = getContainerNotificationKey(container);
+      return notificationKey === containerName || fullName(container) === containerName;
+    });
   }
 
   private buildAutoTriggerErrorSignature(
@@ -592,7 +686,7 @@ class Trigger extends Component {
   }
 
   private buildEventBatchDispatchKey(container: Container): string {
-    return container.id || fullName(container);
+    return getContainerNotificationKey(container) || fullName(container);
   }
 
   private async flushEventBatchDispatch(ruleId: NotificationRuleId, containers: Container[]) {
@@ -641,6 +735,121 @@ class Trigger extends Component {
     this.eventBatchDispatches.clear();
   }
 
+  private deleteBufferedContainerEntry(
+    buffer: BufferedContainerMap,
+    timestamps: BufferedContainerTimestamps,
+    key: string,
+  ) {
+    const deleted = buffer.delete(key);
+    timestamps.delete(key);
+    return deleted;
+  }
+
+  private pruneStaleBufferedContainerEntries(
+    bufferName: string,
+    buffer: BufferedContainerMap,
+    timestamps: BufferedContainerTimestamps,
+    now: number,
+  ) {
+    if (this.bufferEntryRetentionMs <= 0) {
+      return;
+    }
+
+    const oldestAllowedTimestamp = now - this.bufferEntryRetentionMs;
+    for (const key of buffer.keys()) {
+      const updatedAt = timestamps.get(key);
+      if (updatedAt === undefined) {
+        timestamps.set(key, now);
+        continue;
+      }
+
+      if (updatedAt < oldestAllowedTimestamp) {
+        this.deleteBufferedContainerEntry(buffer, timestamps, key);
+        this.log.debug(`Evicted stale ${bufferName} entry ${key}`);
+      }
+    }
+  }
+
+  private enforceBufferedContainerLimit(
+    bufferName: string,
+    buffer: BufferedContainerMap,
+    timestamps: BufferedContainerTimestamps,
+    maxEntries: number,
+  ) {
+    if (maxEntries <= 0) {
+      buffer.clear();
+      timestamps.clear();
+      return;
+    }
+
+    while (buffer.size > maxEntries) {
+      let oldestKey: string | undefined;
+      let oldestUpdatedAt = Number.POSITIVE_INFINITY;
+
+      for (const key of buffer.keys()) {
+        const updatedAt = timestamps.get(key) ?? 0;
+        if (updatedAt < oldestUpdatedAt) {
+          oldestUpdatedAt = updatedAt;
+          oldestKey = key;
+        }
+      }
+
+      if (!oldestKey) {
+        break;
+      }
+
+      this.deleteBufferedContainerEntry(buffer, timestamps, oldestKey);
+      this.log.warn(
+        `Evicted oldest ${bufferName} entry ${oldestKey} after reaching the ${maxEntries}-entry limit`,
+      );
+    }
+  }
+
+  private setBufferedContainerEntry(
+    bufferName: string,
+    buffer: BufferedContainerMap,
+    timestamps: BufferedContainerTimestamps,
+    key: string,
+    container: Container,
+    maxEntries: number,
+    now = Date.now(),
+  ) {
+    this.pruneStaleBufferedContainerEntries(bufferName, buffer, timestamps, now);
+    buffer.set(key, container);
+    timestamps.set(key, now);
+    this.enforceBufferedContainerLimit(bufferName, buffer, timestamps, maxEntries);
+  }
+
+  private pruneDigestBuffer(now = Date.now()) {
+    this.pruneStaleBufferedContainerEntries(
+      'digest buffer',
+      this.digestBuffer,
+      this.digestBufferUpdatedAt,
+      now,
+    );
+    this.enforceBufferedContainerLimit(
+      'digest buffer',
+      this.digestBuffer,
+      this.digestBufferUpdatedAt,
+      this.digestBufferMaxEntries,
+    );
+  }
+
+  private pruneBatchRetryBuffer(now = Date.now()) {
+    this.pruneStaleBufferedContainerEntries(
+      'batch retry buffer',
+      this.batchRetryBuffer,
+      this.batchRetryBufferUpdatedAt,
+      now,
+    );
+    this.enforceBufferedContainerLimit(
+      'batch retry buffer',
+      this.batchRetryBuffer,
+      this.batchRetryBufferUpdatedAt,
+      this.batchRetryBufferMaxEntries,
+    );
+  }
+
   private shouldDispatchNotificationEventInBatch(
     notificationEvent: TriggerNotificationEvent | undefined,
   ) {
@@ -670,8 +879,11 @@ class Trigger extends Component {
       return;
     }
 
-    if (!this.mustTrigger(container)) {
-      this.log.debug(`Trigger conditions not met for ${ruleId} event => ignore`);
+    const mustTriggerDecision = this.getMustTriggerDecision(container);
+    if (!mustTriggerDecision.allowed) {
+      this.log.debug(
+        `Trigger conditions not met for ${ruleId} event => ignore (${mustTriggerDecision.reason})`,
+      );
       return;
     }
 
@@ -698,14 +910,48 @@ class Trigger extends Component {
     }
   }
 
-  async handleContainerUpdateAppliedEvent(containerName: string) {
-    // Evict from digest buffer — container is already updated, no need to notify.
-    // containerName is the full business ID (watcher_name), matching the buffer key.
-    if (this.digestBuffer.delete(containerName)) {
-      this.log.debug(`Evicted ${containerName} from digest buffer (update applied)`);
+  async handleContainerUpdateAppliedEvent(payload: ContainerUpdateAppliedEventPayload) {
+    const containerName = getContainerUpdateAppliedEventContainerName(payload);
+    if (!containerName) {
+      this.log.debug('Skipping update-applied event because container name is missing');
+      return;
     }
 
-    const container = this.findContainerByBusinessId(containerName);
+    const payloadContainer =
+      typeof payload === 'object' && payload !== null && 'container' in payload
+        ? (payload.container as Container | undefined)
+        : undefined;
+    const container = payloadContainer || this.findContainerByBusinessId(containerName);
+    const notificationKey = getContainerNotificationKey(container) || containerName;
+
+    // Evict from digest buffer — container is already updated, no need to notify.
+    let evictedBufferedUpdate = this.deleteBufferedContainerEntry(
+      this.digestBuffer,
+      this.digestBufferUpdatedAt,
+      notificationKey,
+    );
+    if (!evictedBufferedUpdate && containerName !== notificationKey) {
+      evictedBufferedUpdate = this.deleteBufferedContainerEntry(
+        this.digestBuffer,
+        this.digestBufferUpdatedAt,
+        containerName,
+      );
+    }
+    if (!evictedBufferedUpdate) {
+      for (const [bufferKey, bufferedContainer] of this.digestBuffer.entries()) {
+        if (fullName(bufferedContainer) === containerName) {
+          this.deleteBufferedContainerEntry(
+            this.digestBuffer,
+            this.digestBufferUpdatedAt,
+            bufferKey,
+          );
+          evictedBufferedUpdate = true;
+        }
+      }
+    }
+    if (evictedBufferedUpdate) {
+      this.log.debug(`Evicted ${notificationKey} from digest buffer (update applied)`);
+    }
     const notificationContainer = container
       ? withNotificationEvent(container, { kind: 'update-applied' })
       : undefined;
@@ -780,18 +1026,7 @@ class Trigger extends Component {
   }
 
   private isUpdateAvailableAutoTriggerEnabled() {
-    const dispatchDecision = notificationStore.getTriggerDispatchDecisionForRule(
-      'update-available',
-      this.getId(),
-      {
-        // Keep backward compatibility: if update-available has no explicit trigger
-        // allow-list yet, legacy auto trigger behavior remains enabled.
-        allowAllWhenNoTriggers: true,
-        defaultWhenRuleMissing: true,
-      },
-    );
-    this.warnIfDigestRoutingIsSuppressed(dispatchDecision);
-    return dispatchDecision.enabled;
+    return this.getUpdateAvailableAutoTriggerDispatchDecision().enabled;
   }
 
   private warnIfDigestRoutingIsSuppressed(
@@ -843,24 +1078,165 @@ class Trigger extends Component {
     return (this.configuration.threshold ?? 'all').toLowerCase();
   }
 
+  private getMustTriggerDecision(containerResult: Container) {
+    if (Trigger.isRollbackContainer(containerResult)) {
+      return {
+        allowed: false,
+        reason: 'rollback-container',
+      };
+    }
+    if (this.agent && this.agent !== containerResult.agent) {
+      return {
+        allowed: false,
+        reason: `agent mismatch expected=${this.agent} actual=${containerResult.agent ?? '<none>'}`,
+      };
+    }
+    if (this.strictAgentMatch && this.agent !== containerResult.agent) {
+      return {
+        allowed: false,
+        reason: `strict agent mismatch expected=${this.agent ?? '<none>'} actual=${containerResult.agent ?? '<none>'}`,
+      };
+    }
+
+    const { triggerInclude, triggerExclude } = containerResult;
+    const included = this.isTriggerIncluded(containerResult, triggerInclude);
+    const excluded = this.isTriggerExcluded(containerResult, triggerExclude);
+
+    if (!included || excluded) {
+      return {
+        allowed: false,
+        reason: `triggerInclude=${triggerInclude ?? '<none>'}, triggerExclude=${triggerExclude ?? '<none>'}, included=${included}, excluded=${excluded}`,
+      };
+    }
+
+    return {
+      allowed: true,
+    };
+  }
+
+  private isPureBatchMode() {
+    return Trigger.normalizeMode(this.configuration.mode) === 'batch';
+  }
+
+  private shouldDispatchUpdateAvailableContainer(container: Container) {
+    return (
+      container.updateAvailable &&
+      Trigger.isThresholdReached(container, this.getSimpleModeThreshold()) &&
+      this.mustTrigger(container)
+    );
+  }
+
+  private shouldHandleBatchContainerReport(containerReport: ContainerReport) {
+    return (
+      (containerReport.changed || !this.configuration.once) &&
+      this.shouldDispatchUpdateAvailableContainer(containerReport.container)
+    );
+  }
+
+  private getBatchRetryContainers(containerReports: ContainerReport[]) {
+    if (!this.isPureBatchMode() || this.batchRetryBuffer.size === 0) {
+      return [];
+    }
+
+    const now = Date.now();
+    this.pruneBatchRetryBuffer(now);
+
+    const currentReportsByBusinessId = new Map<string, ContainerReport>(
+      containerReports.map(
+        (containerReport) =>
+          [
+            getContainerNotificationKey(containerReport.container) ||
+              fullName(containerReport.container),
+            containerReport,
+          ] as const,
+      ),
+    );
+    const currentContainersByBusinessId = new Map<string, Container>(
+      storeContainer
+        .getContainersRaw()
+        .map(
+          (container) =>
+            [
+              getContainerNotificationKey(container as Container) ||
+                fullName(container as Container),
+              container as Container,
+            ] as const,
+        ),
+    );
+
+    for (const [containerName, bufferedContainer] of this.batchRetryBuffer.entries()) {
+      const currentContainer =
+        currentReportsByBusinessId.get(containerName)?.container ??
+        currentContainersByBusinessId.get(containerName);
+
+      if (!currentContainer || !this.shouldDispatchUpdateAvailableContainer(currentContainer)) {
+        if (this.batchRetryBuffer.get(containerName) === bufferedContainer) {
+          this.deleteBufferedContainerEntry(
+            this.batchRetryBuffer,
+            this.batchRetryBufferUpdatedAt,
+            containerName,
+          );
+        }
+        continue;
+      }
+
+      this.setBufferedContainerEntry(
+        'batch retry buffer',
+        this.batchRetryBuffer,
+        this.batchRetryBufferUpdatedAt,
+        containerName,
+        currentContainer,
+        this.batchRetryBufferMaxEntries,
+        now,
+      );
+    }
+
+    return Array.from(this.batchRetryBuffer.values());
+  }
+
+  private recordBatchDeliveryFailure(containers: Container[], errorMessage: string) {
+    const timestamp = new Date().toISOString();
+
+    for (const container of containers) {
+      auditStore.insertAudit({
+        id: '',
+        timestamp,
+        action: 'notification-delivery-failed',
+        containerName: fullName(container),
+        containerImage: container.image?.name,
+        fromVersion: container.updateKind?.localValue,
+        toVersion: container.updateKind?.remoteValue,
+        triggerName: this.getId(),
+        status: 'error',
+        details: errorMessage,
+      });
+    }
+  }
+
   private async runUpdateAvailableSimpleTrigger(
     container: Container,
     logContainer: Component['log'],
   ) {
     if (!Trigger.isThresholdReached(container, this.getSimpleModeThreshold())) {
-      logContainer.debug('Threshold not reached => ignore');
+      logContainer.debug(
+        `Threshold not reached => ignore (threshold=${this.getSimpleModeThreshold()}, updateKind=${container.updateKind?.kind ?? 'unknown'}, semverDiff=${container.updateKind?.semverDiff ?? 'unknown'})`,
+      );
       return;
     }
 
-    if (!this.mustTrigger(container)) {
-      logContainer.debug('Trigger conditions not met => ignore');
+    const mustTriggerDecision = this.getMustTriggerDecision(container);
+    if (!mustTriggerDecision.allowed) {
+      logContainer.debug(`Trigger conditions not met => ignore (${mustTriggerDecision.reason})`);
       return;
     }
 
     logContainer.debug('Run');
     const result = await this.trigger(container);
     if (this.configuration.resolvenotifications && result) {
-      this.notificationResults.set(fullName(container), result);
+      this.notificationResults.set(
+        getContainerNotificationKey(container) || fullName(container),
+        result,
+      );
     }
   }
 
@@ -892,15 +1268,22 @@ class Trigger extends Component {
    * @returns {Promise<void>}
    */
   async handleContainerReport(containerReport: ContainerReport) {
-    if (!this.isUpdateAvailableAutoTriggerEnabled()) {
-      return;
-    }
-
     // Strip Docker recreate alias prefixes before any trigger processing
     Trigger.canonicalizeReportName(containerReport);
 
+    const dispatchDecision = this.getUpdateAvailableAutoTriggerDispatchDecision();
+    if (!dispatchDecision.enabled) {
+      this.log.debug(
+        `Skipping update-available notification for ${fullName(containerReport.container)} (${dispatchDecision.reason})`,
+      );
+      return;
+    }
+
     // Filter on changed containers with update available and passing trigger threshold
     if (!this.shouldHandleSimpleContainerReport(containerReport)) {
+      this.log.debug(
+        `Skipping update-available notification for ${fullName(containerReport.container)} (changed=${containerReport.changed}, once=${this.configuration.once ?? false}, updateAvailable=${containerReport.container.updateAvailable})`,
+      );
       return;
     }
 
@@ -933,45 +1316,96 @@ class Trigger extends Component {
     }
 
     // Filter on containers with update available and passing trigger threshold
-    try {
-      const containerReportsFiltered = containerReports
-        .filter((containerReport) => containerReport.changed || !this.configuration.once)
-        .filter((containerReport) => containerReport.container.updateAvailable)
-        .filter((containerReport) => this.mustTrigger(containerReport.container))
-        .filter((containerReport) =>
-          Trigger.isThresholdReached(
-            containerReport.container,
-            (this.configuration.threshold || 'all').toLowerCase(),
-          ),
-        );
-      const containersFiltered = containerReportsFiltered.map(
-        (containerReport) => containerReport.container,
+    const containersToSendByBusinessId = new Map<string, Container>();
+    for (const container of this.getBatchRetryContainers(containerReports)) {
+      containersToSendByBusinessId.set(
+        getContainerNotificationKey(container) || fullName(container),
+        container,
       );
-      if (containersFiltered.length > 0) {
-        this.log.debug('Run batch');
-        await this.triggerBatch(containersFiltered);
+    }
+    for (const containerReport of containerReports) {
+      if (this.shouldHandleBatchContainerReport(containerReport)) {
+        containersToSendByBusinessId.set(
+          getContainerNotificationKey(containerReport.container) ||
+            fullName(containerReport.container),
+          containerReport.container,
+        );
+      }
+    }
+    const containersToSend = Array.from(containersToSendByBusinessId.values());
+    if (containersToSend.length === 0) {
+      return;
+    }
+
+    let status: 'success' | 'error' = 'error';
+    try {
+      this.log.debug('Run batch');
+      await this.triggerBatch(containersToSend);
+      status = 'success';
+      // In batch+digest mode, evict successfully-batched containers from the
+      // digest buffer so they are not sent again at the next digest flush.
+      if (this.digestBuffer.size > 0) {
+        for (const container of containersToSend) {
+          this.deleteBufferedContainerEntry(
+            this.digestBuffer,
+            this.digestBufferUpdatedAt,
+            getContainerNotificationKey(container) || fullName(container),
+          );
+        }
+      }
+      if (this.batchRetryBuffer.size > 0) {
+        for (const container of containersToSend) {
+          this.deleteBufferedContainerEntry(
+            this.batchRetryBuffer,
+            this.batchRetryBufferUpdatedAt,
+            getContainerNotificationKey(container) || fullName(container),
+          );
+        }
       }
     } catch (e: unknown) {
       const errorMessage = Trigger.getErrorMessage(e);
-      if (this.shouldSuppressAutoTriggerError('update-available', undefined, errorMessage)) {
+      if (this.isPureBatchMode()) {
+        for (const container of containersToSend) {
+          this.setBufferedContainerEntry(
+            'batch retry buffer',
+            this.batchRetryBuffer,
+            this.batchRetryBufferUpdatedAt,
+            getContainerNotificationKey(container) || fullName(container),
+            container,
+            this.batchRetryBufferMaxEntries,
+          );
+        }
+      }
+      this.recordBatchDeliveryFailure(containersToSend, errorMessage);
+      if (
+        this.shouldSuppressAutoTriggerError('update-available', containersToSend[0], errorMessage)
+      ) {
         this.log.debug(`Suppressed repeated error (${errorMessage})`);
       } else {
         this.log.warn(`Error (${errorMessage})`);
       }
       this.log.debug(e);
+    } finally {
+      this.incrementTriggerCounter(status);
     }
   }
 
   /**
-   * Buffer a container for digest mode. Keyed by full name so the latest
-   * update for each container wins if multiple scans fire before the digest
-   * cron flushes.
+   * Buffer a container for digest mode. Keyed by stable container identity
+   * so same-name siblings do not overwrite each other before the digest cron
+   * flushes.
    */
   private bufferContainerForDigest(container: Container) {
-    this.digestBuffer.set(fullName(container), container);
-    this.log.debug(
-      `Buffered ${fullName(container)} for digest (${this.digestBuffer.size} buffered)`,
+    const containerKey = getContainerNotificationKey(container) || fullName(container);
+    this.setBufferedContainerEntry(
+      'digest buffer',
+      this.digestBuffer,
+      this.digestBufferUpdatedAt,
+      containerKey,
+      container,
+      this.digestBufferMaxEntries,
     );
+    this.log.debug(`Buffered ${containerKey} for digest (${this.digestBuffer.size} buffered)`);
   }
 
   /**
@@ -981,10 +1415,16 @@ class Trigger extends Component {
     Trigger.canonicalizeReportName(containerReport);
 
     const { container } = containerReport;
-    const containerName = fullName(container);
+    const containerName = getContainerNotificationKey(container) || fullName(container);
 
     if (!container.updateAvailable) {
-      if (this.digestBuffer.delete(containerName)) {
+      if (
+        this.deleteBufferedContainerEntry(
+          this.digestBuffer,
+          this.digestBufferUpdatedAt,
+          containerName,
+        )
+      ) {
         this.log.debug(`Evicted ${containerName} from digest buffer (update no longer available)`);
       }
       return;
@@ -1018,11 +1458,23 @@ class Trigger extends Component {
       this.log.debug('Digest cron fired — buffer empty, nothing to send');
       return;
     }
+    this.pruneDigestBuffer();
+    if (this.digestBuffer.size === 0) {
+      this.log.debug('Digest cron fired — no buffered updates remain after eviction');
+      return;
+    }
     const bufferedEntries = Array.from(this.digestBuffer.entries());
     const currentContainersByBusinessId = new Map<string, Container>(
       storeContainer
         .getContainersRaw()
-        .map((container) => [fullName(container as Container), container as Container] as const),
+        .map(
+          (container) =>
+            [
+              getContainerNotificationKey(container as Container) ||
+                fullName(container as Container),
+              container as Container,
+            ] as const,
+        ),
     );
     const dispatchEntries = bufferedEntries.flatMap(([containerName, bufferedContainer]) => {
       const currentContainer = currentContainersByBusinessId.get(containerName);
@@ -1048,7 +1500,11 @@ class Trigger extends Component {
       }
 
       if (this.digestBuffer.get(containerName) === bufferedContainer) {
-        this.digestBuffer.delete(containerName);
+        this.deleteBufferedContainerEntry(
+          this.digestBuffer,
+          this.digestBufferUpdatedAt,
+          containerName,
+        );
       }
       return [];
     });
@@ -1067,7 +1523,11 @@ class Trigger extends Component {
       status = 'success';
       for (const { containerName, bufferedContainer } of dispatchEntries) {
         if (this.digestBuffer.get(containerName) === bufferedContainer) {
-          this.digestBuffer.delete(containerName);
+          this.deleteBufferedContainerEntry(
+            this.digestBuffer,
+            this.digestBufferUpdatedAt,
+            containerName,
+          );
         }
       }
     } catch (e: unknown) {
@@ -1131,20 +1591,7 @@ class Trigger extends Component {
   }
 
   mustTrigger(containerResult: Container) {
-    if (Trigger.isRollbackContainer(containerResult)) {
-      return false;
-    }
-    if (this.agent && this.agent !== containerResult.agent) {
-      return false;
-    }
-    if (this.strictAgentMatch && this.agent !== containerResult.agent) {
-      return false;
-    }
-    const { triggerInclude, triggerExclude } = containerResult;
-    return (
-      this.isTriggerIncluded(containerResult, triggerInclude) &&
-      !this.isTriggerExcluded(containerResult, triggerExclude)
-    );
+    return this.getMustTriggerDecision(containerResult).allowed;
   }
 
   /**
@@ -1270,6 +1717,9 @@ class Trigger extends Component {
     this.digestCronTask = undefined;
     this.isDigestFlushInProgress = false;
     this.digestBuffer.clear();
+    this.digestBufferUpdatedAt.clear();
+    this.batchRetryBuffer.clear();
+    this.batchRetryBufferUpdatedAt.clear();
     this.clearEventBatchDispatches();
 
     this.autoTriggerErrorSeenAt.clear();
@@ -1372,7 +1822,22 @@ class Trigger extends Component {
    * Dismiss the stored notification for the updated container.
    * @param containerId
    */
-  async handleContainerUpdateApplied(containerId: string) {
+  async handleContainerUpdateApplied(payload: ContainerUpdateAppliedEventPayload) {
+    const containerName = getContainerUpdateAppliedEventContainerName(payload);
+    const payloadContainer =
+      typeof payload === 'object' && payload !== null && 'container' in payload
+        ? (payload.container as Container | undefined)
+        : undefined;
+    const containerId =
+      getContainerNotificationKey(payloadContainer) ||
+      (containerName
+        ? getContainerNotificationKey(this.findContainerByBusinessId(containerName))
+        : undefined) ||
+      getContainerUpdateAppliedEventNotificationKey(payload);
+    if (!containerId) {
+      return;
+    }
+
     const triggerResult = this.notificationResults.get(containerId);
     if (!triggerResult) {
       return;
@@ -1454,14 +1919,65 @@ class Trigger extends Component {
    * Build the container template context used by trigger body/title rendering.
    * Release notes bodies are shortened for notifications to avoid excessively long payloads.
    */
-  private getTemplateContainer(container: Container): Container {
+  private getNotificationServerName(container: Container): string {
+    const agent = typeof container.agent === 'string' ? container.agent.trim() : '';
+    return agent || getServerName();
+  }
+
+  private getNotificationWatcherSuffix(
+    container: Container,
+    notificationAgentPrefix: string,
+    notificationServerName: string,
+  ): string {
+    const watcher = typeof container.watcher === 'string' ? container.watcher.trim() : '';
+    if (!watcher || watcher === 'local' || watcher === 'agent') {
+      return '';
+    }
+
+    if (
+      notificationAgentPrefix &&
+      watcher.toLowerCase() === notificationServerName.trim().toLowerCase()
+    ) {
+      return '';
+    }
+
+    return ` (${watcher})`;
+  }
+
+  private getNotificationAgentPrefix(container: Container): string {
+    const agent = typeof container.agent === 'string' ? container.agent.trim() : '';
+    if (agent) {
+      return `[${agent}] `;
+    }
+    if (getAgents().length > 0) {
+      return `[${getServerName()}] `;
+    }
+    return '';
+  }
+
+  private getTemplateContainer(container: Container): TriggerTemplateContainer {
+    const notificationAgentPrefix = this.getNotificationAgentPrefix(container);
+    const notificationServerName = this.getNotificationServerName(container);
+    const notificationWatcherSuffix = this.getNotificationWatcherSuffix(
+      container,
+      notificationAgentPrefix,
+      notificationServerName,
+    );
     const releaseNotes = container.result?.releaseNotes;
     if (!releaseNotes || typeof releaseNotes.body !== 'string') {
-      return container;
+      return {
+        ...container,
+        notificationWatcherSuffix,
+        notificationAgentPrefix,
+        notificationServerName,
+      };
     }
 
     return {
       ...container,
+      notificationWatcherSuffix,
+      notificationAgentPrefix,
+      notificationServerName,
       result: {
         ...container.result,
         releaseNotes: {

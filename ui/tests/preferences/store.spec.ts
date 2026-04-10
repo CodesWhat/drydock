@@ -27,6 +27,7 @@ describe('preferences store', () => {
       (globalThis as any).requestIdleCallback = originalRequestIdleCallback;
     }
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   async function loadStore() {
@@ -137,6 +138,17 @@ describe('preferences store', () => {
     resetPreferences();
     const raw = JSON.parse(localStorage.getItem('dd-preferences') ?? '{}');
     expect(raw.theme.family).toBe('one-dark');
+  });
+
+  it('should skip lifecycle registration when addEventListener is unavailable', async () => {
+    const addEventListenerSpy = vi.spyOn(document, 'addEventListener');
+    const removeEventListenerSpy = vi.spyOn(document, 'removeEventListener');
+    vi.stubGlobal('addEventListener', undefined);
+
+    await loadStore();
+
+    expect(addEventListenerSpy).not.toHaveBeenCalled();
+    expect(removeEventListenerSpy).not.toHaveBeenCalled();
   });
 
   it('should preserve array values when persisting', async () => {

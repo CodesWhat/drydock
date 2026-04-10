@@ -158,6 +158,8 @@ function createHarness(options: { containers?: any[] } = {}) {
       getOperationsByContainerName: vi.fn(() => []),
       getInProgressOperationByContainerName: vi.fn(() => undefined),
       getInProgressOperationByContainerId: vi.fn(() => undefined),
+      getActiveOperationByContainerName: vi.fn(() => undefined),
+      getActiveOperationByContainerId: vi.fn(() => undefined),
     },
     getServerConfiguration: vi.fn(() => ({ feature: { delete: true } })),
     getAgent: vi.fn(),
@@ -2370,20 +2372,23 @@ describe('api/container/crud', () => {
       const harness = createHarness({
         containers: [createContainer({ id: 'c1', name: 'edge-api' })],
       });
-      harness.deps.updateOperationStore.getInProgressOperationByContainerName.mockReturnValue({
+      harness.deps.updateOperationStore.getActiveOperationByContainerName.mockReturnValue({
         id: 'op-1',
         status: 'in-progress',
         phase: 'old-stopped',
         updatedAt: '2026-04-01T12:00:00.000Z',
         fromVersion: '1.0.0',
         toVersion: '1.1.0',
+        batchId: 'batch-1',
+        queuePosition: 1,
+        queueTotal: 3,
       });
 
       const listRes = callGetContainers(harness.handlers);
       const singleRes = callGetContainer(harness.handlers, 'c1');
 
       expect(
-        harness.deps.updateOperationStore.getInProgressOperationByContainerName,
+        harness.deps.updateOperationStore.getActiveOperationByContainerName,
       ).toHaveBeenCalledWith('edge-api');
       expect(listRes.json).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -2395,6 +2400,9 @@ describe('api/container/crud', () => {
                 phase: 'old-stopped',
                 fromVersion: '1.0.0',
                 toVersion: '1.1.0',
+                batchId: 'batch-1',
+                queuePosition: 1,
+                queueTotal: 3,
               }),
             }),
           ],
@@ -2406,6 +2414,91 @@ describe('api/container/crud', () => {
             id: 'op-1',
             status: 'in-progress',
             phase: 'old-stopped',
+            batchId: 'batch-1',
+            queuePosition: 1,
+            queueTotal: 3,
+          }),
+        }),
+      );
+    });
+
+    test('coerces string queue metadata on active update-operation responses', () => {
+      const harness = createHarness({
+        containers: [createContainer({ id: 'c1', name: 'edge-api' })],
+      });
+      harness.deps.updateOperationStore.getActiveOperationByContainerName.mockReturnValue({
+        id: 'op-1',
+        status: 'queued',
+        phase: 'queued',
+        updatedAt: '2026-04-01T12:00:00.000Z',
+        batchId: 'batch-2',
+        queuePosition: '2',
+        queueTotal: '3',
+      });
+
+      const listRes = callGetContainers(harness.handlers);
+      const singleRes = callGetContainer(harness.handlers, 'c1');
+
+      expect(listRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: [
+            expect.objectContaining({
+              updateOperation: expect.objectContaining({
+                batchId: 'batch-2',
+                queuePosition: 2,
+                queueTotal: 3,
+              }),
+            }),
+          ],
+        }),
+      );
+      expect(singleRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          updateOperation: expect.objectContaining({
+            batchId: 'batch-2',
+            queuePosition: 2,
+            queueTotal: 3,
+          }),
+        }),
+      );
+    });
+
+    test('omits invalid queue metadata from active update-operation responses', () => {
+      const harness = createHarness({
+        containers: [createContainer({ id: 'c1', name: 'edge-api' })],
+      });
+      harness.deps.updateOperationStore.getActiveOperationByContainerName.mockReturnValue({
+        id: 'op-1',
+        status: 'queued',
+        phase: 'queued',
+        updatedAt: '2026-04-01T12:00:00.000Z',
+        batchId: 'batch-3',
+        queuePosition: 'not-a-number',
+        queueTotal: '2',
+      });
+
+      const listRes = callGetContainers(harness.handlers);
+      const singleRes = callGetContainer(harness.handlers, 'c1');
+
+      expect(listRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: [
+            expect.objectContaining({
+              updateOperation: expect.not.objectContaining({
+                batchId: expect.anything(),
+                queuePosition: expect.anything(),
+                queueTotal: expect.anything(),
+              }),
+            }),
+          ],
+        }),
+      );
+      expect(singleRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          updateOperation: expect.not.objectContaining({
+            batchId: expect.anything(),
+            queuePosition: expect.anything(),
+            queueTotal: expect.anything(),
           }),
         }),
       );
@@ -2415,7 +2508,7 @@ describe('api/container/crud', () => {
       const harness = createHarness({
         containers: [createContainer({ id: 'new-c1', name: 'edge-api' })],
       });
-      harness.deps.updateOperationStore.getInProgressOperationByContainerId.mockImplementation(
+      harness.deps.updateOperationStore.getActiveOperationByContainerId.mockImplementation(
         (id: string) =>
           id === 'new-c1'
             ? {
@@ -2435,10 +2528,10 @@ describe('api/container/crud', () => {
       const singleRes = callGetContainer(harness.handlers, 'new-c1');
 
       expect(
-        harness.deps.updateOperationStore.getInProgressOperationByContainerId,
+        harness.deps.updateOperationStore.getActiveOperationByContainerId,
       ).toHaveBeenCalledWith('new-c1');
       expect(
-        harness.deps.updateOperationStore.getInProgressOperationByContainerName,
+        harness.deps.updateOperationStore.getActiveOperationByContainerName,
       ).not.toHaveBeenCalled();
       expect(listRes.json).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -2470,7 +2563,7 @@ describe('api/container/crud', () => {
       const harness = createHarness({
         containers: [createContainer({ id: 'c1', name: 'edge-api' })],
       });
-      harness.deps.updateOperationStore.getInProgressOperationByContainerName.mockReturnValue({
+      harness.deps.updateOperationStore.getActiveOperationByContainerName.mockReturnValue({
         id: 'op-1',
         status: 'success',
         phase: 'complete',

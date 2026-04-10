@@ -34,6 +34,7 @@ export function actionIcon(action: string): string {
   if (action.includes('update-available')) return 'updates';
   if (action.includes('update-applied')) return 'check';
   if (action.includes('update-failed')) return 'xmark';
+  if (action.includes('notification-delivery-failed')) return 'xmark';
   if (action.includes('security-alert')) return 'security';
   if (action.includes('agent-disconnect')) return 'network';
   if (action.includes('rollback') || action === 'auto-rollback') return 'restart';

@@ -200,16 +200,17 @@ By contributing, you agree that your contributions will be licensed under the [G
 
 | Priority | Step | What it does | On Failure |
 |---|---|---|---|
-| 0 | `clean-tree` | Rejects uncommitted changes | Fail |
-| 1 | `ts-nocheck` | Checks for `@ts-nocheck` directives | Fail |
-| 2 | `biome check` | Linting and formatting | Fail |
-| 3 | `qlty` | Static analysis (medium+ severity gate) | Fail |
-| 4 | `build-and-test` | Parallel builds + tests WITHOUT coverage | Fail |
-| 5 | `e2e` | End-to-end Cucumber tests | Fail |
-| 6 | `e2e-playwright` | Playwright browser tests | Fail |
-| 7 | `zizmor` | GitHub Actions security scanning | Fail |
+| 1 | `clean-tree` | Rejects uncommitted changes | Fail |
+| 2 | `ts-nocheck` | Checks for `@ts-nocheck` directives | Fail |
+| 3 | `biome check` | Linting and formatting | Fail |
+| 4 | `qlty` | Static analysis (medium+ severity gate) | Fail |
+| 5 | `coverage` | Sharded app+ui parallel vitest with 100% threshold | Fail |
+| 6 | `build` | Sharded app+ui parallel tsc/vite (no tests) | Fail |
+| 7 | `e2e` | End-to-end Cucumber tests | Fail |
+| 8 | `e2e-playwright` | Playwright browser tests | Fail |
+| 9 | `zizmor` | GitHub Actions security scanning | Fail |
 
-Coverage enforcement runs in the `pre-commit` hook (not pre-push). When coverage fails, `.coverage-gaps.json` contains exact files and uncovered lines.
+The `pre-commit` hook runs a scoped `vitest --changed` on staged workspaces for fast feedback. Full 100% coverage enforcement happens in the pre-push `coverage` step; on failure it writes `.coverage-gaps.json` with per-file metrics plus uncovered line numbers and branch ids parsed from `lcov.info`.
 
 ### Coverage policy
 

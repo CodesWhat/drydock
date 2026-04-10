@@ -258,9 +258,7 @@ class Hass {
         watcherName,
         containerName: staleContainerName,
       });
-      /* v8 ignore start -- defensive: stale candidates are always different from current topic */
       if (staleStateTopic !== currentStateTopic) {
-        /* v8 ignore stop */
         staleStateTopics.add(staleStateTopic);
       }
     }

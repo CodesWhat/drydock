@@ -139,7 +139,7 @@ describe('Container Actions Service', () => {
     it('posts to update endpoint', async () => {
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ message: 'Container updated successfully' }),
+        json: async () => ({ message: 'Container update accepted', operationId: 'op-123' }),
       } as any);
 
       const result = await updateContainer('abc123');
@@ -148,7 +148,33 @@ describe('Container Actions Service', () => {
         method: 'POST',
         credentials: 'include',
       });
-      expect(result).toEqual({ message: 'Container updated successfully' });
+      expect(result).toEqual({ message: 'Container update accepted', operationId: 'op-123' });
+    });
+
+    it('posts queue batch metadata when provided', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ message: 'Container update accepted', operationId: 'op-123' }),
+      } as any);
+
+      await updateContainer('abc123', {
+        batchId: 'batch-1',
+        queuePosition: 2,
+        queueTotal: 4,
+      });
+
+      expect(fetch).toHaveBeenCalledWith('/api/v1/containers/abc123/update', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          batchId: 'batch-1',
+          queuePosition: 2,
+          queueTotal: 4,
+        }),
+      });
     });
 
     it('throws with server error message on failure', async () => {

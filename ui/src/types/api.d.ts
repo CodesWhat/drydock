@@ -10,6 +10,7 @@ export interface ApiComponent {
   name: string;
   configuration: Record<string, unknown>;
   agent?: string;
+  metadata?: Record<string, unknown>;
 }
 
 /** Agent shape returned by GET /api/agents. */
@@ -72,6 +73,9 @@ export interface ApiContainerUpdateOperation {
   phase: ApiContainerUpdateOperationPhase;
   createdAt: string;
   updatedAt: string;
+  batchId?: string;
+  queuePosition?: number;
+  queueTotal?: number;
   containerId?: string;
   containerName?: string;
   triggerName?: string;

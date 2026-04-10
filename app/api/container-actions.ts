@@ -1,12 +1,15 @@
+import crypto from 'node:crypto';
 import express, { type Request, type Response } from 'express';
 import nocache from 'nocache';
 import { getServerConfiguration } from '../configuration/index.js';
 import logger from '../log/index.js';
+import { sanitizeLogParam } from '../log/sanitize.js';
 import type { AuditEntry } from '../model/audit.js';
-import { clearDetectedUpdateState } from '../model/container.js';
+import { type Container, clearDetectedUpdateState } from '../model/container.js';
 import { getContainerActionsCounter } from '../prometheus/container-actions.js';
 import * as registry from '../registry/index.js';
 import * as storeContainer from '../store/container.js';
+import * as updateOperationStore from '../store/update-operation.js';
 import Trigger from '../triggers/providers/Trigger.js';
 import { recordAuditEvent } from './audit-events.js';
 import { findDockerTriggerForContainer, NO_DOCKER_TRIGGER_FOUND_ERROR } from './docker-trigger.js';
@@ -44,6 +47,93 @@ type DockerWatcher = {
     getContainer: (id: string) => DockerContainerHandle;
   };
 };
+
+type UpdateQueueBatchMetadata = {
+  batchId: string;
+  queuePosition: number;
+  queueTotal: number;
+};
+
+function parsePositiveInteger(value: unknown): number | undefined {
+  if (typeof value === 'number') {
+    return Number.isSafeInteger(value) && value > 0 ? value : undefined;
+  }
+  if (typeof value !== 'string' || !/^\d+$/.test(value)) {
+    return undefined;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : undefined;
+}
+
+function parseUpdateQueueBatchMetadata(body: unknown): UpdateQueueBatchMetadata | undefined {
+  if (!body || typeof body !== 'object') {
+    return undefined;
+  }
+
+  const candidate = body as Record<string, unknown>;
+  const batchId = typeof candidate.batchId === 'string' ? candidate.batchId.trim() : '';
+  const queuePosition = parsePositiveInteger(candidate.queuePosition);
+  const queueTotal = parsePositiveInteger(candidate.queueTotal);
+
+  if (!batchId || !queuePosition || !queueTotal || queuePosition > queueTotal) {
+    return undefined;
+  }
+
+  return {
+    batchId,
+    queuePosition,
+    queueTotal,
+  };
+}
+
+function clearManualUpdateDetectionState(id: string) {
+  const containerAfterTrigger = storeContainer.getContainer(id);
+  if (
+    containerAfterTrigger &&
+    (containerAfterTrigger.result || containerAfterTrigger.updateAvailable)
+  ) {
+    const clearedAtMs = Date.now();
+    storeContainer.markPendingFreshStateAfterManualUpdate(containerAfterTrigger, clearedAtMs);
+    storeContainer.updateContainer(clearDetectedUpdateState(containerAfterTrigger));
+  }
+}
+
+function recordAcceptedUpdateFailure(id: string, container: Container, error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  log.warn(`Error updating container ${sanitizeLogParam(id)} (${sanitizeLogParam(message)})`);
+  recordAuditEvent({
+    action: 'container-update',
+    container,
+    status: 'error',
+    details: message,
+  });
+}
+
+function markAcceptedQueuedOperationFailed(operationId: string, error: unknown) {
+  const operation = updateOperationStore.getOperationById(operationId);
+  if (operation?.status !== 'queued') {
+    return;
+  }
+
+  const message = error instanceof Error ? error.message : String(error);
+  updateOperationStore.updateOperation(operationId, {
+    status: 'failed',
+    lastError: message,
+  });
+}
+
+function getActiveUpdateOperationForContainer(container: Container) {
+  const byId = updateOperationStore.getActiveOperationByContainerId(container.id);
+  if (byId) {
+    return byId;
+  }
+
+  const byName = updateOperationStore.getActiveOperationByContainerName(container.name);
+  const isLegacyOperation =
+    byName && typeof byName === 'object' && !('containerId' in (byName as Record<string, unknown>));
+  return isLegacyOperation ? byName : undefined;
+}
 
 /**
  * Execute a container action (start, stop, restart).
@@ -160,6 +250,16 @@ async function updateContainer(req: Request, res: Response) {
     return;
   }
 
+  const activeOperation = getActiveUpdateOperationForContainer(container);
+  if (activeOperation) {
+    sendErrorResponse(
+      res,
+      409,
+      `Container update already ${activeOperation.status === 'queued' ? 'queued' : 'in progress'}`,
+    );
+    return;
+  }
+
   if (!container.updateAvailable) {
     sendErrorResponse(res, 400, 'No update available for this container');
     return;
@@ -187,35 +287,31 @@ async function updateContainer(req: Request, res: Response) {
     return;
   }
 
-  try {
-    await trigger.trigger(container);
-    // Drop stale raw update data so the next store validation recomputes this
-    // container as up to date until the watcher performs an authoritative rescan.
-    const containerAfterTrigger = storeContainer.getContainer(id);
-    if (
-      containerAfterTrigger &&
-      (containerAfterTrigger.result || containerAfterTrigger.updateAvailable)
-    ) {
-      const clearedAtMs = Date.now();
-      storeContainer.markPendingFreshStateAfterManualUpdate(containerAfterTrigger, clearedAtMs);
-      storeContainer.updateContainer(clearDetectedUpdateState(containerAfterTrigger));
+  const operationId = crypto.randomUUID();
+  const batchMetadata = parseUpdateQueueBatchMetadata(req.body);
+  getContainerActionsCounter()?.inc({ action: 'container-update' });
+
+  updateOperationStore.insertOperation({
+    id: operationId,
+    containerId: container.id,
+    containerName: container.name,
+    status: 'queued',
+    phase: 'queued',
+    ...batchMetadata,
+  });
+
+  void (async () => {
+    try {
+      await trigger.trigger(container, { operationId });
+      clearManualUpdateDetectionState(id);
+      recordAuditEvent({ action: 'container-update', container, status: 'success' });
+    } catch (e: unknown) {
+      markAcceptedQueuedOperationFailed(operationId, e);
+      recordAcceptedUpdateFailure(id, container, e);
     }
-    const updatedContainer = storeContainer.getContainer(id);
-    recordAuditEvent({ action: 'container-update', container, status: 'success' });
-    getContainerActionsCounter()?.inc({ action: 'container-update' });
-    res.status(200).json({ message: 'Container updated successfully', result: updatedContainer });
-  } catch (e: unknown) {
-    handleContainerActionError({
-      error: e,
-      action: 'container-update',
-      actionLabel: 'updating',
-      id,
-      container,
-      log,
-      res,
-    });
-    getContainerActionsCounter()?.inc({ action: 'container-update' });
-  }
+  })();
+
+  res.status(202).json({ message: 'Container update accepted', operationId });
 }
 
 /**

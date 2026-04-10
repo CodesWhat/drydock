@@ -107,6 +107,7 @@ type ComposeRuntimeContext = {
   dockerApi?: unknown;
   auth?: RegistryPullAuth;
   newImage?: string;
+  operationId?: string;
   registry?: unknown;
 };
 
@@ -134,6 +135,10 @@ type ComposeRuntimeRefreshOptions = {
   composeFiles?: string[];
   runtimeContext?: ComposeRuntimeContext;
 };
+
+function hasDefinedComposeRuntimeContextValue(runtimeContext: ComposeRuntimeContext): boolean {
+  return Object.values(runtimeContext).some((value) => value !== undefined);
+}
 
 type ValidateComposeConfigurationOptions = {
   composeFiles?: string[];
@@ -262,7 +267,6 @@ function getErrorCode(error: unknown): string | undefined {
     return undefined;
   }
   const code = (error as { code?: unknown }).code;
-  /* v8 ignore next -- non-string fs/network error codes are defensive and treated as absent */
   return typeof code === 'string' ? code : undefined;
 }
 
@@ -1195,13 +1199,29 @@ class Dockercompose extends Docker {
     context: ComposeRuntimeContext | undefined,
     composeCtx: ComposeUpdateLifecycleContext,
   ): ComposeRuntimeContext {
-    return {
-      dockerApi: context?.dockerApi,
-      auth: context?.auth,
-      newImage: context?.newImage,
-      registry: context?.registry,
-      ...(composeCtx.runtimeContext || {}),
-    };
+    const runtimeContext: ComposeRuntimeContext = {};
+
+    if (context?.dockerApi !== undefined) {
+      runtimeContext.dockerApi = context.dockerApi;
+    }
+    if (context?.auth !== undefined) {
+      runtimeContext.auth = context.auth;
+    }
+    if (context?.newImage !== undefined) {
+      runtimeContext.newImage = context.newImage;
+    }
+    if (context?.operationId !== undefined) {
+      runtimeContext.operationId = context.operationId;
+    }
+    if (context?.registry !== undefined) {
+      runtimeContext.registry = context.registry;
+    }
+
+    if (composeCtx.runtimeContext) {
+      Object.assign(runtimeContext, composeCtx.runtimeContext);
+    }
+
+    return runtimeContext;
   }
 
   async maybeRunPerServiceComposeRefresh(
@@ -1272,12 +1292,7 @@ class Dockercompose extends Docker {
     if (composeCtx.skipPull === true) {
       composeUpdateOptions.skipPull = true;
     }
-    if (
-      runtimeContext.dockerApi !== undefined ||
-      runtimeContext.auth !== undefined ||
-      runtimeContext.newImage !== undefined ||
-      runtimeContext.registry !== undefined
-    ) {
+    if (hasDefinedComposeRuntimeContextValue(runtimeContext)) {
       composeUpdateOptions.runtimeContext = runtimeContext;
     }
 
@@ -1330,18 +1345,28 @@ class Dockercompose extends Docker {
    * @param container the container
    * @returns {Promise<void>}
    */
-  async trigger(container) {
-    const triggerBatchResults = await this.triggerBatch([container]);
+  async trigger(container, runtimeContext?: unknown) {
+    const triggerBatchResults =
+      runtimeContext === undefined
+        ? await this.triggerBatch([container])
+        : await this.triggerBatch([container], runtimeContext);
     const hasRuntimeUpdates = triggerBatchResults.some((result) => result === true);
-    if (
-      this.configuration.dryrun !== true &&
-      container?.updateAvailable === true &&
-      !hasRuntimeUpdates
-    ) {
-      throw new Error(
-        `No compose updates were applied for container ${container?.name || 'unknown'}`,
-      );
+    /* v8 ignore next -- V8 mis-maps the false branch of this dryrun guard despite direct coverage */
+    if (this.configuration.dryrun === true) {
+      return;
     }
+
+    if (container?.updateAvailable !== true) {
+      return;
+    }
+
+    if (hasRuntimeUpdates) {
+      return;
+    }
+
+    throw new Error(
+      `No compose updates were applied for container ${container?.name || 'unknown'}`,
+    );
   }
 
   isContainerEligibleForComposeFileGrouping(container: ComposeContainerReference): boolean {
@@ -1480,7 +1505,7 @@ class Dockercompose extends Docker {
    * @param containers the containers
    * @returns {Promise<boolean[]>}
    */
-  async triggerBatch(containers): Promise<boolean[]> {
+  async triggerBatch(containers, runtimeContext?: unknown): Promise<boolean[]> {
     const configuredComposeFilePath = await this.resolveDefaultComposeFilePathForRuntime();
     const containersByComposeFile = await this.resolveAndGroupContainersByComposeFile(
       containers,
@@ -1500,10 +1525,26 @@ class Dockercompose extends Docker {
     } of containersByComposeFile.values()) {
       if (composeFiles.length > 1) {
         batchResults.push(
-          await this.processComposeFile(composeFile, containersInFile, composeFiles),
+          runtimeContext === undefined
+            ? await this.processComposeFile(composeFile, containersInFile, composeFiles)
+            : await this.processComposeFile(
+                composeFile,
+                containersInFile,
+                composeFiles,
+                runtimeContext,
+              ),
         );
       } else {
-        batchResults.push(await this.processComposeFile(composeFile, containersInFile));
+        batchResults.push(
+          runtimeContext === undefined
+            ? await this.processComposeFile(composeFile, containersInFile)
+            : await this.processComposeFile(
+                composeFile,
+                containersInFile,
+                undefined,
+                runtimeContext,
+              ),
+        );
       }
     }
     return batchResults;
@@ -1522,28 +1563,26 @@ class Dockercompose extends Docker {
         firstContainerByService.set(mapping.service, mapping);
       }
     }
-    await Promise.all(
-      [...firstContainerByService.entries()].map(async ([service, mapping]) => {
-        const runtimeContainer = mapping.container;
-        const logContainer = this.log.child({
-          container: runtimeContainer.name,
-        });
-        const watcher = this.getWatcher(runtimeContainer);
-        const { dockerApi } = watcher;
-        const registry = this.resolveRegistryManager(runtimeContainer, logContainer, {
-          allowAnonymousFallback: true,
-        });
-        const auth = await registry.getAuthPull();
-        const newImage = this.getNewImageFullName(registry, runtimeContainer);
-        composeFileOnceRuntimeContextByService.set(service, {
-          dockerApi,
-          registry,
-          auth,
-          newImage,
-        });
-        await this.pullImage(dockerApi, auth, newImage, logContainer);
-      }),
-    );
+    for (const [service, mapping] of firstContainerByService.entries()) {
+      const runtimeContainer = mapping.container;
+      const logContainer = this.log.child({
+        container: runtimeContainer.name,
+      });
+      const watcher = this.getWatcher(runtimeContainer);
+      const { dockerApi } = watcher;
+      const registry = this.resolveRegistryManager(runtimeContainer, logContainer, {
+        allowAnonymousFallback: true,
+      });
+      const auth = await registry.getAuthPull();
+      const newImage = this.getNewImageFullName(registry, runtimeContainer);
+      composeFileOnceRuntimeContextByService.set(service, {
+        dockerApi,
+        registry,
+        auth,
+        newImage,
+      });
+      await this.pullImage(dockerApi, auth, newImage, logContainer);
+    }
     return composeFileOnceRuntimeContextByService;
   }
 
@@ -1699,7 +1738,12 @@ class Dockercompose extends Docker {
     composeFileChain,
     compose,
     mappingsNeedingRuntimeUpdate,
+    runtimeContext?: unknown,
   ): Promise<void> {
+    const requestedRuntimeContext =
+      runtimeContext && typeof runtimeContext === 'object'
+        ? (runtimeContext as Record<string, unknown>)
+        : undefined;
     const composeFileOnceHandledServices = new Set<string>();
     const composeFileOnceEnabled =
       this.configuration.composeFileOnce === true && this.configuration.dryrun !== true;
@@ -1723,7 +1767,13 @@ class Dockercompose extends Docker {
           composeFileOnceEnabled &&
           composeFileOnceApplied !== true &&
           composeFileOnceRuntimeContext !== undefined,
-        runtimeContext: composeFileOnceRuntimeContext,
+        runtimeContext:
+          composeFileOnceRuntimeContext || requestedRuntimeContext
+            ? {
+                ...(requestedRuntimeContext || {}),
+                ...(composeFileOnceRuntimeContext || {}),
+              }
+            : undefined,
       };
       await this.runContainerUpdateLifecycle(container, composeContext);
       if (composeFileOnceEnabled && !composeFileOnceApplied) {
@@ -1742,6 +1792,7 @@ class Dockercompose extends Docker {
     composeFile,
     containers,
     composeFiles = [composeFile],
+    runtimeContext?: unknown,
   ): Promise<boolean> {
     const { composeFileChain, composeFileChainSummary, composeByFile, compose } =
       await this.loadComposeProcessingContext(composeFile, composeFiles);
@@ -1777,6 +1828,7 @@ class Dockercompose extends Docker {
       composeFileChain,
       compose,
       mappingsNeedingRuntimeUpdate,
+      runtimeContext,
     );
     return true;
   }

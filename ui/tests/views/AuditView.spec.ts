@@ -214,6 +214,27 @@ describe('AuditView', () => {
       expect((wrapper.find('select').element as HTMLSelectElement).value).toBe('container-update');
     });
 
+    it('accepts notification-delivery-failed as a valid action filter from route query', async () => {
+      mockRoute.query = {
+        action: 'notification-delivery-failed',
+      };
+      mockGetAuditLog.mockResolvedValue({
+        entries: [makeEntry({ action: 'notification-delivery-failed', status: 'error' })],
+        total: 1,
+      });
+
+      const wrapper = await mountAuditView();
+
+      expect(mockGetAuditLog).toHaveBeenCalledWith({
+        page: 1,
+        limit: 50,
+        action: 'notification-delivery-failed',
+      });
+      expect((wrapper.find('select').element as HTMLSelectElement).value).toBe(
+        'notification-delivery-failed',
+      );
+    });
+
     it('loads using route query date range filters', async () => {
       mockRoute.query = {
         from: '2026-01-01',

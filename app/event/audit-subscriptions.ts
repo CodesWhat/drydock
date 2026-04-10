@@ -4,6 +4,7 @@ import * as auditStore from '../store/audit.js';
 import type {
   AgentDisconnectedEventPayload,
   ContainerLifecycleEventPayload,
+  ContainerUpdateAppliedEvent,
   ContainerUpdateFailedEventPayload,
   SecurityAlertEventPayload,
 } from './index.js';
@@ -26,7 +27,7 @@ type EventRegistrarFn<TPayload> = (handler: (payload: TPayload) => void) => void
 
 export interface AuditSubscriptionRegistrars {
   registerContainerReport: OrderedEventRegistrarFn<ContainerReport>;
-  registerContainerUpdateApplied: OrderedEventRegistrarFn<string>;
+  registerContainerUpdateApplied: OrderedEventRegistrarFn<ContainerUpdateAppliedEvent>;
   registerContainerUpdateFailed: OrderedEventRegistrarFn<ContainerUpdateFailedEventPayload>;
   registerSecurityAlert: OrderedEventRegistrarFn<SecurityAlertEventPayload>;
   registerAgentDisconnected: OrderedEventRegistrarFn<AgentDisconnectedEventPayload>;
@@ -37,6 +38,22 @@ export interface AuditSubscriptionRegistrars {
 
 const securityAlertAuditSeenAt = new Map<string, number>();
 const agentDisconnectedAuditSeenAt = new Map<string, number>();
+
+function getContainerUpdateAppliedEventContainerName(
+  payload: ContainerUpdateAppliedEvent,
+): string | undefined {
+  if (typeof payload === 'string') {
+    return payload || undefined;
+  }
+
+  if (!payload || typeof payload !== 'object') {
+    return undefined;
+  }
+
+  return typeof payload.containerName === 'string' && payload.containerName !== ''
+    ? payload.containerName
+    : undefined;
+}
 
 function pruneAuditDedupeCache(
   cache: Map<string, number>,
@@ -83,12 +100,16 @@ export function registerAuditLogSubscriptions(registrars: AuditSubscriptionRegis
     }
   }, AUDIT_HANDLER_OPTIONS);
 
-  registrars.registerContainerUpdateApplied(async (containerId: string) => {
+  registrars.registerContainerUpdateApplied(async (payload) => {
+    const containerName = getContainerUpdateAppliedEventContainerName(payload);
+    if (!containerName) {
+      return;
+    }
     auditStore.insertAudit({
       id: '',
       timestamp: new Date().toISOString(),
       action: 'update-applied',
-      containerName: containerId,
+      containerName,
       status: 'success',
     });
     getAuditCounter()?.inc({ action: 'update-applied' });

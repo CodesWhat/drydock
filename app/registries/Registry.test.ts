@@ -298,6 +298,36 @@ describe('getImageManifestDigest', () => {
     });
   });
 
+  test('should fall back to manifest digest when HEAD response omits docker-content-digest', async () => {
+    const registryMocked = createMockedRegistry();
+    registryMocked.callRegistry = vi.fn((options) => {
+      if (options.method === 'head') {
+        return { headers: {} };
+      }
+      if (options.url === 'url/image/manifests/tag') {
+        return {
+          schemaVersion: 2,
+          mediaType: 'application/vnd.docker.distribution.manifest.v2+json',
+          config: {
+            digest: 'sha256:config',
+          },
+        };
+      }
+      if (options.url === 'url/image/blobs/sha256:config') {
+        return {
+          created: '2026-03-04T11:22:33.000Z',
+        };
+      }
+      throw new Error(`Unexpected request: ${JSON.stringify(options)}`);
+    });
+
+    await expect(registryMocked.getImageManifestDigest(imageInput())).resolves.toStrictEqual({
+      version: 2,
+      digest: 'tag',
+      created: '2026-03-04T11:22:33.000Z',
+    });
+  });
+
   test('should ignore invalid created date from schemaVersion 2 config blob', async () => {
     const registryMocked = createMockedRegistry();
     registryMocked.callRegistry = vi.fn((options) => {
@@ -616,6 +646,58 @@ describe('getImageManifestDigest', () => {
       }
       throw new Error(`Unexpected request: ${JSON.stringify(options)}`);
     });
+    const result = await registryMocked.getImageManifestDigest(imageInput());
+    expect(result).toStrictEqual({ version: 1, digest: 'digest_x' });
+  });
+
+  test('should include created date when legacy manifest config blob metadata is present', async () => {
+    const registryMocked = createMockedRegistry();
+    registryMocked.callRegistry = vi.fn((options) => {
+      if (options.headers?.Accept === ALL_MANIFEST_ACCEPT) {
+        return manifestListResponse([
+          platformManifest(
+            'amd64',
+            'linux',
+            'digest_x',
+            'application/vnd.docker.container.image.v1+json',
+          ),
+        ]);
+      }
+      if (options.url?.includes('/blobs/')) {
+        return {
+          created: '2026-04-10T12:34:56.000Z',
+        };
+      }
+      throw new Error(`Unexpected request: ${JSON.stringify(options)}`);
+    });
+
+    const result = await registryMocked.getImageManifestDigest(imageInput());
+    expect(result).toStrictEqual({
+      version: 1,
+      digest: 'digest_x',
+      created: '2026-04-10T12:34:56.000Z',
+    });
+  });
+
+  test('should omit created date when legacy manifest config blob metadata is missing', async () => {
+    const registryMocked = createMockedRegistry();
+    registryMocked.callRegistry = vi.fn((options) => {
+      if (options.headers?.Accept === ALL_MANIFEST_ACCEPT) {
+        return manifestListResponse([
+          platformManifest(
+            'amd64',
+            'linux',
+            'digest_x',
+            'application/vnd.docker.container.image.v1+json',
+          ),
+        ]);
+      }
+      if (options.url?.includes('/blobs/')) {
+        return {};
+      }
+      throw new Error(`Unexpected request: ${JSON.stringify(options)}`);
+    });
+
     const result = await registryMocked.getImageManifestDigest(imageInput());
     expect(result).toStrictEqual({ version: 1, digest: 'digest_x' });
   });

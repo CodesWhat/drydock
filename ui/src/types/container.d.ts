@@ -43,6 +43,9 @@ export interface ContainerUpdateOperation {
   status: ContainerUpdateOperationStatus;
   phase: ContainerUpdateOperationPhase;
   updatedAt: string;
+  batchId?: string;
+  queuePosition?: number;
+  queueTotal?: number;
   fromVersion?: string;
   toVersion?: string;
   targetImage?: string;
@@ -50,6 +53,7 @@ export interface ContainerUpdateOperation {
 
 export interface Container {
   id: string;
+  identityKey: string;
   name: string;
   image: string;
   icon: string;
@@ -60,6 +64,7 @@ export interface Container {
   imageDigestWatch?: boolean;
   imageTagSemver?: boolean;
   tagPrecision?: 'specific' | 'floating';
+  tagPinned?: boolean;
   releaseLink?: string;
   suggestedTag?: string;
   sourceRepo?: string;

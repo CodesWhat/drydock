@@ -4,6 +4,7 @@ import nocache from 'nocache';
 import {
   getNotificationTriggerIdsFromState,
   normalizeNotificationTriggerIds,
+  resolveNotificationTriggerIds,
 } from '../notifications/trigger-policy.js';
 import * as registry from '../registry/index.js';
 import * as notificationStore from '../store/notification.js';
@@ -64,14 +65,10 @@ function updateNotificationRule(req, res) {
     const allowedTriggerIds = getAllowedNotificationTriggerIds();
     const triggersRequested = notificationRuleToUpdate.value.triggers;
     if (Array.isArray(triggersRequested)) {
-      const triggersNormalized = normalizeNotificationTriggerIds(
-        triggersRequested,
-        allowedTriggerIds,
+      const invalidTriggers = triggersRequested.filter(
+        (triggerId) => resolveNotificationTriggerIds(triggerId, allowedTriggerIds).length === 0,
       );
-      if (triggersNormalized.length !== triggersRequested.length) {
-        const invalidTriggers = triggersRequested.filter(
-          (triggerId) => !allowedTriggerIds.has(triggerId),
-        );
+      if (invalidTriggers.length > 0) {
         sendErrorResponse(
           res,
           400,
@@ -79,6 +76,11 @@ function updateNotificationRule(req, res) {
         );
         return;
       }
+
+      const triggersNormalized = normalizeNotificationTriggerIds(
+        triggersRequested,
+        allowedTriggerIds,
+      );
       notificationRuleToUpdate.value.triggers = triggersNormalized;
     }
 

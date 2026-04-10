@@ -1,16 +1,28 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 
-const { mockGetInProgressOperationByContainerName, mockInsertOperation, mockUpdateOperation } =
-  vi.hoisted(() => ({
-    mockGetInProgressOperationByContainerName: vi.fn(),
-    mockInsertOperation: vi.fn(),
-    mockUpdateOperation: vi.fn(),
-  }));
+const {
+  mockGetInProgressOperationByContainerName,
+  mockGetOperationById,
+  mockInsertOperation,
+  mockUpdateOperation,
+  mockGetActiveOperationByContainerName,
+  mockGetActiveOperationByContainerId,
+} = vi.hoisted(() => ({
+  mockGetInProgressOperationByContainerName: vi.fn(),
+  mockGetOperationById: vi.fn(),
+  mockInsertOperation: vi.fn(),
+  mockUpdateOperation: vi.fn(),
+  mockGetActiveOperationByContainerName: vi.fn(),
+  mockGetActiveOperationByContainerId: vi.fn(),
+}));
 
 vi.mock('../../../store/update-operation.js', () => ({
   getInProgressOperationByContainerName: mockGetInProgressOperationByContainerName,
+  getOperationById: mockGetOperationById,
   insertOperation: mockInsertOperation,
   updateOperation: mockUpdateOperation,
+  getActiveOperationByContainerName: mockGetActiveOperationByContainerName,
+  getActiveOperationByContainerId: mockGetActiveOperationByContainerId,
 }));
 
 import ContainerUpdateExecutor from './ContainerUpdateExecutor.js';
@@ -106,6 +118,7 @@ describe('ContainerUpdateExecutor', () => {
     vi.clearAllMocks();
     mockInsertOperation.mockReturnValue({ id: 'op-1' });
     mockGetInProgressOperationByContainerName.mockReturnValue(undefined);
+    mockGetOperationById.mockReturnValue(undefined);
   });
 
   test('constructor provides default configuration fallback', () => {
@@ -249,6 +262,32 @@ describe('ContainerUpdateExecutor', () => {
       expect.objectContaining({
         status: 'succeeded',
         phase: 'recovered-cleanup-temp',
+      }),
+    );
+  });
+
+  test('reconcile records successful cleanup details when stale temp container is removed', async () => {
+    const pending = {
+      id: 'op-1',
+      oldName: 'web',
+      tempName: 'web-old-1',
+      fromVersion: '1.0.0',
+      toVersion: '1.0.1',
+    };
+    mockGetInProgressOperationByContainerName.mockReturnValue(pending);
+
+    const executor = createExecutor();
+    vi.spyOn(executor, 'inspectContainerByIdentifier')
+      .mockResolvedValueOnce({ container: {}, inspection: {} })
+      .mockResolvedValueOnce({ container: {}, inspection: {} });
+    vi.spyOn(executor, 'stopAndRemoveContainerBestEffort').mockResolvedValueOnce(true);
+
+    await executor.reconcileInProgressContainerUpdateOperation({}, createContainer(), createLog());
+
+    expect(executor.recordRollbackTelemetry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reason: 'startup_reconcile_cleanup_temp',
+        details: 'Recovered stale renamed container web-old-1',
       }),
     );
   });
@@ -471,6 +510,39 @@ describe('ContainerUpdateExecutor', () => {
     );
   });
 
+  test('execute updates a pre-created queued operation when runtime context provides an operation id', async () => {
+    mockGetOperationById.mockReturnValue({
+      id: 'queued-op',
+      status: 'queued',
+    });
+    mockUpdateOperation.mockReturnValue({ id: 'queued-op' });
+    const context = createContext({
+      currentContainerSpec: createCurrentContainerSpec({
+        State: { Running: false },
+        HostConfig: { AutoRemove: false },
+      }),
+    });
+    const executor = createExecutor({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      hasHealthcheckConfigured: vi.fn(() => false),
+    });
+
+    await expect(
+      executor.execute(context, createContainer(), createLog(), { operationId: ' queued-op ' }),
+    ).resolves.toBe(true);
+
+    expect(mockGetOperationById).toHaveBeenCalledWith('queued-op');
+    expect(mockUpdateOperation).toHaveBeenCalledWith(
+      'queued-op',
+      expect.objectContaining({
+        containerId: 'container-id',
+        status: 'in-progress',
+        phase: 'pulling',
+      }),
+    );
+    expect(mockInsertOperation).not.toHaveBeenCalled();
+  });
+
   test('execute performs successful update without runtime start when old container is stopped', async () => {
     const context = createContext({
       currentContainerSpec: createCurrentContainerSpec({
@@ -598,6 +670,159 @@ describe('ContainerUpdateExecutor', () => {
       'web',
       log,
       300_000,
+    );
+  });
+
+  test('execute ignores non-string requested operation ids in runtime context', async () => {
+    const context = createContext({
+      currentContainerSpec: createCurrentContainerSpec({
+        State: { Running: false },
+        HostConfig: { AutoRemove: false },
+      }),
+    });
+    const executor = createExecutor({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      hasHealthcheckConfigured: vi.fn(() => false),
+    });
+
+    await expect(
+      executor.execute(context, createContainer(), createLog(), {
+        operationId: 123,
+      }),
+    ).resolves.toBe(true);
+
+    expect(mockInsertOperation.mock.calls.at(-1)?.[0]?.id).toBeUndefined();
+  });
+
+  test('execute ignores blank requested operation ids in runtime context', async () => {
+    const context = createContext({
+      currentContainerSpec: createCurrentContainerSpec({
+        State: { Running: false },
+        HostConfig: { AutoRemove: false },
+      }),
+    });
+    const executor = createExecutor({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      hasHealthcheckConfigured: vi.fn(() => false),
+    });
+
+    await expect(
+      executor.execute(context, createContainer(), createLog(), {
+        operationId: '   ',
+      }),
+    ).resolves.toBe(true);
+
+    expect(mockInsertOperation.mock.calls.at(-1)?.[0]?.id).toBeUndefined();
+  });
+
+  test('execute trims and reuses valid requested operation ids in runtime context', async () => {
+    const context = createContext({
+      currentContainerSpec: createCurrentContainerSpec({
+        State: { Running: false },
+        HostConfig: { AutoRemove: false },
+      }),
+    });
+    const executor = createExecutor({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      hasHealthcheckConfigured: vi.fn(() => false),
+    });
+
+    await expect(
+      executor.execute(context, createContainer(), createLog(), {
+        operationId: ' custom-op ',
+      }),
+    ).resolves.toBe(true);
+
+    expect(mockInsertOperation.mock.calls.at(-1)?.[0]?.id).toBe('custom-op');
+  });
+
+  test('execute reuses a queued pre-created operation instead of inserting a new one', async () => {
+    const context = createContext({
+      currentContainerSpec: createCurrentContainerSpec({
+        State: { Running: false },
+        HostConfig: { AutoRemove: false },
+      }),
+    });
+    mockGetOperationById.mockReturnValue({
+      id: 'queued-op-1',
+      status: 'queued',
+    });
+    mockUpdateOperation.mockReturnValue({ id: 'queued-op-1' });
+    const executor = createExecutor({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      hasHealthcheckConfigured: vi.fn(() => false),
+    });
+
+    await expect(
+      executor.execute(context, createContainer(), createLog(), {
+        operationId: 'queued-op-1',
+      }),
+    ).resolves.toBe(true);
+
+    expect(mockUpdateOperation.mock.calls[0]?.[0]).toBe('queued-op-1');
+    expect(mockUpdateOperation.mock.calls[0]?.[1]).toEqual(
+      expect.objectContaining({
+        containerId: 'container-id',
+        containerName: 'web',
+        triggerName: 'docker.update',
+        oldContainerId: 'old-container-id',
+        oldName: 'web',
+        tempName: expect.stringMatching(/^web-old-/),
+        status: 'in-progress',
+        phase: 'pulling',
+      }),
+    );
+    expect(mockInsertOperation).not.toHaveBeenCalled();
+  });
+
+  test('execute revives an expired pre-created operation instead of inserting a duplicate row', async () => {
+    const context = createContext({
+      currentContainerSpec: createCurrentContainerSpec({
+        State: { Running: false },
+        HostConfig: { AutoRemove: false },
+      }),
+    });
+    const existingOperation = {
+      id: 'queued-op-expired',
+      containerId: 'container-id',
+      containerName: 'web',
+      status: 'failed',
+      phase: 'queued',
+      lastError: 'Marked failed after exceeding active update TTL',
+    };
+    mockGetOperationById.mockImplementation(() => existingOperation);
+    mockUpdateOperation.mockImplementation((_id, patch) => {
+      Object.assign(existingOperation, patch);
+      return { ...existingOperation };
+    });
+    const executor = createExecutor({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      hasHealthcheckConfigured: vi.fn(() => false),
+    });
+
+    await expect(
+      executor.execute(context, createContainer(), createLog(), {
+        operationId: 'queued-op-expired',
+      }),
+    ).resolves.toBe(true);
+
+    expect(mockInsertOperation).not.toHaveBeenCalled();
+    expect(mockUpdateOperation.mock.calls[0]?.[0]).toBe('queued-op-expired');
+    expect(mockUpdateOperation.mock.calls[0]?.[1]).toEqual(
+      expect.objectContaining({
+        status: 'in-progress',
+        phase: 'pulling',
+        lastError: undefined,
+      }),
+    );
+    expect(existingOperation.id).toBe('queued-op-expired');
+    expect(existingOperation.status).toBe('succeeded');
+    expect(mockGetOperationById('queued-op-expired')).toEqual(
+      expect.objectContaining({
+        id: 'queued-op-expired',
+        status: 'succeeded',
+        phase: 'succeeded',
+      }),
     );
   });
 
@@ -771,6 +996,127 @@ describe('ContainerUpdateExecutor', () => {
         details: expect.stringContaining('Rollback failed after start_new_failed'),
         fromVersion: '1.0.1',
         toVersion: '1.0.0',
+      }),
+    );
+  });
+
+  test('execute defers reconciliation when rollback fails due to connection error', async () => {
+    const context = createContext({
+      currentContainerSpec: createCurrentContainerSpec({
+        State: { Running: true },
+      }),
+    });
+
+    const connectionError = new Error('connect ECONNREFUSED 127.0.0.1:2375');
+
+    const startContainer = vi
+      .fn()
+      .mockRejectedValueOnce(connectionError)
+      .mockRejectedValueOnce(connectionError);
+
+    context.currentContainer.rename
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(connectionError);
+
+    const scheduleDeferredReconciliation = vi.fn();
+    const executor = createExecutor({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      stopContainer: vi.fn().mockResolvedValue(undefined),
+      startContainer,
+      scheduleDeferredReconciliation,
+    });
+
+    await expect(executor.execute(context, createContainer(), createLog())).rejects.toThrow(
+      'ECONNREFUSED',
+    );
+
+    expect(mockUpdateOperation).toHaveBeenCalledWith(
+      'op-1',
+      expect.objectContaining({
+        status: 'in-progress',
+        phase: 'rollback-deferred',
+      }),
+    );
+    expect(scheduleDeferredReconciliation).toHaveBeenCalledWith('web', 'op-1', 10_000);
+    expect(executor.recordRollbackTelemetry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reason: 'start_new_failed_rollback_deferred',
+        details: expect.stringContaining('Rollback deferred'),
+      }),
+    );
+  });
+
+  test('execute does not defer reconciliation for non-connection errors', async () => {
+    const context = createContext({
+      currentContainerSpec: createCurrentContainerSpec({
+        State: { Running: true },
+      }),
+    });
+
+    const startContainer = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('container not found'))
+      .mockRejectedValueOnce(new Error('restart also failed'));
+
+    context.currentContainer.rename
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('rename failed'));
+
+    const scheduleDeferredReconciliation = vi.fn();
+    const executor = createExecutor({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      stopContainer: vi.fn().mockResolvedValue(undefined),
+      startContainer,
+      scheduleDeferredReconciliation,
+    });
+
+    await expect(executor.execute(context, createContainer(), createLog())).rejects.toThrow(
+      'container not found',
+    );
+
+    expect(mockUpdateOperation).toHaveBeenCalledWith(
+      'op-1',
+      expect.objectContaining({
+        status: 'failed',
+        phase: 'rollback-failed',
+      }),
+    );
+    expect(scheduleDeferredReconciliation).not.toHaveBeenCalled();
+  });
+
+  test('execute does not defer reconciliation when callback is not provided', async () => {
+    const context = createContext({
+      currentContainerSpec: createCurrentContainerSpec({
+        State: { Running: true },
+      }),
+    });
+
+    const connectionError = new Error('connect ECONNREFUSED 127.0.0.1:2375');
+
+    const startContainer = vi
+      .fn()
+      .mockRejectedValueOnce(connectionError)
+      .mockRejectedValueOnce(connectionError);
+
+    context.currentContainer.rename
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(connectionError);
+
+    const executor = createExecutor({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      stopContainer: vi.fn().mockResolvedValue(undefined),
+      startContainer,
+    });
+
+    await expect(executor.execute(context, createContainer(), createLog())).rejects.toThrow(
+      'ECONNREFUSED',
+    );
+
+    expect(mockUpdateOperation).toHaveBeenCalledWith(
+      'op-1',
+      expect.objectContaining({
+        status: 'failed',
+        phase: 'rollback-failed',
       }),
     );
   });

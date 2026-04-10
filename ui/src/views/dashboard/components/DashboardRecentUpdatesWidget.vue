@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watchEffect } from 'vue';
 import AppBadge from '@/components/AppBadge.vue';
 import AppIconButton from '@/components/AppIconButton.vue';
 import { useBreakpoints } from '@/composables/useBreakpoints';
-import type { RecentUpdateRow, UpdateKind } from '../dashboardTypes';
+import type { DashboardUpdateSequenceEntry, RecentUpdateRow, UpdateKind } from '../dashboardTypes';
 
 const { isMobile } = useBreakpoints();
 
@@ -28,6 +28,7 @@ interface Props {
   dashboardUpdateAllInProgress: boolean;
   dashboardUpdateError: string | null;
   dashboardUpdateInProgress: string | null;
+  dashboardUpdateSequence: Map<string, DashboardUpdateSequenceEntry>;
   editMode: boolean;
   getUpdateKindColor: (kind: UpdateKind | null) => string;
   getUpdateKindIcon: (kind: UpdateKind | null) => string;
@@ -38,18 +39,153 @@ interface Props {
 
 const props = defineProps<Props>();
 
-function isRowUpdating(row: Record<string, unknown>): boolean {
-  const id = row.id as string;
+type BackendRowSequence = DashboardUpdateSequenceEntry & {
+  batchId: string;
+};
+
+function getBackendRowSequence(row: Record<string, unknown>): BackendRowSequence | undefined {
+  const batchId = typeof row.batchId === 'string' ? row.batchId : undefined;
+  const queuePosition = typeof row.queuePosition === 'number' ? row.queuePosition : undefined;
+  const queueTotal = typeof row.queueTotal === 'number' ? row.queueTotal : undefined;
+
+  if (
+    !batchId ||
+    !Number.isSafeInteger(queuePosition) ||
+    !Number.isSafeInteger(queueTotal) ||
+    queuePosition <= 0 ||
+    queueTotal <= 0 ||
+    queuePosition > queueTotal
+  ) {
+    return undefined;
+  }
+
+  return {
+    batchId,
+    position: queuePosition,
+    total: queueTotal,
+  };
+}
+
+const dashboardUpdateSequenceHeadPosition = computed<number | null>(() => {
+  let headPosition: number | null = null;
+  for (const sequence of props.dashboardUpdateSequence.values()) {
+    if (headPosition === null || sequence.position < headPosition) {
+      headPosition = sequence.position;
+    }
+  }
+  return headPosition;
+});
+
+const backendUpdateSequenceHeadByBatch = computed(() => {
+  const queuedHeads = new Map<string, number>();
+  const updatingHeads = new Map<string, number>();
+
+  for (const item of props.recentUpdates) {
+    const row = item as unknown as Record<string, unknown>;
+    const sequence = getBackendRowSequence(row);
+    if (!sequence) {
+      continue;
+    }
+
+    const currentQueuedHead = queuedHeads.get(sequence.batchId);
+    if (currentQueuedHead === undefined || sequence.position < currentQueuedHead) {
+      queuedHeads.set(sequence.batchId, sequence.position);
+    }
+
+    if (row.status !== 'updating') {
+      continue;
+    }
+
+    const currentUpdatingHead = updatingHeads.get(sequence.batchId);
+    if (currentUpdatingHead === undefined || sequence.position < currentUpdatingHead) {
+      updatingHeads.set(sequence.batchId, sequence.position);
+    }
+  }
+
+  const heads = new Map(queuedHeads);
+  for (const [batchId, position] of updatingHeads.entries()) {
+    heads.set(batchId, position);
+  }
+  return heads;
+});
+
+const hasPersistedBackendQueue = computed(() =>
+  props.recentUpdates.some((row) =>
+    Boolean(getBackendRowSequence(row as unknown as Record<string, unknown>)),
+  ),
+);
+
+const isDashboardBulkUpdateLocked = computed(
+  () =>
+    props.dashboardUpdateAllInProgress ||
+    props.dashboardUpdateSequence.size > 0 ||
+    hasPersistedBackendQueue.value,
+);
+
+function getDashboardRecentUpdateRowKey(row: Record<string, unknown>) {
+  const id = row.id as string | undefined;
+  const name = row.name as string | undefined;
+  return id || name;
+}
+
+function getRowSequence(row: Record<string, unknown>) {
+  const key = getDashboardRecentUpdateRowKey(row);
+  return key ? props.dashboardUpdateSequence.get(key) : undefined;
+}
+
+function getRowUpdateState(row: Record<string, unknown>): 'queued' | 'updating' | null {
+  const localSequence = getRowSequence(row);
+  if (localSequence) {
+    return dashboardUpdateSequenceHeadPosition.value === localSequence.position
+      ? 'updating'
+      : 'queued';
+  }
+
+  const backendSequence = getBackendRowSequence(row);
+  if (backendSequence) {
+    return backendUpdateSequenceHeadByBatch.value.get(backendSequence.batchId) ===
+      backendSequence.position
+      ? 'updating'
+      : 'queued';
+  }
+
   const status = row.status as string | undefined;
-  return (
-    status === 'updating' ||
-    props.dashboardUpdateInProgress === id ||
-    props.dashboardUpdateAllInProgress
-  );
+  if (status === 'queued') {
+    return 'queued';
+  }
+
+  const id = row.id as string;
+  if (status === 'updating' || props.dashboardUpdateInProgress === id) {
+    return 'updating';
+  }
+
+  return null;
+}
+
+function isRowUpdating(row: Record<string, unknown>): boolean {
+  return getRowUpdateState(row) === 'updating';
+}
+
+function isRowQueued(row: Record<string, unknown>): boolean {
+  return getRowUpdateState(row) === 'queued';
+}
+
+function getRowUpdateLabel(row: Record<string, unknown>): string {
+  const updateState = getRowUpdateState(row);
+  if (!updateState) {
+    return '';
+  }
+
+  const sequence = getRowSequence(row) ?? getBackendRowSequence(row);
+  const baseLabel = updateState === 'queued' ? 'Queued' : 'Updating';
+  if (!sequence || sequence.total <= 1) {
+    return baseLabel;
+  }
+  return `${baseLabel} ${sequence.position} of ${sequence.total}`;
 }
 
 function getRowClass(row: Record<string, unknown>): string {
-  if (isRowUpdating(row)) {
+  if (isRowUpdating(row) || isRowQueued(row)) {
     return 'opacity-50 pointer-events-none transition-opacity duration-300';
   }
   return '';
@@ -126,10 +262,10 @@ watchEffect(() => {
           weight="none"
           type="button"
           class="inline-flex items-center justify-center px-2 py-1 dd-rounded border text-2xs font-semibold transition-colors"
-          :class="dashboardUpdateAllInProgress
+          :class="isDashboardBulkUpdateLocked
             ? 'dd-text-muted cursor-not-allowed opacity-60'
             : 'dd-text hover:dd-bg-elevated'"
-          :disabled="dashboardUpdateAllInProgress"
+          :disabled="isDashboardBulkUpdateLocked"
           @click="handleConfirmUpdateAll">
           <AppIcon
             :name="dashboardUpdateAllInProgress ? 'spinner' : 'cloud-download'"
@@ -181,6 +317,7 @@ watchEffect(() => {
             <div class="flex items-start gap-2">
               <div v-if="isMobile" class="shrink-0 mt-0.5">
                 <AppIcon v-if="isRowUpdating(row)" name="spinner" :size="16" class="dd-spin dd-text-muted" />
+                <AppIcon v-else-if="isRowQueued(row)" name="clock" :size="16" class="dd-text-muted" />
                 <ContainerIcon v-else :icon="row.icon" :size="20" />
               </div>
               <div class="min-w-0">
@@ -191,7 +328,14 @@ watchEffect(() => {
                     size="xs"
                     :custom="{ bg: 'var(--dd-warning-muted)', text: 'var(--dd-warning)' }">
                     <AppIcon name="spinner" :size="12" class="mr-1 dd-spin" />
-                    Updating
+                    {{ getRowUpdateLabel(row) }}
+                  </AppBadge>
+                  <AppBadge
+                    v-else-if="isRowQueued(row)"
+                    size="xs"
+                    :custom="{ bg: 'var(--dd-warning-muted)', text: 'var(--dd-warning)' }">
+                    <AppIcon name="clock" :size="12" class="mr-1" />
+                    {{ getRowUpdateLabel(row) }}
                   </AppBadge>
                 </div>
                 <div class="text-2xs dd-text-muted mt-0.5 truncate">{{ row.image }}</div>
@@ -267,8 +411,14 @@ watchEffect(() => {
             <span
               v-if="isRowUpdating(row)"
               class="w-7 h-7 dd-rounded-sm flex items-center justify-center dd-text-muted"
-              v-tooltip.top="'Updating'">
+              v-tooltip.top="getRowUpdateLabel(row)">
               <AppIcon name="spinner" :size="14" class="dd-spin" />
+            </span>
+            <span
+              v-else-if="isRowQueued(row)"
+              class="w-7 h-7 dd-rounded-sm flex items-center justify-center dd-text-muted"
+              v-tooltip.top="getRowUpdateLabel(row)">
+              <AppIcon name="clock" :size="14" />
             </span>
             <span
               v-else-if="row.blocked"
@@ -283,10 +433,10 @@ watchEffect(() => {
               variant="plain"
               data-test="dashboard-update-btn"
               class="dd-rounded-sm transition-colors"
-              :class="dashboardUpdateInProgress === row.id || dashboardUpdateAllInProgress
+              :class="dashboardUpdateInProgress === row.id || isDashboardBulkUpdateLocked
                 ? 'dd-text-muted opacity-50 cursor-not-allowed'
                 : 'dd-text-muted hover:dd-text-success hover:dd-bg-elevated'"
-              :disabled="dashboardUpdateInProgress === row.id || dashboardUpdateAllInProgress"
+              :disabled="dashboardUpdateInProgress === row.id || isDashboardBulkUpdateLocked"
               :loading="dashboardUpdateInProgress === row.id"
               tooltip="Update container"
               aria-label="Update container"

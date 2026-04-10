@@ -13,6 +13,113 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0-rc.8] - 2026-04-09
+
+### Added
+
+- **Backend-driven update queue** — Container updates are now queued server-side with per-trigger concurrency limits. UI shows Queued → Updating → Updated state progression with sequence labels (e.g. "Updating 1 of 3"). ([#bacbc1c7](https://github.com/CodesWhat/drydock/commit/bacbc1c7), [#5edc55a2](https://github.com/CodesWhat/drydock/commit/5edc55a2), [#7d7cfdfc](https://github.com/CodesWhat/drydock/commit/7d7cfdfc))
+- **Watcher next-run metadata ([#288](https://github.com/CodesWhat/drydock/issues/288))** — Watcher API and Agents view now show when each watcher will next poll for updates. ([#6706929e](https://github.com/CodesWhat/drydock/commit/6706929e))
+- **Notification delivery failure audit entries ([#282](https://github.com/CodesWhat/drydock/issues/282))** — Failed notification deliveries appear in the notification bell dropdown. ([#ae5309b3](https://github.com/CodesWhat/drydock/commit/ae5309b3))
+- **Container action operations** — Container actions (start, stop, restart, etc.) tracked with dashboard updates. ([#6615ccbf](https://github.com/CodesWhat/drydock/commit/6615ccbf))
+- **Identity-keyed container tracking** — Containers tracked by stable identity key (agent::watcher::name) across renames/replacements. Audit events include `containerIdentityKey`. Recent-status API returns `statusesByIdentity` for precise per-container status resolution. ([#8fb75070](https://github.com/CodesWhat/drydock/commit/8fb75070), [#ea413c34](https://github.com/CodesWhat/drydock/commit/ea413c34))
+- **Trigger buffer retention and capacity limits** — Digest and batch-retry buffers now enforce a 5,000-entry cap and 7-day retention window, evicting the oldest entries first and pruning stale entries before each access. Prevents unbounded memory growth on long-running controllers. ([#c6a9930c](https://github.com/CodesWhat/drydock/commit/c6a9930c))
+- **Update operation recovery phases** — New phases (`recovered-cleanup-temp`, `recovered-rollback`, `recovered-active`, `recovery-failed`, `recovery-missing-containers`) distinguish operations that completed via the deferred reconciliation recovery path from the primary update flow. ([#3ffe2f12](https://github.com/CodesWhat/drydock/commit/3ffe2f12))
+
+### Changed
+
+- **Auth user cache removed** — Replaced TTL-based auth cache with request deduplication only, ensuring logout/session expiry in other tabs is reflected immediately. ([#923e0926](https://github.com/CodesWhat/drydock/commit/923e0926))
+
+### Fixed
+
+- **[#286](https://github.com/CodesWhat/drydock/issues/286)** — Stack view column shifting fixed by collapsing all stacks into a single table. ([#2f511d33](https://github.com/CodesWhat/drydock/commit/2f511d33))
+- **[#283](https://github.com/CodesWhat/drydock/issues/283)** — Duplicate server name in notification prefix and suffix suppressed. ([#aaf9962d](https://github.com/CodesWhat/drydock/commit/aaf9962d))
+- **[#270](https://github.com/CodesWhat/drydock/issues/270)** — Hide-pinned filter now uses computed `tagPinned` property instead of stale stored field. Unconditional startup repair ensures tagPrecision data is always correct. ([#c7ecceef](https://github.com/CodesWhat/drydock/commit/c7ecceef), [#0949a142](https://github.com/CodesWhat/drydock/commit/0949a142))
+- **[#291](https://github.com/CodesWhat/drydock/issues/291)** — Dashboard update widget now uses the same update-start semantics as containers view (shows "Updating" toast, not "Updated"). ([#c9f21a7b](https://github.com/CodesWhat/drydock/commit/c9f21a7b))
+- **[#290](https://github.com/CodesWhat/drydock/issues/290)** — Update-applied success events preserved across Docker container rename race. ([#6b5c1f72](https://github.com/CodesWhat/drydock/commit/6b5c1f72))
+- **[#289](https://github.com/CodesWhat/drydock/issues/289)** — Standalone (non-queued) update state transitions restored after queue-aware changes broke them in rc.7. ([#2b00c4b8](https://github.com/CodesWhat/drydock/commit/2b00c4b8))
+- **[#287](https://github.com/CodesWhat/drydock/discussions/287)** — Custom healthcheck backward compatibility restored. The built-in `/bin/healthcheck` remains the default image probe and now handles TLS backends, while `curl` is again present in the Docker image for user-defined custom `healthcheck:` overrides during the v1.5.x deprecation window. v1.6.0 is the final warning release, and removal is now scheduled for v1.7.0. ([#414f0170](https://github.com/CodesWhat/drydock/commit/414f0170))
+- **[#282](https://github.com/CodesWhat/drydock/issues/282)** — Digest buffer evicted after batch send; watcher events awaited for handler ordering; batch send retry with delivery failure audit; agent remote report events awaited. ([#982b4d74](https://github.com/CodesWhat/drydock/commit/982b4d74), [#0594e971](https://github.com/CodesWhat/drydock/commit/0594e971), [#c31f78eb](https://github.com/CodesWhat/drydock/commit/c31f78eb), [#1ac7c36d](https://github.com/CodesWhat/drydock/commit/1ac7c36d))
+- **[#276](https://github.com/CodesWhat/drydock/issues/276)** — Dashboard update tracking keyed by container ID instead of name. ([#c81e25a8](https://github.com/CodesWhat/drydock/commit/c81e25a8))
+- **[#256](https://github.com/CodesWhat/drydock/issues/256)** — Pending update state scoped by stable container identity, preventing cross-contamination between same-name containers on different hosts. ([#05c023fe](https://github.com/CodesWhat/drydock/commit/05c023fe))
+- **[#253](https://github.com/CodesWhat/drydock/issues/253)** — Shorthand trigger references resolved in notification rule matching; notification buffering keys stabilized; debug logging added to every silent filter path. ([#ba6341b4](https://github.com/CodesWhat/drydock/commit/ba6341b4), [#d475d33c](https://github.com/CodesWhat/drydock/commit/d475d33c), [#bb1550e4](https://github.com/CodesWhat/drydock/commit/bb1550e4))
+- **[#248](https://github.com/CodesWhat/drydock/issues/248)** — API guard against duplicate container updates (409 conflict). ([#110aae36](https://github.com/CodesWhat/drydock/commit/110aae36))
+- **[#217](https://github.com/CodesWhat/drydock/issues/217)** — Vulnerability rows top-aligned in detail panels. ([#431be5ea](https://github.com/CodesWhat/drydock/commit/431be5ea))
+- **Expired update operations** — Executor revives expired pre-created operations instead of inserting duplicate rows. ([#04e847ef](https://github.com/CodesWhat/drydock/commit/04e847ef))
+- **Static asset throttling** — SPA fallback rate limiter no longer throttles static assets. ([#bfe52038](https://github.com/CodesWhat/drydock/commit/bfe52038))
+- **Compound rolling tag aliases misclassified as pinned** — `isTagPinned` now treats aliases like `latest-alpine`, `stable_arm64`, and `dev.build` as floating even when their suffixes contain digits. ([#da613f70](https://github.com/CodesWhat/drydock/commit/da613f70))
+
+### Performance
+
+- **Virtual scrolling for grouped containers table** — Grouped container tables no longer render every row eagerly, keeping the DOM light on deployments with many containers. ([#606d5cc0](https://github.com/CodesWhat/drydock/commit/606d5cc0))
+
+### Security
+
+- **Axios CVE-2025-62718** — Updated axios 1.13.6 → 1.15.0. ([#c4af5e4a](https://github.com/CodesWhat/drydock/commit/c4af5e4a))
+- **Healthcheck HTTPS probe hardening** — `/bin/healthcheck` no longer uses `popen()` with shell command interpolation to invoke `openssl`. The probe now locates the openssl binary explicitly, fork/execs it with pipes, and uses poll-driven I/O with SIGPIPE handling — eliminating any shell injection surface. ([#0173d7ed](https://github.com/CodesWhat/drydock/commit/0173d7ed))
+- **SSE log IP hashing with opt-in raw mode** — SSE connect/disconnect lines and per-IP rate-limit warnings now log the internal client ID plus a salted hash of the source IP (`h:xxxxxxxx`) by default. The hash salt rotates on every process start, so hashed identifiers cannot be correlated across restarts and raw addresses never touch the log. Operators troubleshooting a specific connection issue can set `DD_SSE_DEBUG_LOG_IP=true` to temporarily log raw IPs. ([#9e236745](https://github.com/CodesWhat/drydock/commit/9e236745))
+- **HTTP trigger proxy URL scheme validation** — HTTP trigger proxy URLs must now be `http://` or `https://` schemes. Invalid schemes are rejected at config-validation time and fail closed at runtime instead of silently constructing a broken proxy. ([#981f7f8e](https://github.com/CodesWhat/drydock/commit/981f7f8e))
+- **Vulnerability CSV export escape hardening** — Every CSV field (including column headers) is now quoted unconditionally, and tab/CR leading characters are escaped alongside `=+-@` to fully close the CSV formula-injection surface. ([#95de9f0e](https://github.com/CodesWhat/drydock/commit/95de9f0e))
+
+## [1.5.0-rc.7] — 2026-04-08
+
+### Added
+
+- **Multi-server notification identification (#283)** — Notifications automatically include a `[server-name]` prefix when agents are registered, identifying which server (controller or agent) each update comes from. Controller name configurable via `DD_SERVER_NAME` (defaults to `os.hostname()`). Custom templates can use `container.notificationServerName` and `container.notificationAgentPrefix`. ([#14365870](https://github.com/CodesWhat/drydock/commit/14365870), [#5880b4c8](https://github.com/CodesWhat/drydock/commit/5880b4c8))
+- **Infrastructure update mode** — `dd.update.mode=infrastructure` label for socket proxy containers enables helper-swap update path bypassing the socket proxy. ([#0e8f620d](https://github.com/CodesWhat/drydock/commit/0e8f620d))
+
+### Changed
+
+- **SSE debug logging** — Connect/disconnect log messages now include client ID and IP address. ([#12942ee4](https://github.com/CodesWhat/drydock/commit/12942ee4))
+
+### Security
+
+- **Vite CVE patches** — Updated vite to 8.0.7 (ui) and 7.3.2 (demo) to fix CVE-2026-39363, CVE-2026-39364, CVE-2026-39365 (dev server file read vulnerabilities). ([#15abb919](https://github.com/CodesWhat/drydock/commit/15abb919))
+
+## [1.5.0-rc.6] — 2026-04-05
+
+### Added
+
+- **Rollback shortcut in container actions menu** — Quick rollback option directly from the container row actions dropdown. ([#5137b99a](https://github.com/CodesWhat/drydock/commit/5137b99a))
+- **Clear all button in notification bell** — One-click dismiss of all notification bell entries. ([#6785e2a4](https://github.com/CodesWhat/drydock/commit/6785e2a4))
+- **Info toast when no pending update** — Container update check now shows an informational toast when the container is already at its latest version. ([#08864936](https://github.com/CodesWhat/drydock/commit/08864936))
+- **Typed notification event templates** — Every event type (update-available, update-applied, update-failed, security-alert, agent-reconnect) now has a dedicated default template with type-safe variable placeholders. ([#69f85c36](https://github.com/CodesWhat/drydock/commit/69f85c36))
+- **Digest-aware default notification templates** — Default templates now indicate when a notification was delivered via digest accumulation. ([#f7668d44](https://github.com/CodesWhat/drydock/commit/f7668d44))
+- **Structured dispatch decisions with digest routing** — Trigger dispatch returns structured decision objects with digest routing warnings for debugging notification flow. ([#fd82adc8](https://github.com/CodesWhat/drydock/commit/fd82adc8))
+- **Agent SSE event relay** — Controller now relays `update-applied`, `update-failed`, and `security-alert` events from remote agents over SSE to connected UI clients. ([#f497ac75](https://github.com/CodesWhat/drydock/commit/f497ac75))
+- **Implicit all-triggers semantics label** — Notification rule editor shows helper text when an `update-available` rule implicitly applies to all triggers. ([#ba43a870](https://github.com/CodesWhat/drydock/commit/ba43a870))
+
+### Changed
+
+- **Responsive dashboard layout persistence** — Dashboard widget bounds and layout are now breakpoint-aware, persisting separate layouts per viewport tier. ([#d16a3d0f](https://github.com/CodesWhat/drydock/commit/d16a3d0f), [#2deac1c3](https://github.com/CodesWhat/drydock/commit/2deac1c3))
+- **Tag precision module consolidation** — `TagPrecision` type and numeric tag shape parser deduplicated into `tag/precision` module. ([#857fcb7a](https://github.com/CodesWhat/drydock/commit/857fcb7a), [#f2cc81e0](https://github.com/CodesWhat/drydock/commit/f2cc81e0))
+- **Trigger notification internals** — Extracted notification event helpers, hoisted default templates, type-safe container access in store. ([#3e81f378](https://github.com/CodesWhat/drydock/commit/3e81f378), [#42f5c7aa](https://github.com/CodesWhat/drydock/commit/42f5c7aa))
+- **Outlined button styling** — Filled background and improved contrast for outlined action buttons across all views. ([#b901295e](https://github.com/CodesWhat/drydock/commit/b901295e), [#898b6195](https://github.com/CodesWhat/drydock/commit/898b6195))
+- **Axios supply chain advisory retired** — Removed from README and website security documentation. ([#c782d3dc](https://github.com/CodesWhat/drydock/commit/c782d3dc))
+
+### Fixed
+
+- **#270** — Hide-pinned filter now applies to dashboard update widgets; `tagPrecision` backfilled for existing containers on migration. ([#f2e36ce4](https://github.com/CodesWhat/drydock/commit/f2e36ce4), [#972f7af1](https://github.com/CodesWhat/drydock/commit/972f7af1))
+- **#271** — Log sort order persists across navigation. ([#dbc42186](https://github.com/CodesWhat/drydock/commit/dbc42186))
+- **#265** — Stale update detection suppressed from pre-clear watcher scans. ([#06e8a4ee](https://github.com/CodesWhat/drydock/commit/06e8a4ee))
+- **#217** — Data rows top-aligned with scroll containment for container views. ([#a97bd0a9](https://github.com/CodesWhat/drydock/commit/a97bd0a9))
+- **Dashboard mobile responsive layout** — Recent updates widget layout fixed on mobile viewports. ([#e686bdef](https://github.com/CodesWhat/drydock/commit/e686bdef))
+- **Dashboard layout hardening** — Unknown widgets handled gracefully; unnecessary re-renders suppressed. ([#37a33a80](https://github.com/CodesWhat/drydock/commit/37a33a80))
+- **Preference persistence on page exit** — Pending dashboard layout and preference writes flushed on `pagehide` and `visibilitychange`. ([#554b7c37](https://github.com/CodesWhat/drydock/commit/554b7c37), [#1cffd21e](https://github.com/CodesWhat/drydock/commit/1cffd21e))
+- **Disabled button hover affordance** — Disabled outlined buttons no longer show hover state. ([#89ca53d3](https://github.com/CodesWhat/drydock/commit/89ca53d3))
+- **Tag precision backfill guard** — `tagPrecision` backfill skipped when upgrading past v1.5.0. ([#9deb3ba1](https://github.com/CodesWhat/drydock/commit/9deb3ba1))
+- **Tag shape parser crash** — `getNumericTagShape` guarded against undefined `transformTag` result. ([#eedc01bf](https://github.com/CodesWhat/drydock/commit/eedc01bf))
+- **Digest buffer stale entries** — Container name canonicalized before digest buffer eviction; stale entries evicted before flush. ([#547a3f15](https://github.com/CodesWhat/drydock/commit/547a3f15), [#2776a2d6](https://github.com/CodesWhat/drydock/commit/2776a2d6))
+- **Digest buffer type safety** — `flushDigestBuffer` store container map typed as `Container`. ([#d256e3af](https://github.com/CodesWhat/drydock/commit/d256e3af))
+
+### Performance
+
+- **Log viewer cache** — Incremental newest-first cache for log viewer avoids full re-sort on new entries. ([#3340b7c1](https://github.com/CodesWhat/drydock/commit/3340b7c1))
+- **Vulnerability list URL memoization** — Safe URL computation memoized to avoid redundant parsing. ([#d9bcbe5d](https://github.com/CodesWhat/drydock/commit/d9bcbe5d))
+
+### Security
+
+- **Vulnerability URL and CSV sanitization** — Vulnerability URLs validated before rendering; CSV export fields sanitized against formula injection. ([#c9ecf1e6](https://github.com/CodesWhat/drydock/commit/c9ecf1e6))
+
 ## [1.5.0-rc.5] — 2026-04-04
 
 ### Added
@@ -21,24 +128,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Log component dropdown** — Component filter replaced with a `<select>` dropdown populated from new `GET /api/v1/log/components` endpoint that returns unique component names from the log buffer.
 - **Hide Pinned containers toggle** — Checkbox in the container list filter bar hides containers pinned to specific versions (`tagPrecision: specific`). Persisted in user preferences. ([#250](https://github.com/CodesWhat/drydock/discussions/250))
 - **Combined batch+digest notification mode** — Triggers can now use `MODE=batch+digest` to send both immediate batch emails and scheduled digest summaries. ([#254](https://github.com/CodesWhat/drydock/issues/254))
+- **Conditional reset button** — A reset icon appears in the system log toolbar only when level, tail, or component filters differ from defaults.
 - **Security scan export** — Detail panel has export controls (CSV/JSON) for vulnerability reports and SBOM download at the top of the panel. ([#269](https://github.com/CodesWhat/drydock/discussions/269))
 
 ### Changed
 
-- **Container filter labels** — Default dropdown options renamed for clarity: "Status" → "All Statuses", "Host" → "All Hosts", etc. ([#247](https://github.com/CodesWhat/drydock/discussions/247))
+- **Container filter labels** — Default dropdown options renamed for clarity: "Status" → "All Statuses", "Host" → "All Hosts", "Registry" → "All Registries", "Update" → "All Containers". ([#247](https://github.com/CodesWhat/drydock/discussions/247))
+- **Log viewer icons** — Pause, Pin, Sort, Filter, and Copy icons use the theme-aware icon map, so they change when the user switches icon themes in settings.
 
 ### Fixed
 
-- **#248** — Update operation state survives container ID change during replacement updates.
-- **#241** — Temporary rollback containers hidden from container list API responses.
+- **#248** — Update operation state survives container ID change during replacement updates (`newContainerId` lookup).
+- **#241** — Temporary rollback containers (`-old-{timestamp}`) hidden from container list API responses.
 - **#253** — `threshold=all` honored before rejecting `updateKind=unknown` in notification dispatch.
-- **#256** — Update operation state disambiguated by container ID instead of name.
-- **#257** — Non-dashboard views refresh on SSE reconnect.
-- **#258** — Edge-to-edge scroll on DataViewLayout for mobile touch.
-- **#217** — Content-aware mode threshold for Host Status widget.
+- **#256** — Update operation state disambiguated by container ID instead of name (prevents cross-host bleed).
+- **#257** — Non-dashboard views (Containers, Security, Agents) refresh on SSE reconnect.
+- **#258** — Edge-to-edge scroll surface on DataViewLayout for mobile touch.
+- **#217** — Content-aware mode threshold for Host Status widget (full mode only when viewport fits all rows).
 - **#262** — Registry log calls use component child logger with image name context.
-- **#269** — SBOM download button was silently failing unless the "View SBOM" toggle was active.
-- **#255** — Container event handler schedules refresh for unknown containers.
+- **#255** — Container event handler schedules refresh for any unknown-to-store container, not just renames.
+- **#269** — SBOM download button was silently failing unless the "View SBOM" toggle was active; now serializes directly.
+- **BaseRegistry** — Trusted host validation and `getImagePublishedAt` tag object creation hardened.
+- **ECR** — Public gallery hostname matching uses parsed URL comparison; private auth token structure validated before split.
 
 ## [1.5.0] — 2026-03-19
 
@@ -84,7 +195,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Centralized rollback container guard** — `-old-{timestamp}` container rejection moved from Docker trigger to base Trigger class, covering all trigger types.
 - **Container list query internals modularized** — Extracted query-validation logic and split tests by concern.
 - **Container list filtering performance** — Status/kind filters avoid unnecessary full-collection loads; age/created sorting precomputes values.
-- **Healthcheck execution path optimized** — Default HEALTHCHECK probe replaced with a 65KB static C binary (`/bin/healthcheck`). curl is retained for backward compatibility with user-defined HEALTHCHECK overrides and will be removed in v1.6.0.
+- **Healthcheck execution path optimized** — Default HEALTHCHECK probe replaced with a 65KB static C binary (`/bin/healthcheck`). curl is retained for backward compatibility with user-defined HEALTHCHECK overrides during the deprecation window and is now scheduled for removal in v1.7.0, with v1.6.0 as the final warning release.
 - **Watcher event logging noise reduced** — First event-stream reconnect downgraded from `warn` to `info`.
 - **CI workflows renamed** — Dropped numeric prefixes from workflow filenames for clarity.
 - **Smoke load test profile removed** — Replaced with the ci profile for meaningful regression detection.
@@ -1116,7 +1227,10 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.5.0-rc.5...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.5.0-rc.8...HEAD
+[1.5.0-rc.8]: https://github.com/CodesWhat/drydock/compare/v1.5.0-rc.7...v1.5.0-rc.8
+[1.5.0-rc.7]: https://github.com/CodesWhat/drydock/compare/v1.5.0-rc.6...v1.5.0-rc.7
+[1.5.0-rc.6]: https://github.com/CodesWhat/drydock/compare/v1.5.0-rc.5...v1.5.0-rc.6
 [1.5.0-rc.5]: https://github.com/CodesWhat/drydock/compare/v1.5.0...v1.5.0-rc.5
 [1.5.0]: https://github.com/CodesWhat/drydock/compare/v1.4.5...v1.5.0
 [1.4.5]: https://github.com/CodesWhat/drydock/compare/v1.4.4...v1.4.5

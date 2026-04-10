@@ -44,7 +44,9 @@ type UpdateOperationQuery =
   | { 'data.id': string }
   | { 'data.containerName': string }
   | { 'data.containerName': string; 'data.status': ContainerUpdateOperationStatus }
+  | { 'data.containerId': string }
   | { 'data.containerId': string; 'data.status': ContainerUpdateOperationStatus }
+  | { 'data.newContainerId': string }
   | { 'data.newContainerId': string; 'data.status': ContainerUpdateOperationStatus };
 
 interface UpdateOperationCollection {
@@ -76,8 +78,10 @@ const UPDATE_OPERATION_COLLECTION_INDICES = [
 ];
 const DEFAULT_UPDATE_OPERATION_MAX_ENTRIES = getDefaultCacheMaxEntries();
 const DEFAULT_UPDATE_OPERATION_RETENTION_DAYS = 30;
+const DEFAULT_UPDATE_OPERATION_ACTIVE_TTL_MS = 30 * 60 * 1000;
 const UPDATE_OPERATION_PRUNE_MUTATION_INTERVAL = 100;
 let updateOperationMutationsSincePrune = 0;
+const ACTIVE_STATUSES = ['in-progress', 'queued'] as const;
 
 const UPDATE_OPERATION_MAX_ENTRIES = toPositiveInteger(
   process.env.DD_UPDATE_OPERATION_MAX_ENTRIES,
@@ -87,10 +91,53 @@ const UPDATE_OPERATION_RETENTION_DAYS = toPositiveInteger(
   process.env.DD_UPDATE_OPERATION_RETENTION_DAYS,
   DEFAULT_UPDATE_OPERATION_RETENTION_DAYS,
 );
+const UPDATE_OPERATION_ACTIVE_TTL_MS = toPositiveInteger(
+  process.env.DD_UPDATE_OPERATION_ACTIVE_TTL_MS,
+  DEFAULT_UPDATE_OPERATION_ACTIVE_TTL_MS,
+);
 
 function getOperationTimestamp(operation: UpdateOperation): number {
   const timestamp = Date.parse(operation.updatedAt || operation.createdAt);
   return Number.isNaN(timestamp) ? 0 : timestamp;
+}
+
+function isActiveOperationStatus(status: unknown): status is (typeof ACTIVE_STATUSES)[number] {
+  return typeof status === 'string' && (ACTIVE_STATUSES as readonly string[]).includes(status);
+}
+
+function isStaleActiveOperation(operation: UpdateOperation, nowMs = Date.now()): boolean {
+  return nowMs - getOperationTimestamp(operation) > UPDATE_OPERATION_ACTIVE_TTL_MS;
+}
+
+function getStaleActiveOperationMessage(operation: UpdateOperation): string {
+  return `Marked failed after exceeding active update TTL (${UPDATE_OPERATION_ACTIVE_TTL_MS}ms) while ${operation.status === 'queued' ? 'queued' : 'in progress'}`;
+}
+
+function expireStaleActiveOperation(operation: UpdateOperation): UpdateOperation | undefined {
+  const existing = updateOperationCollection!.findOne({ 'data.id': operation.id })?.data;
+  if (!existing || !isActiveOperationStatus(existing.status)) {
+    return existing;
+  }
+
+  const staleMessage = getStaleActiveOperationMessage(existing);
+  return updateOperation(existing.id, {
+    status: 'failed',
+    lastError: existing.lastError ? `${existing.lastError}; ${staleMessage}` : staleMessage,
+  });
+}
+
+function getFreshActiveOperation(
+  operation: UpdateOperation,
+  nowMs = Date.now(),
+): UpdateOperation | undefined {
+  if (!isActiveOperationStatus(operation.status)) {
+    return undefined;
+  }
+  if (!isStaleActiveOperation(operation, nowMs)) {
+    return operation;
+  }
+  expireStaleActiveOperation(operation);
+  return undefined;
 }
 
 function pruneOperationsForRetention(
@@ -107,7 +154,7 @@ function pruneOperationsForRetention(
 
   const retainedTerminalIds = new Set(
     documents
-      .filter((document) => document.data.status !== 'in-progress')
+      .filter((document) => !isActiveOperationStatus(document.data.status))
       .filter((document) => getOperationTimestamp(document.data) >= cutoffTimestamp)
       .sort((a, b) => getOperationTimestamp(b.data) - getOperationTimestamp(a.data))
       .slice(0, UPDATE_OPERATION_MAX_ENTRIES)
@@ -115,7 +162,7 @@ function pruneOperationsForRetention(
   );
 
   const toRemove = documents.filter((document) => {
-    if (document.data.status === 'in-progress') {
+    if (isActiveOperationStatus(document.data.status)) {
       return false;
     }
     return !retainedTerminalIds.has(document.data.id);
@@ -168,6 +215,17 @@ export function insertOperation(operation: InsertUpdateOperationInput): UpdateOp
   }
 
   return operationToSave;
+}
+
+/**
+ * Return a single operation by its unique ID.
+ */
+export function getOperationById(id: string): UpdateOperation | undefined {
+  if (!updateOperationCollection || !id) {
+    return undefined;
+  }
+
+  return updateOperationCollection.findOne({ 'data.id': id })?.data;
 }
 
 /**
@@ -245,6 +303,59 @@ export function getInProgressOperationByContainerId(
     'data.status': 'in-progress',
   })) {
     operationsById.set(document.data.id, document.data);
+  }
+
+  const operations = [...operationsById.values()].sort(
+    (a, b) => getOperationTimestamp(b) - getOperationTimestamp(a),
+  );
+
+  return operations.at(0);
+}
+
+/**
+ * Return the latest active (in-progress OR queued) operation for a container name.
+ */
+export function getActiveOperationByContainerName(
+  containerName: string,
+): UpdateOperation | undefined {
+  if (!updateOperationCollection) {
+    return undefined;
+  }
+
+  const operations = updateOperationCollection
+    .find({ 'data.containerName': containerName })
+    .map((item) => getFreshActiveOperation(item.data))
+    .filter((item): item is UpdateOperation => Boolean(item))
+    .sort((a, b) => getOperationTimestamp(b) - getOperationTimestamp(a));
+
+  return operations.at(0);
+}
+
+/**
+ * Return the latest active (in-progress OR queued) operation for a container ID.
+ */
+export function getActiveOperationByContainerId(containerId: string): UpdateOperation | undefined {
+  if (!updateOperationCollection || !containerId) {
+    return undefined;
+  }
+
+  const operationsById = new Map<string, UpdateOperation>();
+  const nowMs = Date.now();
+
+  for (const document of updateOperationCollection.find({ 'data.containerId': containerId })) {
+    const operation = getFreshActiveOperation(document.data, nowMs);
+    if (operation) {
+      operationsById.set(operation.id, operation);
+    }
+  }
+
+  for (const document of updateOperationCollection.find({
+    'data.newContainerId': containerId,
+  })) {
+    const operation = getFreshActiveOperation(document.data, nowMs);
+    if (operation) {
+      operationsById.set(operation.id, operation);
+    }
   }
 
   const operations = [...operationsById.values()].sort(

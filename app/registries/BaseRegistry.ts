@@ -61,21 +61,16 @@ class BaseRegistry extends Registry {
     }
 
     const registryHost = this.getCanonicalRegistryHost(normalizedImage?.registry?.url);
-    /* v8 ignore next -- missing/empty image names are defensive-only in production call paths */
     const imageName = normalizedImage?.name || '';
     const repository =
       registryHost === 'docker.io' && imageName.length > 0 && !imageName.includes('/')
         ? `library/${imageName}`
         : imageName;
-    /* v8 ignore next -- digest/tag fallback matrix is covered by integration paths */
     const tagOrDigest =
       (typeof digest === 'string' && digest.length > 0 ? digest : normalizedImage?.tag?.value) ||
       'latest';
-    /* v8 ignore next -- architecture fallback is defensive for malformed image payloads */
     const architecture = normalizedImage?.architecture || 'unknown';
-    /* v8 ignore next -- os fallback is defensive for malformed image payloads */
     const os = normalizedImage?.os || 'unknown';
-    /* v8 ignore next -- variant is optional and omitted for most image descriptors */
     const variant = normalizedImage?.variant ? `/${normalizedImage.variant}` : '';
 
     return `${registryHost}/${repository}:${tagOrDigest}|${os}/${architecture}${variant}`;
@@ -106,9 +101,7 @@ class BaseRegistry extends Registry {
 
   public endDigestCachePollCycle() {
     const totalRequests = this.digestCacheHits + this.digestCacheMisses;
-    /* v8 ignore next -- zero-request cycles are trivial defensive accounting */
     const hitRate = totalRequests === 0 ? 0 : (this.digestCacheHits / totalRequests) * 100;
-    /* v8 ignore next -- debug logger may be absent depending on registry initialization mode */
     if (this.log && typeof this.log.debug === 'function') {
       this.log.debug(
         `${this.getId()} digest cache hit rate ${hitRate.toFixed(2)}% (${this.digestCacheHits} hits, ${this.digestCacheMisses} misses)`,
@@ -296,7 +289,6 @@ class BaseRegistry extends Registry {
     this.recordDigestCacheMiss();
     const manifestLookup = (async () => {
       const manifest = await super.getImageManifestDigest(image, digest);
-      /* v8 ignore next -- empty digest responses are treated as non-cacheable defensive fallback */
       if (typeof manifest?.digest === 'string' && manifest.digest.length > 0) {
         this.digestManifestCache.set(cacheKey, {
           digest: manifest.digest,

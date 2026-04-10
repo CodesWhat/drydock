@@ -218,6 +218,7 @@ describe('securityViewUtils', () => {
       expect(toSafeExternalUrl('javascript:alert(1)')).toBeNull();
       expect(toSafeExternalUrl('ftp://example.com')).toBeNull();
       expect(toSafeExternalUrl('data:text/html,<h1>hi</h1>')).toBeNull();
+      expect(toSafeExternalUrl('file:///etc/passwd')).toBeNull();
     });
 
     it('returns null for invalid URLs', () => {
@@ -240,7 +241,9 @@ describe('securityViewUtils', () => {
     };
 
     it('returns only header row for empty array', () => {
-      expect(vulnReportToCsv([])).toBe('ID,Severity,Package,Version,Fixed In,Title,Target,URL');
+      expect(vulnReportToCsv([])).toBe(
+        '"ID","Severity","Package","Version","Fixed In","Title","Target","URL"',
+      );
     });
 
     it('formats a single vulnerability as CSV', () => {
@@ -248,7 +251,7 @@ describe('securityViewUtils', () => {
       const lines = csv.split('\n');
       expect(lines).toHaveLength(2);
       expect(lines[1]).toBe(
-        'CVE-2026-1234,HIGH,openssl,1.1.1,1.1.2,Buffer overflow,usr/lib/libssl.so,https://nvd.nist.gov/vuln/detail/CVE-2026-1234',
+        '"CVE-2026-1234","HIGH","openssl","1.1.1","1.1.2","Buffer overflow","usr/lib/libssl.so","https://nvd.nist.gov/vuln/detail/CVE-2026-1234"',
       );
     });
 
@@ -262,7 +265,7 @@ describe('securityViewUtils', () => {
       };
       const csv = vulnReportToCsv([vuln]);
       const lines = csv.split('\n');
-      expect(lines[1]).toBe('CVE-2026-1234,HIGH,openssl,1.1.1,,,,');
+      expect(lines[1]).toBe('"CVE-2026-1234","HIGH","openssl","1.1.1","","","",""');
     });
 
     it('escapes fields containing commas and quotes', () => {
@@ -290,7 +293,22 @@ describe('securityViewUtils', () => {
       const lines = csv.split('\n');
 
       expect(lines[1]).toBe(
-        "'=CVE-2026-1234,'+HIGH,'-openssl,'@1.1.1,1.1.2,Buffer overflow,usr/lib/libssl.so,https://nvd.nist.gov/vuln/detail/CVE-2026-1234",
+        `"'=CVE-2026-1234","'+HIGH","'-openssl","'@1.1.1","1.1.2","Buffer overflow","usr/lib/libssl.so","https://nvd.nist.gov/vuln/detail/CVE-2026-1234"`,
+      );
+    });
+
+    it('prefixes tab-leading fields and escapes embedded quotes', () => {
+      const vuln: Vulnerability = {
+        ...baseVuln,
+        id: '\t=cmd',
+        title: 'Buffer "overflow"',
+      };
+
+      const csv = vulnReportToCsv([vuln]);
+      const lines = csv.split('\n');
+
+      expect(lines[1]).toBe(
+        '"\'\t=cmd","HIGH","openssl","1.1.1","1.1.2","Buffer ""overflow""","usr/lib/libssl.so","https://nvd.nist.gov/vuln/detail/CVE-2026-1234"',
       );
     });
   });

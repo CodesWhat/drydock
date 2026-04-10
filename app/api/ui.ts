@@ -17,12 +17,11 @@ export function init() {
     legacyHeaders: false,
     validate: { xForwardedForHeader: false },
   });
-  router.use(uiLimiter);
   router.use(express.static(uiDirectory));
 
   // Redirect all 404 to index.html (for vue history mode)
   const indexFile = path.resolve(path.join(uiDirectory, 'index.html'));
-  router.get('/{*path}', (req, res) => {
+  router.get('/{*path}', uiLimiter, (req, res) => {
     res.sendFile(indexFile);
   });
   return router;

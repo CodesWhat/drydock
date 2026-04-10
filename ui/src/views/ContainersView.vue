@@ -16,6 +16,7 @@ import { useViewMode } from '../preferences/useViewMode';
 import type { ContainerGroup } from '../services/container';
 import { getAllContainers, getContainerGroups, refreshAllContainers } from '../services/container';
 import type { Container } from '../types/container';
+import { getContainerActionIdentityKey } from '../utils/container-action-key';
 import { mapApiContainers } from '../utils/container-mapper';
 import {
   maturityColor,
@@ -261,11 +262,14 @@ const {
   formatOperationStatus,
   formatRollbackReason,
   formatTimestamp,
+  getContainerUpdateSequenceLabel,
   getContainerListPolicyState,
   getOperationStatusStyle,
   getTriggerKey,
   groupUpdateInProgress,
+  groupUpdateQueue,
   isContainerUpdateInProgress,
+  isContainerUpdateQueued,
   policyError,
   policyInProgress,
   policyMessage,
@@ -763,10 +767,12 @@ const displayContainers = computed(() => {
         }
       : container,
   );
-  const liveNames = new Set(live.map((container) => container.name));
-  const ghosts = [...actionPending.value.entries()]
-    .filter(([name]) => !liveNames.has(name))
-    .map(([, snapshot]) => ({ ...snapshot, _pending: true as const }));
+  const liveIdentityKeys = new Set(
+    live.map((container) => getContainerActionIdentityKey(container)).filter(Boolean),
+  );
+  const ghosts = [...actionPending.value.values()]
+    .filter((snapshot) => !liveIdentityKeys.has(getContainerActionIdentityKey(snapshot)))
+    .map((snapshot) => ({ ...snapshot, _pending: true as const }));
   return [...live, ...ghosts];
 });
 
@@ -968,6 +974,17 @@ function handleGlobalClick() {
   showColumnPicker.value = false;
 }
 
+const SSE_CONTAINER_CHANGED_DEBOUNCE_MS = 500;
+let sseContainerChangedTimer: ReturnType<typeof setTimeout> | undefined;
+
+function clearSseContainerChangedTimer() {
+  if (sseContainerChangedTimer === undefined) {
+    return;
+  }
+  clearTimeout(sseContainerChangedTimer);
+  sseContainerChangedTimer = undefined;
+}
+
 async function handleSseScanCompleted() {
   await loadContainers();
   if (selectedContainerId.value) {
@@ -976,7 +993,13 @@ async function handleSseScanCompleted() {
 }
 
 const sseScanCompletedListener = handleSseScanCompleted as EventListener;
-const sseContainerChangedListener = handleSseScanCompleted as EventListener;
+const sseContainerChangedListener = (() => {
+  clearSseContainerChangedTimer();
+  sseContainerChangedTimer = setTimeout(() => {
+    sseContainerChangedTimer = undefined;
+    void handleSseScanCompleted();
+  }, SSE_CONTAINER_CHANGED_DEBOUNCE_MS);
+}) as EventListener;
 const sseConnectedListener = handleSseScanCompleted as EventListener;
 onMounted(() => {
   document.addEventListener('click', handleGlobalClick);
@@ -985,6 +1008,7 @@ onMounted(() => {
   globalThis.addEventListener('dd:sse-connected', sseConnectedListener);
 });
 onUnmounted(() => {
+  clearSseContainerChangedTimer();
   document.removeEventListener('click', handleGlobalClick);
   globalThis.removeEventListener('dd:sse-scan-completed', sseScanCompletedListener);
   globalThis.removeEventListener('dd:sse-container-changed', sseContainerChangedListener);
@@ -1035,10 +1059,13 @@ provide(containersViewTemplateContextKey, {
   toggleGroupCollapse,
   collapsedGroups,
   groupUpdateInProgress,
+  groupUpdateQueue,
   containerActionsEnabled,
   containerActionsDisabledReason,
   actionInProgress,
+  getContainerUpdateSequenceLabel,
   isContainerUpdateInProgress,
+  isContainerUpdateQueued,
   updateAllInGroup,
   tableColumns,
   containerSortKey,

@@ -280,6 +280,11 @@ interface LegacyInputSummary {
   api?: LegacyInputSourceSummary;
 }
 
+interface CurlHealthcheckOverrideSummary {
+  detected: boolean;
+  commandPreview?: string;
+}
+
 const LEGACY_KEY_PREVIEW_LIMIT = 6;
 const stackedBannerInlineStyle = {
   position: 'static',
@@ -290,8 +295,10 @@ const stackedBannerInlineStyle = {
   maxWidth: 'none',
 } as const;
 const legacyInputSummary = ref<LegacyInputSummary | null>(null);
+const curlHealthcheckOverrideSummary = ref<CurlHealthcheckOverrideSummary | null>(null);
 const legacyConfigDeprecationBanner = useDeprecationBanner('dd-banner-legacy-config-v1');
 const legacyApiPathDeprecationBanner = useDeprecationBanner('dd-banner-legacy-api-paths-v1');
+const curlHealthcheckDeprecationBanner = useDeprecationBanner('dd-banner-curl-healthcheck-v1');
 
 type SearchScope = 'all' | 'pages' | 'containers' | 'runtime' | 'config';
 type SearchPrefix = '/' | '@' | '#';
@@ -647,6 +654,25 @@ function normalizeLegacyInputSummary(rawValue: unknown): LegacyInputSummary | nu
   return summary;
 }
 
+function normalizeCurlHealthcheckOverrideSummary(
+  rawValue: unknown,
+): CurlHealthcheckOverrideSummary | null {
+  if (!rawValue || typeof rawValue !== 'object') {
+    return null;
+  }
+
+  const detected = (rawValue as { detected?: unknown }).detected === true;
+  const commandPreview =
+    typeof (rawValue as { commandPreview?: unknown }).commandPreview === 'string'
+      ? (rawValue as { commandPreview: string }).commandPreview
+      : undefined;
+
+  return {
+    detected,
+    ...(commandPreview ? { commandPreview } : {}),
+  };
+}
+
 function summarizeLegacyKeys(keys: string[]): string {
   if (keys.length === 0) {
     return '';
@@ -711,6 +737,9 @@ const showLegacyConfigDeprecationBanner = computed(
 const showLegacyApiPathDeprecationBanner = computed(
   () => legacyApiPathDeprecationBanner.visible.value,
 );
+const showCurlHealthcheckDeprecationBanner = computed(
+  () => curlHealthcheckDeprecationBanner.visible.value,
+);
 const legacyConfigBannerTitle = computed(() => {
   const envCount = legacyInputSummary.value?.env.total ?? 0;
   const labelCount = legacyInputSummary.value?.label.total ?? 0;
@@ -725,7 +754,8 @@ const hasVisibleAnnouncementBanners = computed(
     showOidcHttpCompatibilityBanner.value ||
     showLegacyHashDeprecationBanner.value ||
     showLegacyConfigDeprecationBanner.value ||
-    showLegacyApiPathDeprecationBanner.value,
+    showLegacyApiPathDeprecationBanner.value ||
+    showCurlHealthcheckDeprecationBanner.value,
 );
 
 function dismissLegacyHashBannerForSession() {
@@ -739,10 +769,15 @@ function dismissLegacyHashBannerPermanently() {
 async function refreshLegacyInputSummary() {
   const serverData = await getServer().catch(() => null);
   const summary = normalizeLegacyInputSummary(serverData?.compatibility?.legacyInputs);
+  const curlHealthcheckOverride = normalizeCurlHealthcheckOverrideSummary(
+    serverData?.compatibility?.curlHealthcheckOverride,
+  );
   legacyInputSummary.value = summary;
+  curlHealthcheckOverrideSummary.value = curlHealthcheckOverride;
   legacyConfigDeprecationBanner.detected.value =
     (summary?.env.total ?? 0) > 0 || (summary?.label.total ?? 0) > 0;
   legacyApiPathDeprecationBanner.detected.value = (summary?.api?.total ?? 0) > 0;
+  curlHealthcheckDeprecationBanner.detected.value = curlHealthcheckOverride?.detected === true;
 }
 
 async function refreshSearchResources() {
@@ -1386,7 +1421,6 @@ onUnmounted(() => {
 
           <nav class="flex items-center gap-1.5 text-xs-plus">
             <AppIcon :name="currentPageIcon" :size="16" class="leading-none dd-text-muted" />
-            <AppIcon name="chevron-right" :size="13" class="leading-none dd-text-muted" />
             <span class="font-medium leading-none dd-text">
               {{ currentPageLabel }}
             </span>
@@ -1513,6 +1547,27 @@ onUnmounted(() => {
           <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">/api/v1/*</code>.
           <span v-if="legacyApiPathKeysPreview" class="block mt-1 truncate">
             API paths ({{ legacyInputSummary?.api?.total }}): {{ legacyApiPathKeysPreview }}
+          </span>
+        </AnnouncementBanner>
+
+        <AnnouncementBanner
+          v-if="showCurlHealthcheckDeprecationBanner"
+          data-testid="curl-healthcheck-deprecation-banner"
+          title="Custom curl healthcheck override detected"
+          permanent-dismiss-label="Don't show again"
+          link-href="https://getdrydock.com/docs/deprecations#curl-in-docker-image"
+          link-label="Migration guide"
+          :style="stackedBannerInlineStyle"
+          @dismiss="curlHealthcheckDeprecationBanner.dismissForSession"
+          @dismiss-permanent="curlHealthcheckDeprecationBanner.dismissPermanently">
+          Your Drydock container uses a custom curl-based healthcheck override. curl remains
+          supported for backward compatibility in v1.5.x. v1.6.0 is the final warning release,
+          and curl will be removed from the image in v1.7.0. Prefer the built-in image
+          healthcheck or
+          <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">/bin/healthcheck</code>
+          for custom intervals.
+          <span v-if="curlHealthcheckOverrideSummary?.commandPreview" class="block mt-1 truncate">
+            Healthcheck command: {{ curlHealthcheckOverrideSummary.commandPreview }}
           </span>
         </AnnouncementBanner>
       </div>

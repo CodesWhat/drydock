@@ -13,8 +13,22 @@ import {
   updateContainer as apiUpdateContainer,
 } from '../../services/container-actions';
 import type { Container } from '../../types/container';
-import { getContainerActionKey, hasTrackedContainerAction } from '../../utils/container-action-key';
-import { errorMessage, isNoUpdateAvailableError } from '../../utils/error';
+import {
+  getContainerActionIdentityKey,
+  getContainerActionKey,
+  hasTrackedContainerAction,
+} from '../../utils/container-action-key';
+import {
+  createContainerUpdateBatchId,
+  formatContainerUpdateStartedCountMessage,
+  getContainerAlreadyUpToDateMessage,
+  getContainerUpdateStartedMessage,
+  getForceContainerUpdateStartedMessage,
+  isStaleContainerUpdateError,
+  runContainerUpdateRequest,
+  shouldRenderStandaloneQueuedUpdateAsUpdating,
+} from '../../utils/container-update';
+import { errorMessage } from '../../utils/error';
 import { useContainerBackups } from './useContainerBackups';
 import { useContainerPolicy } from './useContainerPolicy';
 import { useContainerPreview } from './useContainerPreview';
@@ -25,7 +39,9 @@ interface ContainerActionGroup {
   containers: Container[];
 }
 
-type ContainerActionTarget = string | Pick<Container, 'id' | 'name' | 'updateOperation'>;
+type ContainerActionTarget =
+  | string
+  | Pick<Container, 'id' | 'name' | 'identityKey' | 'updateOperation'>;
 
 interface UseContainerActionsInput {
   activeDetailTab: Readonly<Ref<string>>;
@@ -45,10 +61,17 @@ export const PENDING_ACTIONS_POLL_INTERVAL_MS = 2000;
 const PENDING_UPDATE_GRACE_MS = 6000;
 
 type PendingActionLifecycleMode = 'presence' | 'update';
-
-function isStaleUpdateError(error: unknown): boolean {
-  return isNoUpdateAvailableError(error);
-}
+type GroupUpdateSequenceEntry = {
+  groupKey: string;
+  position: number;
+  total: number;
+};
+type PersistedUpdateBatchSequence = {
+  batchId: string;
+  position: number;
+  total: number;
+  status: 'queued' | 'in-progress';
+};
 
 function resolveContainerActionTargetKey(target: ContainerActionTarget): string {
   if (typeof target === 'string') {
@@ -74,24 +97,38 @@ function hasPendingContainerAction(
   target: ContainerActionTarget,
   actionPending: Readonly<Ref<Map<string, Container>>>,
 ) {
-  const name = typeof target === 'string' ? target : target.name;
-  return typeof name === 'string' && name.length > 0 && actionPending.value.has(name);
+  const pendingKey = resolveContainerActionTargetKey(target);
+  if (pendingKey && actionPending.value.has(pendingKey)) {
+    return true;
+  }
+
+  const identityKey = typeof target === 'string' ? target : getContainerActionIdentityKey(target);
+  if (!identityKey) {
+    return false;
+  }
+
+  return [...actionPending.value.values()].some((snapshot) => {
+    return typeof target === 'string'
+      ? snapshot.name === identityKey
+      : getContainerActionIdentityKey(snapshot) === identityKey;
+  });
 }
 
 function hasInProgressUpdateOperation(
   target: ContainerActionTarget,
   containers: Readonly<Ref<Container[]>>,
 ) {
-  if (typeof target !== 'string' && target.updateOperation?.status === 'in-progress') {
-    return true;
-  }
-
   const targetId = typeof target === 'string' ? undefined : target.id;
-  const targetName = typeof target === 'string' ? target : target.name;
+  const targetIdentityKey =
+    typeof target === 'string' ? target : getContainerActionIdentityKey(target);
 
   return containers.value.some((container) => {
-    const matches = targetId ? container.id === targetId : container.name === targetName;
-    return matches && container.updateOperation?.status === 'in-progress';
+    const matchesId = Boolean(targetId && container.id === targetId);
+    const matchesIdentity =
+      typeof target === 'string'
+        ? container.name === targetIdentityKey
+        : getContainerActionIdentityKey(container) === targetIdentityKey;
+    return (matchesId || matchesIdentity) && container.updateOperation?.status === 'in-progress';
   });
 }
 
@@ -99,8 +136,8 @@ function markPendingActionState(args: {
   actionPending: Ref<Map<string, Container>>;
   actionPendingLifecycleModes: Ref<Map<string, PendingActionLifecycleMode>>;
   actionPendingLifecycleObserved: Ref<Set<string>>;
-  startPolling: (name: string) => void;
-  name: string;
+  startPolling: (pendingKey: string) => void;
+  pendingKey: string;
   snapshot?: Container;
   mode: PendingActionLifecycleMode;
 }) {
@@ -108,17 +145,17 @@ function markPendingActionState(args: {
     return;
   }
 
-  args.actionPending.value.set(args.name, args.snapshot);
-  args.actionPendingLifecycleModes.value.set(args.name, args.mode);
+  args.actionPending.value.set(args.pendingKey, args.snapshot);
+  args.actionPendingLifecycleModes.value.set(args.pendingKey, args.mode);
 
   const nextObserved = new Set(args.actionPendingLifecycleObserved.value);
   if (args.mode === 'update') {
-    nextObserved.delete(args.name);
+    nextObserved.delete(args.pendingKey);
   } else {
-    nextObserved.add(args.name);
+    nextObserved.add(args.pendingKey);
   }
   args.actionPendingLifecycleObserved.value = nextObserved;
-  args.startPolling(args.name);
+  args.startPolling(args.pendingKey);
 }
 
 async function executeContainerActionState(args: {
@@ -126,6 +163,7 @@ async function executeContainerActionState(args: {
   containerActionsDisabledReason: string;
   containerId?: string;
   actionKey: string;
+  pendingKey: string;
   name: string;
   actionInProgress: Ref<Set<string>>;
   inputError: Ref<string | null>;
@@ -136,7 +174,7 @@ async function executeContainerActionState(args: {
   actionPending: Ref<Map<string, Container>>;
   actionPendingLifecycleModes: Ref<Map<string, PendingActionLifecycleMode>>;
   actionPendingLifecycleObserved: Ref<Set<string>>;
-  startPolling: (name: string) => void;
+  startPolling: (pendingKey: string) => void;
   selectedContainerId: string | undefined;
   activeDetailTab: string;
   refreshActionTabData: () => Promise<void>;
@@ -162,35 +200,54 @@ async function executeContainerActionState(args: {
     args.containers.value.find((container) => container.id === containerId) ??
     args.containers.value.find((container) => container.name === args.name);
   try {
-    await args.action(containerId);
-    if (args.pendingLifecycleMode === 'update') {
-      markPendingActionState({
-        actionPending: args.actionPending,
-        actionPendingLifecycleModes: args.actionPendingLifecycleModes,
-        actionPendingLifecycleObserved: args.actionPendingLifecycleObserved,
-        startPolling: args.startPolling,
-        name: args.name,
-        snapshot,
-        mode: 'update',
-      });
-    }
-    if (shouldReloadContainers) {
-      await args.loadContainers();
-      const stillPresent = args.containers.value.find((container) => container.id === containerId);
-      if (!stillPresent && snapshot) {
-        markPendingActionState({
-          actionPending: args.actionPending,
-          actionPendingLifecycleModes: args.actionPendingLifecycleModes,
-          actionPendingLifecycleObserved: args.actionPendingLifecycleObserved,
-          startPolling: args.startPolling,
-          name: args.name,
-          snapshot,
-          mode: args.pendingLifecycleMode ?? 'presence',
-        });
+    const result = await runContainerUpdateRequest({
+      request: () => args.action(containerId),
+      onAccepted: async () => {
+        if (args.pendingLifecycleMode === 'update') {
+          markPendingActionState({
+            actionPending: args.actionPending,
+            actionPendingLifecycleModes: args.actionPendingLifecycleModes,
+            actionPendingLifecycleObserved: args.actionPendingLifecycleObserved,
+            startPolling: args.startPolling,
+            pendingKey: args.pendingKey,
+            snapshot,
+            mode: 'update',
+          });
+        }
+        if (shouldReloadContainers) {
+          await args.loadContainers();
+          const stillPresent = args.containers.value.find(
+            (container) => container.id === containerId,
+          );
+          if (!stillPresent && snapshot) {
+            markPendingActionState({
+              actionPending: args.actionPending,
+              actionPendingLifecycleModes: args.actionPendingLifecycleModes,
+              actionPendingLifecycleObserved: args.actionPendingLifecycleObserved,
+              startPolling: args.startPolling,
+              pendingKey: args.pendingKey,
+              snapshot,
+              mode: args.pendingLifecycleMode ?? 'presence',
+            });
+          }
+        }
+        if (args.selectedContainerId === containerId && args.activeDetailTab === 'actions') {
+          await args.refreshActionTabData();
+        }
+      },
+      onStale: async () => {
+        if (shouldReloadContainers) {
+          await args.loadContainers();
+        }
+      },
+      isStaleError: args.treatNoUpdateAsStale ? isStaleContainerUpdateError : undefined,
+    });
+    if (result === 'stale') {
+      if (args.staleMessage) {
+        const toast = useToast();
+        toast.info(args.staleMessage);
       }
-    }
-    if (args.selectedContainerId === containerId && args.activeDetailTab === 'actions') {
-      await args.refreshActionTabData();
+      return false;
     }
     if (args.successMessage) {
       const toast = useToast();
@@ -198,16 +255,6 @@ async function executeContainerActionState(args: {
     }
     return true;
   } catch (e: unknown) {
-    if (args.treatNoUpdateAsStale && isStaleUpdateError(e)) {
-      if (shouldReloadContainers) {
-        await args.loadContainers();
-      }
-      if (args.staleMessage) {
-        const toast = useToast();
-        toast.info(args.staleMessage);
-      }
-      return false;
-    }
     const msg = errorMessage(e, `Action failed for ${args.name}`);
     args.inputError.value = msg;
     const toast = useToast();
@@ -237,12 +284,160 @@ function setGroupUpdateStateValue(
   groupUpdateInProgress.value = next;
 }
 
+function setGroupUpdateQueueValue(
+  groupUpdateQueue: Ref<Set<string>>,
+  containerIds: string[],
+  queued: boolean,
+) {
+  const next = new Set(groupUpdateQueue.value);
+  for (const id of containerIds) {
+    if (queued) {
+      next.add(id);
+    } else {
+      next.delete(id);
+    }
+  }
+  groupUpdateQueue.value = next;
+}
+
+function syncGroupUpdateSequenceValue(
+  groupUpdateSequence: Ref<Map<string, GroupUpdateSequenceEntry>>,
+  groupKey: string,
+  groupContainerIds: string[],
+  acceptedContainerIds: string[],
+) {
+  const next = new Map(groupUpdateSequence.value);
+  for (const id of groupContainerIds) {
+    next.delete(id);
+  }
+  for (const [index, id] of acceptedContainerIds.entries()) {
+    next.set(id, {
+      groupKey,
+      position: index + 1,
+      total: acceptedContainerIds.length,
+    });
+  }
+  groupUpdateSequence.value = next;
+}
+
+function getGroupUpdateHeadPosition(
+  groupUpdateSequence: Readonly<Ref<Map<string, GroupUpdateSequenceEntry>>>,
+  groupKey: string,
+) {
+  let headPosition: number | null = null;
+  for (const sequence of groupUpdateSequence.value.values()) {
+    if (sequence.groupKey !== groupKey) {
+      continue;
+    }
+    if (headPosition === null || sequence.position < headPosition) {
+      headPosition = sequence.position;
+    }
+  }
+  return headPosition;
+}
+
+function hasOtherLocalGroupQueueHead(
+  groupUpdateSequence: Readonly<Ref<Map<string, GroupUpdateSequenceEntry>>>,
+  targetId?: string,
+) {
+  for (const [containerId, sequence] of groupUpdateSequence.value.entries()) {
+    if (containerId === targetId) {
+      continue;
+    }
+    if (getGroupUpdateHeadPosition(groupUpdateSequence, sequence.groupKey) === sequence.position) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function getPersistedUpdateBatchSequence(
+  operation?: Pick<
+    NonNullable<Container['updateOperation']>,
+    'status' | 'batchId' | 'queuePosition' | 'queueTotal'
+  >,
+): PersistedUpdateBatchSequence | undefined {
+  if (!operation || (operation.status !== 'queued' && operation.status !== 'in-progress')) {
+    return undefined;
+  }
+
+  const { batchId, queuePosition, queueTotal } = operation;
+  if (
+    !batchId ||
+    !Number.isSafeInteger(queuePosition) ||
+    !Number.isSafeInteger(queueTotal) ||
+    queuePosition <= 0 ||
+    queueTotal <= 0 ||
+    queuePosition > queueTotal
+  ) {
+    return undefined;
+  }
+
+  return {
+    batchId,
+    position: queuePosition,
+    total: queueTotal,
+    status: operation.status,
+  };
+}
+
+function getPersistedBatchHeadPosition(containers: readonly Container[], batchId: string) {
+  let queuedHeadPosition: number | null = null;
+  let inProgressHeadPosition: number | null = null;
+
+  for (const container of containers) {
+    const sequence = getPersistedUpdateBatchSequence(container.updateOperation);
+    if (!sequence || sequence.batchId !== batchId) {
+      continue;
+    }
+
+    if (sequence.status === 'in-progress') {
+      if (inProgressHeadPosition === null || sequence.position < inProgressHeadPosition) {
+        inProgressHeadPosition = sequence.position;
+      }
+      continue;
+    }
+
+    if (queuedHeadPosition === null || sequence.position < queuedHeadPosition) {
+      queuedHeadPosition = sequence.position;
+    }
+  }
+
+  return inProgressHeadPosition ?? queuedHeadPosition;
+}
+
+function getPersistedTargetSequence(
+  target: Exclude<ContainerActionTarget, string>,
+  containers: readonly Container[],
+) {
+  const liveContainer =
+    containers.find((container) => container.id === target.id) ??
+    containers.find(
+      (container) =>
+        getContainerActionIdentityKey(container) === getContainerActionIdentityKey(target),
+    );
+  const sequence = getPersistedUpdateBatchSequence(
+    liveContainer?.updateOperation ?? target.updateOperation,
+  );
+  if (!sequence) {
+    return undefined;
+  }
+
+  const headPosition = getPersistedBatchHeadPosition(containers, sequence.batchId);
+  return {
+    ...sequence,
+    isHead: headPosition === sequence.position,
+  };
+}
+
 async function updateAllInGroupState(args: {
   containerActionsEnabled: boolean;
   containerActionsDisabledReason: string;
   containers: Readonly<Ref<Container[]>>;
   inputError: Ref<string | null>;
   groupUpdateInProgress: Ref<Set<string>>;
+  groupUpdateQueue: Ref<Set<string>>;
+  groupUpdateSequence: Ref<Map<string, GroupUpdateSequenceEntry>>;
   group: ContainerActionGroup;
   executeAction: (
     target: ContainerActionTarget,
@@ -270,39 +465,84 @@ async function updateAllInGroupState(args: {
   });
   const frozenUpdateTargets = updatableContainers.map((container) => ({
     id: container.id,
+    identityKey: container.identityKey,
     name: container.name,
   }));
   if (frozenUpdateTargets.length === 0) {
     return;
   }
   setGroupUpdateStateValue(args.groupUpdateInProgress, args.group.key, true);
+  const groupContainerIds = frozenUpdateTargets.map((t) => t.id);
+  const batchId = createContainerUpdateBatchId();
+  const batchSize = frozenUpdateTargets.length;
+  let activeTargetIds = [...groupContainerIds];
+  const initiallyQueuedTargetIds = groupContainerIds.slice(1);
+  setGroupUpdateQueueValue(args.groupUpdateQueue, initiallyQueuedTargetIds, true);
+  syncGroupUpdateSequenceValue(
+    args.groupUpdateSequence,
+    args.group.key,
+    groupContainerIds,
+    activeTargetIds,
+  );
+  const acceptedTargetIds: string[] = [];
   try {
     let updatedCount = 0;
-    for (const target of frozenUpdateTargets) {
+    for (const [index, target] of frozenUpdateTargets.entries()) {
       const currentContainer = args.containers.value.find(
         (container) => container.id === target.id,
       );
       if (!currentContainer || currentContainer.name !== target.name) {
+        activeTargetIds = activeTargetIds.filter((id) => id !== target.id);
+        setGroupUpdateQueueValue(args.groupUpdateQueue, [target.id], false);
+        syncGroupUpdateSequenceValue(
+          args.groupUpdateSequence,
+          args.group.key,
+          groupContainerIds,
+          activeTargetIds,
+        );
         continue;
       }
 
-      const updated = await args.executeAction(target, apiUpdateContainer, {
-        reloadContainers: false,
-        treatNoUpdateAsStale: true,
-        pendingLifecycleMode: 'update',
-      });
+      const updated = await args.executeAction(
+        target,
+        (id) =>
+          apiUpdateContainer(id, {
+            batchId,
+            queuePosition: index + 1,
+            queueTotal: batchSize,
+          }),
+        {
+          reloadContainers: false,
+          treatNoUpdateAsStale: true,
+          pendingLifecycleMode: 'update',
+        },
+      );
       if (updated) {
         updatedCount += 1;
+        acceptedTargetIds.push(target.id);
+      } else {
+        activeTargetIds = activeTargetIds.filter((id) => id !== target.id);
+        setGroupUpdateQueueValue(args.groupUpdateQueue, [target.id], false);
+        syncGroupUpdateSequenceValue(
+          args.groupUpdateSequence,
+          args.group.key,
+          groupContainerIds,
+          activeTargetIds,
+        );
       }
     }
     await args.loadContainers();
     if (updatedCount > 0) {
       const toast = useToast();
       toast.success(
-        `Updated ${updatedCount} container${updatedCount === 1 ? '' : 's'} in ${args.group.key}`,
+        `${formatContainerUpdateStartedCountMessage(updatedCount)} in ${args.group.key}`,
       );
     }
   } finally {
+    if (acceptedTargetIds.length === 0) {
+      setGroupUpdateQueueValue(args.groupUpdateQueue, groupContainerIds, false);
+      syncGroupUpdateSequenceValue(args.groupUpdateSequence, args.group.key, groupContainerIds, []);
+    }
     setGroupUpdateStateValue(args.groupUpdateInProgress, args.group.key, false);
   }
 }
@@ -372,18 +612,27 @@ function clearPendingActionState(args: {
   actionPendingStartTimes: Ref<Map<string, number>>;
   actionPendingLifecycleModes: Ref<Map<string, PendingActionLifecycleMode>>;
   actionPendingLifecycleObserved: Ref<Set<string>>;
-  name: string;
+  groupUpdateQueue: Ref<Set<string>>;
+  groupUpdateSequence: Ref<Map<string, GroupUpdateSequenceEntry>>;
+  pendingKey: string;
 }) {
-  args.actionPending.value.delete(args.name);
-  args.actionPendingStartTimes.value.delete(args.name);
-  args.actionPendingLifecycleModes.value.delete(args.name);
+  const snapshot = args.actionPending.value.get(args.pendingKey);
+  if (snapshot?.id) {
+    setGroupUpdateQueueValue(args.groupUpdateQueue, [snapshot.id], false);
+    const nextSequence = new Map(args.groupUpdateSequence.value);
+    nextSequence.delete(snapshot.id);
+    args.groupUpdateSequence.value = nextSequence;
+  }
+  args.actionPending.value.delete(args.pendingKey);
+  args.actionPendingStartTimes.value.delete(args.pendingKey);
+  args.actionPendingLifecycleModes.value.delete(args.pendingKey);
   const nextObserved = new Set(args.actionPendingLifecycleObserved.value);
-  nextObserved.delete(args.name);
+  nextObserved.delete(args.pendingKey);
   args.actionPendingLifecycleObserved.value = nextObserved;
 }
 
 export function isPendingUpdateSettled(args: {
-  name: string;
+  pendingKey: string;
   now: number;
   startTime: number;
   liveContainer?: Container;
@@ -394,10 +643,11 @@ export function isPendingUpdateSettled(args: {
   const observedLifecycleSignal =
     !args.liveContainer ||
     args.liveContainer.updateOperation?.status === 'in-progress' ||
+    args.liveContainer.updateOperation?.status === 'queued' ||
     args.liveContainer.status !== expectedStatus;
   if (observedLifecycleSignal) {
     const nextObserved = new Set(args.actionPendingLifecycleObserved.value);
-    nextObserved.add(args.name);
+    nextObserved.add(args.pendingKey);
     args.actionPendingLifecycleObserved.value = nextObserved;
   }
 
@@ -405,7 +655,10 @@ export function isPendingUpdateSettled(args: {
     return false;
   }
 
-  if (args.liveContainer.updateOperation?.status === 'in-progress') {
+  if (
+    args.liveContainer.updateOperation?.status === 'in-progress' ||
+    args.liveContainer.updateOperation?.status === 'queued'
+  ) {
     return false;
   }
 
@@ -414,36 +667,53 @@ export function isPendingUpdateSettled(args: {
   }
 
   return (
-    args.actionPendingLifecycleObserved.value.has(args.name) ||
+    args.actionPendingLifecycleObserved.value.has(args.pendingKey) ||
     args.now - args.startTime >= PENDING_UPDATE_GRACE_MS
   );
 }
 
-function prunePendingActionsState(args: {
+export function prunePendingActionsState(args: {
   now: number;
   containers: Readonly<Ref<Container[]>>;
   actionPending: Ref<Map<string, Container>>;
   actionPendingStartTimes: Ref<Map<string, number>>;
   actionPendingLifecycleModes: Ref<Map<string, PendingActionLifecycleMode>>;
   actionPendingLifecycleObserved: Ref<Set<string>>;
+  groupUpdateQueue: Ref<Set<string>>;
+  groupUpdateSequence: Ref<Map<string, GroupUpdateSequenceEntry>>;
   pollTimeout: number;
   stopPendingActionsPolling: () => void;
 }) {
-  const liveContainersByName = new Map(
-    args.containers.value.map((container) => [container.name, container] as const),
-  );
-  for (const [name, startTime] of args.actionPendingStartTimes.value.entries()) {
-    const liveContainer = liveContainersByName.get(name);
-    const pendingMode = args.actionPendingLifecycleModes.value.get(name);
+  const liveContainersByActionKey = new Map<string, Container>();
+  const liveContainersByIdentityKey = new Map<string, Container>();
+
+  for (const container of args.containers.value) {
+    const actionKey = getContainerActionKey(container);
+    if (actionKey) {
+      liveContainersByActionKey.set(actionKey, container);
+    }
+    const identityKey = getContainerActionIdentityKey(container);
+    if (identityKey) {
+      liveContainersByIdentityKey.set(identityKey, container);
+    }
+  }
+
+  for (const [pendingKey, startTime] of args.actionPendingStartTimes.value.entries()) {
+    const snapshot = args.actionPending.value.get(pendingKey);
+    const snapshotIdentityKey = snapshot ? getContainerActionIdentityKey(snapshot) : '';
+    const liveContainer =
+      liveContainersByActionKey.get(pendingKey) ??
+      (snapshotIdentityKey ? liveContainersByIdentityKey.get(snapshotIdentityKey) : undefined);
+    const pendingMode = args.actionPendingLifecycleModes.value.get(pendingKey);
     const timedOut = args.now - startTime > args.pollTimeout;
     const settled =
       pendingMode === 'update'
         ? isPendingUpdateSettled({
-            name,
+            pendingKey,
             now: args.now,
             startTime,
             liveContainer,
-            snapshot: args.actionPending.value.get(name),
+            snapshot,
             actionPendingLifecycleObserved: args.actionPendingLifecycleObserved,
           })
         : Boolean(liveContainer);
@@ -454,7 +724,9 @@ function prunePendingActionsState(args: {
         actionPendingStartTimes: args.actionPendingStartTimes,
         actionPendingLifecycleModes: args.actionPendingLifecycleModes,
         actionPendingLifecycleObserved: args.actionPendingLifecycleObserved,
-        name,
+        groupUpdateQueue: args.groupUpdateQueue,
+        groupUpdateSequence: args.groupUpdateSequence,
+        pendingKey,
       });
     }
   }
@@ -481,14 +753,14 @@ async function pollPendingActionsState(args: {
 }
 
 function startPollingState(args: {
-  name: string;
+  pendingKey: string;
   actionPendingStartTimes: Ref<Map<string, number>>;
   pendingActionsPollTimer: Ref<ReturnType<typeof setInterval> | null>;
   pollInterval: number;
   pollPendingActions: () => Promise<void>;
 }) {
-  if (!args.actionPendingStartTimes.value.has(args.name)) {
-    args.actionPendingStartTimes.value.set(args.name, Date.now());
+  if (!args.actionPendingStartTimes.value.has(args.pendingKey)) {
+    args.actionPendingStartTimes.value.set(args.pendingKey, Date.now());
   }
   if (args.pendingActionsPollTimer.value) {
     return;
@@ -581,7 +853,7 @@ function createConfirmHandlers(args: {
       severity: 'warn',
       accept: () =>
         args.executeAction(target, apiUpdateContainer, {
-          successMessage: `Updated: ${name}`,
+          successMessage: getContainerUpdateStartedMessage(name),
           treatNoUpdateAsStale: true,
           pendingLifecycleMode: 'update',
         }) as unknown as Promise<void>,
@@ -674,8 +946,8 @@ function createContainerActionHandlers(args: {
   async function updateContainer(target: ContainerActionTarget) {
     const name = typeof target === 'string' ? target : target.name;
     await args.executeAction(target, apiUpdateContainer, {
-      successMessage: `Updated: ${name}`,
-      staleMessage: `Already up to date: ${name}`,
+      successMessage: getContainerUpdateStartedMessage(name),
+      staleMessage: getContainerAlreadyUpToDateMessage(name),
       treatNoUpdateAsStale: true,
       pendingLifecycleMode: 'update',
     });
@@ -712,8 +984,8 @@ function createContainerActionHandlers(args: {
     const name = typeof target === 'string' ? target : target.name;
     await args.applyPolicy(target, 'clear', {}, `Cleared update policy for ${name}`);
     await args.executeAction(target, apiUpdateContainer, {
-      successMessage: `Force updated: ${name}`,
-      staleMessage: `Already up to date: ${name}`,
+      successMessage: getForceContainerUpdateStartedMessage(name),
+      staleMessage: getContainerAlreadyUpToDateMessage(name),
       treatNoUpdateAsStale: true,
       pendingLifecycleMode: 'update',
     });
@@ -833,6 +1105,8 @@ export function useContainerActions(input: UseContainerActionsInput) {
   const pendingActionsPollTimer = ref<ReturnType<typeof setInterval> | null>(null);
   const pendingActionsPollInFlight = ref(false);
   const groupUpdateInProgress = ref(new Set<string>());
+  const groupUpdateQueue = ref(new Set<string>());
+  const groupUpdateSequence = ref(new Map<string, GroupUpdateSequenceEntry>());
   const POLL_TIMEOUT = 30000;
 
   function stopPendingActionsPolling() {
@@ -847,6 +1121,8 @@ export function useContainerActions(input: UseContainerActionsInput) {
       actionPendingStartTimes,
       actionPendingLifecycleModes,
       actionPendingLifecycleObserved,
+      groupUpdateQueue,
+      groupUpdateSequence,
       pollTimeout: POLL_TIMEOUT,
       stopPendingActionsPolling,
     });
@@ -860,9 +1136,9 @@ export function useContainerActions(input: UseContainerActionsInput) {
     });
   }
 
-  function startPolling(name: string) {
+  function startPolling(pendingKey: string) {
     startPollingState({
-      name,
+      pendingKey,
       actionPendingStartTimes,
       pendingActionsPollTimer,
       pollInterval: PENDING_ACTIONS_POLL_INTERVAL_MS,
@@ -886,14 +1162,110 @@ export function useContainerActions(input: UseContainerActionsInput) {
   );
 
   function isContainerUpdateInProgress(target: ContainerActionTarget) {
+    const hasTrackedAction = hasTrackedContainerAction(
+      actionInProgress.value,
+      typeof target === 'string' ? { name: target } : target,
+    );
+    if (typeof target !== 'string') {
+      const freshContainer = input.containers.value.find((c) => c.id === target.id);
+      const liveOperation = freshContainer?.updateOperation ?? target.updateOperation;
+      const sequence = groupUpdateSequence.value.get(target.id);
+      const isGroupQueueHead =
+        sequence !== undefined &&
+        getGroupUpdateHeadPosition(groupUpdateSequence, sequence.groupKey) === sequence.position;
+      const otherLocalGroupQueueHead = hasOtherLocalGroupQueueHead(groupUpdateSequence, target.id);
+      if (
+        target.updateOperation?.status === 'in-progress' ||
+        freshContainer?.updateOperation?.status === 'in-progress'
+      ) {
+        return true;
+      }
+      if (hasTrackedAction) {
+        return true;
+      }
+      const persistedSequence = getPersistedTargetSequence(target, input.containers.value);
+      if (persistedSequence) {
+        return persistedSequence.isHead;
+      }
+      if (
+        shouldRenderStandaloneQueuedUpdateAsUpdating({
+          containers: input.containers.value,
+          hasExternalActiveHead: otherLocalGroupQueueHead,
+          operation: liveOperation,
+          targetId: target.id,
+        })
+      ) {
+        return true;
+      }
+      if (
+        target.updateOperation?.status === 'queued' ||
+        freshContainer?.updateOperation?.status === 'queued' ||
+        groupUpdateQueue.value.has(target.id)
+      ) {
+        return isGroupQueueHead;
+      }
+    }
     return (
-      hasTrackedContainerAction(
-        actionInProgress.value,
-        typeof target === 'string' ? { name: target } : target,
-      ) ||
+      hasTrackedAction ||
       hasPendingContainerAction(target, actionPending) ||
       hasInProgressUpdateOperation(target, input.containers)
     );
+  }
+
+  function isContainerUpdateQueued(target: ContainerActionTarget) {
+    const hasTrackedAction = hasTrackedContainerAction(actionInProgress.value, target);
+    if (typeof target === 'string') {
+      return false;
+    }
+    const freshContainer = input.containers.value.find((container) => container.id === target.id);
+    const liveOperation = freshContainer?.updateOperation ?? target.updateOperation;
+    const sequence = groupUpdateSequence.value.get(target.id);
+    const isGroupQueueHead =
+      sequence !== undefined &&
+      getGroupUpdateHeadPosition(groupUpdateSequence, sequence.groupKey) === sequence.position;
+    const otherLocalGroupQueueHead = hasOtherLocalGroupQueueHead(groupUpdateSequence, target.id);
+    if (
+      target.updateOperation?.status === 'in-progress' ||
+      freshContainer?.updateOperation?.status === 'in-progress' ||
+      hasTrackedAction ||
+      isGroupQueueHead
+    ) {
+      return false;
+    }
+    const persistedSequence = getPersistedTargetSequence(target, input.containers.value);
+    if (persistedSequence) {
+      return !persistedSequence.isHead;
+    }
+    if (
+      shouldRenderStandaloneQueuedUpdateAsUpdating({
+        containers: input.containers.value,
+        hasExternalActiveHead: otherLocalGroupQueueHead,
+        operation: liveOperation,
+        targetId: target.id,
+      })
+    ) {
+      return false;
+    }
+    if (
+      target.updateOperation?.status === 'queued' ||
+      freshContainer?.updateOperation?.status === 'queued'
+    ) {
+      return true;
+    }
+    return groupUpdateQueue.value.has(target.id);
+  }
+
+  function getContainerUpdateSequenceLabel(target: ContainerActionTarget) {
+    if (typeof target === 'string') {
+      return null;
+    }
+    const sequence =
+      groupUpdateSequence.value.get(target.id) ??
+      getPersistedTargetSequence(target, input.containers.value);
+    if (!sequence || sequence.total < 2) {
+      return null;
+    }
+    return `${sequence.position} of ${sequence.total}`;
   }
 
   async function executeAction(
@@ -914,11 +1286,13 @@ export function useContainerActions(input: UseContainerActionsInput) {
       options?.containerId,
     );
     const actionKey = containerId ?? resolveContainerActionTargetKey(target);
+    const pendingKey = resolveContainerActionTargetKey(target);
     return executeContainerActionState({
       containerActionsEnabled: containerActionsEnabled.value,
       containerActionsDisabledReason: containerActionsDisabledReason.value,
       containerId,
       actionKey,
+      pendingKey,
       name,
       actionInProgress,
       inputError: input.error,
@@ -947,6 +1321,8 @@ export function useContainerActions(input: UseContainerActionsInput) {
       containers: input.containers,
       inputError: input.error,
       groupUpdateInProgress,
+      groupUpdateQueue,
+      groupUpdateSequence,
       group,
       executeAction,
       loadContainers: input.loadContainers,
@@ -1030,11 +1406,14 @@ export function useContainerActions(input: UseContainerActionsInput) {
     formatOperationStatus: backups.formatOperationStatus,
     formatRollbackReason: backups.formatRollbackReason,
     formatTimestamp: backups.formatTimestamp,
+    getContainerUpdateSequenceLabel,
     getContainerListPolicyState: policy.getContainerListPolicyState,
     getOperationStatusStyle: backups.getOperationStatusStyle,
     getTriggerKey: triggers.getTriggerKey,
     groupUpdateInProgress,
+    groupUpdateQueue,
     isContainerUpdateInProgress,
+    isContainerUpdateQueued,
     policyError: policy.policyError,
     policyInProgress: policy.policyInProgress,
     policyMessage: policy.policyMessage,

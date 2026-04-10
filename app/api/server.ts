@@ -1,5 +1,6 @@
 import express from 'express';
 import nocache from 'nocache';
+import { getCurlHealthcheckOverrideCompatibility } from '../compatibility/curl-healthcheck.js';
 import { getServerConfiguration, getWebhookConfiguration } from '../configuration/index.js';
 import logger from '../log/index.js';
 import { sanitizeLogParam } from '../log/sanitize.js';
@@ -15,9 +16,10 @@ const log = logger.child({ component: 'server' });
  * @param req
  * @param res
  */
-function getServer(req, res) {
+async function getServer(req, res) {
   const serverConfig = getServerConfiguration();
   const webhookConfig = getWebhookConfiguration();
+  const curlHealthcheckOverride = await getCurlHealthcheckOverrideCompatibility();
   const { tls, ...serverConfigWithoutTls } = serverConfig;
   const sanitizedTlsConfig =
     tls && typeof tls === 'object'
@@ -34,6 +36,7 @@ function getServer(req, res) {
     },
     compatibility: {
       legacyInputs: getLegacyInputSummary(),
+      curlHealthcheckOverride,
     },
   });
 }

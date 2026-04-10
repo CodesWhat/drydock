@@ -26,6 +26,18 @@ import { parseBooleanQueryParam } from '../request-helpers.js';
 
 export type ContainerListBasePath = '/api/containers' | '/api/containers/watch';
 
+function parsePositiveInteger(value: unknown): number | undefined {
+  if (typeof value === 'number') {
+    return Number.isSafeInteger(value) && value > 0 ? value : undefined;
+  }
+  if (typeof value !== 'string' || !/^\d+$/.test(value)) {
+    return undefined;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : undefined;
+}
+
 function stripContainerVulnerabilityArrays(container: Container): Container {
   if (!container.security) {
     return container;
@@ -63,6 +75,9 @@ function sanitizeInProgressUpdateOperation(
   const status = isContainerUpdateOperationStatus(candidate.status) ? candidate.status : undefined;
   const phase = isContainerUpdateOperationPhase(candidate.phase) ? candidate.phase : undefined;
   const updatedAt = typeof candidate.updatedAt === 'string' ? candidate.updatedAt : undefined;
+  const batchId = typeof candidate.batchId === 'string' ? candidate.batchId : undefined;
+  const queuePosition = parsePositiveInteger(candidate.queuePosition);
+  const queueTotal = parsePositiveInteger(candidate.queueTotal);
 
   if (!id || !status || !phase || !updatedAt) {
     return undefined;
@@ -76,6 +91,13 @@ function sanitizeInProgressUpdateOperation(
     ...(typeof candidate.fromVersion === 'string' ? { fromVersion: candidate.fromVersion } : {}),
     ...(typeof candidate.toVersion === 'string' ? { toVersion: candidate.toVersion } : {}),
     ...(typeof candidate.targetImage === 'string' ? { targetImage: candidate.targetImage } : {}),
+    ...(batchId && queuePosition && queueTotal && queuePosition <= queueTotal
+      ? {
+          batchId,
+          queuePosition,
+          queueTotal,
+        }
+      : {}),
   };
 }
 
@@ -83,11 +105,11 @@ export function attachInProgressUpdateOperation(
   context: CrudHandlerContext,
   container: Container,
 ): Container {
-  const byId = context.updateOperationStore.getInProgressOperationByContainerId(container.id);
+  const byId = context.updateOperationStore.getActiveOperationByContainerId(container.id);
   // Name-based fallback only for legacy operations that predate the containerId field.
   const byName = byId
     ? undefined
-    : context.updateOperationStore.getInProgressOperationByContainerName(container.name);
+    : context.updateOperationStore.getActiveOperationByContainerName(container.name);
   const isLegacyOperation =
     byName && typeof byName === 'object' && !('containerId' in (byName as Record<string, unknown>));
   const matched = byId ?? (isLegacyOperation ? byName : undefined);

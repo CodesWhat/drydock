@@ -211,6 +211,30 @@ describe('WatchersView', () => {
     expect(rows[0].lastRun).toBe('\u2014');
   });
 
+  it('renders nextRun from metadata.nextRunAt when present', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-04-09T12:00:00.000Z'));
+
+    mockGetAllWatchers.mockResolvedValue([
+      {
+        id: 'watcher-alpha',
+        name: 'Alpha Watcher',
+        type: 'docker',
+        configuration: { cron: '*/5 * * * *' },
+        metadata: { nextRunAt: '2026-04-09T13:30:00.000Z' },
+      },
+    ]);
+    mockGetAllContainers.mockResolvedValue([]);
+
+    const wrapper = await mountWatchersView();
+    const table = wrapper.findComponent(dataViewStubs.DataTable);
+    const rows = table.props('rows') as Array<{ nextRun: string }>;
+
+    expect(rows[0].nextRun).toBe('1h 30m');
+
+    vi.useRealTimers();
+  });
+
   it('clicking a row fetches watcher details from per-component endpoint', async () => {
     mockGetAllWatchers.mockResolvedValue([
       {
