@@ -1,4 +1,9 @@
-import { classifyTagPrecision, getNumericTagShape, isTagPinned } from './precision.js';
+import {
+  classifyTagPrecision,
+  getNumericTagShape,
+  getNumericTagShapeFromTransformedTag,
+  isTagPinned,
+} from './precision.js';
 
 describe('tag/precision', () => {
   describe('getNumericTagShape', () => {
@@ -26,6 +31,14 @@ describe('tag/precision', () => {
 
     test('returns null when the transformed tag contains line breaks', () => {
       expect(getNumericTagShape('1.2.3', '^.*$ => stable\n1.2.3')).toBeNull();
+    });
+
+    test('returns null when the transformed tag contains carriage returns', () => {
+      expect(getNumericTagShapeFromTransformedTag('1.2.3\rrc1')).toBeNull();
+    });
+
+    test('returns null when the transformed tag trims to an empty string', () => {
+      expect(getNumericTagShape('1.2.3', '^.*$ =>    ')).toBeNull();
     });
   });
 
@@ -66,6 +79,10 @@ describe('tag/precision', () => {
     test('treats rolling channel aliases as not pinned', () => {
       expect(isTagPinned('latest', undefined)).toBe(false);
       expect(isTagPinned('stable', undefined)).toBe(false);
+    });
+
+    test('treats whitespace-only transformed tags as not pinned', () => {
+      expect(isTagPinned('1.2.3', '^.*$ =>    ')).toBe(false);
     });
   });
 });

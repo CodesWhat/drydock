@@ -831,6 +831,21 @@ describe('AgentClient', () => {
       await vi.waitFor(() => expect(handleSpy).toHaveBeenCalledWith('dd:ack', { version: '1.0' }));
     });
 
+    test('should ignore empty SSE data chunks', async () => {
+      const stream = new EventEmitter();
+      axios.mockResolvedValue({ data: stream });
+
+      client.startSse();
+      await vi.advanceTimersByTimeAsync(0);
+
+      const handleSpy = vi.spyOn(client, 'handleEvent').mockResolvedValue(undefined);
+      stream.emit('data', Buffer.alloc(0));
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(handleSpy).not.toHaveBeenCalled();
+    });
+
     test('should handle SSE data split across chunks', async () => {
       const stream = new EventEmitter();
       axios.mockResolvedValue({ data: stream });
@@ -948,6 +963,20 @@ describe('AgentClient', () => {
       } finally {
         process.off('unhandledRejection', onUnhandledRejection);
       }
+    });
+
+    test('should log SSE data processing failures', async () => {
+      const stream = new EventEmitter();
+      axios.mockResolvedValue({ data: stream });
+      vi.spyOn(client as any, 'processSseBuffer').mockRejectedValueOnce(new Error('buffer failed'));
+
+      client.startSse();
+      await vi.advanceTimersByTimeAsync(0);
+
+      stream.emit('data', Buffer.from('data: {"type":"dd:ack","data":{"version":"1.0"}}\n\n'));
+      await vi.waitFor(() =>
+        expect(client.log.error).toHaveBeenCalledWith('SSE data processing failed: buffer failed'),
+      );
     });
 
     test('should handle malformed JSON in SSE data', async () => {
@@ -1156,6 +1185,18 @@ describe('AgentClient', () => {
           watcher: 'local',
           agent: 'test-agent',
         }),
+      });
+    });
+
+    test('should omit non-object container payloads for update-applied events', async () => {
+      await client.handleEvent('dd:update-applied', {
+        containerName: 'local_nginx',
+        container: 'not-an-object',
+      });
+
+      expect(event.emitContainerUpdateApplied).toHaveBeenCalledWith({
+        containerName: 'local_nginx',
+        container: undefined,
       });
     });
 

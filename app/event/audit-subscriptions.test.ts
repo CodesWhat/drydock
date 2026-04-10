@@ -30,11 +30,13 @@ vi.mock('../prometheus/audit.js', () => ({
 type OrderedEventHandlerFn<TPayload> = (payload: TPayload) => void | Promise<void>;
 
 function setupAuditSubscriptions(): {
+  containerUpdateAppliedHandler: OrderedEventHandlerFn<ContainerUpdateAppliedEvent>;
   securityAlertHandler: OrderedEventHandlerFn<SecurityAlertEventPayload>;
   agentDisconnectedHandler: OrderedEventHandlerFn<AgentDisconnectedEventPayload>;
   containerUpdatedHandler: (payload: ContainerLifecycleEventPayload) => void;
 } {
   const handlers: {
+    containerUpdateApplied?: OrderedEventHandlerFn<ContainerUpdateAppliedEvent>;
     securityAlert?: OrderedEventHandlerFn<SecurityAlertEventPayload>;
     agentDisconnected?: OrderedEventHandlerFn<AgentDisconnectedEventPayload>;
     containerUpdated?: (payload: ContainerLifecycleEventPayload) => void;
@@ -55,7 +57,9 @@ function setupAuditSubscriptions(): {
 
   const registrars: AuditSubscriptionRegistrars = {
     registerContainerReport: registerOrdered<ContainerReport>(() => {}),
-    registerContainerUpdateApplied: registerOrdered<ContainerUpdateAppliedEvent>(() => {}),
+    registerContainerUpdateApplied: registerOrdered<ContainerUpdateAppliedEvent>((handler) => {
+      handlers.containerUpdateApplied = handler;
+    }),
     registerContainerUpdateFailed: registerOrdered<ContainerUpdateFailedEventPayload>(() => {}),
     registerSecurityAlert: registerOrdered<SecurityAlertEventPayload>((handler) => {
       handlers.securityAlert = handler;
@@ -72,11 +76,17 @@ function setupAuditSubscriptions(): {
 
   registerAuditLogSubscriptions(registrars);
 
-  if (!handlers.securityAlert || !handlers.agentDisconnected || !handlers.containerUpdated) {
+  if (
+    !handlers.containerUpdateApplied ||
+    !handlers.securityAlert ||
+    !handlers.agentDisconnected ||
+    !handlers.containerUpdated
+  ) {
     throw new Error('Expected audit handlers to be registered');
   }
 
   return {
+    containerUpdateAppliedHandler: handlers.containerUpdateApplied,
     securityAlertHandler: handlers.securityAlert,
     agentDisconnectedHandler: handlers.agentDisconnected,
     containerUpdatedHandler: handlers.containerUpdated,
@@ -177,5 +187,31 @@ describe('audit-subscriptions dedupe windows', () => {
       }),
     );
     expect(mockInc).toHaveBeenCalledWith({ action: 'container-update' });
+  });
+
+  test('records update-applied audits for valid string payloads', async () => {
+    const { containerUpdateAppliedHandler } = setupAuditSubscriptions();
+
+    await containerUpdateAppliedHandler('web');
+
+    expect(mockInsertAudit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'update-applied',
+        containerName: 'web',
+        status: 'success',
+      }),
+    );
+    expect(mockInc).toHaveBeenCalledWith({ action: 'update-applied' });
+  });
+
+  test('ignores invalid or nameless update-applied payloads', async () => {
+    const { containerUpdateAppliedHandler } = setupAuditSubscriptions();
+
+    await containerUpdateAppliedHandler('' as unknown as ContainerUpdateAppliedEvent);
+    await containerUpdateAppliedHandler(null as unknown as ContainerUpdateAppliedEvent);
+    await containerUpdateAppliedHandler({ containerName: '' });
+
+    expect(mockInsertAudit).not.toHaveBeenCalled();
+    expect(mockInc).not.toHaveBeenCalledWith({ action: 'update-applied' });
   });
 });

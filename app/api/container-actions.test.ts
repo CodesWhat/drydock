@@ -925,6 +925,69 @@ describe('Container Actions Router', () => {
       expect(updateOperationStore.insertOperation).not.toHaveBeenCalled();
     });
 
+    test('should return 409 when a legacy queued update is already tracked by container name', async () => {
+      const container = {
+        id: 'c1',
+        name: 'nginx',
+        image: { name: 'nginx' },
+        updateAvailable: true,
+      };
+      mockGetContainer.mockReturnValue(container);
+      const updateOperationStore = await import('../store/update-operation');
+      (
+        updateOperationStore.getActiveOperationByContainerName as ReturnType<typeof vi.fn>
+      ).mockReturnValue({
+        id: 'op-queued',
+        containerName: 'nginx',
+        status: 'queued',
+        phase: 'queued',
+        updatedAt: '2026-04-09T12:00:00.000Z',
+      });
+
+      const handler = getHandler('post', '/:id/update');
+      const req = createMockRequest({ params: { id: 'c1' } });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(updateOperationStore.getActiveOperationByContainerId).toHaveBeenCalledWith('c1');
+      expect(updateOperationStore.getActiveOperationByContainerName).toHaveBeenCalledWith('nginx');
+      expect(res.status).toHaveBeenCalledWith(409);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Container update already queued',
+      });
+    });
+
+    test('should ignore name-based operations that already include a container id', async () => {
+      const container = {
+        id: 'c1',
+        name: 'nginx',
+        image: { name: 'nginx' },
+        updateAvailable: false,
+      };
+      mockGetContainer.mockReturnValue(container);
+      const updateOperationStore = await import('../store/update-operation');
+      (
+        updateOperationStore.getActiveOperationByContainerName as ReturnType<typeof vi.fn>
+      ).mockReturnValue({
+        id: 'op-current-shape',
+        containerId: 'c1',
+        containerName: 'nginx',
+        status: 'queued',
+        phase: 'queued',
+        updatedAt: '2026-04-09T12:00:00.000Z',
+      });
+
+      const handler = getHandler('post', '/:id/update');
+      const req = createMockRequest({ params: { id: 'c1' } });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'No update available for this container',
+      });
+    });
+
     test('should return 404 when no docker trigger found', async () => {
       const container = {
         id: 'c1',

@@ -104,4 +104,41 @@ describe('curl healthcheck compatibility', () => {
       detected: false,
     });
   });
+
+  test('returns undefined preview for empty and blank healthcheck commands', async () => {
+    const { getHealthcheckCommandPreview } = await import('./curl-healthcheck.js');
+
+    expect(getHealthcheckCommandPreview([])).toBeUndefined();
+    expect(getHealthcheckCommandPreview([' ', '\t'])).toBeUndefined();
+  });
+
+  test('truncates long healthcheck command previews', async () => {
+    const { getHealthcheckCommandPreview } = await import('./curl-healthcheck.js');
+
+    const preview = getHealthcheckCommandPreview(['CMD-SHELL', 'x'.repeat(200)]);
+    expect(preview).toHaveLength(160);
+    expect(preview?.endsWith('…')).toBe(true);
+  });
+
+  test('creates docker client without version when socket probing returns nothing', async () => {
+    mockProbeSocketApiVersion.mockResolvedValue(undefined);
+    const { getCurlHealthcheckOverrideCompatibility } = await import('./curl-healthcheck.js');
+
+    await expect(getCurlHealthcheckOverrideCompatibility()).resolves.toEqual({
+      detected: true,
+      commandPreview: 'CMD-SHELL curl --fail http://localhost:3000/health || exit 1',
+    });
+    expect(mockDockerode).toHaveBeenCalledWith({
+      socketPath: '/var/run/docker.sock',
+    });
+  });
+
+  test('returns not detected when Docker inspection throws', async () => {
+    mockInspect.mockRejectedValue(new Error('inspect failed'));
+    const { getCurlHealthcheckOverrideCompatibility } = await import('./curl-healthcheck.js');
+
+    await expect(getCurlHealthcheckOverrideCompatibility()).resolves.toEqual({
+      detected: false,
+    });
+  });
 });

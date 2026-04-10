@@ -2500,6 +2500,34 @@ test('handleContainerUpdateApplied should warn on dismiss error and still clean 
   expect(trigger.notificationResults.has('docker.local/nginx')).toBe(false);
 });
 
+test('handleContainerUpdateApplied should dismiss using containerName when payload container has no notification key', async () => {
+  const mockResult = { messageId: '123' };
+  trigger.notificationResults = new Map();
+  trigger.notificationResults.set('local_container1', mockResult);
+  trigger.dismiss = vi.fn().mockResolvedValue(undefined);
+
+  await trigger.handleContainerUpdateApplied({
+    containerName: 'local_container1',
+    container: {},
+  } as any);
+
+  expect(trigger.dismiss).toHaveBeenCalledWith('local_container1', mockResult);
+  expect(trigger.notificationResults.has('local_container1')).toBe(false);
+});
+
+test('handleContainerUpdateApplied should return early when payload cannot resolve a notification key', async () => {
+  trigger.notificationResults = new Map();
+  trigger.notificationResults.set('local_container1', { id: '1' });
+  trigger.dismiss = vi.fn();
+
+  await trigger.handleContainerUpdateApplied('' as any);
+  await trigger.handleContainerUpdateApplied(null as any);
+  await trigger.handleContainerUpdateApplied({} as any);
+
+  expect(trigger.dismiss).not.toHaveBeenCalled();
+  expect(trigger.notificationResults.has('local_container1')).toBe(true);
+});
+
 test('handleContainerReport should skip when update-available rule suppresses this trigger', async () => {
   notificationStore.isTriggerEnabledForRule.mockImplementation(
     (ruleId) => ruleId !== 'update-available',
@@ -2826,6 +2854,20 @@ test('handleContainerUpdateAppliedEvent should skip when container cannot be fou
   await trigger.handleContainerUpdateAppliedEvent('local_missing');
 
   expect(triggerSpy).not.toHaveBeenCalled();
+});
+
+test('handleContainerUpdateAppliedEvent should skip when payload lacks a usable container name', async () => {
+  const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+  const debugSpy = vi.spyOn(log, 'debug');
+
+  await trigger.handleContainerUpdateAppliedEvent('' as any);
+  await trigger.handleContainerUpdateAppliedEvent({ containerName: '', container: {} } as any);
+  await trigger.handleContainerUpdateAppliedEvent(null as any);
+
+  expect(triggerSpy).not.toHaveBeenCalled();
+  expect(debugSpy).toHaveBeenCalledWith(
+    'Skipping update-applied event because container name is missing',
+  );
 });
 
 test('handleContainerUpdateAppliedEvent should suppress repeated identical dispatch errors during a short burst', async () => {
@@ -3471,6 +3513,29 @@ test('handleContainerReport should store result when resolvenotifications is ena
   expect(trigger.notificationResults.size).toBe(1);
 });
 
+test('handleContainerReport should store result under fallback fullName when notification key is missing', async () => {
+  trigger.configuration = {
+    threshold: 'all',
+    mode: 'simple',
+    resolvenotifications: true,
+  };
+  trigger.notificationResults = new Map();
+  const mockResult = { messageId: '456' };
+  trigger.trigger = vi.fn().mockResolvedValue(mockResult);
+  await trigger.init();
+
+  await trigger.handleContainerReport({
+    changed: true,
+    container: {
+      name: 'container1',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', semverDiff: 'major' },
+    },
+  } as any);
+
+  expect(trigger.notificationResults.get('undefined_container1')).toBe(mockResult);
+});
+
 test('doesReferenceMatchId should match provider.name against 3-part trigger id', () => {
   // When triggerId is 'prefix.docker.update', reference 'docker.update' should match
   expect(Trigger.doesReferenceMatchId('docker.update', 'prefix.docker.update')).toBe(true);
@@ -3918,6 +3983,61 @@ test('getBatchRetryContainers should keep a newer retry-buffer entry when iterat
   expect(retryContainers).toEqual([staleContainer]);
   expect(trigger.batchRetryBuffer.size).toBe(1);
   expect(trigger.batchRetryBuffer.get('local_container1')).toBe(replacementContainer);
+});
+
+test('getBatchRetryContainers should match raw containers by fallback fullName when notification keys are missing', () => {
+  trigger.configuration = {
+    threshold: 'all',
+    once: true,
+    mode: 'batch',
+  };
+
+  const bufferedContainer = {
+    name: 'container1',
+    updateAvailable: true,
+    updateKind: { kind: 'tag', semverDiff: 'major' },
+  } as any;
+  const currentContainer = {
+    name: 'container1',
+    updateAvailable: true,
+    updateKind: { kind: 'tag', semverDiff: 'major' },
+  } as any;
+
+  trigger.batchRetryBuffer.set('undefined_container1', bufferedContainer);
+  storeContainer.getContainersRaw.mockReturnValue([currentContainer]);
+
+  const retryContainers = (trigger as any).getBatchRetryContainers([]);
+
+  expect(retryContainers).toEqual([currentContainer]);
+  expect(trigger.batchRetryBuffer.get('undefined_container1')).toBe(currentContainer);
+});
+
+test('handleContainerReports should use fallback fullName keys for retry and digest cleanup when notification keys are missing', async () => {
+  trigger.configuration = {
+    threshold: 'all',
+    once: true,
+    mode: 'batch',
+  };
+
+  const container = {
+    name: 'container1',
+    updateAvailable: true,
+    updateKind: { kind: 'tag', semverDiff: 'major' },
+  } as any;
+  trigger.batchRetryBuffer.set('undefined_container1', container);
+  trigger.digestBuffer.set('undefined_container1', container);
+  trigger.triggerBatch = vi.fn().mockResolvedValue(undefined);
+
+  await trigger.handleContainerReports([
+    {
+      changed: false,
+      container,
+    },
+  ] as any);
+
+  expect(trigger.triggerBatch).toHaveBeenCalledWith([container]);
+  expect(trigger.batchRetryBuffer.size).toBe(0);
+  expect(trigger.digestBuffer.size).toBe(0);
 });
 
 test('handleContainerReports should suppress repeated identical batch errors during a short burst', async () => {
@@ -4422,6 +4542,12 @@ describe('digest mode', () => {
     triggerBatchSpy.mockRestore();
   });
 
+  test('buildEventBatchDispatchKey should fall back to fullName when no notification key can be derived', () => {
+    expect((trigger as any).buildEventBatchDispatchKey({ name: 'container1' })).toBe(
+      'undefined_container1',
+    );
+  });
+
   test('flushDigestBuffer should skip when buffer is empty', async () => {
     await trigger.register('trigger', 'test', 'digest-trigger', {
       ...configurationValid,
@@ -4559,7 +4685,7 @@ describe('digest mode', () => {
     });
     trigger.init();
 
-    // Buffer the original container for 'test_app'
+    // Buffer the original container under its stable digest key ('c1')
     await trigger.handleContainerReportDigest({
       container: {
         id: 'c1',
@@ -4580,12 +4706,12 @@ describe('digest mode', () => {
     };
 
     // The store returns updateAvailable=false so the revalidation falls through
-    // to the identity check at line 1035. Use the getContainers mock to inject a
+    // to the identity check at line 1324. Use the raw container mock to inject a
     // replacement into the buffer AFTER the snapshot is taken (the snapshot uses
-    // Array.from, which runs before getContainers is called for the store lookup).
-    storeContainer.getContainers.mockImplementation(() => {
+    // Array.from, which runs before getContainersRaw is called for the store lookup).
+    storeContainer.getContainersRaw.mockImplementation(() => {
       // Replace the buffer entry mid-revalidation — simulates a concurrent report
-      trigger.digestBuffer.set('test_app', replacement);
+      trigger.digestBuffer.set('c1', replacement);
       return [
         {
           id: 'c1',
@@ -4602,7 +4728,7 @@ describe('digest mode', () => {
 
     // The replacement should NOT have been deleted — the identity check prevents it
     expect(trigger.digestBuffer.size).toBe(1);
-    expect(trigger.digestBuffer.get('test_app')).toBe(replacement);
+    expect(trigger.digestBuffer.get('c1')).toBe(replacement);
     // No dispatch because the store container has updateAvailable=false
     expect(triggerBatchSpy).not.toHaveBeenCalled();
     triggerBatchSpy.mockRestore();
@@ -4645,6 +4771,69 @@ describe('digest mode', () => {
       }),
     ]);
     expect(trigger.digestBuffer.size).toBe(0);
+    triggerBatchSpy.mockRestore();
+  });
+
+  test('flushDigestBuffer should use fallback fullName keys when digest containers lack notification keys', async () => {
+    await trigger.register('trigger', 'test', 'digest-trigger', {
+      ...configurationValid,
+      mode: 'digest',
+    });
+    trigger.init();
+
+    await trigger.handleContainerReportDigest({
+      container: {
+        name: 'app',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      },
+      changed: true,
+    } as any);
+
+    const currentContainer = {
+      name: 'app',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '3.0' },
+    };
+    storeContainer.getContainersRaw.mockReturnValue([currentContainer] as any);
+
+    const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+    await trigger.flushDigestBuffer();
+
+    expect(triggerBatchSpy).toHaveBeenCalledWith([currentContainer]);
+    expect(trigger.digestBuffer.size).toBe(0);
+    triggerBatchSpy.mockRestore();
+  });
+
+  test('flushDigestBuffer should evict fallback-key containers when revalidation shows no update', async () => {
+    await trigger.register('trigger', 'test', 'digest-trigger', {
+      ...configurationValid,
+      mode: 'digest',
+    });
+    trigger.init();
+
+    await trigger.handleContainerReportDigest({
+      container: {
+        name: 'app',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      },
+      changed: true,
+    } as any);
+
+    storeContainer.getContainersRaw.mockReturnValue([
+      {
+        name: 'app',
+        updateAvailable: false,
+        updateKind: { kind: 'tag', localValue: '2.0', remoteValue: '2.0' },
+      },
+    ] as any);
+
+    const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+    await trigger.flushDigestBuffer();
+
+    expect(trigger.digestBuffer.size).toBe(0);
+    expect(triggerBatchSpy).not.toHaveBeenCalled();
     triggerBatchSpy.mockRestore();
   });
 
@@ -4712,17 +4901,15 @@ describe('digest mode', () => {
       changed: true,
     });
 
+    const replacement = {
+      id: 'c1',
+      name: 'app',
+      watcher: 'test',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', localValue: '2.0', remoteValue: '2.1' },
+    };
     const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockImplementationOnce(async () => {
-      await trigger.handleContainerReportDigest({
-        container: {
-          id: 'c2',
-          name: 'app',
-          watcher: 'test',
-          updateAvailable: true,
-          updateKind: { kind: 'tag', localValue: '2.0', remoteValue: '2.1' },
-        },
-        changed: true,
-      });
+      trigger.digestBuffer.set('c1', replacement);
     });
 
     await trigger.flushDigestBuffer();
@@ -4735,12 +4922,7 @@ describe('digest mode', () => {
         updateKind: expect.objectContaining({ remoteValue: '2.0' }),
       }),
     ]);
-    expect(triggerBatchSpy).toHaveBeenNthCalledWith(2, [
-      expect.objectContaining({
-        name: 'app',
-        updateKind: expect.objectContaining({ remoteValue: '2.1' }),
-      }),
-    ]);
+    expect(triggerBatchSpy).toHaveBeenNthCalledWith(2, [replacement]);
     triggerBatchSpy.mockRestore();
   });
 

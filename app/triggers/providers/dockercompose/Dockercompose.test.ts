@@ -4352,7 +4352,15 @@ describe('Dockercompose Trigger', () => {
     // Backup pruning
     expect(backupStore.pruneOldBackups).toHaveBeenCalledWith('nginx', undefined);
     // Update applied event
-    expect(emitContainerUpdateApplied).toHaveBeenCalledWith('local_nginx');
+    expect(emitContainerUpdateApplied).toHaveBeenCalledWith(
+      expect.objectContaining({
+        containerName: 'local_nginx',
+        container: expect.objectContaining({
+          name: 'nginx',
+          watcher: 'local',
+        }),
+      }),
+    );
   });
 
   test('processComposeFile should run security scanning but skip post-update lifecycle in dryrun mode', async () => {
