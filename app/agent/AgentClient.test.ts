@@ -189,6 +189,36 @@ describe('AgentClient', () => {
   });
 
   describe('processContainer', () => {
+    test('should await emitContainerReport before resolving', async () => {
+      let resolveEmit;
+      const emitPromise = new Promise<void>((resolve) => {
+        resolveEmit = resolve;
+      });
+      event.emitContainerReport.mockReturnValueOnce(emitPromise);
+      storeContainer.getContainer.mockReturnValue(undefined);
+      storeContainer.insertContainer.mockReturnValue({ id: 'c1', updateAvailable: true });
+
+      let resolved = false;
+      const processPromise = client.processContainer({ id: 'c1', name: 'test' });
+      void processPromise.then(() => {
+        resolved = true;
+      });
+
+      await Promise.resolve();
+
+      expect(event.emitContainerReport).toHaveBeenCalledWith(
+        expect.objectContaining({
+          container: expect.objectContaining({ id: 'c1' }),
+          changed: true,
+        }),
+      );
+      expect(resolved).toBe(false);
+
+      resolveEmit();
+      await processPromise;
+      expect(resolved).toBe(true);
+    });
+
     test('should insert new container and emit report with changed=true', async () => {
       storeContainer.getContainer.mockReturnValue(undefined);
       storeContainer.insertContainer.mockReturnValue({ id: 'c1', updateAvailable: false });
@@ -432,6 +462,54 @@ describe('AgentClient', () => {
       expect(event.emitContainerReport).toHaveBeenCalledWith(
         expect.objectContaining({ changed: true }),
       );
+    });
+  });
+
+  describe('processAuthoritativeContainers', () => {
+    test('should await emitContainerReports before resolving', async () => {
+      let resolveEmit;
+      const emitPromise = new Promise<void>((resolve) => {
+        resolveEmit = resolve;
+      });
+      event.emitContainerReports.mockReturnValueOnce(emitPromise);
+      storeContainer.getContainer.mockReturnValue(undefined);
+      storeContainer.insertContainer.mockImplementation((container) => ({
+        ...container,
+        updateAvailable: true,
+      }));
+
+      const internal = client as unknown as {
+        processAuthoritativeContainers: (
+          containers: Array<Record<string, unknown>>,
+        ) => Promise<unknown>;
+      };
+
+      let resolved = false;
+      const processPromise = internal.processAuthoritativeContainers([{ id: 'c1', name: 'test' }]);
+      void processPromise.then(() => {
+        resolved = true;
+      });
+
+      await vi.waitFor(() =>
+        expect(event.emitContainerReports).toHaveBeenCalledWith([
+          expect.objectContaining({
+            container: expect.objectContaining({ id: 'c1' }),
+            changed: true,
+          }),
+        ]),
+      );
+
+      expect(event.emitContainerReports).toHaveBeenCalledWith([
+        expect.objectContaining({
+          container: expect.objectContaining({ id: 'c1' }),
+          changed: true,
+        }),
+      ]);
+      expect(resolved).toBe(false);
+
+      resolveEmit();
+      await processPromise;
+      expect(resolved).toBe(true);
     });
   });
 

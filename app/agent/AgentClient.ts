@@ -264,7 +264,7 @@ export class AgentClient {
     for (const container of containers) {
       containerReports.push(await this.processAuthoritativeContainer(container));
     }
-    void emitContainerReports(containerReports);
+    await emitContainerReports(containerReports);
     return containerReports;
   }
 
@@ -375,7 +375,7 @@ export class AgentClient {
     }
 
     // Emit report so Triggers can fire if changed
-    void emitContainerReport(containerReport);
+    await emitContainerReport(containerReport);
     return containerReport;
   }
 
