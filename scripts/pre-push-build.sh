@@ -25,7 +25,7 @@ run() {
 }
 
 run "build-app" bash -c 'cd app && npm run build'
-run "build-ui"  bash -c 'cd ui  && npm run build'
+run "build-ui" bash -c 'cd ui  && npm run build'
 
 fail=0
 failed_labels=()

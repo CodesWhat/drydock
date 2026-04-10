@@ -89,7 +89,7 @@ run_coverage_async() {
 requested_workspaces=()
 while [ $# -gt 0 ]; do
 	case "$1" in
-	app|ui)
+	app | ui)
 		requested_workspaces+=("$1")
 		;;
 	all)
@@ -101,7 +101,7 @@ while [ $# -gt 0 ]; do
 	--fail-fast)
 		FAIL_FAST=1
 		;;
-	-h|--help)
+	-h | --help)
 		usage
 		exit 0
 		;;
