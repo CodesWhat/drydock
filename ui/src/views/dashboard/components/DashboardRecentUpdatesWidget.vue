@@ -122,9 +122,15 @@ const isDashboardBulkUpdateLocked = computed(
     hasPersistedBackendQueue.value,
 );
 
-function getRowSequence(row: Record<string, unknown>) {
+function getDashboardRecentUpdateRowKey(row: Record<string, unknown>) {
+  const id = row.id as string | undefined;
   const name = row.name as string | undefined;
-  return name ? props.dashboardUpdateSequence.get(name) : undefined;
+  return id || name;
+}
+
+function getRowSequence(row: Record<string, unknown>) {
+  const key = getDashboardRecentUpdateRowKey(row);
+  return key ? props.dashboardUpdateSequence.get(key) : undefined;
 }
 
 function getRowUpdateState(row: Record<string, unknown>): 'queued' | 'updating' | null {

@@ -30,6 +30,7 @@ import {
   type ContainerUpdateOperationStatus,
 } from '../types/update-operation';
 import { normalizeSeverityCount } from '../views/security/securityViewUtils';
+import { buildContainerIdentityKey } from './container-action-key';
 import {
   maturityMinAgeDaysToMilliseconds,
   normalizeMaturityMode,
@@ -647,6 +648,7 @@ export function mapApiContainer(apiContainer: ApiContainerInput): Container {
 
   return {
     id,
+    identityKey: buildContainerIdentityKey(apiContainer) || id || name,
     name: displayName ?? name,
     image: imageName,
     icon: getEffectiveDisplayIcon(displayIcon, imageName),

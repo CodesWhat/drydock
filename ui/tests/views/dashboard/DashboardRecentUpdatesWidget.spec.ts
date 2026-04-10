@@ -34,6 +34,7 @@ function makeRecentUpdate<T extends Record<string, unknown> = Record<string, nev
 ): RecentUpdateRow & T {
   return {
     id: 'c1',
+    identityKey: '::local::nginx',
     name: 'nginx',
     image: 'nginx:1.0.0',
     icon: 'docker',
@@ -181,8 +182,8 @@ describe('DashboardRecentUpdatesWidget', () => {
         makeRecentUpdate({ id: 'c2', name: 'redis', image: 'redis:7.0.0' }),
       ],
       dashboardUpdateSequence: new Map<string, DashboardUpdateSequenceEntry>([
-        ['nginx', { position: 1, total: 2 }],
-        ['redis', { position: 2, total: 2 }],
+        ['c1', { position: 1, total: 2 }],
+        ['c2', { position: 2, total: 2 }],
       ]),
     });
 
@@ -195,6 +196,25 @@ describe('DashboardRecentUpdatesWidget', () => {
     expect(
       wrapper.find('[data-test="dashboard-update-all-btn"]').attributes('disabled'),
     ).toBeDefined();
+  });
+
+  it('keeps duplicate-name rows distinct when local dashboard sequencing is keyed by row id', () => {
+    const wrapper = mountWidget({
+      pendingUpdatesCount: 2,
+      recentUpdates: [
+        makeRecentUpdate({ id: 'c-local', name: 'nginx', image: 'nginx:1.0.0' }),
+        makeRecentUpdate({ id: 'c-edge', name: 'nginx', image: 'nginx:1.0.0' }),
+      ],
+      dashboardUpdateSequence: new Map<string, DashboardUpdateSequenceEntry>([
+        ['c-local', { position: 1, total: 2 }],
+        ['c-edge', { position: 2, total: 2 }],
+      ]),
+    });
+
+    const rows = wrapper.findAll('.dashboard-row-stub');
+    expect(rows).toHaveLength(2);
+    expect(wrapper.text()).toContain('Updating 1 of 2');
+    expect(wrapper.text()).toContain('Queued 2 of 2');
   });
 
   it('derives persisted backend queue state from batch metadata', () => {

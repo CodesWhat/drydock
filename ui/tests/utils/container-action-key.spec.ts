@@ -58,17 +58,27 @@ describe('hasTrackedContainerAction', () => {
 });
 
 describe('getContainerActionIdentityKey', () => {
-  test('uses server and name so replacement containers keep the same identity', () => {
+  test('prefers an explicit identity key so replacement containers keep the same identity', () => {
     expect(
       getContainerActionIdentityKey({
+        identityKey: 'edge-a::docker-prod::portainer_agent',
         id: 'host1-abc',
         name: 'portainer_agent',
-        server: 'Datavault',
       }),
-    ).toBe('Datavault::portainer_agent');
+    ).toBe('edge-a::docker-prod::portainer_agent');
   });
 
-  test('falls back to the action key when server is unavailable', () => {
+  test('builds the canonical agent watcher identity when raw identity fields are available', () => {
+    expect(
+      getContainerActionIdentityKey({
+        name: 'portainer_agent',
+        watcher: 'docker-prod',
+        agent: 'edge-a',
+      }),
+    ).toBe('edge-a::docker-prod::portainer_agent');
+  });
+
+  test('falls back to the action key when logical identity fields are unavailable', () => {
     expect(
       getContainerActionIdentityKey({
         id: 'host1-abc',

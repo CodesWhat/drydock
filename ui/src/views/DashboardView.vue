@@ -156,6 +156,7 @@ const {
   loading,
   maintenanceCountdownNow,
   recentStatusByContainer,
+  recentStatusByIdentity,
   registries,
   serverInfo,
   watchers,
@@ -190,6 +191,7 @@ const {
   hidePinned: computed(() => preferences.containers.filters.hidePinned),
   maintenanceCountdownNow,
   recentStatusByContainer,
+  recentStatusByIdentity,
   registries,
   serverInfo,
   watchers,
@@ -200,22 +202,38 @@ const pendingUpdates = computed(() =>
     (row) =>
       row.status === 'pending' &&
       !row.blocked &&
-      !dashboardUpdateSequence.value.has(getDashboardRecentUpdateRowKey(row)),
+      !dashboardUpdateSequence.value.has(getDashboardRecentUpdateSequenceKey(row)),
   ),
 );
 
 const displayRecentUpdates = computed<RecentUpdateRow[]>(() => {
-  const liveRowKeys = new Set(
-    recentUpdates.value.map((row) => getDashboardRecentUpdateRowKey(row)),
+  const liveRowIdentityKeys = new Set(
+    recentUpdates.value.map((row) => getDashboardRecentUpdateReconciliationKey(row)),
   );
   const ghosts = [...dashboardPendingUpdateRows.value.values()]
-    .filter(({ row }) => !liveRowKeys.has(getDashboardRecentUpdateRowKey(row)))
+    .filter(({ row }) => !liveRowIdentityKeys.has(getDashboardRecentUpdateReconciliationKey(row)))
     .map(({ row }) => row);
   return [...recentUpdates.value, ...ghosts];
 });
 
-function getDashboardRecentUpdateRowKey(row: Pick<RecentUpdateRow, 'id' | 'name'>): string {
-  return row.id || row.name;
+function getDashboardRecentUpdateSequenceKey(
+  row: Pick<RecentUpdateRow, 'id' | 'identityKey' | 'name'>,
+): string {
+  return row.id || row.identityKey || row.name;
+}
+
+function getDashboardRecentUpdateReconciliationKey(
+  row: Pick<RecentUpdateRow, 'identityKey' | 'id' | 'name'>,
+): string {
+  return row.identityKey || row.id || row.name;
+}
+
+function getDashboardContainerReconciliationKey(container: {
+  identityKey?: string;
+  id?: string;
+  name?: string;
+}): string {
+  return container.identityKey || container.id || container.name || '';
 }
 
 function stopDashboardPendingUpdatePolling() {
@@ -233,9 +251,9 @@ function hasDashboardTrackedUpdates() {
 }
 
 function getVisibleDashboardTrackedUpdateKeys() {
-  const keys = new Set(recentUpdates.value.map((row) => getDashboardRecentUpdateRowKey(row)));
-  for (const key of dashboardPendingUpdateRows.value.keys()) {
-    keys.add(key);
+  const keys = new Set(recentUpdates.value.map((row) => getDashboardRecentUpdateSequenceKey(row)));
+  for (const { row } of dashboardPendingUpdateRows.value.values()) {
+    keys.add(getDashboardRecentUpdateSequenceKey(row));
   }
   return keys;
 }
@@ -284,12 +302,14 @@ function clearDashboardPendingUpdateRow(key: string) {
 }
 
 function pruneDashboardPendingUpdateRows(now: number = Date.now()) {
-  const liveContainerKeys = new Set(
-    containers.value.map((container) => container.id || container.name),
+  const liveContainerIdentityKeys = new Set(
+    containers.value
+      .map((container) => getDashboardContainerReconciliationKey(container))
+      .filter((key) => key.length > 0),
   );
   for (const [key, pendingRow] of dashboardPendingUpdateRows.value.entries()) {
     if (
-      liveContainerKeys.has(key) ||
+      liveContainerIdentityKeys.has(key) ||
       now - pendingRow.startedAt > DASHBOARD_PENDING_UPDATE_TIMEOUT_MS
     ) {
       clearDashboardPendingUpdateRow(key);
@@ -335,12 +355,14 @@ function startDashboardPendingUpdatePolling() {
 }
 
 function capturePendingDashboardRows(rows: RecentUpdateRow[]) {
-  const liveContainerKeys = new Set(
-    containers.value.map((container) => container.id || container.name),
+  const liveContainerIdentityKeys = new Set(
+    containers.value
+      .map((container) => getDashboardContainerReconciliationKey(container))
+      .filter((key) => key.length > 0),
   );
   for (const row of rows) {
-    const key = getDashboardRecentUpdateRowKey(row);
-    if (liveContainerKeys.has(key)) {
+    const key = getDashboardRecentUpdateReconciliationKey(row);
+    if (!key || liveContainerIdentityKeys.has(key)) {
       continue;
     }
     const existing = dashboardPendingUpdateRows.value.get(key);
@@ -453,7 +475,9 @@ function confirmDashboardUpdateAll() {
       const pendingRowsSnapshot = pendingUpdates.value.filter((row) => !row.blocked);
       dashboardUpdateAllInProgress.value = true;
       dashboardUpdateError.value = null;
-      const snapshotRowKeys = pendingRowsSnapshot.map((row) => getDashboardRecentUpdateRowKey(row));
+      const snapshotRowKeys = pendingRowsSnapshot.map((row) =>
+        getDashboardRecentUpdateSequenceKey(row),
+      );
       const batchId = createContainerUpdateBatchId();
       const queueTotal = pendingRowsSnapshot.length;
       let acceptedRowKeys = [...snapshotRowKeys];
@@ -479,12 +503,12 @@ function confirmDashboardUpdateAll() {
               successfulRows.push(row);
               continue;
             }
-            const rowKey = getDashboardRecentUpdateRowKey(row);
+            const rowKey = getDashboardRecentUpdateSequenceKey(row);
             acceptedRowKeys = acceptedRowKeys.filter((key) => key !== rowKey);
             syncDashboardUpdateSequenceValue(snapshotRowKeys, acceptedRowKeys);
             staleRows.push(row);
           } catch (e: unknown) {
-            const rowKey = getDashboardRecentUpdateRowKey(row);
+            const rowKey = getDashboardRecentUpdateSequenceKey(row);
             acceptedRowKeys = acceptedRowKeys.filter((key) => key !== rowKey);
             syncDashboardUpdateSequenceValue(snapshotRowKeys, acceptedRowKeys);
             if (!firstRejectedUpdate) {

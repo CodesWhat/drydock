@@ -102,9 +102,12 @@ const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
 const originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
 
 function makeContainer(overrides: Partial<Container> = {}): Container {
+  const defaultId = overrides.id ?? 'c1';
+  const defaultName = overrides.name ?? 'nginx';
   return {
-    id: 'c1',
-    name: 'nginx',
+    id: defaultId,
+    identityKey: overrides.identityKey ?? `::local::${defaultName}`,
+    name: defaultName,
     image: 'nginx',
     icon: 'docker',
     currentTag: '1.0.0',
@@ -125,6 +128,7 @@ interface DashboardDataOverrides {
   registries?: any[];
   auditEntries?: any[];
   recentStatuses?: Record<string, string>;
+  recentStatusesByIdentity?: Record<string, string>;
   containerStats?: any[];
 }
 
@@ -172,6 +176,7 @@ async function mountDashboard(
   mockGetContainerRecentStatus.mockResolvedValue({
     statuses:
       overrides.recentStatuses ?? mapAuditEntriesToRecentStatuses(overrides.auditEntries ?? []),
+    statusesByIdentity: overrides.recentStatusesByIdentity ?? {},
   });
 
   const { mapApiContainers } = await import('@/utils/container-mapper');
@@ -1674,6 +1679,7 @@ describe('DashboardView', () => {
       const containers = [
         makeContainer({
           id: 'c-local',
+          identityKey: 'edge-a::watcher-a::nginx',
           name: 'nginx',
           server: 'Local',
           newTag: '1.1.0',
@@ -1681,6 +1687,7 @@ describe('DashboardView', () => {
         }),
         makeContainer({
           id: 'c-edge',
+          identityKey: 'edge-b::watcher-b::nginx',
           name: 'nginx',
           server: 'edge-1',
           newTag: '1.1.0',
@@ -1996,7 +2003,8 @@ describe('DashboardView', () => {
       vi.useFakeTimers();
       try {
         const updatedContainer = makeContainer({
-          id: pendingContainer.id,
+          id: 'c-pending-recreated',
+          identityKey: pendingContainer.identityKey,
           name: pendingContainer.name,
           newTag: null,
           updateKind: null,

@@ -96,9 +96,12 @@ vi.mock('@/composables/useServerFeatures', () => ({
 }));
 
 function makeContainer(overrides: Partial<Container> = {}): Container {
+  const defaultId = overrides.id ?? 'container-1';
+  const defaultName = overrides.name ?? 'web';
   return {
-    id: 'container-1',
-    name: 'web',
+    id: defaultId,
+    identityKey: overrides.identityKey ?? `::local::${defaultName}`,
+    name: defaultName,
     image: 'nginx',
     icon: 'docker',
     currentTag: '1.0.0',
@@ -2402,15 +2405,17 @@ describe('useContainerActions', () => {
   it('keeps pending update state scoped to the targeted container when names collide across hosts', async () => {
     const localNode = makeContainer({
       id: 'container-1',
+      identityKey: 'shared-agent::watcher-a::tdarr_node',
       name: 'tdarr_node',
       newTag: '2.0.0',
-      server: 'Datavault',
+      server: 'shared-agent',
     });
     const remoteNode = makeContainer({
       id: 'container-2',
+      identityKey: 'shared-agent::watcher-b::tdarr_node',
       name: 'tdarr_node',
       newTag: '2.0.0',
-      server: 'Tmvault',
+      server: 'shared-agent',
     });
     const { composable, containers, loadContainers } = await mountActionsHarness({
       containers: [localNode, remoteNode],
@@ -2426,26 +2431,29 @@ describe('useContainerActions', () => {
     expect(composable.isContainerUpdateInProgress(remoteNode)).toBe(false);
   });
 
-  it('matches pending replacement updates by server and name instead of another host with the same name', async () => {
+  it('matches pending replacement updates by identity key instead of another watcher behind the same agent', async () => {
     vi.useFakeTimers();
     const localNode = makeContainer({
       id: 'container-1',
+      identityKey: 'shared-agent::watcher-a::docker-socket-proxy',
       name: 'docker-socket-proxy',
       newTag: '2.0.0',
-      server: 'Datavault',
+      server: 'shared-agent',
       status: 'running',
     });
     const remoteNode = makeContainer({
       id: 'container-2',
+      identityKey: 'shared-agent::watcher-b::docker-socket-proxy',
       name: 'docker-socket-proxy',
       newTag: '2.0.0',
-      server: 'Tmvault',
+      server: 'shared-agent',
       status: 'running',
     });
     const localReplacement = makeContainer({
       id: 'container-1-new',
+      identityKey: localNode.identityKey,
       name: 'docker-socket-proxy',
-      server: 'Datavault',
+      server: 'shared-agent',
       status: 'running',
     });
     const { composable, containers, loadContainers } = await mountActionsHarness({
@@ -2789,6 +2797,39 @@ describe('useContainerActions', () => {
     expect(composable.isContainerUpdateInProgress(queued)).toBe(false);
   });
 
+  it('keeps a standalone queued update operation queued when a persisted batch head already owns the slot', async () => {
+    const persistedBatchHead = makeContainer({
+      id: 'container-head',
+      name: 'socket-proxy-head',
+      updateOperation: {
+        id: 'op-head',
+        status: 'queued',
+        phase: 'queued',
+        updatedAt: '2026-04-01T12:00:00.000Z',
+        batchId: 'batch-1',
+        queuePosition: 1,
+        queueTotal: 2,
+      },
+    });
+    const standaloneQueued = makeContainer({
+      id: 'container-a',
+      name: 'socket-proxy-a',
+      updateOperation: {
+        id: 'op-a',
+        status: 'queued',
+        phase: 'queued',
+        updatedAt: '2026-04-01T12:00:01.000Z',
+      },
+    });
+    const { composable } = await mountActionsHarness({
+      containers: [persistedBatchHead, standaloneQueued],
+    });
+
+    expect(composable.isContainerUpdateInProgress(persistedBatchHead)).toBe(true);
+    expect(composable.isContainerUpdateQueued(standaloneQueued)).toBe(true);
+    expect(composable.isContainerUpdateInProgress(standaloneQueued)).toBe(false);
+  });
+
   it('treats only the oldest standalone queued update operation as updating before any active update exists', async () => {
     const queuedHead = makeContainer({
       id: 'container-head',
@@ -2897,6 +2938,56 @@ describe('useContainerActions', () => {
     resolvers[2]?.();
 
     await Promise.all([proxyUpdatePromise, workerUpdatePromise]);
+  });
+
+  it('keeps standalone queued updates queued while a local bulk-update head is active', async () => {
+    const proxyA = makeContainer({
+      id: 'container-a',
+      name: 'socket-proxy-a',
+      newTag: '2.0.0',
+    });
+    const proxyB = makeContainer({
+      id: 'container-b',
+      name: 'socket-proxy-b',
+      newTag: '2.0.0',
+    });
+    const standaloneQueued = makeContainer({
+      id: 'container-c',
+      name: 'socket-proxy-c',
+      updateOperation: {
+        id: 'op-c',
+        status: 'queued',
+        phase: 'queued',
+        updatedAt: '2026-04-01T12:00:01.000Z',
+      },
+    });
+    const { composable } = await mountActionsHarness({
+      containers: [proxyA, proxyB, standaloneQueued],
+    });
+
+    const resolvers: Array<() => void> = [];
+    mocks.updateContainer.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolvers.push(resolve);
+        }),
+    );
+
+    const proxyUpdatePromise = composable.updateAllInGroup({
+      key: 'proxy-stack',
+      containers: [proxyA, proxyB],
+    });
+    await nextTick();
+
+    expect(composable.isContainerUpdateInProgress(proxyA)).toBe(true);
+    expect(composable.isContainerUpdateQueued(proxyB)).toBe(true);
+    expect(composable.isContainerUpdateQueued(standaloneQueued)).toBe(true);
+    expect(composable.isContainerUpdateInProgress(standaloneQueued)).toBe(false);
+
+    resolvers[0]?.();
+    await flushPromises();
+    resolvers[1]?.();
+    await proxyUpdatePromise;
   });
 
   it('prefers in-progress persisted batch entries when choosing the head position', async () => {

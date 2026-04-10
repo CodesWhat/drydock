@@ -25,6 +25,38 @@ function isStandaloneQueuedUpdateOperation(operation?: UpdateOperationSequenceLi
   return operation?.status === 'queued' && !hasPersistedUpdateBatchSequence(operation);
 }
 
+function getPersistedBatchHeadIds(
+  containers: readonly UpdateOperationContainerLike[],
+): Set<string> {
+  const queuedHeads = new Map<string, { id: string; position: number }>();
+  const inProgressHeads = new Map<string, { id: string; position: number }>();
+
+  for (const container of containers) {
+    const operation = container.updateOperation;
+    if (!hasPersistedUpdateBatchSequence(operation) || !operation?.batchId) {
+      continue;
+    }
+
+    const targetHeads = operation.status === 'in-progress' ? inProgressHeads : queuedHeads;
+    const currentHead = targetHeads.get(operation.batchId);
+    if (!currentHead || operation.queuePosition! < currentHead.position) {
+      targetHeads.set(operation.batchId, {
+        id: container.id,
+        position: operation.queuePosition!,
+      });
+    }
+  }
+
+  const headIds = new Set<string>();
+  for (const [batchId, queuedHead] of queuedHeads.entries()) {
+    headIds.add((inProgressHeads.get(batchId) ?? queuedHead).id);
+  }
+  for (const inProgressHead of inProgressHeads.values()) {
+    headIds.add(inProgressHead.id);
+  }
+  return headIds;
+}
+
 function parseUpdateOperationTimestamp(updatedAt?: string): number {
   if (typeof updatedAt !== 'string') {
     return Number.POSITIVE_INFINITY;
@@ -38,8 +70,13 @@ export function shouldRenderStandaloneQueuedUpdateAsUpdating(args: {
   containers: readonly UpdateOperationContainerLike[];
   operation?: UpdateOperationSequenceLike;
   targetId?: string;
+  hasExternalActiveHead?: boolean;
 }): boolean {
   if (!isStandaloneQueuedUpdateOperation(args.operation)) {
+    return false;
+  }
+
+  if (args.hasExternalActiveHead === true) {
     return false;
   }
 
@@ -48,6 +85,11 @@ export function shouldRenderStandaloneQueuedUpdateAsUpdating(args: {
       container.id !== args.targetId && container.updateOperation?.status === 'in-progress',
   );
   if (hasActivePredecessor) {
+    return false;
+  }
+
+  const persistedBatchHeadIds = getPersistedBatchHeadIds(args.containers);
+  if ([...persistedBatchHeadIds].some((id) => id !== args.targetId)) {
     return false;
   }
 

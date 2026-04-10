@@ -39,7 +39,9 @@ interface ContainerActionGroup {
   containers: Container[];
 }
 
-type ContainerActionTarget = string | Pick<Container, 'id' | 'name' | 'server' | 'updateOperation'>;
+type ContainerActionTarget =
+  | string
+  | Pick<Container, 'id' | 'name' | 'identityKey' | 'updateOperation'>;
 
 interface UseContainerActionsInput {
   activeDetailTab: Readonly<Ref<string>>;
@@ -334,6 +336,21 @@ function getGroupUpdateHeadPosition(
   return headPosition;
 }
 
+function hasOtherLocalGroupQueueHead(
+  groupUpdateSequence: Readonly<Ref<Map<string, GroupUpdateSequenceEntry>>>,
+  targetId?: string,
+) {
+  for (const [containerId, sequence] of groupUpdateSequence.value.entries()) {
+    if (containerId === targetId) {
+      continue;
+    }
+    if (getGroupUpdateHeadPosition(groupUpdateSequence, sequence.groupKey) === sequence.position) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function getPersistedUpdateBatchSequence(
   operation?: Pick<
     NonNullable<Container['updateOperation']>,
@@ -448,6 +465,7 @@ async function updateAllInGroupState(args: {
   });
   const frozenUpdateTargets = updatableContainers.map((container) => ({
     id: container.id,
+    identityKey: container.identityKey,
     name: container.name,
   }));
   if (frozenUpdateTargets.length === 0) {
@@ -1155,6 +1173,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
       const isGroupQueueHead =
         sequence !== undefined &&
         getGroupUpdateHeadPosition(groupUpdateSequence, sequence.groupKey) === sequence.position;
+      const otherLocalGroupQueueHead = hasOtherLocalGroupQueueHead(groupUpdateSequence, target.id);
       if (
         target.updateOperation?.status === 'in-progress' ||
         freshContainer?.updateOperation?.status === 'in-progress'
@@ -1171,6 +1190,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
       if (
         shouldRenderStandaloneQueuedUpdateAsUpdating({
           containers: input.containers.value,
+          hasExternalActiveHead: otherLocalGroupQueueHead,
           operation: liveOperation,
           targetId: target.id,
         })
@@ -1203,6 +1223,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
     const isGroupQueueHead =
       sequence !== undefined &&
       getGroupUpdateHeadPosition(groupUpdateSequence, sequence.groupKey) === sequence.position;
+    const otherLocalGroupQueueHead = hasOtherLocalGroupQueueHead(groupUpdateSequence, target.id);
     if (
       target.updateOperation?.status === 'in-progress' ||
       freshContainer?.updateOperation?.status === 'in-progress' ||
@@ -1218,6 +1239,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
     if (
       shouldRenderStandaloneQueuedUpdateAsUpdating({
         containers: input.containers.value,
+        hasExternalActiveHead: otherLocalGroupQueueHead,
         operation: liveOperation,
         targetId: target.id,
       })

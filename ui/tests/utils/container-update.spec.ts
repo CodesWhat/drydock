@@ -4,7 +4,7 @@ import {
 } from '@/utils/container-update';
 
 describe('container-update utils', () => {
-  it('ignores persisted queued batches when promoting standalone queued updates', () => {
+  it('yields standalone queued updates to persisted queued batch heads', () => {
     expect(
       shouldRenderStandaloneQueuedUpdateAsUpdating({
         targetId: 'standalone',
@@ -32,7 +32,7 @@ describe('container-update utils', () => {
           },
         ],
       }),
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it('uses the singular already-up-to-date label for one container', () => {
@@ -60,6 +60,28 @@ describe('container-update utils', () => {
             updateOperation: {
               status: 'queued',
               updatedAt: 'not-a-date',
+            },
+          },
+        ],
+      }),
+    ).toBe(false);
+  });
+
+  it('yields standalone queued updates to external active heads', () => {
+    expect(
+      shouldRenderStandaloneQueuedUpdateAsUpdating({
+        targetId: 'standalone',
+        hasExternalActiveHead: true,
+        operation: {
+          status: 'queued',
+          updatedAt: '2026-04-01T12:00:02.000Z',
+        },
+        containers: [
+          {
+            id: 'standalone',
+            updateOperation: {
+              status: 'queued',
+              updatedAt: '2026-04-01T12:00:02.000Z',
             },
           },
         ],

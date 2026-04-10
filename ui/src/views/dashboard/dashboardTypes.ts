@@ -134,6 +134,7 @@ export interface DashboardStatCard {
 
 export interface RecentUpdateRow {
   id: string;
+  identityKey: string;
   name: string;
   image: string;
   icon: string;

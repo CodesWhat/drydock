@@ -23,6 +23,7 @@ function makeContainer(
 ): Container {
   const container: Container = {
     id: `c-${id}`,
+    identityKey: `::watcher-${server.toLowerCase()}::container-${id}`,
     name: `container-${id}`,
     image: `image-${id}`,
     icon: 'docker',
@@ -58,9 +59,12 @@ function makeContainer(
 }
 
 function makeBaseContainer(overrides: Partial<Container> = {}): Container {
+  const defaultId = overrides.id ?? 'c-0';
+  const defaultName = overrides.name ?? 'container-0';
   return {
-    id: 'c-0',
-    name: 'container-0',
+    id: defaultId,
+    identityKey: overrides.identityKey ?? `::local::${defaultName}`,
+    name: defaultName,
     image: 'image-0',
     icon: 'docker',
     currentTag: '1.0.0',
@@ -92,6 +96,7 @@ interface DashboardComputedOverrides {
   hidePinned?: boolean;
   maintenanceCountdownNow?: number;
   recentStatusByContainer?: Record<string, RecentAuditStatus>;
+  recentStatusByIdentity?: Record<string, RecentAuditStatus>;
   registries?: unknown[];
   serverInfo?: DashboardServerInfo | null;
   watchers?: unknown[];
@@ -105,6 +110,7 @@ function createState(overrides: DashboardComputedOverrides = {}) {
     hidePinned: ref(overrides.hidePinned ?? false),
     maintenanceCountdownNow: ref(overrides.maintenanceCountdownNow ?? Date.now()),
     recentStatusByContainer: ref(overrides.recentStatusByContainer ?? {}),
+    recentStatusByIdentity: ref(overrides.recentStatusByIdentity ?? {}),
     registries: ref(overrides.registries ?? []),
     serverInfo: ref(overrides.serverInfo ?? null),
     watchers: ref(overrides.watchers ?? []),
@@ -931,6 +937,38 @@ describe('useDashboardComputed recent updates', () => {
     });
   });
 
+  it('prefers identity-keyed recent status when duplicate container names exist', () => {
+    const localApi = makeBaseContainer({
+      id: 'local-api',
+      identityKey: 'edge-a::docker-prod::api',
+      name: 'api',
+      newTag: '2.0.0',
+      updateDetectedAt: '2026-03-04T09:00:00.000Z',
+    });
+    const remoteApi = makeBaseContainer({
+      id: 'remote-api',
+      identityKey: 'edge-b::docker-prod::api',
+      name: 'api',
+      newTag: '2.1.0',
+      updateDetectedAt: '2026-03-04T08:00:00.000Z',
+    });
+
+    const state = createState({
+      containers: [localApi, remoteApi],
+      recentStatusByContainer: {
+        api: 'failed',
+      },
+      recentStatusByIdentity: {
+        'edge-a::docker-prod::api': 'updated',
+        'edge-b::docker-prod::api': 'failed',
+      },
+    });
+
+    const rows = state.recentUpdates.value;
+    expect(rows.find((row) => row.id === 'local-api')).toMatchObject({ status: 'updated' });
+    expect(rows.find((row) => row.id === 'remote-api')).toMatchObject({ status: 'failed' });
+  });
+
   it('returns empty list when only registry failures exist', () => {
     const containers = Array.from({ length: 8 }, (_, index) =>
       makeBaseContainer({
@@ -1014,6 +1052,48 @@ describe('useDashboardComputed recent updates', () => {
     expect(state.stats.value.find((card) => card.id === 'stat-updates')).toMatchObject({
       value: '1',
     });
+  });
+
+  it('keeps later visible standalone queued rows queued when a hidden pinned predecessor is first', () => {
+    const hiddenPinnedHead = makeBaseContainer({
+      id: 'pinned-head',
+      identityKey: '::local::pinned-head',
+      name: 'pinned-head',
+      tagPinned: true,
+      updateOperation: {
+        id: 'op-pinned-head',
+        status: 'queued',
+        phase: 'queued',
+        updatedAt: '2026-04-04T10:00:00.000Z',
+        fromVersion: '1.0.0',
+        toVersion: '1.1.0',
+      },
+    });
+    const visibleQueued = makeBaseContainer({
+      id: 'visible-tail',
+      identityKey: '::local::visible-tail',
+      name: 'visible-tail',
+      updateOperation: {
+        id: 'op-visible-tail',
+        status: 'queued',
+        phase: 'queued',
+        updatedAt: '2026-04-04T10:00:01.000Z',
+        fromVersion: '2.0.0',
+        toVersion: '2.1.0',
+      },
+    });
+
+    const state = createState({
+      hidePinned: true,
+      containers: [hiddenPinnedHead, visibleQueued],
+    });
+
+    expect(state.recentUpdates.value).toEqual([
+      expect.objectContaining({
+        id: 'visible-tail',
+        status: 'queued',
+      }),
+    ]);
   });
 
   it('falls back to suppressed update defaults when tags or timestamps are invalid', () => {
