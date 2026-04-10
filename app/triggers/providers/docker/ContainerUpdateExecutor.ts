@@ -592,18 +592,23 @@ class ContainerUpdateExecutor {
       phase: 'pulling' as const,
     };
 
-    // If a queued operation was pre-created by the API handler, transition it
-    // to in-progress instead of inserting a duplicate.
-    const existingQueued = requestedOperationId
+    // If an operation was pre-created by the API handler, always reuse that row
+    // so the original operationId stays stable even if queued TTL expiry
+    // already transitioned it to a terminal state before execution begins.
+    const existingOperation = requestedOperationId
       ? updateOperationStore.getOperationById(requestedOperationId)
       : undefined;
-    const operation =
-      existingQueued?.status === 'queued'
-        ? updateOperationStore.updateOperation(requestedOperationId!, operationFields)!
-        : updateOperationStore.insertOperation({
-            ...(requestedOperationId ? { id: requestedOperationId } : {}),
-            ...operationFields,
-          });
+    const operation = existingOperation
+      ? updateOperationStore.updateOperation(requestedOperationId!, {
+          ...operationFields,
+          lastError: undefined,
+          rollbackReason: undefined,
+          newContainerId: undefined,
+        })!
+      : updateOperationStore.insertOperation({
+          ...(requestedOperationId ? { id: requestedOperationId } : {}),
+          ...operationFields,
+        });
 
     try {
       await this.pullImage(dockerApi, auth, newImage, logContainer);

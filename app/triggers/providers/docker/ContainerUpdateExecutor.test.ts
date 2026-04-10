@@ -775,6 +775,57 @@ describe('ContainerUpdateExecutor', () => {
     expect(mockInsertOperation).not.toHaveBeenCalled();
   });
 
+  test('execute revives an expired pre-created operation instead of inserting a duplicate row', async () => {
+    const context = createContext({
+      currentContainerSpec: createCurrentContainerSpec({
+        State: { Running: false },
+        HostConfig: { AutoRemove: false },
+      }),
+    });
+    const existingOperation = {
+      id: 'queued-op-expired',
+      containerId: 'container-id',
+      containerName: 'web',
+      status: 'failed',
+      phase: 'queued',
+      lastError: 'Marked failed after exceeding active update TTL',
+    };
+    mockGetOperationById.mockImplementation(() => existingOperation);
+    mockUpdateOperation.mockImplementation((_id, patch) => {
+      Object.assign(existingOperation, patch);
+      return { ...existingOperation };
+    });
+    const executor = createExecutor({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      hasHealthcheckConfigured: vi.fn(() => false),
+    });
+
+    await expect(
+      executor.execute(context, createContainer(), createLog(), {
+        operationId: 'queued-op-expired',
+      }),
+    ).resolves.toBe(true);
+
+    expect(mockInsertOperation).not.toHaveBeenCalled();
+    expect(mockUpdateOperation.mock.calls[0]?.[0]).toBe('queued-op-expired');
+    expect(mockUpdateOperation.mock.calls[0]?.[1]).toEqual(
+      expect.objectContaining({
+        status: 'in-progress',
+        phase: 'pulling',
+        lastError: undefined,
+      }),
+    );
+    expect(existingOperation.id).toBe('queued-op-expired');
+    expect(existingOperation.status).toBe('succeeded');
+    expect(mockGetOperationById('queued-op-expired')).toEqual(
+      expect.objectContaining({
+        id: 'queued-op-expired',
+        status: 'succeeded',
+        phase: 'succeeded',
+      }),
+    );
+  });
+
   test('execute rolls back and rethrows original error when rollback succeeds', async () => {
     const context = createContext();
     const createContainerError = new Error('create failed');
