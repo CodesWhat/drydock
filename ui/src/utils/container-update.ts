@@ -29,32 +29,28 @@ function getPersistedBatchHeadIds(
   containers: readonly UpdateOperationContainerLike[],
 ): Set<string> {
   const queuedHeads = new Map<string, { id: string; position: number }>();
-  const inProgressHeads = new Map<string, { id: string; position: number }>();
 
   for (const container of containers) {
     const operation = container.updateOperation;
-    if (!hasPersistedUpdateBatchSequence(operation) || !operation?.batchId) {
+    // In-progress operations are handled before this helper runs.
+    if (
+      operation?.status !== 'queued' ||
+      !hasPersistedUpdateBatchSequence(operation) ||
+      !operation.batchId
+    ) {
       continue;
     }
 
-    const targetHeads = operation.status === 'in-progress' ? inProgressHeads : queuedHeads;
-    const currentHead = targetHeads.get(operation.batchId);
+    const currentHead = queuedHeads.get(operation.batchId);
     if (!currentHead || operation.queuePosition! < currentHead.position) {
-      targetHeads.set(operation.batchId, {
+      queuedHeads.set(operation.batchId, {
         id: container.id,
         position: operation.queuePosition!,
       });
     }
   }
 
-  const headIds = new Set<string>();
-  for (const [batchId, queuedHead] of queuedHeads.entries()) {
-    headIds.add((inProgressHeads.get(batchId) ?? queuedHead).id);
-  }
-  for (const inProgressHead of inProgressHeads.values()) {
-    headIds.add(inProgressHead.id);
-  }
-  return headIds;
+  return new Set(Array.from(queuedHeads.values(), ({ id }) => id));
 }
 
 function parseUpdateOperationTimestamp(updatedAt?: string): number {

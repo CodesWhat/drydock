@@ -35,6 +35,88 @@ describe('container-update utils', () => {
     ).toBe(false);
   });
 
+  it('prefers the earliest queued position within a persisted batch', () => {
+    expect(
+      shouldRenderStandaloneQueuedUpdateAsUpdating({
+        targetId: 'standalone',
+        operation: {
+          status: 'queued',
+          updatedAt: '2026-04-01T12:00:02.000Z',
+        },
+        containers: [
+          {
+            id: 'queued-tail',
+            updateOperation: {
+              status: 'queued',
+              updatedAt: '2026-04-01T12:00:00.000Z',
+              batchId: 'batch-1',
+              queuePosition: 2,
+              queueTotal: 2,
+            },
+          },
+          {
+            id: 'queued-head',
+            updateOperation: {
+              status: 'queued',
+              updatedAt: '2026-04-01T12:00:01.000Z',
+              batchId: 'batch-1',
+              queuePosition: 1,
+              queueTotal: 2,
+            },
+          },
+          {
+            id: 'standalone',
+            updateOperation: {
+              status: 'queued',
+              updatedAt: '2026-04-01T12:00:02.000Z',
+            },
+          },
+        ],
+      }),
+    ).toBe(false);
+  });
+
+  it('keeps the existing persisted batch head when a later queued item is seen', () => {
+    expect(
+      shouldRenderStandaloneQueuedUpdateAsUpdating({
+        targetId: 'standalone',
+        operation: {
+          status: 'queued',
+          updatedAt: '2026-04-01T12:00:02.000Z',
+        },
+        containers: [
+          {
+            id: 'queued-head',
+            updateOperation: {
+              status: 'queued',
+              updatedAt: '2026-04-01T12:00:00.000Z',
+              batchId: 'batch-1',
+              queuePosition: 1,
+              queueTotal: 2,
+            },
+          },
+          {
+            id: 'queued-tail',
+            updateOperation: {
+              status: 'queued',
+              updatedAt: '2026-04-01T12:00:01.000Z',
+              batchId: 'batch-1',
+              queuePosition: 2,
+              queueTotal: 2,
+            },
+          },
+          {
+            id: 'standalone',
+            updateOperation: {
+              status: 'queued',
+              updatedAt: '2026-04-01T12:00:02.000Z',
+            },
+          },
+        ],
+      }),
+    ).toBe(false);
+  });
+
   it('uses the singular already-up-to-date label for one container', () => {
     expect(formatContainersAlreadyUpToDateMessage(1)).toBe('1 container already up to date');
   });
@@ -104,6 +186,47 @@ describe('container-update utils', () => {
               status: 'in-progress',
               updatedAt: '2026-04-01T12:00:00.000Z',
               batchId: 'batch-1',
+              queuePosition: 1,
+              queueTotal: 2,
+            },
+          },
+          {
+            id: 'standalone',
+            updateOperation: {
+              status: 'queued',
+              updatedAt: '2026-04-01T12:00:02.000Z',
+            },
+          },
+        ],
+      }),
+    ).toBe(false);
+  });
+
+  it('yields when a separate in-progress batch head is present alongside queued batch heads', () => {
+    expect(
+      shouldRenderStandaloneQueuedUpdateAsUpdating({
+        targetId: 'standalone',
+        operation: {
+          status: 'queued',
+          updatedAt: '2026-04-01T12:00:02.000Z',
+        },
+        containers: [
+          {
+            id: 'queued-head',
+            updateOperation: {
+              status: 'queued',
+              updatedAt: '2026-04-01T12:00:00.000Z',
+              batchId: 'batch-1',
+              queuePosition: 1,
+              queueTotal: 2,
+            },
+          },
+          {
+            id: 'in-progress-head',
+            updateOperation: {
+              status: 'in-progress',
+              updatedAt: '2026-04-01T12:00:01.000Z',
+              batchId: 'batch-2',
               queuePosition: 1,
               queueTotal: 2,
             },
