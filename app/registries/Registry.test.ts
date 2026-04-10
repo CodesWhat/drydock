@@ -298,6 +298,36 @@ describe('getImageManifestDigest', () => {
     });
   });
 
+  test('should fall back to manifest digest when HEAD response omits docker-content-digest', async () => {
+    const registryMocked = createMockedRegistry();
+    registryMocked.callRegistry = vi.fn((options) => {
+      if (options.method === 'head') {
+        return { headers: {} };
+      }
+      if (options.url === 'url/image/manifests/tag') {
+        return {
+          schemaVersion: 2,
+          mediaType: 'application/vnd.docker.distribution.manifest.v2+json',
+          config: {
+            digest: 'sha256:config',
+          },
+        };
+      }
+      if (options.url === 'url/image/blobs/sha256:config') {
+        return {
+          created: '2026-03-04T11:22:33.000Z',
+        };
+      }
+      throw new Error(`Unexpected request: ${JSON.stringify(options)}`);
+    });
+
+    await expect(registryMocked.getImageManifestDigest(imageInput())).resolves.toStrictEqual({
+      version: 2,
+      digest: 'tag',
+      created: '2026-03-04T11:22:33.000Z',
+    });
+  });
+
   test('should ignore invalid created date from schemaVersion 2 config blob', async () => {
     const registryMocked = createMockedRegistry();
     registryMocked.callRegistry = vi.fn((options) => {

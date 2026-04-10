@@ -312,9 +312,7 @@ class Registry extends Component {
       const result = {
         digest: manifestDigest,
         version: 1,
-        /* v8 ignore start -- legacy manifest created timestamps are optional */
         ...(created ? { created } : {}),
-        /* v8 ignore stop */
       };
       this.log.debug(
         `${image.name} - Manifest found with [digest=${result.digest}, version=${result.version}]`,
@@ -343,16 +341,14 @@ class Registry extends Component {
       resolveWithFullResponse: true,
     });
     const resolvedManifestDigest =
-      /* v8 ignore start -- some registries omit docker-content-digest on HEAD responses */
       responseManifest.headers['docker-content-digest'] || manifestDigest;
-    /* v8 ignore stop */
     const created = await this.fetchImageCreatedFromManifestConfig(
       image,
       resolvedManifestDigest,
       mediaType,
     );
     const result = {
-      digest: responseManifest.headers['docker-content-digest'],
+      digest: resolvedManifestDigest,
       version: 2,
       ...(created ? { created } : {}),
     };
