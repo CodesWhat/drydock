@@ -1,6 +1,7 @@
 interface ContainerActionKeyInput {
   id?: unknown;
   name?: unknown;
+  server?: unknown;
 }
 
 function asNonEmptyString(value: unknown): string | undefined {
@@ -13,6 +14,17 @@ function asNonEmptyString(value: unknown): string | undefined {
 
 export function getContainerActionKey(container: ContainerActionKeyInput): string {
   return asNonEmptyString(container.id) ?? asNonEmptyString(container.name) ?? '';
+}
+
+export function getContainerActionIdentityKey(container: ContainerActionKeyInput): string {
+  const server = asNonEmptyString(container.server);
+  const name = asNonEmptyString(container.name);
+
+  if (server && name) {
+    return `${server}::${name}`;
+  }
+
+  return getContainerActionKey(container);
 }
 
 export function hasTrackedContainerAction(

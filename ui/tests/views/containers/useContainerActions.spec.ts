@@ -227,7 +227,7 @@ describe('useContainerActions', () => {
 
     expect(
       isPendingUpdateSettled({
-        name: 'web',
+        pendingKey: 'web',
         now: Date.now(),
         startTime: Date.now(),
         liveContainer: makeContainer({ id: 'container-1', name: 'web', status: 'running' }),
@@ -812,7 +812,7 @@ describe('useContainerActions', () => {
     await composable.startContainer(web);
 
     expect(composable.actionInProgress.value.size).toBe(0);
-    expect(composable.actionPending.value.has('web')).toBe(true);
+    expect(composable.actionPending.value.has('container-1')).toBe(true);
     expect(composable.isContainerUpdateInProgress(web)).toBe(true);
   });
 
@@ -1020,7 +1020,7 @@ describe('useContainerActions', () => {
       containers: [web],
     });
 
-    expect(composable.actionPending.value.has('web')).toBe(true);
+    expect(composable.actionPending.value.has('container-1')).toBe(true);
     expect(composable.isContainerUpdateInProgress('web')).toBe(true);
 
     vi.advanceTimersByTime(PENDING_ACTIONS_POLL_INTERVAL_MS);
@@ -2396,6 +2396,82 @@ describe('useContainerActions', () => {
     resolveFirst?.();
     resolveSecond?.();
     await Promise.all([first, second]);
+  });
+
+  it('keeps pending update state scoped to the targeted container when names collide across hosts', async () => {
+    const localNode = makeContainer({
+      id: 'container-1',
+      name: 'tdarr_node',
+      newTag: '2.0.0',
+      server: 'Datavault',
+    });
+    const remoteNode = makeContainer({
+      id: 'container-2',
+      name: 'tdarr_node',
+      newTag: '2.0.0',
+      server: 'Tmvault',
+    });
+    const { composable, containers, loadContainers } = await mountActionsHarness({
+      containers: [localNode, remoteNode],
+    });
+    loadContainers.mockImplementation(async () => {
+      containers.value = [remoteNode];
+    });
+
+    await composable.updateContainer(localNode);
+
+    expect(composable.actionPending.value.has('container-1')).toBe(true);
+    expect(composable.isContainerUpdateInProgress(localNode)).toBe(true);
+    expect(composable.isContainerUpdateInProgress(remoteNode)).toBe(false);
+  });
+
+  it('matches pending replacement updates by server and name instead of another host with the same name', async () => {
+    vi.useFakeTimers();
+    const localNode = makeContainer({
+      id: 'container-1',
+      name: 'docker-socket-proxy',
+      newTag: '2.0.0',
+      server: 'Datavault',
+      status: 'running',
+    });
+    const remoteNode = makeContainer({
+      id: 'container-2',
+      name: 'docker-socket-proxy',
+      newTag: '2.0.0',
+      server: 'Tmvault',
+      status: 'running',
+    });
+    const localReplacement = makeContainer({
+      id: 'container-1-new',
+      name: 'docker-socket-proxy',
+      server: 'Datavault',
+      status: 'running',
+    });
+    const { composable, containers, loadContainers } = await mountActionsHarness({
+      containers: [localNode, remoteNode],
+    });
+    let loadCallCount = 0;
+    loadContainers.mockImplementation(async () => {
+      loadCallCount += 1;
+      containers.value = loadCallCount < 5 ? [remoteNode] : [remoteNode, localReplacement];
+    });
+
+    await composable.updateContainer(localNode);
+
+    for (let i = 0; i < 3; i += 1) {
+      vi.advanceTimersByTime(PENDING_ACTIONS_POLL_INTERVAL_MS);
+      await flushPromises();
+    }
+
+    expect(composable.actionPending.value.has('container-1')).toBe(true);
+    expect(composable.isContainerUpdateInProgress(localNode)).toBe(true);
+    expect(composable.isContainerUpdateInProgress(remoteNode)).toBe(false);
+
+    vi.advanceTimersByTime(PENDING_ACTIONS_POLL_INTERVAL_MS);
+    await flushPromises();
+
+    expect(composable.actionPending.value.has('container-1')).toBe(false);
+    expect(composable.isContainerUpdateInProgress(localNode)).toBe(false);
   });
 
   it('tracks queued containers during sequential group update', async () => {

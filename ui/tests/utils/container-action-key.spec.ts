@@ -1,4 +1,5 @@
 import {
+  getContainerActionIdentityKey,
   getContainerActionKey,
   hasTrackedContainerAction,
 } from '../../src/utils/container-action-key';
@@ -53,5 +54,26 @@ describe('hasTrackedContainerAction', () => {
     expect(hasTrackedContainerAction(tracked, { id: 'host2-def', name: 'portainer_agent' })).toBe(
       false,
     );
+  });
+});
+
+describe('getContainerActionIdentityKey', () => {
+  test('uses server and name so replacement containers keep the same identity', () => {
+    expect(
+      getContainerActionIdentityKey({
+        id: 'host1-abc',
+        name: 'portainer_agent',
+        server: 'Datavault',
+      }),
+    ).toBe('Datavault::portainer_agent');
+  });
+
+  test('falls back to the action key when server is unavailable', () => {
+    expect(
+      getContainerActionIdentityKey({
+        id: 'host1-abc',
+        name: 'portainer_agent',
+      }),
+    ).toBe('host1-abc');
   });
 });

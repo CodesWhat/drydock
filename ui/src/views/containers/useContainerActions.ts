@@ -13,7 +13,11 @@ import {
   updateContainer as apiUpdateContainer,
 } from '../../services/container-actions';
 import type { Container } from '../../types/container';
-import { getContainerActionKey, hasTrackedContainerAction } from '../../utils/container-action-key';
+import {
+  getContainerActionIdentityKey,
+  getContainerActionKey,
+  hasTrackedContainerAction,
+} from '../../utils/container-action-key';
 import {
   createContainerUpdateBatchId,
   formatContainerUpdateStartedCountMessage,
@@ -35,7 +39,7 @@ interface ContainerActionGroup {
   containers: Container[];
 }
 
-type ContainerActionTarget = string | Pick<Container, 'id' | 'name' | 'updateOperation'>;
+type ContainerActionTarget = string | Pick<Container, 'id' | 'name' | 'server' | 'updateOperation'>;
 
 interface UseContainerActionsInput {
   activeDetailTab: Readonly<Ref<string>>;
@@ -91,8 +95,21 @@ function hasPendingContainerAction(
   target: ContainerActionTarget,
   actionPending: Readonly<Ref<Map<string, Container>>>,
 ) {
-  const name = typeof target === 'string' ? target : target.name;
-  return typeof name === 'string' && name.length > 0 && actionPending.value.has(name);
+  const pendingKey = resolveContainerActionTargetKey(target);
+  if (pendingKey && actionPending.value.has(pendingKey)) {
+    return true;
+  }
+
+  const identityKey = typeof target === 'string' ? target : getContainerActionIdentityKey(target);
+  if (!identityKey) {
+    return false;
+  }
+
+  return [...actionPending.value.values()].some((snapshot) => {
+    return typeof target === 'string'
+      ? snapshot.name === identityKey
+      : getContainerActionIdentityKey(snapshot) === identityKey;
+  });
 }
 
 function hasInProgressUpdateOperation(
@@ -100,11 +117,16 @@ function hasInProgressUpdateOperation(
   containers: Readonly<Ref<Container[]>>,
 ) {
   const targetId = typeof target === 'string' ? undefined : target.id;
-  const targetName = typeof target === 'string' ? target : target.name;
+  const targetIdentityKey =
+    typeof target === 'string' ? target : getContainerActionIdentityKey(target);
 
   return containers.value.some((container) => {
-    const matches = targetId ? container.id === targetId : container.name === targetName;
-    return matches && container.updateOperation?.status === 'in-progress';
+    const matchesId = Boolean(targetId && container.id === targetId);
+    const matchesIdentity =
+      typeof target === 'string'
+        ? container.name === targetIdentityKey
+        : getContainerActionIdentityKey(container) === targetIdentityKey;
+    return (matchesId || matchesIdentity) && container.updateOperation?.status === 'in-progress';
   });
 }
 
@@ -112,8 +134,8 @@ function markPendingActionState(args: {
   actionPending: Ref<Map<string, Container>>;
   actionPendingLifecycleModes: Ref<Map<string, PendingActionLifecycleMode>>;
   actionPendingLifecycleObserved: Ref<Set<string>>;
-  startPolling: (name: string) => void;
-  name: string;
+  startPolling: (pendingKey: string) => void;
+  pendingKey: string;
   snapshot?: Container;
   mode: PendingActionLifecycleMode;
 }) {
@@ -121,17 +143,17 @@ function markPendingActionState(args: {
     return;
   }
 
-  args.actionPending.value.set(args.name, args.snapshot);
-  args.actionPendingLifecycleModes.value.set(args.name, args.mode);
+  args.actionPending.value.set(args.pendingKey, args.snapshot);
+  args.actionPendingLifecycleModes.value.set(args.pendingKey, args.mode);
 
   const nextObserved = new Set(args.actionPendingLifecycleObserved.value);
   if (args.mode === 'update') {
-    nextObserved.delete(args.name);
+    nextObserved.delete(args.pendingKey);
   } else {
-    nextObserved.add(args.name);
+    nextObserved.add(args.pendingKey);
   }
   args.actionPendingLifecycleObserved.value = nextObserved;
-  args.startPolling(args.name);
+  args.startPolling(args.pendingKey);
 }
 
 async function executeContainerActionState(args: {
@@ -139,6 +161,7 @@ async function executeContainerActionState(args: {
   containerActionsDisabledReason: string;
   containerId?: string;
   actionKey: string;
+  pendingKey: string;
   name: string;
   actionInProgress: Ref<Set<string>>;
   inputError: Ref<string | null>;
@@ -149,7 +172,7 @@ async function executeContainerActionState(args: {
   actionPending: Ref<Map<string, Container>>;
   actionPendingLifecycleModes: Ref<Map<string, PendingActionLifecycleMode>>;
   actionPendingLifecycleObserved: Ref<Set<string>>;
-  startPolling: (name: string) => void;
+  startPolling: (pendingKey: string) => void;
   selectedContainerId: string | undefined;
   activeDetailTab: string;
   refreshActionTabData: () => Promise<void>;
@@ -184,7 +207,7 @@ async function executeContainerActionState(args: {
             actionPendingLifecycleModes: args.actionPendingLifecycleModes,
             actionPendingLifecycleObserved: args.actionPendingLifecycleObserved,
             startPolling: args.startPolling,
-            name: args.name,
+            pendingKey: args.pendingKey,
             snapshot,
             mode: 'update',
           });
@@ -200,7 +223,7 @@ async function executeContainerActionState(args: {
               actionPendingLifecycleModes: args.actionPendingLifecycleModes,
               actionPendingLifecycleObserved: args.actionPendingLifecycleObserved,
               startPolling: args.startPolling,
-              name: args.name,
+              pendingKey: args.pendingKey,
               snapshot,
               mode: args.pendingLifecycleMode ?? 'presence',
             });
@@ -372,7 +395,10 @@ function getPersistedTargetSequence(
 ) {
   const liveContainer =
     containers.find((container) => container.id === target.id) ??
-    containers.find((container) => container.name === target.name);
+    containers.find(
+      (container) =>
+        getContainerActionIdentityKey(container) === getContainerActionIdentityKey(target),
+    );
   const sequence = getPersistedUpdateBatchSequence(
     liveContainer?.updateOperation ?? target.updateOperation,
   );
@@ -570,25 +596,25 @@ function clearPendingActionState(args: {
   actionPendingLifecycleObserved: Ref<Set<string>>;
   groupUpdateQueue: Ref<Set<string>>;
   groupUpdateSequence: Ref<Map<string, GroupUpdateSequenceEntry>>;
-  name: string;
+  pendingKey: string;
 }) {
-  const snapshot = args.actionPending.value.get(args.name);
+  const snapshot = args.actionPending.value.get(args.pendingKey);
   if (snapshot?.id) {
     setGroupUpdateQueueValue(args.groupUpdateQueue, [snapshot.id], false);
     const nextSequence = new Map(args.groupUpdateSequence.value);
     nextSequence.delete(snapshot.id);
     args.groupUpdateSequence.value = nextSequence;
   }
-  args.actionPending.value.delete(args.name);
-  args.actionPendingStartTimes.value.delete(args.name);
-  args.actionPendingLifecycleModes.value.delete(args.name);
+  args.actionPending.value.delete(args.pendingKey);
+  args.actionPendingStartTimes.value.delete(args.pendingKey);
+  args.actionPendingLifecycleModes.value.delete(args.pendingKey);
   const nextObserved = new Set(args.actionPendingLifecycleObserved.value);
-  nextObserved.delete(args.name);
+  nextObserved.delete(args.pendingKey);
   args.actionPendingLifecycleObserved.value = nextObserved;
 }
 
 export function isPendingUpdateSettled(args: {
-  name: string;
+  pendingKey: string;
   now: number;
   startTime: number;
   liveContainer?: Container;
@@ -603,7 +629,7 @@ export function isPendingUpdateSettled(args: {
     args.liveContainer.status !== expectedStatus;
   if (observedLifecycleSignal) {
     const nextObserved = new Set(args.actionPendingLifecycleObserved.value);
-    nextObserved.add(args.name);
+    nextObserved.add(args.pendingKey);
     args.actionPendingLifecycleObserved.value = nextObserved;
   }
 
@@ -623,7 +649,7 @@ export function isPendingUpdateSettled(args: {
   }
 
   return (
-    args.actionPendingLifecycleObserved.value.has(args.name) ||
+    args.actionPendingLifecycleObserved.value.has(args.pendingKey) ||
     args.now - args.startTime >= PENDING_UPDATE_GRACE_MS
   );
 }
@@ -640,21 +666,36 @@ function prunePendingActionsState(args: {
   pollTimeout: number;
   stopPendingActionsPolling: () => void;
 }) {
-  const liveContainersByName = new Map(
-    args.containers.value.map((container) => [container.name, container] as const),
-  );
-  for (const [name, startTime] of args.actionPendingStartTimes.value.entries()) {
-    const liveContainer = liveContainersByName.get(name);
-    const pendingMode = args.actionPendingLifecycleModes.value.get(name);
+  const liveContainersByActionKey = new Map<string, Container>();
+  const liveContainersByIdentityKey = new Map<string, Container>();
+
+  for (const container of args.containers.value) {
+    const actionKey = getContainerActionKey(container);
+    if (actionKey) {
+      liveContainersByActionKey.set(actionKey, container);
+    }
+    const identityKey = getContainerActionIdentityKey(container);
+    if (identityKey) {
+      liveContainersByIdentityKey.set(identityKey, container);
+    }
+  }
+
+  for (const [pendingKey, startTime] of args.actionPendingStartTimes.value.entries()) {
+    const snapshot = args.actionPending.value.get(pendingKey);
+    const snapshotIdentityKey = snapshot ? getContainerActionIdentityKey(snapshot) : '';
+    const liveContainer =
+      liveContainersByActionKey.get(pendingKey) ??
+      (snapshotIdentityKey ? liveContainersByIdentityKey.get(snapshotIdentityKey) : undefined);
+    const pendingMode = args.actionPendingLifecycleModes.value.get(pendingKey);
     const timedOut = args.now - startTime > args.pollTimeout;
     const settled =
       pendingMode === 'update'
         ? isPendingUpdateSettled({
-            name,
+            pendingKey,
             now: args.now,
             startTime,
             liveContainer,
-            snapshot: args.actionPending.value.get(name),
+            snapshot,
             actionPendingLifecycleObserved: args.actionPendingLifecycleObserved,
           })
         : Boolean(liveContainer);
@@ -667,7 +708,7 @@ function prunePendingActionsState(args: {
         actionPendingLifecycleObserved: args.actionPendingLifecycleObserved,
         groupUpdateQueue: args.groupUpdateQueue,
         groupUpdateSequence: args.groupUpdateSequence,
-        name,
+        pendingKey,
       });
     }
   }
@@ -694,14 +735,14 @@ async function pollPendingActionsState(args: {
 }
 
 function startPollingState(args: {
-  name: string;
+  pendingKey: string;
   actionPendingStartTimes: Ref<Map<string, number>>;
   pendingActionsPollTimer: Ref<ReturnType<typeof setInterval> | null>;
   pollInterval: number;
   pollPendingActions: () => Promise<void>;
 }) {
-  if (!args.actionPendingStartTimes.value.has(args.name)) {
-    args.actionPendingStartTimes.value.set(args.name, Date.now());
+  if (!args.actionPendingStartTimes.value.has(args.pendingKey)) {
+    args.actionPendingStartTimes.value.set(args.pendingKey, Date.now());
   }
   if (args.pendingActionsPollTimer.value) {
     return;
@@ -1077,9 +1118,9 @@ export function useContainerActions(input: UseContainerActionsInput) {
     });
   }
 
-  function startPolling(name: string) {
+  function startPolling(pendingKey: string) {
     startPollingState({
-      name,
+      pendingKey,
       actionPendingStartTimes,
       pendingActionsPollTimer,
       pollInterval: PENDING_ACTIONS_POLL_INTERVAL_MS,
@@ -1223,11 +1264,13 @@ export function useContainerActions(input: UseContainerActionsInput) {
       options?.containerId,
     );
     const actionKey = containerId ?? resolveContainerActionTargetKey(target);
+    const pendingKey = resolveContainerActionTargetKey(target);
     return executeContainerActionState({
       containerActionsEnabled: containerActionsEnabled.value,
       containerActionsDisabledReason: containerActionsDisabledReason.value,
       containerId,
       actionKey,
+      pendingKey,
       name,
       actionInProgress,
       inputError: input.error,

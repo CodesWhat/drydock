@@ -875,6 +875,31 @@ describe('ContainersView', () => {
       expect(vm.actionPending.has('mycontainer')).toBe(true);
     });
 
+    it('keeps a ghost row when only another host with the same name remains live', async () => {
+      const localNode = makeContainer({
+        id: 'c1',
+        name: 'docker-socket-proxy',
+        server: 'Datavault',
+      });
+      const remoteNode = makeContainer({
+        id: 'c2',
+        name: 'docker-socket-proxy',
+        server: 'Tmvault',
+      });
+      const wrapper = await mountContainersView([remoteNode]);
+      const vm = wrapper.vm as any;
+
+      vm.actionPending = new Map([['docker-socket-proxy', localNode]]);
+
+      const ghosts = vm.displayContainers.filter(
+        (container: Container & { _pending?: boolean }) => {
+          return container._pending;
+        },
+      );
+      expect(ghosts).toHaveLength(1);
+      expect(ghosts[0]?.id).toBe('c1');
+    });
+
     it('uses a single poll timer for multiple pending actions', async () => {
       const first = makeContainer({ id: 'c1', name: 'alpha' });
       const second = makeContainer({ id: 'c2', name: 'beta' });

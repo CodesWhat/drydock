@@ -16,6 +16,7 @@ import { useViewMode } from '../preferences/useViewMode';
 import type { ContainerGroup } from '../services/container';
 import { getAllContainers, getContainerGroups, refreshAllContainers } from '../services/container';
 import type { Container } from '../types/container';
+import { getContainerActionIdentityKey } from '../utils/container-action-key';
 import { mapApiContainers } from '../utils/container-mapper';
 import {
   maturityColor,
@@ -766,10 +767,12 @@ const displayContainers = computed(() => {
         }
       : container,
   );
-  const liveNames = new Set(live.map((container) => container.name));
-  const ghosts = [...actionPending.value.entries()]
-    .filter(([name]) => !liveNames.has(name))
-    .map(([, snapshot]) => ({ ...snapshot, _pending: true as const }));
+  const liveIdentityKeys = new Set(
+    live.map((container) => getContainerActionIdentityKey(container)).filter(Boolean),
+  );
+  const ghosts = [...actionPending.value.values()]
+    .filter((snapshot) => !liveIdentityKeys.has(getContainerActionIdentityKey(snapshot)))
+    .map((snapshot) => ({ ...snapshot, _pending: true as const }));
   return [...live, ...ghosts];
 });
 
