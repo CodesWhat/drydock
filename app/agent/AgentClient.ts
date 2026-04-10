@@ -409,28 +409,34 @@ export class AgentClient {
     }, reconnectDelay);
   }
 
-  private parseSseLine(line: string) {
+  private async parseSseLine(line: string) {
     if (!line.startsWith('data: ')) {
       return;
     }
     try {
       const payload = JSON.parse(line.substring(6)) as AgentSsePayload;
       if (payload.type && payload.data) {
-        this.handleEvent(payload.type as string, payload.data);
+        try {
+          await this.handleEvent(payload.type as string, payload.data);
+        } catch (error: unknown) {
+          this.log.error(
+            `Error handling SSE event ${sanitizeLogParam(String(payload.type))} (${getErrorMessage(error)})`,
+          );
+        }
       }
     } catch (error: unknown) {
       this.log.warn(`Error parsing SSE data: ${getErrorMessage(error)}`);
     }
   }
 
-  private processSseBuffer(buffer: string): string {
+  private async processSseBuffer(buffer: string): Promise<string> {
     const messages = buffer.split('\n\n');
     // The last element is either empty (if buffer ended with \n\n) or incomplete
     const remainder = messages.pop() || '';
 
     for (const message of messages) {
       for (const line of message.split('\n')) {
-        this.parseSseLine(line);
+        await this.parseSseLine(line);
       }
     }
     return remainder;
@@ -439,10 +445,22 @@ export class AgentClient {
   private attachStreamHandlers(stream: NodeJS.EventEmitter) {
     const decoder = new StringDecoder('utf8');
     let buffer = '';
+    let sseProcessing = Promise.resolve();
 
     stream.on('data', (chunk: Buffer) => {
-      buffer += decoder.write(chunk);
-      buffer = this.processSseBuffer(buffer);
+      const decodedChunk = decoder.write(chunk);
+      if (!decodedChunk) {
+        return;
+      }
+
+      sseProcessing = sseProcessing
+        .then(async () => {
+          buffer += decodedChunk;
+          buffer = await this.processSseBuffer(buffer);
+        })
+        .catch((error: unknown) => {
+          this.log.error(`SSE data processing failed: ${getErrorMessage(error)}`);
+        });
     });
     stream.on('error', (e: Error) => {
       this.log.error(`SSE Connection failed: ${e.message}`);

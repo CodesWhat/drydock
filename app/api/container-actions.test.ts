@@ -892,6 +892,39 @@ describe('Container Actions Router', () => {
       });
     });
 
+    test('should return 409 when a fresh update operation is already active for the container', async () => {
+      const container = {
+        id: 'c1',
+        name: 'nginx',
+        image: { name: 'nginx' },
+        updateAvailable: true,
+      };
+      mockGetContainer.mockReturnValue(container);
+      const updateOperationStore = await import('../store/update-operation');
+      (
+        updateOperationStore.getActiveOperationByContainerId as ReturnType<typeof vi.fn>
+      ).mockReturnValue({
+        id: 'op-active',
+        containerId: 'c1',
+        containerName: 'nginx',
+        status: 'in-progress',
+        phase: 'pulling',
+        updatedAt: '2026-04-09T12:00:00.000Z',
+      });
+
+      const handler = getHandler('post', '/:id/update');
+      const req = createMockRequest({ params: { id: 'c1' } });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(updateOperationStore.getActiveOperationByContainerId).toHaveBeenCalledWith('c1');
+      expect(res.status).toHaveBeenCalledWith(409);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Container update already in progress',
+      });
+      expect(updateOperationStore.insertOperation).not.toHaveBeenCalled();
+    });
+
     test('should return 404 when no docker trigger found', async () => {
       const container = {
         id: 'c1',

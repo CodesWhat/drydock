@@ -1051,20 +1051,22 @@ class Docker extends Watcher {
       const containerReportsSettled = await Promise.allSettled(
         containers.map((container) => this.watchContainer(container)),
       );
-      const containerReports = containerReportsSettled.map((containerReport, index) => {
+      const containerReports: ContainerReport[] = [];
+      for (const [index, containerReport] of containerReportsSettled.entries()) {
         if (containerReport.status === 'fulfilled') {
-          return containerReport.value;
+          containerReports.push(containerReport.value);
+          continue;
         }
         const message = getErrorMessage(containerReport.reason);
         this.log.warn(
           `Error when processing container ${fullName(containers[index])} (${message})`,
         );
         const fallbackContainerReport = buildFallbackContainerReport(containers[index], message);
-        event.emitContainerReport(fallbackContainerReport);
-        return fallbackContainerReport;
-      });
-      event.emitContainerReports(containerReports);
-      event.emitWatcherSnapshot({
+        await event.emitContainerReport(fallbackContainerReport);
+        containerReports.push(fallbackContainerReport);
+      }
+      await event.emitContainerReports(containerReports);
+      await event.emitWatcherSnapshot({
         watcher: {
           type: this.type,
           name: this.name,

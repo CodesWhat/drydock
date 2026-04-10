@@ -516,6 +516,69 @@ describe('Docker Watcher', () => {
       });
     });
 
+    test('should await async fallback, batch, and snapshot emitters during watch', async () => {
+      docker.log = createMockLog(['warn']);
+      docker.getContainers = vi.fn().mockResolvedValue([{ id: 'failed' }]);
+      docker.watchContainer = vi.fn().mockRejectedValue(new Error('Processing failed'));
+
+      let resolveFallbackEmit;
+      let resolveBatchEmit;
+      let resolveSnapshotEmit;
+      const fallbackEmitPromise = new Promise<void>((resolve) => {
+        resolveFallbackEmit = resolve;
+      });
+      const batchEmitPromise = new Promise<void>((resolve) => {
+        resolveBatchEmit = resolve;
+      });
+      const snapshotEmitPromise = new Promise<void>((resolve) => {
+        resolveSnapshotEmit = resolve;
+      });
+
+      event.emitContainerReport.mockReturnValueOnce(fallbackEmitPromise);
+      event.emitContainerReports.mockReturnValueOnce(batchEmitPromise);
+      event.emitWatcherSnapshot.mockReturnValueOnce(snapshotEmitPromise);
+
+      let resolved = false;
+      const watchPromise = docker.watch().then((result) => {
+        resolved = true;
+        return result;
+      });
+
+      await vi.waitFor(() =>
+        expect(event.emitContainerReport).toHaveBeenCalledWith(
+          expect.objectContaining({
+            container: expect.objectContaining({ id: 'failed' }),
+            changed: false,
+          }),
+        ),
+      );
+      expect(event.emitContainerReports).not.toHaveBeenCalled();
+      expect(event.emitWatcherSnapshot).not.toHaveBeenCalled();
+      expect(resolved).toBe(false);
+
+      resolveFallbackEmit();
+      await vi.waitFor(() => expect(event.emitContainerReports).toHaveBeenCalledTimes(1));
+      expect(event.emitWatcherSnapshot).not.toHaveBeenCalled();
+      expect(resolved).toBe(false);
+
+      resolveBatchEmit();
+      await vi.waitFor(() => expect(event.emitWatcherSnapshot).toHaveBeenCalledTimes(1));
+      expect(resolved).toBe(false);
+
+      resolveSnapshotEmit();
+      await watchPromise;
+      expect(resolved).toBe(true);
+    });
+
+    test('should surface async container report batch emitter failures during watch', async () => {
+      docker.getContainers = vi.fn().mockResolvedValue([]);
+      event.emitContainerReports.mockRejectedValueOnce(new Error('batch emit failed'));
+
+      await expect(docker.watch()).rejects.toThrow('batch emit failed');
+      expect(event.emitWatcherSnapshot).not.toHaveBeenCalled();
+      expect(event.emitWatcherStop).toHaveBeenCalledWith(docker);
+    });
+
     test('should skip containers refreshed by registry webhooks on the next scheduled poll', async () => {
       const freshContainer = {
         id: 'fresh-id',

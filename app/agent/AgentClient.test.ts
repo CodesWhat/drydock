@@ -828,7 +828,7 @@ describe('AgentClient', () => {
       const handleSpy = vi.spyOn(client, 'handleEvent').mockResolvedValue(undefined);
       stream.emit('data', Buffer.from('data: {"type":"dd:ack","data":{"version":"1.0"}}\n\n'));
 
-      expect(handleSpy).toHaveBeenCalledWith('dd:ack', { version: '1.0' });
+      await vi.waitFor(() => expect(handleSpy).toHaveBeenCalledWith('dd:ack', { version: '1.0' }));
     });
 
     test('should handle SSE data split across chunks', async () => {
@@ -843,7 +843,111 @@ describe('AgentClient', () => {
       stream.emit('data', Buffer.from('data: {"type":"dd:ac'));
       stream.emit('data', Buffer.from('k","data":{"version":"1.0"}}\n\n'));
 
-      expect(handleSpy).toHaveBeenCalledWith('dd:ack', { version: '1.0' });
+      await vi.waitFor(() => expect(handleSpy).toHaveBeenCalledWith('dd:ack', { version: '1.0' }));
+    });
+
+    test('should process streamed container and watcher snapshot events in order', async () => {
+      const stream = new EventEmitter();
+      axios.mockResolvedValue({ data: stream });
+
+      client.startSse();
+      await vi.advanceTimersByTimeAsync(0);
+
+      const callOrder: string[] = [];
+      let resolveFirstEvent;
+      const firstEventHandled = new Promise<void>((resolve) => {
+        resolveFirstEvent = resolve;
+      });
+      const handleSpy = vi
+        .spyOn(client, 'handleEvent')
+        .mockImplementationOnce(async (eventName) => {
+          callOrder.push(`start:${eventName}`);
+          await firstEventHandled;
+          callOrder.push(`end:${eventName}`);
+        })
+        .mockImplementationOnce(async (eventName) => {
+          callOrder.push(`run:${eventName}`);
+        });
+
+      stream.emit(
+        'data',
+        Buffer.from('data: {"type":"dd:container-updated","data":{"id":"c1"}}\n\n'),
+      );
+      await vi.waitFor(() => expect(handleSpy).toHaveBeenCalledTimes(1));
+
+      stream.emit(
+        'data',
+        Buffer.from(
+          'data: {"type":"dd:watcher-snapshot","data":{"watcher":{"name":"local"},"containers":[]}}\n\n',
+        ),
+      );
+      await Promise.resolve();
+
+      expect(handleSpy).toHaveBeenCalledTimes(1);
+      expect(callOrder).toEqual(['start:dd:container-updated']);
+
+      resolveFirstEvent();
+      await vi.waitFor(() => expect(handleSpy).toHaveBeenCalledTimes(2));
+
+      expect(callOrder).toEqual([
+        'start:dd:container-updated',
+        'end:dd:container-updated',
+        'run:dd:watcher-snapshot',
+      ]);
+      expect(handleSpy).toHaveBeenNthCalledWith(1, 'dd:container-updated', { id: 'c1' });
+      expect(handleSpy).toHaveBeenNthCalledWith(2, 'dd:watcher-snapshot', {
+        watcher: { name: 'local' },
+        containers: [],
+      });
+    });
+
+    test('should log and continue when streamed event handling fails', async () => {
+      const stream = new EventEmitter();
+      axios.mockResolvedValue({ data: stream });
+      const unhandledRejectionSpy = vi.fn();
+      const onUnhandledRejection = (error: unknown) => {
+        unhandledRejectionSpy(error);
+      };
+      process.on('unhandledRejection', onUnhandledRejection);
+
+      try {
+        client.startSse();
+        await vi.advanceTimersByTimeAsync(0);
+
+        event.emitContainerReports.mockRejectedValueOnce(new Error('emit failed'));
+        storeContainer.getContainer.mockReturnValue(undefined);
+        storeContainer.insertContainer.mockImplementation((container) => ({
+          ...container,
+          updateAvailable: true,
+        }));
+        storeContainer.getContainers.mockReturnValue([]);
+        const processSpy = vi.spyOn(client, 'processContainer');
+
+        stream.emit(
+          'data',
+          Buffer.from(
+            'data: {"type":"dd:watcher-snapshot","data":{"watcher":{"type":"docker","name":"local"},"containers":[{"id":"c1","name":"current","watcher":"local"}]}}\n\n',
+          ),
+        );
+        stream.emit(
+          'data',
+          Buffer.from('data: {"type":"dd:container-updated","data":{"id":"c2","name":"next"}}\n\n'),
+        );
+
+        await vi.waitFor(() =>
+          expect(client.log.error).toHaveBeenCalledWith(
+            'Error handling SSE event dd:watcher-snapshot (emit failed)',
+          ),
+        );
+        await vi.waitFor(() =>
+          expect(processSpy).toHaveBeenCalledWith(
+            expect.objectContaining({ id: 'c2', name: 'next', agent: 'test-agent' }),
+          ),
+        );
+        expect(unhandledRejectionSpy).not.toHaveBeenCalled();
+      } finally {
+        process.off('unhandledRejection', onUnhandledRejection);
+      }
     });
 
     test('should handle malformed JSON in SSE data', async () => {

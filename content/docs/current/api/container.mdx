@@ -257,9 +257,18 @@ curl -X POST http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d
 
 ## Update a container
 
-This operation triggers a direct container update — pulling the new image, stopping the old container, and recreating it with the updated image. This is equivalent to clicking "Update now" in the UI. Requires the Docker trigger to be configured for the container's watcher and `DD_SERVER_FEATURE_CONTAINERACTIONS` to be enabled.
+This operation queues a direct container update — pulling the new image, stopping the old container, and recreating it with the updated image. This is equivalent to clicking "Update now" in the UI. Requires the Docker trigger to be configured for the container's watcher and `DD_SERVER_FEATURE_CONTAINERACTIONS` to be enabled.
 
-Returns 200 with the updated container on success, 400 if no update is available, 403 if container actions are disabled, 404 if the container or Docker trigger is not found, or 500 on update failure.
+Returns `202 Accepted` with an operation id when the update is queued successfully, `400` if no update is available, `403` if container actions are disabled, `404` if the container or Docker trigger is not found, `409` if the update conflicts with the current container state (already queued/in progress, blocked by security, or targeting a temporary rollback container), or `500` on update failure.
+
+Example success response:
+
+```json
+{
+  "message": "Container update accepted",
+  "operationId": "ea7c33a4-c1e3-4f34-9b95-9662cc7a40d6"
+}
+```
 
 ```bash
 curl -X POST http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/update

@@ -654,6 +654,9 @@ export const containerPaths = {
     successStatus: 202,
     additionalErrorResponses: {
       400: errorResponse('No update available for container'),
+      409: errorResponse(
+        'Container update already queued or in progress, blocked by security, or targeting a rollback container',
+      ),
     },
   }),
 } as const;

@@ -123,6 +123,18 @@ function markAcceptedQueuedOperationFailed(operationId: string, error: unknown) 
   });
 }
 
+function getActiveUpdateOperationForContainer(container: Container) {
+  const byId = updateOperationStore.getActiveOperationByContainerId(container.id);
+  if (byId) {
+    return byId;
+  }
+
+  const byName = updateOperationStore.getActiveOperationByContainerName(container.name);
+  const isLegacyOperation =
+    byName && typeof byName === 'object' && !('containerId' in (byName as Record<string, unknown>));
+  return isLegacyOperation ? byName : undefined;
+}
+
 /**
  * Execute a container action (start, stop, restart).
  *
@@ -235,6 +247,16 @@ async function updateContainer(req: Request, res: Response) {
   const container = storeContainer.getContainer(id);
   if (!container) {
     sendErrorResponse(res, 404, 'Container not found');
+    return;
+  }
+
+  const activeOperation = getActiveUpdateOperationForContainer(container);
+  if (activeOperation) {
+    sendErrorResponse(
+      res,
+      409,
+      `Container update already ${activeOperation.status === 'queued' ? 'queued' : 'in progress'}`,
+    );
     return;
   }
 
