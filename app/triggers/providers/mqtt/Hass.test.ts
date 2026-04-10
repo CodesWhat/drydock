@@ -821,6 +821,26 @@ test('addContainerSensor should not duplicate stale topic when it matches curren
   expect(canonicalPublishes).toHaveLength(1);
 });
 
+test('getStaleContainerStateTopics should ignore stale aliases that already match the current topic', () => {
+  const hassWithInternals = hass as unknown as {
+    getStaleContainerStateTopics: (args: {
+      container: { id?: unknown; name?: unknown; watcher?: unknown };
+      currentStateTopic: string;
+    }) => string[];
+  };
+
+  const staleStateTopics = hassWithInternals.getStaleContainerStateTopics({
+    container: {
+      id: '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a10',
+      name: '7ea6b8a42686_termix',
+      watcher: 'watcher-name',
+    },
+    currentStateTopic: 'topic/watcher-name/7ea6b8a42686_termix',
+  });
+
+  expect(staleStateTopics).toEqual([]);
+});
+
 test('removeContainerSensor should clean up stale tracked topic when container id was previously tracked', async () => {
   vi.spyOn(hass, 'updateContainerSensors').mockResolvedValue(undefined);
 

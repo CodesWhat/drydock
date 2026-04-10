@@ -78,10 +78,7 @@ export function getStaleSanitizedContainerNameCandidates(container: {
 
   const legacyAliasCandidate = getLegacyAliasNameCandidate(container);
   if (legacyAliasCandidate) {
-    const sanitizedLegacyAliasCandidate = sanitizeContainerName(legacyAliasCandidate);
-    if (sanitizedLegacyAliasCandidate !== canonicalContainerName) {
-      staleContainerNames.add(sanitizedLegacyAliasCandidate);
-    }
+    staleContainerNames.add(sanitizeContainerName(legacyAliasCandidate));
   }
 
   return Array.from(staleContainerNames);
