@@ -348,6 +348,29 @@ describe('SSE Router', () => {
       expect(sseRouter._clients.size).toBe(1);
     });
 
+    test('should log connection lifecycle without raw client identifiers', () => {
+      const handler = getHandler();
+      const req = createSSERequest('203.0.113.10');
+      const res = createSSEResponse();
+
+      handler(req, res);
+      const connectedPayload = parseSseEventPayload(res, 'dd:connected');
+
+      expect(mockLoggerDebug).toHaveBeenCalledWith('SSE client connected (1 total)');
+      expect(mockLoggerDebug).not.toHaveBeenCalledWith(
+        expect.stringContaining(connectedPayload.clientId),
+      );
+      expect(mockLoggerDebug).not.toHaveBeenCalledWith(expect.stringContaining('203.0.113.10'));
+
+      req._listeners.close();
+
+      expect(mockLoggerDebug).toHaveBeenCalledWith('SSE client disconnected (0 total)');
+      expect(mockLoggerDebug).not.toHaveBeenCalledWith(
+        expect.stringContaining(connectedPayload.clientId),
+      );
+      expect(mockLoggerDebug).not.toHaveBeenCalledWith(expect.stringContaining('203.0.113.10'));
+    });
+
     test('should remove client on connection close', () => {
       const handler = getHandler();
       const req = createSSERequest();
@@ -608,6 +631,8 @@ describe('SSE Router', () => {
 
       expect(rejectedRes.status).toHaveBeenCalledWith(429);
       expect(rejectedRes.json).toHaveBeenCalledWith({ error: 'Too many SSE connections' });
+      expect(mockLoggerWarn).toHaveBeenCalledWith('SSE per-IP connection limit reached (10)');
+      expect(mockLoggerWarn).not.toHaveBeenCalledWith(expect.stringContaining(ip));
     });
 
     test('should allow connections from different IPs independently', () => {
