@@ -20,7 +20,7 @@ const coverageConfig: CustomCoverageConfig = {
   // Use v8 coverage with a small wrapper that avoids a Vitest temp-dir race.
   provider: 'custom',
   customProviderModule: './vitest.coverage-provider.ts',
-  reporter: ['text', 'lcov', 'html'],
+  reporter: ['text', 'lcov', 'html', 'json-summary'],
   include: ['**/*.{js,ts}'],
   exclude: [
     '**/node_modules/**',

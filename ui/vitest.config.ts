@@ -21,7 +21,7 @@ interface CustomCoverageConfig {
 const coverageConfig: CustomCoverageConfig = {
   provider: 'custom',
   customProviderModule: './vitest.coverage-provider.ts',
-  reporter: ['text', 'lcov', 'html'],
+  reporter: ['text', 'lcov', 'html', 'json-summary'],
   include: ['src/**/*.ts'],
   exclude: ['**/*.typecheck.ts', '**/*.d.ts', '**/types/**', '**/node_modules/**'],
   thresholds: {
