@@ -125,6 +125,9 @@ describe('Store Module', () => {
     expect(settings.createCollections).toHaveBeenCalled();
     expect(updateOperation.createCollections).toHaveBeenCalled();
     expect(app.completeStartupInitialization).toHaveBeenCalled();
+    expect(container.createCollections.mock.invocationCallOrder[0]).toBeLessThan(
+      app.completeStartupInitialization.mock.invocationCallOrder[0],
+    );
   });
 
   test('should create directory if it does not exist', async () => {

@@ -58,6 +58,8 @@ describe('tag/precision', () => {
   describe('isTagPinned', () => {
     test('treats numeric version aliases as pinned', () => {
       expect(isTagPinned('16-alpine', undefined)).toBe(true);
+      expect(isTagPinned('1.4', undefined)).toBe(true);
+      expect(isTagPinned('v3', undefined)).toBe(true);
       expect(isTagPinned('1.2.3', undefined)).toBe(true);
     });
 
