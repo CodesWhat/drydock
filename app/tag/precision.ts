@@ -110,11 +110,17 @@ export function isTagPinned(tag: string, transformTags: string | undefined): boo
     return false;
   }
 
+  // Rolling aliases like "stable-arm64" should remain floating even when a
+  // suffix contains digits (for example architecture or build markers).
+  if (isRollingTagAliasValue(transformedTag)) {
+    return false;
+  }
+
   if (getNumericTagShapeFromTransformedTag(transformedTag)) {
     return true;
   }
 
-  return !isRollingTagAliasValue(transformedTag);
+  return true;
 }
 
 export function classifyTagPrecision(

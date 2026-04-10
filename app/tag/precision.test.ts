@@ -37,6 +37,14 @@ describe('tag/precision', () => {
       expect(getNumericTagShapeFromTransformedTag('1.2.3\rrc1')).toBeNull();
     });
 
+    test('extracts numeric segments after a multi-byte prefix', () => {
+      expect(getNumericTagShapeFromTransformedTag('🧪v1.2.3-alpine')).toEqual({
+        prefix: '🧪v',
+        numericSegments: ['1', '2', '3'],
+        suffix: '-alpine',
+      });
+    });
+
     test('returns null when the transformed tag trims to an empty string', () => {
       expect(getNumericTagShape('1.2.3', '^.*$ =>    ')).toBeNull();
     });
@@ -79,6 +87,12 @@ describe('tag/precision', () => {
     test('treats rolling channel aliases as not pinned', () => {
       expect(isTagPinned('latest', undefined)).toBe(false);
       expect(isTagPinned('stable', undefined)).toBe(false);
+    });
+
+    test('treats compound rolling channel aliases as not pinned', () => {
+      expect(isTagPinned('latest-alpine', undefined)).toBe(false);
+      expect(isTagPinned('stable_arm64', undefined)).toBe(false);
+      expect(isTagPinned('dev.build', undefined)).toBe(false);
     });
 
     test('treats whitespace-only transformed tags as not pinned', () => {
