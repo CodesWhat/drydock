@@ -84,7 +84,9 @@ export function formatValidationFailure(rawMessage, errors) {
   const allowedPairs = Object.entries(COMMIT_TYPES)
     .map(([type, meta]) => {
       const alternates =
-        meta.aliases.length > 0 ? ` (or ${meta.aliases.map((a) => `${a} ${type}`).join(', ')})` : '';
+        meta.aliases.length > 0
+          ? ` (or ${meta.aliases.map((a) => `${a} ${type}`).join(', ')})`
+          : '';
       return `  ${meta.emoji} ${type}: ${meta.purpose}${alternates}`;
     })
     .join('\n');
