@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { mount } from '@vue/test-utils';
-import { defineComponent, h, nextTick, ref } from 'vue';
+import { defineComponent, effectScope, h, nextTick, ref } from 'vue';
 import { preferences } from '@/preferences/store';
 import { DASHBOARD_WIDGET_IDS, type DashboardWidgetId } from '@/views/dashboard/dashboardTypes';
 import { applyConstraints } from '@/views/dashboard/dashboardWidgetLayout';
@@ -206,6 +206,25 @@ describe('useDashboardWidgetOrder', () => {
     expect(state.currentBreakpoint.value).toBe('sm');
     expect(state.layout.value.every((item) => item.x === 0)).toBe(true);
     expect(state.layout.value.every((item) => item.w === 1)).toBe(true);
+  });
+
+  it('hydrates legacy single-column gridLayout into the mobile responsive breakpoint', async () => {
+    preferences.dashboard.gridLayout = DASHBOARD_WIDGET_IDS.map((id, index) => ({
+      i: id,
+      x: 0,
+      y: index,
+      w: 1,
+      h: 1,
+    })) as typeof preferences.dashboard.gridLayout;
+
+    const { state, wrapper } = await mountResponsiveLayoutsComposable();
+
+    expect(state.responsiveLayouts.value.sm?.every((item) => item.x === 0 && item.w === 1)).toBe(
+      true,
+    );
+    expect(state.responsiveLayouts.value.sm?.map((item) => item.i)).toEqual(DASHBOARD_WIDGET_IDS);
+
+    wrapper.unmount();
   });
 
   it('syncs a missing breakpoint back to the default layout when no persisted layout exists', async () => {
@@ -578,6 +597,48 @@ describe('useDashboardWidgetOrder', () => {
       );
     } finally {
       vi.useRealTimers();
+    }
+  });
+
+  it('skips global listener registration and cleanup when document APIs are unavailable', () => {
+    const originalDocument = globalThis.document;
+    const originalAddEventListener = globalThis.addEventListener;
+    const originalRemoveEventListener = globalThis.removeEventListener;
+
+    try {
+      Object.defineProperty(globalThis, 'document', {
+        configurable: true,
+        value: undefined,
+      });
+      Object.defineProperty(globalThis, 'addEventListener', {
+        configurable: true,
+        value: undefined,
+      });
+      Object.defineProperty(globalThis, 'removeEventListener', {
+        configurable: true,
+        value: undefined,
+      });
+
+      const scope = effectScope();
+      expect(() => {
+        scope.run(() => useDashboardWidgetOrder());
+      }).not.toThrow();
+      expect(() => {
+        scope.stop();
+      }).not.toThrow();
+    } finally {
+      Object.defineProperty(globalThis, 'document', {
+        configurable: true,
+        value: originalDocument,
+      });
+      Object.defineProperty(globalThis, 'addEventListener', {
+        configurable: true,
+        value: originalAddEventListener,
+      });
+      Object.defineProperty(globalThis, 'removeEventListener', {
+        configurable: true,
+        value: originalRemoveEventListener,
+      });
     }
   });
 

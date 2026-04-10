@@ -969,6 +969,31 @@ describe('useDashboardComputed recent updates', () => {
     expect(rows.find((row) => row.id === 'remote-api')).toMatchObject({ status: 'failed' });
   });
 
+  it('uses the container-name recent status when a container name is unique', () => {
+    const state = createState({
+      containers: [
+        makeBaseContainer({
+          id: 'solo-api',
+          identityKey: 'edge-a::docker-prod::api',
+          name: 'api',
+          newTag: '2.0.0',
+          updateDetectedAt: '2026-03-04T09:00:00.000Z',
+        }),
+      ],
+      recentStatusByContainer: {
+        api: 'updated',
+      },
+      recentStatusByIdentity: {},
+    });
+
+    expect(state.recentUpdates.value).toEqual([
+      expect.objectContaining({
+        id: 'solo-api',
+        status: 'updated',
+      }),
+    ]);
+  });
+
   it('falls back to pending when duplicate container names have no identity-keyed status', () => {
     const nodeA = makeBaseContainer({
       id: 'node-a',
@@ -996,6 +1021,41 @@ describe('useDashboardComputed recent updates', () => {
     const rows = state.recentUpdates.value;
     expect(rows.find((row) => row.id === 'node-a')).toMatchObject({ status: 'pending' });
     expect(rows.find((row) => row.id === 'node-b')).toMatchObject({ status: 'pending' });
+  });
+
+  it('falls back to pending when the precomputed name counts miss the rendered name', () => {
+    const unstableNameContainer = makeBaseContainer({
+      id: 'flaky-name',
+      identityKey: 'edge-a::docker-prod::flaky-name',
+      name: 'flaky-counted',
+      newTag: '2.0.0',
+      updateDetectedAt: '2026-03-04T09:00:00.000Z',
+    });
+    let nameReads = 0;
+    Object.defineProperty(unstableNameContainer, 'name', {
+      configurable: true,
+      enumerable: true,
+      get() {
+        nameReads += 1;
+        return nameReads === 1 ? 'flaky-counted' : 'flaky-rendered';
+      },
+    });
+
+    const state = createState({
+      containers: [unstableNameContainer],
+      recentStatusByContainer: {
+        'flaky-counted': 'updated',
+        'flaky-rendered': 'failed',
+      },
+      recentStatusByIdentity: {},
+    });
+
+    expect(state.recentUpdates.value).toEqual([
+      expect.objectContaining({
+        id: 'flaky-name',
+        status: 'pending',
+      }),
+    ]);
   });
 
   it('returns empty list when only registry failures exist', () => {

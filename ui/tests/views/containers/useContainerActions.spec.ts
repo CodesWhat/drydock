@@ -3224,6 +3224,43 @@ describe('useContainerActions', () => {
     expect(stopPendingActionsPolling).toHaveBeenCalledTimes(1);
   });
 
+  it('ignores live containers that have neither action nor identity keys', () => {
+    const snapshot = makeContainer({
+      id: 'container-1',
+      name: 'web',
+      identityKey: 'local::docker::web',
+    });
+    const liveContainer = makeContainer({
+      id: '',
+      name: '',
+      identityKey: '',
+    });
+    const actionPending = ref(new Map<string, Container>([['web', snapshot]]));
+    const actionPendingStartTimes = ref(new Map<string, number>([['web', 0]]));
+    const actionPendingLifecycleModes = ref(new Map([['web', 'presence' as const]]));
+    const actionPendingLifecycleObserved = ref(new Set<string>());
+    const groupUpdateQueue = ref(new Set<string>());
+    const groupUpdateSequence = ref(new Map());
+    const stopPendingActionsPolling = vi.fn();
+
+    prunePendingActionsState({
+      now: 1,
+      containers: ref([liveContainer]),
+      actionPending,
+      actionPendingStartTimes,
+      actionPendingLifecycleModes,
+      actionPendingLifecycleObserved,
+      groupUpdateQueue,
+      groupUpdateSequence,
+      pollTimeout: PENDING_ACTIONS_POLL_INTERVAL_MS,
+      stopPendingActionsPolling,
+    });
+
+    expect(actionPending.value.has('web')).toBe(true);
+    expect(actionPendingStartTimes.value.has('web')).toBe(true);
+    expect(stopPendingActionsPolling).not.toHaveBeenCalled();
+  });
+
   it('fails closed for action handlers when container actions are disabled', async () => {
     mocks.containerActionsEnabled.value = false;
     const container = makeContainer({ id: 'container-1', name: 'web' });
