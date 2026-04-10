@@ -96,6 +96,30 @@ describe('attachInProgressUpdateOperation', () => {
     });
   });
 
+  test('keeps recovered rollback phases from valid terminal operations', () => {
+    const container = createContainer();
+    const context = createMockContext({
+      id: 'op-recovered',
+      status: 'rolled-back',
+      phase: 'recovered-rollback',
+      updatedAt: '2026-04-01T12:00:00.000Z',
+      fromVersion: '1.0.1',
+      toVersion: '1.0.0',
+    });
+
+    expect(attachInProgressUpdateOperation(context, container)).toEqual({
+      ...container,
+      updateOperation: {
+        id: 'op-recovered',
+        status: 'rolled-back',
+        phase: 'recovered-rollback',
+        updatedAt: '2026-04-01T12:00:00.000Z',
+        fromVersion: '1.0.1',
+        toVersion: '1.0.0',
+      },
+    });
+  });
+
   test('keeps valid batch queue metadata from active operations', () => {
     const container = createContainer();
     const context = createMockContext({
