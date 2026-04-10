@@ -89,6 +89,83 @@ describe('container-update utils', () => {
     ).toBe(false);
   });
 
+  it('yields to in-progress batch heads without a matching queued head', () => {
+    expect(
+      shouldRenderStandaloneQueuedUpdateAsUpdating({
+        targetId: 'standalone',
+        operation: {
+          status: 'queued',
+          updatedAt: '2026-04-01T12:00:02.000Z',
+        },
+        containers: [
+          {
+            id: 'in-progress-head',
+            updateOperation: {
+              status: 'in-progress',
+              updatedAt: '2026-04-01T12:00:00.000Z',
+              batchId: 'batch-1',
+              queuePosition: 1,
+              queueTotal: 2,
+            },
+          },
+          {
+            id: 'standalone',
+            updateOperation: {
+              status: 'queued',
+              updatedAt: '2026-04-01T12:00:02.000Z',
+            },
+          },
+        ],
+      }),
+    ).toBe(false);
+  });
+
+  it('skips non-standalone containers when scanning for the queue head', () => {
+    expect(
+      shouldRenderStandaloneQueuedUpdateAsUpdating({
+        targetId: 'standalone',
+        operation: {
+          status: 'queued',
+          updatedAt: '2026-04-01T12:00:01.000Z',
+        },
+        containers: [
+          {
+            id: 'up-to-date',
+            updateOperation: undefined,
+          },
+          {
+            id: 'standalone',
+            updateOperation: {
+              status: 'queued',
+              updatedAt: '2026-04-01T12:00:01.000Z',
+            },
+          },
+        ],
+      }),
+    ).toBe(true);
+  });
+
+  it('promotes the sole standalone queued update even with undefined updatedAt', () => {
+    expect(
+      shouldRenderStandaloneQueuedUpdateAsUpdating({
+        targetId: 'solo',
+        operation: {
+          status: 'queued',
+          updatedAt: undefined,
+        },
+        containers: [
+          {
+            id: 'solo',
+            updateOperation: {
+              status: 'queued',
+              updatedAt: undefined,
+            },
+          },
+        ],
+      }),
+    ).toBe(true);
+  });
+
   it('uses the plural already-up-to-date label for multiple containers', () => {
     expect(formatContainersAlreadyUpToDateMessage(2)).toBe('2 containers already up to date');
   });
