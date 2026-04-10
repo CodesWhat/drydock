@@ -2,10 +2,11 @@ import { readFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { mount } from '@vue/test-utils';
-import { defineComponent, h, nextTick } from 'vue';
+import { defineComponent, h, nextTick, ref } from 'vue';
 import { preferences } from '@/preferences/store';
 import { DASHBOARD_WIDGET_IDS, type DashboardWidgetId } from '@/views/dashboard/dashboardTypes';
 import { applyConstraints } from '@/views/dashboard/dashboardWidgetLayout';
+import { useDashboardResponsiveLayouts } from '@/views/dashboard/useDashboardResponsiveLayouts';
 import {
   _rebuildLayoutsForOrderForTests,
   createResponsiveLayoutsMemo,
@@ -27,6 +28,26 @@ async function mountWidgetOrderComposable() {
 
   if (!state) {
     throw new Error('Dashboard widget order composable did not initialize');
+  }
+
+  return { state, wrapper };
+}
+
+async function mountResponsiveLayoutsComposable() {
+  let state: ReturnType<typeof useDashboardResponsiveLayouts> | undefined;
+  const Harness = defineComponent({
+    setup() {
+      const widgetOrder = ref([...DASHBOARD_WIDGET_IDS]);
+      state = useDashboardResponsiveLayouts({ widgetOrder });
+      return () => h('div');
+    },
+  });
+
+  const wrapper = mount(Harness);
+  await nextTick();
+
+  if (!state) {
+    throw new Error('Dashboard responsive layouts composable did not initialize');
   }
 
   return { state, wrapper };
@@ -159,6 +180,14 @@ describe('useDashboardWidgetOrder', () => {
     });
   });
 
+  it('falls back to the default layout when persisted gridLayouts is null', async () => {
+    preferences.dashboard.gridLayouts = null as unknown as typeof preferences.dashboard.gridLayouts;
+
+    const { state } = await mountWidgetOrderComposable();
+
+    expect(state.layout.value.map((item) => item.i)).toEqual(DASHBOARD_WIDGET_IDS);
+  });
+
   it('preserves valid single-column layouts for the mobile breakpoint', async () => {
     const mobileLayout = DASHBOARD_WIDGET_IDS.map((id, index) => ({
       i: id,
@@ -177,6 +206,17 @@ describe('useDashboardWidgetOrder', () => {
     expect(state.currentBreakpoint.value).toBe('sm');
     expect(state.layout.value.every((item) => item.x === 0)).toBe(true);
     expect(state.layout.value.every((item) => item.w === 1)).toBe(true);
+  });
+
+  it('syncs a missing breakpoint back to the default layout when no persisted layout exists', async () => {
+    const { state, wrapper } = await mountResponsiveLayoutsComposable();
+
+    state.currentBreakpoint.value = 'md';
+    state.syncCurrentLayoutFromResponsiveLayouts();
+
+    expect(state.layout.value.map((item) => item.i)).toEqual(DASHBOARD_WIDGET_IDS);
+
+    wrapper.unmount();
   });
 
   it('returns explicit style ordering and uses canonical fallback index for missing ids', async () => {
@@ -355,6 +395,16 @@ describe('useDashboardWidgetOrder', () => {
     expect(state.currentBreakpoint.value).toBe('lg');
 
     state.onBreakpointChanged('md', 'invalid-layout' as any);
+    await nextTick();
+
+    expect(state.currentBreakpoint.value).toBe('md');
+    expect(state.responsiveLayouts.value.md?.map((item) => item.i)).toEqual(DASHBOARD_WIDGET_IDS);
+  });
+
+  it('rebuilds a missing breakpoint layout when onBreakpointChanged is called without a payload', async () => {
+    const { state } = await mountWidgetOrderComposable();
+
+    state.onBreakpointChanged('md');
     await nextTick();
 
     expect(state.currentBreakpoint.value).toBe('md');
