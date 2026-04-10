@@ -84,6 +84,11 @@ curl http://drydock:3000/api/v1/containers/recent-status
     "homeassistant": "updated",
     "nginx": "pending",
     "postgres": "failed"
+  },
+  "statusesByIdentity": {
+    "::local::homeassistant": "updated",
+    "edge-a::docker-prod::nginx": "pending",
+    "edge-b::docker-prod::postgres": "failed"
   }
 }
 ```
@@ -92,8 +97,10 @@ curl http://drydock:3000/api/v1/containers/recent-status
 
 | Field | Type | Description |
 | --- | --- | --- |
-| `statuses` | object | Map of container name to status |
+| `statuses` | object | Map of container name to status (last-write-wins when names collide across hosts) |
 | `statuses[name]` | string | `updated` (update applied), `pending` (update available), or `failed` (update failed) |
+| `statusesByIdentity` | object | Map of identity key (`agent::watcher::name`) to status. Provides unambiguous per-container status when the same container name exists on multiple hosts. |
+| `statusesByIdentity[key]` | string | `updated`, `pending`, or `failed` |
 
 ## Watch all Containers
 

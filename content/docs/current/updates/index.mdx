@@ -7,7 +7,7 @@ description: "Release update notes and feature highlights, with direct links to 
 
 - **System log live streaming** — The Configuration Logs view now supports live WebSocket system logs with level/component filtering and tail backfill.  
   Docs: [Logs configuration](/docs/configuration/logs), [Log API stream endpoint](/docs/api/log#stream-application-logs-websocket).
-- **Watcher run-time visibility** — Watchers expose `metadata.lastRunAt`, and the UI surfaces this in the Watchers list as **Last run**.  
+- **Watcher run-time visibility** — Watchers expose `metadata.lastRunAt` and `metadata.nextRunAt`, and the UI surfaces these in the Watchers and Agents views as **Last run** and **Next run**.  
   Docs: [Watcher API](/docs/api/watcher).
 - **Container list query enhancements** — Container list now supports `order`, runtime `status` filters (`running`, `paused`, etc.), and watched-state `kind` filters (`watched`, `unwatched`, `all`).  
   Docs: [Container API query parameters](/docs/api/container#get-all-containers).

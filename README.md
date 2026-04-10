@@ -148,15 +148,16 @@ See the [Quick Start guide](https://getdrydock.com/docs/quickstart) for Docker C
 
 <h2 align="center" id="recent-updates">🆕 Recent Updates</h2>
 
+- **Backend-driven update queue** — Container updates queued server-side with per-trigger concurrency limits. UI shows Queued → Updating → Updated progression with sequence labels (e.g. "Updating 1 of 3").
+- **Identity-keyed container tracking** — Containers tracked by stable identity key (agent::watcher::name) across renames/replacements, preventing cross-host status contamination.
+- **Watcher next-run schedule visibility** — Watcher API and Agents view now show when each watcher will next poll for updates.
+- **Notification delivery failure audit trail** — Failed notification deliveries surface in the notification bell dropdown for visibility without leaving the UI.
 - **Multi-server notification identification** — Notifications automatically include `[server-name]` prefix when agents are registered, identifying which server each update comes from. Configurable via `DD_SERVER_NAME` (defaults to hostname). Custom templates can use `container.notificationServerName`.
 - **System log viewer overhaul** — Pinned toolbar, line wrapping, sort toggle (newest/oldest), filter mode (funnel icon shows matches only), auto-apply filters, component dropdown from API, aligned columns, floating copy button.
 - **Hide Pinned containers** — Checkbox toggle in the container filter bar hides version-pinned containers. Persisted in user preferences.
 - **Combined batch+digest notifications** — `MODE=batch+digest` sends both immediate batch emails and scheduled digest summaries.
 - **Multi-host same-name container support** — Containers with identical names across different hosts no longer collide in the UI. Actions, logs, and detail panels route by container ID.
 - **Lazy OIDC discovery** — SSO provider startup failures no longer block the server. Discovery retries on first use.
-- **Digest watch for Docker Hub** — Digest-pinned containers (e.g. Portainer Agent) now detect updates even when Docker recovers a tagged reference from inspect.
-- **Floating tag detection** — `tagPrecision` classifier warns when mutable aliases like `v3` are used without digest watching.
-- **Podman compatibility** — API version negotiation prevents `EAI_AGAIN` crashes with Podman socket connections.
 
 <hr>
 
