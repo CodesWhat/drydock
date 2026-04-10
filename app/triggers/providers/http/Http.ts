@@ -15,10 +15,28 @@ interface HttpRequestOptions extends Omit<AxiosRequestConfig, 'proxy'> {
   };
 }
 
+const SUPPORTED_PROXY_PROTOCOLS = new Set(['http:', 'https:']);
+
 /**
  * HTTP Trigger implementation
  */
 class Http extends Trigger {
+  private parseProxyConfiguration(proxy: string): NonNullable<HttpRequestOptions['proxy']> {
+    const proxyUrl = new URL(proxy);
+    if (!SUPPORTED_PROXY_PROTOCOLS.has(proxyUrl.protocol)) {
+      throw new Error(
+        `Unable to configure HTTP trigger ${this.getId()}: proxy URL scheme "${proxyUrl.protocol}" is unsupported`,
+      );
+    }
+
+    const defaultProxyPort = proxyUrl.protocol === 'https:' ? 443 : 80;
+    const proxyPort = proxyUrl.port ? Number.parseInt(proxyUrl.port, 10) : defaultProxyPort;
+    return {
+      host: proxyUrl.hostname,
+      port: proxyPort,
+    };
+  }
+
   /**
    * Get the Trigger configuration schema.
    * @returns {*}
@@ -59,7 +77,9 @@ class Http extends Trigger {
           'auth.basic.passwordMissing': '"auth.password" is required',
           'auth.bearer.missing': '"auth.bearer" is required',
         }),
-      proxy: this.joi.string(),
+      proxy: this.joi.string().uri({
+        scheme: ['http', 'https'],
+      }),
     });
   }
 
@@ -120,13 +140,7 @@ class Http extends Trigger {
       }
     }
     if (this.configuration.proxy) {
-      const proxyUrl = new URL(this.configuration.proxy);
-      const defaultProxyPort = proxyUrl.protocol === 'https:' ? 443 : 80;
-      const proxyPort = proxyUrl.port ? Number.parseInt(proxyUrl.port, 10) : defaultProxyPort;
-      options.proxy = {
-        host: proxyUrl.hostname,
-        port: proxyPort,
-      };
+      options.proxy = this.parseProxyConfiguration(this.configuration.proxy);
     }
     const response = await axios(options);
     return response.data;

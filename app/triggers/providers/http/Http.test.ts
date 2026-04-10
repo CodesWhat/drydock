@@ -113,6 +113,15 @@ describe('HTTP Trigger', () => {
     expect(() => http.validateConfiguration(config)).toThrow();
   });
 
+  test('should reject unsupported proxy URL schemes', async () => {
+    const config = {
+      url: 'https://example.com/webhook',
+      proxy: 'ftp://proxy:21',
+    };
+
+    expect(() => http.validateConfiguration(config)).toThrow();
+  });
+
   test('should validate GET method explicitly', async () => {
     const config = {
       url: 'https://example.com/webhook',
@@ -431,6 +440,21 @@ describe('HTTP Trigger', () => {
         proxy: { host: 'secure-proxy', port: 443 },
       }),
     );
+  });
+
+  test('should fail closed on unsupported proxy URL schemes at runtime', async () => {
+    const { default: axios } = await import('axios');
+    axios.mockResolvedValue({ data: {} });
+    http.configuration = {
+      url: 'https://example.com/webhook',
+      method: 'POST',
+      proxy: 'ftp://proxy:21',
+    };
+
+    await expect(http.trigger({ name: 'test' })).rejects.toThrow(
+      'proxy URL scheme "ftp:" is unsupported',
+    );
+    expect(axios).not.toHaveBeenCalled();
   });
 
   test('should use centralized outbound timeout when env override is set', async () => {
