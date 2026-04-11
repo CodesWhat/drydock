@@ -49,6 +49,8 @@ interface SelfUpdateOrchestratorDependencies {
   ) => void;
   emitSelfUpdateStarting: (payload: SelfUpdateStartingPayload) => Promise<void>;
   createOperationId: () => string;
+  resolveFinalizeUrl: () => string;
+  resolveFinalizeSecret: () => string;
 }
 
 interface SelfUpdateOrchestratorConstructorOptions {
@@ -74,6 +76,8 @@ interface SelfUpdateOrchestratorConstructorOptions {
   insertContainerImageBackup?: SelfUpdateOrchestratorDependencies['insertContainerImageBackup'];
   emitSelfUpdateStarting?: SelfUpdateOrchestratorDependencies['emitSelfUpdateStarting'];
   createOperationId?: SelfUpdateOrchestratorDependencies['createOperationId'];
+  resolveFinalizeUrl?: SelfUpdateOrchestratorDependencies['resolveFinalizeUrl'];
+  resolveFinalizeSecret?: SelfUpdateOrchestratorDependencies['resolveFinalizeSecret'];
   resolveHelperImage?: (container: SelfUpdateContainerRef) => string | undefined;
 }
 
@@ -98,6 +102,10 @@ class SelfUpdateOrchestrator {
 
   createOperationId: SelfUpdateOrchestratorDependencies['createOperationId'];
 
+  resolveFinalizeUrl: SelfUpdateOrchestratorDependencies['resolveFinalizeUrl'];
+
+  resolveFinalizeSecret: SelfUpdateOrchestratorDependencies['resolveFinalizeSecret'];
+
   resolveHelperImage?: (container: SelfUpdateContainerRef) => string | undefined;
 
   constructor(options: SelfUpdateOrchestratorConstructorOptions = {}) {
@@ -121,6 +129,11 @@ class SelfUpdateOrchestrator {
     this.insertContainerImageBackup = options.insertContainerImageBackup || (() => undefined);
     this.emitSelfUpdateStarting = options.emitSelfUpdateStarting || (() => Promise.resolve());
     this.createOperationId = options.createOperationId || (() => crypto.randomUUID());
+    this.resolveFinalizeUrl =
+      options.resolveFinalizeUrl ||
+      (() => 'http://127.0.0.1:3000/api/v1/internal/self-update/finalize');
+    this.resolveFinalizeSecret =
+      options.resolveFinalizeSecret || (() => 'missing-self-update-finalize-secret');
     this.resolveHelperImage = options.resolveHelperImage;
   }
 
@@ -174,6 +187,8 @@ class SelfUpdateOrchestrator {
         cloneContainer: this.cloneContainer,
         createContainer: this.createContainer,
         createOperationId: this.createOperationId,
+        resolveFinalizeUrl: this.resolveFinalizeUrl,
+        resolveFinalizeSecret: this.resolveFinalizeSecret,
         resolveHelperImage: resolveHelperImage ? () => resolveHelperImage(container) : undefined,
       },
       context,

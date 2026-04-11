@@ -24,6 +24,8 @@ const DEFAULT_CONTROLLER_ENV = {
   DD_SELF_UPDATE_OLD_CONTAINER_ID: 'old-container-id',
   DD_SELF_UPDATE_OLD_CONTAINER_NAME: 'drydock',
   DD_SELF_UPDATE_NEW_CONTAINER_ID: 'new-container-id',
+  DD_SELF_UPDATE_FINALIZE_URL: 'http://127.0.0.1:3000/api/v1/internal/self-update/finalize',
+  DD_SELF_UPDATE_FINALIZE_SECRET: 'self-update-finalize-secret',
   DD_SELF_UPDATE_START_TIMEOUT_MS: '1000',
   DD_SELF_UPDATE_HEALTH_TIMEOUT_MS: '1000',
   DD_SELF_UPDATE_POLL_INTERVAL_MS: '1',
@@ -51,22 +53,49 @@ function clearControllerEnv() {
   }
 }
 
+function createExecHarness({ exitCode = 0 } = {}) {
+  const startStream = {
+    once: vi.fn((event: string, callback: (error?: unknown) => void) => {
+      if (event === 'end' || event === 'close') {
+        queueMicrotask(() => callback());
+      }
+    }),
+    removeListener: vi.fn(),
+    resume: vi.fn(),
+  };
+  const mockExec = {
+    start: vi.fn().mockResolvedValue(startStream),
+    inspect: vi.fn().mockResolvedValue({ ExitCode: exitCode }),
+  };
+
+  return {
+    mockExec,
+    exec: vi.fn().mockResolvedValue(mockExec),
+  };
+}
+
 function createOldContainer(overrides = {}) {
+  const { exec, mockExec } = createExecHarness();
   return {
     stop: vi.fn().mockResolvedValue(undefined),
     inspect: vi.fn().mockResolvedValue({ State: { Running: false }, Name: '/drydock' }),
     start: vi.fn().mockResolvedValue(undefined),
     rename: vi.fn().mockResolvedValue(undefined),
     remove: vi.fn().mockResolvedValue(undefined),
+    exec,
+    _mockExec: mockExec,
     ...overrides,
   };
 }
 
 function createNewContainer(overrides = {}) {
+  const { exec, mockExec } = createExecHarness();
   return {
     start: vi.fn().mockResolvedValue(undefined),
     inspect: vi.fn().mockResolvedValue({ State: { Running: true } }),
     remove: vi.fn().mockResolvedValue(undefined),
+    exec,
+    _mockExec: mockExec,
     ...overrides,
   };
 }
@@ -155,6 +184,18 @@ describe('self-update-controller orchestration', () => {
     expect(newContainer.remove).not.toHaveBeenCalled();
     expect(oldContainer.start).not.toHaveBeenCalled();
     expect(oldContainer.rename).not.toHaveBeenCalled();
+    expect(newContainer.exec).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Cmd: ['node', 'dist/triggers/providers/docker/self-update-finalize-entrypoint.js'],
+        Env: expect.arrayContaining([
+          'DD_SELF_UPDATE_FINALIZE_URL=http://127.0.0.1:3000/api/v1/internal/self-update/finalize',
+          'DD_SELF_UPDATE_FINALIZE_SECRET=self-update-finalize-secret',
+          'DD_SELF_UPDATE_OPERATION_ID=op-123',
+          'DD_SELF_UPDATE_STATUS=succeeded',
+          'DD_SELF_UPDATE_PHASE=succeeded',
+        ]),
+      }),
+    );
   });
 
   test('uses default op id and old container name when optional env vars are unset', async () => {
@@ -243,6 +284,35 @@ describe('self-update-controller orchestration', () => {
 
     expect(newContainer.remove).toHaveBeenCalledWith({ force: true });
     expect(oldContainer.start).toHaveBeenCalledTimes(1);
+    expect(oldContainer.exec).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Cmd: ['node', 'dist/triggers/providers/docker/self-update-finalize-entrypoint.js'],
+        Env: expect.arrayContaining([
+          'DD_SELF_UPDATE_FINALIZE_URL=http://127.0.0.1:3000/api/v1/internal/self-update/finalize',
+          'DD_SELF_UPDATE_FINALIZE_SECRET=self-update-finalize-secret',
+          'DD_SELF_UPDATE_OPERATION_ID=op-123',
+          'DD_SELF_UPDATE_STATUS=rolled-back',
+          'DD_SELF_UPDATE_PHASE=rolled-back',
+          'DD_SELF_UPDATE_LAST_ERROR=New container became unhealthy (new-container-id)',
+        ]),
+      }),
+    );
+  });
+
+  test('does not attempt rollback when success finalization callback fails after commit', async () => {
+    const oldContainer = createOldContainer();
+    const newContainer = createNewContainer({
+      exec: vi.fn().mockRejectedValue(new Error('finalize unavailable')),
+    });
+    mockDocker(oldContainer, newContainer);
+
+    await expect(runSelfUpdateController()).resolves.toBeUndefined();
+
+    expect(oldContainer.remove).toHaveBeenCalledWith({ force: true });
+    expect(oldContainer.start).not.toHaveBeenCalled();
+    expect(getLoggedStates()).toContain(
+      '[self-update:op-123] FINALIZE_FAILED - finalize unavailable',
+    );
   });
 
   test('times out waiting for old container to stop and rolls back', async () => {

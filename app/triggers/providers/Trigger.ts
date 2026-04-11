@@ -15,6 +15,14 @@ import Component, { type ComponentConfiguration } from '../../registry/Component
 import * as auditStore from '../../store/audit.js';
 import * as storeContainer from '../../store/container.js';
 import * as notificationStore from '../../store/notification.js';
+import {
+  type AcceptedContainerUpdateRequest,
+  buildAcceptedUpdateRuntimeContext,
+  enqueueContainerUpdate,
+  enqueueContainerUpdates,
+  runAcceptedContainerUpdates,
+  UpdateRequestError,
+} from '../../updates/request-update.js';
 import { renderBatch, renderSimple } from './trigger-expression-parser.js';
 import {
   isThresholdReached as isThresholdReachedHelper,
@@ -120,6 +128,7 @@ interface EventDispatchOptions extends notificationStore.NotificationRuleDispatc
 const AUTO_TRIGGER_ERROR_SUPPRESSION_WINDOW_MS = 15_000;
 const AUTO_TRIGGER_ERROR_SUPPRESSION_RETENTION_MS = AUTO_TRIGGER_ERROR_SUPPRESSION_WINDOW_MS * 4;
 const AUTO_EVENT_BATCH_FLUSH_DELAY_MS = 250;
+const UPDATE_ACTION_TRIGGER_TYPES = new Set(['docker', 'dockercompose']);
 
 function getContainerNotificationKey(
   container: Pick<Container, 'id' | 'name' | 'watcher'> | undefined,
@@ -1231,6 +1240,17 @@ class Trigger extends Component {
     }
 
     logContainer.debug('Run');
+    if (this.isUpdateActionTrigger()) {
+      const accepted = await enqueueContainerUpdate(container, {
+        trigger: this as unknown as {
+          type: string;
+          trigger: (container: Container, runtimeContext?: unknown) => Promise<unknown>;
+        },
+      });
+      await runAcceptedContainerUpdates([accepted]);
+      return;
+    }
+
     const result = await this.trigger(container);
     if (this.configuration.resolvenotifications && result) {
       this.notificationResults.set(
@@ -1245,6 +1265,11 @@ class Trigger extends Component {
     container: Container,
     logContainer: Component['log'],
   ) {
+    if (error instanceof UpdateRequestError) {
+      logContainer.debug(`Skipped auto update (${error.message})`);
+      return;
+    }
+
     const errorMessage = Trigger.getErrorMessage(error);
     if (this.shouldSuppressAutoTriggerError('update-available', container, errorMessage)) {
       logContainer.debug(`Suppressed repeated error (${errorMessage})`);
@@ -1340,7 +1365,11 @@ class Trigger extends Component {
     let status: 'success' | 'error' = 'error';
     try {
       this.log.debug('Run batch');
-      await this.triggerBatch(containersToSend);
+      if (this.isUpdateActionTrigger()) {
+        await this.runAcceptedUpdateBatch(containersToSend);
+      } else {
+        await this.triggerBatch(containersToSend);
+      }
       status = 'success';
       // In batch+digest mode, evict successfully-batched containers from the
       // digest buffer so they are not sent again at the next digest flush.
@@ -1519,7 +1548,11 @@ class Trigger extends Component {
     let status: 'success' | 'error' = 'error';
     this.isDigestFlushInProgress = true;
     try {
-      await this.triggerBatch(containers);
+      if (this.isUpdateActionTrigger()) {
+        await this.runAcceptedUpdateBatch(containers);
+      } else {
+        await this.triggerBatch(containers);
+      }
       status = 'success';
       for (const { containerName, bufferedContainer } of dispatchEntries) {
         if (this.digestBuffer.get(containerName) === bufferedContainer) {
@@ -1531,7 +1564,9 @@ class Trigger extends Component {
         }
       }
     } catch (e: unknown) {
-      this.log.warn(`Digest flush failed (${Trigger.getErrorMessage(e)})`);
+      const errorMessage = Trigger.getErrorMessage(e);
+      this.recordBatchDeliveryFailure(containers, errorMessage);
+      this.log.warn(`Digest flush failed (${errorMessage})`);
       this.log.debug(e);
     } finally {
       this.isDigestFlushInProgress = false;
@@ -1804,10 +1839,45 @@ class Trigger extends Component {
    * @param containersWithResult
    * @returns {*}
    */
-  async triggerBatch(containersWithResult: Container[]): Promise<unknown> {
+  async triggerBatch(
+    containersWithResult: Container[],
+    _runtimeContext?: unknown,
+  ): Promise<unknown> {
     // do nothing by default
     this.log.warn('Cannot trigger container results; this trigger does not implement "batch" mode');
     return containersWithResult;
+  }
+
+  private isUpdateActionTrigger(): boolean {
+    return UPDATE_ACTION_TRIGGER_TYPES.has(this.type.toLowerCase());
+  }
+
+  private async runAcceptedUpdateBatch(containers: Container[]): Promise<void> {
+    const { accepted, rejected } = await enqueueContainerUpdates(containers, {
+      trigger: this as unknown as {
+        type: string;
+        trigger: (container: Container, runtimeContext?: unknown) => Promise<unknown>;
+      },
+    });
+
+    for (const entry of rejected) {
+      this.log.debug(
+        `Skipped batched auto update for ${getContainerNotificationKey(entry.container) || fullName(entry.container)} (${entry.message})`,
+      );
+    }
+
+    if (accepted.length === 0) {
+      return;
+    }
+
+    await runAcceptedContainerUpdates(accepted, {
+      executeAcceptedUpdates: async (acceptedUpdates) => {
+        await this.triggerBatch(
+          acceptedUpdates.map((entry) => entry.container),
+          buildAcceptedUpdateRuntimeContext(acceptedUpdates),
+        );
+      },
+    });
   }
 
   getMetadata(): Record<string, unknown> {

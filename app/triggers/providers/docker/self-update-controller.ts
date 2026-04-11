@@ -15,6 +15,8 @@ type SelfUpdateControllerConfig = {
   oldContainerId: string;
   oldContainerName: string;
   newContainerId: string;
+  finalizeUrl: string;
+  finalizeSecret: string;
   startTimeoutMs: number;
   healthTimeoutMs: number;
   pollIntervalMs: number;
@@ -33,6 +35,27 @@ type ContainerInspectState = {
     };
   };
   Name?: string;
+};
+
+type ContainerExecStream = {
+  once?: (event: string, callback: (error?: unknown) => void) => void;
+  removeListener: (event: string, callback: (error?: unknown) => void) => void;
+  resume?: () => void;
+};
+
+type ContainerExecResult = {
+  ExitCode?: number;
+};
+
+type ContainerExecHandle = {
+  start: (options: { Detach: boolean; Tty: boolean }) => Promise<ContainerExecStream>;
+  inspect: () => Promise<ContainerExecResult>;
+};
+
+type SelfUpdateTerminalFinalizePayload = {
+  status: 'succeeded' | 'rolled-back';
+  phase: 'succeeded' | 'rolled-back';
+  lastError?: string;
 };
 
 function getErrorStatusCode(error: unknown): number | undefined {
@@ -57,6 +80,8 @@ function readConfigFromEnv(): SelfUpdateControllerConfig {
     oldContainerId: getRequiredEnv('DD_SELF_UPDATE_OLD_CONTAINER_ID'),
     oldContainerName: process.env.DD_SELF_UPDATE_OLD_CONTAINER_NAME || 'drydock',
     newContainerId: getRequiredEnv('DD_SELF_UPDATE_NEW_CONTAINER_ID'),
+    finalizeUrl: getRequiredEnv('DD_SELF_UPDATE_FINALIZE_URL'),
+    finalizeSecret: getRequiredEnv('DD_SELF_UPDATE_FINALIZE_SECRET'),
     startTimeoutMs: toPositiveInteger(
       process.env.DD_SELF_UPDATE_START_TIMEOUT_MS,
       SELF_UPDATE_START_TIMEOUT_MS,
@@ -223,7 +248,74 @@ class SelfUpdateController {
     this.logState('COMMIT');
     const oldContainer = this.docker.getContainer(this.config.oldContainerId);
     await oldContainer.remove({ force: true });
-    this.logState('SUCCEEDED');
+  }
+
+  async waitForExecStream(execStream: ContainerExecStream): Promise<void> {
+    await new Promise((resolve, reject) => {
+      if (!execStream?.once) {
+        resolve(undefined);
+        return;
+      }
+      const onError = (error: unknown) => {
+        execStream.removeListener('end', onDone);
+        execStream.removeListener('close', onDone);
+        reject(error);
+      };
+      const onDone = () => {
+        execStream.removeListener('end', onDone);
+        execStream.removeListener('close', onDone);
+        execStream.removeListener('error', onError);
+        resolve(undefined);
+      };
+      execStream.once('end', onDone);
+      execStream.once('close', onDone);
+      execStream.once('error', onError);
+    });
+  }
+
+  buildFinalizeExecEnv(payload: SelfUpdateTerminalFinalizePayload): string[] {
+    return [
+      `DD_SELF_UPDATE_FINALIZE_URL=${this.config.finalizeUrl}`,
+      `DD_SELF_UPDATE_FINALIZE_SECRET=${this.config.finalizeSecret}`,
+      `DD_SELF_UPDATE_OPERATION_ID=${this.config.opId}`,
+      `DD_SELF_UPDATE_STATUS=${payload.status}`,
+      `DD_SELF_UPDATE_PHASE=${payload.phase}`,
+      ...(payload.lastError ? [`DD_SELF_UPDATE_LAST_ERROR=${payload.lastError}`] : []),
+    ];
+  }
+
+  async runFinalizeCallbackInContainer(
+    targetContainerId: string,
+    payload: SelfUpdateTerminalFinalizePayload,
+  ): Promise<void> {
+    const targetContainer = this.docker.getContainer(targetContainerId);
+    const execHandle = (await targetContainer.exec({
+      AttachStdout: true,
+      AttachStderr: true,
+      Cmd: ['node', 'dist/triggers/providers/docker/self-update-finalize-entrypoint.js'],
+      Env: this.buildFinalizeExecEnv(payload),
+    })) as ContainerExecHandle;
+    const execStream = await execHandle.start({ Detach: false, Tty: false });
+    execStream.resume?.();
+    await this.waitForExecStream(execStream);
+    const execResult = await execHandle.inspect();
+    if (execResult.ExitCode === 0) {
+      return;
+    }
+    throw new Error(
+      `Self-update finalize callback failed for ${this.config.opId} with exit code ${execResult.ExitCode}`,
+    );
+  }
+
+  async maybeFinalizeCallbackInContainer(
+    targetContainerId: string,
+    payload: SelfUpdateTerminalFinalizePayload,
+  ): Promise<void> {
+    try {
+      await this.runFinalizeCallbackInContainer(targetContainerId, payload);
+    } catch (error: unknown) {
+      this.logState('FINALIZE_FAILED', getErrorMessage(error, String(error)));
+    }
   }
 
   async restoreOldContainerName(oldContainer: Dockerode.Container): Promise<void> {
@@ -241,6 +333,8 @@ class SelfUpdateController {
     const reason = getErrorMessage(error, String(error));
     const oldContainer = this.docker.getContainer(this.config.oldContainerId);
     const newContainer = this.docker.getContainer(this.config.newContainerId);
+    let rollbackRestoreSucceeded = true;
+    let rollbackRestartSucceeded = true;
 
     try {
       this.logState('CLEANUP_CANDIDATE');
@@ -255,6 +349,7 @@ class SelfUpdateController {
     try {
       await this.restoreOldContainerName(oldContainer);
     } catch (restoreNameError: unknown) {
+      rollbackRestoreSucceeded = false;
       this.logState(
         'ROLLBACK_RESTORE_NAME_FAILED',
         getErrorMessage(restoreNameError, String(restoreNameError)),
@@ -266,11 +361,20 @@ class SelfUpdateController {
       await oldContainer.start();
     } catch (rollbackError: unknown) {
       if (!isContainerAlreadyStartedError(rollbackError)) {
+        rollbackRestartSucceeded = false;
         this.logState(
           'ROLLBACK_START_OLD_FAILED',
           getErrorMessage(rollbackError, String(rollbackError)),
         );
       }
+    }
+
+    if (rollbackRestoreSucceeded && rollbackRestartSucceeded) {
+      await this.maybeFinalizeCallbackInContainer(this.config.oldContainerId, {
+        status: 'rolled-back',
+        phase: 'rolled-back',
+        lastError: reason,
+      });
     }
 
     this.logState('FAILED_WITH_ROLLBACK', reason);
@@ -292,6 +396,11 @@ class SelfUpdateController {
     } catch (error: unknown) {
       await this.rollback(error);
     }
+    await this.maybeFinalizeCallbackInContainer(this.config.newContainerId, {
+      status: 'succeeded',
+      phase: 'succeeded',
+    });
+    this.logState('SUCCEEDED');
   }
 }
 

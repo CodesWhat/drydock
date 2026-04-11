@@ -22,10 +22,29 @@ const CONTROLLER_ENV_KEYS = [
   'DD_SELF_UPDATE_OLD_CONTAINER_ID',
   'DD_SELF_UPDATE_NEW_CONTAINER_ID',
   'DD_SELF_UPDATE_OLD_CONTAINER_NAME',
+  'DD_SELF_UPDATE_FINALIZE_URL',
+  'DD_SELF_UPDATE_FINALIZE_SECRET',
   'DD_SELF_UPDATE_START_TIMEOUT_MS',
   'DD_SELF_UPDATE_HEALTH_TIMEOUT_MS',
   'DD_SELF_UPDATE_POLL_INTERVAL_MS',
 ] as const;
+
+function createControllerExecMock() {
+  const stream = {
+    once: vi.fn((event: string, callback: () => void) => {
+      if (event === 'end' || event === 'close') {
+        queueMicrotask(() => callback());
+      }
+    }),
+    removeListener: vi.fn(),
+    resume: vi.fn(),
+  };
+
+  return vi.fn().mockResolvedValue({
+    start: vi.fn().mockResolvedValue(stream),
+    inspect: vi.fn().mockResolvedValue({ ExitCode: 0 }),
+  });
+}
 
 function getRouteHandler(router: any, path: string, method: 'get' | 'post') {
   const layer = router.stack.find(
@@ -193,6 +212,7 @@ describe('self-update SSE flow integration', () => {
       start: vi.fn().mockResolvedValue(undefined),
       rename: vi.fn().mockResolvedValue(undefined),
       remove: vi.fn().mockResolvedValue(undefined),
+      exec: createControllerExecMock(),
     };
     const controllerNewContainer = {
       start: vi.fn().mockResolvedValue(undefined),
@@ -202,6 +222,7 @@ describe('self-update SSE flow integration', () => {
         .mockResolvedValueOnce({ State: { Running: true, Health: { Status: 'starting' } } })
         .mockResolvedValueOnce({ State: { Running: true, Health: { Status: 'healthy' } } }),
       remove: vi.fn().mockResolvedValue(undefined),
+      exec: createControllerExecMock(),
     };
     mockDockerodeCtor.mockImplementation(function DockerodeMock() {
       return {
@@ -269,6 +290,10 @@ describe('self-update SSE flow integration', () => {
           cloneContainer: vi.fn(() => ({ cloned: true })),
           createContainer: vi.fn().mockResolvedValue(transitionNewContainer),
           createOperationId: vi.fn(() => 'unused-operation-id'),
+          resolveFinalizeUrl: vi.fn(
+            () => 'http://127.0.0.1:3000/api/v1/internal/self-update/finalize',
+          ),
+          resolveFinalizeSecret: vi.fn(() => 'self-update-finalize-secret'),
         },
         transitionContext as any,
         {

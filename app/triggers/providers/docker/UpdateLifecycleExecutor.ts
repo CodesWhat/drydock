@@ -1,4 +1,3 @@
-import crypto from 'node:crypto';
 import type { ContainerUpdateAppliedEvent } from '../../../event/index.js';
 import {
   assertRequiredFunctionDependencies,
@@ -51,6 +50,12 @@ type UpdateLifecycleExecutorCallbacks = {
   ) => Promise<void>;
   isSelfUpdate: (container: UpdateLifecycleContainer) => boolean;
   isInfrastructureUpdate: (container: UpdateLifecycleContainer) => boolean;
+  prepareSelfUpdateOperation: (
+    context: UpdateLifecycleContext,
+    container: UpdateLifecycleContainer,
+    logger: UpdateLifecycleOperationLogger,
+    runtimeContext?: unknown,
+  ) => Promise<string> | string;
   maybeNotifySelfUpdate: (
     container: UpdateLifecycleContainer,
     logger: UpdateLifecycleOperationLogger,
@@ -118,7 +123,11 @@ type UpdateLifecycleHookServices = Pick<
 
 type UpdateLifecycleSelfUpdateServices = Pick<
   UpdateLifecycleExecutorCallbacks,
-  'isSelfUpdate' | 'isInfrastructureUpdate' | 'maybeNotifySelfUpdate' | 'executeSelfUpdate'
+  | 'isSelfUpdate'
+  | 'isInfrastructureUpdate'
+  | 'prepareSelfUpdateOperation'
+  | 'maybeNotifySelfUpdate'
+  | 'executeSelfUpdate'
 >;
 
 type UpdateLifecycleRuntimeUpdateServices = Pick<
@@ -169,6 +178,7 @@ const REQUIRED_UPDATE_LIFECYCLE_EXECUTOR_DEPENDENCY_KEYS = {
   selfUpdate: [
     'isSelfUpdate',
     'isInfrastructureUpdate',
+    'prepareSelfUpdateOperation',
     'maybeNotifySelfUpdate',
     'executeSelfUpdate',
   ],
@@ -263,7 +273,12 @@ class UpdateLifecycleExecutor {
         this.selfUpdate.isSelfUpdate(container) ||
         this.selfUpdate.isInfrastructureUpdate(container)
       ) {
-        const selfUpdateOperationId = crypto.randomUUID();
+        const selfUpdateOperationId = await this.selfUpdate.prepareSelfUpdateOperation(
+          context,
+          container,
+          containerLogger,
+          runtimeContext,
+        );
         await this.selfUpdate.maybeNotifySelfUpdate(
           container,
           containerLogger,

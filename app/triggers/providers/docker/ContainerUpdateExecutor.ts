@@ -1,5 +1,6 @@
 import * as updateOperationStore from '../../../store/update-operation.js';
 import { resolveFunctionDependencies } from './dependency-constructor.js';
+import { getRequestedOperationId } from './update-runtime-context.js';
 
 type ContainerUpdateLogger = {
   info: (message: string) => void;
@@ -67,11 +68,6 @@ type ContainerUpdateContext = {
   newImage: string;
   currentContainer: DockerContainerHandle;
   currentContainerSpec: ContainerSpecLike;
-};
-
-type ContainerUpdateRuntimeContext = {
-  operationId?: string;
-  [key: string]: unknown;
 };
 
 type PreparedContainerUpdateExecution = {
@@ -250,20 +246,6 @@ function getHealthGateTimeoutMs(rollbackConfig: RollbackConfig): number {
     : DEFAULT_HEALTH_GATE_TIMEOUT_MS;
 }
 
-function getRequestedOperationId(runtimeContext?: unknown): string | undefined {
-  if (!runtimeContext || typeof runtimeContext !== 'object') {
-    return undefined;
-  }
-
-  const operationId = (runtimeContext as ContainerUpdateRuntimeContext).operationId;
-  if (typeof operationId !== 'string') {
-    return undefined;
-  }
-
-  const trimmedOperationId = operationId.trim();
-  return trimmedOperationId.length > 0 ? trimmedOperationId : undefined;
-}
-
 class ContainerUpdateExecutor {
   getConfiguration: ContainerUpdateExecutorDependencies['getConfiguration'];
 
@@ -421,7 +403,7 @@ class ContainerUpdateExecutor {
       logContainer,
     );
 
-    updateOperationStore.updateOperation(pending.id, {
+    updateOperationStore.markOperationTerminal(pending.id, {
       status: 'succeeded',
       phase: 'recovered-cleanup-temp',
       recoveredAt: new Date().toISOString(),
@@ -456,12 +438,20 @@ class ContainerUpdateExecutor {
     }
 
     const recovered = !recoveryError;
-    updateOperationStore.updateOperation(pending.id, {
-      status: recovered ? 'rolled-back' : 'failed',
-      phase: recovered ? 'recovered-rollback' : 'recovery-failed',
-      lastError: recoveryError ? getErrorMessage(recoveryError) : undefined,
-      recoveredAt: new Date().toISOString(),
-    });
+    if (recovered) {
+      updateOperationStore.markOperationTerminal(pending.id, {
+        status: 'rolled-back',
+        phase: 'recovered-rollback',
+        recoveredAt: new Date().toISOString(),
+      });
+    } else {
+      updateOperationStore.markOperationTerminal(pending.id, {
+        status: 'failed',
+        phase: 'recovery-failed',
+        lastError: getErrorMessage(recoveryError),
+        recoveredAt: new Date().toISOString(),
+      });
+    }
     this.recordRollbackTelemetry({
       container,
       outcome: recovered ? 'success' : 'error',
@@ -478,7 +468,7 @@ class ContainerUpdateExecutor {
     pending: PendingContainerUpdateOperation,
     container: ContainerForUpdate,
   ): void {
-    updateOperationStore.updateOperation(pending.id, {
+    updateOperationStore.markOperationTerminal(pending.id, {
       status: 'succeeded',
       phase: 'recovered-active',
       recoveredAt: new Date().toISOString(),
@@ -497,7 +487,7 @@ class ContainerUpdateExecutor {
     pending: PendingContainerUpdateOperation,
     container: ContainerForUpdate,
   ): void {
-    updateOperationStore.updateOperation(pending.id, {
+    updateOperationStore.markOperationTerminal(pending.id, {
       status: 'failed',
       phase: 'recovery-missing-containers',
       lastError: 'No active or temporary container found during update-operation recovery',
@@ -563,7 +553,7 @@ class ContainerUpdateExecutor {
   ): Promise<PreparedContainerUpdateExecution | undefined> {
     const { dockerApi, auth, newImage, currentContainer, currentContainerSpec } = context;
     const configuration = this.getConfiguration();
-    const requestedOperationId = getRequestedOperationId(runtimeContext);
+    const requestedOperationId = getRequestedOperationId(container, runtimeContext);
 
     await this.reconcileInProgressContainerUpdateOperation(dockerApi, container, logContainer);
 
@@ -599,12 +589,17 @@ class ContainerUpdateExecutor {
       ? updateOperationStore.getOperationById(requestedOperationId)
       : undefined;
     const operation = existingOperation
-      ? updateOperationStore.updateOperation(requestedOperationId!, {
-          ...operationFields,
-          lastError: undefined,
-          rollbackReason: undefined,
-          newContainerId: undefined,
-        })!
+      ? existingOperation.status === 'queued' || existingOperation.status === 'in-progress'
+        ? updateOperationStore.updateOperation(requestedOperationId!, {
+            ...operationFields,
+            lastError: undefined,
+            rollbackReason: undefined,
+            newContainerId: undefined,
+            completedAt: undefined,
+          })!
+        : updateOperationStore.reopenTerminalOperation(requestedOperationId!, {
+            ...operationFields,
+          })!
       : updateOperationStore.insertOperation({
           ...(requestedOperationId ? { id: requestedOperationId } : {}),
           ...operationFields,
@@ -613,7 +608,7 @@ class ContainerUpdateExecutor {
     try {
       await this.pullImage(dockerApi, auth, newImage, logContainer);
     } catch (pullError: unknown) {
-      updateOperationStore.updateOperation(operation.id, {
+      updateOperationStore.markOperationTerminal(operation.id, {
         status: 'failed',
         phase: 'pull-failed',
         lastError: getErrorMessage(pullError),
@@ -623,7 +618,7 @@ class ContainerUpdateExecutor {
 
     if (configuration.dryrun) {
       logContainer.info('Do not replace the existing container because dry-run mode is enabled');
-      updateOperationStore.updateOperation(operation.id, {
+      updateOperationStore.markOperationTerminal(operation.id, {
         status: 'succeeded',
         phase: 'dryrun',
       });
@@ -793,7 +788,7 @@ class ContainerUpdateExecutor {
   }
 
   private markOperationSucceeded(operationId: string) {
-    updateOperationStore.updateOperation(operationId, {
+    updateOperationStore.markOperationTerminal(operationId, {
       status: 'succeeded',
       phase: 'succeeded',
     });
@@ -842,10 +837,18 @@ class ContainerUpdateExecutor {
         preparedExecution.operationId,
         DEFERRED_RECONCILIATION_DELAY_MS,
       );
+    } else if (rollbackSucceeded) {
+      updateOperationStore.markOperationTerminal(preparedExecution.operationId, {
+        status: 'rolled-back',
+        phase: 'rolled-back',
+        oldContainerStopped: attemptState.oldContainerStopped,
+        rollbackReason: attemptState.failureReason,
+        lastError: getErrorMessage(error),
+      });
     } else {
-      updateOperationStore.updateOperation(preparedExecution.operationId, {
-        status: rollbackSucceeded ? 'rolled-back' : 'failed',
-        phase: rollbackSucceeded ? 'rolled-back' : 'rollback-failed',
+      updateOperationStore.markOperationTerminal(preparedExecution.operationId, {
+        status: 'failed',
+        phase: 'rollback-failed',
         oldContainerStopped: attemptState.oldContainerStopped,
         rollbackReason: attemptState.failureReason,
         lastError: getErrorMessage(error),

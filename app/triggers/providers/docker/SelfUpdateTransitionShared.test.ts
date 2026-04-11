@@ -67,6 +67,8 @@ function createDependencies(overrides = {}) {
     cloneContainer: vi.fn(() => ({ cloned: true })),
     createContainer: vi.fn(),
     createOperationId: vi.fn(() => 'generated-operation-id'),
+    resolveFinalizeUrl: vi.fn(() => 'http://127.0.0.1:3000/api/v1/internal/self-update/finalize'),
+    resolveFinalizeSecret: vi.fn(() => 'self-update-finalize-secret'),
     ...overrides,
   };
 }
@@ -150,6 +152,8 @@ describe('SelfUpdateTransitionShared', () => {
       expect.objectContaining({
         Env: expect.arrayContaining([
           'DD_SELF_UPDATE_OP_ID=generated-op-id',
+          'DD_SELF_UPDATE_FINALIZE_URL=http://127.0.0.1:3000/api/v1/internal/self-update/finalize',
+          'DD_SELF_UPDATE_FINALIZE_SECRET=self-update-finalize-secret',
           `DD_SELF_UPDATE_START_TIMEOUT_MS=${SELF_UPDATE_START_TIMEOUT_MS}`,
           `DD_SELF_UPDATE_HEALTH_TIMEOUT_MS=${SELF_UPDATE_HEALTH_TIMEOUT_MS}`,
           `DD_SELF_UPDATE_POLL_INTERVAL_MS=${SELF_UPDATE_POLL_INTERVAL_MS}`,

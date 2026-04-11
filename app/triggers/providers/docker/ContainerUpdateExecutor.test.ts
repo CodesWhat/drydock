@@ -4,14 +4,18 @@ const {
   mockGetInProgressOperationByContainerName,
   mockGetOperationById,
   mockInsertOperation,
+  mockReopenTerminalOperation,
   mockUpdateOperation,
+  mockMarkOperationTerminal,
   mockGetActiveOperationByContainerName,
   mockGetActiveOperationByContainerId,
 } = vi.hoisted(() => ({
   mockGetInProgressOperationByContainerName: vi.fn(),
   mockGetOperationById: vi.fn(),
   mockInsertOperation: vi.fn(),
+  mockReopenTerminalOperation: vi.fn(),
   mockUpdateOperation: vi.fn(),
+  mockMarkOperationTerminal: vi.fn(),
   mockGetActiveOperationByContainerName: vi.fn(),
   mockGetActiveOperationByContainerId: vi.fn(),
 }));
@@ -20,7 +24,9 @@ vi.mock('../../../store/update-operation.js', () => ({
   getInProgressOperationByContainerName: mockGetInProgressOperationByContainerName,
   getOperationById: mockGetOperationById,
   insertOperation: mockInsertOperation,
+  reopenTerminalOperation: mockReopenTerminalOperation,
   updateOperation: mockUpdateOperation,
+  markOperationTerminal: mockMarkOperationTerminal,
   getActiveOperationByContainerName: mockGetActiveOperationByContainerName,
   getActiveOperationByContainerId: mockGetActiveOperationByContainerId,
 }));
@@ -117,6 +123,7 @@ describe('ContainerUpdateExecutor', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockInsertOperation.mockReturnValue({ id: 'op-1' });
+    mockReopenTerminalOperation.mockReturnValue({ id: 'op-1' });
     mockGetInProgressOperationByContainerName.mockReturnValue(undefined);
     mockGetOperationById.mockReturnValue(undefined);
   });
@@ -257,7 +264,7 @@ describe('ContainerUpdateExecutor', () => {
 
     await executor.reconcileInProgressContainerUpdateOperation({}, createContainer(), createLog());
 
-    expect(mockUpdateOperation).toHaveBeenCalledWith(
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
       'op-1',
       expect.objectContaining({
         status: 'succeeded',
@@ -327,7 +334,7 @@ describe('ContainerUpdateExecutor', () => {
 
     expect(tempContainer.rename).toHaveBeenCalledWith({ name: 'web' });
     expect(restored.start).toHaveBeenCalled();
-    expect(mockUpdateOperation).toHaveBeenCalledWith(
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
       'op-1',
       expect.objectContaining({
         status: 'rolled-back',
@@ -368,7 +375,7 @@ describe('ContainerUpdateExecutor', () => {
 
     expect(tempContainer.rename).toHaveBeenCalledWith({ name: 'web' });
     expect(dockerApi.getContainer).not.toHaveBeenCalled();
-    expect(mockUpdateOperation).toHaveBeenCalledWith(
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
       'op-1',
       expect.objectContaining({
         status: 'rolled-back',
@@ -400,7 +407,7 @@ describe('ContainerUpdateExecutor', () => {
 
     await executor.reconcileInProgressContainerUpdateOperation({}, createContainer(), createLog());
 
-    expect(mockUpdateOperation).toHaveBeenCalledWith(
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
       'op-1',
       expect.objectContaining({
         status: 'failed',
@@ -433,7 +440,7 @@ describe('ContainerUpdateExecutor', () => {
 
     await executor.reconcileInProgressContainerUpdateOperation({}, createContainer(), createLog());
 
-    expect(mockUpdateOperation).toHaveBeenCalledWith(
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
       'op-1',
       expect.objectContaining({
         status: 'failed',
@@ -460,7 +467,7 @@ describe('ContainerUpdateExecutor', () => {
       .mockResolvedValueOnce({ container: {}, inspection: {} })
       .mockResolvedValueOnce(undefined);
     await executor.reconcileInProgressContainerUpdateOperation({}, createContainer(), createLog());
-    expect(mockUpdateOperation).toHaveBeenCalledWith(
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
       'op-1',
       expect.objectContaining({
         status: 'succeeded',
@@ -470,7 +477,7 @@ describe('ContainerUpdateExecutor', () => {
 
     inspectSpy.mockResolvedValueOnce(undefined).mockResolvedValueOnce(undefined);
     await executor.reconcileInProgressContainerUpdateOperation({}, createContainer(), createLog());
-    expect(mockUpdateOperation).toHaveBeenCalledWith(
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
       'op-1',
       expect.objectContaining({
         status: 'failed',
@@ -500,7 +507,7 @@ describe('ContainerUpdateExecutor', () => {
       'pull failed',
     );
 
-    expect(mockUpdateOperation).toHaveBeenCalledWith(
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
       'op-1',
       expect.objectContaining({
         status: 'failed',
@@ -567,7 +574,7 @@ describe('ContainerUpdateExecutor', () => {
       'web',
       expect.anything(),
     );
-    expect(mockUpdateOperation).toHaveBeenCalledWith(
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
       'op-1',
       expect.objectContaining({
         status: 'succeeded',
@@ -736,6 +743,43 @@ describe('ContainerUpdateExecutor', () => {
     expect(mockInsertOperation.mock.calls.at(-1)?.[0]?.id).toBe('custom-op');
   });
 
+  test('execute reuses a per-container requested operation id from runtime context operationIds', async () => {
+    const context = createContext({
+      currentContainerSpec: createCurrentContainerSpec({
+        State: { Running: false },
+        HostConfig: { AutoRemove: false },
+      }),
+    });
+    mockGetOperationById.mockReturnValue({
+      id: 'op-from-map',
+      status: 'queued',
+    });
+    mockUpdateOperation.mockReturnValue({ id: 'op-from-map' });
+    const executor = createExecutor({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      hasHealthcheckConfigured: vi.fn(() => false),
+    });
+
+    await expect(
+      executor.execute(context, createContainer(), createLog(), {
+        operationIds: {
+          'container-id': ' op-from-map ',
+        },
+      }),
+    ).resolves.toBe(true);
+
+    expect(mockGetOperationById).toHaveBeenCalledWith('op-from-map');
+    expect(mockUpdateOperation).toHaveBeenCalledWith(
+      'op-from-map',
+      expect.objectContaining({
+        containerId: 'container-id',
+        status: 'in-progress',
+        phase: 'pulling',
+      }),
+    );
+    expect(mockInsertOperation).not.toHaveBeenCalled();
+  });
+
   test('execute reuses a queued pre-created operation instead of inserting a new one', async () => {
     const context = createContext({
       currentContainerSpec: createCurrentContainerSpec({
@@ -791,7 +835,11 @@ describe('ContainerUpdateExecutor', () => {
       lastError: 'Marked failed after exceeding active update TTL',
     };
     mockGetOperationById.mockImplementation(() => existingOperation);
-    mockUpdateOperation.mockImplementation((_id, patch) => {
+    mockReopenTerminalOperation.mockImplementation((_id, patch) => {
+      Object.assign(existingOperation, patch);
+      return { ...existingOperation };
+    });
+    mockMarkOperationTerminal.mockImplementationOnce((_id, patch) => {
       Object.assign(existingOperation, patch);
       return { ...existingOperation };
     });
@@ -807,12 +855,17 @@ describe('ContainerUpdateExecutor', () => {
     ).resolves.toBe(true);
 
     expect(mockInsertOperation).not.toHaveBeenCalled();
-    expect(mockUpdateOperation.mock.calls[0]?.[0]).toBe('queued-op-expired');
-    expect(mockUpdateOperation.mock.calls[0]?.[1]).toEqual(
+    expect(mockReopenTerminalOperation.mock.calls[0]?.[0]).toBe('queued-op-expired');
+    expect(mockReopenTerminalOperation.mock.calls[0]?.[1]).toEqual(
       expect.objectContaining({
         status: 'in-progress',
         phase: 'pulling',
-        lastError: undefined,
+      }),
+    );
+    expect(mockUpdateOperation).toHaveBeenCalledWith(
+      'queued-op-expired',
+      expect.objectContaining({
+        phase: 'prepare',
       }),
     );
     expect(existingOperation.id).toBe('queued-op-expired');
@@ -839,7 +892,7 @@ describe('ContainerUpdateExecutor', () => {
     );
 
     expect(context.currentContainer.rename).toHaveBeenNthCalledWith(2, { name: 'web' });
-    expect(mockUpdateOperation).toHaveBeenCalledWith(
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
       'op-1',
       expect.objectContaining({
         status: 'rolled-back',
@@ -980,7 +1033,7 @@ describe('ContainerUpdateExecutor', () => {
       'runtime compatibility error',
     );
 
-    expect(mockUpdateOperation).toHaveBeenCalledWith(
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
       'op-1',
       expect.objectContaining({
         status: 'failed',
@@ -1074,7 +1127,7 @@ describe('ContainerUpdateExecutor', () => {
       'container not found',
     );
 
-    expect(mockUpdateOperation).toHaveBeenCalledWith(
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
       'op-1',
       expect.objectContaining({
         status: 'failed',
@@ -1112,7 +1165,7 @@ describe('ContainerUpdateExecutor', () => {
       'ECONNREFUSED',
     );
 
-    expect(mockUpdateOperation).toHaveBeenCalledWith(
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
       'op-1',
       expect.objectContaining({
         status: 'failed',

@@ -1,7 +1,13 @@
 import joi from 'joi';
+import {
+  createFinalizeSelfUpdateHandler,
+  getSelfUpdateFinalizeSecret,
+  SELF_UPDATE_FINALIZE_SECRET_HEADER,
+} from '../../../api/internal-self-update.js';
 import log from '../../../log/index.js';
 import * as registryStore from '../../../registry';
 import * as backupStore from '../../../store/backup';
+import { createMockRequest, createMockResponse } from '../../../test/helpers.js';
 import Docker from './Docker.js';
 
 const configurationValid = {
@@ -28,6 +34,7 @@ docker.configuration = configurationValid;
 docker.log = log;
 
 const mockGetSecurityConfiguration = vi.hoisted(() => vi.fn());
+const mockGetServerConfiguration = vi.hoisted(() => vi.fn());
 vi.mock('../../../configuration/index.js', async () => {
   const actual = await vi.importActual<typeof import('../../../configuration/index.js')>(
     '../../../configuration/index.js',
@@ -35,6 +42,7 @@ vi.mock('../../../configuration/index.js', async () => {
   return {
     ...actual,
     getSecurityConfiguration: (...args: any[]) => mockGetSecurityConfiguration(...args),
+    getServerConfiguration: (...args: any[]) => mockGetServerConfiguration(...args),
   };
 });
 
@@ -93,6 +101,7 @@ vi.mock('../../../prometheus/rollback.js', () => ({
 const mockInsertOperation = vi.hoisted(() => vi.fn());
 const mockUpdateOperation = vi.hoisted(() => vi.fn());
 const mockGetOperationById = vi.hoisted(() => vi.fn());
+const mockMarkOperationTerminal = vi.hoisted(() => vi.fn());
 const mockGetInProgressOperationByContainerName = vi.hoisted(() => vi.fn());
 const mockGetActiveOperationByContainerName = vi.hoisted(() => vi.fn());
 const mockGetActiveOperationByContainerId = vi.hoisted(() => vi.fn());
@@ -100,6 +109,7 @@ vi.mock('../../../store/update-operation.js', () => ({
   insertOperation: (...args: any[]) => mockInsertOperation(...args),
   updateOperation: (...args: any[]) => mockUpdateOperation(...args),
   getOperationById: (...args: any[]) => mockGetOperationById(...args),
+  markOperationTerminal: (...args: any[]) => mockMarkOperationTerminal(...args),
   getInProgressOperationByContainerName: (...args: any[]) =>
     mockGetInProgressOperationByContainerName(...args),
   getActiveOperationByContainerName: (...args: any[]) =>
@@ -371,6 +381,7 @@ beforeEach(async () => {
   vi.resetAllMocks();
   docker.configuration = configurationValid;
   docker.log = log;
+  mockGetServerConfiguration.mockReturnValue({ port: 3000 });
   mockGetSecurityConfiguration.mockReturnValue({
     enabled: false,
     scanner: '',
@@ -415,6 +426,35 @@ beforeEach(async () => {
   }));
   mockUpdateOperation.mockImplementation((id, patch = {}) => ({ id, ...patch }));
   mockGetInProgressOperationByContainerName.mockReturnValue(undefined);
+});
+
+test('getSelfUpdateFinalizeUrl should keep loopback finalize callbacks on plain HTTP even when public TLS is enabled', () => {
+  mockGetServerConfiguration.mockReturnValue({
+    port: 3443,
+    tls: { enabled: true },
+  });
+
+  expect(docker.getSelfUpdateFinalizeUrl()).toBe(
+    'http://127.0.0.1:3443/api/v1/internal/self-update/finalize',
+  );
+});
+
+test('getSelfUpdateFinalizeUrl should throw when server port is missing', () => {
+  mockGetServerConfiguration.mockReturnValue({});
+
+  expect(() => docker.getSelfUpdateFinalizeUrl()).toThrow(
+    'Self-update finalize URL requires a valid server port; got undefined',
+  );
+});
+
+test('getSelfUpdateFinalizeUrl should throw when server port is invalid', () => {
+  mockGetServerConfiguration.mockReturnValue({
+    port: 0,
+  });
+
+  expect(() => docker.getSelfUpdateFinalizeUrl()).toThrow(
+    'Self-update finalize URL requires a valid server port; got 0',
+  );
 });
 
 // --- Configuration validation ---
@@ -2861,7 +2901,7 @@ describe('executeContainerUpdate', () => {
     expect(result).toBe(true);
     expect(context.currentContainer.rename).toHaveBeenCalledTimes(1);
     expect(mockRollbackCounterInc).not.toHaveBeenCalled();
-    expect(mockUpdateOperation).toHaveBeenCalledWith(
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
         status: 'succeeded',
@@ -3057,7 +3097,7 @@ describe('executeContainerUpdate', () => {
     await docker.executeContainerUpdate(context, createTriggerContainer(), logContainer);
 
     expect(staleTempContainer.remove).toHaveBeenCalledWith({ force: true });
-    expect(mockUpdateOperation).toHaveBeenCalledWith(
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
       'op-recover-1',
       expect.objectContaining({
         status: 'succeeded',
@@ -3691,6 +3731,162 @@ describe('extracted lifecycle delegation', () => {
       await docker.runContainerUpdateLifecycle(container, runtimeContext);
 
       expect(run).toHaveBeenCalledWith(container, runtimeContext);
+    } finally {
+      docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
+    }
+  });
+
+  test('runContainerUpdateLifecycle should mark a queued requested operation failed when lifecycle throws', async () => {
+    const originalUpdateLifecycleExecutor = docker.updateLifecycleExecutor;
+    const run = vi.fn().mockRejectedValue(new Error('scan failed hard'));
+    docker.updateLifecycleExecutor = { run };
+    const container = createTriggerContainer();
+
+    mockGetOperationById.mockReturnValue({
+      id: 'queued-op-1',
+      status: 'queued',
+      phase: 'queued',
+    });
+
+    try {
+      await expect(
+        docker.runContainerUpdateLifecycle(container, { operationId: 'queued-op-1' }),
+      ).rejects.toThrow('scan failed hard');
+
+      expect(mockMarkOperationTerminal).toHaveBeenCalledWith('queued-op-1', {
+        status: 'failed',
+        phase: 'failed',
+        lastError: 'scan failed hard',
+      });
+    } finally {
+      docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
+    }
+  });
+
+  test('runContainerUpdateLifecycle should mark a batched requested operation failed when lifecycle throws', async () => {
+    const originalUpdateLifecycleExecutor = docker.updateLifecycleExecutor;
+    const run = vi.fn().mockRejectedValue(new Error('hook failed hard'));
+    docker.updateLifecycleExecutor = { run };
+    const container = createTriggerContainer();
+
+    mockGetOperationById.mockReturnValue({
+      id: 'queued-op-batch-1',
+      status: 'queued',
+      phase: 'queued',
+    });
+
+    try {
+      await expect(
+        docker.runContainerUpdateLifecycle(container, {
+          operationIds: { [container.id]: 'queued-op-batch-1' },
+        }),
+      ).rejects.toThrow('hook failed hard');
+
+      expect(mockMarkOperationTerminal).toHaveBeenCalledWith('queued-op-batch-1', {
+        status: 'failed',
+        phase: 'failed',
+        lastError: 'hook failed hard',
+      });
+    } finally {
+      docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
+    }
+  });
+
+  test('runContainerUpdateLifecycle should not override deferred reconciliation state on thrown lifecycle errors', async () => {
+    const originalUpdateLifecycleExecutor = docker.updateLifecycleExecutor;
+    const run = vi.fn().mockRejectedValue(new Error('connect ECONNRESET'));
+    docker.updateLifecycleExecutor = { run };
+    const container = createTriggerContainer();
+
+    mockGetOperationById.mockReturnValue({
+      id: 'op-deferred-1',
+      status: 'in-progress',
+      phase: 'rollback-deferred',
+    });
+
+    try {
+      await expect(
+        docker.runContainerUpdateLifecycle(container, { operationId: 'op-deferred-1' }),
+      ).rejects.toThrow('connect ECONNRESET');
+
+      expect(mockMarkOperationTerminal).not.toHaveBeenCalled();
+    } finally {
+      docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
+    }
+  });
+
+  test('runContainerUpdateLifecycle should not re-terminalize an already terminal operation when lifecycle throws', async () => {
+    const originalUpdateLifecycleExecutor = docker.updateLifecycleExecutor;
+    const run = vi.fn().mockRejectedValue(new Error('hook failed hard'));
+    docker.updateLifecycleExecutor = { run };
+    const container = createTriggerContainer();
+
+    mockGetOperationById.mockReturnValue({
+      id: 'op-terminal-1',
+      status: 'failed',
+      phase: 'failed',
+    });
+
+    try {
+      await expect(
+        docker.runContainerUpdateLifecycle(container, { operationId: 'op-terminal-1' }),
+      ).rejects.toThrow('hook failed hard');
+
+      expect(mockMarkOperationTerminal).not.toHaveBeenCalled();
+    } finally {
+      docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
+    }
+  });
+
+  test('runContainerUpdateLifecycle should leave self-update terminalization to the finalize callback', async () => {
+    const originalUpdateLifecycleExecutor = docker.updateLifecycleExecutor;
+    const run = vi.fn().mockRejectedValue(new Error('post-spawn cleanup failed'));
+    docker.updateLifecycleExecutor = { run };
+    const container = createTriggerContainer();
+
+    mockGetOperationById.mockReturnValueOnce({
+      id: 'op-self-1',
+      status: 'in-progress',
+      phase: 'prepare',
+      kind: 'self-update',
+    });
+
+    try {
+      await expect(
+        docker.runContainerUpdateLifecycle(container, { operationId: 'op-self-1' }),
+      ).rejects.toThrow('post-spawn cleanup failed');
+
+      expect(mockMarkOperationTerminal).not.toHaveBeenCalled();
+
+      mockGetOperationById.mockReturnValueOnce({
+        id: 'op-self-1',
+        status: 'in-progress',
+        phase: 'prepare',
+        kind: 'self-update',
+      });
+
+      const handler = createFinalizeSelfUpdateHandler();
+      const req = createMockRequest({
+        socket: { remoteAddress: '127.0.0.1' },
+        header: (name: string) =>
+          name.toLowerCase() === SELF_UPDATE_FINALIZE_SECRET_HEADER
+            ? getSelfUpdateFinalizeSecret()
+            : undefined,
+        body: {
+          operationId: 'op-self-1',
+          status: 'succeeded',
+          phase: 'succeeded',
+        },
+      });
+      const res = createMockResponse();
+
+      handler(req, res);
+
+      expect(mockMarkOperationTerminal).toHaveBeenCalledWith('op-self-1', {
+        status: 'succeeded',
+        phase: 'succeeded',
+      });
+      expect(res.status).toHaveBeenCalledWith(202);
     } finally {
       docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
     }

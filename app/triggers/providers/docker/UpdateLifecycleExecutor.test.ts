@@ -35,6 +35,7 @@ function createHarness(overrides = {}) {
     runPreUpdateHook: vi.fn().mockResolvedValue(undefined),
     isSelfUpdate: vi.fn(() => false),
     isInfrastructureUpdate: vi.fn(() => false),
+    prepareSelfUpdateOperation: vi.fn().mockResolvedValue('prepared-self-update-op-id'),
     maybeNotifySelfUpdate: vi.fn().mockResolvedValue(undefined),
     executeSelfUpdate: vi.fn().mockResolvedValue(true),
     runPreRuntimeUpdateLifecycle: vi.fn().mockResolvedValue(undefined),
@@ -70,6 +71,7 @@ function createHarness(overrides = {}) {
     selfUpdate: {
       isSelfUpdate: deps.isSelfUpdate,
       isInfrastructureUpdate: deps.isInfrastructureUpdate,
+      prepareSelfUpdateOperation: deps.prepareSelfUpdateOperation,
       maybeNotifySelfUpdate: deps.maybeNotifySelfUpdate,
       executeSelfUpdate: deps.executeSelfUpdate,
     },
@@ -122,6 +124,7 @@ describe('UpdateLifecycleExecutor', () => {
       selfUpdate: {
         isSelfUpdate: vi.fn(() => false),
         isInfrastructureUpdate: vi.fn(() => false),
+        prepareSelfUpdateOperation: vi.fn().mockResolvedValue('prepared-self-update-op-id'),
         maybeNotifySelfUpdate: vi.fn().mockResolvedValue(undefined),
         executeSelfUpdate: vi.fn().mockResolvedValue(true),
       },
@@ -168,6 +171,7 @@ describe('UpdateLifecycleExecutor', () => {
       selfUpdate: {
         isSelfUpdate: vi.fn(() => false),
         isInfrastructureUpdate: vi.fn(() => false),
+        prepareSelfUpdateOperation: vi.fn(),
         maybeNotifySelfUpdate: vi.fn(),
         executeSelfUpdate: vi.fn(),
       },
@@ -208,6 +212,7 @@ describe('UpdateLifecycleExecutor', () => {
       selfUpdate: {
         isSelfUpdate: vi.fn(() => false),
         isInfrastructureUpdate: vi.fn(() => false),
+        prepareSelfUpdateOperation: vi.fn().mockResolvedValue('prepared-self-update-op-id'),
         maybeNotifySelfUpdate: vi.fn().mockResolvedValue(undefined),
         executeSelfUpdate: vi.fn().mockResolvedValue(true),
       },
@@ -260,6 +265,7 @@ describe('UpdateLifecycleExecutor', () => {
       selfUpdate: {
         isSelfUpdate: vi.fn(() => false),
         isInfrastructureUpdate: vi.fn(() => false),
+        prepareSelfUpdateOperation: vi.fn().mockResolvedValue('prepared-self-update-op-id'),
         maybeNotifySelfUpdate: vi.fn().mockResolvedValue(undefined),
         executeSelfUpdate: vi.fn().mockResolvedValue(true),
       },
@@ -309,26 +315,29 @@ describe('UpdateLifecycleExecutor', () => {
   test('runs self-update path and stops when self update returns false', async () => {
     const harness = createHarness({
       isSelfUpdate: vi.fn(() => true),
+      prepareSelfUpdateOperation: vi.fn().mockResolvedValue('op-self-update-123'),
       executeSelfUpdate: vi.fn().mockResolvedValue(false),
     });
 
-    await harness.executor.run(createContainer(), { runtime: true });
+    await harness.executor.run(createContainer(), { runtime: true, operationId: 'queued-op-1' });
 
-    const selfUpdateOperationId = harness.maybeNotifySelfUpdate.mock.calls[0][2];
+    expect(harness.prepareSelfUpdateOperation).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      { runtime: true, operationId: 'queued-op-1' },
+    );
     expect(harness.maybeNotifySelfUpdate).toHaveBeenCalledWith(
       expect.anything(),
       expect.anything(),
-      expect.stringMatching(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i),
-    );
-    expect(selfUpdateOperationId).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+      'op-self-update-123',
     );
     expect(harness.executeSelfUpdate).toHaveBeenCalledWith(
       expect.anything(),
       expect.anything(),
       expect.anything(),
-      selfUpdateOperationId,
-      { runtime: true },
+      'op-self-update-123',
+      { runtime: true, operationId: 'queued-op-1' },
     );
     expect(harness.runPreRuntimeUpdateLifecycle).not.toHaveBeenCalled();
     expect(harness.emitContainerUpdateApplied).not.toHaveBeenCalled();
