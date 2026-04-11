@@ -616,6 +616,43 @@ export const openApiSchemas = {
     required: ['message', 'operationId'],
     additionalProperties: false,
   },
+  ContainerBulkUpdateAcceptedItem: {
+    type: 'object',
+    properties: {
+      containerId: { type: 'string' },
+      containerName: { type: 'string' },
+      operationId: { type: 'string' },
+    },
+    required: ['containerId', 'containerName', 'operationId'],
+    additionalProperties: false,
+  },
+  ContainerBulkUpdateRejectedItem: {
+    type: 'object',
+    properties: {
+      containerId: { type: 'string' },
+      containerName: { type: 'string' },
+      statusCode: { type: 'integer' },
+      message: { type: 'string' },
+    },
+    required: ['containerId', 'containerName', 'statusCode', 'message'],
+    additionalProperties: false,
+  },
+  ContainerBulkUpdateResponse: {
+    type: 'object',
+    properties: {
+      message: { type: 'string' },
+      accepted: {
+        type: 'array',
+        items: { $ref: '#/components/schemas/ContainerBulkUpdateAcceptedItem' },
+      },
+      rejected: {
+        type: 'array',
+        items: { $ref: '#/components/schemas/ContainerBulkUpdateRejectedItem' },
+      },
+    },
+    required: ['message', 'accepted', 'rejected'],
+    additionalProperties: false,
+  },
   ComponentItem: {
     type: 'object',
     properties: {

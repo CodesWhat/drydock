@@ -15,6 +15,7 @@ import * as debugRouter from './debug.js';
 import { sendErrorResponse } from './error-response.js';
 import * as groupRouter from './group.js';
 import * as iconsRouter from './icons.js';
+import * as internalSelfUpdateRouter from './internal-self-update.js';
 import { requireJsonContentTypeForMutations, shouldParseJsonBody } from './json-content-type.js';
 import * as logRouter from './log.js';
 import * as notificationRouter from './notification.js';
@@ -79,6 +80,12 @@ export function init(): express.Router {
     const { openApiDocument } = await import('./openapi.js');
     res.status(200).json(openApiDocument);
   });
+
+  // Internal self-update finalize callback used by the surviving Drydock
+  // process after helper-container handoff. Guarded by loopback-only checks
+  // plus a per-process shared secret in the sub-router, so it must remain
+  // ahead of session auth.
+  router.use('/internal', internalSelfUpdateRouter.init());
 
   // Routes to protect after this line
   router.use(requireAuthentication);

@@ -5,7 +5,9 @@ import logger from '../log/index.js';
 import { sanitizeLogParam } from '../log/sanitize.js';
 import type { Container } from '../model/container.js';
 import * as registry from '../registry/index.js';
+import * as storeContainer from '../store/container.js';
 import Trigger from '../triggers/providers/Trigger.js';
+import { requestContainerUpdate, UpdateRequestError } from '../updates/request-update.js';
 import { getErrorMessage } from '../util/error.js';
 import * as component from './component.js';
 import { sendErrorResponse } from './error-response.js';
@@ -47,6 +49,7 @@ const triggerRequestBodySchema = joi
   .unknown(true);
 
 const INVALID_TRIGGER_REQUEST_BODY_ERROR = 'Invalid trigger request body';
+const UPDATE_TRIGGER_TYPES = new Set(['docker', 'dockercompose']);
 
 function validateTriggerRequestBody(body: unknown): {
   value?: TriggerRequestBody;
@@ -166,6 +169,23 @@ export async function runTrigger(req: Request<RunTriggerParams>, res: Response) 
   }
 
   try {
+    if (UPDATE_TRIGGER_TYPES.has(triggerType.toLowerCase())) {
+      const storedContainer = storeContainer.getContainer(containerToTrigger.id);
+      if (!storedContainer) {
+        sendErrorResponse(res, 404, 'Container not found');
+        return;
+      }
+
+      const accepted = await requestContainerUpdate(storedContainer, {
+        trigger: triggerToRun as { type: string; trigger: typeof triggerToRun.trigger },
+      });
+      log.info(
+        `Accepted update trigger ${sanitizeLogParam(triggerType)}.${sanitizeLogParam(triggerName)} (container=${sanitizeLogParam(storedContainer.id)})`,
+      );
+      res.status(202).json({ operationId: accepted.operationId });
+      return;
+    }
+
     log.debug(
       `Running trigger ${sanitizeLogParam(triggerType)}.${sanitizeLogParam(triggerName)} (container=${sanitizeLogParam(JSON.stringify(containerToTrigger), 500)})`,
     );
@@ -175,6 +195,11 @@ export async function runTrigger(req: Request<RunTriggerParams>, res: Response) 
     );
     res.status(200).json({});
   } catch (e) {
+    if (e instanceof UpdateRequestError) {
+      sendErrorResponse(res, e.statusCode, e.message);
+      return;
+    }
+
     const errorMessage = getErrorMessage(e);
     log.warn(
       `Error when running trigger ${sanitizeLogParam(triggerType)}.${sanitizeLogParam(triggerName)} (${sanitizeLogParam(errorMessage)})`,

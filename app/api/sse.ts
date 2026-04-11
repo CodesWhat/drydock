@@ -9,6 +9,7 @@ import {
   registerContainerRemoved,
   registerContainerUpdated,
   registerSelfUpdateStarting,
+  registerUpdateOperationChanged,
 } from '../event/index.js';
 import log from '../log/index.js';
 import { hashToken } from '../util/crypto.js';
@@ -37,6 +38,7 @@ const ALLOWED_CONTAINER_EVENT_NAMES = new Set<string>([
   'dd:container-added',
   'dd:container-updated',
   'dd:container-removed',
+  'dd:update-operation-changed',
   'dd:agent-connected',
   'dd:agent-disconnected',
 ]);
@@ -370,6 +372,11 @@ export function init(): express.Router {
   trackEventListenerDeregistration(
     registerContainerRemoved((payload: unknown) => {
       broadcastContainerEvent('dd:container-removed', payload);
+    }),
+  );
+  trackEventListenerDeregistration(
+    registerUpdateOperationChanged((payload: unknown) => {
+      broadcastContainerEvent('dd:update-operation-changed', payload);
     }),
   );
   trackEventListenerDeregistration(

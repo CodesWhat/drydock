@@ -96,7 +96,7 @@ describe('attachInProgressUpdateOperation', () => {
     });
   });
 
-  test('keeps recovered rollback phases from valid terminal operations', () => {
+  test('ignores terminal operations on live container payloads', () => {
     const container = createContainer();
     const context = createMockContext({
       id: 'op-recovered',
@@ -107,17 +107,7 @@ describe('attachInProgressUpdateOperation', () => {
       toVersion: '1.0.0',
     });
 
-    expect(attachInProgressUpdateOperation(context, container)).toEqual({
-      ...container,
-      updateOperation: {
-        id: 'op-recovered',
-        status: 'rolled-back',
-        phase: 'recovered-rollback',
-        updatedAt: '2026-04-01T12:00:00.000Z',
-        fromVersion: '1.0.1',
-        toVersion: '1.0.0',
-      },
-    });
+    expect(attachInProgressUpdateOperation(context, container)).toBe(container);
   });
 
   test('keeps valid batch queue metadata from active operations', () => {

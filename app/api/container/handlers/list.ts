@@ -1,8 +1,9 @@
 import type { Request, Response } from 'express';
 import type { Container, ContainerUpdateOperationState } from '../../../model/container.js';
 import {
-  isContainerUpdateOperationPhase,
-  isContainerUpdateOperationStatus,
+  isActiveContainerUpdateOperationPhaseForStatus,
+  isActiveContainerUpdateOperationStatus,
+  isContainerUpdateOperationKind,
 } from '../../../model/container-update-operation.js';
 import { sendErrorResponse } from '../../error-response.js';
 import { buildPaginationLinks } from '../../pagination-links.js';
@@ -62,7 +63,7 @@ function stripContainerVulnerabilityArrays(container: Container): Container {
   };
 }
 
-function sanitizeInProgressUpdateOperation(
+function sanitizeActiveUpdateOperation(
   operation: unknown,
 ): ContainerUpdateOperationState | undefined {
   if (!operation || typeof operation !== 'object') {
@@ -72,12 +73,18 @@ function sanitizeInProgressUpdateOperation(
   const candidate = operation as Record<string, unknown>;
 
   const id = typeof candidate.id === 'string' ? candidate.id : undefined;
-  const status = isContainerUpdateOperationStatus(candidate.status) ? candidate.status : undefined;
-  const phase = isContainerUpdateOperationPhase(candidate.phase) ? candidate.phase : undefined;
+  const kind = isContainerUpdateOperationKind(candidate.kind) ? candidate.kind : undefined;
+  const status = isActiveContainerUpdateOperationStatus(candidate.status)
+    ? candidate.status
+    : undefined;
   const updatedAt = typeof candidate.updatedAt === 'string' ? candidate.updatedAt : undefined;
   const batchId = typeof candidate.batchId === 'string' ? candidate.batchId : undefined;
   const queuePosition = parsePositiveInteger(candidate.queuePosition);
   const queueTotal = parsePositiveInteger(candidate.queueTotal);
+  const phase =
+    status && isActiveContainerUpdateOperationPhaseForStatus(status, candidate.phase)
+      ? candidate.phase
+      : undefined;
 
   if (!id || !status || !phase || !updatedAt) {
     return undefined;
@@ -85,6 +92,7 @@ function sanitizeInProgressUpdateOperation(
 
   return {
     id,
+    ...(kind ? { kind } : {}),
     status,
     phase,
     updatedAt,
@@ -113,7 +121,7 @@ export function attachInProgressUpdateOperation(
   const isLegacyOperation =
     byName && typeof byName === 'object' && !('containerId' in (byName as Record<string, unknown>));
   const matched = byId ?? (isLegacyOperation ? byName : undefined);
-  const operation = sanitizeInProgressUpdateOperation(matched);
+  const operation = sanitizeActiveUpdateOperation(matched);
 
   if (!operation) {
     return container;

@@ -1,4 +1,3 @@
-import crypto from 'node:crypto';
 import express, { type Request, type Response } from 'express';
 import nocache from 'nocache';
 import { getServerConfiguration } from '../configuration/index.js';
@@ -9,8 +8,12 @@ import { type Container, clearDetectedUpdateState } from '../model/container.js'
 import { getContainerActionsCounter } from '../prometheus/container-actions.js';
 import * as registry from '../registry/index.js';
 import * as storeContainer from '../store/container.js';
-import * as updateOperationStore from '../store/update-operation.js';
-import Trigger from '../triggers/providers/Trigger.js';
+import {
+  type RejectedContainerUpdateRequest,
+  requestContainerUpdate,
+  requestContainerUpdates,
+  UpdateRequestError,
+} from '../updates/request-update.js';
 import { recordAuditEvent } from './audit-events.js';
 import { findDockerTriggerForContainer, NO_DOCKER_TRIGGER_FOUND_ERROR } from './docker-trigger.js';
 import { sendErrorResponse } from './error-response.js';
@@ -48,42 +51,42 @@ type DockerWatcher = {
   };
 };
 
-type UpdateQueueBatchMetadata = {
-  batchId: string;
-  queuePosition: number;
-  queueTotal: number;
+type BulkUpdateResponseItem = {
+  containerId: string;
+  containerName: string;
+  message?: string;
+  operationId?: string;
+  statusCode?: number;
 };
 
-function parsePositiveInteger(value: unknown): number | undefined {
-  if (typeof value === 'number') {
-    return Number.isSafeInteger(value) && value > 0 ? value : undefined;
-  }
-  if (typeof value !== 'string' || !/^\d+$/.test(value)) {
-    return undefined;
-  }
-
-  const parsed = Number.parseInt(value, 10);
-  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : undefined;
-}
-
-function parseUpdateQueueBatchMetadata(body: unknown): UpdateQueueBatchMetadata | undefined {
+function parseBulkContainerIds(body: unknown): string[] | undefined {
   if (!body || typeof body !== 'object') {
     return undefined;
   }
 
-  const candidate = body as Record<string, unknown>;
-  const batchId = typeof candidate.batchId === 'string' ? candidate.batchId.trim() : '';
-  const queuePosition = parsePositiveInteger(candidate.queuePosition);
-  const queueTotal = parsePositiveInteger(candidate.queueTotal);
-
-  if (!batchId || !queuePosition || !queueTotal || queuePosition > queueTotal) {
+  const containerIds = (body as Record<string, unknown>).containerIds;
+  if (!Array.isArray(containerIds) || containerIds.length === 0) {
     return undefined;
   }
 
+  const normalized = containerIds
+    .map((value) => (typeof value === 'string' ? value.trim() : ''))
+    .filter((value) => value !== '');
+  if (normalized.length === 0) {
+    return undefined;
+  }
+
+  return Array.from(new Set(normalized));
+}
+
+function serializeRejectedUpdateRequest(
+  rejected: RejectedContainerUpdateRequest,
+): BulkUpdateResponseItem {
   return {
-    batchId,
-    queuePosition,
-    queueTotal,
+    containerId: rejected.container.id,
+    containerName: rejected.container.name,
+    statusCode: rejected.statusCode,
+    message: rejected.message,
   };
 }
 
@@ -108,31 +111,6 @@ function recordAcceptedUpdateFailure(id: string, container: Container, error: un
     status: 'error',
     details: message,
   });
-}
-
-function markAcceptedQueuedOperationFailed(operationId: string, error: unknown) {
-  const operation = updateOperationStore.getOperationById(operationId);
-  if (operation?.status !== 'queued') {
-    return;
-  }
-
-  const message = error instanceof Error ? error.message : String(error);
-  updateOperationStore.updateOperation(operationId, {
-    status: 'failed',
-    lastError: message,
-  });
-}
-
-function getActiveUpdateOperationForContainer(container: Container) {
-  const byId = updateOperationStore.getActiveOperationByContainerId(container.id);
-  if (byId) {
-    return byId;
-  }
-
-  const byName = updateOperationStore.getActiveOperationByContainerName(container.name);
-  const isLegacyOperation =
-    byName && typeof byName === 'object' && !('containerId' in (byName as Record<string, unknown>));
-  return isLegacyOperation ? byName : undefined;
 }
 
 /**
@@ -250,68 +228,101 @@ async function updateContainer(req: Request, res: Response) {
     return;
   }
 
-  const activeOperation = getActiveUpdateOperationForContainer(container);
-  if (activeOperation) {
-    sendErrorResponse(
-      res,
-      409,
-      `Container update already ${activeOperation.status === 'queued' ? 'queued' : 'in progress'}`,
-    );
-    return;
-  }
-
-  if (!container.updateAvailable) {
-    sendErrorResponse(res, 400, 'No update available for this container');
-    return;
-  }
-
-  if (Trigger.isRollbackContainer(container)) {
-    sendErrorResponse(
-      res,
-      409,
-      'Cannot update temporary rollback container renamed with -old-{timestamp}',
-    );
-    return;
-  }
-
-  if (container.security?.scan?.status === 'blocked') {
-    sendErrorResponse(res, 409, 'Update blocked by security scan. Use force-update to override.');
-    return;
-  }
-
-  const trigger = findDockerTriggerForContainer(registry.getState().trigger, container, {
-    triggerTypes: ['docker', 'dockercompose'],
-  });
-  if (!trigger) {
-    sendErrorResponse(res, 404, NO_DOCKER_TRIGGER_FOUND_ERROR);
-    return;
-  }
-
-  const operationId = crypto.randomUUID();
-  const batchMetadata = parseUpdateQueueBatchMetadata(req.body);
-  getContainerActionsCounter()?.inc({ action: 'container-update' });
-
-  updateOperationStore.insertOperation({
-    id: operationId,
-    containerId: container.id,
-    containerName: container.name,
-    status: 'queued',
-    phase: 'queued',
-    ...batchMetadata,
-  });
-
-  void (async () => {
-    try {
-      await trigger.trigger(container, { operationId });
-      clearManualUpdateDetectionState(id);
-      recordAuditEvent({ action: 'container-update', container, status: 'success' });
-    } catch (e: unknown) {
-      markAcceptedQueuedOperationFailed(operationId, e);
-      recordAcceptedUpdateFailure(id, container, e);
+  try {
+    const accepted = await requestContainerUpdate(container, {
+      onSuccess: () => {
+        clearManualUpdateDetectionState(id);
+        recordAuditEvent({ action: 'container-update', container, status: 'success' });
+      },
+      onFailure: (_accepted, error) => {
+        recordAcceptedUpdateFailure(id, container, error);
+      },
+    });
+    getContainerActionsCounter()?.inc({ action: 'container-update' });
+    res
+      .status(202)
+      .json({ message: 'Container update accepted', operationId: accepted.operationId });
+  } catch (error: unknown) {
+    if (error instanceof UpdateRequestError) {
+      sendErrorResponse(res, error.statusCode, error.message);
+      return;
     }
-  })();
 
-  res.status(202).json({ message: 'Container update accepted', operationId });
+    log.warn(
+      `Unexpected error accepting update for container ${sanitizeLogParam(id)} (${sanitizeLogParam(
+        error instanceof Error ? error.message : String(error),
+      )})`,
+    );
+    sendErrorResponse(res, 500, 'Unable to accept container update');
+  }
+}
+
+async function updateContainers(req: Request, res: Response) {
+  const serverConfiguration = getServerConfiguration();
+  if (!serverConfiguration.feature.containeractions) {
+    sendErrorResponse(res, 403, 'Container actions are disabled');
+    return;
+  }
+
+  const containerIds = parseBulkContainerIds(req.body);
+  if (!containerIds) {
+    sendErrorResponse(res, 400, 'containerIds must be a non-empty array of container ids');
+    return;
+  }
+
+  const containers: Container[] = [];
+  const rejected: BulkUpdateResponseItem[] = [];
+
+  for (const id of containerIds) {
+    const container = storeContainer.getContainer(id);
+    if (!container) {
+      rejected.push({
+        containerId: id,
+        containerName: id,
+        statusCode: 404,
+        message: 'Container not found',
+      });
+      continue;
+    }
+    containers.push(container);
+  }
+
+  try {
+    const result = await requestContainerUpdates(containers, {
+      onSuccess: (accepted) => {
+        clearManualUpdateDetectionState(accepted.container.id);
+        recordAuditEvent({
+          action: 'container-update',
+          container: accepted.container,
+          status: 'success',
+        });
+      },
+      onFailure: (accepted, error) => {
+        recordAcceptedUpdateFailure(accepted.container.id, accepted.container, error);
+      },
+    });
+
+    result.accepted.forEach(() => {
+      getContainerActionsCounter()?.inc({ action: 'container-update' });
+    });
+
+    res.status(200).json({
+      message: 'Container update requests processed',
+      accepted: result.accepted.map((accepted) => ({
+        containerId: accepted.container.id,
+        containerName: accepted.container.name,
+        operationId: accepted.operationId,
+      })),
+      rejected: [...rejected, ...result.rejected.map(serializeRejectedUpdateRequest)],
+    });
+  } catch (error: unknown) {
+    log.warn(
+      `Unexpected error accepting bulk updates (${sanitizeLogParam(
+        error instanceof Error ? error.message : String(error),
+      )})`,
+    );
+    sendErrorResponse(res, 500, 'Unable to accept container updates');
+  }
 }
 
 /**
@@ -320,6 +331,7 @@ async function updateContainer(req: Request, res: Response) {
  */
 export function init() {
   router.use(nocache());
+  router.post('/update', updateContainers);
   router.post('/:id/start', startContainer);
   router.post('/:id/stop', stopContainer);
   router.post('/:id/restart', restartContainer);

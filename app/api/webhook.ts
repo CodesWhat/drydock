@@ -8,11 +8,10 @@ import { sanitizeLogParam } from '../log/sanitize.js';
 import { getWebhookCounter } from '../prometheus/webhook.js';
 import * as registry from '../registry/index.js';
 import * as storeContainer from '../store/container.js';
-import Trigger from '../triggers/providers/Trigger.js';
+import { requestContainerUpdate, UpdateRequestError } from '../updates/request-update.js';
 import { getErrorMessage } from '../util/error.js';
 import { ddWebhookEnabled, wudWebhookEnabled } from '../watchers/providers/docker/label.js';
 import { recordAuditEvent } from './audit-events.js';
-import { findDockerTriggerForContainer, NO_DOCKER_TRIGGER_FOUND_ERROR } from './docker-trigger.js';
 import { sendErrorResponse } from './error-response.js';
 
 const log = logger.child({ component: 'webhook' });
@@ -276,32 +275,37 @@ async function updateContainer(req: Request, res: Response) {
     return;
   }
 
-  const trigger = findDockerTriggerForContainer(registry.getState().trigger, container);
-  if (!trigger) {
-    sendErrorResponse(res, 404, NO_DOCKER_TRIGGER_FOUND_ERROR);
-    return;
-  }
-
-  if (Trigger.isRollbackContainer(container)) {
-    sendErrorResponse(res, 409, 'Cannot update temporary rollback container');
-    return;
-  }
-
   try {
-    await trigger.trigger(container);
-
-    recordAuditEvent({
-      action: 'webhook-update',
-      container,
-      status: 'success',
+    const accepted = await requestContainerUpdate(container, {
+      onSuccess: () => {
+        recordAuditEvent({
+          action: 'webhook-update',
+          container,
+          status: 'success',
+        });
+      },
+      onFailure: (_accepted, error) => {
+        recordAuditEvent({
+          action: 'webhook-update',
+          container,
+          status: 'error',
+          details: getErrorMessage(error),
+        });
+      },
     });
     getWebhookCounter()?.inc({ action: 'update-container' });
 
-    res.status(200).json({
-      message: `Update triggered for container ${safeContainerName}`,
+    res.status(202).json({
+      message: `Update accepted for container ${safeContainerName}`,
+      operationId: accepted.operationId,
       result: { container: safeContainerName },
     });
   } catch (e: unknown) {
+    if (e instanceof UpdateRequestError) {
+      sendErrorResponse(res, e.statusCode, e.message);
+      return;
+    }
+
     handleContainerActionError(e, container, containerName, res, {
       auditAction: 'webhook-update',
       webhookAction: 'update-container',

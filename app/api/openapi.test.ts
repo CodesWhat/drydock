@@ -108,6 +108,24 @@ describe('OpenAPI document', () => {
     expect(openApiDocument.paths['/api/settings']?.put?.deprecated).toBe(true);
   });
 
+  test('should document the bulk container update endpoint', () => {
+    expect(openApiDocument.components.schemas.ContainerBulkUpdateResponse).toMatchObject({
+      type: 'object',
+      properties: {
+        message: { type: 'string' },
+        accepted: { type: 'array' },
+        rejected: { type: 'array' },
+      },
+      required: ['message', 'accepted', 'rejected'],
+    });
+
+    expect(openApiDocument.paths['/api/containers/update']?.post?.responses?.[200]).toEqual(
+      jsonResponse('Container update requests processed', {
+        $ref: '#/components/schemas/ContainerBulkUpdateResponse',
+      }),
+    );
+  });
+
   test('should document compose-specific preview metadata while keeping base preview fields', () => {
     const previewSchema = openApiDocument.components.schemas.PreviewResponse;
 

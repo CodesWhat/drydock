@@ -24,6 +24,11 @@ vi.mock('../registry', () => ({
   })),
 }));
 
+const mockGetContainer = vi.hoisted(() => vi.fn());
+vi.mock('../store/container.js', () => ({
+  getContainer: mockGetContainer,
+}));
+
 vi.mock('../agent', () => ({
   getAgent: vi.fn(),
 }));
@@ -41,6 +46,11 @@ import * as registry from '../registry/index.js';
 import * as triggerRouter from './trigger.js';
 import { runTrigger } from './trigger.js';
 
+async function flushAcceptedUpdateWork() {
+  await Promise.resolve();
+  await Promise.resolve();
+}
+
 function getRemoteTriggerHandler() {
   triggerRouter.init();
   const call = mockRouter.post.mock.calls.find((c) => c[0] === '/:type/:name/:agent');
@@ -53,6 +63,7 @@ describe('Trigger Router', () => {
     mockGetErrorMessage.mockImplementation((error: unknown) =>
       error instanceof Error ? error.message : String(error),
     );
+    mockGetContainer.mockReturnValue(undefined);
   });
 
   describe('init', () => {
@@ -140,6 +151,60 @@ describe('Trigger Router', () => {
 
       expect(mockTrigger.trigger).toHaveBeenCalledWith(expect.objectContaining({ id: 'c1' }));
       expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    test('should accept docker update triggers against the stored container state', async () => {
+      const mockTrigger = {
+        type: 'docker',
+        trigger: vi.fn().mockResolvedValue(undefined),
+      };
+      registry.getState.mockReturnValue({
+        trigger: { 'docker.update': mockTrigger },
+      });
+      mockGetContainer.mockReturnValue({
+        id: 'c1',
+        name: 'nginx',
+        image: { name: 'nginx' },
+        updateAvailable: true,
+      });
+
+      const req = {
+        params: { type: 'docker', name: 'update' },
+        body: { id: 'c1' },
+      };
+      const res = createMockResponse();
+
+      await runTrigger(req, res);
+      await flushAcceptedUpdateWork();
+
+      expect(mockTrigger.trigger).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'c1', name: 'nginx' }),
+        expect.objectContaining({ operationId: expect.any(String) }),
+      );
+      expect(res.status).toHaveBeenCalledWith(202);
+      expect(res.json).toHaveBeenCalledWith({ operationId: expect.any(String) });
+    });
+
+    test('should return 404 when docker update trigger targets a container missing from the store', async () => {
+      const mockTrigger = {
+        type: 'docker',
+        trigger: vi.fn().mockResolvedValue(undefined),
+      };
+      registry.getState.mockReturnValue({
+        trigger: { 'docker.update': mockTrigger },
+      });
+
+      const req = {
+        params: { type: 'docker', name: 'update' },
+        body: { id: 'c1' },
+      };
+      const res = createMockResponse();
+
+      await runTrigger(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Container not found' });
+      expect(mockTrigger.trigger).not.toHaveBeenCalled();
     });
 
     test('should set default updateKind when missing', async () => {

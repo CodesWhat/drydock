@@ -129,6 +129,40 @@ export const containerPaths = {
       },
     },
   },
+  '/api/containers/update': {
+    post: {
+      tags: ['Containers', 'Actions'],
+      summary: 'Request updates for multiple containers',
+      operationId: 'updateContainers',
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                containerIds: {
+                  type: 'array',
+                  items: { type: 'string' },
+                },
+              },
+              required: ['containerIds'],
+              additionalProperties: false,
+            },
+          },
+        },
+      },
+      responses: {
+        200: jsonResponse('Container update requests processed', {
+          $ref: '#/components/schemas/ContainerBulkUpdateResponse',
+        }),
+        400: errorResponse('containerIds must be a non-empty array of container ids'),
+        401: errorResponse('Authentication required'),
+        403: errorResponse('Container actions feature disabled'),
+        500: errorResponse('Unable to accept container updates'),
+      },
+    },
+  },
   '/api/containers/summary': {
     get: {
       tags: ['Containers'],
