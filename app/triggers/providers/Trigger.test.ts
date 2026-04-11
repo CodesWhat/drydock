@@ -5309,6 +5309,42 @@ describe('digest mode', () => {
     triggerBatchSpy.mockRestore();
   });
 
+  test('flushDigestBuffer should audit failed digest deliveries', async () => {
+    await trigger.register('trigger', 'smtp', 'gmail', {
+      ...configurationValid,
+      mode: 'digest',
+    });
+    trigger.init();
+
+    await trigger.handleContainerReportDigest({
+      container: {
+        id: 'c1',
+        name: 'app',
+        watcher: 'test',
+        image: {
+          name: 'library/nginx',
+        },
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      },
+      changed: true,
+    });
+
+    vi.spyOn(trigger, 'triggerBatch').mockRejectedValueOnce(new Error('SMTP down'));
+
+    await trigger.flushDigestBuffer();
+
+    expect(auditStore.insertAudit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'notification-delivery-failed',
+        containerName: 'test_app',
+        triggerName: 'smtp.gmail',
+        status: 'error',
+        details: 'SMTP down',
+      }),
+    );
+  });
+
   test('flushDigestBuffer should retain buffered updates when triggerBatch throws', async () => {
     await trigger.register('trigger', 'test', 'digest-trigger', {
       ...configurationValid,
