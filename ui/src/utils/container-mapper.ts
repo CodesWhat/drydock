@@ -24,10 +24,9 @@ import type {
   ContainerUpdateOperation,
 } from '../types/container';
 import {
-  CONTAINER_UPDATE_OPERATION_PHASES,
-  CONTAINER_UPDATE_OPERATION_STATUSES,
-  type ContainerUpdateOperationPhase,
-  type ContainerUpdateOperationStatus,
+  isActiveContainerUpdateOperationPhaseForStatus,
+  isActiveContainerUpdateOperationStatus,
+  isContainerUpdateOperationKind,
 } from '../types/update-operation';
 import { normalizeSeverityCount } from '../views/security/securityViewUtils';
 import { buildContainerIdentityKey } from './container-action-key';
@@ -178,24 +177,6 @@ function asPositiveInteger(value: unknown): number | undefined {
 
 function asOptionalBoolean(value: unknown): boolean | undefined {
   return typeof value === 'boolean' ? value : undefined;
-}
-
-function asContainerUpdateOperationStatus(
-  value: unknown,
-): ContainerUpdateOperationStatus | undefined {
-  return typeof value === 'string' &&
-    (CONTAINER_UPDATE_OPERATION_STATUSES as readonly string[]).includes(value)
-    ? (value as ContainerUpdateOperationStatus)
-    : undefined;
-}
-
-function asContainerUpdateOperationPhase(
-  value: unknown,
-): ContainerUpdateOperationPhase | undefined {
-  return typeof value === 'string' &&
-    (CONTAINER_UPDATE_OPERATION_PHASES as readonly string[]).includes(value)
-    ? (value as ContainerUpdateOperationPhase)
-    : undefined;
 }
 
 /** Derive a human-readable server/host name from watcher + agent fields. */
@@ -601,8 +582,14 @@ function deriveUpdateOperation(
   }
 
   const id = asNonEmptyString(operation.id);
-  const status = asContainerUpdateOperationStatus(operation.status);
-  const phase = asContainerUpdateOperationPhase(operation.phase);
+  const kind = isContainerUpdateOperationKind(operation.kind) ? operation.kind : undefined;
+  const status = isActiveContainerUpdateOperationStatus(operation.status)
+    ? operation.status
+    : undefined;
+  const phase =
+    status && isActiveContainerUpdateOperationPhaseForStatus(status, operation.phase)
+      ? operation.phase
+      : undefined;
   const updatedAt = asNonEmptyString(operation.updatedAt);
   const batchId = asNonEmptyString(operation.batchId);
   const queuePosition = asPositiveInteger(operation.queuePosition);
@@ -614,6 +601,7 @@ function deriveUpdateOperation(
 
   return {
     id,
+    ...(kind ? { kind } : {}),
     status,
     phase,
     updatedAt,

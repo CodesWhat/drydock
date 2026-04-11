@@ -199,7 +199,7 @@ describe('container-mapper', () => {
       });
     });
 
-    it('maps recovered rollback phases from valid terminal update-operation payloads', () => {
+    it('drops terminal update-operation payloads from live container payloads', () => {
       const c = mapApiContainer(
         makeApiContainer({
           updateOperation: {
@@ -213,14 +213,7 @@ describe('container-mapper', () => {
         }),
       );
 
-      expect(c.updateOperation).toEqual({
-        id: 'op-recovered',
-        status: 'rolled-back',
-        phase: 'recovered-rollback',
-        updatedAt: '2026-04-01T12:00:00.000Z',
-        fromVersion: '1.0.1',
-        toVersion: '1.0.0',
-      });
+      expect(c.updateOperation).toBeUndefined();
     });
   });
 

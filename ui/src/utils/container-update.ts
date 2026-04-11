@@ -1,4 +1,4 @@
-import type { Container, ContainerUpdateOperation } from '../types/container';
+import type { ContainerUpdateOperation } from '../types/container';
 import { isNoUpdateAvailableError } from './error';
 
 export type ContainerUpdateRequestResult = 'accepted' | 'stale';
@@ -8,7 +8,10 @@ type UpdateOperationSequenceLike = Pick<
   'status' | 'updatedAt' | 'batchId' | 'queuePosition' | 'queueTotal'
 >;
 
-type UpdateOperationContainerLike = Pick<Container, 'id' | 'updateOperation'>;
+type UpdateOperationContainerLike = {
+  id: string;
+  updateOperation?: UpdateOperationSequenceLike;
+};
 
 function hasPersistedUpdateBatchSequence(operation?: UpdateOperationSequenceLike): boolean {
   return Boolean(
@@ -109,13 +112,6 @@ export function shouldRenderStandaloneQueuedUpdateAsUpdating(args: {
   }
 
   return headId === args.targetId;
-}
-
-export function createContainerUpdateBatchId(): string {
-  const randomUUID = globalThis.crypto?.randomUUID;
-  return typeof randomUUID === 'function'
-    ? randomUUID.call(globalThis.crypto)
-    : `dd-update-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
 export function isStaleContainerUpdateError(error: unknown): boolean {

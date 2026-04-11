@@ -64,6 +64,7 @@ vi.mock('@/services/container', () => ({
 vi.mock('@/services/container-actions', () => ({
   startContainer: vi.fn(),
   updateContainer: vi.fn(),
+  updateContainers: vi.fn(),
   stopContainer: vi.fn(),
   restartContainer: vi.fn(),
 }));
@@ -306,7 +307,10 @@ import {
   scanContainer,
   updateContainerPolicy,
 } from '@/services/container';
-import { updateContainer as apiUpdateContainer } from '@/services/container-actions';
+import {
+  updateContainer as apiUpdateContainer,
+  updateContainers as apiUpdateContainers,
+} from '@/services/container-actions';
 
 const mockGetAllContainers = getAllContainers as ReturnType<typeof vi.fn>;
 const mockRefreshAllContainers = refreshAllContainers as ReturnType<typeof vi.fn>;
@@ -317,12 +321,16 @@ const mockGetContainerSbom = getContainerSbom as ReturnType<typeof vi.fn>;
 const mockScanContainer = scanContainer as ReturnType<typeof vi.fn>;
 const mockUpdateContainerPolicy = updateContainerPolicy as ReturnType<typeof vi.fn>;
 const mockApiUpdate = apiUpdateContainer as ReturnType<typeof vi.fn>;
+const mockApiUpdateBulk = apiUpdateContainers as ReturnType<typeof vi.fn>;
 const mountedWrappers: Array<{ unmount: () => void }> = [];
 
 function makeContainer(overrides: Partial<Container> = {}): Container {
+  const defaultName = overrides.name ?? 'nginx';
+  const defaultServer = overrides.server ?? 'Local';
   return {
     id: 'c1',
-    name: 'nginx',
+    identityKey: overrides.identityKey ?? `::${defaultServer}::${defaultName}`,
+    name: defaultName,
     image: 'nginx',
     icon: 'docker',
     currentTag: '1.0.0',
@@ -332,7 +340,7 @@ function makeContainer(overrides: Partial<Container> = {}): Container {
     updateKind: null,
     updateMaturity: null,
     bouncer: 'safe',
-    server: 'Local',
+    server: defaultServer,
     details: { ports: [], volumes: [], env: [], labels: [] },
     ...overrides,
   };
@@ -394,6 +402,15 @@ describe('ContainersView', () => {
     mockGetContainerSbom.mockResolvedValue({ format: 'spdx-json', document: {} });
     mockScanContainer.mockResolvedValue({});
     mockUpdateContainerPolicy.mockResolvedValue({});
+    mockApiUpdateBulk.mockImplementation(async (containerIds: string[]) => ({
+      message: 'Container update requests processed',
+      accepted: containerIds.map((containerId) => ({
+        containerId,
+        containerName: containerId,
+        operationId: `op-${containerId}`,
+      })),
+      rejected: [],
+    }));
     mockFilteredContainers.value = [];
     mockActiveFilterCount.value = 0;
     mockFilterSearch.value = '';
@@ -1562,7 +1579,6 @@ describe('ContainersView', () => {
       ];
       const wrapper = await mountContainersView(containers);
       const vm = wrapper.vm as any;
-      mockApiUpdate.mockResolvedValue({});
 
       vm.groupByStack = true;
       vm.groupMembershipMap = { nginx: 'web-stack', redis: 'web-stack', postgres: 'web-stack' };
@@ -1570,28 +1586,8 @@ describe('ContainersView', () => {
 
       await vm.updateAllInGroup(vm.groupedContainers[0]);
 
-      expect(mockApiUpdate).toHaveBeenCalledTimes(2);
-      expect(mockApiUpdate).toHaveBeenNthCalledWith(
-        1,
-        'c1',
-        expect.objectContaining({
-          batchId: expect.any(String),
-          queuePosition: 1,
-          queueTotal: 2,
-        }),
-      );
-      expect(mockApiUpdate).toHaveBeenNthCalledWith(
-        2,
-        'c3',
-        expect.objectContaining({
-          batchId: expect.any(String),
-          queuePosition: 2,
-          queueTotal: 2,
-        }),
-      );
-      expect(mockApiUpdate.mock.calls[0]?.[1]?.batchId).toBe(
-        mockApiUpdate.mock.calls[1]?.[1]?.batchId,
-      );
+      expect(mockApiUpdateBulk).toHaveBeenCalledWith(['c1', 'c3']);
+      expect(mockApiUpdate).not.toHaveBeenCalled();
     });
 
     it('tracks group update-all loading state during execution', async () => {
@@ -1601,11 +1597,20 @@ describe('ContainersView', () => {
       ];
       const wrapper = await mountContainersView(containers);
       const vm = wrapper.vm as any;
-      const resolvers: Array<(value: unknown) => void> = [];
-      mockApiUpdate.mockImplementation(
-        () =>
+      let resolveBulkUpdate: (() => void) | undefined;
+      mockApiUpdateBulk.mockImplementation(
+        (containerIds: string[]) =>
           new Promise((resolve) => {
-            resolvers.push(resolve);
+            resolveBulkUpdate = () =>
+              resolve({
+                message: 'Container update requests processed',
+                accepted: containerIds.map((containerId) => ({
+                  containerId,
+                  containerName: containerId,
+                  operationId: `op-${containerId}`,
+                })),
+                rejected: [],
+              });
           }),
       );
 
@@ -1616,9 +1621,7 @@ describe('ContainersView', () => {
       const pending = vm.updateAllInGroup(vm.groupedContainers[0]);
       expect(vm.groupUpdateInProgress.has('web-stack')).toBe(true);
 
-      for (const resolve of resolvers) {
-        resolve({});
-      }
+      resolveBulkUpdate?.();
       await pending;
 
       expect(vm.groupUpdateInProgress.has('web-stack')).toBe(false);

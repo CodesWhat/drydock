@@ -47,7 +47,7 @@ describe('SseService', () => {
     expect(MockEventSourceCtor).toHaveBeenCalledWith('/api/v1/events/ui');
   });
 
-  it('registers event listeners for dd:connected, dd:self-update, container lifecycle events, agent status events, dd:scan-started, and dd:scan-completed', () => {
+  it('registers event listeners for dd:connected, dd:self-update, container lifecycle events, update-operation changes, agent status events, dd:scan-started, and dd:scan-completed', () => {
     sseService.connect(mockEventBus);
     expect(mockEventSource.addEventListener).toHaveBeenCalledWith(
       'dd:connected',
@@ -67,6 +67,10 @@ describe('SseService', () => {
     );
     expect(mockEventSource.addEventListener).toHaveBeenCalledWith(
       'dd:container-removed',
+      expect.any(Function),
+    );
+    expect(mockEventSource.addEventListener).toHaveBeenCalledWith(
+      'dd:update-operation-changed',
       expect.any(Function),
     );
     expect(mockEventSource.addEventListener).toHaveBeenCalledWith(
@@ -182,6 +186,14 @@ describe('SseService', () => {
     expect(mockEventBus.emit).toHaveBeenCalledWith('container-changed');
 
     eventListeners['dd:container-removed']();
+    expect(mockEventBus.emit).toHaveBeenCalledWith('container-changed');
+  });
+
+  it('emits container-changed on update-operation changes', () => {
+    sseService.connect(mockEventBus);
+
+    eventListeners['dd:update-operation-changed']();
+
     expect(mockEventBus.emit).toHaveBeenCalledWith('container-changed');
   });
 

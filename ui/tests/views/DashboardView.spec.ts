@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { flushPromises, type VueWrapper } from '@vue/test-utils';
+import { nextTick } from 'vue';
 import DataTable from '@/components/DataTable.vue';
 import { useToast } from '@/composables/useToast';
 import type { Container } from '@/types/container';
@@ -16,13 +17,17 @@ const dashboardViewSource = readFileSync(
   'utf-8',
 );
 
-const { mockRouterPush, mockBuildDashboardContainerMetrics, mockUpdateContainer } = vi.hoisted(
-  () => ({
-    mockRouterPush: vi.fn(),
-    mockBuildDashboardContainerMetrics: vi.fn(),
-    mockUpdateContainer: vi.fn(),
-  }),
-);
+const {
+  mockRouterPush,
+  mockBuildDashboardContainerMetrics,
+  mockUpdateContainer,
+  mockUpdateContainers,
+} = vi.hoisted(() => ({
+  mockRouterPush: vi.fn(),
+  mockBuildDashboardContainerMetrics: vi.fn(),
+  mockUpdateContainer: vi.fn(),
+  mockUpdateContainers: vi.fn(),
+}));
 
 vi.mock('vue-router', () => ({
   useRouter: () => ({ push: mockRouterPush }),
@@ -56,6 +61,7 @@ vi.mock('@/services/registry', () => ({
 
 vi.mock('@/services/container-actions', () => ({
   updateContainer: mockUpdateContainer,
+  updateContainers: mockUpdateContainers,
 }));
 
 vi.mock('@/utils/container-mapper', () => ({
@@ -203,6 +209,16 @@ describe('DashboardView', () => {
     vi.clearAllMocks();
     mockRouterPush.mockClear();
     mockBuildDashboardContainerMetrics.mockClear();
+    mockUpdateContainer.mockResolvedValue({});
+    mockUpdateContainers.mockImplementation(async (containerIds: string[]) => ({
+      message: 'Container update requests processed',
+      accepted: containerIds.map((containerId) => ({
+        containerId,
+        containerName: containerId,
+        operationId: `op-${containerId}`,
+      })),
+      rejected: [],
+    }));
     const { toasts, dismissToast } = useToast();
     for (const toast of [...toasts.value]) {
       dismissToast(toast.id);
@@ -1570,10 +1586,20 @@ describe('DashboardView', () => {
           updateKind: 'minor',
         }),
       ];
-      mockUpdateContainer.mockImplementation(async (id: string) => {
-        if (id === 'c-fail') {
-          throw new Error('update exploded');
-        }
+      mockUpdateContainers.mockResolvedValue({
+        message: 'Container update requests processed',
+        accepted: [
+          { containerId: 'c-success-1', containerName: 'nginx', operationId: 'op-1' },
+          { containerId: 'c-success-2', containerName: 'postgres', operationId: 'op-2' },
+        ],
+        rejected: [
+          {
+            containerId: 'c-fail',
+            containerName: 'redis',
+            statusCode: 500,
+            message: 'update exploded',
+          },
+        ],
       });
 
       const wrapper = await mountDashboard(
@@ -1597,35 +1623,72 @@ describe('DashboardView', () => {
       await confirm.accept();
       await flushPromises();
 
-      expect(mockUpdateContainer).toHaveBeenCalledTimes(3);
-      const updateCalls = mockUpdateContainer.mock.calls;
-      expect(updateCalls).toEqual([
-        [
-          'c-success-1',
-          expect.objectContaining({
-            batchId: expect.any(String),
-            queuePosition: 1,
-            queueTotal: 3,
-          }),
-        ],
-        [
-          'c-success-2',
-          expect.objectContaining({
-            batchId: updateCalls[0]?.[1]?.batchId,
-            queuePosition: 2,
-            queueTotal: 3,
-          }),
-        ],
-        [
-          'c-fail',
-          expect.objectContaining({
-            batchId: updateCalls[0]?.[1]?.batchId,
-            queuePosition: 3,
-            queueTotal: 3,
-          }),
-        ],
-      ]);
+      expect(mockUpdateContainers).toHaveBeenCalledWith(['c-success-1', 'c-success-2', 'c-fail']);
+      expect(mockUpdateContainer).not.toHaveBeenCalled();
       expect(mockGetAllContainers.mock.calls.length).toBe(initialFetchCount + 1);
+    });
+
+    it('sends dashboard update-all through the bulk update endpoint', async () => {
+      const containers = [
+        makeContainer({
+          id: 'c-success-1',
+          name: 'nginx',
+          newTag: '1.1.0',
+          updateKind: 'minor',
+        }),
+        makeContainer({
+          id: 'c-fail',
+          name: 'redis',
+          image: 'redis',
+          newTag: '7.1.0',
+          updateKind: 'minor',
+        }),
+        makeContainer({
+          id: 'c-success-2',
+          name: 'postgres',
+          image: 'postgres',
+          newTag: '16.1.0',
+          updateKind: 'minor',
+        }),
+      ];
+      mockUpdateContainers.mockResolvedValue({
+        message: 'Container update requests processed',
+        accepted: [
+          { containerId: 'c-success-1', containerName: 'nginx', operationId: 'op-1' },
+          { containerId: 'c-success-2', containerName: 'postgres', operationId: 'op-2' },
+        ],
+        rejected: [
+          {
+            containerId: 'c-fail',
+            containerName: 'redis',
+            statusCode: 409,
+            message: 'Container update already queued',
+          },
+        ],
+      });
+
+      const wrapper = await mountDashboard(
+        containers,
+        [],
+        {},
+        {
+          recentStatuses: {
+            nginx: 'pending',
+            redis: 'pending',
+            postgres: 'pending',
+          },
+        },
+      );
+      const updateAllBtn = wrapper.find('[data-test="dashboard-update-all-btn"]');
+      const { useConfirmDialog } = await import('@/composables/useConfirmDialog');
+      const confirm = useConfirmDialog();
+
+      await updateAllBtn.trigger('click');
+      await confirm.accept();
+      await flushPromises();
+
+      expect(mockUpdateContainers).toHaveBeenCalledWith(['c-success-1', 'c-success-2', 'c-fail']);
+      expect(mockUpdateContainer).not.toHaveBeenCalled();
     });
 
     it('shows Updating 1 of N and Queued 2 of N immediately after dashboard update all starts', async () => {
@@ -1644,7 +1707,22 @@ describe('DashboardView', () => {
           updateKind: 'minor',
         }),
       ];
-      mockUpdateContainer.mockResolvedValue({});
+      let resolveBatch: (() => void) | undefined;
+      mockUpdateContainers.mockImplementation(
+        (containerIds: string[]) =>
+          new Promise((resolve) => {
+            resolveBatch = () =>
+              resolve({
+                message: 'Container update requests processed',
+                accepted: containerIds.map((containerId) => ({
+                  containerId,
+                  containerName: containerId,
+                  operationId: `op-${containerId}`,
+                })),
+                rejected: [],
+              });
+          }),
+      );
 
       const wrapper = await mountDashboard(
         containers,
@@ -1667,12 +1745,15 @@ describe('DashboardView', () => {
       const confirm = useConfirmDialog();
 
       await updateAllBtn.trigger('click');
-      await confirm.accept();
-      await flushPromises();
+      void confirm.accept();
+      await nextTick();
 
       const widgetText = wrapper.find('[data-widget-id="recent-updates"]').text();
       expect(widgetText).toContain('Updating 1 of 2');
       expect(widgetText).toContain('Queued 2 of 2');
+
+      resolveBatch?.();
+      await flushPromises();
     });
 
     it('keeps same-name containers on different servers distinct during dashboard update all sequencing', async () => {
@@ -1719,8 +1800,8 @@ describe('DashboardView', () => {
       await confirm.accept();
       await flushPromises();
 
-      expect(mockUpdateContainer).toHaveBeenCalledTimes(2);
-      expect(mockUpdateContainer.mock.calls.map((call) => call[0])).toEqual(['c-local', 'c-edge']);
+      expect(mockUpdateContainers).toHaveBeenCalledWith(['c-local', 'c-edge']);
+      expect(mockUpdateContainer).not.toHaveBeenCalled();
 
       const widgetText = wrapper.find('[data-widget-id="recent-updates"]').text();
       expect(widgetText).toContain('Updating 1 of 2');

@@ -11,6 +11,7 @@ import {
   startContainer as apiStartContainer,
   stopContainer as apiStopContainer,
   updateContainer as apiUpdateContainer,
+  updateContainers as apiUpdateContainers,
 } from '../../services/container-actions';
 import type { Container } from '../../types/container';
 import {
@@ -19,7 +20,6 @@ import {
   hasTrackedContainerAction,
 } from '../../utils/container-action-key';
 import {
-  createContainerUpdateBatchId,
   formatContainerUpdateStartedCountMessage,
   getContainerAlreadyUpToDateMessage,
   getContainerUpdateStartedMessage,
@@ -435,6 +435,11 @@ async function updateAllInGroupState(args: {
   containerActionsDisabledReason: string;
   containers: Readonly<Ref<Container[]>>;
   inputError: Ref<string | null>;
+  actionInProgress: Ref<Set<string>>;
+  actionPending: Ref<Map<string, Container>>;
+  actionPendingLifecycleModes: Ref<Map<string, PendingActionLifecycleMode>>;
+  actionPendingLifecycleObserved: Ref<Set<string>>;
+  startPolling: (pendingKey: string) => void;
   groupUpdateInProgress: Ref<Set<string>>;
   groupUpdateQueue: Ref<Set<string>>;
   groupUpdateSequence: Ref<Map<string, GroupUpdateSequenceEntry>>;
@@ -473,8 +478,10 @@ async function updateAllInGroupState(args: {
   }
   setGroupUpdateStateValue(args.groupUpdateInProgress, args.group.key, true);
   const groupContainerIds = frozenUpdateTargets.map((t) => t.id);
-  const batchId = createContainerUpdateBatchId();
-  const batchSize = frozenUpdateTargets.length;
+  const firstTargetActionKey = resolveContainerActionTargetKey(frozenUpdateTargets[0]!);
+  const headActionInProgress = new Set(args.actionInProgress.value);
+  headActionInProgress.add(firstTargetActionKey);
+  args.actionInProgress.value = headActionInProgress;
   let activeTargetIds = [...groupContainerIds];
   const initiallyQueuedTargetIds = groupContainerIds.slice(1);
   setGroupUpdateQueueValue(args.groupUpdateQueue, initiallyQueuedTargetIds, true);
@@ -484,66 +491,63 @@ async function updateAllInGroupState(args: {
     groupContainerIds,
     activeTargetIds,
   );
-  const acceptedTargetIds: string[] = [];
+  let acceptedTargetIds: string[] = [];
   try {
-    let updatedCount = 0;
-    for (const [index, target] of frozenUpdateTargets.entries()) {
-      const currentContainer = args.containers.value.find(
-        (container) => container.id === target.id,
-      );
-      if (!currentContainer || currentContainer.name !== target.name) {
-        activeTargetIds = activeTargetIds.filter((id) => id !== target.id);
-        setGroupUpdateQueueValue(args.groupUpdateQueue, [target.id], false);
-        syncGroupUpdateSequenceValue(
-          args.groupUpdateSequence,
-          args.group.key,
-          groupContainerIds,
-          activeTargetIds,
-        );
+    const response = await apiUpdateContainers(groupContainerIds);
+    acceptedTargetIds = response.accepted.map((accepted) => accepted.containerId);
+    const acceptedTargetIdSet = new Set(acceptedTargetIds);
+    activeTargetIds = groupContainerIds.filter((id) => acceptedTargetIds.includes(id));
+
+    const rejectedTargetIds = response.rejected.map((rejected) => rejected.containerId);
+    if (rejectedTargetIds.length > 0) {
+      setGroupUpdateQueueValue(args.groupUpdateQueue, rejectedTargetIds, false);
+    }
+    syncGroupUpdateSequenceValue(
+      args.groupUpdateSequence,
+      args.group.key,
+      groupContainerIds,
+      activeTargetIds,
+    );
+
+    const toast = useToast();
+    for (const container of updatableContainers) {
+      if (!acceptedTargetIdSet.has(container.id)) {
         continue;
       }
-
-      const updated = await args.executeAction(
-        target,
-        (id) =>
-          apiUpdateContainer(id, {
-            batchId,
-            queuePosition: index + 1,
-            queueTotal: batchSize,
-          }),
-        {
-          reloadContainers: false,
-          treatNoUpdateAsStale: true,
-          pendingLifecycleMode: 'update',
-        },
-      );
-      if (updated) {
-        updatedCount += 1;
-        acceptedTargetIds.push(target.id);
-      } else {
-        activeTargetIds = activeTargetIds.filter((id) => id !== target.id);
-        setGroupUpdateQueueValue(args.groupUpdateQueue, [target.id], false);
-        syncGroupUpdateSequenceValue(
-          args.groupUpdateSequence,
-          args.group.key,
-          groupContainerIds,
-          activeTargetIds,
-        );
+      markPendingActionState({
+        actionPending: args.actionPending,
+        actionPendingLifecycleModes: args.actionPendingLifecycleModes,
+        actionPendingLifecycleObserved: args.actionPendingLifecycleObserved,
+        startPolling: args.startPolling,
+        pendingKey: container.id,
+        snapshot: container,
+        mode: 'update',
+      });
+    }
+    for (const rejected of response.rejected) {
+      if (isStaleContainerUpdateError(rejected.message)) {
+        continue;
       }
+      toast.error(`Failed to update ${rejected.containerName}: ${rejected.message}`);
     }
+
     await args.loadContainers();
-    if (updatedCount > 0) {
-      const toast = useToast();
+    if (acceptedTargetIds.length > 0) {
       toast.success(
-        `${formatContainerUpdateStartedCountMessage(updatedCount)} in ${args.group.key}`,
+        `${formatContainerUpdateStartedCountMessage(acceptedTargetIds.length)} in ${args.group.key}`,
       );
     }
+  } catch (error: unknown) {
+    useToast().error(errorMessage(error, `Failed to update ${args.group.key}`));
   } finally {
     if (acceptedTargetIds.length === 0) {
       setGroupUpdateQueueValue(args.groupUpdateQueue, groupContainerIds, false);
       syncGroupUpdateSequenceValue(args.groupUpdateSequence, args.group.key, groupContainerIds, []);
     }
     setGroupUpdateStateValue(args.groupUpdateInProgress, args.group.key, false);
+    const nextActionInProgress = new Set(args.actionInProgress.value);
+    nextActionInProgress.delete(firstTargetActionKey);
+    args.actionInProgress.value = nextActionInProgress;
   }
 }
 
@@ -1213,10 +1217,10 @@ export function useContainerActions(input: UseContainerActionsInput) {
   }
 
   function isContainerUpdateQueued(target: ContainerActionTarget) {
-    const hasTrackedAction = hasTrackedContainerAction(actionInProgress.value, target);
     if (typeof target === 'string') {
       return false;
     }
+    const hasTrackedAction = hasTrackedContainerAction(actionInProgress.value, target);
     const freshContainer = input.containers.value.find((container) => container.id === target.id);
     const liveOperation = freshContainer?.updateOperation ?? target.updateOperation;
     const sequence = groupUpdateSequence.value.get(target.id);
@@ -1320,6 +1324,11 @@ export function useContainerActions(input: UseContainerActionsInput) {
       containerActionsDisabledReason: containerActionsDisabledReason.value,
       containers: input.containers,
       inputError: input.error,
+      actionInProgress,
+      actionPending,
+      actionPendingLifecycleModes,
+      actionPendingLifecycleObserved,
+      startPolling,
       groupUpdateInProgress,
       groupUpdateQueue,
       groupUpdateSequence,

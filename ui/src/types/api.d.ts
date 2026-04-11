@@ -1,4 +1,5 @@
 import type {
+  ContainerUpdateOperationKind,
   ContainerUpdateOperationPhase,
   ContainerUpdateOperationStatus,
 } from './update-operation';
@@ -69,10 +70,12 @@ export type ApiContainerUpdateOperationPhase = ContainerUpdateOperationPhase;
 /** Persisted update-operation history entry from GET /api/containers/:id/update-operations. */
 export interface ApiContainerUpdateOperation {
   id: string;
+  kind?: ContainerUpdateOperationKind;
   status: ApiContainerUpdateOperationStatus;
   phase: ApiContainerUpdateOperationPhase;
   createdAt: string;
   updatedAt: string;
+  completedAt?: string;
   batchId?: string;
   queuePosition?: number;
   queueTotal?: number;

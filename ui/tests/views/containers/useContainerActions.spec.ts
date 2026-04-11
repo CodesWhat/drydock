@@ -28,6 +28,7 @@ const mocks = vi.hoisted(() => ({
   startContainer: vi.fn(),
   stopContainer: vi.fn(),
   updateContainer: vi.fn(),
+  updateContainers: vi.fn(),
   previewContainer: vi.fn(),
   containerActionsEnabled: { value: true },
   loadServerFeatures: vi.fn().mockResolvedValue(undefined),
@@ -58,6 +59,7 @@ vi.mock('@/services/container-actions', () => ({
   startContainer: mocks.startContainer,
   stopContainer: mocks.stopContainer,
   updateContainer: mocks.updateContainer,
+  updateContainers: mocks.updateContainers,
 }));
 
 vi.mock('@/services/preview', () => ({
@@ -216,6 +218,15 @@ describe('useContainerActions', () => {
     mocks.startContainer.mockResolvedValue({});
     mocks.stopContainer.mockResolvedValue({});
     mocks.updateContainer.mockResolvedValue({});
+    mocks.updateContainers.mockImplementation(async (containerIds: string[]) => ({
+      message: 'Container update requests processed',
+      accepted: containerIds.map((containerId) => ({
+        containerId,
+        containerName: containerId,
+        operationId: `op-${containerId}`,
+      })),
+      rejected: [],
+    }));
     mocks.previewContainer.mockResolvedValue({});
   });
 
@@ -374,8 +385,16 @@ describe('useContainerActions', () => {
       containerIdMap: { web: 'container-1' },
     });
 
-    await composable.startContainer({ id: 'container-1', name: 'web' });
-    await composable.scanContainer({ id: 'container-1', name: 'web' });
+    await composable.startContainer({
+      id: 'container-1',
+      identityKey: '::local::web',
+      name: 'web',
+    });
+    await composable.scanContainer({
+      id: 'container-1',
+      identityKey: '::local::web',
+      name: 'web',
+    });
     composable.confirmForceUpdate({
       name: 'web',
     } as unknown as Parameters<typeof composable.confirmForceUpdate>[0]);
@@ -613,28 +632,40 @@ describe('useContainerActions', () => {
       containers: [c1, c2, c3, c4],
     });
 
-    expect(mocks.updateContainer).toHaveBeenCalledTimes(2);
-    expect(mocks.updateContainer).toHaveBeenNthCalledWith(
-      1,
-      'container-1',
-      expect.objectContaining({
-        batchId: expect.any(String),
-        queuePosition: 1,
-        queueTotal: 2,
-      }),
-    );
-    expect(mocks.updateContainer).toHaveBeenNthCalledWith(
-      2,
-      'container-2',
-      expect.objectContaining({
-        batchId: mocks.updateContainer.mock.calls[0]?.[1]?.batchId,
-        queuePosition: 2,
-        queueTotal: 2,
-      }),
-    );
+    expect(mocks.updateContainers).toHaveBeenCalledWith(['container-1', 'container-2']);
+    expect(mocks.updateContainer).not.toHaveBeenCalled();
     expect(loadContainers).toHaveBeenCalledTimes(1);
     expect(composable.groupUpdateInProgress.value.has('group-1')).toBe(false);
     expect(mocks.toastSuccess).toHaveBeenCalledWith('Started updates for 2 containers in group-1');
+  });
+
+  it('sends grouped update-all through the bulk update endpoint', async () => {
+    const c1 = makeContainer({ id: 'container-1', name: 'web', newTag: '1.1.0', bouncer: 'safe' });
+    const c2 = makeContainer({ id: 'container-2', name: 'api', newTag: '2.0.0', bouncer: 'safe' });
+    mocks.updateContainers.mockResolvedValue({
+      message: 'Container update requests processed',
+      accepted: [
+        { containerId: 'container-1', containerName: 'web', operationId: 'op-1' },
+        { containerId: 'container-2', containerName: 'api', operationId: 'op-2' },
+      ],
+      rejected: [],
+    });
+
+    const { composable } = await mountActionsHarness({
+      containers: [c1, c2],
+      containerIdMap: {
+        web: 'container-1',
+        api: 'container-2',
+      },
+    });
+
+    await composable.updateAllInGroup({
+      key: 'group-1',
+      containers: [c1, c2],
+    });
+
+    expect(mocks.updateContainers).toHaveBeenCalledWith(['container-1', 'container-2']);
+    expect(mocks.updateContainer).not.toHaveBeenCalled();
   });
 
   it('freezes grouped update ids and skips containers renamed during the batch', async () => {
@@ -649,8 +680,8 @@ describe('useContainerActions', () => {
     });
     loadContainers.mockClear();
 
-    mocks.updateContainer.mockImplementation(async (containerId: string) => {
-      if (containerId === 'container-1') {
+    mocks.updateContainers.mockImplementation(async (containerIds: string[]) => {
+      if (containerIds.includes('container-1')) {
         containerIdMap.value = {
           web: 'container-1-new',
           api: 'container-2-new',
@@ -667,7 +698,15 @@ describe('useContainerActions', () => {
           makeContainer({ id: 'container-2-new', name: 'api', newTag: '2.0.0', bouncer: 'safe' }),
         ];
       }
-      return {};
+      return {
+        message: 'Container update requests processed',
+        accepted: containerIds.map((containerId) => ({
+          containerId,
+          containerName: containerId,
+          operationId: `op-${containerId}`,
+        })),
+        rejected: [],
+      };
     });
 
     await composable.updateAllInGroup({
@@ -675,15 +714,7 @@ describe('useContainerActions', () => {
       containers: [web, api],
     });
 
-    expect(mocks.updateContainer).toHaveBeenCalledTimes(1);
-    expect(mocks.updateContainer).toHaveBeenCalledWith(
-      'container-1',
-      expect.objectContaining({
-        batchId: expect.any(String),
-        queuePosition: 1,
-        queueTotal: 2,
-      }),
-    );
+    expect(mocks.updateContainers).toHaveBeenCalledWith(['container-1', 'container-2']);
     expect(loadContainers).toHaveBeenCalledTimes(1);
   });
 
@@ -702,7 +733,7 @@ describe('useContainerActions', () => {
         api: 'container-2',
       },
     });
-    mocks.updateContainer.mockRejectedValue(new Error('update failed'));
+    mocks.updateContainers.mockRejectedValue(new Error('update failed'));
     loadContainers.mockClear();
 
     await composable.updateAllInGroup({
@@ -710,11 +741,11 @@ describe('useContainerActions', () => {
       containers: [c1, c2],
     });
 
-    expect(mocks.updateContainer).toHaveBeenCalledTimes(2);
-    expect(loadContainers).toHaveBeenCalledTimes(1);
+    expect(mocks.updateContainers).toHaveBeenCalledWith(['container-1', 'container-2']);
+    expect(loadContainers).not.toHaveBeenCalled();
     expect(composable.groupUpdateInProgress.value.has('group-1')).toBe(false);
     expect(mocks.toastSuccess).not.toHaveBeenCalled();
-    expect(mocks.toastError).toHaveBeenCalledTimes(2);
+    expect(mocks.toastError).toHaveBeenCalledTimes(1);
   });
 
   it('refreshes grouped updates when stale rows report no update available and only counts successful updates', async () => {
@@ -737,11 +768,17 @@ describe('useContainerActions', () => {
         api: 'container-2',
       },
     });
-    mocks.updateContainer.mockImplementation(async (containerId: string) => {
-      if (containerId === 'container-1') {
-        throw new Error('No update available for this container');
-      }
-      return {};
+    mocks.updateContainers.mockResolvedValue({
+      message: 'Container update requests processed',
+      accepted: [{ containerId: 'container-2', containerName: 'api', operationId: 'op-2' }],
+      rejected: [
+        {
+          containerId: 'container-1',
+          containerName: 'web',
+          statusCode: 400,
+          message: 'No update available for this container',
+        },
+      ],
     });
     loadContainers.mockClear();
 
@@ -750,25 +787,7 @@ describe('useContainerActions', () => {
       containers: [stale, fresh],
     });
 
-    expect(mocks.updateContainer).toHaveBeenCalledTimes(2);
-    expect(mocks.updateContainer).toHaveBeenNthCalledWith(
-      1,
-      'container-1',
-      expect.objectContaining({
-        batchId: expect.any(String),
-        queuePosition: 1,
-        queueTotal: 2,
-      }),
-    );
-    expect(mocks.updateContainer).toHaveBeenNthCalledWith(
-      2,
-      'container-2',
-      expect.objectContaining({
-        batchId: mocks.updateContainer.mock.calls[0]?.[1]?.batchId,
-        queuePosition: 2,
-        queueTotal: 2,
-      }),
-    );
+    expect(mocks.updateContainers).toHaveBeenCalledWith(['container-1', 'container-2']);
     expect(loadContainers).toHaveBeenCalledTimes(1);
     expect(error.value).toBeNull();
     expect(mocks.toastError).not.toHaveBeenCalled();
@@ -1400,9 +1419,9 @@ describe('useContainerActions', () => {
       containerIdMap: { web: web.id, api: api.id },
     });
 
-    composable.confirmStop({ id: web.id, name: web.name });
-    composable.confirmRestart({ id: web.id, name: web.name });
-    composable.confirmUpdate({ id: web.id, name: web.name });
+    composable.confirmStop({ id: web.id, identityKey: web.identityKey, name: web.name });
+    composable.confirmRestart({ id: web.id, identityKey: web.identityKey, name: web.name });
+    composable.confirmUpdate({ id: web.id, identityKey: web.identityKey, name: web.name });
     composable.confirmDelete({ name: web.name } as unknown as Parameters<
       typeof composable.confirmDelete
     >[0]);
@@ -2333,25 +2352,7 @@ describe('useContainerActions', () => {
       containers: [localNode, remoteNode],
     });
 
-    expect(mocks.updateContainer).toHaveBeenCalledTimes(2);
-    expect(mocks.updateContainer).toHaveBeenNthCalledWith(
-      1,
-      'container-1',
-      expect.objectContaining({
-        batchId: expect.any(String),
-        queuePosition: 1,
-        queueTotal: 2,
-      }),
-    );
-    expect(mocks.updateContainer).toHaveBeenNthCalledWith(
-      2,
-      'container-2',
-      expect.objectContaining({
-        batchId: mocks.updateContainer.mock.calls[0]?.[1]?.batchId,
-        queuePosition: 2,
-        queueTotal: 2,
-      }),
-    );
+    expect(mocks.updateContainers).toHaveBeenCalledWith(['container-1', 'container-2']);
   });
 
   it('tracks in-progress actions by container id when names collide across hosts', async () => {
@@ -2509,18 +2510,22 @@ describe('useContainerActions', () => {
       },
     });
 
-    let resolveFirst: (() => void) | undefined;
-    let resolveSecond: (() => void) | undefined;
-    let resolveThird: (() => void) | undefined;
-    let callCount = 0;
-    mocks.updateContainer.mockImplementation(() => {
-      callCount += 1;
-      return new Promise<void>((resolve) => {
-        if (callCount === 1) resolveFirst = resolve;
-        else if (callCount === 2) resolveSecond = resolve;
-        else resolveThird = resolve;
-      });
-    });
+    let resolveBatch: (() => void) | undefined;
+    mocks.updateContainers.mockImplementation(
+      (containerIds: string[]) =>
+        new Promise((resolve) => {
+          resolveBatch = () =>
+            resolve({
+              message: 'Container update requests processed',
+              accepted: containerIds.map((containerId) => ({
+                containerId,
+                containerName: containerId,
+                operationId: `op-${containerId}`,
+              })),
+              rejected: [],
+            });
+        }),
+    );
 
     const updatePromise = composable.updateAllInGroup({
       key: 'proxy-stack',
@@ -2534,23 +2539,13 @@ describe('useContainerActions', () => {
     expect(composable.isContainerUpdateQueued(proxyC)).toBe(true);
     expect(composable.isContainerUpdateQueued(proxyA)).toBe(false);
 
-    resolveFirst?.();
+    resolveBatch?.();
     await flushPromises();
 
-    expect(composable.isContainerUpdateInProgress(proxyB)).toBe(true);
+    expect(composable.isContainerUpdateInProgress(proxyA)).toBe(true);
+    expect(composable.isContainerUpdateQueued(proxyB)).toBe(true);
     expect(composable.isContainerUpdateQueued(proxyC)).toBe(true);
     expect(composable.isContainerUpdateQueued(proxyA)).toBe(false);
-    expect(composable.isContainerUpdateQueued(proxyB)).toBe(false);
-
-    resolveSecond?.();
-    await flushPromises();
-
-    expect(composable.isContainerUpdateInProgress(proxyC)).toBe(true);
-    expect(composable.isContainerUpdateQueued(proxyA)).toBe(false);
-    expect(composable.isContainerUpdateQueued(proxyB)).toBe(true);
-    expect(composable.isContainerUpdateQueued(proxyC)).toBe(false);
-
-    resolveThird?.();
     await updatePromise;
 
     expect(composable.groupUpdateInProgress.value.has('proxy-stack')).toBe(false);
@@ -2590,7 +2585,15 @@ describe('useContainerActions', () => {
           resolveLoadContainers = resolve;
         }),
     );
-    mocks.updateContainer.mockResolvedValue({});
+    mocks.updateContainers.mockResolvedValue({
+      message: 'Container update requests processed',
+      accepted: [
+        { containerId: 'container-a', containerName: 'container-a', operationId: 'op-a' },
+        { containerId: 'container-b', containerName: 'container-b', operationId: 'op-b' },
+        { containerId: 'container-c', containerName: 'container-c', operationId: 'op-c' },
+      ],
+      rejected: [],
+    });
 
     const updatePromise = composable.updateAllInGroup({
       key: 'proxy-stack',
@@ -2637,22 +2640,7 @@ describe('useContainerActions', () => {
       vi.unstubAllGlobals();
     }
 
-    const firstBatch = mocks.updateContainer.mock.calls[0]?.[1];
-    const secondBatch = mocks.updateContainer.mock.calls[1]?.[1];
-    expect(firstBatch).toEqual(
-      expect.objectContaining({
-        batchId: expect.stringMatching(/^dd-update-/),
-        queuePosition: 1,
-        queueTotal: 2,
-      }),
-    );
-    expect(secondBatch).toEqual(
-      expect.objectContaining({
-        batchId: firstBatch?.batchId,
-        queuePosition: 2,
-        queueTotal: 2,
-      }),
-    );
+    expect(mocks.updateContainers).toHaveBeenCalledWith(['container-a', 'container-b']);
   });
 
   it('clears group update queue on error', async () => {
@@ -2675,7 +2663,7 @@ describe('useContainerActions', () => {
       },
     });
 
-    mocks.updateContainer.mockRejectedValue(new Error('update failed'));
+    mocks.updateContainers.mockRejectedValue(new Error('update failed'));
 
     await composable.updateAllInGroup({
       key: 'proxy-stack',
@@ -3201,7 +3189,7 @@ describe('useContainerActions', () => {
   it('prunes timed-out pending actions when the snapshot entry is missing', () => {
     const actionPending = ref(new Map<string, Container>());
     const actionPendingStartTimes = ref(new Map<string, number>([['web', 0]]));
-    const actionPendingLifecycleModes = ref(new Map([['web', 'start' as const]]));
+    const actionPendingLifecycleModes = ref(new Map([['web', 'presence' as const]]));
     const actionPendingLifecycleObserved = ref(new Set<string>());
     const groupUpdateQueue = ref(new Set<string>());
     const groupUpdateSequence = ref(new Map());

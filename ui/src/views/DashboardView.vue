@@ -8,9 +8,8 @@ import { useConfirmDialog } from '../composables/useConfirmDialog';
 import { useToast } from '../composables/useToast';
 import { preferences } from '../preferences/store';
 import { ROUTES } from '../router/routes';
-import { updateContainer } from '../services/container-actions';
+import { updateContainer, updateContainers } from '../services/container-actions';
 import {
-  createContainerUpdateBatchId,
   formatContainerUpdateStartedCountMessage,
   formatContainersAlreadyUpToDateMessage,
   getContainerAlreadyUpToDateMessage,
@@ -478,42 +477,34 @@ function confirmDashboardUpdateAll() {
       const snapshotRowKeys = pendingRowsSnapshot.map((row) =>
         getDashboardRecentUpdateSequenceKey(row),
       );
-      const batchId = createContainerUpdateBatchId();
-      const queueTotal = pendingRowsSnapshot.length;
       let acceptedRowKeys = [...snapshotRowKeys];
       syncDashboardUpdateSequenceValue(snapshotRowKeys, acceptedRowKeys);
       startDashboardPendingUpdateTracking();
       try {
-        const successfulRows: RecentUpdateRow[] = [];
+        const response = await updateContainers(pendingRowsSnapshot.map((row) => row.id));
+        const acceptedIds = new Set(response.accepted.map((accepted) => accepted.containerId));
+        acceptedRowKeys = pendingRowsSnapshot
+          .filter((row) => acceptedIds.has(row.id))
+          .map((row) => getDashboardRecentUpdateSequenceKey(row));
+        syncDashboardUpdateSequenceValue(snapshotRowKeys, acceptedRowKeys);
+
+        const successfulRows = pendingRowsSnapshot.filter((row) => acceptedIds.has(row.id));
         const staleRows: RecentUpdateRow[] = [];
         let firstRejectedUpdate: unknown;
 
-        for (const [index, row] of pendingRowsSnapshot.entries()) {
-          try {
-            const result = await runContainerUpdateRequest({
-              request: () =>
-                updateContainer(row.id, {
-                  batchId,
-                  queuePosition: index + 1,
-                  queueTotal,
-                }),
-              isStaleError: isStaleContainerUpdateError,
-            });
-            if (result === 'accepted') {
-              successfulRows.push(row);
-              continue;
-            }
-            const rowKey = getDashboardRecentUpdateSequenceKey(row);
-            acceptedRowKeys = acceptedRowKeys.filter((key) => key !== rowKey);
-            syncDashboardUpdateSequenceValue(snapshotRowKeys, acceptedRowKeys);
+        for (const rejected of response.rejected) {
+          const row = pendingRowsSnapshot.find(
+            (candidate) => candidate.id === rejected.containerId,
+          );
+          if (!row) {
+            continue;
+          }
+          if (isStaleContainerUpdateError(rejected.message)) {
             staleRows.push(row);
-          } catch (e: unknown) {
-            const rowKey = getDashboardRecentUpdateSequenceKey(row);
-            acceptedRowKeys = acceptedRowKeys.filter((key) => key !== rowKey);
-            syncDashboardUpdateSequenceValue(snapshotRowKeys, acceptedRowKeys);
-            if (!firstRejectedUpdate) {
-              firstRejectedUpdate = e;
-            }
+            continue;
+          }
+          if (!firstRejectedUpdate) {
+            firstRejectedUpdate = rejected.message;
           }
         }
 

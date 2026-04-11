@@ -55,6 +55,10 @@ const UPDATE_BREAKDOWN_BUCKETS: ReadonlyArray<Omit<UpdateBreakdownBucket, 'count
   },
 ];
 
+function assertNever(value: never): never {
+  throw new Error(`Unexpected dashboard status: ${String(value)}`);
+}
+
 function formatMaintenanceDuration(durationMs: number): string {
   const totalMinutes = Math.max(1, Math.ceil(durationMs / 60_000));
   const days = Math.floor(totalMinutes / (24 * 60));
@@ -82,6 +86,8 @@ function getRecentUpdateStatusColor(status: RecentUpdateRow['status']): string {
     case 'failed':
     case 'error':
       return 'var(--dd-danger)';
+    default:
+      return assertNever(status);
   }
 }
 
@@ -102,6 +108,8 @@ function getRecentUpdateStatusMutedColor(status: RecentUpdateRow['status']): str
     case 'failed':
     case 'error':
       return 'var(--dd-danger-muted)';
+    default:
+      return assertNever(status);
   }
 }
 
@@ -122,6 +130,8 @@ function getRecentUpdateStatusIcon(status: RecentUpdateRow['status']): string {
     case 'failed':
     case 'error':
       return 'xmark';
+    default:
+      return assertNever(status);
   }
 }
 
