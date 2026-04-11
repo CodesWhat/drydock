@@ -117,6 +117,7 @@ export class AgentClient {
   private reconnectAttempts: number;
   private hasConnectedOnce: boolean;
   private readonly pendingFreshStateAfterRemoteUpdate: Set<string>;
+  private readonly pendingWatcherCycleReports: Map<string, Map<string, ContainerReport>>;
 
   constructor(name: string, config: AgentClientConfig) {
     this.name = name;
@@ -133,6 +134,7 @@ export class AgentClient {
     this.reconnectAttempts = 0;
     this.hasConnectedOnce = false;
     this.pendingFreshStateAfterRemoteUpdate = new Set();
+    this.pendingWatcherCycleReports = new Map();
   }
 
   private parseBaseUrl(): URL {
@@ -245,11 +247,146 @@ export class AgentClient {
     }
   }
 
+  private getPendingWatcherCycleContainerKey(
+    container: Pick<Container, 'id' | 'name' | 'watcher'> | undefined,
+  ): string | undefined {
+    if (!container || typeof container !== 'object') {
+      return undefined;
+    }
+    if (typeof container.id === 'string' && container.id.length > 0) {
+      return container.id;
+    }
+    if (
+      typeof container.watcher === 'string' &&
+      container.watcher.length > 0 &&
+      typeof container.name === 'string' &&
+      container.name.length > 0
+    ) {
+      return `${container.watcher}:${container.name}`;
+    }
+    return undefined;
+  }
+
+  private rememberPendingWatcherCycleReport(containerReport: ContainerReport) {
+    if (!containerReport || !containerReport.container) {
+      return;
+    }
+
+    const watcherName = containerReport.container?.watcher;
+    if (typeof watcherName !== 'string' || watcherName.length === 0) {
+      return;
+    }
+
+    const containerKey = this.getPendingWatcherCycleContainerKey(containerReport.container);
+    if (!containerKey) {
+      return;
+    }
+
+    const reportsForWatcher = this.pendingWatcherCycleReports.get(watcherName) ?? new Map();
+    reportsForWatcher.set(containerKey, containerReport);
+    this.pendingWatcherCycleReports.set(watcherName, reportsForWatcher);
+  }
+
+  private takePendingWatcherCycleReport(
+    watcherName: string | undefined,
+    container: Pick<Container, 'id' | 'name' | 'watcher'>,
+  ): ContainerReport | undefined {
+    if (typeof watcherName !== 'string' || watcherName.length === 0) {
+      return undefined;
+    }
+
+    const reportsForWatcher = this.pendingWatcherCycleReports.get(watcherName);
+    if (!reportsForWatcher) {
+      return undefined;
+    }
+
+    const containerKey = this.getPendingWatcherCycleContainerKey(container);
+    if (!containerKey) {
+      return undefined;
+    }
+
+    const pendingReport = reportsForWatcher.get(containerKey);
+    if (!pendingReport) {
+      return undefined;
+    }
+
+    reportsForWatcher.delete(containerKey);
+    if (reportsForWatcher.size === 0) {
+      this.pendingWatcherCycleReports.delete(watcherName);
+    }
+    return pendingReport;
+  }
+
+  private clearPendingWatcherCycleReports(watcherName: string | undefined) {
+    if (typeof watcherName === 'string' && watcherName.length > 0) {
+      this.pendingWatcherCycleReports.delete(watcherName);
+    }
+  }
+
+  private clearPendingWatcherCycleReportByContainerId(containerId: unknown) {
+    if (typeof containerId !== 'string' || containerId.length === 0) {
+      return;
+    }
+
+    for (const [watcherName, reportsForWatcher] of this.pendingWatcherCycleReports.entries()) {
+      reportsForWatcher.delete(containerId);
+      if (reportsForWatcher.size === 0) {
+        this.pendingWatcherCycleReports.delete(watcherName);
+      }
+    }
+  }
+
   private shouldPreserveClearedUpdateAvailable(container: Container): boolean {
     return (
       this.pendingFreshStateAfterRemoteUpdate.has(container.id) &&
       container.updateAvailable === true
     );
+  }
+
+  private buildContainerReport(container: Container, changedOverride?: boolean): ContainerReport {
+    container.agent = this.name;
+    // The container coming from Agent should already be normalized and have results
+    // We rely on the Agent to perform Registry checks if configured
+
+    // Strip redaction metadata (e.g. `sensitive`) that the agent's event
+    // emitter may attach — the controller's Joi schema does not allow it.
+    if (container.details?.env && Array.isArray(container.details.env)) {
+      container.details.env = container.details.env.map(({ key, value }) => ({ key, value }));
+    }
+
+    if (this.shouldPreserveClearedUpdateAvailable(container)) {
+      container = clearDetectedUpdateState(container);
+    } else if (container.updateAvailable === false) {
+      this.clearPendingFreshState(container.id);
+    }
+
+    // Save to store logic with Change Detection
+    const existing = storeContainer.getContainer(container.id);
+    const containerReport = {
+      container: container,
+      changed: false,
+    };
+
+    if (existing) {
+      containerReport.container = storeContainer.updateContainer(container);
+      // existing is the old state (from store), container is new state (from Agent)
+      // But storeContainer.updateContainer returns the NEW state object with validation/methods
+      // We use existing.resultChanged() to compare with the new state
+      if (existing.resultChanged) {
+        containerReport.changed =
+          existing.resultChanged(containerReport.container) &&
+          containerReport.container.updateAvailable;
+      }
+    } else {
+      containerReport.container = storeContainer.insertContainer(container);
+      containerReport.changed = true;
+    }
+
+    if (typeof changedOverride === 'boolean') {
+      containerReport.changed = changedOverride;
+    }
+
+    return containerReport;
   }
 
   private async processAuthoritativeContainer(container: Container): Promise<ContainerReport> {
@@ -336,43 +473,7 @@ export class AgentClient {
   }
 
   async processContainer(container: Container): Promise<ContainerReport> {
-    container.agent = this.name;
-    // The container coming from Agent should already be normalized and have results
-    // We rely on the Agent to perform Registry checks if configured
-
-    // Strip redaction metadata (e.g. `sensitive`) that the agent's event
-    // emitter may attach — the controller's Joi schema does not allow it.
-    if (container.details?.env && Array.isArray(container.details.env)) {
-      container.details.env = container.details.env.map(({ key, value }) => ({ key, value }));
-    }
-
-    if (this.shouldPreserveClearedUpdateAvailable(container)) {
-      container = clearDetectedUpdateState(container);
-    } else if (container.updateAvailable === false) {
-      this.clearPendingFreshState(container.id);
-    }
-
-    // Save to store logic with Change Detection
-    const existing = storeContainer.getContainer(container.id);
-    const containerReport = {
-      container: container,
-      changed: false,
-    };
-
-    if (existing) {
-      containerReport.container = storeContainer.updateContainer(container);
-      // existing is the old state (from store), container is new state (from Agent)
-      // But storeContainer.updateContainer returns the NEW state object with validation/methods
-      // We use existing.resultChanged() to compare with the new state
-      if (existing.resultChanged) {
-        containerReport.changed =
-          existing.resultChanged(containerReport.container) &&
-          containerReport.container.updateAvailable;
-      }
-    } else {
-      containerReport.container = storeContainer.insertContainer(container);
-      containerReport.changed = true;
-    }
+    const containerReport = this.buildContainerReport(container);
 
     // Emit report so Triggers can fire if changed
     await emitContainerReport(containerReport);
@@ -524,12 +625,14 @@ export class AgentClient {
   }
 
   private async handleContainerChangeEvent(data: unknown) {
-    await this.processContainer(data as Container);
+    const containerReport = await this.processContainer(data as Container);
+    this.rememberPendingWatcherCycleReport(containerReport);
   }
 
   private handleContainerRemovedEvent(data: unknown) {
     const removedContainerData = data as { id: string };
     this.clearPendingFreshState(removedContainerData.id);
+    this.clearPendingWatcherCycleReportByContainerId(removedContainerData.id);
     storeContainer.deleteContainer(removedContainerData.id);
   }
 
@@ -541,7 +644,18 @@ export class AgentClient {
       ? (snapshotPayload.containers as Container[])
       : [];
 
-    await this.processAuthoritativeContainers(containers);
+    const containerReports: ContainerReport[] = [];
+    for (const container of containers) {
+      const pendingContainerReport = this.takePendingWatcherCycleReport(watcherName, container);
+      if (pendingContainerReport) {
+        this.clearPendingFreshState(container.id);
+        containerReports.push(this.buildContainerReport(container, pendingContainerReport.changed));
+        continue;
+      }
+      containerReports.push(await this.processAuthoritativeContainer(container));
+    }
+    this.clearPendingWatcherCycleReports(watcherName);
+    await emitContainerReports(containerReports);
 
     if (watcherName) {
       this.pruneOldContainers(containers, watcherName);

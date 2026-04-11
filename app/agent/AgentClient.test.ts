@@ -1361,6 +1361,74 @@ describe('AgentClient', () => {
       ]);
     });
 
+    test('should preserve changed=true for remote container updates when watcher snapshot closes the same cycle', async () => {
+      const changedBeforeSnapshot = {
+        id: 'c1',
+        name: 'qBittorrent',
+        watcher: 'mediavault',
+        agent: 'test-agent',
+        updateAvailable: true,
+        resultChanged: vi.fn().mockReturnValue(true),
+      };
+      const unchangedAfterSnapshot = {
+        id: 'c1',
+        name: 'qBittorrent',
+        watcher: 'mediavault',
+        agent: 'test-agent',
+        updateAvailable: true,
+        resultChanged: vi.fn().mockReturnValue(false),
+      };
+
+      storeContainer.getContainer
+        .mockReturnValueOnce(changedBeforeSnapshot)
+        .mockReturnValueOnce(unchangedAfterSnapshot);
+      storeContainer.updateContainer.mockImplementation((container) => ({
+        ...container,
+        updateAvailable: true,
+      }));
+      storeContainer.getContainers.mockReturnValue([]);
+
+      await client.handleEvent('dd:container-updated', {
+        id: 'c1',
+        name: 'qBittorrent',
+        watcher: 'mediavault',
+        updateAvailable: true,
+      });
+      await client.handleEvent('dd:watcher-snapshot', {
+        watcher: { type: 'docker', name: 'mediavault' },
+        containers: [
+          {
+            id: 'c1',
+            name: 'qBittorrent',
+            watcher: 'mediavault',
+            updateAvailable: true,
+          },
+        ],
+      });
+
+      expect(event.emitContainerReport).toHaveBeenCalledTimes(1);
+      expect(event.emitContainerReport).toHaveBeenCalledWith(
+        expect.objectContaining({
+          changed: true,
+          container: expect.objectContaining({
+            id: 'c1',
+            watcher: 'mediavault',
+            agent: 'test-agent',
+          }),
+        }),
+      );
+      expect(event.emitContainerReports).toHaveBeenCalledWith([
+        expect.objectContaining({
+          changed: true,
+          container: expect.objectContaining({
+            id: 'c1',
+            watcher: 'mediavault',
+            agent: 'test-agent',
+          }),
+        }),
+      ]);
+    });
+
     test('should prune all containers for a watcher when a watcher snapshot is empty', async () => {
       const containersInStore = [
         { id: 'c1', name: 'stale-1', watcher: 'local', agent: 'test-agent' },
