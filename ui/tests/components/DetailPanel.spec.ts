@@ -226,14 +226,45 @@ describe('DetailPanel', () => {
       expect(w.find('aside').classes()).not.toContain('mr-[15px]');
     });
 
-    it('stretches to full viewport height on desktop without extra margin', () => {
+    // ────────────────────────────────────────────────────────────────────────
+    // DO NOT MODIFY THIS BLOCK WITHOUT READING THE COMMENT BELOW.
+    //
+    // This combination has regressed at least twice. Each time someone
+    // "simplifies" one half (the mt-4/sm:mt-6 OR the height calc) without
+    // understanding the other half, the panel either floats above the content
+    // or stops short of the page bottom on the Containers and Audit pages.
+    //
+    // The math, on desktop:
+    //   topbar height        = 48px (h-12 on <header> in AppLayout)
+    //   AppLayout main py-6  = 24px top + 24px bottom
+    //   --dd-layout-main-viewport-offset = 96px = 48 + 24 + 24
+    //
+    // DataViewLayout uses negative margins (-my-6) to escape the main padding,
+    // so the panel's natural position is flush with the topbar (viewport y=48).
+    // We need it at viewport y=72 (topbar + top padding) so its bottom lands at
+    // 100vh - 24 (matching the bottom padding):
+    //
+    //   top    = 48 (escape) + 24 (mt-6)            = 72
+    //   bottom = top + (100vh - 96) = 100vh - 24    ✓
+    //
+    // BOTH the `mt-4 sm:mt-6` class AND the `100vh - var(--dd-layout-main-viewport-offset)`
+    // height MUST stay. Removing either one breaks alignment. There is no
+    // `1.5rem` subtraction — that was an old workaround that double-counted.
+    //
+    // If you think you have a cleaner approach, redo the math above with the
+    // current AppLayout values first, then update this comment along with the
+    // assertions. Do not just delete the assertions to make a refactor pass.
+    // ────────────────────────────────────────────────────────────────────────
+    it('LOCKED: aligns top edge with main content padding and reaches the bottom padding on desktop', () => {
       const w = factory({ open: true, isMobile: false });
       const aside = w.find('aside');
       const style = aside.attributes('style');
       expect(style).toContain('calc(100vh - var(--dd-layout-main-viewport-offset))');
       expect(style).not.toContain('1.5rem');
-      expect(aside.classes()).not.toContain('mt-4');
-      expect(aside.classes()).not.toContain('sm:mt-6');
+      expect(aside.classes()).toContain('mt-4');
+      expect(aside.classes()).toContain('sm:mt-6');
+      expect(aside.classes()).toContain('sticky');
+      expect(aside.classes()).toContain('top-0');
     });
   });
 

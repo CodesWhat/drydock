@@ -53,13 +53,19 @@ onUnmounted(() => globalThis.removeEventListener('keydown', handleKeydown));
        class="fixed inset-0 bg-black/50 z-40"
        @click="closePanel" />
 
-  <!-- Panel -->
+  <!--
+    Panel — DO NOT touch the desktop sticky/mt-4/sm:mt-6 + height calc combo
+    without reading the LOCKED test in tests/components/DetailPanel.spec.ts.
+    This has regressed twice. The mt-4/sm:mt-6 and the
+    `calc(100vh - var(--dd-layout-main-viewport-offset))` height are paired —
+    removing either makes the panel misalign on Containers and Audit pages.
+  -->
   <aside v-if="open"
          role="dialog"
          :aria-modal="isMobile ? 'true' : undefined"
          aria-label="Detail panel"
          class="detail-panel-inline flex flex-col min-w-0 overflow-clip transition-[flex-basis,width,max-width,color,background-color,border-color,opacity,transform,box-shadow] duration-300 ease-in-out"
-         :class="isMobile ? 'fixed top-0 right-0 h-full z-50 dd-rounded' : 'sticky top-0 mr-[15px]'"
+         :class="isMobile ? 'fixed top-0 right-0 h-full z-50 dd-rounded' : 'sticky top-0 mt-4 sm:mt-6 mr-[15px]'"
          :style="{
            flex: isMobile ? undefined : `0 0 ${panelDesktopWidth}`,
            width: isMobile ? '100%' : panelDesktopWidth,
