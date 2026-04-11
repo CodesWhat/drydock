@@ -54,6 +54,41 @@ function createDb(options?: { inactiveIds?: Set<string>; missingIds?: Set<string
   };
 }
 
+function createDocumentBackedDb(documents: any[]) {
+  return {
+    getCollection: () => null,
+    addCollection: () => ({
+      insert: (doc: any) => {
+        documents.push(doc);
+      },
+      find: (query: Record<string, string> = {}) =>
+        documents.filter((doc) =>
+          Object.entries(query).every(([key, value]) => {
+            const path = key.split('.');
+            let current: any = doc;
+            for (const segment of path) current = current?.[segment];
+            return current === value;
+          }),
+        ),
+      findOne: (query: Record<string, string>) =>
+        documents.find((doc) =>
+          Object.entries(query).every(([key, value]) => {
+            const path = key.split('.');
+            let current: any = doc;
+            for (const segment of path) current = current?.[segment];
+            return current === value;
+          }),
+        ) || null,
+      remove: (doc: any) => {
+        const index = documents.indexOf(doc);
+        if (index >= 0) {
+          documents.splice(index, 1);
+        }
+      },
+    }),
+  };
+}
+
 describe('Update Operation Store', () => {
   beforeEach(() => {
     updateOperation.createCollections(createDb());
@@ -70,6 +105,185 @@ describe('Update Operation Store', () => {
       expect.objectContaining({
         indices: expect.arrayContaining(['data.id', 'data.containerName', 'data.status']),
       }),
+    );
+  });
+
+  test('createCollections should reconcile every active operation during startup repair', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-02-23T01:00:00.000Z'));
+      vi.resetModules();
+      const fresh = await import('./update-operation.js');
+      const documents = [
+        {
+          data: {
+            id: 'queued-fresh-op-1',
+            containerId: 'container-queued',
+            containerName: 'queued-web',
+            status: 'queued',
+            phase: 'queued',
+            batchId: 'batch-1',
+            queuePosition: 2,
+            queueTotal: 4,
+            createdAt: '2026-02-23T00:55:00.000Z',
+            updatedAt: '2026-02-23T00:59:59.000Z',
+          },
+        },
+        {
+          data: {
+            id: 'started-stale-op-1',
+            containerId: 'container-started',
+            containerName: 'started-web',
+            status: 'in-progress',
+            phase: 'new-started',
+            createdAt: '2026-02-23T00:00:00.000Z',
+            updatedAt: '2026-02-23T00:10:00.000Z',
+          },
+        },
+        {
+          data: {
+            id: 'health-stale-op-1',
+            containerId: 'container-health',
+            containerName: 'health-web',
+            status: 'in-progress',
+            phase: 'health-gate',
+            createdAt: '2026-02-23T00:05:00.000Z',
+            updatedAt: '2026-02-23T00:15:00.000Z',
+          },
+        },
+        {
+          data: {
+            id: 'deferred-stale-op-1',
+            containerId: 'container-deferred',
+            containerName: 'deferred-web',
+            status: 'in-progress',
+            phase: 'rollback-deferred',
+            createdAt: '2026-02-23T00:20:00.000Z',
+            updatedAt: '2026-02-23T00:25:00.000Z',
+          },
+        },
+        {
+          data: {
+            id: 'terminal-op-1',
+            containerId: 'container-terminal',
+            containerName: 'done-web',
+            status: 'succeeded',
+            phase: 'succeeded',
+            createdAt: '2026-02-23T00:30:00.000Z',
+            updatedAt: '2026-02-23T00:35:00.000Z',
+            completedAt: '2026-02-23T00:35:00.000Z',
+          },
+        },
+      ];
+
+      fresh.createCollections(createDocumentBackedDb(documents) as any);
+
+      expect(fresh.getOperationById('queued-fresh-op-1')).toEqual(
+        expect.objectContaining({
+          id: 'queued-fresh-op-1',
+          status: 'failed',
+          phase: 'failed',
+          completedAt: '2026-02-23T01:00:00.000Z',
+          lastError: expect.stringContaining('process restart'),
+          batchId: undefined,
+          queuePosition: undefined,
+          queueTotal: undefined,
+        }),
+      );
+
+      expect(fresh.getOperationById('started-stale-op-1')).toEqual(
+        expect.objectContaining({
+          id: 'started-stale-op-1',
+          status: 'failed',
+          phase: 'failed',
+          completedAt: '2026-02-23T01:00:00.000Z',
+          lastError: expect.stringContaining('process restart'),
+        }),
+      );
+
+      expect(fresh.getOperationById('health-stale-op-1')).toEqual(
+        expect.objectContaining({
+          id: 'health-stale-op-1',
+          status: 'failed',
+          phase: 'failed',
+          completedAt: '2026-02-23T01:00:00.000Z',
+          lastError: expect.stringContaining('process restart'),
+        }),
+      );
+
+      expect(fresh.getOperationById('deferred-stale-op-1')).toEqual(
+        expect.objectContaining({
+          id: 'deferred-stale-op-1',
+          status: 'failed',
+          phase: 'failed',
+          completedAt: '2026-02-23T01:00:00.000Z',
+          lastError: expect.stringContaining('process restart'),
+        }),
+      );
+
+      expect(fresh.getOperationById('terminal-op-1')).toEqual(
+        expect.objectContaining({
+          id: 'terminal-op-1',
+          status: 'succeeded',
+          phase: 'succeeded',
+          completedAt: '2026-02-23T00:35:00.000Z',
+          updatedAt: '2026-02-23T00:35:00.000Z',
+        }),
+      );
+
+      expect(fresh.getActiveOperationByContainerName('queued-web')).toBeUndefined();
+      expect(fresh.getActiveOperationByContainerName('started-web')).toBeUndefined();
+      expect(fresh.getActiveOperationByContainerName('health-web')).toBeUndefined();
+      expect(fresh.getActiveOperationByContainerName('deferred-web')).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('createCollections should use targeted indexed status queries for startup repair', async () => {
+    vi.resetModules();
+    const fresh = await import('./update-operation.js');
+    const findQueries: Array<Record<string, string> | undefined> = [];
+    const db = {
+      getCollection: () => null,
+      addCollection: () => {
+        const docs: any[] = [];
+        const getByPath = (object: Record<string, unknown>, path: string) =>
+          path
+            .split('.')
+            .reduce<unknown>((acc, key) => (acc as Record<string, unknown>)?.[key], object);
+        const matchesQuery = (doc: Record<string, unknown>, query: Record<string, string> = {}) =>
+          Object.entries(query).every(([key, value]) => getByPath(doc, key) === value);
+
+        return {
+          insert: (doc: any) => {
+            docs.push(doc);
+          },
+          find: (query: Record<string, string> = {}) => {
+            findQueries.push(Object.keys(query).length === 0 ? undefined : query);
+            return docs.filter((doc) => matchesQuery(doc, query));
+          },
+          findOne: (query: Record<string, string>) =>
+            docs.find((doc) => matchesQuery(doc, query)) || null,
+          remove: (doc: any) => {
+            const index = docs.indexOf(doc);
+            if (index >= 0) {
+              docs.splice(index, 1);
+            }
+          },
+        };
+      },
+    };
+
+    fresh.createCollections(db as any);
+
+    const statusQueries = findQueries.filter(
+      (query): query is Record<string, string> =>
+        Boolean(query) && Object.keys(query).length === 1 && 'data.status' in query,
+    );
+
+    expect(new Set(statusQueries.map((query) => query['data.status']))).toEqual(
+      new Set(['queued', 'in-progress']),
     );
   });
 
@@ -113,8 +327,236 @@ describe('Update Operation Store', () => {
   });
 
   test('updateOperation should return undefined when operation id does not exist', () => {
-    const result = updateOperation.updateOperation('missing-id', { status: 'failed' });
+    const result = updateOperation.updateOperation('missing-id', { status: 'in-progress' });
     expect(result).toBeUndefined();
+  });
+
+  test('updateOperation should reject terminal statuses passed at runtime', () => {
+    const inserted = updateOperation.insertOperation({
+      containerName: 'web',
+      status: 'in-progress',
+      phase: 'pulling',
+    });
+
+    expect(() =>
+      updateOperation.updateOperation(inserted.id, {
+        status: 'failed',
+        lastError: 'runtime misuse',
+      } as any),
+    ).toThrow(
+      'updateOperation only accepts active statuses; use markOperationTerminal() for terminal transitions',
+    );
+
+    const persisted = updateOperation.getOperationById(inserted.id);
+    expect(persisted).toEqual(
+      expect.objectContaining({
+        id: inserted.id,
+        status: 'in-progress',
+        phase: 'pulling',
+      }),
+    );
+    expect(persisted?.completedAt).toBeUndefined();
+    expect(persisted?.lastError).toBeUndefined();
+  });
+
+  test('updateOperation should reject terminal phases passed at runtime', () => {
+    const inserted = updateOperation.insertOperation({
+      containerName: 'web',
+      status: 'in-progress',
+      phase: 'pulling',
+    });
+
+    expect(() =>
+      updateOperation.updateOperation(inserted.id, {
+        phase: 'failed',
+      } as any),
+    ).toThrow(
+      'updateOperation only accepts active phases; use markOperationTerminal() for terminal transitions',
+    );
+  });
+
+  test('updateOperation should reject completedAt passed at runtime', () => {
+    const inserted = updateOperation.insertOperation({
+      containerName: 'web',
+      status: 'in-progress',
+      phase: 'pulling',
+    });
+
+    expect(() =>
+      updateOperation.updateOperation(inserted.id, {
+        completedAt: '2026-02-23T00:00:00.000Z',
+      } as any),
+    ).toThrow(
+      'updateOperation cannot set completedAt; use markOperationTerminal() for terminal transitions',
+    );
+  });
+
+  test('updateOperation should reject reopening a terminal row with an explicit active patch', () => {
+    const inserted = updateOperation.insertOperation({
+      containerName: 'web',
+      status: 'failed',
+      phase: 'failed',
+      completedAt: '2026-02-23T00:00:00.000Z',
+      lastError: 'stale terminal state',
+    });
+
+    expect(() =>
+      updateOperation.updateOperation(inserted.id, {
+        status: 'in-progress',
+        phase: 'pulling',
+        completedAt: undefined,
+        lastError: undefined,
+      }),
+    ).toThrow(
+      'updateOperation cannot modify terminal operations; use reopenTerminalOperation() for an explicit restart',
+    );
+  });
+
+  test('reopenTerminalOperation should explicitly restart a terminal row', () => {
+    const inserted = updateOperation.insertOperation({
+      containerName: 'web',
+      status: 'failed',
+      phase: 'failed',
+      completedAt: '2026-02-23T00:00:00.000Z',
+      lastError: 'stale terminal state',
+      rollbackReason: 'stale-rollback',
+      newContainerId: 'stale-new-container',
+      batchId: 'stale-batch',
+      queuePosition: 2,
+      queueTotal: 4,
+      tempName: 'web-old-stale',
+      oldContainerStopped: true,
+    });
+
+    const updated = updateOperation.reopenTerminalOperation(inserted.id, {
+      status: 'in-progress',
+      phase: 'pulling',
+      tempName: 'web-old-fresh',
+      oldContainerStopped: false,
+    });
+
+    expect(updated).toEqual(
+      expect.objectContaining({
+        id: inserted.id,
+        status: 'in-progress',
+        phase: 'pulling',
+        completedAt: undefined,
+        lastError: undefined,
+        rollbackReason: undefined,
+        newContainerId: undefined,
+        batchId: undefined,
+        queuePosition: undefined,
+        queueTotal: undefined,
+        tempName: 'web-old-fresh',
+        oldContainerStopped: false,
+      }),
+    );
+  });
+
+  test('reopenTerminalOperation should clear stale terminal fields when caller forgets', () => {
+    const inserted = updateOperation.insertOperation({
+      containerName: 'web',
+      status: 'failed',
+      phase: 'failed',
+      completedAt: '2026-02-23T00:00:00.000Z',
+      lastError: 'stale terminal state',
+      rollbackReason: 'stale-rollback',
+      newContainerId: 'stale-new-container',
+      batchId: 'stale-batch',
+      queuePosition: 3,
+      queueTotal: 5,
+      tempName: 'web-old-stale',
+      oldContainerStopped: true,
+    });
+
+    const updated = updateOperation.reopenTerminalOperation(inserted.id, {
+      status: 'in-progress',
+      phase: 'pulling',
+    });
+
+    expect(updated).toEqual(
+      expect.objectContaining({
+        status: 'in-progress',
+        phase: 'pulling',
+        completedAt: undefined,
+        lastError: undefined,
+        rollbackReason: undefined,
+        newContainerId: undefined,
+        batchId: undefined,
+        queuePosition: undefined,
+        queueTotal: undefined,
+        tempName: undefined,
+        oldContainerStopped: undefined,
+      }),
+    );
+  });
+
+  test('markOperationTerminal should set completedAt, clear queue metadata, and default failed phase', () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-02-23T00:00:00.000Z'));
+      const inserted = updateOperation.insertOperation({
+        containerName: 'web',
+        status: 'queued',
+        phase: 'queued',
+        batchId: 'batch-1',
+        queuePosition: 2,
+        queueTotal: 4,
+      });
+
+      vi.setSystemTime(new Date('2026-02-23T00:01:00.000Z'));
+      const terminal = updateOperation.markOperationTerminal(inserted.id, {
+        status: 'failed',
+        lastError: 'scan failed',
+      });
+
+      expect(terminal).toEqual(
+        expect.objectContaining({
+          id: inserted.id,
+          status: 'failed',
+          phase: 'failed',
+          lastError: 'scan failed',
+          completedAt: '2026-02-23T00:01:00.000Z',
+          batchId: undefined,
+          queuePosition: undefined,
+          queueTotal: undefined,
+        }),
+      );
+      expect(updateOperation.getActiveOperationByContainerName('web')).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('markOperationTerminal should normalize invalid terminal phases to the status default', () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-02-23T00:00:00.000Z'));
+      const inserted = updateOperation.insertOperation({
+        containerName: 'web',
+        status: 'queued',
+        phase: 'queued',
+      });
+
+      vi.setSystemTime(new Date('2026-02-23T00:01:00.000Z'));
+      const terminal = updateOperation.markOperationTerminal(inserted.id, {
+        status: 'failed',
+        phase: 'rolled-back',
+        lastError: 'scan failed',
+      });
+
+      expect(terminal).toEqual(
+        expect.objectContaining({
+          id: inserted.id,
+          status: 'failed',
+          phase: 'failed',
+          lastError: 'scan failed',
+          completedAt: '2026-02-23T00:01:00.000Z',
+        }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   test('getInProgressOperationByContainerName should return latest in-progress operation', () => {
@@ -127,9 +569,9 @@ describe('Update Operation Store', () => {
       createdAt: '2026-02-23T00:00:00.000Z',
       updatedAt: '2026-02-23T00:00:00.000Z',
     });
-    updateOperation.updateOperation(older.id, {
+    updateOperation.markOperationTerminal(older.id, {
       status: 'rolled-back',
-      updatedAt: '2026-02-23T00:01:00.000Z',
+      completedAt: '2026-02-23T00:01:00.000Z',
     });
 
     const newer = updateOperation.insertOperation({
@@ -389,6 +831,9 @@ describe('Update Operation Store', () => {
         containerName: 'web',
         status: 'queued',
         phase: 'queued',
+        batchId: 'batch-ttl',
+        queuePosition: 1,
+        queueTotal: 3,
       });
 
       vi.setSystemTime(new Date('2026-02-23T00:01:01.000Z'));
@@ -399,7 +844,11 @@ describe('Update Operation Store', () => {
         expect.objectContaining({
           id: queued.id,
           status: 'failed',
-          phase: 'queued',
+          phase: 'failed',
+          completedAt: '2026-02-23T00:01:01.000Z',
+          batchId: undefined,
+          queuePosition: undefined,
+          queueTotal: undefined,
           lastError: expect.stringContaining('active update TTL'),
         }),
       );
@@ -625,7 +1074,8 @@ describe('Update Operation Store', () => {
         expect.objectContaining({
           id: operation.id,
           status: 'failed',
-          phase: 'pulling',
+          phase: 'failed',
+          completedAt: '2026-02-23T00:01:01.000Z',
           lastError: expect.stringContaining('active update TTL'),
         }),
       );
@@ -724,7 +1174,7 @@ describe('Update Operation Store', () => {
       });
 
       vi.setSystemTime(new Date('2026-02-23T00:02:00.000Z'));
-      updateOperation.updateOperation(first.id, {
+      updateOperation.markOperationTerminal(first.id, {
         status: 'succeeded',
         phase: 'succeeded',
       });
@@ -835,18 +1285,27 @@ describe('Update Operation Store', () => {
         status: 'failed',
         phase: 'rollback-failed',
       });
+      const active = fresh.insertOperation({
+        containerName: 'web',
+        status: 'in-progress',
+        phase: 'prepare',
+      });
 
       for (let i = 0; i < 97; i += 1) {
         vi.setSystemTime(new Date(2026, 2, 1, 0, 1, i));
-        fresh.updateOperation(third.id, {
-          lastError: `error-${i}`,
+        fresh.updateOperation(active.id, {
+          phase: i % 2 === 0 ? 'prepare' : 'health-gate',
         });
       }
 
       const operations = fresh.getOperationsByContainerName('web');
-      expect(operations).toHaveLength(2);
-      expect(operations.map((operation) => operation.id)).toEqual([third.id, second.id]);
-      expect(operations.find((operation) => operation.id === first.id)).toBeUndefined();
+      const terminalOperations = operations.filter(
+        (operation) => operation.status !== 'queued' && operation.status !== 'in-progress',
+      );
+
+      expect(terminalOperations).toHaveLength(2);
+      expect(terminalOperations.map((operation) => operation.id)).toEqual([third.id, second.id]);
+      expect(terminalOperations.find((operation) => operation.id === first.id)).toBeUndefined();
     } finally {
       vi.useRealTimers();
       if (previousMaxEntries === undefined) {
@@ -951,8 +1410,8 @@ describe('Update Operation Store', () => {
 
       for (let i = 0; i < 98; i += 1) {
         vi.setSystemTime(new Date(2026, 1, 1, 0, 1, i));
-        fresh.updateOperation(latestTerminal.id, {
-          lastError: `error-${i}`,
+        fresh.updateOperation(queued.id, {
+          phase: 'queued',
         });
       }
 
@@ -995,7 +1454,7 @@ describe('Update Operation Store', () => {
   test('updateOperation should return undefined when store is not initialized', async () => {
     vi.resetModules();
     const fresh = await import('./update-operation.js');
-    expect(fresh.updateOperation('missing', { status: 'failed' })).toBeUndefined();
+    expect(fresh.updateOperation('missing', { status: 'in-progress' })).toBeUndefined();
   });
 
   test('retention pruning should handle empty collections safely', async () => {

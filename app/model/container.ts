@@ -9,8 +9,9 @@ import type {
 import * as tag from '../tag/index.js';
 import { isTagPinned } from '../tag/precision.js';
 import type {
-  ContainerUpdateOperationPhase,
-  ContainerUpdateOperationStatus,
+  ActiveContainerUpdateOperationPhase,
+  ActiveContainerUpdateOperationStatus,
+  ContainerUpdateOperationKind,
 } from './container-update-operation.js';
 import {
   MATURITY_MIN_AGE_DAYS_MAX,
@@ -126,8 +127,9 @@ export interface ContainerRuntimeDetails {
 
 export interface ContainerUpdateOperationState {
   id: string;
-  status: ContainerUpdateOperationStatus;
-  phase: ContainerUpdateOperationPhase;
+  kind?: ContainerUpdateOperationKind;
+  status: ActiveContainerUpdateOperationStatus;
+  phase: ActiveContainerUpdateOperationPhase;
   updatedAt: string;
   batchId?: string;
   queuePosition?: number;

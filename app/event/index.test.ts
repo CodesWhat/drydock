@@ -30,6 +30,10 @@ const eventTestCases = [
     register: event.registerContainerRemoved,
   },
   {
+    emitter: event.emitUpdateOperationChanged,
+    register: event.registerUpdateOperationChanged,
+  },
+  {
     emitter: event.emitWatcherStart,
     register: event.registerWatcherStart,
   },
@@ -82,6 +86,16 @@ test('deregistration of container removed handler should work', () => {
   deregister();
 
   event.emitContainerRemoved({ id: 'container-removed-1' });
+
+  expect(handler).not.toHaveBeenCalled();
+});
+
+test('deregistration of update operation changed handler should work', async () => {
+  const handler = vi.fn();
+  const deregister = event.registerUpdateOperationChanged(handler);
+  deregister();
+
+  await event.emitUpdateOperationChanged({ operationId: 'op-1' });
 
   expect(handler).not.toHaveBeenCalled();
 });
