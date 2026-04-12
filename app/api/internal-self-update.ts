@@ -7,6 +7,8 @@ import {
   isTerminalContainerUpdateOperationStatus,
   type RolledBackContainerUpdateOperationPhase,
   type SucceededContainerUpdateOperationPhase,
+  type TerminalContainerUpdateOperationPhase,
+  type TerminalContainerUpdateOperationStatus,
 } from '../model/container-update-operation.js';
 import * as updateOperationStore from '../store/update-operation.js';
 import { sendErrorResponse } from './error-response.js';
@@ -20,6 +22,13 @@ type FinalizeSelfUpdateBody = {
   status?: unknown;
   phase?: unknown;
   lastError?: unknown;
+};
+
+type FinalizeSelfUpdateRequest = {
+  operationId: string;
+  status: TerminalContainerUpdateOperationStatus;
+  phase?: TerminalContainerUpdateOperationPhase;
+  lastError?: string;
 };
 
 function getFinalizeSecretHeaderValue(req: Request): string | undefined {
@@ -72,6 +81,97 @@ function getFinalizeRequestBody(
   };
 }
 
+function trimNonEmptyString(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  const trimmedValue = value.trim();
+  return trimmedValue !== '' ? trimmedValue : undefined;
+}
+
+function validateFinalizeRequestBody(
+  body: ReturnType<typeof getFinalizeRequestBody>,
+  res: Response,
+): FinalizeSelfUpdateRequest | undefined {
+  const operationId = String(body.operationId || '').trim();
+  if (!operationId) {
+    sendErrorResponse(res, 400, 'operationId is required');
+    return undefined;
+  }
+  if (!isTerminalContainerUpdateOperationStatus(body.status)) {
+    sendErrorResponse(res, 400, 'status must be a terminal update-operation status');
+    return undefined;
+  }
+  if (
+    body.phase !== undefined &&
+    !isTerminalContainerUpdateOperationPhaseForStatus(body.status, body.phase)
+  ) {
+    sendErrorResponse(res, 400, 'phase must be valid for the supplied terminal status');
+    return undefined;
+  }
+
+  const lastError = trimNonEmptyString(body.lastError);
+
+  return {
+    operationId,
+    status: body.status,
+    ...(body.phase !== undefined
+      ? { phase: body.phase as TerminalContainerUpdateOperationPhase }
+      : {}),
+    ...(lastError ? { lastError } : {}),
+  };
+}
+
+function applyFinalizeTerminalPatch(body: FinalizeSelfUpdateRequest): void {
+  const lastErrorPatch = body.lastError ? { lastError: body.lastError } : {};
+  switch (body.status) {
+    case 'succeeded':
+      updateOperationStore.markOperationTerminal(body.operationId, {
+        status: 'succeeded',
+        ...(body.phase ? { phase: body.phase as SucceededContainerUpdateOperationPhase } : {}),
+        ...lastErrorPatch,
+      });
+      return;
+    case 'rolled-back':
+      updateOperationStore.markOperationTerminal(body.operationId, {
+        status: 'rolled-back',
+        ...(body.phase ? { phase: body.phase as RolledBackContainerUpdateOperationPhase } : {}),
+        ...lastErrorPatch,
+      });
+      return;
+    case 'failed':
+      updateOperationStore.markOperationTerminal(body.operationId, {
+        status: 'failed',
+        ...(body.phase ? { phase: body.phase as FailedContainerUpdateOperationPhase } : {}),
+        ...lastErrorPatch,
+      });
+      return;
+  }
+}
+
+function findFinalizeSelfUpdateOperation(operationId: string, res: Response) {
+  const operation = updateOperationStore.getOperationById(operationId);
+  if (!operation) {
+    sendErrorResponse(res, 404, 'Update operation not found');
+    return undefined;
+  }
+  if (operation.kind !== 'self-update') {
+    sendErrorResponse(res, 409, 'Update operation is not a self-update operation');
+    return undefined;
+  }
+
+  return operation;
+}
+
+function isAlreadyTerminalOperation(operation: { status: string }): boolean {
+  return (
+    operation.status === 'succeeded' ||
+    operation.status === 'rolled-back' ||
+    operation.status === 'failed'
+  );
+}
+
 export function createFinalizeSelfUpdateHandler() {
   return function finalizeSelfUpdate(req: Request, res: Response): void {
     if (!isLoopbackAddress(req.socket?.remoteAddress)) {
@@ -83,93 +183,30 @@ export function createFinalizeSelfUpdateHandler() {
       return;
     }
 
-    const body = getFinalizeRequestBody(req);
-    const operationId = String(body.operationId || '').trim();
-    if (!operationId) {
-      sendErrorResponse(res, 400, 'operationId is required');
-      return;
-    }
-    if (!isTerminalContainerUpdateOperationStatus(body.status)) {
-      sendErrorResponse(res, 400, 'status must be a terminal update-operation status');
-      return;
-    }
-    if (
-      body.phase !== undefined &&
-      !isTerminalContainerUpdateOperationPhaseForStatus(body.status, body.phase)
-    ) {
-      sendErrorResponse(res, 400, 'phase must be valid for the supplied terminal status');
+    const body = validateFinalizeRequestBody(getFinalizeRequestBody(req), res);
+    if (!body) {
       return;
     }
 
-    const operation = updateOperationStore.getOperationById(operationId);
+    const operation = findFinalizeSelfUpdateOperation(body.operationId, res);
     if (!operation) {
-      sendErrorResponse(res, 404, 'Update operation not found');
       return;
     }
-    if (operation.kind !== 'self-update') {
-      sendErrorResponse(res, 409, 'Update operation is not a self-update operation');
-      return;
-    }
-    if (
-      operation.status === 'succeeded' ||
-      operation.status === 'rolled-back' ||
-      operation.status === 'failed'
-    ) {
+
+    if (isAlreadyTerminalOperation(operation)) {
       res.status(202).json({
         status: 'ignored',
-        operationId,
+        operationId: body.operationId,
         reason: 'already-terminal',
       });
       return;
     }
 
-    const lastError =
-      typeof body.lastError === 'string' && body.lastError.trim() !== ''
-        ? body.lastError.trim()
-        : undefined;
-
-    switch (body.status) {
-      case 'succeeded': {
-        const phase =
-          body.phase !== undefined
-            ? (body.phase as SucceededContainerUpdateOperationPhase)
-            : undefined;
-        updateOperationStore.markOperationTerminal(operationId, {
-          status: 'succeeded',
-          ...(phase ? { phase } : {}),
-          ...(lastError ? { lastError } : {}),
-        });
-        break;
-      }
-      case 'rolled-back': {
-        const phase =
-          body.phase !== undefined
-            ? (body.phase as RolledBackContainerUpdateOperationPhase)
-            : undefined;
-        updateOperationStore.markOperationTerminal(operationId, {
-          status: 'rolled-back',
-          ...(phase ? { phase } : {}),
-          ...(lastError ? { lastError } : {}),
-        });
-        break;
-      }
-      case 'failed': {
-        const phase =
-          body.phase !== undefined
-            ? (body.phase as FailedContainerUpdateOperationPhase)
-            : undefined;
-        updateOperationStore.markOperationTerminal(operationId, {
-          status: 'failed',
-          ...(phase ? { phase } : {}),
-          ...(lastError ? { lastError } : {}),
-        });
-        break;
-      }
-    }
+    applyFinalizeTerminalPatch(body);
 
     res.status(202).json({
       status: 'accepted',
-      operationId,
+      operationId: body.operationId,
     });
   };
 }

@@ -74,6 +74,43 @@ function getDockerWatchers(
   >;
 }
 
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+async function runOptionalAsyncHook(
+  hook: (() => Promise<void>) | undefined,
+  snapshot: JsonObject,
+  errorField: string,
+): Promise<void> {
+  if (typeof hook !== 'function') {
+    return;
+  }
+
+  try {
+    await hook();
+  } catch (error: unknown) {
+    snapshot[errorField] = getErrorMessage(error);
+  }
+}
+
+async function setOptionalAsyncField(
+  snapshot: JsonObject,
+  field: string,
+  errorField: string,
+  getter: (() => Promise<unknown>) | undefined,
+): Promise<void> {
+  if (typeof getter !== 'function') {
+    return;
+  }
+
+  try {
+    snapshot[field] = await getter();
+  } catch (error: unknown) {
+    snapshot[errorField] = getErrorMessage(error);
+  }
+}
+
 async function collectDockerApiInfo(
   dockerWatchers: Array<[string, DockerWatcherLike]>,
 ): Promise<Array<JsonObject>> {
@@ -84,29 +121,13 @@ async function collectDockerApiInfo(
         watcherName: watcher.name,
       };
 
-      try {
-        if (typeof watcher.ensureRemoteAuthHeaders === 'function') {
-          await watcher.ensureRemoteAuthHeaders();
-        }
-      } catch (error: unknown) {
-        snapshot.authInitializationError = error instanceof Error ? error.message : String(error);
-      }
-
-      if (typeof watcher.dockerApi?.version === 'function') {
-        try {
-          snapshot.version = await watcher.dockerApi.version();
-        } catch (error: unknown) {
-          snapshot.versionError = error instanceof Error ? error.message : String(error);
-        }
-      }
-
-      if (typeof watcher.dockerApi?.info === 'function') {
-        try {
-          snapshot.info = await watcher.dockerApi.info();
-        } catch (error: unknown) {
-          snapshot.infoError = error instanceof Error ? error.message : String(error);
-        }
-      }
+      await runOptionalAsyncHook(
+        watcher.ensureRemoteAuthHeaders,
+        snapshot,
+        'authInitializationError',
+      );
+      await setOptionalAsyncField(snapshot, 'version', 'versionError', watcher.dockerApi?.version);
+      await setOptionalAsyncField(snapshot, 'info', 'infoError', watcher.dockerApi?.info);
 
       return snapshot;
     }),
@@ -129,40 +150,44 @@ function collectDockerEventSubscriptionState(
   }));
 }
 
+function collectRecentWatcherRecords(
+  dockerWatchers: Array<[string, DockerWatcherLike]>,
+  recentMinutes: number,
+  getRecords: (
+    watcher: DockerWatcherLike,
+    options: { sinceMs: number; limit?: number },
+  ) => unknown[] | undefined,
+): unknown[] {
+  const sinceMs = Date.now() - recentMinutes * 60 * 1000;
+  return dockerWatchers.flatMap(([watcherId, watcher]) => {
+    const records = getRecords(watcher, { sinceMs });
+    if (!Array.isArray(records)) {
+      return [];
+    }
+    return records.map((record) => ({
+      watcherId,
+      watcherName: watcher.name,
+      ...((record as Record<string, unknown>) || {}),
+    }));
+  });
+}
+
 function collectRecentDockerEvents(
   dockerWatchers: Array<[string, DockerWatcherLike]>,
   recentMinutes: number,
 ): unknown[] {
-  const sinceMs = Date.now() - recentMinutes * 60 * 1000;
-  return dockerWatchers.flatMap(([watcherId, watcher]) => {
-    if (typeof watcher.getRecentDockerEvents !== 'function') {
-      return [];
-    }
-    const events = watcher.getRecentDockerEvents({ sinceMs });
-    return events.map((event) => ({
-      watcherId,
-      watcherName: watcher.name,
-      ...((event as Record<string, unknown>) || {}),
-    }));
-  });
+  return collectRecentWatcherRecords(dockerWatchers, recentMinutes, (watcher, options) =>
+    watcher.getRecentDockerEvents?.(options),
+  );
 }
 
 function collectRecentAliasFilterDecisions(
   dockerWatchers: Array<[string, DockerWatcherLike]>,
   recentMinutes: number,
 ): unknown[] {
-  const sinceMs = Date.now() - recentMinutes * 60 * 1000;
-  return dockerWatchers.flatMap(([watcherId, watcher]) => {
-    if (typeof watcher.getRecentAliasFilterDecisions !== 'function') {
-      return [];
-    }
-    const decisions = watcher.getRecentAliasFilterDecisions({ sinceMs });
-    return decisions.map((decision) => ({
-      watcherId,
-      watcherName: watcher.name,
-      ...((decision as Record<string, unknown>) || {}),
-    }));
-  });
+  return collectRecentWatcherRecords(dockerWatchers, recentMinutes, (watcher, options) =>
+    watcher.getRecentAliasFilterDecisions?.(options),
+  );
 }
 
 function addMqttSensorDefinition(

@@ -728,14 +728,20 @@ function addUpdateMaturityLevelProperty(container: Container) {
  * @param otherContainer
  * @returns {boolean}
  */
-function resultChangedFunction(this: Container, otherContainer: Container | undefined) {
+function hasResultChanged(
+  currentResult: Container['result'],
+  otherResult: Container['result'],
+): boolean {
   return (
-    otherContainer === undefined ||
-    this.result?.tag !== otherContainer.result?.tag ||
-    this.result?.suggestedTag !== otherContainer.result?.suggestedTag ||
-    this.result?.digest !== otherContainer.result?.digest ||
-    this.result?.created !== otherContainer.result?.created
+    currentResult?.tag !== otherResult?.tag ||
+    currentResult?.suggestedTag !== otherResult?.suggestedTag ||
+    currentResult?.digest !== otherResult?.digest ||
+    currentResult?.created !== otherResult?.created
   );
+}
+
+function resultChangedFunction(this: Container, otherContainer: Container | undefined) {
+  return otherContainer === undefined || hasResultChanged(this.result, otherContainer.result);
 }
 
 /**
@@ -824,22 +830,28 @@ export function flatten(container: Container) {
   return containerFlatten;
 }
 
+function hasContainerIdentityValue(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0;
+}
+
+function hasValidContainerIdentity(containerIdentity: ContainerIdentity | undefined): boolean {
+  return (
+    containerIdentity !== undefined &&
+    hasContainerIdentityValue(containerIdentity.watcher) &&
+    hasContainerIdentityValue(containerIdentity.name)
+  );
+}
+
+function getContainerIdentityAgentPrefix(containerIdentity: ContainerIdentity): string {
+  return hasContainerIdentityValue(containerIdentity.agent) ? containerIdentity.agent : '';
+}
+
 export function getContainerIdentityKey(containerIdentity: ContainerIdentity) {
-  if (
-    !containerIdentity ||
-    typeof containerIdentity.watcher !== 'string' ||
-    containerIdentity.watcher.length === 0 ||
-    typeof containerIdentity.name !== 'string' ||
-    containerIdentity.name.length === 0
-  ) {
+  if (!hasValidContainerIdentity(containerIdentity)) {
     return undefined;
   }
 
-  const agent =
-    typeof containerIdentity.agent === 'string' && containerIdentity.agent.length > 0
-      ? containerIdentity.agent
-      : '';
-  return `${agent}::${containerIdentity.watcher}::${containerIdentity.name}`;
+  return `${getContainerIdentityAgentPrefix(containerIdentity)}::${containerIdentity.watcher}::${containerIdentity.name}`;
 }
 
 /**
