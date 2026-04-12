@@ -1,5 +1,6 @@
 import { computed, onUnmounted, type Ref, ref, watch } from 'vue';
 import { useConfirmDialog } from '../../composables/useConfirmDialog';
+import { useOperationDisplayHold } from '../../composables/useOperationDisplayHold';
 import { useServerFeatures } from '../../composables/useServerFeatures';
 import { useToast } from '../../composables/useToast';
 import { useUpdateBatches } from '../../composables/useUpdateBatches';
@@ -106,9 +107,9 @@ function hasPendingContainerAction(
 
 function hasInProgressUpdateOperationByIdentityKey(
   targetIdentityKey: string,
-  containers: Readonly<Ref<Container[]>>,
+  containers: readonly Pick<Container, 'name' | 'updateOperation'>[],
 ) {
-  return containers.value.some((container) => {
+  return containers.some((container) => {
     return (
       container.name === targetIdentityKey && container.updateOperation?.status === 'in-progress'
     );
@@ -257,6 +258,7 @@ async function updateAllInGroupState(args: {
   containerActionsEnabled: boolean;
   containerActionsDisabledReason: string;
   containers: Readonly<Ref<Container[]>>;
+  projectContainerDisplayState: (container: Container) => Container;
   inputError: Ref<string | null>;
   actionInProgress: Ref<Set<string>>;
   actionPending: Ref<Map<string, Container>>;
@@ -275,10 +277,13 @@ async function updateAllInGroupState(args: {
   const updatableContainers = args.group.containers.filter((container) => {
     return container.newTag && container.bouncer !== 'blocked';
   });
+  const displayContainers = args.containers.value.map(args.projectContainerDisplayState);
   if (
     updatableContainers.some((container) => {
-      const liveContainer = args.containers.value.find((entry) => entry.id === container.id);
-      const operation = liveContainer?.updateOperation ?? container.updateOperation;
+      const liveContainer = displayContainers.find((entry) => entry.id === container.id);
+      const operation =
+        liveContainer?.updateOperation ??
+        args.projectContainerDisplayState(container).updateOperation;
       return (
         operation?.status === 'queued' ||
         operation?.status === 'in-progress' ||
@@ -800,6 +805,7 @@ function createContainerActionHandlers(args: {
 
 export function useContainerActions(input: UseContainerActionsInput) {
   const confirm = useConfirmDialog();
+  const { getDisplayUpdateOperation, projectContainerDisplayState } = useOperationDisplayHold();
   const { containerActionsEnabled, containerActionsDisabledReason } = useServerFeatures();
 
   const skippedUpdates = ref(new Set<string>());
@@ -960,6 +966,10 @@ export function useContainerActions(input: UseContainerActionsInput) {
     return [...actionInProgress.value].some((actionKey) => actionKey !== targetKey);
   }
 
+  function getDisplayContainers() {
+    return input.containers.value.map(projectContainerDisplayState);
+  }
+
   function isContainerUpdateInProgress(target: ContainerActionTarget) {
     const hasTrackedAction = hasTrackedContainerAction(
       actionInProgress.value,
@@ -968,9 +978,10 @@ export function useContainerActions(input: UseContainerActionsInput) {
     if (hasTrackedAction) {
       return true;
     }
+    const displayContainers = getDisplayContainers();
     if (typeof target !== 'string') {
-      const freshContainer = input.containers.value.find((c) => c.id === target.id);
-      const liveOperation = freshContainer?.updateOperation ?? target.updateOperation;
+      const freshContainer = displayContainers.find((c) => c.id === target.id);
+      const liveOperation = freshContainer?.updateOperation ?? getDisplayUpdateOperation(target);
       if (liveOperation?.status === 'in-progress') {
         return true;
       }
@@ -979,7 +990,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
       }
       if (
         shouldRenderStandaloneQueuedUpdateAsUpdating({
-          containers: input.containers.value,
+          containers: displayContainers,
           hasExternalActiveHead: hasOtherLocalTrackedAction(target),
           operation: liveOperation,
           targetId: target.id,
@@ -991,7 +1002,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
     }
     return (
       hasPendingContainerAction(target, actionPending) ||
-      hasInProgressUpdateOperationByIdentityKey(target, input.containers)
+      hasInProgressUpdateOperationByIdentityKey(target, displayContainers)
     );
   }
 
@@ -1003,14 +1014,15 @@ export function useContainerActions(input: UseContainerActionsInput) {
     if (hasTrackedAction) {
       return false;
     }
-    const freshContainer = input.containers.value.find((container) => container.id === target.id);
-    const liveOperation = freshContainer?.updateOperation ?? target.updateOperation;
+    const displayContainers = getDisplayContainers();
+    const freshContainer = displayContainers.find((container) => container.id === target.id);
+    const liveOperation = freshContainer?.updateOperation ?? getDisplayUpdateOperation(target);
     if (liveOperation?.status === 'in-progress') {
       return false;
     }
     if (
       shouldRenderStandaloneQueuedUpdateAsUpdating({
-        containers: input.containers.value,
+        containers: displayContainers,
         hasExternalActiveHead: hasOtherLocalTrackedAction(target),
         operation: liveOperation,
         targetId: target.id,
@@ -1072,6 +1084,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
       containerActionsEnabled: containerActionsEnabled.value,
       containerActionsDisabledReason: containerActionsDisabledReason.value,
       containers: input.containers,
+      projectContainerDisplayState,
       inputError: input.error,
       actionInProgress,
       actionPending,

@@ -1,5 +1,9 @@
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { computed, defineComponent, h, nextTick, type Ref, ref } from 'vue';
+import {
+  OPERATION_DISPLAY_HOLD_MS,
+  useOperationDisplayHold,
+} from '@/composables/useOperationDisplayHold';
 import { useUpdateBatches } from '@/composables/useUpdateBatches';
 import type { ApiContainerTrigger, ApiContainerUpdateOperation } from '@/types/api';
 import type { Container } from '@/types/container';
@@ -206,6 +210,7 @@ describe('useContainerActions', () => {
   beforeEach(() => {
     vi.useRealTimers();
     vi.resetAllMocks();
+    useOperationDisplayHold().clearAllOperationDisplayHolds();
     useUpdateBatches().batches.value = new Map();
     mocks.containerActionsEnabled.value = true;
     mocks.getBackups.mockResolvedValue([]);
@@ -2942,6 +2947,56 @@ describe('useContainerActions', () => {
 
     expect(composable.isContainerUpdateQueued(queued)).toBe(true);
     expect(composable.isContainerUpdateInProgress(queued)).toBe(false);
+  });
+
+  it('treats a held terminal operation as updating and keeps later queued work queued', async () => {
+    vi.useFakeTimers();
+    const held = makeContainer({
+      id: 'container-head',
+      name: 'socket-proxy-head',
+    });
+    const queued = makeContainer({
+      id: 'container-a',
+      name: 'socket-proxy-a',
+      updateOperation: {
+        id: 'op-a',
+        status: 'queued',
+        phase: 'queued',
+        updatedAt: '2026-04-01T12:00:01.000Z',
+      },
+    });
+    const { composable, containers } = await mountActionsHarness({
+      containers: [held, queued],
+    });
+    const { holdOperationDisplay, scheduleHeldOperationRelease } = useOperationDisplayHold();
+
+    holdOperationDisplay({
+      operationId: 'op-head',
+      containerId: 'container-head',
+      containerName: 'socket-proxy-head',
+      operation: {
+        id: 'op-head',
+        status: 'in-progress',
+        phase: 'pulling',
+        updatedAt: '2026-04-01T12:00:00.000Z',
+      },
+    });
+    scheduleHeldOperationRelease({ operationId: 'op-head' });
+
+    containers.value = [makeContainer({ id: 'container-head', name: 'socket-proxy-head' }), queued];
+    await flushPromises();
+
+    expect(composable.isContainerUpdateInProgress(containers.value[0]!)).toBe(true);
+    expect(composable.isContainerUpdateQueued(containers.value[0]!)).toBe(false);
+    expect(composable.isContainerUpdateQueued(queued)).toBe(true);
+    expect(composable.isContainerUpdateInProgress(queued)).toBe(false);
+
+    vi.advanceTimersByTime(OPERATION_DISPLAY_HOLD_MS);
+    await flushPromises();
+
+    expect(composable.isContainerUpdateInProgress(containers.value[0]!)).toBe(false);
+    expect(composable.isContainerUpdateQueued(queued)).toBe(false);
+    expect(composable.isContainerUpdateInProgress(queued)).toBe(true);
   });
 
   it('keeps a standalone queued update operation queued when a persisted batch head already owns the slot', async () => {

@@ -2052,8 +2052,9 @@ describe('ContainersView', () => {
       }
     });
 
-    it('patches container updateOperation in-place on dd:sse-update-operation-changed', async () => {
+    it('derives a held display update operation after raw terminal success', async () => {
       const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
+      vi.useFakeTimers();
       try {
         const c = makeContainer({ id: 'c1', name: 'nginx' });
         const wrapper = await mountContainersView(
@@ -2085,7 +2086,11 @@ describe('ContainersView', () => {
         expect(patched?.updateOperation).toBeDefined();
         expect(patched.updateOperation.status).toBe('in-progress');
         expect(patched.updateOperation.phase).toBe('pulling');
+        expect(vm.displayContainers.find((c: any) => c.id === 'c1')?.updateOperation?.status).toBe(
+          'in-progress',
+        );
 
+        vi.advanceTimersByTime(200);
         operationListener?.(
           new CustomEvent('dd:sse-update-operation-changed', {
             detail: {
@@ -2098,12 +2103,104 @@ describe('ContainersView', () => {
           }),
         );
 
-        const cleared = vm.containers.find((c: any) => c.id === 'c1');
-        expect(cleared?.updateOperation).toBeUndefined();
+        const rawCleared = vm.containers.find((c: any) => c.id === 'c1');
+        expect(rawCleared?.updateOperation).toBeUndefined();
+        expect(vm.isContainerUpdateInProgress(rawCleared)).toBe(true);
+        expect(vm.isContainerUpdateQueued(rawCleared)).toBe(false);
+        expect(vm.displayContainers.find((c: any) => c.id === 'c1')?.updateOperation?.status).toBe(
+          'in-progress',
+        );
+
+        vm.containers = [makeContainer({ id: 'c1', name: 'nginx' })];
+        await flushPromises();
+        expect(vm.isContainerUpdateInProgress(vm.containers[0])).toBe(true);
+        expect(vm.displayContainers.find((c: any) => c.id === 'c1')?.updateOperation?.status).toBe(
+          'in-progress',
+        );
+
+        vi.advanceTimersByTime(1299);
+        await flushPromises();
+        expect(vm.isContainerUpdateInProgress(vm.containers[0])).toBe(true);
+        expect(vm.displayContainers.find((c: any) => c.id === 'c1')?.updateOperation?.status).toBe(
+          'in-progress',
+        );
+
+        vi.advanceTimersByTime(1);
+        await flushPromises();
+
+        expect(vm.isContainerUpdateInProgress(vm.containers[0])).toBe(false);
+        expect(vm.isContainerUpdateQueued(vm.containers[0])).toBe(false);
+        expect(
+          vm.displayContainers.find((c: any) => c.id === 'c1')?.updateOperation,
+        ).toBeUndefined();
 
         wrapper.unmount();
       } finally {
         addEventListenerSpy.mockRestore();
+        vi.useRealTimers();
+      }
+    });
+
+    it('drops the display hold immediately when the operation fails', async () => {
+      const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
+      vi.useFakeTimers();
+      try {
+        const c = makeContainer({ id: 'c1', name: 'nginx' });
+        const wrapper = await mountContainersView(
+          [c],
+          [{ id: 'c1', name: 'nginx', displayName: 'nginx' }],
+        );
+        const vm = wrapper.vm as any;
+        const operationListener = addEventListenerSpy.mock.calls.findLast(
+          ([eventName]) => eventName === 'dd:sse-update-operation-changed',
+        )?.[1] as EventListener | undefined;
+
+        expect(operationListener).toBeTypeOf('function');
+
+        operationListener?.(
+          new CustomEvent('dd:sse-update-operation-changed', {
+            detail: {
+              operationId: 'op-1',
+              containerId: 'c1',
+              containerName: 'nginx',
+              status: 'in-progress',
+              phase: 'pulling',
+            },
+          }),
+        );
+
+        expect(vm.isContainerUpdateInProgress(vm.containers[0])).toBe(true);
+
+        vi.advanceTimersByTime(200);
+        operationListener?.(
+          new CustomEvent('dd:sse-update-operation-changed', {
+            detail: {
+              operationId: 'op-1',
+              containerId: 'c1',
+              containerName: 'nginx',
+              status: 'failed',
+              phase: 'failed',
+            },
+          }),
+        );
+
+        expect(vm.containers.find((c: any) => c.id === 'c1')?.updateOperation).toBeUndefined();
+        expect(
+          vm.displayContainers.find((c: any) => c.id === 'c1')?.updateOperation,
+        ).toBeUndefined();
+        expect(vm.isContainerUpdateInProgress(vm.containers[0])).toBe(false);
+        expect(vm.isContainerUpdateQueued(vm.containers[0])).toBe(false);
+
+        vi.advanceTimersByTime(5000);
+        await flushPromises();
+        expect(
+          vm.displayContainers.find((c: any) => c.id === 'c1')?.updateOperation,
+        ).toBeUndefined();
+
+        wrapper.unmount();
+      } finally {
+        addEventListenerSpy.mockRestore();
+        vi.useRealTimers();
       }
     });
   });

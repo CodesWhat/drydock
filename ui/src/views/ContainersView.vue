@@ -10,12 +10,19 @@ import { useColumnVisibility } from '../composables/useColumnVisibility';
 import { useContainerFilters } from '../composables/useContainerFilters';
 import { useDetailPanel, useDetailPanelStorage } from '../composables/useDetailPanel';
 import { LOG_AUTO_FETCH_INTERVALS } from '../composables/useLogViewerBehavior';
+import { useOperationDisplayHold } from '../composables/useOperationDisplayHold';
 import { preferences } from '../preferences/store';
 import { usePreference } from '../preferences/usePreference';
 import { useViewMode } from '../preferences/useViewMode';
 import type { ContainerGroup } from '../services/container';
 import { getAllContainers, getContainerGroups, refreshAllContainers } from '../services/container';
 import type { Container } from '../types/container';
+import {
+  isActiveContainerUpdateOperationPhaseForStatus,
+  isActiveContainerUpdateOperationStatus,
+  isContainerUpdateOperationStatus,
+  type ActiveContainerUpdateOperationPhase,
+} from '../types/update-operation';
 import { getContainerActionIdentityKey } from '../utils/container-action-key';
 import { mapApiContainers } from '../utils/container-mapper';
 import {
@@ -50,6 +57,13 @@ const error = ref<string | null>(null);
 const containers = ref<Container[]>([]);
 const containerIdMap = ref<Record<string, string>>({});
 const containerMetaMap = ref<Record<string, unknown>>({});
+const {
+  clearAllOperationDisplayHolds,
+  holdOperationDisplay,
+  projectContainerDisplayState,
+  scheduleHeldOperationRelease,
+  clearHeldOperation,
+} = useOperationDisplayHold();
 
 function buildContainerLookupMaps(apiContainers: Record<string, unknown>[]) {
   const idMap: Record<string, string> = {};
@@ -753,7 +767,7 @@ const sortedContainers = computed(() => {
   });
 });
 
-const displayContainers = computed(() => {
+const displayContainers = computed<Array<Container & { _pending?: true }>>(() => {
   const live = sortedContainers.value.map((container) =>
     skippedUpdates.value.has(container.id) || skippedUpdates.value.has(container.name)
       ? {
@@ -770,7 +784,7 @@ const displayContainers = computed(() => {
   const ghosts = [...actionPending.value.values()]
     .filter((snapshot) => !liveIdentityKeys.has(getContainerActionIdentityKey(snapshot)))
     .map((snapshot) => ({ ...snapshot, _pending: true as const }));
-  return [...live, ...ghosts];
+  return [...live, ...ghosts].map(projectContainerDisplayState);
 });
 
 const groupMembershipMap = ref<Record<string, string>>({});
@@ -997,7 +1011,22 @@ const sseContainerChangedListener = (() => {
     void handleSseScanCompleted();
   }, SSE_CONTAINER_CHANGED_DEBOUNCE_MS);
 }) as EventListener;
-const ACTIVE_OP_STATUSES = new Set(['queued', 'in-progress']);
+function resolveActiveOperationPhase(args: {
+  status: 'queued' | 'in-progress';
+  phase: unknown;
+  previousPhase?: unknown;
+}): ActiveContainerUpdateOperationPhase {
+  if (isActiveContainerUpdateOperationPhaseForStatus(args.status, args.phase)) {
+    return args.phase;
+  }
+  if (
+    args.previousPhase !== undefined &&
+    isActiveContainerUpdateOperationPhaseForStatus(args.status, args.previousPhase)
+  ) {
+    return args.previousPhase;
+  }
+  return args.status === 'queued' ? 'queued' : 'pulling';
+}
 
 function applyOperationPatch(event: Event) {
   const payload = (event as CustomEvent)?.detail;
@@ -1006,7 +1035,7 @@ function applyOperationPatch(event: Event) {
   }
   const { operationId, containerId, newContainerId, containerName, status, phase } =
     payload as Record<string, unknown>;
-  if (typeof status !== 'string') {
+  if (!isContainerUpdateOperationStatus(status)) {
     return;
   }
 
@@ -1021,16 +1050,41 @@ function applyOperationPatch(event: Event) {
   }
 
   const updated = { ...containers.value[idx] };
-  if (ACTIVE_OP_STATUSES.has(status)) {
-    updated.updateOperation = {
+  if (isActiveContainerUpdateOperationStatus(status)) {
+    const nextOperation = {
       ...(updated.updateOperation || {}),
       id: typeof operationId === 'string' ? operationId : (updated.updateOperation?.id ?? ''),
-      status: status as 'queued' | 'in-progress',
-      phase: (typeof phase === 'string' ? phase : status) as typeof updated.updateOperation.phase,
+      status,
+      phase: resolveActiveOperationPhase({
+        status,
+        phase,
+        previousPhase: updated.updateOperation?.phase,
+      }),
       updatedAt: new Date().toISOString(),
     };
+    updated.updateOperation = nextOperation;
+    if (status === 'in-progress' && typeof operationId === 'string' && operationId.length > 0) {
+      holdOperationDisplay({
+        operationId,
+        operation: nextOperation,
+        containerId: typeof containerId === 'string' ? containerId : undefined,
+        newContainerId: typeof newContainerId === 'string' ? newContainerId : undefined,
+        containerName: typeof containerName === 'string' ? containerName : undefined,
+      });
+    }
   } else {
     updated.updateOperation = undefined;
+    const target = {
+      operationId: typeof operationId === 'string' ? operationId : undefined,
+      containerId: typeof containerId === 'string' ? containerId : undefined,
+      newContainerId: typeof newContainerId === 'string' ? newContainerId : undefined,
+      containerName: typeof containerName === 'string' ? containerName : undefined,
+    };
+    if (status === 'succeeded') {
+      scheduleHeldOperationRelease(target);
+    } else {
+      clearHeldOperation(target);
+    }
   }
 
   const next = [...containers.value];
@@ -1052,6 +1106,7 @@ onMounted(() => {
 });
 onUnmounted(() => {
   clearSseContainerChangedTimer();
+  clearAllOperationDisplayHolds();
   document.removeEventListener('click', handleGlobalClick);
   globalThis.removeEventListener('dd:sse-scan-completed', sseScanCompletedListener);
   globalThis.removeEventListener('dd:sse-container-changed', sseContainerChangedListener);
