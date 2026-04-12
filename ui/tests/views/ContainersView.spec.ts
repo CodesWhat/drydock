@@ -2052,8 +2052,7 @@ describe('ContainersView', () => {
       }
     });
 
-    it('reloads immediately on dd:sse-update-operation-changed without debounce', async () => {
-      vi.useFakeTimers();
+    it('patches container updateOperation in-place on dd:sse-update-operation-changed', async () => {
       const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
       try {
         const c = makeContainer({ id: 'c1', name: 'nginx' });
@@ -2061,23 +2060,50 @@ describe('ContainersView', () => {
           [c],
           [{ id: 'c1', name: 'nginx', displayName: 'nginx' }],
         );
+        const vm = wrapper.vm as any;
         const operationListener = addEventListenerSpy.mock.calls.findLast(
           ([eventName]) => eventName === 'dd:sse-update-operation-changed',
         )?.[1] as EventListener | undefined;
 
         expect(operationListener).toBeTypeOf('function');
 
-        mockGetAllContainers.mockClear();
+        expect(vm.containers.find((c: any) => c.id === 'c1')?.updateOperation).toBeUndefined();
 
-        operationListener?.(new Event('dd:sse-update-operation-changed'));
-        await flushPromises();
+        operationListener?.(
+          new CustomEvent('dd:sse-update-operation-changed', {
+            detail: {
+              operationId: 'op-1',
+              containerId: 'c1',
+              containerName: 'nginx',
+              status: 'in-progress',
+              phase: 'pulling',
+            },
+          }),
+        );
 
-        expect(mockGetAllContainers).toHaveBeenCalledTimes(1);
+        const patched = vm.containers.find((c: any) => c.id === 'c1');
+        expect(patched?.updateOperation).toBeDefined();
+        expect(patched.updateOperation.status).toBe('in-progress');
+        expect(patched.updateOperation.phase).toBe('pulling');
+
+        operationListener?.(
+          new CustomEvent('dd:sse-update-operation-changed', {
+            detail: {
+              operationId: 'op-1',
+              containerId: 'c1',
+              containerName: 'nginx',
+              status: 'succeeded',
+              phase: 'succeeded',
+            },
+          }),
+        );
+
+        const cleared = vm.containers.find((c: any) => c.id === 'c1');
+        expect(cleared?.updateOperation).toBeUndefined();
 
         wrapper.unmount();
       } finally {
         addEventListenerSpy.mockRestore();
-        vi.useRealTimers();
       }
     });
   });

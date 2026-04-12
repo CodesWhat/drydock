@@ -195,7 +195,78 @@ describe('SseService', () => {
     eventListeners['dd:update-operation-changed']();
 
     expect(mockEventBus.emit).toHaveBeenCalledWith('container-changed');
-    expect(mockEventBus.emit).toHaveBeenCalledWith('update-operation-changed');
+    expect(mockEventBus.emit).toHaveBeenCalledWith('update-operation-changed', undefined);
+  });
+
+  it('parses operation payload from SSE event data', () => {
+    sseService.connect(mockEventBus);
+
+    const event = new MessageEvent('dd:update-operation-changed', {
+      data: JSON.stringify({
+        operationId: 'op-1',
+        containerName: 'nginx',
+        containerId: 'c1',
+        newContainerId: 'c1-new',
+        status: 'in-progress',
+        phase: 'pulling',
+      }),
+    });
+    eventListeners['dd:update-operation-changed'](event);
+
+    expect(mockEventBus.emit).toHaveBeenCalledWith('update-operation-changed', {
+      operationId: 'op-1',
+      containerName: 'nginx',
+      containerId: 'c1',
+      newContainerId: 'c1-new',
+      status: 'in-progress',
+      phase: 'pulling',
+    });
+  });
+
+  it('returns undefined for non-object operation payload', () => {
+    sseService.connect(mockEventBus);
+    const event = new MessageEvent('dd:update-operation-changed', { data: '"not-an-object"' });
+    eventListeners['dd:update-operation-changed'](event);
+    expect(mockEventBus.emit).toHaveBeenCalledWith('update-operation-changed', undefined);
+  });
+
+  it('returns undefined for operation payload missing status', () => {
+    sseService.connect(mockEventBus);
+    const event = new MessageEvent('dd:update-operation-changed', {
+      data: JSON.stringify({ operationId: 'op-1' }),
+    });
+    eventListeners['dd:update-operation-changed'](event);
+    expect(mockEventBus.emit).toHaveBeenCalledWith('update-operation-changed', undefined);
+  });
+
+  it('returns undefined for malformed JSON operation payload', () => {
+    sseService.connect(mockEventBus);
+    const event = new MessageEvent('dd:update-operation-changed', { data: '{bad json' });
+    eventListeners['dd:update-operation-changed'](event);
+    expect(mockEventBus.emit).toHaveBeenCalledWith('update-operation-changed', undefined);
+  });
+
+  it('coerces non-string optional fields to undefined in operation payload', () => {
+    sseService.connect(mockEventBus);
+    const event = new MessageEvent('dd:update-operation-changed', {
+      data: JSON.stringify({
+        operationId: 123,
+        containerName: null,
+        containerId: true,
+        newContainerId: {},
+        status: 'queued',
+        phase: 42,
+      }),
+    });
+    eventListeners['dd:update-operation-changed'](event);
+    expect(mockEventBus.emit).toHaveBeenCalledWith('update-operation-changed', {
+      operationId: undefined,
+      containerName: undefined,
+      containerId: undefined,
+      newContainerId: undefined,
+      status: 'queued',
+      phase: undefined,
+    });
   });
 
   it('emits agent-status-changed on agent lifecycle events', () => {

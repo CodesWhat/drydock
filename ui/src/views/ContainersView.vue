@@ -997,10 +997,51 @@ const sseContainerChangedListener = (() => {
     void handleSseScanCompleted();
   }, SSE_CONTAINER_CHANGED_DEBOUNCE_MS);
 }) as EventListener;
+const ACTIVE_OP_STATUSES = new Set(['queued', 'in-progress']);
+
+function applyOperationPatch(event: Event) {
+  const payload = (event as CustomEvent)?.detail;
+  if (!payload || typeof payload !== 'object') {
+    return;
+  }
+  const { operationId, containerId, newContainerId, containerName, status, phase } =
+    payload as Record<string, unknown>;
+  if (typeof status !== 'string') {
+    return;
+  }
+
+  const idx = containers.value.findIndex(
+    (c) =>
+      (typeof containerId === 'string' && c.id === containerId) ||
+      (typeof newContainerId === 'string' && c.id === newContainerId) ||
+      (typeof containerName === 'string' && c.name === containerName),
+  );
+  if (idx === -1) {
+    return;
+  }
+
+  const updated = { ...containers.value[idx] };
+  if (ACTIVE_OP_STATUSES.has(status)) {
+    updated.updateOperation = {
+      ...(updated.updateOperation || {}),
+      id: typeof operationId === 'string' ? operationId : (updated.updateOperation?.id ?? ''),
+      status: status as 'queued' | 'in-progress',
+      phase: (typeof phase === 'string' ? phase : status) as typeof updated.updateOperation.phase,
+      updatedAt: new Date().toISOString(),
+    };
+  } else {
+    updated.updateOperation = undefined;
+  }
+
+  const next = [...containers.value];
+  next[idx] = updated;
+  containers.value = next;
+}
+
 const sseConnectedListener = handleSseScanCompleted as EventListener;
-const sseUpdateOperationChangedListener = (() => {
+const sseUpdateOperationChangedListener = ((event: Event) => {
   clearSseContainerChangedTimer();
-  void loadContainers();
+  applyOperationPatch(event);
 }) as EventListener;
 onMounted(() => {
   document.addEventListener('click', handleGlobalClick);

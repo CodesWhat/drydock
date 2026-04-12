@@ -1191,8 +1191,8 @@ function scheduleSidebarDataRefresh() {
   }, 800);
 }
 
-function emitUiSseEvent(name: string) {
-  globalThis.dispatchEvent(new CustomEvent(name));
+function emitUiSseEvent(name: string, detail?: unknown) {
+  globalThis.dispatchEvent(new CustomEvent(name, detail !== undefined ? { detail } : undefined));
 }
 
 function handleSseEvent(event: string, payload?: unknown) {
@@ -1230,7 +1230,7 @@ function handleSseEvent(event: string, payload?: unknown) {
     return;
   }
   if (event === 'update-operation-changed') {
-    emitUiSseEvent('dd:sse-update-operation-changed');
+    emitUiSseEvent('dd:sse-update-operation-changed', payload);
     return;
   }
   if (event === 'agent-status-changed') {
