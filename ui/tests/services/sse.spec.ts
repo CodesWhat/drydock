@@ -189,12 +189,13 @@ describe('SseService', () => {
     expect(mockEventBus.emit).toHaveBeenCalledWith('container-changed');
   });
 
-  it('emits container-changed on update-operation changes', () => {
+  it('emits both container-changed and update-operation-changed on update-operation changes', () => {
     sseService.connect(mockEventBus);
 
     eventListeners['dd:update-operation-changed']();
 
     expect(mockEventBus.emit).toHaveBeenCalledWith('container-changed');
+    expect(mockEventBus.emit).toHaveBeenCalledWith('update-operation-changed');
   });
 
   it('emits agent-status-changed on agent lifecycle events', () => {

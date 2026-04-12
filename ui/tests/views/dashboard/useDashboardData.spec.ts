@@ -240,6 +240,17 @@ describe('useDashboardData', () => {
     expect(mocks.getAllContainers).toHaveBeenCalledTimes(1);
   });
 
+  it('performs immediate data refresh on dd:sse-update-operation-changed without debounce', async () => {
+    const { state } = await mountDashboardData();
+    mocks.getAllContainers.mockClear();
+
+    globalThis.dispatchEvent(new CustomEvent('dd:sse-update-operation-changed'));
+    await flushPromises();
+
+    expect(mocks.getAllContainers).toHaveBeenCalledTimes(1);
+    expect(state.error.value).toBeNull();
+  });
+
   it('sets error for a failed foreground fetch and clears loading', async () => {
     mocks.getAllContainers.mockRejectedValue(new Error('containers failed'));
 

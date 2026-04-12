@@ -83,6 +83,7 @@ class SseService {
 
     this.eventSource.addEventListener('dd:update-operation-changed', () => {
       this.eventBus?.emit('container-changed');
+      this.eventBus?.emit('update-operation-changed');
     });
 
     this.eventSource.addEventListener('dd:agent-connected', () => {

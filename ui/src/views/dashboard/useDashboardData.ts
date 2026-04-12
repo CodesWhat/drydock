@@ -245,11 +245,15 @@ export function useDashboardData() {
   });
 
   const fullRefreshListener = (() => realtimeRefreshScheduler.schedule('full')) as EventListener;
+  const operationRefreshListener = (() => {
+    void fetchDashboardData({ background: true });
+  }) as EventListener;
   const visibilityChangeListener = maintenanceCountdownController.sync as EventListener;
   let stopMaintenanceWindowWatch: ReturnType<typeof watch> | undefined;
 
   onMounted(async () => {
     globalThis.addEventListener('dd:sse-container-changed', fullRefreshListener);
+    globalThis.addEventListener('dd:sse-update-operation-changed', operationRefreshListener);
     globalThis.addEventListener('dd:sse-scan-completed', fullRefreshListener);
     globalThis.addEventListener('dd:sse-connected', fullRefreshListener);
     document.addEventListener('visibilitychange', visibilityChangeListener);
@@ -261,6 +265,7 @@ export function useDashboardData() {
 
   onUnmounted(() => {
     globalThis.removeEventListener('dd:sse-container-changed', fullRefreshListener);
+    globalThis.removeEventListener('dd:sse-update-operation-changed', operationRefreshListener);
     globalThis.removeEventListener('dd:sse-scan-completed', fullRefreshListener);
     globalThis.removeEventListener('dd:sse-connected', fullRefreshListener);
     document.removeEventListener('visibilitychange', visibilityChangeListener);

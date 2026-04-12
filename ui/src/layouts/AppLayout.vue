@@ -1229,6 +1229,10 @@ function handleSseEvent(event: string, payload?: unknown) {
     scheduleSidebarDataRefresh();
     return;
   }
+  if (event === 'update-operation-changed') {
+    emitUiSseEvent('dd:sse-update-operation-changed');
+    return;
+  }
   if (event === 'agent-status-changed') {
     emitUiSseEvent('dd:sse-agent-status-changed');
     return;
