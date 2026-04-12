@@ -1,3 +1,5 @@
+import { createWebSocketStreamConnection } from '@/services/websocket-stream-connection';
+
 type LogStreamTail = number | 'all';
 
 export interface ContainerLogFrame {
@@ -42,12 +44,19 @@ function isLogFrame(payload: unknown): payload is ContainerLogFrame {
     return false;
   }
   const frame = payload as Record<string, unknown>;
-  return (
-    (frame.type === 'stdout' || frame.type === 'stderr') &&
-    typeof frame.ts === 'string' &&
-    typeof frame.displayTs === 'string' &&
-    typeof frame.line === 'string'
-  );
+  if (frame.type !== 'stdout' && frame.type !== 'stderr') {
+    return false;
+  }
+  if (typeof frame.ts !== 'string') {
+    return false;
+  }
+  if (typeof frame.displayTs !== 'string') {
+    return false;
+  }
+  if (typeof frame.line !== 'string') {
+    return false;
+  }
+  return true;
 }
 
 function parseLogFrameMessage(data: unknown): ContainerLogFrame | null {
@@ -103,110 +112,16 @@ export function buildContainerLogStreamUrl(
 export function createContainerLogStreamConnection(
   options: ContainerLogStreamConnectionOptions,
 ): ContainerLogStreamConnection {
-  const webSocketFactory = options.webSocketFactory ?? ((url) => new WebSocket(url));
-  const locationRef = options.location ?? window.location;
-  let query: ContainerLogQuery = { ...options.query };
-  let paused = false;
-  let closed = false;
-  let socket: WebSocket | undefined;
-
-  function closeSocket(code: number, reason: string) {
-    if (!socket) {
-      return;
-    }
-
-    const activeSocket = socket;
-    socket = undefined;
-    activeSocket.close(code, reason);
-  }
-
-  function isActiveSocket(candidate: WebSocket): boolean {
-    return socket === candidate;
-  }
-
-  function notifyDisconnectedIfActive(candidate: WebSocket) {
-    if (!isActiveSocket(candidate) || paused || closed) {
-      return;
-    }
-    options.onStatus?.('disconnected');
-  }
-
-  function connect() {
-    if (closed || paused) {
-      return;
-    }
-
-    const streamUrl = buildContainerLogStreamUrl(options.containerId, query, locationRef);
-    const nextSocket = webSocketFactory(streamUrl);
-    socket = nextSocket;
-
-    nextSocket.onopen = () => {
-      if (!isActiveSocket(nextSocket)) {
-        return;
-      }
-      options.onStatus?.('connected');
-    };
-    nextSocket.onmessage = (event) => {
-      if (!isActiveSocket(nextSocket)) {
-        return;
-      }
-
-      const frame = parseLogFrameMessage(event.data);
-      if (frame) {
-        options.onMessage(frame);
-      }
-    };
-    nextSocket.onerror = () => {
-      notifyDisconnectedIfActive(nextSocket);
-    };
-    nextSocket.onclose = () => {
-      if (!isActiveSocket(nextSocket)) {
-        return;
-      }
-      const shouldNotify = !paused && !closed;
-      socket = undefined;
-      if (shouldNotify) {
-        options.onStatus?.('disconnected');
-      }
-    };
-  }
-
-  connect();
-
-  return {
-    update(nextQuery) {
-      query = {
-        ...query,
-        ...nextQuery,
-      };
-      closeSocket(1000, 'reconnect');
-      connect();
-    },
-    pause() {
-      if (paused || closed) {
-        return;
-      }
-      paused = true;
-      closeSocket(1000, 'pause');
-    },
-    resume() {
-      if (!paused || closed) {
-        return;
-      }
-      paused = false;
-      connect();
-    },
-    close() {
-      if (closed) {
-        return;
-      }
-      closed = true;
-      closeSocket(1000, 'manual-close');
-    },
-    isPaused() {
-      return paused;
-    },
-  };
+  return createWebSocketStreamConnection<ContainerLogQuery, ContainerLogStreamFrame>({
+    query: options.query,
+    onMessage: options.onMessage,
+    onStatus: options.onStatus,
+    webSocketFactory: options.webSocketFactory,
+    location: options.location,
+    buildUrl: (query, locationRef) =>
+      buildContainerLogStreamUrl(options.containerId, query, locationRef),
+    parseMessage: parseLogFrameMessage,
+  });
 }
 
 export async function downloadContainerLogs(

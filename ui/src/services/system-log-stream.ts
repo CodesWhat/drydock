@@ -1,3 +1,5 @@
+import { createWebSocketStreamConnection } from '@/services/websocket-stream-connection';
+
 export interface SystemLogEntry {
   timestamp: number;
   displayTimestamp: string;
@@ -35,13 +37,22 @@ function isSystemLogEntry(payload: unknown): payload is SystemLogEntry {
     return false;
   }
   const entry = payload as Record<string, unknown>;
-  return (
-    typeof entry.timestamp === 'number' &&
-    typeof entry.displayTimestamp === 'string' &&
-    typeof entry.level === 'string' &&
-    typeof entry.component === 'string' &&
-    typeof entry.msg === 'string'
-  );
+  if (typeof entry.timestamp !== 'number') {
+    return false;
+  }
+  if (typeof entry.displayTimestamp !== 'string') {
+    return false;
+  }
+  if (typeof entry.level !== 'string') {
+    return false;
+  }
+  if (typeof entry.component !== 'string') {
+    return false;
+  }
+  if (typeof entry.msg !== 'string') {
+    return false;
+  }
+  return true;
 }
 
 function parseSystemLogMessage(data: unknown): SystemLogEntry | null {
@@ -76,103 +87,13 @@ export function buildSystemLogStreamUrl(
 export function createSystemLogStreamConnection(
   options: SystemLogStreamConnectionOptions,
 ): SystemLogStreamConnection {
-  const webSocketFactory = options.webSocketFactory ?? ((url) => new WebSocket(url));
-  const locationRef = options.location ?? window.location;
-  let query: SystemLogStreamQuery = { ...options.query };
-  let paused = false;
-  let closed = false;
-  let socket: WebSocket | undefined;
-
-  function closeSocket(code: number, reason: string) {
-    if (!socket) {
-      return;
-    }
-    const activeSocket = socket;
-    socket = undefined;
-    activeSocket.close(code, reason);
-  }
-
-  function isActiveSocket(candidate: WebSocket): boolean {
-    return socket === candidate;
-  }
-
-  function notifyDisconnectedIfActive(candidate: WebSocket) {
-    if (!isActiveSocket(candidate) || paused || closed) {
-      return;
-    }
-    options.onStatus?.('disconnected');
-  }
-
-  function connect() {
-    if (closed || paused) {
-      return;
-    }
-
-    const streamUrl = buildSystemLogStreamUrl(query, locationRef);
-    const nextSocket = webSocketFactory(streamUrl);
-    socket = nextSocket;
-
-    nextSocket.onopen = () => {
-      if (!isActiveSocket(nextSocket)) {
-        return;
-      }
-      options.onStatus?.('connected');
-    };
-    nextSocket.onmessage = (event) => {
-      if (!isActiveSocket(nextSocket)) {
-        return;
-      }
-      const entry = parseSystemLogMessage(event.data);
-      if (entry) {
-        options.onMessage(entry);
-      }
-    };
-    nextSocket.onerror = () => {
-      notifyDisconnectedIfActive(nextSocket);
-    };
-    nextSocket.onclose = () => {
-      if (!isActiveSocket(nextSocket)) {
-        return;
-      }
-      const shouldNotify = !paused && !closed;
-      socket = undefined;
-      if (shouldNotify) {
-        options.onStatus?.('disconnected');
-      }
-    };
-  }
-
-  connect();
-
-  return {
-    update(nextQuery) {
-      query = { ...query, ...nextQuery };
-      closeSocket(1000, 'reconnect');
-      connect();
-    },
-    pause() {
-      if (paused || closed) {
-        return;
-      }
-      paused = true;
-      closeSocket(1000, 'pause');
-    },
-    resume() {
-      if (!paused || closed) {
-        return;
-      }
-      paused = false;
-      connect();
-    },
-    close() {
-      if (closed) {
-        return;
-      }
-      closed = true;
-      closeSocket(1000, 'manual-close');
-    },
-    isPaused() {
-      return paused;
-    },
-  };
+  return createWebSocketStreamConnection<SystemLogStreamQuery, SystemLogEntry>({
+    query: options.query,
+    onMessage: options.onMessage,
+    onStatus: options.onStatus,
+    webSocketFactory: options.webSocketFactory,
+    location: options.location,
+    buildUrl: buildSystemLogStreamUrl,
+    parseMessage: parseSystemLogMessage,
+  });
 }
