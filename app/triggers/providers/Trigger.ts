@@ -17,7 +17,6 @@ import * as storeContainer from '../../store/container.js';
 import * as notificationStore from '../../store/notification.js';
 import {
   type AcceptedContainerUpdateRequest,
-  buildAcceptedUpdateRuntimeContext,
   enqueueContainerUpdate,
   enqueueContainerUpdates,
   runAcceptedContainerUpdates,
@@ -1870,14 +1869,7 @@ class Trigger extends Component {
       return;
     }
 
-    await runAcceptedContainerUpdates(accepted, {
-      executeAcceptedUpdates: async (acceptedUpdates) => {
-        await this.triggerBatch(
-          acceptedUpdates.map((entry) => entry.container),
-          buildAcceptedUpdateRuntimeContext(acceptedUpdates),
-        );
-      },
-    });
+    await runAcceptedContainerUpdates(accepted);
   }
 
   getMetadata(): Record<string, unknown> {

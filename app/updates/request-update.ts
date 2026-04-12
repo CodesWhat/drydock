@@ -60,7 +60,6 @@ interface EnqueueContainerUpdateOptions {
 }
 
 interface RunAcceptedContainerUpdatesOptions {
-  executeAcceptedUpdates?: (accepted: AcceptedContainerUpdateRequest[]) => Promise<void>;
   onSuccess?: (accepted: AcceptedContainerUpdateRequest) => Promise<void> | void;
   onFailure?: (accepted: AcceptedContainerUpdateRequest, error: unknown) => Promise<void> | void;
 }
@@ -270,12 +269,6 @@ export async function enqueueContainerUpdates(
   };
 }
 
-async function defaultExecuteAcceptedUpdates(accepted: AcceptedContainerUpdateRequest[]) {
-  for (const entry of accepted) {
-    await entry.trigger.trigger(entry.container, { operationId: entry.operationId });
-  }
-}
-
 export async function runAcceptedContainerUpdates(
   accepted: AcceptedContainerUpdateRequest[],
   options: RunAcceptedContainerUpdatesOptions = {},
@@ -284,23 +277,25 @@ export async function runAcceptedContainerUpdates(
     return;
   }
 
-  try {
-    await (options.executeAcceptedUpdates || defaultExecuteAcceptedUpdates)(accepted);
-    if (options.onSuccess) {
-      for (const entry of accepted) {
+  let firstError: unknown;
+
+  for (const entry of accepted) {
+    try {
+      await entry.trigger.trigger(entry.container, { operationId: entry.operationId });
+      if (options.onSuccess) {
         await options.onSuccess(entry);
       }
-    }
-  } catch (error: unknown) {
-    for (const entry of accepted) {
+    } catch (error: unknown) {
       markAcceptedQueuedOperationFailed(entry.operationId, error);
-    }
-    if (options.onFailure) {
-      for (const entry of accepted) {
+      if (options.onFailure) {
         await options.onFailure(entry, error);
       }
+      firstError ??= error;
     }
-    throw error;
+  }
+
+  if (firstError) {
+    throw firstError;
   }
 }
 

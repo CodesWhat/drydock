@@ -158,47 +158,37 @@ describe('request-update', () => {
     );
   });
 
-  test('runAcceptedContainerUpdates marks still-queued accepted operations failed when batch execution throws', async () => {
+  test('runAcceptedContainerUpdates isolates per-entry failures so one failure does not cascade to the rest', async () => {
     mockGetOperationById.mockImplementation((id: string) => ({
       id,
       status: 'queued',
       phase: 'queued',
     }));
-    const executeAcceptedUpdates = vi.fn().mockRejectedValue(new Error('batch failed'));
+    const triggerNginx = vi.fn().mockRejectedValue(new Error('pull denied'));
+    const triggerRedis = vi.fn().mockResolvedValue(undefined);
 
     await expect(
-      runAcceptedContainerUpdates(
-        [
-          {
-            operationId: 'op-1',
-            container: createContainer({ id: 'c1', name: 'nginx' }),
-            trigger: { type: 'docker', trigger: vi.fn() },
-          },
-          {
-            operationId: 'op-2',
-            container: createContainer({ id: 'c2', name: 'redis' }),
-            trigger: { type: 'docker', trigger: vi.fn() },
-          },
-        ],
-        { executeAcceptedUpdates },
-      ),
-    ).rejects.toThrow('batch failed');
-
-    expect(executeAcceptedUpdates).toHaveBeenCalledWith(
-      expect.arrayContaining([
-        expect.objectContaining({ operationId: 'op-1' }),
-        expect.objectContaining({ operationId: 'op-2' }),
+      runAcceptedContainerUpdates([
+        {
+          operationId: 'op-1',
+          container: createContainer({ id: 'c1', name: 'nginx' }),
+          trigger: { type: 'docker', trigger: triggerNginx },
+        },
+        {
+          operationId: 'op-2',
+          container: createContainer({ id: 'c2', name: 'redis' }),
+          trigger: { type: 'docker', trigger: triggerRedis },
+        },
       ]),
-    );
+    ).rejects.toThrow('pull denied');
+
+    expect(triggerNginx).toHaveBeenCalled();
+    expect(triggerRedis).toHaveBeenCalled();
     expect(mockMarkOperationTerminal).toHaveBeenCalledWith('op-1', {
       status: 'failed',
       phase: 'failed',
-      lastError: 'batch failed',
+      lastError: 'pull denied',
     });
-    expect(mockMarkOperationTerminal).toHaveBeenCalledWith('op-2', {
-      status: 'failed',
-      phase: 'failed',
-      lastError: 'batch failed',
-    });
+    expect(mockMarkOperationTerminal).not.toHaveBeenCalledWith('op-2', expect.anything());
   });
 });
