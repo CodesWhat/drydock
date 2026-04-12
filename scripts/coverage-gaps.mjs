@@ -38,6 +38,69 @@ function normalizeFilePath(repoRoot, filename) {
   return path.normalize(path.isAbsolute(filename) ? filename : path.resolve(repoRoot, filename));
 }
 
+function createLcovDetailEntry() {
+  return {
+    uncoveredBranchLines: new Set(),
+    uncoveredBranches: [],
+    uncoveredLines: new Set(),
+  };
+}
+
+function ensureLcovDetail(details, currentFile) {
+  if (!details.has(currentFile)) {
+    details.set(currentFile, createLcovDetailEntry());
+  }
+  return details.get(currentFile);
+}
+
+function handleLcovDataLine(details, currentFile, line) {
+  const [lineNumber, hits] = line
+    .slice(3)
+    .split(',', 2)
+    .map((value) => Number.parseInt(value, 10));
+  if (hits === 0) {
+    ensureLcovDetail(details, currentFile).uncoveredLines.add(lineNumber);
+  }
+}
+
+function handleLcovBranchLine(details, currentFile, line) {
+  const [lineNumberText, blockNumberText, branchNumberText, hitsText] = line.slice(5).split(',');
+  const lineNumber = Number.parseInt(lineNumberText, 10);
+  const hits = hitsText === '-' ? 0 : Number.parseInt(hitsText, 10);
+  if (hits !== 0) {
+    return;
+  }
+
+  const entry = ensureLcovDetail(details, currentFile);
+  entry.uncoveredBranchLines.add(lineNumber);
+  entry.uncoveredBranches.push({
+    line: lineNumber,
+    block: Number.parseInt(blockNumberText, 10),
+    branch: Number.parseInt(branchNumberText, 10),
+  });
+}
+
+function processLcovLine(repoRoot, details, currentFile, line) {
+  if (line.startsWith('SF:')) {
+    return normalizeFilePath(repoRoot, line.slice(3));
+  }
+
+  if (!currentFile) {
+    return currentFile;
+  }
+
+  if (line.startsWith('DA:')) {
+    handleLcovDataLine(details, currentFile, line);
+    return currentFile;
+  }
+
+  if (line.startsWith('BRDA:')) {
+    handleLcovBranchLine(details, currentFile, line);
+  }
+
+  return currentFile;
+}
+
 function parseLcovFile(repoRoot, lcovPath) {
   const details = new Map();
   if (!fs.existsSync(lcovPath)) {
@@ -48,49 +111,7 @@ function parseLcovFile(repoRoot, lcovPath) {
   let currentFile = null;
 
   for (const line of lines) {
-    if (line.startsWith('SF:')) {
-      currentFile = normalizeFilePath(repoRoot, line.slice(3));
-      if (!details.has(currentFile)) {
-        details.set(currentFile, {
-          uncoveredBranchLines: new Set(),
-          uncoveredBranches: [],
-          uncoveredLines: new Set(),
-        });
-      }
-      continue;
-    }
-
-    if (!currentFile) {
-      continue;
-    }
-
-    if (line.startsWith('DA:')) {
-      const [lineNumber, hits] = line
-        .slice(3)
-        .split(',', 2)
-        .map((value) => Number.parseInt(value, 10));
-      if (hits === 0) {
-        details.get(currentFile).uncoveredLines.add(lineNumber);
-      }
-      continue;
-    }
-
-    if (line.startsWith('BRDA:')) {
-      const [lineNumberText, blockNumberText, branchNumberText, hitsText] = line
-        .slice(5)
-        .split(',');
-      const lineNumber = Number.parseInt(lineNumberText, 10);
-      const hits = hitsText === '-' ? 0 : Number.parseInt(hitsText, 10);
-      if (hits === 0) {
-        const entry = details.get(currentFile);
-        entry.uncoveredBranchLines.add(lineNumber);
-        entry.uncoveredBranches.push({
-          line: lineNumber,
-          block: Number.parseInt(blockNumberText, 10),
-          branch: Number.parseInt(branchNumberText, 10),
-        });
-      }
-    }
+    currentFile = processLcovLine(repoRoot, details, currentFile, line);
   }
 
   return details;
@@ -98,6 +119,30 @@ function parseLcovFile(repoRoot, lcovPath) {
 
 function toMetricGap(data) {
   return { pct: data.pct, covered: data.covered, total: data.total };
+}
+
+const COVERAGE_METRICS = ['lines', 'statements', 'branches', 'functions'];
+
+function collectUncoveredMetrics(data) {
+  const uncovered = {};
+
+  for (const metric of COVERAGE_METRICS) {
+    if (data[metric]?.pct < 100) {
+      uncovered[metric] = toMetricGap(data[metric]);
+    }
+  }
+
+  return Object.keys(uncovered).length > 0 ? uncovered : null;
+}
+
+function buildGapEntry(repoRoot, normalized, uncovered, detail) {
+  return {
+    file: path.relative(repoRoot, normalized),
+    ...uncovered,
+    uncoveredLines: detail ? Array.from(detail.uncoveredLines).sort((a, b) => a - b) : [],
+    uncoveredBranchLines: detail ? Array.from(detail.uncoveredBranchLines).sort((a, b) => a - b) : [],
+    uncoveredBranches: detail ? detail.uncoveredBranches : [],
+  };
 }
 
 function collectGaps(repoRoot, workspace) {
@@ -117,32 +162,15 @@ function collectGaps(repoRoot, workspace) {
       continue;
     }
 
-    const uncovered = {};
-    let hasGap = false;
-
-    for (const metric of ['lines', 'statements', 'branches', 'functions']) {
-      if (data[metric]?.pct < 100) {
-        uncovered[metric] = toMetricGap(data[metric]);
-        hasGap = true;
-      }
-    }
-
-    if (!hasGap) {
+    const uncovered = collectUncoveredMetrics(data);
+    if (!uncovered) {
       continue;
     }
 
     const normalized = normalizeFilePath(repoRoot, file);
     const detail = lcovDetails.get(normalized);
 
-    gaps.push({
-      file: path.relative(repoRoot, normalized),
-      ...uncovered,
-      uncoveredLines: detail ? Array.from(detail.uncoveredLines).sort((a, b) => a - b) : [],
-      uncoveredBranchLines: detail
-        ? Array.from(detail.uncoveredBranchLines).sort((a, b) => a - b)
-        : [],
-      uncoveredBranches: detail ? detail.uncoveredBranches : [],
-    });
+    gaps.push(buildGapEntry(repoRoot, normalized, uncovered, detail));
   }
 
   return gaps.sort((left, right) => left.file.localeCompare(right.file));
