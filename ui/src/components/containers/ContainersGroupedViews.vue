@@ -136,6 +136,21 @@ function isContainerQueued(container: { id?: unknown; name?: unknown }) {
   return isContainerUpdateQueued(container);
 }
 
+function blockedUpdateTooltip(container: {
+  newTag?: string | null;
+  updateBouncer?: string;
+  updateSecuritySummary?: { critical?: number; high?: number };
+}) {
+  const tag = container.newTag ?? 'update';
+  const summary = container.updateSecuritySummary;
+  const critical = summary?.critical ?? 0;
+  if (critical > 0) {
+    const noun = critical === 1 ? 'critical CVE' : 'critical CVEs';
+    return `Blocked: ${tag} (${critical} ${noun})`;
+  }
+  return `Blocked: ${tag}`;
+}
+
 function getGroupByKey(groupKey: string) {
   return renderGroups.value.find((group) => group.key === groupKey);
 }
@@ -426,6 +441,16 @@ watchEffect(() => {
           </AppBadge>
           <AppBadge v-else-if="!c.updateKind && !c.updateMaturity && !c.suggestedTag" size="xs" v-tooltip.top="'Up to date'" :custom="{ bg: 'var(--dd-success-muted)', text: 'var(--dd-success)' }">
             <AppIcon name="up-to-date" :size="12" />
+          </AppBadge>
+          <AppBadge
+            v-if="c.newTag && c.bouncer === 'blocked'"
+            tone="danger"
+            size="xs"
+            class="px-1.5 py-0"
+            v-tooltip.top="tt(blockedUpdateTooltip(c))"
+          >
+            <AppIcon name="lock" :size="12" class="mr-0.5" />
+            Blocked
           </AppBadge>
           <UpdateMaturityBadge :maturity="c.updateMaturity" :tooltip="c.updateMaturityTooltip" />
           <SuggestedTagBadge :tag="c.suggestedTag" :current-tag="c.currentTag" />

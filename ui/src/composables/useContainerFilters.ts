@@ -80,6 +80,9 @@ function matchesKindFilter(container: Container, selectedKind: string): boolean 
   if (selectedKind === 'any') {
     return Boolean(container.newTag);
   }
+  if (selectedKind === 'blocked') {
+    return Boolean(container.newTag) && container.bouncer === 'blocked';
+  }
   return container.updateKind === selectedKind;
 }
 

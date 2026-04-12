@@ -61,6 +61,7 @@ const FILTER_KIND_LABELS: Record<string, string> = {
   minor: 'Minor',
   patch: 'Patch',
   digest: 'Digest',
+  blocked: 'Blocked',
 };
 
 const activeFilterChips = computed(() => {
@@ -156,6 +157,7 @@ const activeFilterChips = computed(() => {
           <option value="minor">Minor</option>
           <option value="patch">Patch</option>
           <option value="digest">Digest</option>
+          <option value="blocked">Blocked</option>
         </select>
         <label
           class="flex items-center gap-1.5 px-2 py-1.5 dd-rounded text-2xs-plus font-semibold uppercase tracking-wide cursor-pointer dd-bg dd-text select-none"
