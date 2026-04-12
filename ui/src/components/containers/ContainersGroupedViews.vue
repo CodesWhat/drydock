@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, watchEffect } from 'vue';
 import AppBadge from '../AppBadge.vue';
 import AppIconButton from '../AppIconButton.vue';
 import type { ContainersViewRenderGroup } from './containersViewTemplateContext';
 import { useContainersViewTemplateContext } from './containersViewTemplateContext';
+import { useUpdateBatches } from '../../composables/useUpdateBatches';
 import { getContainerViewKey } from '../../utils/container-view-key';
 import { imageAge } from '../../utils/audit-helpers';
 import UpdateMaturityBadge from './UpdateMaturityBadge.vue';
@@ -17,12 +18,10 @@ const {
   groupByStack,
   toggleGroupCollapse,
   collapsedGroups,
-  groupUpdateInProgress,
   containerActionsEnabled,
   containerActionsDisabledReason,
   isContainerUpdateInProgress,
   isContainerUpdateQueued,
-  getContainerUpdateSequenceLabel,
   updateAllInGroup,
   tt,
   containerViewMode,
@@ -61,6 +60,7 @@ const {
   filterSearch,
   clearFilters,
 } = useContainersViewTemplateContext();
+const { batches, clearBatch, getBatch } = useUpdateBatches();
 
 const openActionsContainer = computed(
   () => displayContainers.value.find((container) => container.id === openActionsMenu.value) ?? null,
@@ -136,20 +136,39 @@ function isContainerQueued(container: { id?: unknown; name?: unknown }) {
   return isContainerUpdateQueued(container);
 }
 
-function formatContainerUpdateLabel(
-  container: { id?: unknown; name?: unknown },
-  baseLabel: 'Updating' | 'Queued',
-) {
-  const sequence = getContainerUpdateSequenceLabel(container);
-  return sequence ? `${baseLabel} ${sequence}` : baseLabel;
+function getGroupByKey(groupKey: string) {
+  return renderGroups.value.find((group) => group.key === groupKey);
+}
+
+function getGroupActiveUpdateCount(group: ContainersViewRenderGroup) {
+  return group.containers.filter((container) => {
+    return isContainerUpdating(container) || isContainerQueued(container);
+  }).length;
+}
+
+function isGroupUpdateInProgress(group: ContainersViewRenderGroup) {
+  return getGroupActiveUpdateCount(group) > 0;
+}
+
+function getGroupFrozenTotal(group: ContainersViewRenderGroup) {
+  return getBatch(group.key)?.frozenTotal;
+}
+
+function getGroupDoneCount(group: ContainersViewRenderGroup) {
+  const batch = getBatch(group.key);
+  if (!batch) {
+    return undefined;
+  }
+
+  return Math.max(batch.frozenTotal - getGroupActiveUpdateCount(group), 0);
 }
 
 function getContainerStatusLabel(container: { id?: unknown; name?: unknown; status?: string }) {
   if (isContainerUpdating(container)) {
-    return formatContainerUpdateLabel(container, 'Updating');
+    return 'Updating';
   }
   if (isContainerQueued(container)) {
-    return formatContainerUpdateLabel(container, 'Queued');
+    return 'Queued';
   }
   return container.status ?? 'unknown';
 }
@@ -199,9 +218,10 @@ function tableRowClass(row: Record<string, unknown>) {
   if (!isContainerTableRow(typedRow)) {
     return '';
   }
+  const group = getGroupByKey(typedRow.__groupKey);
   return isContainerUpdating(typedRow) ||
     isContainerQueued(typedRow) ||
-    groupUpdateInProgress.value.has(typedRow.__groupKey)
+    (group ? isGroupUpdateInProgress(group) : false)
     ? 'opacity-50 pointer-events-none transition-opacity duration-300'
     : '';
 }
@@ -217,6 +237,18 @@ function selectTableRow(row: Record<string, unknown>) {
   }
   selectContainer(typedRow.__source);
 }
+
+watchEffect(() => {
+  batches.value;
+  renderGroups.value.forEach((group) => {
+    if (!getBatch(group.key)) {
+      return;
+    }
+    if (getGroupActiveUpdateCount(group) === 0) {
+      clearBatch(group.key);
+    }
+  });
+});
 </script>
 
 <template>
@@ -248,7 +280,9 @@ function selectTableRow(row: Record<string, unknown>) {
             :collapsed="collapsedGroups.has(row.group.key)"
             :container-actions-enabled="containerActionsEnabled"
             :container-actions-disabled-reason="containerActionsDisabledReason"
-            :in-progress="groupUpdateInProgress.has(row.group.key)"
+            :in-progress="isGroupUpdateInProgress(row.group)"
+            :frozen-total="getGroupFrozenTotal(row.group)"
+            :done-count="getGroupDoneCount(row.group)"
             :tt="tt"
             @toggle="toggleGroupCollapse"
             @update-all="updateAllInGroup($event)"
@@ -545,7 +579,9 @@ function selectTableRow(row: Record<string, unknown>) {
             :collapsed="collapsedGroups.has(group.key)"
             :container-actions-enabled="containerActionsEnabled"
             :container-actions-disabled-reason="containerActionsDisabledReason"
-            :in-progress="groupUpdateInProgress.has(group.key)"
+            :in-progress="isGroupUpdateInProgress(group)"
+            :frozen-total="getGroupFrozenTotal(group)"
+            :done-count="getGroupDoneCount(group)"
             :tt="tt"
             @toggle="toggleGroupCollapse"
             @update-all="updateAllInGroup($event)"
@@ -562,7 +598,7 @@ function selectTableRow(row: Record<string, unknown>) {
                     @item-click="selectContainer($event)">
         <template #card="{ item: c }">
           <!-- Card header -->
-          <div class="px-4 pt-4 pb-2 flex items-start justify-between" :class="{ 'opacity-50': isContainerUpdating(c) || isContainerQueued(c) || groupUpdateInProgress.has(group.key) }">
+          <div class="px-4 pt-4 pb-2 flex items-start justify-between" :class="{ 'opacity-50': isContainerUpdating(c) || isContainerQueued(c) || isGroupUpdateInProgress(group) }">
             <div class="flex items-center gap-2.5 min-w-0">
               <AppIcon v-if="isContainerUpdating(c)" name="spinner" :size="16" class="dd-spin dd-text-muted shrink-0" />
               <AppIcon v-else-if="isContainerQueued(c)" name="clock" :size="16" class="dd-text-muted shrink-0" />
@@ -612,7 +648,7 @@ function selectTableRow(row: Record<string, unknown>) {
           </div>
 
           <!-- Card body -- inline Current / Latest -->
-          <div class="px-4 py-3 min-w-0" :class="{ 'opacity-50': isContainerUpdating(c) || isContainerQueued(c) || groupUpdateInProgress.has(group.key) }">
+          <div class="px-4 py-3 min-w-0" :class="{ 'opacity-50': isContainerUpdating(c) || isContainerQueued(c) || isGroupUpdateInProgress(group) }">
             <div class="flex items-center gap-2 flex-wrap min-w-0">
               <span class="text-2xs-plus dd-text-muted shrink-0">Current</span>
               <CopyableTag :tag="c.currentTag" class="text-xs font-bold dd-text truncate max-w-[120px]" @click.stop>
@@ -667,13 +703,13 @@ function selectTableRow(row: Record<string, unknown>) {
               class="mt-2 inline-flex items-center gap-1 text-2xs"
               style="color: var(--dd-warning);">
               <AppIcon name="spinner" :size="12" class="dd-spin shrink-0" />
-              {{ formatContainerUpdateLabel(c, 'Updating') }}
+              Updating
             </div>
             <div
               v-else-if="isContainerQueued(c)"
               class="mt-2 inline-flex items-center gap-1 text-2xs dd-text-muted">
               <AppIcon name="clock" :size="12" class="shrink-0" />
-              {{ formatContainerUpdateLabel(c, 'Queued') }}
+              Queued
             </div>
             <div v-if="c.suggestedTag || c.releaseNotes || c.releaseLink" class="flex items-center gap-2 flex-wrap mt-2">
               <SuggestedTagBadge :tag="c.suggestedTag" :current-tag="c.currentTag" />
@@ -753,13 +789,13 @@ function selectTableRow(row: Record<string, unknown>) {
               class="text-2xs mt-0.5 inline-flex items-center gap-1"
               style="color: var(--dd-warning);">
               <AppIcon name="spinner" :size="10" class="dd-spin shrink-0" />
-              {{ formatContainerUpdateLabel(c, 'Updating') }}
+              Updating
             </div>
             <div
               v-else-if="isContainerQueued(c)"
               class="text-2xs mt-0.5 inline-flex items-center gap-1 dd-text-muted">
               <AppIcon name="clock" :size="10" class="shrink-0" />
-              {{ formatContainerUpdateLabel(c, 'Queued') }}
+              Queued
             </div>
             <div
               v-else-if="!c.newTag && c.noUpdateReason"

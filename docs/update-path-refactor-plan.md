@@ -414,6 +414,7 @@ Recommended implementation order:
 2. Finish the discriminated union and terminal helper cleanup.
 3. Add the backend queue abstraction.
 4. Move UI bulk flows to backend-owned batch enqueue.
+   The queue-status presentation follow-up for that UI work lives in `docs/queue-ux-refactor-plan.md`.
 5. Add outer-wrapper finalization and startup reconciliation.
 6. Add `kind` support and integrate self-update into the shared operation framework.
 

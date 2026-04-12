@@ -39,33 +39,6 @@ interface Props {
 
 const props = defineProps<Props>();
 
-type BackendRowSequence = DashboardUpdateSequenceEntry & {
-  batchId: string;
-};
-
-function getBackendRowSequence(row: Record<string, unknown>): BackendRowSequence | undefined {
-  const batchId = typeof row.batchId === 'string' ? row.batchId : undefined;
-  const queuePosition = typeof row.queuePosition === 'number' ? row.queuePosition : undefined;
-  const queueTotal = typeof row.queueTotal === 'number' ? row.queueTotal : undefined;
-
-  if (
-    !batchId ||
-    !Number.isSafeInteger(queuePosition) ||
-    !Number.isSafeInteger(queueTotal) ||
-    queuePosition <= 0 ||
-    queueTotal <= 0 ||
-    queuePosition > queueTotal
-  ) {
-    return undefined;
-  }
-
-  return {
-    batchId,
-    position: queuePosition,
-    total: queueTotal,
-  };
-}
-
 const dashboardUpdateSequenceHeadPosition = computed<number | null>(() => {
   let headPosition: number | null = null;
   for (const sequence of props.dashboardUpdateSequence.values()) {
@@ -76,50 +49,11 @@ const dashboardUpdateSequenceHeadPosition = computed<number | null>(() => {
   return headPosition;
 });
 
-const backendUpdateSequenceHeadByBatch = computed(() => {
-  const queuedHeads = new Map<string, number>();
-  const updatingHeads = new Map<string, number>();
-
-  for (const item of props.recentUpdates) {
-    const row = item as unknown as Record<string, unknown>;
-    const sequence = getBackendRowSequence(row);
-    if (!sequence) {
-      continue;
-    }
-
-    const currentQueuedHead = queuedHeads.get(sequence.batchId);
-    if (currentQueuedHead === undefined || sequence.position < currentQueuedHead) {
-      queuedHeads.set(sequence.batchId, sequence.position);
-    }
-
-    if (row.status !== 'updating') {
-      continue;
-    }
-
-    const currentUpdatingHead = updatingHeads.get(sequence.batchId);
-    if (currentUpdatingHead === undefined || sequence.position < currentUpdatingHead) {
-      updatingHeads.set(sequence.batchId, sequence.position);
-    }
-  }
-
-  const heads = new Map(queuedHeads);
-  for (const [batchId, position] of updatingHeads.entries()) {
-    heads.set(batchId, position);
-  }
-  return heads;
-});
-
-const hasPersistedBackendQueue = computed(() =>
-  props.recentUpdates.some((row) =>
-    Boolean(getBackendRowSequence(row as unknown as Record<string, unknown>)),
-  ),
-);
-
 const isDashboardBulkUpdateLocked = computed(
   () =>
     props.dashboardUpdateAllInProgress ||
     props.dashboardUpdateSequence.size > 0 ||
-    hasPersistedBackendQueue.value,
+    props.recentUpdates.some((row) => row.status === 'queued' || row.status === 'updating'),
 );
 
 function getDashboardRecentUpdateRowKey(row: Record<string, unknown>) {
@@ -141,17 +75,9 @@ function getRowUpdateState(row: Record<string, unknown>): 'queued' | 'updating' 
       : 'queued';
   }
 
-  const backendSequence = getBackendRowSequence(row);
-  if (backendSequence) {
-    return backendUpdateSequenceHeadByBatch.value.get(backendSequence.batchId) ===
-      backendSequence.position
-      ? 'updating'
-      : 'queued';
-  }
-
   const status = row.status as string | undefined;
-  if (status === 'queued') {
-    return 'queued';
+  if (status === 'queued' || status === 'updating') {
+    return status;
   }
 
   const id = row.id as string;
@@ -176,12 +102,7 @@ function getRowUpdateLabel(row: Record<string, unknown>): string {
     return '';
   }
 
-  const sequence = getRowSequence(row) ?? getBackendRowSequence(row);
-  const baseLabel = updateState === 'queued' ? 'Queued' : 'Updating';
-  if (!sequence || sequence.total <= 1) {
-    return baseLabel;
-  }
-  return `${baseLabel} ${sequence.position} of ${sequence.total}`;
+  return updateState === 'queued' ? 'Queued' : 'Updating';
 }
 
 function getRowClass(row: Record<string, unknown>): string {

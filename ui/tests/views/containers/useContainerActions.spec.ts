@@ -1,5 +1,6 @@
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { computed, defineComponent, h, nextTick, type Ref, ref } from 'vue';
+import { useUpdateBatches } from '@/composables/useUpdateBatches';
 import type { ApiContainerTrigger, ApiContainerUpdateOperation } from '@/types/api';
 import type { Container } from '@/types/container';
 import { daysToMs } from '@/utils/maturity-policy';
@@ -205,6 +206,7 @@ describe('useContainerActions', () => {
   beforeEach(() => {
     vi.useRealTimers();
     vi.resetAllMocks();
+    useUpdateBatches().batches.value = new Map();
     mocks.containerActionsEnabled.value = true;
     mocks.getBackups.mockResolvedValue([]);
     mocks.rollback.mockResolvedValue({});
@@ -635,7 +637,10 @@ describe('useContainerActions', () => {
     expect(mocks.updateContainers).toHaveBeenCalledWith(['container-1', 'container-2']);
     expect(mocks.updateContainer).not.toHaveBeenCalled();
     expect(loadContainers).toHaveBeenCalledTimes(1);
-    expect(composable.groupUpdateInProgress.value.has('group-1')).toBe(false);
+    expect(useUpdateBatches().getBatch('group-1')).toEqual({
+      frozenTotal: 2,
+      startedAt: expect.any(Number),
+    });
     expect(mocks.toastSuccess).toHaveBeenCalledWith('Started updates for 2 containers in group-1');
   });
 
@@ -743,7 +748,7 @@ describe('useContainerActions', () => {
 
     expect(mocks.updateContainers).toHaveBeenCalledWith(['container-1', 'container-2']);
     expect(loadContainers).not.toHaveBeenCalled();
-    expect(composable.groupUpdateInProgress.value.has('group-1')).toBe(false);
+    expect(useUpdateBatches().getBatch('group-1')).toBeUndefined();
     expect(mocks.toastSuccess).not.toHaveBeenCalled();
     expect(mocks.toastError).toHaveBeenCalledTimes(1);
   });
@@ -794,6 +799,81 @@ describe('useContainerActions', () => {
     expect(mocks.toastSuccess).toHaveBeenCalledWith('Started update for 1 container in group-1');
   });
 
+  it('surfaces non-stale grouped update rejections as toast errors', async () => {
+    const web = makeContainer({
+      id: 'container-1',
+      name: 'web',
+      newTag: '1.1.0',
+      bouncer: 'safe',
+    });
+    const api = makeContainer({
+      id: 'container-2',
+      name: 'api',
+      newTag: '2.0.0',
+      bouncer: 'safe',
+    });
+    const { composable } = await mountActionsHarness({
+      containers: [web, api],
+      containerIdMap: {
+        web: 'container-1',
+        api: 'container-2',
+      },
+    });
+    mocks.updateContainers.mockResolvedValue({
+      message: 'Container update requests processed',
+      accepted: [{ containerId: 'container-1', containerName: 'web', operationId: 'op-1' }],
+      rejected: [
+        {
+          containerId: 'container-2',
+          containerName: 'api',
+          statusCode: 500,
+          message: 'registry timeout',
+        },
+      ],
+    });
+
+    await composable.updateAllInGroup({
+      key: 'group-1',
+      containers: [web, api],
+    });
+
+    expect(mocks.toastError).toHaveBeenCalledWith('Failed to update api: registry timeout');
+  });
+
+  it('does not show a grouped update success toast when no requests were accepted', async () => {
+    const web = makeContainer({
+      id: 'container-1',
+      name: 'web',
+      newTag: '1.1.0',
+      bouncer: 'safe',
+    });
+    const { composable, loadContainers } = await mountActionsHarness({
+      containers: [web],
+      containerIdMap: { web: 'container-1' },
+    });
+    mocks.updateContainers.mockResolvedValue({
+      message: 'Container update requests processed',
+      accepted: [],
+      rejected: [
+        {
+          containerId: 'container-1',
+          containerName: 'web',
+          statusCode: 400,
+          message: 'No update available for this container',
+        },
+      ],
+    });
+
+    await composable.updateAllInGroup({
+      key: 'group-1',
+      containers: [web],
+    });
+
+    expect(loadContainers).toHaveBeenCalledTimes(1);
+    expect(mocks.toastSuccess).not.toHaveBeenCalledWith(expect.stringContaining('Started update'));
+    expect(useUpdateBatches().getBatch('group-1')).toBeUndefined();
+  });
+
   it('tracks pending actions and polls until container reappears', async () => {
     vi.useFakeTimers();
     const web = makeContainer({ id: 'container-1', name: 'web' });
@@ -821,6 +901,23 @@ describe('useContainerActions', () => {
     expect(loadContainers).toHaveBeenCalledTimes(2);
   });
 
+  it('captures the pending snapshot by container name when the mapped id is stale', async () => {
+    const liveWeb = makeContainer({ id: 'container-1-new', name: 'web' });
+    const { composable, containers, loadContainers } = await mountActionsHarness({
+      containers: [liveWeb],
+      containerIdMap: { web: 'container-1' },
+    });
+    loadContainers.mockImplementation(async () => {
+      containers.value = [];
+    });
+
+    await composable.startContainer('web');
+
+    expect(composable.actionPending.value.get('web')).toEqual(
+      expect.objectContaining({ id: 'container-1-new', name: 'web' }),
+    );
+  });
+
   it('reports pending containers as still updating after the request completes', async () => {
     vi.useFakeTimers();
     const web = makeContainer({ id: 'container-1', name: 'web' });
@@ -837,6 +934,70 @@ describe('useContainerActions', () => {
     expect(composable.actionInProgress.value.size).toBe(0);
     expect(composable.actionPending.value.has('container-1')).toBe(true);
     expect(composable.isContainerUpdateInProgress(web)).toBe(true);
+  });
+
+  it('matches pending updates for string targets by snapshot name when the pending key is a container id', async () => {
+    const web = makeContainer({ id: 'container-1', name: 'web' });
+    const { composable } = await mountActionsHarness({
+      containers: [web],
+    });
+
+    composable.actionPending.value.set('container-1', web);
+
+    expect(composable.isContainerUpdateInProgress('web')).toBe(true);
+  });
+
+  it('does not match unrelated live in-progress updates for string targets', async () => {
+    const api = makeContainer({
+      id: 'container-2',
+      name: 'api',
+      updateOperation: {
+        id: 'op-2',
+        status: 'in-progress',
+        phase: 'pulling',
+        updatedAt: '2026-04-11T12:00:00.000Z',
+      },
+    });
+    const { composable } = await mountActionsHarness({
+      containers: [api],
+    });
+
+    expect(composable.isContainerUpdateInProgress('web')).toBe(false);
+  });
+
+  it('treats stale update actions without a stale message as a quiet no-op when reload is disabled', async () => {
+    const web = makeContainer({ id: 'container-1', name: 'web' });
+    const { composable, loadContainers } = await mountActionsHarness({
+      containers: [web],
+      containerIdMap: { web: 'container-1' },
+    });
+    const action = vi.fn().mockRejectedValue(new Error('No update available for this container'));
+
+    const result = await composable.executeAction('web', action, {
+      reloadContainers: false,
+      treatNoUpdateAsStale: true,
+    });
+
+    expect(result).toBe(false);
+    expect(loadContainers).not.toHaveBeenCalled();
+    expect(mocks.toastInfo).not.toHaveBeenCalled();
+  });
+
+  it('skips reload when a non-stale update action fails and reload is disabled', async () => {
+    const web = makeContainer({ id: 'container-1', name: 'web' });
+    const { composable, loadContainers, error } = await mountActionsHarness({
+      containers: [web],
+      containerIdMap: { web: 'container-1' },
+    });
+    const action = vi.fn().mockRejectedValue(new Error('update exploded'));
+
+    const result = await composable.executeAction('web', action, {
+      reloadContainers: false,
+    });
+
+    expect(result).toBe(false);
+    expect(error.value).toBe('update exploded');
+    expect(loadContainers).not.toHaveBeenCalled();
   });
 
   it('reports live containers with an in-progress update operation as still updating', async () => {
@@ -1005,7 +1166,7 @@ describe('useContainerActions', () => {
     expect(composable.isContainerUpdateInProgress('web')).toBe(false);
   });
 
-  it('tracks grouped updates as pending until the replacement container settles', async () => {
+  it('relies on live backend operation state for grouped updates instead of local pending tracking', async () => {
     vi.useFakeTimers();
     const web = makeContainer({
       id: 'container-1',
@@ -1043,14 +1204,8 @@ describe('useContainerActions', () => {
       containers: [web],
     });
 
-    expect(composable.actionPending.value.has('container-1')).toBe(true);
+    expect(composable.actionPending.value.has('container-1')).toBe(false);
     expect(composable.isContainerUpdateInProgress('web')).toBe(true);
-
-    vi.advanceTimersByTime(PENDING_ACTIONS_POLL_INTERVAL_MS);
-    await flushPromises();
-
-    expect(composable.actionPending.value.has('web')).toBe(false);
-    expect(composable.isContainerUpdateInProgress('web')).toBe(false);
   });
 
   it('reuses existing pending start timestamps when the same action is queued again', async () => {
@@ -2196,7 +2351,17 @@ describe('useContainerActions', () => {
   });
 
   it('skips grouped updates when already in progress or when no container is eligible', async () => {
-    const updatable = makeContainer({ id: 'container-1', name: 'web', newTag: '1.1.0' });
+    const updatable = makeContainer({
+      id: 'container-1',
+      name: 'web',
+      newTag: '1.1.0',
+      updateOperation: {
+        id: 'op-1',
+        status: 'queued',
+        phase: 'queued',
+        updatedAt: '2026-04-11T12:00:00.000Z',
+      },
+    });
     const blocked = makeContainer({
       id: 'container-2',
       name: 'api',
@@ -2209,13 +2374,11 @@ describe('useContainerActions', () => {
       containerIdMap: { web: 'container-1', api: 'container-2', worker: 'container-3' },
     });
 
-    composable.groupUpdateInProgress.value = new Set(['group-1']);
     await composable.updateAllInGroup({ key: 'group-1', containers: [updatable] });
-    expect(mocks.updateContainer).not.toHaveBeenCalled();
+    expect(mocks.updateContainers).not.toHaveBeenCalled();
 
-    composable.groupUpdateInProgress.value = new Set();
     await composable.updateAllInGroup({ key: 'group-2', containers: [blocked, unchanged] });
-    expect(mocks.updateContainer).not.toHaveBeenCalled();
+    expect(mocks.updateContainers).not.toHaveBeenCalled();
   });
 
   it('handles delete guard and delete failure paths', async () => {
@@ -2533,23 +2696,24 @@ describe('useContainerActions', () => {
     });
     await nextTick();
 
-    expect(composable.groupUpdateInProgress.value.has('proxy-stack')).toBe(true);
     expect(composable.isContainerUpdateInProgress(proxyA)).toBe(true);
-    expect(composable.isContainerUpdateQueued(proxyB)).toBe(true);
-    expect(composable.isContainerUpdateQueued(proxyC)).toBe(true);
+    expect(composable.isContainerUpdateQueued(proxyB)).toBe(false);
+    expect(composable.isContainerUpdateQueued(proxyC)).toBe(false);
     expect(composable.isContainerUpdateQueued(proxyA)).toBe(false);
 
     resolveBatch?.();
     await flushPromises();
 
     expect(composable.isContainerUpdateInProgress(proxyA)).toBe(true);
-    expect(composable.isContainerUpdateQueued(proxyB)).toBe(true);
-    expect(composable.isContainerUpdateQueued(proxyC)).toBe(true);
+    expect(composable.isContainerUpdateQueued(proxyB)).toBe(false);
+    expect(composable.isContainerUpdateQueued(proxyC)).toBe(false);
     expect(composable.isContainerUpdateQueued(proxyA)).toBe(false);
     await updatePromise;
 
-    expect(composable.groupUpdateInProgress.value.has('proxy-stack')).toBe(false);
-    expect(composable.groupUpdateQueue.value.size).toBe(2);
+    expect(useUpdateBatches().getBatch('proxy-stack')).toEqual({
+      frozenTotal: 3,
+      startedAt: expect.any(Number),
+    });
   });
 
   it('keeps later group updates queued when requests resolve before the first refresh', async () => {
@@ -2603,13 +2767,11 @@ describe('useContainerActions', () => {
 
     expect(composable.isContainerUpdateInProgress(proxyA)).toBe(true);
     expect(composable.isContainerUpdateQueued(proxyA)).toBe(false);
-    expect(composable.getContainerUpdateSequenceLabel(proxyA)).toBe('1 of 3');
     expect(composable.isContainerUpdateInProgress(proxyB)).toBe(false);
-    expect(composable.isContainerUpdateQueued(proxyB)).toBe(true);
-    expect(composable.getContainerUpdateSequenceLabel(proxyB)).toBe('2 of 3');
+    expect(composable.isContainerUpdateQueued(proxyB)).toBe(false);
     expect(composable.isContainerUpdateInProgress(proxyC)).toBe(false);
-    expect(composable.isContainerUpdateQueued(proxyC)).toBe(true);
-    expect(composable.getContainerUpdateSequenceLabel(proxyC)).toBe('3 of 3');
+    expect(composable.isContainerUpdateQueued(proxyC)).toBe(false);
+    expect(useUpdateBatches().getBatch('proxy-stack')).toBeUndefined();
 
     resolveLoadContainers?.();
     await updatePromise;
@@ -2670,8 +2832,7 @@ describe('useContainerActions', () => {
       containers: [proxyA, proxyB],
     });
 
-    expect(composable.groupUpdateInProgress.value.has('proxy-stack')).toBe(false);
-    expect(composable.groupUpdateQueue.value.size).toBe(0);
+    expect(useUpdateBatches().getBatch('proxy-stack')).toBeUndefined();
   });
 
   it('returns false for isContainerUpdateQueued when target is a string', async () => {
@@ -2692,7 +2853,7 @@ describe('useContainerActions', () => {
     ).toBe(false);
   });
 
-  it('derives persisted queue labels from backend batch metadata after reload', async () => {
+  it('derives persisted queued and updating phases from backend operation status after reload', async () => {
     const proxyA = makeContainer({
       id: 'container-a',
       name: 'socket-proxy-a',
@@ -2729,12 +2890,10 @@ describe('useContainerActions', () => {
       },
     });
 
-    expect(composable.isContainerUpdateInProgress(proxyA)).toBe(true);
-    expect(composable.isContainerUpdateQueued(proxyA)).toBe(false);
-    expect(composable.getContainerUpdateSequenceLabel(proxyA)).toBe('1 of 2');
+    expect(composable.isContainerUpdateInProgress(proxyA)).toBe(false);
+    expect(composable.isContainerUpdateQueued(proxyA)).toBe(true);
     expect(composable.isContainerUpdateInProgress(proxyB)).toBe(false);
     expect(composable.isContainerUpdateQueued(proxyB)).toBe(true);
-    expect(composable.getContainerUpdateSequenceLabel(proxyB)).toBe('2 of 2');
   });
 
   it('treats a standalone queued update operation as updating when no other active update exists', async () => {
@@ -2813,7 +2972,8 @@ describe('useContainerActions', () => {
       containers: [persistedBatchHead, standaloneQueued],
     });
 
-    expect(composable.isContainerUpdateInProgress(persistedBatchHead)).toBe(true);
+    expect(composable.isContainerUpdateInProgress(persistedBatchHead)).toBe(false);
+    expect(composable.isContainerUpdateQueued(persistedBatchHead)).toBe(true);
     expect(composable.isContainerUpdateQueued(standaloneQueued)).toBe(true);
     expect(composable.isContainerUpdateInProgress(standaloneQueued)).toBe(false);
   });
@@ -2847,12 +3007,6 @@ describe('useContainerActions', () => {
     expect(composable.isContainerUpdateInProgress(queuedHead)).toBe(true);
     expect(composable.isContainerUpdateQueued(queuedTail)).toBe(true);
     expect(composable.isContainerUpdateInProgress(queuedTail)).toBe(false);
-  });
-
-  it('returns null for string targets when resolving update sequence labels', async () => {
-    const { composable } = await mountActionsHarness({});
-
-    expect(composable.getContainerUpdateSequenceLabel('socket-proxy-a')).toBeNull();
   });
 
   it('treats targets carrying their own in-progress operation as updating', async () => {
@@ -2915,8 +3069,7 @@ describe('useContainerActions', () => {
     await nextTick();
 
     expect(composable.isContainerUpdateInProgress(proxyA)).toBe(true);
-    expect(composable.isContainerUpdateQueued(proxyB)).toBe(true);
-    expect(composable.getContainerUpdateSequenceLabel(proxyB)).toBe('2 of 2');
+    expect(composable.isContainerUpdateQueued(proxyB)).toBe(false);
     expect(composable.isContainerUpdateInProgress(worker)).toBe(true);
 
     resolvers[0]?.();
@@ -2968,7 +3121,7 @@ describe('useContainerActions', () => {
     await nextTick();
 
     expect(composable.isContainerUpdateInProgress(proxyA)).toBe(true);
-    expect(composable.isContainerUpdateQueued(proxyB)).toBe(true);
+    expect(composable.isContainerUpdateQueued(proxyB)).toBe(false);
     expect(composable.isContainerUpdateQueued(standaloneQueued)).toBe(true);
     expect(composable.isContainerUpdateInProgress(standaloneQueued)).toBe(false);
 
@@ -3010,9 +3163,7 @@ describe('useContainerActions', () => {
     });
 
     expect(composable.isContainerUpdateQueued(queued)).toBe(true);
-    expect(composable.getContainerUpdateSequenceLabel(queued)).toBe('1 of 2');
     expect(composable.isContainerUpdateQueued(inProgress)).toBe(false);
-    expect(composable.getContainerUpdateSequenceLabel(inProgress)).toBe('2 of 2');
   });
 
   it('keeps the earliest in-progress persisted batch entry as the head position', async () => {
@@ -3060,9 +3211,8 @@ describe('useContainerActions', () => {
     });
 
     expect(composable.isContainerUpdateInProgress(inProgressHead)).toBe(true);
-    expect(composable.isContainerUpdateQueued(inProgressLater)).toBe(false);
+    expect(composable.isContainerUpdateInProgress(inProgressLater)).toBe(true);
     expect(composable.isContainerUpdateQueued(queued)).toBe(true);
-    expect(composable.getContainerUpdateSequenceLabel(queued)).toBe('3 of 3');
   });
 
   it('ignores unrelated persisted batch entries when determining queued state', async () => {
@@ -3113,9 +3263,9 @@ describe('useContainerActions', () => {
       containers: [head, queued, otherBatch, noSequence],
     });
 
-    expect(composable.isContainerUpdateInProgress(head)).toBe(true);
+    expect(composable.isContainerUpdateInProgress(head)).toBe(false);
+    expect(composable.isContainerUpdateQueued(head)).toBe(true);
     expect(composable.isContainerUpdateQueued(queued)).toBe(true);
-    expect(composable.getContainerUpdateSequenceLabel(queued)).toBe('2 of 2');
   });
 
   it('clears pending action state when the stored snapshot no longer has an id', async () => {
@@ -3191,8 +3341,6 @@ describe('useContainerActions', () => {
     const actionPendingStartTimes = ref(new Map<string, number>([['web', 0]]));
     const actionPendingLifecycleModes = ref(new Map([['web', 'presence' as const]]));
     const actionPendingLifecycleObserved = ref(new Set<string>());
-    const groupUpdateQueue = ref(new Set<string>());
-    const groupUpdateSequence = ref(new Map());
     const stopPendingActionsPolling = vi.fn();
 
     prunePendingActionsState({
@@ -3202,8 +3350,6 @@ describe('useContainerActions', () => {
       actionPendingStartTimes,
       actionPendingLifecycleModes,
       actionPendingLifecycleObserved,
-      groupUpdateQueue,
-      groupUpdateSequence,
       pollTimeout: 0,
       stopPendingActionsPolling,
     });
@@ -3227,8 +3373,6 @@ describe('useContainerActions', () => {
     const actionPendingStartTimes = ref(new Map<string, number>([['web', 0]]));
     const actionPendingLifecycleModes = ref(new Map([['web', 'presence' as const]]));
     const actionPendingLifecycleObserved = ref(new Set<string>());
-    const groupUpdateQueue = ref(new Set<string>());
-    const groupUpdateSequence = ref(new Map());
     const stopPendingActionsPolling = vi.fn();
 
     prunePendingActionsState({
@@ -3238,8 +3382,6 @@ describe('useContainerActions', () => {
       actionPendingStartTimes,
       actionPendingLifecycleModes,
       actionPendingLifecycleObserved,
-      groupUpdateQueue,
-      groupUpdateSequence,
       pollTimeout: PENDING_ACTIONS_POLL_INTERVAL_MS,
       stopPendingActionsPolling,
     });

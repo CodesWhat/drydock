@@ -236,5 +236,29 @@ describe('Container Actions Service', () => {
         ],
       });
     });
+
+    it('throws with server error message on bulk update failure', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        statusText: 'Conflict',
+        json: async () => ({ error: 'Queue already active' }),
+      } as any);
+
+      await expect(updateContainers(['abc123'])).rejects.toThrow('Queue already active');
+    });
+
+    it('throws with statusText when bulk update error parsing fails', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        statusText: 'Internal Server Error',
+        json: async () => {
+          throw new Error('parse error');
+        },
+      } as any);
+
+      await expect(updateContainers(['abc123'])).rejects.toThrow(
+        'Failed to update containers: Internal Server Error',
+      );
+    });
   });
 });

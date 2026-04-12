@@ -1691,7 +1691,7 @@ describe('DashboardView', () => {
       expect(mockUpdateContainer).not.toHaveBeenCalled();
     });
 
-    it('shows Updating 1 of N and Queued 2 of N immediately after dashboard update all starts', async () => {
+    it('shows phase-only queue labels immediately after dashboard update all starts', async () => {
       const containers = [
         makeContainer({
           id: 'c-success-1',
@@ -1749,8 +1749,10 @@ describe('DashboardView', () => {
       await nextTick();
 
       const widgetText = wrapper.find('[data-widget-id="recent-updates"]').text();
-      expect(widgetText).toContain('Updating 1 of 2');
-      expect(widgetText).toContain('Queued 2 of 2');
+      expect(widgetText).toContain('Updating');
+      expect(widgetText).toContain('Queued');
+      expect(widgetText).not.toContain('1 of 2');
+      expect(widgetText).not.toContain('2 of 2');
 
       resolveBatch?.();
       await flushPromises();
@@ -1804,8 +1806,10 @@ describe('DashboardView', () => {
       expect(mockUpdateContainer).not.toHaveBeenCalled();
 
       const widgetText = wrapper.find('[data-widget-id="recent-updates"]').text();
-      expect(widgetText).toContain('Updating 1 of 2');
-      expect(widgetText).toContain('Queued 2 of 2');
+      expect(widgetText).toContain('Updating');
+      expect(widgetText).toContain('Queued');
+      expect(widgetText).not.toContain('1 of 2');
+      expect(widgetText).not.toContain('2 of 2');
     });
 
     it('advances the dashboard queue label when the next bulk update becomes active', async () => {
@@ -1887,8 +1891,9 @@ describe('DashboardView', () => {
         await flushPromises();
 
         const widgetText = wrapper.find('[data-widget-id="recent-updates"]').text();
-        expect(widgetText).toContain('Updating 2 of 2');
-        expect(widgetText).not.toContain('Queued 2 of 2');
+        expect(widgetText).toContain('Updating');
+        expect(widgetText).not.toContain('Queued');
+        expect(widgetText).not.toContain('2 of 2');
       } finally {
         vi.useRealTimers();
       }
@@ -2076,8 +2081,9 @@ describe('DashboardView', () => {
       const wrapper = await mountDashboard([queuedFirstContainer, queuedSecondContainer]);
 
       const widgetText = wrapper.find('[data-widget-id="recent-updates"]').text();
-      expect(widgetText).toContain('Updating 1 of 2');
-      expect(widgetText).toContain('Queued 2 of 2');
+      expect(widgetText).toContain('Queued');
+      expect(widgetText).not.toContain('Updating 1 of 2');
+      expect(widgetText).not.toContain('Queued 2 of 2');
     });
 
     it('keeps a dashboard row visible as updating until the container reappears', async () => {

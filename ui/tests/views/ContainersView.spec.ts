@@ -1590,7 +1590,7 @@ describe('ContainersView', () => {
       expect(mockApiUpdate).not.toHaveBeenCalled();
     });
 
-    it('tracks group update-all loading state during execution', async () => {
+    it('marks the first grouped container as updating while the bulk request is in flight', async () => {
       const containers = [
         makeContainer({ id: 'c1', name: 'nginx', newTag: '2.0.0', updateKind: 'major' }),
         makeContainer({ id: 'c2', name: 'redis' }),
@@ -1619,12 +1619,12 @@ describe('ContainersView', () => {
       await flushPromises();
 
       const pending = vm.updateAllInGroup(vm.groupedContainers[0]);
-      expect(vm.groupUpdateInProgress.has('web-stack')).toBe(true);
+      expect(vm.isContainerUpdateInProgress(containers[0])).toBe(true);
 
       resolveBulkUpdate?.();
       await pending;
 
-      expect(vm.groupUpdateInProgress.has('web-stack')).toBe(false);
+      expect(vm.isContainerUpdateInProgress(containers[0])).toBe(true);
     });
 
     it('fetches groups when toggle is turned ON and map is empty', async () => {
@@ -2044,6 +2044,35 @@ describe('ContainersView', () => {
         expect(mockGetContainerGroups).toHaveBeenCalledTimes(1);
         expect(mockGetContainerVulnerabilities).toHaveBeenCalledTimes(1);
         expect(mockGetContainerSbom).toHaveBeenCalledTimes(1);
+
+        wrapper.unmount();
+      } finally {
+        addEventListenerSpy.mockRestore();
+        vi.useRealTimers();
+      }
+    });
+
+    it('reloads immediately on dd:sse-update-operation-changed without debounce', async () => {
+      vi.useFakeTimers();
+      const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
+      try {
+        const c = makeContainer({ id: 'c1', name: 'nginx' });
+        const wrapper = await mountContainersView(
+          [c],
+          [{ id: 'c1', name: 'nginx', displayName: 'nginx' }],
+        );
+        const operationListener = addEventListenerSpy.mock.calls.findLast(
+          ([eventName]) => eventName === 'dd:sse-update-operation-changed',
+        )?.[1] as EventListener | undefined;
+
+        expect(operationListener).toBeTypeOf('function');
+
+        mockGetAllContainers.mockClear();
+
+        operationListener?.(new Event('dd:sse-update-operation-changed'));
+        await flushPromises();
+
+        expect(mockGetAllContainers).toHaveBeenCalledTimes(1);
 
         wrapper.unmount();
       } finally {

@@ -11,6 +11,8 @@ defineProps<{
   containerActionsEnabled: boolean;
   containerActionsDisabledReason: string;
   inProgress: boolean;
+  frozenTotal?: number;
+  doneCount?: number;
   tt: (label: string) => { value: string; showDelay: number };
 }>();
 
@@ -81,7 +83,13 @@ const emit = defineEmits<{
         class="mr-1"
         :class="!containerActionsEnabled ? '' : inProgress ? 'dd-spin' : ''"
       />
-      {{ containerActionsEnabled ? 'Update all' : 'Actions disabled' }}
+      {{
+        !containerActionsEnabled
+          ? 'Actions disabled'
+          : inProgress && frozenTotal !== undefined && doneCount !== undefined && frozenTotal >= 2
+            ? `Updating stack · ${doneCount} of ${frozenTotal} done`
+            : 'Update all'
+      }}
     </AppButton>
   </div>
 </template>

@@ -52,6 +52,28 @@ describe('container-mapper', () => {
   });
 
   describe('deriveUpdateOperation', () => {
+    it('maps valid update-operation kind metadata when present', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateOperation: {
+            id: 'op-kind',
+            kind: 'container-update',
+            status: 'in-progress',
+            phase: 'old-stopped',
+            updatedAt: '2026-04-01T12:00:00.000Z',
+          },
+        }),
+      );
+
+      expect(c.updateOperation).toEqual({
+        id: 'op-kind',
+        kind: 'container-update',
+        status: 'in-progress',
+        phase: 'old-stopped',
+        updatedAt: '2026-04-01T12:00:00.000Z',
+      });
+    });
+
     it('maps active update-operation metadata when present', () => {
       const c = mapApiContainer(
         makeApiContainer({

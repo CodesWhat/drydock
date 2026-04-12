@@ -1,5 +1,6 @@
 import { defineComponent, nextTick, onMounted, ref } from 'vue';
 import ContainersGroupedViews from '@/components/containers/ContainersGroupedViews.vue';
+import { useUpdateBatches } from '@/composables/useUpdateBatches';
 import type { Container } from '@/types/container';
 import { mountWithPlugins } from '../../helpers/mount';
 
@@ -215,10 +216,21 @@ function makeContext(overrides: Record<string, unknown> = {}) {
     containerActionsEnabled,
     containerActionsDisabledReason: ref('Actions disabled by server configuration'),
     actionInProgress,
-    isContainerUpdateInProgress: (target: { id?: string; name?: string; _pending?: true }) =>
-      Boolean(target._pending) || actionInProgress.value.has(target.id ?? target.name ?? ''),
-    isContainerUpdateQueued: (target: { id?: string; name?: string }) =>
-      groupUpdateQueue.value.has(target.id ?? ''),
+    isContainerUpdateInProgress: (target: {
+      id?: string;
+      name?: string;
+      _pending?: true;
+      updateOperation?: { status?: string };
+    }) =>
+      Boolean(target._pending) ||
+      target.updateOperation?.status === 'in-progress' ||
+      actionInProgress.value.has(target.id ?? target.name ?? ''),
+    isContainerUpdateQueued: (target: {
+      id?: string;
+      name?: string;
+      updateOperation?: { status?: string };
+    }) =>
+      target.updateOperation?.status === 'queued' || groupUpdateQueue.value.has(target.id ?? ''),
     getContainerUpdateSequenceLabel: () => null,
     updateAllInGroup: spies.updateAllInGroup,
     tt: (label: string) => ({ value: label, showDelay: 400 }),
@@ -332,6 +344,7 @@ function mountSubject() {
 describe('ContainersGroupedViews', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    useUpdateBatches().batches.value = new Map();
   });
 
   it('covers grouped table interactions in icon action mode', async () => {
@@ -376,17 +389,8 @@ describe('ContainersGroupedViews', () => {
       status: 'stopped',
       server: 'local-backup',
     });
-    const pending = makeContainer({
-      id: 'c-pending',
-      name: 'epsilon',
-      newTag: null,
-      status: 'running',
-      bouncer: 'safe',
-      _pending: true as any,
-    });
-
     const { context, spies } = makeContext();
-    const containers = [blocked, updatable, runningNoUpdate, stoppedNoUpdate, pending];
+    const containers = [blocked, updatable, runningNoUpdate, stoppedNoUpdate];
     context.groupByStack.value = true;
     context.containerViewMode.value = 'table';
     context.tableActionStyle.value = 'icons';
@@ -1199,7 +1203,7 @@ describe('ContainersGroupedViews', () => {
     expect(row.text()).toContain('Updating');
   });
 
-  it('renders grouped queue positions in status labels', () => {
+  it('renders phase-only queued labels for grouped rows', () => {
     const queued = makeContainer({
       id: 'c-queued-1',
       name: 'alpha',
@@ -1208,10 +1212,7 @@ describe('ContainersGroupedViews', () => {
       status: 'running',
     });
 
-    const { context, refs } = makeContext({
-      getContainerUpdateSequenceLabel: (target: { id?: string }) =>
-        target.id === 'c-queued-1' ? '2 of 3' : null,
-    });
+    const { context, refs } = makeContext();
     refs.filteredContainers.value = [queued];
     refs.displayContainers.value = [queued];
     refs.renderGroups.value = [
@@ -1231,7 +1232,62 @@ describe('ContainersGroupedViews', () => {
     const wrapper = mountSubject();
     const row = rowByName(wrapper, 'alpha');
 
-    expect(row.text()).toContain('Queued 2 of 3');
+    expect(row.text()).toContain('Queued');
+    expect(row.text()).not.toContain('2 of 3');
+  });
+
+  it('shows frozen batch progress in the grouped header', () => {
+    const updating = makeContainer({
+      id: 'c-updating',
+      name: 'alpha',
+      newTag: '2.0.0',
+      updateKind: 'major',
+      updateOperation: {
+        id: 'op-1',
+        status: 'in-progress',
+        phase: 'pulling',
+        updatedAt: '2026-04-11T12:00:00.000Z',
+      },
+    });
+    const queued = makeContainer({
+      id: 'c-queued',
+      name: 'beta',
+      newTag: '2.0.0',
+      updateKind: 'major',
+      updateOperation: {
+        id: 'op-2',
+        status: 'queued',
+        phase: 'queued',
+        updatedAt: '2026-04-11T12:00:01.000Z',
+      },
+    });
+    const done = makeContainer({
+      id: 'c-done',
+      name: 'gamma',
+      newTag: null,
+      status: 'running',
+    });
+
+    const { context, refs } = makeContext();
+    refs.groupByStack.value = true;
+    refs.filteredContainers.value = [updating, queued, done];
+    refs.displayContainers.value = [updating, queued, done];
+    refs.renderGroups.value = [
+      {
+        key: 'stack-a',
+        name: 'stack-a',
+        containers: [updating, queued, done],
+        containerCount: 3,
+        updatesAvailable: 2,
+        updatableCount: 2,
+      },
+    ];
+    useUpdateBatches().captureBatch('stack-a', 3);
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+
+    expect(wrapper.text()).toContain('Updating stack · 1 of 3 done');
   });
 
   it('covers card and list pending/disabled/update-kind branches', async () => {

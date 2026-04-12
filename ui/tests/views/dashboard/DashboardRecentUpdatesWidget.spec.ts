@@ -191,8 +191,10 @@ describe('DashboardRecentUpdatesWidget', () => {
     expect(rows).toHaveLength(2);
     expect(rows[0]?.classes()).toContain('opacity-50');
     expect(rows[1]?.classes()).toContain('opacity-50');
-    expect(wrapper.text()).toContain('Updating 1 of 2');
-    expect(wrapper.text()).toContain('Queued 2 of 2');
+    expect(wrapper.text()).toContain('Updating');
+    expect(wrapper.text()).toContain('Queued');
+    expect(wrapper.text()).not.toContain('1 of 2');
+    expect(wrapper.text()).not.toContain('2 of 2');
     expect(
       wrapper.find('[data-test="dashboard-update-all-btn"]').attributes('disabled'),
     ).toBeDefined();
@@ -213,11 +215,13 @@ describe('DashboardRecentUpdatesWidget', () => {
 
     const rows = wrapper.findAll('.dashboard-row-stub');
     expect(rows).toHaveLength(2);
-    expect(wrapper.text()).toContain('Updating 1 of 2');
-    expect(wrapper.text()).toContain('Queued 2 of 2');
+    expect(wrapper.text()).toContain('Updating');
+    expect(wrapper.text()).toContain('Queued');
+    expect(wrapper.text()).not.toContain('1 of 2');
+    expect(wrapper.text()).not.toContain('2 of 2');
   });
 
-  it('derives persisted backend queue state from batch metadata', () => {
+  it('renders persisted backend queue rows with phase-only labels', () => {
     const wrapper = mountWidget({
       pendingUpdatesCount: 2,
       recentUpdates: [
@@ -239,8 +243,10 @@ describe('DashboardRecentUpdatesWidget', () => {
       ],
     });
 
-    expect(wrapper.text()).toContain('Queued 1 of 2');
-    expect(wrapper.text()).toContain('Updating 2 of 2');
+    expect(wrapper.text()).toContain('Queued');
+    expect(wrapper.text()).toContain('Updating');
+    expect(wrapper.text()).not.toContain('1 of 2');
+    expect(wrapper.text()).not.toContain('2 of 2');
     expect(
       wrapper.find('[data-test="dashboard-update-all-btn"]').attributes('disabled'),
     ).toBeDefined();

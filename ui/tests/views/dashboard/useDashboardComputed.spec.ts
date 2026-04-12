@@ -434,6 +434,8 @@ describe('useDashboardComputed update summary', () => {
 
     expect(state.getRecentUpdateStatusColor('updated')).toBe('var(--dd-success)');
     expect(state.getRecentUpdateStatusColor('pending')).toBe('var(--dd-warning)');
+    expect(state.getRecentUpdateStatusColor('queued')).toBe('var(--dd-warning)');
+    expect(state.getRecentUpdateStatusColor('updating')).toBe('var(--dd-warning)');
     expect(state.getRecentUpdateStatusColor('snoozed')).toBe('var(--dd-primary)');
     expect(state.getRecentUpdateStatusColor('maturity-blocked')).toBe('var(--dd-primary)');
     expect(state.getRecentUpdateStatusColor('skipped')).toBe('var(--dd-text-muted)');
@@ -442,6 +444,8 @@ describe('useDashboardComputed update summary', () => {
 
     expect(state.getRecentUpdateStatusMutedColor('updated')).toBe('var(--dd-success-muted)');
     expect(state.getRecentUpdateStatusMutedColor('pending')).toBe('var(--dd-warning-muted)');
+    expect(state.getRecentUpdateStatusMutedColor('queued')).toBe('var(--dd-warning-muted)');
+    expect(state.getRecentUpdateStatusMutedColor('updating')).toBe('var(--dd-warning-muted)');
     expect(state.getRecentUpdateStatusMutedColor('snoozed')).toBe('var(--dd-primary-muted)');
     expect(state.getRecentUpdateStatusMutedColor('maturity-blocked')).toBe(
       'var(--dd-primary-muted)',
@@ -452,6 +456,8 @@ describe('useDashboardComputed update summary', () => {
 
     expect(state.getRecentUpdateStatusIcon('updated')).toBe('check');
     expect(state.getRecentUpdateStatusIcon('pending')).toBe('pending');
+    expect(state.getRecentUpdateStatusIcon('queued')).toBe('pending');
+    expect(state.getRecentUpdateStatusIcon('updating')).toBe('pending');
     expect(state.getRecentUpdateStatusIcon('snoozed')).toBe('pending');
     expect(state.getRecentUpdateStatusIcon('maturity-blocked')).toBe('clock');
     expect(state.getRecentUpdateStatusIcon('skipped')).toBe('skip-forward');
@@ -475,6 +481,16 @@ describe('useDashboardComputed update summary', () => {
     expect(state.getUpdateKindIcon('patch')).toBe('hashtag');
     expect(state.getUpdateKindIcon('digest')).toBe('fingerprint');
     expect(state.getUpdateKindIcon(null)).toBe('info');
+
+    expect(() => state.getRecentUpdateStatusColor('unexpected' as never)).toThrow(
+      'Unexpected dashboard status: unexpected',
+    );
+    expect(() => state.getRecentUpdateStatusMutedColor('unexpected' as never)).toThrow(
+      'Unexpected dashboard status: unexpected',
+    );
+    expect(() => state.getRecentUpdateStatusIcon('unexpected' as never)).toThrow(
+      'Unexpected dashboard status: unexpected',
+    );
   });
 });
 

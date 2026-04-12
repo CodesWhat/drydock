@@ -19,7 +19,6 @@ const {
   actionInProgress,
   isContainerUpdateInProgress,
   isContainerUpdateQueued,
-  getContainerUpdateSequenceLabel,
   confirmStop,
   startContainer,
   confirmRestart,
@@ -44,20 +43,12 @@ function isActionBlocked(container: { id?: unknown; name?: unknown }) {
   return isActionInProgress(container) || isActionQueued(container);
 }
 
-function formatUpdateStateLabel(
-  container: { id?: unknown; name?: unknown },
-  baseLabel: 'Updating' | 'Queued',
-) {
-  const sequence = getContainerUpdateSequenceLabel(container);
-  return sequence ? `${baseLabel} ${sequence}` : baseLabel;
-}
-
 function getStatusLabel(container: { id?: unknown; name?: unknown; status?: string }) {
   if (isActionInProgress(container)) {
-    return formatUpdateStateLabel(container, 'Updating');
+    return 'Updating';
   }
   if (isActionQueued(container)) {
-    return formatUpdateStateLabel(container, 'Queued');
+    return 'Queued';
   }
   return container.status ?? 'unknown';
 }

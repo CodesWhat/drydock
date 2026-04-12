@@ -262,12 +262,9 @@ const {
   formatOperationStatus,
   formatRollbackReason,
   formatTimestamp,
-  getContainerUpdateSequenceLabel,
   getContainerListPolicyState,
   getOperationStatusStyle,
   getTriggerKey,
-  groupUpdateInProgress,
-  groupUpdateQueue,
   isContainerUpdateInProgress,
   isContainerUpdateQueued,
   policyError,
@@ -1001,10 +998,15 @@ const sseContainerChangedListener = (() => {
   }, SSE_CONTAINER_CHANGED_DEBOUNCE_MS);
 }) as EventListener;
 const sseConnectedListener = handleSseScanCompleted as EventListener;
+const sseUpdateOperationChangedListener = (() => {
+  clearSseContainerChangedTimer();
+  void loadContainers();
+}) as EventListener;
 onMounted(() => {
   document.addEventListener('click', handleGlobalClick);
   globalThis.addEventListener('dd:sse-scan-completed', sseScanCompletedListener);
   globalThis.addEventListener('dd:sse-container-changed', sseContainerChangedListener);
+  globalThis.addEventListener('dd:sse-update-operation-changed', sseUpdateOperationChangedListener);
   globalThis.addEventListener('dd:sse-connected', sseConnectedListener);
 });
 onUnmounted(() => {
@@ -1012,6 +1014,10 @@ onUnmounted(() => {
   document.removeEventListener('click', handleGlobalClick);
   globalThis.removeEventListener('dd:sse-scan-completed', sseScanCompletedListener);
   globalThis.removeEventListener('dd:sse-container-changed', sseContainerChangedListener);
+  globalThis.removeEventListener(
+    'dd:sse-update-operation-changed',
+    sseUpdateOperationChangedListener,
+  );
   globalThis.removeEventListener('dd:sse-connected', sseConnectedListener);
 });
 
@@ -1058,12 +1064,9 @@ provide(containersViewTemplateContextKey, {
   renderGroups,
   toggleGroupCollapse,
   collapsedGroups,
-  groupUpdateInProgress,
-  groupUpdateQueue,
   containerActionsEnabled,
   containerActionsDisabledReason,
   actionInProgress,
-  getContainerUpdateSequenceLabel,
   isContainerUpdateInProgress,
   isContainerUpdateQueued,
   updateAllInGroup,
