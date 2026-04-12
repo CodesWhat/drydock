@@ -36,7 +36,7 @@ function onCardKeydown(event: KeyboardEvent, item: Record<string, unknown>) {
   <div class="grid gap-4"
        :style="{ gridTemplateColumns: `repeat(auto-fill, minmax(${minWidth ?? '280px'}, 1fr))` }">
     <div v-for="item in items" :key="getKey(item, itemKey)"
-         class="container-card dd-rounded cursor-pointer overflow-hidden flex flex-col"
+         class="container-card dd-rounded cursor-pointer overflow-hidden flex flex-col relative"
          :style="{
            backgroundColor: 'var(--dd-bg-card)',
            border: selectedKey != null && getKey(item, itemKey) === selectedKey

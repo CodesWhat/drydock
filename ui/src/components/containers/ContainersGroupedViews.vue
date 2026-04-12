@@ -597,12 +597,14 @@ watchEffect(() => {
                     :selected-key="selectedContainer ? getContainerViewKey(selectedContainer) : null"
                     @item-click="selectContainer($event)">
         <template #card="{ item: c }">
+          <div
+            class="flex flex-col flex-1 transition-opacity"
+            :class="{ 'opacity-30': isContainerUpdating(c) || isContainerQueued(c) || isGroupUpdateInProgress(group) }"
+          >
           <!-- Card header -->
-          <div class="px-4 pt-4 pb-2 flex items-start justify-between" :class="{ 'opacity-50': isContainerUpdating(c) || isContainerQueued(c) || isGroupUpdateInProgress(group) }">
+          <div class="px-4 pt-4 pb-2 flex items-start justify-between">
             <div class="flex items-center gap-2.5 min-w-0">
-              <AppIcon v-if="isContainerUpdating(c)" name="spinner" :size="16" class="dd-spin dd-text-muted shrink-0" />
-              <AppIcon v-else-if="isContainerQueued(c)" name="clock" :size="16" class="dd-text-muted shrink-0" />
-              <ContainerIcon v-else :icon="c.icon" :size="24" class="shrink-0" />
+              <ContainerIcon :icon="c.icon" :size="24" class="shrink-0" />
               <div class="min-w-0">
                 <div class="text-sm-plus font-semibold truncate dd-text">
                   {{ c.name }}
@@ -648,7 +650,7 @@ watchEffect(() => {
           </div>
 
           <!-- Card body -- inline Current / Latest -->
-          <div class="px-4 py-3 min-w-0" :class="{ 'opacity-50': isContainerUpdating(c) || isContainerQueued(c) || isGroupUpdateInProgress(group) }">
+          <div class="px-4 py-3 min-w-0">
             <div class="flex items-center gap-2 flex-wrap min-w-0">
               <span class="text-2xs-plus dd-text-muted shrink-0">Current</span>
               <CopyableTag :tag="c.currentTag" class="text-xs font-bold dd-text truncate max-w-[120px]" @click.stop>
@@ -697,19 +699,6 @@ watchEffect(() => {
                 </template>
                 <AppIcon v-else name="check" :size="14" class="ml-1" style="color: var(--dd-success);" v-tooltip.top="tt('Up to date')" />
               </template>
-            </div>
-            <div
-              v-if="isContainerUpdating(c)"
-              class="mt-2 inline-flex items-center gap-1 text-2xs"
-              style="color: var(--dd-warning);">
-              <AppIcon name="spinner" :size="12" class="dd-spin shrink-0" />
-              Updating
-            </div>
-            <div
-              v-else-if="isContainerQueued(c)"
-              class="mt-2 inline-flex items-center gap-1 text-2xs dd-text-muted">
-              <AppIcon name="clock" :size="12" class="shrink-0" />
-              Queued
             </div>
             <div v-if="c.suggestedTag || c.releaseNotes || c.releaseLink" class="flex items-center gap-2 flex-wrap mt-2">
               <SuggestedTagBadge :tag="c.suggestedTag" :current-tag="c.currentTag" />
@@ -766,6 +755,27 @@ watchEffect(() => {
                   :tooltip="tt(containerActionsDisabledReason)"
                   @click.stop />
               </template>
+            </div>
+          </div>
+          </div>
+          <div
+            v-if="isContainerUpdating(c) || isContainerQueued(c) || isGroupUpdateInProgress(group)"
+            class="absolute inset-0 flex items-center justify-center pointer-events-none z-10"
+          >
+            <div
+              class="flex items-center gap-2 px-4 py-2 dd-rounded text-sm font-bold uppercase tracking-wider shadow-lg"
+              :style="{
+                backgroundColor: 'var(--dd-bg-elevated)',
+                border: '1px solid var(--dd-border)',
+                color: 'var(--dd-text)',
+              }"
+            >
+              <AppIcon
+                :name="isContainerQueued(c) && !isContainerUpdating(c) ? 'clock' : 'spinner'"
+                :size="18"
+                :class="isContainerQueued(c) && !isContainerUpdating(c) ? '' : 'dd-spin'"
+              />
+              <span>{{ isContainerQueued(c) && !isContainerUpdating(c) ? 'Queued' : 'Updating' }}</span>
             </div>
           </div>
         </template>

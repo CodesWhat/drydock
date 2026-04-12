@@ -1375,4 +1375,70 @@ describe('ContainersGroupedViews', () => {
     await nextTick();
     await wrapper.find('.emit-list-click').trigger('click');
   });
+
+  it('renders dimmed card overlay with updating and queued labels for the cards view', async () => {
+    const updatingCard = makeContainer({
+      id: 'c-card-updating',
+      name: 'alpha',
+      newTag: '2.0.0',
+      updateKind: 'major',
+      status: 'running',
+      bouncer: 'safe',
+      updateOperation: {
+        id: 'op-updating',
+        status: 'in-progress',
+        phase: 'pulling',
+        updatedAt: '2026-04-12T00:00:00.000Z',
+      },
+    });
+    const queuedCard = makeContainer({
+      id: 'c-card-queued',
+      name: 'beta',
+      newTag: '2.1.0',
+      updateKind: 'minor',
+      status: 'running',
+      bouncer: 'safe',
+      updateOperation: {
+        id: 'op-queued',
+        status: 'queued',
+        phase: 'queued',
+        updatedAt: '2026-04-12T00:00:00.000Z',
+      },
+    });
+
+    const { context, refs } = makeContext();
+    const containers = [updatingCard, queuedCard];
+    refs.containerViewMode.value = 'cards';
+    refs.filteredContainers.value = containers;
+    refs.displayContainers.value = containers;
+    refs.renderGroups.value = [
+      {
+        key: '__flat__',
+        name: null,
+        containers,
+        containerCount: containers.length,
+        updatesAvailable: 2,
+        updatableCount: 2,
+      },
+    ];
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+    await nextTick();
+
+    const cards = wrapper.findAll('.card-item-stub');
+    expect(cards).toHaveLength(2);
+
+    const updatingWrapper = cards[0]!.find('.transition-opacity');
+    expect(updatingWrapper.classes()).toContain('opacity-30');
+    const updatingOverlay = cards[0]!.find('.absolute.inset-0');
+    expect(updatingOverlay.exists()).toBe(true);
+    expect(updatingOverlay.text()).toBe('Updating');
+
+    const queuedWrapper = cards[1]!.find('.transition-opacity');
+    expect(queuedWrapper.classes()).toContain('opacity-30');
+    const queuedOverlay = cards[1]!.find('.absolute.inset-0');
+    expect(queuedOverlay.exists()).toBe(true);
+    expect(queuedOverlay.text()).toBe('Queued');
+  });
 });
