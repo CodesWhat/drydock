@@ -105,6 +105,7 @@ const mockFilterRegistry = ref('all');
 const mockFilterBouncer = ref('all');
 const mockFilterServer = ref('all');
 const mockFilterKind = ref('all');
+const mockFilterHidePinned = ref(false);
 
 vi.mock('@/composables/useContainerFilters', () => ({
   useContainerFilters: vi.fn(() => ({
@@ -114,6 +115,7 @@ vi.mock('@/composables/useContainerFilters', () => ({
     filterBouncer: mockFilterBouncer,
     filterServer: mockFilterServer,
     filterKind: mockFilterKind,
+    filterHidePinned: mockFilterHidePinned,
     showFilters: mockShowFilters,
     activeFilterCount: mockActiveFilterCount,
     filteredContainers: mockFilteredContainers,
@@ -219,7 +221,7 @@ const childStubs = {
   },
   DataFilterBar: {
     template:
-      '<div class="data-filter-bar"><slot name="filters" /><slot name="extra-buttons" /><slot name="left" /></div>',
+      '<div class="data-filter-bar"><slot v-if="showFilters" name="filters" /><slot name="extra-buttons" /><slot name="left" /><slot name="center" /></div>',
     props: ['modelValue', 'showFilters', 'filteredCount', 'totalCount', 'activeFilterCount'],
   },
   DataTable: defineComponent({
@@ -372,6 +374,7 @@ async function mountContainersView(
   mockFilterBouncer.value = 'all';
   mockFilterServer.value = 'all';
   mockFilterKind.value = options.initialFilterKind ?? 'all';
+  mockFilterHidePinned.value = false;
   mockSelectedContainer.value = null;
   mockDetailPanelOpen.value = false;
   mockContainerFullPage.value = false;
@@ -419,6 +422,7 @@ describe('ContainersView', () => {
     mockFilterBouncer.value = 'all';
     mockFilterServer.value = 'all';
     mockFilterKind.value = 'all';
+    mockFilterHidePinned.value = false;
     mockContainerScrollBlocked.value = false;
     mockContainerAutoFetchInterval.value = 0;
     mockDetailPanelStorageRead.mockReturnValue(null);
@@ -580,6 +584,46 @@ describe('ContainersView', () => {
           sort: 'status-desc',
         }),
       });
+    });
+  });
+
+  describe('collapsed filter summary', () => {
+    it('shows active filter chips when filters are collapsed', async () => {
+      const wrapper = await mountContainersView([
+        makeContainer({ newTag: '2.0.0', updateKind: 'major' }),
+      ]);
+
+      mockFilterSearch.value = 'grafana';
+      mockFilterStatus.value = 'running';
+      mockFilterKind.value = 'any';
+      mockFilterHidePinned.value = true;
+      mockActiveFilterCount.value = 3;
+      await flushPromises();
+
+      expect(wrapper.text()).toContain('Search: grafana');
+      expect(wrapper.text()).toContain('Status: Running');
+      expect(wrapper.text()).toContain('Kind: Has Update');
+      expect(wrapper.text()).toContain('Hidden: Pinned');
+    });
+
+    it('hides active filter chips while the filter panel is open', async () => {
+      const wrapper = await mountContainersView([
+        makeContainer({ newTag: '2.0.0', updateKind: 'major' }),
+      ]);
+
+      mockFilterStatus.value = 'running';
+      mockFilterKind.value = 'any';
+      mockActiveFilterCount.value = 2;
+      await flushPromises();
+
+      expect(wrapper.text()).toContain('Status: Running');
+      expect(wrapper.text()).toContain('Kind: Has Update');
+
+      mockShowFilters.value = true;
+      await flushPromises();
+
+      expect(wrapper.text()).not.toContain('Status: Running');
+      expect(wrapper.text()).not.toContain('Kind: Has Update');
     });
   });
 

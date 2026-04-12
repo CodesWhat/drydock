@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import AppIconButton from '../AppIconButton.vue';
 import ContainersGroupedViews from './ContainersGroupedViews.vue';
 import {
@@ -36,6 +37,60 @@ const {
   rechecking,
   recheckAll,
 } = templateContext;
+
+const FILTER_STATUS_LABELS: Record<string, string> = {
+  running: 'Running',
+  stopped: 'Stopped',
+};
+
+const FILTER_BOUNCER_LABELS: Record<string, string> = {
+  safe: 'Safe',
+  unsafe: 'Unsafe',
+  blocked: 'Blocked',
+};
+
+const FILTER_REGISTRY_LABELS: Record<string, string> = {
+  dockerhub: 'Docker Hub',
+  ghcr: 'GHCR',
+  custom: 'Custom',
+};
+
+const FILTER_KIND_LABELS: Record<string, string> = {
+  any: 'Has Update',
+  major: 'Major',
+  minor: 'Minor',
+  patch: 'Patch',
+  digest: 'Digest',
+};
+
+const activeFilterChips = computed(() => {
+  const chips: string[] = [];
+  const searchValue = filterSearch.value.trim();
+
+  if (searchValue !== '') {
+    chips.push(`Search: ${searchValue}`);
+  }
+  if (filterStatus.value !== 'all') {
+    chips.push(`Status: ${FILTER_STATUS_LABELS[filterStatus.value] ?? filterStatus.value}`);
+  }
+  if (filterBouncer.value !== 'all') {
+    chips.push(`Bouncer: ${FILTER_BOUNCER_LABELS[filterBouncer.value] ?? filterBouncer.value}`);
+  }
+  if (filterRegistry.value !== 'all') {
+    chips.push(`Registry: ${FILTER_REGISTRY_LABELS[filterRegistry.value] ?? filterRegistry.value}`);
+  }
+  if (filterServer.value !== 'all') {
+    chips.push(`Host: ${filterServer.value}`);
+  }
+  if (filterKind.value !== 'all') {
+    chips.push(`Kind: ${FILTER_KIND_LABELS[filterKind.value] ?? filterKind.value}`);
+  }
+  if (filterHidePinned.value) {
+    chips.push('Hidden: Pinned');
+  }
+
+  return chips;
+});
 </script>
 
 <template>
@@ -139,6 +194,25 @@ const {
           :loading="rechecking"
           :tooltip="tt('Recheck for updates')"
           @click="recheckAll" />
+      </template>
+      <template #center>
+        <div
+          v-if="!showFilters && activeFilterChips.length > 0"
+          class="flex flex-wrap items-center gap-1.5 min-w-0"
+        >
+          <span
+            class="text-3xs font-bold uppercase tracking-[0.22em] dd-text-muted"
+          >
+            Filters
+          </span>
+          <span
+            v-for="chip in activeFilterChips"
+            :key="chip"
+            class="px-2 py-1 dd-rounded text-2xs font-medium whitespace-nowrap dd-bg-elevated dd-text"
+          >
+            {{ chip }}
+          </span>
+        </div>
       </template>
     </DataFilterBar>
 
