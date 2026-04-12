@@ -49,27 +49,39 @@ function isLegacySingleColumnGridLayout(layout: unknown[]): boolean {
   );
 }
 
-function normalizeDashboardLayouts(data: Record<string, unknown>): void {
+function getMutableDashboard(data: Record<string, unknown>): Record<string, unknown> | undefined {
   const dashboard = data.dashboard;
-  if (!isRecord(dashboard)) {
-    return;
+  return isRecord(dashboard) ? dashboard : undefined;
+}
+
+function pruneResponsiveDashboardLayouts(
+  dashboard: Record<string, unknown>,
+): Record<string, unknown> | undefined {
+  if (!('gridLayouts' in dashboard)) {
+    return isRecord(dashboard.gridLayouts) ? dashboard.gridLayouts : undefined;
   }
 
-  if ('gridLayouts' in dashboard) {
-    if (!isRecord(dashboard.gridLayouts)) {
-      delete dashboard.gridLayouts;
-    } else {
-      for (const key of Object.keys(dashboard.gridLayouts)) {
-        if (
-          !(DASHBOARD_LAYOUT_BREAKPOINTS as readonly string[]).includes(key) ||
-          !Array.isArray(dashboard.gridLayouts[key])
-        ) {
-          delete dashboard.gridLayouts[key];
-        }
-      }
+  if (!isRecord(dashboard.gridLayouts)) {
+    delete dashboard.gridLayouts;
+    return undefined;
+  }
+
+  for (const key of Object.keys(dashboard.gridLayouts)) {
+    if (
+      !(DASHBOARD_LAYOUT_BREAKPOINTS as readonly string[]).includes(key) ||
+      !Array.isArray(dashboard.gridLayouts[key])
+    ) {
+      delete dashboard.gridLayouts[key];
     }
   }
 
+  return dashboard.gridLayouts;
+}
+
+function normalizeLegacyGridLayout(
+  dashboard: Record<string, unknown>,
+  responsiveLayouts: Record<string, unknown> | undefined,
+): void {
   if (!Array.isArray(dashboard.gridLayout)) {
     if ('gridLayout' in dashboard) {
       delete dashboard.gridLayout;
@@ -77,10 +89,7 @@ function normalizeDashboardLayouts(data: Record<string, unknown>): void {
     return;
   }
 
-  const responsiveLayouts = (
-    isRecord(dashboard.gridLayouts) ? dashboard.gridLayouts : {}
-  ) as Record<string, unknown>;
-  if (Object.keys(responsiveLayouts).length > 0) {
+  if (responsiveLayouts && Object.keys(responsiveLayouts).length > 0) {
     dashboard.gridLayouts = responsiveLayouts;
     return;
   }
@@ -91,6 +100,16 @@ function normalizeDashboardLayouts(data: Record<string, unknown>): void {
   dashboard.gridLayouts = { [breakpoint]: dashboard.gridLayout };
 }
 
+function normalizeDashboardLayouts(data: Record<string, unknown>): void {
+  const dashboard = getMutableDashboard(data);
+  if (!dashboard) {
+    return;
+  }
+
+  const responsiveLayouts = pruneResponsiveDashboardLayouts(dashboard);
+  normalizeLegacyGridLayout(dashboard, responsiveLayouts);
+}
+
 /**
  * Remove invalid enum values from persisted preferences so that
  * deepMerge preserves defaults for those fields instead of
@@ -98,19 +117,31 @@ function normalizeDashboardLayouts(data: Record<string, unknown>): void {
  */
 function sanitize(data: Record<string, unknown>): void {
   normalizeDashboardLayouts(data);
+  sanitizeTheme(data);
+  sanitizeFont(data);
+  sanitizeIcons(data);
+  sanitizeAppearance(data);
+  sanitizeContainers(data);
+  sanitizeViews(data);
+}
 
+function sanitizeTheme(data: Record<string, unknown>): void {
   const theme = data.theme;
   if (theme && typeof theme === 'object') {
     const t = theme as Record<string, unknown>;
     deleteIfInvalid(t, 'family', THEME_FAMILIES);
     deleteIfInvalid(t, 'variant', THEME_VARIANTS);
   }
+}
 
+function sanitizeFont(data: Record<string, unknown>): void {
   const font = data.font;
   if (font && typeof font === 'object') {
     deleteIfInvalid(font as Record<string, unknown>, 'family', FONT_FAMILIES);
   }
+}
 
+function sanitizeIcons(data: Record<string, unknown>): void {
   const icons = data.icons;
   if (icons && typeof icons === 'object') {
     const i = icons as Record<string, unknown>;
@@ -119,7 +150,9 @@ function sanitize(data: Record<string, unknown>): void {
       delete i.scale;
     }
   }
+}
 
+function sanitizeAppearance(data: Record<string, unknown>): void {
   const appearance = data.appearance;
   if (appearance && typeof appearance === 'object') {
     const a = appearance as Record<string, unknown>;
@@ -128,7 +161,9 @@ function sanitize(data: Record<string, unknown>): void {
       delete a.fontSize;
     }
   }
+}
 
+function sanitizeContainers(data: Record<string, unknown>): void {
   const containers = data.containers;
   if (containers && typeof containers === 'object') {
     const c = containers as Record<string, unknown>;
@@ -148,7 +183,9 @@ function sanitize(data: Record<string, unknown>): void {
       }
     }
   }
+}
 
+function sanitizeViews(data: Record<string, unknown>): void {
   const views = data.views;
   if (views && typeof views === 'object') {
     const v = views as Record<string, unknown>;

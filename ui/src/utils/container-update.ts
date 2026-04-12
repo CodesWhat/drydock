@@ -13,15 +13,32 @@ type UpdateOperationContainerLike = {
   updateOperation?: UpdateOperationSequenceLike;
 };
 
+function hasPersistedUpdateBatchId(operation?: UpdateOperationSequenceLike): boolean {
+  return Boolean(operation?.batchId);
+}
+
+function hasPersistedUpdateQueuePosition(operation?: UpdateOperationSequenceLike): boolean {
+  const queuePosition = operation?.queuePosition;
+  return Number.isSafeInteger(queuePosition) && queuePosition > 0;
+}
+
+function hasPersistedUpdateQueueTotal(operation?: UpdateOperationSequenceLike): boolean {
+  const queueTotal = operation?.queueTotal;
+  return Number.isSafeInteger(queueTotal) && queueTotal > 0;
+}
+
+function hasPersistedUpdateQueueOrder(operation?: UpdateOperationSequenceLike): boolean {
+  const queuePosition = operation?.queuePosition;
+  const queueTotal = operation?.queueTotal;
+  if (!hasPersistedUpdateQueuePosition(operation) || !hasPersistedUpdateQueueTotal(operation)) {
+    return false;
+  }
+
+  return queuePosition! <= queueTotal!;
+}
+
 function hasPersistedUpdateBatchSequence(operation?: UpdateOperationSequenceLike): boolean {
-  return Boolean(
-    operation?.batchId &&
-      Number.isSafeInteger(operation.queuePosition) &&
-      Number.isSafeInteger(operation.queueTotal) &&
-      operation.queuePosition > 0 &&
-      operation.queueTotal > 0 &&
-      operation.queuePosition <= operation.queueTotal,
-  );
+  return hasPersistedUpdateBatchId(operation) && hasPersistedUpdateQueueOrder(operation);
 }
 
 function isStandaloneQueuedUpdateOperation(operation?: UpdateOperationSequenceLike): boolean {

@@ -59,6 +59,57 @@ function assertNever(value: never): never {
   throw new Error(`Unexpected dashboard status: ${String(value)}`);
 }
 
+const RECENT_UPDATE_STATUS_STYLES: Record<
+  RecentUpdateRow['status'],
+  { color: string; colorMuted: string; icon: string }
+> = {
+  updated: {
+    color: 'var(--dd-success)',
+    colorMuted: 'var(--dd-success-muted)',
+    icon: 'check',
+  },
+  pending: {
+    color: 'var(--dd-warning)',
+    colorMuted: 'var(--dd-warning-muted)',
+    icon: 'pending',
+  },
+  queued: {
+    color: 'var(--dd-warning)',
+    colorMuted: 'var(--dd-warning-muted)',
+    icon: 'pending',
+  },
+  updating: {
+    color: 'var(--dd-warning)',
+    colorMuted: 'var(--dd-warning-muted)',
+    icon: 'pending',
+  },
+  snoozed: {
+    color: 'var(--dd-primary)',
+    colorMuted: 'var(--dd-primary-muted)',
+    icon: 'pending',
+  },
+  'maturity-blocked': {
+    color: 'var(--dd-primary)',
+    colorMuted: 'var(--dd-primary-muted)',
+    icon: 'clock',
+  },
+  skipped: {
+    color: 'var(--dd-text-muted)',
+    colorMuted: 'var(--dd-bg-elevated)',
+    icon: 'skip-forward',
+  },
+  failed: {
+    color: 'var(--dd-danger)',
+    colorMuted: 'var(--dd-danger-muted)',
+    icon: 'xmark',
+  },
+  error: {
+    color: 'var(--dd-danger)',
+    colorMuted: 'var(--dd-danger-muted)',
+    icon: 'xmark',
+  },
+};
+
 function formatMaintenanceDuration(durationMs: number): string {
   const totalMinutes = Math.max(1, Math.ceil(durationMs / 60_000));
   const days = Math.floor(totalMinutes / (24 * 60));
@@ -70,69 +121,27 @@ function formatMaintenanceDuration(durationMs: number): string {
 }
 
 function getRecentUpdateStatusColor(status: RecentUpdateRow['status']): string {
-  switch (status) {
-    case 'updated':
-      return 'var(--dd-success)';
-    case 'pending':
-    case 'queued':
-    case 'updating':
-      return 'var(--dd-warning)';
-    case 'snoozed':
-      return 'var(--dd-primary)';
-    case 'maturity-blocked':
-      return 'var(--dd-primary)';
-    case 'skipped':
-      return 'var(--dd-text-muted)';
-    case 'failed':
-    case 'error':
-      return 'var(--dd-danger)';
-    default:
-      return assertNever(status);
+  const style = RECENT_UPDATE_STATUS_STYLES[status];
+  if (!style) {
+    return assertNever(status);
   }
+  return style.color;
 }
 
 function getRecentUpdateStatusMutedColor(status: RecentUpdateRow['status']): string {
-  switch (status) {
-    case 'updated':
-      return 'var(--dd-success-muted)';
-    case 'pending':
-    case 'queued':
-    case 'updating':
-      return 'var(--dd-warning-muted)';
-    case 'snoozed':
-      return 'var(--dd-primary-muted)';
-    case 'maturity-blocked':
-      return 'var(--dd-primary-muted)';
-    case 'skipped':
-      return 'var(--dd-bg-elevated)';
-    case 'failed':
-    case 'error':
-      return 'var(--dd-danger-muted)';
-    default:
-      return assertNever(status);
+  const style = RECENT_UPDATE_STATUS_STYLES[status];
+  if (!style) {
+    return assertNever(status);
   }
+  return style.colorMuted;
 }
 
 function getRecentUpdateStatusIcon(status: RecentUpdateRow['status']): string {
-  switch (status) {
-    case 'updated':
-      return 'check';
-    case 'pending':
-    case 'queued':
-    case 'updating':
-      return 'pending';
-    case 'snoozed':
-      return 'pending';
-    case 'maturity-blocked':
-      return 'clock';
-    case 'skipped':
-      return 'skip-forward';
-    case 'failed':
-    case 'error':
-      return 'xmark';
-    default:
-      return assertNever(status);
+  const style = RECENT_UPDATE_STATUS_STYLES[status];
+  if (!style) {
+    return assertNever(status);
   }
+  return style.icon;
 }
 
 function getUpdateKindColor(kind: UpdateKind | null): string {
@@ -600,12 +609,16 @@ function isPendingRecentUpdateContainer(container: Container): boolean {
   );
 }
 
+interface PendingRecentUpdateCandidateContext {
+  containers: readonly Container[];
+  recentStatusByContainer: Record<string, RecentAuditStatus>;
+  recentStatusByIdentity: Record<string, RecentAuditStatus>;
+  containerNameCounts: ReadonlyMap<string, number>;
+}
+
 function toPendingRecentUpdateCandidate(
   container: Container,
-  containers: readonly Container[],
-  recentStatusByContainer: Record<string, RecentAuditStatus>,
-  recentStatusByIdentity: Record<string, RecentAuditStatus>,
-  containerNameCounts: ReadonlyMap<string, number>,
+  context: PendingRecentUpdateCandidateContext,
   blocked: boolean,
 ): PendingRecentUpdateCandidate {
   const batchId = container.updateOperation?.batchId;
@@ -625,10 +638,10 @@ function toPendingRecentUpdateCandidate(
       releaseLink: container.releaseLink,
       status: deriveRecentUpdateStatus(
         container,
-        containers,
-        recentStatusByContainer,
-        recentStatusByIdentity,
-        containerNameCounts,
+        context.containers,
+        context.recentStatusByContainer,
+        context.recentStatusByIdentity,
+        context.containerNameCounts,
       ),
       updateKind: container.updateKind ?? null,
       running: container.status === 'running',
@@ -664,20 +677,19 @@ function buildRecentUpdateRows(
   // "Updates Available" widget (#186).
   const candidates: PendingRecentUpdateCandidate[] = [];
   const containerNameCounts = buildContainerNameCounts(allContainers);
+  const candidateContext: PendingRecentUpdateCandidateContext = {
+    containers: allContainers,
+    recentStatusByContainer,
+    recentStatusByIdentity,
+    containerNameCounts,
+  };
   for (const container of visibleContainers) {
     if (!isPendingRecentUpdateContainer(container)) {
       continue;
     }
 
     candidates.push(
-      toPendingRecentUpdateCandidate(
-        container,
-        allContainers,
-        recentStatusByContainer,
-        recentStatusByIdentity,
-        containerNameCounts,
-        container.bouncer === 'blocked',
-      ),
+      toPendingRecentUpdateCandidate(container, candidateContext, container.bouncer === 'blocked'),
     );
   }
 
@@ -781,60 +793,99 @@ function deriveWatcherHost(watcher: unknown): string {
   return 'unix:///var/run/docker.sock';
 }
 
+function isNonAgentWatcher(watcher: unknown): boolean {
+  return (
+    !!watcher &&
+    typeof watcher === 'object' &&
+    !('agent' in watcher && (watcher as Record<string, unknown>).agent)
+  );
+}
+
+function toServerContainerCounts(
+  countsByServer: Map<string, ServerContainerCounts>,
+  serverName: string,
+): ServerContainerCounts {
+  return countsByServer.get(serverName) ?? { running: 0, total: 0 };
+}
+
+function toWatcherServerRow(
+  watcher: unknown,
+  countsByServer: Map<string, ServerContainerCounts>,
+): DashboardServerRow {
+  const watcherRecord = watcher as Record<string, unknown>;
+  const rawName = typeof watcherRecord.name === 'string' ? watcherRecord.name : 'local';
+  const serverName = deriveWatcherServerName(rawName);
+  const counts = toServerContainerCounts(countsByServer, serverName);
+
+  return {
+    name: serverName,
+    host: deriveWatcherHost(watcher),
+    status: 'connected',
+    containers: {
+      running: counts.running,
+      total: counts.total,
+    },
+  };
+}
+
+function toLocalServerRow(countsByServer: Map<string, ServerContainerCounts>): DashboardServerRow {
+  const localContainerCounts = toServerContainerCounts(countsByServer, 'Local');
+
+  return {
+    name: 'Local',
+    host: 'unix:///var/run/docker.sock',
+    status: 'connected',
+    containers: {
+      running: localContainerCounts.running,
+      total: localContainerCounts.total,
+    },
+  };
+}
+
+function toAgentServerRow(
+  agent: DashboardAgent,
+  countsByServer: Map<string, ServerContainerCounts>,
+): DashboardServerRow {
+  const agentName =
+    typeof agent.name === 'string' && agent.name.length > 0 ? agent.name : 'unknown-agent';
+  const agentContainerCounts = toServerContainerCounts(countsByServer, agentName);
+
+  return {
+    name: agentName,
+    host: formatAgentHost(agent),
+    status: agent.connected ? 'connected' : 'disconnected',
+    containers: {
+      running: agentContainerCounts.running,
+      total: agentContainerCounts.total,
+    },
+  };
+}
+
+function buildWatcherServerRows(
+  watchers: unknown[],
+  countsByServer: Map<string, ServerContainerCounts>,
+): DashboardServerRow[] {
+  const nonAgentWatchers = watchers.filter(isNonAgentWatcher);
+  if (nonAgentWatchers.length > 0) {
+    return nonAgentWatchers.map((watcher) => toWatcherServerRow(watcher, countsByServer));
+  }
+
+  return [toLocalServerRow(countsByServer)];
+}
+
+function buildAgentServerRows(
+  agents: DashboardAgent[],
+  countsByServer: Map<string, ServerContainerCounts>,
+): DashboardServerRow[] {
+  return agents.map((agent) => toAgentServerRow(agent, countsByServer));
+}
+
 function useServersComputed(input: UseDashboardComputedInput) {
   return computed<DashboardServerRow[]>(() => {
-    const list: DashboardServerRow[] = [];
     const countsByServer = buildServerContainerCounts(input.containers.value);
-
-    const nonAgentWatchers = input.watchers.value.filter(
-      (w) => w && typeof w === 'object' && !('agent' in w && (w as Record<string, unknown>).agent),
-    );
-
-    if (nonAgentWatchers.length > 0) {
-      for (const watcher of nonAgentWatchers) {
-        const watcherRecord = watcher as Record<string, unknown>;
-        const rawName = typeof watcherRecord.name === 'string' ? watcherRecord.name : 'local';
-        const serverName = deriveWatcherServerName(rawName);
-        const counts = countsByServer.get(serverName) ?? { running: 0, total: 0 };
-        list.push({
-          name: serverName,
-          host: deriveWatcherHost(watcher),
-          status: 'connected',
-          containers: {
-            running: counts.running,
-            total: counts.total,
-          },
-        });
-      }
-    } else {
-      const localContainerCounts = countsByServer.get('Local') ?? { running: 0, total: 0 };
-      list.push({
-        name: 'Local',
-        host: 'unix:///var/run/docker.sock',
-        status: 'connected',
-        containers: {
-          running: localContainerCounts.running,
-          total: localContainerCounts.total,
-        },
-      });
-    }
-
-    for (const agent of input.agents.value) {
-      const agentName =
-        typeof agent.name === 'string' && agent.name.length > 0 ? agent.name : 'unknown-agent';
-      const agentContainerCounts = countsByServer.get(agentName) ?? { running: 0, total: 0 };
-      list.push({
-        name: agentName,
-        host: formatAgentHost(agent),
-        status: agent.connected ? 'connected' : 'disconnected',
-        containers: {
-          running: agentContainerCounts.running,
-          total: agentContainerCounts.total,
-        },
-      });
-    }
-
-    return list;
+    const watcherRows = buildWatcherServerRows(input.watchers.value, countsByServer);
+    const agentRows = buildAgentServerRows(input.agents.value, countsByServer);
+    return watcherRows.concat(agentRows);
   });
 }
 

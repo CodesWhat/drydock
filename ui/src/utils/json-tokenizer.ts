@@ -6,80 +6,144 @@ export interface JsonToken {
 const TOKEN_CACHE_MAX = 500;
 const tokenCache = new Map<string, JsonToken[]>();
 
+function isWhitespace(character: string) {
+  return /\s/u.test(character);
+}
+
+function readWhitespaceToken(prettyJson: string, cursor: number) {
+  let end = cursor + 1;
+  while (end < prettyJson.length && isWhitespace(prettyJson[end])) {
+    end += 1;
+  }
+
+  return {
+    token: { text: prettyJson.slice(cursor, end), type: 'text' as const },
+    nextCursor: end,
+  };
+}
+
+function readPunctuationToken(character: string) {
+  if (!'{}[],:'.includes(character)) {
+    return null;
+  }
+
+  return { text: character, type: 'punctuation' as const };
+}
+
+function readStringToken(prettyJson: string, cursor: number) {
+  let end = cursor + 1;
+  while (end < prettyJson.length) {
+    if (prettyJson[end] === '"') {
+      let backslashes = 0;
+      while (end - 1 - backslashes > cursor && prettyJson[end - 1 - backslashes] === '\\') {
+        backslashes += 1;
+      }
+      if (backslashes % 2 === 0) {
+        end += 1;
+        break;
+      }
+    }
+    end += 1;
+  }
+
+  let lookAhead = end;
+  while (lookAhead < prettyJson.length && isWhitespace(prettyJson[lookAhead])) {
+    lookAhead += 1;
+  }
+
+  return {
+    token: {
+      text: prettyJson.slice(cursor, end),
+      type: prettyJson[lookAhead] === ':' ? ('key' as const) : ('string' as const),
+    },
+    nextCursor: end,
+  };
+}
+
+function readBooleanToken(remaining: string) {
+  if (remaining.startsWith('true')) {
+    return { token: { text: 'true', type: 'boolean' as const }, length: 4 };
+  }
+
+  if (remaining.startsWith('false')) {
+    return { token: { text: 'false', type: 'boolean' as const }, length: 5 };
+  }
+
+  return null;
+}
+
+function readNullToken(remaining: string) {
+  if (!remaining.startsWith('null')) {
+    return null;
+  }
+
+  return { token: { text: 'null', type: 'null' as const }, length: 4 };
+}
+
+function readNumberToken(remaining: string) {
+  const numberPattern = /^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/;
+  const numberMatch = remaining.match(numberPattern);
+
+  if (!numberMatch?.[0]) {
+    return null;
+  }
+
+  return {
+    token: { text: numberMatch[0], type: 'number' as const },
+    length: numberMatch[0].length,
+  };
+}
+
 export function tokenizeJson(prettyJson: string): JsonToken[] {
   const cached = tokenCache.get(prettyJson);
   if (cached) return cached;
 
   const tokens: JsonToken[] = [];
   let cursor = 0;
-  const numberPattern = /^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/;
 
   while (cursor < prettyJson.length) {
     const character = prettyJson[cursor];
 
-    if (/\s/u.test(character)) {
-      let end = cursor + 1;
-      while (end < prettyJson.length && /\s/u.test(prettyJson[end])) {
-        end += 1;
-      }
-      tokens.push({ text: prettyJson.slice(cursor, end), type: 'text' });
-      cursor = end;
+    if (isWhitespace(character)) {
+      const { token, nextCursor } = readWhitespaceToken(prettyJson, cursor);
+      tokens.push(token);
+      cursor = nextCursor;
       continue;
     }
 
-    if ('{}[],:'.includes(character)) {
-      tokens.push({ text: character, type: 'punctuation' });
+    const punctuationToken = readPunctuationToken(character);
+    if (punctuationToken) {
+      tokens.push(punctuationToken);
       cursor += 1;
       continue;
     }
 
     if (character === '"') {
-      let end = cursor + 1;
-      while (end < prettyJson.length) {
-        if (prettyJson[end] === '"') {
-          let backslashes = 0;
-          while (end - 1 - backslashes > cursor && prettyJson[end - 1 - backslashes] === '\\') {
-            backslashes += 1;
-          }
-          if (backslashes % 2 === 0) {
-            end += 1;
-            break;
-          }
-        }
-        end += 1;
-      }
-
-      let lookAhead = end;
-      while (lookAhead < prettyJson.length && /\s/u.test(prettyJson[lookAhead])) {
-        lookAhead += 1;
-      }
-
-      tokens.push({
-        text: prettyJson.slice(cursor, end),
-        type: prettyJson[lookAhead] === ':' ? 'key' : 'string',
-      });
-      cursor = end;
+      const { token, nextCursor } = readStringToken(prettyJson, cursor);
+      tokens.push(token);
+      cursor = nextCursor;
       continue;
     }
 
     const remaining = prettyJson.slice(cursor);
-    if (remaining.startsWith('true') || remaining.startsWith('false')) {
-      const value = remaining.startsWith('true') ? 'true' : 'false';
-      tokens.push({ text: value, type: 'boolean' });
-      cursor += value.length;
+    const booleanToken = readBooleanToken(remaining);
+    if (booleanToken) {
+      tokens.push(booleanToken.token);
+      cursor += booleanToken.length;
       continue;
     }
 
-    if (remaining.startsWith('null')) {
-      tokens.push({ text: 'null', type: 'null' });
-      cursor += 4;
+    const nullToken = readNullToken(remaining);
+    if (nullToken) {
+      tokens.push(nullToken.token);
+      cursor += nullToken.length;
       continue;
     }
 
-    const numberMatch = remaining.match(numberPattern);
-    if (numberMatch?.[0]) {
-      tokens.push({ text: numberMatch[0], type: 'number' });
-      cursor += numberMatch[0].length;
+    const numberToken = readNumberToken(remaining);
+    if (numberToken) {
+      tokens.push(numberToken.token);
+      cursor += numberToken.length;
       continue;
     }
 

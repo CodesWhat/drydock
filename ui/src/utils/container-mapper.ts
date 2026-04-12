@@ -399,13 +399,66 @@ function deriveUpdateDetectedAt(apiContainer: ApiContainerInput): string | undef
   return new Date(parsedAt).toISOString();
 }
 
+function hasPolicyRelevantUpdateKind(
+  updateKind: ApiContainerUpdateKind | null | undefined,
+): boolean {
+  return updateKind?.kind === 'tag' || updateKind?.kind === 'digest';
+}
+
+function isFutureSnoozeUntil(updatePolicy: ApiContainerUpdatePolicy, nowMs: number): boolean {
+  const snoozeUntil = asNonEmptyString(updatePolicy.snoozeUntil);
+  if (!snoozeUntil) {
+    return false;
+  }
+
+  const parsedSnoozeUntil = Date.parse(snoozeUntil);
+  return !Number.isNaN(parsedSnoozeUntil) && parsedSnoozeUntil > nowMs;
+}
+
+function isSkippedByTagPolicy(
+  updateKind: ApiContainerUpdateKind,
+  updatePolicy: ApiContainerUpdatePolicy,
+  remoteValue: string | undefined,
+): boolean {
+  return (
+    updateKind.kind === 'tag' &&
+    remoteValue !== undefined &&
+    Array.isArray(updatePolicy.skipTags) &&
+    updatePolicy.skipTags.includes(remoteValue)
+  );
+}
+
+function isSkippedByDigestPolicy(
+  updateKind: ApiContainerUpdateKind,
+  updatePolicy: ApiContainerUpdatePolicy,
+  remoteValue: string | undefined,
+): boolean {
+  return (
+    updateKind.kind === 'digest' &&
+    remoteValue !== undefined &&
+    Array.isArray(updatePolicy.skipDigests) &&
+    updatePolicy.skipDigests.includes(remoteValue)
+  );
+}
+
+function isMaturityBlocked(
+  apiContainer: ApiContainerInput,
+  updatePolicy: ApiContainerUpdatePolicy,
+): boolean {
+  if (normalizeMaturityMode(updatePolicy.maturityMode) !== 'mature') {
+    return false;
+  }
+
+  const minAgeDays = resolveMaturityMinAgeDays(updatePolicy.maturityMinAgeDays);
+  const updateDetectedAt = deriveUpdateDetectedAt(apiContainer);
+  const detectedAtMs = Date.parse(updateDetectedAt || '');
+  const minAgeMs = maturityMinAgeDaysToMilliseconds(minAgeDays);
+  return !Number.isFinite(detectedAtMs) || Date.now() - detectedAtMs < minAgeMs;
+}
+
 function deriveUpdatePolicyState(apiContainer: ApiContainerInput): Container['updatePolicyState'] {
   const updateKind = apiContainer.updateKind;
-  if (
-    apiContainer.updateAvailable ||
-    !updateKind ||
-    (updateKind.kind !== 'tag' && updateKind.kind !== 'digest')
-  ) {
+  if (apiContainer.updateAvailable || !updateKind || !hasPolicyRelevantUpdateKind(updateKind)) {
     return undefined;
   }
 
@@ -414,43 +467,22 @@ function deriveUpdatePolicyState(apiContainer: ApiContainerInput): Container['up
     return undefined;
   }
 
-  const snoozeUntil = asNonEmptyString(updatePolicy.snoozeUntil);
-  if (snoozeUntil) {
-    const parsedSnoozeUntil = Date.parse(snoozeUntil);
-    if (!Number.isNaN(parsedSnoozeUntil) && parsedSnoozeUntil > Date.now()) {
-      return 'snoozed';
-    }
+  if (isFutureSnoozeUntil(updatePolicy, Date.now())) {
+    return 'snoozed';
   }
 
   const remoteValue = asNonEmptyString(updateKind.remoteValue);
 
-  if (
-    updateKind.kind === 'tag' &&
-    remoteValue &&
-    Array.isArray(updatePolicy.skipTags) &&
-    updatePolicy.skipTags.includes(remoteValue)
-  ) {
+  if (isSkippedByTagPolicy(updateKind, updatePolicy, remoteValue)) {
     return 'skipped';
   }
 
-  if (
-    updateKind.kind === 'digest' &&
-    remoteValue &&
-    Array.isArray(updatePolicy.skipDigests) &&
-    updatePolicy.skipDigests.includes(remoteValue)
-  ) {
+  if (isSkippedByDigestPolicy(updateKind, updatePolicy, remoteValue)) {
     return 'skipped';
   }
 
-  const maturityMode = normalizeMaturityMode(updatePolicy.maturityMode);
-  if (maturityMode === 'mature') {
-    const minAgeDays = resolveMaturityMinAgeDays(updatePolicy.maturityMinAgeDays);
-    const updateDetectedAt = deriveUpdateDetectedAt(apiContainer);
-    const detectedAtMs = Date.parse(updateDetectedAt || '');
-    const minAgeMs = maturityMinAgeDaysToMilliseconds(minAgeDays);
-    if (!Number.isFinite(detectedAtMs) || Date.now() - detectedAtMs < minAgeMs) {
-      return 'maturity-blocked';
-    }
+  if (isMaturityBlocked(apiContainer, updatePolicy)) {
+    return 'maturity-blocked';
   }
 
   return undefined;
