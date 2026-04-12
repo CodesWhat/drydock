@@ -22,58 +22,84 @@ const MAX_BODY_BYTES = 64 * 1024;
  */
 export function probeSocketApiVersion(socketPath: string): Promise<string | undefined> {
   return new Promise((resolve) => {
-    function makeRequest(requestPath: string, followedRedirect: boolean): void {
-      const req = http.request(
-        {
-          socketPath,
-          path: requestPath,
-          method: 'GET',
-          timeout: PROBE_TIMEOUT_MS,
-        },
-        (res) => {
-          if (
-            !followedRedirect &&
-            res.statusCode &&
-            res.statusCode >= 300 &&
-            res.statusCode < 400 &&
-            res.headers.location
-          ) {
-            makeRequest(res.headers.location, true);
-            return;
-          }
-
-          let body = '';
-          res.setEncoding('utf8');
-          res.on('data', (chunk: string) => {
-            body += chunk;
-            if (body.length > MAX_BODY_BYTES) {
-              req.destroy();
-              resolve(undefined);
-            }
-          });
-          res.on('end', () => {
-            try {
-              const data = JSON.parse(body);
-              if (data.ApiVersion && typeof data.ApiVersion === 'string') {
-                resolve(data.ApiVersion);
-              } else {
-                resolve(undefined);
-              }
-            } catch {
-              resolve(undefined);
-            }
-          });
-          res.on('error', () => resolve(undefined));
-        },
-      );
-      req.on('error', () => resolve(undefined));
-      req.on('timeout', () => {
-        req.destroy();
-        resolve(undefined);
-      });
-      req.end();
-    }
-
-    makeRequest('/version', false);
+    sendProbeRequest(socketPath, '/version', false, resolve);
   });
+}
+
+function sendProbeRequest(
+  socketPath: string,
+  requestPath: string,
+  followedRedirect: boolean,
+  resolve: (version: string | undefined) => void,
+): void {
+  const req = http.request(
+    {
+      socketPath,
+      path: requestPath,
+      method: 'GET',
+      timeout: PROBE_TIMEOUT_MS,
+    },
+    (res) => {
+      if (shouldFollowRedirect(res, followedRedirect)) {
+        sendProbeRequest(socketPath, res.headers.location, true, resolve);
+        return;
+      }
+
+      collectProbeResponse(req, res, resolve);
+    },
+  );
+
+  wireProbeRequest(req, resolve);
+  req.end();
+}
+
+function shouldFollowRedirect(res: http.IncomingMessage, followedRedirect: boolean): boolean {
+  return (
+    !followedRedirect &&
+    isRedirectStatus(res.statusCode) &&
+    typeof res.headers.location === 'string'
+  );
+}
+
+function isRedirectStatus(statusCode: number | undefined): boolean {
+  return typeof statusCode === 'number' && statusCode >= 300 && statusCode < 400;
+}
+
+function wireProbeRequest(
+  req: http.ClientRequest,
+  resolve: (version: string | undefined) => void,
+): void {
+  req.on('error', () => resolve(undefined));
+  req.on('timeout', () => {
+    req.destroy();
+    resolve(undefined);
+  });
+}
+
+function collectProbeResponse(
+  req: http.ClientRequest,
+  res: http.IncomingMessage,
+  resolve: (version: string | undefined) => void,
+): void {
+  let body = '';
+
+  res.setEncoding('utf8');
+  res.on('data', (chunk: string) => {
+    body += chunk;
+    if (body.length > MAX_BODY_BYTES) {
+      req.destroy();
+      resolve(undefined);
+    }
+  });
+  res.on('end', () => resolve(parseProbeApiVersion(body)));
+  res.on('error', () => resolve(undefined));
+}
+
+function parseProbeApiVersion(body: string): string | undefined {
+  try {
+    const data = JSON.parse(body) as { ApiVersion?: unknown };
+    return typeof data.ApiVersion === 'string' ? data.ApiVersion : undefined;
+  } catch {
+    return undefined;
+  }
 }

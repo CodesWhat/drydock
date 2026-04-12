@@ -175,6 +175,30 @@ interface DockerImageDetailsHelpers {
 
 type RuntimeDetails = ReturnType<typeof getRuntimeDetailsFromContainerSummary>;
 
+interface ResolveContainerImageStateContext {
+  watcher: DockerImageDetailsWatcher;
+  container: DockerContainerSummary;
+  dockerContainerName: string;
+  labelOverrides: ContainerLabelOverrides;
+  image: DockerImageInspectPayload;
+  containerInspect: DockerContainerInspectPayload | undefined;
+  helpers: DockerImageDetailsHelpers;
+}
+
+interface RefreshStoredContainerImageFieldsContext {
+  watcher: DockerImageDetailsWatcher;
+  container: DockerContainerSummary;
+  dockerContainerName: string;
+  labelOverrides: ContainerLabelOverrides;
+  helpers: DockerImageDetailsHelpers;
+  containerInStore: Container;
+  containerInspect: DockerContainerInspectPayload | undefined;
+}
+
+interface RefreshContainerAlreadyInStoreContext extends RefreshStoredContainerImageFieldsContext {
+  runtimeDetailsFromSummary: RuntimeDetails;
+}
+
 function refreshContainerIdentityFromSummary(
   containerInStore: Container,
   dockerContainerName: string,
@@ -240,14 +264,17 @@ function backfillStoredTagPrecision(containerInStore: Container) {
 }
 
 async function refreshStoredContainerImageFields(
-  watcher: DockerImageDetailsWatcher,
-  container: DockerContainerSummary,
-  dockerContainerName: string,
-  labelOverrides: ContainerLabelOverrides,
-  helpers: DockerImageDetailsHelpers,
-  containerInStore: Container,
-  containerInspect: DockerContainerInspectPayload | undefined,
+  context: RefreshStoredContainerImageFieldsContext,
 ) {
+  const {
+    watcher,
+    container,
+    dockerContainerName,
+    labelOverrides,
+    helpers,
+    containerInStore,
+    containerInspect,
+  } = context;
   backfillStoredTagPrecision(containerInStore);
 
   try {
@@ -256,15 +283,15 @@ async function refreshStoredContainerImageFields(
     const freshImageId = currentImage.Id;
 
     if (shouldRepairStoredImageReference(containerInStore)) {
-      const resolvedImageState = resolveContainerImageState(
+      const resolvedImageState = resolveContainerImageState({
         watcher,
         container,
         dockerContainerName,
         labelOverrides,
-        currentImage,
+        image: currentImage,
         containerInspect,
         helpers,
-      );
+      });
 
       if (resolvedImageState) {
         const refreshedContainer = helpers.normalizeContainer({
@@ -332,15 +359,16 @@ async function refreshStoredContainerImageFields(
   }
 }
 
-async function refreshContainerAlreadyInStore(
-  watcher: DockerImageDetailsWatcher,
-  container: DockerContainerSummary,
-  dockerContainerName: string,
-  labelOverrides: ContainerLabelOverrides,
-  helpers: DockerImageDetailsHelpers,
-  runtimeDetailsFromSummary: RuntimeDetails,
-  containerInStore: Container,
-) {
+async function refreshContainerAlreadyInStore(context: RefreshContainerAlreadyInStoreContext) {
+  const {
+    watcher,
+    container,
+    dockerContainerName,
+    labelOverrides,
+    helpers,
+    runtimeDetailsFromSummary,
+    containerInStore,
+  } = context;
   watcher.ensureLogger();
   watcher.log.debug(`Container ${containerInStore.id} already in store`);
 
@@ -363,7 +391,7 @@ async function refreshContainerAlreadyInStore(
 
   // Reconcile container status from Docker summary (covers events missed during reconnect gaps)
   reconcileStoredContainerStatus(containerInStore, container.State);
-  await refreshStoredContainerImageFields(
+  await refreshStoredContainerImageFields({
     watcher,
     container,
     dockerContainerName,
@@ -371,7 +399,7 @@ async function refreshContainerAlreadyInStore(
     helpers,
     containerInStore,
     containerInspect,
-  );
+  });
 
   return containerInStore;
 }
@@ -438,14 +466,17 @@ function resolveImageReferenceForParsing(
 }
 
 function resolveContainerImageState(
-  watcher: DockerImageDetailsWatcher,
-  container: DockerContainerSummary,
-  dockerContainerName: string,
-  labelOverrides: ContainerLabelOverrides,
-  image: DockerImageInspectPayload,
-  containerInspect: DockerContainerInspectPayload | undefined,
-  helpers: DockerImageDetailsHelpers,
+  context: ResolveContainerImageStateContext,
 ): ResolvedContainerImageState | undefined {
+  const {
+    watcher,
+    container,
+    dockerContainerName,
+    labelOverrides,
+    image,
+    containerInspect,
+    helpers,
+  } = context;
   const containerLabels: Record<string, string> = container.Labels || {};
   const parsedImage = helpers.resolveImageName(
     resolveImageReferenceForParsing(container.Image, containerInspect),
@@ -608,7 +639,7 @@ export async function addImageDetailsToContainerOrchestration(
   // Is container already in store? Refresh volatile image fields, then return it
   const containerInStore = storeContainer.getContainer(containerId);
   if (containerInStore !== undefined && containerInStore.error === undefined) {
-    return refreshContainerAlreadyInStore(
+    return refreshContainerAlreadyInStore({
       watcher,
       container,
       dockerContainerName,
@@ -616,12 +647,13 @@ export async function addImageDetailsToContainerOrchestration(
       helpers,
       runtimeDetailsFromSummary,
       containerInStore,
-    );
+      containerInspect: undefined,
+    });
   }
 
   const image = await inspectImageForContainer(watcher, containerId, container.Image);
   const containerInspect = await inspectDiscoveredContainer(watcher, containerId);
-  const resolvedImageState = resolveContainerImageState(
+  const resolvedImageState = resolveContainerImageState({
     watcher,
     container,
     dockerContainerName,
@@ -629,7 +661,7 @@ export async function addImageDetailsToContainerOrchestration(
     image,
     containerInspect,
     helpers,
-  );
+  });
   if (!resolvedImageState) {
     return undefined;
   }
