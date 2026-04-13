@@ -815,7 +815,7 @@ watchEffect(() => {
         <template #header="{ item: c }">
           <AppIcon v-if="isContainerUpdating(c)" name="spinner" :size="14" class="dd-spin dd-text-muted shrink-0" />
           <AppIcon v-else-if="isContainerQueued(c)" name="clock" :size="14" class="dd-text-muted shrink-0" />
-          <ContainerIcon v-else :icon="c.icon" :size="18" class="shrink-0" />
+          <ContainerIcon v-else :icon="c.icon" :size="28" class="shrink-0" />
           <div class="min-w-0 flex-1" :class="{ 'opacity-50': isContainerUpdating(c) || isContainerQueued(c) }">
             <div class="text-sm font-semibold truncate dd-text">{{ c.name }}</div>
             <div class="text-2xs mt-0.5 truncate dd-text-muted" v-tooltip.top="`${c.image}:${c.currentTag}`">{{ c.image }}:{{ c.currentTag }}</div>
