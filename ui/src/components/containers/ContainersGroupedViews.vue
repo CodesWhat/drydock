@@ -628,8 +628,8 @@ watchEffect(() => {
           >
           <!-- Card header -->
           <div class="px-4 pt-4 pb-2 flex items-start justify-between">
-            <div class="flex items-center gap-2.5 min-w-0">
-              <ContainerIcon :icon="c.icon" :size="24" class="shrink-0" />
+            <div class="flex items-center gap-3 min-w-0">
+              <ContainerIcon :icon="c.icon" :size="44" class="shrink-0" />
               <div class="min-w-0">
                 <div class="text-sm-plus font-semibold truncate dd-text">
                   {{ c.name }}
