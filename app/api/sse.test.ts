@@ -4,9 +4,11 @@ var {
   mockRegisterContainerAdded,
   mockRegisterContainerUpdated,
   mockRegisterContainerRemoved,
+  mockRegisterUpdateOperationChanged,
   mockRegisterAgentConnected,
   mockRegisterAgentDisconnected,
   mockRandomUUID,
+  mockRandomBytes,
   mockCreateHash,
   mockTimingSafeEqual,
   mockLoggerDebug,
@@ -19,26 +21,29 @@ var {
     mockRegisterContainerAdded: vi.fn(),
     mockRegisterContainerUpdated: vi.fn(),
     mockRegisterContainerRemoved: vi.fn(),
+    mockRegisterUpdateOperationChanged: vi.fn(),
     mockRegisterAgentConnected: vi.fn(),
     mockRegisterAgentDisconnected: vi.fn(),
     mockRandomUUID: vi.fn(() => {
       uuidCounter += 1;
       return `uuid-${uuidCounter}`;
     }),
+    mockRandomBytes: vi.fn((size: number) => Buffer.alloc(size, 0x42)),
     mockCreateHash: vi.fn(() => {
       const chunks: Buffer[] = [];
       const hash = {
-        update: vi.fn((value: string, encoding?: BufferEncoding) => {
-          chunks.push(Buffer.from(value, encoding ?? 'utf8'));
+        update: vi.fn((value: string | Buffer, encoding?: BufferEncoding) => {
+          const chunk = Buffer.isBuffer(value) ? value : Buffer.from(value, encoding ?? 'utf8');
+          chunks.push(chunk);
           return hash;
         }),
-        digest: vi.fn(() => {
+        digest: vi.fn((format?: BufferEncoding) => {
           const data = Buffer.concat(chunks);
           const digest = Buffer.alloc(32);
           for (let i = 0; i < data.length; i += 1) {
             digest[i % 32] ^= data[i];
           }
-          return digest;
+          return format === 'hex' ? digest.toString('hex') : digest;
         }),
       };
       return hash;
@@ -57,6 +62,7 @@ vi.mock('express', () => ({
 
 vi.mock('node:crypto', () => ({
   randomUUID: mockRandomUUID,
+  randomBytes: mockRandomBytes,
   createHash: mockCreateHash,
   timingSafeEqual: mockTimingSafeEqual,
 }));
@@ -66,6 +72,7 @@ vi.mock('../event/index', () => ({
   registerContainerAdded: mockRegisterContainerAdded,
   registerContainerUpdated: mockRegisterContainerUpdated,
   registerContainerRemoved: mockRegisterContainerRemoved,
+  registerUpdateOperationChanged: mockRegisterUpdateOperationChanged,
   registerAgentConnected: mockRegisterAgentConnected,
   registerAgentDisconnected: mockRegisterAgentDisconnected,
 }));
@@ -178,6 +185,7 @@ describe('SSE Router', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
+    delete process.env.DD_SSE_DEBUG_LOG_IP;
     sseRouter._resetInitializationStateForTests();
     // Clear clients and connection tracking between tests
     sseRouter._clients.clear();
@@ -189,6 +197,7 @@ describe('SSE Router', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    delete process.env.DD_SSE_DEBUG_LOG_IP;
   });
 
   describe('init', () => {
@@ -202,6 +211,7 @@ describe('SSE Router', () => {
       expect(mockRegisterContainerAdded).toHaveBeenCalledTimes(1);
       expect(mockRegisterContainerUpdated).toHaveBeenCalledTimes(1);
       expect(mockRegisterContainerRemoved).toHaveBeenCalledTimes(1);
+      expect(mockRegisterUpdateOperationChanged).toHaveBeenCalledTimes(1);
       expect(mockRegisterAgentConnected).toHaveBeenCalledTimes(1);
       expect(mockRegisterAgentDisconnected).toHaveBeenCalledTimes(1);
     });
@@ -211,6 +221,7 @@ describe('SSE Router', () => {
       const deregisterContainerAdded = vi.fn();
       const deregisterContainerUpdated = vi.fn();
       const deregisterContainerRemoved = vi.fn();
+      const deregisterUpdateOperationChanged = vi.fn();
       const deregisterAgentConnected = vi.fn();
       const deregisterAgentDisconnected = vi.fn();
 
@@ -218,6 +229,7 @@ describe('SSE Router', () => {
       mockRegisterContainerAdded.mockReturnValueOnce(deregisterContainerAdded);
       mockRegisterContainerUpdated.mockReturnValueOnce(deregisterContainerUpdated);
       mockRegisterContainerRemoved.mockReturnValueOnce(deregisterContainerRemoved);
+      mockRegisterUpdateOperationChanged.mockReturnValueOnce(deregisterUpdateOperationChanged);
       mockRegisterAgentConnected.mockReturnValueOnce(deregisterAgentConnected);
       mockRegisterAgentDisconnected.mockReturnValueOnce(deregisterAgentDisconnected);
 
@@ -229,6 +241,7 @@ describe('SSE Router', () => {
       expect(deregisterContainerAdded).toHaveBeenCalledTimes(1);
       expect(deregisterContainerUpdated).toHaveBeenCalledTimes(1);
       expect(deregisterContainerRemoved).toHaveBeenCalledTimes(1);
+      expect(deregisterUpdateOperationChanged).toHaveBeenCalledTimes(1);
       expect(deregisterAgentConnected).toHaveBeenCalledTimes(1);
       expect(deregisterAgentDisconnected).toHaveBeenCalledTimes(1);
 
@@ -236,6 +249,7 @@ describe('SSE Router', () => {
       expect(mockRegisterContainerAdded).toHaveBeenCalledTimes(2);
       expect(mockRegisterContainerUpdated).toHaveBeenCalledTimes(2);
       expect(mockRegisterContainerRemoved).toHaveBeenCalledTimes(2);
+      expect(mockRegisterUpdateOperationChanged).toHaveBeenCalledTimes(2);
       expect(mockRegisterAgentConnected).toHaveBeenCalledTimes(2);
       expect(mockRegisterAgentDisconnected).toHaveBeenCalledTimes(2);
     });
@@ -245,6 +259,7 @@ describe('SSE Router', () => {
       const deregisterContainerAdded = vi.fn();
       const deregisterContainerUpdated = vi.fn();
       const deregisterContainerRemoved = vi.fn();
+      const deregisterUpdateOperationChanged = vi.fn();
       const deregisterAgentConnected = vi.fn();
       const deregisterAgentDisconnected = vi.fn();
 
@@ -252,6 +267,7 @@ describe('SSE Router', () => {
       mockRegisterContainerAdded.mockReturnValueOnce(deregisterContainerAdded);
       mockRegisterContainerUpdated.mockReturnValueOnce(deregisterContainerUpdated);
       mockRegisterContainerRemoved.mockReturnValueOnce(deregisterContainerRemoved);
+      mockRegisterUpdateOperationChanged.mockReturnValueOnce(deregisterUpdateOperationChanged);
       mockRegisterAgentConnected.mockReturnValueOnce(deregisterAgentConnected);
       mockRegisterAgentDisconnected.mockReturnValueOnce(deregisterAgentDisconnected);
 
@@ -262,6 +278,7 @@ describe('SSE Router', () => {
       expect(deregisterContainerAdded).toHaveBeenCalledTimes(1);
       expect(deregisterContainerUpdated).toHaveBeenCalledTimes(1);
       expect(deregisterContainerRemoved).toHaveBeenCalledTimes(1);
+      expect(deregisterUpdateOperationChanged).toHaveBeenCalledTimes(1);
       expect(deregisterAgentConnected).toHaveBeenCalledTimes(1);
       expect(deregisterAgentDisconnected).toHaveBeenCalledTimes(1);
     });
@@ -289,6 +306,7 @@ describe('SSE Router', () => {
       expect(mockRegisterContainerAdded).toHaveBeenCalledWith(expect.any(Function));
       expect(mockRegisterContainerUpdated).toHaveBeenCalledWith(expect.any(Function));
       expect(mockRegisterContainerRemoved).toHaveBeenCalledWith(expect.any(Function));
+      expect(mockRegisterUpdateOperationChanged).toHaveBeenCalledWith(expect.any(Function));
     });
 
     test('should register agent connection lifecycle event handlers', () => {
@@ -346,6 +364,61 @@ describe('SSE Router', () => {
 
       expect(sseRouter._clients.has(res)).toBe(true);
       expect(sseRouter._clients.size).toBe(1);
+    });
+
+    test('should log connection lifecycle with client ID and hashed IP by default', () => {
+      delete process.env.DD_SSE_DEBUG_LOG_IP;
+      const handler = getHandler();
+      const req = createSSERequest('203.0.113.10');
+      const res = createSSEResponse();
+
+      handler(req, res);
+      const connectedPayload = parseSseEventPayload(res, 'dd:connected');
+
+      expect(mockLoggerDebug).toHaveBeenCalledWith(
+        expect.stringMatching(
+          new RegExp(
+            `^SSE client connected: ${connectedPayload.clientId} from h:[0-9a-f]{8} \\(1 total\\)$`,
+          ),
+        ),
+      );
+      expect(mockLoggerDebug).not.toHaveBeenCalledWith(expect.stringContaining('203.0.113.10'));
+
+      req._listeners.close();
+
+      expect(mockLoggerDebug).toHaveBeenCalledWith(
+        expect.stringMatching(
+          new RegExp(
+            `^SSE client disconnected: ${connectedPayload.clientId} from h:[0-9a-f]{8} \\(0 total\\)$`,
+          ),
+        ),
+      );
+      expect(mockLoggerDebug).not.toHaveBeenCalledWith(expect.stringContaining('203.0.113.10'));
+    });
+
+    test('should log raw IP and client ID when DD_SSE_DEBUG_LOG_IP is enabled', () => {
+      process.env.DD_SSE_DEBUG_LOG_IP = 'true';
+      try {
+        const handler = getHandler();
+        const req = createSSERequest('203.0.113.10');
+        const res = createSSEResponse();
+
+        handler(req, res);
+        const connectedPayload = parseSseEventPayload(res, 'dd:connected');
+
+        expect(mockLoggerDebug).toHaveBeenCalledWith(
+          `SSE client connected: ${connectedPayload.clientId} from 203.0.113.10 (1 total)`,
+        );
+        expect(mockLoggerDebug).not.toHaveBeenCalledWith(expect.stringMatching(/from h:[0-9a-f]+/));
+
+        req._listeners.close();
+
+        expect(mockLoggerDebug).toHaveBeenCalledWith(
+          `SSE client disconnected: ${connectedPayload.clientId} from 203.0.113.10 (0 total)`,
+        );
+      } finally {
+        delete process.env.DD_SSE_DEBUG_LOG_IP;
+      }
     });
 
     test('should remove client on connection close', () => {
@@ -608,6 +681,36 @@ describe('SSE Router', () => {
 
       expect(rejectedRes.status).toHaveBeenCalledWith(429);
       expect(rejectedRes.json).toHaveBeenCalledWith({ error: 'Too many SSE connections' });
+      expect(mockLoggerWarn).toHaveBeenCalledWith(
+        expect.stringMatching(/^SSE per-IP connection limit reached for h:[0-9a-f]{8} \(10\)$/),
+      );
+      expect(mockLoggerWarn).not.toHaveBeenCalledWith(expect.stringContaining(ip));
+    });
+
+    test('should log raw IP in rate-limit warning when DD_SSE_DEBUG_LOG_IP is enabled', () => {
+      process.env.DD_SSE_DEBUG_LOG_IP = 'true';
+      try {
+        const handler = getHandler();
+        const ip = '192.168.1.2';
+
+        for (let i = 0; i < sseRouter._MAX_CONNECTIONS_PER_IP; i++) {
+          handler(createSSERequest(ip), createSSEResponse());
+        }
+
+        const rejectedReq = createSSERequest(ip);
+        const rejectedRes = {
+          ...createSSEResponse(),
+          status: vi.fn().mockReturnThis(),
+          json: vi.fn(),
+        };
+        handler(rejectedReq, rejectedRes);
+
+        expect(mockLoggerWarn).toHaveBeenCalledWith(
+          'SSE per-IP connection limit reached for 192.168.1.2 (10)',
+        );
+      } finally {
+        delete process.env.DD_SSE_DEBUG_LOG_IP;
+      }
     });
 
     test('should allow connections from different IPs independently', () => {
@@ -1127,6 +1230,23 @@ describe('SSE Router', () => {
 
       expect(res.write).toHaveBeenCalledWith(
         'event: dd:container-removed\ndata: {"id":"container-1"}\n\n',
+      );
+    });
+
+    test('should broadcast dd:update-operation-changed when update-operation event fires', () => {
+      const handler = getHandler();
+      const { res } = connectSseClient(handler);
+      const onUpdateOperationChanged = mockRegisterUpdateOperationChanged.mock.calls.at(-1)[0];
+
+      onUpdateOperationChanged({
+        operationId: 'op-1',
+        containerName: 'nginx',
+        status: 'failed',
+        phase: 'failed',
+      });
+
+      expect(res.write).toHaveBeenCalledWith(
+        'event: dd:update-operation-changed\ndata: {"operationId":"op-1","containerName":"nginx","status":"failed","phase":"failed"}\n\n',
       );
     });
 

@@ -1,3 +1,22 @@
+export interface BulkContainerUpdateAcceptedItem {
+  containerId: string;
+  containerName: string;
+  operationId: string;
+}
+
+export interface BulkContainerUpdateRejectedItem {
+  containerId: string;
+  containerName: string;
+  message: string;
+  statusCode: number;
+}
+
+export interface BulkContainerUpdateResponse {
+  message: string;
+  accepted: BulkContainerUpdateAcceptedItem[];
+  rejected: BulkContainerUpdateRejectedItem[];
+}
+
 async function startContainer(containerId: string) {
   const response = await fetch(`/api/v1/containers/${containerId}/start`, {
     method: 'POST',
@@ -46,4 +65,20 @@ async function updateContainer(containerId: string) {
   return response.json();
 }
 
-export { restartContainer, startContainer, stopContainer, updateContainer };
+async function updateContainers(containerIds: string[]): Promise<BulkContainerUpdateResponse> {
+  const response = await fetch('/api/v1/containers/update', {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ containerIds }),
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body?.error || `Failed to update containers: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+export { restartContainer, startContainer, stopContainer, updateContainer, updateContainers };

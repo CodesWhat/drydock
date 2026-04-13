@@ -193,6 +193,22 @@ describe('useContainerFilters', () => {
         'postgres',
       ]);
     });
+
+    it('should filter blocked containers only when they have a newTag', async () => {
+      const blockedWithTag = makeContainer({
+        id: 'c4',
+        name: 'api',
+        image: 'api:latest',
+        bouncer: 'blocked',
+        newTag: '2.0',
+      });
+      const mod = await import('@/composables/useContainerFilters');
+      const localContainers = ref([...containers.value, blockedWithTag]);
+      const filters = mod.useContainerFilters(localContainers);
+      filters.filterKind.value = 'blocked';
+
+      expect(filters.filteredContainers.value.map((c) => c.name)).toEqual(['api']);
+    });
   });
 
   describe('activeFilterCount', () => {
@@ -319,10 +335,16 @@ describe('useContainerFilters', () => {
   });
 
   describe('hidePinned filter', () => {
-    it('hides containers with tagPrecision specific when enabled', async () => {
+    it('hides pinned containers even when they use floating version aliases', async () => {
       const mixed = ref<Container[]>([
-        makeContainer({ id: 'c1', name: 'floating', tagPrecision: 'floating' }),
-        makeContainer({ id: 'c2', name: 'pinned', tagPrecision: 'specific' }),
+        makeContainer({ id: 'c1', name: 'floating', currentTag: 'latest', tagPinned: false }),
+        makeContainer({
+          id: 'c2',
+          name: 'pinned',
+          currentTag: '16-alpine',
+          tagPrecision: 'floating',
+          tagPinned: true,
+        }),
         makeContainer({ id: 'c3', name: 'unset' }),
       ]);
       const mod = await import('@/composables/useContainerFilters');

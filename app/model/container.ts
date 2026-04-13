@@ -7,9 +7,11 @@ import type {
   ContainerSignatureVerification,
 } from '../security/scan.js';
 import * as tag from '../tag/index.js';
+import { isTagPinned } from '../tag/precision.js';
 import type {
-  ContainerUpdateOperationPhase,
-  ContainerUpdateOperationStatus,
+  ActiveContainerUpdateOperationPhase,
+  ActiveContainerUpdateOperationStatus,
+  ContainerUpdateOperationKind,
 } from './container-update-operation.js';
 import {
   MATURITY_MIN_AGE_DAYS_MAX,
@@ -125,9 +127,13 @@ export interface ContainerRuntimeDetails {
 
 export interface ContainerUpdateOperationState {
   id: string;
-  status: ContainerUpdateOperationStatus;
-  phase: ContainerUpdateOperationPhase;
+  kind?: ContainerUpdateOperationKind;
+  status: ActiveContainerUpdateOperationStatus;
+  phase: ActiveContainerUpdateOperationPhase;
   updatedAt: string;
+  batchId?: string;
+  queuePosition?: number;
+  queueTotal?: number;
   fromVersion?: string;
   toVersion?: string;
   targetImage?: string;
@@ -149,6 +155,7 @@ export interface Container {
   link?: string;
   triggerInclude?: string;
   triggerExclude?: string;
+  tagPinned?: boolean;
   updatePolicy?: ContainerUpdatePolicy;
   security?: ContainerSecurityState;
   image: ContainerImage;
@@ -168,6 +175,8 @@ export interface Container {
   details?: ContainerRuntimeDetails;
   resultChanged?: (otherContainer: Container | undefined) => boolean;
 }
+
+export type ContainerIdentity = Partial<Pick<Container, 'agent' | 'watcher' | 'name'>>;
 
 export interface ContainerReport {
   container: Container;
@@ -245,6 +254,7 @@ const schema = joi.object({
   link: joi.string(),
   triggerInclude: joi.string(),
   triggerExclude: joi.string(),
+  tagPinned: joi.boolean(),
   updatePolicy: joi.object({
     skipTags: joi.array().items(joi.string()),
     skipDigests: joi.array().items(joi.string()),
@@ -623,6 +633,15 @@ function getLink(container: Container, originalTagValue: string) {
   );
 }
 
+function addTagPinnedProperty(container: Container) {
+  Object.defineProperty(container, 'tagPinned', {
+    enumerable: true,
+    get(this: Container) {
+      return isTagPinned(this.image.tag.value, this.transformTags);
+    },
+  });
+}
+
 /**
  * Computed function to check whether there is an update.
  * @param container
@@ -709,14 +728,20 @@ function addUpdateMaturityLevelProperty(container: Container) {
  * @param otherContainer
  * @returns {boolean}
  */
-function resultChangedFunction(this: Container, otherContainer: Container | undefined) {
+function hasResultChanged(
+  currentResult: Container['result'],
+  otherResult: Container['result'],
+): boolean {
   return (
-    otherContainer === undefined ||
-    this.result?.tag !== otherContainer.result?.tag ||
-    this.result?.suggestedTag !== otherContainer.result?.suggestedTag ||
-    this.result?.digest !== otherContainer.result?.digest ||
-    this.result?.created !== otherContainer.result?.created
+    currentResult?.tag !== otherResult?.tag ||
+    currentResult?.suggestedTag !== otherResult?.suggestedTag ||
+    currentResult?.digest !== otherResult?.digest ||
+    currentResult?.created !== otherResult?.created
   );
+}
+
+function resultChangedFunction(this: Container, otherContainer: Container | undefined) {
+  return otherContainer === undefined || hasResultChanged(this.result, otherContainer.result);
 }
 
 /**
@@ -752,6 +777,7 @@ export function validate(container: unknown): Container {
   delete containerValidated.image?.registry?.lookupUrl;
 
   // Add computed properties
+  addTagPinnedProperty(containerValidated);
   addUpdateAvailableProperty(containerValidated);
   addUpdateKindProperty(containerValidated);
   addUpdateAgeProperty(containerValidated);
@@ -802,6 +828,30 @@ export function flatten(container: Container) {
   });
   delete containerFlatten.result_changed;
   return containerFlatten;
+}
+
+function hasContainerIdentityValue(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0;
+}
+
+function hasValidContainerIdentity(containerIdentity: ContainerIdentity | undefined): boolean {
+  return (
+    containerIdentity !== undefined &&
+    hasContainerIdentityValue(containerIdentity.watcher) &&
+    hasContainerIdentityValue(containerIdentity.name)
+  );
+}
+
+function getContainerIdentityAgentPrefix(containerIdentity: ContainerIdentity): string {
+  return hasContainerIdentityValue(containerIdentity.agent) ? containerIdentity.agent : '';
+}
+
+export function getContainerIdentityKey(containerIdentity: ContainerIdentity) {
+  if (!hasValidContainerIdentity(containerIdentity)) {
+    return undefined;
+  }
+
+  return `${getContainerIdentityAgentPrefix(containerIdentity)}::${containerIdentity.watcher}::${containerIdentity.name}`;
 }
 
 /**

@@ -46,6 +46,15 @@ test('validateConfiguration should normalize trailing slash in URL', async () =>
   expect(validatedConfiguration.url).toEqual('https://matrix.example.com');
 });
 
+test('validateConfiguration should throw error when url scheme is unsupported', async () => {
+  expect(() => {
+    matrix.validateConfiguration({
+      ...configurationValid,
+      url: 'git://matrix.example.com',
+    });
+  }).toThrowError(joi.ValidationError);
+});
+
 test('validateConfiguration should apply default msgtype when missing', async () => {
   const validatedConfiguration = matrix.validateConfiguration({
     url: configurationValid.url,
@@ -53,6 +62,23 @@ test('validateConfiguration should apply default msgtype when missing', async ()
     accesstoken: configurationValid.accesstoken,
   });
   expect(validatedConfiguration.msgtype).toEqual('m.notice');
+});
+
+test('validateConfiguration should accept m.text msgtype', async () => {
+  const validatedConfiguration = matrix.validateConfiguration({
+    ...configurationValid,
+    msgtype: 'm.text',
+  });
+  expect(validatedConfiguration.msgtype).toEqual('m.text');
+});
+
+test('validateConfiguration should apply default disabletitle when missing', async () => {
+  const validatedConfiguration = matrix.validateConfiguration({
+    url: configurationValid.url,
+    roomid: configurationValid.roomid,
+    accesstoken: configurationValid.accesstoken,
+  });
+  expect(validatedConfiguration.disabletitle).toBe(false);
 });
 
 test('validateConfiguration should throw error when invalid', async () => {
@@ -86,7 +112,7 @@ test('buildMessageBody should include message type and body', async () => {
 test('generateTransactionId should include timestamp prefix', async () => {
   vi.spyOn(Date, 'now').mockReturnValue(1700000000000);
   vi.spyOn(Math, 'random').mockReturnValue(0.123456789);
-  expect(matrix.generateTransactionId()).toMatch(/^1700000000000-/);
+  expect(matrix.generateTransactionId()).toMatch(/^1700000000000-[a-z0-9]{8}$/);
   vi.restoreAllMocks();
 });
 

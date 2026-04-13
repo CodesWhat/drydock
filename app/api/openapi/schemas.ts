@@ -191,6 +191,15 @@ export const openApiSchemas = {
     required: ['total', 'env', 'label'],
     additionalProperties: false,
   },
+  CurlHealthcheckOverrideCompatibility: {
+    type: 'object',
+    properties: {
+      detected: { type: 'boolean' },
+      commandPreview: { type: 'string' },
+    },
+    required: ['detected'],
+    additionalProperties: false,
+  },
   ServerInfoResponse: {
     type: 'object',
     properties: {
@@ -213,8 +222,11 @@ export const openApiSchemas = {
         type: 'object',
         properties: {
           legacyInputs: { $ref: '#/components/schemas/LegacyInputSummary' },
+          curlHealthcheckOverride: {
+            $ref: '#/components/schemas/CurlHealthcheckOverrideCompatibility',
+          },
         },
-        required: ['legacyInputs'],
+        required: ['legacyInputs', 'curlHealthcheckOverride'],
         additionalProperties: true,
       },
     },
@@ -310,8 +322,15 @@ export const openApiSchemas = {
           enum: ['updated', 'pending', 'failed'],
         },
       },
+      statusesByIdentity: {
+        type: 'object',
+        additionalProperties: {
+          type: 'string',
+          enum: ['updated', 'pending', 'failed'],
+        },
+      },
     },
-    required: ['statuses'],
+    required: ['statuses', 'statusesByIdentity'],
     additionalProperties: false,
   },
   WatchContainersRequest: {
@@ -587,6 +606,52 @@ export const openApiSchemas = {
     },
     required: ['message', 'result'],
     additionalProperties: true,
+  },
+  ContainerUpdateAcceptedResponse: {
+    type: 'object',
+    properties: {
+      message: { type: 'string' },
+      operationId: { type: 'string' },
+    },
+    required: ['message', 'operationId'],
+    additionalProperties: false,
+  },
+  ContainerBulkUpdateAcceptedItem: {
+    type: 'object',
+    properties: {
+      containerId: { type: 'string' },
+      containerName: { type: 'string' },
+      operationId: { type: 'string' },
+    },
+    required: ['containerId', 'containerName', 'operationId'],
+    additionalProperties: false,
+  },
+  ContainerBulkUpdateRejectedItem: {
+    type: 'object',
+    properties: {
+      containerId: { type: 'string' },
+      containerName: { type: 'string' },
+      statusCode: { type: 'integer' },
+      message: { type: 'string' },
+    },
+    required: ['containerId', 'containerName', 'statusCode', 'message'],
+    additionalProperties: false,
+  },
+  ContainerBulkUpdateResponse: {
+    type: 'object',
+    properties: {
+      message: { type: 'string' },
+      accepted: {
+        type: 'array',
+        items: { $ref: '#/components/schemas/ContainerBulkUpdateAcceptedItem' },
+      },
+      rejected: {
+        type: 'array',
+        items: { $ref: '#/components/schemas/ContainerBulkUpdateRejectedItem' },
+      },
+    },
+    required: ['message', 'accepted', 'rejected'],
+    additionalProperties: false,
   },
   ComponentItem: {
     type: 'object',

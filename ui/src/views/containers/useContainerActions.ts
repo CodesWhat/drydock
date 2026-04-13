@@ -1,7 +1,9 @@
 import { computed, onUnmounted, type Ref, ref, watch } from 'vue';
 import { useConfirmDialog } from '../../composables/useConfirmDialog';
+import { useOperationDisplayHold } from '../../composables/useOperationDisplayHold';
 import { useServerFeatures } from '../../composables/useServerFeatures';
 import { useToast } from '../../composables/useToast';
+import { useUpdateBatches } from '../../composables/useUpdateBatches';
 import {
   deleteContainer as apiDeleteContainer,
   scanContainer as apiScanContainer,
@@ -11,10 +13,24 @@ import {
   startContainer as apiStartContainer,
   stopContainer as apiStopContainer,
   updateContainer as apiUpdateContainer,
+  updateContainers as apiUpdateContainers,
 } from '../../services/container-actions';
 import type { Container } from '../../types/container';
-import { getContainerActionKey, hasTrackedContainerAction } from '../../utils/container-action-key';
-import { errorMessage, isNoUpdateAvailableError } from '../../utils/error';
+import {
+  getContainerActionIdentityKey,
+  getContainerActionKey,
+  hasTrackedContainerAction,
+} from '../../utils/container-action-key';
+import {
+  formatContainerUpdateStartedCountMessage,
+  getContainerAlreadyUpToDateMessage,
+  getContainerUpdateStartedMessage,
+  getForceContainerUpdateStartedMessage,
+  isStaleContainerUpdateError,
+  runContainerUpdateRequest,
+  shouldRenderStandaloneQueuedUpdateAsUpdating,
+} from '../../utils/container-update';
+import { errorMessage } from '../../utils/error';
 import { useContainerBackups } from './useContainerBackups';
 import { useContainerPolicy } from './useContainerPolicy';
 import { useContainerPreview } from './useContainerPreview';
@@ -25,7 +41,9 @@ interface ContainerActionGroup {
   containers: Container[];
 }
 
-type ContainerActionTarget = string | Pick<Container, 'id' | 'name' | 'updateOperation'>;
+type ContainerActionTarget =
+  | string
+  | Pick<Container, 'id' | 'name' | 'identityKey' | 'updateOperation'>;
 
 interface UseContainerActionsInput {
   activeDetailTab: Readonly<Ref<string>>;
@@ -45,10 +63,6 @@ export const PENDING_ACTIONS_POLL_INTERVAL_MS = 2000;
 const PENDING_UPDATE_GRACE_MS = 6000;
 
 type PendingActionLifecycleMode = 'presence' | 'update';
-
-function isStaleUpdateError(error: unknown): boolean {
-  return isNoUpdateAvailableError(error);
-}
 
 function resolveContainerActionTargetKey(target: ContainerActionTarget): string {
   if (typeof target === 'string') {
@@ -74,24 +88,31 @@ function hasPendingContainerAction(
   target: ContainerActionTarget,
   actionPending: Readonly<Ref<Map<string, Container>>>,
 ) {
-  const name = typeof target === 'string' ? target : target.name;
-  return typeof name === 'string' && name.length > 0 && actionPending.value.has(name);
-}
-
-function hasInProgressUpdateOperation(
-  target: ContainerActionTarget,
-  containers: Readonly<Ref<Container[]>>,
-) {
-  if (typeof target !== 'string' && target.updateOperation?.status === 'in-progress') {
+  const pendingKey = resolveContainerActionTargetKey(target);
+  if (pendingKey && actionPending.value.has(pendingKey)) {
     return true;
   }
 
-  const targetId = typeof target === 'string' ? undefined : target.id;
-  const targetName = typeof target === 'string' ? target : target.name;
+  const identityKey = typeof target === 'string' ? target : getContainerActionIdentityKey(target);
+  if (!identityKey) {
+    return false;
+  }
 
-  return containers.value.some((container) => {
-    const matches = targetId ? container.id === targetId : container.name === targetName;
-    return matches && container.updateOperation?.status === 'in-progress';
+  return [...actionPending.value.values()].some((snapshot) => {
+    return typeof target === 'string'
+      ? snapshot.name === identityKey
+      : getContainerActionIdentityKey(snapshot) === identityKey;
+  });
+}
+
+function hasInProgressUpdateOperationByIdentityKey(
+  targetIdentityKey: string,
+  containers: readonly Pick<Container, 'name' | 'updateOperation'>[],
+) {
+  return containers.some((container) => {
+    return (
+      container.name === targetIdentityKey && container.updateOperation?.status === 'in-progress'
+    );
   });
 }
 
@@ -99,8 +120,8 @@ function markPendingActionState(args: {
   actionPending: Ref<Map<string, Container>>;
   actionPendingLifecycleModes: Ref<Map<string, PendingActionLifecycleMode>>;
   actionPendingLifecycleObserved: Ref<Set<string>>;
-  startPolling: (name: string) => void;
-  name: string;
+  startPolling: (pendingKey: string) => void;
+  pendingKey: string;
   snapshot?: Container;
   mode: PendingActionLifecycleMode;
 }) {
@@ -108,17 +129,17 @@ function markPendingActionState(args: {
     return;
   }
 
-  args.actionPending.value.set(args.name, args.snapshot);
-  args.actionPendingLifecycleModes.value.set(args.name, args.mode);
+  args.actionPending.value.set(args.pendingKey, args.snapshot);
+  args.actionPendingLifecycleModes.value.set(args.pendingKey, args.mode);
 
   const nextObserved = new Set(args.actionPendingLifecycleObserved.value);
   if (args.mode === 'update') {
-    nextObserved.delete(args.name);
+    nextObserved.delete(args.pendingKey);
   } else {
-    nextObserved.add(args.name);
+    nextObserved.add(args.pendingKey);
   }
   args.actionPendingLifecycleObserved.value = nextObserved;
-  args.startPolling(args.name);
+  args.startPolling(args.pendingKey);
 }
 
 async function executeContainerActionState(args: {
@@ -126,6 +147,7 @@ async function executeContainerActionState(args: {
   containerActionsDisabledReason: string;
   containerId?: string;
   actionKey: string;
+  pendingKey: string;
   name: string;
   actionInProgress: Ref<Set<string>>;
   inputError: Ref<string | null>;
@@ -136,7 +158,7 @@ async function executeContainerActionState(args: {
   actionPending: Ref<Map<string, Container>>;
   actionPendingLifecycleModes: Ref<Map<string, PendingActionLifecycleMode>>;
   actionPendingLifecycleObserved: Ref<Set<string>>;
-  startPolling: (name: string) => void;
+  startPolling: (pendingKey: string) => void;
   selectedContainerId: string | undefined;
   activeDetailTab: string;
   refreshActionTabData: () => Promise<void>;
@@ -162,35 +184,54 @@ async function executeContainerActionState(args: {
     args.containers.value.find((container) => container.id === containerId) ??
     args.containers.value.find((container) => container.name === args.name);
   try {
-    await args.action(containerId);
-    if (args.pendingLifecycleMode === 'update') {
-      markPendingActionState({
-        actionPending: args.actionPending,
-        actionPendingLifecycleModes: args.actionPendingLifecycleModes,
-        actionPendingLifecycleObserved: args.actionPendingLifecycleObserved,
-        startPolling: args.startPolling,
-        name: args.name,
-        snapshot,
-        mode: 'update',
-      });
-    }
-    if (shouldReloadContainers) {
-      await args.loadContainers();
-      const stillPresent = args.containers.value.find((container) => container.id === containerId);
-      if (!stillPresent && snapshot) {
-        markPendingActionState({
-          actionPending: args.actionPending,
-          actionPendingLifecycleModes: args.actionPendingLifecycleModes,
-          actionPendingLifecycleObserved: args.actionPendingLifecycleObserved,
-          startPolling: args.startPolling,
-          name: args.name,
-          snapshot,
-          mode: args.pendingLifecycleMode ?? 'presence',
-        });
+    const result = await runContainerUpdateRequest({
+      request: () => args.action(containerId),
+      onAccepted: async () => {
+        if (args.pendingLifecycleMode === 'update') {
+          markPendingActionState({
+            actionPending: args.actionPending,
+            actionPendingLifecycleModes: args.actionPendingLifecycleModes,
+            actionPendingLifecycleObserved: args.actionPendingLifecycleObserved,
+            startPolling: args.startPolling,
+            pendingKey: args.pendingKey,
+            snapshot,
+            mode: 'update',
+          });
+        }
+        if (shouldReloadContainers) {
+          await args.loadContainers();
+          const stillPresent = args.containers.value.find(
+            (container) => container.id === containerId,
+          );
+          if (!stillPresent && snapshot) {
+            markPendingActionState({
+              actionPending: args.actionPending,
+              actionPendingLifecycleModes: args.actionPendingLifecycleModes,
+              actionPendingLifecycleObserved: args.actionPendingLifecycleObserved,
+              startPolling: args.startPolling,
+              pendingKey: args.pendingKey,
+              snapshot,
+              mode: args.pendingLifecycleMode ?? 'presence',
+            });
+          }
+        }
+        if (args.selectedContainerId === containerId && args.activeDetailTab === 'actions') {
+          await args.refreshActionTabData();
+        }
+      },
+      onStale: async () => {
+        if (shouldReloadContainers) {
+          await args.loadContainers();
+        }
+      },
+      isStaleError: args.treatNoUpdateAsStale ? isStaleContainerUpdateError : undefined,
+    });
+    if (result === 'stale') {
+      if (args.staleMessage) {
+        const toast = useToast();
+        toast.info(args.staleMessage);
       }
-    }
-    if (args.selectedContainerId === containerId && args.activeDetailTab === 'actions') {
-      await args.refreshActionTabData();
+      return false;
     }
     if (args.successMessage) {
       const toast = useToast();
@@ -198,16 +239,6 @@ async function executeContainerActionState(args: {
     }
     return true;
   } catch (e: unknown) {
-    if (args.treatNoUpdateAsStale && isStaleUpdateError(e)) {
-      if (shouldReloadContainers) {
-        await args.loadContainers();
-      }
-      if (args.staleMessage) {
-        const toast = useToast();
-        toast.info(args.staleMessage);
-      }
-      return false;
-    }
     const msg = errorMessage(e, `Action failed for ${args.name}`);
     args.inputError.value = msg;
     const toast = useToast();
@@ -223,87 +254,112 @@ async function executeContainerActionState(args: {
   }
 }
 
-function setGroupUpdateStateValue(
-  groupUpdateInProgress: Ref<Set<string>>,
-  groupKey: string,
-  updating: boolean,
-) {
-  const next = new Set(groupUpdateInProgress.value);
-  if (updating) {
-    next.add(groupKey);
-  } else {
-    next.delete(groupKey);
-  }
-  groupUpdateInProgress.value = next;
-}
-
 async function updateAllInGroupState(args: {
   containerActionsEnabled: boolean;
   containerActionsDisabledReason: string;
   containers: Readonly<Ref<Container[]>>;
+  projectContainerDisplayState: (container: Container) => Container;
   inputError: Ref<string | null>;
-  groupUpdateInProgress: Ref<Set<string>>;
+  actionInProgress: Ref<Set<string>>;
+  actionPending: Ref<Map<string, Container>>;
+  actionPendingLifecycleModes: Ref<Map<string, PendingActionLifecycleMode>>;
+  actionPendingLifecycleObserved: Ref<Set<string>>;
+  startPolling: (pendingKey: string) => void;
   group: ContainerActionGroup;
-  executeAction: (
-    target: ContainerActionTarget,
-    action: (id: string) => Promise<unknown>,
-    options?: {
-      containerId?: string;
-      reloadContainers?: boolean;
-      successMessage?: string;
-      staleMessage?: string;
-      treatNoUpdateAsStale?: boolean;
-      pendingLifecycleMode?: PendingActionLifecycleMode;
-    },
-  ) => Promise<boolean>;
   loadContainers: () => Promise<void>;
+  captureBatch: (groupKey: string, frozenTotal: number) => void;
+  clearBatch: (groupKey: string) => void;
 }) {
   if (!args.containerActionsEnabled) {
     args.inputError.value = args.containerActionsDisabledReason;
     return;
   }
-  if (args.groupUpdateInProgress.value.has(args.group.key)) {
-    return;
-  }
   const updatableContainers = args.group.containers.filter((container) => {
     return container.newTag && container.bouncer !== 'blocked';
   });
+  const displayContainers = args.containers.value.map(args.projectContainerDisplayState);
+  if (
+    updatableContainers.some((container) => {
+      const liveContainer = displayContainers.find((entry) => entry.id === container.id);
+      const operation =
+        liveContainer?.updateOperation ??
+        args.projectContainerDisplayState(container).updateOperation;
+      return (
+        operation?.status === 'queued' ||
+        operation?.status === 'in-progress' ||
+        args.actionInProgress.value.has(container.id)
+      );
+    })
+  ) {
+    return;
+  }
   const frozenUpdateTargets = updatableContainers.map((container) => ({
     id: container.id,
+    identityKey: container.identityKey,
     name: container.name,
   }));
   if (frozenUpdateTargets.length === 0) {
     return;
   }
-  setGroupUpdateStateValue(args.groupUpdateInProgress, args.group.key, true);
+  const groupContainerIds = frozenUpdateTargets.map((t) => t.id);
+  const firstTargetActionKey = resolveContainerActionTargetKey(frozenUpdateTargets[0]!);
+  const headActionInProgress = new Set(args.actionInProgress.value);
+  headActionInProgress.add(firstTargetActionKey);
+  args.actionInProgress.value = headActionInProgress;
+  let acceptedTargetIds: string[] = [];
   try {
-    let updatedCount = 0;
-    for (const target of frozenUpdateTargets) {
-      const currentContainer = args.containers.value.find(
-        (container) => container.id === target.id,
-      );
-      if (!currentContainer || currentContainer.name !== target.name) {
+    const response = await apiUpdateContainers(groupContainerIds);
+    acceptedTargetIds = response.accepted.map((accepted) => accepted.containerId);
+    const acceptedTargetIdSet = new Set(acceptedTargetIds);
+
+    const toast = useToast();
+    for (const rejected of response.rejected) {
+      if (isStaleContainerUpdateError(rejected.message)) {
         continue;
       }
-
-      const updated = await args.executeAction(target, apiUpdateContainer, {
-        reloadContainers: false,
-        treatNoUpdateAsStale: true,
-        pendingLifecycleMode: 'update',
-      });
-      if (updated) {
-        updatedCount += 1;
-      }
+      toast.error(`Failed to update ${rejected.containerName}: ${rejected.message}`);
     }
+
     await args.loadContainers();
-    if (updatedCount > 0) {
-      const toast = useToast();
+    for (const container of updatableContainers) {
+      if (!acceptedTargetIdSet.has(container.id)) {
+        continue;
+      }
+      const liveContainer = args.containers.value.find((entry) => entry.id === container.id);
+      const operation = liveContainer?.updateOperation;
+      if (operation?.status === 'queued' || operation?.status === 'in-progress') {
+        continue;
+      }
+      markPendingActionState({
+        actionPending: args.actionPending,
+        actionPendingLifecycleModes: args.actionPendingLifecycleModes,
+        actionPendingLifecycleObserved: args.actionPendingLifecycleObserved,
+        startPolling: args.startPolling,
+        pendingKey: container.id,
+        snapshot: container,
+        mode: 'update',
+      });
+    }
+    if (acceptedTargetIds.length >= 2) {
+      args.captureBatch(args.group.key, acceptedTargetIds.length);
+    } else {
+      args.clearBatch(args.group.key);
+    }
+    if (acceptedTargetIds.length > 0) {
       toast.success(
-        `Updated ${updatedCount} container${updatedCount === 1 ? '' : 's'} in ${args.group.key}`,
+        `${formatContainerUpdateStartedCountMessage(acceptedTargetIds.length)} in ${args.group.key}`,
       );
     }
+  } catch (error: unknown) {
+    args.clearBatch(args.group.key);
+    useToast().error(errorMessage(error, `Failed to update ${args.group.key}`));
   } finally {
-    setGroupUpdateStateValue(args.groupUpdateInProgress, args.group.key, false);
+    if (acceptedTargetIds.length === 0) {
+      args.clearBatch(args.group.key);
+    }
+    const nextActionInProgress = new Set(args.actionInProgress.value);
+    nextActionInProgress.delete(firstTargetActionKey);
+    args.actionInProgress.value = nextActionInProgress;
   }
 }
 
@@ -372,18 +428,18 @@ function clearPendingActionState(args: {
   actionPendingStartTimes: Ref<Map<string, number>>;
   actionPendingLifecycleModes: Ref<Map<string, PendingActionLifecycleMode>>;
   actionPendingLifecycleObserved: Ref<Set<string>>;
-  name: string;
+  pendingKey: string;
 }) {
-  args.actionPending.value.delete(args.name);
-  args.actionPendingStartTimes.value.delete(args.name);
-  args.actionPendingLifecycleModes.value.delete(args.name);
+  args.actionPending.value.delete(args.pendingKey);
+  args.actionPendingStartTimes.value.delete(args.pendingKey);
+  args.actionPendingLifecycleModes.value.delete(args.pendingKey);
   const nextObserved = new Set(args.actionPendingLifecycleObserved.value);
-  nextObserved.delete(args.name);
+  nextObserved.delete(args.pendingKey);
   args.actionPendingLifecycleObserved.value = nextObserved;
 }
 
 export function isPendingUpdateSettled(args: {
-  name: string;
+  pendingKey: string;
   now: number;
   startTime: number;
   liveContainer?: Container;
@@ -394,10 +450,11 @@ export function isPendingUpdateSettled(args: {
   const observedLifecycleSignal =
     !args.liveContainer ||
     args.liveContainer.updateOperation?.status === 'in-progress' ||
+    args.liveContainer.updateOperation?.status === 'queued' ||
     args.liveContainer.status !== expectedStatus;
   if (observedLifecycleSignal) {
     const nextObserved = new Set(args.actionPendingLifecycleObserved.value);
-    nextObserved.add(args.name);
+    nextObserved.add(args.pendingKey);
     args.actionPendingLifecycleObserved.value = nextObserved;
   }
 
@@ -405,7 +462,10 @@ export function isPendingUpdateSettled(args: {
     return false;
   }
 
-  if (args.liveContainer.updateOperation?.status === 'in-progress') {
+  if (
+    args.liveContainer.updateOperation?.status === 'in-progress' ||
+    args.liveContainer.updateOperation?.status === 'queued'
+  ) {
     return false;
   }
 
@@ -414,12 +474,12 @@ export function isPendingUpdateSettled(args: {
   }
 
   return (
-    args.actionPendingLifecycleObserved.value.has(args.name) ||
+    args.actionPendingLifecycleObserved.value.has(args.pendingKey) ||
     args.now - args.startTime >= PENDING_UPDATE_GRACE_MS
   );
 }
 
-function prunePendingActionsState(args: {
+export function prunePendingActionsState(args: {
   now: number;
   containers: Readonly<Ref<Container[]>>;
   actionPending: Ref<Map<string, Container>>;
@@ -429,21 +489,36 @@ function prunePendingActionsState(args: {
   pollTimeout: number;
   stopPendingActionsPolling: () => void;
 }) {
-  const liveContainersByName = new Map(
-    args.containers.value.map((container) => [container.name, container] as const),
-  );
-  for (const [name, startTime] of args.actionPendingStartTimes.value.entries()) {
-    const liveContainer = liveContainersByName.get(name);
-    const pendingMode = args.actionPendingLifecycleModes.value.get(name);
+  const liveContainersByActionKey = new Map<string, Container>();
+  const liveContainersByIdentityKey = new Map<string, Container>();
+
+  for (const container of args.containers.value) {
+    const actionKey = getContainerActionKey(container);
+    if (actionKey) {
+      liveContainersByActionKey.set(actionKey, container);
+    }
+    const identityKey = getContainerActionIdentityKey(container);
+    if (identityKey) {
+      liveContainersByIdentityKey.set(identityKey, container);
+    }
+  }
+
+  for (const [pendingKey, startTime] of args.actionPendingStartTimes.value.entries()) {
+    const snapshot = args.actionPending.value.get(pendingKey);
+    const snapshotIdentityKey = snapshot ? getContainerActionIdentityKey(snapshot) : '';
+    const liveContainer =
+      liveContainersByActionKey.get(pendingKey) ??
+      (snapshotIdentityKey ? liveContainersByIdentityKey.get(snapshotIdentityKey) : undefined);
+    const pendingMode = args.actionPendingLifecycleModes.value.get(pendingKey);
     const timedOut = args.now - startTime > args.pollTimeout;
     const settled =
       pendingMode === 'update'
         ? isPendingUpdateSettled({
-            name,
+            pendingKey,
             now: args.now,
             startTime,
             liveContainer,
-            snapshot: args.actionPending.value.get(name),
+            snapshot,
             actionPendingLifecycleObserved: args.actionPendingLifecycleObserved,
           })
         : Boolean(liveContainer);
@@ -454,7 +529,7 @@ function prunePendingActionsState(args: {
         actionPendingStartTimes: args.actionPendingStartTimes,
         actionPendingLifecycleModes: args.actionPendingLifecycleModes,
         actionPendingLifecycleObserved: args.actionPendingLifecycleObserved,
-        name,
+        pendingKey,
       });
     }
   }
@@ -481,14 +556,14 @@ async function pollPendingActionsState(args: {
 }
 
 function startPollingState(args: {
-  name: string;
+  pendingKey: string;
   actionPendingStartTimes: Ref<Map<string, number>>;
   pendingActionsPollTimer: Ref<ReturnType<typeof setInterval> | null>;
   pollInterval: number;
   pollPendingActions: () => Promise<void>;
 }) {
-  if (!args.actionPendingStartTimes.value.has(args.name)) {
-    args.actionPendingStartTimes.value.set(args.name, Date.now());
+  if (!args.actionPendingStartTimes.value.has(args.pendingKey)) {
+    args.actionPendingStartTimes.value.set(args.pendingKey, Date.now());
   }
   if (args.pendingActionsPollTimer.value) {
     return;
@@ -581,7 +656,7 @@ function createConfirmHandlers(args: {
       severity: 'warn',
       accept: () =>
         args.executeAction(target, apiUpdateContainer, {
-          successMessage: `Updated: ${name}`,
+          successMessage: getContainerUpdateStartedMessage(name),
           treatNoUpdateAsStale: true,
           pendingLifecycleMode: 'update',
         }) as unknown as Promise<void>,
@@ -674,8 +749,8 @@ function createContainerActionHandlers(args: {
   async function updateContainer(target: ContainerActionTarget) {
     const name = typeof target === 'string' ? target : target.name;
     await args.executeAction(target, apiUpdateContainer, {
-      successMessage: `Updated: ${name}`,
-      staleMessage: `Already up to date: ${name}`,
+      successMessage: getContainerUpdateStartedMessage(name),
+      staleMessage: getContainerAlreadyUpToDateMessage(name),
       treatNoUpdateAsStale: true,
       pendingLifecycleMode: 'update',
     });
@@ -712,8 +787,8 @@ function createContainerActionHandlers(args: {
     const name = typeof target === 'string' ? target : target.name;
     await args.applyPolicy(target, 'clear', {}, `Cleared update policy for ${name}`);
     await args.executeAction(target, apiUpdateContainer, {
-      successMessage: `Force updated: ${name}`,
-      staleMessage: `Already up to date: ${name}`,
+      successMessage: getForceContainerUpdateStartedMessage(name),
+      staleMessage: getContainerAlreadyUpToDateMessage(name),
       treatNoUpdateAsStale: true,
       pendingLifecycleMode: 'update',
     });
@@ -730,6 +805,7 @@ function createContainerActionHandlers(args: {
 
 export function useContainerActions(input: UseContainerActionsInput) {
   const confirm = useConfirmDialog();
+  const { getDisplayUpdateOperation, projectContainerDisplayState } = useOperationDisplayHold();
   const { containerActionsEnabled, containerActionsDisabledReason } = useServerFeatures();
 
   const skippedUpdates = ref(new Set<string>());
@@ -832,8 +908,8 @@ export function useContainerActions(input: UseContainerActionsInput) {
   const actionPendingLifecycleObserved = ref<Set<string>>(new Set());
   const pendingActionsPollTimer = ref<ReturnType<typeof setInterval> | null>(null);
   const pendingActionsPollInFlight = ref(false);
-  const groupUpdateInProgress = ref(new Set<string>());
   const POLL_TIMEOUT = 30000;
+  const { captureBatch, clearBatch } = useUpdateBatches();
 
   function stopPendingActionsPolling() {
     stopPendingActionsPollingState(pendingActionsPollTimer);
@@ -860,9 +936,9 @@ export function useContainerActions(input: UseContainerActionsInput) {
     });
   }
 
-  function startPolling(name: string) {
+  function startPolling(pendingKey: string) {
     startPollingState({
-      name,
+      pendingKey,
       actionPendingStartTimes,
       pendingActionsPollTimer,
       pollInterval: PENDING_ACTIONS_POLL_INTERVAL_MS,
@@ -885,15 +961,76 @@ export function useContainerActions(input: UseContainerActionsInput) {
     },
   );
 
+  function hasOtherLocalTrackedAction(target: Exclude<ContainerActionTarget, string>) {
+    const targetKey = resolveContainerActionTargetKey(target);
+    return [...actionInProgress.value].some((actionKey) => actionKey !== targetKey);
+  }
+
+  function getDisplayContainers() {
+    return input.containers.value.map(projectContainerDisplayState);
+  }
+
   function isContainerUpdateInProgress(target: ContainerActionTarget) {
-    return (
-      hasTrackedContainerAction(
-        actionInProgress.value,
-        typeof target === 'string' ? { name: target } : target,
-      ) ||
-      hasPendingContainerAction(target, actionPending) ||
-      hasInProgressUpdateOperation(target, input.containers)
+    const hasTrackedAction = hasTrackedContainerAction(
+      actionInProgress.value,
+      typeof target === 'string' ? { name: target } : target,
     );
+    if (hasTrackedAction) {
+      return true;
+    }
+    const displayContainers = getDisplayContainers();
+    if (typeof target !== 'string') {
+      const freshContainer = displayContainers.find((c) => c.id === target.id);
+      const liveOperation = freshContainer?.updateOperation ?? getDisplayUpdateOperation(target);
+      if (liveOperation?.status === 'in-progress') {
+        return true;
+      }
+      if (!liveOperation && hasPendingContainerAction(target, actionPending)) {
+        return true;
+      }
+      if (
+        shouldRenderStandaloneQueuedUpdateAsUpdating({
+          containers: displayContainers,
+          hasExternalActiveHead: hasOtherLocalTrackedAction(target),
+          operation: liveOperation,
+          targetId: target.id,
+        })
+      ) {
+        return true;
+      }
+      return false;
+    }
+    return (
+      hasPendingContainerAction(target, actionPending) ||
+      hasInProgressUpdateOperationByIdentityKey(target, displayContainers)
+    );
+  }
+
+  function isContainerUpdateQueued(target: ContainerActionTarget) {
+    if (typeof target === 'string') {
+      return false;
+    }
+    const hasTrackedAction = hasTrackedContainerAction(actionInProgress.value, target);
+    if (hasTrackedAction) {
+      return false;
+    }
+    const displayContainers = getDisplayContainers();
+    const freshContainer = displayContainers.find((container) => container.id === target.id);
+    const liveOperation = freshContainer?.updateOperation ?? getDisplayUpdateOperation(target);
+    if (liveOperation?.status === 'in-progress') {
+      return false;
+    }
+    if (
+      shouldRenderStandaloneQueuedUpdateAsUpdating({
+        containers: displayContainers,
+        hasExternalActiveHead: hasOtherLocalTrackedAction(target),
+        operation: liveOperation,
+        targetId: target.id,
+      })
+    ) {
+      return false;
+    }
+    return liveOperation?.status === 'queued';
   }
 
   async function executeAction(
@@ -914,11 +1051,13 @@ export function useContainerActions(input: UseContainerActionsInput) {
       options?.containerId,
     );
     const actionKey = containerId ?? resolveContainerActionTargetKey(target);
+    const pendingKey = resolveContainerActionTargetKey(target);
     return executeContainerActionState({
       containerActionsEnabled: containerActionsEnabled.value,
       containerActionsDisabledReason: containerActionsDisabledReason.value,
       containerId,
       actionKey,
+      pendingKey,
       name,
       actionInProgress,
       inputError: input.error,
@@ -945,11 +1084,17 @@ export function useContainerActions(input: UseContainerActionsInput) {
       containerActionsEnabled: containerActionsEnabled.value,
       containerActionsDisabledReason: containerActionsDisabledReason.value,
       containers: input.containers,
+      projectContainerDisplayState,
       inputError: input.error,
-      groupUpdateInProgress,
+      actionInProgress,
+      actionPending,
+      actionPendingLifecycleModes,
+      actionPendingLifecycleObserved,
+      startPolling,
       group,
-      executeAction,
       loadContainers: input.loadContainers,
+      captureBatch,
+      clearBatch,
     });
   }
 
@@ -1033,8 +1178,8 @@ export function useContainerActions(input: UseContainerActionsInput) {
     getContainerListPolicyState: policy.getContainerListPolicyState,
     getOperationStatusStyle: backups.getOperationStatusStyle,
     getTriggerKey: triggers.getTriggerKey,
-    groupUpdateInProgress,
     isContainerUpdateInProgress,
+    isContainerUpdateQueued,
     policyError: policy.policyError,
     policyInProgress: policy.policyInProgress,
     policyMessage: policy.policyMessage,

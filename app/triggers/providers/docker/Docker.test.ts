@@ -1,7 +1,13 @@
 import joi from 'joi';
+import {
+  createFinalizeSelfUpdateHandler,
+  getSelfUpdateFinalizeSecret,
+  SELF_UPDATE_FINALIZE_SECRET_HEADER,
+} from '../../../api/internal-self-update.js';
 import log from '../../../log/index.js';
 import * as registryStore from '../../../registry';
 import * as backupStore from '../../../store/backup';
+import { createMockRequest, createMockResponse } from '../../../test/helpers.js';
 import Docker from './Docker.js';
 
 const configurationValid = {
@@ -28,6 +34,7 @@ docker.configuration = configurationValid;
 docker.log = log;
 
 const mockGetSecurityConfiguration = vi.hoisted(() => vi.fn());
+const mockGetServerConfiguration = vi.hoisted(() => vi.fn());
 vi.mock('../../../configuration/index.js', async () => {
   const actual = await vi.importActual<typeof import('../../../configuration/index.js')>(
     '../../../configuration/index.js',
@@ -35,6 +42,7 @@ vi.mock('../../../configuration/index.js', async () => {
   return {
     ...actual,
     getSecurityConfiguration: (...args: any[]) => mockGetSecurityConfiguration(...args),
+    getServerConfiguration: (...args: any[]) => mockGetServerConfiguration(...args),
   };
 });
 
@@ -53,6 +61,7 @@ vi.mock('../../../security/scan.js', () => ({
 
 vi.mock('../../../store/container.js', () => ({
   getContainer: vi.fn(),
+  getContainers: vi.fn().mockReturnValue([]),
   updateContainer: vi.fn((container) => container),
   cacheSecurityState: vi.fn(),
 }));
@@ -91,12 +100,21 @@ vi.mock('../../../prometheus/rollback.js', () => ({
 
 const mockInsertOperation = vi.hoisted(() => vi.fn());
 const mockUpdateOperation = vi.hoisted(() => vi.fn());
+const mockGetOperationById = vi.hoisted(() => vi.fn());
+const mockMarkOperationTerminal = vi.hoisted(() => vi.fn());
 const mockGetInProgressOperationByContainerName = vi.hoisted(() => vi.fn());
+const mockGetActiveOperationByContainerName = vi.hoisted(() => vi.fn());
+const mockGetActiveOperationByContainerId = vi.hoisted(() => vi.fn());
 vi.mock('../../../store/update-operation.js', () => ({
   insertOperation: (...args: any[]) => mockInsertOperation(...args),
   updateOperation: (...args: any[]) => mockUpdateOperation(...args),
+  getOperationById: (...args: any[]) => mockGetOperationById(...args),
+  markOperationTerminal: (...args: any[]) => mockMarkOperationTerminal(...args),
   getInProgressOperationByContainerName: (...args: any[]) =>
     mockGetInProgressOperationByContainerName(...args),
+  getActiveOperationByContainerName: (...args: any[]) =>
+    mockGetActiveOperationByContainerName(...args),
+  getActiveOperationByContainerId: (...args: any[]) => mockGetActiveOperationByContainerId(...args),
 }));
 
 const mockSyncComposeFileTag = vi.hoisted(() => vi.fn().mockResolvedValue(false));
@@ -363,6 +381,7 @@ beforeEach(async () => {
   vi.resetAllMocks();
   docker.configuration = configurationValid;
   docker.log = log;
+  mockGetServerConfiguration.mockReturnValue({ port: 3000 });
   mockGetSecurityConfiguration.mockReturnValue({
     enabled: false,
     scanner: '',
@@ -407,6 +426,35 @@ beforeEach(async () => {
   }));
   mockUpdateOperation.mockImplementation((id, patch = {}) => ({ id, ...patch }));
   mockGetInProgressOperationByContainerName.mockReturnValue(undefined);
+});
+
+test('getSelfUpdateFinalizeUrl should keep loopback finalize callbacks on plain HTTP even when public TLS is enabled', () => {
+  mockGetServerConfiguration.mockReturnValue({
+    port: 3443,
+    tls: { enabled: true },
+  });
+
+  expect(docker.getSelfUpdateFinalizeUrl()).toBe(
+    'http://127.0.0.1:3443/api/v1/internal/self-update/finalize',
+  );
+});
+
+test('getSelfUpdateFinalizeUrl should throw when server port is missing', () => {
+  mockGetServerConfiguration.mockReturnValue({});
+
+  expect(() => docker.getSelfUpdateFinalizeUrl()).toThrow(
+    'Self-update finalize URL requires a valid server port; got undefined',
+  );
+});
+
+test('getSelfUpdateFinalizeUrl should throw when server port is invalid', () => {
+  mockGetServerConfiguration.mockReturnValue({
+    port: 0,
+  });
+
+  expect(() => docker.getSelfUpdateFinalizeUrl()).toThrow(
+    'Self-update finalize URL requires a valid server port; got 0',
+  );
 });
 
 // --- Configuration validation ---
@@ -1491,6 +1539,18 @@ test('triggerBatch should limit concurrent container updates to 3', async () => 
   expect(maxInFlight).toBeLessThanOrEqual(3);
 });
 
+test('triggerBatch should forward runtimeContext when provided', async () => {
+  const triggerSpy = vi.spyOn(docker, 'trigger').mockResolvedValue();
+  const runtimeContext = { operationId: 'batch-op-1' };
+  const containers = [{ name: 'c1' }, { name: 'c2' }];
+
+  await docker.triggerBatch(containers, runtimeContext);
+
+  expect(triggerSpy).toHaveBeenCalledTimes(2);
+  expect(triggerSpy).toHaveBeenCalledWith({ name: 'c1' }, runtimeContext);
+  expect(triggerSpy).toHaveBeenCalledWith({ name: 'c2' }, runtimeContext);
+});
+
 // --- pruneImages (parametric: exclusion filters) ---
 
 describe('pruneImages exclusion filters', () => {
@@ -2556,6 +2616,20 @@ describe('executeContainerUpdate', () => {
     );
   });
 
+  test('should forward runtimeContext when provided', async () => {
+    const context = createContainerUpdateContext();
+    const logContainer = createMockLog('info', 'warn', 'debug');
+
+    const result = await docker.executeContainerUpdate(
+      context,
+      createTriggerContainer(),
+      logContainer,
+      { operationId: 'custom-op' },
+    );
+
+    expect(result).toBe(true);
+  });
+
   test('should preserve explicit runtime pins matching source defaults during update', async () => {
     const currentContainer = {
       rename: vi.fn().mockResolvedValue(undefined),
@@ -2839,7 +2913,7 @@ describe('executeContainerUpdate', () => {
     expect(result).toBe(true);
     expect(context.currentContainer.rename).toHaveBeenCalledTimes(1);
     expect(mockRollbackCounterInc).not.toHaveBeenCalled();
-    expect(mockUpdateOperation).toHaveBeenCalledWith(
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
         status: 'succeeded',
@@ -3035,7 +3109,7 @@ describe('executeContainerUpdate', () => {
     await docker.executeContainerUpdate(context, createTriggerContainer(), logContainer);
 
     expect(staleTempContainer.remove).toHaveBeenCalledWith({ force: true });
-    expect(mockUpdateOperation).toHaveBeenCalledWith(
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
       'op-recover-1',
       expect.objectContaining({
         status: 'succeeded',
@@ -3082,6 +3156,262 @@ describe('isSelfUpdate', () => {
 
   test('should return false for image name containing drydock as substring', () => {
     expect(docker.isSelfUpdate({ image: { name: 'drydock-proxy' } })).toBe(false);
+  });
+});
+
+describe('isInfrastructureUpdate', () => {
+  test('should return true for container with dd.update.mode=infrastructure label', () => {
+    expect(
+      docker.isInfrastructureUpdate({
+        labels: { 'dd.update.mode': 'infrastructure' },
+      }),
+    ).toBe(true);
+  });
+
+  test('should return false for container without the label', () => {
+    expect(docker.isInfrastructureUpdate({ labels: {} })).toBe(false);
+    expect(docker.isInfrastructureUpdate({})).toBe(false);
+  });
+
+  test('should return false for container with different update mode', () => {
+    expect(docker.isInfrastructureUpdate({ labels: { 'dd.update.mode': 'normal' } })).toBe(false);
+  });
+});
+
+describe('resolveHelperImage for infrastructure updates', () => {
+  test('should resolve drydock image from store for infrastructure container', async () => {
+    const storeContainer = await import('../../../store/container.js');
+    (storeContainer.getContainers as any).mockReturnValueOnce([
+      {
+        name: 'drydock',
+        image: {
+          name: 'ghcr.io/codeswhat/drydock',
+          tag: { value: '1.5.0' },
+          registry: { url: 'ghcr.io' },
+        },
+      },
+    ]);
+
+    // Access the orchestrator's resolveHelperImage through the self-update flow
+    const resolved = (docker as any).selfUpdateOrchestrator.resolveHelperImage?.({
+      image: { name: 'linuxserver/socket-proxy' },
+      labels: { 'dd.update.mode': 'infrastructure' },
+    });
+    expect(resolved).toBe('ghcr.io/ghcr.io/codeswhat/drydock:1.5.0');
+  });
+
+  test('should return undefined for self-update containers', async () => {
+    const resolved = (docker as any).selfUpdateOrchestrator.resolveHelperImage?.({
+      image: { name: 'ghcr.io/codeswhat/drydock' },
+    });
+    expect(resolved).toBeUndefined();
+  });
+
+  test('should return undefined when drydock container not found in store', async () => {
+    const storeContainer = await import('../../../store/container.js');
+    (storeContainer.getContainers as any).mockReturnValueOnce([]);
+
+    const resolved = (docker as any).selfUpdateOrchestrator.resolveHelperImage?.({
+      image: { name: 'linuxserver/socket-proxy' },
+      labels: { 'dd.update.mode': 'infrastructure' },
+    });
+    expect(resolved).toBeUndefined();
+  });
+
+  test('should return image without registry url when registry has no url', async () => {
+    const storeContainer = await import('../../../store/container.js');
+    (storeContainer.getContainers as any).mockReturnValueOnce([
+      {
+        name: 'drydock',
+        image: {
+          name: 'drydock',
+          tag: { value: '1.5.0' },
+          registry: {},
+        },
+      },
+    ]);
+
+    const resolved = (docker as any).selfUpdateOrchestrator.resolveHelperImage?.({
+      image: { name: 'linuxserver/socket-proxy' },
+      labels: { 'dd.update.mode': 'infrastructure' },
+    });
+    expect(resolved).toBe('drydock:1.5.0');
+  });
+
+  test('should return undefined when drydock container has no tag', async () => {
+    const storeContainer = await import('../../../store/container.js');
+    (storeContainer.getContainers as any).mockReturnValueOnce([
+      {
+        name: 'drydock',
+        image: {
+          name: 'drydock',
+          tag: {},
+        },
+      },
+    ]);
+
+    const resolved = (docker as any).selfUpdateOrchestrator.resolveHelperImage?.({
+      image: { name: 'linuxserver/socket-proxy' },
+    });
+    expect(resolved).toBeUndefined();
+  });
+
+  test('should return undefined when drydock container image becomes null after find', async () => {
+    const storeContainer = await import('../../../store/container.js');
+    // Use a getter that returns a valid image on first access (for find predicate)
+    // but undefined on second access (for destructuring on line 275),
+    // exercising the ?? {} fallback branch.
+    let accessCount = 0;
+    const drydockObj = {
+      name: 'drydock',
+      get image() {
+        accessCount++;
+        if (accessCount <= 1) {
+          return { name: 'drydock', tag: { value: '1.0.0' } };
+        }
+        return undefined;
+      },
+    };
+    (storeContainer.getContainers as any).mockReturnValueOnce([drydockObj]);
+
+    const resolved = (docker as any).selfUpdateOrchestrator.resolveHelperImage?.({
+      image: { name: 'linuxserver/socket-proxy' },
+    });
+    expect(resolved).toBeUndefined();
+  });
+});
+
+describe('scheduleDeferredReconciliation', () => {
+  test('should invoke reconciliation after delay for matching container', async () => {
+    vi.useFakeTimers();
+    const storeContainer = await import('../../../store/container.js');
+    const mockContainer = {
+      name: 'web',
+      watcher: 'local',
+      image: { name: 'nginx', tag: { value: '1.0.0' } },
+    };
+    (storeContainer.getContainers as any).mockReturnValue([mockContainer]);
+
+    const callback = (docker as any).containerUpdateExecutor.scheduleDeferredReconciliation;
+    expect(callback).toBeDefined();
+
+    callback('web', 'op-1', 10_000);
+
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    vi.useRealTimers();
+  });
+
+  test('should handle missing container gracefully', async () => {
+    vi.useFakeTimers();
+    const storeContainer = await import('../../../store/container.js');
+    (storeContainer.getContainers as any).mockReturnValue([]);
+
+    const callback = (docker as any).containerUpdateExecutor.scheduleDeferredReconciliation;
+    callback('nonexistent', 'op-2', 5_000);
+
+    await vi.advanceTimersByTimeAsync(5_000);
+
+    vi.useRealTimers();
+  });
+
+  test('should use fallback logger when this.log has no child method', async () => {
+    vi.useFakeTimers();
+    const storeContainer = await import('../../../store/container.js');
+    const mockContainer = {
+      name: 'web',
+      watcher: 'test',
+      image: { name: 'nginx', tag: { value: '1.0.0' } },
+    };
+    (storeContainer.getContainers as any).mockReturnValue([mockContainer]);
+
+    const originalLog = docker.log;
+    const originalReconcile =
+      docker.containerUpdateExecutor.reconcileInProgressContainerUpdateOperation;
+    // Capture the fallback logContainer and call its methods to cover the () => {} functions
+    const reconcileSpy = vi.fn().mockImplementation((_dockerApi, _container, logContainer) => {
+      logContainer.info('test');
+      logContainer.warn('test');
+      logContainer.debug('test');
+      return Promise.resolve(undefined);
+    });
+    docker.containerUpdateExecutor.reconcileInProgressContainerUpdateOperation = reconcileSpy;
+    // Set log to an object without child to trigger the ?? fallback
+    docker.log = { info: vi.fn(), warn: vi.fn(), debug: vi.fn(), error: vi.fn() };
+
+    const callback = (docker as any).containerUpdateExecutor.scheduleDeferredReconciliation;
+    callback('web', 'op-3', 1_000);
+
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    expect(reconcileSpy).toHaveBeenCalled();
+
+    docker.log = originalLog;
+    docker.containerUpdateExecutor.reconcileInProgressContainerUpdateOperation = originalReconcile;
+    vi.useRealTimers();
+  });
+
+  test('should warn via log when reconciliation throws and log is null', async () => {
+    vi.useFakeTimers();
+    const storeContainer = await import('../../../store/container.js');
+    const mockContainer = {
+      name: 'web',
+      watcher: 'test',
+      image: { name: 'nginx', tag: { value: '1.0.0' } },
+    };
+    (storeContainer.getContainers as any).mockReturnValue([mockContainer]);
+
+    const originalLog = docker.log;
+    const originalReconcile =
+      docker.containerUpdateExecutor.reconcileInProgressContainerUpdateOperation;
+    docker.containerUpdateExecutor.reconcileInProgressContainerUpdateOperation = vi
+      .fn()
+      .mockRejectedValue(new Error('reconcile failed'));
+    // Set log to undefined to exercise the ?.warn?. skip branch in the catch
+    docker.log = undefined;
+
+    const callback = (docker as any).containerUpdateExecutor.scheduleDeferredReconciliation;
+    callback('web', 'op-4', 1_000);
+
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    docker.log = originalLog;
+    docker.containerUpdateExecutor.reconcileInProgressContainerUpdateOperation = originalReconcile;
+    vi.useRealTimers();
+  });
+
+  test('should log warning when reconciliation throws a non-Error value', async () => {
+    vi.useFakeTimers();
+    const storeContainer = await import('../../../store/container.js');
+    const mockContainer = {
+      name: 'web',
+      watcher: 'test',
+      image: { name: 'nginx', tag: { value: '1.0.0' } },
+    };
+    (storeContainer.getContainers as any).mockReturnValue([mockContainer]);
+
+    const originalLog = docker.log;
+    const originalReconcile =
+      docker.containerUpdateExecutor.reconcileInProgressContainerUpdateOperation;
+    docker.containerUpdateExecutor.reconcileInProgressContainerUpdateOperation = vi
+      .fn()
+      .mockRejectedValue('string-error');
+    const warnSpy = vi.fn();
+    docker.log = {
+      warn: warnSpy,
+      child: vi.fn().mockReturnValue({ info: vi.fn(), warn: vi.fn(), debug: vi.fn() }),
+    };
+
+    const callback = (docker as any).containerUpdateExecutor.scheduleDeferredReconciliation;
+    callback('web', 'op-5', 1_000);
+
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    expect(warnSpy).toHaveBeenCalledWith('Deferred reconciliation failed for web: string-error');
+
+    docker.log = originalLog;
+    docker.containerUpdateExecutor.reconcileInProgressContainerUpdateOperation = originalReconcile;
+    vi.useRealTimers();
   });
 });
 
@@ -3378,6 +3708,30 @@ describe('extracted lifecycle delegation', () => {
     }
   });
 
+  test('executeContainerUpdate should forward runtimeContext when provided', async () => {
+    const originalContainerUpdateExecutor = docker.containerUpdateExecutor;
+    const execute = vi.fn().mockResolvedValue('delegated-with-runtime');
+    docker.containerUpdateExecutor = { execute };
+    const context = { any: 'context' };
+    const container = createTriggerContainer();
+    const logContainer = createMockLog('info', 'warn', 'debug');
+    const runtimeContext = { composeFile: '/tmp/docker-compose.yml' };
+
+    try {
+      const result = await docker.executeContainerUpdate(
+        context,
+        container,
+        logContainer,
+        runtimeContext,
+      );
+
+      expect(execute).toHaveBeenCalledWith(context, container, logContainer, runtimeContext);
+      expect(result).toBe('delegated-with-runtime');
+    } finally {
+      docker.containerUpdateExecutor = originalContainerUpdateExecutor;
+    }
+  });
+
   test('runContainerUpdateLifecycle should delegate to updateLifecycleExecutor', async () => {
     const originalUpdateLifecycleExecutor = docker.updateLifecycleExecutor;
     const run = vi.fn().mockResolvedValue(undefined);
@@ -3389,6 +3743,162 @@ describe('extracted lifecycle delegation', () => {
       await docker.runContainerUpdateLifecycle(container, runtimeContext);
 
       expect(run).toHaveBeenCalledWith(container, runtimeContext);
+    } finally {
+      docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
+    }
+  });
+
+  test('runContainerUpdateLifecycle should mark a queued requested operation failed when lifecycle throws', async () => {
+    const originalUpdateLifecycleExecutor = docker.updateLifecycleExecutor;
+    const run = vi.fn().mockRejectedValue(new Error('scan failed hard'));
+    docker.updateLifecycleExecutor = { run };
+    const container = createTriggerContainer();
+
+    mockGetOperationById.mockReturnValue({
+      id: 'queued-op-1',
+      status: 'queued',
+      phase: 'queued',
+    });
+
+    try {
+      await expect(
+        docker.runContainerUpdateLifecycle(container, { operationId: 'queued-op-1' }),
+      ).rejects.toThrow('scan failed hard');
+
+      expect(mockMarkOperationTerminal).toHaveBeenCalledWith('queued-op-1', {
+        status: 'failed',
+        phase: 'failed',
+        lastError: 'scan failed hard',
+      });
+    } finally {
+      docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
+    }
+  });
+
+  test('runContainerUpdateLifecycle should mark a batched requested operation failed when lifecycle throws', async () => {
+    const originalUpdateLifecycleExecutor = docker.updateLifecycleExecutor;
+    const run = vi.fn().mockRejectedValue(new Error('hook failed hard'));
+    docker.updateLifecycleExecutor = { run };
+    const container = createTriggerContainer();
+
+    mockGetOperationById.mockReturnValue({
+      id: 'queued-op-batch-1',
+      status: 'queued',
+      phase: 'queued',
+    });
+
+    try {
+      await expect(
+        docker.runContainerUpdateLifecycle(container, {
+          operationIds: { [container.id]: 'queued-op-batch-1' },
+        }),
+      ).rejects.toThrow('hook failed hard');
+
+      expect(mockMarkOperationTerminal).toHaveBeenCalledWith('queued-op-batch-1', {
+        status: 'failed',
+        phase: 'failed',
+        lastError: 'hook failed hard',
+      });
+    } finally {
+      docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
+    }
+  });
+
+  test('runContainerUpdateLifecycle should not override deferred reconciliation state on thrown lifecycle errors', async () => {
+    const originalUpdateLifecycleExecutor = docker.updateLifecycleExecutor;
+    const run = vi.fn().mockRejectedValue(new Error('connect ECONNRESET'));
+    docker.updateLifecycleExecutor = { run };
+    const container = createTriggerContainer();
+
+    mockGetOperationById.mockReturnValue({
+      id: 'op-deferred-1',
+      status: 'in-progress',
+      phase: 'rollback-deferred',
+    });
+
+    try {
+      await expect(
+        docker.runContainerUpdateLifecycle(container, { operationId: 'op-deferred-1' }),
+      ).rejects.toThrow('connect ECONNRESET');
+
+      expect(mockMarkOperationTerminal).not.toHaveBeenCalled();
+    } finally {
+      docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
+    }
+  });
+
+  test('runContainerUpdateLifecycle should not re-terminalize an already terminal operation when lifecycle throws', async () => {
+    const originalUpdateLifecycleExecutor = docker.updateLifecycleExecutor;
+    const run = vi.fn().mockRejectedValue(new Error('hook failed hard'));
+    docker.updateLifecycleExecutor = { run };
+    const container = createTriggerContainer();
+
+    mockGetOperationById.mockReturnValue({
+      id: 'op-terminal-1',
+      status: 'failed',
+      phase: 'failed',
+    });
+
+    try {
+      await expect(
+        docker.runContainerUpdateLifecycle(container, { operationId: 'op-terminal-1' }),
+      ).rejects.toThrow('hook failed hard');
+
+      expect(mockMarkOperationTerminal).not.toHaveBeenCalled();
+    } finally {
+      docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
+    }
+  });
+
+  test('runContainerUpdateLifecycle should leave self-update terminalization to the finalize callback', async () => {
+    const originalUpdateLifecycleExecutor = docker.updateLifecycleExecutor;
+    const run = vi.fn().mockRejectedValue(new Error('post-spawn cleanup failed'));
+    docker.updateLifecycleExecutor = { run };
+    const container = createTriggerContainer();
+
+    mockGetOperationById.mockReturnValueOnce({
+      id: 'op-self-1',
+      status: 'in-progress',
+      phase: 'prepare',
+      kind: 'self-update',
+    });
+
+    try {
+      await expect(
+        docker.runContainerUpdateLifecycle(container, { operationId: 'op-self-1' }),
+      ).rejects.toThrow('post-spawn cleanup failed');
+
+      expect(mockMarkOperationTerminal).not.toHaveBeenCalled();
+
+      mockGetOperationById.mockReturnValueOnce({
+        id: 'op-self-1',
+        status: 'in-progress',
+        phase: 'prepare',
+        kind: 'self-update',
+      });
+
+      const handler = createFinalizeSelfUpdateHandler();
+      const req = createMockRequest({
+        socket: { remoteAddress: '127.0.0.1' },
+        header: (name: string) =>
+          name.toLowerCase() === SELF_UPDATE_FINALIZE_SECRET_HEADER
+            ? getSelfUpdateFinalizeSecret()
+            : undefined,
+        body: {
+          operationId: 'op-self-1',
+          status: 'succeeded',
+          phase: 'succeeded',
+        },
+      });
+      const res = createMockResponse();
+
+      handler(req, res);
+
+      expect(mockMarkOperationTerminal).toHaveBeenCalledWith('op-self-1', {
+        status: 'succeeded',
+        phase: 'succeeded',
+      });
+      expect(res.status).toHaveBeenCalledWith(202);
     } finally {
       docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
     }
@@ -3940,6 +4450,180 @@ describe('performContainerUpdate compose file sync', () => {
     const result = await docker.performContainerUpdate(context, container, logContainer);
 
     expect(result).toBe(false);
+    expect(mockSyncComposeFileTag).not.toHaveBeenCalled();
+
+    executeUpdateSpy.mockRestore();
+  });
+
+  test('should call syncComposeFileTag after successful tag update with runtimeContext', async () => {
+    const executeUpdateSpy = vi.spyOn(docker, 'executeContainerUpdate').mockResolvedValue(true);
+
+    const context = {
+      currentContainerSpec: {
+        Config: {
+          Labels: {
+            'com.docker.compose.project.config_files': '/app/docker-compose.yml',
+            'com.docker.compose.service': 'web',
+          },
+        },
+      },
+      newImage: 'myapp:v3',
+    };
+
+    const container = {
+      updateKind: { kind: 'tag', localValue: 'v2', remoteValue: 'v3' },
+    };
+
+    const logContainer = { info: vi.fn(), warn: vi.fn(), debug: vi.fn(), error: vi.fn() };
+    const runtimeContext = { composeFile: '/app/docker-compose.yml' };
+
+    await docker.performContainerUpdate(context, container, logContainer, runtimeContext);
+
+    expect(executeUpdateSpy).toHaveBeenCalledWith(context, container, logContainer, runtimeContext);
+    expect(mockSyncComposeFileTag).toHaveBeenCalledWith({
+      labels: context.currentContainerSpec.Config.Labels,
+      newImage: 'myapp:v3',
+      logContainer,
+    });
+
+    executeUpdateSpy.mockRestore();
+  });
+
+  test('should skip syncComposeFileTag when runtimeContext provided but updateKind missing', async () => {
+    const executeUpdateSpy = vi.spyOn(docker, 'executeContainerUpdate').mockResolvedValue(true);
+
+    const context = {
+      currentContainerSpec: { Config: { Labels: {} } },
+      newImage: 'myapp:v3',
+    };
+
+    const container = {};
+
+    const logContainer = { info: vi.fn(), warn: vi.fn(), debug: vi.fn(), error: vi.fn() };
+    const runtimeContext = { composeFile: '/app/docker-compose.yml' };
+
+    const result = await docker.performContainerUpdate(
+      context,
+      container,
+      logContainer,
+      runtimeContext,
+    );
+
+    expect(result).toBe(true);
+    expect(executeUpdateSpy).toHaveBeenCalledWith(context, container, logContainer, runtimeContext);
+    expect(mockSyncComposeFileTag).not.toHaveBeenCalled();
+
+    executeUpdateSpy.mockRestore();
+  });
+
+  test('should handle undefined currentContainerSpec with runtimeContext tag update', async () => {
+    const executeUpdateSpy = vi.spyOn(docker, 'executeContainerUpdate').mockResolvedValue(true);
+
+    const context = {
+      newImage: 'myapp:v3',
+    };
+
+    const container = {
+      updateKind: { kind: 'tag', localValue: 'v2', remoteValue: 'v3' },
+    };
+
+    const logContainer = { info: vi.fn(), warn: vi.fn(), debug: vi.fn(), error: vi.fn() };
+    const runtimeContext = { composeFile: '/app/docker-compose.yml' };
+
+    await docker.performContainerUpdate(context, container, logContainer, runtimeContext);
+
+    expect(mockSyncComposeFileTag).toHaveBeenCalledWith({
+      labels: undefined,
+      newImage: 'myapp:v3',
+      logContainer,
+    });
+
+    executeUpdateSpy.mockRestore();
+  });
+
+  test('should skip syncComposeFileTag when runtimeContext provided with digest update', async () => {
+    const executeUpdateSpy = vi.spyOn(docker, 'executeContainerUpdate').mockResolvedValue(true);
+
+    const context = {
+      currentContainerSpec: { Config: { Labels: {} } },
+      newImage: 'myapp:latest',
+    };
+
+    const container = {
+      updateKind: { kind: 'digest' },
+    };
+
+    const logContainer = { info: vi.fn(), warn: vi.fn(), debug: vi.fn(), error: vi.fn() };
+    const runtimeContext = { composeFile: '/app/docker-compose.yml' };
+
+    const result = await docker.performContainerUpdate(
+      context,
+      container,
+      logContainer,
+      runtimeContext,
+    );
+
+    expect(result).toBe(true);
+    expect(executeUpdateSpy).toHaveBeenCalledWith(context, container, logContainer, runtimeContext);
+    expect(mockSyncComposeFileTag).not.toHaveBeenCalled();
+
+    executeUpdateSpy.mockRestore();
+  });
+
+  test('should skip syncComposeFileTag when runtimeContext provided and result is undefined', async () => {
+    const executeUpdateSpy = vi
+      .spyOn(docker, 'executeContainerUpdate')
+      .mockResolvedValue(undefined);
+
+    const context = {
+      currentContainerSpec: { Config: { Labels: {} } },
+      newImage: 'myapp:v3',
+    };
+
+    const container = {
+      updateKind: { kind: 'tag', localValue: 'v2', remoteValue: 'v3' },
+    };
+
+    const logContainer = { info: vi.fn(), warn: vi.fn(), debug: vi.fn(), error: vi.fn() };
+    const runtimeContext = { composeFile: '/app/docker-compose.yml' };
+
+    const result = await docker.performContainerUpdate(
+      context,
+      container,
+      logContainer,
+      runtimeContext,
+    );
+
+    expect(result).toBeUndefined();
+    expect(mockSyncComposeFileTag).not.toHaveBeenCalled();
+
+    executeUpdateSpy.mockRestore();
+  });
+
+  test('should skip syncComposeFileTag when runtimeContext provided but update fails', async () => {
+    const executeUpdateSpy = vi.spyOn(docker, 'executeContainerUpdate').mockResolvedValue(false);
+
+    const context = {
+      currentContainerSpec: { Config: { Labels: {} } },
+      newImage: 'myapp:v3',
+    };
+
+    const container = {
+      updateKind: { kind: 'tag', localValue: 'v2', remoteValue: 'v3' },
+    };
+
+    const logContainer = { info: vi.fn(), warn: vi.fn(), debug: vi.fn(), error: vi.fn() };
+    const runtimeContext = { composeFile: '/app/docker-compose.yml' };
+
+    const result = await docker.performContainerUpdate(
+      context,
+      container,
+      logContainer,
+      runtimeContext,
+    );
+
+    expect(result).toBe(false);
+    expect(executeUpdateSpy).toHaveBeenCalledWith(context, container, logContainer, runtimeContext);
     expect(mockSyncComposeFileTag).not.toHaveBeenCalled();
 
     executeUpdateSpy.mockRestore();

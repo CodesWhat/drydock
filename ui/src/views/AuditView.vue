@@ -21,6 +21,7 @@ const actionTypes = [
   'update-available',
   'update-applied',
   'update-failed',
+  'notification-delivery-failed',
   'container-update',
   'security-alert',
   'agent-disconnect',

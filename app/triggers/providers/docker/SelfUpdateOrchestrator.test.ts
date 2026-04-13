@@ -115,6 +115,56 @@ describe('SelfUpdateOrchestrator', () => {
     expect(orchestrator.findDockerSocketBind(undefined)).toBeUndefined();
   });
 
+  test('identifies infrastructure update containers by dd.update.mode label', () => {
+    const orchestrator = createOrchestrator();
+
+    expect(
+      orchestrator.isInfrastructureUpdate(
+        createContainer({ labels: { 'dd.update.mode': 'infrastructure' } }),
+      ),
+    ).toBe(true);
+    expect(
+      orchestrator.isInfrastructureUpdate(
+        createContainer({ labels: { 'dd.update.mode': 'normal' } }),
+      ),
+    ).toBe(false);
+    expect(orchestrator.isInfrastructureUpdate(createContainer({ labels: {} }))).toBe(false);
+    expect(orchestrator.isInfrastructureUpdate(createContainer({}))).toBe(false);
+    expect(orchestrator.isInfrastructureUpdate(createContainer({ labels: null }))).toBe(false);
+  });
+
+  test('passes resolveHelperImage through to executeSelfUpdateTransition', async () => {
+    const resolveHelperImage = vi.fn(() => 'drydock:latest');
+    const helperContainer = { start: vi.fn().mockResolvedValue(undefined) };
+    const dockerApiCreateContainer = vi.fn().mockResolvedValue(helperContainer);
+    const newContainer = {
+      inspect: vi.fn().mockResolvedValue({ Id: 'new-id' }),
+      remove: vi.fn().mockResolvedValue(undefined),
+    };
+    const orchestrator = createOrchestrator({
+      resolveHelperImage,
+      createContainer: vi.fn().mockResolvedValue(newContainer),
+    });
+    const log = { info: vi.fn(), warn: vi.fn() };
+    const context = {
+      dockerApi: { createContainer: dockerApiCreateContainer },
+      auth: undefined,
+      newImage: 'proxy:latest',
+      currentContainer: { rename: vi.fn().mockResolvedValue(undefined) },
+      currentContainerSpec: {
+        Name: '/socket-proxy',
+        Id: 'abc123',
+        HostConfig: { Binds: ['/var/run/docker.sock:/var/run/docker.sock'] },
+      },
+    };
+
+    await orchestrator.execute(context as never, createContainer(), log);
+
+    expect(resolveHelperImage).toHaveBeenCalled();
+    const helperCreateCall = dockerApiCreateContainer.mock.calls[0][0];
+    expect(helperCreateCall.Image).toBe('drydock:latest');
+  });
+
   test('maybeNotify emits self-update-starting only for self-update containers', async () => {
     const emitSelfUpdateStarting = vi.fn().mockResolvedValue(undefined);
     const createOperationId = vi.fn(() => 'generated-operation-id');

@@ -48,6 +48,7 @@ vi.mock('@/utils/container-mapper', () => ({
 function makeContainer(overrides: Partial<Container> = {}): Container {
   return {
     id: 'c1',
+    identityKey: '::local::nginx',
     name: 'nginx',
     image: 'nginx:latest',
     icon: 'docker',
@@ -111,7 +112,7 @@ describe('useDashboardData', () => {
       containers: { total: 0, running: 0, stopped: 0 },
       security: { issues: 0 },
     });
-    mocks.getContainerRecentStatus.mockResolvedValue({ statuses: {} });
+    mocks.getContainerRecentStatus.mockResolvedValue({ statuses: {}, statusesByIdentity: {} });
     mocks.mapApiContainers.mockReturnValue([makeContainer()]);
 
     originalVisibilityState = Object.getOwnPropertyDescriptor(document, 'visibilityState');
@@ -149,6 +150,13 @@ describe('useDashboardData', () => {
         ignored: 'nope',
         '': 'failed',
       },
+      statusesByIdentity: {
+        '::local::cache': 'pending',
+        'edge-a::docker-prod::api': 'failed',
+        'edge-b::docker-prod::worker': 'updated',
+        invalid: 'nope',
+        '': 'failed',
+      },
     });
 
     const { state, wrapper } = await mountDashboardData();
@@ -165,6 +173,11 @@ describe('useDashboardData', () => {
       api: 'failed',
       cache: 'pending',
       worker: 'updated',
+    });
+    expect(state.recentStatusByIdentity.value).toEqual({
+      '::local::cache': 'pending',
+      'edge-a::docker-prod::api': 'failed',
+      'edge-b::docker-prod::worker': 'updated',
     });
 
     expect(setIntervalSpy).toHaveBeenCalledWith(expect.any(Function), 30_000);
@@ -187,14 +200,16 @@ describe('useDashboardData', () => {
     expect(state.watchers.value).toEqual(['not-an-object']);
     expect(state.registries.value).toEqual([]);
     expect(state.recentStatusByContainer.value).toEqual({});
+    expect(state.recentStatusByIdentity.value).toEqual({});
     expect(setIntervalSpy).not.toHaveBeenCalled();
 
     mocks.getAllWatchers.mockResolvedValueOnce({ data: [] });
-    mocks.getContainerRecentStatus.mockResolvedValueOnce({ statuses: [] });
+    mocks.getContainerRecentStatus.mockResolvedValueOnce({ statuses: [], statusesByIdentity: [] });
     await state.fetchDashboardData();
 
     expect(state.watchers.value).toEqual([]);
     expect(state.recentStatusByContainer.value).toEqual({});
+    expect(state.recentStatusByIdentity.value).toEqual({});
   });
 
   it('performs full data refresh on debounced container-changed SSE event', async () => {
@@ -223,6 +238,17 @@ describe('useDashboardData', () => {
     await flushPromises();
 
     expect(mocks.getAllContainers).toHaveBeenCalledTimes(1);
+  });
+
+  it('performs immediate data refresh on dd:sse-update-operation-changed without debounce', async () => {
+    const { state } = await mountDashboardData();
+    mocks.getAllContainers.mockClear();
+
+    globalThis.dispatchEvent(new CustomEvent('dd:sse-update-operation-changed'));
+    await flushPromises();
+
+    expect(mocks.getAllContainers).toHaveBeenCalledTimes(1);
+    expect(state.error.value).toBeNull();
   });
 
   it('sets error for a failed foreground fetch and clears loading', async () => {

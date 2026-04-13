@@ -25,7 +25,9 @@ lib-cov
 # Coverage directory used by tools like istanbul
 coverage
 *.lcov
-.coverage-gaps.json
+.coverage-gaps*.json
+.coverage-logs/
+.build-logs/
 CLAUDE.md
 
 # nyc test coverage
@@ -128,6 +130,7 @@ output/
 /screenshots/
 /qa-*.png
 /qa-*.md
+/*-view.png
 
 # qlty config (track qlty.toml, ignore cache/outputs)
 .qlty/*

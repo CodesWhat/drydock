@@ -134,12 +134,16 @@ export interface DashboardStatCard {
 
 export interface RecentUpdateRow {
   id: string;
+  identityKey: string;
   name: string;
   image: string;
   icon: string;
   oldVer: string;
   newVer: string;
   releaseLink?: string;
+  batchId?: string;
+  queuePosition?: number;
+  queueTotal?: number;
   status:
     | 'updated'
     | 'pending'
@@ -148,11 +152,17 @@ export interface RecentUpdateRow {
     | 'snoozed'
     | 'skipped'
     | 'maturity-blocked'
+    | 'queued'
     | 'updating';
   updateKind: UpdateKind | null;
   running: boolean;
   registryError?: string;
   blocked: boolean;
+}
+
+export interface DashboardUpdateSequenceEntry {
+  position: number;
+  total: number;
 }
 
 export interface DashboardServerRow {

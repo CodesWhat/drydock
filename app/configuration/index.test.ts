@@ -17,6 +17,10 @@ function getTestDirectory() {
 
 const TEST_DIRECTORY = getTestDirectory();
 
+afterEach(() => {
+  configuration.setDetectedServerName(undefined);
+});
+
 test('getVersion should return dd version', async () => {
   configuration.ddEnvVars.DD_VERSION = 'x.y.z';
   expect(configuration.getVersion()).toStrictEqual('x.y.z');
@@ -410,6 +414,39 @@ test('getServerConfiguration should allow overriding max concurrent sessions per
     maxconcurrentsessions: 3,
   });
   delete configuration.ddEnvVars.DD_SERVER_SESSION_MAXCONCURRENTSESSIONS;
+});
+
+test('getServerName should return DD_SERVER_NAME when set', () => {
+  configuration.ddEnvVars.DD_SERVER_NAME = 'my-controller';
+  expect(configuration.getServerName()).toBe('my-controller');
+  delete configuration.ddEnvVars.DD_SERVER_NAME;
+});
+
+test('getServerName should fall back to os.hostname when DD_SERVER_NAME is not set', () => {
+  delete configuration.ddEnvVars.DD_SERVER_NAME;
+  const name = configuration.getServerName();
+  expect(typeof name).toBe('string');
+  expect(name.length).toBeGreaterThan(0);
+});
+
+test('getServerName should trim whitespace from DD_SERVER_NAME', () => {
+  configuration.ddEnvVars.DD_SERVER_NAME = '  my-server  ';
+  expect(configuration.getServerName()).toBe('my-server');
+  delete configuration.ddEnvVars.DD_SERVER_NAME;
+});
+
+test('getServerName should fall back to hostname when DD_SERVER_NAME is empty', () => {
+  configuration.ddEnvVars.DD_SERVER_NAME = '';
+  const name = configuration.getServerName();
+  expect(name).not.toBe('');
+  delete configuration.ddEnvVars.DD_SERVER_NAME;
+});
+
+test('getServerName should prefer detected server name when DD_SERVER_NAME is not set', () => {
+  delete configuration.ddEnvVars.DD_SERVER_NAME;
+  configuration.setDetectedServerName('datavault');
+
+  expect(configuration.getServerName()).toBe('datavault');
 });
 
 test('getServerConfiguration should allow enabling identity-aware rate-limit keys', async () => {

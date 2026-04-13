@@ -153,6 +153,9 @@ describe('AppLayout', () => {
           env: { total: 0, keys: [] },
           label: { total: 0, keys: [] },
         },
+        curlHealthcheckOverride: {
+          detected: false,
+        },
       },
     });
     mockGetAllAuthentications.mockResolvedValue([]);
@@ -632,6 +635,31 @@ describe('AppLayout', () => {
     expect(banner.exists()).toBe(true);
     expect(banner.text()).toContain('7 legacy API paths detected');
     expect(banner.text()).toContain('/api/containers');
+  });
+
+  it('shows a curl healthcheck deprecation banner when server reports a custom override', async () => {
+    mockGetServer.mockResolvedValue({
+      compatibility: {
+        legacyInputs: {
+          total: 0,
+          env: { total: 0, keys: [] },
+          label: { total: 0, keys: [] },
+        },
+        curlHealthcheckOverride: {
+          detected: true,
+          commandPreview: 'CMD-SHELL curl --fail http://localhost:3000/health || exit 1',
+        },
+      },
+    });
+
+    const wrapper = mountLayout();
+    mountedWrappers.push(wrapper);
+    await flushPromises();
+
+    const banner = wrapper.find('[data-testid="curl-healthcheck-deprecation-banner"]');
+    expect(banner.exists()).toBe(true);
+    expect(banner.text()).toContain('custom curl-based healthcheck override');
+    expect(banner.text()).toContain('v1.7.0');
   });
 
   it('dismisses consolidated legacy config banner', async () => {

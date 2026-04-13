@@ -1,4 +1,5 @@
 import {
+  getContainerActionIdentityKey,
   getContainerActionKey,
   hasTrackedContainerAction,
 } from '../../src/utils/container-action-key';
@@ -53,5 +54,36 @@ describe('hasTrackedContainerAction', () => {
     expect(hasTrackedContainerAction(tracked, { id: 'host2-def', name: 'portainer_agent' })).toBe(
       false,
     );
+  });
+});
+
+describe('getContainerActionIdentityKey', () => {
+  test('prefers an explicit identity key so replacement containers keep the same identity', () => {
+    expect(
+      getContainerActionIdentityKey({
+        identityKey: 'edge-a::docker-prod::portainer_agent',
+        id: 'host1-abc',
+        name: 'portainer_agent',
+      }),
+    ).toBe('edge-a::docker-prod::portainer_agent');
+  });
+
+  test('builds the canonical agent watcher identity when raw identity fields are available', () => {
+    expect(
+      getContainerActionIdentityKey({
+        name: 'portainer_agent',
+        watcher: 'docker-prod',
+        agent: 'edge-a',
+      }),
+    ).toBe('edge-a::docker-prod::portainer_agent');
+  });
+
+  test('falls back to the action key when logical identity fields are unavailable', () => {
+    expect(
+      getContainerActionIdentityKey({
+        id: 'host1-abc',
+        name: 'portainer_agent',
+      }),
+    ).toBe('host1-abc');
   });
 });

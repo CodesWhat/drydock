@@ -1,5 +1,6 @@
 import { defineComponent, nextTick, onMounted, ref } from 'vue';
 import ContainersGroupedViews from '@/components/containers/ContainersGroupedViews.vue';
+import { useUpdateBatches } from '@/composables/useUpdateBatches';
 import type { Container } from '@/types/container';
 import { mountWithPlugins } from '../../helpers/mount';
 
@@ -12,33 +13,67 @@ vi.mock('@/components/containers/containersViewTemplateContext', () => ({
 }));
 
 const DataTableStub = defineComponent({
-  props: ['rows', 'rowClass'],
+  props: ['rows', 'rowClass', 'rowClickable', 'fullWidthRow', 'rowKey', 'virtualScroll'],
   emits: ['update:sort-key', 'update:sort-asc', 'row-click'],
   setup(props, { emit }) {
+    const isFullWidth = (row: Record<string, unknown>) =>
+      typeof props.fullWidthRow === 'function' ? props.fullWidthRow(row) : false;
+    const isClickable = (row: Record<string, unknown>) =>
+      typeof props.rowClickable === 'function' ? props.rowClickable(row) : true;
+    const keyFor = (row: Record<string, unknown>) => {
+      if (typeof props.rowKey === 'function') {
+        return props.rowKey(row);
+      }
+      if (typeof props.rowKey === 'string' && row[props.rowKey] != null) {
+        return row[props.rowKey];
+      }
+      return row.name;
+    };
+
     onMounted(() => {
       emit('update:sort-key', 'status');
       emit('update:sort-asc', false);
-      if (Array.isArray(props.rows) && props.rows.length > 0) {
-        emit('row-click', props.rows[0]);
+      if (Array.isArray(props.rows)) {
+        const firstClickable = props.rows.find(
+          (row: Record<string, unknown>) => !isFullWidth(row) && isClickable(row),
+        );
+        if (firstClickable) {
+          emit('row-click', firstClickable);
+        }
       }
     });
+
+    return {
+      isFullWidth,
+      isClickable,
+      keyFor,
+    };
   },
   template: `
     <div class="data-table-stub">
       <div
         v-for="row in rows"
-        :key="row.name"
-        class="table-row-stub"
-        :class="typeof rowClass === 'function' ? rowClass(row) : ''">
-        <slot name="cell-icon" :row="row" />
-        <slot name="cell-name" :row="row" />
-        <slot name="cell-version" :row="row" />
-        <slot name="cell-kind" :row="row" />
-        <slot name="cell-status" :row="row" />
-        <slot name="cell-bouncer" :row="row" />
-        <slot name="cell-server" :row="row" />
-        <slot name="cell-registry" :row="row" />
-        <slot name="actions" :row="row" />
+        :key="keyFor(row)"
+        :class="[
+          isFullWidth(row) ? 'full-row-stub' : 'table-row-stub',
+          !isFullWidth(row) && typeof rowClass === 'function' ? rowClass(row) : '',
+        ]">
+        <template v-if="isFullWidth(row)">
+          <slot name="full-row" :row="row" />
+        </template>
+        <template v-else>
+          <div>
+            <slot name="cell-icon" :row="row" />
+            <slot name="cell-name" :row="row" />
+            <slot name="cell-version" :row="row" />
+            <slot name="cell-kind" :row="row" />
+            <slot name="cell-status" :row="row" />
+            <slot name="cell-bouncer" :row="row" />
+            <slot name="cell-server" :row="row" />
+            <slot name="cell-registry" :row="row" />
+            <slot name="actions" :row="row" />
+          </div>
+        </template>
       </div>
     </div>
   `,
@@ -102,6 +137,7 @@ function makeContext(overrides: Record<string, unknown> = {}) {
   const groupByStack = ref(false);
   const collapsedGroups = ref(new Set<string>());
   const groupUpdateInProgress = ref(new Set<string>());
+  const groupUpdateQueue = ref(new Set<string>());
   const containerActionsEnabled = ref(true);
   const actionInProgress = ref(new Set<string>());
   const containerViewMode = ref<'table' | 'cards' | 'list'>('table');
@@ -176,11 +212,26 @@ function makeContext(overrides: Record<string, unknown> = {}) {
     toggleGroupCollapse: spies.toggleGroupCollapse,
     collapsedGroups,
     groupUpdateInProgress,
+    groupUpdateQueue,
     containerActionsEnabled,
     containerActionsDisabledReason: ref('Actions disabled by server configuration'),
     actionInProgress,
-    isContainerUpdateInProgress: (target: { id?: string; name?: string; _pending?: true }) =>
-      Boolean(target._pending) || actionInProgress.value.has(target.id ?? target.name ?? ''),
+    isContainerUpdateInProgress: (target: {
+      id?: string;
+      name?: string;
+      _pending?: true;
+      updateOperation?: { status?: string };
+    }) =>
+      Boolean(target._pending) ||
+      target.updateOperation?.status === 'in-progress' ||
+      actionInProgress.value.has(target.id ?? target.name ?? ''),
+    isContainerUpdateQueued: (target: {
+      id?: string;
+      name?: string;
+      updateOperation?: { status?: string };
+    }) =>
+      target.updateOperation?.status === 'queued' || groupUpdateQueue.value.has(target.id ?? ''),
+    getContainerUpdateSequenceLabel: () => null,
     updateAllInGroup: spies.updateAllInGroup,
     tt: (label: string) => ({ value: label, showDelay: 400 }),
     containerViewMode,
@@ -241,6 +292,7 @@ function makeContext(overrides: Record<string, unknown> = {}) {
       renderGroups,
       groupByStack,
       groupUpdateInProgress,
+      groupUpdateQueue,
       containerViewMode,
       tableActionStyle,
       openActionsMenu,
@@ -292,6 +344,7 @@ function mountSubject() {
 describe('ContainersGroupedViews', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    useUpdateBatches().batches.value = new Map();
   });
 
   it('covers grouped table interactions in icon action mode', async () => {
@@ -336,17 +389,8 @@ describe('ContainersGroupedViews', () => {
       status: 'stopped',
       server: 'local-backup',
     });
-    const pending = makeContainer({
-      id: 'c-pending',
-      name: 'epsilon',
-      newTag: null,
-      status: 'running',
-      bouncer: 'safe',
-      _pending: true as any,
-    });
-
     const { context, spies } = makeContext();
-    const containers = [blocked, updatable, runningNoUpdate, stoppedNoUpdate, pending];
+    const containers = [blocked, updatable, runningNoUpdate, stoppedNoUpdate];
     context.groupByStack.value = true;
     context.containerViewMode.value = 'table';
     context.tableActionStyle.value = 'icons';
@@ -629,6 +673,89 @@ describe('ContainersGroupedViews', () => {
       .findAll('button')
       .filter((button) => button.text().trim() === 'Delete');
     expect(deleteButtons).toHaveLength(1);
+  });
+
+  it('flattens grouped table mode into a single data table with group rows', async () => {
+    const alpha = makeContainer({
+      id: 'c-alpha',
+      name: 'alpha',
+      newTag: '2.0.0',
+      updateKind: 'major',
+      status: 'running',
+    });
+    const beta = makeContainer({
+      id: 'c-beta',
+      name: 'beta',
+      newTag: '1.1.0',
+      updateKind: 'minor',
+      status: 'stopped',
+    });
+
+    const { context } = makeContext();
+    context.groupByStack.value = true;
+    context.containerViewMode.value = 'table';
+    context.filteredContainers.value = [alpha, beta];
+    context.displayContainers.value = [alpha, beta];
+    context.renderGroups.value = [
+      {
+        key: 'stack-a',
+        name: 'stack-a',
+        containers: [alpha],
+        containerCount: 1,
+        updatesAvailable: 1,
+        updatableCount: 1,
+      },
+      {
+        key: 'stack-b',
+        name: 'stack-b',
+        containers: [beta],
+        containerCount: 1,
+        updatesAvailable: 1,
+        updatableCount: 1,
+      },
+    ];
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+    await nextTick();
+
+    expect(wrapper.findAll('.data-table-stub')).toHaveLength(1);
+    expect(wrapper.findAll('.full-row-stub')).toHaveLength(2);
+    expect(wrapper.findAll('.table-row-stub')).toHaveLength(2);
+    expect(wrapper.text()).toContain('stack-a');
+    expect(wrapper.text()).toContain('stack-b');
+  });
+
+  it('enables virtual scrolling for grouped table mode', async () => {
+    const alpha = makeContainer({
+      id: 'c-alpha',
+      name: 'alpha',
+      newTag: '1.1.0',
+      updateKind: 'minor',
+      status: 'running',
+    });
+
+    const { context } = makeContext();
+    context.groupByStack.value = true;
+    context.containerViewMode.value = 'table';
+    context.filteredContainers.value = [alpha];
+    context.displayContainers.value = [alpha];
+    context.renderGroups.value = [
+      {
+        key: 'stack-a',
+        name: 'stack-a',
+        containers: [alpha],
+        containerCount: 1,
+        updatesAvailable: 1,
+        updatableCount: 1,
+      },
+    ];
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+    await nextTick();
+
+    expect(wrapper.findComponent(DataTableStub).props('virtualScroll')).toBe(true);
   });
 
   it('covers card/list view events and footer action handlers', async () => {
@@ -1076,6 +1203,93 @@ describe('ContainersGroupedViews', () => {
     expect(row.text()).toContain('Updating');
   });
 
+  it('renders phase-only queued labels for grouped rows', () => {
+    const queued = makeContainer({
+      id: 'c-queued-1',
+      name: 'alpha',
+      newTag: '2.0.0',
+      updateKind: 'major',
+      status: 'running',
+    });
+
+    const { context, refs } = makeContext();
+    refs.filteredContainers.value = [queued];
+    refs.displayContainers.value = [queued];
+    refs.renderGroups.value = [
+      {
+        key: '__flat__',
+        name: null,
+        containers: [queued],
+        containerCount: 1,
+        updatesAvailable: 1,
+        updatableCount: 1,
+      },
+    ];
+    refs.containerViewMode.value = 'table';
+    refs.groupUpdateQueue.value = new Set(['c-queued-1']);
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+    const row = rowByName(wrapper, 'alpha');
+
+    expect(row.text()).toContain('Queued');
+    expect(row.text()).not.toContain('2 of 3');
+  });
+
+  it('shows frozen batch progress in the grouped header', () => {
+    const updating = makeContainer({
+      id: 'c-updating',
+      name: 'alpha',
+      newTag: '2.0.0',
+      updateKind: 'major',
+      updateOperation: {
+        id: 'op-1',
+        status: 'in-progress',
+        phase: 'pulling',
+        updatedAt: '2026-04-11T12:00:00.000Z',
+      },
+    });
+    const queued = makeContainer({
+      id: 'c-queued',
+      name: 'beta',
+      newTag: '2.0.0',
+      updateKind: 'major',
+      updateOperation: {
+        id: 'op-2',
+        status: 'queued',
+        phase: 'queued',
+        updatedAt: '2026-04-11T12:00:01.000Z',
+      },
+    });
+    const done = makeContainer({
+      id: 'c-done',
+      name: 'gamma',
+      newTag: null,
+      status: 'running',
+    });
+
+    const { context, refs } = makeContext();
+    refs.groupByStack.value = true;
+    refs.filteredContainers.value = [updating, queued, done];
+    refs.displayContainers.value = [updating, queued, done];
+    refs.renderGroups.value = [
+      {
+        key: 'stack-a',
+        name: 'stack-a',
+        containers: [updating, queued, done],
+        containerCount: 3,
+        updatesAvailable: 2,
+        updatableCount: 2,
+      },
+    ];
+    useUpdateBatches().captureBatch('stack-a', 3);
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+
+    expect(wrapper.text()).toContain('Updating stack · 1 of 3 done');
+  });
+
   it('covers card and list pending/disabled/update-kind branches', async () => {
     const pendingCard = makeContainer({
       id: 'c-card-pending',
@@ -1160,5 +1374,71 @@ describe('ContainersGroupedViews', () => {
     refs.containerActionsEnabled.value = true;
     await nextTick();
     await wrapper.find('.emit-list-click').trigger('click');
+  });
+
+  it('renders dimmed card overlay with updating and queued labels for the cards view', async () => {
+    const updatingCard = makeContainer({
+      id: 'c-card-updating',
+      name: 'alpha',
+      newTag: '2.0.0',
+      updateKind: 'major',
+      status: 'running',
+      bouncer: 'safe',
+      updateOperation: {
+        id: 'op-updating',
+        status: 'in-progress',
+        phase: 'pulling',
+        updatedAt: '2026-04-12T00:00:00.000Z',
+      },
+    });
+    const queuedCard = makeContainer({
+      id: 'c-card-queued',
+      name: 'beta',
+      newTag: '2.1.0',
+      updateKind: 'minor',
+      status: 'running',
+      bouncer: 'safe',
+      updateOperation: {
+        id: 'op-queued',
+        status: 'queued',
+        phase: 'queued',
+        updatedAt: '2026-04-12T00:00:00.000Z',
+      },
+    });
+
+    const { context, refs } = makeContext();
+    const containers = [updatingCard, queuedCard];
+    refs.containerViewMode.value = 'cards';
+    refs.filteredContainers.value = containers;
+    refs.displayContainers.value = containers;
+    refs.renderGroups.value = [
+      {
+        key: '__flat__',
+        name: null,
+        containers,
+        containerCount: containers.length,
+        updatesAvailable: 2,
+        updatableCount: 2,
+      },
+    ];
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+    await nextTick();
+
+    const cards = wrapper.findAll('.card-item-stub');
+    expect(cards).toHaveLength(2);
+
+    const updatingWrapper = cards[0]!.find('.transition-opacity');
+    expect(updatingWrapper.classes()).toContain('opacity-30');
+    const updatingOverlay = cards[0]!.find('.absolute.inset-0');
+    expect(updatingOverlay.exists()).toBe(true);
+    expect(updatingOverlay.text()).toBe('Updating');
+
+    const queuedWrapper = cards[1]!.find('.transition-opacity');
+    expect(queuedWrapper.classes()).toContain('opacity-30');
+    const queuedOverlay = cards[1]!.find('.absolute.inset-0');
+    expect(queuedOverlay.exists()).toBe(true);
+    expect(queuedOverlay.text()).toBe('Queued');
   });
 });

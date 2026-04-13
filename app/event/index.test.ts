@@ -30,6 +30,10 @@ const eventTestCases = [
     register: event.registerContainerRemoved,
   },
   {
+    emitter: event.emitUpdateOperationChanged,
+    register: event.registerUpdateOperationChanged,
+  },
+  {
     emitter: event.emitWatcherStart,
     register: event.registerWatcherStart,
   },
@@ -82,6 +86,16 @@ test('deregistration of container removed handler should work', () => {
   deregister();
 
   event.emitContainerRemoved({ id: 'container-removed-1' });
+
+  expect(handler).not.toHaveBeenCalled();
+});
+
+test('deregistration of update operation changed handler should work', async () => {
+  const handler = vi.fn();
+  const deregister = event.registerUpdateOperationChanged(handler);
+  deregister();
+
+  await event.emitUpdateOperationChanged({ operationId: 'op-1' });
 
   expect(handler).not.toHaveBeenCalled();
 });
@@ -223,6 +237,27 @@ test('deregistration of containerUpdateApplied handler should work', async () =>
   deregister();
   await event.emitContainerUpdateApplied('container-456');
   expect(handler).not.toHaveBeenCalled();
+});
+
+test('getContainerUpdateAppliedEventContainerName should normalize supported payload shapes', () => {
+  expect(event.getContainerUpdateAppliedEventContainerName('container-123')).toBe('container-123');
+  expect(event.getContainerUpdateAppliedEventContainerName('')).toBeUndefined();
+  expect(
+    event.getContainerUpdateAppliedEventContainerName(null as unknown as string),
+  ).toBeUndefined();
+  expect(
+    event.getContainerUpdateAppliedEventContainerName(42 as unknown as string),
+  ).toBeUndefined();
+  expect(
+    event.getContainerUpdateAppliedEventContainerName({ containerName: '' } as {
+      containerName: string;
+    }),
+  ).toBeUndefined();
+  expect(
+    event.getContainerUpdateAppliedEventContainerName({ containerName: 'web' } as {
+      containerName: string;
+    }),
+  ).toBe('web');
 });
 
 test('emitContainerUpdateFailed should call registered handlers', async () => {

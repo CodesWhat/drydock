@@ -508,6 +508,7 @@ test('model should be validated when compliant', async () => {
 
     linkTemplate: 'https://release-${major}.${minor}.${patch}.acme.com',
     link: 'https://release-1.0.0.acme.com',
+    tagPinned: true,
     updateAvailable: true,
     updateKind: {
       kind: 'tag',
@@ -727,6 +728,62 @@ test.each([
   });
 
   expect(containerValidated.image.tag.tagPrecision).toBe(tagPrecision);
+});
+
+test('model should flag numeric version aliases as tagPinned even when tagPrecision is floating', () => {
+  const containerValidated = container.validate({
+    id: 'container-tag-pinned-floating',
+    name: 'test-tag-pinned-floating',
+    watcher: 'test',
+    image: {
+      id: 'image-tag-pinned-floating',
+      registry: {
+        name: 'hub',
+        url: 'https://hub',
+      },
+      name: 'organization/image',
+      tag: {
+        value: '16-alpine',
+        semver: true,
+        tagPrecision: 'floating',
+      },
+      digest: {
+        watch: false,
+      },
+      architecture: 'arch',
+      os: 'os',
+    },
+  });
+
+  expect(containerValidated.tagPinned).toBe(true);
+});
+
+test('model should not flag rolling aliases as tagPinned', () => {
+  const containerValidated = container.validate({
+    id: 'container-tag-unpinned-latest',
+    name: 'test-tag-unpinned-latest',
+    watcher: 'test',
+    image: {
+      id: 'image-tag-unpinned-latest',
+      registry: {
+        name: 'hub',
+        url: 'https://hub',
+      },
+      name: 'organization/image',
+      tag: {
+        value: 'latest',
+        semver: false,
+        tagPrecision: 'floating',
+      },
+      digest: {
+        watch: false,
+      },
+      architecture: 'arch',
+      os: 'os',
+    },
+  });
+
+  expect(containerValidated.tagPinned).toBe(false);
 });
 
 test('model should reject invalid image.tag.tagPrecision values', () => {
@@ -1525,6 +1582,7 @@ test('flatten should be flatten the nested properties with underscores when call
     status: 'unknown',
     image_architecture: 'arch',
     image_created: '2021-06-12T05:33:38.440Z',
+    image_digest_repo: undefined,
     image_digest_watch: false,
     image_id: 'image-123456789',
     image_name: 'organization/image',
@@ -1541,6 +1599,7 @@ test('flatten should be flatten the nested properties with underscores when call
     display_icon: 'mdi:docker',
     result_link: 'https://release-2.0.0.acme.com',
     result_tag: '2.0.0',
+    tag_pinned: true,
     update_available: true,
     update_kind_kind: 'tag',
     update_kind_local_value: '1.0.0',

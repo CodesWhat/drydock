@@ -10,12 +10,20 @@ import { useColumnVisibility } from '../composables/useColumnVisibility';
 import { useContainerFilters } from '../composables/useContainerFilters';
 import { useDetailPanel, useDetailPanelStorage } from '../composables/useDetailPanel';
 import { LOG_AUTO_FETCH_INTERVALS } from '../composables/useLogViewerBehavior';
+import { useOperationDisplayHold } from '../composables/useOperationDisplayHold';
 import { preferences } from '../preferences/store';
 import { usePreference } from '../preferences/usePreference';
 import { useViewMode } from '../preferences/useViewMode';
 import type { ContainerGroup } from '../services/container';
 import { getAllContainers, getContainerGroups, refreshAllContainers } from '../services/container';
 import type { Container } from '../types/container';
+import {
+  isActiveContainerUpdateOperationPhaseForStatus,
+  isActiveContainerUpdateOperationStatus,
+  isContainerUpdateOperationStatus,
+  type ActiveContainerUpdateOperationPhase,
+} from '../types/update-operation';
+import { getContainerActionIdentityKey } from '../utils/container-action-key';
 import { mapApiContainers } from '../utils/container-mapper';
 import {
   maturityColor,
@@ -49,6 +57,13 @@ const error = ref<string | null>(null);
 const containers = ref<Container[]>([]);
 const containerIdMap = ref<Record<string, string>>({});
 const containerMetaMap = ref<Record<string, unknown>>({});
+const {
+  clearAllOperationDisplayHolds,
+  holdOperationDisplay,
+  projectContainerDisplayState,
+  scheduleHeldOperationRelease,
+  clearHeldOperation,
+} = useOperationDisplayHold();
 
 function buildContainerLookupMaps(apiContainers: Record<string, unknown>[]) {
   const idMap: Record<string, string> = {};
@@ -264,8 +279,8 @@ const {
   getContainerListPolicyState,
   getOperationStatusStyle,
   getTriggerKey,
-  groupUpdateInProgress,
   isContainerUpdateInProgress,
+  isContainerUpdateQueued,
   policyError,
   policyInProgress,
   policyMessage,
@@ -752,7 +767,7 @@ const sortedContainers = computed(() => {
   });
 });
 
-const displayContainers = computed(() => {
+const displayContainers = computed<Array<Container & { _pending?: true }>>(() => {
   const live = sortedContainers.value.map((container) =>
     skippedUpdates.value.has(container.id) || skippedUpdates.value.has(container.name)
       ? {
@@ -763,11 +778,13 @@ const displayContainers = computed(() => {
         }
       : container,
   );
-  const liveNames = new Set(live.map((container) => container.name));
-  const ghosts = [...actionPending.value.entries()]
-    .filter(([name]) => !liveNames.has(name))
-    .map(([, snapshot]) => ({ ...snapshot, _pending: true as const }));
-  return [...live, ...ghosts];
+  const liveIdentityKeys = new Set(
+    live.map((container) => getContainerActionIdentityKey(container)).filter(Boolean),
+  );
+  const ghosts = [...actionPending.value.values()]
+    .filter((snapshot) => !liveIdentityKeys.has(getContainerActionIdentityKey(snapshot)))
+    .map((snapshot) => ({ ...snapshot, _pending: true as const }));
+  return [...live, ...ghosts].map(projectContainerDisplayState);
 });
 
 const groupMembershipMap = ref<Record<string, string>>({});
@@ -968,6 +985,17 @@ function handleGlobalClick() {
   showColumnPicker.value = false;
 }
 
+const SSE_CONTAINER_CHANGED_DEBOUNCE_MS = 500;
+let sseContainerChangedTimer: ReturnType<typeof setTimeout> | undefined;
+
+function clearSseContainerChangedTimer() {
+  if (sseContainerChangedTimer === undefined) {
+    return;
+  }
+  clearTimeout(sseContainerChangedTimer);
+  sseContainerChangedTimer = undefined;
+}
+
 async function handleSseScanCompleted() {
   await loadContainers();
   if (selectedContainerId.value) {
@@ -976,18 +1004,116 @@ async function handleSseScanCompleted() {
 }
 
 const sseScanCompletedListener = handleSseScanCompleted as EventListener;
-const sseContainerChangedListener = handleSseScanCompleted as EventListener;
+const sseContainerChangedListener = (() => {
+  clearSseContainerChangedTimer();
+  sseContainerChangedTimer = setTimeout(() => {
+    sseContainerChangedTimer = undefined;
+    void handleSseScanCompleted();
+  }, SSE_CONTAINER_CHANGED_DEBOUNCE_MS);
+}) as EventListener;
+function resolveActiveOperationPhase(args: {
+  status: 'queued' | 'in-progress';
+  phase: unknown;
+  previousPhase?: unknown;
+}): ActiveContainerUpdateOperationPhase {
+  if (isActiveContainerUpdateOperationPhaseForStatus(args.status, args.phase)) {
+    return args.phase;
+  }
+  if (
+    args.previousPhase !== undefined &&
+    isActiveContainerUpdateOperationPhaseForStatus(args.status, args.previousPhase)
+  ) {
+    return args.previousPhase;
+  }
+  return args.status === 'queued' ? 'queued' : 'pulling';
+}
+
+function applyOperationPatch(event: Event) {
+  const payload = (event as CustomEvent)?.detail;
+  if (!payload || typeof payload !== 'object') {
+    return;
+  }
+  const { operationId, containerId, newContainerId, containerName, status, phase } =
+    payload as Record<string, unknown>;
+  if (!isContainerUpdateOperationStatus(status)) {
+    return;
+  }
+
+  const idx = containers.value.findIndex(
+    (c) =>
+      (typeof containerId === 'string' && c.id === containerId) ||
+      (typeof newContainerId === 'string' && c.id === newContainerId) ||
+      (typeof containerName === 'string' && c.name === containerName),
+  );
+  if (idx === -1) {
+    return;
+  }
+
+  const updated = { ...containers.value[idx] };
+  if (isActiveContainerUpdateOperationStatus(status)) {
+    const nextOperation = {
+      ...(updated.updateOperation || {}),
+      id: typeof operationId === 'string' ? operationId : (updated.updateOperation?.id ?? ''),
+      status,
+      phase: resolveActiveOperationPhase({
+        status,
+        phase,
+        previousPhase: updated.updateOperation?.phase,
+      }),
+      updatedAt: new Date().toISOString(),
+    };
+    updated.updateOperation = nextOperation;
+    if (status === 'in-progress' && typeof operationId === 'string' && operationId.length > 0) {
+      holdOperationDisplay({
+        operationId,
+        operation: nextOperation,
+        containerId: typeof containerId === 'string' ? containerId : undefined,
+        newContainerId: typeof newContainerId === 'string' ? newContainerId : undefined,
+        containerName: typeof containerName === 'string' ? containerName : undefined,
+      });
+    }
+  } else {
+    updated.updateOperation = undefined;
+    const target = {
+      operationId: typeof operationId === 'string' ? operationId : undefined,
+      containerId: typeof containerId === 'string' ? containerId : undefined,
+      newContainerId: typeof newContainerId === 'string' ? newContainerId : undefined,
+      containerName: typeof containerName === 'string' ? containerName : undefined,
+    };
+    if (status === 'succeeded') {
+      scheduleHeldOperationRelease(target);
+    } else {
+      clearHeldOperation(target);
+    }
+  }
+
+  const next = [...containers.value];
+  next[idx] = updated;
+  containers.value = next;
+}
+
 const sseConnectedListener = handleSseScanCompleted as EventListener;
+const sseUpdateOperationChangedListener = ((event: Event) => {
+  clearSseContainerChangedTimer();
+  applyOperationPatch(event);
+}) as EventListener;
 onMounted(() => {
   document.addEventListener('click', handleGlobalClick);
   globalThis.addEventListener('dd:sse-scan-completed', sseScanCompletedListener);
   globalThis.addEventListener('dd:sse-container-changed', sseContainerChangedListener);
+  globalThis.addEventListener('dd:sse-update-operation-changed', sseUpdateOperationChangedListener);
   globalThis.addEventListener('dd:sse-connected', sseConnectedListener);
 });
 onUnmounted(() => {
+  clearSseContainerChangedTimer();
+  clearAllOperationDisplayHolds();
   document.removeEventListener('click', handleGlobalClick);
   globalThis.removeEventListener('dd:sse-scan-completed', sseScanCompletedListener);
   globalThis.removeEventListener('dd:sse-container-changed', sseContainerChangedListener);
+  globalThis.removeEventListener(
+    'dd:sse-update-operation-changed',
+    sseUpdateOperationChangedListener,
+  );
   globalThis.removeEventListener('dd:sse-connected', sseConnectedListener);
 });
 
@@ -1034,11 +1160,11 @@ provide(containersViewTemplateContextKey, {
   renderGroups,
   toggleGroupCollapse,
   collapsedGroups,
-  groupUpdateInProgress,
   containerActionsEnabled,
   containerActionsDisabledReason,
   actionInProgress,
   isContainerUpdateInProgress,
+  isContainerUpdateQueued,
   updateAllInGroup,
   tableColumns,
   containerSortKey,

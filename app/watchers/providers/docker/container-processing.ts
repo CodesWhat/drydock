@@ -71,7 +71,7 @@ export async function watchContainer(
   }
 
   const containerReport = mapContainerToContainerReport(containerWithResult, watchStartedAtMs);
-  event.emitContainerReport(containerReport);
+  await event.emitContainerReport(containerReport);
   return containerReport;
 }
 

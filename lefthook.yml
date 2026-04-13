@@ -4,8 +4,14 @@
 # Pre-push pipeline (piped = sequential, fail-fast):
 #   0. Clean tree gate — rejects untracked/uncommitted/stashed files
 #   1. Lint gate (~20s) — catches formatting/lint before burning CPU
-#   2. Build + test (~26s parallel) — independent workspaces run concurrently
-#   3. E2E + Playwright + zizmor (blocking)
+#   2. Coverage (sharded app+ui parallel) — tests run here, gap report on fail
+#   3. Build (sharded app+ui parallel) — tsc/vite only, no tests
+#   4. E2E + Playwright + zizmor (blocking)
+#
+# Coverage runs BEFORE build because it's the most common failure mode and
+# it already exercises the code. Splitting it out of the build step means
+# tests run exactly once per push instead of once embedded in build-and-test
+# plus again if we ever add a standalone coverage gate.
 #
 # Snyk scans are CI-only (release workflow) to preserve the 200/month quota.
 #
@@ -47,39 +53,49 @@ pre-push:
           exit 1
         fi
       fail_text: "Uncommitted changes detected — decide what to do with them before pushing"
-      priority: 0
+      priority: 1
       timeout: 10s
 
     # ── Lint gate: fast checks that catch formatting/lint issues ──────
     ts-nocheck:
       run: node scripts/check-ts-nocheck-allowlist.mjs
-      priority: 1
+      priority: 2
       timeout: 15s
     biome:
       run: npx biome check .
-      priority: 2
+      priority: 3
       timeout: 30s
     qlty:
       run: ./scripts/qlty-check-gate.sh all
-      priority: 3
+      priority: 4
       timeout: 4m
 
-    # ── Build + test: parallel across independent workspaces ─────────
-    build-and-test:
-      run: ./scripts/pre-push-build-test.sh
-      priority: 4
+    # ── Coverage: sharded app+ui parallel, 100% threshold ────────────
+    # Runs tests with coverage. On failure, writes .coverage-gaps.json
+    # with exact files + uncovered lines/branches (parsed from lcov.info).
+    # Honors DD_COVERAGE_FAIL_FAST=1 for sequential first-failure mode.
+    coverage:
+      run: ./scripts/pre-push-coverage.sh
+      priority: 5
       timeout: 6m
+
+    # ── Build: sharded app+ui parallel, no tests ─────────────────────
+    # Tests already ran in the coverage step, so this is tsc/vite only.
+    build:
+      run: ./scripts/pre-push-build.sh
+      priority: 6
+      timeout: 4m
 
     # ── E2E: mirrors CI "E2E Tests" job ──────────────────────────────
     e2e:
       run: ./scripts/run-e2e-tests.sh
-      priority: 5
+      priority: 7
       timeout: 10m
 
     # ── Playwright: mirrors CI "Playwright E2E" job ────────────────
     e2e-playwright:
       run: ./scripts/run-playwright-qa.sh
-      priority: 6
+      priority: 8
       timeout: 15m
 
     # ── Zizmor: GitHub Actions security scanner (blocking) ───────────
@@ -88,5 +104,5 @@ pre-push:
       run: zizmor .github/workflows/
       skip:
         - run: '! command -v zizmor >/dev/null 2>&1'
-      priority: 7
+      priority: 9
       timeout: 30s

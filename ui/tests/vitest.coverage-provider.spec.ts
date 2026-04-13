@@ -49,7 +49,7 @@ async function loadCoverageProvider(mockProvider: MockCoverageProvider) {
     },
   }));
 
-  return (await import('../vitest.coverage-provider.ts')).default;
+  return (await import('../vitest.coverage-provider.js')).default;
 }
 
 describe('vitest coverage provider', () => {

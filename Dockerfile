@@ -17,20 +17,21 @@ HEALTHCHECK --interval=30s --timeout=5s CMD ["sh", "-c", "if [ -n \"$DD_SERVER_E
 # Install system packages, trivy, and cosign
 RUN apk add --no-cache \
     bash=5.3.3-r1 \
+    curl=8.17.0-r1 \
     git=2.52.0-r0 \
     jq=1.8.1-r0 \
-    openssl=3.5.5-r0 \
+    openssl=3.5.6-r0 \
     su-exec=0.3-r0 \
     tini=0.19.0-r3 \
     tzdata=2026a-r0 \
-    && apk add --no-cache cosign=2.4.3-r11 \
-    && apk add --no-cache --repository=https://dl-cdn.alpinelinux.org/alpine/edge/testing trivy=0.69.3-r1 \
+    && apk add --no-cache cosign=2.4.3-r12 \
+    && apk add --no-cache --repository=https://dl-cdn.alpinelinux.org/alpine/edge/testing trivy=0.69.3-r2 \
     && apk upgrade --no-cache zlib \
     && mkdir /store && chown node:node /store
 
 # Build stage for healthcheck binary (~65KB static binary)
 FROM alpine:3.21@sha256:c3f8e73fdb79deaebaa2037150150191b9dcbfba68b4a46d70103204c53f4709 AS healthcheck-build
-RUN apk add --no-cache gcc=14.2.0-r4 musl-dev=1.2.5-r9
+RUN apk add --no-cache gcc=14.2.0-r4 musl-dev=1.2.5-r11
 COPY healthcheck.c /src/healthcheck.c
 RUN gcc -Os -static -s -o /bin/healthcheck /src/healthcheck.c
 
@@ -70,11 +71,11 @@ ENV DD_LOG_FORMAT=text
 
 # Remove unnecessary network utilities (busybox symlinks) and npm to reduce attack surface.
 # curl is kept for backward compatibility with user-defined HEALTHCHECK overrides;
-# it will be removed in v1.6.0 — use the built-in /bin/healthcheck binary instead.
+# v1.6.0 is the final warning release, and removal is scheduled for v1.7.0.
 RUN rm -f /usr/bin/wget /usr/bin/nc \
     && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 
-# Copy healthcheck binary (65KB static, replaces curl for HEALTHCHECK probe)
+# Copy healthcheck binary (65KB static, default HEALTHCHECK probe)
 COPY --from=healthcheck-build /bin/healthcheck /bin/healthcheck
 
 # Default entrypoint

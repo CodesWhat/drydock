@@ -14,6 +14,7 @@ const BELL_ACTIONS = [
   'update-available',
   'update-applied',
   'update-failed',
+  'notification-delivery-failed',
   'security-alert',
   'agent-disconnect',
 ];

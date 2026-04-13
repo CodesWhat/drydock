@@ -18,7 +18,7 @@ The `http` trigger lets you send container update notifications via HTTP.
 | `DD_TRIGGER_HTTP_{trigger_name}_AUTH_USER` | ⚪ | The Auth user if BASIC Auth is enabled | | |
 | `DD_TRIGGER_HTTP_{trigger_name}_AUTH_PASSWORD` | ⚪ | The Auth user password if `BASIC` Auth is enabled | | |
 | `DD_TRIGGER_HTTP_{trigger_name}_AUTH_BEARER` | ⚪ | The Auth bearer token if `BEARER` Auth is enabled | | |
-| `DD_TRIGGER_HTTP_{trigger_name}_PROXY` | ⚪ | The HTTP Proxy | | |
+| `DD_TRIGGER_HTTP_{trigger_name}_PROXY` | ⚪ | The HTTP Proxy | Valid `http` or `https` proxy URL | |
 
 <Callout type="warn">HTTP trigger auth now fails closed. If `AUTH_TYPE=BASIC`, both `AUTH_USER` and `AUTH_PASSWORD` are required. If `AUTH_TYPE=BEARER`, `AUTH_BEARER` is required.</Callout>
 

@@ -1,7 +1,8 @@
 import crypto from 'node:crypto';
 import pLimit from 'p-limit';
 import parse from 'parse-docker-image-name';
-import { getSecurityConfiguration } from '../../../configuration/index.js';
+import { getSelfUpdateFinalizeSecret } from '../../../api/internal-self-update.js';
+import { getSecurityConfiguration, getServerConfiguration } from '../../../configuration/index.js';
 import { getPreferredLabelValue as resolvePreferredLabelValue } from '../../../docker/legacy-label.js';
 import {
   emitContainerUpdateApplied,
@@ -22,6 +23,7 @@ import * as auditStore from '../../../store/audit.js';
 import * as backupStore from '../../../store/backup.js';
 import * as storeContainer from '../../../store/container.js';
 import { cacheSecurityState } from '../../../store/container.js';
+import * as updateOperationStore from '../../../store/update-operation.js';
 import { runHook } from '../../hooks/HookRunner.js';
 import Trigger from '../Trigger.js';
 import ContainerRuntimeConfigManager from './ContainerRuntimeConfigManager.js';
@@ -33,12 +35,21 @@ import RegistryResolver from './RegistryResolver.js';
 import RollbackMonitor from './RollbackMonitor.js';
 import SecurityGate from './SecurityGate.js';
 import SelfUpdateOrchestrator from './SelfUpdateOrchestrator.js';
+import { prepareSelfUpdateOperation as preparePersistedSelfUpdateOperation } from './self-update-operation.js';
 import UpdateLifecycleExecutor from './UpdateLifecycleExecutor.js';
+import { getRequestedOperationId } from './update-runtime-context.js';
 
 const PULL_PROGRESS_LOG_INTERVAL_MS = 2000;
 const NON_SELF_UPDATE_HEALTH_TIMEOUT_MS = 120_000;
 const NON_SELF_UPDATE_HEALTH_POLL_INTERVAL_MS = 1_000;
 const TRIGGER_BATCH_CONCURRENCY = 3;
+
+/**
+ * Module-level update concurrency limiter shared across all Docker/Dockercompose
+ * trigger instances. Ensures only one container update executes at a time
+ * regardless of which trigger instance dispatches it.
+ */
+const updateConcurrencyLimit = pLimit(1);
 const warnedLegacyTriggerLabelFallbacks = new Set<string>();
 
 type ContainerFullNameReference = {
@@ -128,7 +139,6 @@ function getErrorJsonMessage(error: unknown): string | undefined {
     return undefined;
   }
   const jsonMessage = (json as { message?: unknown }).message;
-  /* v8 ignore next -- json.message is typically string when present; non-string forms are defensive */
   return typeof jsonMessage === 'string' ? jsonMessage : undefined;
 }
 
@@ -161,6 +171,8 @@ const UPDATE_LIFECYCLE_ORCHESTRATOR_METHODS = [
   'recordHookConfigurationAudit',
   'runPreUpdateHook',
   'isSelfUpdate',
+  'isInfrastructureUpdate',
+  'prepareSelfUpdateOperation',
   'maybeNotifySelfUpdate',
   'executeSelfUpdate',
   'runPreRuntimeUpdateLifecycle',
@@ -261,6 +273,24 @@ class Docker extends Trigger {
       runtimeConfigManager: this.runtimeConfigManager,
       ...pickOrchestratorCallbacks(this, SELF_UPDATE_ORCHESTRATOR_METHODS),
       emitSelfUpdateStarting,
+      resolveFinalizeUrl: () => this.getSelfUpdateFinalizeUrl(),
+      resolveFinalizeSecret: () => this.getSelfUpdateFinalizeSecret(),
+      resolveHelperImage: (container) => {
+        if (this.selfUpdateOrchestrator.isSelfUpdate(container)) {
+          return undefined;
+        }
+        const drydockContainer = storeContainer
+          .getContainers()
+          .find((c) => c.image?.name === 'drydock' || c.image?.name?.endsWith('/drydock'));
+        if (!drydockContainer) {
+          return undefined;
+        }
+        const { name, tag, registry } = drydockContainer.image ?? {};
+        if (!name || !tag?.value) {
+          return undefined;
+        }
+        return registry?.url ? `${registry.url}/${name}:${tag.value}` : `${name}:${tag.value}`;
+      },
     });
     this.containerUpdateExecutor = new ContainerUpdateExecutor({
       getConfiguration: () => this.configuration,
@@ -268,6 +298,34 @@ class Docker extends Trigger {
       ...pickOrchestratorCallbacks(this, CONTAINER_UPDATE_ORCHESTRATOR_METHODS),
       getCloneRuntimeConfigOptions,
       buildRuntimeConfigCompatibilityError,
+      scheduleDeferredReconciliation: (containerName, _operationId, delayMs) => {
+        setTimeout(async () => {
+          try {
+            const container = storeContainer.getContainers().find((c) => c.name === containerName);
+            if (!container) {
+              return;
+            }
+            const watcher = this.getWatcher(container);
+            const dockerApi = watcher.dockerApi as Parameters<
+              typeof this.containerUpdateExecutor.reconcileInProgressContainerUpdateOperation
+            >[0];
+            const logContainer = this.log?.child?.({ container: containerName }) ?? {
+              info: () => {},
+              warn: () => {},
+              debug: () => {},
+            };
+            await this.containerUpdateExecutor.reconcileInProgressContainerUpdateOperation(
+              dockerApi,
+              container,
+              logContainer,
+            );
+          } catch (e: unknown) {
+            this.log?.warn?.(
+              `Deferred reconciliation failed for ${containerName}: ${String((e as Error)?.message ?? e)}`,
+            );
+          }
+        }, delayMs);
+      },
     });
     this.rollbackMonitor = new RollbackMonitor({
       getPreferredLabelValue,
@@ -299,6 +357,8 @@ class Docker extends Trigger {
       },
       selfUpdate: {
         isSelfUpdate: updateLifecycleCallbacks.isSelfUpdate,
+        isInfrastructureUpdate: updateLifecycleCallbacks.isInfrastructureUpdate,
+        prepareSelfUpdateOperation: updateLifecycleCallbacks.prepareSelfUpdateOperation,
         maybeNotifySelfUpdate: updateLifecycleCallbacks.maybeNotifySelfUpdate,
         executeSelfUpdate: updateLifecycleCallbacks.executeSelfUpdate,
       },
@@ -1063,8 +1123,45 @@ class Docker extends Trigger {
     return this.selfUpdateOrchestrator.isSelfUpdate(container);
   }
 
+  isInfrastructureUpdate(container) {
+    return this.selfUpdateOrchestrator.isInfrastructureUpdate(container);
+  }
+
   findDockerSocketBind(spec) {
     return this.selfUpdateOrchestrator.findDockerSocketBind(spec);
+  }
+
+  getSelfUpdateFinalizeUrl() {
+    const serverConfiguration = getServerConfiguration() as {
+      port?: unknown;
+    };
+    if (
+      typeof serverConfiguration?.port !== 'number' ||
+      !Number.isInteger(serverConfiguration.port) ||
+      serverConfiguration.port <= 0
+    ) {
+      throw new Error(
+        `Self-update finalize URL requires a valid server port; got ${String(serverConfiguration?.port)}`,
+      );
+    }
+    const port = serverConfiguration.port;
+    // This callback stays on loopback within the local Drydock process boundary.
+    // Keep it on plain HTTP so we do not need to weaken TLS verification for a
+    // localhost-only helper callback.
+    return `http://127.0.0.1:${port}/api/v1/internal/self-update/finalize`;
+  }
+
+  getSelfUpdateFinalizeSecret() {
+    return getSelfUpdateFinalizeSecret();
+  }
+
+  async prepareSelfUpdateOperation(context, container, _logContainer, runtimeContext?: unknown) {
+    return preparePersistedSelfUpdateOperation({
+      container,
+      context,
+      triggerName: this.getId(),
+      runtimeContext,
+    });
   }
 
   async executeSelfUpdate(
@@ -1151,8 +1248,11 @@ class Docker extends Trigger {
     this.insertContainerImageBackup(context, container);
   }
 
-  async executeContainerUpdate(context, container, logContainer) {
-    return this.containerUpdateExecutor.execute(context, container, logContainer);
+  async executeContainerUpdate(context, container, logContainer, runtimeContext?: unknown) {
+    if (runtimeContext === undefined) {
+      return this.containerUpdateExecutor.execute(context, container, logContainer);
+    }
+    return this.containerUpdateExecutor.execute(context, container, logContainer, runtimeContext);
   }
 
   /**
@@ -1160,8 +1260,12 @@ class Docker extends Trigger {
    * Subclasses (e.g. Dockercompose) override this to use their own runtime
    * mechanics while reusing the shared lifecycle orchestrator.
    */
-  async performContainerUpdate(context, container, logContainer, _runtimeContext?: unknown) {
-    const updated = await this.executeContainerUpdate(context, container, logContainer);
+  async performContainerUpdate(context, container, logContainer, runtimeContext?: unknown) {
+    const updated =
+      runtimeContext === undefined
+        ? await this.executeContainerUpdate(context, container, logContainer)
+        : await this.executeContainerUpdate(context, container, logContainer, runtimeContext);
+    /* v8 ignore next -- V8 mis-maps an import destructuring branch to this line */
     if (updated && container.updateKind?.kind === 'tag') {
       await syncComposeFileTag({
         labels: context.currentContainerSpec?.Config?.Labels,
@@ -1187,7 +1291,48 @@ class Docker extends Trigger {
    * subclasses can override.
    */
   async runContainerUpdateLifecycle(container, runtimeContext?: unknown) {
-    return this.updateLifecycleExecutor.run(container, runtimeContext);
+    return updateConcurrencyLimit(async () => {
+      try {
+        return await this.updateLifecycleExecutor.run(container, runtimeContext);
+      } catch (error: unknown) {
+        const requestedOperationId = getRequestedOperationId(container, runtimeContext);
+        const operation = requestedOperationId
+          ? updateOperationStore.getOperationById(requestedOperationId)
+          : undefined;
+
+        if (!operation) {
+          throw error;
+        }
+
+        if (operation.kind === 'self-update') {
+          // Self-update terminalization is owned by the helper finalize callback.
+          // If the outgoing process dies before that callback runs, startup
+          // reconciliation will fail the orphaned active row on the next boot.
+          throw error;
+        }
+
+        if (operation.phase === 'rollback-deferred') {
+          // rollback-deferred is terminalized by the deferred reconciliation callback in the
+          // normal case; if the process dies before that callback runs, startup reconciliation
+          // will fail the orphaned active row on the next boot.
+          throw error;
+        }
+
+        if (operation.status !== 'queued' && operation.status !== 'in-progress') {
+          // Already terminalized by an inner handler or prior recovery path. The outer wrapper
+          // must not rewrite completedAt/error fields by terminalizing the row a second time.
+          throw error;
+        }
+
+        updateOperationStore.markOperationTerminal(operation.id, {
+          status: 'failed',
+          phase: 'failed',
+          lastError: getErrorMessage(error),
+        });
+
+        throw error;
+      }
+    });
   }
 
   /**
@@ -1204,9 +1349,17 @@ class Docker extends Trigger {
    * @param containers
    * @returns {Promise<unknown[]>}
    */
-  async triggerBatch(containers): Promise<unknown[]> {
+  async triggerBatch(containers, runtimeContext?: unknown): Promise<unknown[]> {
     const limit = pLimit(TRIGGER_BATCH_CONCURRENCY);
-    return Promise.all(containers.map((container) => limit(() => this.trigger(container))));
+    return Promise.all(
+      containers.map((container) =>
+        limit(() =>
+          runtimeContext === undefined
+            ? this.trigger(container)
+            : this.trigger(container, runtimeContext),
+        ),
+      ),
+    );
   }
 }
 

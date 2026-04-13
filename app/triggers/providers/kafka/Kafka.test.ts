@@ -18,10 +18,10 @@ const configurationValid = {
   auto: 'all',
   order: 100,
   simpletitle:
-    '${isDigestUpdate ? "New image available for container " + container.name + " (tag " + currentTag + ")" : "New " + container.updateKind.kind + " found for container " + container.name}',
+    '${isDigestUpdate ? container.notificationAgentPrefix + "New image available for container " + container.name + container.notificationWatcherSuffix + " (tag " + currentTag + ")" : container.notificationAgentPrefix + "New " + container.updateKind.kind + " found for container " + container.name + container.notificationWatcherSuffix}',
 
   simplebody:
-    '${isDigestUpdate ? "Container " + container.name + " running tag " + currentTag + " has a newer image available" : "Container " + container.name + " running with " + container.updateKind.kind + " " + container.updateKind.localValue + " can be updated to " + container.updateKind.kind + " " + container.updateKind.remoteValue}${container.result && container.result.link ? "\\n" + container.result.link : ""}',
+    '${isDigestUpdate ? container.notificationAgentPrefix + "Container " + container.name + container.notificationWatcherSuffix + " running tag " + currentTag + " has a newer image available" : container.notificationAgentPrefix + "Container " + container.name + container.notificationWatcherSuffix + " running with " + container.updateKind.kind + " " + container.updateKind.localValue + " can be updated to " + container.updateKind.kind + " " + container.updateKind.remoteValue}${container.result && container.result.link ? "\\n" + container.result.link : ""}',
 
   batchtitle: '${containers.length} updates available',
   resolvenotifications: false,
@@ -95,6 +95,29 @@ test('validateConfiguration should accept legacy clientId with deprecation warni
   );
 });
 
+test('validateConfiguration should warn only once across Kafka instances for legacy clientId', async () => {
+  vi.resetModules();
+  const { default: log } = await import('../../../log/index.js');
+  const { default: FreshKafka } = await import('./Kafka.js');
+  const warnSpy = vi.spyOn(log, 'warn').mockImplementation(() => undefined);
+  const firstKafka = new FreshKafka();
+  const secondKafka = new FreshKafka();
+  const configuration = {
+    brokers: 'broker1:9000, broker2:9000',
+    clientId: 'legacy-client-id',
+  };
+
+  const firstValidatedConfiguration = firstKafka.validateConfiguration(configuration);
+  const secondValidatedConfiguration = secondKafka.validateConfiguration(configuration);
+
+  expect(firstValidatedConfiguration.clientid).toBe('legacy-client-id');
+  expect(secondValidatedConfiguration.clientid).toBe('legacy-client-id');
+  expect(warnSpy).toHaveBeenCalledTimes(1);
+  expect(warnSpy).toHaveBeenCalledWith(
+    'Kafka trigger configuration key "clientId" is deprecated and will be removed in v1.6.0. Use "clientid" instead.',
+  );
+});
+
 test('validateConfiguration should prefer explicit clientid over legacy clientId', async () => {
   const validatedConfiguration = kafka.validateConfiguration({
     brokers: 'broker1:9000, broker2:9000',
@@ -104,6 +127,39 @@ test('validateConfiguration should prefer explicit clientid over legacy clientId
 
   expect(validatedConfiguration.clientid).toBe('explicit-client');
   expect(validatedConfiguration).not.toHaveProperty('clientId');
+});
+
+test.each([
+  'SCRAM-SHA-256',
+  'SCRAM-SHA-512',
+])('validateConfiguration should accept %s authentication', (authType) => {
+  const validatedConfiguration = kafka.validateConfiguration({
+    brokers: 'broker1:9000, broker2:9000',
+    authentication: {
+      user: 'user',
+      password: 'password',
+      type: authType,
+    },
+  });
+
+  expect(validatedConfiguration.authentication).toStrictEqual({
+    user: 'user',
+    password: 'password',
+    type: authType,
+  });
+});
+
+test('validateConfiguration should reject unsupported authentication type', async () => {
+  expect(() => {
+    kafka.validateConfiguration({
+      brokers: 'broker1:9000, broker2:9000',
+      authentication: {
+        user: 'user',
+        password: 'password',
+        type: 'UNKNOWN',
+      },
+    });
+  }).toThrowError(joi.ValidationError);
 });
 
 test('maskConfiguration should mask sensitive data', async () => {

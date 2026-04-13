@@ -134,6 +134,44 @@ describe('docker event orchestration helpers', () => {
     expect(watcher.dockerApi.getEvents).not.toHaveBeenCalled();
   });
 
+  test('listenDockerEventsOrchestration calls recreateDockerClient when provided', async () => {
+    const recreateDockerClient = vi.fn().mockResolvedValue(undefined);
+    const { watcher } = createWatcher({ recreateDockerClient });
+
+    await listenDockerEventsOrchestration(watcher as any);
+
+    expect(recreateDockerClient).toHaveBeenCalled();
+    expect(watcher.ensureRemoteAuthHeaders).toHaveBeenCalled();
+    expect(watcher.dockerApi.getEvents).toHaveBeenCalled();
+  });
+
+  test('listenDockerEventsOrchestration schedules reconnect when recreateDockerClient fails', async () => {
+    const recreateError = new Error('socket reset');
+    const recreateDockerClient = vi.fn().mockRejectedValue(recreateError);
+    const { watcher } = createWatcher({ recreateDockerClient });
+
+    await listenDockerEventsOrchestration(watcher as any);
+
+    expect(watcher.log.warn).toHaveBeenCalledWith(
+      'Unable to recreate Docker client during reconnect (socket reset)',
+    );
+    expect(watcher.scheduleDockerEventsReconnect).toHaveBeenCalledWith(
+      'client recreation failure',
+      recreateError,
+    );
+    expect(watcher.ensureRemoteAuthHeaders).not.toHaveBeenCalled();
+    expect(watcher.dockerApi.getEvents).not.toHaveBeenCalled();
+  });
+
+  test('listenDockerEventsOrchestration skips recreateDockerClient when not provided', async () => {
+    const { watcher } = createWatcher();
+
+    await listenDockerEventsOrchestration(watcher as any);
+
+    expect(watcher.ensureRemoteAuthHeaders).toHaveBeenCalled();
+    expect(watcher.dockerApi.getEvents).toHaveBeenCalled();
+  });
+
   test('listenDockerEventsOrchestration wires stream handlers when docker events stream opens', async () => {
     const { watcher, stream, streamHandlers } = createWatcher();
 

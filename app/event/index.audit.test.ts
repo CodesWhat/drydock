@@ -101,6 +101,24 @@ describe('event default audit listeners', () => {
     expect(mockInc).toHaveBeenCalledWith({ action: 'update-applied' });
   });
 
+  test('should record update-applied audits from object payloads', async () => {
+    const event = await loadEventModule();
+
+    await event.emitContainerUpdateApplied({
+      containerName: 'container-456',
+      container: { id: 'c1', name: 'nginx', watcher: 'local' },
+    });
+
+    expect(mockInsertAudit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'update-applied',
+        containerName: 'container-456',
+        status: 'success',
+      }),
+    );
+    expect(mockInc).toHaveBeenCalledWith({ action: 'update-applied' });
+  });
+
   test('should record update-failed audits', async () => {
     const event = await loadEventModule();
 

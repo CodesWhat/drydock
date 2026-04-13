@@ -104,7 +104,6 @@ for (const section of DEEP_WATCH_SECTIONS) {
 }
 
 function registerLifecycleFlushHandlers() {
-  /* v8 ignore next 3 -- SSR guard: document is always defined in JSDOM tests */
   if (typeof document === 'undefined' || typeof globalThis.addEventListener !== 'function') {
     return;
   }

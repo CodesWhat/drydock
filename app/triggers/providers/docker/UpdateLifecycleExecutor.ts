@@ -1,4 +1,4 @@
-import crypto from 'node:crypto';
+import type { ContainerUpdateAppliedEvent } from '../../../event/index.js';
 import {
   assertRequiredFunctionDependencies,
   resolveFunctionDependencies,
@@ -49,6 +49,13 @@ type UpdateLifecycleExecutorCallbacks = {
     logger: UpdateLifecycleOperationLogger,
   ) => Promise<void>;
   isSelfUpdate: (container: UpdateLifecycleContainer) => boolean;
+  isInfrastructureUpdate: (container: UpdateLifecycleContainer) => boolean;
+  prepareSelfUpdateOperation: (
+    context: UpdateLifecycleContext,
+    container: UpdateLifecycleContainer,
+    logger: UpdateLifecycleOperationLogger,
+    runtimeContext?: unknown,
+  ) => Promise<string> | string;
   maybeNotifySelfUpdate: (
     container: UpdateLifecycleContainer,
     logger: UpdateLifecycleOperationLogger,
@@ -91,7 +98,7 @@ type UpdateLifecycleExecutorCallbacks = {
     rollbackConfig: Record<string, unknown>,
     logger: UpdateLifecycleOperationLogger,
   ) => Promise<void>;
-  emitContainerUpdateApplied: (containerName: string) => Promise<void>;
+  emitContainerUpdateApplied: (payload: ContainerUpdateAppliedEvent) => Promise<void>;
   emitContainerUpdateFailed: (payload: { containerName: string; error: string }) => Promise<void>;
   pruneOldBackups: (containerName: string, backupCount: number | undefined) => void;
   getBackupCount: () => number | undefined;
@@ -116,7 +123,11 @@ type UpdateLifecycleHookServices = Pick<
 
 type UpdateLifecycleSelfUpdateServices = Pick<
   UpdateLifecycleExecutorCallbacks,
-  'isSelfUpdate' | 'maybeNotifySelfUpdate' | 'executeSelfUpdate'
+  | 'isSelfUpdate'
+  | 'isInfrastructureUpdate'
+  | 'prepareSelfUpdateOperation'
+  | 'maybeNotifySelfUpdate'
+  | 'executeSelfUpdate'
 >;
 
 type UpdateLifecycleRuntimeUpdateServices = Pick<
@@ -164,7 +175,13 @@ const REQUIRED_UPDATE_LIFECYCLE_EXECUTOR_DEPENDENCY_KEYS = {
     'runPreUpdateHook',
     'runPostUpdateHook',
   ],
-  selfUpdate: ['isSelfUpdate', 'maybeNotifySelfUpdate', 'executeSelfUpdate'],
+  selfUpdate: [
+    'isSelfUpdate',
+    'isInfrastructureUpdate',
+    'prepareSelfUpdateOperation',
+    'maybeNotifySelfUpdate',
+    'executeSelfUpdate',
+  ],
   runtimeUpdate: ['runPreRuntimeUpdateLifecycle', 'performContainerUpdate'],
   postUpdate: ['cleanupOldImages', 'getRollbackConfig', 'maybeStartAutoRollbackMonitor'],
   telemetry: ['emitContainerUpdateApplied', 'emitContainerUpdateFailed'],
@@ -252,8 +269,16 @@ class UpdateLifecycleExecutor {
       this.hooks.recordHookConfigurationAudit(container, hookConfig);
       await this.hooks.runPreUpdateHook(container, hookConfig, containerLogger);
 
-      if (this.selfUpdate.isSelfUpdate(container)) {
-        const selfUpdateOperationId = crypto.randomUUID();
+      if (
+        this.selfUpdate.isSelfUpdate(container) ||
+        this.selfUpdate.isInfrastructureUpdate(container)
+      ) {
+        const selfUpdateOperationId = await this.selfUpdate.prepareSelfUpdateOperation(
+          context,
+          container,
+          containerLogger,
+          runtimeContext,
+        );
         await this.selfUpdate.maybeNotifySelfUpdate(
           container,
           containerLogger,
@@ -303,7 +328,10 @@ class UpdateLifecycleExecutor {
         containerLogger,
       );
 
-      await this.telemetry.emitContainerUpdateApplied(this.context.getContainerFullName(container));
+      await this.telemetry.emitContainerUpdateApplied({
+        containerName: this.context.getContainerFullName(container),
+        container,
+      });
       this.postUpdate.pruneOldBackups(container.name, this.postUpdate.getBackupCount());
     } catch (e: unknown) {
       const errorMessage = String((e as Error)?.message ?? e);

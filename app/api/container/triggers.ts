@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import type { Container } from '../../model/container.js';
 import Trigger from '../../triggers/providers/Trigger.js';
+import { requestContainerUpdate, UpdateRequestError } from '../../updates/request-update.js';
 import type { ApiComponent } from '../component.js';
 import { isTriggerCompatibleWithContainer } from '../docker-trigger.js';
 import { sendErrorResponse } from '../error-response.js';
@@ -28,6 +29,8 @@ interface TriggerComponent {
 interface TriggerRuntimeComponent extends TriggerComponent {
   trigger: (container: Container) => Promise<unknown>;
 }
+
+const UPDATE_TRIGGER_TYPES = new Set(['docker', 'dockercompose']);
 
 interface TriggerStaticApi {
   parseIncludeOrIncludeTriggerString: (value: string) => ParsedTriggerReference;
@@ -207,12 +210,28 @@ function createRunTriggerHandler({
     }
 
     try {
+      if (UPDATE_TRIGGER_TYPES.has(triggerType.toLowerCase())) {
+        const accepted = await requestContainerUpdate(containerToTrigger, {
+          trigger: triggerToRun as { type: string; trigger: TriggerRuntimeComponent['trigger'] },
+        });
+        log.info(
+          `Accepted update trigger (type=${sanitizeLogParam(triggerType)}, name=${sanitizeLogParam(triggerName)}, container=${sanitizeLogParam(JSON.stringify(containerToTrigger), 500)})`,
+        );
+        res.status(202).json({ operationId: accepted.operationId });
+        return;
+      }
+
       await triggerToRun.trigger(containerToTrigger);
       log.info(
         `Trigger executed with success (type=${sanitizeLogParam(triggerType)}, name=${sanitizeLogParam(triggerName)}, container=${sanitizeLogParam(JSON.stringify(containerToTrigger), 500)})`,
       );
       res.status(200).json({});
     } catch (error: unknown) {
+      if (error instanceof UpdateRequestError) {
+        sendErrorResponse(res, error.statusCode, error.message);
+        return;
+      }
+
       log.warn(
         `Error when running trigger (type=${sanitizeLogParam(triggerType)}, name=${sanitizeLogParam(triggerName)}) (${sanitizeLogParam(getErrorMessage(error))})`,
       );

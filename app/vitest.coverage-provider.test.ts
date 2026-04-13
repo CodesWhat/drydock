@@ -119,6 +119,237 @@ describe('vitest coverage provider', () => {
     );
   });
 
+  test('should retry coverage file reads when the file is temporarily missing', async () => {
+    readFileMock
+      .mockRejectedValueOnce(Object.assign(new Error('missing file'), { code: 'ENOENT' }))
+      .mockResolvedValueOnce('{"result":[]}');
+
+    const { readCoverageFileWithRetry } = await import('./vitest.coverage-provider.shared.js');
+
+    await expect(readCoverageFileWithRetry('/tmp/coverage/in.json')).resolves.toBe('{"result":[]}');
+    expect(readFileMock).toHaveBeenCalledTimes(2);
+  });
+
+  test('should throw when coverage file writes exhaust all retries', async () => {
+    writeFileMock.mockRejectedValue(
+      Object.assign(new Error('missing directory'), { code: 'ENOENT' }),
+    );
+    mkdirMock.mockResolvedValue(undefined);
+
+    const { writeCoverageFileWithRetry } = await import('./vitest.coverage-provider.shared.js');
+
+    await expect(writeCoverageFileWithRetry('/tmp/coverage/out.json', '{}')).rejects.toThrow(
+      'missing directory',
+    );
+  });
+
+  test('should throw when coverage file reads exhaust all retries', async () => {
+    readFileMock.mockRejectedValue(Object.assign(new Error('missing file'), { code: 'ENOENT' }));
+
+    const { readCoverageFileWithRetry } = await import('./vitest.coverage-provider.shared.js');
+
+    await expect(readCoverageFileWithRetry('/tmp/coverage/in.json')).rejects.toThrow(
+      'missing file',
+    );
+  });
+
+  test('should keep waiting when new writes appear during the settle window', async () => {
+    const { waitForPendingWrites } = await import('./vitest.coverage-provider.shared.js');
+    const provider = {
+      pendingPromises: [Promise.resolve()] as Promise<unknown>[],
+    };
+
+    setTimeout(() => {
+      provider.pendingPromises.push(Promise.resolve());
+    }, 0);
+
+    await waitForPendingWrites(provider);
+
+    expect(provider.pendingPromises).toHaveLength(0);
+  });
+
+  test('should create the coverage directory when no base clean callback is provided', async () => {
+    const { resetCoverageProvider } = await import('./vitest.coverage-provider.shared.js');
+    const provider = {
+      pendingPromises: [],
+      coverageFiles: new Map([['app', { node: { 'suite.test.ts': '/tmp/coverage/out.json' } }]]),
+      coverageFilesDirectory: '/tmp/coverage/.tmp',
+      options: {
+        processingConcurrency: 1,
+      },
+    } as any;
+    const onReset = vi.fn();
+
+    await resetCoverageProvider(provider, undefined, true, onReset);
+
+    expect(onReset).toHaveBeenCalledTimes(1);
+    expect(mkdirMock).toHaveBeenCalledWith(
+      expect.stringMatching(/^\/tmp\/coverage\/\.tmp-\d+-\d+-[a-f0-9]+$/),
+      { recursive: true },
+    );
+    expect(provider.coverageFiles.size).toBe(0);
+    expect(provider.pendingPromises).toHaveLength(0);
+  });
+
+  test('should delegate to the base clean callback when one is provided', async () => {
+    const { resetCoverageProvider } = await import('./vitest.coverage-provider.shared.js');
+    const provider = {
+      pendingPromises: [],
+      coverageFiles: new Map(),
+      coverageFilesDirectory: '/tmp/coverage/.tmp',
+      options: {
+        processingConcurrency: 1,
+      },
+    } as any;
+    const originalClean = vi.fn().mockResolvedValue(undefined);
+    const onReset = vi.fn();
+
+    await resetCoverageProvider(provider, originalClean, true, onReset);
+
+    expect(onReset).toHaveBeenCalledTimes(1);
+    expect(originalClean).toHaveBeenCalledWith(true);
+    expect(mkdirMock).not.toHaveBeenCalled();
+  });
+
+  test('should reset coverage state without recreating a directory when none is configured', async () => {
+    const { resetCoverageProvider } = await import('./vitest.coverage-provider.shared.js');
+    const provider = {
+      pendingPromises: [Promise.resolve()],
+      coverageFiles: new Map([['app', { node: { 'suite.test.ts': '/tmp/coverage/out.json' } }]]),
+      options: {
+        processingConcurrency: 1,
+      },
+    } as any;
+    const onReset = vi.fn();
+
+    await resetCoverageProvider(provider, undefined, true, onReset);
+
+    expect(onReset).toHaveBeenCalledTimes(1);
+    expect(mkdirMock).not.toHaveBeenCalled();
+    expect(provider.coverageFiles.size).toBe(0);
+    expect(provider.pendingPromises).toHaveLength(0);
+  });
+
+  test('should skip recording when suite coverage is missing', async () => {
+    const { createCoverageAfterSuiteRunHandler } = await import(
+      './vitest.coverage-provider.shared.js'
+    );
+    const provider = {
+      pendingPromises: [],
+      coverageFiles: new Map(),
+      coverageFilesDirectory: '/tmp/coverage/.tmp',
+      ctx: {
+        getProjectByName: vi.fn(),
+      },
+      options: {
+        processingConcurrency: 1,
+      },
+      toSlices: (filenames: string[]) => filenames.map((filename) => [filename]),
+    } as any;
+    const writeErrors: unknown[] = [];
+    const coveragePayloads = new Map<string, string>();
+
+    const handler = createCoverageAfterSuiteRunHandler(
+      provider,
+      writeErrors,
+      coveragePayloads,
+      () => '/tmp/coverage/.tmp/coverage-0.json',
+    );
+
+    handler({
+      coverage: undefined,
+      environment: 'node',
+      projectName: 'app',
+      testFiles: ['suite.test.ts'],
+    });
+
+    expect(provider.coverageFiles.size).toBe(0);
+    expect(coveragePayloads.size).toBe(0);
+    expect(writeErrors).toHaveLength(0);
+  });
+
+  test('should record write failures from coverage persistence', async () => {
+    writeFileMock.mockRejectedValueOnce(new Error('write failed'));
+    mkdirMock.mockResolvedValue(undefined);
+
+    const { createCoverageAfterSuiteRunHandler } = await import(
+      './vitest.coverage-provider.shared.js'
+    );
+    const provider = {
+      pendingPromises: [],
+      coverageFiles: new Map(),
+      coverageFilesDirectory: '/tmp/coverage/.tmp',
+      ctx: {
+        getProjectByName: vi.fn(),
+      },
+      options: {
+        processingConcurrency: 1,
+      },
+      toSlices: (filenames: string[]) => filenames.map((filename) => [filename]),
+    } as any;
+    const writeErrors: unknown[] = [];
+    const coveragePayloads = new Map<string, string>();
+
+    const handler = createCoverageAfterSuiteRunHandler(
+      provider,
+      writeErrors,
+      coveragePayloads,
+      () => '/tmp/coverage/.tmp/coverage-0.json',
+    );
+
+    handler({
+      coverage: { result: [] },
+      environment: 'node',
+      projectName: 'app',
+      testFiles: ['suite.test.ts'],
+    });
+
+    await Promise.all(provider.pendingPromises);
+
+    expect(writeErrors).toHaveLength(1);
+    expect(writeErrors[0]).toBeInstanceOf(Error);
+    expect((writeErrors[0] as Error).message).toBe('write failed');
+  });
+
+  test('should throw accumulated write errors before reading coverage files', async () => {
+    const { createCoverageReadFilesHandler } = await import('./vitest.coverage-provider.shared.js');
+    const provider = {
+      pendingPromises: [],
+      coverageFiles: new Map([
+        [
+          'app',
+          {
+            node: {
+              'suite.test.ts': '/tmp/coverage/.tmp/coverage-0.json',
+            },
+          },
+        ],
+      ]),
+      ctx: {
+        getProjectByName: vi.fn(),
+      },
+      options: {
+        processingConcurrency: 1,
+      },
+      toSlices: (filenames: string[]) => filenames.map((filename) => [filename]),
+    } as any;
+    const readCoverageFile = vi.fn();
+    const handler = createCoverageReadFilesHandler(
+      provider,
+      [new Error('write failed')],
+      readCoverageFile,
+    );
+
+    await expect(
+      handler({
+        onFileRead: vi.fn(),
+        onFinished: vi.fn(async () => {}),
+        onDebug: (() => {}) as ((message: string) => void) & { enabled?: boolean },
+      }),
+    ).rejects.toThrow('write failed');
+    expect(readCoverageFile).not.toHaveBeenCalled();
+  });
+
   test('should isolate coverage temp files per provider instance', async () => {
     getProviderMock.mockResolvedValue({
       pendingPromises: [],

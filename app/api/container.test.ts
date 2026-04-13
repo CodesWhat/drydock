@@ -62,8 +62,11 @@ vi.mock('../store/audit', () => ({
 
 vi.mock('../store/update-operation', () => ({
   getOperationsByContainerName: (...args: unknown[]) => mockGetOperationsByContainerName(...args),
+  getOperationById: vi.fn(() => undefined),
   getInProgressOperationByContainerName: vi.fn(() => undefined),
   getInProgressOperationByContainerId: vi.fn(() => undefined),
+  getActiveOperationByContainerName: vi.fn(() => undefined),
+  getActiveOperationByContainerId: vi.fn(() => undefined),
 }));
 
 vi.mock('../registry', () => ({
@@ -750,10 +753,26 @@ describe('Container Router', () => {
   describe('getContainerRecentStatus', () => {
     test('should return the latest status per container using recent audit entries', () => {
       auditStore.getRecentEntries.mockReturnValue([
-        { containerName: 'api', action: 'update-failed' },
-        { containerName: 'api', action: 'update-applied' },
-        { containerName: 'worker', action: 'update-applied' },
-        { containerName: 'cache', action: 'update-available' },
+        {
+          containerName: 'api',
+          containerIdentityKey: 'edge-a::docker-prod::api',
+          action: 'update-failed',
+        },
+        {
+          containerName: 'api',
+          containerIdentityKey: 'edge-a::docker-prod::api',
+          action: 'update-applied',
+        },
+        {
+          containerName: 'worker',
+          containerIdentityKey: 'edge-b::docker-prod::worker',
+          action: 'update-applied',
+        },
+        {
+          containerName: 'cache',
+          containerIdentityKey: '::local::cache',
+          action: 'update-available',
+        },
         { containerName: 'ignore-me', action: 'container-update' },
       ]);
 
@@ -769,7 +788,20 @@ describe('Container Router', () => {
           cache: 'pending',
           worker: 'updated',
         },
+        statusesByIdentity: {
+          '::local::cache': 'pending',
+          'edge-a::docker-prod::api': 'failed',
+          'edge-b::docker-prod::worker': 'updated',
+        },
       });
+      const contractValidation = validateOpenApiJsonResponse({
+        path: '/api/containers/recent-status',
+        method: 'get',
+        statusCode: '200',
+        payload: res.json.mock.calls[0][0],
+      });
+      expect(contractValidation.valid).toBe(true);
+      expect(contractValidation.errors).toStrictEqual([]);
     });
 
     test('should ignore invalid entries and empty container names', () => {
@@ -778,6 +810,16 @@ describe('Container Router', () => {
         { action: 'update-failed' },
         { containerName: ' ', action: 'update-failed' },
         { containerName: 'trim-me', action: 'update-applied' },
+        {
+          containerName: 'duplicate-name',
+          containerIdentityKey: 'edge-a::docker-a::duplicate-name',
+          action: 'update-failed',
+        },
+        {
+          containerName: 'duplicate-name',
+          containerIdentityKey: 'edge-b::docker-b::duplicate-name',
+          action: 'update-applied',
+        },
       ]);
 
       const handler = getHandler('get', '/recent-status');
@@ -787,7 +829,12 @@ describe('Container Router', () => {
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
         statuses: {
+          'duplicate-name': 'failed',
           'trim-me': 'updated',
+        },
+        statusesByIdentity: {
+          'edge-a::docker-a::duplicate-name': 'failed',
+          'edge-b::docker-b::duplicate-name': 'updated',
         },
       });
     });
@@ -800,7 +847,7 @@ describe('Container Router', () => {
       handler({ query: {} }, res);
 
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith({ statuses: {} });
+      expect(res.json).toHaveBeenCalledWith({ statuses: {}, statusesByIdentity: {} });
     });
   });
 
@@ -1432,6 +1479,8 @@ describe('Container Router', () => {
             getOperationsByContainerName: vi.fn(() => []),
             getInProgressOperationByContainerName: vi.fn(() => undefined),
             getInProgressOperationByContainerId: vi.fn(() => undefined),
+            getActiveOperationByContainerName: vi.fn(() => undefined),
+            getActiveOperationByContainerId: vi.fn(() => undefined),
           },
         },
         agentApi: {

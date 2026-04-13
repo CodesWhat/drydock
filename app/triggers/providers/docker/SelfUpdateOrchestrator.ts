@@ -49,6 +49,8 @@ interface SelfUpdateOrchestratorDependencies {
   ) => void;
   emitSelfUpdateStarting: (payload: SelfUpdateStartingPayload) => Promise<void>;
   createOperationId: () => string;
+  resolveFinalizeUrl: () => string;
+  resolveFinalizeSecret: () => string;
 }
 
 interface SelfUpdateOrchestratorConstructorOptions {
@@ -74,6 +76,9 @@ interface SelfUpdateOrchestratorConstructorOptions {
   insertContainerImageBackup?: SelfUpdateOrchestratorDependencies['insertContainerImageBackup'];
   emitSelfUpdateStarting?: SelfUpdateOrchestratorDependencies['emitSelfUpdateStarting'];
   createOperationId?: SelfUpdateOrchestratorDependencies['createOperationId'];
+  resolveFinalizeUrl?: SelfUpdateOrchestratorDependencies['resolveFinalizeUrl'];
+  resolveFinalizeSecret?: SelfUpdateOrchestratorDependencies['resolveFinalizeSecret'];
+  resolveHelperImage?: (container: SelfUpdateContainerRef) => string | undefined;
 }
 
 function missingDependency(dependencyName: string): never {
@@ -97,6 +102,12 @@ class SelfUpdateOrchestrator {
 
   createOperationId: SelfUpdateOrchestratorDependencies['createOperationId'];
 
+  resolveFinalizeUrl: SelfUpdateOrchestratorDependencies['resolveFinalizeUrl'];
+
+  resolveFinalizeSecret: SelfUpdateOrchestratorDependencies['resolveFinalizeSecret'];
+
+  resolveHelperImage?: (container: SelfUpdateContainerRef) => string | undefined;
+
   constructor(options: SelfUpdateOrchestratorConstructorOptions = {}) {
     this.getConfiguration = options.getConfiguration || (() => ({}));
     this.runtimeConfigManager = options.runtimeConfigManager || {
@@ -118,10 +129,21 @@ class SelfUpdateOrchestrator {
     this.insertContainerImageBackup = options.insertContainerImageBackup || (() => undefined);
     this.emitSelfUpdateStarting = options.emitSelfUpdateStarting || (() => Promise.resolve());
     this.createOperationId = options.createOperationId || (() => crypto.randomUUID());
+    this.resolveFinalizeUrl =
+      options.resolveFinalizeUrl ||
+      (() => 'http://127.0.0.1:3000/api/v1/internal/self-update/finalize');
+    this.resolveFinalizeSecret =
+      options.resolveFinalizeSecret || (() => 'missing-self-update-finalize-secret');
+    this.resolveHelperImage = options.resolveHelperImage;
   }
 
   isSelfUpdate(container: SelfUpdateContainerRef): boolean {
     return container.image.name === 'drydock' || container.image.name.endsWith('/drydock');
+  }
+
+  isInfrastructureUpdate(container: SelfUpdateContainerRef): boolean {
+    const labels = (container as { labels?: Record<string, string> }).labels;
+    return !!labels && typeof labels === 'object' && labels['dd.update.mode'] === 'infrastructure';
   }
 
   findDockerSocketBind(spec: SelfUpdateContainerSpec | undefined): string | undefined {
@@ -152,6 +174,7 @@ class SelfUpdateOrchestrator {
     logContainer: SelfUpdateLogger,
     operationId?: string,
   ): Promise<boolean> {
+    const resolveHelperImage = this.resolveHelperImage;
     return executeSelfUpdateTransition(
       {
         getConfiguration: this.getConfiguration,
@@ -164,6 +187,9 @@ class SelfUpdateOrchestrator {
         cloneContainer: this.cloneContainer,
         createContainer: this.createContainer,
         createOperationId: this.createOperationId,
+        resolveFinalizeUrl: this.resolveFinalizeUrl,
+        resolveFinalizeSecret: this.resolveFinalizeSecret,
+        resolveHelperImage: resolveHelperImage ? () => resolveHelperImage(container) : undefined,
       },
       context,
       container,

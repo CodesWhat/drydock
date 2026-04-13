@@ -23,27 +23,32 @@ function makeContainer(overrides: Partial<Container> = {}): Container {
 describe('hide-pinned', () => {
   describe('matchesHidePinnedFilter', () => {
     it('returns true for all containers when hidePinned is disabled', () => {
-      expect(matchesHidePinnedFilter(makeContainer({ tagPrecision: 'specific' }), false)).toBe(
-        true,
-      );
-      expect(matchesHidePinnedFilter(makeContainer({ tagPrecision: 'floating' }), false)).toBe(
-        true,
-      );
+      expect(matchesHidePinnedFilter(makeContainer({ tagPinned: true }), false)).toBe(true);
+      expect(matchesHidePinnedFilter(makeContainer({ tagPinned: false }), false)).toBe(true);
     });
 
     it('returns false only for pinned containers when hidePinned is enabled', () => {
-      expect(matchesHidePinnedFilter(makeContainer({ tagPrecision: 'specific' }), true)).toBe(
-        false,
-      );
-      expect(matchesHidePinnedFilter(makeContainer({ tagPrecision: 'floating' }), true)).toBe(true);
+      expect(
+        matchesHidePinnedFilter(
+          makeContainer({ currentTag: '16-alpine', tagPrecision: 'floating', tagPinned: true }),
+          true,
+        ),
+      ).toBe(false);
+      expect(matchesHidePinnedFilter(makeContainer({ tagPinned: false }), true)).toBe(true);
       expect(matchesHidePinnedFilter(makeContainer(), true)).toBe(true);
     });
   });
 
   describe('filterContainersByHidePinned', () => {
     const containers = [
-      makeContainer({ id: 'floating', name: 'floating', tagPrecision: 'floating' }),
-      makeContainer({ id: 'pinned', name: 'pinned', tagPrecision: 'specific' }),
+      makeContainer({ id: 'floating', name: 'floating', currentTag: 'latest', tagPinned: false }),
+      makeContainer({
+        id: 'pinned',
+        name: 'pinned',
+        currentTag: '16-alpine',
+        tagPrecision: 'floating',
+        tagPinned: true,
+      }),
       makeContainer({ id: 'unspecified', name: 'unspecified' }),
     ];
 

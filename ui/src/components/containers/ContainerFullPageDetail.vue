@@ -19,6 +19,7 @@ const {
   confirmDelete,
   actionInProgress,
   isContainerUpdateInProgress,
+  isContainerUpdateQueued,
   error,
   registryColorBg,
   registryColorText,
@@ -28,6 +29,10 @@ const {
   activeDetailTab,
 } = useContainersViewTemplateContext();
 
+function isActionQueued(container: { id?: unknown; name?: unknown }) {
+  return isContainerUpdateQueued(container);
+}
+
 function isActionInProgress(container: { id?: unknown; name?: unknown }) {
   return (
     hasTrackedContainerAction(actionInProgress.value, container) ||
@@ -35,16 +40,28 @@ function isActionInProgress(container: { id?: unknown; name?: unknown }) {
   );
 }
 
+function isActionBlocked(container: { id?: unknown; name?: unknown }) {
+  return isActionInProgress(container) || isActionQueued(container);
+}
+
 function getStatusLabel(container: { id?: unknown; name?: unknown; status?: string }) {
-  return isActionInProgress(container) ? 'Updating' : (container.status ?? 'unknown');
+  if (isActionInProgress(container)) {
+    return 'Updating';
+  }
+  if (isActionQueued(container)) {
+    return 'Queued';
+  }
+  return container.status ?? 'unknown';
 }
 
 function getStatusTone(container: { id?: unknown; name?: unknown; status?: string }) {
-  return isActionInProgress(container)
-    ? 'warning'
-    : container.status === 'running'
-      ? 'success'
-      : 'danger';
+  if (isActionInProgress(container)) {
+    return 'warning';
+  }
+  if (isActionQueued(container)) {
+    return 'neutral';
+  }
+  return container.status === 'running' ? 'success' : 'danger';
 }
 </script>
 
@@ -65,7 +82,7 @@ function getStatusTone(container: { id?: unknown; name?: unknown; status?: strin
           </AppButton>
           <div class="flex items-center gap-3 min-w-0">
             <StatusDot
-              :status="isActionInProgress(selectedContainer) ? 'warning' : selectedContainer.status === 'running' ? 'running' : 'stopped'"
+              :status="isActionBlocked(selectedContainer) ? 'warning' : selectedContainer.status === 'running' ? 'running' : 'stopped'"
               :pulse="isActionInProgress(selectedContainer)"
               v-tooltip.top="getStatusLabel(selectedContainer)"
               size="lg" />
@@ -85,6 +102,11 @@ function getStatusTone(container: { id?: unknown; name?: unknown; status?: strin
                     name="spinner"
                     :size="12"
                     class="mr-1 dd-spin" />
+                  <AppIcon
+                    v-else-if="isActionQueued(selectedContainer)"
+                    name="clock"
+                    :size="12"
+                    class="mr-1" />
                   {{ getStatusLabel(selectedContainer) }}
                 </AppBadge>
                 <AppBadge
@@ -120,9 +142,9 @@ function getStatusTone(container: { id?: unknown; name?: unknown; status?: strin
           <AppButton size="none" variant="plain" weight="none"
             v-if="selectedContainer.status === 'running'"
             class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-2xs-plus font-semibold transition-colors"
-            :class="isActionInProgress(selectedContainer) ? 'opacity-50 cursor-not-allowed' : ''"
+            :class="isActionBlocked(selectedContainer) ? 'opacity-50 cursor-not-allowed' : ''"
             :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)', border: '1px solid var(--dd-danger)' }"
-            :disabled="isActionInProgress(selectedContainer)"
+            :disabled="isActionBlocked(selectedContainer)"
             aria-label="Stop container"
             @click="confirmStop(selectedContainer)">
             <AppIcon :name="isActionInProgress(selectedContainer) ? 'spinner' : 'stop'" :size="12" :class="isActionInProgress(selectedContainer) ? 'dd-spin' : ''" />
@@ -131,9 +153,9 @@ function getStatusTone(container: { id?: unknown; name?: unknown; status?: strin
           <AppButton size="none" variant="plain" weight="none"
             v-else
             class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-2xs-plus font-semibold transition-colors"
-            :class="isActionInProgress(selectedContainer) ? 'opacity-50 cursor-not-allowed' : ''"
+            :class="isActionBlocked(selectedContainer) ? 'opacity-50 cursor-not-allowed' : ''"
             :style="{ backgroundColor: 'var(--dd-success-muted)', color: 'var(--dd-success)', border: '1px solid var(--dd-success)' }"
-            :disabled="isActionInProgress(selectedContainer)"
+            :disabled="isActionBlocked(selectedContainer)"
             aria-label="Start container"
             @click="startContainer(selectedContainer)">
             <AppIcon :name="isActionInProgress(selectedContainer) ? 'spinner' : 'play'" :size="12" :class="isActionInProgress(selectedContainer) ? 'dd-spin' : ''" />
@@ -141,8 +163,8 @@ function getStatusTone(container: { id?: unknown; name?: unknown; status?: strin
           </AppButton>
           <AppButton size="none" variant="plain" weight="none"
             class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-2xs-plus font-semibold transition-colors"
-            :class="isActionInProgress(selectedContainer) ? 'opacity-50 cursor-not-allowed' : 'dd-text-muted hover:dd-text'"
-            :disabled="isActionInProgress(selectedContainer)"
+            :class="isActionBlocked(selectedContainer) ? 'opacity-50 cursor-not-allowed' : 'dd-text-muted hover:dd-text'"
+            :disabled="isActionBlocked(selectedContainer)"
             aria-label="Restart container"
             @click="confirmRestart(selectedContainer)">
             <AppIcon :name="isActionInProgress(selectedContainer) ? 'spinner' : 'restart'" :size="12" :class="isActionInProgress(selectedContainer) ? 'dd-spin' : ''" />
@@ -150,8 +172,8 @@ function getStatusTone(container: { id?: unknown; name?: unknown; status?: strin
           </AppButton>
           <AppButton size="none" variant="plain" weight="none"
             class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-2xs-plus font-semibold transition-colors"
-            :class="isActionInProgress(selectedContainer) ? 'opacity-50 cursor-not-allowed' : 'dd-text-muted hover:dd-text'"
-            :disabled="isActionInProgress(selectedContainer)"
+            :class="isActionBlocked(selectedContainer) ? 'opacity-50 cursor-not-allowed' : 'dd-text-muted hover:dd-text'"
+            :disabled="isActionBlocked(selectedContainer)"
             aria-label="Scan container"
             @click="scanContainer(selectedContainer)">
             <AppIcon :name="isActionInProgress(selectedContainer) ? 'spinner' : 'security'" :size="12" :class="isActionInProgress(selectedContainer) ? 'dd-spin' : ''" />
@@ -160,9 +182,9 @@ function getStatusTone(container: { id?: unknown; name?: unknown; status?: strin
           <AppButton size="none" variant="plain" weight="none"
             v-if="selectedContainer.newTag && selectedContainer.bouncer === 'blocked'"
             class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-2xs-plus font-bold transition-colors"
-            :class="isActionInProgress(selectedContainer) ? 'opacity-50 cursor-not-allowed' : ''"
+            :class="isActionBlocked(selectedContainer) ? 'opacity-50 cursor-not-allowed' : ''"
             :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)', border: '1px solid var(--dd-danger)' }"
-            :disabled="isActionInProgress(selectedContainer)"
+            :disabled="isActionBlocked(selectedContainer)"
             aria-label="Update blocked by security scan"
             @click="confirmForceUpdate(selectedContainer)">
             <AppIcon name="lock" :size="12" />
@@ -171,9 +193,9 @@ function getStatusTone(container: { id?: unknown; name?: unknown; status?: strin
           <AppButton size="none" variant="plain" weight="none"
             v-else-if="selectedContainer.newTag"
             class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-2xs-plus font-bold transition-colors"
-            :class="isActionInProgress(selectedContainer) ? 'opacity-50 cursor-not-allowed' : ''"
+            :class="isActionBlocked(selectedContainer) ? 'opacity-50 cursor-not-allowed' : ''"
             :style="{ backgroundColor: 'var(--dd-success-muted)', color: 'var(--dd-success)', border: '1px solid var(--dd-success)' }"
-            :disabled="isActionInProgress(selectedContainer)"
+            :disabled="isActionBlocked(selectedContainer)"
             aria-label="Update container"
             @click="confirmUpdate(selectedContainer)">
             <AppIcon :name="isActionInProgress(selectedContainer) ? 'spinner' : 'cloud-download'" :size="12" :class="isActionInProgress(selectedContainer) ? 'dd-spin' : ''" />
@@ -181,9 +203,9 @@ function getStatusTone(container: { id?: unknown; name?: unknown; status?: strin
           </AppButton>
           <AppButton size="none" variant="plain" weight="none"
             class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-2xs-plus font-semibold transition-colors"
-            :class="isActionInProgress(selectedContainer) ? 'opacity-50 cursor-not-allowed' : ''"
+            :class="isActionBlocked(selectedContainer) ? 'opacity-50 cursor-not-allowed' : ''"
             :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)', border: '1px solid var(--dd-danger)' }"
-            :disabled="isActionInProgress(selectedContainer)"
+            :disabled="isActionBlocked(selectedContainer)"
             aria-label="Delete container"
             @click="confirmDelete(selectedContainer)">
             <AppIcon :name="isActionInProgress(selectedContainer) ? 'spinner' : 'trash'" :size="12" :class="isActionInProgress(selectedContainer) ? 'dd-spin' : ''" />

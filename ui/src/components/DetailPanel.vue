@@ -53,13 +53,19 @@ onUnmounted(() => globalThis.removeEventListener('keydown', handleKeydown));
        class="fixed inset-0 bg-black/50 z-40"
        @click="closePanel" />
 
-  <!-- Panel -->
+  <!--
+    Panel — DO NOT touch the desktop sticky/mt-4/sm:mt-6 + height calc combo
+    without reading the LOCKED test in tests/components/DetailPanel.spec.ts.
+    This has regressed twice. The mt-4/sm:mt-6 and the
+    `calc(100vh - var(--dd-layout-main-viewport-offset))` height are paired —
+    removing either makes the panel misalign on Containers and Audit pages.
+  -->
   <aside v-if="open"
          role="dialog"
          :aria-modal="isMobile ? 'true' : undefined"
          aria-label="Detail panel"
-         class="detail-panel-inline flex flex-col min-w-0 dd-rounded overflow-clip transition-[flex-basis,width,max-width,color,background-color,border-color,opacity,transform,box-shadow] duration-300 ease-in-out"
-         :class="isMobile ? 'fixed top-0 right-0 h-full z-50' : 'sticky top-0 mr-[15px]'"
+         class="detail-panel-inline flex flex-col min-w-0 overflow-clip transition-[flex-basis,width,max-width,color,background-color,border-color,opacity,transform,box-shadow] duration-300 ease-in-out"
+         :class="isMobile ? 'fixed top-0 right-0 h-full z-50 dd-rounded' : 'sticky top-0 mt-4 sm:mt-6 mr-[15px]'"
          :style="{
            flex: isMobile ? undefined : `0 0 ${panelDesktopWidth}`,
            width: isMobile ? '100%' : panelDesktopWidth,
@@ -67,6 +73,10 @@ onUnmounted(() => globalThis.removeEventListener('keydown', handleKeydown));
            backgroundColor: 'var(--dd-bg-card)',
            height: isMobile ? '100vh' : 'calc(100vh - var(--dd-layout-main-viewport-offset))',
            minHeight: '480px',
+           borderTopLeftRadius: 'var(--dd-radius)',
+           borderTopRightRadius: 'var(--dd-radius)',
+           borderBottomLeftRadius: isMobile ? undefined : '0',
+           borderBottomRightRadius: isMobile ? undefined : '0',
          }">
 
     <!-- Panel toolbar: size + full page + close -->
@@ -110,7 +120,7 @@ onUnmounted(() => globalThis.removeEventListener('keydown', handleKeydown));
     <slot name="tabs" />
 
     <!-- Main scrollable content -->
-    <div class="flex flex-col flex-1 min-w-0 min-h-0 overflow-y-auto">
+    <div class="flex flex-col flex-1 min-w-0 min-h-0 overflow-y-auto overscroll-contain dd-scroll-stable dd-touch-scroll">
       <slot />
     </div>
   </aside>

@@ -67,6 +67,7 @@ vi.mock('./agent', mockInit);
 vi.mock('./preview', mockInit);
 vi.mock('./backup', mockInit);
 vi.mock('./container-actions', mockInit);
+vi.mock('./internal-self-update', mockInit);
 vi.mock('./audit', mockInit);
 vi.mock('./webhook', mockInit);
 vi.mock('./webhooks', mockInit);
@@ -275,6 +276,7 @@ describe('API Router', () => {
     const previewRouter = await import('./preview.js');
     const backupRouter = await import('./backup.js');
     const containerActionsRouter = await import('./container-actions.js');
+    const internalSelfUpdateRouter = await import('./internal-self-update.js');
     const auditRouter = await import('./audit.js');
     const webhookRouter = await import('./webhook.js');
     const webhooksRouter = await import('./webhooks.js');
@@ -298,6 +300,7 @@ describe('API Router', () => {
     expect(previewRouter.init).toHaveBeenCalled();
     expect(backupRouter.init).toHaveBeenCalled();
     expect(containerActionsRouter.init).toHaveBeenCalled();
+    expect(internalSelfUpdateRouter.init).toHaveBeenCalled();
     expect(auditRouter.init).toHaveBeenCalled();
     expect(webhookRouter.init).toHaveBeenCalled();
     expect(webhooksRouter.init).toHaveBeenCalled();
@@ -318,6 +321,18 @@ describe('API Router', () => {
     expect(authIndex).toBeGreaterThan(-1);
     expect(appIndex).toBeGreaterThan(-1);
     expect(appIndex).toBeGreaterThan(authIndex);
+  });
+
+  test('should mount internal self-update routes before requireAuthentication middleware', async () => {
+    const auth = await import('./auth.js');
+    const useCalls = router.use.mock.calls;
+
+    const internalIndex = useCalls.findIndex((c) => c[0] === '/internal');
+    const authIndex = useCalls.findIndex((c) => c[0] === auth.requireAuthentication);
+
+    expect(internalIndex).toBeGreaterThan(-1);
+    expect(authIndex).toBeGreaterThan(-1);
+    expect(internalIndex).toBeLessThan(authIndex);
   });
 
   test('should use CSRF middleware', async () => {

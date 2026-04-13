@@ -46,7 +46,6 @@ function cloneLayout(layout: readonly WidgetLayoutItem[]): WidgetLayoutItem[] {
   return layout.map(cloneLayoutItem);
 }
 
-/* v8 ignore next 12 -- short-circuit chain; every property is tested individually */
 function layoutItemsEqual(left: WidgetLayoutItem, right: WidgetLayoutItem): boolean {
   return (
     left.i === right.i &&
@@ -150,7 +149,6 @@ function getCurrentBreakpointLayout(
   order: readonly DashboardWidgetId[],
   breakpoint: DashboardLayoutBreakpoint,
 ): WidgetLayoutItem[] {
-  /* v8 ignore next -- defensive fallback for missing breakpoint */
   return cloneLayout(layouts[breakpoint] ?? createLayoutFromOrder(order, breakpoint));
 }
 
@@ -184,7 +182,6 @@ function loadPersistedLayouts(order: readonly DashboardWidgetId[]): ResponsiveWi
   const layouts: ResponsiveWidgetLayouts = {};
   const rawResponsiveLayouts = preferences.dashboard.gridLayouts;
 
-  /* v8 ignore next -- defensive: gridLayouts is always initialized as object */
   if (rawResponsiveLayouts && typeof rawResponsiveLayouts === 'object') {
     for (const breakpoint of RESPONSIVE_BREAKPOINTS) {
       const candidate = (rawResponsiveLayouts as Record<string, unknown>)[breakpoint];
@@ -199,7 +196,6 @@ function loadPersistedLayouts(order: readonly DashboardWidgetId[]): ResponsiveWi
     Array.isArray(preferences.dashboard.gridLayout) &&
     preferences.dashboard.gridLayout.length > 0
   ) {
-    /* v8 ignore next -- legacy migration: tested via migration specs */
     const legacyBreakpoint = isLegacySingleColumnLayout(preferences.dashboard.gridLayout)
       ? 'sm'
       : 'lg';
@@ -279,8 +275,7 @@ export function useDashboardResponsiveLayouts(options: {
     const normalized = syncCurrentLayoutIntoResponsiveLayouts(nextLayout);
     preferences.dashboard.widgetOrder = [...widgetOrder.value];
     preferences.dashboard.gridLayouts = serializeResponsiveLayouts(layoutsByBreakpoint.value);
-    /* v8 ignore next -- defensive fallback: lg always exists */
-    preferences.dashboard.gridLayout = [...(preferences.dashboard.gridLayouts.lg ?? [])];
+    preferences.dashboard.gridLayout = [...preferences.dashboard.gridLayouts.lg];
     return normalized;
   }
 
@@ -300,14 +295,9 @@ export function useDashboardResponsiveLayouts(options: {
   }
 
   function resetLayoutsToDefaults() {
-    const nextLayouts: ResponsiveWidgetLayouts = {
-      lg: createLayoutFromOrder(widgetOrder.value, 'lg'),
-    };
-    if (currentBreakpoint.value !== 'lg') {
-      nextLayouts[currentBreakpoint.value] = createLayoutFromOrder(
-        widgetOrder.value,
-        currentBreakpoint.value,
-      );
+    const nextLayouts: ResponsiveWidgetLayouts = {};
+    for (const breakpoint of RESPONSIVE_BREAKPOINTS) {
+      nextLayouts[breakpoint] = createLayoutFromOrder(widgetOrder.value, breakpoint);
     }
     layoutsByBreakpoint.value = nextLayouts;
     syncCurrentLayoutFromResponsiveLayouts();
@@ -325,7 +315,6 @@ export function useDashboardResponsiveLayouts(options: {
     const normalized = hydrateLayout(
       widgetOrder.value,
       breakpoint,
-      /* v8 ignore next -- defensive fallback when called without explicit layout */
       nextLayout ?? layoutsByBreakpoint.value[breakpoint],
     );
     layoutsByBreakpoint.value = {

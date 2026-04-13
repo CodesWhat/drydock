@@ -156,14 +156,12 @@ export function useDashboardWidgetOrder() {
     flushPendingLayoutPersist();
   };
 
-  /* v8 ignore start -- SSR guard: document/addEventListener always exist in JSDOM */
   if (typeof document !== 'undefined') {
     document.addEventListener('visibilitychange', visibilitychangeListener);
   }
   if (typeof globalThis.addEventListener === 'function') {
     globalThis.addEventListener('pagehide', pagehideListener);
   }
-  /* v8 ignore stop */
 
   watch(
     layout,
@@ -195,14 +193,12 @@ export function useDashboardWidgetOrder() {
   watch(hiddenWidgets, persistHiddenWidgets, { deep: true });
 
   onScopeDispose(() => {
-    /* v8 ignore start -- SSR guard: mirrors registration above */
     if (typeof document !== 'undefined') {
       document.removeEventListener('visibilitychange', visibilitychangeListener);
     }
     if (typeof globalThis.removeEventListener === 'function') {
       globalThis.removeEventListener('pagehide', pagehideListener);
     }
-    /* v8 ignore stop */
     flushPendingLayoutPersist();
     persistHiddenWidgets();
   });

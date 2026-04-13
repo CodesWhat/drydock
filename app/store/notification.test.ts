@@ -353,6 +353,36 @@ describe('Notification Store', () => {
     expect(notification.isTriggerEnabledForRule('update-applied', 'slack.ops')).toBe(false);
   });
 
+  test('getTriggerDispatchDecisionForRule should match shorthand trigger references against full ids', () => {
+    const collection = createCollection();
+    const db = {
+      getCollection: vi.fn(() => collection),
+      addCollection: vi.fn(() => collection),
+    };
+
+    notification.createCollections(db);
+    notification.updateNotificationRule('update-available', {
+      triggers: ['mobile', 'smtp.gmail'],
+    });
+
+    expect(
+      notification.getTriggerDispatchDecisionForRule('update-available', 'edge.pushover.mobile', {
+        allowAllWhenNoTriggers: true,
+      }),
+    ).toEqual({
+      enabled: true,
+      reason: 'matched-allow-list',
+    });
+    expect(
+      notification.getTriggerDispatchDecisionForRule('update-available', 'edge.smtp.gmail', {
+        allowAllWhenNoTriggers: true,
+      }),
+    ).toEqual({
+      enabled: true,
+      reason: 'matched-allow-list',
+    });
+  });
+
   test('isTriggerEnabledForRule should support allow-all fallback when no triggers are configured', () => {
     const collection = createCollection();
     const db = {

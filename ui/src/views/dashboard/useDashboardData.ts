@@ -37,6 +37,7 @@ interface DashboardStateRefs {
   watchers: Ref<unknown[]>;
   registries: Ref<unknown[]>;
   recentStatusByContainer: Ref<Record<string, RecentAuditStatus>>;
+  recentStatusByIdentity: Ref<Record<string, RecentAuditStatus>>;
 }
 
 interface DashboardDataResponse {
@@ -49,20 +50,37 @@ interface DashboardDataResponse {
   recentStatusRes: unknown;
 }
 
-function normalizeRecentStatusByContainer(response: unknown): Record<string, RecentAuditStatus> {
-  if (!response || typeof response !== 'object') return {};
-  const statusesData = (response as { statuses?: unknown }).statuses;
-  if (!statusesData || typeof statusesData !== 'object' || Array.isArray(statusesData)) return {};
+function normalizeRecentStatusMap(input: unknown): Record<string, RecentAuditStatus> {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return {};
 
   const normalizedStatuses: Record<string, RecentAuditStatus> = {};
-  for (const [containerNameRaw, statusRaw] of Object.entries(statusesData)) {
-    const containerName = containerNameRaw.trim();
-    if (!containerName) continue;
+  for (const [keyRaw, statusRaw] of Object.entries(input)) {
+    const key = keyRaw.trim();
+    if (!key) continue;
     if (statusRaw === 'updated' || statusRaw === 'pending' || statusRaw === 'failed') {
-      normalizedStatuses[containerName] = statusRaw;
+      normalizedStatuses[key] = statusRaw;
     }
   }
   return normalizedStatuses;
+}
+
+function normalizeRecentStatuses(response: unknown) {
+  if (!response || typeof response !== 'object') {
+    return {
+      byContainer: {},
+      byIdentity: {},
+    };
+  }
+
+  const responseRecord = response as {
+    statuses?: unknown;
+    statusesByIdentity?: unknown;
+  };
+
+  return {
+    byContainer: normalizeRecentStatusMap(responseRecord.statuses),
+    byIdentity: normalizeRecentStatusMap(responseRecord.statusesByIdentity),
+  };
 }
 
 function watcherHasMaintenanceWindow(watcher: unknown): boolean {
@@ -118,7 +136,9 @@ function applyFetchedDashboardData(state: DashboardStateRefs, response: Dashboar
   state.agents.value = response.agentsRes;
   state.watchers.value = Array.isArray(response.watchersRes) ? response.watchersRes : [];
   state.registries.value = Array.isArray(response.registriesRes) ? response.registriesRes : [];
-  state.recentStatusByContainer.value = normalizeRecentStatusByContainer(response.recentStatusRes);
+  const normalizedRecentStatuses = normalizeRecentStatuses(response.recentStatusRes);
+  state.recentStatusByContainer.value = normalizedRecentStatuses.byContainer;
+  state.recentStatusByIdentity.value = normalizedRecentStatuses.byIdentity;
   state.error.value = null;
 }
 
@@ -187,6 +207,7 @@ export function useDashboardData() {
   const watchers = ref<unknown[]>([]);
   const registries = ref<unknown[]>([]);
   const recentStatusByContainer = ref<Record<string, RecentAuditStatus>>({});
+  const recentStatusByIdentity = ref<Record<string, RecentAuditStatus>>({});
   const maintenanceCountdownNow = ref(Date.now());
 
   const state: DashboardStateRefs = {
@@ -200,6 +221,7 @@ export function useDashboardData() {
     watchers,
     registries,
     recentStatusByContainer,
+    recentStatusByIdentity,
   };
 
   const { fetchDashboardData } = createDashboardDataFetchers(state);
@@ -223,11 +245,15 @@ export function useDashboardData() {
   });
 
   const fullRefreshListener = (() => realtimeRefreshScheduler.schedule('full')) as EventListener;
+  const operationRefreshListener = (() => {
+    void fetchDashboardData({ background: true });
+  }) as EventListener;
   const visibilityChangeListener = maintenanceCountdownController.sync as EventListener;
   let stopMaintenanceWindowWatch: ReturnType<typeof watch> | undefined;
 
   onMounted(async () => {
     globalThis.addEventListener('dd:sse-container-changed', fullRefreshListener);
+    globalThis.addEventListener('dd:sse-update-operation-changed', operationRefreshListener);
     globalThis.addEventListener('dd:sse-scan-completed', fullRefreshListener);
     globalThis.addEventListener('dd:sse-connected', fullRefreshListener);
     document.addEventListener('visibilitychange', visibilityChangeListener);
@@ -239,6 +265,7 @@ export function useDashboardData() {
 
   onUnmounted(() => {
     globalThis.removeEventListener('dd:sse-container-changed', fullRefreshListener);
+    globalThis.removeEventListener('dd:sse-update-operation-changed', operationRefreshListener);
     globalThis.removeEventListener('dd:sse-scan-completed', fullRefreshListener);
     globalThis.removeEventListener('dd:sse-connected', fullRefreshListener);
     document.removeEventListener('visibilitychange', visibilityChangeListener);
@@ -257,6 +284,7 @@ export function useDashboardData() {
     loading,
     maintenanceCountdownNow,
     recentStatusByContainer,
+    recentStatusByIdentity,
     registries,
     serverInfo,
     watchers,

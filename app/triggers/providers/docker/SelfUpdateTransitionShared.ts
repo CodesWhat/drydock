@@ -48,6 +48,9 @@ interface SelfUpdateTransitionDependencies {
     logContainer: SelfUpdateLogger,
   ) => Promise<SelfUpdateCreatedContainer>;
   createOperationId: () => string;
+  resolveFinalizeUrl: () => string;
+  resolveFinalizeSecret: () => string;
+  resolveHelperImage?: () => string | undefined;
 }
 
 function findDockerSocketBind(spec: SelfUpdateContainerSpec | undefined): string | undefined {
@@ -94,7 +97,7 @@ async function executeSelfUpdateTransition(
   );
 
   const oldName = currentContainerSpec.Name.replace(/^\//, '');
-  const tempName = `drydock-old-${Date.now()}`;
+  const tempName = `${oldName}-old-${Date.now()}`;
 
   logContainer.info(`Rename container ${oldName} to ${tempName}`);
   await currentContainer.rename({ name: tempName });
@@ -139,18 +142,22 @@ async function executeSelfUpdateTransition(
   const oldContainerId = currentContainerSpec.Id;
   const socketMount = `${socketPath}:/var/run/docker.sock`;
   const selfUpdateOperationId = operationId || dependencies.createOperationId();
+  const finalizeUrl = dependencies.resolveFinalizeUrl();
+  const finalizeSecret = dependencies.resolveFinalizeSecret();
 
   logContainer.info('Spawning helper container for self-update transition');
   try {
     await dockerApi
       .createContainer({
-        Image: newImage,
+        Image: dependencies.resolveHelperImage?.() ?? newImage,
         Cmd: ['node', 'dist/triggers/providers/docker/self-update-controller-entrypoint.js'],
         Env: [
           `DD_SELF_UPDATE_OP_ID=${selfUpdateOperationId}`,
           `DD_SELF_UPDATE_OLD_CONTAINER_ID=${oldContainerId}`,
           `DD_SELF_UPDATE_NEW_CONTAINER_ID=${newContainerId}`,
           `DD_SELF_UPDATE_OLD_CONTAINER_NAME=${oldName}`,
+          `DD_SELF_UPDATE_FINALIZE_URL=${finalizeUrl}`,
+          `DD_SELF_UPDATE_FINALIZE_SECRET=${finalizeSecret}`,
           `DD_SELF_UPDATE_START_TIMEOUT_MS=${SELF_UPDATE_START_TIMEOUT_MS}`,
           `DD_SELF_UPDATE_HEALTH_TIMEOUT_MS=${SELF_UPDATE_HEALTH_TIMEOUT_MS}`,
           `DD_SELF_UPDATE_POLL_INTERVAL_MS=${SELF_UPDATE_POLL_INTERVAL_MS}`,

@@ -8,8 +8,16 @@ import { useConfirmDialog } from '../composables/useConfirmDialog';
 import { useToast } from '../composables/useToast';
 import { preferences } from '../preferences/store';
 import { ROUTES } from '../router/routes';
-import { updateContainer } from '../services/container-actions';
-import { errorMessage, isNoUpdateAvailableError } from '../utils/error';
+import { updateContainer, updateContainers } from '../services/container-actions';
+import {
+  formatContainerUpdateStartedCountMessage,
+  formatContainersAlreadyUpToDateMessage,
+  getContainerAlreadyUpToDateMessage,
+  getContainerUpdateStartedMessage,
+  isStaleContainerUpdateError,
+  runContainerUpdateRequest,
+} from '../utils/container-update';
+import { errorMessage } from '../utils/error';
 import { summarizeContainerResourceUsage } from '../utils/stats-summary';
 import DashboardHostStatusWidget from './dashboard/components/DashboardHostStatusWidget.vue';
 import DashboardRecentUpdatesWidget from './dashboard/components/DashboardRecentUpdatesWidget.vue';
@@ -18,6 +26,7 @@ import DashboardSecurityOverviewWidget from './dashboard/components/DashboardSec
 import DashboardUpdateBreakdownWidget from './dashboard/components/DashboardUpdateBreakdownWidget.vue';
 import {
   DASHBOARD_WIDGET_META,
+  type DashboardUpdateSequenceEntry,
   type DashboardWidgetId,
   type RecentUpdateRow,
 } from './dashboard/dashboardTypes';
@@ -48,6 +57,7 @@ const dashboardUpdateError = ref<string | null>(null);
 const dashboardPendingUpdateRows = ref<Map<string, { row: RecentUpdateRow; startedAt: number }>>(
   new Map(),
 );
+const dashboardUpdateSequence = ref<Map<string, DashboardUpdateSequenceEntry>>(new Map());
 const dashboardPendingUpdatePollTimer = ref<ReturnType<typeof setTimeout> | null>(null);
 const dashboardPendingUpdatePollInFlight = ref(false);
 const dashboardPendingUpdatePollDelayMs = ref(2_000);
@@ -55,16 +65,8 @@ const DASHBOARD_PENDING_UPDATE_POLL_INTERVAL_MS = 2_000;
 const DASHBOARD_PENDING_UPDATE_POLL_MAX_INTERVAL_MS = 16_000;
 const DASHBOARD_PENDING_UPDATE_TIMEOUT_MS = 30_000;
 
-function isStaleDashboardUpdateError(error: unknown): boolean {
-  return isNoUpdateAvailableError(error);
-}
-
 function navigateTo(route: RouteLocationRaw) {
   router.push(route);
-}
-
-function formatContainerCount(count: number): string {
-  return `${count} container${count === 1 ? '' : 's'}`;
 }
 
 // Delay enabling grid transitions to prevent fly-in on initial load
@@ -82,10 +84,6 @@ onUnmounted(() => {
 const {
   currentBreakpoint,
   gridInstanceKey,
-  onWidgetDragEnd,
-  onWidgetDragOver,
-  onWidgetDragStart,
-  onWidgetDrop,
   onBreakpointChanged,
   editMode,
   isWidgetVisible,
@@ -157,6 +155,7 @@ const {
   loading,
   maintenanceCountdownNow,
   recentStatusByContainer,
+  recentStatusByIdentity,
   registries,
   serverInfo,
   watchers,
@@ -191,22 +190,50 @@ const {
   hidePinned: computed(() => preferences.containers.filters.hidePinned),
   maintenanceCountdownNow,
   recentStatusByContainer,
+  recentStatusByIdentity,
   registries,
   serverInfo,
   watchers,
 });
 
 const pendingUpdates = computed(() =>
-  recentUpdates.value.filter((r) => r.status === 'pending' && !r.blocked),
+  recentUpdates.value.filter(
+    (row) =>
+      row.status === 'pending' &&
+      !row.blocked &&
+      !dashboardUpdateSequence.value.has(getDashboardRecentUpdateSequenceKey(row)),
+  ),
 );
 
 const displayRecentUpdates = computed<RecentUpdateRow[]>(() => {
-  const liveRowNames = new Set(recentUpdates.value.map((row) => row.name));
+  const liveRowIdentityKeys = new Set(
+    recentUpdates.value.map((row) => getDashboardRecentUpdateReconciliationKey(row)),
+  );
   const ghosts = [...dashboardPendingUpdateRows.value.values()]
-    .filter(({ row }) => !liveRowNames.has(row.name))
+    .filter(({ row }) => !liveRowIdentityKeys.has(getDashboardRecentUpdateReconciliationKey(row)))
     .map(({ row }) => row);
   return [...recentUpdates.value, ...ghosts];
 });
+
+function getDashboardRecentUpdateSequenceKey(
+  row: Pick<RecentUpdateRow, 'id' | 'identityKey' | 'name'>,
+): string {
+  return row.id || row.identityKey || row.name;
+}
+
+function getDashboardRecentUpdateReconciliationKey(
+  row: Pick<RecentUpdateRow, 'identityKey' | 'id' | 'name'>,
+): string {
+  return row.identityKey || row.id || row.name;
+}
+
+function getDashboardContainerReconciliationKey(container: {
+  identityKey?: string;
+  id?: string;
+  name?: string;
+}): string {
+  return container.identityKey || container.id || container.name || '';
+}
 
 function stopDashboardPendingUpdatePolling() {
   if (!dashboardPendingUpdatePollTimer.value) {
@@ -218,21 +245,77 @@ function stopDashboardPendingUpdatePolling() {
   dashboardPendingUpdatePollDelayMs.value = DASHBOARD_PENDING_UPDATE_POLL_INTERVAL_MS;
 }
 
-function clearDashboardPendingUpdateRow(name: string) {
-  dashboardPendingUpdateRows.value.delete(name);
+function hasDashboardTrackedUpdates() {
+  return dashboardPendingUpdateRows.value.size > 0 || dashboardUpdateSequence.value.size > 0;
+}
+
+function getVisibleDashboardTrackedUpdateKeys() {
+  const keys = new Set(recentUpdates.value.map((row) => getDashboardRecentUpdateSequenceKey(row)));
+  for (const { row } of dashboardPendingUpdateRows.value.values()) {
+    keys.add(getDashboardRecentUpdateSequenceKey(row));
+  }
+  return keys;
+}
+
+function startDashboardPendingUpdateTracking() {
+  if (!hasDashboardTrackedUpdates()) {
+    stopDashboardPendingUpdatePolling();
+    return;
+  }
+  stopDashboardPendingUpdatePolling();
+  dashboardPendingUpdatePollDelayMs.value = DASHBOARD_PENDING_UPDATE_POLL_INTERVAL_MS;
+  startDashboardPendingUpdatePolling();
+}
+
+function syncDashboardUpdateSequenceValue(rowKeys: string[], acceptedRowKeys: string[]) {
+  const next = new Map(dashboardUpdateSequence.value);
+  for (const key of rowKeys) {
+    next.delete(key);
+  }
+  for (const [index, key] of acceptedRowKeys.entries()) {
+    next.set(key, {
+      position: index + 1,
+      total: acceptedRowKeys.length,
+    });
+  }
+  dashboardUpdateSequence.value = next;
+}
+
+function pruneDashboardUpdateSequence() {
+  const visibleKeys = getVisibleDashboardTrackedUpdateKeys();
+  if (dashboardUpdateAllInProgress.value && visibleKeys.size === 0) {
+    return;
+  }
+  const next = new Map(dashboardUpdateSequence.value);
+  for (const key of dashboardUpdateSequence.value.keys()) {
+    if (!visibleKeys.has(key)) {
+      next.delete(key);
+    }
+  }
+  dashboardUpdateSequence.value = next;
+}
+
+function clearDashboardPendingUpdateRow(key: string) {
+  dashboardPendingUpdateRows.value.delete(key);
+  pruneDashboardUpdateSequence();
 }
 
 function pruneDashboardPendingUpdateRows(now: number = Date.now()) {
-  const liveContainerNames = new Set(containers.value.map((container) => container.name));
-  for (const [name, pendingRow] of dashboardPendingUpdateRows.value.entries()) {
+  const liveContainerIdentityKeys = new Set(
+    containers.value
+      .map((container) => getDashboardContainerReconciliationKey(container))
+      .filter((key) => key.length > 0),
+  );
+  for (const [key, pendingRow] of dashboardPendingUpdateRows.value.entries()) {
     if (
-      liveContainerNames.has(name) ||
+      liveContainerIdentityKeys.has(key) ||
       now - pendingRow.startedAt > DASHBOARD_PENDING_UPDATE_TIMEOUT_MS
     ) {
-      clearDashboardPendingUpdateRow(name);
+      clearDashboardPendingUpdateRow(key);
     }
   }
-  if (dashboardPendingUpdateRows.value.size === 0) {
+  pruneDashboardUpdateSequence();
+  if (!hasDashboardTrackedUpdates()) {
     stopDashboardPendingUpdatePolling();
   }
 }
@@ -247,9 +330,9 @@ async function pollDashboardPendingUpdateRows() {
   } finally {
     pruneDashboardPendingUpdateRows();
     dashboardPendingUpdatePollInFlight.value = false;
-    if (dashboardPendingUpdateRows.value.size > 0) {
+    if (hasDashboardTrackedUpdates()) {
       dashboardPendingUpdatePollDelayMs.value =
-        pendingUpdates.value.length > 0
+        dashboardUpdateSequence.value.size > 0 || pendingUpdates.value.length > 0
           ? DASHBOARD_PENDING_UPDATE_POLL_INTERVAL_MS
           : Math.min(
               dashboardPendingUpdatePollDelayMs.value * 2,
@@ -271,13 +354,18 @@ function startDashboardPendingUpdatePolling() {
 }
 
 function capturePendingDashboardRows(rows: RecentUpdateRow[]) {
-  const liveContainerNames = new Set(containers.value.map((container) => container.name));
+  const liveContainerIdentityKeys = new Set(
+    containers.value
+      .map((container) => getDashboardContainerReconciliationKey(container))
+      .filter((key) => key.length > 0),
+  );
   for (const row of rows) {
-    if (liveContainerNames.has(row.name)) {
+    const key = getDashboardRecentUpdateReconciliationKey(row);
+    if (!key || liveContainerIdentityKeys.has(key)) {
       continue;
     }
-    const existing = dashboardPendingUpdateRows.value.get(row.name);
-    dashboardPendingUpdateRows.value.set(row.name, {
+    const existing = dashboardPendingUpdateRows.value.get(key);
+    dashboardPendingUpdateRows.value.set(key, {
       row: {
         ...row,
         status: 'updating',
@@ -285,12 +373,8 @@ function capturePendingDashboardRows(rows: RecentUpdateRow[]) {
       startedAt: existing?.startedAt ?? Date.now(),
     });
   }
-  if (dashboardPendingUpdateRows.value.size > 0) {
-    stopDashboardPendingUpdatePolling();
-    dashboardPendingUpdatePollDelayMs.value = DASHBOARD_PENDING_UPDATE_POLL_INTERVAL_MS;
-    startDashboardPendingUpdatePolling();
-  }
   pruneDashboardPendingUpdateRows();
+  startDashboardPendingUpdateTracking();
 }
 
 // Stat card data lookup by widget id
@@ -302,6 +386,7 @@ const statById = computed(() => {
 
 watch(containers, () => {
   pruneDashboardPendingUpdateRows();
+  pruneDashboardUpdateSequence();
 });
 
 onUnmounted(() => {
@@ -353,17 +438,24 @@ function confirmDashboardUpdate(row: RecentUpdateRow) {
       dashboardUpdateInProgress.value = row.id;
       dashboardUpdateError.value = null;
       try {
-        await updateContainer(row.id);
-        await fetchDashboardData();
-        capturePendingDashboardRows([row]);
-        toast.success(`Updated: ${row.name}`);
-      } catch (e: unknown) {
-        if (isStaleDashboardUpdateError(e)) {
-          await fetchDashboardData();
-          toast.info(`Already up to date: ${row.name}`);
+        const result = await runContainerUpdateRequest({
+          request: () => updateContainer(row.id),
+          onAccepted: async () => {
+            await fetchDashboardData();
+            capturePendingDashboardRows([row]);
+          },
+          onStale: async () => {
+            await fetchDashboardData();
+          },
+          isStaleError: isStaleContainerUpdateError,
+        });
+        if (result === 'accepted') {
+          toast.success(getContainerUpdateStartedMessage(row.name));
         } else {
-          dashboardUpdateError.value = errorMessage(e, `Failed to update ${row.name}`);
+          toast.info(getContainerAlreadyUpToDateMessage(row.name));
         }
+      } catch (e: unknown) {
+        dashboardUpdateError.value = errorMessage(e, `Failed to update ${row.name}`);
       } finally {
         dashboardUpdateInProgress.value = null;
       }
@@ -382,39 +474,63 @@ function confirmDashboardUpdateAll() {
       const pendingRowsSnapshot = pendingUpdates.value.filter((row) => !row.blocked);
       dashboardUpdateAllInProgress.value = true;
       dashboardUpdateError.value = null;
+      const snapshotRowKeys = pendingRowsSnapshot.map((row) =>
+        getDashboardRecentUpdateSequenceKey(row),
+      );
+      let acceptedRowKeys = [...snapshotRowKeys];
+      syncDashboardUpdateSequenceValue(snapshotRowKeys, acceptedRowKeys);
+      startDashboardPendingUpdateTracking();
       try {
-        const updateResults = await Promise.allSettled(
-          pendingRowsSnapshot.map((row) => updateContainer(row.id)),
-        );
-        const successfulRows = pendingRowsSnapshot.filter(
-          (_, index) => updateResults[index]?.status === 'fulfilled',
-        );
-        const staleRows = pendingRowsSnapshot.filter((_, index) => {
-          const result = updateResults[index];
-          return result?.status === 'rejected' && isStaleDashboardUpdateError(result.reason);
-        });
+        const response = await updateContainers(pendingRowsSnapshot.map((row) => row.id));
+        const acceptedIds = new Set(response.accepted.map((accepted) => accepted.containerId));
+        acceptedRowKeys = pendingRowsSnapshot
+          .filter((row) => acceptedIds.has(row.id))
+          .map((row) => getDashboardRecentUpdateSequenceKey(row));
+        syncDashboardUpdateSequenceValue(snapshotRowKeys, acceptedRowKeys);
+
+        const successfulRows = pendingRowsSnapshot.filter((row) => acceptedIds.has(row.id));
+        const staleRows: RecentUpdateRow[] = [];
+        let firstRejectedUpdate: unknown;
+
+        for (const rejected of response.rejected) {
+          const row = pendingRowsSnapshot.find(
+            (candidate) => candidate.id === rejected.containerId,
+          );
+          if (!row) {
+            continue;
+          }
+          if (isStaleContainerUpdateError(rejected.message)) {
+            staleRows.push(row);
+            continue;
+          }
+          if (!firstRejectedUpdate) {
+            firstRejectedUpdate = rejected.message;
+          }
+        }
+
         await fetchDashboardData();
         capturePendingDashboardRows(successfulRows);
         if (successfulRows.length > 0) {
-          toast.success(`Updated ${formatContainerCount(successfulRows.length)}`);
+          toast.success(formatContainerUpdateStartedCountMessage(successfulRows.length));
         }
         if (staleRows.length > 0) {
           toast.info(
             staleRows.length === 1
-              ? `Already up to date: ${staleRows[0]!.name}`
-              : `${formatContainerCount(staleRows.length)} already up to date`,
+              ? getContainerAlreadyUpToDateMessage(staleRows[0]!.name)
+              : formatContainersAlreadyUpToDateMessage(staleRows.length),
           );
         }
-        const firstRejectedUpdate = updateResults.find(
-          (result) => result.status === 'rejected' && !isStaleDashboardUpdateError(result.reason),
-        );
-        if (firstRejectedUpdate?.status === 'rejected') {
+        if (firstRejectedUpdate) {
           dashboardUpdateError.value = errorMessage(
-            firstRejectedUpdate.reason,
+            firstRejectedUpdate,
             'Failed to update all containers',
           );
         }
       } finally {
+        if (acceptedRowKeys.length === 0) {
+          syncDashboardUpdateSequenceValue(snapshotRowKeys, []);
+          pruneDashboardUpdateSequence();
+        }
         dashboardUpdateAllInProgress.value = false;
       }
     },
@@ -490,7 +606,6 @@ function confirmDashboardUpdateAll() {
             :key="item.i"
             :data-widget-id="item.i"
             :data-widget-order="widgetOrderIndex(item.i as DashboardWidgetId)"
-            :draggable="editMode"
             :x="item.x"
             :y="item.y"
             :w="item.w"
@@ -504,10 +619,6 @@ function confirmDashboardUpdateAll() {
             drag-allow-from=".drag-handle"
             class="dd-grid-item"
             :style="editMode ? { touchAction: 'pan-y' } : undefined"
-            @dragstart="onWidgetDragStart(item.i as DashboardWidgetId, $event)"
-            @dragover="onWidgetDragOver(item.i as DashboardWidgetId, $event)"
-            @drop="onWidgetDrop(item.i as DashboardWidgetId, $event)"
-            @dragend="onWidgetDragEnd"
             :class="editMode ? 'dd-grid-edit' : ''">
 
             <!-- Stat Cards -->
@@ -552,6 +663,7 @@ function confirmDashboardUpdateAll() {
               :dashboard-update-error="dashboardUpdateError"
               :dashboard-update-in-progress="dashboardUpdateInProgress"
               :dashboard-update-all-in-progress="dashboardUpdateAllInProgress"
+              :dashboard-update-sequence="dashboardUpdateSequence"
               :get-update-kind-color="getUpdateKindColor"
               :get-update-kind-icon="getUpdateKindIcon"
               :get-update-kind-muted-color="getUpdateKindMutedColor"
@@ -635,7 +747,7 @@ function confirmDashboardUpdateAll() {
           @click="closeWidgetPanel" />
       </div>
 
-      <div class="flex-1 overflow-y-auto p-3 space-y-1">
+      <div class="flex-1 overflow-y-auto overscroll-contain dd-scroll-stable dd-touch-scroll p-3 space-y-1">
         <label
           v-for="widget in allWidgetMeta"
           :key="widget.id"

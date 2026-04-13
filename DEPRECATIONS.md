@@ -116,12 +116,12 @@ Legacy `WUD_*` environment variables are accepted as fallbacks for their `DD_*` 
 | | |
 | --- | --- |
 | **Deprecated in** | v1.5.0 |
-| **Removed in** | v1.6.0 |
+| **Removed in** | v1.7.0 |
 | **Affects** | Custom `healthcheck:` overrides in compose files that use `curl` |
 
-The official Docker image previously included `curl` for custom healthcheck overrides. The built-in `HEALTHCHECK` now uses a lightweight static binary (`/bin/healthcheck`).
+The official Docker image keeps `curl` available in v1.5.x and v1.6.x for backward compatibility with custom healthcheck overrides. The default built-in `HEALTHCHECK` uses the lightweight static binary (`/bin/healthcheck`) instead.
 
-**Migration:** Remove custom `healthcheck:` blocks from your drydock compose service — the image handles it automatically. If you need custom intervals, use `test: /bin/healthcheck ${DD_SERVER_PORT:-3000}`. See [Monitoring](https://getdrydock.com/docs/monitoring).
+**Migration:** Custom `curl`-based healthcheck overrides remain supported in v1.5.x. v1.6.0 is the final warning release. Removal is scheduled for v1.7.0. Prefer the built-in image healthcheck, or switch custom intervals to `test: /bin/healthcheck ${DD_SERVER_PORT:-3000}`. See [Monitoring](https://getdrydock.com/docs/monitoring).
 
 ---
 

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { sanitizeLogParam } from '../log/sanitize.js';
 import { createMockRequest, createMockResponse } from '../test/helpers.js';
+import * as requestUpdate from '../updates/request-update.js';
 import { validateOpenApiJsonResponse } from './openapi-contract.js';
 
 const {
@@ -64,10 +65,21 @@ vi.mock('express-rate-limit', () => ({
   default: vi.fn(() => 'rate-limit-middleware'),
 }));
 
-vi.mock('node:crypto', () => ({
-  createHash: mockCreateHash,
-  timingSafeEqual: mockTimingSafeEqual,
-}));
+vi.mock('node:crypto', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:crypto')>();
+  return {
+    ...actual,
+    default: {
+      ...actual.default,
+      createHash: mockCreateHash,
+      timingSafeEqual: mockTimingSafeEqual,
+      randomUUID: vi.fn(() => 'op-webhook-test'),
+    },
+    createHash: mockCreateHash,
+    timingSafeEqual: mockTimingSafeEqual,
+    randomUUID: vi.fn(() => 'op-webhook-test'),
+  };
+});
 
 vi.mock('../configuration/index.js', () => ({
   getWebhookConfiguration: mockGetWebhookConfiguration,
@@ -117,6 +129,11 @@ function getHandler(method, path) {
   webhookRouter.init();
   const call = mockRouter[method].mock.calls.find((c) => c[0] === path);
   return call[1];
+}
+
+async function flushAcceptedUpdateWork() {
+  await Promise.resolve();
+  await Promise.resolve();
 }
 
 describe('Webhook Router', () => {
@@ -1004,7 +1021,12 @@ describe('Webhook Router', () => {
     });
 
     test('should return 404 when no docker trigger found', async () => {
-      const container = { name: 'my-nginx', image: { name: 'nginx' } };
+      const container = {
+        id: 'c1',
+        name: 'my-nginx',
+        image: { name: 'nginx' },
+        updateAvailable: true,
+      };
       mockGetContainers.mockReturnValue([container]);
       mockGetState.mockReturnValue({ watcher: {}, trigger: {} });
 
@@ -1020,7 +1042,12 @@ describe('Webhook Router', () => {
     });
 
     test('should return 409 when update targets a temporary rollback container', async () => {
-      const container = { name: 'my-nginx-old-1234567890', image: { name: 'nginx' } };
+      const container = {
+        id: 'c1',
+        name: 'my-nginx-old-1234567890',
+        image: { name: 'nginx' },
+        updateAvailable: true,
+      };
       mockGetContainers.mockReturnValue([container]);
       const mockTrigger = vi.fn().mockResolvedValue(undefined);
       mockGetState.mockReturnValue({
@@ -1035,13 +1062,18 @@ describe('Webhook Router', () => {
 
       expect(res.status).toHaveBeenCalledWith(409);
       expect(res.json).toHaveBeenCalledWith({
-        error: 'Cannot update temporary rollback container',
+        error: expect.stringContaining('temporary rollback container'),
       });
       expect(mockTrigger).not.toHaveBeenCalled();
     });
 
-    test('should trigger update and return 200', async () => {
-      const container = { name: 'my-nginx', image: { name: 'nginx' } };
+    test('should accept update and return 202', async () => {
+      const container = {
+        id: 'c1',
+        name: 'my-nginx',
+        image: { name: 'nginx' },
+        updateAvailable: true,
+      };
       mockGetContainers.mockReturnValue([container]);
       const mockTrigger = vi.fn().mockResolvedValue(undefined);
       mockGetState.mockReturnValue({
@@ -1053,17 +1085,27 @@ describe('Webhook Router', () => {
       const req = createMockRequest({ params: { containerName: 'my-nginx' } });
       const res = createMockResponse();
       await handler(req, res);
+      await flushAcceptedUpdateWork();
 
-      expect(mockTrigger).toHaveBeenCalledWith(container);
-      expect(res.status).toHaveBeenCalledWith(200);
+      expect(mockTrigger).toHaveBeenCalledWith(
+        container,
+        expect.objectContaining({ operationId: expect.any(String) }),
+      );
+      expect(res.status).toHaveBeenCalledWith(202);
       expect(res.json).toHaveBeenCalledWith({
-        message: 'Update triggered for container my-nginx',
+        message: 'Update accepted for container my-nginx',
+        operationId: expect.any(String),
         result: { container: 'my-nginx' },
       });
     });
 
-    test('should trigger update and return 200 with a dockercompose trigger', async () => {
-      const container = { name: 'my-nginx', image: { name: 'nginx' } };
+    test('should accept update and return 202 with a dockercompose trigger', async () => {
+      const container = {
+        id: 'c1',
+        name: 'my-nginx',
+        image: { name: 'nginx' },
+        updateAvailable: true,
+      };
       mockGetContainers.mockReturnValue([container]);
       const mockTrigger = vi.fn().mockResolvedValue(undefined);
       mockGetState.mockReturnValue({
@@ -1075,18 +1117,86 @@ describe('Webhook Router', () => {
       const req = createMockRequest({ params: { containerName: 'my-nginx' } });
       const res = createMockResponse();
       await handler(req, res);
+      await flushAcceptedUpdateWork();
 
-      expect(mockTrigger).toHaveBeenCalledWith(container);
-      expect(res.status).toHaveBeenCalledWith(200);
+      expect(mockTrigger).toHaveBeenCalledWith(
+        container,
+        expect.objectContaining({ operationId: expect.any(String) }),
+      );
+      expect(res.status).toHaveBeenCalledWith(202);
       expect(res.json).toHaveBeenCalledWith({
-        message: 'Update triggered for container my-nginx',
+        message: 'Update accepted for container my-nginx',
+        operationId: expect.any(String),
         result: { container: 'my-nginx' },
+      });
+    });
+
+    test('should return the UpdateRequestError status when update acceptance fails', async () => {
+      const container = {
+        id: 'c1',
+        name: 'my-nginx',
+        image: { name: 'nginx' },
+        updateAvailable: true,
+      };
+      mockGetContainers.mockReturnValue([container]);
+      mockGetState.mockReturnValue({
+        watcher: {},
+        trigger: {
+          'docker.default': { type: 'docker', trigger: vi.fn() },
+        },
+      });
+      const spy = vi
+        .spyOn(requestUpdate, 'requestContainerUpdate')
+        .mockRejectedValueOnce(new requestUpdate.UpdateRequestError(409, 'teapot'));
+
+      const handler = getHandler('post', '/update/:containerName');
+      const req = createMockRequest({ params: { containerName: 'my-nginx' } });
+      const res = createMockResponse();
+      await handler(req, res);
+      spy.mockRestore();
+
+      expect(res.status).toHaveBeenCalledWith(409);
+      expect(res.json).toHaveBeenCalledWith({ error: 'teapot' });
+    });
+
+    test('should return 500 when update acceptance fails unexpectedly', async () => {
+      const container = {
+        id: 'c1',
+        name: 'my-nginx',
+        image: { name: 'nginx' },
+        updateAvailable: true,
+      };
+      mockGetContainers.mockReturnValue([container]);
+      mockGetState.mockReturnValue({
+        watcher: {},
+        trigger: {
+          'docker.default': { type: 'docker', trigger: vi.fn() },
+        },
+      });
+      const spy = vi
+        .spyOn(requestUpdate, 'requestContainerUpdate')
+        .mockRejectedValueOnce(new Error('unexpected update failure'));
+
+      const handler = getHandler('post', '/update/:containerName');
+      const req = createMockRequest({ params: { containerName: 'my-nginx' } });
+      const res = createMockResponse();
+      await handler(req, res);
+      spy.mockRestore();
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Error updating container my-nginx',
       });
     });
 
     test('should sanitize reflected containerName in successful update response', async () => {
       const containerName = '\u001b[31mmy-nginx\u001b[0m\nnext';
-      const container = { name: containerName, image: { name: 'nginx' } };
+      const container = {
+        id: 'c1',
+        name: containerName,
+        image: { name: 'nginx' },
+        updateAvailable: true,
+      };
       const sanitizedName = sanitizeLogParam(containerName);
       mockGetContainers.mockReturnValue([container]);
       const mockTrigger = vi.fn().mockResolvedValue(undefined);
@@ -1100,15 +1210,21 @@ describe('Webhook Router', () => {
       const res = createMockResponse();
       await handler(req, res);
 
-      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.status).toHaveBeenCalledWith(202);
       expect(res.json).toHaveBeenCalledWith({
-        message: `Update triggered for container ${sanitizedName}`,
+        message: `Update accepted for container ${sanitizedName}`,
+        operationId: expect.any(String),
         result: { container: sanitizedName },
       });
     });
 
-    test('should return 500 on trigger error without leaking internal details', async () => {
-      const container = { name: 'my-nginx', image: { name: 'nginx' } };
+    test('should accept update even when the trigger later fails', async () => {
+      const container = {
+        id: 'c1',
+        name: 'my-nginx',
+        image: { name: 'nginx' },
+        updateAvailable: true,
+      };
       mockGetContainers.mockReturnValue([container]);
       mockGetState.mockReturnValue({
         watcher: {},
@@ -1124,13 +1240,30 @@ describe('Webhook Router', () => {
       const req = createMockRequest({ params: { containerName: 'my-nginx' } });
       const res = createMockResponse();
       await handler(req, res);
+      await flushAcceptedUpdateWork();
 
-      expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith({ error: 'Error updating container my-nginx' });
+      expect(res.status).toHaveBeenCalledWith(202);
+      expect(res.json).toHaveBeenCalledWith({
+        message: 'Update accepted for container my-nginx',
+        operationId: expect.any(String),
+        result: { container: 'my-nginx' },
+      });
+      expect(mockInsertAudit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'webhook-update',
+          status: 'error',
+          details: 'Trigger failed',
+        }),
+      );
     });
 
     test('should stringify non-Error update failures for audit details', async () => {
-      const container = { name: 'my-nginx', image: { name: 'nginx' } };
+      const container = {
+        id: 'c1',
+        name: 'my-nginx',
+        image: { name: 'nginx' },
+        updateAvailable: true,
+      };
       mockGetContainers.mockReturnValue([container]);
       mockGetState.mockReturnValue({
         watcher: {},
@@ -1146,16 +1279,21 @@ describe('Webhook Router', () => {
       const req = createMockRequest({ params: { containerName: 'my-nginx' } });
       const res = createMockResponse();
       await handler(req, res);
+      await flushAcceptedUpdateWork();
 
-      expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith({ error: 'Error updating container my-nginx' });
+      expect(res.status).toHaveBeenCalledWith(202);
       expect(mockInsertAudit).toHaveBeenCalledWith(
         expect.objectContaining({ details: 'trigger failed as string' }),
       );
     });
 
     test('should insert audit entry for successful update', async () => {
-      const container = { name: 'my-nginx', image: { name: 'nginx' } };
+      const container = {
+        id: 'c1',
+        name: 'my-nginx',
+        image: { name: 'nginx' },
+        updateAvailable: true,
+      };
       mockGetContainers.mockReturnValue([container]);
       mockGetState.mockReturnValue({
         watcher: {},
@@ -1168,6 +1306,7 @@ describe('Webhook Router', () => {
       const req = createMockRequest({ params: { containerName: 'my-nginx' } });
       const res = createMockResponse();
       await handler(req, res);
+      await flushAcceptedUpdateWork();
 
       expect(mockInsertAudit).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -1179,7 +1318,12 @@ describe('Webhook Router', () => {
     });
 
     test('should insert audit entry on update error', async () => {
-      const container = { name: 'my-nginx', image: { name: 'nginx' } };
+      const container = {
+        id: 'c1',
+        name: 'my-nginx',
+        image: { name: 'nginx' },
+        updateAvailable: true,
+      };
       mockGetContainers.mockReturnValue([container]);
       mockGetState.mockReturnValue({
         watcher: {},
@@ -1195,6 +1339,7 @@ describe('Webhook Router', () => {
       const req = createMockRequest({ params: { containerName: 'my-nginx' } });
       const res = createMockResponse();
       await handler(req, res);
+      await flushAcceptedUpdateWork();
 
       expect(mockInsertAudit).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -1206,7 +1351,12 @@ describe('Webhook Router', () => {
     });
 
     test('should increment prometheus counters for update', async () => {
-      const container = { name: 'my-nginx', image: { name: 'nginx' } };
+      const container = {
+        id: 'c1',
+        name: 'my-nginx',
+        image: { name: 'nginx' },
+        updateAvailable: true,
+      };
       mockGetContainers.mockReturnValue([container]);
       mockGetState.mockReturnValue({
         watcher: {},
@@ -1225,7 +1375,13 @@ describe('Webhook Router', () => {
     });
 
     test('should find the correct docker trigger matching container agent', async () => {
-      const container = { name: 'my-nginx', agent: 'agent1', image: { name: 'nginx' } };
+      const container = {
+        id: 'c1',
+        name: 'my-nginx',
+        agent: 'agent1',
+        image: { name: 'nginx' },
+        updateAvailable: true,
+      };
       mockGetContainers.mockReturnValue([container]);
       const mockTriggerFn = vi.fn().mockResolvedValue(undefined);
       const mockOtherTriggerFn = vi.fn().mockResolvedValue(undefined);
@@ -1242,14 +1398,23 @@ describe('Webhook Router', () => {
       const req = createMockRequest({ params: { containerName: 'my-nginx' } });
       const res = createMockResponse();
       await handler(req, res);
+      await flushAcceptedUpdateWork();
 
-      expect(res.status).toHaveBeenCalledWith(200);
-      expect(mockTriggerFn).toHaveBeenCalledWith(container);
+      expect(res.status).toHaveBeenCalledWith(202);
+      expect(mockTriggerFn).toHaveBeenCalledWith(
+        container,
+        expect.objectContaining({ operationId: expect.any(String) }),
+      );
       expect(mockOtherTriggerFn).not.toHaveBeenCalled();
     });
 
     test('should skip non-docker triggers when finding trigger', async () => {
-      const container = { name: 'my-nginx', image: { name: 'nginx' } };
+      const container = {
+        id: 'c1',
+        name: 'my-nginx',
+        image: { name: 'nginx' },
+        updateAvailable: true,
+      };
       mockGetContainers.mockReturnValue([container]);
       mockGetState.mockReturnValue({
         watcher: {},

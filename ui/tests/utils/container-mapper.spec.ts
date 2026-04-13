@@ -52,6 +52,28 @@ describe('container-mapper', () => {
   });
 
   describe('deriveUpdateOperation', () => {
+    it('maps valid update-operation kind metadata when present', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateOperation: {
+            id: 'op-kind',
+            kind: 'container-update',
+            status: 'in-progress',
+            phase: 'old-stopped',
+            updatedAt: '2026-04-01T12:00:00.000Z',
+          },
+        }),
+      );
+
+      expect(c.updateOperation).toEqual({
+        id: 'op-kind',
+        kind: 'container-update',
+        status: 'in-progress',
+        phase: 'old-stopped',
+        updatedAt: '2026-04-01T12:00:00.000Z',
+      });
+    });
+
     it('maps active update-operation metadata when present', () => {
       const c = mapApiContainer(
         makeApiContainer({
@@ -62,6 +84,9 @@ describe('container-mapper', () => {
             updatedAt: '2026-04-01T12:00:00.000Z',
             fromVersion: '1.0.0',
             toVersion: '1.1.0',
+            batchId: 'batch-1',
+            queuePosition: 2,
+            queueTotal: 4,
           },
         }),
       );
@@ -73,6 +98,58 @@ describe('container-mapper', () => {
         updatedAt: '2026-04-01T12:00:00.000Z',
         fromVersion: '1.0.0',
         toVersion: '1.1.0',
+        batchId: 'batch-1',
+        queuePosition: 2,
+        queueTotal: 4,
+      });
+    });
+
+    it('normalizes string batch queue metadata to positive integers', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateOperation: {
+            id: 'op-2',
+            status: 'queued',
+            phase: 'queued',
+            updatedAt: '2026-04-01T12:00:00.000Z',
+            batchId: ' batch-2 ',
+            queuePosition: '2',
+            queueTotal: '4',
+          },
+        }),
+      );
+
+      expect(c.updateOperation).toEqual({
+        id: 'op-2',
+        status: 'queued',
+        phase: 'queued',
+        updatedAt: '2026-04-01T12:00:00.000Z',
+        batchId: 'batch-2',
+        queuePosition: 2,
+        queueTotal: 4,
+      });
+    });
+
+    it('drops batch queue metadata when queue values are not positive integers', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateOperation: {
+            id: 'op-3',
+            status: 'queued',
+            phase: 'queued',
+            updatedAt: '2026-04-01T12:00:00.000Z',
+            batchId: 'batch-3',
+            queuePosition: 0,
+            queueTotal: '0',
+          },
+        }),
+      );
+
+      expect(c.updateOperation).toEqual({
+        id: 'op-3',
+        status: 'queued',
+        phase: 'queued',
+        updatedAt: '2026-04-01T12:00:00.000Z',
       });
     });
 
@@ -142,6 +219,23 @@ describe('container-mapper', () => {
         updatedAt: '2026-04-01T12:00:00.000Z',
         targetImage: 'nginx:1.1.0',
       });
+    });
+
+    it('drops terminal update-operation payloads from live container payloads', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateOperation: {
+            id: 'op-recovered',
+            status: 'rolled-back',
+            phase: 'recovered-rollback',
+            updatedAt: '2026-04-01T12:00:00.000Z',
+            fromVersion: '1.0.1',
+            toVersion: '1.0.0',
+          },
+        }),
+      );
+
+      expect(c.updateOperation).toBeUndefined();
     });
   });
 
@@ -967,6 +1061,20 @@ describe('container-mapper', () => {
         }),
       );
       expect(c.tagPrecision).toBe('floating');
+    });
+
+    it('maps tagPinned when present in API response', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          tagPinned: true,
+          image: {
+            registry: { name: 'hub', url: 'https://registry-1.docker.io' },
+            name: 'nginx',
+            tag: { value: '16-alpine', tagPrecision: 'floating' },
+          },
+        }),
+      );
+      expect(c.tagPinned).toBe(true);
     });
 
     it('maps tagPrecision as specific when set', () => {

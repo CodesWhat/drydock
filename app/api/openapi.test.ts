@@ -1,4 +1,5 @@
 import appPackageJson from '../package.json';
+import { errorResponse, jsonResponse, paginationQueryParams } from './openapi/common.js';
 import { openApiDocument as openApiDocumentFromIndex } from './openapi/index.js';
 import { openApiDocument } from './openapi.js';
 
@@ -84,10 +85,45 @@ describe('OpenAPI document', () => {
     });
   });
 
+  test('should document accepted container updates with an operation id response', () => {
+    expect(openApiDocument.components.schemas.ContainerUpdateAcceptedResponse).toMatchObject({
+      type: 'object',
+      properties: {
+        message: { type: 'string' },
+        operationId: { type: 'string' },
+      },
+      required: ['message', 'operationId'],
+    });
+
+    expect(openApiDocument.paths['/api/containers/{id}/update']?.post?.responses?.[202]).toEqual(
+      jsonResponse('Container update accepted', {
+        $ref: '#/components/schemas/ContainerUpdateAcceptedResponse',
+      }),
+    );
+  });
+
   test('should expose PATCH /api/settings and keep PUT as deprecated compatibility alias', () => {
     expect(openApiDocument.paths['/api/settings']?.patch).toBeDefined();
     expect(openApiDocument.paths['/api/settings']?.put).toBeDefined();
     expect(openApiDocument.paths['/api/settings']?.put?.deprecated).toBe(true);
+  });
+
+  test('should document the bulk container update endpoint', () => {
+    expect(openApiDocument.components.schemas.ContainerBulkUpdateResponse).toMatchObject({
+      type: 'object',
+      properties: {
+        message: { type: 'string' },
+        accepted: { type: 'array' },
+        rejected: { type: 'array' },
+      },
+      required: ['message', 'accepted', 'rejected'],
+    });
+
+    expect(openApiDocument.paths['/api/containers/update']?.post?.responses?.[200]).toEqual(
+      jsonResponse('Container update requests processed', {
+        $ref: '#/components/schemas/ContainerBulkUpdateResponse',
+      }),
+    );
   });
 
   test('should document compose-specific preview metadata while keeping base preview fields', () => {
@@ -144,6 +180,44 @@ describe('OpenAPI document', () => {
     expect(openApiDocument.paths['/api/registries/{agent}/{type}/{name}']).toBeUndefined();
     expect(openApiDocument.paths['/api/authentications/{type}/{name}/{agent}']?.get).toBeDefined();
     expect(openApiDocument.paths['/api/authentications/{agent}/{type}/{name}']).toBeUndefined();
+  });
+
+  test('should describe component collection endpoints with pagination and auth errors', () => {
+    const componentCollections = [
+      {
+        path: '/api/watchers',
+        tag: 'Watchers',
+        nounPlural: 'watchers',
+        operationId: 'watcherList',
+      },
+      {
+        path: '/api/registries',
+        tag: 'Registries',
+        nounPlural: 'registries',
+        operationId: 'registryList',
+      },
+      {
+        path: '/api/authentications',
+        tag: 'Authentications',
+        nounPlural: 'authentications',
+        operationId: 'authenticationList',
+      },
+    ] as const;
+
+    for (const { path, tag, nounPlural, operationId } of componentCollections) {
+      expect(openApiDocument.paths[path]?.get).toStrictEqual({
+        tags: [tag],
+        summary: `List ${nounPlural}`,
+        operationId,
+        parameters: paginationQueryParams,
+        responses: {
+          200: jsonResponse(`List of ${nounPlural}`, {
+            $ref: '#/components/schemas/PaginatedResult',
+          }),
+          401: errorResponse('Authentication required'),
+        },
+      });
+    }
   });
 
   test('should avoid GenericObject for successful JSON responses', () => {

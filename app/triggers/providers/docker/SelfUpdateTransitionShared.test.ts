@@ -67,6 +67,8 @@ function createDependencies(overrides = {}) {
     cloneContainer: vi.fn(() => ({ cloned: true })),
     createContainer: vi.fn(),
     createOperationId: vi.fn(() => 'generated-operation-id'),
+    resolveFinalizeUrl: vi.fn(() => 'http://127.0.0.1:3000/api/v1/internal/self-update/finalize'),
+    resolveFinalizeSecret: vi.fn(() => 'self-update-finalize-secret'),
     ...overrides,
   };
 }
@@ -150,11 +152,79 @@ describe('SelfUpdateTransitionShared', () => {
       expect.objectContaining({
         Env: expect.arrayContaining([
           'DD_SELF_UPDATE_OP_ID=generated-op-id',
+          'DD_SELF_UPDATE_FINALIZE_URL=http://127.0.0.1:3000/api/v1/internal/self-update/finalize',
+          'DD_SELF_UPDATE_FINALIZE_SECRET=self-update-finalize-secret',
           `DD_SELF_UPDATE_START_TIMEOUT_MS=${SELF_UPDATE_START_TIMEOUT_MS}`,
           `DD_SELF_UPDATE_HEALTH_TIMEOUT_MS=${SELF_UPDATE_HEALTH_TIMEOUT_MS}`,
           `DD_SELF_UPDATE_POLL_INTERVAL_MS=${SELF_UPDATE_POLL_INTERVAL_MS}`,
         ]),
       }),
     );
+  });
+
+  test('uses resolveHelperImage for helper container when provided', async () => {
+    const context = createContext();
+    const dependencies = createDependencies({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      resolveHelperImage: () => 'custom-drydock:3.0.0',
+    });
+    const log = { info: vi.fn(), warn: vi.fn() };
+
+    await executeSelfUpdateTransition(dependencies, context, createContainer(), log);
+
+    expect(context.dockerApi.createContainer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Image: 'custom-drydock:3.0.0',
+      }),
+    );
+  });
+
+  test('falls back to newImage when resolveHelperImage returns undefined', async () => {
+    const context = createContext();
+    const dependencies = createDependencies({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      resolveHelperImage: () => undefined,
+    });
+    const log = { info: vi.fn(), warn: vi.fn() };
+
+    await executeSelfUpdateTransition(dependencies, context, createContainer(), log);
+
+    expect(context.dockerApi.createContainer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Image: 'ghcr.io/acme/drydock:2.0.0',
+      }),
+    );
+  });
+
+  test('falls back to newImage when resolveHelperImage is not provided', async () => {
+    const context = createContext();
+    const dependencies = createDependencies({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+    });
+    const log = { info: vi.fn(), warn: vi.fn() };
+
+    await executeSelfUpdateTransition(dependencies, context, createContainer(), log);
+
+    expect(context.dockerApi.createContainer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Image: 'ghcr.io/acme/drydock:2.0.0',
+      }),
+    );
+  });
+
+  test('uses container name for temp rename prefix instead of hardcoded drydock', async () => {
+    const context = createContext({
+      currentContainerSpec: createCurrentContainerSpec({ Name: '/socket-proxy' }),
+    });
+    const dependencies = createDependencies({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+    });
+    const log = { info: vi.fn(), warn: vi.fn() };
+
+    await executeSelfUpdateTransition(dependencies, context, createContainer(), log);
+
+    expect(context.currentContainer.rename).toHaveBeenCalledWith({
+      name: expect.stringMatching(/^socket-proxy-old-\d+$/),
+    });
   });
 });

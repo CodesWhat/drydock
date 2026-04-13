@@ -3,9 +3,19 @@ type SseBusEvent =
   | 'self-update'
   | 'connection-lost'
   | 'container-changed'
+  | 'update-operation-changed'
   | 'agent-status-changed'
   | 'scan-started'
   | 'scan-completed';
+
+export type OperationChangedPayload = {
+  operationId?: string;
+  containerName?: string;
+  containerId?: string;
+  newContainerId?: string;
+  status: string;
+  phase?: string;
+};
 
 type SelfUpdateSsePayload = {
   opId?: string;
@@ -81,6 +91,11 @@ class SseService {
       this.eventBus?.emit('container-changed');
     });
 
+    this.eventSource.addEventListener('dd:update-operation-changed', (event) => {
+      this.eventBus?.emit('container-changed');
+      this.eventBus?.emit('update-operation-changed', this.parseOperationPayload(event));
+    });
+
     this.eventSource.addEventListener('dd:agent-connected', () => {
       this.eventBus?.emit('agent-status-changed');
     });
@@ -106,6 +121,33 @@ class SseService {
   private scheduleReconnect(delayMs = 5000): void {
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     this.reconnectTimer = setTimeout(() => this.doConnect(), delayMs);
+  }
+
+  private parseOperationPayload(event: Event): OperationChangedPayload | undefined {
+    const rawData = (event as MessageEvent)?.data;
+    if (!rawData || typeof rawData !== 'string') {
+      return undefined;
+    }
+    try {
+      const parsed = JSON.parse(rawData);
+      if (!parsed || typeof parsed !== 'object') {
+        return undefined;
+      }
+      const p = parsed as Record<string, unknown>;
+      if (typeof p.status !== 'string') {
+        return undefined;
+      }
+      return {
+        operationId: typeof p.operationId === 'string' ? p.operationId : undefined,
+        containerName: typeof p.containerName === 'string' ? p.containerName : undefined,
+        containerId: typeof p.containerId === 'string' ? p.containerId : undefined,
+        newContainerId: typeof p.newContainerId === 'string' ? p.newContainerId : undefined,
+        status: p.status,
+        phase: typeof p.phase === 'string' ? p.phase : undefined,
+      };
+    } catch {
+      return undefined;
+    }
   }
 
   private parseSelfUpdatePayload(rawData: unknown): SelfUpdateSsePayload {

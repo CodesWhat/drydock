@@ -36,9 +36,10 @@ test('validateConfiguration should return validated configuration when valid', a
   expect(validatedConfiguration).toStrictEqual(configurationValid);
 });
 
-test('validateConfiguration should throw error when invalid', async () => {
+test('validateConfiguration should throw error when url scheme is invalid', async () => {
   const configuration = {
     url: 'git://xxx.com',
+    urls: 'mailto://test@example.com',
   };
   expect(() => {
     apprise.validateConfiguration(configuration);
@@ -146,6 +147,7 @@ test('trigger should use config without tag', async () => {
     url: 'http://xxx.com/notify/myconfig',
     timeout: 30000,
   });
+  expect(axios.mock.calls[0][0].data).not.toHaveProperty('tag');
 });
 
 test('trigger should URL-encode config path segment', async () => {
@@ -300,6 +302,7 @@ test('triggerBatch should use config without tag', async () => {
     url: 'http://xxx.com/notify/myconfig',
     timeout: 30000,
   });
+  expect(axios.mock.calls[0][0].data).not.toHaveProperty('tag');
 });
 
 test('maskConfiguration should mask urls', async () => {

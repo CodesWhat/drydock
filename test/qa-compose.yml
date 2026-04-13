@@ -330,5 +330,103 @@ services:
       - dd.watch=true
       - dd.display.name=Memcached (Stopped)
 
+  # ── Edge stack (multi-container batch QA) ──────────────
+  edge-caddy:
+    image: caddy:2.6.4-alpine
+    pull_policy: missing
+    container_name: drydock-playwright-edge-caddy
+    command: ["caddy", "respond", "--listen", ":80", "QA"]
+    labels:
+      - dd.watch=true
+      - dd.display.name=Caddy (Edge)
+      - dd.group=edge
+      - dd.tag.include=^2\.\d+\.\d+-alpine$$
+
+  edge-nginx:
+    image: nginx:1.21.0-alpine
+    pull_policy: missing
+    container_name: drydock-playwright-edge-nginx
+    labels:
+      - dd.watch=true
+      - dd.display.name=Nginx (Edge)
+      - dd.group=edge
+      - dd.tag.include=^1\.\d+\.\d+-alpine$$
+
+  edge-httpd:
+    image: httpd:2.4.50-alpine
+    pull_policy: missing
+    container_name: drydock-playwright-edge-httpd
+    labels:
+      - dd.watch=true
+      - dd.display.name=Apache (Edge)
+      - dd.group=edge
+      - dd.tag.include=^2\.4\.\d+-alpine$$
+
+  # ── Messaging stack (multi-container batch QA) ─────────
+  msg-nats:
+    image: nats:2.9.0-alpine
+    pull_policy: missing
+    container_name: drydock-playwright-msg-nats
+    command: ["-js"]
+    labels:
+      - dd.watch=true
+      - dd.display.name=NATS (Messaging)
+      - dd.group=messaging
+      - dd.tag.include=^2\.\d+\.\d+-alpine$$
+
+  msg-redis:
+    image: redis:6.0.0-alpine
+    pull_policy: missing
+    container_name: drydock-playwright-msg-redis
+    labels:
+      - dd.watch=true
+      - dd.display.name=Redis (Messaging)
+      - dd.group=messaging
+      - dd.tag.include=^6\.\d+\.\d+-alpine$$
+
+  # ── Runtime stack (multi-container batch QA) ───────────
+  runtime-node:
+    image: node:18.0.0-alpine
+    pull_policy: missing
+    container_name: drydock-playwright-runtime-node
+    command: ["node", "-e", "setInterval(() => {}, 60000)"]
+    labels:
+      - dd.watch=true
+      - dd.display.name=Node 18 (Runtime)
+      - dd.group=runtime
+      - dd.tag.include=^18\.\d+\.\d+-alpine$$
+
+  runtime-python:
+    image: python:3.10.0-alpine
+    pull_policy: missing
+    container_name: drydock-playwright-runtime-python
+    command: ["python", "-c", "import time; time.sleep(999999)"]
+    labels:
+      - dd.watch=true
+      - dd.display.name=Python 3.10 (Runtime)
+      - dd.group=runtime
+      - dd.tag.include=^3\.10\.\d+-alpine$$
+
+  # ── Standalone updateable containers ───────────────────
+  busybox-old:
+    image: busybox:1.34.0
+    pull_policy: missing
+    container_name: drydock-playwright-busybox-old
+    command: ["sh", "-c", "while true; do sleep 60; done"]
+    labels:
+      - dd.watch=true
+      - dd.display.name=BusyBox (Old)
+      - dd.tag.include=^1\.\d+\.\d+$$
+
+  alpine-old:
+    image: alpine:3.14.0
+    pull_policy: missing
+    container_name: drydock-playwright-alpine-old
+    command: ["sh", "-c", "while true; do sleep 60; done"]
+    labels:
+      - dd.watch=true
+      - dd.display.name=Alpine (Old)
+      - dd.tag.include=^3\.\d+\.\d+$$
+
 volumes:
   portainer_data:

@@ -63,6 +63,7 @@ interface DockerEventOrchestrationWatcher {
   processDockerEvent: (dockerEvent: unknown) => Promise<void>;
   updateContainerFromInspect: (containerFound: Container, containerInspect: unknown) => void;
   isRecoverableDockerEventParseError: (error: unknown) => boolean;
+  recreateDockerClient?: () => Promise<void>;
 }
 
 /**
@@ -81,6 +82,17 @@ export async function listenDockerEventsOrchestration(
   if (watcher.dockerEventsReconnectTimeout) {
     clearTimeout(watcher.dockerEventsReconnectTimeout);
     watcher.dockerEventsReconnectTimeout = undefined;
+  }
+
+  if (watcher.recreateDockerClient) {
+    try {
+      await watcher.recreateDockerClient();
+    } catch (e: unknown) {
+      const errorMessage = getErrorMessage(e);
+      watcher.log.warn(`Unable to recreate Docker client during reconnect (${errorMessage})`);
+      watcher.scheduleDockerEventsReconnect('client recreation failure', e);
+      return;
+    }
   }
 
   try {

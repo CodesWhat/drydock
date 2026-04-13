@@ -35,47 +35,88 @@ function parseStableVersion(version) {
   };
 }
 
-export function inferReleaseLevel(commits) {
-  let hasFeat = false;
-  let hasPatch = false;
+function getCommitMessage(commit) {
+  return String(commit ?? '').trim();
+}
 
-  for (const commit of commits) {
-    const message = String(commit ?? '').trim();
-    if (!message) {
-      continue;
-    }
+function getCommitSubject(message) {
+  return message.split(/\r?\n/u, 1)[0] ?? '';
+}
 
-    if (/\bBREAKING[ -]CHANGE:/iu.test(message)) {
-      return 'major';
-    }
-
-    const subject = message.split(/\r?\n/u, 1)[0] ?? '';
-    const match = subject.match(conventionalSubjectRegex);
-    if (!match?.groups) {
-      continue;
-    }
-
-    const type = match.groups.type;
-    if (match.groups.breakingA === '!' || match.groups.breakingB === '!') {
-      return 'major';
-    }
-
-    if (type === 'feat') {
-      hasFeat = true;
-      continue;
-    }
-
-    if (PATCH_TYPES.has(type)) {
-      hasPatch = true;
-    }
+function classifyCommitSubject(subject) {
+  const match = subject.match(conventionalSubjectRegex);
+  if (!match?.groups) {
+    return null;
   }
 
-  if (hasFeat) {
+  if (match.groups.breakingA === '!' || match.groups.breakingB === '!') {
+    return 'major';
+  }
+
+  return match.groups.type;
+}
+
+function getCommitSignal(commit) {
+  const message = getCommitMessage(commit);
+  if (!message) {
+    return null;
+  }
+
+  if (/\bBREAKING[ -]CHANGE:/iu.test(message)) {
+    return 'major';
+  }
+
+  return classifyCommitSubject(getCommitSubject(message));
+}
+
+function hasCommitSignal(commits, signal) {
+  return commits.some((commit) => getCommitSignal(commit) === signal);
+}
+
+function hasPatchCommit(commits) {
+  return commits.some((commit) => PATCH_TYPES.has(getCommitSignal(commit) ?? ''));
+}
+
+function parseNextArgValue(argv, index, key) {
+  const value = argv[index + 1];
+  if (value === undefined || value.startsWith('--')) {
+    throw new Error(`Missing value for argument: ${key}`);
+  }
+  return value;
+}
+
+function setParsedArg(args, key, value) {
+  switch (key) {
+    case '--bump':
+      args.bump = value;
+      return;
+    case '--current':
+      args.current = value;
+      return;
+    case '--from':
+      args.from = value;
+      return;
+    case '--to':
+      args.to = value;
+      return;
+    default:
+      throw new Error(`Unknown argument: ${key}`);
+  }
+}
+
+export function inferReleaseLevel(commits) {
+  if (hasCommitSignal(commits, 'major')) {
+    return 'major';
+  }
+
+  if (hasCommitSignal(commits, 'feat')) {
     return 'minor';
   }
-  if (hasPatch) {
+
+  if (hasPatchCommit(commits)) {
     return 'patch';
   }
+
   return null;
 }
 
@@ -97,13 +138,12 @@ export function bumpSemver(currentVersion, level) {
 
 function inferExplicitReleaseVersion(commits) {
   for (const commit of commits) {
-    const message = String(commit ?? '').trim();
+    const message = getCommitMessage(commit);
     if (!message) {
       continue;
     }
 
-    const subject = message.split(/\r?\n/u, 1)[0] ?? '';
-    const match = subject.match(explicitReleaseVersionRegex);
+    const match = getCommitSubject(message).match(explicitReleaseVersionRegex);
     if (match?.groups?.version) {
       return match.groups.version;
     }
@@ -155,17 +195,19 @@ function parseArgs(argv) {
   const args = {};
   for (let i = 0; i < argv.length; i += 1) {
     const key = argv[i];
-    const value = argv[i + 1];
     if (!key.startsWith('--')) {
       continue;
     }
-    if (value === undefined || value.startsWith('--')) {
-      throw new Error(`Missing value for argument: ${key}`);
-    }
-    args[key.slice(2)] = value;
+    const value = parseNextArgValue(argv, i, key);
+    setParsedArg(args, key, value);
     i += 1;
   }
   return args;
+}
+
+function emitReleaseInfo(releaseLevel, nextVersion) {
+  console.log(`release_level=${releaseLevel}`);
+  console.log(`next_version=${nextVersion}`);
 }
 
 function getCommitMessages(fromRef, toRef) {
@@ -203,15 +245,12 @@ function main() {
     }
 
     releaseLevel = resolved.releaseLevel;
-    const nextVersion = resolved.nextVersion;
-    console.log(`release_level=${releaseLevel}`);
-    console.log(`next_version=${nextVersion}`);
+    emitReleaseInfo(releaseLevel, resolved.nextVersion);
     return;
   }
 
   const nextVersion = bumpSemver(current, releaseLevel);
-  console.log(`release_level=${releaseLevel}`);
-  console.log(`next_version=${nextVersion}`);
+  emitReleaseInfo(releaseLevel, nextVersion);
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

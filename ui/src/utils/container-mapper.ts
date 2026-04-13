@@ -24,12 +24,12 @@ import type {
   ContainerUpdateOperation,
 } from '../types/container';
 import {
-  CONTAINER_UPDATE_OPERATION_PHASES,
-  CONTAINER_UPDATE_OPERATION_STATUSES,
-  type ContainerUpdateOperationPhase,
-  type ContainerUpdateOperationStatus,
+  isActiveContainerUpdateOperationPhaseForStatus,
+  isActiveContainerUpdateOperationStatus,
+  isContainerUpdateOperationKind,
 } from '../types/update-operation';
 import { normalizeSeverityCount } from '../views/security/securityViewUtils';
+import { buildContainerIdentityKey } from './container-action-key';
 import {
   maturityMinAgeDaysToMilliseconds,
   normalizeMaturityMode,
@@ -144,6 +144,7 @@ export interface ApiContainerInput {
   transformTags?: unknown;
   triggerInclude?: unknown;
   triggerExclude?: unknown;
+  tagPinned?: unknown;
   sourceRepo?: unknown;
   error?: { message?: unknown } | null;
   ports?: unknown;
@@ -162,26 +163,20 @@ function asNonEmptyString(value: unknown): string | undefined {
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
+function asPositiveInteger(value: unknown): number | undefined {
+  if (typeof value === 'number') {
+    return Number.isSafeInteger(value) && value > 0 ? value : undefined;
+  }
+  if (typeof value !== 'string' || !/^\d+$/.test(value)) {
+    return undefined;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : undefined;
+}
+
 function asOptionalBoolean(value: unknown): boolean | undefined {
   return typeof value === 'boolean' ? value : undefined;
-}
-
-function asContainerUpdateOperationStatus(
-  value: unknown,
-): ContainerUpdateOperationStatus | undefined {
-  return typeof value === 'string' &&
-    (CONTAINER_UPDATE_OPERATION_STATUSES as readonly string[]).includes(value)
-    ? (value as ContainerUpdateOperationStatus)
-    : undefined;
-}
-
-function asContainerUpdateOperationPhase(
-  value: unknown,
-): ContainerUpdateOperationPhase | undefined {
-  return typeof value === 'string' &&
-    (CONTAINER_UPDATE_OPERATION_PHASES as readonly string[]).includes(value)
-    ? (value as ContainerUpdateOperationPhase)
-    : undefined;
 }
 
 /** Derive a human-readable server/host name from watcher + agent fields. */
@@ -404,13 +399,66 @@ function deriveUpdateDetectedAt(apiContainer: ApiContainerInput): string | undef
   return new Date(parsedAt).toISOString();
 }
 
+function hasPolicyRelevantUpdateKind(
+  updateKind: ApiContainerUpdateKind | null | undefined,
+): boolean {
+  return updateKind?.kind === 'tag' || updateKind?.kind === 'digest';
+}
+
+function isFutureSnoozeUntil(updatePolicy: ApiContainerUpdatePolicy, nowMs: number): boolean {
+  const snoozeUntil = asNonEmptyString(updatePolicy.snoozeUntil);
+  if (!snoozeUntil) {
+    return false;
+  }
+
+  const parsedSnoozeUntil = Date.parse(snoozeUntil);
+  return !Number.isNaN(parsedSnoozeUntil) && parsedSnoozeUntil > nowMs;
+}
+
+function isSkippedByTagPolicy(
+  updateKind: ApiContainerUpdateKind,
+  updatePolicy: ApiContainerUpdatePolicy,
+  remoteValue: string | undefined,
+): boolean {
+  return (
+    updateKind.kind === 'tag' &&
+    remoteValue !== undefined &&
+    Array.isArray(updatePolicy.skipTags) &&
+    updatePolicy.skipTags.includes(remoteValue)
+  );
+}
+
+function isSkippedByDigestPolicy(
+  updateKind: ApiContainerUpdateKind,
+  updatePolicy: ApiContainerUpdatePolicy,
+  remoteValue: string | undefined,
+): boolean {
+  return (
+    updateKind.kind === 'digest' &&
+    remoteValue !== undefined &&
+    Array.isArray(updatePolicy.skipDigests) &&
+    updatePolicy.skipDigests.includes(remoteValue)
+  );
+}
+
+function isMaturityBlocked(
+  apiContainer: ApiContainerInput,
+  updatePolicy: ApiContainerUpdatePolicy,
+): boolean {
+  if (normalizeMaturityMode(updatePolicy.maturityMode) !== 'mature') {
+    return false;
+  }
+
+  const minAgeDays = resolveMaturityMinAgeDays(updatePolicy.maturityMinAgeDays);
+  const updateDetectedAt = deriveUpdateDetectedAt(apiContainer);
+  const detectedAtMs = Date.parse(updateDetectedAt || '');
+  const minAgeMs = maturityMinAgeDaysToMilliseconds(minAgeDays);
+  return !Number.isFinite(detectedAtMs) || Date.now() - detectedAtMs < minAgeMs;
+}
+
 function deriveUpdatePolicyState(apiContainer: ApiContainerInput): Container['updatePolicyState'] {
   const updateKind = apiContainer.updateKind;
-  if (
-    apiContainer.updateAvailable ||
-    !updateKind ||
-    (updateKind.kind !== 'tag' && updateKind.kind !== 'digest')
-  ) {
+  if (apiContainer.updateAvailable || !updateKind || !hasPolicyRelevantUpdateKind(updateKind)) {
     return undefined;
   }
 
@@ -419,43 +467,22 @@ function deriveUpdatePolicyState(apiContainer: ApiContainerInput): Container['up
     return undefined;
   }
 
-  const snoozeUntil = asNonEmptyString(updatePolicy.snoozeUntil);
-  if (snoozeUntil) {
-    const parsedSnoozeUntil = Date.parse(snoozeUntil);
-    if (!Number.isNaN(parsedSnoozeUntil) && parsedSnoozeUntil > Date.now()) {
-      return 'snoozed';
-    }
+  if (isFutureSnoozeUntil(updatePolicy, Date.now())) {
+    return 'snoozed';
   }
 
   const remoteValue = asNonEmptyString(updateKind.remoteValue);
 
-  if (
-    updateKind.kind === 'tag' &&
-    remoteValue &&
-    Array.isArray(updatePolicy.skipTags) &&
-    updatePolicy.skipTags.includes(remoteValue)
-  ) {
+  if (isSkippedByTagPolicy(updateKind, updatePolicy, remoteValue)) {
     return 'skipped';
   }
 
-  if (
-    updateKind.kind === 'digest' &&
-    remoteValue &&
-    Array.isArray(updatePolicy.skipDigests) &&
-    updatePolicy.skipDigests.includes(remoteValue)
-  ) {
+  if (isSkippedByDigestPolicy(updateKind, updatePolicy, remoteValue)) {
     return 'skipped';
   }
 
-  const maturityMode = normalizeMaturityMode(updatePolicy.maturityMode);
-  if (maturityMode === 'mature') {
-    const minAgeDays = resolveMaturityMinAgeDays(updatePolicy.maturityMinAgeDays);
-    const updateDetectedAt = deriveUpdateDetectedAt(apiContainer);
-    const detectedAtMs = Date.parse(updateDetectedAt || '');
-    const minAgeMs = maturityMinAgeDaysToMilliseconds(minAgeDays);
-    if (!Number.isFinite(detectedAtMs) || Date.now() - detectedAtMs < minAgeMs) {
-      return 'maturity-blocked';
-    }
+  if (isMaturityBlocked(apiContainer, updatePolicy)) {
+    return 'maturity-blocked';
   }
 
   return undefined;
@@ -587,9 +614,18 @@ function deriveUpdateOperation(
   }
 
   const id = asNonEmptyString(operation.id);
-  const status = asContainerUpdateOperationStatus(operation.status);
-  const phase = asContainerUpdateOperationPhase(operation.phase);
+  const kind = isContainerUpdateOperationKind(operation.kind) ? operation.kind : undefined;
+  const status = isActiveContainerUpdateOperationStatus(operation.status)
+    ? operation.status
+    : undefined;
+  const phase =
+    status && isActiveContainerUpdateOperationPhaseForStatus(status, operation.phase)
+      ? operation.phase
+      : undefined;
   const updatedAt = asNonEmptyString(operation.updatedAt);
+  const batchId = asNonEmptyString(operation.batchId);
+  const queuePosition = asPositiveInteger(operation.queuePosition);
+  const queueTotal = asPositiveInteger(operation.queueTotal);
 
   if (!id || !status || !phase || !updatedAt) {
     return undefined;
@@ -597,6 +633,7 @@ function deriveUpdateOperation(
 
   return {
     id,
+    ...(kind ? { kind } : {}),
     status,
     phase,
     updatedAt,
@@ -608,6 +645,9 @@ function deriveUpdateOperation(
       : {}),
     ...(asNonEmptyString(operation.targetImage)
       ? { targetImage: asNonEmptyString(operation.targetImage) }
+      : {}),
+    ...(batchId && queuePosition && queueTotal && queuePosition <= queueTotal
+      ? { batchId, queuePosition, queueTotal }
       : {}),
   };
 }
@@ -628,6 +668,7 @@ export function mapApiContainer(apiContainer: ApiContainerInput): Container {
 
   return {
     id,
+    identityKey: buildContainerIdentityKey(apiContainer) || id || name,
     name: displayName ?? name,
     image: imageName,
     icon: getEffectiveDisplayIcon(displayIcon, imageName),
@@ -638,6 +679,7 @@ export function mapApiContainer(apiContainer: ApiContainerInput): Container {
     imageDigestWatch: asOptionalBoolean(apiContainer.image?.digest?.watch),
     imageTagSemver: asOptionalBoolean(apiContainer.image?.tag?.semver),
     tagPrecision: apiContainer.image?.tag?.tagPrecision as 'specific' | 'floating' | undefined,
+    tagPinned: asOptionalBoolean(apiContainer.tagPinned),
     suggestedTag: asNonEmptyString(apiContainer.result?.suggestedTag),
     sourceRepo: asNonEmptyString(apiContainer.sourceRepo),
     releaseNotes: deriveReleaseNotes(apiContainer),

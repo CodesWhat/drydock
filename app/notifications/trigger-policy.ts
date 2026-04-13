@@ -20,6 +20,66 @@ export function getNotificationTriggerIdsFromState(
   return triggerIds;
 }
 
+export function doesNotificationTriggerReferenceMatchId(
+  triggerReference: string | undefined,
+  triggerId: string | undefined,
+): boolean {
+  const triggerReferenceNormalized = `${triggerReference || ''}`.trim().toLowerCase();
+  const triggerIdNormalized = `${triggerId || ''}`.trim().toLowerCase();
+
+  if (!triggerReferenceNormalized || !triggerIdNormalized) {
+    return false;
+  }
+
+  if (triggerReferenceNormalized === triggerIdNormalized) {
+    return true;
+  }
+
+  const triggerIdParts = triggerIdNormalized.split('.');
+  const triggerName = triggerIdParts.at(-1);
+  if (!triggerName) {
+    return false;
+  }
+  if (triggerReferenceNormalized === triggerName) {
+    return true;
+  }
+
+  if (triggerIdParts.length >= 2) {
+    const provider = triggerIdParts.at(-2);
+    const providerAndName = `${provider}.${triggerName}`;
+    if (triggerReferenceNormalized === providerAndName) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+export function resolveNotificationTriggerIds(
+  triggerReference: string | undefined,
+  allowedTriggerIds: Set<string>,
+): string[] {
+  const triggerReferenceNormalized = `${triggerReference || ''}`.trim();
+  if (!triggerReferenceNormalized) {
+    return [];
+  }
+
+  const allowedTriggerIdEntries = Array.from(allowedTriggerIds);
+  const exactMatches = allowedTriggerIdEntries.filter(
+    (allowedTriggerId) =>
+      allowedTriggerId.toLowerCase() === triggerReferenceNormalized.toLowerCase(),
+  );
+  if (exactMatches.length > 0) {
+    return exactMatches.sort();
+  }
+
+  return allowedTriggerIdEntries
+    .filter((allowedTriggerId) =>
+      doesNotificationTriggerReferenceMatchId(triggerReferenceNormalized, allowedTriggerId),
+    )
+    .sort();
+}
+
 export function normalizeNotificationTriggerIds(
   triggerIds: string[] | undefined,
   allowedTriggerIds: Set<string>,
@@ -32,7 +92,7 @@ export function normalizeNotificationTriggerIds(
       triggerIds
         .filter((triggerId) => typeof triggerId === 'string')
         .map((triggerId) => triggerId.trim())
-        .filter((triggerId) => triggerId.length > 0 && allowedTriggerIds.has(triggerId)),
+        .flatMap((triggerId) => resolveNotificationTriggerIds(triggerId, allowedTriggerIds)),
     ),
   ).sort();
 }

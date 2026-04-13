@@ -35,6 +35,36 @@ function summarizeToMarkdown(summaryPath) {
   console.log(lines.join('\n'));
 }
 
+function requireArgValue(argv, index, argName, usage) {
+  const value = argv[index + 1];
+  if (!value) {
+    usage(`Missing value for ${argName}`);
+  }
+  return value;
+}
+
+function setParsedArg(args, arg, value) {
+  switch (arg) {
+    case '--expected-count':
+      args.expectedCount = Number.parseInt(value, 10);
+      return;
+    case '--input':
+      args.input = value;
+      return;
+    case '--score-out':
+      args.scoreOut = value;
+      return;
+    case '--summarize':
+      args.summarize = value;
+      return;
+    case '--summary-out':
+      args.summaryOut = value;
+      return;
+    default:
+      throw new Error(`Unknown argument: ${arg}`);
+  }
+}
+
 function parseArgs(argv) {
   const args = {
     allowMissing: false,
@@ -47,50 +77,18 @@ function parseArgs(argv) {
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
-    const next = argv[index + 1];
-
-    switch (arg) {
-      case '--expected-count':
-        if (!next) {
-          usage('Missing value for --expected-count');
-        }
-        args.expectedCount = Number.parseInt(next, 10);
-        index += 1;
-        break;
-      case '--input':
-        if (!next) {
-          usage('Missing value for --input');
-        }
-        args.input = next;
-        index += 1;
-        break;
-      case '--score-out':
-        if (!next) {
-          usage('Missing value for --score-out');
-        }
-        args.scoreOut = next;
-        index += 1;
-        break;
-      case '--summarize':
-        if (!next) {
-          usage('Missing value for --summarize');
-        }
-        args.summarize = next;
-        index += 1;
-        break;
-      case '--summary-out':
-        if (!next) {
-          usage('Missing value for --summary-out');
-        }
-        args.summaryOut = next;
-        index += 1;
-        break;
-      case '--allow-missing':
-        args.allowMissing = true;
-        break;
-      default:
-        usage(`Unknown argument: ${arg}`);
+    if (arg === '--allow-missing') {
+      args.allowMissing = true;
+      continue;
     }
+
+    if (!arg.startsWith('--')) {
+      usage(`Unknown argument: ${arg}`);
+    }
+
+    const next = requireArgValue(argv, index, arg, usage);
+    setParsedArg(args, arg, next);
+    index += 1;
   }
 
   if (args.summarize) {
@@ -152,6 +150,25 @@ function finalizeCounts(counts) {
   return counts;
 }
 
+const MUTANT_STATUS_TO_COUNT = {
+  CompileError: 'compileErrors',
+  Ignored: 'ignored',
+  Killed: 'killed',
+  NoCoverage: 'noCoverage',
+  Pending: 'pending',
+  RuntimeError: 'runtimeErrors',
+  Survived: 'survived',
+  Timeout: 'timeout',
+};
+
+function addMutantStatus(counts, mutantStatus, reportPath) {
+  const key = MUTANT_STATUS_TO_COUNT[mutantStatus];
+  if (!key) {
+    throw new Error(`Unknown mutant status "${mutantStatus}" in ${reportPath}`);
+  }
+  counts[key] += 1;
+}
+
 function collectMutationReports(root) {
   const reports = [];
   const queue = [root];
@@ -175,47 +192,14 @@ function collectMutationReports(root) {
   return reports.sort((left, right) => left.localeCompare(right));
 }
 
-function summarizeReport(reportPath) {
-  const raw = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
-  const counts = createCounts();
-
-  for (const file of Object.values(raw.files ?? {})) {
-    for (const mutant of file.mutants ?? []) {
-      counts.total += 1;
-
-      switch (mutant.status) {
-        case 'Killed':
-          counts.killed += 1;
-          break;
-        case 'Survived':
-          counts.survived += 1;
-          break;
-        case 'NoCoverage':
-          counts.noCoverage += 1;
-          break;
-        case 'Timeout':
-          counts.timeout += 1;
-          break;
-        case 'RuntimeError':
-          counts.runtimeErrors += 1;
-          break;
-        case 'CompileError':
-          counts.compileErrors += 1;
-          break;
-        case 'Ignored':
-          counts.ignored += 1;
-          break;
-        case 'Pending':
-          counts.pending += 1;
-          break;
-        default:
-          throw new Error(`Unknown mutant status "${mutant.status}" in ${reportPath}`);
-      }
-    }
+function summarizeCountsFromMutants(counts, file, reportPath) {
+  for (const mutant of file.mutants ?? []) {
+    counts.total += 1;
+    addMutantStatus(counts, mutant.status, reportPath);
   }
+}
 
-  finalizeCounts(counts);
-
+function buildReportSummary(raw, counts, reportPath) {
   return {
     file: reportPath,
     framework: raw.framework?.name ?? null,
@@ -226,6 +210,19 @@ function summarizeReport(reportPath) {
     thresholds: raw.thresholds ?? null,
     ...counts,
   };
+}
+
+function summarizeReport(reportPath) {
+  const raw = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
+  const counts = createCounts();
+
+  for (const file of Object.values(raw.files ?? {})) {
+    summarizeCountsFromMutants(counts, file, reportPath);
+  }
+
+  finalizeCounts(counts);
+
+  return buildReportSummary(raw, counts, reportPath);
 }
 
 function ensureDirectory(filePath) {

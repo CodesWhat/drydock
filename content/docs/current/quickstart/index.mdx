@@ -33,6 +33,9 @@ services:
   socket-proxy:
     image: tecnativa/docker-socket-proxy
     container_name: drydock-socket-proxy
+    labels:
+      - dd.watch=true
+      - dd.update.mode=infrastructure
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     environment:

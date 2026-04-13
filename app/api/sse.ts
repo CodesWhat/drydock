@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import type { Request, Response } from 'express';
 import express from 'express';
 import type { SelfUpdateStartingEventPayload } from '../event/index.js';
@@ -9,6 +9,7 @@ import {
   registerContainerRemoved,
   registerContainerUpdated,
   registerSelfUpdateStarting,
+  registerUpdateOperationChanged,
 } from '../event/index.js';
 import log from '../log/index.js';
 import { hashToken } from '../util/crypto.js';
@@ -37,6 +38,7 @@ const ALLOWED_CONTAINER_EVENT_NAMES = new Set<string>([
   'dd:container-added',
   'dd:container-updated',
   'dd:container-removed',
+  'dd:update-operation-changed',
   'dd:agent-connected',
   'dd:agent-disconnected',
 ]);
@@ -57,8 +59,20 @@ const eventListenerDeregistrations: Array<() => void> = [];
 const PROCESS_SHUTDOWN_SIGNALS: NodeJS.Signals[] = ['SIGINT', 'SIGTERM'];
 let processShutdownHandlersRegistered = false;
 
+// Per-process salt for SSE log IP hashing. Regenerated on each start so hashed
+// identifiers cannot be correlated across process restarts.
+const SSE_LOG_IP_SALT = randomBytes(16);
+
 function getClientIp(req: Request): string {
   return req.ip ?? 'unknown';
+}
+
+function formatIpForLog(ip: string): string {
+  if (process.env.DD_SSE_DEBUG_LOG_IP === 'true') {
+    return ip;
+  }
+  const hashHex = createHash('sha256').update(SSE_LOG_IP_SALT).update(ip).digest('hex').slice(0, 8);
+  return `h:${hashHex}`;
 }
 
 function getClientSessionKey(req: Request): string {
@@ -150,7 +164,9 @@ function eventsHandler(req: Request, res: Response): void {
   const currentSessionCount = connectionsPerSession.get(sessionKey) ?? 0;
 
   if (currentIpCount >= MAX_CONNECTIONS_PER_IP) {
-    logger.warn(`SSE connection limit reached for ${ip} (${currentIpCount})`);
+    logger.warn(
+      `SSE per-IP connection limit reached for ${formatIpForLog(ip)} (${currentIpCount})`,
+    );
     sendErrorResponse(res, 429, 'Too many SSE connections');
     return;
   }
@@ -194,7 +210,9 @@ function eventsHandler(req: Request, res: Response): void {
   client.flush?.();
 
   clients.add(client);
-  logger.debug(`SSE client connected (${clients.size} total)`);
+  logger.debug(
+    `SSE client connected: ${activeClient.clientId} from ${formatIpForLog(ip)} (${clients.size} total)`,
+  );
   startSharedHeartbeatIntervalIfNeeded();
 
   let disconnected = false;
@@ -222,7 +240,9 @@ function eventsHandler(req: Request, res: Response): void {
     } else {
       connectionsPerSession.set(sessionKey, sessionCount - 1);
     }
-    logger.debug(`SSE client disconnected (${clients.size} total)`);
+    logger.debug(
+      `SSE client disconnected: ${activeClient.clientId} from ${formatIpForLog(ip)} (${clients.size} total)`,
+    );
   };
 
   req.on('close', cleanup);
@@ -352,6 +372,11 @@ export function init(): express.Router {
   trackEventListenerDeregistration(
     registerContainerRemoved((payload: unknown) => {
       broadcastContainerEvent('dd:container-removed', payload);
+    }),
+  );
+  trackEventListenerDeregistration(
+    registerUpdateOperationChanged((payload: unknown) => {
+      broadcastContainerEvent('dd:update-operation-changed', payload);
     }),
   );
   trackEventListenerDeregistration(

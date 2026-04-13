@@ -56,6 +56,7 @@ vi.mock('./container.js', () => ({
   deleteContainer: vi.fn(),
 }));
 vi.mock('./watcher.js', () => ({
+  getWatcher: vi.fn(),
   getWatchers: vi.fn(),
   watchWatcher: vi.fn(),
   watchContainer: vi.fn(),

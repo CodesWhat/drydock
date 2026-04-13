@@ -4,8 +4,11 @@
 
 import { errorMessage } from '../utils/error';
 
-// Current logged user
-let user = undefined;
+let pendingUserRequest: Promise<unknown> | undefined;
+
+function clearCachedUser() {
+  pendingUserRequest = undefined;
+}
 
 function getPayloadErrorMessage(payload: unknown): string {
   if (typeof payload !== 'object' || payload === null) {
@@ -39,23 +42,31 @@ async function getStrategies(): Promise<{
  * @returns {Promise<*>}
  */
 async function getUser() {
-  try {
-    const response = await fetch('/auth/user', {
-      redirect: 'manual',
-      credentials: 'include',
-    });
-    if (response.ok) {
-      user = await response.json();
-      return user;
-    } else {
-      user = undefined;
-      return undefined;
-    }
-  } catch (e: unknown) {
-    console.debug(`Unable to fetch current user: ${errorMessage(e)}`);
-    user = undefined;
-    return undefined;
+  if (pendingUserRequest) {
+    return pendingUserRequest;
   }
+
+  pendingUserRequest = (async () => {
+    try {
+      // Only dedupe concurrent callers. Always revalidate settled auth state so
+      // logout/session expiry in another tab is reflected on the next check.
+      const response = await fetch('/auth/user', {
+        redirect: 'manual',
+        credentials: 'include',
+      });
+      if (response.ok) {
+        return await response.json();
+      }
+      return undefined;
+    } catch (e: unknown) {
+      console.debug(`Unable to fetch current user: ${errorMessage(e)}`);
+      return undefined;
+    } finally {
+      pendingUserRequest = undefined;
+    }
+  })();
+
+  return pendingUserRequest;
 }
 
 /**
@@ -90,8 +101,8 @@ async function loginBasic(username: string, password: string, remember: boolean 
 
     throw new Error(message || 'Username or password error');
   }
-  user = await response.json();
-  return user;
+  clearCachedUser();
+  return await response.json();
 }
 
 /**
@@ -112,8 +123,7 @@ async function setRememberMe(remember: boolean) {
  */
 async function getOidcRedirection(name: string) {
   const response = await fetch(`/auth/oidc/${name}/redirect`, { credentials: 'include' });
-  user = await response.json();
-  return user;
+  return response.json();
 }
 
 /**
@@ -126,7 +136,7 @@ async function logout() {
     credentials: 'include',
     redirect: 'manual',
   });
-  user = undefined;
+  clearCachedUser();
   return response.json();
 }
 

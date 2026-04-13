@@ -5,6 +5,38 @@ set -euo pipefail
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 LOCK_DIR="${TMPDIR:-/tmp}/drydock-e2e.lock"
 LOCK_TIMEOUT_SECONDS="${LOCK_TIMEOUT_SECONDS:-300}"
+RESTART_COLIMA="${DD_E2E_RESTART_COLIMA:-true}"
+
+restart_colima() {
+	if [[ $RESTART_COLIMA != "true" ]]; then
+		return
+	fi
+
+	if ! command -v colima >/dev/null 2>&1; then
+		return
+	fi
+
+	echo "🔄 Restarting Colima..."
+	colima stop >/dev/null 2>&1 || true
+	colima start >/dev/null
+}
+
+wait_for_docker_engine() {
+	if docker info >/dev/null 2>&1; then
+		return
+	fi
+
+	echo "⏳ Waiting for Docker engine..."
+	for _ in $(seq 1 60); do
+		if docker info >/dev/null 2>&1; then
+			return
+		fi
+		sleep 1
+	done
+
+	echo "❌ Docker engine did not become ready."
+	exit 1
+}
 
 acquire_lock() {
 	local started_at current_time lock_pid
@@ -46,6 +78,9 @@ cleanup() {
 trap 'cleanup; release_lock' EXIT
 
 echo "🧪 Running complete e2e test suite..."
+
+restart_colima
+wait_for_docker_engine
 
 acquire_lock
 

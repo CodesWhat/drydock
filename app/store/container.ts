@@ -31,6 +31,7 @@ const CONTAINER_COLLECTION_INDICES = ['data.watcher', 'data.status', 'data.updat
 const UNSAFE_QUERY_PATH_SEGMENTS = new Set(['__proto__', 'prototype', 'constructor']);
 const CONTAINER_QUERY_CONTROL_KEYS = new Set(['excludeRollbackContainers']);
 const STABLE_UNDEFINED_SENTINEL = '__undefined__';
+const toContainerFreshStateKey = container.getContainerIdentityKey;
 
 type SecurityStateCacheEntry = {
   security: unknown;
@@ -52,26 +53,6 @@ interface ContainerListPaginationOptions {
 
 function toCacheKey(watcher, name) {
   return `${watcher}_${name}`;
-}
-
-function toContainerFreshStateKey(
-  containerIdentity: Partial<Pick<container.Container, 'agent' | 'watcher' | 'name'>>,
-) {
-  if (
-    !containerIdentity ||
-    typeof containerIdentity.watcher !== 'string' ||
-    containerIdentity.watcher.length === 0 ||
-    typeof containerIdentity.name !== 'string' ||
-    containerIdentity.name.length === 0
-  ) {
-    return undefined;
-  }
-
-  const agent =
-    typeof containerIdentity.agent === 'string' && containerIdentity.agent.length > 0
-      ? containerIdentity.agent
-      : '';
-  return `${agent}::${containerIdentity.watcher}::${containerIdentity.name}`;
 }
 
 export const SECURITY_STATE_CACHE_TTL_MS = toPositiveInteger(

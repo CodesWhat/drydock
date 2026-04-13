@@ -3,7 +3,7 @@
  */
 import * as migrate from './migrate.js';
 
-const { migrate: migrateData } = migrate;
+const { migrate: migrateData, repairDataOnStartup } = migrate;
 
 import { getVersion } from '../configuration/index.js';
 import { initCollection } from './util.js';
@@ -39,6 +39,7 @@ function saveAppInfosAndMigrate() {
   if (currentVersion !== versionFromStore) {
     migrateData(versionFromStore, currentVersion);
   }
+  repairDataOnStartup();
   if (appInfosSaved) {
     app.remove(appInfosSaved);
   }
@@ -47,6 +48,9 @@ function saveAppInfosAndMigrate() {
 
 export function createCollections(db: AppStoreDb) {
   app = initCollection(db, 'app') as AppCollection;
+}
+
+export function completeStartupInitialization() {
   saveAppInfosAndMigrate();
 }
 

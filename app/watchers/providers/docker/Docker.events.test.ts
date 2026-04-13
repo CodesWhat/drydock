@@ -42,6 +42,9 @@ vi.mock('./maintenance.js', () => ({
   isInMaintenanceWindow: vi.fn(() => true),
   getNextMaintenanceWindow: vi.fn(() => undefined),
 }));
+vi.mock('./socket-version-probe.js', () => ({
+  probeSocketApiVersion: vi.fn().mockResolvedValue(undefined),
+}));
 
 import axios from 'axios';
 import mockDockerode from 'dockerode';

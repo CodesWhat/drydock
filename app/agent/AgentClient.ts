@@ -4,6 +4,7 @@ import { StringDecoder } from 'node:string_decoder';
 import axios, { type AxiosRequestConfig } from 'axios';
 import type { Logger } from 'pino';
 import type {
+  ContainerUpdateAppliedEventPayload,
   ContainerUpdateFailedEventPayload,
   SecurityAlertEventPayload,
   SecurityAlertSummary,
@@ -51,9 +52,12 @@ interface AgentClientRuntimeInfo {
 }
 
 interface AgentComponentDescriptor {
+  id?: string;
   type: string;
   name: string;
   configuration: Record<string, unknown>;
+  agent?: string;
+  metadata?: Record<string, unknown>;
 }
 
 interface AgentRuntimeAckPayload {
@@ -90,6 +94,17 @@ const INITIAL_SSE_RECONNECT_DELAY_MS = 1_000;
 const MAX_SSE_RECONNECT_DELAY_MS = 60_000;
 const REMOTE_UPDATE_TRIGGER_TYPES = new Set(['docker', 'dockercompose']);
 
+function isContainerUpdateAppliedEventPayload(
+  data: unknown,
+): data is ContainerUpdateAppliedEventPayload {
+  if (!data || typeof data !== 'object') {
+    return false;
+  }
+
+  const containerName = (data as { containerName?: unknown }).containerName;
+  return typeof containerName === 'string' && containerName.length > 0;
+}
+
 export class AgentClient {
   public name: string;
   public config: AgentClientConfig;
@@ -102,6 +117,7 @@ export class AgentClient {
   private reconnectAttempts: number;
   private hasConnectedOnce: boolean;
   private readonly pendingFreshStateAfterRemoteUpdate: Set<string>;
+  private readonly pendingWatcherCycleReports: Map<string, Map<string, ContainerReport>>;
 
   constructor(name: string, config: AgentClientConfig) {
     this.name = name;
@@ -118,6 +134,7 @@ export class AgentClient {
     this.reconnectAttempts = 0;
     this.hasConnectedOnce = false;
     this.pendingFreshStateAfterRemoteUpdate = new Set();
+    this.pendingWatcherCycleReports = new Map();
   }
 
   private parseBaseUrl(): URL {
@@ -230,11 +247,146 @@ export class AgentClient {
     }
   }
 
+  private getPendingWatcherCycleContainerKey(
+    container: Pick<Container, 'id' | 'name' | 'watcher'> | undefined,
+  ): string | undefined {
+    if (!container || typeof container !== 'object') {
+      return undefined;
+    }
+    if (typeof container.id === 'string' && container.id.length > 0) {
+      return container.id;
+    }
+    if (
+      typeof container.watcher === 'string' &&
+      container.watcher.length > 0 &&
+      typeof container.name === 'string' &&
+      container.name.length > 0
+    ) {
+      return `${container.watcher}:${container.name}`;
+    }
+    return undefined;
+  }
+
+  private rememberPendingWatcherCycleReport(containerReport: ContainerReport) {
+    if (!containerReport || !containerReport.container) {
+      return;
+    }
+
+    const watcherName = containerReport.container?.watcher;
+    if (typeof watcherName !== 'string' || watcherName.length === 0) {
+      return;
+    }
+
+    const containerKey = this.getPendingWatcherCycleContainerKey(containerReport.container);
+    if (!containerKey) {
+      return;
+    }
+
+    const reportsForWatcher = this.pendingWatcherCycleReports.get(watcherName) ?? new Map();
+    reportsForWatcher.set(containerKey, containerReport);
+    this.pendingWatcherCycleReports.set(watcherName, reportsForWatcher);
+  }
+
+  private takePendingWatcherCycleReport(
+    watcherName: string | undefined,
+    container: Pick<Container, 'id' | 'name' | 'watcher'>,
+  ): ContainerReport | undefined {
+    if (typeof watcherName !== 'string' || watcherName.length === 0) {
+      return undefined;
+    }
+
+    const reportsForWatcher = this.pendingWatcherCycleReports.get(watcherName);
+    if (!reportsForWatcher) {
+      return undefined;
+    }
+
+    const containerKey = this.getPendingWatcherCycleContainerKey(container);
+    if (!containerKey) {
+      return undefined;
+    }
+
+    const pendingReport = reportsForWatcher.get(containerKey);
+    if (!pendingReport) {
+      return undefined;
+    }
+
+    reportsForWatcher.delete(containerKey);
+    if (reportsForWatcher.size === 0) {
+      this.pendingWatcherCycleReports.delete(watcherName);
+    }
+    return pendingReport;
+  }
+
+  private clearPendingWatcherCycleReports(watcherName: string | undefined) {
+    if (typeof watcherName === 'string' && watcherName.length > 0) {
+      this.pendingWatcherCycleReports.delete(watcherName);
+    }
+  }
+
+  private clearPendingWatcherCycleReportByContainerId(containerId: unknown) {
+    if (typeof containerId !== 'string' || containerId.length === 0) {
+      return;
+    }
+
+    for (const [watcherName, reportsForWatcher] of this.pendingWatcherCycleReports.entries()) {
+      reportsForWatcher.delete(containerId);
+      if (reportsForWatcher.size === 0) {
+        this.pendingWatcherCycleReports.delete(watcherName);
+      }
+    }
+  }
+
   private shouldPreserveClearedUpdateAvailable(container: Container): boolean {
     return (
       this.pendingFreshStateAfterRemoteUpdate.has(container.id) &&
       container.updateAvailable === true
     );
+  }
+
+  private buildContainerReport(container: Container, changedOverride?: boolean): ContainerReport {
+    container.agent = this.name;
+    // The container coming from Agent should already be normalized and have results
+    // We rely on the Agent to perform Registry checks if configured
+
+    // Strip redaction metadata (e.g. `sensitive`) that the agent's event
+    // emitter may attach — the controller's Joi schema does not allow it.
+    if (container.details?.env && Array.isArray(container.details.env)) {
+      container.details.env = container.details.env.map(({ key, value }) => ({ key, value }));
+    }
+
+    if (this.shouldPreserveClearedUpdateAvailable(container)) {
+      container = clearDetectedUpdateState(container);
+    } else if (container.updateAvailable === false) {
+      this.clearPendingFreshState(container.id);
+    }
+
+    // Save to store logic with Change Detection
+    const existing = storeContainer.getContainer(container.id);
+    const containerReport = {
+      container: container,
+      changed: false,
+    };
+
+    if (existing) {
+      containerReport.container = storeContainer.updateContainer(container);
+      // existing is the old state (from store), container is new state (from Agent)
+      // But storeContainer.updateContainer returns the NEW state object with validation/methods
+      // We use existing.resultChanged() to compare with the new state
+      if (existing.resultChanged) {
+        containerReport.changed =
+          existing.resultChanged(containerReport.container) &&
+          containerReport.container.updateAvailable;
+      }
+    } else {
+      containerReport.container = storeContainer.insertContainer(container);
+      containerReport.changed = true;
+    }
+
+    if (typeof changedOverride === 'boolean') {
+      containerReport.changed = changedOverride;
+    }
+
+    return containerReport;
   }
 
   private async processAuthoritativeContainer(container: Container): Promise<ContainerReport> {
@@ -249,7 +401,7 @@ export class AgentClient {
     for (const container of containers) {
       containerReports.push(await this.processAuthoritativeContainer(container));
     }
-    void emitContainerReports(containerReports);
+    await emitContainerReports(containerReports);
     return containerReports;
   }
 
@@ -321,46 +473,10 @@ export class AgentClient {
   }
 
   async processContainer(container: Container): Promise<ContainerReport> {
-    container.agent = this.name;
-    // The container coming from Agent should already be normalized and have results
-    // We rely on the Agent to perform Registry checks if configured
-
-    // Strip redaction metadata (e.g. `sensitive`) that the agent's event
-    // emitter may attach — the controller's Joi schema does not allow it.
-    if (container.details?.env && Array.isArray(container.details.env)) {
-      container.details.env = container.details.env.map(({ key, value }) => ({ key, value }));
-    }
-
-    if (this.shouldPreserveClearedUpdateAvailable(container)) {
-      container = clearDetectedUpdateState(container);
-    } else if (container.updateAvailable === false) {
-      this.clearPendingFreshState(container.id);
-    }
-
-    // Save to store logic with Change Detection
-    const existing = storeContainer.getContainer(container.id);
-    const containerReport = {
-      container: container,
-      changed: false,
-    };
-
-    if (existing) {
-      containerReport.container = storeContainer.updateContainer(container);
-      // existing is the old state (from store), container is new state (from Agent)
-      // But storeContainer.updateContainer returns the NEW state object with validation/methods
-      // We use existing.resultChanged() to compare with the new state
-      if (existing.resultChanged) {
-        containerReport.changed =
-          existing.resultChanged(containerReport.container) &&
-          containerReport.container.updateAvailable;
-      }
-    } else {
-      containerReport.container = storeContainer.insertContainer(container);
-      containerReport.changed = true;
-    }
+    const containerReport = this.buildContainerReport(container);
 
     // Emit report so Triggers can fire if changed
-    void emitContainerReport(containerReport);
+    await emitContainerReport(containerReport);
     return containerReport;
   }
 
@@ -394,28 +510,34 @@ export class AgentClient {
     }, reconnectDelay);
   }
 
-  private parseSseLine(line: string) {
+  private async parseSseLine(line: string) {
     if (!line.startsWith('data: ')) {
       return;
     }
     try {
       const payload = JSON.parse(line.substring(6)) as AgentSsePayload;
       if (payload.type && payload.data) {
-        this.handleEvent(payload.type as string, payload.data);
+        try {
+          await this.handleEvent(payload.type as string, payload.data);
+        } catch (error: unknown) {
+          this.log.error(
+            `Error handling SSE event ${sanitizeLogParam(String(payload.type))} (${getErrorMessage(error)})`,
+          );
+        }
       }
     } catch (error: unknown) {
       this.log.warn(`Error parsing SSE data: ${getErrorMessage(error)}`);
     }
   }
 
-  private processSseBuffer(buffer: string): string {
+  private async processSseBuffer(buffer: string): Promise<string> {
     const messages = buffer.split('\n\n');
     // The last element is either empty (if buffer ended with \n\n) or incomplete
     const remainder = messages.pop() || '';
 
     for (const message of messages) {
       for (const line of message.split('\n')) {
-        this.parseSseLine(line);
+        await this.parseSseLine(line);
       }
     }
     return remainder;
@@ -424,10 +546,22 @@ export class AgentClient {
   private attachStreamHandlers(stream: NodeJS.EventEmitter) {
     const decoder = new StringDecoder('utf8');
     let buffer = '';
+    let sseProcessing = Promise.resolve();
 
     stream.on('data', (chunk: Buffer) => {
-      buffer += decoder.write(chunk);
-      buffer = this.processSseBuffer(buffer);
+      const decodedChunk = decoder.write(chunk);
+      if (!decodedChunk) {
+        return;
+      }
+
+      sseProcessing = sseProcessing
+        .then(async () => {
+          buffer += decodedChunk;
+          buffer = await this.processSseBuffer(buffer);
+        })
+        .catch((error: unknown) => {
+          this.log.error(`SSE data processing failed: ${getErrorMessage(error)}`);
+        });
     });
     stream.on('error', (e: Error) => {
       this.log.error(`SSE Connection failed: ${e.message}`);
@@ -491,12 +625,14 @@ export class AgentClient {
   }
 
   private async handleContainerChangeEvent(data: unknown) {
-    await this.processContainer(data as Container);
+    const containerReport = await this.processContainer(data as Container);
+    this.rememberPendingWatcherCycleReport(containerReport);
   }
 
   private handleContainerRemovedEvent(data: unknown) {
     const removedContainerData = data as { id: string };
     this.clearPendingFreshState(removedContainerData.id);
+    this.clearPendingWatcherCycleReportByContainerId(removedContainerData.id);
     storeContainer.deleteContainer(removedContainerData.id);
   }
 
@@ -508,7 +644,18 @@ export class AgentClient {
       ? (snapshotPayload.containers as Container[])
       : [];
 
-    await this.processAuthoritativeContainers(containers);
+    const containerReports: ContainerReport[] = [];
+    for (const container of containers) {
+      const pendingContainerReport = this.takePendingWatcherCycleReport(watcherName, container);
+      if (pendingContainerReport) {
+        this.clearPendingFreshState(container.id);
+        containerReports.push(this.buildContainerReport(container, pendingContainerReport.changed));
+        continue;
+      }
+      containerReports.push(await this.processAuthoritativeContainer(container));
+    }
+    this.clearPendingWatcherCycleReports(watcherName);
+    await emitContainerReports(containerReports);
 
     if (watcherName) {
       this.pruneOldContainers(containers, watcherName);
@@ -604,6 +751,17 @@ export class AgentClient {
       case 'dd:update-applied':
         if (typeof data === 'string' && data.length > 0) {
           await emitContainerUpdateApplied(data);
+        } else if (isContainerUpdateAppliedEventPayload(data)) {
+          await emitContainerUpdateApplied({
+            containerName: data.containerName,
+            container:
+              data.container && typeof data.container === 'object'
+                ? {
+                    ...data.container,
+                    agent: this.name,
+                  }
+                : undefined,
+          });
         }
         return;
       case 'dd:update-failed': {
@@ -738,6 +896,21 @@ export class AgentClient {
       );
     } catch (error: unknown) {
       this.log.error(`Error deleting container on agent: ${getErrorMessage(error)}`);
+      throw error;
+    }
+  }
+
+  async getWatcher(watcherType: string, watcherName: string) {
+    try {
+      const response = await axios.get<AgentComponentDescriptor>(
+        `${this.baseUrl}/api/watchers/${encodeURIComponent(watcherType)}/${encodeURIComponent(watcherName)}`,
+        this.axiosOptions,
+      );
+      return response.data;
+    } catch (error: unknown) {
+      this.log.error(
+        `Error fetching watcher on agent: ${sanitizeLogParam(getErrorMessage(error))}`,
+      );
       throw error;
     }
   }

@@ -3,6 +3,7 @@ import {
   startContainer,
   stopContainer,
   updateContainer,
+  updateContainers,
 } from '@/services/container-actions';
 
 global.fetch = vi.fn();
@@ -139,7 +140,7 @@ describe('Container Actions Service', () => {
     it('posts to update endpoint', async () => {
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ message: 'Container updated successfully' }),
+        json: async () => ({ message: 'Container update accepted', operationId: 'op-123' }),
       } as any);
 
       const result = await updateContainer('abc123');
@@ -148,7 +149,21 @@ describe('Container Actions Service', () => {
         method: 'POST',
         credentials: 'include',
       });
-      expect(result).toEqual({ message: 'Container updated successfully' });
+      expect(result).toEqual({ message: 'Container update accepted', operationId: 'op-123' });
+    });
+
+    it('does not post client-authored batch metadata for single updates', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ message: 'Container update accepted', operationId: 'op-123' }),
+      } as any);
+
+      await updateContainer('abc123');
+
+      expect(fetch).toHaveBeenCalledWith('/api/v1/containers/abc123/update', {
+        method: 'POST',
+        credentials: 'include',
+      });
     });
 
     it('throws with server error message on failure', async () => {
@@ -174,6 +189,75 @@ describe('Container Actions Service', () => {
 
       await expect(updateContainer('abc123')).rejects.toThrow(
         'Failed to update container: Internal Server Error',
+      );
+    });
+  });
+
+  describe('updateContainers', () => {
+    it('posts to the bulk update endpoint', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          message: 'Container update requests processed',
+          accepted: [{ containerId: 'abc123', containerName: 'nginx', operationId: 'op-123' }],
+          rejected: [
+            {
+              containerId: 'def456',
+              containerName: 'redis',
+              statusCode: 400,
+              message: 'No update available for this container',
+            },
+          ],
+        }),
+      } as any);
+
+      const result = await updateContainers(['abc123', 'def456']);
+
+      expect(fetch).toHaveBeenCalledWith('/api/v1/containers/update', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          containerIds: ['abc123', 'def456'],
+        }),
+      });
+      expect(result).toEqual({
+        message: 'Container update requests processed',
+        accepted: [{ containerId: 'abc123', containerName: 'nginx', operationId: 'op-123' }],
+        rejected: [
+          {
+            containerId: 'def456',
+            containerName: 'redis',
+            statusCode: 400,
+            message: 'No update available for this container',
+          },
+        ],
+      });
+    });
+
+    it('throws with server error message on bulk update failure', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        statusText: 'Conflict',
+        json: async () => ({ error: 'Queue already active' }),
+      } as any);
+
+      await expect(updateContainers(['abc123'])).rejects.toThrow('Queue already active');
+    });
+
+    it('throws with statusText when bulk update error parsing fails', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        statusText: 'Internal Server Error',
+        json: async () => {
+          throw new Error('parse error');
+        },
+      } as any);
+
+      await expect(updateContainers(['abc123'])).rejects.toThrow(
+        'Failed to update containers: Internal Server Error',
       );
     });
   });

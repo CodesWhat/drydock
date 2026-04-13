@@ -180,6 +180,12 @@ interface DockerEventsStream {
   destroy?: () => void;
 }
 
+interface CronTaskWithNextMatch {
+  timeMatcher: {
+    getNextMatch: (fromDate: Date) => unknown;
+  };
+}
+
 interface DockerApiWithMutableModemHeaders {
   modem?: {
     headers?: Record<string, string>;
@@ -467,6 +473,52 @@ class Docker extends Watcher {
     );
   }
 
+  getNextScheduledRunDate(fromDate: Date = new Date()) {
+    if (!this.configuration.cron) {
+      return undefined;
+    }
+
+    try {
+      const task = cron.createTask(
+        this.configuration.cron,
+        () => {},
+      ) as unknown as CronTaskWithNextMatch;
+      const nextMatch = task.timeMatcher.getNextMatch(fromDate);
+      return nextMatch instanceof Date ? nextMatch : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  override getNextRunAt(): string | undefined {
+    const now = new Date();
+
+    if (!this.configuration.maintenancewindow) {
+      return this.getNextScheduledRunDate(now)?.toISOString();
+    }
+
+    if (this.maintenanceWindowWatchQueued) {
+      return this.getNextMaintenanceWindowDate(now)?.toISOString();
+    }
+
+    const nextScheduledRun = this.getNextScheduledRunDate(now);
+    if (!nextScheduledRun) {
+      return undefined;
+    }
+
+    if (
+      isInMaintenanceWindow(
+        this.configuration.maintenancewindow,
+        this.configuration.maintenancewindowtz,
+        nextScheduledRun,
+      )
+    ) {
+      return nextScheduledRun.toISOString();
+    }
+
+    return this.getNextMaintenanceWindowDate(nextScheduledRun)?.toISOString();
+  }
+
   clearMaintenanceWindowQueue() {
     if (this.maintenanceWindowQueueTimeout) {
       clearTimeout(this.maintenanceWindowQueueTimeout);
@@ -556,6 +608,10 @@ class Docker extends Watcher {
   }
 
   async initWatcher() {
+    await initWatcherWithRemoteAuth(this.asRemoteAuthWatcher());
+  }
+
+  async recreateDockerClient() {
     await initWatcherWithRemoteAuth(this.asRemoteAuthWatcher());
   }
 
@@ -995,20 +1051,22 @@ class Docker extends Watcher {
       const containerReportsSettled = await Promise.allSettled(
         containers.map((container) => this.watchContainer(container)),
       );
-      const containerReports = containerReportsSettled.map((containerReport, index) => {
+      const containerReports: ContainerReport[] = [];
+      for (const [index, containerReport] of containerReportsSettled.entries()) {
         if (containerReport.status === 'fulfilled') {
-          return containerReport.value;
+          containerReports.push(containerReport.value);
+          continue;
         }
         const message = getErrorMessage(containerReport.reason);
         this.log.warn(
           `Error when processing container ${fullName(containers[index])} (${message})`,
         );
         const fallbackContainerReport = buildFallbackContainerReport(containers[index], message);
-        event.emitContainerReport(fallbackContainerReport);
-        return fallbackContainerReport;
-      });
-      event.emitContainerReports(containerReports);
-      event.emitWatcherSnapshot({
+        await event.emitContainerReport(fallbackContainerReport);
+        containerReports.push(fallbackContainerReport);
+      }
+      await event.emitContainerReports(containerReports);
+      await event.emitWatcherSnapshot({
         watcher: {
           type: this.type,
           name: this.name,

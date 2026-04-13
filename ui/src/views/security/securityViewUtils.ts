@@ -151,15 +151,8 @@ export function buildSecurityEmptyState(input: SecurityViewEmptyStateInput): Sec
 export type VulnExportFormat = 'json' | 'csv';
 
 function escapeCsvField(value: string): string {
-  const sanitizedValue = /^[=+\-@]/.test(value) ? `'${value}` : value;
-  if (
-    sanitizedValue.includes(',') ||
-    sanitizedValue.includes('"') ||
-    sanitizedValue.includes('\n')
-  ) {
-    return `"${sanitizedValue.replace(/"/g, '""')}"`;
-  }
-  return sanitizedValue;
+  const sanitizedValue = /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
+  return `"${sanitizedValue.replace(/"/g, '""')}"`;
 }
 
 const VULN_CSV_COLUMNS = [
@@ -174,7 +167,7 @@ const VULN_CSV_COLUMNS = [
 ] as const;
 
 export function vulnReportToCsv(vulns: Vulnerability[]): string {
-  const rows = [VULN_CSV_COLUMNS.join(',')];
+  const rows = [VULN_CSV_COLUMNS.map(escapeCsvField).join(',')];
   for (const v of vulns) {
     rows.push(
       [

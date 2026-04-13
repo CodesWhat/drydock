@@ -1,4 +1,5 @@
 import type {
+  ContainerUpdateOperationKind,
   ContainerUpdateOperationPhase,
   ContainerUpdateOperationStatus,
 } from './update-operation';
@@ -10,6 +11,7 @@ export interface ApiComponent {
   name: string;
   configuration: Record<string, unknown>;
   agent?: string;
+  metadata?: Record<string, unknown>;
 }
 
 /** Agent shape returned by GET /api/agents. */
@@ -68,10 +70,15 @@ export type ApiContainerUpdateOperationPhase = ContainerUpdateOperationPhase;
 /** Persisted update-operation history entry from GET /api/containers/:id/update-operations. */
 export interface ApiContainerUpdateOperation {
   id: string;
+  kind?: ContainerUpdateOperationKind;
   status: ApiContainerUpdateOperationStatus;
   phase: ApiContainerUpdateOperationPhase;
   createdAt: string;
   updatedAt: string;
+  completedAt?: string;
+  batchId?: string;
+  queuePosition?: number;
+  queueTotal?: number;
   containerId?: string;
   containerName?: string;
   triggerName?: string;

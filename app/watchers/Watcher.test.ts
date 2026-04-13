@@ -75,12 +75,27 @@ test('maskConfiguration should return passed configuration when provided', () =>
 
 test('getMetadata should return lastRunAt as undefined when no watch has occurred', () => {
   const watcher = new ConcreteWatcher();
-  expect(watcher.getMetadata()).toStrictEqual({ lastRunAt: undefined });
+  expect(watcher.getMetadata()).toStrictEqual({ lastRunAt: undefined, nextRunAt: undefined });
 });
 
 test('getMetadata should return lastRunAt when set', () => {
   const watcher = new ConcreteWatcher();
   const now = '2026-03-20T12:00:00.000Z';
   watcher.lastRunAt = now;
-  expect(watcher.getMetadata()).toStrictEqual({ lastRunAt: now });
+  expect(watcher.getMetadata()).toStrictEqual({ lastRunAt: now, nextRunAt: undefined });
+});
+
+test('getMetadata should include nextRunAt when provided by the watcher', () => {
+  class WatcherWithNextRun extends ConcreteWatcher {
+    getNextRunAt(): string | undefined {
+      return '2026-03-20T13:00:00.000Z';
+    }
+  }
+
+  const watcher = new WatcherWithNextRun();
+
+  expect(watcher.getMetadata()).toStrictEqual({
+    lastRunAt: undefined,
+    nextRunAt: '2026-03-20T13:00:00.000Z',
+  });
 });

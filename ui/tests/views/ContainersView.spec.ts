@@ -64,6 +64,7 @@ vi.mock('@/services/container', () => ({
 vi.mock('@/services/container-actions', () => ({
   startContainer: vi.fn(),
   updateContainer: vi.fn(),
+  updateContainers: vi.fn(),
   stopContainer: vi.fn(),
   restartContainer: vi.fn(),
 }));
@@ -104,6 +105,7 @@ const mockFilterRegistry = ref('all');
 const mockFilterBouncer = ref('all');
 const mockFilterServer = ref('all');
 const mockFilterKind = ref('all');
+const mockFilterHidePinned = ref(false);
 
 vi.mock('@/composables/useContainerFilters', () => ({
   useContainerFilters: vi.fn(() => ({
@@ -113,6 +115,7 @@ vi.mock('@/composables/useContainerFilters', () => ({
     filterBouncer: mockFilterBouncer,
     filterServer: mockFilterServer,
     filterKind: mockFilterKind,
+    filterHidePinned: mockFilterHidePinned,
     showFilters: mockShowFilters,
     activeFilterCount: mockActiveFilterCount,
     filteredContainers: mockFilteredContainers,
@@ -218,7 +221,7 @@ const childStubs = {
   },
   DataFilterBar: {
     template:
-      '<div class="data-filter-bar"><slot name="filters" /><slot name="extra-buttons" /><slot name="left" /></div>',
+      '<div class="data-filter-bar"><slot v-if="showFilters" name="filters" /><slot name="extra-buttons" /><slot name="left" /><slot name="center" /></div>',
     props: ['modelValue', 'showFilters', 'filteredCount', 'totalCount', 'activeFilterCount'],
   },
   DataTable: defineComponent({
@@ -233,15 +236,21 @@ const childStubs = {
       'virtualScroll',
       'virtualRowHeight',
       'virtualMaxHeight',
+      'fullWidthRow',
+      'rowInteractive',
+      'rowClass',
     ],
     template: `
       <div class="data-table">
-        <div v-if="rows?.[0]" class="data-table-first-row">
-          <slot name="cell-name" :row="rows[0]" />
-          <slot name="cell-version" :row="rows[0]" />
-          <slot name="cell-status" :row="rows[0]" />
-          <slot name="cell-registry" :row="rows[0]" />
-          <slot name="actions" :row="rows[0]" />
+        <div v-for="row in rows" :key="rowKey ? (typeof rowKey === 'function' ? rowKey(row) : row[rowKey]) : row.id ?? row.name">
+          <slot v-if="typeof fullWidthRow === 'function' && fullWidthRow(row)" name="full-row" :row="row" />
+          <div v-else class="data-table-first-row">
+            <slot name="cell-name" :row="row" />
+            <slot name="cell-version" :row="row" />
+            <slot name="cell-status" :row="row" />
+            <slot name="cell-registry" :row="row" />
+            <slot name="actions" :row="row" />
+          </div>
         </div>
       </div>
     `,
@@ -300,7 +309,10 @@ import {
   scanContainer,
   updateContainerPolicy,
 } from '@/services/container';
-import { updateContainer as apiUpdateContainer } from '@/services/container-actions';
+import {
+  updateContainer as apiUpdateContainer,
+  updateContainers as apiUpdateContainers,
+} from '@/services/container-actions';
 
 const mockGetAllContainers = getAllContainers as ReturnType<typeof vi.fn>;
 const mockRefreshAllContainers = refreshAllContainers as ReturnType<typeof vi.fn>;
@@ -311,12 +323,16 @@ const mockGetContainerSbom = getContainerSbom as ReturnType<typeof vi.fn>;
 const mockScanContainer = scanContainer as ReturnType<typeof vi.fn>;
 const mockUpdateContainerPolicy = updateContainerPolicy as ReturnType<typeof vi.fn>;
 const mockApiUpdate = apiUpdateContainer as ReturnType<typeof vi.fn>;
+const mockApiUpdateBulk = apiUpdateContainers as ReturnType<typeof vi.fn>;
 const mountedWrappers: Array<{ unmount: () => void }> = [];
 
 function makeContainer(overrides: Partial<Container> = {}): Container {
+  const defaultName = overrides.name ?? 'nginx';
+  const defaultServer = overrides.server ?? 'Local';
   return {
     id: 'c1',
-    name: 'nginx',
+    identityKey: overrides.identityKey ?? `::${defaultServer}::${defaultName}`,
+    name: defaultName,
     image: 'nginx',
     icon: 'docker',
     currentTag: '1.0.0',
@@ -326,7 +342,7 @@ function makeContainer(overrides: Partial<Container> = {}): Container {
     updateKind: null,
     updateMaturity: null,
     bouncer: 'safe',
-    server: 'Local',
+    server: defaultServer,
     details: { ports: [], volumes: [], env: [], labels: [] },
     ...overrides,
   };
@@ -358,6 +374,7 @@ async function mountContainersView(
   mockFilterBouncer.value = 'all';
   mockFilterServer.value = 'all';
   mockFilterKind.value = options.initialFilterKind ?? 'all';
+  mockFilterHidePinned.value = false;
   mockSelectedContainer.value = null;
   mockDetailPanelOpen.value = false;
   mockContainerFullPage.value = false;
@@ -388,6 +405,15 @@ describe('ContainersView', () => {
     mockGetContainerSbom.mockResolvedValue({ format: 'spdx-json', document: {} });
     mockScanContainer.mockResolvedValue({});
     mockUpdateContainerPolicy.mockResolvedValue({});
+    mockApiUpdateBulk.mockImplementation(async (containerIds: string[]) => ({
+      message: 'Container update requests processed',
+      accepted: containerIds.map((containerId) => ({
+        containerId,
+        containerName: containerId,
+        operationId: `op-${containerId}`,
+      })),
+      rejected: [],
+    }));
     mockFilteredContainers.value = [];
     mockActiveFilterCount.value = 0;
     mockFilterSearch.value = '';
@@ -396,6 +422,7 @@ describe('ContainersView', () => {
     mockFilterBouncer.value = 'all';
     mockFilterServer.value = 'all';
     mockFilterKind.value = 'all';
+    mockFilterHidePinned.value = false;
     mockContainerScrollBlocked.value = false;
     mockContainerAutoFetchInterval.value = 0;
     mockDetailPanelStorageRead.mockReturnValue(null);
@@ -560,6 +587,46 @@ describe('ContainersView', () => {
     });
   });
 
+  describe('collapsed filter summary', () => {
+    it('shows active filter chips when filters are collapsed', async () => {
+      const wrapper = await mountContainersView([
+        makeContainer({ newTag: '2.0.0', updateKind: 'major' }),
+      ]);
+
+      mockFilterSearch.value = 'grafana';
+      mockFilterStatus.value = 'running';
+      mockFilterKind.value = 'any';
+      mockFilterHidePinned.value = true;
+      mockActiveFilterCount.value = 3;
+      await flushPromises();
+
+      expect(wrapper.text()).toContain('Search: grafana');
+      expect(wrapper.text()).toContain('Status: Running');
+      expect(wrapper.text()).toContain('Kind: Has Update');
+      expect(wrapper.text()).toContain('Hidden: Pinned');
+    });
+
+    it('hides active filter chips while the filter panel is open', async () => {
+      const wrapper = await mountContainersView([
+        makeContainer({ newTag: '2.0.0', updateKind: 'major' }),
+      ]);
+
+      mockFilterStatus.value = 'running';
+      mockFilterKind.value = 'any';
+      mockActiveFilterCount.value = 2;
+      await flushPromises();
+
+      expect(wrapper.text()).toContain('Status: Running');
+      expect(wrapper.text()).toContain('Kind: Has Update');
+
+      mockShowFilters.value = true;
+      await flushPromises();
+
+      expect(wrapper.text()).not.toContain('Status: Running');
+      expect(wrapper.text()).not.toContain('Kind: Has Update');
+    });
+  });
+
   describe('route-driven logs detail', () => {
     it('opens full-page logs tab for /containers/:id/logs', async () => {
       const targetContainer = makeContainer({ id: 'container-42', name: 'api' });
@@ -629,10 +696,10 @@ describe('ContainersView', () => {
       expect(wrapper.findAll('button[disabled]').length).toBeGreaterThan(0);
     });
 
-    it('disables virtual scrolling so the table flows with the page', async () => {
+    it('enables virtual scrolling for the grouped containers table', async () => {
       const wrapper = await mountContainersView([makeContainer()]);
       const dataTable = wrapper.findComponent(childStubs.DataTable as any);
-      expect(dataTable.props('virtualScroll')).toBe(false);
+      expect(dataTable.props('virtualScroll')).toBe(true);
     });
 
     it('renders DataFilterBar', async () => {
@@ -867,6 +934,31 @@ describe('ContainersView', () => {
 
       // Ghost entry should exist in actionPending
       expect(vm.actionPending.has('mycontainer')).toBe(true);
+    });
+
+    it('keeps a ghost row when only another host with the same name remains live', async () => {
+      const localNode = makeContainer({
+        id: 'c1',
+        name: 'docker-socket-proxy',
+        server: 'Datavault',
+      });
+      const remoteNode = makeContainer({
+        id: 'c2',
+        name: 'docker-socket-proxy',
+        server: 'Tmvault',
+      });
+      const wrapper = await mountContainersView([remoteNode]);
+      const vm = wrapper.vm as any;
+
+      vm.actionPending = new Map([['docker-socket-proxy', localNode]]);
+
+      const ghosts = vm.displayContainers.filter(
+        (container: Container & { _pending?: boolean }) => {
+          return container._pending;
+        },
+      );
+      expect(ghosts).toHaveLength(1);
+      expect(ghosts[0]?.id).toBe('c1');
     });
 
     it('uses a single poll timer for multiple pending actions', async () => {
@@ -1531,7 +1623,6 @@ describe('ContainersView', () => {
       ];
       const wrapper = await mountContainersView(containers);
       const vm = wrapper.vm as any;
-      mockApiUpdate.mockResolvedValue({});
 
       vm.groupByStack = true;
       vm.groupMembershipMap = { nginx: 'web-stack', redis: 'web-stack', postgres: 'web-stack' };
@@ -1539,23 +1630,31 @@ describe('ContainersView', () => {
 
       await vm.updateAllInGroup(vm.groupedContainers[0]);
 
-      expect(mockApiUpdate).toHaveBeenCalledTimes(2);
-      expect(mockApiUpdate).toHaveBeenNthCalledWith(1, 'c1');
-      expect(mockApiUpdate).toHaveBeenNthCalledWith(2, 'c3');
+      expect(mockApiUpdateBulk).toHaveBeenCalledWith(['c1', 'c3']);
+      expect(mockApiUpdate).not.toHaveBeenCalled();
     });
 
-    it('tracks group update-all loading state during execution', async () => {
+    it('marks the first grouped container as updating while the bulk request is in flight', async () => {
       const containers = [
         makeContainer({ id: 'c1', name: 'nginx', newTag: '2.0.0', updateKind: 'major' }),
         makeContainer({ id: 'c2', name: 'redis' }),
       ];
       const wrapper = await mountContainersView(containers);
       const vm = wrapper.vm as any;
-      const resolvers: Array<(value: unknown) => void> = [];
-      mockApiUpdate.mockImplementation(
-        () =>
+      let resolveBulkUpdate: (() => void) | undefined;
+      mockApiUpdateBulk.mockImplementation(
+        (containerIds: string[]) =>
           new Promise((resolve) => {
-            resolvers.push(resolve);
+            resolveBulkUpdate = () =>
+              resolve({
+                message: 'Container update requests processed',
+                accepted: containerIds.map((containerId) => ({
+                  containerId,
+                  containerName: containerId,
+                  operationId: `op-${containerId}`,
+                })),
+                rejected: [],
+              });
           }),
       );
 
@@ -1564,14 +1663,12 @@ describe('ContainersView', () => {
       await flushPromises();
 
       const pending = vm.updateAllInGroup(vm.groupedContainers[0]);
-      expect(vm.groupUpdateInProgress.has('web-stack')).toBe(true);
+      expect(vm.isContainerUpdateInProgress(containers[0])).toBe(true);
 
-      for (const resolve of resolvers) {
-        resolve({});
-      }
+      resolveBulkUpdate?.();
       await pending;
 
-      expect(vm.groupUpdateInProgress.has('web-stack')).toBe(false);
+      expect(vm.isContainerUpdateInProgress(containers[0])).toBe(true);
     });
 
     it('fetches groups when toggle is turned ON and map is empty', async () => {
@@ -1883,55 +1980,272 @@ describe('ContainersView', () => {
     });
 
     it('covers menu/picker/global/sse handlers and registry fallback tooltip', async () => {
-      const c = makeContainer({ id: 'c1', name: 'nginx' });
-      const wrapper = await mountContainersView(
-        [c],
-        [{ id: 'c1', name: 'nginx', displayName: 'nginx' }],
-      );
-      const vm = wrapper.vm as any;
+      vi.useFakeTimers();
+      try {
+        const c = makeContainer({ id: 'c1', name: 'nginx' });
+        const wrapper = await mountContainersView(
+          [c],
+          [{ id: 'c1', name: 'nginx', displayName: 'nginx' }],
+        );
+        const vm = wrapper.vm as any;
 
-      const event = {
-        currentTarget: {
-          getBoundingClientRect: () => ({ bottom: 120, right: 400, left: 80 }),
-        },
-      } as unknown as MouseEvent;
+        const event = {
+          currentTarget: {
+            getBoundingClientRect: () => ({ bottom: 120, right: 400, left: 80 }),
+          },
+        } as unknown as MouseEvent;
 
-      vm.toggleActionsMenu('nginx', event);
-      expect(vm.openActionsMenu).toBe('nginx');
-      vm.toggleActionsMenu('nginx', event);
-      expect(vm.openActionsMenu).toBeNull();
-      vm.toggleActionsMenu('nginx', event);
-      expect(vm.actionsMenuStyle.top).toBe('124px');
-      vm.closeActionsMenu();
-      expect(vm.openActionsMenu).toBeNull();
+        vm.toggleActionsMenu('nginx', event);
+        expect(vm.openActionsMenu).toBe('nginx');
+        vm.toggleActionsMenu('nginx', event);
+        expect(vm.openActionsMenu).toBeNull();
+        vm.toggleActionsMenu('nginx', event);
+        expect(vm.actionsMenuStyle.top).toBe('124px');
+        vm.closeActionsMenu();
+        expect(vm.openActionsMenu).toBeNull();
 
-      vm.toggleColumnPicker(event);
-      expect(vm.showColumnPicker).toBe(true);
-      expect(vm.columnPickerStyle.left).toBe('80px');
-      vm.toggleColumnPicker(event);
-      expect(vm.showColumnPicker).toBe(false);
+        vm.toggleColumnPicker(event);
+        expect(vm.showColumnPicker).toBe(true);
+        expect(vm.columnPickerStyle.left).toBe('80px');
+        vm.toggleColumnPicker(event);
+        expect(vm.showColumnPicker).toBe(false);
 
-      vm.openActionsMenu = 'nginx';
-      vm.showColumnPicker = true;
-      document.dispatchEvent(new MouseEvent('click'));
-      await flushPromises();
-      expect(vm.openActionsMenu).toBeNull();
-      expect(vm.showColumnPicker).toBe(false);
+        vm.openActionsMenu = 'nginx';
+        vm.showColumnPicker = true;
+        document.dispatchEvent(new MouseEvent('click'));
+        await flushPromises();
+        expect(vm.openActionsMenu).toBeNull();
+        expect(vm.showColumnPicker).toBe(false);
 
-      vm.selectedContainer = null;
-      globalThis.dispatchEvent(new Event('dd:sse-scan-completed'));
-      await flushPromises();
-      globalThis.dispatchEvent(new Event('dd:sse-container-changed'));
-      await flushPromises();
+        vm.selectedContainer = null;
+        globalThis.dispatchEvent(new Event('dd:sse-scan-completed'));
+        await flushPromises();
+        globalThis.dispatchEvent(new Event('dd:sse-container-changed'));
+        await flushPromises();
+        vi.advanceTimersByTime(500);
+        await flushPromises();
 
-      vm.selectedContainer = c;
-      globalThis.dispatchEvent(new Event('dd:sse-scan-completed'));
-      await flushPromises();
-      globalThis.dispatchEvent(new Event('dd:sse-container-changed'));
-      await flushPromises();
-      expect(mockGetAllContainers.mock.calls.length).toBeGreaterThan(1);
+        vm.selectedContainer = c;
+        globalThis.dispatchEvent(new Event('dd:sse-scan-completed'));
+        await flushPromises();
+        globalThis.dispatchEvent(new Event('dd:sse-container-changed'));
+        await flushPromises();
+        vi.advanceTimersByTime(500);
+        await flushPromises();
+        expect(mockGetAllContainers.mock.calls.length).toBeGreaterThan(1);
 
-      expect(vm.registryErrorTooltip(c)).toBe('Registry error');
+        expect(vm.registryErrorTooltip(c)).toBe('Registry error');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('debounces burst dd:sse-container-changed events into one refresh cycle', async () => {
+      vi.useFakeTimers();
+      const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
+      try {
+        const c = makeContainer({ id: 'c1', name: 'nginx' });
+        const wrapper = await mountContainersView(
+          [c],
+          [{ id: 'c1', name: 'nginx', displayName: 'nginx' }],
+        );
+        const vm = wrapper.vm as any;
+        const containerChangedListener = addEventListenerSpy.mock.calls.findLast(
+          ([eventName]) => eventName === 'dd:sse-container-changed',
+        )?.[1] as EventListener | undefined;
+
+        expect(containerChangedListener).toBeTypeOf('function');
+
+        vm.groupByStack = true;
+        vm.selectedContainer = c;
+        await flushPromises();
+
+        vi.clearAllTimers();
+        mockGetAllContainers.mockClear();
+        mockGetContainerGroups.mockClear();
+        mockGetContainerVulnerabilities.mockClear();
+        mockGetContainerSbom.mockClear();
+
+        containerChangedListener?.(new Event('dd:sse-container-changed'));
+        containerChangedListener?.(new Event('dd:sse-container-changed'));
+        containerChangedListener?.(new Event('dd:sse-container-changed'));
+        await flushPromises();
+
+        expect(mockGetAllContainers).not.toHaveBeenCalled();
+        expect(mockGetContainerGroups).not.toHaveBeenCalled();
+        expect(mockGetContainerVulnerabilities).not.toHaveBeenCalled();
+        expect(mockGetContainerSbom).not.toHaveBeenCalled();
+
+        vi.advanceTimersByTime(499);
+        await flushPromises();
+        expect(mockGetAllContainers).not.toHaveBeenCalled();
+        expect(mockGetContainerGroups).not.toHaveBeenCalled();
+
+        vi.advanceTimersByTime(1);
+        await flushPromises();
+
+        expect(mockGetAllContainers).toHaveBeenCalledTimes(1);
+        expect(mockGetContainerGroups).toHaveBeenCalledTimes(1);
+        expect(mockGetContainerVulnerabilities).toHaveBeenCalledTimes(1);
+        expect(mockGetContainerSbom).toHaveBeenCalledTimes(1);
+
+        wrapper.unmount();
+      } finally {
+        addEventListenerSpy.mockRestore();
+        vi.useRealTimers();
+      }
+    });
+
+    it('derives a held display update operation after raw terminal success', async () => {
+      const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
+      vi.useFakeTimers();
+      try {
+        const c = makeContainer({ id: 'c1', name: 'nginx' });
+        const wrapper = await mountContainersView(
+          [c],
+          [{ id: 'c1', name: 'nginx', displayName: 'nginx' }],
+        );
+        const vm = wrapper.vm as any;
+        const operationListener = addEventListenerSpy.mock.calls.findLast(
+          ([eventName]) => eventName === 'dd:sse-update-operation-changed',
+        )?.[1] as EventListener | undefined;
+
+        expect(operationListener).toBeTypeOf('function');
+
+        expect(vm.containers.find((c: any) => c.id === 'c1')?.updateOperation).toBeUndefined();
+
+        operationListener?.(
+          new CustomEvent('dd:sse-update-operation-changed', {
+            detail: {
+              operationId: 'op-1',
+              containerId: 'c1',
+              containerName: 'nginx',
+              status: 'in-progress',
+              phase: 'pulling',
+            },
+          }),
+        );
+
+        const patched = vm.containers.find((c: any) => c.id === 'c1');
+        expect(patched?.updateOperation).toBeDefined();
+        expect(patched.updateOperation.status).toBe('in-progress');
+        expect(patched.updateOperation.phase).toBe('pulling');
+        expect(vm.displayContainers.find((c: any) => c.id === 'c1')?.updateOperation?.status).toBe(
+          'in-progress',
+        );
+
+        vi.advanceTimersByTime(200);
+        operationListener?.(
+          new CustomEvent('dd:sse-update-operation-changed', {
+            detail: {
+              operationId: 'op-1',
+              containerId: 'c1',
+              containerName: 'nginx',
+              status: 'succeeded',
+              phase: 'succeeded',
+            },
+          }),
+        );
+
+        const rawCleared = vm.containers.find((c: any) => c.id === 'c1');
+        expect(rawCleared?.updateOperation).toBeUndefined();
+        expect(vm.isContainerUpdateInProgress(rawCleared)).toBe(true);
+        expect(vm.isContainerUpdateQueued(rawCleared)).toBe(false);
+        expect(vm.displayContainers.find((c: any) => c.id === 'c1')?.updateOperation?.status).toBe(
+          'in-progress',
+        );
+
+        vm.containers = [makeContainer({ id: 'c1', name: 'nginx' })];
+        await flushPromises();
+        expect(vm.isContainerUpdateInProgress(vm.containers[0])).toBe(true);
+        expect(vm.displayContainers.find((c: any) => c.id === 'c1')?.updateOperation?.status).toBe(
+          'in-progress',
+        );
+
+        vi.advanceTimersByTime(1299);
+        await flushPromises();
+        expect(vm.isContainerUpdateInProgress(vm.containers[0])).toBe(true);
+        expect(vm.displayContainers.find((c: any) => c.id === 'c1')?.updateOperation?.status).toBe(
+          'in-progress',
+        );
+
+        vi.advanceTimersByTime(1);
+        await flushPromises();
+
+        expect(vm.isContainerUpdateInProgress(vm.containers[0])).toBe(false);
+        expect(vm.isContainerUpdateQueued(vm.containers[0])).toBe(false);
+        expect(
+          vm.displayContainers.find((c: any) => c.id === 'c1')?.updateOperation,
+        ).toBeUndefined();
+
+        wrapper.unmount();
+      } finally {
+        addEventListenerSpy.mockRestore();
+        vi.useRealTimers();
+      }
+    });
+
+    it('drops the display hold immediately when the operation fails', async () => {
+      const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
+      vi.useFakeTimers();
+      try {
+        const c = makeContainer({ id: 'c1', name: 'nginx' });
+        const wrapper = await mountContainersView(
+          [c],
+          [{ id: 'c1', name: 'nginx', displayName: 'nginx' }],
+        );
+        const vm = wrapper.vm as any;
+        const operationListener = addEventListenerSpy.mock.calls.findLast(
+          ([eventName]) => eventName === 'dd:sse-update-operation-changed',
+        )?.[1] as EventListener | undefined;
+
+        expect(operationListener).toBeTypeOf('function');
+
+        operationListener?.(
+          new CustomEvent('dd:sse-update-operation-changed', {
+            detail: {
+              operationId: 'op-1',
+              containerId: 'c1',
+              containerName: 'nginx',
+              status: 'in-progress',
+              phase: 'pulling',
+            },
+          }),
+        );
+
+        expect(vm.isContainerUpdateInProgress(vm.containers[0])).toBe(true);
+
+        vi.advanceTimersByTime(200);
+        operationListener?.(
+          new CustomEvent('dd:sse-update-operation-changed', {
+            detail: {
+              operationId: 'op-1',
+              containerId: 'c1',
+              containerName: 'nginx',
+              status: 'failed',
+              phase: 'failed',
+            },
+          }),
+        );
+
+        expect(vm.containers.find((c: any) => c.id === 'c1')?.updateOperation).toBeUndefined();
+        expect(
+          vm.displayContainers.find((c: any) => c.id === 'c1')?.updateOperation,
+        ).toBeUndefined();
+        expect(vm.isContainerUpdateInProgress(vm.containers[0])).toBe(false);
+        expect(vm.isContainerUpdateQueued(vm.containers[0])).toBe(false);
+
+        vi.advanceTimersByTime(5000);
+        await flushPromises();
+        expect(
+          vm.displayContainers.find((c: any) => c.id === 'c1')?.updateOperation,
+        ).toBeUndefined();
+
+        wrapper.unmount();
+      } finally {
+        addEventListenerSpy.mockRestore();
+        vi.useRealTimers();
+      }
     });
   });
 });

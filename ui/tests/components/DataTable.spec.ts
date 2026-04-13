@@ -102,6 +102,29 @@ describe('DataTable', () => {
       expect(evenBg).toContain('dd-bg-card');
       expect(oddBg).toContain('dd-bg-inset');
     });
+
+    it('renders a full-width row slot when a row is marked full width', () => {
+      const mixedRows = [
+        { id: 'group-a', name: 'Group A', status: 'meta', kind: 'group' },
+        ...rows,
+      ];
+      const w = factory(
+        {
+          rows: mixedRows,
+          fullWidthRow: (row: { kind?: string }) => row.kind === 'group',
+        },
+        {
+          'full-row': ({ row }: any) => `<div class="full-row">Header: ${row.name}</div>`,
+        },
+      );
+
+      const firstRow = w.findAll('tbody tr')[0];
+      const cells = firstRow.findAll('td');
+
+      expect(cells).toHaveLength(1);
+      expect(cells[0].attributes('colspan')).toBe('3');
+      expect(firstRow.text()).toContain('Header: Group A');
+    });
   });
 
   describe('row key', () => {
@@ -228,6 +251,25 @@ describe('DataTable', () => {
     it('does not emit row-click on other keys', async () => {
       const w = factory();
       await w.findAll('tbody tr')[0].trigger('keydown', { key: 'Tab' });
+      expect(w.emitted('row-click')).toBeUndefined();
+    });
+
+    it('skips tabindex and row-click for non-interactive rows', async () => {
+      const mixedRows = [
+        { id: 'group-a', name: 'Group A', status: 'meta', kind: 'group' },
+        ...rows,
+      ];
+      const w = factory({
+        rows: mixedRows,
+        rowInteractive: (row: { kind?: string }) => row.kind !== 'group',
+      });
+
+      const firstRow = w.findAll('tbody tr')[0];
+      expect(firstRow.attributes('tabindex')).toBeUndefined();
+
+      await firstRow.trigger('click');
+      await firstRow.trigger('keydown', { key: 'Enter' });
+
       expect(w.emitted('row-click')).toBeUndefined();
     });
   });

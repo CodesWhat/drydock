@@ -2,12 +2,18 @@ import express, { type Request, type Response } from 'express';
 import nocache from 'nocache';
 import { getServerConfiguration } from '../configuration/index.js';
 import logger from '../log/index.js';
+import { sanitizeLogParam } from '../log/sanitize.js';
 import type { AuditEntry } from '../model/audit.js';
-import { clearDetectedUpdateState } from '../model/container.js';
+import { type Container, clearDetectedUpdateState } from '../model/container.js';
 import { getContainerActionsCounter } from '../prometheus/container-actions.js';
 import * as registry from '../registry/index.js';
 import * as storeContainer from '../store/container.js';
-import Trigger from '../triggers/providers/Trigger.js';
+import {
+  type RejectedContainerUpdateRequest,
+  requestContainerUpdate,
+  requestContainerUpdates,
+  UpdateRequestError,
+} from '../updates/request-update.js';
 import { recordAuditEvent } from './audit-events.js';
 import { findDockerTriggerForContainer, NO_DOCKER_TRIGGER_FOUND_ERROR } from './docker-trigger.js';
 import { sendErrorResponse } from './error-response.js';
@@ -44,6 +50,68 @@ type DockerWatcher = {
     getContainer: (id: string) => DockerContainerHandle;
   };
 };
+
+type BulkUpdateResponseItem = {
+  containerId: string;
+  containerName: string;
+  message?: string;
+  operationId?: string;
+  statusCode?: number;
+};
+
+function parseBulkContainerIds(body: unknown): string[] | undefined {
+  if (!body || typeof body !== 'object') {
+    return undefined;
+  }
+
+  const containerIds = (body as Record<string, unknown>).containerIds;
+  if (!Array.isArray(containerIds) || containerIds.length === 0) {
+    return undefined;
+  }
+
+  const normalized = containerIds
+    .map((value) => (typeof value === 'string' ? value.trim() : ''))
+    .filter((value) => value !== '');
+  if (normalized.length === 0) {
+    return undefined;
+  }
+
+  return Array.from(new Set(normalized));
+}
+
+function serializeRejectedUpdateRequest(
+  rejected: RejectedContainerUpdateRequest,
+): BulkUpdateResponseItem {
+  return {
+    containerId: rejected.container.id,
+    containerName: rejected.container.name,
+    statusCode: rejected.statusCode,
+    message: rejected.message,
+  };
+}
+
+function clearManualUpdateDetectionState(id: string) {
+  const containerAfterTrigger = storeContainer.getContainer(id);
+  if (
+    containerAfterTrigger &&
+    (containerAfterTrigger.result || containerAfterTrigger.updateAvailable)
+  ) {
+    const clearedAtMs = Date.now();
+    storeContainer.markPendingFreshStateAfterManualUpdate(containerAfterTrigger, clearedAtMs);
+    storeContainer.updateContainer(clearDetectedUpdateState(containerAfterTrigger));
+  }
+}
+
+function recordAcceptedUpdateFailure(id: string, container: Container, error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  log.warn(`Error updating container ${sanitizeLogParam(id)} (${sanitizeLogParam(message)})`);
+  recordAuditEvent({
+    action: 'container-update',
+    container,
+    status: 'error',
+    details: message,
+  });
+}
 
 /**
  * Execute a container action (start, stop, restart).
@@ -160,61 +228,100 @@ async function updateContainer(req: Request, res: Response) {
     return;
   }
 
-  if (!container.updateAvailable) {
-    sendErrorResponse(res, 400, 'No update available for this container');
-    return;
-  }
+  try {
+    const accepted = await requestContainerUpdate(container, {
+      onSuccess: () => {
+        clearManualUpdateDetectionState(id);
+        recordAuditEvent({ action: 'container-update', container, status: 'success' });
+      },
+      onFailure: (_accepted, error) => {
+        recordAcceptedUpdateFailure(id, container, error);
+      },
+    });
+    getContainerActionsCounter()?.inc({ action: 'container-update' });
+    res
+      .status(202)
+      .json({ message: 'Container update accepted', operationId: accepted.operationId });
+  } catch (error: unknown) {
+    if (error instanceof UpdateRequestError) {
+      sendErrorResponse(res, error.statusCode, error.message);
+      return;
+    }
 
-  if (Trigger.isRollbackContainer(container)) {
-    sendErrorResponse(
-      res,
-      409,
-      'Cannot update temporary rollback container renamed with -old-{timestamp}',
+    log.warn(
+      `Unexpected error accepting update for container ${sanitizeLogParam(id)} (${sanitizeLogParam(
+        error instanceof Error ? error.message : String(error),
+      )})`,
     );
+    sendErrorResponse(res, 500, 'Unable to accept container update');
+  }
+}
+
+async function updateContainers(req: Request, res: Response) {
+  const serverConfiguration = getServerConfiguration();
+  if (!serverConfiguration.feature.containeractions) {
+    sendErrorResponse(res, 403, 'Container actions are disabled');
     return;
   }
 
-  if (container.security?.scan?.status === 'blocked') {
-    sendErrorResponse(res, 409, 'Update blocked by security scan. Use force-update to override.');
+  const containerIds = parseBulkContainerIds(req.body);
+  if (!containerIds) {
+    sendErrorResponse(res, 400, 'containerIds must be a non-empty array of container ids');
     return;
   }
 
-  const trigger = findDockerTriggerForContainer(registry.getState().trigger, container, {
-    triggerTypes: ['docker', 'dockercompose'],
-  });
-  if (!trigger) {
-    sendErrorResponse(res, 404, NO_DOCKER_TRIGGER_FOUND_ERROR);
-    return;
+  const containers: Container[] = [];
+  const rejected: BulkUpdateResponseItem[] = [];
+
+  for (const id of containerIds) {
+    const container = storeContainer.getContainer(id);
+    if (!container) {
+      rejected.push({
+        containerId: id,
+        containerName: id,
+        statusCode: 404,
+        message: 'Container not found',
+      });
+      continue;
+    }
+    containers.push(container);
   }
 
   try {
-    await trigger.trigger(container);
-    // Drop stale raw update data so the next store validation recomputes this
-    // container as up to date until the watcher performs an authoritative rescan.
-    const containerAfterTrigger = storeContainer.getContainer(id);
-    if (
-      containerAfterTrigger &&
-      (containerAfterTrigger.result || containerAfterTrigger.updateAvailable)
-    ) {
-      const clearedAtMs = Date.now();
-      storeContainer.markPendingFreshStateAfterManualUpdate(containerAfterTrigger, clearedAtMs);
-      storeContainer.updateContainer(clearDetectedUpdateState(containerAfterTrigger));
-    }
-    const updatedContainer = storeContainer.getContainer(id);
-    recordAuditEvent({ action: 'container-update', container, status: 'success' });
-    getContainerActionsCounter()?.inc({ action: 'container-update' });
-    res.status(200).json({ message: 'Container updated successfully', result: updatedContainer });
-  } catch (e: unknown) {
-    handleContainerActionError({
-      error: e,
-      action: 'container-update',
-      actionLabel: 'updating',
-      id,
-      container,
-      log,
-      res,
+    const result = await requestContainerUpdates(containers, {
+      onSuccess: (accepted) => {
+        clearManualUpdateDetectionState(accepted.container.id);
+        recordAuditEvent({
+          action: 'container-update',
+          container: accepted.container,
+          status: 'success',
+        });
+      },
+      onFailure: (accepted, error) => {
+        recordAcceptedUpdateFailure(accepted.container.id, accepted.container, error);
+      },
     });
-    getContainerActionsCounter()?.inc({ action: 'container-update' });
+
+    result.accepted.forEach(() => {
+      getContainerActionsCounter()?.inc({ action: 'container-update' });
+    });
+
+    res.status(200).json({
+      message: 'Container update requests processed',
+      accepted: result.accepted.map((accepted) => ({
+        containerId: accepted.container.id,
+        containerName: accepted.container.name,
+        operationId: accepted.operationId,
+      })),
+      rejected: [...rejected, ...result.rejected.map(serializeRejectedUpdateRequest)],
+    });
+  } catch (error: unknown) {
+    log.warn(
+      `Unexpected error accepting bulk updates (${sanitizeLogParam(
+        error instanceof Error ? error.message : String(error),
+      )})`,
+    );
+    sendErrorResponse(res, 500, 'Unable to accept container updates');
   }
 }
 
@@ -224,6 +331,7 @@ async function updateContainer(req: Request, res: Response) {
  */
 export function init() {
   router.use(nocache());
+  router.post('/update', updateContainers);
   router.post('/:id/start', startContainer);
   router.post('/:id/stop', stopContainer);
   router.post('/:id/restart', restartContainer);

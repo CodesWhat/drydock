@@ -18,6 +18,7 @@ const {
   activeDetailTab,
   actionInProgress,
   isContainerUpdateInProgress,
+  isContainerUpdateQueued,
   confirmStop,
   startContainer,
   confirmRestart,
@@ -27,6 +28,10 @@ const {
   confirmDelete,
 } = useContainersViewTemplateContext();
 
+function isActionQueued(container: { id?: unknown; name?: unknown }) {
+  return isContainerUpdateQueued(container);
+}
+
 function isActionInProgress(container: { id?: unknown; name?: unknown }) {
   return (
     hasTrackedContainerAction(actionInProgress.value, container) ||
@@ -34,16 +39,28 @@ function isActionInProgress(container: { id?: unknown; name?: unknown }) {
   );
 }
 
+function isActionBlocked(container: { id?: unknown; name?: unknown }) {
+  return isActionInProgress(container) || isActionQueued(container);
+}
+
 function getStatusLabel(container: { id?: unknown; name?: unknown; status?: string }) {
-  return isActionInProgress(container) ? 'Updating' : (container.status ?? 'unknown');
+  if (isActionInProgress(container)) {
+    return 'Updating';
+  }
+  if (isActionQueued(container)) {
+    return 'Queued';
+  }
+  return container.status ?? 'unknown';
 }
 
 function getStatusTone(container: { id?: unknown; name?: unknown; status?: string }) {
-  return isActionInProgress(container)
-    ? 'warning'
-    : container.status === 'running'
-      ? 'success'
-      : 'danger';
+  if (isActionInProgress(container)) {
+    return 'warning';
+  }
+  if (isActionQueued(container)) {
+    return 'neutral';
+  }
+  return container.status === 'running' ? 'success' : 'danger';
 }
 </script>
 
@@ -66,7 +83,7 @@ function getStatusTone(container: { id?: unknown; name?: unknown; status?: strin
             icon="stop"
             size="xs"
             variant="danger"
-            :disabled="isActionInProgress(selectedContainer)"
+            :disabled="isActionBlocked(selectedContainer)"
             tooltip="Stop"
             @click="confirmStop(selectedContainer)" />
           <AppIconButton
@@ -74,21 +91,21 @@ function getStatusTone(container: { id?: unknown; name?: unknown; status?: strin
             icon="play"
             size="xs"
             variant="success"
-            :disabled="isActionInProgress(selectedContainer)"
+            :disabled="isActionBlocked(selectedContainer)"
             tooltip="Start"
             @click="startContainer(selectedContainer)" />
           <AppIconButton
             icon="restart"
             size="xs"
             variant="muted"
-            :disabled="isActionInProgress(selectedContainer)"
+            :disabled="isActionBlocked(selectedContainer)"
             tooltip="Restart"
             @click="confirmRestart(selectedContainer)" />
           <AppIconButton
             icon="security"
             size="xs"
             variant="secondary"
-            :disabled="isActionInProgress(selectedContainer)"
+            :disabled="isActionBlocked(selectedContainer)"
             tooltip="Scan"
             @click="scanContainer(selectedContainer)" />
           <AppIconButton
@@ -96,7 +113,7 @@ function getStatusTone(container: { id?: unknown; name?: unknown; status?: strin
             icon="lock"
             size="xs"
             variant="danger"
-            :disabled="isActionInProgress(selectedContainer)"
+            :disabled="isActionBlocked(selectedContainer)"
             tooltip="Blocked — Force Update"
             @click="confirmForceUpdate(selectedContainer)" />
           <AppIconButton
@@ -104,14 +121,14 @@ function getStatusTone(container: { id?: unknown; name?: unknown; status?: strin
             icon="cloud-download"
             size="xs"
             variant="success"
-            :disabled="isActionInProgress(selectedContainer)"
+            :disabled="isActionBlocked(selectedContainer)"
             tooltip="Update"
             @click="confirmUpdate(selectedContainer)" />
           <AppIconButton
             icon="trash"
             size="xs"
             variant="danger"
-            :disabled="isActionInProgress(selectedContainer)"
+            :disabled="isActionBlocked(selectedContainer)"
             tooltip="Delete"
             @click="confirmDelete(selectedContainer)" />
         </div>
@@ -119,7 +136,7 @@ function getStatusTone(container: { id?: unknown; name?: unknown; status?: strin
       <template #header>
         <div class="flex items-center gap-2 min-w-0">
           <StatusDot
-            :status="isActionInProgress(selectedContainer) ? 'warning' : selectedContainer.status === 'running' ? 'running' : 'stopped'"
+            :status="isActionBlocked(selectedContainer) ? 'warning' : selectedContainer.status === 'running' ? 'running' : 'stopped'"
             :pulse="isActionInProgress(selectedContainer)"
             v-tooltip.top="getStatusLabel(selectedContainer)"
             size="lg" />
@@ -140,6 +157,11 @@ function getStatusTone(container: { id?: unknown; name?: unknown; status?: strin
             name="spinner"
             :size="12"
             class="mr-1 dd-spin" />
+          <AppIcon
+            v-else-if="isActionQueued(selectedContainer)"
+            name="clock"
+            :size="12"
+            class="mr-1" />
           {{ getStatusLabel(selectedContainer) }}
         </AppBadge>
         <AppBadge tone="neutral" size="xs">

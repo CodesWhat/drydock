@@ -162,7 +162,7 @@ watchEffect(() => {
       <template v-if="showVulns">
         <div class="w-full mb-4" :style="{ borderTop: '1px solid var(--dd-border)' }" />
         <div class="w-full dd-text-label mb-3 dd-text-muted">Top Vulnerabilities</div>
-        <div class="w-full space-y-2.5 overflow-y-auto max-h-[200px]">
+        <div class="w-full space-y-2.5 overflow-y-auto overscroll-contain dd-scroll-stable dd-touch-scroll max-h-[200px]">
           <div v-for="vuln in vulnerabilities" :key="vuln.id"
             class="flex items-start gap-3 p-2.5 dd-rounded"
             :style="{ backgroundColor: 'var(--dd-bg-inset)' }">

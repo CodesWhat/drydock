@@ -44,6 +44,10 @@ function shouldBackfillMissingTagPrecision(from?: string, to?: string) {
   return semver.valid(from) ? semver.lt(from, TAG_PRECISION_BACKFILL_VERSION) : true;
 }
 
+export function repairDataOnStartup() {
+  backfillMissingTagPrecision();
+}
+
 /**
  * Data migration function.
  * @param from version

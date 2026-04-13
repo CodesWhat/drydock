@@ -263,8 +263,8 @@ export function initEvents() {
   event.registerWatcherSnapshot((payload: event.WatcherSnapshotEventPayload) =>
     sendSseEvent('dd:watcher-snapshot', sanitizeWatcherSnapshotPayloadForAgentSse(payload)),
   );
-  event.registerContainerUpdateApplied((containerName: string) =>
-    sendSseEvent('dd:update-applied', containerName),
+  event.registerContainerUpdateApplied((payload: event.ContainerUpdateAppliedEvent) =>
+    sendSseEvent('dd:update-applied', payload),
   );
   event.registerContainerUpdateFailed((payload: event.ContainerUpdateFailedEventPayload) =>
     sendSseEvent('dd:update-failed', payload),

@@ -15,10 +15,28 @@ interface HttpRequestOptions extends Omit<AxiosRequestConfig, 'proxy'> {
   };
 }
 
+const SUPPORTED_PROXY_PROTOCOLS = new Set(['http:', 'https:']);
+
 /**
  * HTTP Trigger implementation
  */
 class Http extends Trigger {
+  private parseProxyConfiguration(proxy: string): NonNullable<HttpRequestOptions['proxy']> {
+    const proxyUrl = new URL(proxy);
+    if (!SUPPORTED_PROXY_PROTOCOLS.has(proxyUrl.protocol)) {
+      throw new Error(
+        `Unable to configure HTTP trigger ${this.getId()}: proxy URL scheme "${proxyUrl.protocol}" is unsupported`,
+      );
+    }
+
+    const defaultProxyPort = proxyUrl.protocol === 'https:' ? 443 : 80;
+    const proxyPort = proxyUrl.port ? Number.parseInt(proxyUrl.port, 10) : defaultProxyPort;
+    return {
+      host: proxyUrl.hostname,
+      port: proxyPort,
+    };
+  }
+
   /**
    * Get the Trigger configuration schema.
    * @returns {*}
@@ -31,23 +49,37 @@ class Http extends Trigger {
           scheme: ['http', 'https'],
         })
         .required(),
-      method: this.joi.string().allow('GET').allow('POST').default('POST'),
-      auth: this.joi.object({
-        type: this.joi.string().uppercase().allow('BASIC').allow('BEARER').default('BASIC'),
-        user: this.joi.string().when('type', {
-          is: 'BASIC',
-          then: this.joi.required(),
+      method: this.joi.string().valid('GET', 'POST').default('POST'),
+      auth: this.joi
+        .object({
+          type: this.joi.string().uppercase().valid('BASIC', 'BEARER').default('BASIC'),
+          user: this.joi.string(),
+          password: this.joi.string(),
+          bearer: this.joi.string(),
+        })
+        .custom((auth, helpers) => {
+          const authType = auth.type as 'BASIC' | 'BEARER';
+          if (authType === 'BASIC') {
+            if (!auth.user) {
+              return helpers.error('auth.basic.userMissing');
+            }
+            if (!auth.password) {
+              return helpers.error('auth.basic.passwordMissing');
+            }
+          } else if (!auth.bearer) {
+            return helpers.error('auth.bearer.missing');
+          }
+
+          return auth;
+        }, 'HTTP auth validation')
+        .messages({
+          'auth.basic.userMissing': '"auth.user" is required',
+          'auth.basic.passwordMissing': '"auth.password" is required',
+          'auth.bearer.missing': '"auth.bearer" is required',
         }),
-        password: this.joi.string().when('type', {
-          is: 'BASIC',
-          then: this.joi.required(),
-        }),
-        bearer: this.joi.string().when('type', {
-          is: 'BEARER',
-          then: this.joi.required(),
-        }),
+      proxy: this.joi.string().uri({
+        scheme: ['http', 'https'],
       }),
-      proxy: this.joi.string(),
     });
   }
 
@@ -108,13 +140,7 @@ class Http extends Trigger {
       }
     }
     if (this.configuration.proxy) {
-      const proxyUrl = new URL(this.configuration.proxy);
-      const defaultProxyPort = proxyUrl.protocol === 'https:' ? 443 : 80;
-      const proxyPort = proxyUrl.port ? Number.parseInt(proxyUrl.port, 10) : defaultProxyPort;
-      options.proxy = {
-        host: proxyUrl.hostname,
-        port: proxyPort,
-      };
+      options.proxy = this.parseProxyConfiguration(this.configuration.proxy);
     }
     const response = await axios(options);
     return response.data;
