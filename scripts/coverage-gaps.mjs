@@ -140,7 +140,9 @@ function buildGapEntry(repoRoot, normalized, uncovered, detail) {
     file: path.relative(repoRoot, normalized),
     ...uncovered,
     uncoveredLines: detail ? Array.from(detail.uncoveredLines).sort((a, b) => a - b) : [],
-    uncoveredBranchLines: detail ? Array.from(detail.uncoveredBranchLines).sort((a, b) => a - b) : [],
+    uncoveredBranchLines: detail
+      ? Array.from(detail.uncoveredBranchLines).sort((a, b) => a - b)
+      : [],
     uncoveredBranches: detail ? detail.uncoveredBranches : [],
   };
 }
