@@ -11,7 +11,6 @@ import type {
   InProgressContainerUpdateOperationPhase,
   RolledBackContainerUpdateOperationPhase,
   SucceededContainerUpdateOperationPhase,
-  TerminalContainerUpdateOperationStatus,
 } from '../model/container-update-operation.js';
 import {
   ACTIVE_CONTAINER_UPDATE_OPERATION_STATUSES,

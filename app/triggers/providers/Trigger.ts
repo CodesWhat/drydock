@@ -16,7 +16,6 @@ import * as auditStore from '../../store/audit.js';
 import * as storeContainer from '../../store/container.js';
 import * as notificationStore from '../../store/notification.js';
 import {
-  type AcceptedContainerUpdateRequest,
   enqueueContainerUpdate,
   enqueueContainerUpdates,
   runAcceptedContainerUpdates,
