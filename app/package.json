@@ -50,7 +50,7 @@
     "mqtt": "5.15.0",
     "nocache": "4.0.0",
     "node-cron": "4.2.1",
-    "nodemailer": "^8.0.5",
+    "nodemailer": "8.0.5",
     "openid-client": "6.8.2",
     "p-limit": "7.3.0",
     "parse-docker-image-name": "3.0.0",
