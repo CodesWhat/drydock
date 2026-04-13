@@ -21,7 +21,7 @@ This matches the 2026 UX consensus from NNG, LogRocket, Polaris, Carbon, Vercel,
 
 ### Per-container card (everywhere: list, table, cards, side panel, full page, dashboard widget)
 
-```
+```text
 [spinner]  Updating
 [clock]    Queued
 [check]    Updated
@@ -37,6 +37,7 @@ Single phase label. No denominator. No ordinal position. Same string regardless 
 **Batch done:** returns to idle `Update all` (or shows a transient "All up to date" if nothing left to update)
 
 `2 of 5` = doneCount / frozenTotal, where:
+
 - `frozenTotal` is captured at the moment the user clicks "Update all" — specifically set to `response.accepted.length` so it reflects what the backend actually queued (not what the user requested, which may include rejected items).
 - Stored in a **module-scope composable at `ui/src/composables/useUpdateBatches.ts`**, keyed by **`groupKey`** (not `batchId` — see below). Drydock doesn't use Pinia; the existing pattern is module-scope singleton refs in composables (see `ui/src/composables/useToast.ts:14-15`).
 - `doneCount` = `frozenTotal − (containers in group whose updateOperation is still queued/in-progress)`.
@@ -63,6 +64,7 @@ Using `frozenTotal` instead of live `queueTotal` is mandatory because `markOpera
 - [ ] `ui/src/views/dashboard/components/DashboardRecentUpdatesWidget.vue:42-185` — rip out the independent batch-head tracking copy (`getBackendRowSequence`, `backendUpdateSequenceHeadByBatch`, `getRowUpdateLabel`). Replace with direct `container.updateOperation.status → phase label` read. No more parallel implementation.
 
 **Acceptance:**
+
 - No string in the UI of the form `\d+ of \d+` sourced from a container update operation.
 - Grep for `queuePosition` / `queueTotal` in `ui/src/` returns zero results outside of type definitions and the new group-header derivation (Phase 2).
 - Containers page, dashboard widget, and side/full-page detail panels all render the same status string for the same container at the same instant.
@@ -79,6 +81,7 @@ Using `frozenTotal` instead of live `queueTotal` is mandatory because `markOpera
 - [ ] Purge ephemeral refs: delete `groupUpdateInProgress`, `groupUpdateQueue`, `groupUpdateSequence` from `useContainerActions.ts:1111-1113` and all their callsites. Anything that needed them reads from `useUpdateBatches` or from `container.updateOperation` instead.
 
 **Acceptance:**
+
 - Click "Update all" on a stack with 3 containers → header immediately shows `Updating stack · 0 of 3 done`, button disabled.
 - As each container completes → `1 of 3`, `2 of 3`, `3 of 3`.
 - Navigate away mid-batch, come back → header still shows correct progress (Pinia store survived).
@@ -101,6 +104,7 @@ Using `frozenTotal` instead of live `queueTotal` is mandatory because `markOpera
 - [ ] LOCKED comment pattern (same as `DetailPanel.spec.ts`): add a `DO NOT REGRESS` block to the group header spec explaining that per-card N-of-M is a 2026 anti-pattern and linking to `.research-findings.md`.
 
 **Acceptance:**
+
 - `npm run test:unit` in `ui/` passes with 100% coverage maintained.
 - Coverage gap report (`.coverage-gaps.json`) is empty after the refactor.
 
@@ -132,16 +136,19 @@ Using `frozenTotal` instead of live `queueTotal` is mandatory because `markOpera
 ## Files Touched (summary)
 
 **Deleted / heavily refactored:**
+
 - `ui/src/views/containers/useContainerActions.ts` — `getContainerUpdateSequenceLabel`, ephemeral refs.
 - `ui/src/views/dashboard/components/DashboardRecentUpdatesWidget.vue` — batch-head tracking copy.
 
 **Modified:**
+
 - `ui/src/components/containers/ContainerSideDetail.vue`
 - `ui/src/components/containers/ContainerFullPageDetail.vue`
 - `ui/src/components/containers/ContainersGroupedViews.vue`
 - `ui/src/components/containers/ContainersGroupHeader.vue`
 
 **New:**
+
 - `ui/src/composables/useUpdateBatches.ts` — module-scope frozen-total tracking (pattern per `useToast.ts`).
 - `ui/tests/components/ContainersGroupHeader.spec.ts`
 - `ui/tests/composables/useUpdateBatches.spec.ts`

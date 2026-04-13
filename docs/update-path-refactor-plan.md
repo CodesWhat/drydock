@@ -31,7 +31,7 @@ That said, Drydock has a few repo-specific drift points the research does not co
 
 Architecture decision:
 
-4. Self-update should use the same persisted operation framework, admission path, queue contract, terminalization rules, and reconciliation logic as every other update, but it should be modeled as its own explicit operation kind rather than pretending to be a normal container recreate.
+1. Self-update should use the same persisted operation framework, admission path, queue contract, terminalization rules, and reconciliation logic as every other update, but it should be modeled as its own explicit operation kind rather than pretending to be a normal container recreate.
 
 The refactor must address those repo-specific issues, not just add another terminal helper.
 
