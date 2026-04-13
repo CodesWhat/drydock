@@ -438,7 +438,7 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
             </template>
             <template v-else>
               <td v-for="col in columns" :key="col.key"
-                  class="py-3 align-middle"
+                  class="py-3 align-top"
                   :class="col.icon ? 'text-center pl-5 pr-0' : ['overflow-hidden text-ellipsis', col.align ?? 'text-center', 'px-5']">
                 <slot :name="'cell-' + col.key" :row="row" :value="row[col.key]">
                   {{ row[col.key] }}
