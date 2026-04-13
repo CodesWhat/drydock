@@ -14,6 +14,7 @@ const {
   mockAuditCounterInc,
   mockGetInProgressOperationByContainerName,
   mockInsertAudit,
+  mockMarkOperationTerminal,
   mockRollbackCounterInc,
   mockRunHook,
   mockStartHealthMonitor,
@@ -1009,7 +1010,7 @@ describe('executeContainerUpdate', () => {
     expect(result).toBe(true);
     expect(context.currentContainer.rename).toHaveBeenCalledTimes(1);
     expect(mockRollbackCounterInc).not.toHaveBeenCalled();
-    expect(mockUpdateOperation).toHaveBeenCalledWith(
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
         status: 'succeeded',
@@ -1205,7 +1206,7 @@ describe('executeContainerUpdate', () => {
     await docker.executeContainerUpdate(context, createTriggerContainer(), logContainer);
 
     expect(staleTempContainer.remove).toHaveBeenCalledWith({ force: true });
-    expect(mockUpdateOperation).toHaveBeenCalledWith(
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
       'op-recover-1',
       expect.objectContaining({
         status: 'succeeded',

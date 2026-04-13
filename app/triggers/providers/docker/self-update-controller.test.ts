@@ -315,6 +315,75 @@ describe('self-update-controller orchestration', () => {
     );
   });
 
+  test('treats finalize exec streams without once handlers as immediate success', async () => {
+    const oldContainer = createOldContainer();
+    const newContainer = createNewContainer({
+      exec: vi.fn().mockResolvedValue({
+        start: vi.fn().mockResolvedValue({
+          resume: vi.fn(),
+          removeListener: vi.fn(),
+        }),
+        inspect: vi.fn().mockResolvedValue({ ExitCode: 0 }),
+      }),
+    });
+    mockDocker(oldContainer, newContainer);
+
+    await runSelfUpdateController();
+
+    expect(oldContainer.remove).toHaveBeenCalledWith({ force: true });
+    expect(getLoggedStates().some((line) => line.includes('FINALIZE_FAILED'))).toBe(false);
+  });
+
+  test('logs finalize callback stream errors and keeps the controller moving', async () => {
+    const oldContainer = createOldContainer();
+    const newContainer = createNewContainer({
+      exec: vi.fn().mockResolvedValue({
+        start: vi.fn().mockResolvedValue({
+          once: vi.fn((event: string, callback: (error?: unknown) => void) => {
+            if (event === 'error') {
+              queueMicrotask(() => callback(new Error('stream exploded')));
+            }
+          }),
+          removeListener: vi.fn(),
+          resume: vi.fn(),
+        }),
+        inspect: vi.fn(),
+      }),
+    });
+    mockDocker(oldContainer, newContainer);
+
+    await runSelfUpdateController();
+
+    expect(oldContainer.remove).toHaveBeenCalledWith({ force: true });
+    expect(getLoggedStates()).toContain('[self-update:op-123] FINALIZE_FAILED - stream exploded');
+  });
+
+  test('logs finalize callback exit code failures and keeps the controller moving', async () => {
+    const oldContainer = createOldContainer();
+    const newContainer = createNewContainer({
+      exec: vi.fn().mockResolvedValue({
+        start: vi.fn().mockResolvedValue({
+          once: vi.fn((event: string, callback: () => void) => {
+            if (event === 'end' || event === 'close') {
+              queueMicrotask(() => callback());
+            }
+          }),
+          removeListener: vi.fn(),
+          resume: vi.fn(),
+        }),
+        inspect: vi.fn().mockResolvedValue({ ExitCode: 1 }),
+      }),
+    });
+    mockDocker(oldContainer, newContainer);
+
+    await runSelfUpdateController();
+
+    expect(oldContainer.remove).toHaveBeenCalledWith({ force: true });
+    expect(getLoggedStates()).toContain(
+      '[self-update:op-123] FINALIZE_FAILED - Self-update finalize callback failed for op-123 with exit code 1',
+    );
+  });
+
   test('times out waiting for old container to stop and rolls back', async () => {
     setControllerEnv({
       DD_SELF_UPDATE_START_TIMEOUT_MS: '3',

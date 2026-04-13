@@ -51,8 +51,6 @@ export async function readCoverageFileWithRetry(filename: string): Promise<strin
       await sleep(COVERAGE_READ_RETRY_DELAY_MS);
     }
   }
-
-  throw new Error(`Unable to read coverage file "${filename}"`);
 }
 
 export async function writeCoverageFileWithRetry(filename: string, content: string): Promise<void> {
@@ -69,8 +67,6 @@ export async function writeCoverageFileWithRetry(filename: string, content: stri
       await sleep(COVERAGE_WRITE_RETRY_DELAY_MS);
     }
   }
-
-  throw new Error(`Unable to write coverage file "${filename}"`);
 }
 
 export function resolveReportsDirectory(

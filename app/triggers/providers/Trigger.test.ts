@@ -6,6 +6,7 @@ import log from '../../log/index.js';
 import * as auditStore from '../../store/audit.js';
 import * as storeContainer from '../../store/container.js';
 import * as notificationStore from '../../store/notification.js';
+import { UpdateRequestError } from '../../updates/request-update.js';
 import Trigger, {
   buildLiteralTemplateExpression,
   getNotificationEvent,
@@ -15,6 +16,7 @@ import Trigger, {
 const mockTriggerCounterInc = vi.hoisted(() => vi.fn());
 const mockGetAgents = vi.hoisted(() => vi.fn(() => []));
 const mockGetServerName = vi.hoisted(() => vi.fn(() => 'controller-host'));
+const forceRejectedUpdateBatch = vi.hoisted(() => ({ enabled: false }));
 
 vi.mock('node-cron');
 vi.mock('../../log');
@@ -43,6 +45,31 @@ vi.mock('../../store/container.js', () => ({
   getContainers: vi.fn(() => []),
   getContainersRaw: vi.fn(() => []),
 }));
+vi.mock('../../updates/request-update.js', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../../updates/request-update.js')>();
+  return {
+    ...original,
+    enqueueContainerUpdates: vi.fn(
+      async (...args: Parameters<typeof original.enqueueContainerUpdates>) => {
+        if (forceRejectedUpdateBatch.enabled) {
+          const useNotificationKey = Array.isArray(args[0]) && args[0][0]?.id === 'with-key';
+          return {
+            accepted: [],
+            rejected: [
+              {
+                container: useNotificationKey
+                  ? ({ id: 'c1', name: 'app', watcher: 'test' } as any)
+                  : ({} as any),
+                message: 'rejected',
+              },
+            ],
+          };
+        }
+        return original.enqueueContainerUpdates(...args);
+      },
+    ),
+  };
+});
 vi.mock('../../prometheus/trigger', () => ({
   getTriggerCounter: () => ({
     inc: mockTriggerCounterInc,
@@ -5374,6 +5401,162 @@ describe('digest mode', () => {
     expect(triggerBatchSpy).toHaveBeenCalledTimes(2);
     expect(triggerBatchSpy).toHaveBeenNthCalledWith(2, [expect.objectContaining({ name: 'app' })]);
     triggerBatchSpy.mockRestore();
+  });
+
+  test('flushDigestBuffer should use the accepted update batch path for action triggers', async () => {
+    const actionTrigger = Object.create(Trigger.prototype) as any;
+    actionTrigger.configuration = { ...configurationValid, mode: 'digest' };
+    actionTrigger.type = 'docker';
+    actionTrigger.log = trigger.log;
+    actionTrigger.digestBuffer = new Map();
+    actionTrigger.digestBufferUpdatedAt = new Map();
+    actionTrigger.batchRetryBuffer = new Map();
+    actionTrigger.batchRetryBufferUpdatedAt = new Map();
+    actionTrigger.isDigestFlushInProgress = false;
+    actionTrigger.pruneDigestBuffer = vi.fn();
+    actionTrigger.deleteBufferedContainerEntry = vi.fn(
+      (buffer: Map<string, unknown>, updatedAt: Map<string, unknown>, key: string) => {
+        buffer.delete(key);
+        updatedAt.delete(key);
+        return true;
+      },
+    );
+    actionTrigger.incrementTriggerCounter = vi.fn();
+    actionTrigger.isUpdateActionTrigger = () => true;
+    const runAcceptedUpdateBatch = vi.fn().mockResolvedValue(undefined);
+    actionTrigger.runAcceptedUpdateBatch = runAcceptedUpdateBatch;
+    actionTrigger.triggerBatch = vi.fn();
+
+    const container = {
+      id: 'c1',
+      name: 'app',
+      watcher: 'test',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+    };
+    actionTrigger.digestBuffer.set('c1', container as any);
+    actionTrigger.digestBufferUpdatedAt = new Map([['c1', 1_000]]);
+    storeContainer.getContainersRaw.mockReturnValue([container]);
+
+    expect(actionTrigger.isUpdateActionTrigger()).toBe(true);
+
+    await actionTrigger.flushDigestBuffer();
+    expect(runAcceptedUpdateBatch).toHaveBeenCalledTimes(1);
+    expect(actionTrigger.digestBuffer.size).toBe(0);
+    expect(actionTrigger.digestBufferUpdatedAt.size).toBe(0);
+  });
+
+  test('handleContainerReports should use the accepted update batch path for action triggers', async () => {
+    trigger.configuration.mode = 'batch';
+    vi.spyOn(trigger as any, 'isUpdateActionTrigger').mockReturnValue(true);
+    const runAcceptedUpdateBatchSpy = vi
+      .spyOn(trigger as any, 'runAcceptedUpdateBatch')
+      .mockResolvedValue(undefined);
+
+    await trigger.handleContainerReports([
+      {
+        container: {
+          id: 'c1',
+          name: 'app',
+          watcher: 'test',
+          updateAvailable: true,
+          updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+        },
+        changed: true,
+      } as any,
+    ]);
+
+    expect(runAcceptedUpdateBatchSpy).toHaveBeenCalledWith([expect.objectContaining({ id: 'c1' })]);
+  });
+
+  test('runAcceptedUpdateBatch should skip rejected-only batches', async () => {
+    forceRejectedUpdateBatch.enabled = true;
+    const debugSpy = vi.spyOn(trigger.log, 'debug').mockImplementation(() => undefined);
+    try {
+      await expect(
+        (trigger as any).runAcceptedUpdateBatch([
+          {
+            id: 'c1',
+            name: 'app',
+            watcher: 'test',
+            updateAvailable: false,
+          },
+        ]),
+      ).resolves.toBeUndefined();
+      expect(debugSpy).toHaveBeenCalledWith(expect.stringContaining('Skipped batched auto update'));
+    } finally {
+      debugSpy.mockRestore();
+      forceRejectedUpdateBatch.enabled = false;
+    }
+  });
+
+  test('runAcceptedUpdateBatch should log rejected batches with notification keys', async () => {
+    forceRejectedUpdateBatch.enabled = true;
+    const debugSpy = vi.spyOn(trigger.log, 'debug').mockImplementation(() => undefined);
+    try {
+      await expect(
+        (trigger as any).runAcceptedUpdateBatch([
+          {
+            id: 'with-key',
+            name: 'app',
+            watcher: 'test',
+            updateAvailable: false,
+          },
+        ]),
+      ).resolves.toBeUndefined();
+      expect(debugSpy).toHaveBeenCalledWith(expect.stringContaining('Skipped batched auto update'));
+    } finally {
+      debugSpy.mockRestore();
+      forceRejectedUpdateBatch.enabled = false;
+    }
+  });
+
+  test('runAcceptedUpdateBatch should fall back to fullName for rejected containers without a notification key', async () => {
+    const debugSpy = vi.spyOn(trigger.log, 'debug').mockImplementation(() => undefined);
+    try {
+      await expect(
+        (trigger as any).runAcceptedUpdateBatch([
+          {
+            updateAvailable: false,
+          } as any,
+        ]),
+      ).resolves.toBeUndefined();
+      expect(debugSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Skipped batched auto update for undefined_undefined'),
+      );
+    } finally {
+      debugSpy.mockRestore();
+    }
+  });
+
+  test('handleUpdateAvailableSimpleTriggerError should skip update request errors', () => {
+    const debugSpy = vi.spyOn(trigger.log, 'debug').mockImplementation(() => undefined);
+    const error = new UpdateRequestError(400, 'No update available for this container');
+
+    expect(
+      (trigger as any).handleUpdateAvailableSimpleTriggerError(error, { id: 'c1' }, trigger.log),
+    ).toBeUndefined();
+    expect(debugSpy).toHaveBeenCalledWith(
+      'Skipped auto update (No update available for this container)',
+    );
+
+    debugSpy.mockRestore();
+  });
+
+  test('runAcceptedUpdateBatch should execute accepted batches', async () => {
+    trigger.type = 'docker';
+
+    await expect(
+      (trigger as any).runAcceptedUpdateBatch([
+        {
+          id: 'c1',
+          name: 'app',
+          watcher: 'test',
+          updateAvailable: true,
+          updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+        },
+      ]),
+    ).resolves.toBeUndefined();
   });
 
   test('digest cron callback should invoke flushDigestBuffer', async () => {

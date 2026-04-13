@@ -326,6 +326,44 @@ describe('Update Operation Store', () => {
     );
   });
 
+  test('updateOperation should default queued active phases correctly', () => {
+    const inserted = updateOperation.insertOperation({
+      containerName: 'web',
+      status: 'in-progress',
+      phase: 'prepare',
+    });
+
+    const updated = updateOperation.updateOperation(inserted.id, {
+      status: 'queued',
+    });
+
+    expect(updated).toEqual(
+      expect.objectContaining({
+        status: 'queued',
+        phase: 'queued',
+      }),
+    );
+  });
+
+  test('updateOperation should preserve the existing status when only phase changes', () => {
+    const inserted = updateOperation.insertOperation({
+      containerName: 'web',
+      status: 'in-progress',
+      phase: 'prepare',
+    });
+
+    const updated = updateOperation.updateOperation(inserted.id, {
+      phase: 'queued',
+    });
+
+    expect(updated).toEqual(
+      expect.objectContaining({
+        status: 'in-progress',
+        phase: 'prepare',
+      }),
+    );
+  });
+
   test('updateOperation should return undefined when operation id does not exist', () => {
     const result = updateOperation.updateOperation('missing-id', { status: 'in-progress' });
     expect(result).toBeUndefined();
@@ -491,6 +529,134 @@ describe('Update Operation Store', () => {
     );
   });
 
+  test('reopenTerminalOperation should reject terminal phases and terminal completedAt strings', () => {
+    const inserted = updateOperation.insertOperation({
+      containerName: 'web',
+      status: 'failed',
+      phase: 'failed',
+      completedAt: '2026-02-23T00:00:00.000Z',
+    });
+
+    expect(() =>
+      updateOperation.reopenTerminalOperation(inserted.id, {
+        status: 'in-progress',
+        phase: 'failed',
+      }),
+    ).toThrow(
+      'reopenTerminalOperation only accepts active phases; use markOperationTerminal() for terminal transitions',
+    );
+
+    expect(() =>
+      updateOperation.reopenTerminalOperation(inserted.id, {
+        status: 'in-progress',
+        phase: 'pulling',
+        completedAt: '2026-02-23T00:01:00.000Z',
+      } as any),
+    ).toThrow('reopenTerminalOperation cannot set completedAt to a string value');
+  });
+
+  test('reopenTerminalOperation should return undefined for missing rows and reject active rows', () => {
+    expect(
+      updateOperation.reopenTerminalOperation('missing-op', {
+        status: 'in-progress',
+        phase: 'pulling',
+      }),
+    ).toBeUndefined();
+
+    const active = updateOperation.insertOperation({
+      containerName: 'web',
+      status: 'in-progress',
+      phase: 'pulling',
+    });
+
+    expect(() =>
+      updateOperation.reopenTerminalOperation(active.id, {
+        status: 'in-progress',
+        phase: 'pulling',
+      }),
+    ).toThrow(
+      'reopenTerminalOperation only accepts terminal operations; use updateOperation() for active rows',
+    );
+  });
+
+  test('reopenTerminalOperation should reject terminal statuses from a terminal row', () => {
+    const inserted = updateOperation.insertOperation({
+      containerName: 'web',
+      status: 'failed',
+      phase: 'failed',
+      completedAt: '2026-02-23T00:00:00.000Z',
+    });
+
+    expect(() =>
+      updateOperation.reopenTerminalOperation(inserted.id, {
+        status: 'failed' as any,
+        phase: 'pulling',
+      }),
+    ).toThrow(
+      'reopenTerminalOperation only accepts active statuses; use markOperationTerminal() for terminal transitions',
+    );
+  });
+
+  test('markOperationTerminal should return undefined when the row disappears between lookup and patch', async () => {
+    vi.resetModules();
+    const fresh = await import('./update-operation.js');
+    let lookupCount = 0;
+    const collection = {
+      insert: vi.fn(),
+      find: vi.fn(() => []),
+      findOne: vi.fn(() => {
+        lookupCount += 1;
+        if (lookupCount === 1) {
+          return {
+            data: {
+              id: 'op-1',
+              containerName: 'web',
+              status: 'queued',
+              phase: 'queued',
+              createdAt: '2026-02-23T00:00:00.000Z',
+              updatedAt: '2026-02-23T00:00:00.000Z',
+            },
+          };
+        }
+        return null;
+      }),
+      remove: vi.fn(),
+    };
+
+    fresh.createCollections({
+      getCollection: () => collection,
+      addCollection: () => collection,
+    } as any);
+
+    expect(
+      fresh.markOperationTerminal('op-1', {
+        status: 'failed',
+        lastError: 'lost row',
+      }),
+    ).toBeUndefined();
+  });
+
+  test('reopenTerminalOperation should default invalid active phases to the active default', () => {
+    const inserted = updateOperation.insertOperation({
+      containerName: 'web',
+      status: 'failed',
+      phase: 'failed',
+      completedAt: '2026-02-23T00:00:00.000Z',
+    });
+
+    const reopened = updateOperation.reopenTerminalOperation(inserted.id, {
+      status: 'in-progress',
+      phase: 'queued',
+    });
+
+    expect(reopened).toEqual(
+      expect.objectContaining({
+        status: 'in-progress',
+        phase: 'prepare',
+      }),
+    );
+  });
+
   test('markOperationTerminal should set completedAt, clear queue metadata, and default failed phase', () => {
     vi.useFakeTimers();
     try {
@@ -559,6 +725,27 @@ describe('Update Operation Store', () => {
     }
   });
 
+  test('markOperationTerminal should return undefined when the operation is missing and preserve terminal rows', () => {
+    expect(
+      updateOperation.markOperationTerminal('missing-op', { status: 'failed' }),
+    ).toBeUndefined();
+
+    const terminal = updateOperation.insertOperation({
+      containerName: 'web',
+      status: 'failed',
+      phase: 'failed',
+      completedAt: '2026-02-23T00:00:00.000Z',
+      lastError: 'already done',
+    });
+
+    expect(
+      updateOperation.markOperationTerminal(terminal.id, {
+        status: 'failed',
+        lastError: 'new error',
+      }),
+    ).toEqual(terminal);
+  });
+
   test('getInProgressOperationByContainerName should return latest in-progress operation', () => {
     const older = updateOperation.insertOperation({
       containerName: 'web',
@@ -612,6 +799,53 @@ describe('Update Operation Store', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  test('getInProgressOperationByContainerId should ignore non-in-progress documents returned by the collection', () => {
+    const collection = {
+      insert: vi.fn(),
+      remove: vi.fn(),
+      find: vi.fn((query: Record<string, string> = {}) => {
+        if (query['data.containerId'] === 'container-1' && query['data.status'] === 'in-progress') {
+          return [
+            {
+              data: {
+                id: 'op-1',
+                containerId: 'container-1',
+                status: 'failed',
+                phase: 'failed',
+              },
+            },
+          ];
+        }
+
+        if (
+          query['data.newContainerId'] === 'container-1' &&
+          query['data.status'] === 'in-progress'
+        ) {
+          return [
+            {
+              data: {
+                id: 'op-2',
+                newContainerId: 'container-1',
+                status: 'succeeded',
+                phase: 'succeeded',
+              },
+            },
+          ];
+        }
+
+        return [];
+      }),
+      findOne: vi.fn(),
+    };
+
+    updateOperation.createCollections({
+      getCollection: () => collection,
+      addCollection: () => collection,
+    } as any);
+
+    expect(updateOperation.getInProgressOperationByContainerId('container-1')).toBeUndefined();
   });
 
   test('getInProgressOperationByContainerId should return operation matching the container ID', () => {

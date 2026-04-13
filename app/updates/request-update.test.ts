@@ -6,12 +6,14 @@ const {
   mockGetActiveOperationByContainerName,
   mockInsertOperation,
   mockMarkOperationTerminal,
+  mockGetState,
 } = vi.hoisted(() => ({
   mockGetOperationById: vi.fn(),
   mockGetActiveOperationByContainerId: vi.fn(),
   mockGetActiveOperationByContainerName: vi.fn(),
   mockInsertOperation: vi.fn(),
   mockMarkOperationTerminal: vi.fn(),
+  mockGetState: vi.fn(() => ({ trigger: {} })),
 }));
 
 vi.mock('../store/update-operation.js', () => ({
@@ -23,7 +25,7 @@ vi.mock('../store/update-operation.js', () => ({
 }));
 
 vi.mock('../registry/index.js', () => ({
-  getState: vi.fn(() => ({ trigger: {} })),
+  getState: mockGetState,
 }));
 
 vi.mock('../log/index.js', () => ({
@@ -31,6 +33,8 @@ vi.mock('../log/index.js', () => ({
 }));
 
 import {
+  buildAcceptedUpdateRuntimeContext,
+  enqueueContainerUpdate,
   enqueueContainerUpdates,
   requestContainerUpdate,
   runAcceptedContainerUpdates,
@@ -58,6 +62,7 @@ describe('request-update', () => {
     mockGetOperationById.mockReturnValue(undefined);
     mockGetActiveOperationByContainerId.mockReturnValue(undefined);
     mockGetActiveOperationByContainerName.mockReturnValue(undefined);
+    mockGetState.mockReturnValue({ trigger: {} });
     mockInsertOperation.mockImplementation((operation) => ({
       id: operation.id || 'op-1',
       ...operation,
@@ -156,6 +161,153 @@ describe('request-update', () => {
         queueTotal: 2,
       }),
     );
+  });
+
+  test('requestContainerUpdate resolves an explicit dockercompose triggerTypes override', async () => {
+    const trigger = {
+      type: 'dockercompose',
+      configuration: { file: '/opt/drydock/test/monitoring.yml' },
+      getDefaultComposeFilePath: vi.fn(() => '/opt/drydock/test/monitoring.yml'),
+      getComposeFilesForContainer: vi.fn(() => ['/opt/drydock/test/monitoring.yml']),
+      trigger: vi.fn().mockResolvedValue(undefined),
+    };
+    mockGetState.mockReturnValue({
+      trigger: {
+        'dockercompose.compose': trigger,
+      },
+    });
+    const container = createContainer({
+      labels: {
+        'com.docker.compose.project.config_files': '/opt/drydock/test/monitoring.yml',
+      },
+    });
+    mockGetState.mockReturnValue({
+      trigger: {
+        'dockercompose.compose': trigger,
+      },
+    });
+
+    const accepted = await requestContainerUpdate(container, {
+      triggerTypes: ['dockercompose'],
+    });
+    await flushAsyncWork();
+
+    expect(accepted.operationId).toBeDefined();
+    expect(trigger.trigger).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'c1', name: 'nginx' }),
+      expect.objectContaining({ operationId: accepted.operationId }),
+    );
+  });
+
+  test('enqueueContainerUpdate rejects invalid provided trigger shapes', async () => {
+    await expect(
+      enqueueContainerUpdate(createContainer(), {
+        trigger: { type: 123, trigger: vi.fn() } as any,
+      }),
+    ).rejects.toMatchObject<Partial<UpdateRequestError>>({
+      statusCode: 500,
+      message: 'Invalid update trigger',
+    });
+  });
+
+  test('enqueueContainerUpdate rejects non-container update trigger types', async () => {
+    await expect(
+      enqueueContainerUpdate(createContainer(), {
+        trigger: { type: 'slack', trigger: vi.fn() } as any,
+      }),
+    ).rejects.toMatchObject<Partial<UpdateRequestError>>({
+      statusCode: 400,
+      message: 'Trigger is not a container update trigger',
+    });
+  });
+
+  test('enqueueContainerUpdate rejects when no docker trigger is found', async () => {
+    await expect(
+      enqueueContainerUpdate(createContainer(), {
+        triggerTypes: ['dockercompose'],
+      }),
+    ).rejects.toMatchObject<Partial<UpdateRequestError>>({
+      statusCode: 404,
+      message: 'No docker trigger found for this container',
+    });
+  });
+
+  test('enqueueContainerUpdates rethrows unexpected trigger resolution failures', async () => {
+    const evilTrigger = {
+      get type() {
+        throw new Error('boom');
+      },
+      trigger: vi.fn(),
+    } as any;
+
+    await expect(
+      enqueueContainerUpdates([createContainer()], {
+        trigger: evilTrigger,
+      }),
+    ).rejects.toThrow('boom');
+  });
+
+  test('buildAcceptedUpdateRuntimeContext filters invalid container ids from bulk updates', () => {
+    const accepted = [
+      {
+        container: createContainer({ id: 'c1' }),
+        operationId: 'op-1',
+        trigger: { type: 'docker', trigger: vi.fn() },
+      },
+      {
+        container: createContainer({ id: '' }),
+        operationId: 'op-2',
+        trigger: { type: 'docker', trigger: vi.fn() },
+      },
+    ];
+
+    expect(buildAcceptedUpdateRuntimeContext(accepted)).toEqual({
+      operationIds: {
+        c1: 'op-1',
+      },
+    });
+  });
+
+  test('buildAcceptedUpdateRuntimeContext returns a single operation id for one accepted update', () => {
+    const accepted = [
+      {
+        container: createContainer({ id: 'c1' }),
+        operationId: 'op-1',
+        trigger: { type: 'docker', trigger: vi.fn() },
+      },
+    ];
+
+    expect(buildAcceptedUpdateRuntimeContext(accepted)).toEqual({
+      operationId: 'op-1',
+    });
+  });
+
+  test('runAcceptedContainerUpdates handles empty accepted lists', async () => {
+    await expect(runAcceptedContainerUpdates([])).resolves.toBeUndefined();
+    expect(mockMarkOperationTerminal).not.toHaveBeenCalled();
+  });
+
+  test('runAcceptedContainerUpdates invokes onSuccess for successful updates', async () => {
+    const trigger = {
+      type: 'docker',
+      trigger: vi.fn().mockResolvedValue(undefined),
+    };
+    const accepted = [
+      {
+        container: createContainer({ id: 'c1' }),
+        operationId: 'op-1',
+        trigger,
+      },
+    ];
+    const onSuccess = vi.fn();
+
+    await runAcceptedContainerUpdates(accepted, { onSuccess });
+
+    expect(trigger.trigger).toHaveBeenCalledWith(accepted[0].container, {
+      operationId: 'op-1',
+    });
+    expect(onSuccess).toHaveBeenCalledWith(accepted[0]);
+    expect(mockMarkOperationTerminal).not.toHaveBeenCalled();
   });
 
   test('runAcceptedContainerUpdates isolates per-entry failures so one failure does not cascade to the rest', async () => {

@@ -277,11 +277,7 @@ function getStartupOrphanedActiveOperationMessage(operation: UpdateOperation): s
   return `Marked failed after orphaned active operation was found during process restart while ${operation.status === 'queued' ? 'queued' : 'in progress'}`;
 }
 
-function emitOperationChangedEvent(operation: UpdateOperation | undefined): void {
-  if (!operation || !updateOperationCollection) {
-    return;
-  }
-
+function emitOperationChangedEvent(operation: UpdateOperation): void {
   void emitUpdateOperationChanged({
     operationId: operation.id,
     containerName: operation.containerName,
@@ -463,10 +459,6 @@ function persistOperationPatch(
   id: string,
   patch: PersistedUpdateOperationPatch = {},
 ): UpdateOperation | undefined {
-  if (!updateOperationCollection) {
-    return undefined;
-  }
-
   const existingDoc = updateOperationCollection.findOne({ 'data.id': id });
   if (!existingDoc) {
     return undefined;

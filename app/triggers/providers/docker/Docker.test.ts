@@ -1539,6 +1539,18 @@ test('triggerBatch should limit concurrent container updates to 3', async () => 
   expect(maxInFlight).toBeLessThanOrEqual(3);
 });
 
+test('triggerBatch should forward runtimeContext when provided', async () => {
+  const triggerSpy = vi.spyOn(docker, 'trigger').mockResolvedValue();
+  const runtimeContext = { operationId: 'batch-op-1' };
+  const containers = [{ name: 'c1' }, { name: 'c2' }];
+
+  await docker.triggerBatch(containers, runtimeContext);
+
+  expect(triggerSpy).toHaveBeenCalledTimes(2);
+  expect(triggerSpy).toHaveBeenCalledWith({ name: 'c1' }, runtimeContext);
+  expect(triggerSpy).toHaveBeenCalledWith({ name: 'c2' }, runtimeContext);
+});
+
 // --- pruneImages (parametric: exclusion filters) ---
 
 describe('pruneImages exclusion filters', () => {

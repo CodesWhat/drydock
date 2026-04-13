@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { createMockResponse } from '../../test/helpers.js';
+import * as requestUpdate from '../../updates/request-update.js';
 import { createTriggerHandlers } from './triggers.js';
 
 function createTrigger(overrides: Record<string, unknown> = {}) {
@@ -394,6 +395,39 @@ describe('api/container/triggers', () => {
       );
       expect(res.status).toHaveBeenCalledWith(202);
       expect(res.json).toHaveBeenCalledWith({ operationId: expect.any(String) });
+    });
+
+    test('surfaces UpdateRequestError responses from accepted docker update triggers', async () => {
+      const trigger = createTrigger({
+        id: 'docker.update',
+        type: 'docker',
+        name: 'update',
+        trigger: vi.fn().mockResolvedValue(undefined),
+      });
+      const harness = createHarness({
+        container: {
+          id: 'c1',
+          name: 'nginx',
+          image: { name: 'nginx' },
+          updateAvailable: true,
+        },
+        triggerMap: {
+          'docker.update': trigger,
+        },
+      });
+      const spy = vi
+        .spyOn(requestUpdate, 'requestContainerUpdate')
+        .mockRejectedValueOnce(new requestUpdate.UpdateRequestError(418, 'teapot'));
+
+      const res = await callRunTrigger(harness.handlers, {
+        id: 'c1',
+        triggerType: 'docker',
+        triggerName: 'update',
+      });
+      spy.mockRestore();
+
+      expect(res.status).toHaveBeenCalledWith(418);
+      expect(res.json).toHaveBeenCalledWith({ error: 'teapot' });
     });
 
     test('returns 404 when the trigger cannot be found', async () => {

@@ -1159,6 +1159,228 @@ describe('AgentClient', () => {
       expect(storeContainer.deleteContainer).toHaveBeenCalledWith('c1');
     });
 
+    test('should ignore watcher-cycle cleanup for invalid container ids', () => {
+      (client as any).pendingWatcherCycleReports.set(
+        'watcher',
+        new Map([
+          [
+            'c1',
+            {
+              container: {
+                id: 'c1',
+                name: 'test',
+                watcher: 'watcher',
+              },
+              changed: true,
+            },
+          ],
+        ]),
+      );
+
+      (client as any).clearPendingWatcherCycleReportByContainerId('');
+
+      expect((client as any).pendingWatcherCycleReports.get('watcher')?.has('c1')).toBe(true);
+    });
+
+    test('should clear watcher-cycle reports when the last container in a watcher is removed', () => {
+      (client as any).pendingWatcherCycleReports.set(
+        'watcher',
+        new Map([
+          [
+            'c1',
+            {
+              container: {
+                id: 'c1',
+                name: 'test',
+                watcher: 'watcher',
+              },
+              changed: true,
+            },
+          ],
+        ]),
+      );
+
+      (client as any).clearPendingWatcherCycleReportByContainerId('c1');
+
+      expect((client as any).pendingWatcherCycleReports.has('watcher')).toBe(false);
+    });
+
+    test('should ignore watcher-cycle reports that do not have a resolvable container key', () => {
+      const beforeSize = (client as any).pendingWatcherCycleReports.size;
+
+      (client as any).rememberPendingWatcherCycleReport({
+        container: {
+          watcher: 'watcher',
+        },
+        changed: true,
+      });
+
+      expect((client as any).pendingWatcherCycleReports.size).toBe(beforeSize);
+    });
+
+    test('should ignore invalid watcher-cycle lookups before taking a pending report', () => {
+      const report = {
+        container: {
+          id: 'c1',
+          name: 'test',
+          watcher: 'watcher',
+        },
+        changed: true,
+      };
+      (client as any).pendingWatcherCycleReports.set('watcher', new Map([['c1', report]]));
+
+      expect((client as any).takePendingWatcherCycleReport('', report.container)).toBeUndefined();
+      expect(
+        (client as any).takePendingWatcherCycleReport('watcher', { watcher: 'watcher' } as any),
+      ).toBeUndefined();
+      expect(
+        (client as any).takePendingWatcherCycleReport('watcher', {
+          ...report.container,
+          id: 'missing',
+        }),
+      ).toBeUndefined();
+      expect((client as any).takePendingWatcherCycleReport('watcher', report.container)).toBe(
+        report,
+      );
+    });
+
+    test('should return undefined when deriving a watcher-cycle key from a non-container', () => {
+      expect((client as any).getPendingWatcherCycleContainerKey(undefined)).toBeUndefined();
+      expect((client as any).getPendingWatcherCycleContainerKey(null)).toBeUndefined();
+    });
+
+    test('should fall back to watcher:name when id is missing', () => {
+      expect(
+        (client as any).getPendingWatcherCycleContainerKey({
+          name: 'test',
+          watcher: 'watcher',
+        }),
+      ).toBe('watcher:test');
+    });
+
+    test('should remove the watcher bucket after taking the last pending watcher-cycle report', () => {
+      const report = {
+        container: {
+          id: 'c1',
+          name: 'test',
+          watcher: 'watcher',
+        },
+        changed: true,
+      };
+      (client as any).pendingWatcherCycleReports.set('watcher', new Map([['c1', report]]));
+
+      expect((client as any).takePendingWatcherCycleReport('watcher', report.container)).toBe(
+        report,
+      );
+      expect((client as any).pendingWatcherCycleReports.has('watcher')).toBe(false);
+    });
+
+    test('should keep the watcher bucket after taking one report when others remain', () => {
+      const firstReport = {
+        container: {
+          id: 'c1',
+          name: 'test',
+          watcher: 'watcher',
+        },
+        changed: true,
+      };
+      const secondReport = {
+        container: {
+          id: 'c2',
+          name: 'test-2',
+          watcher: 'watcher',
+        },
+        changed: true,
+      };
+      (client as any).pendingWatcherCycleReports.set(
+        'watcher',
+        new Map([
+          ['c1', firstReport],
+          ['c2', secondReport],
+        ]),
+      );
+
+      expect((client as any).takePendingWatcherCycleReport('watcher', firstReport.container)).toBe(
+        firstReport,
+      );
+      expect((client as any).pendingWatcherCycleReports.has('watcher')).toBe(true);
+      expect((client as any).pendingWatcherCycleReports.get('watcher')?.has('c2')).toBe(true);
+    });
+
+    test('should remove the watcher bucket when clearing the last pending watcher-cycle report by id', () => {
+      const report = {
+        container: {
+          id: 'c1',
+          name: 'test',
+          watcher: 'watcher',
+        },
+        changed: true,
+      };
+      (client as any).pendingWatcherCycleReports.set('watcher', new Map([['c1', report]]));
+
+      (client as any).clearPendingWatcherCycleReportByContainerId('c1');
+
+      expect((client as any).pendingWatcherCycleReports.has('watcher')).toBe(false);
+    });
+
+    test('should keep the watcher bucket when clearing one watcher-cycle container id and others remain', () => {
+      (client as any).pendingWatcherCycleReports.set(
+        'watcher',
+        new Map([
+          [
+            'c1',
+            {
+              container: {
+                id: 'c1',
+                name: 'test',
+                watcher: 'watcher',
+              },
+              changed: true,
+            },
+          ],
+          [
+            'c2',
+            {
+              container: {
+                id: 'c2',
+                name: 'test-2',
+                watcher: 'watcher',
+              },
+              changed: true,
+            },
+          ],
+        ]),
+      );
+
+      (client as any).clearPendingWatcherCycleReportByContainerId('c1');
+
+      expect((client as any).pendingWatcherCycleReports.has('watcher')).toBe(true);
+      expect((client as any).pendingWatcherCycleReports.get('watcher')?.has('c2')).toBe(true);
+    });
+
+    test('should remove the watcher bucket after clearing the last watcher-cycle container id', () => {
+      (client as any).pendingWatcherCycleReports.set(
+        'watcher',
+        new Map([
+          [
+            'c1',
+            {
+              container: {
+                id: 'c1',
+                name: 'test',
+                watcher: 'watcher',
+              },
+              changed: true,
+            },
+          ],
+        ]),
+      );
+
+      (client as any).clearPendingWatcherCycleReportByContainerId('c1');
+
+      expect((client as any).pendingWatcherCycleReports.has('watcher')).toBe(false);
+    });
+
     test('should emit update-applied when agent sends dd:update-applied', async () => {
       await client.handleEvent('dd:update-applied', 'local_nginx');
 

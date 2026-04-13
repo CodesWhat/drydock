@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { sanitizeLogParam } from '../log/sanitize.js';
 import { createMockRequest, createMockResponse } from '../test/helpers.js';
+import * as requestUpdate from '../updates/request-update.js';
 import { validateOpenApiJsonResponse } from './openapi-contract.js';
 
 const {
@@ -1127,6 +1128,64 @@ describe('Webhook Router', () => {
         message: 'Update accepted for container my-nginx',
         operationId: expect.any(String),
         result: { container: 'my-nginx' },
+      });
+    });
+
+    test('should return the UpdateRequestError status when update acceptance fails', async () => {
+      const container = {
+        id: 'c1',
+        name: 'my-nginx',
+        image: { name: 'nginx' },
+        updateAvailable: true,
+      };
+      mockGetContainers.mockReturnValue([container]);
+      mockGetState.mockReturnValue({
+        watcher: {},
+        trigger: {
+          'docker.default': { type: 'docker', trigger: vi.fn() },
+        },
+      });
+      const spy = vi
+        .spyOn(requestUpdate, 'requestContainerUpdate')
+        .mockRejectedValueOnce(new requestUpdate.UpdateRequestError(409, 'teapot'));
+
+      const handler = getHandler('post', '/update/:containerName');
+      const req = createMockRequest({ params: { containerName: 'my-nginx' } });
+      const res = createMockResponse();
+      await handler(req, res);
+      spy.mockRestore();
+
+      expect(res.status).toHaveBeenCalledWith(409);
+      expect(res.json).toHaveBeenCalledWith({ error: 'teapot' });
+    });
+
+    test('should return 500 when update acceptance fails unexpectedly', async () => {
+      const container = {
+        id: 'c1',
+        name: 'my-nginx',
+        image: { name: 'nginx' },
+        updateAvailable: true,
+      };
+      mockGetContainers.mockReturnValue([container]);
+      mockGetState.mockReturnValue({
+        watcher: {},
+        trigger: {
+          'docker.default': { type: 'docker', trigger: vi.fn() },
+        },
+      });
+      const spy = vi
+        .spyOn(requestUpdate, 'requestContainerUpdate')
+        .mockRejectedValueOnce(new Error('unexpected update failure'));
+
+      const handler = getHandler('post', '/update/:containerName');
+      const req = createMockRequest({ params: { containerName: 'my-nginx' } });
+      const res = createMockResponse();
+      await handler(req, res);
+      spy.mockRestore();
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Error updating container my-nginx',
       });
     });
 

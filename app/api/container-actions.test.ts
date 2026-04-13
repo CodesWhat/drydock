@@ -1,4 +1,5 @@
 import { createMockRequest, createMockResponse } from '../test/helpers.js';
+import * as requestUpdate from '../updates/request-update.js';
 import { validateOpenApiJsonResponse } from './openapi-contract.js';
 
 const {
@@ -873,6 +874,60 @@ describe('Container Actions Router', () => {
       expect(res.json).toHaveBeenCalledWith({ error: 'Container actions are disabled' });
     });
 
+    test('should return 500 when update acceptance throws unexpectedly', async () => {
+      const container = {
+        id: 'c1',
+        name: 'nginx',
+        image: { name: 'nginx' },
+        updateAvailable: true,
+      };
+      mockGetContainer.mockReturnValue(container);
+      mockGetState.mockReturnValue({
+        trigger: {
+          'docker.default': { type: 'docker', trigger: vi.fn() },
+        },
+      });
+      const spy = vi
+        .spyOn(requestUpdate, 'requestContainerUpdate')
+        .mockRejectedValueOnce(new Error('accept blew up'));
+
+      const handler = getHandler('post', '/:id/update');
+      const req = createMockRequest({ params: { id: 'c1' } });
+      const res = createMockResponse();
+      await handler(req, res);
+      spy.mockRestore();
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Unable to accept container update' });
+    });
+
+    test('should return 500 when update acceptance throws a non-Error value', async () => {
+      const container = {
+        id: 'c1',
+        name: 'nginx',
+        image: { name: 'nginx' },
+        updateAvailable: true,
+      };
+      mockGetContainer.mockReturnValue(container);
+      mockGetState.mockReturnValue({
+        trigger: {
+          'docker.default': { type: 'docker', trigger: vi.fn() },
+        },
+      });
+      const spy = vi
+        .spyOn(requestUpdate, 'requestContainerUpdate')
+        .mockRejectedValueOnce('accept blew up as string');
+
+      const handler = getHandler('post', '/:id/update');
+      const req = createMockRequest({ params: { id: 'c1' } });
+      const res = createMockResponse();
+      await handler(req, res);
+      spy.mockRestore();
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Unable to accept container update' });
+    });
+
     test('should accept update and record an error when trigger fails asynchronously', async () => {
       const container = {
         id: 'c1',
@@ -1095,6 +1150,58 @@ describe('Container Actions Router', () => {
   });
 
   describe('updateContainers', () => {
+    test('should return 403 when bulk updates are disabled', async () => {
+      mockGetServerConfiguration.mockReturnValue({ feature: { containeractions: false } });
+
+      const handler = getHandler('post', '/update');
+      const req = createMockRequest({ body: { containerIds: ['c1'] } });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Container actions are disabled' });
+    });
+
+    test('should return 400 when bulk body is missing containerIds', async () => {
+      const handler = getHandler('post', '/update');
+      const req = createMockRequest({ body: undefined });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'containerIds must be a non-empty array of container ids',
+      });
+    });
+
+    test('should return 400 when bulk body normalizes to no valid ids', async () => {
+      const handler = getHandler('post', '/update');
+      const req = createMockRequest({
+        body: { containerIds: [' ', '\n', 123, null] },
+      });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'containerIds must be a non-empty array of container ids',
+      });
+    });
+
+    test('should return 400 when bulk containerIds is not an array', async () => {
+      const handler = getHandler('post', '/update');
+      const req = createMockRequest({
+        body: { containerIds: 'nginx' },
+      });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'containerIds must be a non-empty array of container ids',
+      });
+    });
+
     test('should accept a bulk update request and return accepted and rejected containers', async () => {
       const nginx = {
         id: 'c1',
@@ -1153,6 +1260,150 @@ describe('Container Actions Router', () => {
         expect.objectContaining({ id: 'c1', name: 'nginx' }),
         expect.objectContaining({ operationId: expect.any(String) }),
       );
+    });
+
+    test('should record errors for bulk accepted updates that fail asynchronously', async () => {
+      const nginx = {
+        id: 'c1',
+        name: 'nginx',
+        image: { name: 'nginx' },
+        updateAvailable: true,
+        result: { digest: 'sha256:new' },
+      };
+      mockGetContainer.mockReturnValue(nginx);
+      const mockTriggerFn = vi.fn().mockRejectedValue(new Error('bulk trigger failed'));
+      mockGetState.mockReturnValue({
+        trigger: { 'docker.default': { type: 'docker', trigger: mockTriggerFn } },
+      });
+
+      const handler = getHandler('post', '/update');
+      const req = createMockRequest({
+        body: {
+          containerIds: ['c1'],
+        },
+      });
+      const res = createMockResponse();
+      await handler(req, res);
+      await flushAcceptedUpdateWork();
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(mockInsertAudit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'container-update',
+          status: 'error',
+          details: 'bulk trigger failed',
+        }),
+      );
+    });
+
+    test('should dedupe bulk container ids and merge rejected entries from the update layer', async () => {
+      const nginx = {
+        id: 'c1',
+        name: 'nginx',
+        image: { name: 'nginx' },
+        updateAvailable: true,
+        result: { digest: 'sha256:new' },
+      };
+      const redis = {
+        id: 'c2',
+        name: 'redis',
+        image: { name: 'redis' },
+        updateAvailable: false,
+      };
+      mockGetContainer.mockImplementation((id: string) => {
+        if (id === 'c1') {
+          return nginx;
+        }
+        if (id === 'c2') {
+          return redis;
+        }
+        return undefined;
+      });
+      mockGetState.mockReturnValue({
+        trigger: {
+          'docker.default': { type: 'docker', trigger: vi.fn().mockResolvedValue(undefined) },
+        },
+      });
+      const handler = getHandler('post', '/update');
+      const req = createMockRequest({
+        body: {
+          containerIds: ['c1', 'c1', 'c2', 'missing'],
+        },
+      });
+      const res = createMockResponse();
+      await handler(req, res);
+      await flushAcceptedUpdateWork();
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          accepted: [
+            expect.objectContaining({
+              containerId: 'c1',
+              containerName: 'nginx',
+              operationId: expect.any(String),
+            }),
+          ],
+          rejected: expect.arrayContaining([
+            expect.objectContaining({
+              containerId: 'missing',
+              containerName: 'missing',
+              statusCode: 404,
+              message: 'Container not found',
+            }),
+            expect.objectContaining({
+              containerId: 'c2',
+              containerName: 'redis',
+              statusCode: 400,
+              message: 'No update available for this container',
+            }),
+          ]),
+        }),
+      );
+    });
+
+    test('should return 500 when bulk acceptance throws unexpectedly', async () => {
+      const spy = vi
+        .spyOn(requestUpdate, 'requestContainerUpdates')
+        .mockRejectedValueOnce(new Error('bulk blew up'));
+
+      mockGetContainer.mockReturnValue({
+        id: 'c1',
+        name: 'nginx',
+        image: { name: 'nginx' },
+        updateAvailable: true,
+      });
+
+      const handler = getHandler('post', '/update');
+      const req = createMockRequest({ body: { containerIds: ['c1'] } });
+      const res = createMockResponse();
+      await handler(req, res);
+      spy.mockRestore();
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Unable to accept container updates' });
+    });
+
+    test('should return 500 when bulk acceptance throws a non-Error value', async () => {
+      const spy = vi
+        .spyOn(requestUpdate, 'requestContainerUpdates')
+        .mockRejectedValueOnce('bulk blew up as string');
+
+      mockGetContainer.mockReturnValue({
+        id: 'c1',
+        name: 'nginx',
+        image: { name: 'nginx' },
+        updateAvailable: true,
+      });
+
+      const handler = getHandler('post', '/update');
+      const req = createMockRequest({ body: { containerIds: ['c1'] } });
+      const res = createMockResponse();
+      await handler(req, res);
+      spy.mockRestore();
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Unable to accept container updates' });
     });
   });
 });

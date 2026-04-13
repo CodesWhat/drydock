@@ -1,4 +1,5 @@
 import { createMockResponse } from '../test/helpers.js';
+import * as requestUpdate from '../updates/request-update.js';
 
 const { mockRouter, mockLog, mockGetErrorMessage } = vi.hoisted(() => ({
   mockRouter: { use: vi.fn(), get: vi.fn(), post: vi.fn() },
@@ -183,6 +184,37 @@ describe('Trigger Router', () => {
       );
       expect(res.status).toHaveBeenCalledWith(202);
       expect(res.json).toHaveBeenCalledWith({ operationId: expect.any(String) });
+    });
+
+    test('should surface UpdateRequestError responses from accepted docker update triggers', async () => {
+      const mockTrigger = {
+        type: 'docker',
+        trigger: vi.fn().mockResolvedValue(undefined),
+      };
+      registry.getState.mockReturnValue({
+        trigger: { 'docker.update': mockTrigger },
+      });
+      mockGetContainer.mockReturnValue({
+        id: 'c1',
+        name: 'nginx',
+        image: { name: 'nginx' },
+        updateAvailable: true,
+      });
+      const spy = vi
+        .spyOn(requestUpdate, 'requestContainerUpdate')
+        .mockRejectedValueOnce(new requestUpdate.UpdateRequestError(418, 'teapot'));
+
+      const req = {
+        params: { type: 'docker', name: 'update' },
+        body: { id: 'c1' },
+      };
+      const res = createMockResponse();
+
+      await runTrigger(req, res);
+      spy.mockRestore();
+
+      expect(res.status).toHaveBeenCalledWith(418);
+      expect(res.json).toHaveBeenCalledWith({ error: 'teapot' });
     });
 
     test('should return 404 when docker update trigger targets a container missing from the store', async () => {
