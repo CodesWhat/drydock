@@ -58,7 +58,7 @@ function pruneResponsiveDashboardLayouts(
   dashboard: Record<string, unknown>,
 ): Record<string, unknown> | undefined {
   if (!('gridLayouts' in dashboard)) {
-    return isRecord(dashboard.gridLayouts) ? dashboard.gridLayouts : undefined;
+    return undefined;
   }
 
   if (!isRecord(dashboard.gridLayouts)) {

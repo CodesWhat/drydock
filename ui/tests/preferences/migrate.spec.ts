@@ -228,6 +228,18 @@ describe('preferences migration', () => {
       expect(result.dashboard.gridLayouts.lg).toEqual(gridLayout);
     });
 
+    it('should preserve defaults when responsive gridLayouts key is absent', () => {
+      const result = migrate({
+        schemaVersion: 1,
+        dashboard: {
+          widgetOrder: ['host-status'],
+          hiddenWidgets: [],
+        },
+      });
+
+      expect(result.dashboard.gridLayouts).toEqual(DEFAULTS.dashboard.gridLayouts);
+    });
+
     it('should keep valid responsive dashboard layouts and discard invalid entries', () => {
       const desktopLayout = [{ i: 'host-status', x: 8, y: 3, w: 4, h: 6 }];
       const result = migrate({

@@ -131,6 +131,29 @@ describe('system-log-stream service', () => {
       expect(onMessage).not.toHaveBeenCalled();
     });
 
+    it('ignores log entries with invalid level, component, or msg metadata', () => {
+      const onMessage = vi.fn();
+
+      createSystemLogStreamConnection({
+        onMessage,
+        webSocketFactory: (url) => new MockWebSocket(url) as unknown as WebSocket,
+        location: { protocol: 'http:', host: 'localhost:3000' } as Location,
+      });
+
+      const socket = MockWebSocket.instances[0];
+      socket.emitMessage(
+        '{"timestamp":1000,"displayTimestamp":"[00:00:01.000]","level":123,"component":"api","msg":"hello"}',
+      );
+      socket.emitMessage(
+        '{"timestamp":1000,"displayTimestamp":"[00:00:01.000]","level":"info","component":123,"msg":"hello"}',
+      );
+      socket.emitMessage(
+        '{"timestamp":1000,"displayTimestamp":"[00:00:01.000]","level":"info","component":"api","msg":123}',
+      );
+
+      expect(onMessage).not.toHaveBeenCalled();
+    });
+
     it('supports update, pause, and resume lifecycle controls', () => {
       const connection = createSystemLogStreamConnection({
         onMessage: vi.fn(),

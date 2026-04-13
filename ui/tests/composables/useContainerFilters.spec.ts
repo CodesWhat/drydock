@@ -193,6 +193,22 @@ describe('useContainerFilters', () => {
         'postgres',
       ]);
     });
+
+    it('should filter blocked containers only when they have a newTag', async () => {
+      const blockedWithTag = makeContainer({
+        id: 'c4',
+        name: 'api',
+        image: 'api:latest',
+        bouncer: 'blocked',
+        newTag: '2.0',
+      });
+      const mod = await import('@/composables/useContainerFilters');
+      const localContainers = ref([...containers.value, blockedWithTag]);
+      const filters = mod.useContainerFilters(localContainers);
+      filters.filterKind.value = 'blocked';
+
+      expect(filters.filteredContainers.value.map((c) => c.name)).toEqual(['api']);
+    });
   });
 
   describe('activeFilterCount', () => {

@@ -171,6 +171,33 @@ describe('container-update utils', () => {
     ).toBe(false);
   });
 
+  it('treats invalid persisted queue metadata as standalone queued state', () => {
+    expect(
+      shouldRenderStandaloneQueuedUpdateAsUpdating({
+        targetId: 'malformed',
+        operation: {
+          status: 'queued',
+          updatedAt: '2026-04-01T12:00:02.000Z',
+          batchId: 'batch-1',
+          queuePosition: 1,
+          queueTotal: 0,
+        },
+        containers: [
+          {
+            id: 'malformed',
+            updateOperation: {
+              status: 'queued',
+              updatedAt: '2026-04-01T12:00:02.000Z',
+              batchId: 'batch-1',
+              queuePosition: 1,
+              queueTotal: 0,
+            },
+          },
+        ],
+      }),
+    ).toBe(true);
+  });
+
   it('yields to in-progress batch heads without a matching queued head', () => {
     expect(
       shouldRenderStandaloneQueuedUpdateAsUpdating({

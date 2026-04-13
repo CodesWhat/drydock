@@ -26,9 +26,6 @@ function setHeldOperation(operationId: string, hold: OperationDisplayHoldRecord)
 }
 
 function removeHeldOperation(operationId: string) {
-  if (!heldOperations.value.has(operationId)) {
-    return;
-  }
   const next = new Map(heldOperations.value);
   next.delete(operationId);
   heldOperations.value = next;
@@ -179,12 +176,7 @@ function scheduleHeldOperationRelease(args: {
   let scheduled = false;
 
   for (const operationId of operationIds) {
-    const existing = heldOperations.value.get(operationId);
-    if (!existing) {
-      continue;
-    }
-
-    const nextHold = updateHoldTargets(existing, args);
+    const nextHold = updateHoldTargets(heldOperations.value.get(operationId)!, args);
     setHeldOperation(operationId, nextHold);
 
     const remaining = nextHold.displayUntil - (args.now ?? Date.now());
