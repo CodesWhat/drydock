@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.5.0-rc.8] - 2026-04-09
+## [1.5.0-rc.8] - 2026-04-13
 
 ### Added
 
@@ -29,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **[#296](https://github.com/CodesWhat/drydock/issues/296)** — Notification server-name prefix no longer renders the container ID on Docker Compose setups. `getServerName()` precedence is now `DD_SERVER_NAME` → detected Docker/Podman daemon host name (from `dockerApi.info().Name`) → `os.hostname()`. Remote watchers never hijack the controller identity. ([#b723369f](https://github.com/CodesWhat/drydock/commit/b723369f))
 - **[#286](https://github.com/CodesWhat/drydock/issues/286)** — Stack view column shifting fixed by collapsing all stacks into a single table. ([#2f511d33](https://github.com/CodesWhat/drydock/commit/2f511d33))
 - **[#283](https://github.com/CodesWhat/drydock/issues/283)** — Duplicate server name in notification prefix and suffix suppressed. ([#aaf9962d](https://github.com/CodesWhat/drydock/commit/aaf9962d))
 - **[#270](https://github.com/CodesWhat/drydock/issues/270)** — Hide-pinned filter now uses computed `tagPinned` property instead of stale stored field. Unconditional startup repair ensures tagPrecision data is always correct. ([#c7ecceef](https://github.com/CodesWhat/drydock/commit/c7ecceef), [#0949a142](https://github.com/CodesWhat/drydock/commit/0949a142))
@@ -57,6 +58,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **SSE log IP hashing with opt-in raw mode** — SSE connect/disconnect lines and per-IP rate-limit warnings now log the internal client ID plus a salted hash of the source IP (`h:xxxxxxxx`) by default. The hash salt rotates on every process start, so hashed identifiers cannot be correlated across restarts and raw addresses never touch the log. Operators troubleshooting a specific connection issue can set `DD_SSE_DEBUG_LOG_IP=true` to temporarily log raw IPs. ([#9e236745](https://github.com/CodesWhat/drydock/commit/9e236745))
 - **HTTP trigger proxy URL scheme validation** — HTTP trigger proxy URLs must now be `http://` or `https://` schemes. Invalid schemes are rejected at config-validation time and fail closed at runtime instead of silently constructing a broken proxy. ([#981f7f8e](https://github.com/CodesWhat/drydock/commit/981f7f8e))
 - **Vulnerability CSV export escape hardening** — Every CSV field (including column headers) is now quoted unconditionally, and tab/CR leading characters are escaped alongside `=+-@` to fully close the CSV formula-injection surface. ([#95de9f0e](https://github.com/CodesWhat/drydock/commit/95de9f0e))
+- **Snyk policy file** — Added a repo-level `.snyk` file so reviewed false-positive Snyk Code findings are silenced with a mandatory reason and expiry date alongside the code, instead of in PR comments. Initial entries cover the ephemeral session-secret generator and the UI static file sink flagged via `process.argv[1]` taint. ([#61f49606](https://github.com/CodesWhat/drydock/commit/61f49606))
+- **Supply-chain toolchain refresh** — Bumped pinned Alpine edge/testing package versions for `cosign` (2.4.3-r12) and `trivy` (0.69.3-r2) in the Dockerfile to track upstream security fixes. ([#b542eb15](https://github.com/CodesWhat/drydock/commit/b542eb15))
+
+### Internal
+
+- **Exact-version package.json pinning** — Flipped the four remaining caret specifiers (`nodemailer`, `@biomejs/biome`, `lefthook`, `lodash`) to exact versions so every package.json matches the already-exact lockfile resolutions and Renovate cannot pull in-range bumps without a PR. Every dependency layer is now SHA-immutable: npm via lockfile integrity hashes, Docker base images via `@sha256:` digests, and GitHub Actions via 40-char commit SHAs. ([#23b7fcfd](https://github.com/CodesWhat/drydock/commit/23b7fcfd))
+- **Regression test coverage** — Closed the remaining app + UI coverage gaps flagged by the pre-push gate, including guard branches in `detectLocalDaemonServerName`, `useOperationDisplayHold`, `useContainerFilters`, `preferences/migrate`, services `logs` and `system-log-stream`, and `useContainerPolicy`. ([#58932e40](https://github.com/CodesWhat/drydock/commit/58932e40), [#9f238be5](https://github.com/CodesWhat/drydock/commit/9f238be5), [#72d6d688](https://github.com/CodesWhat/drydock/commit/72d6d688))
 
 ## [1.5.0-rc.7] — 2026-04-08
 
