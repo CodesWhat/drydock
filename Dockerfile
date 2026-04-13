@@ -24,8 +24,8 @@ RUN apk add --no-cache \
     su-exec=0.3-r0 \
     tini=0.19.0-r3 \
     tzdata=2026a-r0 \
-    && apk add --no-cache cosign=2.4.3-r11 \
-    && apk add --no-cache --repository=https://dl-cdn.alpinelinux.org/alpine/edge/testing trivy=0.69.3-r1 \
+    && apk add --no-cache cosign=2.4.3-r12 \
+    && apk add --no-cache --repository=https://dl-cdn.alpinelinux.org/alpine/edge/testing trivy=0.69.3-r2 \
     && apk upgrade --no-cache zlib \
     && mkdir /store && chown node:node /store
 
