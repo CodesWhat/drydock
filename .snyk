@@ -1,0 +1,59 @@
+# Snyk policy file — https://docs.snyk.io/manage-risk/policies/the-.snyk-file
+#
+# Registry of reviewed Snyk findings that have been determined to be false
+# positives (or otherwise unactionable) and should not block builds.
+#
+# Every entry MUST include a reason that explains why the finding is a
+# false positive or why the risk is accepted, and an expires date so the
+# ignore gets re-evaluated over time instead of silently living forever.
+#
+# Format:
+#   <rule-id>:
+#     - '<path-glob>':
+#         reason: >-
+#           Concrete explanation — what the scanner saw, why it's wrong,
+#           and any guardrails that make the code safe in practice.
+#         expires: 2027-04-13T00:00:00.000Z
+#         created: 2026-04-13T00:00:00.000Z
+#
+# Adding entries: prefer the Snyk CLI (`snyk ignore --id=<issue-id>
+# --path=<file> --reason='...' --expiry=YYYY-MM-DD`) so the rule id and
+# policy version stay in sync. Hand-edits are fine as long as the reason
+# is load-bearing — "false positive" alone is not a reason.
+
+version: v1.25.1
+
+ignore:
+  # Snyk Code — Hardcoded Non-Cryptographic Secret (CWE-547)
+  # File: app/api/auth-session.ts around line 47
+  # Code: `generatedSessionSecret = randomBytes(64).toString('hex')`
+  'javascript/HardcodedNonCryptographicSecret':
+    - 'app/api/auth-session.ts':
+        reason: >-
+          Value is generated at runtime via Node's crypto.randomBytes(64),
+          not a literal. The function prefers DD_SESSION_SECRET when the
+          operator sets it; the ephemeral-random path is an intentional
+          fail-safe that logs an error in production so the operator
+          configures a persistent secret. The only string literal near
+          the flagged line is the warning message, not a secret.
+        expires: 2027-04-13T00:00:00.000Z
+        created: 2026-04-13T00:00:00.000Z
+
+  # Snyk Code — Path Traversal (CWE-23)
+  # Files: app/api/ui.ts lines 20 and 26
+  # Sinks: express.static(uiDirectory), res.sendFile(indexFile)
+  'javascript/PT':
+    - 'app/api/ui.ts':
+        reason: >-
+          Snyk's taint tracker flags the flow back to process.argv[1] in
+          app/runtime/paths.ts (getRuntimeRootCandidates). process.argv[1]
+          is the Node entry-script path set by the runtime at launch —
+          it is not user input, and controlling it requires pre-existing
+          RCE. The resolved path is further hardened by hasRuntimeMarkers
+          + isDirectory + path.resolve before use, and indexFile is
+          joined with a literal 'index.html'. No HTTP request data ever
+          reaches express.static or sendFile as the path argument.
+        expires: 2027-04-13T00:00:00.000Z
+        created: 2026-04-13T00:00:00.000Z
+
+patch: {}
