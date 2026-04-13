@@ -58,6 +58,51 @@ jobs:
         with:
           token: ${{ github.token }}
 
+  changes:
+    name: "🔎 Changes: Path Filter"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      runtime: ${{ steps.filter.outputs.runtime }}
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594  # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Filter paths
+        id: filter
+        uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d  # v4.0.1
+        with:
+          # runtime=true when the changeset touches anything that can affect
+          # runtime behavior (backend, UI, e2e, test harness, Docker image,
+          # lockfiles, CI workflow, or scripts). Pure docs / changelog /
+          # policy-file changes leave runtime=false so the heavy e2e jobs
+          # (Cucumber + Playwright) short-circuit.
+          filters: |
+            runtime:
+              - 'app/**'
+              - 'ui/**'
+              - 'e2e/**'
+              - 'test/**'
+              - 'scripts/**'
+              - 'Dockerfile'
+              - 'Docker.entrypoint.sh'
+              - 'healthcheck.c'
+              - 'package.json'
+              - 'package-lock.json'
+              - '.github/workflows/ci-verify.yml'
+
   codeql:
     name: "🛡️ SAST: CodeQL"
     if: github.event_name == 'pull_request' || github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
@@ -748,10 +793,10 @@ jobs:
 
   e2e:
     name: "🥒 E2E: Cucumber"
-    if: github.event_name != 'schedule'
+    if: github.event_name != 'schedule' && needs.changes.outputs.runtime == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    needs: [build]
+    needs: [build, changes]
     permissions:
       contents: read
 
@@ -799,10 +844,10 @@ jobs:
 
   playwright:
     name: "🎭 E2E: Playwright"
-    if: github.event_name != 'schedule'
+    if: github.event_name != 'schedule' && needs.changes.outputs.runtime == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 25  # Browser install + QA stack startup + full UI flow tests
-    needs: [build]
+    needs: [build, changes]
     permissions:
       contents: read
 
@@ -1041,7 +1086,14 @@ jobs:
 
   auto-tag:
     name: "🏷️ Release: Auto Tag"
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # !failure() treats a skipped upstream (e.g. docs-only push that
+    # skipped the e2e shards) as success so the tag job still runs on
+    # main, while a real failure in any dependency still blocks it.
+    if: |
+      !cancelled() &&
+      !failure() &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: [zizmor, dependency-review, lint, test, build, e2e, playwright, load-test-ci, codeql, fuzz]
