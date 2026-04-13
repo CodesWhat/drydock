@@ -69,6 +69,7 @@ const warnedLegacyTriggerEnvVars = new Set<string>();
 const triggerLegacyPrefixUsage = new Set<string>();
 let packageVersionCache: string | undefined;
 let packageVersionResolved = false;
+let detectedServerName: string | undefined;
 
 // First, collect legacy WUD_ vars and remap to DD_ keys
 Object.keys(process.env)
@@ -134,14 +135,22 @@ export function getVersion() {
 
 /**
  * Get the server name used to identify this Drydock instance in notifications.
- * Configured via DD_SERVER_NAME, falls back to os.hostname().
+ * Configured via DD_SERVER_NAME, then a detected daemon host name, then os.hostname().
  */
 export function getServerName(): string {
   const configured = ddEnvVars.DD_SERVER_NAME?.trim();
   if (configured) {
     return configured;
   }
+  if (detectedServerName) {
+    return detectedServerName;
+  }
   return hostname();
+}
+
+export function setDetectedServerName(name: string | undefined): void {
+  const trimmed = typeof name === 'string' ? name.trim() : '';
+  detectedServerName = trimmed || undefined;
 }
 
 export function getLogLevel() {

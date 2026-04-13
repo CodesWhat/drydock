@@ -17,6 +17,10 @@ function getTestDirectory() {
 
 const TEST_DIRECTORY = getTestDirectory();
 
+afterEach(() => {
+  configuration.setDetectedServerName(undefined);
+});
+
 test('getVersion should return dd version', async () => {
   configuration.ddEnvVars.DD_VERSION = 'x.y.z';
   expect(configuration.getVersion()).toStrictEqual('x.y.z');
@@ -436,6 +440,13 @@ test('getServerName should fall back to hostname when DD_SERVER_NAME is empty', 
   const name = configuration.getServerName();
   expect(name).not.toBe('');
   delete configuration.ddEnvVars.DD_SERVER_NAME;
+});
+
+test('getServerName should prefer detected server name when DD_SERVER_NAME is not set', () => {
+  delete configuration.ddEnvVars.DD_SERVER_NAME;
+  configuration.setDetectedServerName('datavault');
+
+  expect(configuration.getServerName()).toBe('datavault');
 });
 
 test('getServerConfiguration should allow enabling identity-aware rate-limit keys', async () => {

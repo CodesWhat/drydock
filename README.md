@@ -152,7 +152,7 @@ See the [Quick Start guide](https://getdrydock.com/docs/quickstart) for Docker C
 - **Identity-keyed container tracking** — Containers tracked by stable identity key (agent::watcher::name) across renames/replacements, preventing cross-host status contamination.
 - **Watcher next-run schedule visibility** — Watcher API and Agents view now show when each watcher will next poll for updates.
 - **Notification delivery failure audit trail** — Failed notification deliveries surface in the notification bell dropdown for visibility without leaving the UI.
-- **Multi-server notification identification** — Notifications automatically include `[server-name]` prefix when agents are registered, identifying which server each update comes from. Configurable via `DD_SERVER_NAME` (defaults to hostname). Custom templates can use `container.notificationServerName`.
+- **Multi-server notification identification** — Notifications automatically include `[server-name]` prefix when agents are registered, identifying which server each update comes from. Configurable via `DD_SERVER_NAME` (defaults to the detected daemon host name, then the process hostname). Custom templates can use `container.notificationServerName`.
 - **System log viewer overhaul** — Pinned toolbar, line wrapping, sort toggle (newest/oldest), filter mode (funnel icon shows matches only), auto-apply filters, component dropdown from API, aligned columns, floating copy button.
 - **Hide Pinned containers** — Checkbox toggle in the container filter bar hides version-pinned containers. Persisted in user preferences.
 - **Combined batch+digest notifications** — `MODE=batch+digest` sends both immediate batch emails and scheduled digest summaries.

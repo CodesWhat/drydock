@@ -221,4 +221,4 @@ services:
 - **Registries**: Configured on the Agent to check for updates.
 - **Triggers**:
   - `docker` and `dockercompose` triggers are configured and executed **on the Agent** (allowing update of remote containers). The controller automatically proxies update requests to the correct agent.
-  - Notification triggers (e.g. `smtp`, `discord`) are configured and executed **on the Controller**. Notifications automatically include a `[server-name]` prefix identifying which server each update comes from. The controller name defaults to the hostname and can be overridden with `DD_SERVER_NAME`.
+  - Notification triggers (e.g. `smtp`, `discord`) are configured and executed **on the Controller**. Notifications automatically include a `[server-name]` prefix identifying which server each update comes from. The controller name defaults to the detected Docker or Podman daemon host name when available, then the process hostname, and can be overridden with `DD_SERVER_NAME`.

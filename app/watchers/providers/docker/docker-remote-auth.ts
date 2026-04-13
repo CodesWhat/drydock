@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import Dockerode from 'dockerode';
+import { setDetectedServerName } from '../../../configuration/index.js';
 import { resolveConfiguredPath } from '../../../runtime/paths.js';
 import { disableSocketRedirects } from './disable-socket-redirects.js';
 import { getErrorMessage } from './docker-helpers.js';
@@ -45,6 +46,26 @@ interface DockerRemoteAuthWatcher {
   getOidcContext: () => OidcContext;
   getOidcStateAdapter: () => MutableOidcState;
   setRemoteAuthorizationHeader: (authorizationValue: string) => void;
+}
+
+async function detectLocalDaemonServerName(watcher: DockerRemoteAuthWatcher): Promise<void> {
+  if (watcher.configuration.host || typeof watcher.dockerApi?.info !== 'function') {
+    return;
+  }
+
+  try {
+    const info = await watcher.dockerApi.info();
+    if (!info || typeof info !== 'object') {
+      return;
+    }
+
+    const daemonName = (info as { Name?: unknown }).Name;
+    if (typeof daemonName === 'string') {
+      setDetectedServerName(daemonName);
+    }
+  } catch {
+    // Server-name detection is best-effort. Fall back to os.hostname() when unavailable.
+  }
 }
 
 export async function initWatcherWithRemoteAuth(watcher: DockerRemoteAuthWatcher): Promise<void> {
@@ -104,6 +125,7 @@ export async function initWatcherWithRemoteAuth(watcher: DockerRemoteAuthWatcher
   watcher.dockerApi = new Dockerode(options);
   if (!watcher.configuration.host) {
     disableSocketRedirects(watcher.dockerApi);
+    await detectLocalDaemonServerName(watcher);
   }
 }
 
