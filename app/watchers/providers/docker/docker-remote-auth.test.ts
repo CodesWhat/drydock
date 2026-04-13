@@ -164,6 +164,50 @@ describe('docker remote auth module', () => {
     expect(mockSetDetectedServerName).toHaveBeenCalledWith('datavault');
   });
 
+  test('initWatcherWithRemoteAuth ignores non-object local daemon info responses', async () => {
+    const dockerApi = {
+      modem: { headers: {} },
+      info: vi.fn().mockResolvedValue(null),
+    };
+    mockDockerodeCtor.mockImplementation(function DockerodeMock() {
+      return dockerApi;
+    });
+
+    const watcher = createWatcher({
+      configuration: {
+        socket: '/var/run/docker.sock',
+        port: 0,
+      },
+    });
+
+    await initWatcherWithRemoteAuth(watcher as any);
+
+    expect(dockerApi.info).toHaveBeenCalledTimes(1);
+    expect(mockSetDetectedServerName).not.toHaveBeenCalled();
+  });
+
+  test('initWatcherWithRemoteAuth ignores local daemon names that are not strings', async () => {
+    const dockerApi = {
+      modem: { headers: {} },
+      info: vi.fn().mockResolvedValue({ Name: 1234 }),
+    };
+    mockDockerodeCtor.mockImplementation(function DockerodeMock() {
+      return dockerApi;
+    });
+
+    const watcher = createWatcher({
+      configuration: {
+        socket: '/var/run/docker.sock',
+        port: 0,
+      },
+    });
+
+    await initWatcherWithRemoteAuth(watcher as any);
+
+    expect(dockerApi.info).toHaveBeenCalledTimes(1);
+    expect(mockSetDetectedServerName).not.toHaveBeenCalled();
+  });
+
   test('initWatcherWithRemoteAuth pins API version when probe succeeds', async () => {
     const dockerApi = { modem: { headers: {} } };
     mockDockerodeCtor.mockImplementation(function DockerodeMock() {
