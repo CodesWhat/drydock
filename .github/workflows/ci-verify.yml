@@ -84,6 +84,14 @@ jobs:
         id: filter
         uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d  # v4.0.1
         with:
+          # On push events, diff against the ref's previous SHA so we get
+          # per-push changes. dorny/paths-filter's default on non-default
+          # branches is to diff against the repository's default branch,
+          # which on a long-lived release branch means every commit sees
+          # the entire branch diff and runtime is always true. Pull
+          # request events leave base unset so the action falls back to
+          # the PR target diff (the correct behavior there).
+          base: ${{ github.event_name == 'push' && github.event.before || '' }}
           # runtime=true when the changeset touches anything that can affect
           # runtime behavior (backend, UI, e2e, test harness, Docker image,
           # lockfiles, CI workflow, or scripts). Pure docs / changelog /
