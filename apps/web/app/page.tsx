@@ -289,6 +289,7 @@ const roadmap = [
       "Backend-based scanner execution (docker/remote)",
       "Grype scanner provider",
       "Scanner asset lifecycle management",
+      "Fixed-height Containers table redesign with explicit column widths, overflow handling, and safe virtualization re-enable",
     ],
   },
   {

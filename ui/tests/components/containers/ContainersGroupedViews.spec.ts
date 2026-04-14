@@ -13,7 +13,15 @@ vi.mock('@/components/containers/containersViewTemplateContext', () => ({
 }));
 
 const DataTableStub = defineComponent({
-  props: ['rows', 'rowClass', 'rowClickable', 'fullWidthRow', 'rowKey', 'virtualScroll'],
+  props: [
+    'rows',
+    'rowClass',
+    'rowClickable',
+    'fullWidthRow',
+    'rowKey',
+    'virtualScroll',
+    'maxHeight',
+  ],
   emits: ['update:sort-key', 'update:sort-asc', 'row-click'],
   setup(props, { emit }) {
     const isFullWidth = (row: Record<string, unknown>) =>
@@ -726,7 +734,7 @@ describe('ContainersGroupedViews', () => {
     expect(wrapper.text()).toContain('stack-b');
   });
 
-  it('enables virtual scrolling for grouped table mode', async () => {
+  it('uses bounded native scrolling instead of virtualization for grouped table mode', async () => {
     const alpha = makeContainer({
       id: 'c-alpha',
       name: 'alpha',
@@ -755,7 +763,9 @@ describe('ContainersGroupedViews', () => {
     const wrapper = mountSubject();
     await nextTick();
 
-    expect(wrapper.findComponent(DataTableStub).props('virtualScroll')).toBe(true);
+    const dataTable = wrapper.findComponent(DataTableStub);
+    expect(dataTable.props('virtualScroll')).toBe(false);
+    expect(dataTable.props('maxHeight')).toBe('70vh');
   });
 
   it('covers card/list view events and footer action handlers', async () => {
