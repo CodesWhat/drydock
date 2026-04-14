@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **Auth user cache removed** — Replaced TTL-based auth cache with request deduplication only, ensuring logout/session expiry in other tabs is reflected immediately. ([#923e0926](https://github.com/CodesWhat/drydock/commit/923e0926))
+- ♻️ **refactor(ui)** — Container update cards now render phase-only queue status, while grouped stack headers own the frozen `X of Y done` batch progress copy for multi-container updates.
 
 ### Fixed
 
