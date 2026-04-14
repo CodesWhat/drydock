@@ -52,6 +52,18 @@ function makeLabels(overrides: Record<string, string> = {}) {
   };
 }
 
+function makeDockerApi(bindDefinitions: string[] = []) {
+  return {
+    getContainer: vi.fn().mockReturnValue({
+      inspect: vi.fn().mockResolvedValue({
+        HostConfig: {
+          Binds: bindDefinitions,
+        },
+      }),
+    }),
+  };
+}
+
 beforeEach(() => {
   vi.resetAllMocks();
   mockUpdateComposeServiceImageInText.mockImplementation(
@@ -202,6 +214,30 @@ describe('syncComposeFileTag', () => {
     });
 
     expect(fs.readFile).toHaveBeenCalledWith('/home/user/stacks/app/docker-compose.yml', 'utf8');
+  });
+
+  test('should remap host compose file paths through drydock bind mounts', async () => {
+    const logContainer = makeLog();
+    const dockerApi = makeDockerApi([
+      '/Users/sbenson/code/drydock/test/qa-compose.yml:/drydock/qa-compose.yml:ro',
+    ]);
+    vi.mocked(fs.readFile).mockResolvedValue(COMPOSE_CONTENT);
+    vi.mocked(fs.writeFile).mockResolvedValue(undefined);
+    vi.mocked(fs.rename).mockResolvedValue(undefined);
+
+    await syncComposeFileTag({
+      labels: makeLabels({
+        'com.docker.compose.project.config_files':
+          '/Users/sbenson/code/drydock/test/qa-compose.yml',
+        'com.docker.compose.project.working_dir': '/Users/sbenson/code/drydock/test',
+      }),
+      newImage: 'hemmeligapp/hemmelig:v7',
+      logContainer,
+      dockerApi,
+      selfContainerIdentifier: 'drydock-playwright-qa',
+    });
+
+    expect(fs.readFile).toHaveBeenCalledWith('/drydock/qa-compose.yml', 'utf8');
   });
 
   test('should handle compose file read failure gracefully', async () => {

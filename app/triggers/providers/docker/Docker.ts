@@ -1268,6 +1268,7 @@ class Docker extends Trigger {
     /* v8 ignore next -- V8 mis-maps an import destructuring branch to this line */
     if (updated && container.updateKind?.kind === 'tag') {
       await syncComposeFileTag({
+        dockerApi: context.dockerApi,
         labels: context.currentContainerSpec?.Config?.Labels,
         newImage: context.newImage,
         logContainer,

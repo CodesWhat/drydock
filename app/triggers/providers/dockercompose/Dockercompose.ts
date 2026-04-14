@@ -15,6 +15,12 @@ import ComposeFileParser, {
   updateComposeServiceImagesInText,
   YAML_MAX_ALIAS_COUNT,
 } from './ComposeFileParser.js';
+import {
+  getSelfContainerIdentifier as getRuntimeSelfContainerIdentifier,
+  getSelfContainerBindMounts,
+  mapComposePathToContainerBindMount as mapComposePathThroughBindMounts,
+  parseHostToContainerBindMount as parseHostContainerBindMount,
+} from './ComposePathBindMounts.js';
 import PostStartExecutor, {
   normalizePostStartEnvironmentValue,
   normalizePostStartHooks,
@@ -31,7 +37,6 @@ const COMPOSE_DIRECTORY_FILE_CANDIDATES = [
   'docker-compose.yaml',
   'docker-compose.yml',
 ];
-const SELF_CONTAINER_IDENTIFIER_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/;
 const ROOT_MODE_BREAK_GLASS_HINT =
   'use socket proxy or adjust file permissions/group_add; break-glass root mode requires DD_RUN_AS_ROOT=true + DD_ALLOW_INSECURE_ROOT=true';
 
@@ -397,29 +402,11 @@ class Dockercompose extends Docker {
   }
 
   parseHostToContainerBindMount(bindDefinition: string): HostToContainerBindMount | null {
-    // Docker bind mounts follow "<source>:<destination>[:options]".
-    // We only need source + destination; mount options (for example :rw/:ro) are ignored.
-    const [sourceRaw, destinationRaw] = bindDefinition.split(':', 2);
-    const source = sourceRaw?.trim();
-    const destination = destinationRaw?.trim();
-    if (!source || !destination) {
-      return null;
-    }
-    if (!path.isAbsolute(source) || !path.isAbsolute(destination)) {
-      return null;
-    }
-    return {
-      source: path.resolve(source),
-      destination: path.resolve(destination),
-    };
+    return parseHostContainerBindMount(bindDefinition);
   }
 
   getSelfContainerIdentifier(): string | null {
-    const hostname = process.env.HOSTNAME?.trim();
-    if (!hostname || !SELF_CONTAINER_IDENTIFIER_PATTERN.test(hostname)) {
-      return null;
-    }
-    return hostname;
+    return getRuntimeSelfContainerIdentifier();
   }
 
   protected isHostToContainerBindMountCacheLoaded(): boolean {
@@ -465,17 +452,10 @@ class Dockercompose extends Docker {
 
       this._hostToContainerBindMountsLoaded = true;
       try {
-        const selfContainerInspect = await dockerApi
-          .getContainer(selfContainerIdentifier)
-          .inspect();
-        const bindDefinitions = selfContainerInspect?.HostConfig?.Binds;
-        if (!Array.isArray(bindDefinitions)) {
-          return;
-        }
-        this._hostToContainerBindMounts = bindDefinitions
-          .map((bindDefinition) => this.parseHostToContainerBindMount(bindDefinition))
-          .filter((bindMount): bindMount is HostToContainerBindMount => bindMount !== null)
-          .sort((left, right) => right.source.length - left.source.length);
+        this._hostToContainerBindMounts = await getSelfContainerBindMounts(
+          dockerApi,
+          selfContainerIdentifier,
+        );
       } catch (e: unknown) {
         this.log.debug(
           `Unable to inspect bind mounts for compose host-path remapping (${getErrorMessage(e)})`,
@@ -491,32 +471,7 @@ class Dockercompose extends Docker {
   }
 
   mapComposePathToContainerBindMount(composeFilePath: string): string {
-    if (!path.isAbsolute(composeFilePath) || this._hostToContainerBindMounts.length === 0) {
-      return composeFilePath;
-    }
-    const normalizedComposeFilePath = path.resolve(composeFilePath);
-
-    for (const bindMount of this._hostToContainerBindMounts) {
-      if (normalizedComposeFilePath === bindMount.source) {
-        return bindMount.destination;
-      }
-      const sourcePrefix = bindMount.source.endsWith(path.sep)
-        ? bindMount.source
-        : `${bindMount.source}${path.sep}`;
-      if (!normalizedComposeFilePath.startsWith(sourcePrefix)) {
-        continue;
-      }
-      const relativeComposePath = path.relative(bindMount.source, normalizedComposeFilePath);
-      if (!relativeComposePath || relativeComposePath === '.') {
-        return bindMount.destination;
-      }
-      if (relativeComposePath.startsWith('..') || path.isAbsolute(relativeComposePath)) {
-        continue;
-      }
-      return path.join(bindMount.destination, relativeComposePath);
-    }
-
-    return composeFilePath;
+    return mapComposePathThroughBindMounts(composeFilePath, this._hostToContainerBindMounts);
   }
 
   resolveComposeFilePath(

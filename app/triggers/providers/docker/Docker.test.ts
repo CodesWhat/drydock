@@ -4398,6 +4398,41 @@ describe('performContainerUpdate compose file sync', () => {
     executeUpdateSpy.mockRestore();
   });
 
+  test('should pass dockerApi to compose sync when available', async () => {
+    const executeUpdateSpy = vi.spyOn(docker, 'executeContainerUpdate').mockResolvedValue(true);
+
+    const dockerApi = { getContainer: vi.fn() };
+    const context = {
+      currentContainerSpec: {
+        Config: {
+          Labels: {
+            'com.docker.compose.project.config_files': '/app/docker-compose.yml',
+            'com.docker.compose.service': 'web',
+          },
+        },
+      },
+      dockerApi,
+      newImage: 'myapp:v2',
+    };
+
+    const container = {
+      updateKind: { kind: 'tag', localValue: 'v1', remoteValue: 'v2' },
+    };
+
+    const logContainer = { info: vi.fn(), warn: vi.fn(), debug: vi.fn(), error: vi.fn() };
+
+    await docker.performContainerUpdate(context, container, logContainer);
+
+    expect(mockSyncComposeFileTag).toHaveBeenCalledWith({
+      labels: context.currentContainerSpec.Config.Labels,
+      newImage: 'myapp:v2',
+      logContainer,
+      dockerApi,
+    });
+
+    executeUpdateSpy.mockRestore();
+  });
+
   test('should not call syncComposeFileTag for digest updates', async () => {
     const executeUpdateSpy = vi.spyOn(docker, 'executeContainerUpdate').mockResolvedValue(true);
 
