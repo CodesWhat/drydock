@@ -128,10 +128,6 @@ const selectedContainerKey = computed(() =>
   selectedContainer.value ? getContainerViewKey(selectedContainer.value) : null,
 );
 
-// Container rows change height based on badges, policy hints, and stack headers.
-// Keep the scroll area bounded, but avoid fixed-height virtualization math here.
-const tableScrollMaxHeight = '70vh';
-
 function isContainerUpdating(container: { id?: unknown; name?: unknown }) {
   return isContainerUpdateInProgress(container);
 }
@@ -284,7 +280,6 @@ watchEffect(() => {
         :selected-key="selectedContainerKey"
         :show-actions="true"
         :virtual-scroll="false"
-        :max-height="tableScrollMaxHeight"
         :full-width-row="isTableRowFullWidth"
         :row-interactive="isTableRowInteractive"
         :row-class="tableRowClass"

@@ -734,7 +734,7 @@ describe('ContainersGroupedViews', () => {
     expect(wrapper.text()).toContain('stack-b');
   });
 
-  it('uses bounded native scrolling instead of virtualization for grouped table mode', async () => {
+  it('disables virtualization and leaves scrolling to the outer page layout', async () => {
     const alpha = makeContainer({
       id: 'c-alpha',
       name: 'alpha',
@@ -765,7 +765,7 @@ describe('ContainersGroupedViews', () => {
 
     const dataTable = wrapper.findComponent(DataTableStub);
     expect(dataTable.props('virtualScroll')).toBe(false);
-    expect(dataTable.props('maxHeight')).toBe('70vh');
+    expect(dataTable.props('maxHeight')).toBeUndefined();
   });
 
   it('covers card/list view events and footer action handlers', async () => {
