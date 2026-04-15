@@ -69,10 +69,10 @@ function getClientIp(req: Request): string {
 
 function formatIpForLog(ip: string): string {
   if (process.env.DD_SSE_DEBUG_LOG_IP === 'true') {
-    return ip;
+    return `source IP ${ip}`;
   }
   const hashHex = createHash('sha256').update(SSE_LOG_IP_SALT).update(ip).digest('hex').slice(0, 8);
-  return `h:${hashHex}`;
+  return `source IP hash h:${hashHex}`;
 }
 
 function getClientSessionKey(req: Request): string {
@@ -211,7 +211,7 @@ function eventsHandler(req: Request, res: Response): void {
 
   clients.add(client);
   logger.debug(
-    `SSE client connected: ${activeClient.clientId} from ${formatIpForLog(ip)} (${clients.size} total)`,
+    `SSE client connected: client ID ${activeClient.clientId} from ${formatIpForLog(ip)} (${clients.size} total)`,
   );
   startSharedHeartbeatIntervalIfNeeded();
 
@@ -241,7 +241,7 @@ function eventsHandler(req: Request, res: Response): void {
       connectionsPerSession.set(sessionKey, sessionCount - 1);
     }
     logger.debug(
-      `SSE client disconnected: ${activeClient.clientId} from ${formatIpForLog(ip)} (${clients.size} total)`,
+      `SSE client disconnected: client ID ${activeClient.clientId} from ${formatIpForLog(ip)} (${clients.size} total)`,
     );
   };
 

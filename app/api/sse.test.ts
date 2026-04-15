@@ -366,7 +366,7 @@ describe('SSE Router', () => {
       expect(sseRouter._clients.size).toBe(1);
     });
 
-    test('should log connection lifecycle with client ID and hashed IP by default', () => {
+    test('should log connection lifecycle with client ID and labeled source IP hash by default', () => {
       delete process.env.DD_SSE_DEBUG_LOG_IP;
       const handler = getHandler();
       const req = createSSERequest('203.0.113.10');
@@ -378,7 +378,7 @@ describe('SSE Router', () => {
       expect(mockLoggerDebug).toHaveBeenCalledWith(
         expect.stringMatching(
           new RegExp(
-            `^SSE client connected: ${connectedPayload.clientId} from h:[0-9a-f]{8} \\(1 total\\)$`,
+            `^SSE client connected: client ID ${connectedPayload.clientId} from source IP hash h:[0-9a-f]{8} \\(1 total\\)$`,
           ),
         ),
       );
@@ -389,14 +389,14 @@ describe('SSE Router', () => {
       expect(mockLoggerDebug).toHaveBeenCalledWith(
         expect.stringMatching(
           new RegExp(
-            `^SSE client disconnected: ${connectedPayload.clientId} from h:[0-9a-f]{8} \\(0 total\\)$`,
+            `^SSE client disconnected: client ID ${connectedPayload.clientId} from source IP hash h:[0-9a-f]{8} \\(0 total\\)$`,
           ),
         ),
       );
       expect(mockLoggerDebug).not.toHaveBeenCalledWith(expect.stringContaining('203.0.113.10'));
     });
 
-    test('should log raw IP and client ID when DD_SSE_DEBUG_LOG_IP is enabled', () => {
+    test('should log raw source IP and labeled client ID when DD_SSE_DEBUG_LOG_IP is enabled', () => {
       process.env.DD_SSE_DEBUG_LOG_IP = 'true';
       try {
         const handler = getHandler();
@@ -407,14 +407,14 @@ describe('SSE Router', () => {
         const connectedPayload = parseSseEventPayload(res, 'dd:connected');
 
         expect(mockLoggerDebug).toHaveBeenCalledWith(
-          `SSE client connected: ${connectedPayload.clientId} from 203.0.113.10 (1 total)`,
+          `SSE client connected: client ID ${connectedPayload.clientId} from source IP 203.0.113.10 (1 total)`,
         );
         expect(mockLoggerDebug).not.toHaveBeenCalledWith(expect.stringMatching(/from h:[0-9a-f]+/));
 
         req._listeners.close();
 
         expect(mockLoggerDebug).toHaveBeenCalledWith(
-          `SSE client disconnected: ${connectedPayload.clientId} from 203.0.113.10 (0 total)`,
+          `SSE client disconnected: client ID ${connectedPayload.clientId} from source IP 203.0.113.10 (0 total)`,
         );
       } finally {
         delete process.env.DD_SSE_DEBUG_LOG_IP;
@@ -682,12 +682,14 @@ describe('SSE Router', () => {
       expect(rejectedRes.status).toHaveBeenCalledWith(429);
       expect(rejectedRes.json).toHaveBeenCalledWith({ error: 'Too many SSE connections' });
       expect(mockLoggerWarn).toHaveBeenCalledWith(
-        expect.stringMatching(/^SSE per-IP connection limit reached for h:[0-9a-f]{8} \(10\)$/),
+        expect.stringMatching(
+          /^SSE per-IP connection limit reached for source IP hash h:[0-9a-f]{8} \(10\)$/,
+        ),
       );
       expect(mockLoggerWarn).not.toHaveBeenCalledWith(expect.stringContaining(ip));
     });
 
-    test('should log raw IP in rate-limit warning when DD_SSE_DEBUG_LOG_IP is enabled', () => {
+    test('should log raw source IP in rate-limit warning when DD_SSE_DEBUG_LOG_IP is enabled', () => {
       process.env.DD_SSE_DEBUG_LOG_IP = 'true';
       try {
         const handler = getHandler();
@@ -706,7 +708,7 @@ describe('SSE Router', () => {
         handler(rejectedReq, rejectedRes);
 
         expect(mockLoggerWarn).toHaveBeenCalledWith(
-          'SSE per-IP connection limit reached for 192.168.1.2 (10)',
+          'SSE per-IP connection limit reached for source IP 192.168.1.2 (10)',
         );
       } finally {
         delete process.env.DD_SSE_DEBUG_LOG_IP;
