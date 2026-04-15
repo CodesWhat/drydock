@@ -218,6 +218,20 @@ html.dd-font-comic-mono {
   color: var(--dd-text-muted);
 }
 
+/* ─── Z-index utilities ───
+   Tailwind v4's @theme doesn't map --z-* variables to z-* utilities
+   (z-index isn't in the theme namespace), so these must be declared
+   as explicit @utility rules that pull from the same tokens. */
+@utility z-popover {
+  z-index: var(--z-popover);
+}
+@utility z-overlay {
+  z-index: var(--z-overlay);
+}
+@utility z-modal {
+  z-index: var(--z-modal);
+}
+
 /* ─── Semantic typography ─── */
 @utility dd-text-body {
   font-size: var(--text-2xs-plus); /* 11px — primary body text */
