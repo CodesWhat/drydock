@@ -553,6 +553,67 @@ describe('ContainersGroupedViews', () => {
     );
   });
 
+  it('caps long server and registry labels in grouped table and card headers', async () => {
+    const longServer = 'server-name-that-should-not-expand-the-table-or-card';
+    const longRegistry = 'registry-name-that-should-not-expand-the-table-or-card';
+    const container = makeContainer({
+      id: 'c-long',
+      name: 'omega',
+      server: longServer,
+      registry: longRegistry,
+      registryName: longRegistry,
+    });
+
+    const { context } = makeContext();
+    context.groupByStack.value = true;
+    context.containerViewMode.value = 'table';
+    context.filteredContainers.value = [container];
+    context.displayContainers.value = [container];
+    context.renderGroups.value = [
+      {
+        key: 'stack-long',
+        name: 'stack-long',
+        containers: [container],
+        containerCount: 1,
+        updatesAvailable: 1,
+        updatableCount: 1,
+      },
+    ];
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+
+    const tableServer = wrapper
+      .findAll('span')
+      .find(
+        (candidate) =>
+          candidate.text().trim() === longServer && candidate.classes().includes('max-w-[140px]'),
+      );
+    expect(tableServer).toBeDefined();
+    expect(tableServer?.classes()).toContain('truncate');
+
+    const tableRegistry = wrapper
+      .findAll('span')
+      .find(
+        (candidate) =>
+          candidate.text().trim() === longRegistry && candidate.classes().includes('max-w-[140px]'),
+      );
+    expect(tableRegistry).toBeDefined();
+    expect(tableRegistry?.classes()).toContain('truncate');
+
+    context.containerViewMode.value = 'cards';
+    await nextTick();
+
+    const cardRegistry = wrapper
+      .findAll('span')
+      .find(
+        (candidate) =>
+          candidate.text().trim() === longRegistry && candidate.classes().includes('max-w-[140px]'),
+      );
+    expect(cardRegistry).toBeDefined();
+    expect(cardRegistry?.classes()).toContain('truncate');
+  });
+
   it('covers dropdown menu actions across blocked/updateable states', async () => {
     const blockedNoTag = makeContainer({
       id: 'c-m1',

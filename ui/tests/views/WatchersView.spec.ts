@@ -1,4 +1,5 @@
 import { flushPromises } from '@vue/test-utils';
+import { defineComponent } from 'vue';
 import { resetPreferences } from '@/preferences/store';
 import { getAllContainers } from '@/services/container';
 import { getAllWatchers, getWatcher } from '@/services/watcher';
@@ -34,9 +35,32 @@ const mockGetAllWatchers = getAllWatchers as ReturnType<typeof vi.fn>;
 const mockGetWatcher = getWatcher as ReturnType<typeof vi.fn>;
 const mockGetAllContainers = getAllContainers as ReturnType<typeof vi.fn>;
 
+const richDataTableStub = defineComponent({
+  props: ['columns', 'rows', 'rowKey', 'activeRow'],
+  emits: ['row-click'],
+  template: `
+    <div class="data-table" :data-row-count="rows?.length ?? 0" :data-active-row="activeRow || ''">
+      <div v-for="row in rows" :key="row[rowKey || 'id']" class="data-table-row">
+        <button v-if="row" class="row-click-first" @click="$emit('row-click', row)">Open</button>
+        <slot name="cell-name" :row="row" />
+        <slot name="cell-status" :row="row" />
+        <slot name="cell-containers" :row="row" />
+        <slot name="cell-cron" :row="row" />
+        <slot name="cell-nextRun" :row="row" />
+        <slot name="cell-lastRun" :row="row" />
+      </div>
+    </div>
+  `,
+});
+
 async function mountWatchersView() {
   const wrapper = mountWithPlugins(WatchersView, {
-    global: { stubs: dataViewStubs },
+    global: {
+      stubs: {
+        ...dataViewStubs,
+        DataTable: richDataTableStub,
+      },
+    },
   });
   await flushPromises();
   return wrapper;
@@ -83,7 +107,7 @@ describe('WatchersView', () => {
     expect(mockGetAllContainers).toHaveBeenCalledTimes(1);
     expect(wrapper.find('.data-table').attributes('data-row-count')).toBe('2');
 
-    const table = wrapper.findComponent(dataViewStubs.DataTable);
+    const table = wrapper.findComponent(richDataTableStub);
     const rows = table.props('rows') as Array<{ id: string; containers: number }>;
 
     expect(rows).toEqual(
@@ -123,7 +147,7 @@ describe('WatchersView', () => {
     ]);
 
     const wrapper = await mountWatchersView();
-    const table = wrapper.findComponent(dataViewStubs.DataTable);
+    const table = wrapper.findComponent(richDataTableStub);
     const rows = table.props('rows') as Array<{ name: string; containers: number }>;
 
     expect(rows).toEqual(
@@ -159,7 +183,7 @@ describe('WatchersView', () => {
     expect((wrapper.find('input[type="text"]').element as HTMLInputElement).value).toBe('edge');
     expect(wrapper.find('.data-table').attributes('data-row-count')).toBe('1');
 
-    const table = wrapper.findComponent(dataViewStubs.DataTable);
+    const table = wrapper.findComponent(richDataTableStub);
     const rows = table.props('rows') as Array<{ id: string; name: string }>;
     expect(rows).toEqual([expect.objectContaining({ id: 'watcher-edge', name: 'Edge Cluster' })]);
   });
@@ -187,7 +211,7 @@ describe('WatchersView', () => {
     mockGetAllContainers.mockResolvedValue([]);
 
     const wrapper = await mountWatchersView();
-    const table = wrapper.findComponent(dataViewStubs.DataTable);
+    const table = wrapper.findComponent(richDataTableStub);
     const rows = table.props('rows') as Array<{ lastRun: string }>;
 
     expect(rows[0].lastRun).toBe('5m ago');
@@ -205,7 +229,7 @@ describe('WatchersView', () => {
     mockGetAllContainers.mockResolvedValue([]);
 
     const wrapper = await mountWatchersView();
-    const table = wrapper.findComponent(dataViewStubs.DataTable);
+    const table = wrapper.findComponent(richDataTableStub);
     const rows = table.props('rows') as Array<{ lastRun: string }>;
 
     expect(rows[0].lastRun).toBe('\u2014');
@@ -227,12 +251,33 @@ describe('WatchersView', () => {
     mockGetAllContainers.mockResolvedValue([]);
 
     const wrapper = await mountWatchersView();
-    const table = wrapper.findComponent(dataViewStubs.DataTable);
+    const table = wrapper.findComponent(richDataTableStub);
     const rows = table.props('rows') as Array<{ nextRun: string }>;
 
     expect(rows[0].nextRun).toBe('1h 30m');
 
     vi.useRealTimers();
+  });
+
+  it('caps long cron strings in the table view', async () => {
+    const longCron = '0 0 1,15 */2 1-5 /usr/bin/do-something-very-long-and-important';
+    mockGetAllWatchers.mockResolvedValue([
+      {
+        id: 'watcher-alpha',
+        name: 'Alpha Watcher',
+        type: 'docker',
+        configuration: { cron: longCron },
+      },
+    ]);
+    mockGetAllContainers.mockResolvedValue([{ id: 'c-1', watcher: 'Alpha Watcher' }]);
+
+    const wrapper = await mountWatchersView();
+
+    const cron = wrapper.findAll('span').find((candidate) => candidate.text().trim() === longCron);
+
+    expect(cron).toBeDefined();
+    expect(cron?.classes()).toContain('max-w-[180px]');
+    expect(cron?.classes()).toContain('truncate');
   });
 
   it('clicking a row fetches watcher details from per-component endpoint', async () => {

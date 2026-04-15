@@ -1455,9 +1455,11 @@ onUnmounted(() => {
               <div v-if="showUserMenu"
                    class="min-w-[160px] py-1 dd-rounded-lg shadow-lg"
                    :style="{ ...userMenuStyle, zIndex: 'var(--z-popover)', backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)', boxShadow: 'var(--dd-shadow-tooltip)' }">
-                <div class="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wider dd-text-muted"
+                <div
+                  class="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wider dd-text-muted max-w-[220px] truncate"
+                  v-tooltip.top="currentUser?.username || currentUser?.displayName || 'User'"
                      :style="{ borderBottom: '1px solid var(--dd-border)' }">
-                  {{ currentUser?.username || 'User' }}
+                  {{ currentUser?.username || currentUser?.displayName || 'User' }}
                 </div>
                 <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text" @click="showUserMenu = false; router.push({ path: ROUTES.CONFIG, query: { tab: 'profile' } })">
                   <AppIcon name="user" :size="11" class="dd-text-muted" />

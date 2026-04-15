@@ -1,6 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import NotificationBell from '@/components/NotificationBell.vue';
+import { tooltip as tooltipDirective } from '@/directives/tooltip';
 
 const mockPush = vi.fn();
 vi.mock('vue-router', () => ({
@@ -63,7 +64,10 @@ describe('NotificationBell', () => {
 
   function factory() {
     const wrapper = mount(NotificationBell, {
-      global: { stubs: { AppIcon: iconStub, Transition: transitionStub } },
+      global: {
+        stubs: { AppIcon: iconStub, Transition: transitionStub },
+        directives: { tooltip: tooltipDirective },
+      },
     });
     mountedWrappers.push(wrapper);
     return wrapper;
@@ -196,6 +200,51 @@ describe('NotificationBell', () => {
     const rows = findEntryRows(wrapper);
     expect(rows[0].text()).toContain('1.24');
     expect(rows[0].text()).toContain('1.25');
+  });
+
+  it('truncates long version summaries and keeps the full value on hover', async () => {
+    mockGetAuditLog.mockResolvedValue({
+      entries: [
+        {
+          id: '1',
+          timestamp: new Date(Date.now() - 30_000).toISOString(),
+          action: 'update-available',
+          containerName: 'nginx',
+          fromVersion: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+          toVersion: 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+          status: 'info' as const,
+        },
+      ],
+    });
+
+    const wrapper = factory();
+    await flushPromises();
+    await openBell(wrapper);
+
+    const summary = wrapper.get('[data-test="notification-version-summary"]');
+    expect(summary.classes()).toContain('truncate');
+    expect(summary.attributes('title')).toContain(
+      'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    );
+    expect(summary.attributes('title')).toContain(
+      'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+    );
+
+    await summary.trigger('mouseenter');
+    expect(summary.attributes('title')).toBeUndefined();
+    await summary.trigger('mouseleave');
+    expect(summary.attributes('title')).toContain(
+      'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    );
+    expect(summary.attributes('title')).toContain(
+      'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+    );
+    expect(summary.text()).toContain(
+      'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    );
+    expect(summary.text()).toContain(
+      'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+    );
   });
 
   it('navigates to audit page on entry click', async () => {

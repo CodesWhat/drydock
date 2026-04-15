@@ -219,7 +219,11 @@ onMounted(fetchServers);
             </div>
           </template>
           <template #cell-host="{ row }">
-            <span class="font-mono text-2xs dd-text-secondary">{{ row.host }}</span>
+            <span class="block max-w-[220px] truncate font-mono text-2xs dd-text-secondary"
+                  :title="row.host"
+                  v-tooltip.top="row.host">
+              {{ row.host }}
+            </span>
           </template>
           <template #cell-status="{ row }">
             <AppBadge :tone="row.status === 'connected' ? 'success' : 'danger'" size="xs" class="px-1.5 py-0 md:!hidden" v-tooltip.top="row.status === 'connected' ? 'Connected' : 'Disconnected'">
@@ -258,7 +262,11 @@ onMounted(fetchServers);
                 <AppIcon name="servers" :size="14" class="dd-text-secondary shrink-0 mt-1" />
                 <div class="min-w-0">
                   <div class="text-sm-plus font-semibold truncate dd-text">{{ server.name }}</div>
-                  <div class="text-2xs-plus truncate mt-0.5 dd-text-muted font-mono">{{ server.host }}</div>
+                  <div class="text-2xs-plus truncate mt-0.5 dd-text-muted font-mono"
+                       :title="server.host"
+                       v-tooltip.top="server.host">
+                    {{ server.host }}
+                  </div>
                 </div>
               </div>
               <AppBadge :tone="server.status === 'connected' ? 'success' : 'danger'" size="xs" class="px-1.5 py-0 shrink-0 ml-2 md:!hidden" v-tooltip.top="server.status === 'connected' ? 'Connected' : 'Disconnected'">
@@ -311,11 +319,15 @@ onMounted(fetchServers);
           @item-click="openDetail($event)"
         >
           <template #header="{ item: server }">
-            <AppIcon name="servers" :size="14" class="dd-text-secondary" />
-            <div class="flex-1 min-w-0">
-              <div class="text-sm font-semibold truncate dd-text">{{ server.name }}</div>
-              <div class="text-2xs font-mono dd-text-muted truncate mt-0.5">{{ server.host }}</div>
+          <AppIcon name="servers" :size="14" class="dd-text-secondary" />
+          <div class="flex-1 min-w-0">
+            <div class="text-sm font-semibold truncate dd-text">{{ server.name }}</div>
+            <div class="text-2xs font-mono dd-text-muted truncate mt-0.5"
+                 :title="server.host"
+                 v-tooltip.top="server.host">
+              {{ server.host }}
             </div>
+          </div>
             <div class="flex items-center gap-3 shrink-0">
               <span class="text-2xs-plus dd-text-muted hidden md:inline">
                 <span class="font-semibold dd-text">{{ server.containers.total }}</span> containers
@@ -359,7 +371,11 @@ onMounted(fetchServers);
         </template>
 
         <template #subtitle>
-          <span class="text-2xs-plus font-mono dd-text-secondary">{{ selectedServer?.host }}</span>
+          <span class="block max-w-[220px] truncate text-2xs-plus font-mono dd-text-secondary"
+                :title="selectedServer?.host"
+                v-tooltip.top="selectedServer?.host || ''">
+            {{ selectedServer?.host }}
+          </span>
         </template>
 
         <template v-if="selectedServer" #default>

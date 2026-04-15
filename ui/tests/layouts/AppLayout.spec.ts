@@ -117,7 +117,7 @@ vi.mock('@/services/sse', () => ({
   },
 }));
 
-function mountLayout() {
+function mountLayout(stubs: Record<string, unknown> = {}) {
   return mountWithPlugins(AppLayout, {
     shallow: true,
     global: {
@@ -127,6 +127,7 @@ function mountLayout() {
         NotificationBell: true,
         ThemeToggle: true,
         AnnouncementBanner: false,
+        ...stubs,
       },
     },
   });
@@ -192,6 +193,33 @@ describe('AppLayout', () => {
 
       const main = wrapper.find('main');
       expect(main.classes()).not.toContain('sm:px-6');
+    });
+
+    it('truncates long usernames in the user menu header', async () => {
+      const longUsername = 'avery-long-username-that-should-not-expand-the-menu';
+      mockGetUser.mockResolvedValue({ username: longUsername });
+
+      const wrapper = mountLayout({
+        AppButton: {
+          inheritAttrs: false,
+          template: '<button v-bind="$attrs"><slot /></button>',
+        },
+      });
+      mountedWrappers.push(wrapper);
+      await flushPromises();
+
+      const userMenuButton = wrapper.find('button[aria-label="User menu"]');
+      expect(userMenuButton.exists()).toBe(true);
+      await userMenuButton.trigger('click');
+      await flushPromises();
+
+      const header = wrapper
+        .findAll('div')
+        .find((candidate) => candidate.text().trim() === longUsername);
+
+      expect(header).toBeDefined();
+      expect(header?.classes()).toContain('max-w-[220px]');
+      expect(header?.classes()).toContain('truncate');
     });
   });
 

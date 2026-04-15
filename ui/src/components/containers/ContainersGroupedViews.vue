@@ -475,15 +475,27 @@ watchEffect(() => {
         </template>
         <!-- Server -->
         <template #cell-server="{ row: c }">
-          <AppBadge size="xs" :custom="{ bg: serverBadgeColor(c.server).bg, text: serverBadgeColor(c.server).text }">
-            {{ c.server }}
+          <AppBadge
+            size="xs"
+            :custom="{ bg: serverBadgeColor(c.server).bg, text: serverBadgeColor(c.server).text }"
+            v-tooltip.top="tt(c.server)"
+          >
+            <span class="block max-w-[140px] truncate">
+              {{ c.server }}
+            </span>
           </AppBadge>
         </template>
         <!-- Registry badge -->
         <template #cell-registry="{ row: c }">
           <div class="inline-flex items-center justify-center gap-1.5">
-            <AppBadge size="xs" :custom="{ bg: registryColorBg(c.registry), text: registryColorText(c.registry) }">
-              {{ registryLabel(c.registry, c.registryUrl, c.registryName) }}
+            <AppBadge
+              size="xs"
+              :custom="{ bg: registryColorBg(c.registry), text: registryColorText(c.registry) }"
+              v-tooltip.top="tt(registryLabel(c.registry, c.registryUrl, c.registryName))"
+            >
+              <span class="block max-w-[140px] truncate">
+                {{ registryLabel(c.registry, c.registryUrl, c.registryName) }}
+              </span>
             </AppBadge>
             <span v-if="hasRegistryError(c)"
                   class="inline-flex items-center justify-center"
@@ -637,8 +649,14 @@ watchEffect(() => {
               </div>
             </div>
             <div class="flex items-center gap-1.5 shrink-0 ml-2">
-              <AppBadge size="xs" :custom="{ bg: registryColorBg(c.registry), text: registryColorText(c.registry) }">
-                {{ registryLabel(c.registry, c.registryUrl, c.registryName) }}
+              <AppBadge
+                size="xs"
+                :custom="{ bg: registryColorBg(c.registry), text: registryColorText(c.registry) }"
+                v-tooltip.top="tt(registryLabel(c.registry, c.registryUrl, c.registryName))"
+              >
+                <span class="block max-w-[140px] truncate">
+                  {{ registryLabel(c.registry, c.registryUrl, c.registryName) }}
+                </span>
               </AppBadge>
               <span v-if="hasRegistryError(c)"
                     class="inline-flex items-center justify-center"
@@ -894,8 +912,15 @@ watchEffect(() => {
             </AppBadge>
             <!-- Server: icon on mobile, badge on desktop -->
             <AppIcon :name="parseServer(c.server).name === 'Local' ? 'home' : 'remote'" :size="12" class="shrink-0 dd-text-muted md:!hidden" v-tooltip.top="tt(parseServer(c.server).name)" />
-            <AppBadge class="max-md:!hidden" size="xs" :custom="{ bg: serverBadgeColor(c.server).bg, text: serverBadgeColor(c.server).text }">
-              {{ parseServer(c.server).name }}
+            <AppBadge
+              class="max-md:!hidden"
+              size="xs"
+              :custom="{ bg: serverBadgeColor(c.server).bg, text: serverBadgeColor(c.server).text }"
+              v-tooltip.top="tt(parseServer(c.server).name)"
+            >
+              <span class="block max-w-[140px] truncate">
+                {{ parseServer(c.server).name }}
+              </span>
             </AppBadge>
           </div>
         </template>

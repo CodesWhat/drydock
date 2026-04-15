@@ -1,4 +1,5 @@
 import { flushPromises } from '@vue/test-utils';
+import { defineComponent } from 'vue';
 import { resetPreferences } from '@/preferences/store';
 import { getAllRegistries, getRegistry } from '@/services/registry';
 import RegistriesView from '@/views/RegistriesView.vue';
@@ -39,7 +40,27 @@ function makeRegistry(overrides: Record<string, any> = {}) {
 
 async function mountRegistriesView() {
   const wrapper = mountWithPlugins(RegistriesView, {
-    global: { stubs: dataViewStubs },
+    global: {
+      stubs: {
+        ...dataViewStubs,
+        DataTable: defineComponent({
+          props: ['columns', 'rows', 'rowKey', 'activeRow'],
+          emits: ['row-click'],
+          template: `
+            <div class="data-table" :data-row-count="rows?.length ?? 0" :data-active-row="activeRow || ''">
+              <div v-for="row in rows" :key="row[rowKey || 'id']" class="data-table-row">
+                <button v-if="row" class="row-click-first" @click="$emit('row-click', row)">Open</button>
+                <slot name="cell-name" :row="row" />
+                <slot name="cell-type" :row="row" />
+                <slot name="cell-status" :row="row" />
+                <slot name="cell-url" :row="row" />
+                <slot name="empty" v-if="!rows || rows.length === 0" />
+              </div>
+            </div>
+          `,
+        }),
+      },
+    },
   });
   await flushPromises();
   return wrapper;
@@ -155,5 +176,45 @@ describe('RegistriesView', () => {
     });
     expect(wrapper.text()).toContain('us-east-1');
     expect(wrapper.text()).toContain('123456789012.dkr.ecr.us-east-1.amazonaws.com');
+  });
+
+  it('caps long registry URLs in compact table and detail surfaces', async () => {
+    const longUrl =
+      'https://registry.example.internal/company/team/service/component/releases/2026/04/with-an-extra-long-path';
+    mockGetAllRegistries.mockResolvedValue([
+      makeRegistry({
+        name: 'Long Registry',
+        configuration: { url: longUrl },
+      }),
+    ]);
+    mockGetRegistry.mockResolvedValue(
+      makeRegistry({
+        name: 'Long Registry',
+        configuration: { url: longUrl },
+      }),
+    );
+
+    const wrapper = await mountRegistriesView();
+
+    const tableUrl = wrapper
+      .findAll('span')
+      .find(
+        (candidate) =>
+          candidate.text().trim() === longUrl && candidate.classes().includes('max-w-[220px]'),
+      );
+    expect(tableUrl).toBeDefined();
+    expect(tableUrl?.classes()).toContain('truncate');
+
+    await wrapper.find('.row-click-first').trigger('click');
+    await flushPromises();
+
+    const detailUrl = wrapper
+      .findAll('span')
+      .find(
+        (candidate) =>
+          candidate.text().trim() === longUrl && candidate.classes().includes('max-w-[220px]'),
+      );
+    expect(detailUrl).toBeDefined();
+    expect(detailUrl?.classes()).toContain('truncate');
   });
 });

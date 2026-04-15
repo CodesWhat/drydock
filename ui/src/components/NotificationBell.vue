@@ -188,10 +188,16 @@ function isUnread(entry: AuditEntry): boolean {
                    :class="{ 'font-bold': isUnread(entry), 'font-medium': !isUnread(entry) }">
                 {{ actionLabel(entry.action) }}
               </div>
-              <div class="text-2xs truncate dd-text-muted font-mono mt-0.5">
+              <div class="text-2xs truncate dd-text-muted font-mono mt-0.5"
+                   :title="entry.containerName"
+                   v-tooltip.top="entry.containerName">
                 {{ entry.containerName }}
               </div>
-              <div v-if="versionSummary(entry)" class="text-2xs dd-text-secondary font-mono mt-0.5">
+              <div v-if="versionSummary(entry)"
+                   class="text-2xs dd-text-secondary font-mono mt-0.5 truncate"
+                   data-test="notification-version-summary"
+                   :title="versionSummary(entry)"
+                   v-tooltip.top="versionSummary(entry)">
                 {{ versionSummary(entry) }}
               </div>
             </div>
