@@ -13,6 +13,8 @@ interface TooltipState {
   timer: ReturnType<typeof setTimeout> | null;
   hadTitle: boolean;
   originalTitle: string | null;
+  fallbackTitle: string | null;
+  titleSuppressed: boolean;
   show: () => void;
   hide: () => void;
 }
@@ -94,6 +96,14 @@ function hideTooltip() {
   activeAnchor = null;
 }
 
+function syncTitle(el: HTMLElement, state: TooltipState) {
+  if (state.titleSuppressed || !state.fallbackTitle) {
+    el.removeAttribute('title');
+    return;
+  }
+  el.setAttribute('title', state.fallbackTitle);
+}
+
 // ── Directive state ───────────────────────────────────────────────
 
 const stateMap = new WeakMap<HTMLElement, TooltipState>();
@@ -117,11 +127,15 @@ function makeShow(el: HTMLElement, state: TooltipState): () => void {
     if (state.delay > 0) {
       state.timer = setTimeout(() => {
         state.timer = null;
+        state.titleSuppressed = true;
+        syncTitle(el, state);
         showTooltip(el, state);
       }, state.delay);
       return;
     }
 
+    state.titleSuppressed = true;
+    syncTitle(el, state);
     showTooltip(el, state);
   };
 }
@@ -135,25 +149,29 @@ function makeHide(_el: HTMLElement, state: TooltipState): () => void {
     if (activeAnchor === _el) {
       hideTooltip();
     }
+    if (state.titleSuppressed) {
+      state.titleSuppressed = false;
+      syncTitle(_el, state);
+    }
   };
 }
 
 function bind(el: HTMLElement, binding: DirectiveBinding<BindingValue>) {
   const { text, delay } = parse(binding);
+  const originalTitle = el.getAttribute('title');
   const state: TooltipState = {
     text,
     delay,
     timer: null,
     hadTitle: el.hasAttribute('title'),
-    originalTitle: el.getAttribute('title'),
+    originalTitle,
+    fallbackTitle: originalTitle ?? (text || null),
+    titleSuppressed: false,
     show: undefined as unknown as () => void,
     hide: undefined as unknown as () => void,
   };
 
-  // Avoid native browser tooltip duplication while custom tooltip is active.
-  if (state.hadTitle) {
-    el.removeAttribute('title');
-  }
+  syncTitle(el, state);
 
   state.show = makeShow(el, state);
   state.hide = makeHide(el, state);
@@ -198,6 +216,15 @@ export const tooltip: ObjectDirective<HTMLElement, BindingValue> = {
     const { text, delay } = parse(binding);
     state.text = text;
     state.delay = delay;
+    const currentTitle = el.getAttribute('title');
+    if (currentTitle != null) {
+      state.originalTitle = currentTitle;
+      state.fallbackTitle = currentTitle;
+    } else if (state.hadTitle) {
+      state.fallbackTitle = text || state.originalTitle;
+    } else {
+      state.fallbackTitle = text || null;
+    }
 
     // Update live tooltip text if currently showing for this anchor
     if (activeAnchor === el && sharedTip) {
@@ -206,7 +233,9 @@ export const tooltip: ObjectDirective<HTMLElement, BindingValue> = {
 
     if (!text) {
       state.hide();
+      return;
     }
+    syncTitle(el, state);
   },
   beforeUnmount: unbind,
 };

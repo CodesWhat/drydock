@@ -189,18 +189,35 @@ describe('tooltip directive', () => {
     const el = createAnchor();
     el.setAttribute('title', 'Native title');
     mounted?.(el, binding('Custom title'));
-    expect(el.getAttribute('title')).toBeNull();
+    expect(el.getAttribute('title')).toBe('Native title');
 
     beforeUnmount?.(el);
     expect(el.getAttribute('title')).toBe('Native title');
   });
 
-  it('leaves title absent when none existed before mount', () => {
+  it('uses the binding text as a title fallback while mounted and removes it on unmount', () => {
     const el = createAnchor();
     mounted?.(el, binding('No native title'));
 
+    expect(el.getAttribute('title')).toBe('No native title');
+
     beforeUnmount?.(el);
     expect(el.hasAttribute('title')).toBe(false);
+  });
+
+  it('temporarily suppresses title while the custom tooltip is visible and restores it after hide', () => {
+    const el = createAnchor();
+    mounted?.(el, binding('Hover title'));
+    expect(el.getAttribute('title')).toBe('Hover title');
+
+    el.dispatchEvent(new Event('mouseenter'));
+    expect(el.getAttribute('title')).toBeNull();
+    expect(getTooltipEl()!.textContent).toBe('Hover title');
+
+    el.dispatchEvent(new Event('mouseleave'));
+    expect(el.getAttribute('title')).toBe('Hover title');
+
+    beforeUnmount?.(el);
   });
 
   it('handles inconsistent title APIs where hasAttribute is true but getAttribute is null', () => {
