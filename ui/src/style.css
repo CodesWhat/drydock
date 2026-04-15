@@ -232,6 +232,21 @@ html.dd-font-comic-mono {
   z-index: var(--z-modal);
 }
 
+/* ─── Table row "updating" state ───
+   Marker class put on a <tr> by DataTable's row-class callback. Each
+   direct grandchild of every <td> is dimmed to 50% so the row reads
+   as inactive, while the centered "Updating / Queued" badge — marked
+   `.dd-row-overlay` — stays at full opacity. The TR is set to
+   position: relative so the overlay's absolute positioning resolves
+   to the row boundary and spans the full row width. */
+tr.dd-row-updating {
+  position: relative;
+}
+tr.dd-row-updating > td > *:not(.dd-row-overlay) {
+  opacity: 0.5;
+  transition: opacity var(--dd-duration-enter);
+}
+
 /* ─── Semantic typography ─── */
 @utility dd-text-body {
   font-size: var(--text-2xs-plus); /* 11px — primary body text */

@@ -1237,7 +1237,7 @@ describe('ContainersGroupedViews', () => {
     const wrapper = mountSubject();
     const row = rowByName(wrapper, 'alpha');
 
-    expect(row.classes()).toContain('opacity-50');
+    expect(row.classes()).toContain('dd-row-updating');
     expect(row.text()).toContain('Updating');
   });
 
@@ -1270,7 +1270,7 @@ describe('ContainersGroupedViews', () => {
     const wrapper = mountSubject();
     const row = rowByName(wrapper, 'alpha');
 
-    expect(row.classes()).toContain('opacity-50');
+    expect(row.classes()).toContain('dd-row-updating');
     expect(row.text()).toContain('Updating');
   });
 
