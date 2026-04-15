@@ -624,8 +624,11 @@ class Oidc extends Authentication {
       } else {
         await persistOidcChecks();
       }
+      const { strictEndpoints, allowedOrigins } = this.getAllowedAuthorizationRedirects();
       res.json({
-        url: authUrl,
+        redirect: authUrl,
+        strictEndpoints: [...strictEndpoints],
+        allowedOrigins: [...allowedOrigins],
       });
     } catch (e: unknown) {
       this.log.warn(`Unable to initialize OIDC session (${getErrorMessage(e)})`);

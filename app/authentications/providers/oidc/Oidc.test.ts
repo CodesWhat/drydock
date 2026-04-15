@@ -104,6 +104,22 @@ function expect401JsonMessage(res: any, message: string) {
   expect(res.json).toHaveBeenCalledWith({ error: message });
 }
 
+function expectDefaultRedirectPayload(res: any) {
+  expect(res.json).toHaveBeenCalledWith({
+    redirect: 'https://idp/auth',
+    strictEndpoints: ['https://idp/auth'],
+    allowedOrigins: ['https://idp', 'https://idp.example.com'],
+  });
+}
+
+function expectDiscoveryFallbackRedirectPayload(res: any) {
+  expect(res.json).toHaveBeenCalledWith({
+    redirect: 'https://idp/auth',
+    strictEndpoints: [],
+    allowedOrigins: ['https://idp'],
+  });
+}
+
 /** Perform a redirect flow and return the session with pending state */
 async function performRedirect(oidcInstance: any, mock: any, session?: any) {
   const sess = session || { save: vi.fn((cb) => cb()) };
@@ -548,7 +564,7 @@ test('redirect should persist oidc checks in session before responding', async (
     req.session.oidc.default.pending[Object.keys(req.session.oidc.default.pending)[0]].codeVerifier,
   ).toBeDefined();
   expect(save).toHaveBeenCalledTimes(1);
-  expect(res.json).toHaveBeenCalledWith({ url: 'https://idp/auth' });
+  expectDefaultRedirectPayload(res);
   expect(res.status).not.toHaveBeenCalled();
 });
 
@@ -677,7 +693,11 @@ test('redirect should allow discovery-origin redirects when authorization endpoi
 
   await oidc.redirect(req, res);
 
-  expect(res.json).toHaveBeenCalledWith({ url: 'https://idp/auth' });
+  expect(res.json).toHaveBeenCalledWith({
+    redirect: 'https://idp/auth',
+    strictEndpoints: [],
+    allowedOrigins: ['https://idp', 'https://issuer.example.com'],
+  });
   expect(res.status).not.toHaveBeenCalled();
 });
 
@@ -930,7 +950,7 @@ test('redirect should not wait forever when previous session lock never settles'
 
     expect(settled).toBe(true);
     await redirectPromise;
-    expect(res.json).toHaveBeenCalledWith({ url: 'https://idp/auth' });
+    expectDefaultRedirectPayload(res);
     expect(res.status).not.toHaveBeenCalled();
   } finally {
     mapGetSpy.mockRestore();
@@ -961,7 +981,7 @@ test('redirect should recover when a stale rejected lock promise exists', async 
 
     await oidc.redirect(req, res);
 
-    expect(res.json).toHaveBeenCalledWith({ url: 'https://idp/auth' });
+    expectDefaultRedirectPayload(res);
     expect(res.status).not.toHaveBeenCalled();
   } finally {
     mapGetSpy.mockRestore();
@@ -1300,7 +1320,7 @@ test('redirect should recover from session reload error by regenerating', async 
   await oidc.redirect(req, res);
 
   expect(regenerate).toHaveBeenCalledTimes(1);
-  expect(res.json).toHaveBeenCalledWith({ url: 'https://idp/auth' });
+  expectDefaultRedirectPayload(res);
   expect(res.status).not.toHaveBeenCalled();
 });
 
@@ -1316,7 +1336,7 @@ test('redirect should recover from session reload error even without regenerate'
 
   await oidc.redirect(req, res);
 
-  expect(res.json).toHaveBeenCalledWith({ url: 'https://idp/auth' });
+  expectDefaultRedirectPayload(res);
   expect(res.status).not.toHaveBeenCalled();
 });
 
@@ -1373,7 +1393,7 @@ test('initAuthentication should tolerate startup discovery failure and recover o
   await oidc.redirect(req, res);
 
   expect(openidClientMock.discovery).toHaveBeenCalledTimes(2);
-  expect(res.json).toHaveBeenCalledWith({ url: 'https://idp/auth' });
+  expectDiscoveryFallbackRedirectPayload(res);
   expect(oidc.log.warn).toHaveBeenCalledWith(
     expect.stringContaining('Drydock will retry on the next authentication attempt'),
   );
@@ -1585,7 +1605,7 @@ test('redirect should skip session lock when sessionID is empty', async () => {
 
   await oidc.redirect(req, res);
 
-  expect(res.json).toHaveBeenCalledWith({ url: 'https://idp/auth' });
+  expectDefaultRedirectPayload(res);
 });
 
 test('stale lock cleanup timer should delete session lock when operation outlives TTL', async () => {
@@ -1637,7 +1657,7 @@ test('stale lock cleanup timer should delete session lock when operation outlive
   await vi.advanceTimersByTimeAsync(0);
   await redirectPromise;
 
-  expect(res.json).toHaveBeenCalledWith({ url: 'https://idp/auth' });
+  expectDefaultRedirectPayload(res);
 
   mapGetSpy.mockRestore();
   mapDeleteSpy.mockRestore();
@@ -1677,8 +1697,8 @@ test('stale lock cleanup timer should skip deleting when a newer lock replaces t
     firstReload?.();
     await Promise.all([firstRedirectPromise, secondRedirectPromise]);
 
-    expect(firstRes.json).toHaveBeenCalledWith({ url: 'https://idp/auth' });
-    expect(secondRes.json).toHaveBeenCalledWith({ url: 'https://idp/auth' });
+    expectDefaultRedirectPayload(firstRes);
+    expectDefaultRedirectPayload(secondRes);
   } finally {
     vi.useRealTimers();
   }

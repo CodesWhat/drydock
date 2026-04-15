@@ -56,6 +56,42 @@ function extractOidcRedirect(value: unknown): string | undefined {
   return typeof redirect === 'string' ? redirect : undefined;
 }
 
+function extractStringArray(value: unknown, key: string): string[] {
+  if (!isRecord(value) || !Array.isArray(value[key])) {
+    return [];
+  }
+  return value[key].filter((item): item is string => typeof item === 'string');
+}
+
+function normalizePathname(pathname: string): string {
+  const normalized = pathname.replace(/\/+$/, '');
+  return normalized.length > 0 ? normalized : '/';
+}
+
+function toEndpointKey(url: URL): string {
+  return `${url.origin}${normalizePathname(url.pathname)}`;
+}
+
+function isAllowedOidcRedirect(value: unknown, redirect: string): boolean {
+  const parsedUrl = new URL(redirect, globalThis.location.origin);
+  const isHttp = parsedUrl.protocol === 'http:' || parsedUrl.protocol === 'https:';
+  if (!isHttp) {
+    return false;
+  }
+
+  const strictEndpoints = extractStringArray(value, 'strictEndpoints');
+  if (strictEndpoints.length > 0) {
+    return strictEndpoints.includes(toEndpointKey(parsedUrl));
+  }
+
+  const allowedOrigins = extractStringArray(value, 'allowedOrigins');
+  if (allowedOrigins.length > 0) {
+    return allowedOrigins.includes(parsedUrl.origin);
+  }
+
+  return false;
+}
+
 const strategies = ref<Strategy[]>([]);
 const loading = ref(true);
 const error = ref('');
@@ -137,13 +173,10 @@ async function handleOidc(name: string) {
     const result = await getOidcRedirection(name);
     const redirect = extractOidcRedirect(result);
 
-    if (typeof redirect === 'string') {
+    if (typeof redirect === 'string' && isAllowedOidcRedirect(result, redirect)) {
       const parsedUrl = new URL(redirect, globalThis.location.origin);
-      const isHttp = parsedUrl.protocol === 'http:' || parsedUrl.protocol === 'https:';
-      if (isHttp) {
-        globalThis.location.assign(parsedUrl.toString());
-        return;
-      }
+      globalThis.location.assign(parsedUrl.toString());
+      return;
     }
     error.value = `Failed to connect to ${name}`;
   } catch {
