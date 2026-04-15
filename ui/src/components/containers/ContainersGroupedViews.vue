@@ -233,10 +233,7 @@ function tableRowClass(row: Record<string, unknown>) {
   if (!isContainerTableRow(typedRow)) {
     return '';
   }
-  const group = getGroupByKey(typedRow.__groupKey);
-  return isContainerUpdating(typedRow) ||
-    isContainerQueued(typedRow) ||
-    (group ? isGroupUpdateInProgress(group) : false)
+  return isContainerUpdating(typedRow) || isContainerQueued(typedRow)
     ? 'opacity-50 pointer-events-none transition-opacity duration-300'
     : '';
 }
@@ -624,7 +621,7 @@ watchEffect(() => {
         <template #card="{ item: c }">
           <div
             class="flex flex-col flex-1 transition-opacity"
-            :class="{ 'opacity-30': isContainerUpdating(c) || isContainerQueued(c) || isGroupUpdateInProgress(group) }"
+            :class="{ 'opacity-30': isContainerUpdating(c) || isContainerQueued(c) }"
           >
           <!-- Card header -->
           <div class="px-4 pt-4 pb-2 flex items-start justify-between">
@@ -784,7 +781,7 @@ watchEffect(() => {
           </div>
           </div>
           <div
-            v-if="isContainerUpdating(c) || isContainerQueued(c) || isGroupUpdateInProgress(group)"
+            v-if="isContainerUpdating(c) || isContainerQueued(c)"
             class="absolute inset-0 flex items-center justify-center pointer-events-none z-10"
           >
             <div
