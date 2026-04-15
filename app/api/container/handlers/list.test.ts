@@ -350,6 +350,57 @@ describe('attachInProgressUpdateOperation', () => {
 });
 
 describe('buildContainerListResponse', () => {
+  test('preloads active operations once for the full container list response', () => {
+    const containers = [
+      createContainer({ id: 'c1', name: 'web', displayName: 'web' }),
+      createContainer({ id: 'c2', name: 'worker', displayName: 'worker' }),
+    ];
+    const context: CrudHandlerContext = {
+      ...createMockContext(),
+      getContainersFromStore: vi.fn(() => containers),
+      getContainerCountFromStore: vi.fn(() => containers.length),
+      redactContainersRuntimeEnv: vi.fn((items: Container[]) => items),
+    };
+
+    (context.updateOperationStore as any).listActiveOperations = vi.fn(() => [
+      {
+        id: 'op-1',
+        containerId: 'c1',
+        containerName: 'web',
+        status: 'in-progress',
+        phase: 'pulling',
+        updatedAt: '2026-04-01T12:00:00.000Z',
+      },
+    ]);
+    (
+      context.updateOperationStore.getActiveOperationByContainerId as ReturnType<typeof vi.fn>
+    ).mockImplementation(() => {
+      throw new Error('per-container ID lookup should not be used');
+    });
+    (
+      context.updateOperationStore.getActiveOperationByContainerName as ReturnType<typeof vi.fn>
+    ).mockImplementation(() => {
+      throw new Error('per-container name lookup should not be used');
+    });
+
+    const response = buildContainerListResponse(
+      context,
+      { limit: '10', offset: '0' } as any,
+      '/api/containers',
+    );
+
+    expect((context.updateOperationStore as any).listActiveOperations).toHaveBeenCalledTimes(1);
+    expect(context.updateOperationStore.getActiveOperationByContainerId).not.toHaveBeenCalled();
+    expect(context.updateOperationStore.getActiveOperationByContainerName).not.toHaveBeenCalled();
+    expect(response.data[0]?.updateOperation).toEqual({
+      id: 'op-1',
+      status: 'in-progress',
+      phase: 'pulling',
+      updatedAt: '2026-04-01T12:00:00.000Z',
+    });
+    expect(response.data[1]?.updateOperation).toBeUndefined();
+  });
+
   test('preserves store-level rollback filtering after downstream transforms', () => {
     const containers = [
       createContainer({ id: 'c1', name: 'service', displayName: 'service' }),

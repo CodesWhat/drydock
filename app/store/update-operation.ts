@@ -726,6 +726,20 @@ export function getActiveOperationByContainerId(
   return operations.at(0);
 }
 
+export function listActiveOperations(): ActiveUpdateOperation[] {
+  if (!updateOperationCollection) {
+    return [];
+  }
+
+  const nowMs = Date.now();
+  return ACTIVE_STATUSES.flatMap((status) =>
+    findOperationDocumentsByStatus(updateOperationCollection!, status),
+  )
+    .map((document) => getFreshActiveOperation(document.data, nowMs))
+    .filter((item): item is ActiveUpdateOperation => Boolean(item))
+    .sort((a, b) => getOperationTimestamp(b) - getOperationTimestamp(a));
+}
+
 export function getOperationsByContainerName(containerName: string): UpdateOperation[] {
   if (!updateOperationCollection) {
     return [];

@@ -133,6 +133,90 @@ export function attachInProgressUpdateOperation(
   };
 }
 
+interface PreloadedActiveOperationLookup {
+  byContainerId: Map<string, ContainerUpdateOperationState>;
+  byLegacyContainerName: Map<string, ContainerUpdateOperationState>;
+}
+
+function getOperationUpdatedAtTimestamp(operation: ContainerUpdateOperationState): number {
+  const timestamp = Date.parse(operation.updatedAt);
+  return Number.isNaN(timestamp) ? 0 : timestamp;
+}
+
+function setLatestOperationLookupEntry(
+  map: Map<string, ContainerUpdateOperationState>,
+  key: string,
+  operation: ContainerUpdateOperationState,
+): void {
+  const existing = map.get(key);
+  if (
+    !existing ||
+    getOperationUpdatedAtTimestamp(operation) >= getOperationUpdatedAtTimestamp(existing)
+  ) {
+    map.set(key, operation);
+  }
+}
+
+function buildPreloadedActiveOperationLookup(
+  operations: unknown[],
+): PreloadedActiveOperationLookup | undefined {
+  if (!Array.isArray(operations) || operations.length === 0) {
+    return undefined;
+  }
+
+  const byContainerId = new Map<string, ContainerUpdateOperationState>();
+  const byLegacyContainerName = new Map<string, ContainerUpdateOperationState>();
+
+  for (const candidate of operations) {
+    const operation = sanitizeActiveUpdateOperation(candidate);
+    if (!operation || !candidate || typeof candidate !== 'object') {
+      continue;
+    }
+
+    const record = candidate as Record<string, unknown>;
+    const containerId = typeof record.containerId === 'string' ? record.containerId.trim() : '';
+    const newContainerId =
+      typeof record.newContainerId === 'string' ? record.newContainerId.trim() : '';
+    const containerName =
+      typeof record.containerName === 'string' ? record.containerName.trim() : '';
+
+    if (containerId) {
+      setLatestOperationLookupEntry(byContainerId, containerId, operation);
+    }
+    if (newContainerId) {
+      setLatestOperationLookupEntry(byContainerId, newContainerId, operation);
+    }
+    if (!containerId && !newContainerId && containerName) {
+      setLatestOperationLookupEntry(byLegacyContainerName, containerName, operation);
+    }
+  }
+
+  if (byContainerId.size === 0 && byLegacyContainerName.size === 0) {
+    return undefined;
+  }
+
+  return {
+    byContainerId,
+    byLegacyContainerName,
+  };
+}
+
+function attachPreloadedActiveUpdateOperation(
+  lookup: PreloadedActiveOperationLookup,
+  container: Container,
+): Container {
+  const operation =
+    lookup.byContainerId.get(container.id) ?? lookup.byLegacyContainerName.get(container.name);
+  if (!operation) {
+    return container;
+  }
+
+  return {
+    ...container,
+    updateOperation: operation,
+  };
+}
+
 export function buildContainerListResponse(
   context: CrudHandlerContext,
   query: Request['query'],
@@ -206,8 +290,13 @@ export function buildContainerListResponse(
   const strippedContainers = includeVulnerabilities
     ? redactedContainers
     : redactedContainers.map((container) => stripContainerVulnerabilityArrays(container));
+  const preloadedActiveOperationLookup = buildPreloadedActiveOperationLookup(
+    context.updateOperationStore.listActiveOperations?.() ?? [],
+  );
   const data = strippedContainers.map((container) =>
-    attachInProgressUpdateOperation(context, container),
+    preloadedActiveOperationLookup
+      ? attachPreloadedActiveUpdateOperation(preloadedActiveOperationLookup, container)
+      : attachInProgressUpdateOperation(context, container),
   );
   const hasMore = pagination.limit > 0 && pagination.offset + data.length < total;
   const links = buildPaginationLinks({

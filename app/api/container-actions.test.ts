@@ -60,6 +60,7 @@ vi.mock('../configuration', () => ({
 }));
 
 vi.mock('../store/update-operation', () => ({
+  listActiveOperations: vi.fn(() => []),
   insertOperation: vi.fn((op) => ({ id: op.id || 'op-mock', ...op })),
   updateOperation: vi.fn(),
   markOperationTerminal: mockMarkOperationTerminal,
