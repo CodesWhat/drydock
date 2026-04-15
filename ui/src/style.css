@@ -243,7 +243,7 @@ tr.dd-row-updating {
   position: relative;
 }
 tr.dd-row-updating > td > *:not(.dd-row-overlay) {
-  opacity: 0.5;
+  opacity: 0.3;
   transition: opacity var(--dd-duration-enter);
 }
 
