@@ -112,14 +112,6 @@ function expectDefaultRedirectPayload(res: any) {
   });
 }
 
-function expectDiscoveryFallbackRedirectPayload(res: any) {
-  expect(res.json).toHaveBeenCalledWith({
-    redirect: 'https://idp/auth',
-    strictEndpoints: [],
-    allowedOrigins: ['https://idp'],
-  });
-}
-
 /** Perform a redirect flow and return the session with pending state */
 async function performRedirect(oidcInstance: any, mock: any, session?: any) {
   const sess = session || { save: vi.fn((cb) => cb()) };
@@ -521,6 +513,21 @@ test('isAllowedAuthorizationRedirect should reject non-http protocols', () => {
   expect(allowed).toBe(false);
 });
 
+test('isAllowedAuthorizationRedirect should require authorization endpoint metadata', () => {
+  oidc.client = new Configuration(
+    {
+      issuer: 'https://issuer.example.com',
+    },
+    'dd-client',
+    'dd-secret',
+    ClientSecretPost('dd-secret'),
+  );
+
+  const allowed = oidc.isAllowedAuthorizationRedirect(new URL('https://idp/auth'));
+
+  expect(allowed).toBe(false);
+});
+
 test('verify should return user on valid token', async () => {
   openidClientMock.fetchUserInfo = vi.fn().mockResolvedValue({ email: 'test@example.com' });
 
@@ -678,7 +685,7 @@ test('redirect should reject non-http authorization redirect urls', async () => 
   expect(res.json).toHaveBeenCalledWith({ error: 'Unable to initialize OIDC session' });
 });
 
-test('redirect should allow discovery-origin redirects when authorization endpoint metadata is missing', async () => {
+test('redirect should reject authorization redirects when authorization endpoint metadata is missing', async () => {
   oidc.client = new Configuration(
     {
       issuer: 'https://issuer.example.com',
@@ -693,12 +700,8 @@ test('redirect should allow discovery-origin redirects when authorization endpoi
 
   await oidc.redirect(req, res);
 
-  expect(res.json).toHaveBeenCalledWith({
-    redirect: 'https://idp/auth',
-    strictEndpoints: [],
-    allowedOrigins: ['https://idp', 'https://issuer.example.com'],
-  });
-  expect(res.status).not.toHaveBeenCalled();
+  expect(res.status).toHaveBeenCalledWith(500);
+  expect(res.json).toHaveBeenCalledWith({ error: 'Unable to initialize OIDC session' });
 });
 
 test('callback should fail with explicit message when callback state is missing', async () => {
@@ -1427,7 +1430,12 @@ test('initAuthentication should discover and configure client', async () => {
 test('initAuthentication should tolerate startup discovery failure and recover on a later redirect without restart', async () => {
   oidc.client = undefined;
   oidc.logoutUrl = undefined;
-  const mockClient = {};
+  const mockClient = {
+    serverMetadata: () => ({
+      issuer: 'https://idp.example.com',
+      authorization_endpoint: 'https://idp/auth',
+    }),
+  };
   openidClientMock.discovery = vi
     .fn()
     .mockRejectedValueOnce(new Error('idp unavailable during startup'))
@@ -1447,7 +1455,7 @@ test('initAuthentication should tolerate startup discovery failure and recover o
   await oidc.redirect(req, res);
 
   expect(openidClientMock.discovery).toHaveBeenCalledTimes(2);
-  expectDiscoveryFallbackRedirectPayload(res);
+  expectDefaultRedirectPayload(res);
   expect(oidc.log.warn).toHaveBeenCalledWith(
     expect.stringContaining('Drydock will retry on the next authentication attempt'),
   );

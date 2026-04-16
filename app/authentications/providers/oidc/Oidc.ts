@@ -104,6 +104,17 @@ interface OidcCallbackValidationResult {
   oidcCheck: OidcPendingCheck;
 }
 
+interface OidcConfiguration {
+  discovery: string;
+  clientid: string;
+  clientsecret: string;
+  cafile?: string;
+  insecure: boolean;
+  redirect: boolean;
+  logouturl?: string;
+  timeout: number;
+}
+
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0;
 }
@@ -356,7 +367,7 @@ function getMaxConcurrentSessionsPerUser(): number {
 /**
  * Htpasswd authentication.
  */
-class Oidc extends Authentication {
+class Oidc extends Authentication<OidcConfiguration> {
   openidClient: typeof openidClientLibrary = openidClientLibrary;
   client?: openidClientLibrary.Configuration;
   clientInitializationPromise?: Promise<void>;
@@ -387,7 +398,7 @@ class Oidc extends Authentication {
     });
   }
 
-  validateConfiguration(configuration) {
+  validateConfiguration(configuration: OidcConfiguration): OidcConfiguration {
     const validatedConfiguration = super.validateConfiguration(configuration);
     const publicUrl = ddEnvVars.DD_PUBLIC_URL;
     if (typeof publicUrl !== 'string' || publicUrl.trim().length === 0) {
@@ -400,7 +411,7 @@ class Oidc extends Authentication {
    * Sanitize sensitive data
    * @returns {*}
    */
-  maskConfiguration() {
+  maskConfiguration(): OidcConfiguration {
     return {
       ...this.configuration,
       discovery: this.configuration.discovery,
@@ -585,11 +596,11 @@ class Oidc extends Authentication {
     if (authUrl.protocol !== 'http:' && authUrl.protocol !== 'https:') {
       return false;
     }
-    const { strictEndpoints, allowedOrigins } = this.getAllowedAuthorizationRedirects();
-    if (strictEndpoints.size > 0) {
-      return strictEndpoints.has(toEndpointKey(authUrl));
+    const { strictEndpoints } = this.getAllowedAuthorizationRedirects();
+    if (strictEndpoints.size === 0) {
+      return false;
     }
-    return allowedOrigins.has(authUrl.origin);
+    return strictEndpoints.has(toEndpointKey(authUrl));
   }
 
   async redirect(req: OidcRedirectRequest, res: Response): Promise<void> {
