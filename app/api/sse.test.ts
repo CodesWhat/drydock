@@ -133,6 +133,12 @@ function createSSERequest(ip = '127.0.0.1', sessionID = `session-${ip}`) {
     on: vi.fn((event, handler) => {
       listeners[event] = handler;
     }),
+    once: vi.fn((event, handler) => {
+      listeners[event] = (...args) => {
+        delete listeners[event];
+        handler(...args);
+      };
+    }),
     _listeners: listeners,
   };
 }
@@ -434,6 +440,23 @@ describe('SSE Router', () => {
 
       expect(sseRouter._clients.size).toBe(0);
       expect(sseRouter._clients.has(res)).toBe(false);
+    });
+
+    test('should register one-shot cleanup listeners for request and response teardown', () => {
+      const handler = getHandler();
+      const req = createSSERequest();
+      const res = createSSEResponse();
+
+      handler(req, res);
+
+      expect(req.once).toHaveBeenCalledWith('close', expect.any(Function));
+      expect(req.once).toHaveBeenCalledWith('aborted', expect.any(Function));
+      expect(res.once).toHaveBeenCalledWith('close', expect.any(Function));
+      expect(res.once).toHaveBeenCalledWith('error', expect.any(Function));
+      expect(req.on).not.toHaveBeenCalledWith('close', expect.any(Function));
+      expect(req.on).not.toHaveBeenCalledWith('aborted', expect.any(Function));
+      expect(res.on).not.toHaveBeenCalledWith('close', expect.any(Function));
+      expect(res.on).not.toHaveBeenCalledWith('error', expect.any(Function));
     });
 
     test('should remove client tracking on request abort', () => {
@@ -788,10 +811,11 @@ describe('SSE Router', () => {
       const res = createSSEResponse();
 
       handler(req, res);
+      const closeHandler = req._listeners.close;
 
       expect(() => {
-        req._listeners.close();
-        req._listeners.close();
+        closeHandler();
+        closeHandler();
       }).not.toThrow();
       expect(sseRouter._connectionsPerIp.has('192.168.2.5')).toBe(false);
     });

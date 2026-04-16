@@ -245,10 +245,10 @@ function eventsHandler(req: Request, res: Response): void {
     );
   };
 
-  req.on('close', cleanup);
-  req.on('aborted', cleanup);
-  client.on('close', cleanup);
-  client.on('error', cleanup);
+  req.once('close', cleanup);
+  req.once('aborted', cleanup);
+  client.once('close', cleanup);
+  client.once('error', cleanup);
 }
 
 async function broadcastSelfUpdate(payload: SelfUpdateStartingEventPayload): Promise<void> {
