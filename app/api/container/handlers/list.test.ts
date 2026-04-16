@@ -544,6 +544,42 @@ describe('buildContainerListResponse', () => {
     expect(response.data[1]?.security?.updateScan?.vulnerabilities).toEqual([]);
   });
 
+  test('strips vulnerabilities without eagerly reading unrelated enumerable properties', () => {
+    const container = createContainer({
+      id: 'c1',
+      name: 'service',
+      security: {
+        scan: {
+          vulnerabilities: ['v1'],
+        },
+      },
+    });
+    const expensiveGetter = vi.fn(() => {
+      throw new Error('unexpected eager property read');
+    });
+    Object.defineProperty(container, 'expensive', {
+      enumerable: true,
+      get: expensiveGetter,
+    });
+
+    const context: CrudHandlerContext = {
+      ...createMockContext(),
+      getContainersFromStore: vi.fn(() => [container]),
+      getContainerCountFromStore: vi.fn(() => 1),
+      redactContainersRuntimeEnv: vi.fn((items: Container[]) => items),
+    };
+
+    const response = buildContainerListResponse(
+      context,
+      { limit: '10', offset: '0' } as any,
+      '/api/containers',
+    );
+
+    expect(response.data[0]?.id).toBe('c1');
+    expect(response.data[0]?.security?.scan?.vulnerabilities).toEqual([]);
+    expect(expensiveGetter).not.toHaveBeenCalled();
+  });
+
   test('pushes watched-kind all through the filter pipeline without forcing full collection', () => {
     const containers = [
       createContainer({

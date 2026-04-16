@@ -1814,7 +1814,7 @@ describe('api/container/crud', () => {
       });
     });
 
-    test('uses lightweight container count for security overview totals', () => {
+    test('derives security overview totals from fetched containers without a separate count query', () => {
       const harness = createHarness({
         containers: [
           createContainer({
@@ -1828,16 +1828,24 @@ describe('api/container/crud', () => {
               },
             },
           }),
+          createContainer({
+            id: 'c2',
+            name: 'redis',
+            displayName: 'redis',
+          }),
         ],
       });
-      harness.deps.getContainerCountFromStore.mockReturnValue(42);
+      harness.deps.getContainerCountFromStore.mockImplementation(() => {
+        throw new Error('unexpected count query');
+      });
 
       const res = callGetContainerSecurityVulnerabilities(harness.handlers);
 
-      expect(harness.deps.getContainerCountFromStore).toHaveBeenCalledWith({});
+      expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith({});
+      expect(harness.deps.getContainerCountFromStore).not.toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
-        totalContainers: 42,
+        totalContainers: 2,
         scannedContainers: 1,
         latestScannedAt: '2026-02-01T10:00:00.000Z',
         total: 0,
@@ -2325,9 +2333,8 @@ describe('api/container/crud', () => {
       );
     });
 
-    test('returns empty overview when container count is zero', () => {
+    test('returns empty overview when no containers are fetched', () => {
       const harness = createHarness({ containers: [] });
-      harness.deps.getContainerCountFromStore.mockReturnValue(0);
 
       const res = callGetContainerSecurityVulnerabilities(harness.handlers);
       const payload = res.json.mock.calls[0][0];
@@ -2339,7 +2346,8 @@ describe('api/container/crud', () => {
         total: 0,
         images: [],
       });
-      expect(harness.deps.getContainersFromStore).not.toHaveBeenCalled();
+      expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith({});
+      expect(harness.deps.getContainerCountFromStore).not.toHaveBeenCalled();
     });
 
     test('returns redacted container when id exists', () => {

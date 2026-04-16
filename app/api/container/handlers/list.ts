@@ -39,28 +39,74 @@ function parsePositiveInteger(value: unknown): number | undefined {
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : undefined;
 }
 
+function createProjectionView<T extends object>(
+  target: T,
+  overrides: ReadonlyArray<readonly [string | symbol, unknown]>,
+): T {
+  if (overrides.length === 0) {
+    return target;
+  }
+
+  const overrideMap = new Map<string | symbol, unknown>(overrides);
+
+  return new Proxy(target, {
+    get(viewTarget, property, receiver) {
+      if (overrideMap.has(property)) {
+        return overrideMap.get(property);
+      }
+
+      return Reflect.get(viewTarget, property, receiver);
+    },
+    has(viewTarget, property) {
+      return overrideMap.has(property) || Reflect.has(viewTarget, property);
+    },
+    ownKeys(viewTarget) {
+      const keys = new Set(Reflect.ownKeys(viewTarget));
+      for (const key of overrideMap.keys()) {
+        keys.add(key);
+      }
+
+      return Array.from(keys);
+    },
+    getOwnPropertyDescriptor(viewTarget, property) {
+      if (!overrideMap.has(property)) {
+        return Reflect.getOwnPropertyDescriptor(viewTarget, property);
+      }
+
+      const descriptor = Reflect.getOwnPropertyDescriptor(viewTarget, property);
+      return {
+        configurable: descriptor?.configurable ?? true,
+        enumerable: descriptor?.enumerable ?? true,
+        writable: descriptor && 'writable' in descriptor ? descriptor.writable : true,
+        value: overrideMap.get(property),
+      };
+    },
+  });
+}
+
+function stripScanVulnerabilityArray<T extends object>(scan: T): T {
+  return createProjectionView(scan, [['vulnerabilities', []]]);
+}
+
 function stripContainerVulnerabilityArrays(container: Container): Container {
   if (!container.security) {
     return container;
   }
-  return {
-    ...container,
-    security: {
-      ...container.security,
-      scan: container.security.scan
-        ? {
-            ...container.security.scan,
-            vulnerabilities: [],
-          }
-        : container.security.scan,
-      updateScan: container.security.updateScan
-        ? {
-            ...container.security.updateScan,
-            vulnerabilities: [],
-          }
-        : container.security.updateScan,
-    },
-  };
+
+  const projectedSecurity = createProjectionView(container.security, [
+    [
+      'scan',
+      container.security.scan ? stripScanVulnerabilityArray(container.security.scan) : undefined,
+    ],
+    [
+      'updateScan',
+      container.security.updateScan
+        ? stripScanVulnerabilityArray(container.security.updateScan)
+        : undefined,
+    ],
+  ]);
+
+  return createProjectionView(container, [['security', projectedSecurity]]);
 }
 
 function sanitizeActiveUpdateOperation(
@@ -127,10 +173,7 @@ export function attachInProgressUpdateOperation(
     return container;
   }
 
-  return {
-    ...container,
-    updateOperation: operation,
-  };
+  return createProjectionView(container, [['updateOperation', operation]]);
 }
 
 interface PreloadedActiveOperationLookup {
@@ -211,10 +254,7 @@ function attachPreloadedActiveUpdateOperation(
     return container;
   }
 
-  return {
-    ...container,
-    updateOperation: operation,
-  };
+  return createProjectionView(container, [['updateOperation', operation]]);
 }
 
 export function buildContainerListResponse(
