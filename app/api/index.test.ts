@@ -262,6 +262,47 @@ describe('API Index', () => {
   });
 
   test('should enable CORS when configured', async () => {
+    mockDdEnvVars.DD_SERVER_CORS_ORIGIN = 'https://example.com';
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {
+        enabled: true,
+        origin: 'https://example.com',
+        methods: 'GET,POST',
+      },
+      tls: {},
+    });
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    await indexRouter.init();
+
+    expect(mockApp.use).toHaveBeenCalledWith('cors-middleware');
+  });
+
+  test('should throw when CORS is enabled without DD_SERVER_CORS_ORIGIN', async () => {
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {
+        enabled: true,
+        origin: '*',
+        methods: 'GET,POST',
+      },
+      tls: {},
+    });
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    await expect(indexRouter.init()).rejects.toThrow(
+      'DD_SERVER_CORS_ORIGIN must be configured when CORS is enabled',
+    );
+    expect(mockApp.use).not.toHaveBeenCalledWith('cors-middleware');
+  });
+
+  test('should allow explicit wildcard CORS origin only when DD_SERVER_CORS_ORIGIN is set', async () => {
+    mockDdEnvVars.DD_SERVER_CORS_ORIGIN = '*';
     mockGetServerConfiguration.mockReturnValue({
       enabled: true,
       port: 3000,
@@ -280,50 +321,7 @@ describe('API Index', () => {
     expect(mockApp.use).toHaveBeenCalledWith('cors-middleware');
   });
 
-  test('should warn when CORS origin defaults to wildcard without explicit env var', async () => {
-    mockGetServerConfiguration.mockReturnValue({
-      enabled: true,
-      port: 3000,
-      cors: {
-        enabled: true,
-        origin: '*',
-        methods: 'GET,POST',
-      },
-      tls: {},
-    });
-
-    vi.resetModules();
-    const indexRouter = await import('./index.js');
-    await indexRouter.init();
-
-    expect(mockLog.warn).toHaveBeenCalledWith(
-      expect.stringContaining('default wildcard origin is deprecated'),
-    );
-  });
-
-  test('should not warn when CORS wildcard origin is explicitly set via env var', async () => {
-    mockDdEnvVars.DD_SERVER_CORS_ORIGIN = '*';
-    mockGetServerConfiguration.mockReturnValue({
-      enabled: true,
-      port: 3000,
-      cors: {
-        enabled: true,
-        origin: '*',
-        methods: 'GET,POST',
-      },
-      tls: {},
-    });
-
-    vi.resetModules();
-    const indexRouter = await import('./index.js');
-    await indexRouter.init();
-
-    expect(mockLog.warn).not.toHaveBeenCalledWith(
-      expect.stringContaining('default wildcard origin is deprecated'),
-    );
-  });
-
-  test('should not warn when CORS uses an explicit trusted origin', async () => {
+  test('should allow explicit trusted CORS origin when DD_SERVER_CORS_ORIGIN is set', async () => {
     mockDdEnvVars.DD_SERVER_CORS_ORIGIN = 'https://example.com';
     mockGetServerConfiguration.mockReturnValue({
       enabled: true,
@@ -340,9 +338,7 @@ describe('API Index', () => {
     const indexRouter = await import('./index.js');
     await indexRouter.init();
 
-    expect(mockLog.warn).not.toHaveBeenCalledWith(
-      expect.stringContaining('default wildcard origin is deprecated'),
-    );
+    expect(mockApp.use).toHaveBeenCalledWith('cors-middleware');
   });
 
   test('should warn about deprecated unversioned /api/* path at startup', async () => {

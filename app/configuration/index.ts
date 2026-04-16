@@ -383,7 +383,11 @@ export function getServerConfiguration() {
     cors: joi
       .object({
         enabled: joi.boolean().default(false),
-        origin: joi.string().default('*'),
+        origin: joi.string().trim().min(1).when('enabled', {
+          is: true,
+          then: joi.required(),
+          otherwise: joi.optional(),
+        }),
         methods: joi.string().default('GET,HEAD,PUT,PATCH,POST,DELETE'),
       })
       .default({}),

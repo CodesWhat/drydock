@@ -1018,6 +1018,13 @@ describe('getServerConfiguration errors', () => {
     delete configuration.ddEnvVars.DD_SERVER_METRICS_TOKEN;
   });
 
+  test('should throw when CORS is enabled without DD_SERVER_CORS_ORIGIN', () => {
+    configuration.ddEnvVars.DD_SERVER_CORS_ENABLED = 'true';
+    delete configuration.ddEnvVars.DD_SERVER_CORS_ORIGIN;
+    expect(() => configuration.getServerConfiguration()).toThrow();
+    delete configuration.ddEnvVars.DD_SERVER_CORS_ENABLED;
+  });
+
   test('should fallback to defaults when nested server config is null', () => {
     const originalDd = configuration.ddEnvVars.dd;
     configuration.ddEnvVars.dd = {

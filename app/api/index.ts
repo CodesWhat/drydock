@@ -48,15 +48,16 @@ function createCompressionMiddleware() {
 
 function configureCors(app) {
   if (!configuration.cors.enabled) return;
+  const explicitCorsOrigin =
+    typeof ddEnvVars.DD_SERVER_CORS_ORIGIN === 'string'
+      ? ddEnvVars.DD_SERVER_CORS_ORIGIN.trim()
+      : '';
+  if (!explicitCorsOrigin) {
+    throw new Error('DD_SERVER_CORS_ORIGIN must be configured when CORS is enabled');
+  }
   log.warn(
     `CORS is enabled, please make sure that the provided configuration is not a security breech (${JSON.stringify(configuration.cors)})`,
   );
-  const hasExplicitCorsOrigin = Object.hasOwn(ddEnvVars, 'DD_SERVER_CORS_ORIGIN');
-  if (configuration.cors.origin === '*' && !hasExplicitCorsOrigin) {
-    log.warn(
-      'CORS enabled without explicit origin. The default wildcard origin is deprecated and will be removed in v1.6.0. Set DD_SERVER_CORS_ORIGIN to your trusted origin(s) to silence this warning.',
-    );
-  }
   app.use(
     cors({
       origin: configuration.cors.origin,
