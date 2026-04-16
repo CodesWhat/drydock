@@ -85,7 +85,10 @@ describe('HookRunner', () => {
   });
 
   test('should capture stderr output', async () => {
-    var result = await runHook('echo oops >&2; exit 1', { label: 'test' });
+    var result = await runHook(
+      'python3 -c "import sys; sys.stderr.write(\'oops\\\\n\'); raise SystemExit(1)"',
+      { label: 'test' },
+    );
     expect(result.exitCode).toBe(1);
     expect(result.stderr.trim()).toBe('oops');
     expect(result.timedOut).toBe(false);
@@ -104,6 +107,42 @@ describe('HookRunner', () => {
     });
     expect(result.exitCode).toBe(0);
     expect(result.stdout.trim()).toBe('hello-hook');
+  });
+
+  test.each([
+    'echo hello && whoami',
+    'echo hello; whoami',
+    'echo $(whoami)',
+    'echo `whoami`',
+    'echo hello | cat',
+  ])('should reject unsafe shell syntax in hook command: %s', async (command) => {
+    var execFileCalls = 0;
+
+    childProcessMockControl.execFileImpl = (
+      _: string,
+      __: readonly string[],
+      ___: unknown,
+      callback: (...args: unknown[]) => void,
+    ) => {
+      execFileCalls += 1;
+      setImmediate(() => callback(null, 'unexpected execution', ''));
+      return { exitCode: 0 };
+    };
+
+    try {
+      const result = await runHook(command, { label: 'test' });
+
+      expect(execFileCalls).toBe(0);
+      expect(result).toStrictEqual({
+        exitCode: 1,
+        stdout: '',
+        stderr:
+          'Hook command contains unsupported shell syntax. Use a single command with arguments and optional $VAR expansions.',
+        timedOut: false,
+      });
+    } finally {
+      childProcessMockControl.execFileImpl = null;
+    }
   });
 
   test('should not forward non-allowlisted parent environment variables', async () => {
@@ -152,12 +191,9 @@ describe('HookRunner', () => {
 
   test('should truncate stdout to 10KB', async () => {
     // Generate output larger than 10KB
-    var result = await runHook(
-      'python3 -c "print(\'x\' * 20000)" 2>/dev/null || printf "%0.sx" $(seq 1 20000)',
-      {
-        label: 'test',
-      },
-    );
+    var result = await runHook('node -e "process.stdout.write(\'x\'.repeat(20000))"', {
+      label: 'test',
+    });
     expect(result.stdout.length).toBeLessThanOrEqual(10 * 1024);
   });
 
