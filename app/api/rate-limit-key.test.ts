@@ -77,6 +77,35 @@ describe('createAuthenticatedRouteRateLimitKeyGenerator', () => {
     expect(secondKey).toBe(firstKey);
   });
 
+  test('should prefer socket remote address over request ip for unauthenticated requests', async () => {
+    const keyGenerator = createAuthenticatedRouteRateLimitKeyGenerator(true);
+    expect(keyGenerator).toBeDefined();
+
+    const firstKey = await keyGenerator!(
+      createRequest({
+        ip: '203.0.113.20',
+        socket: {
+          remoteAddress: '198.51.100.7',
+        } as Request['socket'],
+        isAuthenticated: () => false,
+      }),
+      response,
+    );
+    const secondKey = await keyGenerator!(
+      createRequest({
+        ip: '203.0.113.21',
+        socket: {
+          remoteAddress: '198.51.100.7',
+        } as Request['socket'],
+        isAuthenticated: () => false,
+      }),
+      response,
+    );
+
+    expect(firstKey).toMatch(/^ip:/);
+    expect(secondKey).toBe(firstKey);
+  });
+
   test('should return unknown ip key when unauthenticated request ip is undefined', async () => {
     const keyGenerator = createAuthenticatedRouteRateLimitKeyGenerator(true);
     expect(keyGenerator).toBeDefined();

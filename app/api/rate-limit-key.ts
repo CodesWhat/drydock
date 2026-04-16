@@ -3,6 +3,9 @@ import { ipKeyGenerator, type ValueDeterminingMiddleware } from 'express-rate-li
 
 export type IdentityAwareRateLimitRequestLike = {
   ip?: unknown;
+  socket?: {
+    remoteAddress?: unknown;
+  };
   isAuthenticated?: () => boolean;
   sessionID?: unknown;
   user?: {
@@ -18,13 +21,10 @@ function getTrimmedString(value: unknown): string | undefined {
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
-function getIpRateLimitKey(request: Pick<IdentityAwareRateLimitRequestLike, 'ip'>): string {
-  const rawRequestIp = request.ip;
-  if (rawRequestIp === undefined) {
-    return 'ip:unknown';
-  }
-
-  const requestIp = getTrimmedString(rawRequestIp);
+function getIpRateLimitKey(
+  request: Pick<IdentityAwareRateLimitRequestLike, 'ip' | 'socket'>,
+): string {
+  const requestIp = getTrimmedString(request.socket?.remoteAddress) || getTrimmedString(request.ip);
   if (!requestIp) {
     return 'ip:unknown';
   }
