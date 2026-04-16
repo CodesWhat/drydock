@@ -241,7 +241,8 @@ export async function getTrivyDatabaseStatus(): Promise<TrivyDatabaseStatus | un
   const configuration = getSecurityConfiguration();
   const trivyCommand = configuration.trivy.command || 'trivy';
 
-  const inFlightEntry: TrivyDatabaseStatusInFlight = {
+  let inFlightEntry: TrivyDatabaseStatusInFlight;
+  inFlightEntry = {
     promise: (async (): Promise<TrivyDatabaseStatus | undefined> => {
       try {
         const output = await new Promise<string>((resolve, reject) => {
@@ -276,7 +277,9 @@ export async function getTrivyDatabaseStatus(): Promise<TrivyDatabaseStatus | un
               ? parsed.VulnerabilityDB.DownloadedAt
               : undefined,
         };
-        trivyDbStatusCache = { status, expiresAt: now + TRIVY_DB_STATUS_CACHE_TTL_MS };
+        if (trivyDbStatusInFlight === inFlightEntry) {
+          trivyDbStatusCache = { status, expiresAt: now + TRIVY_DB_STATUS_CACHE_TTL_MS };
+        }
         return status;
       } catch {
         return undefined;

@@ -828,6 +828,44 @@ describe('getTrivyDatabaseStatus', () => {
     expect(result).toBeUndefined();
   });
 
+  test('should not cache malformed JSON responses', async () => {
+    const execFileMock = vi
+      .fn()
+      .mockImplementationOnce(
+        (
+          _command: unknown,
+          _args: unknown,
+          _options: unknown,
+          callback: (...args: unknown[]) => void,
+        ) => {
+          callback(null, 'this is not json', '');
+          return { exitCode: 0 };
+        },
+      )
+      .mockImplementationOnce(
+        (
+          _command: unknown,
+          _args: unknown,
+          _options: unknown,
+          callback: (...args: unknown[]) => void,
+        ) => {
+          callback(null, validTrivyVersionOutput, '');
+          return { exitCode: 0 };
+        },
+      );
+    childProcessControl.execFileImpl = execFileMock;
+
+    const first = await getTrivyDatabaseStatus();
+    const second = await getTrivyDatabaseStatus();
+
+    expect(first).toBeUndefined();
+    expect(second).toEqual({
+      updatedAt: '2025-06-01T00:00:00Z',
+      downloadedAt: '2025-06-02T12:00:00Z',
+    });
+    expect(execFileMock).toHaveBeenCalledTimes(2);
+  });
+
   test('should return undefined when JSON lacks VulnerabilityDB key', async () => {
     mockExecFileSuccess(JSON.stringify({ Version: '0.50.0' }));
 
@@ -951,5 +989,55 @@ describe('getTrivyDatabaseStatus', () => {
     await getTrivyDatabaseStatus();
 
     expect(execFileMock).toHaveBeenCalledTimes(2);
+  });
+
+  test('should not let an older in-flight lookup overwrite the cache after a newer lookup succeeds', async () => {
+    const callbacks: Array<(error: unknown, stdout?: string, stderr?: string) => void> = [];
+    const execFileMock = vi.fn(
+      (
+        _command: unknown,
+        _args: unknown,
+        _options: unknown,
+        callback: (error: unknown, stdout?: string, stderr?: string) => void,
+      ) => {
+        callbacks.push(callback);
+        return { exitCode: 0 };
+      },
+    );
+    childProcessControl.execFileImpl = execFileMock;
+
+    const olderStatusOutput = JSON.stringify({
+      VulnerabilityDB: {
+        UpdatedAt: '2025-05-01T00:00:00Z',
+        DownloadedAt: '2025-05-02T00:00:00Z',
+      },
+    });
+    const newerStatusOutput = JSON.stringify({
+      VulnerabilityDB: {
+        UpdatedAt: '2025-06-01T00:00:00Z',
+        DownloadedAt: '2025-06-02T12:00:00Z',
+      },
+    });
+
+    const first = getTrivyDatabaseStatus();
+    clearTrivyDatabaseStatusCache();
+    const second = getTrivyDatabaseStatus();
+
+    callbacks[1](null, newerStatusOutput, '');
+    callbacks[0](null, olderStatusOutput, '');
+
+    const [firstResult, secondResult] = await Promise.all([first, second]);
+    const thirdResult = await getTrivyDatabaseStatus();
+
+    expect(execFileMock).toHaveBeenCalledTimes(2);
+    expect(firstResult).toEqual({
+      updatedAt: '2025-05-01T00:00:00Z',
+      downloadedAt: '2025-05-02T00:00:00Z',
+    });
+    expect(secondResult).toEqual({
+      updatedAt: '2025-06-01T00:00:00Z',
+      downloadedAt: '2025-06-02T12:00:00Z',
+    });
+    expect(thirdResult).toEqual(secondResult);
   });
 });
