@@ -15,6 +15,7 @@ import Component, { type ComponentConfiguration } from '../../registry/Component
 import * as auditStore from '../../store/audit.js';
 import * as storeContainer from '../../store/container.js';
 import * as notificationStore from '../../store/notification.js';
+import * as notificationHistoryStore from '../../store/notification-history.js';
 import {
   enqueueContainerUpdate,
   enqueueContainerUpdates,
@@ -959,6 +960,19 @@ class Trigger extends Component {
     if (evictedBufferedUpdate) {
       this.log.debug(`Evicted ${notificationKey} from digest buffer (update applied)`);
     }
+
+    // Clear update-available history for this container. The update has been
+    // applied, so the next detected update (even one whose hash happens to
+    // match what we previously sent) should notify again.
+    const containerIdForHistory =
+      typeof container?.id === 'string' && container.id !== '' ? container.id : undefined;
+    if (containerIdForHistory) {
+      notificationHistoryStore.clearNotificationsForContainerAndEvent(
+        containerIdForHistory,
+        'update-available',
+      );
+    }
+
     const notificationContainer = container
       ? withNotificationEvent(container, { kind: 'update-applied' })
       : undefined;
@@ -1066,11 +1080,96 @@ class Trigger extends Component {
     this.log.warn(message);
   }
 
-  private shouldHandleSimpleContainerReport(containerReport: ContainerReport) {
-    return (
-      (containerReport.changed || !this.configuration.once) &&
-      containerReport.container.updateAvailable
+  private hasAlreadyNotifiedForResult(
+    container: Container,
+    eventKind: notificationHistoryStore.NotificationEventKind,
+  ): boolean {
+    const containerId =
+      typeof container?.id === 'string' && container.id !== '' ? container.id : undefined;
+    if (!containerId) {
+      // No stable id — fall back to permissive "not notified" so we don't
+      // silently swallow legitimate events on degenerate records.
+      return false;
+    }
+    const currentHash = notificationHistoryStore.computeResultHash(container);
+    const lastHash = notificationHistoryStore.getLastNotifiedHash(
+      this.getId(),
+      containerId,
+      eventKind,
     );
+    return lastHash !== undefined && lastHash === currentHash;
+  }
+
+  private recordNotifiedForResult(
+    container: Container,
+    eventKind: notificationHistoryStore.NotificationEventKind,
+  ) {
+    const containerId =
+      typeof container?.id === 'string' && container.id !== '' ? container.id : undefined;
+    if (!containerId) {
+      return;
+    }
+    notificationHistoryStore.recordNotification(
+      this.getId(),
+      containerId,
+      eventKind,
+      notificationHistoryStore.computeResultHash(container),
+    );
+  }
+
+  // Seed notification history from the persisted store on init so that
+  // containers already showing updateAvailable=true before this trigger
+  // came online are NOT re-notified on the first scan cycle after a
+  // restart or config change. Existing history entries win — seed only
+  // fills gaps.
+  private seedNotificationHistoryFromStore() {
+    if (!this.configuration.once) {
+      return;
+    }
+    const triggerId = this.getId();
+    let seeded = 0;
+    for (const rawContainer of storeContainer.getContainersRaw()) {
+      const container = rawContainer as Container;
+      if (!container.updateAvailable) {
+        continue;
+      }
+      const containerId =
+        typeof container.id === 'string' && container.id !== '' ? container.id : undefined;
+      if (!containerId) {
+        continue;
+      }
+      const existing = notificationHistoryStore.getLastNotifiedHash(
+        triggerId,
+        containerId,
+        'update-available',
+      );
+      if (existing !== undefined) {
+        continue;
+      }
+      notificationHistoryStore.recordNotification(
+        triggerId,
+        containerId,
+        'update-available',
+        notificationHistoryStore.computeResultHash(container),
+        container.updateDetectedAt ?? new Date().toISOString(),
+      );
+      seeded += 1;
+    }
+    if (seeded > 0) {
+      this.log.debug(
+        `Seeded notification history with ${seeded} pre-existing update-available entr${seeded === 1 ? 'y' : 'ies'}`,
+      );
+    }
+  }
+
+  private shouldHandleSimpleContainerReport(containerReport: ContainerReport) {
+    if (!containerReport.container.updateAvailable) {
+      return false;
+    }
+    if (!this.configuration.once) {
+      return true;
+    }
+    return !this.hasAlreadyNotifiedForResult(containerReport.container, 'update-available');
   }
 
   private getContainerLogger(container: Container): Component['log'] {
@@ -1134,10 +1233,13 @@ class Trigger extends Component {
   }
 
   private shouldHandleBatchContainerReport(containerReport: ContainerReport) {
-    return (
-      (containerReport.changed || !this.configuration.once) &&
-      this.shouldDispatchUpdateAvailableContainer(containerReport.container)
-    );
+    if (!this.shouldDispatchUpdateAvailableContainer(containerReport.container)) {
+      return false;
+    }
+    if (!this.configuration.once) {
+      return true;
+    }
+    return !this.hasAlreadyNotifiedForResult(containerReport.container, 'update-available');
   }
 
   private getBatchRetryContainers(containerReports: ContainerReport[]) {
@@ -1256,6 +1358,7 @@ class Trigger extends Component {
         result,
       );
     }
+    this.recordNotifiedForResult(container, 'update-available');
   }
 
   private handleUpdateAvailableSimpleTriggerError(
@@ -1304,8 +1407,12 @@ class Trigger extends Component {
 
     // Filter on changed containers with update available and passing trigger threshold
     if (!this.shouldHandleSimpleContainerReport(containerReport)) {
+      const alreadyNotified =
+        containerReport.container.updateAvailable &&
+        this.configuration.once === true &&
+        this.hasAlreadyNotifiedForResult(containerReport.container, 'update-available');
       this.log.debug(
-        `Skipping update-available notification for ${fullName(containerReport.container)} (changed=${containerReport.changed}, once=${this.configuration.once ?? false}, updateAvailable=${containerReport.container.updateAvailable})`,
+        `Skipping update-available notification for ${fullName(containerReport.container)} (once=${this.configuration.once ?? false}, updateAvailable=${containerReport.container.updateAvailable}, alreadyNotified=${alreadyNotified})`,
       );
       return;
     }
@@ -1369,6 +1476,9 @@ class Trigger extends Component {
         await this.triggerBatch(containersToSend);
       }
       status = 'success';
+      for (const container of containersToSend) {
+        this.recordNotifiedForResult(container, 'update-available');
+      }
       // In batch+digest mode, evict successfully-batched containers from the
       // digest buffer so they are not sent again at the next digest flush.
       if (this.digestBuffer.size > 0) {
@@ -1552,6 +1662,9 @@ class Trigger extends Component {
         await this.triggerBatch(containers);
       }
       status = 'success';
+      for (const container of containers) {
+        this.recordNotifiedForResult(container, 'update-available');
+      }
       for (const { containerName, bufferedContainer } of dispatchEntries) {
         if (this.digestBuffer.get(containerName) === bufferedContainer) {
           this.deleteBufferedContainerEntry(
@@ -1710,6 +1823,8 @@ class Trigger extends Component {
           order: this.configuration.order,
         },
       );
+
+      this.seedNotificationHistoryFromStore();
     } else {
       this.log.info(`Registering for manual execution`);
     }
