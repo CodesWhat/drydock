@@ -80,16 +80,19 @@ interface SafeRegex {
   exec(s: string): RegExpMatchArray | null;
 }
 
+class TagTransformConfigurationError extends Error {}
+
 /**
  * Safely compile a user-supplied regex pattern.
- * Returns null (and logs a warning) when the pattern is invalid.
+ * Throws when the pattern is invalid so configuration errors fail loudly.
  * Uses RE2 (via re2js), which is inherently immune to ReDoS backtracking attacks.
  */
-function safeRegExp(pattern: string): SafeRegex | null {
+function safeRegExp(pattern: string): SafeRegex {
   const MAX_PATTERN_LENGTH = 1024;
   if (pattern.length > MAX_PATTERN_LENGTH) {
-    log.warn(`Regex pattern exceeds maximum length of ${MAX_PATTERN_LENGTH} characters`);
-    return null;
+    const message = `Regex pattern exceeds maximum length of ${MAX_PATTERN_LENGTH} characters`;
+    log.warn(message);
+    throw new TagTransformConfigurationError(message);
   }
   try {
     const compiled = RE2JS.compile(pattern);
@@ -105,8 +108,9 @@ function safeRegExp(pattern: string): SafeRegex | null {
       },
     };
   } catch (e: unknown) {
-    log.warn(`Invalid regex pattern "${pattern}": ${getErrorMessage(e, String(e))}`);
-    return null;
+    const message = `Invalid regex pattern "${pattern}": ${getErrorMessage(e, String(e))}`;
+    log.warn(message);
+    throw new TagTransformConfigurationError(message);
   }
 }
 
@@ -129,9 +133,6 @@ export function transform(transformFormula: string, originalTag: string) {
     const pattern = transformFormula.slice(0, separatorIndex).trim();
     const replacement = transformFormula.slice(separatorIndex + 2).trim();
     const compiledPattern = safeRegExp(pattern);
-    if (!compiledPattern) {
-      return originalTag;
-    }
     const placeholders = replacement.match(/\$\d+/g) || [];
     const originalTagMatches = compiledPattern.exec(originalTag);
     if (!originalTagMatches) {
@@ -146,6 +147,9 @@ export function transform(transformFormula: string, originalTag: string) {
     });
     return transformedTag;
   } catch (e) {
+    if (e instanceof TagTransformConfigurationError) {
+      throw e;
+    }
     // Upon error; log & fallback to original tag value
     log.warn(`Error when applying transform function [${transformFormula}]to tag [${originalTag}]`);
     log.debug(e);

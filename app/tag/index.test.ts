@@ -303,18 +303,20 @@ describe('transform', () => {
       expect(semver.transform('^(\\d+)$ => $2', '123')).toBe('');
     });
 
-    test('should handle malformed regex', async () => {
-      expect(semver.transform('[invalid-regex => $1', '1.2.3')).toBe('1.2.3');
+    test('should throw on malformed regex', async () => {
+      expect(() => semver.transform('[invalid-regex => $1', '1.2.3')).toThrow(
+        /Invalid regex pattern/,
+      );
     });
 
-    test('should include message from non-Error throw values during regex compilation', () => {
+    test('should throw with message from non-Error values during regex compilation', () => {
       const warnSpy = vi.spyOn(log, 'warn').mockImplementation(() => {});
       const compileSpy = vi.spyOn(RE2JS, 'compile').mockImplementation(() => {
         throw { message: 'regex compile failed' };
       });
 
       try {
-        expect(semver.transform('^v(.+)$ => $1', 'v1.2.3')).toBe('v1.2.3');
+        expect(() => semver.transform('^v(.+)$ => $1', 'v1.2.3')).toThrow(/regex compile failed/);
         expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('regex compile failed'));
       } finally {
         compileSpy.mockRestore();
@@ -329,7 +331,7 @@ describe('transform', () => {
       });
 
       try {
-        expect(semver.transform('^v(.+)$ => $1', 'v1.2.3')).toBe('v1.2.3');
+        expect(() => semver.transform('^v(.+)$ => $1', 'v1.2.3')).toThrow(/42/);
         expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('42'));
       } finally {
         compileSpy.mockRestore();
@@ -337,9 +339,11 @@ describe('transform', () => {
       }
     });
 
-    test('should return original tag when regex pattern exceeds max length', async () => {
+    test('should throw when regex pattern exceeds max length', async () => {
       const longPattern = `${'a'.repeat(1025)} => $1`;
-      expect(semver.transform(longPattern, '1.2.3')).toBe('1.2.3');
+      expect(() => semver.transform(longPattern, '1.2.3')).toThrow(
+        /Regex pattern exceeds maximum length/,
+      );
     });
 
     test('should return original tag when transform throws unexpectedly', async () => {
