@@ -700,7 +700,12 @@ describe('DashboardView', () => {
       expect(updatesCard?.text()).toContain('1');
     });
 
-    it('hides pinned updates across dashboard update widgets when hidePinned preference is enabled', async () => {
+    it('keeps pinned containers with pending updates visible across dashboard widgets when hidePinned is enabled (#293)', async () => {
+      // Hide Pinned is a decluttering filter for static pinned containers; a
+      // pinned container with an active update is exactly what the user is
+      // watching for (reporter pinned `grafana:12.3.2` to wait out a
+      // regression and wanted the next release to appear). The filter should
+      // only hide pinned containers that have no pending update.
       const { flushPreferences, preferences } = await import('@/preferences/store');
       preferences.containers.filters.hidePinned = true;
       flushPreferences();
@@ -727,17 +732,14 @@ describe('DashboardView', () => {
 
       const statCards = wrapper.findAll('.stat-card');
       const updatesCard = statCards.find((c) => c.text().includes('Updates Available'));
-      expect(updatesCard?.text()).toContain('1');
-      expect(updatesCard?.text()).not.toContain('2');
+      expect(updatesCard?.text()).toContain('2');
 
       const recentUpdatesWidget = wrapper.find('[data-widget-id="recent-updates"]');
       expect(recentUpdatesWidget.text()).toContain('floating');
-      expect(recentUpdatesWidget.text()).not.toContain('pinned');
+      expect(recentUpdatesWidget.text()).toContain('pinned');
 
       const updateBreakdownWidget = wrapper.find('[data-widget-id="update-breakdown"]');
-      expect(updateBreakdownWidget.text()).toContain('1');
       expect(updateBreakdownWidget.text()).toContain('Major');
-      expect(updateBreakdownWidget.text()).toContain('0');
       expect(updateBreakdownWidget.text()).toContain('Minor');
     });
 
