@@ -51,11 +51,13 @@ class Quay extends BaseRegistry {
       return requestOptions;
     }
     const authUrl = `https://quay.io/v2/auth?service=quay.io&scope=repository:${image.name}:pull`;
-    return this.authenticateBearerFromAuthUrl(
+    return this.authenticateBearerFromAuthUrlWithPublicFallback(
       requestOptions,
       authUrl,
       credentials,
-      (response) => response.data.token,
+      {
+        providerLabel: 'Quay',
+      },
     );
   }
 

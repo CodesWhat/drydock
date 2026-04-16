@@ -10,14 +10,15 @@ vi.mock('axios', () => ({
   })),
 }));
 
-const gcr = new Gcr();
-gcr.configuration = {
-  clientemail: TEST_CLIENT_EMAIL,
-  privatekey: TEST_PRIVATE_KEY,
-};
+let gcr;
 
 beforeEach(() => {
   vi.clearAllMocks();
+  gcr = new Gcr();
+  gcr.configuration = {
+    clientemail: TEST_CLIENT_EMAIL,
+    privatekey: TEST_PRIVATE_KEY,
+  };
 });
 
 test('validatedConfiguration should initialize when configuration is valid', async () => {
@@ -115,6 +116,52 @@ test('authenticate should return unchanged options when no clientemail configure
   gcrAnon.configuration = {};
   const result = await gcrAnon.authenticate({}, { headers: {} });
   expect(result).toEqual({ headers: {} });
+});
+
+test('authenticate should retry anonymously when configured credentials are rejected with 403', async () => {
+  const { default: axios } = await import('axios');
+  const gcrWithCreds = new Gcr();
+  await gcrWithCreds.register('registry', 'gcr', 'test', {
+    clientemail: TEST_CLIENT_EMAIL,
+    privatekey: TEST_PRIVATE_KEY,
+  });
+  axios
+    .mockRejectedValueOnce(new Error('Request failed with status code 403'))
+    .mockResolvedValueOnce({ data: { token: 'anon-token' } });
+  const warnSpy = vi.spyOn(gcrWithCreds.log, 'warn');
+
+  const result = await gcrWithCreds.authenticate({ name: 'project/image' }, { headers: {} });
+
+  const expectedBasic = Buffer.from(
+    `_json_key:${JSON.stringify({
+      client_email: TEST_CLIENT_EMAIL,
+      private_key: TEST_PRIVATE_KEY,
+    })}`,
+    'utf-8',
+  ).toString('base64');
+  expect(axios).toHaveBeenNthCalledWith(1, {
+    method: 'GET',
+    url: 'https://gcr.io/v2/token?scope=repository:project/image:pull',
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Basic ${expectedBasic}`,
+    },
+  });
+  expect(axios).toHaveBeenNthCalledWith(2, {
+    method: 'GET',
+    url: 'https://gcr.io/v2/token?scope=repository:project/image:pull',
+    headers: {
+      Accept: 'application/json',
+    },
+  });
+  expect(warnSpy).toHaveBeenCalledWith(
+    expect.stringContaining('GCR credentials were rejected for registry gcr.test (status 403)'),
+  );
+  expect(result).toEqual({
+    headers: {
+      Authorization: 'Bearer anon-token',
+    },
+  });
 });
 
 test('authenticate should throw when gcr token is missing', async () => {

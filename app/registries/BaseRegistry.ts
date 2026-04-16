@@ -324,13 +324,13 @@ class BaseRegistry extends Registry {
     credentials?: string,
     tokenExtractor: (response: { data?: Record<string, unknown> }) => unknown = (response) =>
       response.data?.token,
+    tokenFailureMessage = `Unable to authenticate registry ${this.getId()}: token endpoint response does not contain token`,
   ) {
     this.validateAuthUrlHost(authUrl, requestOptions);
 
     const requestOptionsWithAuth = this.withTlsRequestOptions({
       ...requestOptions,
     });
-    const tokenFailureMessage = `Unable to authenticate registry ${this.getId()}: token endpoint response does not contain token`;
     const cacheKey = this.getBearerTokenCacheKey(authUrl, credentials);
     const now = Date.now();
     this.pruneExpiredBearerTokenCache(now);
@@ -375,6 +375,64 @@ class BaseRegistry extends Registry {
     });
 
     return withAuthorizationHeader(requestOptionsWithAuth, 'Bearer', token, tokenFailureMessage);
+  }
+
+  private getRejectedCredentialStatus(
+    error: unknown,
+    rejectedCredentialStatuses: readonly number[] = [401, 403],
+  ): string | undefined {
+    if (!(error instanceof Error) || rejectedCredentialStatuses.length === 0) {
+      return undefined;
+    }
+
+    const allowedStatuses = rejectedCredentialStatuses.join('|');
+    const rejectedStatusPattern = new RegExp(
+      `token request failed \\(Request failed with status code (${allowedStatuses})\\)`,
+    );
+    const match = error.message.match(rejectedStatusPattern);
+    return match ? match[1] : undefined;
+  }
+
+  protected async authenticateBearerFromAuthUrlWithPublicFallback(
+    requestOptions: RegistryRequestOptions,
+    authUrl: string,
+    credentials?: string,
+    options: {
+      tokenExtractor?: (response: { data?: Record<string, unknown> }) => unknown;
+      tokenFailureMessage?: string;
+      providerLabel?: string;
+      rejectedCredentialStatuses?: readonly number[];
+    } = {},
+  ) {
+    try {
+      return await this.authenticateBearerFromAuthUrl(
+        requestOptions,
+        authUrl,
+        credentials,
+        options.tokenExtractor,
+        options.tokenFailureMessage,
+      );
+    } catch (error) {
+      const rejectedStatus = credentials
+        ? this.getRejectedCredentialStatus(error, options.rejectedCredentialStatuses)
+        : undefined;
+      if (!credentials || !rejectedStatus) {
+        throw error;
+      }
+
+      const providerLabel = options.providerLabel || this.getId();
+      this.log.warn(
+        `${providerLabel} credentials were rejected for registry ${this.getId()} (status ${rejectedStatus}); retrying token request without credentials for public image checks`,
+      );
+
+      return this.authenticateBearerFromAuthUrl(
+        requestOptions,
+        authUrl,
+        undefined,
+        options.tokenExtractor,
+        options.tokenFailureMessage,
+      );
+    }
   }
 
   /**
