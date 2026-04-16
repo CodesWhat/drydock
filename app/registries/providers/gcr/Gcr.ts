@@ -1,9 +1,14 @@
-import BaseRegistry from '../../BaseRegistry.js';
+import BaseRegistry, { type BaseRegistryConfiguration } from '../../BaseRegistry.js';
+
+interface GcrRegistryConfiguration extends BaseRegistryConfiguration {
+  clientemail?: string;
+  privatekey?: string;
+}
 
 /**
  * Google Container Registry integration.
  */
-class Gcr extends BaseRegistry {
+class Gcr extends BaseRegistry<GcrRegistryConfiguration> {
   protected getTrustedAuthHosts(): string[] {
     return ['gcr.io'];
   }

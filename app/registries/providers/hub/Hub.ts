@@ -1,6 +1,6 @@
 import axios, { type AxiosRequestConfig } from 'axios';
 import type { ContainerImage } from '../../../model/container.js';
-import Custom from '../custom/Custom.js';
+import Custom, { type CustomRegistryConfiguration } from '../custom/Custom.js';
 import { getTokenAuthConfigurationSchema } from '../shared/tokenAuthConfigurationSchema.js';
 
 interface HubTokenResponse {
@@ -11,10 +11,14 @@ interface HubTagMetadataResponse {
   last_updated?: unknown;
 }
 
+interface HubRegistryConfiguration extends CustomRegistryConfiguration {
+  token?: string;
+}
+
 /**
  * Docker Hub integration.
  */
-class Hub extends Custom {
+class Hub extends Custom<HubRegistryConfiguration> {
   protected getTrustedAuthHosts(): string[] {
     return ['auth.docker.io'];
   }

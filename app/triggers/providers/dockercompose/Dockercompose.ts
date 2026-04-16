@@ -7,7 +7,7 @@ import type Registry from '../../../registries/Registry.js';
 import { getState } from '../../../registry/index.js';
 import { resolveConfiguredPath, resolveConfiguredPathWithinBase } from '../../../runtime/paths.js';
 import { sleep } from '../../../util/sleep.js';
-import Docker from '../docker/Docker.js';
+import Docker, { type DockerTriggerConfiguration } from '../docker/Docker.js';
 import ComposeFileLockManager from './ComposeFileLockManager.js';
 import ComposeFileParser, {
   COMPOSE_CACHE_MAX_ENTRIES,
@@ -39,6 +39,15 @@ const COMPOSE_DIRECTORY_FILE_CANDIDATES = [
 ];
 const ROOT_MODE_BREAK_GLASS_HINT =
   'use socket proxy or adjust file permissions/group_add; break-glass root mode requires DD_RUN_AS_ROOT=true + DD_ALLOW_INSECURE_ROOT=true';
+
+interface DockercomposeTriggerConfiguration extends DockerTriggerConfiguration {
+  file?: string;
+  backup: boolean;
+  composeFileLabel: string;
+  reconciliationMode: 'warn' | 'block' | 'off';
+  digestPinning: boolean;
+  composeFileOnce: boolean;
+}
 
 interface DockerApiLike {
   modem: {
@@ -307,7 +316,7 @@ function buildComposePatchPreview(composeFile, service, currentImage, updateImag
 /**
  * Update a Docker compose stack with an updated one.
  */
-class Dockercompose extends Docker {
+class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
   _composeFileLockManager = new ComposeFileLockManager({
     getLog: () => this.log,
   });

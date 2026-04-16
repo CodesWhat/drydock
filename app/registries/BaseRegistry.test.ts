@@ -998,6 +998,7 @@ test('getImageManifestDigest should fall back to original image when normalizeIm
   const normalizeImageSpy = vi.spyOn(baseRegistry, 'normalizeImage').mockImplementation(() => {
     throw new Error('normalize failed');
   });
+  const warnSpy = vi.spyOn(baseRegistry.log, 'warn').mockImplementation(() => undefined);
 
   baseRegistry.startDigestCachePollCycle();
   const image = {
@@ -1011,6 +1012,11 @@ test('getImageManifestDigest should fall back to original image when normalizeIm
   await baseRegistry.getImageManifestDigest(image);
 
   expect(superGetImageManifestDigestSpy).toHaveBeenCalledTimes(1);
+  expect(warnSpy).toHaveBeenCalledWith(
+    expect.stringContaining(
+      'Unable to normalize image metadata for digest cache key generation: docker.io/library/postgres:16 (normalize failed)',
+    ),
+  );
   normalizeImageSpy.mockRestore();
 });
 

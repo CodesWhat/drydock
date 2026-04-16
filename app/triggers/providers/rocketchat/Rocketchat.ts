@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { getOutboundHttpTimeoutMs } from '../../../configuration/runtime-defaults.js';
-import Trigger from '../Trigger.js';
+import Trigger, { type TriggerConfiguration } from '../Trigger.js';
 
 interface RocketchatMessageBody {
   channel: string;
@@ -11,10 +11,27 @@ interface RocketchatMessageBody {
   parseUrls?: boolean;
 }
 
+interface RocketchatConfiguration extends TriggerConfiguration {
+  url: string;
+  user: {
+    id: string;
+  };
+  auth: {
+    token: string;
+  };
+  channel: string;
+  alias?: string;
+  avatar?: string;
+  emoji?: string;
+  parse?: {
+    urls?: boolean;
+  };
+}
+
 /**
  * Rocket Chat Trigger implementation
  */
-class Rocketchat extends Trigger {
+class Rocketchat extends Trigger<RocketchatConfiguration> {
   /**
    * Get the Trigger configuration schema.
    * @returns {*}

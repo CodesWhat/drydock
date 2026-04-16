@@ -23,7 +23,7 @@ type UpdateTriggerLike = {
 
 type ResolvedUpdateTrigger = UpdateTriggerLike & {
   agent?: string;
-  configuration?: Record<string, unknown>;
+  configuration?: object;
   getDefaultComposeFilePath?: () => string | null;
   getComposeFilesForContainer?: (container: {
     name?: string;

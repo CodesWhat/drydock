@@ -462,8 +462,10 @@ function splitAndTrimCommaSeparatedList(value: string): string[] {
 /**
  * Trigger base component.
  */
-class Trigger extends Component {
-  public configuration: TriggerConfiguration = {};
+class Trigger<
+  TConfiguration extends TriggerConfiguration = TriggerConfiguration,
+> extends Component<TConfiguration> {
+  public configuration = {} as TConfiguration;
   public strictAgentMatch = false;
   private unregisterContainerReport?: () => void;
   private unregisterContainerReports?: () => void;
@@ -961,9 +963,9 @@ class Trigger extends Component {
       this.log.debug(`Evicted ${notificationKey} from digest buffer (update applied)`);
     }
 
-    // Clear update-available history for this container. The update has been
-    // applied, so the next detected update (even one whose hash happens to
-    // match what we previously sent) should notify again.
+    // Clear update-available notification history for this container — the
+    // update has been applied so the next detected update (even at the same
+    // hash by coincidence) should notify again.
     const containerIdForHistory =
       typeof container?.id === 'string' && container.id !== '' ? container.id : undefined;
     if (containerIdForHistory) {
@@ -1117,11 +1119,13 @@ class Trigger extends Component {
     );
   }
 
-  // Seed notification history from the persisted store on init so that
-  // containers already showing updateAvailable=true before this trigger
-  // came online are NOT re-notified on the first scan cycle after a
-  // restart or config change. Existing history entries win — seed only
-  // fills gaps.
+  /**
+   * Seed notification history from the persisted container store on init so
+   * that containers already showing `updateAvailable=true` before this trigger
+   * came online are NOT re-notified on the first scan cycle after a restart
+   * or config change. If the store already holds a history entry for the
+   * (trigger, container, event) tuple, it wins — seed only fills gaps.
+   */
   private seedNotificationHistoryFromStore() {
     if (!this.configuration.once) {
       return;
@@ -1405,7 +1409,7 @@ class Trigger extends Component {
       return;
     }
 
-    // Filter on changed containers with update available and passing trigger threshold
+    // Filter on containers with update available that we haven't already notified for this exact result
     if (!this.shouldHandleSimpleContainerReport(containerReport)) {
       const alreadyNotified =
         containerReport.container.updateAvailable &&
@@ -1879,7 +1883,7 @@ class Trigger extends Component {
    * @param configuration
    * @returns {*}
    */
-  validateConfiguration(configuration: TriggerConfiguration): TriggerConfiguration {
+  validateConfiguration(configuration: TConfiguration): TConfiguration {
     const schema = this.getConfigurationSchema() as ReturnType<typeof this.joi.object>;
     const schemaWithDefaultOptions = schema.append({
       auto: this.joi
@@ -1917,7 +1921,7 @@ class Trigger extends Component {
     if (schemaValidated.error) {
       throw schemaValidated.error;
     }
-    const normalizedConfiguration = schemaValidated.value as TriggerConfiguration;
+    const normalizedConfiguration = schemaValidated.value as TConfiguration;
     normalizedConfiguration.auto = Trigger.normalizeAutoMode(normalizedConfiguration.auto);
     return normalizedConfiguration;
   }
@@ -2080,15 +2084,15 @@ class Trigger extends Component {
    * For simple flat-field masking; providers with nested fields should
    * override maskConfiguration() directly.
    */
-  protected maskFields(fieldsToMask: string[]): Record<string, unknown> {
-    const masked: Record<string, unknown> = { ...this.configuration };
+  protected maskFields(fieldsToMask: string[]): TConfiguration {
+    const masked = { ...this.configuration } as Record<string, unknown>;
     for (const field of fieldsToMask) {
       const value = masked[field];
       if (typeof value === 'string' && value.length > 0) {
         masked[field] = (this.constructor as typeof Trigger).mask(value);
       }
     }
-    return masked;
+    return masked as TConfiguration;
   }
 
   /**

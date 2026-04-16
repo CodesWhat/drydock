@@ -1,12 +1,27 @@
 import fs from 'node:fs';
 import https from 'node:https';
 import axios, { type AxiosRequestConfig } from 'axios';
+import { sanitizeLogParam } from '../log/sanitize.js';
 import type { ContainerImage } from '../model/container.js';
 import * as registryPrometheus from '../prometheus/registry.js';
 import { resolveConfiguredPath } from '../runtime/paths.js';
 import { failClosedAuth, requireAuthString, withAuthorizationHeader } from '../security/auth.js';
+import { getErrorMessage } from '../util/error.js';
 import { REGISTRY_BEARER_TOKEN_CACHE_TTL_MS } from './configuration.js';
 import Registry from './Registry.js';
+
+export interface BaseRegistryConfiguration {
+  url?: string;
+  insecure?: boolean;
+  cafile?: string;
+  clientcert?: string;
+  clientkey?: string;
+  auth?: string;
+  login?: string;
+  password?: string;
+  token?: string;
+  username?: string;
+}
 
 type RegistryRequestOptions = AxiosRequestConfig;
 type RegistryManifestLookupResult = Awaited<ReturnType<Registry['getImageManifestDigest']>>;
@@ -20,7 +35,9 @@ type DigestCacheEntry = {
 /**
  * Base Registry with common patterns
  */
-class BaseRegistry extends Registry {
+class BaseRegistry<
+  TConfiguration extends BaseRegistryConfiguration = BaseRegistryConfiguration,
+> extends Registry<TConfiguration> {
   private httpsAgent?: https.Agent;
   private bearerTokenCache = new Map<string, { token: string; expiresAt: number }>();
   private digestManifestCache = new Map<string, DigestCacheEntry>();
@@ -52,11 +69,29 @@ class BaseRegistry extends Registry {
     return host;
   }
 
+  private getDigestCacheImageLabel(image: ContainerImage, digest?: string): string {
+    const registryUrl =
+      typeof image?.registry?.url === 'string' && image.registry.url.length > 0
+        ? image.registry.url
+        : 'unknown-registry';
+    const imageName =
+      typeof image?.name === 'string' && image.name.length > 0 ? image.name : 'unknown-image';
+    const tagOrDigest =
+      typeof digest === 'string' && digest.length > 0
+        ? digest
+        : image?.tag?.value || image?.digest?.value || 'latest';
+
+    return `${registryUrl}/${imageName}:${tagOrDigest}`;
+  }
+
   private buildDigestCacheKey(image: ContainerImage, digest?: string): string {
     let normalizedImage: ContainerImage;
     try {
       normalizedImage = this.normalizeImage(structuredClone(image));
-    } catch {
+    } catch (error) {
+      this.log.warn(
+        `Unable to normalize image metadata for digest cache key generation: ${sanitizeLogParam(this.getDigestCacheImageLabel(image, digest))} (${sanitizeLogParam(getErrorMessage(error))})`,
+      );
       normalizedImage = image;
     }
 

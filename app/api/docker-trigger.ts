@@ -29,7 +29,7 @@ interface FindDockerTriggerForContainerOptions {
 interface DockerTriggerCandidate {
   type: string;
   agent?: string;
-  configuration?: Record<string, unknown>;
+  configuration?: object;
   getDefaultComposeFilePath?: () => string | null;
   getComposeFilesForContainer?: (container: {
     name?: string;
@@ -61,7 +61,7 @@ function getConfiguredComposeFilePath(trigger: TriggerWithComposeAffinity): stri
       return composeFileFromMethod;
     }
   }
-  return normalizeComposeFilePath(trigger.configuration?.file);
+  return normalizeComposeFilePath((trigger.configuration as { file?: unknown } | undefined)?.file);
 }
 
 function getComposeFilesForContainer(

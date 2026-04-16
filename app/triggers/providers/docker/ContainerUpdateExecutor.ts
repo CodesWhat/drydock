@@ -110,7 +110,7 @@ type PendingContainerUpdateOperation = NonNullable<
 >;
 
 type ContainerUpdateExecutorDependencies = {
-  getConfiguration: () => { dryrun?: boolean; [key: string]: unknown };
+  getConfiguration: () => { dryrun?: boolean };
   getTriggerId: () => string;
   getRollbackConfig: (container: ContainerForUpdate) => RollbackConfig;
   stopContainer: (

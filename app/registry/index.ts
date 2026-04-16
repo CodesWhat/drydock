@@ -12,7 +12,7 @@ import * as store from '../store/index.js';
 
 const log = logger.child({ component: 'registry' });
 
-import Agent from '../agent/components/Agent.js';
+import Agent, { type AgentConfiguration } from '../agent/components/Agent.js';
 import type Authentication from '../authentications/providers/Authentication.js';
 import {
   ddEnvVars,
@@ -687,7 +687,7 @@ async function registerAgents() {
     try {
       const config = configurations[name];
       const agent = new Agent();
-      const registered = await agent.register('agent', 'dd', name, config);
+      const registered = await agent.register('agent', 'dd', name, config as AgentConfiguration);
       state.agent[registered.getId()] = registered;
     } catch (e: unknown) {
       log.warn(`Agent ${name} failed to register (${getErrorMessage(e)})`);

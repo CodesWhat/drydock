@@ -24,7 +24,13 @@ function getRegistryHost(registryUrl: string | undefined): string {
 /**
  * Elastic Container Registry integration.
  */
-class Ecr extends Registry {
+interface EcrRegistryConfiguration {
+  accesskeyid?: string;
+  secretaccesskey?: string;
+  region?: string;
+}
+
+class Ecr extends Registry<EcrRegistryConfiguration> {
   getConfigurationSchema() {
     return this.joi.alternatives([
       this.joi.string().allow(''),

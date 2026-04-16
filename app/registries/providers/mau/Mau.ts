@@ -1,11 +1,15 @@
 import axios from 'axios';
 import { withAuthorizationHeader } from '../../../security/auth.js';
-import Gitlab from '../gitlab/Gitlab.js';
+import Gitlab, { type GitlabRegistryConfiguration } from '../gitlab/Gitlab.js';
+
+interface MauRegistryConfiguration extends GitlabRegistryConfiguration {
+  token?: string;
+}
 
 /**
  * dock.mau.dev (GitLab-based) Container Registry integration.
  */
-class Mau extends Gitlab {
+class Mau extends Gitlab<MauRegistryConfiguration> {
   /**
    * Get the mau configuration schema.
    * @returns {*}

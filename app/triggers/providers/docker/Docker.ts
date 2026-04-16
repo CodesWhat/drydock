@@ -25,7 +25,7 @@ import * as storeContainer from '../../../store/container.js';
 import { cacheSecurityState } from '../../../store/container.js';
 import * as updateOperationStore from '../../../store/update-operation.js';
 import { runHook } from '../../hooks/HookRunner.js';
-import Trigger from '../Trigger.js';
+import Trigger, { type TriggerConfiguration } from '../Trigger.js';
 import ContainerRuntimeConfigManager from './ContainerRuntimeConfigManager.js';
 import ContainerUpdateExecutor from './ContainerUpdateExecutor.js';
 import { syncComposeFileTag } from './compose-file-sync.js';
@@ -43,6 +43,13 @@ const PULL_PROGRESS_LOG_INTERVAL_MS = 2000;
 const NON_SELF_UPDATE_HEALTH_TIMEOUT_MS = 120_000;
 const NON_SELF_UPDATE_HEALTH_POLL_INTERVAL_MS = 1_000;
 const TRIGGER_BATCH_CONCURRENCY = 3;
+
+export interface DockerTriggerConfiguration extends TriggerConfiguration {
+  prune: boolean;
+  dryrun: boolean;
+  autoremovetimeout: number;
+  backupcount: number;
+}
 
 /**
  * Module-level update concurrency limiter shared across all Docker/Dockercompose
@@ -229,7 +236,9 @@ function pickOrchestratorCallbacks<K extends keyof DockerTriggerOrchestrator>(
 /**
  * Replace a Docker container with an updated one.
  */
-class Docker extends Trigger {
+class Docker<
+  TConfiguration extends DockerTriggerConfiguration = DockerTriggerConfiguration,
+> extends Trigger<TConfiguration> {
   public strictAgentMatch = true;
 
   registryResolver: RegistryResolver;

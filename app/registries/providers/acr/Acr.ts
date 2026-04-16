@@ -1,9 +1,14 @@
-import BaseRegistry from '../../BaseRegistry.js';
+import BaseRegistry, { type BaseRegistryConfiguration } from '../../BaseRegistry.js';
+
+interface AcrRegistryConfiguration extends BaseRegistryConfiguration {
+  clientid: string;
+  clientsecret: string;
+}
 
 /**
  * Azure Container Registry integration.
  */
-class Acr extends BaseRegistry {
+class Acr extends BaseRegistry<AcrRegistryConfiguration> {
   getConfigurationSchema() {
     return this.joi.object().keys({
       clientid: this.joi.string().required(),

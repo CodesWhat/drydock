@@ -1,11 +1,18 @@
 import axios from 'axios';
 import { getOutboundHttpTimeoutMs } from '../../../configuration/runtime-defaults.js';
-import Trigger from '../Trigger.js';
+import Trigger, { type TriggerConfiguration } from '../Trigger.js';
+
+interface MatrixConfiguration extends TriggerConfiguration {
+  url: string;
+  roomid: string;
+  accesstoken: string;
+  msgtype: 'm.notice' | 'm.text';
+}
 
 /**
  * Matrix Trigger implementation
  */
-class Matrix extends Trigger {
+class Matrix extends Trigger<MatrixConfiguration> {
   /**
    * Get the Trigger configuration schema.
    * @returns {*}

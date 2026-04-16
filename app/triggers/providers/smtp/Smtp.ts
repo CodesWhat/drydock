@@ -1,10 +1,24 @@
 import nodemailer, { type Transporter } from 'nodemailer';
-import Trigger from '../Trigger.js';
+import Trigger, { type TriggerConfiguration } from '../Trigger.js';
+
+interface SmtpConfiguration extends TriggerConfiguration {
+  host: string;
+  allowcustomtld: boolean;
+  port: number;
+  user?: string;
+  pass?: string;
+  from: string;
+  to: string;
+  tls: {
+    enabled: boolean;
+    verify: boolean;
+  };
+}
 
 /**
  * SMTP Trigger implementation
  */
-class Smtp extends Trigger {
+class Smtp extends Trigger<SmtpConfiguration> {
   private transporter!: Transporter;
 
   normalizeFromAddress(value, allowCustomTld) {

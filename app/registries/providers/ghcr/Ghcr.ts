@@ -1,10 +1,15 @@
 import axios from 'axios';
-import BaseRegistry from '../../BaseRegistry.js';
+import BaseRegistry, { type BaseRegistryConfiguration } from '../../BaseRegistry.js';
+
+interface GhcrRegistryConfiguration extends BaseRegistryConfiguration {
+  username?: string;
+  token?: string;
+}
 
 /**
  * Github Container Registry integration.
  */
-class Ghcr extends BaseRegistry {
+class Ghcr extends BaseRegistry<GhcrRegistryConfiguration> {
   protected getTrustedAuthHosts(): string[] {
     return ['ghcr.io'];
   }

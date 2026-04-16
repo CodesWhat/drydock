@@ -1,11 +1,16 @@
 import axios from 'axios';
 import { withAuthorizationHeader } from '../../../security/auth.js';
-import BaseRegistry from '../../BaseRegistry.js';
+import BaseRegistry, { type BaseRegistryConfiguration } from '../../BaseRegistry.js';
+
+interface GarRegistryConfiguration extends BaseRegistryConfiguration {
+  clientemail?: string;
+  privatekey?: string;
+}
 
 /**
  * Google Artifact Registry integration.
  */
-class Gar extends BaseRegistry {
+class Gar extends BaseRegistry<GarRegistryConfiguration> {
   getConfigurationSchema() {
     return this.joi.alternatives([
       this.joi.string().allow(''),

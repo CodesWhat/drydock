@@ -1,6 +1,5 @@
 export interface SelfUpdateConfiguration {
   dryrun?: boolean;
-  [key: string]: unknown;
 }
 
 export interface SelfUpdateLogger {

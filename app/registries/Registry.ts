@@ -3,7 +3,7 @@ import https from 'node:https';
 import axios, { type AxiosRequestConfig, type AxiosResponse, type Method } from 'axios';
 import type { ContainerImage } from '../model/container.js';
 import { getSummaryTags } from '../prometheus/registry.js';
-import Component from '../registry/Component.js';
+import Component, { type ComponentConfiguration } from '../registry/Component.js';
 import { getErrorMessage } from '../util/error.js';
 import { getRegistryRequestTimeoutMs } from './configuration.js';
 
@@ -122,7 +122,9 @@ const DEFAULT_HTTPS_KEEP_ALIVE_AGENT = new https.Agent({ keepAlive: true });
 /**
  * Docker Registry Abstract class.
  */
-class Registry extends Component {
+class Registry<
+  TConfiguration extends ComponentConfiguration = ComponentConfiguration,
+> extends Component<TConfiguration> {
   /**
    * Encode Bse64(login:password)
    * @param login

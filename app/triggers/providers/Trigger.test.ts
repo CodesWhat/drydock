@@ -5224,6 +5224,21 @@ describe('digest mode', () => {
       },
     ]);
 
+    storeContainer.getContainers.mockClear();
+    storeContainer.getContainersRaw.mockClear();
+    storeContainer.getContainersRaw.mockReturnValueOnce([
+      {
+        id: 'c1',
+        name: 'app',
+        watcher: 'test',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '3.0' },
+        env: {
+          SECRET_TOKEN: 'raw-secret',
+        },
+      },
+    ]);
+
     const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
     await trigger.flushDigestBuffer();
 
@@ -6239,6 +6254,7 @@ describe('notification history (once=true dedup)', () => {
     });
     trigger.init();
 
+    // With once=false every scan fires — so no seeding needed.
     expect(
       notificationHistoryStore.getLastNotifiedHash(
         'trigger.test.pushover',

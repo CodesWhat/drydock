@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { getOutboundHttpTimeoutMs } from '../../../configuration/runtime-defaults.js';
-import Trigger from '../Trigger.js';
+import Trigger, { type TriggerConfiguration } from '../Trigger.js';
 
 type TeamsAdaptiveCardTextBlock = {
   type: 'TextBlock';
@@ -31,10 +31,15 @@ type TeamsMessageBody = {
   }>;
 };
 
+interface TeamsConfiguration extends TriggerConfiguration {
+  url: string;
+  cardversion: string;
+}
+
 /**
  * Microsoft Teams Trigger implementation
  */
-class Teams extends Trigger {
+class Teams extends Trigger<TeamsConfiguration> {
   /**
    * Get the Trigger configuration schema.
    * @returns {*}

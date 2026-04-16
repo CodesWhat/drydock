@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { getOutboundHttpTimeoutMs } from '../../../configuration/runtime-defaults.js';
-import Trigger from '../Trigger.js';
+import Trigger, { type TriggerConfiguration } from '../Trigger.js';
 
 type MattermostMessageBody = {
   text: string;
@@ -10,10 +10,18 @@ type MattermostMessageBody = {
   icon_url?: string;
 };
 
+interface MattermostConfiguration extends TriggerConfiguration {
+  url: string;
+  channel?: string;
+  username?: string;
+  iconemoji?: string;
+  iconurl?: string;
+}
+
 /**
  * Mattermost Trigger implementation
  */
-class Mattermost extends Trigger {
+class Mattermost extends Trigger<MattermostConfiguration> {
   /**
    * Get the Trigger configuration schema.
    * @returns {*}

@@ -1,9 +1,13 @@
-import Custom from '../custom/Custom.js';
+import Custom, { type CustomRegistryConfiguration } from '../custom/Custom.js';
+
+interface DocrRegistryConfiguration extends CustomRegistryConfiguration {
+  token?: string;
+}
 
 /**
  * DigitalOcean Container Registry integration.
  */
-class Docr extends Custom {
+class Docr extends Custom<DocrRegistryConfiguration> {
   init() {
     this.configuration.url = 'https://registry.digitalocean.com';
 

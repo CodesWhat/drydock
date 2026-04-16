@@ -77,7 +77,7 @@ function splitFilterPaths(value: string | undefined): string[] {
 /**
  * MQTT Trigger implementation
  */
-class Mqtt extends Trigger {
+class Mqtt extends Trigger<MqttConfiguration> {
   public configuration: MqttConfiguration = {
     url: '',
     topic: containerDefaultTopic,

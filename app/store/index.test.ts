@@ -253,6 +253,7 @@ describe('Store Module', () => {
     vi.doMock('./backup', createCollectionsMock);
     vi.doMock('./container', createCollectionsMock);
     vi.doMock('./notification', createCollectionsMock);
+    vi.doMock('./notification-history', createCollectionsMock);
     vi.doMock('./settings', createCollectionsMock);
     vi.doMock('./update-operation', createCollectionsMock);
     vi.doMock('../log', createLogMock);

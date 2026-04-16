@@ -4,30 +4,28 @@ import { redactTriggerConfigurationInfrastructureDetails } from './trigger-confi
 
 type AppLogger = typeof log;
 
-export interface ComponentConfiguration {
-  [key: string]: any;
-}
+export type ComponentConfiguration = object;
 
 type ConfigurationSchemaValidationResult = {
   error?: unknown;
   value?: unknown;
 };
 
-type ComponentConfigurationSchema = {
-  validate?: (configuration: ComponentConfiguration) => ConfigurationSchemaValidationResult;
+type ComponentConfigurationSchema<TConfiguration extends ComponentConfiguration> = {
+  validate?: (configuration: TConfiguration) => ConfigurationSchemaValidationResult;
 };
 
 /**
  * Base Component Class.
  */
-class Component {
+class Component<TConfiguration extends ComponentConfiguration = ComponentConfiguration> {
   public joi: typeof joi;
   public log: AppLogger;
   public kind: string = '';
   public type: string = '';
   public name: string = '';
   public agent?: string;
-  public configuration: ComponentConfiguration = {};
+  public configuration = {} as TConfiguration;
 
   /**
    * Constructor.
@@ -49,7 +47,7 @@ class Component {
     kind: string,
     type: string,
     name: string,
-    configuration: ComponentConfiguration,
+    configuration: TConfiguration,
     agent?: string,
   ): Promise<this> {
     // Child log for the component
@@ -95,7 +93,7 @@ class Component {
    * @param configuration the configuration
    * @returns {*} or throw a validation error
    */
-  validateConfiguration(configuration: ComponentConfiguration): ComponentConfiguration {
+  validateConfiguration(configuration: TConfiguration): TConfiguration {
     const schema = this.getConfigurationSchema();
     const schemaValidated =
       typeof schema?.validate === 'function'
@@ -104,7 +102,9 @@ class Component {
     if (schemaValidated.error) {
       throw schemaValidated.error;
     }
-    return schemaValidated.value ? (schemaValidated.value as ComponentConfiguration) : {};
+    return schemaValidated.value
+      ? (schemaValidated.value as TConfiguration)
+      : ({} as TConfiguration);
   }
 
   /**
@@ -112,8 +112,8 @@ class Component {
    * Can be overridden by the component implementation class
    * @returns {*}
    */
-  getConfigurationSchema(): ComponentConfigurationSchema {
-    return this.joi.object();
+  getConfigurationSchema(): ComponentConfigurationSchema<TConfiguration> {
+    return this.joi.object() as ComponentConfigurationSchema<TConfiguration>;
   }
 
   /**
@@ -129,7 +129,7 @@ class Component {
    * Sanitize sensitive data
    * @returns {*}
    */
-  maskConfiguration(configuration?: ComponentConfiguration): ComponentConfiguration {
+  maskConfiguration(configuration?: TConfiguration): TConfiguration {
     return configuration || this.configuration;
   }
 
