@@ -153,6 +153,10 @@ export function setDetectedServerName(name: string | undefined): void {
   detectedServerName = trimmed || undefined;
 }
 
+export function getDetectedServerName(): string | undefined {
+  return detectedServerName;
+}
+
 export function getLogLevel() {
   return ddEnvVars.DD_LOG_LEVEL || 'info';
 }

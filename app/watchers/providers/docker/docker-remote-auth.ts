@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import Dockerode from 'dockerode';
-import { setDetectedServerName } from '../../../configuration/index.js';
+import { getDetectedServerName, setDetectedServerName } from '../../../configuration/index.js';
 import { resolveConfiguredPath } from '../../../runtime/paths.js';
 import { disableSocketRedirects } from './disable-socket-redirects.js';
 import { getErrorMessage } from './docker-helpers.js';
@@ -49,9 +49,17 @@ interface DockerRemoteAuthWatcher {
 }
 
 async function detectLocalDaemonServerName(watcher: DockerRemoteAuthWatcher): Promise<void> {
-  if (watcher.configuration.host || typeof watcher.dockerApi?.info !== 'function') {
+  if (typeof watcher.dockerApi?.info !== 'function') {
     return;
   }
+
+  // A watcher without a `host` is bound directly to a Unix socket on this
+  // machine, so its daemon is unambiguously the controller's daemon. A watcher
+  // *with* a host may still be talking to the local daemon via a socket proxy
+  // (a common pattern on Synology / Compose setups) — we still want to honor
+  // its daemon name when no socket-based watcher has claimed the identity
+  // first, while never letting a truly remote watcher overwrite one that did.
+  const isSocketWatcher = !watcher.configuration.host;
 
   try {
     const info = await watcher.dockerApi.info();
@@ -60,7 +68,11 @@ async function detectLocalDaemonServerName(watcher: DockerRemoteAuthWatcher): Pr
     }
 
     const daemonName = (info as { Name?: unknown }).Name;
-    if (typeof daemonName === 'string') {
+    if (typeof daemonName !== 'string' || daemonName.trim() === '') {
+      return;
+    }
+
+    if (isSocketWatcher || !getDetectedServerName()) {
       setDetectedServerName(daemonName);
     }
   } catch {
@@ -125,8 +137,8 @@ export async function initWatcherWithRemoteAuth(watcher: DockerRemoteAuthWatcher
   watcher.dockerApi = new Dockerode(options);
   if (!watcher.configuration.host) {
     disableSocketRedirects(watcher.dockerApi);
-    await detectLocalDaemonServerName(watcher);
   }
+  await detectLocalDaemonServerName(watcher);
 }
 
 export async function ensureRemoteAuthHeadersForWatcher(

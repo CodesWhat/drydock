@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **[#296](https://github.com/CodesWhat/drydock/issues/296)** (reopen) — Controller identity detection now runs for host-based watchers (TCP to a local socket-proxy, the common Synology / Docker Compose pattern), not just pure-socket watchers. Socket-based watchers still take priority, and truly remote watchers can no longer hijack the identity because host-based detection is skipped once a name has already been populated. Reporter saw `[baf1154911ce]` on rc.8 because their Synology setup reaches the daemon via `docker-socket-proxy`, which made the previous `!watcher.configuration.host` gate short-circuit. Workaround for users on rc.8: set `DD_SERVER_NAME`.
+
 ## [1.5.0-rc.8] - 2026-04-13
 
 ### Added

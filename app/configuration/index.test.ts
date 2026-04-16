@@ -449,6 +449,17 @@ test('getServerName should prefer detected server name when DD_SERVER_NAME is no
   expect(configuration.getServerName()).toBe('datavault');
 });
 
+test('getDetectedServerName should reflect the last setDetectedServerName value', () => {
+  configuration.setDetectedServerName(undefined);
+  expect(configuration.getDetectedServerName()).toBeUndefined();
+
+  configuration.setDetectedServerName('datavault');
+  expect(configuration.getDetectedServerName()).toBe('datavault');
+
+  configuration.setDetectedServerName('   ');
+  expect(configuration.getDetectedServerName()).toBeUndefined();
+});
+
 test('getServerConfiguration should allow enabling identity-aware rate-limit keys', async () => {
   configuration.ddEnvVars.DD_SERVER_RATELIMIT_IDENTITYKEYING = 'true';
   const config = configuration.getServerConfiguration();

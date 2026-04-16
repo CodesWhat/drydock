@@ -6,6 +6,7 @@ const {
   mockResolveConfiguredPath,
   mockGetErrorMessage,
   mockSetDetectedServerName,
+  mockGetDetectedServerName,
   mockInitializeRemoteOidcStateFromConfiguration,
   mockIsRemoteOidcTokenRefreshRequired,
   mockRefreshRemoteOidcAccessToken,
@@ -17,6 +18,7 @@ const {
   mockResolveConfiguredPath: vi.fn((value: string) => `/resolved/${value}`),
   mockGetErrorMessage: vi.fn((_: unknown, fallback: string) => fallback),
   mockSetDetectedServerName: vi.fn(),
+  mockGetDetectedServerName: vi.fn<() => string | undefined>(() => undefined),
   mockInitializeRemoteOidcStateFromConfiguration: vi.fn(),
   mockIsRemoteOidcTokenRefreshRequired: vi.fn(() => false),
   mockRefreshRemoteOidcAccessToken: vi.fn(),
@@ -40,6 +42,7 @@ vi.mock('../../../runtime/paths.js', () => ({
 
 vi.mock('../../../configuration/index.js', () => ({
   setDetectedServerName: mockSetDetectedServerName,
+  getDetectedServerName: mockGetDetectedServerName,
 }));
 
 vi.mock('./docker-helpers.js', () => ({
@@ -115,6 +118,7 @@ describe('docker remote auth module', () => {
     mockIsRemoteOidcTokenRefreshRequired.mockReturnValue(false);
     mockRefreshRemoteOidcAccessToken.mockResolvedValue(undefined);
     mockProbeSocketApiVersion.mockResolvedValue(undefined);
+    mockGetDetectedServerName.mockReturnValue(undefined);
   });
 
   test('initWatcherWithRemoteAuth initializes local socket watcher', async () => {
@@ -308,6 +312,119 @@ describe('docker remote auth module', () => {
 
     expect(mockProbeSocketApiVersion).not.toHaveBeenCalled();
     expect(mockDisableSocketRedirects).not.toHaveBeenCalled();
+  });
+
+  test('initWatcherWithRemoteAuth captures the daemon host name for host-based watchers (socket-proxy topology)', async () => {
+    const dockerApi = {
+      modem: { headers: {} },
+      info: vi.fn().mockResolvedValue({ Name: 'datavault' }),
+    };
+    mockDockerodeCtor.mockImplementation(function DockerodeMock() {
+      return dockerApi;
+    });
+
+    const watcher = createWatcher({
+      configuration: {
+        host: 'socket-proxy',
+        socket: '/var/run/docker.sock',
+        port: 2375,
+      },
+    });
+
+    await initWatcherWithRemoteAuth(watcher as any);
+
+    expect(dockerApi.info).toHaveBeenCalledTimes(1);
+    expect(mockSetDetectedServerName).toHaveBeenCalledWith('datavault');
+  });
+
+  test('initWatcherWithRemoteAuth skips host-based daemon detection when a name was already detected', async () => {
+    const dockerApi = {
+      modem: { headers: {} },
+      info: vi.fn().mockResolvedValue({ Name: 'tmvault' }),
+    };
+    mockDockerodeCtor.mockImplementation(function DockerodeMock() {
+      return dockerApi;
+    });
+    mockGetDetectedServerName.mockReturnValue('datavault');
+
+    const watcher = createWatcher({
+      configuration: {
+        host: 'remote.example.com',
+        socket: '/var/run/docker.sock',
+        port: 2375,
+      },
+    });
+
+    await initWatcherWithRemoteAuth(watcher as any);
+
+    expect(dockerApi.info).toHaveBeenCalledTimes(1);
+    expect(mockSetDetectedServerName).not.toHaveBeenCalled();
+  });
+
+  test('initWatcherWithRemoteAuth lets socket-based watchers override a name populated by a host watcher', async () => {
+    const dockerApi = {
+      modem: { headers: {} },
+      info: vi.fn().mockResolvedValue({ Name: 'datavault' }),
+    };
+    mockDockerodeCtor.mockImplementation(function DockerodeMock() {
+      return dockerApi;
+    });
+    mockGetDetectedServerName.mockReturnValue('tmvault');
+
+    const watcher = createWatcher({
+      configuration: {
+        socket: '/var/run/docker.sock',
+        port: 0,
+      },
+    });
+
+    await initWatcherWithRemoteAuth(watcher as any);
+
+    expect(dockerApi.info).toHaveBeenCalledTimes(1);
+    expect(mockSetDetectedServerName).toHaveBeenCalledWith('datavault');
+  });
+
+  test('initWatcherWithRemoteAuth ignores empty daemon names', async () => {
+    const dockerApi = {
+      modem: { headers: {} },
+      info: vi.fn().mockResolvedValue({ Name: '   ' }),
+    };
+    mockDockerodeCtor.mockImplementation(function DockerodeMock() {
+      return dockerApi;
+    });
+
+    const watcher = createWatcher({
+      configuration: {
+        socket: '/var/run/docker.sock',
+        port: 0,
+      },
+    });
+
+    await initWatcherWithRemoteAuth(watcher as any);
+
+    expect(dockerApi.info).toHaveBeenCalledTimes(1);
+    expect(mockSetDetectedServerName).not.toHaveBeenCalled();
+  });
+
+  test('initWatcherWithRemoteAuth swallows daemon info errors silently for host watchers', async () => {
+    const dockerApi = {
+      modem: { headers: {} },
+      info: vi.fn().mockRejectedValue(new Error('boom')),
+    };
+    mockDockerodeCtor.mockImplementation(function DockerodeMock() {
+      return dockerApi;
+    });
+
+    const watcher = createWatcher({
+      configuration: {
+        host: 'remote.example.com',
+        socket: '/var/run/docker.sock',
+        port: 2375,
+      },
+    });
+
+    await expect(initWatcherWithRemoteAuth(watcher as any)).resolves.toBeUndefined();
+    expect(mockSetDetectedServerName).not.toHaveBeenCalled();
   });
 
   test('initWatcherWithRemoteAuth blocks remote watcher auth when header application fails', async () => {
