@@ -1699,13 +1699,55 @@ describe('AgentClient', () => {
   describe('runRemoteTrigger', () => {
     test('should post to remote trigger endpoint', async () => {
       axios.post.mockResolvedValue({ data: {} });
-      const container = { id: 'c1' };
+      const container = { id: 'c1', name: 'my-container' };
       await client.runRemoteTrigger(container, 'docker', 'update');
       expect(axios.post).toHaveBeenCalledWith(
         expect.stringContaining('/api/triggers/docker/update'),
-        container,
+        expect.objectContaining({ id: 'c1', name: 'my-container' }),
         expect.any(Object),
       );
+    });
+
+    test('should post only id and name for docker update triggers (avoids agent 256kb 413)', async () => {
+      axios.post.mockResolvedValue({ data: {} });
+      const container = {
+        id: 'c1',
+        name: 'calibre',
+        status: 'running',
+        watcher: 'mediavault',
+        displayName: 'calibre',
+        image: { id: 'sha256:abc', name: 'linuxserver/calibre', tag: { value: 'latest' } },
+        result: { tag: 'latest', releaseNotes: { body: 'x'.repeat(300 * 1024) } },
+        details: { env: [{ key: 'A', value: 'B' }], labels: { foo: 'bar' } },
+      };
+      await client.runRemoteTrigger(container, 'docker', 'update');
+      const [, postedPayload] = axios.post.mock.calls[0];
+      expect(postedPayload).toStrictEqual({ id: 'c1', name: 'calibre' });
+    });
+
+    test('should post only id and name for dockercompose update triggers', async () => {
+      axios.post.mockResolvedValue({ data: {} });
+      const container = {
+        id: 'c2',
+        name: 'web',
+        result: { releaseNotes: { body: 'x'.repeat(400 * 1024) } },
+      };
+      await client.runRemoteTrigger(container, 'dockercompose', 'update');
+      const [, postedPayload] = axios.post.mock.calls[0];
+      expect(postedPayload).toStrictEqual({ id: 'c2', name: 'web' });
+    });
+
+    test('should post the full container for non-update (notification) trigger types', async () => {
+      axios.post.mockResolvedValue({ data: {} });
+      const container = {
+        id: 'c3',
+        name: 'api',
+        status: 'running',
+        result: { releaseNotes: { body: 'release body' } },
+      };
+      await client.runRemoteTrigger(container, 'smtp', 'notify');
+      const [, postedPayload] = axios.post.mock.calls[0];
+      expect(postedPayload).toBe(container);
     });
 
     test('should throw on failure', async () => {
