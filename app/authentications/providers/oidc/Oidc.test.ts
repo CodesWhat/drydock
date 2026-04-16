@@ -1109,6 +1109,34 @@ test('callback should return 401 when login fails with error', async () => {
   expect401Json(res);
 });
 
+test('callback should redact sensitive token values from login error logs', async () => {
+  mockSuccessfulGrant(openidClientMock);
+
+  const { session } = await performRedirect(oidc, openidClientMock);
+
+  const state = Object.keys(session.oidc.default.pending)[0];
+  const req = createCallbackReq(
+    `/auth/oidc/default/cb?code=abc&state=${state}`,
+    session,
+    (_user, done) =>
+      done(
+        new Error(
+          'login failed: access_token=secret-access refresh_token=secret-refresh id_token=secret-id',
+        ),
+      ),
+  );
+  const res = createRes();
+
+  await oidc.callback(req, res);
+
+  expect401Json(res);
+  const warnMsg = oidc.log.warn.mock.calls.at(-1)?.[0];
+  expect(warnMsg).toContain('[REDACTED]');
+  expect(warnMsg).not.toContain('secret-access');
+  expect(warnMsg).not.toContain('secret-refresh');
+  expect(warnMsg).not.toContain('secret-id');
+});
+
 test('callback should evict oldest sessions when concurrent session cap is reached', async () => {
   mockSuccessfulGrant(openidClientMock);
 
@@ -1254,6 +1282,32 @@ test('callback should return 401 when authorizationCodeGrant throws', async () =
   await oidc.callback(req, res);
 
   expect401Json(res);
+});
+
+test('callback should redact sensitive token values from authorizationCodeGrant error logs', async () => {
+  openidClientMock.authorizationCodeGrant = vi
+    .fn()
+    .mockRejectedValue(
+      new Error(
+        'grant failed: https://idp.example.com/callback?access_token=secret-access&refresh_token=secret-refresh&id_token=secret-id&state=secret-state',
+      ),
+    );
+
+  const session = createSessionWithPending({
+    'valid-state': createPendingCheck(),
+  });
+  const req = createCallbackReq('/auth/oidc/default/cb?code=abc&state=valid-state', session);
+  const res = createRes();
+
+  await oidc.callback(req, res);
+
+  expect401Json(res);
+  const warnMsg = oidc.log.warn.mock.calls.at(-1)?.[0];
+  expect(warnMsg).toContain('[REDACTED]');
+  expect(warnMsg).not.toContain('secret-access');
+  expect(warnMsg).not.toContain('secret-refresh');
+  expect(warnMsg).not.toContain('secret-id');
+  expect(warnMsg).not.toContain('secret-state');
 });
 
 test('callback should return 401 when authorizationCodeGrant rejects with non-Error', async () => {

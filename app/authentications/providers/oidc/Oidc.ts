@@ -6,6 +6,7 @@ import * as openidClientLibrary from 'openid-client';
 import { Agent } from 'undici';
 import { v4 as uuid } from 'uuid';
 import { ddEnvVars, getPublicUrl, getServerConfiguration } from '../../../configuration/index.js';
+import { sanitizeLogParam } from '../../../log/sanitize.js';
 import { observeAuthLoginDuration, recordAuthLogin } from '../../../prometheus/auth.js';
 import { resolveConfiguredPath } from '../../../runtime/paths.js';
 import { getErrorMessage } from '../../../util/error.js';
@@ -21,13 +22,26 @@ const DEFAULT_MAX_CONCURRENT_SESSIONS_PER_USER = 5;
 const oidcSessionLocks = new Map<string, Promise<void>>();
 const OIDC_STATE_PATTERN = /^[A-Za-z0-9._~-]{8,256}$/;
 const SENSITIVE_OIDC_PARAMS = new Set([
+  'access_token',
   'client_id',
   'client_secret',
   'code_challenge',
+  'code_verifier',
   'state',
   'nonce',
   'code',
+  'refresh_token',
+  'id_token',
 ]);
+const SENSITIVE_OIDC_MESSAGE_PARAM_NAMES = Array.from(SENSITIVE_OIDC_PARAMS)
+  .map((param) => param.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+  .join('|');
+const SENSITIVE_OIDC_ASSIGNMENT_PATTERN = new RegExp(
+  `((?:"|')?(?:${SENSITIVE_OIDC_MESSAGE_PARAM_NAMES})(?:"|')?\\s*[:=]\\s*)(?:"[^"]*"|'[^']*'|[^\\s,)&\\]}]+)`,
+  'gi',
+);
+const OIDC_URL_IN_TEXT_PATTERN = /https?:\/\/[^\s<>"')\]]+/gi;
+const OIDC_BEARER_TOKEN_PATTERN = /\bBearer\s+[A-Za-z0-9._~+/-]+=*/gi;
 
 interface OidcAppLike {
   use: (path: string, middleware: unknown) => void;
@@ -111,6 +125,17 @@ function redactUrlParams(url: string): string {
   } catch {
     return '[unparseable URL]';
   }
+}
+
+function sanitizeOidcErrorMessage(error: unknown): string {
+  const rawMessage = getErrorMessage(error);
+  const urlRedactedMessage = rawMessage.replace(OIDC_URL_IN_TEXT_PATTERN, (match) =>
+    redactUrlParams(match),
+  );
+  const tokenRedactedMessage = urlRedactedMessage
+    .replace(SENSITIVE_OIDC_ASSIGNMENT_PATTERN, '$1[REDACTED]')
+    .replace(OIDC_BEARER_TOKEN_PATTERN, 'Bearer [REDACTED]');
+  return sanitizeLogParam(tokenRedactedMessage);
 }
 
 function parseHttpUrl(value: unknown): URL | undefined {
@@ -441,7 +466,7 @@ class Oidc extends Authentication {
     try {
       this.logoutUrl = openidClient.buildEndSessionUrl(this.client).href;
     } catch (e: unknown) {
-      this.log.warn(` End session url is not supported (${getErrorMessage(e)})`);
+      this.log.warn(` End session url is not supported (${sanitizeOidcErrorMessage(e)})`);
     }
   }
 
@@ -474,7 +499,7 @@ class Oidc extends Authentication {
       await this.ensureClientInitialized();
     } catch (e: unknown) {
       this.log.warn(
-        `OIDC discovery unavailable during startup (${getErrorMessage(e)}). Drydock will retry on the next authentication attempt.`,
+        `OIDC discovery unavailable during startup (${sanitizeOidcErrorMessage(e)}). Drydock will retry on the next authentication attempt.`,
       );
     }
   }
@@ -631,7 +656,7 @@ class Oidc extends Authentication {
         allowedOrigins: [...allowedOrigins],
       });
     } catch (e: unknown) {
-      this.log.warn(`Unable to initialize OIDC session (${getErrorMessage(e)})`);
+      this.log.warn(`Unable to initialize OIDC session (${sanitizeOidcErrorMessage(e)})`);
       res.status(500).json({ error: 'Unable to initialize OIDC session' });
     }
   }
@@ -682,7 +707,7 @@ class Oidc extends Authentication {
 
       this.completePassportLogin(req, res, user, loginVerificationStartedAt);
     } catch (err: unknown) {
-      this.log.warn(`Error when logging the user [${getErrorMessage(err)}]`);
+      this.log.warn(`Error when logging the user [${sanitizeOidcErrorMessage(err)}]`);
       this.recordLoginMetrics('error', loginVerificationStartedAt);
       res.status(401).json({ error: 'Authentication failed' });
     }
@@ -836,7 +861,7 @@ class Oidc extends Authentication {
     this.log.debug('Perform passport login');
     req.login(user, (err) => {
       if (err) {
-        this.log.warn(`Error when logging the user [${getErrorMessage(err)}]`);
+        this.log.warn(`Error when logging the user [${sanitizeOidcErrorMessage(err)}]`);
         this.recordLoginMetrics('error', loginVerificationStartedAt);
         this.respondAuthenticationError(res, 'Authentication failed');
         return;
@@ -857,7 +882,7 @@ class Oidc extends Authentication {
       this.recordLoginMetrics('success', verifyStartedAt);
       done(null, user);
     } catch (e: unknown) {
-      this.log.warn(`Error when validating the user access token (${getErrorMessage(e)})`);
+      this.log.warn(`Error when validating the user access token (${sanitizeOidcErrorMessage(e)})`);
       this.recordLoginMetrics('invalid', verifyStartedAt);
       done(null, false);
     }
