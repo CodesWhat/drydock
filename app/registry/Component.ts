@@ -81,7 +81,7 @@ class Component {
   }
 
   /**
-   * Deregistger the component (do nothing by default).
+   * Deregister the component (do nothing by default).
    * @returns {Promise<void>}
    */
 
