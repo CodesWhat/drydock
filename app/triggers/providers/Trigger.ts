@@ -653,6 +653,9 @@ class Trigger<
     container: Container | undefined,
     errorMessage: string,
   ) {
+    // Intentionally coarse: key on watcher (not container ID) so a burst of
+    // identical errors from one system-level condition (SMTP down, agent
+    // disconnected) produces a single warn log rather than one per container.
     return `${this.getId()}|${ruleId}|${container?.watcher ?? 'unknown'}|${errorMessage}`;
   }
 

@@ -814,9 +814,6 @@ export class AgentClient {
 
   async runRemoteTrigger(container: Container, triggerType: string, triggerName: string) {
     try {
-      this.log.debug(
-        `Running remote trigger ${sanitizeLogParam(triggerType)}.${sanitizeLogParam(triggerName)} (container=${sanitizeLogParam(JSON.stringify(container), 500)})`,
-      );
       // For update-trigger types (docker, dockercompose), the agent's handler
       // only dereferences container.id (to look up its own stored container)
       // and container.name (for the rollback-container guard). Sending the
@@ -828,6 +825,9 @@ export class AgentClient {
       const payload = REMOTE_UPDATE_TRIGGER_TYPES.has(triggerType)
         ? { id: container.id, name: container.name }
         : container;
+      this.log.debug(
+        `Running remote trigger ${sanitizeLogParam(triggerType)}.${sanitizeLogParam(triggerName)} (payload=${sanitizeLogParam(JSON.stringify(payload), 500)})`,
+      );
       await axios.post(
         `${this.baseUrl}/api/triggers/${encodeURIComponent(triggerType)}/${encodeURIComponent(triggerName)}`,
         payload,

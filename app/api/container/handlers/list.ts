@@ -200,6 +200,12 @@ function setLatestOperationLookupEntry(
   }
 }
 
+// Returns undefined when there is nothing to preload. The caller treats that
+// as a signal to use the per-row attachInProgressUpdateOperation path — which
+// performs its own empty-store check and returns the container unmodified. The
+// preload-vs-per-row branch is a perf optimisation for the common case where
+// active operations exist; undefined keeps the rare empty-store path on the
+// known-good fallback instead of adding another empty-map short-circuit.
 function buildPreloadedActiveOperationLookup(
   operations: unknown[],
 ): PreloadedActiveOperationLookup | undefined {
