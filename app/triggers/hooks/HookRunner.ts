@@ -159,14 +159,12 @@ function isAllowedHookCommand(command: string): boolean {
     }
 
     sawToken = true;
-    let consumedToken = false;
 
     while (index < trimmedCommand.length && !isHookWhitespace(trimmedCommand[index])) {
       const nextIndex = consumeHookSegment(trimmedCommand, index);
       if (nextIndex === undefined || nextIndex === index) {
         return false;
       }
-      consumedToken = true;
       index = nextIndex;
     }
   }

@@ -6,4 +6,4 @@ const host: string = agent.configuration.host;
 void host;
 
 // @ts-expect-error Agent configuration should not allow arbitrary properties.
-agent.configuration.unknownKey;
+void agent.configuration.unknownKey;

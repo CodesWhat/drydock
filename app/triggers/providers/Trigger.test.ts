@@ -6119,6 +6119,7 @@ describe('batch+digest mode', () => {
     await digestCallback?.({ container: initialContainer, changed: true } as any);
     await batchCallback?.([{ container: initialContainer, changed: true }] as any);
 
+    expect(triggerBatchSpy).toHaveBeenCalledTimes(1);
     expect(trigger.digestBuffer.size).toBe(1);
 
     // Scan cycle 2 detects a new remote value — result hash changes
@@ -6165,6 +6166,8 @@ describe('batch+digest mode', () => {
     // Scan cycle 1: digest buffers + batch fires
     await digestCallback?.({ container, changed: true } as any);
     await batchCallback?.([{ container, changed: true }] as any);
+
+    expect(triggerBatchSpy).toHaveBeenCalled();
 
     // Digest cron flushes, records update-available-digest history
     const cronCallback = vi.mocked(mockCron.schedule).mock.calls[0]?.[1];
