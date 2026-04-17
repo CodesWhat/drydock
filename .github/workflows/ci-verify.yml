@@ -27,7 +27,11 @@ on:
         required: false
 
 concurrency:
-  group: ci-verify-${{ github.workflow }}-${{ github.ref }}
+  # On a PR synchronize, both `push` (ref=refs/heads/<branch>) and
+  # `pull_request` (ref=refs/pull/<n>/merge) fire. Key on the source
+  # branch name — `head_ref` on PRs, `ref_name` everywhere else — so
+  # both events share one slot and cancel-in-progress deduplicates.
+  group: ci-verify-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 permissions: {}
