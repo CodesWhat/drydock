@@ -54,6 +54,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Rate-limit key derivation** — Unauthenticated rate-limit buckets now key on `socket.remoteAddress` in preference to `request.ip`, eliminating the `X-Forwarded-For` spoof-ability for IP-based buckets when reverse proxies are untrusted. ([#cb36affa](https://github.com/CodesWhat/drydock/commit/cb36affa))
 - **CORS origin required when enabled** — Enabling CORS now requires `DD_SERVER_CORS_ORIGIN` to be set explicitly; the previous wildcard default silently allowed any origin when the env var was forgotten. ([#ba82d917](https://github.com/CodesWhat/drydock/commit/ba82d917))
 - **Snyk policy refresh** — `.snyk` scope narrowed to the two genuinely-reviewed Code false-positives; non-enforced rules dropped so the policy file stays a real exception ledger rather than a catch-all suppression list. ([#8a2360a9](https://github.com/CodesWhat/drydock/commit/8a2360a9))
+- **Trivy pin refresh** — Bumped the Dockerfile `apk add` pin for Trivy from `0.69.3-r2` to `0.70.0-r0` to track Alpine edge/testing. The previous pin started failing builds once edge advanced past it.
 
 ## [1.5.0-rc.8] - 2026-04-13
 
