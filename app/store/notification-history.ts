@@ -5,6 +5,7 @@ import { initCollection } from './util.js';
 
 export type NotificationEventKind =
   | 'update-available'
+  | 'update-available-digest'
   | 'update-applied'
   | 'update-failed'
   | 'security-alert'

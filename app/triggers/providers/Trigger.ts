@@ -965,13 +965,18 @@ class Trigger<
 
     // Clear update-available notification history for this container — the
     // update has been applied so the next detected update (even at the same
-    // hash by coincidence) should notify again.
+    // hash by coincidence) should notify again. Clear both the simple/batch
+    // channel and the digest channel so every subscriber can re-fire.
     const containerIdForHistory =
       typeof container?.id === 'string' && container.id !== '' ? container.id : undefined;
     if (containerIdForHistory) {
       notificationHistoryStore.clearNotificationsForContainerAndEvent(
         containerIdForHistory,
         'update-available',
+      );
+      notificationHistoryStore.clearNotificationsForContainerAndEvent(
+        containerIdForHistory,
+        'update-available-digest',
       );
     }
 
@@ -1131,6 +1136,10 @@ class Trigger<
       return;
     }
     const triggerId = this.getId();
+    const kindsToSeed: notificationHistoryStore.NotificationEventKind[] = ['update-available'];
+    if (Trigger.isDigestCapableMode(this.configuration.mode)) {
+      kindsToSeed.push('update-available-digest');
+    }
     let seeded = 0;
     for (const rawContainer of storeContainer.getContainersRaw()) {
       const container = rawContainer as Container;
@@ -1142,22 +1151,22 @@ class Trigger<
       if (!containerId) {
         continue;
       }
-      const existing = notificationHistoryStore.getLastNotifiedHash(
-        triggerId,
-        containerId,
-        'update-available',
-      );
-      if (existing !== undefined) {
-        continue;
+      const resultHash = notificationHistoryStore.computeResultHash(container);
+      const notifiedAt = container.updateDetectedAt ?? new Date().toISOString();
+      for (const kind of kindsToSeed) {
+        const existing = notificationHistoryStore.getLastNotifiedHash(triggerId, containerId, kind);
+        if (existing !== undefined) {
+          continue;
+        }
+        notificationHistoryStore.recordNotification(
+          triggerId,
+          containerId,
+          kind,
+          resultHash,
+          notifiedAt,
+        );
+        seeded += 1;
       }
-      notificationHistoryStore.recordNotification(
-        triggerId,
-        containerId,
-        'update-available',
-        notificationHistoryStore.computeResultHash(container),
-        container.updateDetectedAt ?? new Date().toISOString(),
-      );
-      seeded += 1;
     }
     if (seeded > 0) {
       this.log.debug(
@@ -1174,6 +1183,16 @@ class Trigger<
       return true;
     }
     return !this.hasAlreadyNotifiedForResult(containerReport.container, 'update-available');
+  }
+
+  private shouldHandleDigestContainerReport(containerReport: ContainerReport) {
+    if (!containerReport.container.updateAvailable) {
+      return false;
+    }
+    if (!this.configuration.once) {
+      return true;
+    }
+    return !this.hasAlreadyNotifiedForResult(containerReport.container, 'update-available-digest');
   }
 
   private getContainerLogger(container: Container): Component['log'] {
@@ -1483,17 +1502,6 @@ class Trigger<
       for (const container of containersToSend) {
         this.recordNotifiedForResult(container, 'update-available');
       }
-      // In batch+digest mode, evict successfully-batched containers from the
-      // digest buffer so they are not sent again at the next digest flush.
-      if (this.digestBuffer.size > 0) {
-        for (const container of containersToSend) {
-          this.deleteBufferedContainerEntry(
-            this.digestBuffer,
-            this.digestBufferUpdatedAt,
-            getContainerNotificationKey(container) || fullName(container),
-          );
-        }
-      }
       if (this.batchRetryBuffer.size > 0) {
         for (const container of containersToSend) {
           this.deleteBufferedContainerEntry(
@@ -1574,7 +1582,14 @@ class Trigger<
     if (!this.isUpdateAvailableAutoTriggerEnabled()) {
       return;
     }
-    if (!this.shouldHandleSimpleContainerReport(containerReport)) {
+    if (!this.shouldHandleDigestContainerReport(containerReport)) {
+      const alreadyBuffered =
+        container.updateAvailable &&
+        this.configuration.once === true &&
+        this.hasAlreadyNotifiedForResult(container, 'update-available-digest');
+      this.log.debug(
+        `Skipping update-available digest buffer for ${containerName} (once=${this.configuration.once ?? false}, updateAvailable=${container.updateAvailable}, alreadyBuffered=${alreadyBuffered})`,
+      );
       return;
     }
     if (!Trigger.isThresholdReached(container, this.getSimpleModeThreshold())) {
@@ -1667,7 +1682,7 @@ class Trigger<
       }
       status = 'success';
       for (const container of containers) {
-        this.recordNotifiedForResult(container, 'update-available');
+        this.recordNotifiedForResult(container, 'update-available-digest');
       }
       for (const { containerName, bufferedContainer } of dispatchEntries) {
         if (this.digestBuffer.get(containerName) === bufferedContainer) {

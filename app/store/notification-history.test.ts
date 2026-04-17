@@ -125,6 +125,22 @@ describe('notification-history store', () => {
         'h2',
       );
     });
+
+    test('update-available and update-available-digest track independently', () => {
+      notificationHistory.recordNotification('trigger.a', 'c1', 'update-available', 'hash-batch');
+      notificationHistory.recordNotification(
+        'trigger.a',
+        'c1',
+        'update-available-digest',
+        'hash-digest',
+      );
+      expect(notificationHistory.getLastNotifiedHash('trigger.a', 'c1', 'update-available')).toBe(
+        'hash-batch',
+      );
+      expect(
+        notificationHistory.getLastNotifiedHash('trigger.a', 'c1', 'update-available-digest'),
+      ).toBe('hash-digest');
+    });
   });
 
   describe('clear', () => {
