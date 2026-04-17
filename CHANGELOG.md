@@ -38,6 +38,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Grouped-row Update All lockout** — Starting an update on one container in a stack no longer disables every other row in the same group; only the updating row itself is locked. ([#6c4d10ea](https://github.com/CodesWhat/drydock/commit/6c4d10ea))
 - **Modal backdrop z-index** — `z-index` utility classes are now registered as Tailwind `@utility` rules so modal backdrops reliably cover the page instead of getting layered below dashboard widgets on certain themes. ([#7bb26683](https://github.com/CodesWhat/drydock/commit/7bb26683))
 - **Containers table 70vh cap** — Dropped the legacy `max-height: 70vh` cap on the containers table so the table fills the viewport like every other data surface, eliminating the phantom whitespace at the bottom of the page on tall displays. ([#d2fceec7](https://github.com/CodesWhat/drydock/commit/d2fceec7))
+- **Grouped containers table 70vh cap (regressed in rc.9)** — The bound-scroll fix in rc.9 reintroduced a `max-height="70vh"` cap on the grouped (Stacks) table; removed so it again fills the page like flat view. The DataViewLayout already provides the page-level scroll surface — no nested scroller needed.
+- **Table cell vertical alignment** — DataTable cells default to `align-middle` instead of `align-top`. Multi-line name+image cells used to push the row taller than the actions column, leaving the actions floating in the vertical middle while every other cell stuck to the top. Centering everything keeps the row reading as a single horizontal band of metadata.
+- **Container icon size in table view** — Container icons in the grouped/flat table bumped from 20px → 32px and the icon column from 40px → 56px so they read at a glance on dense rows.
+- **Sidebar nav top padding** — Trimmed the gap between the DRYDOCK brand and the first nav item (Dashboard) from ~14px to ~6px so the brand visually anchors to the nav grid below it instead of floating above empty space.
+- **Notification bell dropdown row styling** — Replaced the per-row bottom border with alternating row backgrounds (`var(--dd-bg-card)` / `var(--dd-bg-inset)`), matching the zebra-striped pattern every other data table in the app uses.
 
 ### Performance
 

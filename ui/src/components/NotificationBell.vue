@@ -174,10 +174,10 @@ function isUnread(entry: AuditEntry): boolean {
           <div v-else-if="visibleEntries.length === 0" class="px-3 py-6 text-center text-2xs-plus dd-text-muted">
             No notifications yet
           </div>
-          <AppButton size="none" variant="plain" weight="none" v-for="entry in visibleEntries"
+          <AppButton size="none" variant="plain" weight="none" v-for="(entry, index) in visibleEntries"
                   :key="entry.id"
                   class="w-full text-left px-3 py-2 flex items-start gap-2.5 transition-colors hover:dd-bg-elevated"
-                  :style="{ borderBottom: '1px solid var(--dd-border)' }"
+                  :style="{ backgroundColor: index % 2 === 0 ? 'var(--dd-bg-card)' : 'var(--dd-bg-inset)' }"
                   @click="navigateToEntry(entry)">
             <AppIcon :name="actionIcon(entry.action)"
                      :size="13"

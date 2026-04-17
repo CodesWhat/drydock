@@ -277,7 +277,6 @@ watchEffect(() => {
         :selected-key="selectedContainerKey"
         :show-actions="true"
         :virtual-scroll="false"
-        max-height="70vh"
         :full-width-row="isTableRowFullWidth"
         :row-interactive="isTableRowInteractive"
         :row-class="tableRowClass"
@@ -323,7 +322,7 @@ watchEffect(() => {
               <span>{{ isContainerQueued(c) && !isContainerUpdating(c) ? 'Queued' : 'Updating' }}</span>
             </div>
           </div>
-          <ContainerIcon :icon="c.icon" :size="20" />
+          <ContainerIcon :icon="c.icon" :size="32" />
         </template>
 
         <!-- Container name + image (+ compact actions & badges) -->

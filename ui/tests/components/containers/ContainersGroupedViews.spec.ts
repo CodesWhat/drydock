@@ -795,7 +795,7 @@ describe('ContainersGroupedViews', () => {
     expect(wrapper.text()).toContain('stack-b');
   });
 
-  it('disables virtualization and bounds native table scrolling', async () => {
+  it('disables virtualization and lets the page scroll handle overflow', async () => {
     const alpha = makeContainer({
       id: 'c-alpha',
       name: 'alpha',
@@ -826,7 +826,7 @@ describe('ContainersGroupedViews', () => {
 
     const dataTable = wrapper.findComponent(DataTableStub);
     expect(dataTable.props('virtualScroll')).toBe(false);
-    expect(dataTable.props('maxHeight')).toBe('70vh');
+    expect(dataTable.props('maxHeight')).toBeUndefined();
   });
 
   it('covers card/list view events and footer action handlers', async () => {

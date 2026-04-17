@@ -1317,7 +1317,7 @@ onUnmounted(() => {
       </div>
 
       <!-- Nav groups -->
-      <nav class="flex-1 overflow-y-auto overflow-x-hidden py-3 px-2 space-y-4">
+      <nav class="flex-1 overflow-y-auto overflow-x-hidden pt-1 pb-3 px-2 space-y-4">
         <div v-for="group in navGroups" :key="group.label">
           <div v-if="group.label && !isCollapsed"
                class="px-2 mb-1 text-2xs font-semibold uppercase tracking-wider dd-text-muted">

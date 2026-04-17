@@ -919,7 +919,7 @@ const tableColumns = computed(() =>
     label: column.label,
     align: column.align,
     sortable: column.key !== 'icon',
-    width: column.key === 'name' ? '99%' : column.key === 'icon' ? '40px' : undefined,
+    width: column.key === 'name' ? '99%' : column.key === 'icon' ? '56px' : undefined,
     icon: column.key === 'icon',
   })),
 );
