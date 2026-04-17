@@ -148,6 +148,12 @@ See the [Quick Start guide](https://getdrydock.com/docs/quickstart) for Docker C
 
 <h2 align="center" id="recent-updates">🆕 Recent Updates</h2>
 
+- **Per-channel notification dedup** — The batch and digest notification channels now track `once=true` dedup independently, so `MODE=batch+digest` reliably delivers both the immediate batch email and the scheduled morning digest for each detected update.
+- **Container list performance** — `GET /api/containers` now preloads active update operations in a single indexed scan with per-row O(1) lookup, eliminating the rc.8 slowdown on large inventories (Dashboard / Watchers / Servers / Container Logs all benefit).
+- **Persistent once-dedup** — `once=true` notification dedup survives process restarts and transient `changed=false` scan cycles via a new on-disk notification history store, so notifications no longer re-fire after a restart.
+- **Hide Pinned surfaces actionable rows** — Pinned containers with a pending update stay visible when Hide Pinned is on; only static pinned rows are hidden, matching the decluttering intent without suppressing actionable updates.
+- **Remote-agent updates work end-to-end** — Controller trims the remote-trigger payload for `docker` / `dockercompose` updates so the agent's json body cap can't block an update with HTTP 413.
+- **Socket-proxy identity detection** — Daemon host-name detection now runs for host-based watchers (TCP to a local socket-proxy, the common Synology / Compose pattern), so notification prefixes stop falling back to container short IDs.
 - **Backend-driven update queue** — Container updates queued server-side with per-trigger concurrency limits. UI shows Queued → Updating → Updated progression with sequence labels (e.g. "Updating 1 of 3").
 - **Identity-keyed container tracking** — Containers tracked by stable identity key (agent::watcher::name) across renames/replacements, preventing cross-host status contamination.
 - **Watcher next-run schedule visibility** — Watcher API and Agents view now show when each watcher will next poll for updates.
