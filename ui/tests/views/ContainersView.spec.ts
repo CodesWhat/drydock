@@ -718,11 +718,11 @@ describe('ContainersView', () => {
       expect(wrapper.findAll('button[disabled]').length).toBeGreaterThan(0);
     });
 
-    it('uses bounded native scrolling for the containers table', async () => {
+    it('uses native scrolling for the containers table and lets the page handle overflow', async () => {
       const wrapper = await mountContainersView([makeContainer()]);
       const dataTable = wrapper.findComponent(childStubs.DataTable as any);
       expect(dataTable.props('virtualScroll')).toBe(false);
-      expect(dataTable.props('maxHeight')).toBe('70vh');
+      expect(dataTable.props('maxHeight')).toBeUndefined();
     });
 
     it('renders DataFilterBar', async () => {
