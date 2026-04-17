@@ -277,6 +277,7 @@ watchEffect(() => {
         :selected-key="selectedContainerKey"
         :show-actions="true"
         :virtual-scroll="false"
+        max-height="70vh"
         :full-width-row="isTableRowFullWidth"
         :row-interactive="isTableRowInteractive"
         :row-class="tableRowClass"
