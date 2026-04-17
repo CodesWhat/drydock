@@ -240,6 +240,61 @@ describe('syncComposeFileTag', () => {
     expect(fs.readFile).toHaveBeenCalledWith('/drydock/qa-compose.yml', 'utf8');
   });
 
+  test('should fall back to the resolved compose path when bind mount inspection fails', async () => {
+    const logContainer = makeLog();
+    const dockerApi = {
+      getContainer: vi.fn().mockReturnValue({
+        inspect: vi.fn().mockRejectedValue(new Error('inspect failed')),
+      }),
+    };
+    vi.mocked(fs.readFile).mockResolvedValue(COMPOSE_CONTENT);
+    vi.mocked(fs.writeFile).mockResolvedValue(undefined);
+    vi.mocked(fs.rename).mockResolvedValue(undefined);
+
+    await syncComposeFileTag({
+      labels: makeLabels({
+        'com.docker.compose.project.config_files': 'docker-compose.yml',
+        'com.docker.compose.project.working_dir': '/home/user/stacks/app',
+      }),
+      newImage: 'hemmeligapp/hemmelig:v7',
+      logContainer,
+      dockerApi,
+      selfContainerIdentifier: 'drydock-playwright-qa',
+    });
+
+    expect(fs.readFile).toHaveBeenCalledWith(
+      path.resolve('/home/user/stacks/app', 'docker-compose.yml'),
+      'utf8',
+    );
+    expect(logContainer.debug).toHaveBeenCalledWith(
+      expect.stringContaining('Unable to inspect bind mounts for compose file sync path remapping'),
+    );
+  });
+
+  test('should stringify non-Error bind mount inspection failures', async () => {
+    const logContainer = makeLog();
+    const dockerApi = {
+      getContainer: vi.fn().mockReturnValue({
+        inspect: vi.fn().mockRejectedValue('inspect failed'),
+      }),
+    };
+    vi.mocked(fs.readFile).mockResolvedValue(COMPOSE_CONTENT);
+    vi.mocked(fs.writeFile).mockResolvedValue(undefined);
+    vi.mocked(fs.rename).mockResolvedValue(undefined);
+
+    await syncComposeFileTag({
+      labels: makeLabels({
+        'com.docker.compose.project.config_files': '/home/user/stacks/app/docker-compose.yml',
+      }),
+      newImage: 'hemmeligapp/hemmelig:v7',
+      logContainer,
+      dockerApi,
+      selfContainerIdentifier: 'drydock-playwright-qa',
+    });
+
+    expect(logContainer.debug).toHaveBeenCalledWith(expect.stringContaining('inspect failed'));
+  });
+
   test('should handle compose file read failure gracefully', async () => {
     const logContainer = makeLog();
     vi.mocked(fs.readFile).mockRejectedValue(new Error('ENOENT: no such file'));

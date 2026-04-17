@@ -109,12 +109,33 @@ describe('HookRunner', () => {
     expect(result.stdout.trim()).toBe('hello-hook');
   });
 
+  test('should allow quoted arguments, braced variables, and trailing whitespace', async () => {
+    var result = await runHook(`printf '%s %s' "\${MY_VAR}" 'world'   `, {
+      label: 'test',
+      env: { MY_VAR: 'hello-hook' },
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toBe('hello-hook world');
+  });
+
   test.each([
     'echo hello && whoami',
     'echo hello; whoami',
     'echo $(whoami)',
     'echo `whoami`',
     'echo hello | cat',
+    'echo hello\nwhoami',
+    '   ',
+    'echo $',
+    'echo ${',
+    'echo ${1}',
+    'echo ${MY_VAR',
+    "echo 'unterminated",
+    'echo "unterminated',
+    'echo "escaped-backslash\\',
+    'echo "bad${1}"',
+    'echo "bad`tick"',
   ])('should reject unsafe shell syntax in hook command: %s', async (command) => {
     var execFileCalls = 0;
 

@@ -42,10 +42,6 @@ function isSafeHookCharacter(character: string): boolean {
 }
 
 function consumeVariableReference(command: string, start: number): number | undefined {
-  if (command[start] !== '$') {
-    return undefined;
-  }
-
   const nextCharacter = command[start + 1];
   if (!nextCharacter) {
     return undefined;
@@ -78,9 +74,6 @@ function consumeSingleQuotedSegment(command: string, start: number): number | un
     const character = command[index];
     if (character === "'") {
       return index + 1;
-    }
-    if (character === '\n' || character === '\r' || character === '\0') {
-      return undefined;
     }
     index += 1;
   }
@@ -165,10 +158,6 @@ function isAllowedHookCommand(command: string): boolean {
       index += 1;
     }
 
-    if (index >= trimmedCommand.length) {
-      break;
-    }
-
     sawToken = true;
     let consumedToken = false;
 
@@ -179,10 +168,6 @@ function isAllowedHookCommand(command: string): boolean {
       }
       consumedToken = true;
       index = nextIndex;
-    }
-
-    if (!consumedToken) {
-      return false;
     }
   }
 

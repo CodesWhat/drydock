@@ -89,4 +89,14 @@ describe('UI Router', () => {
       'public, max-age=31536000, immutable',
     );
   });
+
+  test('should leave cache headers untouched for non-html files outside assets', () => {
+    uiRouter.init();
+    const setHeaders = vi.mocked(express.static).mock.calls[0][1]?.setHeaders;
+    const res = { setHeader: vi.fn() };
+
+    setHeaders?.(res as never, '/app/ui/favicon.ico');
+
+    expect(res.setHeader).not.toHaveBeenCalled();
+  });
 });

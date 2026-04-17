@@ -1586,12 +1586,12 @@ class Trigger<
       return;
     }
     if (!this.shouldHandleDigestContainerReport(containerReport)) {
-      const alreadyBuffered =
-        container.updateAvailable &&
-        this.configuration.once === true &&
-        this.hasAlreadyNotifiedForResult(container, 'update-available-digest');
+      const alreadyBuffered = this.hasAlreadyNotifiedForResult(
+        container,
+        'update-available-digest',
+      );
       this.log.debug(
-        `Skipping update-available digest buffer for ${containerName} (once=${this.configuration.once ?? false}, updateAvailable=${container.updateAvailable}, alreadyBuffered=${alreadyBuffered})`,
+        `Skipping update-available digest buffer for ${containerName} (once=${this.configuration.once === true}, updateAvailable=${container.updateAvailable}, alreadyBuffered=${alreadyBuffered})`,
       );
       return;
     }

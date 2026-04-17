@@ -222,4 +222,19 @@ describe('notification-history store', () => {
       .find((e) => e.triggerId === 'trigger.a' && e.containerId === 'c1');
     expect(entry?.notifiedAt).toBe(when);
   });
+
+  test('uninitialized helpers return empty results without throwing', async () => {
+    vi.resetModules();
+    const fresh = await import('./notification-history.js');
+
+    expect(() =>
+      fresh.recordNotification('trigger.a', 'c1', 'update-available', 'hash-1'),
+    ).not.toThrow();
+    expect(fresh.getLastNotifiedHash('trigger.a', 'c1', 'update-available')).toBeUndefined();
+    expect(fresh.clearNotificationsForContainer('c1')).toBe(0);
+    expect(fresh.clearNotificationsForTrigger('trigger.a')).toBe(0);
+    expect(fresh.clearNotificationsForContainerAndEvent('c1', 'update-available')).toBe(0);
+    expect(fresh.getAllForTesting()).toEqual([]);
+    expect(() => fresh.resetForTesting()).not.toThrow();
+  });
 });

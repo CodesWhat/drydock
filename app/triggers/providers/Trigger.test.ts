@@ -6274,6 +6274,52 @@ describe('batch+digest mode', () => {
     ).toBeUndefined();
   });
 
+  test('seedNotificationHistoryFromStore skips containers without updates or stable ids', async () => {
+    storeContainer.getContainersRaw.mockReturnValue([
+      {
+        id: 'skip-no-update',
+        name: 'skip-no-update',
+        watcher: 'test',
+        updateAvailable: false,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      },
+      {
+        id: '',
+        name: 'skip-no-id',
+        watcher: 'test',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      },
+      {
+        id: 'c1',
+        name: 'app',
+        watcher: 'test',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      },
+    ]);
+
+    await trigger.register('trigger', 'test', 'combined-trigger', {
+      ...configurationValid,
+      mode: 'batch+digest',
+    });
+    trigger.init();
+
+    expect(
+      notificationHistoryStore.getLastNotifiedHash(
+        trigger.getId(),
+        'skip-no-update',
+        'update-available',
+      ),
+    ).toBeUndefined();
+    expect(
+      notificationHistoryStore.getLastNotifiedHash(trigger.getId(), '', 'update-available'),
+    ).toBeUndefined();
+    expect(
+      notificationHistoryStore.getLastNotifiedHash(trigger.getId(), 'c1', 'update-available'),
+    ).toBeDefined();
+  });
+
   test('handleContainerReportDigest emits debug log on once+alreadyNotified skip', async () => {
     let digestCallback;
     vi.mocked(event.registerContainerReport).mockImplementation((cb) => {
@@ -6309,6 +6355,62 @@ describe('batch+digest mode', () => {
     expect(debugSpy).toHaveBeenCalledWith(
       expect.stringMatching(/Skipping update-available digest buffer for .*alreadyBuffered=true/),
     );
+  });
+
+  test('handleContainerReportDigest falls back to once=false in skip logs when configuration.once is unset', async () => {
+    await trigger.register('trigger', 'test', 'combined-trigger', {
+      ...configurationValid,
+      mode: 'batch+digest',
+    });
+    trigger.init();
+
+    trigger.configuration.once = undefined;
+    vi.spyOn(trigger as any, 'shouldHandleDigestContainerReport').mockReturnValue(false);
+    const debugSpy = vi.spyOn((trigger as any).log, 'debug');
+
+    await trigger.handleContainerReportDigest({
+      container: {
+        id: 'c1',
+        name: 'app',
+        watcher: 'test',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      },
+      changed: false,
+    } as any);
+
+    expect(trigger.digestBuffer.size).toBe(0);
+    expect(debugSpy).toHaveBeenCalledWith(
+      expect.stringMatching(
+        /Skipping update-available digest buffer for .*once=false, updateAvailable=true, alreadyBuffered=false/,
+      ),
+    );
+  });
+
+  test('shouldHandleDigestContainerReport reflects update availability and once=false fast path', () => {
+    trigger.configuration.once = false;
+
+    expect(
+      (trigger as any).shouldHandleDigestContainerReport({
+        container: {
+          id: 'c1',
+          name: 'app',
+          watcher: 'test',
+          updateAvailable: false,
+        },
+      }),
+    ).toBe(false);
+
+    expect(
+      (trigger as any).shouldHandleDigestContainerReport({
+        container: {
+          id: 'c1',
+          name: 'app',
+          watcher: 'test',
+          updateAvailable: true,
+        },
+      }),
+    ).toBe(true);
   });
 });
 

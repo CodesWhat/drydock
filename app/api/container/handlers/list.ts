@@ -43,10 +43,6 @@ function createProjectionView<T extends object>(
   target: T,
   overrides: ReadonlyArray<readonly [string | symbol, unknown]>,
 ): T {
-  if (overrides.length === 0) {
-    return target;
-  }
-
   const overrideMap = new Map<string | symbol, unknown>(overrides);
 
   return new Proxy(target, {
@@ -74,11 +70,18 @@ function createProjectionView<T extends object>(
       }
 
       const descriptor = Reflect.getOwnPropertyDescriptor(viewTarget, property);
+      const overrideValue = overrideMap.get(property);
+      const writable =
+        descriptor &&
+        'writable' in descriptor &&
+        (!descriptor.configurable || descriptor.writable || descriptor.value === overrideValue)
+          ? descriptor.writable
+          : true;
       return {
         configurable: descriptor?.configurable ?? true,
         enumerable: descriptor?.enumerable ?? true,
-        writable: descriptor && 'writable' in descriptor ? descriptor.writable : true,
-        value: overrideMap.get(property),
+        writable,
+        value: overrideValue,
       };
     },
   });
