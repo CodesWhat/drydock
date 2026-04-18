@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **[#296](https://github.com/CodesWhat/drydock/issues/296)** (follow-up) — When `docker-socket-proxy` blocks `GET /info` (the default — `INFO=0`), drydock now logs an actionable warning naming the watcher, the error, and the fix (`set INFO=1 on your docker-socket-proxy config, or set DD_SERVER_NAME to override`) instead of silently falling back to the container short ID. The socket-proxy setup doc and compose examples now include `INFO=1` in the required environment variables. Default notification body templates no longer repeat the `[server]` source prefix that already appears in the title — providers that concatenate title + body (Telegram, Slack, Mattermost, Matrix, Teams, Google Chat, Rocket.Chat) are unaffected because source context is carried by the title.
+
 ## [1.5.0-rc.10] — 2026-04-18
 
 ### Added

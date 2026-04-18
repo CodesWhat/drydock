@@ -75,8 +75,16 @@ async function detectLocalDaemonServerName(watcher: DockerRemoteAuthWatcher): Pr
     if (isSocketWatcher || !getDetectedServerName()) {
       setDetectedServerName(daemonName);
     }
-  } catch {
+  } catch (err: unknown) {
     // Server-name detection is best-effort. Fall back to os.hostname() when unavailable.
+    // Log a diagnostic warning so operators know why detection failed and how to fix it.
+    const errMsg =
+      err instanceof Error ? err.message : typeof err === 'string' ? err : 'unknown error';
+    watcher.log.warn(
+      `Watcher ${watcher.name}: daemon identity detection via GET /info failed (${errMsg}). ` +
+        'Notifications will fall back to os.hostname() which inside a container is the short container ID. ' +
+        'To fix: set INFO=1 on your docker-socket-proxy config, or set DD_SERVER_NAME to override.',
+    );
   }
 }
 

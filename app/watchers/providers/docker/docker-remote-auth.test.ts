@@ -406,7 +406,7 @@ describe('docker remote auth module', () => {
     expect(mockSetDetectedServerName).not.toHaveBeenCalled();
   });
 
-  test('initWatcherWithRemoteAuth swallows daemon info errors silently for host watchers', async () => {
+  test('initWatcherWithRemoteAuth logs a diagnostic warning when GET /info fails for host watchers', async () => {
     const dockerApi = {
       modem: { headers: {} },
       info: vi.fn().mockRejectedValue(new Error('boom')),
@@ -425,6 +425,78 @@ describe('docker remote auth module', () => {
 
     await expect(initWatcherWithRemoteAuth(watcher as any)).resolves.toBeUndefined();
     expect(mockSetDetectedServerName).not.toHaveBeenCalled();
+    expect(watcher.log.warn).toHaveBeenCalledWith(expect.stringContaining('boom'));
+    expect(watcher.log.warn).toHaveBeenCalledWith(expect.stringContaining('INFO=1'));
+    expect(watcher.log.warn).toHaveBeenCalledWith(expect.stringContaining('DD_SERVER_NAME'));
+  });
+
+  test('initWatcherWithRemoteAuth logs a diagnostic warning when docker-socket-proxy returns 403 for /info', async () => {
+    const forbiddenError = new Error('Request failed with status code 403');
+    const dockerApi = {
+      modem: { headers: {} },
+      info: vi.fn().mockRejectedValue(forbiddenError),
+    };
+    mockDockerodeCtor.mockImplementation(function DockerodeMock() {
+      return dockerApi;
+    });
+
+    const watcher = createWatcher({
+      configuration: {
+        host: 'socket-proxy',
+        socket: '/var/run/docker.sock',
+        port: 2375,
+      },
+    });
+
+    await expect(initWatcherWithRemoteAuth(watcher as any)).resolves.toBeUndefined();
+    expect(mockSetDetectedServerName).not.toHaveBeenCalled();
+    expect(watcher.log.warn).toHaveBeenCalledWith(expect.stringContaining('403'));
+    expect(watcher.log.warn).toHaveBeenCalledWith(expect.stringContaining('INFO=1'));
+    expect(watcher.log.warn).toHaveBeenCalledWith(expect.stringContaining('DD_SERVER_NAME'));
+  });
+
+  test('initWatcherWithRemoteAuth logs a diagnostic warning when GET /info rejects with a string', async () => {
+    const dockerApi = {
+      modem: { headers: {} },
+      info: vi.fn().mockRejectedValue('string rejection'),
+    };
+    mockDockerodeCtor.mockImplementation(function DockerodeMock() {
+      return dockerApi;
+    });
+
+    const watcher = createWatcher({
+      configuration: {
+        host: 'socket-proxy',
+        socket: '/var/run/docker.sock',
+        port: 2375,
+      },
+    });
+
+    await expect(initWatcherWithRemoteAuth(watcher as any)).resolves.toBeUndefined();
+    expect(watcher.log.warn).toHaveBeenCalledWith(expect.stringContaining('string rejection'));
+    expect(watcher.log.warn).toHaveBeenCalledWith(expect.stringContaining('INFO=1'));
+  });
+
+  test('initWatcherWithRemoteAuth logs a diagnostic warning when GET /info rejects with an unknown value', async () => {
+    const dockerApi = {
+      modem: { headers: {} },
+      info: vi.fn().mockRejectedValue(42),
+    };
+    mockDockerodeCtor.mockImplementation(function DockerodeMock() {
+      return dockerApi;
+    });
+
+    const watcher = createWatcher({
+      configuration: {
+        host: 'socket-proxy',
+        socket: '/var/run/docker.sock',
+        port: 2375,
+      },
+    });
+
+    await expect(initWatcherWithRemoteAuth(watcher as any)).resolves.toBeUndefined();
+    expect(watcher.log.warn).toHaveBeenCalledWith(expect.stringContaining('unknown error'));
+    expect(watcher.log.warn).toHaveBeenCalledWith(expect.stringContaining('INFO=1'));
   });
 
   test('initWatcherWithRemoteAuth blocks remote watcher auth when header application fails', async () => {
