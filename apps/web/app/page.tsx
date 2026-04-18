@@ -276,6 +276,9 @@ const roadmap = [
       "Dashboard customization",
       "Resource usage dashboard widget",
       "Trigger environment variable aliases (DD_ACTION_*/DD_NOTIFICATION_*)",
+      "Security scan digest (SECURITYMODE=digest) — one notification per scan cycle (#300)",
+      "POST /containers/scan-all bulk scan endpoint with 1 req/60s rate limit",
+      "Scan cycle correlation via UUID v7 cycleId (scheduled + on-demand + agent-forwarded)",
     ],
   },
   {
