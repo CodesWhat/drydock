@@ -8,6 +8,7 @@ import UpdateMaturityBadge from './UpdateMaturityBadge.vue';
 import SuggestedTagBadge from './SuggestedTagBadge.vue';
 import FloatingTagBadge from './FloatingTagBadge.vue';
 import ReleaseNotesLink from './ReleaseNotesLink.vue';
+import ProjectLink from './ProjectLink.vue';
 import { hasTrackedContainerAction } from '../../utils/container-action-key';
 import { revealContainerEnv } from '../../services/container';
 import { errorMessage } from '../../utils/error';
@@ -273,6 +274,7 @@ function isActionInProgress(container: { id?: unknown; name?: unknown }) {
                 />
               </div>
               <ReleaseNotesLink :release-notes="selectedContainer.releaseNotes" :release-link="selectedContainer.releaseLink" />
+              <ProjectLink :source-repo="selectedContainer.sourceRepo" />
               <div class="pt-1 space-y-1.5">
                 <div class="dd-text-label dd-text-muted">Tag Filters</div>
                 <div class="flex items-start gap-2 px-3 py-2 dd-rounded text-2xs-plus"

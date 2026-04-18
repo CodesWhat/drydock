@@ -10,6 +10,7 @@ import { imageAge } from '../../utils/audit-helpers';
 import UpdateMaturityBadge from './UpdateMaturityBadge.vue';
 import SuggestedTagBadge from './SuggestedTagBadge.vue';
 import ReleaseNotesLink from './ReleaseNotesLink.vue';
+import ProjectLink from './ProjectLink.vue';
 import ContainersGroupHeader from './ContainersGroupHeader.vue';
 
 const {
@@ -755,9 +756,10 @@ watchEffect(() => {
                 <AppIcon v-else name="check" :size="14" class="ml-1" style="color: var(--dd-success);" v-tooltip.top="tt('Up to date')" />
               </template>
             </div>
-            <div v-if="c.suggestedTag || c.releaseNotes || c.releaseLink" class="flex items-center gap-2 flex-wrap mt-2">
+            <div v-if="c.suggestedTag || c.releaseNotes || c.releaseLink || c.sourceRepo" class="flex items-center gap-2 flex-wrap mt-2">
               <SuggestedTagBadge :tag="c.suggestedTag" :current-tag="c.currentTag" />
               <ReleaseNotesLink :release-notes="c.releaseNotes" :release-link="c.releaseLink" />
+              <ProjectLink :source-repo="c.sourceRepo" />
             </div>
           </div>
 
