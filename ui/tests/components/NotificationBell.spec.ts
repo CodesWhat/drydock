@@ -45,7 +45,11 @@ function findDropdown(wrapper: ReturnType<typeof mount>) {
 }
 
 function findEntryRows(wrapper: ReturnType<typeof mount>) {
-  return wrapper.findAll('.notification-bell-wrapper button.w-full.text-left');
+  return wrapper.findAll('[data-test="notification-row"]');
+}
+
+function findEntryBodyButtons(wrapper: ReturnType<typeof mount>) {
+  return wrapper.findAll('[data-test="notification-row"] button.text-left');
 }
 
 describe('NotificationBell', () => {
@@ -251,7 +255,7 @@ describe('NotificationBell', () => {
     const wrapper = factory();
     await flushPromises();
     await openBell(wrapper);
-    const rows = findEntryRows(wrapper);
+    const rows = findEntryBodyButtons(wrapper);
     await rows[0].trigger('click');
     expect(mockPush).toHaveBeenCalledWith({ path: '/audit', query: { container: 'nginx' } });
   });
@@ -260,27 +264,47 @@ describe('NotificationBell', () => {
     const wrapper = factory();
     await flushPromises();
     await openBell(wrapper);
-    const rows = findEntryRows(wrapper);
+    const rows = findEntryBodyButtons(wrapper);
     await rows[0].trigger('click');
     await nextTick();
     expect(findDropdown(wrapper).exists()).toBe(false);
   });
 
-  it('navigates to /audit on "View all" click', async () => {
+  it('navigates to /audit on "Open audit log" footer click', async () => {
     const wrapper = factory();
     await flushPromises();
     await openBell(wrapper);
-    const viewAll = wrapper.findAll('.notification-bell-wrapper button.text-center');
-    await viewAll[viewAll.length - 1].trigger('click');
+    const openLog = wrapper.find('[data-test="open-audit-log-btn"]');
+    expect(openLog.exists()).toBe(true);
+    await openLog.trigger('click');
     expect(mockPush).toHaveBeenCalledWith('/audit');
   });
 
-  it('shows mark all read button when there are unread entries', async () => {
+  it('keeps "Open audit log" button visible even when there are no entries', async () => {
+    mockGetAuditLog.mockResolvedValue({ entries: [] });
     const wrapper = factory();
     await flushPromises();
     await openBell(wrapper);
-    const markBtn = wrapper.findAll('button').find((b) => b.text().includes('Mark all read'));
-    expect(markBtn).toBeTruthy();
+    expect(wrapper.find('[data-test="open-audit-log-btn"]').exists()).toBe(true);
+  });
+
+  it('shows mark all read button in the footer when there are unread entries', async () => {
+    const wrapper = factory();
+    await flushPromises();
+    await openBell(wrapper);
+    const markBtn = wrapper.find('[data-test="mark-all-read-btn"]');
+    expect(markBtn.exists()).toBe(true);
+    expect(markBtn.text()).toContain('Mark all as read');
+  });
+
+  it('header no longer carries any bulk-action buttons (variant A layout)', async () => {
+    const wrapper = factory();
+    await flushPromises();
+    await openBell(wrapper);
+    const header = findDropdown(wrapper).find('div.px-3.py-2');
+    expect(header.exists()).toBe(true);
+    expect(header.text()).toContain('Notifications');
+    expect(header.find('button').exists()).toBe(false);
   });
 
   it('mark all read clears unread badge', async () => {
@@ -288,8 +312,7 @@ describe('NotificationBell', () => {
     await flushPromises();
     expect(wrapper.find('.badge-pulse').exists()).toBe(true);
     await openBell(wrapper);
-    const markBtn = wrapper.findAll('button').find((b) => b.text().includes('Mark all read'));
-    await markBtn!.trigger('click');
+    await wrapper.find('[data-test="mark-all-read-btn"]').trigger('click');
     await nextTick();
     expect(wrapper.find('.badge-pulse').exists()).toBe(false);
   });
@@ -321,23 +344,13 @@ describe('NotificationBell', () => {
     const wrapper = factory();
     await flushPromises();
     await openBell(wrapper);
-    // All entries are unread (no lastSeen)
-    const boldLabels = wrapper.findAll(
-      '.notification-bell-wrapper button.w-full.text-left .font-bold',
-    );
+    const boldLabels = wrapper.findAll('[data-test="notification-row"] .font-bold');
     expect(boldLabels.length).toBe(2);
-    // Mark all read
-    const markBtn = wrapper.findAll('button').find((b) => b.text().includes('Mark all read'));
-    await markBtn!.trigger('click');
+    await wrapper.find('[data-test="mark-all-read-btn"]').trigger('click');
     await nextTick();
-    // Now entries should have font-medium instead of font-bold
-    const boldAfter = wrapper.findAll(
-      '.notification-bell-wrapper button.w-full.text-left .font-bold',
-    );
+    const boldAfter = wrapper.findAll('[data-test="notification-row"] .font-bold');
     expect(boldAfter.length).toBe(0);
-    const mediumAfter = wrapper.findAll(
-      '.notification-bell-wrapper button.w-full.text-left .font-medium',
-    );
+    const mediumAfter = wrapper.findAll('[data-test="notification-row"] .font-medium');
     expect(mediumAfter.length).toBe(2);
   });
 
@@ -435,7 +448,7 @@ describe('NotificationBell', () => {
     const wrapper = factory();
     await flushPromises();
     await openBell(wrapper);
-    const rows = findEntryRows(wrapper);
+    const rows = findEntryBodyButtons(wrapper);
     await rows[0].trigger('click');
     expect(mockPush).toHaveBeenCalledWith({ path: '/audit', query: { container: 'my app/test' } });
   });
@@ -445,85 +458,120 @@ describe('NotificationBell', () => {
     const wrapper = factory();
     await flushPromises();
     await openBell(wrapper);
-    const markBtn = wrapper.findAll('button').find((b) => b.text().includes('Mark all read'));
-    expect(markBtn).toBeUndefined();
+    expect(wrapper.find('[data-test="mark-all-read-btn"]').exists()).toBe(false);
   });
 
-  describe('clear all', () => {
-    it('shows clear all button when there are visible entries', async () => {
+  describe('zebra striping', () => {
+    it('uses the themeable --dd-zebra-stripe token for alternate rows', async () => {
       const wrapper = factory();
       await flushPromises();
       await openBell(wrapper);
-      const clearBtn = wrapper.find('[data-test="clear-all-btn"]');
-      expect(clearBtn.exists()).toBe(true);
-      expect(clearBtn.text()).toBe('Clear all');
+      const rows = findEntryRows(wrapper);
+      expect(rows[0].attributes('style')).toContain('var(--dd-bg-card)');
+      expect(rows[1].attributes('style')).toContain('var(--dd-zebra-stripe)');
     });
+  });
 
-    it('hides clear all button when no visible entries', async () => {
-      mockGetAuditLog.mockResolvedValue({ entries: [] });
+  describe('per-row dismiss', () => {
+    it('renders a dismiss button inside every row', async () => {
       const wrapper = factory();
       await flushPromises();
       await openBell(wrapper);
-      expect(wrapper.find('[data-test="clear-all-btn"]').exists()).toBe(false);
+      const dismissButtons = wrapper.findAll('[data-test="notification-dismiss"]');
+      expect(dismissButtons.length).toBe(2);
     });
 
-    it('removes all entries from the dropdown when clicked', async () => {
+    it('removes only the dismissed entry, leaving the others visible', async () => {
       const wrapper = factory();
       await flushPromises();
       await openBell(wrapper);
       expect(findEntryRows(wrapper)).toHaveLength(2);
 
-      await wrapper.find('[data-test="clear-all-btn"]').trigger('click');
+      const dismiss = wrapper.findAll('[data-test="notification-dismiss"]');
+      await dismiss[0].trigger('click');
       await nextTick();
-      expect(findEntryRows(wrapper)).toHaveLength(0);
-      expect(wrapper.text()).toContain('No notifications yet');
+      const remaining = findEntryRows(wrapper);
+      expect(remaining).toHaveLength(1);
+      expect(remaining[0].text()).toContain('redis');
+      expect(remaining[0].text()).not.toContain('nginx');
     });
 
-    it('also marks all as read (clears badge)', async () => {
-      const wrapper = factory();
-      await flushPromises();
-      expect(wrapper.find('.badge-pulse').exists()).toBe(true);
-
-      await openBell(wrapper);
-      await wrapper.find('[data-test="clear-all-btn"]').trigger('click');
-      await nextTick();
-      expect(wrapper.find('.badge-pulse').exists()).toBe(false);
-    });
-
-    it('hides clear all button after clearing', async () => {
+    it('does not navigate when the dismiss button is clicked', async () => {
       const wrapper = factory();
       await flushPromises();
       await openBell(wrapper);
-      await wrapper.find('[data-test="clear-all-btn"]').trigger('click');
+      const dismiss = wrapper.findAll('[data-test="notification-dismiss"]');
+      await dismiss[0].trigger('click');
       await nextTick();
-      expect(wrapper.find('[data-test="clear-all-btn"]').exists()).toBe(false);
+      expect(mockPush).not.toHaveBeenCalled();
     });
 
-    it('persists cleared state across re-opens via localStorage', async () => {
+    it('persists dismissed entries across re-opens via localStorage', async () => {
       const wrapper = factory();
       await flushPromises();
       await openBell(wrapper);
-      await wrapper.find('[data-test="clear-all-btn"]').trigger('click');
+      const dismiss = wrapper.findAll('[data-test="notification-dismiss"]');
+      await dismiss[0].trigger('click');
       await nextTick();
 
-      // Close and re-open
       await wrapper.find('button[aria-label="Notifications"]').trigger('click');
       await nextTick();
       expect(findDropdown(wrapper).exists()).toBe(false);
 
       await openBell(wrapper);
-      expect(findEntryRows(wrapper)).toHaveLength(0);
+      expect(findEntryRows(wrapper)).toHaveLength(1);
     });
 
-    it('shows new entries that arrive after clearing', async () => {
+    it('skips adding the same id twice if dismiss is double-triggered', async () => {
       const wrapper = factory();
       await flushPromises();
       await openBell(wrapper);
-      await wrapper.find('[data-test="clear-all-btn"]').trigger('click');
+      const dismiss = wrapper.findAll('[data-test="notification-dismiss"]');
+      await dismiss[0].trigger('click');
+      await dismiss[0].trigger('click');
+      await nextTick();
+      const raw = localStorage.getItem('dd-bell-dismissed-ids');
+      expect(raw).toBe(JSON.stringify(['1']));
+    });
+
+    it('empty state appears once every entry has been individually dismissed', async () => {
+      const wrapper = factory();
+      await flushPromises();
+      await openBell(wrapper);
+      const dismiss = wrapper.findAll('[data-test="notification-dismiss"]');
+      await dismiss[0].trigger('click');
+      await dismiss[1].trigger('click');
+      await nextTick();
+      expect(findEntryRows(wrapper)).toHaveLength(0);
+      expect(wrapper.text()).toContain('No notifications yet');
+    });
+
+    it('falls back to an empty dismiss list when localStorage contains malformed data', async () => {
+      localStorage.setItem('dd-bell-dismissed-ids', JSON.stringify({ not: 'an array' }));
+      const wrapper = factory();
+      await flushPromises();
+      await openBell(wrapper);
+      expect(findEntryRows(wrapper)).toHaveLength(2);
+    });
+
+    it('rejects arrays that contain non-string entries', async () => {
+      localStorage.setItem('dd-bell-dismissed-ids', JSON.stringify(['1', 42, null]));
+      const wrapper = factory();
+      await flushPromises();
+      await openBell(wrapper);
+      expect(findEntryRows(wrapper)).toHaveLength(2);
+    });
+
+    it('surfaces new entries whose ids are not in the dismissed list', async () => {
+      const wrapper = factory();
+      await flushPromises();
+      await openBell(wrapper);
+      const dismiss = wrapper.findAll('[data-test="notification-dismiss"]');
+      await dismiss[0].trigger('click');
+      await dismiss[1].trigger('click');
       await nextTick();
       expect(findEntryRows(wrapper)).toHaveLength(0);
 
-      // Simulate a new entry arriving after the clear timestamp
       const futureEntry = {
         id: '99',
         timestamp: new Date(Date.now() + 60_000).toISOString(),
@@ -533,7 +581,6 @@ describe('NotificationBell', () => {
       };
       mockGetAuditLog.mockResolvedValue({ entries: [...mockEntries, futureEntry] });
 
-      // Close and re-open to trigger refetch
       await wrapper.find('button[aria-label="Notifications"]').trigger('click');
       await nextTick();
       await openBell(wrapper);
