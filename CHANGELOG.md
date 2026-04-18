@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0-rc.9] — 2026-04-17
+
 ### Added
 
 - **Notification history store** — New LokiJS collection (`notifications_history`) records a per-(trigger, container, event-kind) result hash so `once=true` dedup survives process restarts and transient `changed=false` scan cycles. Replaces in-memory `notifiedHashes` state that used to disappear on restart, and lets the digest channel maintain its own send history independently of simple/batch channels (see #282). ([#c0054d25](https://github.com/CodesWhat/drydock/commit/c0054d25), [#f79d9ec6](https://github.com/CodesWhat/drydock/commit/f79d9ec6))
