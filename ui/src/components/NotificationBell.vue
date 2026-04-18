@@ -153,8 +153,8 @@ function isUnread(entry: AuditEntry): boolean {
            :style="{ ...bellPanelStyle, zIndex: 'var(--z-popover)', backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)', boxShadow: 'var(--dd-shadow-tooltip)' }">
         <!-- Header: title only -->
         <div class="flex items-center px-3 py-2"
-             :style="{ borderBottom: '1px solid var(--dd-border)' }">
-          <span class="text-2xs-plus font-semibold uppercase tracking-wider dd-text-muted">Notifications</span>
+             :style="{ backgroundColor: 'var(--dd-bg-sidebar)' }">
+          <span class="text-2xs-plus font-semibold uppercase tracking-wider dd-text-secondary">Notifications</span>
         </div>
 
         <!-- Scrollable list -->
@@ -213,21 +213,17 @@ function isUnread(entry: AuditEntry): boolean {
 
         <!-- Footer: split actions -->
         <div class="flex items-stretch"
-             :style="{ borderTop: '1px solid var(--dd-border)' }">
+             :style="{ backgroundColor: 'var(--dd-bg-sidebar)' }">
           <AppButton v-if="unreadCount > 0"
                   size="none" variant="plain" weight="none"
-                  class="flex-1 px-3 py-2 text-2xs-plus font-medium dd-text-secondary hover:dd-text transition-colors flex items-center justify-center gap-1.5"
+                  class="flex-1 px-3 py-2 text-2xs-plus font-medium dd-text hover:dd-text-primary transition-colors flex items-center justify-center gap-1.5"
                   data-test="mark-all-read-btn"
                   @click="markAllRead">
             <AppIcon name="check" :size="11" />
             Mark all as read
           </AppButton>
-          <div v-if="unreadCount > 0"
-               aria-hidden="true"
-               class="w-px"
-               :style="{ backgroundColor: 'var(--dd-border)' }" />
           <AppButton size="none" variant="plain" weight="none"
-                  class="flex-1 px-3 py-2 text-2xs-plus font-medium dd-text-secondary hover:dd-text transition-colors flex items-center justify-center gap-1.5"
+                  class="flex-1 px-3 py-2 text-2xs-plus font-medium dd-text hover:dd-text-primary transition-colors flex items-center justify-center gap-1.5"
                   data-test="open-audit-log-btn"
                   @click="openAuditLog">
             Open audit log
