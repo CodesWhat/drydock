@@ -4,7 +4,7 @@ import rateLimit from 'express-rate-limit';
 import nocache from 'nocache';
 import { getAgent } from '../agent/manager.js';
 import { getSecurityConfiguration, getServerConfiguration } from '../configuration/index.js';
-import { emitSecurityAlert } from '../event/index.js';
+import { emitSecurityAlert, emitSecurityScanCycleComplete } from '../event/index.js';
 import logger from '../log/index.js';
 import { sanitizeLogParam } from '../log/sanitize.js';
 import { fullName } from '../model/container.js';
@@ -207,6 +207,7 @@ const securityHandlers = createSecurityHandlers({
   scanImageForVulnerabilities,
   verifyImageSignature,
   emitSecurityAlert,
+  emitSecurityScanCycleComplete,
   fullName,
   broadcastScanStarted,
   broadcastScanCompleted,
