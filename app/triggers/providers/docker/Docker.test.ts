@@ -3691,6 +3691,17 @@ describe('extracted lifecycle delegation', () => {
     }
   });
 
+  test('markSelfUpdateOperationFailed should call markOperationTerminal with failed status', async () => {
+    mockMarkOperationTerminal.mockReturnValue(undefined);
+
+    await docker.markSelfUpdateOperationFailed('op-stuck-123', 'pull failed: connection refused');
+
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith('op-stuck-123', {
+      status: 'failed',
+      lastError: 'pull failed: connection refused',
+    });
+  });
+
   test('executeContainerUpdate should delegate to containerUpdateExecutor', async () => {
     const originalContainerUpdateExecutor = docker.containerUpdateExecutor;
     const execute = vi.fn().mockResolvedValue('delegated-container-update');

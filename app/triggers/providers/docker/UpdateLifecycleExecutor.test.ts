@@ -556,4 +556,35 @@ describe('UpdateLifecycleExecutor', () => {
       ),
     );
   });
+
+  test('stringifies non-Error thrown from executeSelfUpdate when marking self-update operation failed', async () => {
+    const harness = createHarness({
+      isSelfUpdate: vi.fn(() => true),
+      prepareSelfUpdateOperation: vi.fn().mockResolvedValue('op-self-update-noe'),
+      executeSelfUpdate: vi.fn().mockRejectedValue(503),
+    });
+
+    await expect(harness.executor.run(createContainer())).rejects.toBe(503);
+
+    expect(harness.markSelfUpdateOperationFailed).toHaveBeenCalledWith('op-self-update-noe', '503');
+  });
+
+  test('stringifies non-Error thrown from markSelfUpdateOperationFailed in the warn log', async () => {
+    const warn = vi.fn();
+    const harness = createHarness({
+      isSelfUpdate: vi.fn(() => true),
+      prepareSelfUpdateOperation: vi.fn().mockResolvedValue('op-self-update-mark-noe'),
+      executeSelfUpdate: vi.fn().mockRejectedValue(new Error('pull failed')),
+      markSelfUpdateOperationFailed: vi.fn().mockRejectedValue(404),
+    });
+    harness.rootLogger.child.mockReturnValue({ info: vi.fn(), warn, debug: vi.fn() });
+
+    await expect(harness.executor.run(createContainer())).rejects.toThrow('pull failed');
+
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'Failed to mark self-update operation op-self-update-mark-noe as failed: 404',
+      ),
+    );
+  });
 });
