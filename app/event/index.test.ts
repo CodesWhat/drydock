@@ -322,7 +322,7 @@ test('deregistration of security scan cycle complete handler should work', async
   const handler = vi.fn();
   const deregister = event.registerSecurityScanCycleComplete(handler, { order: 10 });
   deregister();
-  await event.emitSecurityScanCycleComplete({ scannedCount: 0 });
+  await event.emitSecurityScanCycleComplete({ cycleId: 'cycle-1', scannedCount: 0 });
   expect(handler).not.toHaveBeenCalled();
 });
 

@@ -100,15 +100,23 @@ export interface SecurityAlertEventPayload {
   summary?: SecurityAlertSummary;
   blockingCount?: number;
   container?: Container;
+  /**
+   * Optional correlation id linking this alert to its scan cycle. When present, consumers
+   * should match the same id on a subsequent `emitSecurityScanCycleComplete` to group the
+   * alert into a cycle-level digest. Absent for legacy callers (pre-v1.5.0 agents, etc.);
+   * consumers should treat an unset id as a single-alert cycle.
+   */
+  cycleId?: string;
 }
 
 export interface SecurityScanCycleCompleteEventPayload {
   scannedCount: number;
   alertCount?: number;
-  cycleId?: string;
+  /** Correlation id shared with each `emitSecurityAlert` emitted during this cycle. */
+  cycleId: string;
   startedAt?: string;
   completedAt?: string;
-  scope?: 'scheduled' | 'on-demand';
+  scope?: 'scheduled' | 'on-demand-single' | 'on-demand-bulk' | 'agent-forwarded';
 }
 
 export interface AgentConnectedEventPayload {

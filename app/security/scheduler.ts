@@ -15,6 +15,7 @@ import { MS_PER_DAY } from '../model/maturity-policy.js';
 import * as registry from '../registry/index.js';
 import * as storeContainer from '../store/container.js';
 import { getErrorMessage } from '../util/error.js';
+import { uuidv7 } from '../util/uuid.js';
 import { getTrivyDatabaseStatus } from './runtime.js';
 import { clearDigestScanCache, scanImageWithDedup } from './scan.js';
 
@@ -176,8 +177,9 @@ async function scanDigestGroup(options: {
   signal: AbortSignal;
   scanIntervalMs: number;
   trivyDbUpdatedAt?: string;
+  cycleId: string;
 }): Promise<ScanDigestGroupResult> {
-  const { digest, group, signal, scanIntervalMs, trivyDbUpdatedAt } = options;
+  const { digest, group, signal, scanIntervalMs, trivyDbUpdatedAt, cycleId } = options;
   let startedBroadcast = false;
 
   try {
@@ -215,7 +217,7 @@ async function scanDigestGroup(options: {
 
     const securityConfig = getSchedulerSecurityConfiguration();
     const alertCount = securityConfig.scan.notifications
-      ? await emitPerContainerSecurityAlerts(group, scanResult)
+      ? await emitPerContainerSecurityAlerts(group, scanResult, cycleId)
       : 0;
 
     return { outcome: fromCache ? 'cached' : 'scanned', alertCount };
@@ -238,6 +240,7 @@ async function scanDigestGroup(options: {
 async function emitPerContainerSecurityAlerts(
   group: Container[],
   scanResult: Awaited<ReturnType<typeof scanImageWithDedup>>['scanResult'],
+  cycleId: string,
 ): Promise<number> {
   const summary = scanResult.summary;
   if (!summary) {
@@ -257,6 +260,7 @@ async function emitPerContainerSecurityAlerts(
       status: scanResult.status,
       summary,
       container,
+      cycleId,
     });
     emitted += 1;
   }
@@ -402,9 +406,16 @@ async function runScheduledBatchDigestWorkers(options: {
   scanConcurrency: number;
   scanIntervalMs: number;
   trivyDbUpdatedAt?: string;
+  cycleId: string;
 }): Promise<ScheduledBatchExecutionResult> {
-  const { batchController, digestEntries, scanConcurrency, scanIntervalMs, trivyDbUpdatedAt } =
-    options;
+  const {
+    batchController,
+    digestEntries,
+    scanConcurrency,
+    scanIntervalMs,
+    trivyDbUpdatedAt,
+    cycleId,
+  } = options;
   const workerCount = Math.min(scanConcurrency, digestEntries.length);
   const outcomeCounts = createInitialScheduledScanOutcomeCounts();
   let nextDigestIndex = 0;
@@ -434,6 +445,7 @@ async function runScheduledBatchDigestWorkers(options: {
           signal: batchController.signal,
           scanIntervalMs,
           trivyDbUpdatedAt,
+          cycleId,
         });
         incrementScheduledScanOutcomeCount(outcomeCounts, result);
       }
@@ -459,6 +471,7 @@ export async function runScheduledScans(): Promise<void> {
   }
 
   scanInProgress = true;
+  const cycleId = uuidv7();
   const startedAt = new Date().toISOString();
   let batchController: AbortController | undefined;
   let batchTimeoutHandle: ReturnType<typeof setTimeout> | undefined;
@@ -485,6 +498,7 @@ export async function runScheduledScans(): Promise<void> {
         scanConcurrency,
         scanIntervalMs,
         trivyDbUpdatedAt,
+        cycleId,
       });
     totalScannedForCycle = cachedCount + scannedCount;
     totalAlertsForCycle = alertCount;
@@ -501,6 +515,7 @@ export async function runScheduledScans(): Promise<void> {
     }
     scanInProgress = false;
     await emitSecurityScanCycleComplete({
+      cycleId,
       scannedCount: totalScannedForCycle,
       alertCount: totalAlertsForCycle,
       startedAt,

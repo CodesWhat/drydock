@@ -1446,14 +1446,58 @@ describe('runScheduledScans', () => {
         containerName: 'local_nginx',
         details: 'critical=1, high=3, medium=2, low=1, unknown=0',
         status: 'blocked',
+        cycleId: expect.stringMatching(
+          /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+        ),
       }),
     );
     expect(mockEmitSecurityAlert).toHaveBeenCalledWith(
       expect.objectContaining({
         containerName: 'local_redis',
         details: 'critical=0, high=2, medium=0, low=0, unknown=0',
+        cycleId: expect.any(String),
       }),
     );
+  });
+
+  test('should share the same cycleId across every alert and the cycle-complete signal in one run', async () => {
+    const container = createContainer();
+    mockGetContainers.mockReturnValue([container]);
+    mockScanImageWithDedup.mockResolvedValue({
+      scanResult: createScanResult({
+        summary: { unknown: 0, low: 0, medium: 0, high: 1, critical: 0 },
+      }),
+      fromCache: false,
+    });
+
+    await runScheduledScans();
+
+    const alertCycleIds = mockEmitSecurityAlert.mock.calls.map(
+      ([payload]) => (payload as { cycleId: string }).cycleId,
+    );
+    const completeCycleId = mockEmitSecurityScanCycleComplete.mock.calls[0]?.[0]?.cycleId;
+    expect(alertCycleIds.every((id) => id === completeCycleId)).toBe(true);
+    expect(completeCycleId).toEqual(expect.any(String));
+  });
+
+  test('should produce distinct cycleIds across two successive runs', async () => {
+    const container = createContainer();
+    mockGetContainers.mockReturnValue([container]);
+    mockScanImageWithDedup.mockResolvedValue({
+      scanResult: createScanResult({
+        summary: { unknown: 0, low: 0, medium: 0, high: 1, critical: 0 },
+      }),
+      fromCache: false,
+    });
+
+    await runScheduledScans();
+    await runScheduledScans();
+
+    const cycleIds = mockEmitSecurityScanCycleComplete.mock.calls.map(
+      ([payload]) => payload.cycleId,
+    );
+    expect(cycleIds).toHaveLength(2);
+    expect(cycleIds[0]).not.toBe(cycleIds[1]);
   });
 
   test('should NOT emit a security alert when only low/medium findings are present', async () => {
