@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0-rc.10] — 2026-04-18
+
 ### Added
 
 - **[#300](https://github.com/CodesWhat/drydock/discussions/300)** — **Security scan digest mode.** Every scan cycle (scheduled cron, on-demand single, or the new bulk `POST /api/v1/containers/scan-all` endpoint) now carries a stable `cycleId` (UUID v7) and emits a `security-scan-cycle-complete` event with `scannedCount` / `alertCount` / `startedAt` / `completedAt` / `scope`. Triggers can configure `SECURITYMODE=digest` (or `batch+digest`) to receive one summary per cycle grouped by severity (critical → high → medium → low → unknown) instead of one notification per container. Templates are customizable via `SECURITYDIGESTTITLE` / `SECURITYDIGESTBODY`. Per-channel `once=true` dedup is tracked under a new `'security-alert-digest'` `NotificationEventKind` so simple / batch / digest channels never stomp on each other (same per-channel pattern introduced for updates in #282). The UI **Scan All** button now issues one bulk-scan request instead of N per-container HTTP calls, so a 40-container inventory produces one email instead of forty.
