@@ -29,6 +29,10 @@ vi.mock('../event/index.js', () => ({
   emitContainerUpdateApplied: vi.fn().mockResolvedValue(undefined),
   emitContainerUpdateFailed: vi.fn().mockResolvedValue(undefined),
   emitSecurityAlert: vi.fn().mockResolvedValue(undefined),
+  emitSecurityScanCycleComplete: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock('../util/uuid.js', () => ({
+  uuidv7: vi.fn(() => '00000000-0000-7000-8000-000000000001'),
 }));
 vi.mock('../registry/index.js', () => ({
   deregisterAgentComponents: vi.fn(),
@@ -1467,6 +1471,7 @@ describe('AgentClient', () => {
         details: '1 critical vulnerability',
         status: 'blocked',
         blockingCount: 1,
+        cycleId: '00000000-0000-7000-8000-000000000001',
       });
     });
 
@@ -1497,6 +1502,7 @@ describe('AgentClient', () => {
           high: 0,
           critical: 1,
         },
+        cycleId: '00000000-0000-7000-8000-000000000001',
       });
     });
 
@@ -1527,7 +1533,85 @@ describe('AgentClient', () => {
       expect(event.emitSecurityAlert).toHaveBeenCalledWith({
         containerName: 'local_nginx',
         details: '1 critical vulnerability',
+        cycleId: '00000000-0000-7000-8000-000000000001',
       });
+    });
+
+    test('should pass through cycleId from modern agents and skip synthesis', async () => {
+      await client.handleEvent('dd:security-alert', {
+        containerName: 'local_nginx',
+        details: '1 critical vulnerability',
+        status: 'blocked',
+        blockingCount: 1,
+        cycleId: 'modern-cycle-abc',
+      });
+
+      expect(event.emitSecurityAlert).toHaveBeenCalledWith({
+        containerName: 'local_nginx',
+        details: '1 critical vulnerability',
+        status: 'blocked',
+        blockingCount: 1,
+        cycleId: 'modern-cycle-abc',
+      });
+      expect(event.emitSecurityScanCycleComplete).not.toHaveBeenCalled();
+    });
+
+    test('should synthesize cycleId and emit cycle-complete for legacy agents', async () => {
+      await client.handleEvent('dd:security-alert', {
+        containerName: 'local_nginx',
+        details: '1 critical vulnerability',
+        status: 'blocked',
+        blockingCount: 1,
+      });
+
+      expect(event.emitSecurityAlert).toHaveBeenCalledWith({
+        containerName: 'local_nginx',
+        details: '1 critical vulnerability',
+        status: 'blocked',
+        blockingCount: 1,
+        cycleId: '00000000-0000-7000-8000-000000000001',
+      });
+      expect(event.emitSecurityScanCycleComplete).toHaveBeenCalledWith(
+        expect.objectContaining({
+          cycleId: '00000000-0000-7000-8000-000000000001',
+          scannedCount: 1,
+          alertCount: 1,
+          scope: 'agent-forwarded',
+        }),
+      );
+    });
+
+    test('should emit forwarded security-scan-cycle-complete from agents', async () => {
+      await client.handleEvent('dd:security-scan-cycle-complete', {
+        cycleId: 'agent-cycle-42',
+        scannedCount: 7,
+        alertCount: 2,
+        startedAt: '2026-04-17T22:30:00.000Z',
+        completedAt: '2026-04-17T22:30:10.000Z',
+      });
+
+      expect(event.emitSecurityScanCycleComplete).toHaveBeenCalledWith({
+        cycleId: 'agent-cycle-42',
+        scannedCount: 7,
+        alertCount: 2,
+        startedAt: '2026-04-17T22:30:00.000Z',
+        completedAt: '2026-04-17T22:30:10.000Z',
+        scope: 'agent-forwarded',
+      });
+    });
+
+    test('should ignore invalid security-scan-cycle-complete payloads', async () => {
+      await client.handleEvent('dd:security-scan-cycle-complete', null);
+      await client.handleEvent('dd:security-scan-cycle-complete', {
+        cycleId: '',
+        scannedCount: 3,
+      });
+      await client.handleEvent('dd:security-scan-cycle-complete', {
+        cycleId: 'ok',
+        scannedCount: 'not-a-number',
+      });
+
+      expect(event.emitSecurityScanCycleComplete).not.toHaveBeenCalled();
     });
 
     test('should reconcile watcher snapshot by processing current containers and pruning missing ones', async () => {

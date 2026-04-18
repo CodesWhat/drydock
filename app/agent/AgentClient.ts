@@ -8,6 +8,7 @@ import type {
   ContainerUpdateFailedEventPayload,
   SecurityAlertEventPayload,
   SecurityAlertSummary,
+  SecurityScanCycleCompleteEventPayload,
 } from '../event/index.js';
 import {
   emitAgentConnected,
@@ -17,6 +18,7 @@ import {
   emitContainerUpdateApplied,
   emitContainerUpdateFailed,
   emitSecurityAlert,
+  emitSecurityScanCycleComplete,
 } from '../event/index.js';
 import logger from '../log/index.js';
 import { sanitizeLogParam } from '../log/sanitize.js';
@@ -29,6 +31,7 @@ import * as registry from '../registry/index.js';
 import { resolveConfiguredPath } from '../runtime/paths.js';
 import * as storeContainer from '../store/container.js';
 import { getErrorMessage } from '../util/error.js';
+import { uuidv7 } from '../util/uuid.js';
 
 export interface AgentClientConfig {
   host: string;
@@ -730,7 +733,41 @@ export class AgentClient {
     if (summary) {
       parsedPayload.summary = summary;
     }
+    if (typeof payload.cycleId === 'string' && payload.cycleId.length > 0) {
+      parsedPayload.cycleId = payload.cycleId;
+    }
     return parsedPayload;
+  }
+
+  private parseSecurityScanCycleCompleteEventPayload(
+    data: unknown,
+  ): SecurityScanCycleCompleteEventPayload | undefined {
+    if (!data || typeof data !== 'object') {
+      return undefined;
+    }
+    const payload = data as Record<string, unknown>;
+    if (
+      typeof payload.cycleId !== 'string' ||
+      payload.cycleId.length === 0 ||
+      !Number.isFinite(payload.scannedCount)
+    ) {
+      return undefined;
+    }
+    const parsed: SecurityScanCycleCompleteEventPayload = {
+      cycleId: payload.cycleId,
+      scannedCount: Number(payload.scannedCount),
+    };
+    if (Number.isFinite(payload.alertCount)) {
+      parsed.alertCount = Number(payload.alertCount);
+    }
+    if (typeof payload.startedAt === 'string' && payload.startedAt.length > 0) {
+      parsed.startedAt = payload.startedAt;
+    }
+    if (typeof payload.completedAt === 'string' && payload.completedAt.length > 0) {
+      parsed.completedAt = payload.completedAt;
+    }
+    parsed.scope = 'agent-forwarded';
+    return parsed;
   }
 
   async handleEvent(eventName: string, data: unknown) {
@@ -774,7 +811,28 @@ export class AgentClient {
       case 'dd:security-alert': {
         const payload = this.parseSecurityAlertEventPayload(data);
         if (payload) {
-          await emitSecurityAlert(payload);
+          if (payload.cycleId) {
+            await emitSecurityAlert(payload);
+          } else {
+            const cycleId = uuidv7();
+            const nowIso = new Date().toISOString();
+            await emitSecurityAlert({ ...payload, cycleId });
+            await emitSecurityScanCycleComplete({
+              cycleId,
+              scannedCount: 1,
+              alertCount: 1,
+              scope: 'agent-forwarded',
+              startedAt: nowIso,
+              completedAt: nowIso,
+            });
+          }
+        }
+        return;
+      }
+      case 'dd:security-scan-cycle-complete': {
+        const payload = this.parseSecurityScanCycleCompleteEventPayload(data);
+        if (payload) {
+          await emitSecurityScanCycleComplete(payload);
         }
         return;
       }
