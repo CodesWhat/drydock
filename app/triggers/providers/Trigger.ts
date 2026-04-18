@@ -202,9 +202,9 @@ const DEFAULT_SIMPLE_TITLE_DIGEST_EXPRESSION =
 const DEFAULT_SIMPLE_TITLE_UPDATE_EXPRESSION =
   'container.notificationAgentPrefix + "New " + container.updateKind.kind + " found for container " + container.name + container.notificationWatcherSuffix';
 const DEFAULT_SIMPLE_BODY_DIGEST_EXPRESSION =
-  'container.notificationAgentPrefix + "Container " + container.name + container.notificationWatcherSuffix + " running tag " + currentTag + " has a newer image available"';
+  '"Container " + container.name + container.notificationWatcherSuffix + " running tag " + currentTag + " has a newer image available"';
 const DEFAULT_SIMPLE_BODY_UPDATE_EXPRESSION =
-  'container.notificationAgentPrefix + "Container " + container.name + container.notificationWatcherSuffix + " running with " + container.updateKind.kind + " " + container.updateKind.localValue + " can be updated to " + container.updateKind.kind + " " + container.updateKind.remoteValue';
+  '"Container " + container.name + container.notificationWatcherSuffix + " running with " + container.updateKind.kind + " " + container.updateKind.localValue + " can be updated to " + container.updateKind.kind + " " + container.updateKind.remoteValue';
 const DEFAULT_SIMPLE_BODY_RESULT_LINK_EXPRESSION =
   'container.result && container.result.link ? "\\n" + container.result.link : ""';
 const DEFAULT_SIMPLE_TITLE_TEMPLATE = buildLiteralTemplateExpression(
@@ -219,11 +219,11 @@ const AGENT_DISCONNECT_SIMPLE_BODY_TEMPLATE = `Agent ${buildLiteralTemplateExpre
 const AGENT_RECONNECT_SIMPLE_TITLE_TEMPLATE = `Agent ${buildLiteralTemplateExpression('event.agentName')} reconnected`;
 const AGENT_RECONNECT_SIMPLE_BODY_TEMPLATE = `Agent ${buildLiteralTemplateExpression('event.agentName')} reconnected`;
 const UPDATE_APPLIED_SIMPLE_TITLE_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Container ${buildLiteralTemplateExpression('container.name')} updated successfully`;
-const UPDATE_APPLIED_SIMPLE_BODY_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Container ${buildLiteralTemplateExpression('container.name')} updated successfully`;
+const UPDATE_APPLIED_SIMPLE_BODY_TEMPLATE = `Container ${buildLiteralTemplateExpression('container.name')} updated successfully`;
 const UPDATE_FAILED_SIMPLE_TITLE_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Container ${buildLiteralTemplateExpression('container.name')} update failed`;
-const UPDATE_FAILED_SIMPLE_BODY_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Container ${buildLiteralTemplateExpression('container.name')} update failed${buildLiteralTemplateExpression('event.error ? ": " + event.error : ""')}`;
+const UPDATE_FAILED_SIMPLE_BODY_TEMPLATE = `Container ${buildLiteralTemplateExpression('container.name')} update failed${buildLiteralTemplateExpression('event.error ? ": " + event.error : ""')}`;
 const SECURITY_ALERT_SIMPLE_TITLE_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Security alert for container ${buildLiteralTemplateExpression('container.name')}`;
-const SECURITY_ALERT_SIMPLE_BODY_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Security alert for container ${buildLiteralTemplateExpression('container.name')}${buildLiteralTemplateExpression('event.blockingCount ? " (" + event.blockingCount + " blocking vulnerabilities)" : ""')}${buildLiteralTemplateExpression('event.details ? "\\n" + event.details : ""')}`;
+const SECURITY_ALERT_SIMPLE_BODY_TEMPLATE = `Security alert for container ${buildLiteralTemplateExpression('container.name')}${buildLiteralTemplateExpression('event.blockingCount ? " (" + event.blockingCount + " blocking vulnerabilities)" : ""')}${buildLiteralTemplateExpression('event.details ? "\\n" + event.details : ""')}`;
 const NOTIFICATION_SIMPLE_TITLE_TEMPLATES: Partial<
   Record<TriggerNotificationEvent['kind'], string>
 > = {

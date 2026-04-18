@@ -2081,7 +2081,7 @@ test('renderSimpleTitle should omit agent prefix when container has no agent', (
   ).toBe('New tag found for container nginx');
 });
 
-test('renderSimpleBody should include agent prefix when container has agent set', () => {
+test('renderSimpleBody should not include agent prefix (prefix is title-only)', () => {
   const { simplebody, ...rest } = configurationValid;
   trigger.configuration = trigger.validateConfiguration(rest);
   expect(
@@ -2094,7 +2094,7 @@ test('renderSimpleBody should include agent prefix when container has agent set'
         remoteValue: '2.0.0',
       },
     }),
-  ).toBe('[prod-server] Container nginx running with tag 1.0.0 can be updated to tag 2.0.0');
+  ).toBe('Container nginx running with tag 1.0.0 can be updated to tag 2.0.0');
 });
 
 test('renderSimpleTitle should include agent prefix for digest updates', () => {
@@ -2140,7 +2140,7 @@ test('renderSimpleTitle should include agent prefix for update-applied events', 
   );
 });
 
-test('renderSimpleBody should include agent prefix for update-failed events', () => {
+test('renderSimpleBody should not include agent prefix for update-failed events (prefix is title-only)', () => {
   const container = {
     id: 'container-nginx',
     name: 'nginx',
@@ -2165,11 +2165,11 @@ test('renderSimpleBody should include agent prefix for update-failed events', ()
   } as any;
 
   expect(trigger.renderSimpleBody(container)).toBe(
-    '[prod-server] Container nginx update failed: pull access denied',
+    'Container nginx update failed: pull access denied',
   );
 });
 
-test('renderSimpleBody should include agent prefix for security-alert events', () => {
+test('renderSimpleBody should not include agent prefix for security-alert events (prefix is title-only)', () => {
   const container = {
     id: 'container-nginx',
     name: 'nginx',
@@ -2195,11 +2195,11 @@ test('renderSimpleBody should include agent prefix for security-alert events', (
   } as any;
 
   expect(trigger.renderSimpleBody(container)).toBe(
-    '[prod-server] Security alert for container nginx (2 blocking vulnerabilities)\ncritical=1 high=1',
+    'Security alert for container nginx (2 blocking vulnerabilities)\ncritical=1 high=1',
   );
 });
 
-test('renderSimpleBody should combine agent prefix and watcher suffix', () => {
+test('renderSimpleBody should include watcher suffix but not agent prefix (prefix is title-only)', () => {
   const { simplebody, ...rest } = configurationValid;
   trigger.configuration = trigger.validateConfiguration(rest);
   expect(
@@ -2213,12 +2213,10 @@ test('renderSimpleBody should combine agent prefix and watcher suffix', () => {
         remoteValue: '2.0.0',
       },
     }),
-  ).toBe(
-    '[prod-server] Container nginx (servicevault) running with tag 1.0.0 can be updated to tag 2.0.0',
-  );
+  ).toBe('Container nginx (servicevault) running with tag 1.0.0 can be updated to tag 2.0.0');
 });
 
-test('renderSimpleBody should omit watcher suffix when it matches the agent prefix', () => {
+test('renderSimpleBody should omit watcher suffix when it matches the agent prefix (and no prefix in body)', () => {
   const { simplebody, ...rest } = configurationValid;
   trigger.configuration = trigger.validateConfiguration(rest);
   expect(
@@ -2232,10 +2230,10 @@ test('renderSimpleBody should omit watcher suffix when it matches the agent pref
         remoteValue: '2.0.0',
       },
     }),
-  ).toBe('[mediavault] Container nginx running with tag 1.0.0 can be updated to tag 2.0.0');
+  ).toBe('Container nginx running with tag 1.0.0 can be updated to tag 2.0.0');
 });
 
-test('renderSimpleBody should omit watcher suffix when it matches the controller prefix', () => {
+test('renderSimpleBody should omit watcher suffix when it matches the controller prefix (and no prefix in body)', () => {
   const { simplebody, ...rest } = configurationValid;
   trigger.configuration = trigger.validateConfiguration(rest);
   mockGetAgents.mockReturnValue([{ name: 'remote-1' }]);
@@ -2250,12 +2248,12 @@ test('renderSimpleBody should omit watcher suffix when it matches the controller
         remoteValue: '2.0.0',
       },
     }),
-  ).toBe('[controller-host] Container nginx running with tag 1.0.0 can be updated to tag 2.0.0');
+  ).toBe('Container nginx running with tag 1.0.0 can be updated to tag 2.0.0');
 
   mockGetAgents.mockReturnValue([]);
 });
 
-test('renderBatchBody should include agent prefix per container in batch', () => {
+test('renderBatchBody should not include agent prefix per container (prefix is title-only)', () => {
   const { simplebody, ...rest } = configurationValid;
   trigger.configuration = trigger.validateConfiguration(rest);
   expect(
@@ -2280,8 +2278,8 @@ test('renderBatchBody should include agent prefix per container in batch', () =>
       },
     ]),
   ).toBe(
-    '- [prod-server] Container nginx running with tag 1.0.0 can be updated to tag 2.0.0\n\n' +
-      '- [staging-server] Container nginx running with tag 1.0.0 can be updated to tag 2.0.0\n',
+    '- Container nginx running with tag 1.0.0 can be updated to tag 2.0.0\n\n' +
+      '- Container nginx running with tag 1.0.0 can be updated to tag 2.0.0\n',
   );
 });
 
@@ -2317,7 +2315,7 @@ test('renderSimpleTitle should not include controller prefix when no agents are 
   ).toBe('New tag found for container nginx');
 });
 
-test('renderSimpleBody should include controller prefix when agents exist and container is local', () => {
+test('renderSimpleBody should not include controller prefix (prefix is title-only, body has no prefix even when agents exist)', () => {
   const { simplebody, ...rest } = configurationValid;
   trigger.configuration = trigger.validateConfiguration(rest);
   mockGetAgents.mockReturnValue([{ name: 'remote-1' }]);
@@ -2331,7 +2329,7 @@ test('renderSimpleBody should include controller prefix when agents exist and co
         remoteValue: '2.0.0',
       },
     }),
-  ).toBe('[controller-host] Container nginx running with tag 1.0.0 can be updated to tag 2.0.0');
+  ).toBe('Container nginx running with tag 1.0.0 can be updated to tag 2.0.0');
 
   mockGetAgents.mockReturnValue([]);
 });
@@ -2390,6 +2388,49 @@ test('renderSimpleBody should expose notificationServerName as controller name e
       updateKind: { kind: 'tag' },
     }),
   ).toBe('controller-host');
+});
+
+test('default title starts with [server] prefix for non-standalone deployments, body does not', () => {
+  // Regression guard for #296 fix: source identity belongs in the title only.
+  const { simpletitle, simplebody, ...rest } = configurationValid;
+  trigger.configuration = trigger.validateConfiguration(rest);
+  mockGetAgents.mockReturnValue([{ name: 'remote-1' }]);
+
+  const container: any = {
+    name: 'nginx',
+    updateKind: { kind: 'tag', localValue: '1.0.0', remoteValue: '2.0.0' },
+  };
+
+  const title = trigger.renderSimpleTitle(container);
+  const body = trigger.renderSimpleBody(container);
+
+  expect(title.startsWith('[controller-host]')).toBe(true);
+  expect(body.startsWith('[controller-host]')).toBe(false);
+  expect(body).toBe('Container nginx running with tag 1.0.0 can be updated to tag 2.0.0');
+
+  mockGetAgents.mockReturnValue([]);
+});
+
+test('default digest-update title starts with [server] prefix, body does not', () => {
+  // Regression guard for #296 fix: both digest and tag-update body templates omit prefix.
+  const { simpletitle, simplebody, ...rest } = configurationValid;
+  trigger.configuration = trigger.validateConfiguration(rest);
+  mockGetAgents.mockReturnValue([{ name: 'remote-1' }]);
+
+  const container: any = {
+    name: 'nginx',
+    image: { tag: { value: 'latest' } },
+    updateKind: { kind: 'digest', localValue: 'sha256:aaa', remoteValue: 'sha256:bbb' },
+  };
+
+  const title = trigger.renderSimpleTitle(container);
+  const body = trigger.renderSimpleBody(container);
+
+  expect(title.startsWith('[controller-host]')).toBe(true);
+  expect(body.startsWith('[controller-host]')).toBe(false);
+  expect(body).toBe('Container nginx running tag latest has a newer image available');
+
+  mockGetAgents.mockReturnValue([]);
 });
 
 test('composeMessage should include title and body when disabletitle is false', () => {
