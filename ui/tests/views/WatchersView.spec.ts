@@ -259,6 +259,59 @@ describe('WatchersView', () => {
     vi.useRealTimers();
   });
 
+  it('renders nextRunAt on the row and the next-run span has a tooltip with the absolute time', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-04-09T12:00:00.000Z'));
+
+    mockGetAllWatchers.mockResolvedValue([
+      {
+        id: 'watcher-alpha',
+        name: 'Alpha Watcher',
+        type: 'docker',
+        configuration: { cron: '*/5 * * * *' },
+        metadata: { nextRunAt: '2026-04-09T13:30:00.000Z' },
+      },
+    ]);
+    mockGetAllContainers.mockResolvedValue([]);
+
+    const wrapper = await mountWatchersView();
+    const table = wrapper.findComponent(richDataTableStub);
+    const rows = table.props('rows') as Array<{ nextRun: string; nextRunAt: string | undefined }>;
+
+    expect(rows[0].nextRun).toBe('1h 30m');
+    expect(rows[0].nextRunAt).toBe('2026-04-09T13:30:00.000Z');
+
+    const nextRunSpan = wrapper.findAll('span').find((s) => s.text() === '1h 30m');
+    expect(nextRunSpan).toBeDefined();
+    const title = nextRunSpan?.element.getAttribute('title');
+    expect(title).toBeTruthy();
+    expect(title).toMatch(/\d{2}:\d{2}:\d{2}/);
+
+    vi.useRealTimers();
+  });
+
+  it('next-run span has empty tooltip when nextRunAt is absent', async () => {
+    mockGetAllWatchers.mockResolvedValue([
+      {
+        id: 'watcher-alpha',
+        name: 'Alpha Watcher',
+        type: 'docker',
+        configuration: { cron: '*/5 * * * *' },
+      },
+    ]);
+    mockGetAllContainers.mockResolvedValue([]);
+
+    const wrapper = await mountWatchersView();
+    const table = wrapper.findComponent(richDataTableStub);
+    const rows = table.props('rows') as Array<{ nextRun: string; nextRunAt: string | undefined }>;
+
+    expect(rows[0].nextRunAt).toBeUndefined();
+
+    const emDashSpan = wrapper.findAll('span').find((s) => s.text() === '\u2014');
+    expect(emDashSpan).toBeDefined();
+    expect(emDashSpan?.element.getAttribute('title')).toBeFalsy();
+  });
+
   it('caps long cron strings in the table view', async () => {
     const longCron = '0 0 1,15 */2 1-5 /usr/bin/do-something-very-long-and-important';
     mockGetAllWatchers.mockResolvedValue([

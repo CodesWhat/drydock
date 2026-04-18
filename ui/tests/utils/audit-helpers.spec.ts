@@ -1,6 +1,7 @@
 import {
   actionIcon,
   actionLabel,
+  formatAbsoluteTime,
   imageAge,
   statusBg,
   statusColor,
@@ -167,6 +168,33 @@ describe('audit-helpers', () => {
     it('returns 6d ago at boundary', () => {
       const sixDays = new Date(Date.now() - 6 * 86_400_000).toISOString();
       expect(timeAgo(sixDays)).toBe('6d ago');
+    });
+  });
+
+  describe('formatAbsoluteTime', () => {
+    it('returns empty string for undefined', () => {
+      expect(formatAbsoluteTime(undefined)).toBe('');
+    });
+
+    it('returns empty string for null', () => {
+      expect(formatAbsoluteTime(null)).toBe('');
+    });
+
+    it('returns empty string for empty string', () => {
+      expect(formatAbsoluteTime('')).toBe('');
+    });
+
+    it('returns empty string for an invalid date string', () => {
+      expect(formatAbsoluteTime('not-a-date')).toBe('');
+    });
+
+    it('returns a formatted string for a valid ISO timestamp', () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-04-09T12:00:00.000Z'));
+      const result = formatAbsoluteTime('2026-04-09T13:30:00.000Z');
+      expect(result).toMatch(/\d{2}:\d{2}:\d{2}/);
+      expect(result).toMatch(/[A-Z][a-z]{2}/);
+      vi.useRealTimers();
     });
   });
 
