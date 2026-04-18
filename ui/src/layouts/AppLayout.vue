@@ -1486,14 +1486,17 @@ onUnmounted(() => {
           data-testid="oidc-http-compat-banner"
           title="HTTP OIDC discovery detected"
           permanent-dismiss-label="Don't show again"
-          link-href="https://getdrydock.com/docs/configuration/authentications/oidc"
-          link-label="Migration guide"
+          link-href="https://getdrydock.com/docs/deprecations#oidc-http-discovery"
+          link-label="View migration guide"
           :style="stackedBannerInlineStyle"
           @dismiss="dismissOidcHttpBannerForSession"
           @dismiss-permanent="dismissOidcHttpBannerPermanently">
           One or more OIDC providers use an insecure
           <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">http://</code>
           discovery URL. HTTP discovery is deprecated and will be removed in v1.6.0.
+          Upgrade your OIDC discovery URL to use HTTPS, or set
+          <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">DD_AUTH_OIDC_{name}_ALLOW_INSECURE_HTTP=true</code>
+          only for trusted internal issuers.
         </AnnouncementBanner>
 
         <AnnouncementBanner
@@ -1501,12 +1504,13 @@ onUnmounted(() => {
           data-testid="sha-hash-deprecation-banner"
           title="Legacy password hash detected"
           permanent-dismiss-label="Don't show again"
-          link-href="https://getdrydock.com/docs/deprecations#legacy-password-hash-formats"
-          link-label="Migration guide"
+          link-href="https://getdrydock.com/docs/deprecations#legacy-password-hashes"
+          link-label="View migration guide"
           :style="stackedBannerInlineStyle"
           @dismiss="dismissLegacyHashBannerForSession"
           @dismiss-permanent="dismissLegacyHashBannerPermanently">
           Your basic authentication uses a legacy password hash format. Legacy v1.3.9 formats are deprecated and will be removed in v1.6.0.
+          Re-hash your admin password with argon2id (see the migration guide for the one-liner).
         </AnnouncementBanner>
 
         <AnnouncementBanner
@@ -1514,21 +1518,25 @@ onUnmounted(() => {
           data-testid="legacy-config-deprecation-banner"
           :title="legacyConfigBannerTitle"
           permanent-dismiss-label="Don't show again"
-          link-href="https://getdrydock.com/docs/deprecations#removal-in-v160"
-          link-label="Migration guide"
+          link-href="https://getdrydock.com/docs/deprecations#legacy-env-vars"
+          link-label="View migration guide"
           :style="stackedBannerInlineStyle"
           @dismiss="legacyConfigDeprecationBanner.dismissForSession"
           @dismiss-permanent="legacyConfigDeprecationBanner.dismissPermanently">
           Deprecated configuration aliases are in use. Rename
           <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">WUD_*</code>
-          vars to
+          env vars to
           <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">DD_*</code>
           and
+          <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">wud.*</code>
+          Docker labels to
+          <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">dd.*</code>.
           <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">DD_TRIGGER_*</code>
-          to
+          variables should also migrate to
           <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">DD_ACTION_*</code>
           or
-          <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">DD_NOTIFICATION_*</code>.
+          <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">DD_NOTIFICATION_*</code>
+          (see the migration guide for the full rename map).
           <span v-if="legacyEnvKeysPreview" class="block mt-1 truncate">
             Env keys ({{ legacyInputSummary?.env.total }}): {{ legacyEnvKeysPreview }}
           </span>
@@ -1542,15 +1550,16 @@ onUnmounted(() => {
           data-testid="legacy-api-path-deprecation-banner"
           :title="legacyApiPathBannerTitle"
           permanent-dismiss-label="Don't show again"
-          link-href="https://getdrydock.com/docs/deprecations"
-          link-label="Migration guide"
+          link-href="https://getdrydock.com/docs/deprecations#unversioned-api-paths"
+          link-label="View migration guide"
           :style="stackedBannerInlineStyle"
           @dismiss="legacyApiPathDeprecationBanner.dismissForSession"
           @dismiss-permanent="legacyApiPathDeprecationBanner.dismissPermanently">
-          Unversioned API paths are deprecated. Migrate from
+          Unversioned API paths are deprecated. Update API clients to the
+          <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">/api/v1/*</code>
+          prefix. Unversioned
           <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">/api/*</code>
-          to
-          <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">/api/v1/*</code>.
+          aliases are removed in v1.6.0.
           <span v-if="legacyApiPathKeysPreview" class="block mt-1 truncate">
             API paths ({{ legacyInputSummary?.api?.total }}): {{ legacyApiPathKeysPreview }}
           </span>
@@ -1561,14 +1570,16 @@ onUnmounted(() => {
           data-testid="curl-healthcheck-deprecation-banner"
           title="Custom curl healthcheck override detected"
           permanent-dismiss-label="Don't show again"
-          link-href="https://getdrydock.com/docs/deprecations#curl-in-docker-image"
-          link-label="Migration guide"
+          link-href="https://getdrydock.com/docs/deprecations#curl-healthcheck-override"
+          link-label="View migration guide"
           :style="stackedBannerInlineStyle"
           @dismiss="curlHealthcheckDeprecationBanner.dismissForSession"
           @dismiss-permanent="curlHealthcheckDeprecationBanner.dismissPermanently">
           Your Drydock container uses a custom curl-based healthcheck override. curl remains
           supported for backward compatibility in v1.5.x. v1.6.0 is the final warning release,
-          and curl will be removed from the image in v1.7.0. Prefer the built-in image
+          and curl will be removed from the image in v1.7.0. Remove the
+          <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">DD_DISABLE_WGET_HEALTHCHECK=true</code>
+          override; the image now uses wget and curl is no longer bundled. Prefer the built-in image
           healthcheck or
           <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">/bin/healthcheck</code>
           for custom intervals.

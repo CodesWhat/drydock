@@ -63,6 +63,14 @@ describe('AnnouncementBanner', () => {
     expect(link.attributes('target')).toBe('_blank');
   });
 
+  it('defaults link label to "View migration guide" when linkHref is provided without linkLabel', () => {
+    const wrapper = factory({ linkHref: 'https://example.com/docs' });
+    const link = wrapper.find('a[href="https://example.com/docs"]');
+
+    expect(link.exists()).toBe(true);
+    expect(link.text()).toContain('View migration guide');
+  });
+
   it('shows permanent dismiss checkbox when permanentDismissLabel is provided', () => {
     const wrapper = factory({ permanentDismissLabel: "Don't show again" });
     const label = wrapper.find('[data-testid="announcement-dismiss-forever"]');
