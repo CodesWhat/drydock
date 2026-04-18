@@ -34,6 +34,12 @@ const { isMobile } = useBreakpoints();
 
 const notificationsData = ref<NotificationRule[]>([]);
 const triggersData = ref<TriggerSummary[]>([]);
+const compactTriggerBadgeClass = 'shrink-0';
+const compactTriggerBadgeLabelClass = 'block max-w-[160px] truncate';
+const compactTriggerRowClass =
+  'flex min-w-0 max-w-full flex-nowrap items-center justify-end gap-1 overflow-x-auto';
+const compactTriggerListRowClass =
+  'flex min-w-0 max-w-[320px] flex-nowrap items-center justify-end gap-1 overflow-x-auto';
 
 const selectedRuleId = ref<string | null>(null);
 const detailOpen = ref(false);
@@ -368,16 +374,25 @@ onMounted(async () => {
         />
       </template>
       <template #cell-name="{ row }">
-        <div class="font-medium dd-text">{{ row.name }}</div>
-        <div class="text-2xs mt-0.5 dd-text-muted">{{ row.description }}</div>
+        <div class="font-medium truncate dd-text" :title="row.name" v-tooltip.top="row.name">{{ row.name }}</div>
+        <div class="text-2xs mt-0.5 dd-text-muted truncate"
+             :title="row.description"
+             v-tooltip.top="row.description">
+          {{ row.description }}
+        </div>
       </template>
       <template #cell-triggers="{ row }">
-        <div class="flex flex-wrap gap-1 justify-end">
+        <div :class="compactTriggerRowClass">
           <AppBadge v-for="triggerId in row.triggers" :key="triggerId"
-                    :custom="{ bg: 'var(--dd-neutral-muted)', text: 'var(--dd-text-secondary)' }" size="xs" :uppercase="false">
-            {{ triggerNameById(triggerId) }}
+                    :custom="{ bg: 'var(--dd-neutral-muted)', text: 'var(--dd-text-secondary)' }"
+                    size="xs"
+                    :uppercase="false"
+                    :title="triggerNameById(triggerId)"
+                    v-tooltip.top="triggerNameById(triggerId)"
+                    :class="compactTriggerBadgeClass">
+            <span :class="compactTriggerBadgeLabelClass">{{ triggerNameById(triggerId) }}</span>
           </AppBadge>
-          <span v-if="triggerAssignmentSummary(row)" class="text-2xs italic dd-text-muted">
+          <span v-if="triggerAssignmentSummary(row)" class="text-2xs italic dd-text-muted shrink-0 whitespace-nowrap">
             {{ triggerAssignmentSummary(row) }}
           </span>
         </div>
@@ -399,8 +414,12 @@ onMounted(async () => {
       <template #card="{ item: notif }">
         <div class="px-4 pt-4 pb-2 flex items-start justify-between gap-3">
           <div class="min-w-0 flex-1">
-            <div class="text-sm-plus font-semibold truncate dd-text">{{ notif.name }}</div>
-            <div class="text-2xs-plus mt-0.5 dd-text-muted">{{ notif.description }}</div>
+            <div class="text-sm-plus font-semibold truncate dd-text" :title="notif.name" v-tooltip.top="notif.name">{{ notif.name }}</div>
+            <div class="text-2xs-plus mt-0.5 dd-text-muted truncate"
+                 :title="notif.description"
+                 v-tooltip.top="notif.description">
+              {{ notif.description }}
+            </div>
           </div>
           <ToggleSwitch
             :model-value="notif.enabled"
@@ -414,13 +433,18 @@ onMounted(async () => {
             @update:model-value="toggleNotification(notif.id)"
           />
         </div>
-        <div class="px-4 py-2.5 flex flex-wrap gap-1.5 mt-auto"
+        <div :class="['px-4 py-2.5 mt-auto', compactTriggerRowClass]"
              :style="{ borderTop: '1px solid var(--dd-border)', backgroundColor: 'var(--dd-bg-elevated)' }">
           <AppBadge v-for="triggerId in notif.triggers" :key="triggerId"
-                    :custom="{ bg: 'var(--dd-neutral-muted)', text: 'var(--dd-text-secondary)' }" size="xs" :uppercase="false">
-            {{ triggerNameById(triggerId) }}
+                    :custom="{ bg: 'var(--dd-neutral-muted)', text: 'var(--dd-text-secondary)' }"
+                    size="xs"
+                    :uppercase="false"
+                    :title="triggerNameById(triggerId)"
+                    v-tooltip.top="triggerNameById(triggerId)"
+                    :class="compactTriggerBadgeClass">
+            <span :class="compactTriggerBadgeLabelClass">{{ triggerNameById(triggerId) }}</span>
           </AppBadge>
-          <span v-if="triggerAssignmentSummary(notif)" class="text-2xs italic dd-text-muted">
+          <span v-if="triggerAssignmentSummary(notif)" class="text-2xs italic dd-text-muted shrink-0 whitespace-nowrap">
             {{ triggerAssignmentSummary(notif) }}
           </span>
         </div>
@@ -446,12 +470,17 @@ onMounted(async () => {
           @update:model-value="toggleNotification(notif.id)"
         />
         <span class="text-sm font-semibold flex-1 min-w-0 truncate dd-text">{{ notif.name }}</span>
-        <div class="flex flex-wrap gap-1.5 shrink-0 max-w-[320px] justify-end">
+        <div :class="compactTriggerListRowClass">
           <AppBadge v-for="triggerId in notif.triggers" :key="triggerId"
-                    :custom="{ bg: 'var(--dd-neutral-muted)', text: 'var(--dd-text-secondary)' }" size="xs" :uppercase="false">
-            {{ triggerNameById(triggerId) }}
+                    :custom="{ bg: 'var(--dd-neutral-muted)', text: 'var(--dd-text-secondary)' }"
+                    size="xs"
+                    :uppercase="false"
+                    :title="triggerNameById(triggerId)"
+                    v-tooltip.top="triggerNameById(triggerId)"
+                    :class="compactTriggerBadgeClass">
+            <span :class="compactTriggerBadgeLabelClass">{{ triggerNameById(triggerId) }}</span>
           </AppBadge>
-          <span v-if="triggerAssignmentSummary(notif)" class="text-2xs italic dd-text-muted">
+          <span v-if="triggerAssignmentSummary(notif)" class="text-2xs italic dd-text-muted shrink-0 whitespace-nowrap">
             {{ triggerAssignmentSummary(notif) }}
           </span>
         </div>
@@ -486,7 +515,12 @@ onMounted(async () => {
           <AppBadge v-if="selectedRule" :tone="selectedRule.enabled ? 'success' : 'neutral'" size="xs">
             {{ selectedRule.enabled ? 'enabled' : 'disabled' }}
           </AppBadge>
-          <span v-if="selectedRule" class="text-2xs font-mono dd-text-muted">{{ selectedRule.id }}</span>
+          <span v-if="selectedRule"
+                class="text-2xs font-mono dd-text-muted truncate max-w-full"
+                :title="selectedRule.id"
+                v-tooltip.top="selectedRule.id">
+            {{ selectedRule.id }}
+          </span>
         </template>
 
         <template v-if="selectedRule" #default>
@@ -529,7 +563,11 @@ onMounted(async () => {
                          @change="toggleDetailTrigger(trigger.id)" />
                   <div class="flex-1 min-w-0">
                     <div class="text-xs font-semibold truncate dd-text">{{ trigger.name }}</div>
-                    <div class="text-2xs font-mono dd-text-muted">{{ trigger.id }}</div>
+                    <div class="text-2xs font-mono dd-text-muted truncate"
+                         :title="trigger.id"
+                         v-tooltip.top="trigger.id">
+                      {{ trigger.id }}
+                    </div>
                   </div>
                   <AppBadge :custom="{ bg: triggerTypeBadge(trigger.type).bg, text: triggerTypeBadge(trigger.type).text }" size="xs" class="shrink-0">
                     {{ triggerTypeBadge(trigger.type).label }}

@@ -64,6 +64,12 @@ function createSseRequest(ip = '127.0.0.1', sessionID = `session-${ip}`) {
     on: vi.fn((event: string, handler: () => void) => {
       listeners[event] = handler;
     }),
+    once: vi.fn((event: string, handler: () => void) => {
+      listeners[event] = (...args: unknown[]) => {
+        delete listeners[event];
+        (handler as (...innerArgs: unknown[]) => void)(...args);
+      };
+    }),
     _listeners: listeners,
   };
 }
@@ -77,6 +83,12 @@ function createSseResponse() {
     flushHeaders: vi.fn(),
     on: vi.fn((event: string, handler: () => void) => {
       listeners[event] = handler;
+    }),
+    once: vi.fn((event: string, handler: () => void) => {
+      listeners[event] = (...args: unknown[]) => {
+        delete listeners[event];
+        (handler as (...innerArgs: unknown[]) => void)(...args);
+      };
     }),
     _listeners: listeners,
   };

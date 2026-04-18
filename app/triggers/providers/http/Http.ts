@@ -6,7 +6,7 @@ import {
   withAuthorizationHeader,
 } from '../../../security/auth.js';
 
-import Trigger from '../Trigger.js';
+import Trigger, { type TriggerConfiguration } from '../Trigger.js';
 
 interface HttpRequestOptions extends Omit<AxiosRequestConfig, 'proxy'> {
   proxy?: {
@@ -17,10 +17,22 @@ interface HttpRequestOptions extends Omit<AxiosRequestConfig, 'proxy'> {
 
 const SUPPORTED_PROXY_PROTOCOLS = new Set(['http:', 'https:']);
 
+interface HttpConfiguration extends TriggerConfiguration {
+  url: string;
+  method: 'GET' | 'POST';
+  auth?: {
+    type?: 'BASIC' | 'BEARER';
+    user?: string;
+    password?: string;
+    bearer?: string;
+  };
+  proxy?: string;
+}
+
 /**
  * HTTP Trigger implementation
  */
-class Http extends Trigger {
+class Http extends Trigger<HttpConfiguration> {
   private parseProxyConfiguration(proxy: string): NonNullable<HttpRequestOptions['proxy']> {
     const proxyUrl = new URL(proxy);
     if (!SUPPORTED_PROXY_PROTOCOLS.has(proxyUrl.protocol)) {

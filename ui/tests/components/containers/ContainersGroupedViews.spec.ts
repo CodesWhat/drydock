@@ -13,7 +13,15 @@ vi.mock('@/components/containers/containersViewTemplateContext', () => ({
 }));
 
 const DataTableStub = defineComponent({
-  props: ['rows', 'rowClass', 'rowClickable', 'fullWidthRow', 'rowKey', 'virtualScroll'],
+  props: [
+    'rows',
+    'rowClass',
+    'rowClickable',
+    'fullWidthRow',
+    'rowKey',
+    'virtualScroll',
+    'maxHeight',
+  ],
   emits: ['update:sort-key', 'update:sort-asc', 'row-click'],
   setup(props, { emit }) {
     const isFullWidth = (row: Record<string, unknown>) =>
@@ -545,6 +553,67 @@ describe('ContainersGroupedViews', () => {
     );
   });
 
+  it('caps long server and registry labels in grouped table and card headers', async () => {
+    const longServer = 'server-name-that-should-not-expand-the-table-or-card';
+    const longRegistry = 'registry-name-that-should-not-expand-the-table-or-card';
+    const container = makeContainer({
+      id: 'c-long',
+      name: 'omega',
+      server: longServer,
+      registry: longRegistry,
+      registryName: longRegistry,
+    });
+
+    const { context } = makeContext();
+    context.groupByStack.value = true;
+    context.containerViewMode.value = 'table';
+    context.filteredContainers.value = [container];
+    context.displayContainers.value = [container];
+    context.renderGroups.value = [
+      {
+        key: 'stack-long',
+        name: 'stack-long',
+        containers: [container],
+        containerCount: 1,
+        updatesAvailable: 1,
+        updatableCount: 1,
+      },
+    ];
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+
+    const tableServer = wrapper
+      .findAll('span')
+      .find(
+        (candidate) =>
+          candidate.text().trim() === longServer && candidate.classes().includes('max-w-[140px]'),
+      );
+    expect(tableServer).toBeDefined();
+    expect(tableServer?.classes()).toContain('truncate');
+
+    const tableRegistry = wrapper
+      .findAll('span')
+      .find(
+        (candidate) =>
+          candidate.text().trim() === longRegistry && candidate.classes().includes('max-w-[140px]'),
+      );
+    expect(tableRegistry).toBeDefined();
+    expect(tableRegistry?.classes()).toContain('truncate');
+
+    context.containerViewMode.value = 'cards';
+    await nextTick();
+
+    const cardRegistry = wrapper
+      .findAll('span')
+      .find(
+        (candidate) =>
+          candidate.text().trim() === longRegistry && candidate.classes().includes('max-w-[140px]'),
+      );
+    expect(cardRegistry).toBeDefined();
+    expect(cardRegistry?.classes()).toContain('truncate');
+  });
+
   it('covers dropdown menu actions across blocked/updateable states', async () => {
     const blockedNoTag = makeContainer({
       id: 'c-m1',
@@ -726,7 +795,7 @@ describe('ContainersGroupedViews', () => {
     expect(wrapper.text()).toContain('stack-b');
   });
 
-  it('enables virtual scrolling for grouped table mode', async () => {
+  it('disables virtualization and lets the page scroll handle overflow', async () => {
     const alpha = makeContainer({
       id: 'c-alpha',
       name: 'alpha',
@@ -755,7 +824,9 @@ describe('ContainersGroupedViews', () => {
     const wrapper = mountSubject();
     await nextTick();
 
-    expect(wrapper.findComponent(DataTableStub).props('virtualScroll')).toBe(true);
+    const dataTable = wrapper.findComponent(DataTableStub);
+    expect(dataTable.props('virtualScroll')).toBe(false);
+    expect(dataTable.props('maxHeight')).toBeUndefined();
   });
 
   it('covers card/list view events and footer action handlers', async () => {
@@ -1166,7 +1237,7 @@ describe('ContainersGroupedViews', () => {
     const wrapper = mountSubject();
     const row = rowByName(wrapper, 'alpha');
 
-    expect(row.classes()).toContain('opacity-50');
+    expect(row.classes()).toContain('dd-row-updating');
     expect(row.text()).toContain('Updating');
   });
 
@@ -1199,7 +1270,7 @@ describe('ContainersGroupedViews', () => {
     const wrapper = mountSubject();
     const row = rowByName(wrapper, 'alpha');
 
-    expect(row.classes()).toContain('opacity-50');
+    expect(row.classes()).toContain('dd-row-updating');
     expect(row.text()).toContain('Updating');
   });
 

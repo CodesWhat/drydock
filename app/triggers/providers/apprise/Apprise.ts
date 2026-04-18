@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { getOutboundHttpTimeoutMs } from '../../../configuration/runtime-defaults.js';
 
-import Trigger from '../Trigger.js';
+import Trigger, { type TriggerConfiguration } from '../Trigger.js';
 
 interface AppriseNotifyBody {
   title: string;
@@ -12,10 +12,17 @@ interface AppriseNotifyBody {
   urls?: string;
 }
 
+interface AppriseConfiguration extends TriggerConfiguration {
+  url: string;
+  urls?: string;
+  config?: string;
+  tag?: string;
+}
+
 /**
  * Apprise Trigger implementation
  */
-class Apprise extends Trigger {
+class Apprise extends Trigger<AppriseConfiguration> {
   private buildNotifyPayload(
     title: string,
     message: string,

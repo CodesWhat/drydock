@@ -1,9 +1,15 @@
 import { execFile } from 'node:child_process';
 
 import { flatten } from '../../../model/container.js';
-import Trigger from '../Trigger.js';
+import Trigger, { type TriggerConfiguration } from '../Trigger.js';
 
 let hasLoggedShellExecutionWarning = false;
+
+interface CommandConfiguration extends TriggerConfiguration {
+  cmd: string;
+  shell: string;
+  timeout: number;
+}
 
 export function resetShellExecutionWarningStateForTests() {
   hasLoggedShellExecutionWarning = false;
@@ -12,7 +18,7 @@ export function resetShellExecutionWarningStateForTests() {
 /**
  * Command Trigger implementation
  */
-class Command extends Trigger {
+class Command extends Trigger<CommandConfiguration> {
   private logShellExecutionWarningOnce() {
     if (hasLoggedShellExecutionWarning) {
       return;

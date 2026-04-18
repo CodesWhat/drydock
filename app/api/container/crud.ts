@@ -25,15 +25,25 @@ import {
 function getContainerSummaryHandler(context: CrudHandlerContext, _req: Request, res: Response) {
   const containers = context.getContainersFromStore({});
   const containerStatus = getContainerStatusSummary(containers);
-  const hotUpdates = containers.filter(
-    (container) => container.updateAvailable && container.updateMaturityLevel === 'hot',
-  ).length;
-  const matureUpdates = containers.filter(
-    (container) =>
-      container.updateAvailable &&
-      (container.updateMaturityLevel === 'mature' ||
-        container.updateMaturityLevel === 'established'),
-  ).length;
+  const { hotUpdates, matureUpdates } = containers.reduce(
+    (summary, container) => {
+      if (!container.updateAvailable) {
+        return summary;
+      }
+      if (container.updateMaturityLevel === 'hot') {
+        summary.hotUpdates += 1;
+        return summary;
+      }
+      if (
+        container.updateMaturityLevel === 'mature' ||
+        container.updateMaturityLevel === 'established'
+      ) {
+        summary.matureUpdates += 1;
+      }
+      return summary;
+    },
+    { hotUpdates: 0, matureUpdates: 0 },
+  );
   res.status(200).json({
     containers: containerStatus,
     security: {
@@ -49,12 +59,12 @@ function getContainerSecurityVulnerabilitiesHandler(
   req: Request,
   res: Response<SecurityVulnerabilityOverviewResponse>,
 ) {
-  const totalContainers = context.getContainerCountFromStore({});
+  const containers = context.getContainersFromStore({});
+  const totalContainers = containers.length;
   if (totalContainers <= 0) {
     res.status(200).json(buildSecurityVulnerabilityOverviewResponse([], req.query, 0));
     return;
   }
-  const containers = context.getContainersFromStore({});
   res
     .status(200)
     .json(buildSecurityVulnerabilityOverviewResponse(containers, req.query, totalContainers));

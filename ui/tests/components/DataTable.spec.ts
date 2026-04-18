@@ -84,14 +84,14 @@ describe('DataTable', () => {
       expect(firstRowCells[1].text()).toBe('running');
     });
 
-    it('top-aligns row cells so compact multi-line content does not visually shift against icon columns', () => {
+    it('vertically centers row cells so multi-line content stays aligned with icons + actions', () => {
       const w = factory();
       const firstRowCells = w.findAll('tbody tr')[0].findAll('td');
 
-      expect(firstRowCells[0].classes()).toContain('align-top');
-      expect(firstRowCells[0].classes()).not.toContain('align-middle');
-      expect(firstRowCells[2].classes()).toContain('align-top');
-      expect(firstRowCells[2].classes()).not.toContain('align-middle');
+      expect(firstRowCells[0].classes()).toContain('align-middle');
+      expect(firstRowCells[0].classes()).not.toContain('align-top');
+      expect(firstRowCells[2].classes()).toContain('align-middle');
+      expect(firstRowCells[2].classes()).not.toContain('align-top');
     });
 
     it('uses striped backgrounds (alternating even/odd)', () => {

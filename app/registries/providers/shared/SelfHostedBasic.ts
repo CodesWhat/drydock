@@ -1,10 +1,16 @@
-import BaseRegistry from '../../BaseRegistry.js';
+import BaseRegistry, { type BaseRegistryConfiguration } from '../../BaseRegistry.js';
 import { getSelfHostedBasicConfigurationSchema } from './selfHostedBasicConfigurationSchema.js';
+
+export interface SelfHostedBasicConfiguration extends BaseRegistryConfiguration {
+  url?: string;
+}
 
 /**
  * Generic self-hosted Docker v2 registry with optional basic auth.
  */
-class SelfHostedBasic extends BaseRegistry {
+class SelfHostedBasic<
+  TConfiguration extends SelfHostedBasicConfiguration = SelfHostedBasicConfiguration,
+> extends BaseRegistry<TConfiguration> {
   getConfigurationSchema() {
     return getSelfHostedBasicConfigurationSchema(this.joi);
   }

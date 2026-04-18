@@ -3,7 +3,19 @@ import Trigger, { type TriggerConfiguration } from '../Trigger.js';
 
 type UserPasswordSaslMechanism = 'plain' | 'scram-sha-256' | 'scram-sha-512';
 type UserPasswordSaslOptions = Extract<SASLOptions, { username: string; password: string }>;
-type KafkaConfigurationWithLegacyAlias = TriggerConfiguration & {
+interface KafkaConfiguration extends TriggerConfiguration {
+  brokers: string;
+  topic: string;
+  clientid: string;
+  ssl: boolean;
+  authentication?: {
+    type: string;
+    user: string;
+    password: string;
+  };
+}
+
+type KafkaConfigurationWithLegacyAlias = KafkaConfiguration & {
   clientid?: string;
   clientId?: string;
 };
@@ -26,9 +38,9 @@ function toSaslMechanism(authType: string): UserPasswordSaslMechanism {
 }
 
 function normalizeLegacyConfiguration(
-  configuration: TriggerConfiguration,
+  configuration: KafkaConfiguration,
   warn: (message: string) => void,
-): TriggerConfiguration {
+): KafkaConfiguration {
   const configurationWithLegacyAlias = configuration as KafkaConfigurationWithLegacyAlias;
   if (configurationWithLegacyAlias.clientId === undefined) {
     return configuration;
@@ -55,11 +67,11 @@ function normalizeLegacyConfiguration(
 /**
  * Kafka Trigger implementation
  */
-class Kafka extends Trigger {
+class Kafka extends Trigger<KafkaConfiguration> {
   private kafka!: KafkaClient;
   private producer?: Producer;
 
-  validateConfiguration(configuration: TriggerConfiguration): TriggerConfiguration {
+  validateConfiguration(configuration: KafkaConfiguration): KafkaConfiguration {
     return super.validateConfiguration(
       normalizeLegacyConfiguration(configuration, (message) => this.log.warn(message)),
     );

@@ -1,22 +1,17 @@
 import axios from 'axios';
-import BaseRegistry from '../../BaseRegistry.js';
+import BaseRegistry, { type BaseRegistryConfiguration } from '../../BaseRegistry.js';
+
+interface GhcrRegistryConfiguration extends BaseRegistryConfiguration {
+  username?: string;
+  token?: string;
+}
 
 /**
  * Github Container Registry integration.
  */
-class Ghcr extends BaseRegistry {
+class Ghcr extends BaseRegistry<GhcrRegistryConfiguration> {
   protected getTrustedAuthHosts(): string[] {
     return ['ghcr.io'];
-  }
-
-  private getRejectedCredentialStatus(error) {
-    if (!(error instanceof Error)) {
-      return undefined;
-    }
-    const match = error.message.match(
-      /token request failed \(Request failed with status code (401|403)\)/,
-    );
-    return match ? match[1] : undefined;
   }
 
   private isNotFoundError(error) {
@@ -78,27 +73,15 @@ class Ghcr extends BaseRegistry {
         : undefined;
     const scope = encodeURIComponent(`repository:${image.name}:pull`);
     const authUrl = `https://ghcr.io/token?service=ghcr.io&scope=${scope}`;
-    const tokenExtractor = (response) => response.data.token || response.data.access_token;
-
-    try {
-      return await this.authenticateBearerFromAuthUrl(
-        requestOptions,
-        authUrl,
-        credentials,
-        tokenExtractor,
-      );
-    } catch (error) {
-      const rejectedStatus = this.getRejectedCredentialStatus(error);
-      if (!credentials || !rejectedStatus) {
-        throw error;
-      }
-
-      this.log.warn(
-        `GHCR credentials were rejected for registry ${this.getId()} (status ${rejectedStatus}); retrying token request without credentials for public image checks`,
-      );
-
-      return this.authenticateBearerFromAuthUrl(requestOptions, authUrl, undefined, tokenExtractor);
-    }
+    return this.authenticateBearerFromAuthUrlWithPublicFallback(
+      requestOptions,
+      authUrl,
+      credentials,
+      {
+        tokenExtractor: (response) => response.data.token || response.data.access_token,
+        providerLabel: 'GHCR',
+      },
+    );
   }
 
   async getImagePublishedAt(image, tag?: string): Promise<string | undefined> {

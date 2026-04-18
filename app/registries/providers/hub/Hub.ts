@@ -1,10 +1,7 @@
-import axios from 'axios';
+import axios, { type AxiosRequestConfig } from 'axios';
 import type { ContainerImage } from '../../../model/container.js';
-import { withAuthorizationHeader } from '../../../security/auth.js';
-import Custom from '../custom/Custom.js';
+import Custom, { type CustomRegistryConfiguration } from '../custom/Custom.js';
 import { getTokenAuthConfigurationSchema } from '../shared/tokenAuthConfigurationSchema.js';
-
-type AuthRequestOptions = Parameters<typeof withAuthorizationHeader>[0];
 
 interface HubTokenResponse {
   token?: unknown;
@@ -14,10 +11,18 @@ interface HubTagMetadataResponse {
   last_updated?: unknown;
 }
 
+interface HubRegistryConfiguration extends CustomRegistryConfiguration {
+  token?: string;
+}
+
 /**
  * Docker Hub integration.
  */
-class Hub extends Custom {
+class Hub extends Custom<HubRegistryConfiguration> {
+  protected getTrustedAuthHosts(): string[] {
+    return ['auth.docker.io'];
+  }
+
   init() {
     this.configuration.url = 'https://registry-1.docker.io';
     if (this.configuration.token) {
@@ -77,28 +82,18 @@ class Hub extends Custom {
    * @param requestOptions
    * @returns {Promise<*>}
    */
-  async authenticate(image: ContainerImage, requestOptions: AuthRequestOptions) {
+  async authenticate(image: ContainerImage, requestOptions: AxiosRequestConfig) {
     const scope = encodeURIComponent(`repository:${image.name}:pull`);
-    const axiosConfig = {
-      method: 'GET',
-      url: `https://auth.docker.io/token?service=registry.docker.io&scope=${scope}&grant_type=password`,
-      headers: {
-        Accept: 'application/json',
-      } as Record<string, string>,
-    };
-
-    // Add Authorization when credentials are available
     const credentials = this.getAuthCredentials();
-    if (credentials) {
-      axiosConfig.headers.Authorization = `Basic ${credentials}`;
-    }
-
-    const response = await axios<HubTokenResponse>(axiosConfig);
-    return withAuthorizationHeader(
+    return this.authenticateBearerFromAuthUrlWithPublicFallback(
       requestOptions,
-      'Bearer',
-      response.data.token,
-      `Unable to authenticate registry ${this.getId()}: Docker Hub token endpoint response does not contain token`,
+      `https://auth.docker.io/token?service=registry.docker.io&scope=${scope}&grant_type=password`,
+      credentials || undefined,
+      {
+        providerLabel: 'Docker Hub',
+        tokenFailureMessage: `Unable to authenticate registry ${this.getId()}: Docker Hub token endpoint response does not contain token`,
+        tokenExtractor: (response: { data?: HubTokenResponse }) => response.data?.token,
+      },
     );
   }
 

@@ -26,6 +26,7 @@ export interface WatchContainersBody {
 }
 
 export interface UpdateOperationStoreApi {
+  listActiveOperations?: () => unknown[];
   getOperationsByContainerName: (containerName: string) => unknown[];
   getInProgressOperationByContainerName: (containerName: string) => unknown | undefined;
   getInProgressOperationByContainerId: (containerId: string) => unknown | undefined;

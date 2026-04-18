@@ -1,11 +1,19 @@
 import axios from 'axios';
 import { withAuthorizationHeader } from '../../../security/auth.js';
-import BaseRegistry from '../../BaseRegistry.js';
+import BaseRegistry, { type BaseRegistryConfiguration } from '../../BaseRegistry.js';
+
+export interface GitlabRegistryConfiguration extends BaseRegistryConfiguration {
+  url?: string;
+  authurl?: string;
+  token?: string;
+}
 
 /**
  * Docker Gitlab integration.
  */
-class Gitlab extends BaseRegistry {
+class Gitlab<
+  TConfiguration extends GitlabRegistryConfiguration = GitlabRegistryConfiguration,
+> extends BaseRegistry<TConfiguration> {
   /**
    * Get the Gitlab configuration schema.
    * @returns {*}

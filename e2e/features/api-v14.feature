@@ -6,22 +6,27 @@ Feature: Drydock v1.4 API exposure
     And response header content-type should contain image/png
     And response header cache-control should contain immutable
 
+  # The E2E instance registers docker.local (AUTO=false) via
+  # scripts/start-drydock.sh, so lifecycle endpoints resolve a docker
+  # trigger and actually act on the container instead of returning the
+  # legacy "No docker trigger found" 404. The scenario now exercises the
+  # full stop → start → restart round-trip and expects success responses.
   Scenario: Drydock must allow container lifecycle actions
     Given I GET /api/containers
     And I store the index of container named hub_nginx_120 as containerIndex in scenario scope
     And I store the value of body path $.data[`containerIndex`].id as containerId in scenario scope
     When I POST to /api/containers/`containerId`/stop
-    Then response code should be 404
+    Then response code should be 200
     And response body should be valid json
-    And response body path $.error should be No docker trigger found for this container
+    And response body path $.message should be Container stopped successfully
     When I POST to /api/containers/`containerId`/start
-    Then response code should be 404
+    Then response code should be 200
     And response body should be valid json
-    And response body path $.error should be No docker trigger found for this container
+    And response body path $.message should be Container started successfully
     When I POST to /api/containers/`containerId`/restart
-    Then response code should be 404
+    Then response code should be 200
     And response body should be valid json
-    And response body path $.error should be No docker trigger found for this container
+    And response body path $.message should be Container restarted successfully
 
   Scenario: Drydock must persist settings through API
     When I GET /api/settings

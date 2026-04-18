@@ -814,12 +814,23 @@ export class AgentClient {
 
   async runRemoteTrigger(container: Container, triggerType: string, triggerName: string) {
     try {
+      // For update-trigger types (docker, dockercompose), the agent's handler
+      // only dereferences container.id (to look up its own stored container)
+      // and container.name (for the rollback-container guard). Sending the
+      // full Container object here has bloated past the agent's 256kb json
+      // body limit for common :latest containers with release notes + env +
+      // labels, causing HTTP 413. Post a minimal payload for update triggers;
+      // notification triggers still need the full container for template
+      // rendering. See #298.
+      const payload = REMOTE_UPDATE_TRIGGER_TYPES.has(triggerType)
+        ? { id: container.id, name: container.name }
+        : container;
       this.log.debug(
-        `Running remote trigger ${sanitizeLogParam(triggerType)}.${sanitizeLogParam(triggerName)} (container=${sanitizeLogParam(JSON.stringify(container), 500)})`,
+        `Running remote trigger ${sanitizeLogParam(triggerType)}.${sanitizeLogParam(triggerName)} (payload=${sanitizeLogParam(JSON.stringify(payload), 500)})`,
       );
       await axios.post(
         `${this.baseUrl}/api/triggers/${encodeURIComponent(triggerType)}/${encodeURIComponent(triggerName)}`,
-        container,
+        payload,
         this.axiosOptions,
       );
       if (REMOTE_UPDATE_TRIGGER_TYPES.has(triggerType)) {

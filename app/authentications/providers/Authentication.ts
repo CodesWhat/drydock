@@ -1,14 +1,16 @@
 import type { Strategy } from 'passport';
-import Component from '../../registry/Component.js';
+import Component, { type ComponentConfiguration } from '../../registry/Component.js';
 
 export interface StrategyDescription {
   type: string;
   name: string;
-  redirect?: string;
+  redirect?: string | boolean;
   logoutUrl?: string;
 }
 
-class Authentication extends Component {
+class Authentication<
+  TConfiguration extends ComponentConfiguration = ComponentConfiguration,
+> extends Component<TConfiguration> {
   /**
    * Init the Trigger.
    */

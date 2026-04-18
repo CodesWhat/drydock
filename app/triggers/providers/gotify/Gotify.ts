@@ -1,10 +1,16 @@
 import { GotifyClient } from 'gotify-client';
-import Trigger from '../Trigger.js';
+import Trigger, { type TriggerConfiguration } from '../Trigger.js';
+
+interface GotifyConfiguration extends TriggerConfiguration {
+  url: string;
+  token: string;
+  priority?: number;
+}
 
 /**
  * Gotify Trigger implementation
  */
-class Gotify extends Trigger {
+class Gotify extends Trigger<GotifyConfiguration> {
   private client!: GotifyClient;
 
   /**

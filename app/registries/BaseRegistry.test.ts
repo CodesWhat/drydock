@@ -420,6 +420,154 @@ test('authenticateBearerFromAuthUrl should throw when token is missing', async (
   ).rejects.toThrow('token endpoint response does not contain token');
 });
 
+test('authenticateBearerFromAuthUrlWithPublicFallback should retry without credentials and honor providerLabel', async () => {
+  const authenticateSpy = vi
+    .spyOn(baseRegistry as any, 'authenticateBearerFromAuthUrl')
+    .mockRejectedValueOnce(new Error('token request failed (Request failed with status code 401)'))
+    .mockResolvedValueOnce({
+      headers: {
+        Authorization: 'Bearer public-token',
+      },
+    });
+  const warnSpy = vi.spyOn(baseRegistry.log, 'warn').mockImplementation(() => undefined);
+
+  await expect(
+    (baseRegistry as any).authenticateBearerFromAuthUrlWithPublicFallback(
+      { headers: {}, url: 'https://registry.example.com/v2/library/nginx/manifests/latest' },
+      'https://registry.example.com/token',
+      'dXNlcjpwYXNz',
+      {
+        providerLabel: 'Docker Hub',
+      },
+    ),
+  ).resolves.toEqual({
+    headers: {
+      Authorization: 'Bearer public-token',
+    },
+  });
+
+  expect(authenticateSpy).toHaveBeenNthCalledWith(
+    1,
+    { headers: {}, url: 'https://registry.example.com/v2/library/nginx/manifests/latest' },
+    'https://registry.example.com/token',
+    'dXNlcjpwYXNz',
+    undefined,
+    undefined,
+  );
+  expect(authenticateSpy).toHaveBeenNthCalledWith(
+    2,
+    { headers: {}, url: 'https://registry.example.com/v2/library/nginx/manifests/latest' },
+    'https://registry.example.com/token',
+    undefined,
+    undefined,
+    undefined,
+  );
+  expect(warnSpy).toHaveBeenCalledWith(
+    expect.stringContaining('Docker Hub credentials were rejected for registry'),
+  );
+});
+
+test('authenticateBearerFromAuthUrlWithPublicFallback should rethrow non-Error failures', async () => {
+  const authenticateSpy = vi
+    .spyOn(baseRegistry as any, 'authenticateBearerFromAuthUrl')
+    .mockRejectedValueOnce('boom');
+
+  await expect(
+    (baseRegistry as any).authenticateBearerFromAuthUrlWithPublicFallback(
+      { headers: {}, url: 'https://registry.example.com/v2/library/nginx/manifests/latest' },
+      'https://registry.example.com/token',
+      'dXNlcjpwYXNz',
+    ),
+  ).rejects.toBe('boom');
+
+  expect(authenticateSpy).toHaveBeenCalledTimes(1);
+});
+
+test('authenticateBearerFromAuthUrlWithPublicFallback should rethrow when credentials are absent', async () => {
+  const error = new Error('token request failed (Request failed with status code 401)');
+  const authenticateSpy = vi
+    .spyOn(baseRegistry as any, 'authenticateBearerFromAuthUrl')
+    .mockRejectedValueOnce(error);
+  const warnSpy = vi.spyOn(baseRegistry.log, 'warn').mockImplementation(() => undefined);
+
+  await expect(
+    (baseRegistry as any).authenticateBearerFromAuthUrlWithPublicFallback(
+      { headers: {}, url: 'https://registry.example.com/v2/library/nginx/manifests/latest' },
+      'https://registry.example.com/token',
+      undefined,
+    ),
+  ).rejects.toBe(error);
+
+  expect(authenticateSpy).toHaveBeenCalledTimes(1);
+  expect(warnSpy).not.toHaveBeenCalled();
+});
+
+test('authenticateBearerFromAuthUrlWithPublicFallback should rethrow when the status is not treated as credential rejection', async () => {
+  const error = new Error('token request failed (Request failed with status code 429)');
+  const authenticateSpy = vi
+    .spyOn(baseRegistry as any, 'authenticateBearerFromAuthUrl')
+    .mockRejectedValueOnce(error);
+  const warnSpy = vi.spyOn(baseRegistry.log, 'warn').mockImplementation(() => undefined);
+
+  await expect(
+    (baseRegistry as any).authenticateBearerFromAuthUrlWithPublicFallback(
+      { headers: {}, url: 'https://registry.example.com/v2/library/nginx/manifests/latest' },
+      'https://registry.example.com/token',
+      'dXNlcjpwYXNz',
+    ),
+  ).rejects.toBe(error);
+
+  expect(authenticateSpy).toHaveBeenCalledTimes(1);
+  expect(warnSpy).not.toHaveBeenCalled();
+});
+
+test('authenticateBearerFromAuthUrlWithPublicFallback should rethrow when rejected credential statuses are disabled', async () => {
+  const error = new Error('token request failed (Request failed with status code 403)');
+  vi.spyOn(baseRegistry as any, 'authenticateBearerFromAuthUrl').mockRejectedValueOnce(error);
+
+  await expect(
+    (baseRegistry as any).authenticateBearerFromAuthUrlWithPublicFallback(
+      { headers: {}, url: 'https://registry.example.com/v2/library/nginx/manifests/latest' },
+      'https://registry.example.com/token',
+      'dXNlcjpwYXNz',
+      {
+        rejectedCredentialStatuses: [],
+      },
+    ),
+  ).rejects.toBe(error);
+});
+
+test('authenticateBearerFromAuthUrlWithPublicFallback should default providerLabel to registry id', async () => {
+  baseRegistry.type = 'registry';
+  baseRegistry.name = 'base';
+  const authenticateSpy = vi
+    .spyOn(baseRegistry as any, 'authenticateBearerFromAuthUrl')
+    .mockRejectedValueOnce(new Error('token request failed (Request failed with status code 403)'))
+    .mockResolvedValueOnce({
+      headers: {
+        Authorization: 'Bearer public-token',
+      },
+    });
+  const warnSpy = vi.spyOn(baseRegistry.log, 'warn').mockImplementation(() => undefined);
+
+  await expect(
+    (baseRegistry as any).authenticateBearerFromAuthUrlWithPublicFallback(
+      { headers: {}, url: 'https://registry.example.com/v2/library/nginx/manifests/latest' },
+      'https://registry.example.com/token',
+      'dXNlcjpwYXNz',
+    ),
+  ).resolves.toEqual({
+    headers: {
+      Authorization: 'Bearer public-token',
+    },
+  });
+
+  expect(authenticateSpy).toHaveBeenCalledTimes(2);
+  expect(warnSpy).toHaveBeenCalledWith(
+    'registry.base credentials were rejected for registry registry.base (status 403); retrying token request without credentials for public image checks',
+  );
+});
+
 test('authenticateBearerFromAuthUrl should set bearer token using custom tokenExtractor', async () => {
   const { default: axios } = await import('axios');
   axios.mockResolvedValue({ data: { access_token: 'custom-token-123' } });
@@ -998,6 +1146,7 @@ test('getImageManifestDigest should fall back to original image when normalizeIm
   const normalizeImageSpy = vi.spyOn(baseRegistry, 'normalizeImage').mockImplementation(() => {
     throw new Error('normalize failed');
   });
+  const warnSpy = vi.spyOn(baseRegistry.log, 'warn').mockImplementation(() => undefined);
 
   baseRegistry.startDigestCachePollCycle();
   const image = {
@@ -1011,6 +1160,11 @@ test('getImageManifestDigest should fall back to original image when normalizeIm
   await baseRegistry.getImageManifestDigest(image);
 
   expect(superGetImageManifestDigestSpy).toHaveBeenCalledTimes(1);
+  expect(warnSpy).toHaveBeenCalledWith(
+    expect.stringContaining(
+      'Unable to normalize image metadata for digest cache key generation: docker.io/library/postgres:16 (normalize failed)',
+    ),
+  );
   normalizeImageSpy.mockRestore();
 });
 
@@ -1033,6 +1187,34 @@ test('getImageManifestDigest should build cache key with defensive defaults for 
   await baseRegistry.getImageManifestDigest(image);
 
   expect(superGetImageManifestDigestSpy).toHaveBeenCalledTimes(1);
+});
+
+test('getDigestCacheImageLabel should use defensive defaults and digest precedence', () => {
+  const getDigestCacheImageLabel = (
+    baseRegistry as unknown as {
+      getDigestCacheImageLabel: (image: unknown, digest?: string) => string;
+    }
+  ).getDigestCacheImageLabel.bind(baseRegistry);
+
+  expect(getDigestCacheImageLabel({})).toBe('unknown-registry/unknown-image:latest');
+  expect(
+    getDigestCacheImageLabel({
+      registry: { url: 'docker.io' },
+      name: 'library/nginx',
+      digest: { value: 'sha256:cached' },
+    }),
+  ).toBe('docker.io/library/nginx:sha256:cached');
+  expect(
+    getDigestCacheImageLabel(
+      {
+        registry: { url: 'docker.io' },
+        name: 'library/nginx',
+        tag: { value: 'stable' },
+        digest: { value: 'sha256:cached' },
+      },
+      'sha256:explicit',
+    ),
+  ).toBe('docker.io/library/nginx:sha256:explicit');
 });
 
 test('getImageManifestDigest should include variant and explicit digest in cache keys', async () => {

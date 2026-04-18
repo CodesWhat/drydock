@@ -11,12 +11,18 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 
 import { updateComposeServiceImageInText } from '../dockercompose/ComposeFileParser.js';
+import {
+  type DockerApiBindMountInspector,
+  getSelfContainerBindMounts,
+  mapComposePathToContainerBindMount,
+} from '../dockercompose/ComposePathBindMounts.js';
 
 const COMPOSE_PROJECT_CONFIG_FILES_LABEL = 'com.docker.compose.project.config_files';
 const COMPOSE_PROJECT_WORKING_DIR_LABEL = 'com.docker.compose.project.working_dir';
 const COMPOSE_SERVICE_LABEL = 'com.docker.compose.service';
 
 interface ComposeFileSyncOptions {
+  dockerApi?: DockerApiBindMountInspector;
   labels: Record<string, string> | undefined;
   newImage: string;
   logContainer: {
@@ -24,20 +30,40 @@ interface ComposeFileSyncOptions {
     warn: (message: string) => void;
     debug: (message: string) => void;
   };
+  selfContainerIdentifier?: string;
 }
 
-function resolveComposeFilePath(
+async function resolveComposeFilePath(
   configFilesLabel: string,
   workingDirLabel: string | undefined,
-): string {
+  options: Pick<ComposeFileSyncOptions, 'dockerApi' | 'logContainer' | 'selfContainerIdentifier'>,
+): Promise<string> {
   const firstFile = configFilesLabel.split(',')[0].trim();
   if (!firstFile) {
     return '';
   }
-  if (workingDirLabel && !path.isAbsolute(firstFile)) {
-    return path.resolve(workingDirLabel, firstFile);
+  const resolvedComposeFilePath =
+    workingDirLabel && !path.isAbsolute(firstFile)
+      ? path.resolve(workingDirLabel, firstFile)
+      : firstFile;
+
+  if (!path.isAbsolute(resolvedComposeFilePath) || !options.dockerApi) {
+    return resolvedComposeFilePath;
   }
-  return firstFile;
+
+  try {
+    const bindMounts = await getSelfContainerBindMounts(
+      options.dockerApi,
+      options.selfContainerIdentifier,
+    );
+    return mapComposePathToContainerBindMount(resolvedComposeFilePath, bindMounts);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    options.logContainer.debug(
+      `Unable to inspect bind mounts for compose file sync path remapping (${message})`,
+    );
+    return resolvedComposeFilePath;
+  }
 }
 
 async function writeComposeFileAtomic(
@@ -92,7 +118,7 @@ export async function syncComposeFileTag(options: ComposeFileSyncOptions): Promi
   }
 
   const workingDir = labels[COMPOSE_PROJECT_WORKING_DIR_LABEL];
-  const composeFilePath = resolveComposeFilePath(configFilesLabel, workingDir);
+  const composeFilePath = await resolveComposeFilePath(configFilesLabel, workingDir, options);
 
   if (!composeFilePath) {
     return false;

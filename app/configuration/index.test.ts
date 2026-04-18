@@ -449,6 +449,17 @@ test('getServerName should prefer detected server name when DD_SERVER_NAME is no
   expect(configuration.getServerName()).toBe('datavault');
 });
 
+test('getDetectedServerName should reflect the last setDetectedServerName value', () => {
+  configuration.setDetectedServerName(undefined);
+  expect(configuration.getDetectedServerName()).toBeUndefined();
+
+  configuration.setDetectedServerName('datavault');
+  expect(configuration.getDetectedServerName()).toBe('datavault');
+
+  configuration.setDetectedServerName('   ');
+  expect(configuration.getDetectedServerName()).toBeUndefined();
+});
+
 test('getServerConfiguration should allow enabling identity-aware rate-limit keys', async () => {
   configuration.ddEnvVars.DD_SERVER_RATELIMIT_IDENTITYKEYING = 'true';
   const config = configuration.getServerConfiguration();
@@ -1005,6 +1016,13 @@ describe('getServerConfiguration errors', () => {
     configuration.ddEnvVars.DD_SERVER_METRICS_TOKEN = 'short-token';
     expect(() => configuration.getServerConfiguration()).toThrow();
     delete configuration.ddEnvVars.DD_SERVER_METRICS_TOKEN;
+  });
+
+  test('should throw when CORS is enabled without DD_SERVER_CORS_ORIGIN', () => {
+    configuration.ddEnvVars.DD_SERVER_CORS_ENABLED = 'true';
+    delete configuration.ddEnvVars.DD_SERVER_CORS_ORIGIN;
+    expect(() => configuration.getServerConfiguration()).toThrow();
+    delete configuration.ddEnvVars.DD_SERVER_CORS_ENABLED;
   });
 
   test('should fallback to defaults when nested server config is null', () => {

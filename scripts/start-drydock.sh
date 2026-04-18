@@ -53,6 +53,7 @@ DOCKER_ARGS=(
 	--name drydock
 	--publish "${DD_E2E_PORT}:3000"
 	--volume /var/run/docker.sock:/var/run/docker.sock
+	--env DD_TRIGGER_DOCKER_LOCAL_AUTO=false
 	--env DD_TRIGGER_MOCK_EXAMPLE_MOCK=mock
 	--env DD_WATCHER_LOCAL_WATCHBYDEFAULT=false
 )

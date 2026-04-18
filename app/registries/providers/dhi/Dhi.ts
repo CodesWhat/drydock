@@ -1,12 +1,16 @@
 import axios from 'axios';
 import { withAuthorizationHeader } from '../../../security/auth.js';
-import Custom from '../custom/Custom.js';
+import Custom, { type CustomRegistryConfiguration } from '../custom/Custom.js';
 import { getTokenAuthConfigurationSchema } from '../shared/tokenAuthConfigurationSchema.js';
+
+interface DhiRegistryConfiguration extends CustomRegistryConfiguration {
+  token?: string;
+}
 
 /**
  * Docker Hardened Images registry integration.
  */
-class Dhi extends Custom {
+class Dhi extends Custom<DhiRegistryConfiguration> {
   init() {
     this.configuration.url = 'https://dhi.io';
     if (this.configuration.token) {

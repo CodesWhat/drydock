@@ -622,7 +622,12 @@ test('registerWatchers should register all watchers', async () => {
     },
   };
   await registry.testable_registerWatchers();
-  expect(Object.keys(registry.getState().watcher)).toEqual(['docker.watcher1', 'docker.watcher2']);
+  // Registration is parallel (Promise.all), so the state key order is not
+  // guaranteed — just assert that both names are registered.
+  expect(Object.keys(registry.getState().watcher).sort()).toEqual([
+    'docker.watcher1',
+    'docker.watcher2',
+  ]);
 });
 
 test('registerWatchers should keep remote watcher registered when auth configuration is incomplete', async () => {

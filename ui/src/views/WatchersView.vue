@@ -224,7 +224,9 @@ onMounted(async () => {
         <span class="dd-text-secondary">{{ row.containers }}</span>
       </template>
       <template #cell-cron="{ row }">
-        <span class="font-mono text-2xs dd-text-secondary">{{ row.cron }}</span>
+        <span class="block max-w-[180px] truncate font-mono text-2xs dd-text-secondary" v-tooltip.top="row.cron">
+          {{ row.cron }}
+        </span>
       </template>
       <template #cell-nextRun="{ row }">
         <span class="dd-text-secondary">{{ row.nextRun }}</span>
@@ -248,7 +250,9 @@ onMounted(async () => {
             <StatusDot :color="watcherStatusColor(watcher.status)" size="lg" class="mt-1" v-tooltip.top="watcher.status === 'watching' ? 'Watching' : 'Paused'" />
             <div class="min-w-0">
               <div class="text-sm-plus font-semibold truncate dd-text">{{ watcher.name }}</div>
-              <div class="text-2xs-plus truncate mt-0.5 dd-text-muted font-mono">{{ watcher.cron }}</div>
+              <div class="text-2xs-plus truncate mt-0.5 dd-text-muted font-mono max-w-[180px]" v-tooltip.top="watcher.cron">
+                {{ watcher.cron }}
+              </div>
             </div>
           </div>
           <AppIcon :name="watcher.status === 'watching' ? 'watchers' : 'pause'" :size="13" class="shrink-0 ml-2 md:!hidden"

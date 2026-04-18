@@ -233,11 +233,8 @@ function tableRowClass(row: Record<string, unknown>) {
   if (!isContainerTableRow(typedRow)) {
     return '';
   }
-  const group = getGroupByKey(typedRow.__groupKey);
-  return isContainerUpdating(typedRow) ||
-    isContainerQueued(typedRow) ||
-    (group ? isGroupUpdateInProgress(group) : false)
-    ? 'opacity-50 pointer-events-none transition-opacity duration-300'
+  return isContainerUpdating(typedRow) || isContainerQueued(typedRow)
+    ? 'dd-row-updating pointer-events-none'
     : '';
 }
 
@@ -279,7 +276,7 @@ watchEffect(() => {
         :sort-asc="containerSortAsc"
         :selected-key="selectedContainerKey"
         :show-actions="true"
-        :virtual-scroll="true"
+        :virtual-scroll="false"
         :full-width-row="isTableRowFullWidth"
         :row-interactive="isTableRowInteractive"
         :row-class="tableRowClass"
@@ -305,14 +302,32 @@ watchEffect(() => {
         </template>
         <!-- Container icon (own column) -->
         <template #cell-icon="{ row: c }">
-          <AppIcon v-if="isContainerUpdating(c)" name="spinner" :size="14" class="dd-spin dd-text-muted" v-tooltip.top="tt(getContainerStatusLabel(c))" />
-          <AppIcon v-else-if="isContainerQueued(c)" name="clock" :size="14" class="dd-text-muted" v-tooltip.top="tt(getContainerStatusLabel(c))" />
-          <ContainerIcon v-else :icon="c.icon" :size="20" />
+          <div
+            v-if="isContainerUpdating(c) || isContainerQueued(c)"
+            class="dd-row-overlay absolute inset-0 flex items-center justify-center pointer-events-none z-10"
+          >
+            <div
+              class="flex items-center gap-2 px-4 py-1.5 dd-rounded text-2xs-plus font-bold uppercase tracking-wider shadow-lg"
+              :style="{
+                backgroundColor: 'var(--dd-bg-elevated)',
+                border: '1px solid var(--dd-border)',
+                color: 'var(--dd-text)',
+              }"
+            >
+              <AppIcon
+                :name="isContainerQueued(c) && !isContainerUpdating(c) ? 'clock' : 'spinner'"
+                :size="14"
+                :class="isContainerQueued(c) && !isContainerUpdating(c) ? '' : 'dd-spin'"
+              />
+              <span>{{ isContainerQueued(c) && !isContainerUpdating(c) ? 'Queued' : 'Updating' }}</span>
+            </div>
+          </div>
+          <ContainerIcon :icon="c.icon" :size="32" />
         </template>
 
         <!-- Container name + image (+ compact actions & badges) -->
         <template #cell-name="{ row: c }">
-          <div class="min-w-0" :class="{ 'opacity-50': isContainerUpdating(c) || isContainerQueued(c) }">
+          <div class="min-w-0">
               <div class="flex items-center gap-2">
                 <div class="font-medium truncate dd-text flex-1">{{ c.name }}</div>
               </div>
@@ -459,12 +474,9 @@ watchEffect(() => {
         <!-- Status -->
         <template #cell-status="{ row: c }">
           <AppIcon :name="getContainerStatusIcon(c)" :size="13" class="shrink-0 md:!hidden"
-                   :class="isContainerUpdating(c) ? 'dd-spin' : ''"
                    :style="getContainerStatusIconStyle(c)"
                    v-tooltip.top="tt(getContainerStatusLabel(c))" />
           <AppBadge class="max-md:!hidden" size="xs" :tone="getContainerStatusTone(c)">
-            <AppIcon v-if="isContainerUpdating(c)" name="spinner" :size="12" class="mr-1 dd-spin" />
-            <AppIcon v-else-if="isContainerQueued(c)" name="clock" :size="12" class="mr-1" />
             {{ getContainerStatusLabel(c) }}
           </AppBadge>
         </template>
@@ -478,15 +490,27 @@ watchEffect(() => {
         </template>
         <!-- Server -->
         <template #cell-server="{ row: c }">
-          <AppBadge size="xs" :custom="{ bg: serverBadgeColor(c.server).bg, text: serverBadgeColor(c.server).text }">
-            {{ c.server }}
+          <AppBadge
+            size="xs"
+            :custom="{ bg: serverBadgeColor(c.server).bg, text: serverBadgeColor(c.server).text }"
+            v-tooltip.top="tt(c.server)"
+          >
+            <span class="block max-w-[140px] truncate">
+              {{ c.server }}
+            </span>
           </AppBadge>
         </template>
         <!-- Registry badge -->
         <template #cell-registry="{ row: c }">
           <div class="inline-flex items-center justify-center gap-1.5">
-            <AppBadge size="xs" :custom="{ bg: registryColorBg(c.registry), text: registryColorText(c.registry) }">
-              {{ registryLabel(c.registry, c.registryUrl, c.registryName) }}
+            <AppBadge
+              size="xs"
+              :custom="{ bg: registryColorBg(c.registry), text: registryColorText(c.registry) }"
+              v-tooltip.top="tt(registryLabel(c.registry, c.registryUrl, c.registryName))"
+            >
+              <span class="block max-w-[140px] truncate">
+                {{ registryLabel(c.registry, c.registryUrl, c.registryName) }}
+              </span>
             </AppBadge>
             <span v-if="hasRegistryError(c)"
                   class="inline-flex items-center justify-center"
@@ -624,7 +648,7 @@ watchEffect(() => {
         <template #card="{ item: c }">
           <div
             class="flex flex-col flex-1 transition-opacity"
-            :class="{ 'opacity-30': isContainerUpdating(c) || isContainerQueued(c) || isGroupUpdateInProgress(group) }"
+            :class="{ 'opacity-30': isContainerUpdating(c) || isContainerQueued(c) }"
           >
           <!-- Card header -->
           <div class="px-4 pt-4 pb-2 flex items-start justify-between">
@@ -640,8 +664,14 @@ watchEffect(() => {
               </div>
             </div>
             <div class="flex items-center gap-1.5 shrink-0 ml-2">
-              <AppBadge size="xs" :custom="{ bg: registryColorBg(c.registry), text: registryColorText(c.registry) }">
-                {{ registryLabel(c.registry, c.registryUrl, c.registryName) }}
+              <AppBadge
+                size="xs"
+                :custom="{ bg: registryColorBg(c.registry), text: registryColorText(c.registry) }"
+                v-tooltip.top="tt(registryLabel(c.registry, c.registryUrl, c.registryName))"
+              >
+                <span class="block max-w-[140px] truncate">
+                  {{ registryLabel(c.registry, c.registryUrl, c.registryName) }}
+                </span>
               </AppBadge>
               <span v-if="hasRegistryError(c)"
                     class="inline-flex items-center justify-center"
@@ -784,7 +814,7 @@ watchEffect(() => {
           </div>
           </div>
           <div
-            v-if="isContainerUpdating(c) || isContainerQueued(c) || isGroupUpdateInProgress(group)"
+            v-if="isContainerUpdating(c) || isContainerQueued(c)"
             class="absolute inset-0 flex items-center justify-center pointer-events-none z-10"
           >
             <div
@@ -897,8 +927,15 @@ watchEffect(() => {
             </AppBadge>
             <!-- Server: icon on mobile, badge on desktop -->
             <AppIcon :name="parseServer(c.server).name === 'Local' ? 'home' : 'remote'" :size="12" class="shrink-0 dd-text-muted md:!hidden" v-tooltip.top="tt(parseServer(c.server).name)" />
-            <AppBadge class="max-md:!hidden" size="xs" :custom="{ bg: serverBadgeColor(c.server).bg, text: serverBadgeColor(c.server).text }">
-              {{ parseServer(c.server).name }}
+            <AppBadge
+              class="max-md:!hidden"
+              size="xs"
+              :custom="{ bg: serverBadgeColor(c.server).bg, text: serverBadgeColor(c.server).text }"
+              v-tooltip.top="tt(parseServer(c.server).name)"
+            >
+              <span class="block max-w-[140px] truncate">
+                {{ parseServer(c.server).name }}
+              </span>
             </AppBadge>
           </div>
         </template>

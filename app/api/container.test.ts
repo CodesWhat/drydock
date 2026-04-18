@@ -61,6 +61,7 @@ vi.mock('../store/audit', () => ({
 }));
 
 vi.mock('../store/update-operation', () => ({
+  listActiveOperations: vi.fn(() => []),
   getOperationsByContainerName: (...args: unknown[]) => mockGetOperationsByContainerName(...args),
   getOperationById: vi.fn(() => undefined),
   getInProgressOperationByContainerName: vi.fn(() => undefined),

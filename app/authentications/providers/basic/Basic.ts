@@ -8,6 +8,11 @@ import {
 import Authentication from '../Authentication.js';
 import BasicStrategy from './BasicStrategy.js';
 
+interface BasicConfiguration {
+  user: string;
+  hash: string;
+}
+
 const require = createRequire(import.meta.url);
 const apacheMd5 = require('apache-md5') as (password: string, salt: string) => string;
 const unixCrypt = require('unix-crypt-td-js') as (password: string, salt: string) => string;
@@ -496,7 +501,7 @@ function getElapsedSeconds(startedAt: bigint): number {
  * Basic authentication backed by argon2id password hashes.
  * Legacy v1.3.9 hash formats are accepted with deprecation warnings.
  */
-class Basic extends Authentication {
+class Basic extends Authentication<BasicConfiguration> {
   /**
    * Get the Trigger configuration schema.
    * @returns {*}

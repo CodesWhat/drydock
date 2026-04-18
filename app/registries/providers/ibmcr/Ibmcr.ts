@@ -1,9 +1,13 @@
-import BaseRegistry from '../../BaseRegistry.js';
+import BaseRegistry, { type BaseRegistryConfiguration } from '../../BaseRegistry.js';
+
+interface IbmcrRegistryConfiguration extends BaseRegistryConfiguration {
+  apikey?: string;
+}
 
 /**
  * IBM Cloud Container Registry integration.
  */
-class Ibmcr extends BaseRegistry {
+class Ibmcr extends BaseRegistry<IbmcrRegistryConfiguration> {
   getConfigurationSchema() {
     const authSchema = this.joi
       .alternatives()

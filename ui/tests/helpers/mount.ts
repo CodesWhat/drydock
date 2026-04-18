@@ -6,6 +6,7 @@
  */
 import { type ComponentMountingOptions, mount as vtuMount } from '@vue/test-utils';
 import { type Component, defineComponent, h } from 'vue';
+import { tooltip as tooltipDirective } from '@/directives/tooltip';
 
 /** Stub router for provide injection. */
 const routerStub = {
@@ -28,7 +29,7 @@ export function mountWithPlugins<T extends Component>(
   options: ComponentMountingOptions<T> = {},
 ) {
   const { global: globalOpts = {}, ...rest } = options as any;
-  const { plugins = [], provide = {}, stubs = {}, ...globalRest } = globalOpts;
+  const { plugins = [], provide = {}, stubs = {}, directives = {}, ...globalRest } = globalOpts;
 
   return vtuMount(component, {
     ...rest,
@@ -52,6 +53,10 @@ export function mountWithPlugins<T extends Component>(
           template: '<span class="container-icon-stub" :data-icon="icon" />',
         }),
         ...stubs,
+      },
+      directives: {
+        tooltip: tooltipDirective,
+        ...directives,
       },
       ...globalRest,
     },

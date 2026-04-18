@@ -301,7 +301,11 @@ describe('Auth Service', () => {
   describe('getOidcRedirection', () => {
     it('returns oidc redirection payload', async () => {
       const { getOidcRedirection } = await loadAuthService();
-      const mockRedirection = { url: 'https://idp.example.com/authorize?code=abc' };
+      const mockRedirection = {
+        redirect: 'https://idp.example.com/authorize?code=abc',
+        strictEndpoints: ['https://idp.example.com/authorize'],
+        allowedOrigins: ['https://idp.example.com'],
+      };
       fetchMock.mockResolvedValueOnce({
         ok: true,
         json: async () => mockRedirection,

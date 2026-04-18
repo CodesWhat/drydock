@@ -1227,6 +1227,50 @@ describe('Update Operation Store', () => {
     expect(fresh.getActiveOperationByContainerName('web')).toBeUndefined();
   });
 
+  test('listActiveOperations returns an empty list when uninitialized', async () => {
+    vi.resetModules();
+    const fresh = await import('./update-operation.js');
+    expect(fresh.listActiveOperations()).toEqual([]);
+  });
+
+  test('listActiveOperations returns active operations sorted by latest update time', () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-02-23T00:00:00.000Z'));
+      updateOperation.insertOperation({
+        id: 'queued-op',
+        containerName: 'web',
+        status: 'queued',
+        phase: 'queued',
+        updatedAt: '2026-02-23T00:00:00.000Z',
+      });
+
+      vi.setSystemTime(new Date('2026-02-23T00:01:00.000Z'));
+      updateOperation.insertOperation({
+        id: 'progress-op',
+        containerName: 'api',
+        status: 'in-progress',
+        phase: 'pulling',
+        updatedAt: '2026-02-23T00:01:00.000Z',
+      });
+
+      updateOperation.insertOperation({
+        id: 'failed-op',
+        containerName: 'worker',
+        status: 'failed',
+        phase: 'failed',
+        updatedAt: '2026-02-23T00:02:00.000Z',
+      });
+
+      expect(updateOperation.listActiveOperations().map((operation) => operation.id)).toEqual([
+        'progress-op',
+        'queued-op',
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test('getActiveOperationByContainerName should handle a terminal replacement returned from storage', async () => {
     vi.resetModules();
     const previousActiveTtlMs = process.env.DD_UPDATE_OPERATION_ACTIVE_TTL_MS;

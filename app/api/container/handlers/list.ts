@@ -39,28 +39,77 @@ function parsePositiveInteger(value: unknown): number | undefined {
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : undefined;
 }
 
+function createProjectionView<T extends object>(
+  target: T,
+  overrides: ReadonlyArray<readonly [string | symbol, unknown]>,
+): T {
+  const overrideMap = new Map<string | symbol, unknown>(overrides);
+
+  return new Proxy(target, {
+    get(viewTarget, property, receiver) {
+      if (overrideMap.has(property)) {
+        return overrideMap.get(property);
+      }
+
+      return Reflect.get(viewTarget, property, receiver);
+    },
+    has(viewTarget, property) {
+      return overrideMap.has(property) || Reflect.has(viewTarget, property);
+    },
+    ownKeys(viewTarget) {
+      const keys = new Set(Reflect.ownKeys(viewTarget));
+      for (const key of overrideMap.keys()) {
+        keys.add(key);
+      }
+
+      return Array.from(keys);
+    },
+    getOwnPropertyDescriptor(viewTarget, property) {
+      if (!overrideMap.has(property)) {
+        return Reflect.getOwnPropertyDescriptor(viewTarget, property);
+      }
+
+      const descriptor = Reflect.getOwnPropertyDescriptor(viewTarget, property);
+      const overrideValue = overrideMap.get(property);
+      const writable =
+        descriptor &&
+        'writable' in descriptor &&
+        (!descriptor.configurable || descriptor.writable || descriptor.value === overrideValue)
+          ? descriptor.writable
+          : true;
+      return {
+        configurable: descriptor?.configurable ?? true,
+        enumerable: descriptor?.enumerable ?? true,
+        writable,
+        value: overrideValue,
+      };
+    },
+  });
+}
+
+function stripScanVulnerabilityArray<T extends object>(scan: T): T {
+  return createProjectionView(scan, [['vulnerabilities', []]]);
+}
+
 function stripContainerVulnerabilityArrays(container: Container): Container {
   if (!container.security) {
     return container;
   }
-  return {
-    ...container,
-    security: {
-      ...container.security,
-      scan: container.security.scan
-        ? {
-            ...container.security.scan,
-            vulnerabilities: [],
-          }
-        : container.security.scan,
-      updateScan: container.security.updateScan
-        ? {
-            ...container.security.updateScan,
-            vulnerabilities: [],
-          }
-        : container.security.updateScan,
-    },
-  };
+
+  const projectedSecurity = createProjectionView(container.security, [
+    [
+      'scan',
+      container.security.scan ? stripScanVulnerabilityArray(container.security.scan) : undefined,
+    ],
+    [
+      'updateScan',
+      container.security.updateScan
+        ? stripScanVulnerabilityArray(container.security.updateScan)
+        : undefined,
+    ],
+  ]);
+
+  return createProjectionView(container, [['security', projectedSecurity]]);
 }
 
 function sanitizeActiveUpdateOperation(
@@ -127,10 +176,94 @@ export function attachInProgressUpdateOperation(
     return container;
   }
 
+  return createProjectionView(container, [['updateOperation', operation]]);
+}
+
+interface PreloadedActiveOperationLookup {
+  byContainerId: Map<string, ContainerUpdateOperationState>;
+  byLegacyContainerName: Map<string, ContainerUpdateOperationState>;
+}
+
+function getOperationUpdatedAtTimestamp(operation: ContainerUpdateOperationState): number {
+  const timestamp = Date.parse(operation.updatedAt);
+  return Number.isNaN(timestamp) ? 0 : timestamp;
+}
+
+function setLatestOperationLookupEntry(
+  map: Map<string, ContainerUpdateOperationState>,
+  key: string,
+  operation: ContainerUpdateOperationState,
+): void {
+  const existing = map.get(key);
+  if (
+    !existing ||
+    getOperationUpdatedAtTimestamp(operation) >= getOperationUpdatedAtTimestamp(existing)
+  ) {
+    map.set(key, operation);
+  }
+}
+
+// Returns undefined when there is nothing to preload. The caller treats that
+// as a signal to use the per-row attachInProgressUpdateOperation path — which
+// performs its own empty-store check and returns the container unmodified. The
+// preload-vs-per-row branch is a perf optimisation for the common case where
+// active operations exist; undefined keeps the rare empty-store path on the
+// known-good fallback instead of adding another empty-map short-circuit.
+function buildPreloadedActiveOperationLookup(
+  operations: unknown[],
+): PreloadedActiveOperationLookup | undefined {
+  if (!Array.isArray(operations) || operations.length === 0) {
+    return undefined;
+  }
+
+  const byContainerId = new Map<string, ContainerUpdateOperationState>();
+  const byLegacyContainerName = new Map<string, ContainerUpdateOperationState>();
+
+  for (const candidate of operations) {
+    const operation = sanitizeActiveUpdateOperation(candidate);
+    if (!operation || !candidate || typeof candidate !== 'object') {
+      continue;
+    }
+
+    const record = candidate as Record<string, unknown>;
+    const containerId = typeof record.containerId === 'string' ? record.containerId.trim() : '';
+    const newContainerId =
+      typeof record.newContainerId === 'string' ? record.newContainerId.trim() : '';
+    const containerName =
+      typeof record.containerName === 'string' ? record.containerName.trim() : '';
+
+    if (containerId) {
+      setLatestOperationLookupEntry(byContainerId, containerId, operation);
+    }
+    if (newContainerId) {
+      setLatestOperationLookupEntry(byContainerId, newContainerId, operation);
+    }
+    if (!containerId && !newContainerId && containerName) {
+      setLatestOperationLookupEntry(byLegacyContainerName, containerName, operation);
+    }
+  }
+
+  if (byContainerId.size === 0 && byLegacyContainerName.size === 0) {
+    return undefined;
+  }
+
   return {
-    ...container,
-    updateOperation: operation,
+    byContainerId,
+    byLegacyContainerName,
   };
+}
+
+function attachPreloadedActiveUpdateOperation(
+  lookup: PreloadedActiveOperationLookup,
+  container: Container,
+): Container {
+  const operation =
+    lookup.byContainerId.get(container.id) ?? lookup.byLegacyContainerName.get(container.name);
+  if (!operation) {
+    return container;
+  }
+
+  return createProjectionView(container, [['updateOperation', operation]]);
 }
 
 export function buildContainerListResponse(
@@ -206,8 +339,13 @@ export function buildContainerListResponse(
   const strippedContainers = includeVulnerabilities
     ? redactedContainers
     : redactedContainers.map((container) => stripContainerVulnerabilityArrays(container));
+  const preloadedActiveOperationLookup = buildPreloadedActiveOperationLookup(
+    context.updateOperationStore.listActiveOperations?.() ?? [],
+  );
   const data = strippedContainers.map((container) =>
-    attachInProgressUpdateOperation(context, container),
+    preloadedActiveOperationLookup
+      ? attachPreloadedActiveUpdateOperation(preloadedActiveOperationLookup, container)
+      : attachInProgressUpdateOperation(context, container),
   );
   const hasMore = pagination.limit > 0 && pagination.offset + data.length < total;
   const links = buildPaginationLinks({

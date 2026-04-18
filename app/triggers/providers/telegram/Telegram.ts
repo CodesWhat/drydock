@@ -1,6 +1,12 @@
 import axios from 'axios';
 import { getOutboundHttpTimeoutMs } from '../../../configuration/runtime-defaults.js';
-import Trigger from '../Trigger.js';
+import Trigger, { type TriggerConfiguration } from '../Trigger.js';
+
+interface TelegramConfiguration extends TriggerConfiguration {
+  bottoken: string;
+  chatid: string;
+  messageformat: 'Markdown' | 'HTML';
+}
 
 /**
  * Escape special characters.
@@ -28,7 +34,7 @@ function escapeHtml(text) {
 /**
  * Telegram Trigger implementation
  */
-class Telegram extends Trigger {
+class Telegram extends Trigger<TelegramConfiguration> {
   private apiUrl: string;
 
   /**

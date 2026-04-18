@@ -146,7 +146,10 @@ function getStatusTone(container: { id?: unknown; name?: unknown; status?: strin
         </div>
       </template>
       <template #subtitle>
-        <span class="text-2xs-plus font-mono dd-text-secondary">
+        <span
+          class="block max-w-[220px] truncate text-2xs-plus font-mono dd-text-secondary"
+          v-tooltip.top="`${selectedContainer.image}:${selectedContainer.currentTag}`"
+        >
           {{ selectedContainer.image }}:{{ selectedContainer.currentTag }}
         </span>
         <AppBadge
@@ -164,8 +167,10 @@ function getStatusTone(container: { id?: unknown; name?: unknown; status?: strin
             class="mr-1" />
           {{ getStatusLabel(selectedContainer) }}
         </AppBadge>
-        <AppBadge tone="neutral" size="xs">
-          {{ selectedContainer.server }}
+        <AppBadge tone="neutral" size="xs" v-tooltip.top="selectedContainer.server">
+          <span class="block max-w-[160px] truncate">
+            {{ selectedContainer.server }}
+          </span>
         </AppBadge>
       </template>
       <template #tabs>

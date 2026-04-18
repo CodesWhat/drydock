@@ -259,9 +259,9 @@ const roadmap = [
     version: "v1.5.0",
     title: "Observability & User-Requested Features",
     emoji: "\u{26A1}",
-    status: "released" as const,
+    status: "next" as const,
     dotColor:
-      "border-emerald-500 bg-emerald-500 text-white dark:border-emerald-400 dark:bg-emerald-400 dark:text-neutral-900",
+      "border-amber-500 bg-amber-50 text-amber-600 dark:border-amber-400 dark:bg-amber-950 dark:text-amber-400",
     items: [
       "Real-time WebSocket log viewer with ANSI colors + JSON syntax highlighting",
       "Container resource monitoring",
@@ -279,26 +279,22 @@ const roadmap = [
     ],
   },
   {
-    version: "v1.5.1",
-    title: "Scanner Decoupling",
-    emoji: "\u{1F50C}",
-    status: "next" as const,
-    dotColor:
-      "border-amber-500 bg-amber-50 text-amber-600 dark:border-amber-400 dark:bg-amber-950 dark:text-amber-400",
-    items: [
-      "Backend-based scanner execution (docker/remote)",
-      "Grype scanner provider",
-      "Scanner asset lifecycle management",
-    ],
-  },
-  {
     version: "v1.6.0",
-    title: "Notifications & Release Intel",
+    title: "Scanner Decoupling, Notifications & Release Intel",
     emoji: "\u{1F4E8}",
     status: "planned" as const,
     dotColor:
       "border-orange-400 bg-orange-50 text-orange-500 dark:border-orange-500 dark:bg-orange-950 dark:text-orange-400",
-    items: ["Notification templates", "Notification preferences UI", "Deprecation removals"],
+    items: [
+      "Backend-based scanner execution (docker/remote)",
+      "Grype scanner provider",
+      "Scanner asset lifecycle management",
+      "Custom zero-dependency dashboard grid (replaces grid-layout-plus, #281)",
+      "Fixed-height Containers table redesign with explicit column widths, overflow handling, and safe virtualization re-enable",
+      "Notification templates",
+      "Notification preferences UI",
+      "Deprecation removals",
+    ],
   },
   {
     version: "v1.7.0",

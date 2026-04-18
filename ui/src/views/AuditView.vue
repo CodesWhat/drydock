@@ -283,7 +283,9 @@ onMounted(fetchAudit);
         </div>
       </template>
       <template #cell-containerName="{ row }">
-        <span class="font-mono text-2xs-plus dd-text">{{ row.containerName }}</span>
+        <span class="block max-w-[220px] truncate font-mono text-2xs-plus dd-text" v-tooltip.top="row.containerName">
+          {{ row.containerName }}
+        </span>
       </template>
       <template #cell-status="{ row }">
         <AppIcon :name="row.status === 'success' ? 'check' : row.status === 'error' ? 'xmark' : 'info'" :size="13" class="shrink-0 md:!hidden"
@@ -294,7 +296,11 @@ onMounted(fetchAudit);
         </AppBadge>
       </template>
       <template #cell-details="{ row }">
-        <span v-if="row.fromVersion || row.toVersion" class="text-2xs font-mono dd-text-secondary whitespace-nowrap">
+        <span
+          v-if="row.fromVersion || row.toVersion"
+          class="block max-w-[220px] truncate text-2xs font-mono dd-text-secondary"
+          v-tooltip.top="`${row.fromVersion || '—'}${row.fromVersion && row.toVersion ? ' → ' : ''}${row.toVersion || '—'}`"
+        >
           {{ row.fromVersion }}{{ row.fromVersion && row.toVersion ? ' → ' : '' }}{{ row.toVersion }}
         </span>
         <span v-else-if="row.details" class="text-2xs dd-text-muted truncate max-w-[200px] inline-block">{{ row.details }}</span>
@@ -331,7 +337,12 @@ onMounted(fetchAudit);
             </div>
             <div v-if="entry.fromVersion || entry.toVersion">
               <span class="dd-text-muted">Version</span>
-              <span class="ml-1 font-mono dd-text">{{ entry.fromVersion || '—' }} → {{ entry.toVersion || '—' }}</span>
+              <span
+                class="ml-1 max-w-[180px] truncate font-mono dd-text inline-block"
+                v-tooltip.top="`${entry.fromVersion || '—'} → ${entry.toVersion || '—'}`"
+              >
+                {{ entry.fromVersion || '—' }} → {{ entry.toVersion || '—' }}
+              </span>
             </div>
           </div>
         </div>

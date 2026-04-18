@@ -1,12 +1,19 @@
 import axios from 'axios';
 import { getOutboundHttpTimeoutMs } from '../../../configuration/runtime-defaults.js';
 
-import Trigger from '../Trigger.js';
+import Trigger, { type TriggerConfiguration } from '../Trigger.js';
+
+interface DiscordConfiguration extends TriggerConfiguration {
+  url: string;
+  botusername: string;
+  cardcolor: number;
+  cardlabel: string;
+}
 
 /**
  * Discord Trigger implementation
  */
-class Discord extends Trigger {
+class Discord extends Trigger<DiscordConfiguration> {
   /**
    * Get the Trigger configuration schema.
    * @returns {*}

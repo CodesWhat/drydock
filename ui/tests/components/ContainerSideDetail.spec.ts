@@ -141,6 +141,53 @@ describe('ContainerSideDetail', () => {
     expect(title?.classes()).toContain('font-bold');
   });
 
+  it('caps the subtitle and server badge so long values do not widen the panel', () => {
+    selectedContainer.value = {
+      id: 'container-1',
+      name: 'nginx',
+      image: 'very-long-image-name-that-should-truncate',
+      currentTag: 'release-candidate-with-a-long-tag',
+      status: 'running',
+      server: 'very-long-server-name-that-should-truncate',
+      newTag: undefined,
+    };
+
+    const wrapper = mount(ContainerSideDetail, {
+      global: {
+        components: {
+          DetailPanel,
+        },
+        stubs: {
+          AppIcon: { template: '<span class="app-icon-stub" />' },
+          ContainerSideTabContent: { template: '<div class="side-tab-content-stub" />' },
+        },
+        directives: {
+          tooltip: {},
+        },
+      },
+    });
+
+    const subtitle = wrapper
+      .findAll('span')
+      .find(
+        (candidate) =>
+          candidate.text().includes('very-long-image-name-that-should-truncate') &&
+          candidate.classes().includes('max-w-[220px]'),
+      );
+    expect(subtitle).toBeDefined();
+    expect(subtitle?.classes()).toContain('truncate');
+
+    const serverBadgeText = wrapper
+      .findAll('span')
+      .find(
+        (candidate) =>
+          candidate.text().includes('very-long-server-name-that-should-truncate') &&
+          candidate.classes().includes('max-w-[160px]'),
+      );
+    expect(serverBadgeText).toBeDefined();
+    expect(serverBadgeText?.classes()).toContain('truncate');
+  });
+
   it('shows Updating when the selected container is still mid-update', () => {
     isContainerUpdateInProgress.mockReturnValue(true);
 

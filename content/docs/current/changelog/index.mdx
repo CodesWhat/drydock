@@ -13,6 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **[#293](https://github.com/CodesWhat/drydock/issues/293)** — Hide Pinned filter no longer hides pinned containers that have a pending update. Reporter pinned `grafana/grafana:12.3.2` to wait out an upstream regression and expected to see `12.3.3` show up as an available update, but the Containers view and the dashboard Updates Available widget both filtered it out because the classifier treats any 3+ numeric-segment semver as pinned. Filter decluttering is preserved for static pinned containers; only rows with a pending update (`newTag` truthy) now surface through the filter. Also resolves the rc.7 flip-flop behavior (container appearing one day and gone the next) independently — rc.8's computed `tagPinned` already removed the stored-state inconsistency, and this change removes the remaining UX mismatch. Updates the dashboard `updatesAvailable` stat card and the update breakdown widget to count pinned-with-update rows toward the true total.
+- **[#298](https://github.com/CodesWhat/drydock/issues/298)** — Remote-agent container updates no longer fail with `HTTP 413 Payload Too Large`. The controller posted the full `Container` object to the agent when executing a `docker` / `dockercompose` trigger, but the agent's 256kb json body cap (introduced as v1.5.0 DoS hardening) started getting exceeded by common payloads once release-notes bodies + env + labels + image metadata grew across the RC cycle. The agent's update handler only dereferences `container.id` (for its own store lookup) and `container.name` (for the rollback-container guard), so the controller now posts just `{ id, name }` for update triggers. Notification triggers still receive the full container so template rendering works. Reporter on Synology DSM 7 saw `Error updating container ... (Request failed with status code 413)` from `agent-client.mediavault`.
+- **[#296](https://github.com/CodesWhat/drydock/issues/296)** (reopen) — Controller identity detection now runs for host-based watchers (TCP to a local socket-proxy, the common Synology / Docker Compose pattern), not just pure-socket watchers. Socket-based watchers still take priority, and truly remote watchers can no longer hijack the identity because host-based detection is skipped once a name has already been populated. Reporter saw `[baf1154911ce]` on rc.8 because their Synology setup reaches the daemon via `docker-socket-proxy`, which made the previous `!watcher.configuration.host` gate short-circuit. Workaround for users on rc.8: set `DD_SERVER_NAME`.
+
 ## [1.5.0-rc.8] - 2026-04-13
 
 ### Added
@@ -28,6 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **Auth user cache removed** — Replaced TTL-based auth cache with request deduplication only, ensuring logout/session expiry in other tabs is reflected immediately. ([#923e0926](https://github.com/CodesWhat/drydock/commit/923e0926))
+- ♻️ **refactor(ui)** — Container update cards now render phase-only queue status, while grouped stack headers own the frozen `X of Y done` batch progress copy for multi-container updates.
 
 ### Fixed
 

@@ -90,7 +90,8 @@ export const logEntries = [
     timestamp: m(20),
     level: 'info' as const,
     component: 'api',
-    message: 'SSE client connected: sse-client-a1b2c3d4 from 192.168.1.10 (1 total)',
+    message:
+      'SSE client connected: client ID sse-client-a1b2c3d4 from source IP 192.168.1.10 (1 total)',
   },
   {
     timestamp: m(22),

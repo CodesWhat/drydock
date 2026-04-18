@@ -1,10 +1,16 @@
-import BaseRegistry from '../../BaseRegistry.js';
+import BaseRegistry, { type BaseRegistryConfiguration } from '../../BaseRegistry.js';
 import type { RegistryTagsList } from '../../Registry.js';
+
+interface QuayRegistryConfiguration extends BaseRegistryConfiguration {
+  namespace?: string;
+  account?: string;
+  token?: string;
+}
 
 /**
  * Quay.io Registry integration.
  */
-class Quay extends BaseRegistry {
+class Quay extends BaseRegistry<QuayRegistryConfiguration> {
   getConfigurationSchema() {
     return this.joi.alternatives([
       // Anonymous configuration
@@ -51,11 +57,13 @@ class Quay extends BaseRegistry {
       return requestOptions;
     }
     const authUrl = `https://quay.io/v2/auth?service=quay.io&scope=repository:${image.name}:pull`;
-    return this.authenticateBearerFromAuthUrl(
+    return this.authenticateBearerFromAuthUrlWithPublicFallback(
       requestOptions,
       authUrl,
       credentials,
-      (response) => response.data.token,
+      {
+        providerLabel: 'Quay',
+      },
     );
   }
 

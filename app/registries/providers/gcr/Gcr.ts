@@ -1,11 +1,18 @@
-import axios from 'axios';
-import { withAuthorizationHeader } from '../../../security/auth.js';
-import BaseRegistry from '../../BaseRegistry.js';
+import BaseRegistry, { type BaseRegistryConfiguration } from '../../BaseRegistry.js';
+
+interface GcrRegistryConfiguration extends BaseRegistryConfiguration {
+  clientemail?: string;
+  privatekey?: string;
+}
 
 /**
  * Google Container Registry integration.
  */
-class Gcr extends BaseRegistry {
+class Gcr extends BaseRegistry<GcrRegistryConfiguration> {
+  protected getTrustedAuthHosts(): string[] {
+    return ['gcr.io'];
+  }
+
   getConfigurationSchema() {
     return this.joi.alternatives([
       this.joi.string().allow(''),
@@ -32,27 +39,22 @@ class Gcr extends BaseRegistry {
     if (!this.configuration.clientemail) {
       return requestOptions;
     }
-    const request = {
-      method: 'GET',
-      url: `https://gcr.io/v2/token?scope=repository:${image.name}:pull`,
-      headers: {
-        Accept: 'application/json',
-        Authorization: `Basic ${Gcr.base64Encode(
-          '_json_key',
-          JSON.stringify({
-            client_email: this.configuration.clientemail,
-            private_key: this.configuration.privatekey,
-          }),
-        )}`,
-      },
-    };
+    const credentials = Gcr.base64Encode(
+      '_json_key',
+      JSON.stringify({
+        client_email: this.configuration.clientemail,
+        private_key: this.configuration.privatekey,
+      }),
+    );
 
-    const response = await axios(request);
-    return withAuthorizationHeader(
+    return this.authenticateBearerFromAuthUrlWithPublicFallback(
       requestOptions,
-      'Bearer',
-      response.data.token,
-      `Unable to authenticate registry ${this.getId()}: GCR token endpoint response does not contain token`,
+      `https://gcr.io/v2/token?scope=repository:${image.name}:pull`,
+      credentials,
+      {
+        providerLabel: 'GCR',
+        tokenFailureMessage: `Unable to authenticate registry ${this.getId()}: GCR token endpoint response does not contain token`,
+      },
     );
   }
 

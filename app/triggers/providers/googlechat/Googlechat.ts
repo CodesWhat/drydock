@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { getOutboundHttpTimeoutMs } from '../../../configuration/runtime-defaults.js';
-import Trigger from '../Trigger.js';
+import Trigger, { type TriggerConfiguration } from '../Trigger.js';
 
 type GoogleChatMessageBody = {
   text: string;
@@ -9,10 +9,16 @@ type GoogleChatMessageBody = {
   };
 };
 
+interface GooglechatConfiguration extends TriggerConfiguration {
+  url: string;
+  threadkey?: string;
+  messagereplyoption?: 'REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD' | 'REPLY_MESSAGE_OR_FAIL';
+}
+
 /**
  * Google Chat Trigger implementation
  */
-class Googlechat extends Trigger {
+class Googlechat extends Trigger<GooglechatConfiguration> {
   /**
    * Get the Trigger configuration schema.
    * @returns {*}

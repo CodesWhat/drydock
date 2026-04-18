@@ -6,6 +6,9 @@ const docsVersionPrefixes = "v1\\.5(?:/|$)|v1\\.4(?:/|$)|v1\\.3(?:/|$)";
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  turbopack: {
+    root: import.meta.dirname,
+  },
   images: {
     remotePatterns: [
       {

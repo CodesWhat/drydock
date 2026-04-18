@@ -210,7 +210,8 @@ const activeFilterChips = computed(() => {
           <span
             v-for="chip in activeFilterChips"
             :key="chip"
-            class="px-2 py-1 dd-rounded text-2xs font-medium whitespace-nowrap dd-bg-elevated dd-text"
+            class="px-2 py-1 dd-rounded text-2xs font-medium whitespace-nowrap dd-bg-elevated dd-text max-w-[240px] truncate"
+            v-tooltip.top="chip"
           >
             {{ chip }}
           </span>

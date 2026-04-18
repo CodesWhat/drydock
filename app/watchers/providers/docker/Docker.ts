@@ -289,7 +289,7 @@ function getContainersFromSameDockerSource(
 /**
  * Docker Watcher Component.
  */
-class Docker extends Watcher {
+class Docker extends Watcher<DockerWatcherConfiguration> {
   public configuration: DockerWatcherConfiguration = {} as DockerWatcherConfiguration;
   public declare dockerApi: Dockerode;
   public watchCron?: ScheduledTask;

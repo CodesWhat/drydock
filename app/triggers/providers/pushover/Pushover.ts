@@ -1,8 +1,8 @@
 import Push from 'pushover-notifications';
 import type { Container } from '../../../model/container.js';
-import Trigger from '../Trigger.js';
+import Trigger, { type TriggerConfiguration } from '../Trigger.js';
 
-interface PushoverConfiguration {
+interface PushoverConfiguration extends TriggerConfiguration {
   user: string;
   token: string;
   device?: string;
@@ -56,7 +56,7 @@ function normalizeErrorMessage(error: unknown): string {
 /**
  * Ifttt Trigger implementation
  */
-class Pushover extends Trigger {
+class Pushover extends Trigger<PushoverConfiguration> {
   /**
    * Get the Trigger configuration schema.
    * @returns {*}
@@ -157,27 +157,26 @@ class Pushover extends Trigger {
   }
 
   async sendMessage(message: PushoverMessageInput): Promise<unknown> {
-    const configuration = this.configuration as PushoverConfiguration;
     const messageToSend: PushoverMessagePayload = {
       ...message,
-      sound: configuration.sound,
-      device: configuration.device,
-      priority: configuration.priority,
-      html: configuration.html,
+      sound: this.configuration.sound,
+      device: this.configuration.device,
+      priority: this.configuration.priority,
+      html: this.configuration.html,
     };
 
     // Emergency priority needs retry/expire props
-    if (configuration.priority === 2) {
-      messageToSend.expire = configuration.expire;
-      messageToSend.retry = configuration.retry;
+    if (this.configuration.priority === 2) {
+      messageToSend.expire = this.configuration.expire;
+      messageToSend.retry = this.configuration.retry;
     }
-    if (configuration.ttl) {
-      messageToSend.ttl = configuration.ttl;
+    if (this.configuration.ttl) {
+      messageToSend.ttl = this.configuration.ttl;
     }
     return new Promise<unknown>((resolve, reject) => {
       const push: PushoverClient = new Push({
-        user: configuration.user,
-        token: configuration.token,
+        user: this.configuration.user,
+        token: this.configuration.token,
       });
 
       push.onerror = (error: unknown) => {

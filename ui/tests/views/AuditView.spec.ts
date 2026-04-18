@@ -43,8 +43,20 @@ const stubs: Record<string, any> = {
     emits: ['row-click'],
     template: `
       <div class="data-table" :data-row-count="rows.length" :data-active-row="activeRow || ''">
-        <button v-if="rows[0]" class="row-click-first" @click="$emit('row-click', rows[0])">Open 1</button>
-        <button v-if="rows[1]" class="row-click-second" @click="$emit('row-click', rows[1])">Open 2</button>
+        <div v-for="(row, index) in rows" :key="row.id" class="data-table-row">
+          <button
+            v-if="row"
+            :class="index === 0 ? 'row-click-first' : index === 1 ? 'row-click-second' : 'row-click-other'"
+            @click="$emit('row-click', row)"
+          >
+            Open {{ index + 1 }}
+          </button>
+          <slot name="cell-timestamp" :row="row" />
+          <slot name="cell-action" :row="row" />
+          <slot name="cell-containerName" :row="row" />
+          <slot name="cell-status" :row="row" />
+          <slot name="cell-details" :row="row" />
+        </div>
       </div>
     `,
   }),
@@ -281,6 +293,45 @@ describe('AuditView', () => {
         'redis-main',
       );
     });
+
+    it('caps long target names and version ranges in the table view', async () => {
+      const longContainerName = 'redis-main-with-an-extra-long-identifier-that-should-truncate';
+      const fromVersion = '1.0.0-build-20260101-abcdef';
+      const toVersion = '2.0.0-build-20260401-fedcba';
+      mockGetAuditLog.mockResolvedValue({
+        entries: [
+          makeEntry({
+            containerName: longContainerName,
+            fromVersion,
+            toVersion,
+          }),
+        ],
+        total: 1,
+      });
+
+      const wrapper = await mountAuditView();
+
+      const target = wrapper
+        .findAll('span')
+        .find(
+          (candidate) =>
+            candidate.text().trim() === longContainerName &&
+            candidate.classes().includes('max-w-[220px]'),
+        );
+      expect(target).toBeDefined();
+      expect(target?.classes()).toContain('truncate');
+
+      const version = wrapper
+        .findAll('span')
+        .find(
+          (candidate) =>
+            candidate.text().includes(fromVersion) &&
+            candidate.text().includes(toVersion) &&
+            candidate.classes().includes('max-w-[220px]'),
+        );
+      expect(version).toBeDefined();
+      expect(version?.classes()).toContain('truncate');
+    });
   });
 
   describe('filtering', () => {
@@ -479,7 +530,6 @@ describe('AuditView', () => {
 
       expect(wrapper.find('.detail-panel').attributes('data-open')).toBe('false');
       expect(wrapper.find('.data-table').attributes('data-active-row')).toBe('');
-      expect(wrapper.text()).not.toContain('redis');
     });
 
     it('opens detail panel from cards and list interactions', async () => {

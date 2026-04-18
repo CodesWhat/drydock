@@ -1,4 +1,3 @@
-import type { ComponentConfiguration } from './Component.js';
 import Component from './Component.js';
 
 const component = new Component();
@@ -6,7 +5,12 @@ const component = new Component();
 // @ts-expect-error Component instances should not allow arbitrary properties.
 component.undocumentedProperty = true;
 
-const configuration: ComponentConfiguration = { secret: 'token' };
+interface ExampleConfiguration {
+  secret: string;
+}
 
-const secret: string = configuration.secret;
+class ExampleComponent extends Component<ExampleConfiguration> {}
+
+const exampleComponent = new ExampleComponent();
+const secret: string = exampleComponent.configuration.secret;
 void secret;

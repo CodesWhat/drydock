@@ -6,6 +6,7 @@ import log from '../../log/index.js';
 import * as auditStore from '../../store/audit.js';
 import * as storeContainer from '../../store/container.js';
 import * as notificationStore from '../../store/notification.js';
+import * as notificationHistoryStore from '../../store/notification-history.js';
 import { UpdateRequestError } from '../../updates/request-update.js';
 import Trigger, {
   buildLiteralTemplateExpression,
@@ -45,6 +46,71 @@ vi.mock('../../store/container.js', () => ({
   getContainers: vi.fn(() => []),
   getContainersRaw: vi.fn(() => []),
 }));
+vi.mock('../../store/notification-history.js', () => {
+  const notificationHistoryByKey = new Map();
+  const buildKey = (triggerId, containerId, eventKind) =>
+    `${triggerId}::${containerId}::${eventKind}`;
+  return {
+    createCollections: vi.fn(),
+    computeResultHash: vi.fn((container) => {
+      const result = container?.result ?? {};
+      const updateKind = container?.updateKind ?? {};
+      return JSON.stringify({
+        tag: result.tag ?? null,
+        suggestedTag: result.suggestedTag ?? null,
+        digest: result.digest ?? null,
+        created: result.created ?? null,
+        kind: updateKind.kind ?? null,
+        remoteValue: updateKind.remoteValue ?? null,
+      });
+    }),
+    recordNotification: vi.fn((triggerId, containerId, eventKind, resultHash, notifiedAt) => {
+      notificationHistoryByKey.set(buildKey(triggerId, containerId, eventKind), {
+        triggerId,
+        containerId,
+        eventKind,
+        resultHash,
+        notifiedAt: notifiedAt ?? new Date().toISOString(),
+      });
+    }),
+    getLastNotifiedHash: vi.fn((triggerId, containerId, eventKind) => {
+      const entry = notificationHistoryByKey.get(buildKey(triggerId, containerId, eventKind));
+      return entry?.resultHash;
+    }),
+    clearNotificationsForContainer: vi.fn((containerId) => {
+      let cleared = 0;
+      for (const [key, entry] of notificationHistoryByKey.entries()) {
+        if (entry.containerId === containerId) {
+          notificationHistoryByKey.delete(key);
+          cleared += 1;
+        }
+      }
+      return cleared;
+    }),
+    clearNotificationsForTrigger: vi.fn((triggerId) => {
+      let cleared = 0;
+      for (const [key, entry] of notificationHistoryByKey.entries()) {
+        if (entry.triggerId === triggerId) {
+          notificationHistoryByKey.delete(key);
+          cleared += 1;
+        }
+      }
+      return cleared;
+    }),
+    clearNotificationsForContainerAndEvent: vi.fn((containerId, eventKind) => {
+      let cleared = 0;
+      for (const [key, entry] of notificationHistoryByKey.entries()) {
+        if (entry.containerId === containerId && entry.eventKind === eventKind) {
+          notificationHistoryByKey.delete(key);
+          cleared += 1;
+        }
+      }
+      return cleared;
+    }),
+    getAllForTesting: vi.fn(() => Array.from(notificationHistoryByKey.values())),
+    resetForTesting: vi.fn(() => notificationHistoryByKey.clear()),
+  };
+});
 vi.mock('../../updates/request-update.js', async (importOriginal) => {
   const original = await importOriginal<typeof import('../../updates/request-update.js')>();
   return {
@@ -106,6 +172,7 @@ beforeEach(async () => {
   storeContainer.getContainersRaw.mockImplementation((query, pagination) =>
     storeContainer.getContainers(query, pagination),
   );
+  notificationHistoryStore.resetForTesting();
   trigger = new Trigger();
   trigger.log = log;
   trigger.configuration = { ...configurationValid };
@@ -2603,21 +2670,34 @@ test('handleContainerReport should debug log when update-available rule suppress
   );
 });
 
-test('handleContainerReport should debug log when simple mode skips an unchanged update', async () => {
+test('handleContainerReport should debug log when simple mode skips an already-notified update', async () => {
+  await trigger.register('trigger', 'test', 'trigger1', configurationValid);
+  trigger.init();
+
+  const alreadyNotifiedContainer = {
+    id: 'c1',
+    watcher: 'local',
+    name: 'container1',
+    updateAvailable: true,
+    updateKind: { kind: 'digest', semverDiff: 'unknown' },
+    result: { tag: '2.0' },
+  };
+  notificationHistoryStore.recordNotification(
+    trigger.getId(),
+    alreadyNotifiedContainer.id,
+    'update-available',
+    notificationHistoryStore.computeResultHash(alreadyNotifiedContainer),
+  );
+
   const debugSpy = vi.spyOn(log, 'debug');
 
   await trigger.handleContainerReport({
     changed: false,
-    container: {
-      watcher: 'local',
-      name: 'container1',
-      updateAvailable: true,
-      updateKind: { kind: 'digest', semverDiff: 'unknown' },
-    },
+    container: alreadyNotifiedContainer,
   });
 
   expect(debugSpy).toHaveBeenCalledWith(
-    'Skipping update-available notification for local_container1 (changed=false, once=true, updateAvailable=true)',
+    'Skipping update-available notification for local_container1 (once=true, updateAvailable=true, alreadyNotified=true)',
   );
 });
 
@@ -2635,7 +2715,7 @@ test('handleContainerReport should debug log when simple mode skips a report wit
   });
 
   expect(debugSpy).toHaveBeenCalledWith(
-    'Skipping update-available notification for local_container1 (changed=true, once=true, updateAvailable=false)',
+    'Skipping update-available notification for local_container1 (once=true, updateAvailable=false, alreadyNotified=false)',
   );
 });
 
@@ -2654,7 +2734,7 @@ test('handleContainerReport should show once=false in skip logs when once is uns
   });
 
   expect(debugSpy).toHaveBeenCalledWith(
-    'Skipping update-available notification for local_container1 (changed=false, once=false, updateAvailable=false)',
+    'Skipping update-available notification for local_container1 (once=false, updateAvailable=false, alreadyNotified=false)',
   );
 });
 
@@ -4125,7 +4205,7 @@ test('handleContainerReports should cap retry-buffer growth by evicting the olde
   }
 });
 
-test('handleContainerReports should use fallback fullName keys for retry and digest cleanup when notification keys are missing', async () => {
+test('handleContainerReports should use fallback fullName keys for retry cleanup when notification keys are missing', async () => {
   trigger.configuration = {
     threshold: 'all',
     once: true,
@@ -4138,7 +4218,6 @@ test('handleContainerReports should use fallback fullName keys for retry and dig
     updateKind: { kind: 'tag', semverDiff: 'major' },
   } as any;
   trigger.batchRetryBuffer.set('undefined_container1', container);
-  trigger.digestBuffer.set('undefined_container1', container);
   trigger.triggerBatch = vi.fn().mockResolvedValue(undefined);
 
   await trigger.handleContainerReports([
@@ -4150,7 +4229,6 @@ test('handleContainerReports should use fallback fullName keys for retry and dig
 
   expect(trigger.triggerBatch).toHaveBeenCalledWith([container]);
   expect(trigger.batchRetryBuffer.size).toBe(0);
-  expect(trigger.digestBuffer.size).toBe(0);
 });
 
 test('handleContainerReports should suppress repeated identical batch errors during a short burst', async () => {
@@ -4667,21 +4745,29 @@ describe('digest mode', () => {
     triggerBatchSpy.mockRestore();
   });
 
-  test('handleContainerReportDigest should not buffer when changed is false and once is true', async () => {
+  test('handleContainerReportDigest should not buffer when the result hash was already notified and once is true', async () => {
     await trigger.register('trigger', 'test', 'digest-trigger', {
       ...configurationValid,
       mode: 'digest',
     });
     trigger.init();
 
+    const alreadyNotifiedContainer = {
+      id: 'c1',
+      name: 'app',
+      watcher: 'test',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+    };
+    notificationHistoryStore.recordNotification(
+      trigger.getId(),
+      alreadyNotifiedContainer.id,
+      'update-available-digest',
+      notificationHistoryStore.computeResultHash(alreadyNotifiedContainer),
+    );
+
     await trigger.handleContainerReportDigest({
-      container: {
-        id: 'c1',
-        name: 'app',
-        watcher: 'test',
-        updateAvailable: true,
-        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
-      },
+      container: alreadyNotifiedContainer,
       changed: false,
     });
 
@@ -5121,7 +5207,24 @@ describe('digest mode', () => {
       changed: true,
     });
 
+    storeContainer.getContainers.mockClear();
+    storeContainer.getContainersRaw.mockClear();
     storeContainer.getContainersRaw.mockReturnValue([
+      {
+        id: 'c1',
+        name: 'app',
+        watcher: 'test',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '3.0' },
+        env: {
+          SECRET_TOKEN: 'raw-secret',
+        },
+      },
+    ]);
+
+    storeContainer.getContainers.mockClear();
+    storeContainer.getContainersRaw.mockClear();
+    storeContainer.getContainersRaw.mockReturnValueOnce([
       {
         id: 'c1',
         name: 'app',
@@ -5740,7 +5843,7 @@ describe('batch+digest mode', () => {
     ]);
   });
 
-  test('batch handler should evict sent containers from digest buffer in batch+digest mode', async () => {
+  test('batch handler should NOT drain digest buffer in batch+digest mode — digest fires independently', async () => {
     let batchCallback;
     vi.mocked(event.registerContainerReports).mockImplementation((cb) => {
       batchCallback = cb;
@@ -5760,27 +5863,29 @@ describe('batch+digest mode', () => {
       updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
     };
 
-    // Pre-populate the digest buffer (as if the digest handler already buffered it)
+    // The per-container event fills the digest buffer
     await trigger.handleContainerReportDigest({
       container,
       changed: true,
     } as any);
 
     const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+    storeContainer.getContainersRaw.mockReturnValue([container]);
 
-    // Batch handler fires for the same container
+    // The same scan cycle's batch event fires
     await batchCallback?.([{ container, changed: true }] as any);
 
     expect(triggerBatchSpy).toHaveBeenCalledWith([container]);
+    // Digest buffer must retain the entry — the morning cron should still see it
+    expect(trigger.digestBuffer.size).toBe(1);
 
-    // The digest buffer should now be empty — batch evicted the entry
+    // Cron tick: digest flush dispatches the same container in a separate email
     const cronCallback = vi.mocked(mockCron.schedule).mock.calls[0]?.[1];
     triggerBatchSpy.mockClear();
     cronCallback?.();
     await Promise.resolve();
 
-    // Digest flush should NOT send because the buffer was evicted
-    expect(triggerBatchSpy).not.toHaveBeenCalled();
+    expect(triggerBatchSpy).toHaveBeenCalledWith([container]);
   });
 
   test('batch handler should not evict from digest buffer when batch send fails', async () => {
@@ -5981,5 +6086,509 @@ describe('batch+digest mode', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  test('digest handler re-buffers across scan cycles when the result hash changes', async () => {
+    let digestCallback;
+    let batchCallback;
+    vi.mocked(event.registerContainerReport).mockImplementation((cb) => {
+      digestCallback = cb;
+      return vi.fn();
+    });
+    vi.mocked(event.registerContainerReports).mockImplementation((cb) => {
+      batchCallback = cb;
+      return vi.fn();
+    });
+
+    await trigger.register('trigger', 'test', 'combined-trigger', {
+      ...configurationValid,
+      mode: 'batch+digest',
+    });
+
+    const initialContainer = {
+      id: 'c1',
+      name: 'app',
+      watcher: 'test',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+    };
+
+    const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+
+    // Scan cycle 1: batch fires and records update-available history
+    await digestCallback?.({ container: initialContainer, changed: true } as any);
+    await batchCallback?.([{ container: initialContainer, changed: true }] as any);
+
+    expect(triggerBatchSpy).toHaveBeenCalledTimes(1);
+    expect(trigger.digestBuffer.size).toBe(1);
+
+    // Scan cycle 2 detects a new remote value — result hash changes
+    const upgradedContainer = {
+      ...initialContainer,
+      updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '3.0' },
+    };
+    await digestCallback?.({ container: upgradedContainer, changed: true } as any);
+
+    // Buffer retains one entry per container key — the newer result overwrites
+    expect(trigger.digestBuffer.size).toBe(1);
+    const [bufferedContainer] = trigger.digestBuffer.values();
+    expect(bufferedContainer.updateKind).toMatchObject({ remoteValue: '3.0' });
+  });
+
+  test('digest handler skips re-buffer when result hash unchanged and once=true', async () => {
+    let digestCallback;
+    let batchCallback;
+    vi.mocked(event.registerContainerReport).mockImplementation((cb) => {
+      digestCallback = cb;
+      return vi.fn();
+    });
+    vi.mocked(event.registerContainerReports).mockImplementation((cb) => {
+      batchCallback = cb;
+      return vi.fn();
+    });
+
+    await trigger.register('trigger', 'test', 'combined-trigger', {
+      ...configurationValid,
+      mode: 'batch+digest',
+    });
+
+    const container = {
+      id: 'c1',
+      name: 'app',
+      watcher: 'test',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+    };
+    storeContainer.getContainersRaw.mockReturnValue([container]);
+
+    const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+
+    // Scan cycle 1: digest buffers + batch fires
+    await digestCallback?.({ container, changed: true } as any);
+    await batchCallback?.([{ container, changed: true }] as any);
+
+    expect(triggerBatchSpy).toHaveBeenCalled();
+
+    // Digest cron flushes, records update-available-digest history
+    const cronCallback = vi.mocked(mockCron.schedule).mock.calls[0]?.[1];
+    cronCallback?.();
+    await Promise.resolve();
+
+    // Reset: buffer is drained by the flush dispatch path
+    expect(trigger.digestBuffer.size).toBe(0);
+
+    // Scan cycle 2: same container, same hash — digest handler must not re-buffer
+    await digestCallback?.({ container, changed: false } as any);
+    expect(trigger.digestBuffer.size).toBe(0);
+  });
+
+  test('flushDigestBuffer records update-available-digest, not update-available', async () => {
+    let digestCallback;
+    vi.mocked(event.registerContainerReport).mockImplementation((cb) => {
+      digestCallback = cb;
+      return vi.fn();
+    });
+
+    await trigger.register('trigger', 'test', 'combined-trigger', {
+      ...configurationValid,
+      mode: 'batch+digest',
+    });
+
+    const container = {
+      id: 'c1',
+      name: 'app',
+      watcher: 'test',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+    };
+    storeContainer.getContainersRaw.mockReturnValue([container]);
+
+    vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+    const recordSpy = vi.spyOn(notificationHistoryStore, 'recordNotification');
+
+    await digestCallback?.({ container, changed: true } as any);
+    const cronCallback = vi.mocked(mockCron.schedule).mock.calls[0]?.[1];
+    cronCallback?.();
+    await Promise.resolve();
+
+    const digestRecordCalls = recordSpy.mock.calls.filter(
+      ([, , kind]) => kind === 'update-available-digest',
+    );
+    const batchRecordCalls = recordSpy.mock.calls.filter(
+      ([, containerId, kind]) => containerId === 'c1' && kind === 'update-available',
+    );
+    expect(digestRecordCalls.length).toBeGreaterThan(0);
+    expect(batchRecordCalls.length).toBe(0);
+  });
+
+  test('seedNotificationHistoryFromStore seeds both update-available and update-available-digest for batch+digest mode', async () => {
+    const container = {
+      id: 'c1',
+      name: 'app',
+      watcher: 'test',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+    };
+    storeContainer.getContainersRaw.mockReturnValue([container]);
+
+    await trigger.register('trigger', 'test', 'combined-trigger', {
+      ...configurationValid,
+      mode: 'batch+digest',
+    });
+    trigger.init();
+
+    expect(
+      notificationHistoryStore.getLastNotifiedHash(trigger.getId(), 'c1', 'update-available'),
+    ).toBeDefined();
+    expect(
+      notificationHistoryStore.getLastNotifiedHash(
+        trigger.getId(),
+        'c1',
+        'update-available-digest',
+      ),
+    ).toBeDefined();
+  });
+
+  test('seedNotificationHistoryFromStore seeds only update-available for pure batch mode', async () => {
+    const container = {
+      id: 'c1',
+      name: 'app',
+      watcher: 'test',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+    };
+    storeContainer.getContainersRaw.mockReturnValue([container]);
+
+    await trigger.register('trigger', 'test', 'batch-only', {
+      ...configurationValid,
+      mode: 'batch',
+    });
+    trigger.init();
+
+    expect(
+      notificationHistoryStore.getLastNotifiedHash(trigger.getId(), 'c1', 'update-available'),
+    ).toBeDefined();
+    expect(
+      notificationHistoryStore.getLastNotifiedHash(
+        trigger.getId(),
+        'c1',
+        'update-available-digest',
+      ),
+    ).toBeUndefined();
+  });
+
+  test('seedNotificationHistoryFromStore skips containers without updates or stable ids', async () => {
+    storeContainer.getContainersRaw.mockReturnValue([
+      {
+        id: 'skip-no-update',
+        name: 'skip-no-update',
+        watcher: 'test',
+        updateAvailable: false,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      },
+      {
+        id: '',
+        name: 'skip-no-id',
+        watcher: 'test',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      },
+      {
+        id: 'c1',
+        name: 'app',
+        watcher: 'test',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      },
+    ]);
+
+    await trigger.register('trigger', 'test', 'combined-trigger', {
+      ...configurationValid,
+      mode: 'batch+digest',
+    });
+    trigger.init();
+
+    expect(
+      notificationHistoryStore.getLastNotifiedHash(
+        trigger.getId(),
+        'skip-no-update',
+        'update-available',
+      ),
+    ).toBeUndefined();
+    expect(
+      notificationHistoryStore.getLastNotifiedHash(trigger.getId(), '', 'update-available'),
+    ).toBeUndefined();
+    expect(
+      notificationHistoryStore.getLastNotifiedHash(trigger.getId(), 'c1', 'update-available'),
+    ).toBeDefined();
+  });
+
+  test('handleContainerReportDigest emits debug log on once+alreadyNotified skip', async () => {
+    let digestCallback;
+    vi.mocked(event.registerContainerReport).mockImplementation((cb) => {
+      digestCallback = cb;
+      return vi.fn();
+    });
+
+    await trigger.register('trigger', 'test', 'combined-trigger', {
+      ...configurationValid,
+      mode: 'batch+digest',
+    });
+
+    const container = {
+      id: 'c1',
+      name: 'app',
+      watcher: 'test',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+    };
+
+    notificationHistoryStore.recordNotification(
+      trigger.getId(),
+      'c1',
+      'update-available-digest',
+      notificationHistoryStore.computeResultHash(container),
+    );
+
+    const debugSpy = vi.spyOn((trigger as any).log, 'debug');
+
+    await digestCallback?.({ container, changed: false } as any);
+
+    expect(trigger.digestBuffer.size).toBe(0);
+    expect(debugSpy).toHaveBeenCalledWith(
+      expect.stringMatching(/Skipping update-available digest buffer for .*alreadyBuffered=true/),
+    );
+  });
+
+  test('handleContainerReportDigest falls back to once=false in skip logs when configuration.once is unset', async () => {
+    await trigger.register('trigger', 'test', 'combined-trigger', {
+      ...configurationValid,
+      mode: 'batch+digest',
+    });
+    trigger.init();
+
+    trigger.configuration.once = undefined;
+    vi.spyOn(trigger as any, 'shouldHandleDigestContainerReport').mockReturnValue(false);
+    const debugSpy = vi.spyOn((trigger as any).log, 'debug');
+
+    await trigger.handleContainerReportDigest({
+      container: {
+        id: 'c1',
+        name: 'app',
+        watcher: 'test',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      },
+      changed: false,
+    } as any);
+
+    expect(trigger.digestBuffer.size).toBe(0);
+    expect(debugSpy).toHaveBeenCalledWith(
+      expect.stringMatching(
+        /Skipping update-available digest buffer for .*once=false, updateAvailable=true, alreadyBuffered=false/,
+      ),
+    );
+  });
+
+  test('shouldHandleDigestContainerReport reflects update availability and once=false fast path', () => {
+    trigger.configuration.once = false;
+
+    expect(
+      (trigger as any).shouldHandleDigestContainerReport({
+        container: {
+          id: 'c1',
+          name: 'app',
+          watcher: 'test',
+          updateAvailable: false,
+        },
+      }),
+    ).toBe(false);
+
+    expect(
+      (trigger as any).shouldHandleDigestContainerReport({
+        container: {
+          id: 'c1',
+          name: 'app',
+          watcher: 'test',
+          updateAvailable: true,
+        },
+      }),
+    ).toBe(true);
+  });
+});
+
+describe('notification history (once=true dedup)', () => {
+  test('handleContainerReport should fire for same-name siblings on different hosts with different ids', async () => {
+    await trigger.register('trigger', 'test', 'pushover', configurationValid);
+    trigger.init();
+    const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+    await trigger.handleContainerReport({
+      changed: false,
+      container: {
+        id: 'id-datavault-tdarr',
+        name: 'tdarr_node',
+        watcher: 'datavault',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+        result: { tag: '2.0' },
+      },
+    });
+
+    await trigger.handleContainerReport({
+      changed: false,
+      container: {
+        id: 'id-tmvault-tdarr',
+        name: 'tdarr_node',
+        watcher: 'tmvault',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+        result: { tag: '2.0' },
+      },
+    });
+
+    expect(triggerSpy).toHaveBeenCalledTimes(2);
+    expect(triggerSpy.mock.calls[0]?.[0]).toMatchObject({
+      id: 'id-datavault-tdarr',
+      watcher: 'datavault',
+    });
+    expect(triggerSpy.mock.calls[1]?.[0]).toMatchObject({
+      id: 'id-tmvault-tdarr',
+      watcher: 'tmvault',
+    });
+  });
+
+  test('handleContainerReport should not re-fire for an already-notified identical result', async () => {
+    await trigger.register('trigger', 'test', 'pushover', configurationValid);
+    trigger.init();
+    const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+    const report = {
+      changed: false,
+      container: {
+        id: 'c1',
+        name: 'app',
+        watcher: 'test',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+        result: { tag: '2.0' },
+      },
+    };
+
+    await trigger.handleContainerReport(report);
+    await trigger.handleContainerReport(report);
+
+    expect(triggerSpy).toHaveBeenCalledTimes(1);
+  });
+
+  test('handleContainerReport should re-fire when the result hash changes (new tag)', async () => {
+    await trigger.register('trigger', 'test', 'pushover', configurationValid);
+    trigger.init();
+    const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+    await trigger.handleContainerReport({
+      changed: false,
+      container: {
+        id: 'c1',
+        name: 'app',
+        watcher: 'test',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+        result: { tag: '2.0' },
+      },
+    });
+
+    await trigger.handleContainerReport({
+      changed: false,
+      container: {
+        id: 'c1',
+        name: 'app',
+        watcher: 'test',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.1' },
+        result: { tag: '2.1' },
+      },
+    });
+
+    expect(triggerSpy).toHaveBeenCalledTimes(2);
+  });
+
+  test('handleContainerUpdateAppliedEvent clears update-available history so the same result can re-notify', async () => {
+    await trigger.register('trigger', 'test', 'pushover', configurationValid);
+    trigger.init();
+    vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+    const container = {
+      id: 'c1',
+      name: 'app',
+      watcher: 'test',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      result: { tag: '2.0' },
+    };
+
+    await trigger.handleContainerReport({ changed: false, container });
+    expect(
+      notificationHistoryStore.getLastNotifiedHash(trigger.getId(), 'c1', 'update-available'),
+    ).toBeDefined();
+
+    storeContainer.getContainersRaw.mockReturnValueOnce([container]);
+    await trigger.handleContainerUpdateAppliedEvent({
+      containerName: 'test_app',
+      container,
+    });
+
+    expect(
+      notificationHistoryStore.getLastNotifiedHash(trigger.getId(), 'c1', 'update-available'),
+    ).toBeUndefined();
+  });
+
+  test('init seeds notification history from pre-existing update-available containers to avoid upgrade spam', async () => {
+    const preExisting = {
+      id: 'c1',
+      name: 'app',
+      watcher: 'test',
+      updateAvailable: true,
+      updateDetectedAt: '2026-04-15T10:00:00Z',
+      updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      result: { tag: '2.0' },
+    };
+    storeContainer.getContainers.mockReturnValue([preExisting]);
+
+    await trigger.register('trigger', 'test', 'pushover', configurationValid);
+    trigger.init();
+
+    const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+    await trigger.handleContainerReport({ changed: false, container: preExisting });
+
+    expect(triggerSpy).not.toHaveBeenCalled();
+  });
+
+  test('init does not seed when once=false', async () => {
+    const preExisting = {
+      id: 'c1',
+      name: 'app',
+      watcher: 'test',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      result: { tag: '2.0' },
+    };
+    storeContainer.getContainers.mockReturnValue([preExisting]);
+
+    await trigger.register('trigger', 'test', 'pushover', {
+      ...configurationValid,
+      once: false,
+    });
+    trigger.init();
+
+    // With once=false every scan fires — so no seeding needed.
+    expect(
+      notificationHistoryStore.getLastNotifiedHash(
+        'trigger.test.pushover',
+        'c1',
+        'update-available',
+      ),
+    ).toBeUndefined();
   });
 });

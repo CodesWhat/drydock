@@ -104,6 +104,92 @@ describe('NotificationsView', () => {
     expect(wrapper.text()).not.toContain('Docker Policy');
   });
 
+  it('truncates compact notification surfaces across table, cards, and list modes', async () => {
+    const longRuleName = 'Security Alert With A Very Long Name That Should Not Expand Compact Rows';
+    const longDescription =
+      'This description is intentionally long enough to verify compact notification rows stay one line.';
+    const longTriggerName =
+      'Slack Alerts With An Exceptionally Long Trigger Name That Must Stay On One Line';
+
+    mockGetAllNotificationRules.mockResolvedValue([
+      makeRule({
+        id: 'security-alert',
+        name: longRuleName,
+        description: longDescription,
+        triggers: ['trigger:slack-alerts'],
+      }),
+    ]);
+    mockGetAllTriggers.mockResolvedValue([
+      { id: 'trigger:slack-alerts', name: longTriggerName, type: 'slack' },
+    ]);
+
+    const wrapper = await mountNotificationsView({
+      DataTable: defineComponent({
+        props: ['columns', 'rows', 'rowKey', 'activeRow', 'selectedKey', 'sortKey', 'sortAsc'],
+        emits: ['row-click', 'update:sort-key', 'update:sort-asc'],
+        template: `
+          <div class="data-table"
+               :data-row-count="rows?.length ?? 0"
+               :data-selected-key="selectedKey || activeRow || ''">
+            <button v-if="rows?.[0]" class="row-click-first" @click="$emit('row-click', rows[0])">Open 1</button>
+            <slot name="cell-name" v-if="rows?.[0]" :row="rows[0]" />
+            <slot name="cell-triggers" v-if="rows?.[0]" :row="rows[0]" />
+            <slot name="empty" v-if="!rows || rows.length === 0" />
+          </div>
+        `,
+      }),
+      DataCardGrid: defineComponent({
+        props: ['items', 'itemKey', 'selectedKey'],
+        emits: ['item-click'],
+        template: `
+          <div class="data-card-grid" :data-item-count="items?.length ?? 0">
+            <button v-if="items?.[0]" class="card-click-first" @click="$emit('item-click', items[0])">Card 1</button>
+            <slot name="card" v-if="items?.[0]" :item="items[0]" />
+          </div>
+        `,
+      }),
+      DataListAccordion: defineComponent({
+        props: ['items', 'itemKey', 'selectedKey'],
+        emits: ['item-click'],
+        template: `
+          <div class="data-list-accordion" :data-item-count="items?.length ?? 0">
+            <button v-if="items?.[0]" class="list-click-first" @click="$emit('item-click', items[0])">List 1</button>
+            <slot name="header" v-if="items?.[0]" :item="items[0]" />
+          </div>
+        `,
+      }),
+    });
+
+    const tableName = wrapper.get('.data-table .font-medium.truncate.dd-text');
+    expect(tableName.classes()).toContain('truncate');
+    expect(tableName.attributes('title')).toBe(longRuleName);
+
+    const tableDescription = wrapper.get('.data-table .text-2xs.mt-0\\.5.dd-text-muted.truncate');
+    expect(tableDescription.classes()).toContain('truncate');
+    expect(tableDescription.attributes('title')).toBe(longDescription);
+
+    const tableBadge = wrapper.get('.data-table .badge');
+    expect(tableBadge.classes()).toContain('shrink-0');
+    expect(tableBadge.attributes('title')).toBe(longTriggerName);
+    expect(tableBadge.get('span').classes()).toEqual(expect.arrayContaining(['block', 'truncate']));
+
+    await wrapper.find('.mode-cards').trigger('click');
+    await flushPromises();
+
+    const cardBadge = wrapper.get('.data-card-grid .badge');
+    expect(cardBadge.classes()).toContain('shrink-0');
+    expect(cardBadge.attributes('title')).toBe(longTriggerName);
+    expect(cardBadge.get('span').classes()).toEqual(expect.arrayContaining(['block', 'truncate']));
+
+    await wrapper.find('.mode-list').trigger('click');
+    await flushPromises();
+
+    const listBadge = wrapper.get('.data-list-accordion .badge');
+    expect(listBadge.classes()).toContain('shrink-0');
+    expect(listBadge.attributes('title')).toBe(longTriggerName);
+    expect(listBadge.get('span').classes()).toEqual(expect.arrayContaining(['block', 'truncate']));
+  });
+
   it('saves trigger assignment changes from the detail panel', async () => {
     const wrapper = await mountNotificationsView();
 

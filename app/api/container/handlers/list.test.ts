@@ -350,6 +350,320 @@ describe('attachInProgressUpdateOperation', () => {
 });
 
 describe('buildContainerListResponse', () => {
+  test('preloads active operations once for the full container list response', () => {
+    const containers = [
+      createContainer({ id: 'c1', name: 'web', displayName: 'web' }),
+      createContainer({ id: 'c2', name: 'worker', displayName: 'worker' }),
+    ];
+    const context: CrudHandlerContext = {
+      ...createMockContext(),
+      getContainersFromStore: vi.fn(() => containers),
+      getContainerCountFromStore: vi.fn(() => containers.length),
+      redactContainersRuntimeEnv: vi.fn((items: Container[]) => items),
+    };
+
+    (context.updateOperationStore as any).listActiveOperations = vi.fn(() => [
+      {
+        id: 'op-1',
+        containerId: 'c1',
+        containerName: 'web',
+        status: 'in-progress',
+        phase: 'pulling',
+        updatedAt: '2026-04-01T12:00:00.000Z',
+      },
+    ]);
+    (
+      context.updateOperationStore.getActiveOperationByContainerId as ReturnType<typeof vi.fn>
+    ).mockImplementation(() => {
+      throw new Error('per-container ID lookup should not be used');
+    });
+    (
+      context.updateOperationStore.getActiveOperationByContainerName as ReturnType<typeof vi.fn>
+    ).mockImplementation(() => {
+      throw new Error('per-container name lookup should not be used');
+    });
+
+    const response = buildContainerListResponse(
+      context,
+      { limit: '10', offset: '0' } as any,
+      '/api/containers',
+    );
+
+    expect((context.updateOperationStore as any).listActiveOperations).toHaveBeenCalledTimes(1);
+    expect(context.updateOperationStore.getActiveOperationByContainerId).not.toHaveBeenCalled();
+    expect(context.updateOperationStore.getActiveOperationByContainerName).not.toHaveBeenCalled();
+    expect(response.data[0]?.updateOperation).toEqual({
+      id: 'op-1',
+      status: 'in-progress',
+      phase: 'pulling',
+      updatedAt: '2026-04-01T12:00:00.000Z',
+    });
+    expect(response.data[1]?.updateOperation).toBeUndefined();
+  });
+
+  test('preloaded operations map replacement container ids and expose projected descriptors', () => {
+    const containers = [
+      createContainer({
+        id: 'new-c1',
+        name: 'web',
+        displayName: 'web',
+        security: {
+          status: 'healthy',
+          scan: {
+            status: 'healthy',
+            vulnerabilities: [{ id: 'v1' }] as any,
+          } as any,
+        } as any,
+      }),
+    ];
+    const context: CrudHandlerContext = {
+      ...createMockContext(),
+      getContainersFromStore: vi.fn(() => containers),
+      getContainerCountFromStore: vi.fn(() => 1),
+      redactContainersRuntimeEnv: vi.fn((items: Container[]) => items),
+    };
+
+    (context.updateOperationStore as any).listActiveOperations = vi.fn(() => [
+      {
+        id: 'op-1',
+        containerId: 'old-c1',
+        newContainerId: 'new-c1',
+        containerName: 'web',
+        status: 'in-progress',
+        phase: 'pulling',
+        updatedAt: '2026-04-01T12:00:00.000Z',
+      },
+    ]);
+
+    const response = buildContainerListResponse(
+      context,
+      { limit: '10', offset: '0' } as any,
+      '/api/containers',
+    );
+
+    expect(response.data[0]?.updateOperation?.id).toBe('op-1');
+    expect(Object.getOwnPropertyDescriptor(response.data[0]!, 'updateOperation')).toEqual({
+      configurable: true,
+      enumerable: true,
+      writable: true,
+      value: {
+        id: 'op-1',
+        status: 'in-progress',
+        phase: 'pulling',
+        updatedAt: '2026-04-01T12:00:00.000Z',
+      },
+    });
+    expect(Object.getOwnPropertyDescriptor(response.data[0]!, 'security')).toMatchObject({
+      configurable: true,
+      enumerable: true,
+      writable: true,
+    });
+  });
+
+  test('preloaded operation projections expose compatible descriptors for overridden non-writable properties', () => {
+    const container = createContainer({ id: 'c1', name: 'web', displayName: 'web' });
+    Object.defineProperty(container, 'updateOperation', {
+      configurable: true,
+      enumerable: false,
+      writable: false,
+      value: {
+        id: 'stale-op',
+        status: 'queued',
+        phase: 'queued',
+        updatedAt: '2026-04-01T11:59:00.000Z',
+      },
+    });
+    const context: CrudHandlerContext = {
+      ...createMockContext(),
+      getContainersFromStore: vi.fn(() => [container]),
+      getContainerCountFromStore: vi.fn(() => 1),
+      redactContainersRuntimeEnv: vi.fn((items: Container[]) => items),
+    };
+
+    (context.updateOperationStore as any).listActiveOperations = vi.fn(() => [
+      {
+        id: 'op-1',
+        containerId: 'c1',
+        status: 'in-progress',
+        phase: 'pulling',
+        updatedAt: '2026-04-01T12:00:00.000Z',
+      },
+    ]);
+
+    const response = buildContainerListResponse(
+      context,
+      { limit: '10', offset: '0' } as any,
+      '/api/containers',
+    );
+
+    expect(Object.getOwnPropertyDescriptor(response.data[0]!, 'updateOperation')).toEqual({
+      configurable: true,
+      enumerable: false,
+      writable: true,
+      value: {
+        id: 'op-1',
+        status: 'in-progress',
+        phase: 'pulling',
+        updatedAt: '2026-04-01T12:00:00.000Z',
+      },
+    });
+  });
+
+  test('preloaded operations fall back to legacy container names when ids are unavailable', () => {
+    const containers = [createContainer({ id: 'c1', name: 'web', displayName: 'web' })];
+    const context: CrudHandlerContext = {
+      ...createMockContext(),
+      getContainersFromStore: vi.fn(() => containers),
+      getContainerCountFromStore: vi.fn(() => 1),
+      redactContainersRuntimeEnv: vi.fn((items: Container[]) => items),
+    };
+
+    (context.updateOperationStore as any).listActiveOperations = vi.fn(() => [
+      {
+        id: 'op-legacy',
+        containerName: 'web',
+        status: 'queued',
+        phase: 'queued',
+        updatedAt: '2026-04-01T12:00:00.000Z',
+      },
+    ]);
+
+    const response = buildContainerListResponse(
+      context,
+      { limit: '10', offset: '0' } as any,
+      '/api/containers',
+    );
+
+    expect(response.data[0]?.updateOperation?.id).toBe('op-legacy');
+  });
+
+  test('preloaded operations keep the newest timestamp and treat invalid timestamps as oldest', () => {
+    const containers = [createContainer({ id: 'c1', name: 'web', displayName: 'web' })];
+    const context: CrudHandlerContext = {
+      ...createMockContext(),
+      getContainersFromStore: vi.fn(() => containers),
+      getContainerCountFromStore: vi.fn(() => 1),
+      redactContainersRuntimeEnv: vi.fn((items: Container[]) => items),
+    };
+
+    (context.updateOperationStore as any).listActiveOperations = vi.fn(() => [
+      {
+        id: 'op-invalid',
+        containerId: 'c1',
+        status: 'in-progress',
+        phase: 'pulling',
+        updatedAt: 'not-a-date',
+      },
+      {
+        id: 'op-latest',
+        containerId: 'c1',
+        status: 'in-progress',
+        phase: 'health-gate',
+        updatedAt: '2026-04-01T12:01:00.000Z',
+      },
+      {
+        id: 'op-older',
+        containerId: 'c1',
+        status: 'in-progress',
+        phase: 'pulling',
+        updatedAt: '2026-04-01T11:59:00.000Z',
+      },
+    ]);
+
+    const response = buildContainerListResponse(
+      context,
+      { limit: '10', offset: '0' } as any,
+      '/api/containers',
+    );
+
+    expect(response.data[0]?.updateOperation).toEqual({
+      id: 'op-latest',
+      status: 'in-progress',
+      phase: 'health-gate',
+      updatedAt: '2026-04-01T12:01:00.000Z',
+    });
+  });
+
+  test('preloaded operations keep an existing newer timestamp when a later duplicate is older', () => {
+    const containers = [createContainer({ id: 'c1', name: 'web', displayName: 'web' })];
+    const context: CrudHandlerContext = {
+      ...createMockContext(),
+      getContainersFromStore: vi.fn(() => containers),
+      getContainerCountFromStore: vi.fn(() => 1),
+      redactContainersRuntimeEnv: vi.fn((items: Container[]) => items),
+    };
+
+    (context.updateOperationStore as any).listActiveOperations = vi.fn(() => [
+      {
+        id: 'op-latest',
+        containerId: 'c1',
+        status: 'in-progress',
+        phase: 'health-gate',
+        updatedAt: '2026-04-01T12:01:00.000Z',
+      },
+      {
+        id: 'op-older',
+        containerId: 'c1',
+        status: 'in-progress',
+        phase: 'pulling',
+        updatedAt: '2026-04-01T12:00:00.000Z',
+      },
+    ]);
+
+    const response = buildContainerListResponse(
+      context,
+      { limit: '10', offset: '0' } as any,
+      '/api/containers',
+    );
+
+    expect(response.data[0]?.updateOperation).toEqual({
+      id: 'op-latest',
+      status: 'in-progress',
+      phase: 'health-gate',
+      updatedAt: '2026-04-01T12:01:00.000Z',
+    });
+  });
+
+  test('falls back to per-container lookups when the preloaded operation list has no usable keys', () => {
+    const containers = [createContainer({ id: 'c1', name: 'web', displayName: 'web' })];
+    const context: CrudHandlerContext = {
+      ...createMockContext(),
+      getContainersFromStore: vi.fn(() => containers),
+      getContainerCountFromStore: vi.fn(() => 1),
+      redactContainersRuntimeEnv: vi.fn((items: Container[]) => items),
+    };
+
+    (context.updateOperationStore as any).listActiveOperations = vi.fn(() => [
+      null,
+      { id: 'bad-op', status: 'queued', phase: 'queued' },
+      {
+        id: 'also-bad',
+        containerName: '',
+        status: 'queued',
+        phase: 'queued',
+        updatedAt: '2026-04-01T12:00:00.000Z',
+      },
+    ]);
+    (
+      context.updateOperationStore.getActiveOperationByContainerId as ReturnType<typeof vi.fn>
+    ).mockReturnValue({
+      id: 'op-fallback',
+      containerId: 'c1',
+      status: 'in-progress',
+      phase: 'pulling',
+      updatedAt: '2026-04-01T12:00:00.000Z',
+    });
+
+    const response = buildContainerListResponse(
+      context,
+      { limit: '10', offset: '0' } as any,
+      '/api/containers',
+    );
+
+    expect(context.updateOperationStore.getActiveOperationByContainerId).toHaveBeenCalledWith('c1');
+    expect(response.data[0]?.updateOperation?.id).toBe('op-fallback');
+  });
+
   test('preserves store-level rollback filtering after downstream transforms', () => {
     const containers = [
       createContainer({ id: 'c1', name: 'service', displayName: 'service' }),
@@ -491,6 +805,42 @@ describe('buildContainerListResponse', () => {
     expect(response.data[0]?.security?.updateScan).toBeUndefined();
     expect(response.data[1]?.security?.scan).toBeUndefined();
     expect(response.data[1]?.security?.updateScan?.vulnerabilities).toEqual([]);
+  });
+
+  test('strips vulnerabilities without eagerly reading unrelated enumerable properties', () => {
+    const container = createContainer({
+      id: 'c1',
+      name: 'service',
+      security: {
+        scan: {
+          vulnerabilities: ['v1'],
+        },
+      },
+    });
+    const expensiveGetter = vi.fn(() => {
+      throw new Error('unexpected eager property read');
+    });
+    Object.defineProperty(container, 'expensive', {
+      enumerable: true,
+      get: expensiveGetter,
+    });
+
+    const context: CrudHandlerContext = {
+      ...createMockContext(),
+      getContainersFromStore: vi.fn(() => [container]),
+      getContainerCountFromStore: vi.fn(() => 1),
+      redactContainersRuntimeEnv: vi.fn((items: Container[]) => items),
+    };
+
+    const response = buildContainerListResponse(
+      context,
+      { limit: '10', offset: '0' } as any,
+      '/api/containers',
+    );
+
+    expect(response.data[0]?.id).toBe('c1');
+    expect(response.data[0]?.security?.scan?.vulnerabilities).toEqual([]);
+    expect(expensiveGetter).not.toHaveBeenCalled();
   });
 
   test('pushes watched-kind all through the filter pipeline without forcing full collection', () => {

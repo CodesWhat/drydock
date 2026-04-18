@@ -1,11 +1,22 @@
 import axios, { type AxiosRequestConfig } from 'axios';
 import { getOutboundHttpTimeoutMs } from '../../../configuration/runtime-defaults.js';
-import Trigger from '../Trigger.js';
+import Trigger, { type TriggerConfiguration } from '../Trigger.js';
+
+interface NtfyConfiguration extends TriggerConfiguration {
+  url: string;
+  topic?: string;
+  priority?: number;
+  auth?: {
+    user?: string;
+    password?: string;
+    token?: string;
+  };
+}
 
 /**
  * Ntfy Trigger implementation
  */
-class Ntfy extends Trigger {
+class Ntfy extends Trigger<NtfyConfiguration> {
   /**
    * Get the Trigger configuration schema.
    * @returns {*}

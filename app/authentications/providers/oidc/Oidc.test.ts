@@ -104,6 +104,14 @@ function expect401JsonMessage(res: any, message: string) {
   expect(res.json).toHaveBeenCalledWith({ error: message });
 }
 
+function expectDefaultRedirectPayload(res: any) {
+  expect(res.json).toHaveBeenCalledWith({
+    redirect: 'https://idp/auth',
+    strictEndpoints: ['https://idp/auth'],
+    allowedOrigins: ['https://idp', 'https://idp.example.com'],
+  });
+}
+
 /** Perform a redirect flow and return the session with pending state */
 async function performRedirect(oidcInstance: any, mock: any, session?: any) {
   const sess = session || { save: vi.fn((cb) => cb()) };
@@ -505,6 +513,21 @@ test('isAllowedAuthorizationRedirect should reject non-http protocols', () => {
   expect(allowed).toBe(false);
 });
 
+test('isAllowedAuthorizationRedirect should require authorization endpoint metadata', () => {
+  oidc.client = new Configuration(
+    {
+      issuer: 'https://issuer.example.com',
+    },
+    'dd-client',
+    'dd-secret',
+    ClientSecretPost('dd-secret'),
+  );
+
+  const allowed = oidc.isAllowedAuthorizationRedirect(new URL('https://idp/auth'));
+
+  expect(allowed).toBe(false);
+});
+
 test('verify should return user on valid token', async () => {
   openidClientMock.fetchUserInfo = vi.fn().mockResolvedValue({ email: 'test@example.com' });
 
@@ -548,7 +571,7 @@ test('redirect should persist oidc checks in session before responding', async (
     req.session.oidc.default.pending[Object.keys(req.session.oidc.default.pending)[0]].codeVerifier,
   ).toBeDefined();
   expect(save).toHaveBeenCalledTimes(1);
-  expect(res.json).toHaveBeenCalledWith({ url: 'https://idp/auth' });
+  expectDefaultRedirectPayload(res);
   expect(res.status).not.toHaveBeenCalled();
 });
 
@@ -662,7 +685,7 @@ test('redirect should reject non-http authorization redirect urls', async () => 
   expect(res.json).toHaveBeenCalledWith({ error: 'Unable to initialize OIDC session' });
 });
 
-test('redirect should allow discovery-origin redirects when authorization endpoint metadata is missing', async () => {
+test('redirect should reject authorization redirects when authorization endpoint metadata is missing', async () => {
   oidc.client = new Configuration(
     {
       issuer: 'https://issuer.example.com',
@@ -677,8 +700,8 @@ test('redirect should allow discovery-origin redirects when authorization endpoi
 
   await oidc.redirect(req, res);
 
-  expect(res.json).toHaveBeenCalledWith({ url: 'https://idp/auth' });
-  expect(res.status).not.toHaveBeenCalled();
+  expect(res.status).toHaveBeenCalledWith(500);
+  expect(res.json).toHaveBeenCalledWith({ error: 'Unable to initialize OIDC session' });
 });
 
 test('callback should fail with explicit message when callback state is missing', async () => {
@@ -930,7 +953,7 @@ test('redirect should not wait forever when previous session lock never settles'
 
     expect(settled).toBe(true);
     await redirectPromise;
-    expect(res.json).toHaveBeenCalledWith({ url: 'https://idp/auth' });
+    expectDefaultRedirectPayload(res);
     expect(res.status).not.toHaveBeenCalled();
   } finally {
     mapGetSpy.mockRestore();
@@ -961,7 +984,7 @@ test('redirect should recover when a stale rejected lock promise exists', async 
 
     await oidc.redirect(req, res);
 
-    expect(res.json).toHaveBeenCalledWith({ url: 'https://idp/auth' });
+    expectDefaultRedirectPayload(res);
     expect(res.status).not.toHaveBeenCalled();
   } finally {
     mapGetSpy.mockRestore();
@@ -1087,6 +1110,34 @@ test('callback should return 401 when login fails with error', async () => {
   await oidc.callback(req, res);
 
   expect401Json(res);
+});
+
+test('callback should redact sensitive token values from login error logs', async () => {
+  mockSuccessfulGrant(openidClientMock);
+
+  const { session } = await performRedirect(oidc, openidClientMock);
+
+  const state = Object.keys(session.oidc.default.pending)[0];
+  const req = createCallbackReq(
+    `/auth/oidc/default/cb?code=abc&state=${state}`,
+    session,
+    (_user, done) =>
+      done(
+        new Error(
+          'login failed: access_token=secret-access refresh_token=secret-refresh id_token=secret-id',
+        ),
+      ),
+  );
+  const res = createRes();
+
+  await oidc.callback(req, res);
+
+  expect401Json(res);
+  const warnMsg = oidc.log.warn.mock.calls.at(-1)?.[0];
+  expect(warnMsg).toContain('[REDACTED]');
+  expect(warnMsg).not.toContain('secret-access');
+  expect(warnMsg).not.toContain('secret-refresh');
+  expect(warnMsg).not.toContain('secret-id');
 });
 
 test('callback should evict oldest sessions when concurrent session cap is reached', async () => {
@@ -1236,6 +1287,32 @@ test('callback should return 401 when authorizationCodeGrant throws', async () =
   expect401Json(res);
 });
 
+test('callback should redact sensitive token values from authorizationCodeGrant error logs', async () => {
+  openidClientMock.authorizationCodeGrant = vi
+    .fn()
+    .mockRejectedValue(
+      new Error(
+        'grant failed: https://idp.example.com/callback?access_token=secret-access&refresh_token=secret-refresh&id_token=secret-id&state=secret-state',
+      ),
+    );
+
+  const session = createSessionWithPending({
+    'valid-state': createPendingCheck(),
+  });
+  const req = createCallbackReq('/auth/oidc/default/cb?code=abc&state=valid-state', session);
+  const res = createRes();
+
+  await oidc.callback(req, res);
+
+  expect401Json(res);
+  const warnMsg = oidc.log.warn.mock.calls.at(-1)?.[0];
+  expect(warnMsg).toContain('[REDACTED]');
+  expect(warnMsg).not.toContain('secret-access');
+  expect(warnMsg).not.toContain('secret-refresh');
+  expect(warnMsg).not.toContain('secret-id');
+  expect(warnMsg).not.toContain('secret-state');
+});
+
 test('callback should return 401 when authorizationCodeGrant rejects with non-Error', async () => {
   openidClientMock.authorizationCodeGrant = vi.fn().mockRejectedValue(null);
 
@@ -1300,7 +1377,7 @@ test('redirect should recover from session reload error by regenerating', async 
   await oidc.redirect(req, res);
 
   expect(regenerate).toHaveBeenCalledTimes(1);
-  expect(res.json).toHaveBeenCalledWith({ url: 'https://idp/auth' });
+  expectDefaultRedirectPayload(res);
   expect(res.status).not.toHaveBeenCalled();
 });
 
@@ -1316,7 +1393,7 @@ test('redirect should recover from session reload error even without regenerate'
 
   await oidc.redirect(req, res);
 
-  expect(res.json).toHaveBeenCalledWith({ url: 'https://idp/auth' });
+  expectDefaultRedirectPayload(res);
   expect(res.status).not.toHaveBeenCalled();
 });
 
@@ -1353,7 +1430,12 @@ test('initAuthentication should discover and configure client', async () => {
 test('initAuthentication should tolerate startup discovery failure and recover on a later redirect without restart', async () => {
   oidc.client = undefined;
   oidc.logoutUrl = undefined;
-  const mockClient = {};
+  const mockClient = {
+    serverMetadata: () => ({
+      issuer: 'https://idp.example.com',
+      authorization_endpoint: 'https://idp/auth',
+    }),
+  };
   openidClientMock.discovery = vi
     .fn()
     .mockRejectedValueOnce(new Error('idp unavailable during startup'))
@@ -1373,7 +1455,7 @@ test('initAuthentication should tolerate startup discovery failure and recover o
   await oidc.redirect(req, res);
 
   expect(openidClientMock.discovery).toHaveBeenCalledTimes(2);
-  expect(res.json).toHaveBeenCalledWith({ url: 'https://idp/auth' });
+  expectDefaultRedirectPayload(res);
   expect(oidc.log.warn).toHaveBeenCalledWith(
     expect.stringContaining('Drydock will retry on the next authentication attempt'),
   );
@@ -1585,7 +1667,7 @@ test('redirect should skip session lock when sessionID is empty', async () => {
 
   await oidc.redirect(req, res);
 
-  expect(res.json).toHaveBeenCalledWith({ url: 'https://idp/auth' });
+  expectDefaultRedirectPayload(res);
 });
 
 test('stale lock cleanup timer should delete session lock when operation outlives TTL', async () => {
@@ -1637,7 +1719,7 @@ test('stale lock cleanup timer should delete session lock when operation outlive
   await vi.advanceTimersByTimeAsync(0);
   await redirectPromise;
 
-  expect(res.json).toHaveBeenCalledWith({ url: 'https://idp/auth' });
+  expectDefaultRedirectPayload(res);
 
   mapGetSpy.mockRestore();
   mapDeleteSpy.mockRestore();
@@ -1677,8 +1759,8 @@ test('stale lock cleanup timer should skip deleting when a newer lock replaces t
     firstReload?.();
     await Promise.all([firstRedirectPromise, secondRedirectPromise]);
 
-    expect(firstRes.json).toHaveBeenCalledWith({ url: 'https://idp/auth' });
-    expect(secondRes.json).toHaveBeenCalledWith({ url: 'https://idp/auth' });
+    expectDefaultRedirectPayload(firstRes);
+    expectDefaultRedirectPayload(secondRes);
   } finally {
     vi.useRealTimers();
   }

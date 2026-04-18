@@ -18,6 +18,10 @@ quay.configuration = {
 };
 quay.log = log;
 
+beforeEach(() => {
+  vi.clearAllMocks();
+});
+
 test('validatedConfiguration should initialize when anonymous configuration is valid', async () => {
   expect(quay.validateConfiguration('')).toStrictEqual({});
   expect(quay.validateConfiguration(undefined)).toStrictEqual({});
@@ -151,6 +155,50 @@ test('authenticate should not populate header with base64 bearer when anonymous'
   ).resolves.toEqual(
     expect.objectContaining({
       headers: {},
+    }),
+  );
+});
+
+test('authenticate should retry anonymously when configured credentials are rejected with 403', async () => {
+  const quayInstance = new Quay();
+  await quayInstance.register('registry', 'quay', 'test', {
+    namespace: 'namespace',
+    account: 'account',
+    token: TEST_TOKEN,
+  });
+  quayInstance.log = log;
+  axios.mockRejectedValueOnce(new Error('Request failed with status code 403'));
+  axios.mockResolvedValueOnce({ data: { token: 'anon-token' } });
+  const warnSpy = vi.spyOn(quayInstance.log, 'warn');
+
+  const result = await quayInstance.authenticate(
+    { name: 'test/image' },
+    { headers: {}, url: 'https://quay.io/v2/test/image/manifests/latest' },
+  );
+
+  expect(axios).toHaveBeenNthCalledWith(1, {
+    method: 'GET',
+    url: 'https://quay.io/v2/auth?service=quay.io&scope=repository:test/image:pull',
+    headers: {
+      Accept: 'application/json',
+      Authorization: 'Basic bmFtZXNwYWNlK2FjY291bnQ6dG9rZW4=',
+    },
+  });
+  expect(axios).toHaveBeenNthCalledWith(2, {
+    method: 'GET',
+    url: 'https://quay.io/v2/auth?service=quay.io&scope=repository:test/image:pull',
+    headers: {
+      Accept: 'application/json',
+    },
+  });
+  expect(warnSpy).toHaveBeenCalledWith(
+    expect.stringContaining('Quay credentials were rejected for registry quay.test (status 403)'),
+  );
+  expect(result).toEqual(
+    expect.objectContaining({
+      headers: {
+        Authorization: 'Bearer anon-token',
+      },
     }),
   );
 });

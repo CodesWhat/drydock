@@ -236,6 +236,7 @@ const childStubs = {
       'virtualScroll',
       'virtualRowHeight',
       'virtualMaxHeight',
+      'maxHeight',
       'fullWidthRow',
       'rowInteractive',
       'rowClass',
@@ -606,6 +607,27 @@ describe('ContainersView', () => {
       expect(wrapper.text()).toContain('Hidden: Pinned');
     });
 
+    it('caps long active filter chips so they do not widen the bar', async () => {
+      const wrapper = await mountContainersView([
+        makeContainer({ newTag: '2.0.0', updateKind: 'major' }),
+      ]);
+
+      const longSearch = 'search-value-that-should-not-expand-the-filter-bar';
+      mockFilterSearch.value = longSearch;
+      mockActiveFilterCount.value = 1;
+      await flushPromises();
+
+      const chip = wrapper
+        .findAll('span')
+        .find(
+          (candidate) =>
+            candidate.text().includes(longSearch) && candidate.classes().includes('max-w-[240px]'),
+        );
+
+      expect(chip).toBeDefined();
+      expect(chip?.classes()).toContain('truncate');
+    });
+
     it('hides active filter chips while the filter panel is open', async () => {
       const wrapper = await mountContainersView([
         makeContainer({ newTag: '2.0.0', updateKind: 'major' }),
@@ -696,10 +718,11 @@ describe('ContainersView', () => {
       expect(wrapper.findAll('button[disabled]').length).toBeGreaterThan(0);
     });
 
-    it('enables virtual scrolling for the grouped containers table', async () => {
+    it('uses native scrolling for the containers table and lets the page handle overflow', async () => {
       const wrapper = await mountContainersView([makeContainer()]);
       const dataTable = wrapper.findComponent(childStubs.DataTable as any);
-      expect(dataTable.props('virtualScroll')).toBe(true);
+      expect(dataTable.props('virtualScroll')).toBe(false);
+      expect(dataTable.props('maxHeight')).toBeUndefined();
     });
 
     it('renders DataFilterBar', async () => {

@@ -1,12 +1,27 @@
 import fs from 'node:fs';
 import https from 'node:https';
 import axios, { type AxiosRequestConfig } from 'axios';
+import { sanitizeLogParam } from '../log/sanitize.js';
 import type { ContainerImage } from '../model/container.js';
 import * as registryPrometheus from '../prometheus/registry.js';
 import { resolveConfiguredPath } from '../runtime/paths.js';
 import { failClosedAuth, requireAuthString, withAuthorizationHeader } from '../security/auth.js';
+import { getErrorMessage } from '../util/error.js';
 import { REGISTRY_BEARER_TOKEN_CACHE_TTL_MS } from './configuration.js';
 import Registry from './Registry.js';
+
+export interface BaseRegistryConfiguration {
+  url?: string;
+  insecure?: boolean;
+  cafile?: string;
+  clientcert?: string;
+  clientkey?: string;
+  auth?: string;
+  login?: string;
+  password?: string;
+  token?: string;
+  username?: string;
+}
 
 type RegistryRequestOptions = AxiosRequestConfig;
 type RegistryManifestLookupResult = Awaited<ReturnType<Registry['getImageManifestDigest']>>;
@@ -20,7 +35,9 @@ type DigestCacheEntry = {
 /**
  * Base Registry with common patterns
  */
-class BaseRegistry extends Registry {
+class BaseRegistry<
+  TConfiguration extends BaseRegistryConfiguration = BaseRegistryConfiguration,
+> extends Registry<TConfiguration> {
   private httpsAgent?: https.Agent;
   private bearerTokenCache = new Map<string, { token: string; expiresAt: number }>();
   private digestManifestCache = new Map<string, DigestCacheEntry>();
@@ -52,11 +69,29 @@ class BaseRegistry extends Registry {
     return host;
   }
 
+  private getDigestCacheImageLabel(image: ContainerImage, digest?: string): string {
+    const registryUrl =
+      typeof image?.registry?.url === 'string' && image.registry.url.length > 0
+        ? image.registry.url
+        : 'unknown-registry';
+    const imageName =
+      typeof image?.name === 'string' && image.name.length > 0 ? image.name : 'unknown-image';
+    const tagOrDigest =
+      typeof digest === 'string' && digest.length > 0
+        ? digest
+        : image?.tag?.value || image?.digest?.value || 'latest';
+
+    return `${registryUrl}/${imageName}:${tagOrDigest}`;
+  }
+
   private buildDigestCacheKey(image: ContainerImage, digest?: string): string {
     let normalizedImage: ContainerImage;
     try {
       normalizedImage = this.normalizeImage(structuredClone(image));
-    } catch {
+    } catch (error) {
+      this.log.warn(
+        `Unable to normalize image metadata for digest cache key generation: ${sanitizeLogParam(this.getDigestCacheImageLabel(image, digest))} (${sanitizeLogParam(getErrorMessage(error))})`,
+      );
       normalizedImage = image;
     }
 
@@ -324,13 +359,13 @@ class BaseRegistry extends Registry {
     credentials?: string,
     tokenExtractor: (response: { data?: Record<string, unknown> }) => unknown = (response) =>
       response.data?.token,
+    tokenFailureMessage = `Unable to authenticate registry ${this.getId()}: token endpoint response does not contain token`,
   ) {
     this.validateAuthUrlHost(authUrl, requestOptions);
 
     const requestOptionsWithAuth = this.withTlsRequestOptions({
       ...requestOptions,
     });
-    const tokenFailureMessage = `Unable to authenticate registry ${this.getId()}: token endpoint response does not contain token`;
     const cacheKey = this.getBearerTokenCacheKey(authUrl, credentials);
     const now = Date.now();
     this.pruneExpiredBearerTokenCache(now);
@@ -375,6 +410,64 @@ class BaseRegistry extends Registry {
     });
 
     return withAuthorizationHeader(requestOptionsWithAuth, 'Bearer', token, tokenFailureMessage);
+  }
+
+  private getRejectedCredentialStatus(
+    error: unknown,
+    rejectedCredentialStatuses: readonly number[] = [401, 403],
+  ): string | undefined {
+    if (!(error instanceof Error) || rejectedCredentialStatuses.length === 0) {
+      return undefined;
+    }
+
+    const allowedStatuses = rejectedCredentialStatuses.join('|');
+    const rejectedStatusPattern = new RegExp(
+      `token request failed \\(Request failed with status code (${allowedStatuses})\\)`,
+    );
+    const match = error.message.match(rejectedStatusPattern);
+    return match ? match[1] : undefined;
+  }
+
+  protected async authenticateBearerFromAuthUrlWithPublicFallback(
+    requestOptions: RegistryRequestOptions,
+    authUrl: string,
+    credentials?: string,
+    options: {
+      tokenExtractor?: (response: { data?: Record<string, unknown> }) => unknown;
+      tokenFailureMessage?: string;
+      providerLabel?: string;
+      rejectedCredentialStatuses?: readonly number[];
+    } = {},
+  ) {
+    try {
+      return await this.authenticateBearerFromAuthUrl(
+        requestOptions,
+        authUrl,
+        credentials,
+        options.tokenExtractor,
+        options.tokenFailureMessage,
+      );
+    } catch (error) {
+      const rejectedStatus = credentials
+        ? this.getRejectedCredentialStatus(error, options.rejectedCredentialStatuses)
+        : undefined;
+      if (!credentials || !rejectedStatus) {
+        throw error;
+      }
+
+      const providerLabel = options.providerLabel || this.getId();
+      this.log.warn(
+        `${providerLabel} credentials were rejected for registry ${this.getId()} (status ${rejectedStatus}); retrying token request without credentials for public image checks`,
+      );
+
+      return this.authenticateBearerFromAuthUrl(
+        requestOptions,
+        authUrl,
+        undefined,
+        options.tokenExtractor,
+        options.tokenFailureMessage,
+      );
+    }
   }
 
   /**

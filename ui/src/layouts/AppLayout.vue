@@ -1317,7 +1317,7 @@ onUnmounted(() => {
       </div>
 
       <!-- Nav groups -->
-      <nav class="flex-1 overflow-y-auto overflow-x-hidden py-3 px-2 space-y-4">
+      <nav class="flex-1 overflow-y-auto overflow-x-hidden pt-1 pb-3 px-2 space-y-4">
         <div v-for="group in navGroups" :key="group.label">
           <div v-if="group.label && !isCollapsed"
                class="px-2 mb-1 text-2xs font-semibold uppercase tracking-wider dd-text-muted">
@@ -1455,9 +1455,11 @@ onUnmounted(() => {
               <div v-if="showUserMenu"
                    class="min-w-[160px] py-1 dd-rounded-lg shadow-lg"
                    :style="{ ...userMenuStyle, zIndex: 'var(--z-popover)', backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)', boxShadow: 'var(--dd-shadow-tooltip)' }">
-                <div class="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wider dd-text-muted"
+                <div
+                  class="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wider dd-text-muted max-w-[220px] truncate"
+                  v-tooltip.top="currentUser?.username || currentUser?.displayName || 'User'"
                      :style="{ borderBottom: '1px solid var(--dd-border)' }">
-                  {{ currentUser?.username || 'User' }}
+                  {{ currentUser?.username || currentUser?.displayName || 'User' }}
                 </div>
                 <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text" @click="showUserMenu = false; router.push({ path: ROUTES.CONFIG, query: { tab: 'profile' } })">
                   <AppIcon name="user" :size="11" class="dd-text-muted" />

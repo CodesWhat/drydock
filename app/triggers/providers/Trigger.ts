@@ -15,6 +15,7 @@ import Component, { type ComponentConfiguration } from '../../registry/Component
 import * as auditStore from '../../store/audit.js';
 import * as storeContainer from '../../store/container.js';
 import * as notificationStore from '../../store/notification.js';
+import * as notificationHistoryStore from '../../store/notification-history.js';
 import {
   enqueueContainerUpdate,
   enqueueContainerUpdates,
@@ -461,8 +462,10 @@ function splitAndTrimCommaSeparatedList(value: string): string[] {
 /**
  * Trigger base component.
  */
-class Trigger extends Component {
-  public configuration: TriggerConfiguration = {};
+class Trigger<
+  TConfiguration extends TriggerConfiguration = TriggerConfiguration,
+> extends Component<TConfiguration> {
+  public configuration = {} as TConfiguration;
   public strictAgentMatch = false;
   private unregisterContainerReport?: () => void;
   private unregisterContainerReports?: () => void;
@@ -650,6 +653,9 @@ class Trigger extends Component {
     container: Container | undefined,
     errorMessage: string,
   ) {
+    // Intentionally coarse: key on watcher (not container ID) so a burst of
+    // identical errors from one system-level condition (SMTP down, agent
+    // disconnected) produces a single warn log rather than one per container.
     return `${this.getId()}|${ruleId}|${container?.watcher ?? 'unknown'}|${errorMessage}`;
   }
 
@@ -959,6 +965,24 @@ class Trigger extends Component {
     if (evictedBufferedUpdate) {
       this.log.debug(`Evicted ${notificationKey} from digest buffer (update applied)`);
     }
+
+    // Clear update-available notification history for this container — the
+    // update has been applied so the next detected update (even at the same
+    // hash by coincidence) should notify again. Clear both the simple/batch
+    // channel and the digest channel so every subscriber can re-fire.
+    const containerIdForHistory =
+      typeof container?.id === 'string' && container.id !== '' ? container.id : undefined;
+    if (containerIdForHistory) {
+      notificationHistoryStore.clearNotificationsForContainerAndEvent(
+        containerIdForHistory,
+        'update-available',
+      );
+      notificationHistoryStore.clearNotificationsForContainerAndEvent(
+        containerIdForHistory,
+        'update-available-digest',
+      );
+    }
+
     const notificationContainer = container
       ? withNotificationEvent(container, { kind: 'update-applied' })
       : undefined;
@@ -1066,11 +1090,112 @@ class Trigger extends Component {
     this.log.warn(message);
   }
 
-  private shouldHandleSimpleContainerReport(containerReport: ContainerReport) {
-    return (
-      (containerReport.changed || !this.configuration.once) &&
-      containerReport.container.updateAvailable
+  private hasAlreadyNotifiedForResult(
+    container: Container,
+    eventKind: notificationHistoryStore.NotificationEventKind,
+  ): boolean {
+    const containerId =
+      typeof container?.id === 'string' && container.id !== '' ? container.id : undefined;
+    if (!containerId) {
+      // No stable id — fall back to permissive "not notified" so we don't
+      // silently swallow legitimate events on degenerate records.
+      return false;
+    }
+    const currentHash = notificationHistoryStore.computeResultHash(container);
+    const lastHash = notificationHistoryStore.getLastNotifiedHash(
+      this.getId(),
+      containerId,
+      eventKind,
     );
+    return lastHash !== undefined && lastHash === currentHash;
+  }
+
+  private recordNotifiedForResult(
+    container: Container,
+    eventKind: notificationHistoryStore.NotificationEventKind,
+  ) {
+    const containerId =
+      typeof container?.id === 'string' && container.id !== '' ? container.id : undefined;
+    if (!containerId) {
+      return;
+    }
+    notificationHistoryStore.recordNotification(
+      this.getId(),
+      containerId,
+      eventKind,
+      notificationHistoryStore.computeResultHash(container),
+    );
+  }
+
+  /**
+   * Seed notification history from the persisted container store on init so
+   * that containers already showing `updateAvailable=true` before this trigger
+   * came online are NOT re-notified on the first scan cycle after a restart
+   * or config change. If the store already holds a history entry for the
+   * (trigger, container, event) tuple, it wins — seed only fills gaps.
+   */
+  private seedNotificationHistoryFromStore() {
+    if (!this.configuration.once) {
+      return;
+    }
+    const triggerId = this.getId();
+    const kindsToSeed: notificationHistoryStore.NotificationEventKind[] = ['update-available'];
+    if (Trigger.isDigestCapableMode(this.configuration.mode)) {
+      kindsToSeed.push('update-available-digest');
+    }
+    let seeded = 0;
+    for (const rawContainer of storeContainer.getContainersRaw()) {
+      const container = rawContainer as Container;
+      if (!container.updateAvailable) {
+        continue;
+      }
+      const containerId =
+        typeof container.id === 'string' && container.id !== '' ? container.id : undefined;
+      if (!containerId) {
+        continue;
+      }
+      const resultHash = notificationHistoryStore.computeResultHash(container);
+      const notifiedAt = container.updateDetectedAt ?? new Date().toISOString();
+      for (const kind of kindsToSeed) {
+        const existing = notificationHistoryStore.getLastNotifiedHash(triggerId, containerId, kind);
+        if (existing !== undefined) {
+          continue;
+        }
+        notificationHistoryStore.recordNotification(
+          triggerId,
+          containerId,
+          kind,
+          resultHash,
+          notifiedAt,
+        );
+        seeded += 1;
+      }
+    }
+    if (seeded > 0) {
+      this.log.debug(
+        `Seeded notification history with ${seeded} pre-existing update-available entr${seeded === 1 ? 'y' : 'ies'}`,
+      );
+    }
+  }
+
+  private shouldHandleSimpleContainerReport(containerReport: ContainerReport) {
+    if (!containerReport.container.updateAvailable) {
+      return false;
+    }
+    if (!this.configuration.once) {
+      return true;
+    }
+    return !this.hasAlreadyNotifiedForResult(containerReport.container, 'update-available');
+  }
+
+  private shouldHandleDigestContainerReport(containerReport: ContainerReport) {
+    if (!containerReport.container.updateAvailable) {
+      return false;
+    }
+    if (!this.configuration.once) {
+      return true;
+    }
+    return !this.hasAlreadyNotifiedForResult(containerReport.container, 'update-available-digest');
   }
 
   private getContainerLogger(container: Container): Component['log'] {
@@ -1134,10 +1259,13 @@ class Trigger extends Component {
   }
 
   private shouldHandleBatchContainerReport(containerReport: ContainerReport) {
-    return (
-      (containerReport.changed || !this.configuration.once) &&
-      this.shouldDispatchUpdateAvailableContainer(containerReport.container)
-    );
+    if (!this.shouldDispatchUpdateAvailableContainer(containerReport.container)) {
+      return false;
+    }
+    if (!this.configuration.once) {
+      return true;
+    }
+    return !this.hasAlreadyNotifiedForResult(containerReport.container, 'update-available');
   }
 
   private getBatchRetryContainers(containerReports: ContainerReport[]) {
@@ -1256,6 +1384,7 @@ class Trigger extends Component {
         result,
       );
     }
+    this.recordNotifiedForResult(container, 'update-available');
   }
 
   private handleUpdateAvailableSimpleTriggerError(
@@ -1302,10 +1431,14 @@ class Trigger extends Component {
       return;
     }
 
-    // Filter on changed containers with update available and passing trigger threshold
+    // Filter on containers with update available that we haven't already notified for this exact result
     if (!this.shouldHandleSimpleContainerReport(containerReport)) {
+      const alreadyNotified =
+        containerReport.container.updateAvailable &&
+        this.configuration.once === true &&
+        this.hasAlreadyNotifiedForResult(containerReport.container, 'update-available');
       this.log.debug(
-        `Skipping update-available notification for ${fullName(containerReport.container)} (changed=${containerReport.changed}, once=${this.configuration.once ?? false}, updateAvailable=${containerReport.container.updateAvailable})`,
+        `Skipping update-available notification for ${fullName(containerReport.container)} (once=${this.configuration.once ?? false}, updateAvailable=${containerReport.container.updateAvailable}, alreadyNotified=${alreadyNotified})`,
       );
       return;
     }
@@ -1369,16 +1502,8 @@ class Trigger extends Component {
         await this.triggerBatch(containersToSend);
       }
       status = 'success';
-      // In batch+digest mode, evict successfully-batched containers from the
-      // digest buffer so they are not sent again at the next digest flush.
-      if (this.digestBuffer.size > 0) {
-        for (const container of containersToSend) {
-          this.deleteBufferedContainerEntry(
-            this.digestBuffer,
-            this.digestBufferUpdatedAt,
-            getContainerNotificationKey(container) || fullName(container),
-          );
-        }
+      for (const container of containersToSend) {
+        this.recordNotifiedForResult(container, 'update-available');
       }
       if (this.batchRetryBuffer.size > 0) {
         for (const container of containersToSend) {
@@ -1460,7 +1585,14 @@ class Trigger extends Component {
     if (!this.isUpdateAvailableAutoTriggerEnabled()) {
       return;
     }
-    if (!this.shouldHandleSimpleContainerReport(containerReport)) {
+    if (!this.shouldHandleDigestContainerReport(containerReport)) {
+      const alreadyBuffered = this.hasAlreadyNotifiedForResult(
+        container,
+        'update-available-digest',
+      );
+      this.log.debug(
+        `Skipping update-available digest buffer for ${containerName} (once=${this.configuration.once === true}, updateAvailable=${container.updateAvailable}, alreadyBuffered=${alreadyBuffered})`,
+      );
       return;
     }
     if (!Trigger.isThresholdReached(container, this.getSimpleModeThreshold())) {
@@ -1552,6 +1684,9 @@ class Trigger extends Component {
         await this.triggerBatch(containers);
       }
       status = 'success';
+      for (const container of containers) {
+        this.recordNotifiedForResult(container, 'update-available-digest');
+      }
       for (const { containerName, bufferedContainer } of dispatchEntries) {
         if (this.digestBuffer.get(containerName) === bufferedContainer) {
           this.deleteBufferedContainerEntry(
@@ -1710,6 +1845,8 @@ class Trigger extends Component {
           order: this.configuration.order,
         },
       );
+
+      this.seedNotificationHistoryFromStore();
     } else {
       this.log.info(`Registering for manual execution`);
     }
@@ -1764,7 +1901,7 @@ class Trigger extends Component {
    * @param configuration
    * @returns {*}
    */
-  validateConfiguration(configuration: TriggerConfiguration): TriggerConfiguration {
+  validateConfiguration(configuration: TConfiguration): TConfiguration {
     const schema = this.getConfigurationSchema() as ReturnType<typeof this.joi.object>;
     const schemaWithDefaultOptions = schema.append({
       auto: this.joi
@@ -1802,7 +1939,7 @@ class Trigger extends Component {
     if (schemaValidated.error) {
       throw schemaValidated.error;
     }
-    const normalizedConfiguration = schemaValidated.value as TriggerConfiguration;
+    const normalizedConfiguration = schemaValidated.value as TConfiguration;
     normalizedConfiguration.auto = Trigger.normalizeAutoMode(normalizedConfiguration.auto);
     return normalizedConfiguration;
   }
@@ -1965,15 +2102,15 @@ class Trigger extends Component {
    * For simple flat-field masking; providers with nested fields should
    * override maskConfiguration() directly.
    */
-  protected maskFields(fieldsToMask: string[]): Record<string, unknown> {
-    const masked: Record<string, unknown> = { ...this.configuration };
+  protected maskFields(fieldsToMask: string[]): TConfiguration {
+    const masked = { ...this.configuration } as Record<string, unknown>;
     for (const field of fieldsToMask) {
       const value = masked[field];
       if (typeof value === 'string' && value.length > 0) {
         masked[field] = (this.constructor as typeof Trigger).mask(value);
       }
     }
-    return masked;
+    return masked as TConfiguration;
   }
 
   /**

@@ -211,7 +211,9 @@ onMounted(async () => {
           </AppBadge>
         </template>
         <template #cell-url="{ row }">
-          <span class="whitespace-nowrap font-mono text-2xs dd-text-secondary">
+          <span class="block max-w-[220px] truncate whitespace-nowrap font-mono text-2xs dd-text-secondary"
+                :title="resolveUrl(row)"
+                v-tooltip.top="resolveUrl(row)">
             {{ resolveUrl(row) }}
           </span>
         </template>
@@ -233,7 +235,11 @@ onMounted(async () => {
           <div class="px-4 pt-4 pb-2 flex items-start justify-between">
             <div class="min-w-0">
               <div class="text-sm font-semibold truncate dd-text">{{ reg.name }}</div>
-              <div class="text-2xs truncate mt-0.5 dd-text-muted font-mono">{{ resolveUrl(reg) }}</div>
+              <div class="text-2xs truncate mt-0.5 dd-text-muted font-mono"
+                   :title="resolveUrl(reg)"
+                   v-tooltip.top="resolveUrl(reg)">
+                {{ resolveUrl(reg) }}
+              </div>
             </div>
             <AppBadge :custom="{ bg: registryTypeBadge(reg.type).bg, text: registryTypeBadge(reg.type).text }" size="xs" class="shrink-0 ml-2">
               {{ registryTypeBadge(reg.type).label }}
@@ -257,7 +263,11 @@ onMounted(async () => {
           </div>
           <div class="px-4 py-2.5 mt-auto"
                :style="{ borderTop: '1px solid var(--dd-border)', backgroundColor: 'var(--dd-bg-elevated)' }">
-            <span class="text-2xs dd-text-muted font-mono truncate">{{ resolveUrl(reg) }}</span>
+            <span class="block truncate text-2xs dd-text-muted font-mono"
+                  :title="resolveUrl(reg)"
+                  v-tooltip.top="resolveUrl(reg)">
+              {{ resolveUrl(reg) }}
+            </span>
           </div>
         </template>
       </DataCardGrid>
@@ -274,7 +284,11 @@ onMounted(async () => {
           </AppBadge>
           <div class="flex-1 min-w-0">
             <div class="text-sm font-semibold truncate dd-text">{{ reg.name }}</div>
-            <div class="text-2xs font-mono dd-text-muted truncate mt-0.5">{{ resolveUrl(reg) }}</div>
+            <div class="text-2xs font-mono dd-text-muted truncate mt-0.5"
+                 :title="resolveUrl(reg)"
+                 v-tooltip.top="resolveUrl(reg)">
+              {{ resolveUrl(reg) }}
+            </div>
           </div>
           <div class="flex items-center gap-3 shrink-0">
             <span class="text-2xs-plus hidden md:inline font-medium" :style="{ color: isPrivate(reg) ? 'var(--dd-warning)' : 'var(--dd-text-muted)' }">
@@ -317,7 +331,11 @@ onMounted(async () => {
         </template>
 
         <template #subtitle>
-          <span class="text-2xs-plus font-mono dd-text-secondary">{{ selectedRegistry ? resolveUrl(selectedRegistry) : '' }}</span>
+          <span class="block max-w-[220px] truncate text-2xs-plus font-mono dd-text-secondary"
+                :title="selectedRegistry ? resolveUrl(selectedRegistry) : ''"
+                v-tooltip.top="selectedRegistry ? resolveUrl(selectedRegistry) : ''">
+            {{ selectedRegistry ? resolveUrl(selectedRegistry) : '' }}
+          </span>
         </template>
 
         <template v-if="selectedRegistry" #default>

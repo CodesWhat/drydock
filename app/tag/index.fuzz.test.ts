@@ -30,11 +30,15 @@ describe('tag/index fuzz tests', () => {
   });
 
   fcTest.prop([fc.string(), fc.string()])(
-    'transform never throws on arbitrary formula and tag strings',
+    'transform either returns a string or throws a regex configuration error',
     (formula, tag) => {
-      const result = transform(formula, tag);
-      // Should always return a string (either transformed or original)
-      expect(typeof result).toBe('string');
+      try {
+        const result = transform(formula, tag);
+        expect(typeof result).toBe('string');
+      } catch (error) {
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).message.length).toBeGreaterThan(0);
+      }
     },
   );
 

@@ -1,10 +1,12 @@
 import type { Container, ContainerReport } from '../model/container.js';
-import Component from '../registry/Component.js';
+import Component, { type ComponentConfiguration } from '../registry/Component.js';
 
 /**
  * Watcher abstract class.
  */
-abstract class Watcher extends Component {
+abstract class Watcher<
+  TConfiguration extends ComponentConfiguration = ComponentConfiguration,
+> extends Component<TConfiguration> {
   dockerApi?: unknown;
   lastRunAt?: string;
 

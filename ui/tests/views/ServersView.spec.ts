@@ -1,5 +1,5 @@
 import { flushPromises } from '@vue/test-utils';
-import { nextTick, ref } from 'vue';
+import { defineComponent, nextTick, ref } from 'vue';
 import { resetPreferences } from '@/preferences/store';
 import { getAgents } from '@/services/agent';
 import { getAllContainers } from '@/services/container';
@@ -36,8 +36,25 @@ const mockGetAgents = getAgents as ReturnType<typeof vi.fn>;
 const mockGetAllContainers = getAllContainers as ReturnType<typeof vi.fn>;
 const mockGetAllWatchers = getAllWatchers as ReturnType<typeof vi.fn>;
 
+const richDataTableStub = defineComponent({
+  props: ['columns', 'rows', 'rowKey', 'activeRow'],
+  emits: ['row-click'],
+  template: `
+    <div class="data-table" :data-row-count="rows?.length ?? 0" :data-active-row="activeRow || ''">
+      <div v-for="row in rows" :key="row[rowKey || 'id']" class="data-table-row">
+        <button v-if="row" class="row-click-first" @click="$emit('row-click', row)">Open</button>
+        <slot name="cell-name" :row="row" />
+        <slot name="cell-host" :row="row" />
+        <slot name="cell-status" :row="row" />
+        <slot name="cell-containers" :row="row" />
+        <slot name="cell-lastSeen" :row="row" />
+      </div>
+    </div>
+  `,
+});
+
 function tableRows(wrapper: any) {
-  const table = wrapper.findComponent(dataViewStubs.DataTable as any);
+  const table = wrapper.findComponent(richDataTableStub as any);
   return (table.props('rows') ?? []) as Array<{
     id?: string;
     name: string;
@@ -50,7 +67,10 @@ function tableRows(wrapper: any) {
 async function mountServersView() {
   const wrapper = mountWithPlugins(ServersView, {
     global: {
-      stubs: dataViewStubs,
+      stubs: {
+        ...dataViewStubs,
+        DataTable: richDataTableStub,
+      },
     },
   });
   await flushPromises();
@@ -281,6 +301,35 @@ describe('ServersView', () => {
     expect(wrapper.find('.detail-panel').attributes('data-open')).toBe('true');
     expect(wrapper.text()).toContain('Refresh');
     expect(wrapper.text()).toContain('unix:///var/run/docker.sock');
+  });
+
+  it('caps long host values in compact table and detail surfaces', async () => {
+    const longHost =
+      'https://very-long-edge-hostname.example.internal:2376/with/a/path/that/should/not/reflow';
+    mockGetAgents.mockResolvedValue([{ name: 'Edge-1', connected: true, host: longHost }]);
+
+    const wrapper = await mountServersView();
+
+    const hostCell = wrapper
+      .findAll('span')
+      .find(
+        (candidate) =>
+          candidate.text().trim() === longHost && candidate.classes().includes('max-w-[220px]'),
+      );
+    expect(hostCell).toBeDefined();
+    expect(hostCell?.classes()).toContain('truncate');
+
+    await wrapper.find('.row-click-first').trigger('click');
+    await nextTick();
+
+    const detailHost = wrapper
+      .findAll('span')
+      .find(
+        (candidate) =>
+          candidate.text().trim() === longHost && candidate.classes().includes('max-w-[220px]'),
+      );
+    expect(detailHost).toBeDefined();
+    expect(detailHost?.classes()).toContain('truncate');
   });
 
   it('renders status badge colors for connected and disconnected', async () => {

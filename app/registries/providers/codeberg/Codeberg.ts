@@ -1,9 +1,16 @@
 import Forgejo from '../forgejo/Forgejo.js';
+import type { SelfHostedBasicConfiguration } from '../shared/SelfHostedBasic.js';
+
+interface CodebergRegistryConfiguration extends SelfHostedBasicConfiguration {
+  login?: string;
+  password?: string;
+  auth?: string;
+}
 
 /**
  * Codeberg Container Registry integration.
  */
-class Codeberg extends Forgejo {
+class Codeberg extends Forgejo<CodebergRegistryConfiguration> {
   getConfigurationSchema() {
     const authSchema = this.joi
       .alternatives()

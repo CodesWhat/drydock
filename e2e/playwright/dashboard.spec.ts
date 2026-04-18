@@ -1,11 +1,15 @@
 import { expect, test } from '@playwright/test';
-import { registerServerAvailabilityCheck } from './helpers/test-helpers';
+import {
+  dismissAnnouncementBanners,
+  registerServerAvailabilityCheck,
+} from './helpers/test-helpers';
 
 registerServerAvailabilityCheck(test);
 
 test.describe('Dashboard', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
+    await dismissAnnouncementBanners(page);
     await expect(page.locator('main')).toContainText('Updates Available', { timeout: 30_000 });
   });
 
@@ -83,5 +87,56 @@ test.describe('Dashboard', () => {
         ).toBeLessThanOrEqual(0.5);
       }
     }
+  });
+
+  test('dashboard updates start in place without leaving the dashboard', async ({ page }) => {
+    const widget = page.locator('[aria-label="Updates Available widget"]');
+    const updateButtons = widget.locator('[data-test="dashboard-update-btn"]');
+
+    await expect(updateButtons.first()).toBeVisible();
+
+    const buttonCountBefore = await updateButtons.count();
+    const targetButton = updateButtons.first();
+    const targetRow = targetButton.locator('xpath=ancestor::tr');
+    const targetName = (await targetRow.locator('.font-medium').first().textContent())?.trim();
+
+    expect(targetName).toBeTruthy();
+
+    const updateAccepted = page.waitForResponse((response) => {
+      return (
+        response.request().method() === 'POST' &&
+        /\/api\/v1\/containers\/[^/]+\/update$/.test(response.url()) &&
+        response.status() === 202
+      );
+    });
+
+    await targetButton.click();
+
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toContainText(`Update ${targetName} now?`);
+    await dialog.getByRole('button', { name: 'Update', exact: true }).click();
+
+    await updateAccepted;
+
+    await expect(page).toHaveURL(/\/$/);
+
+    let sawInFlightState = false;
+    let buttonCountAfter = buttonCountBefore;
+    const deadline = Date.now() + 15_000;
+
+    while (Date.now() < deadline) {
+      const widgetText = await widget.innerText();
+      buttonCountAfter = await updateButtons.count();
+      if (/Updating|Queued/i.test(widgetText)) {
+        sawInFlightState = true;
+        break;
+      }
+      if (buttonCountAfter < buttonCountBefore) {
+        break;
+      }
+      await page.waitForTimeout(500);
+    }
+
+    expect(sawInFlightState || buttonCountAfter < buttonCountBefore).toBeTruthy();
   });
 });

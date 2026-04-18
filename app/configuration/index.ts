@@ -153,6 +153,10 @@ export function setDetectedServerName(name: string | undefined): void {
   detectedServerName = trimmed || undefined;
 }
 
+export function getDetectedServerName(): string | undefined {
+  return detectedServerName;
+}
+
 export function getLogLevel() {
   return ddEnvVars.DD_LOG_LEVEL || 'info';
 }
@@ -379,7 +383,11 @@ export function getServerConfiguration() {
     cors: joi
       .object({
         enabled: joi.boolean().default(false),
-        origin: joi.string().default('*'),
+        origin: joi.string().trim().min(1).when('enabled', {
+          is: true,
+          then: joi.required(),
+          otherwise: joi.optional(),
+        }),
         methods: joi.string().default('GET,HEAD,PUT,PATCH,POST,DELETE'),
       })
       .default({}),

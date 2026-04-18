@@ -13,7 +13,6 @@ on:
     branches:
       - main
       - 'release/**'
-      - 'feature/**'
   pull_request:
     branches: [main]
   schedule:
@@ -27,7 +26,10 @@ on:
         required: false
 
 concurrency:
-  group: ci-verify-${{ github.workflow }}-${{ github.ref }}
+  # Key on the source branch name (`head_ref` on PRs, `ref_name` on
+  # main/release pushes and merge_group) so rapid successive pushes to
+  # the same branch cancel the in-flight run.
+  group: ci-verify-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 permissions: {}

@@ -2,6 +2,8 @@ import { effectScope, nextTick, ref } from 'vue';
 import type { Container } from '@/types/container';
 import { useContainerPolicy } from '@/views/containers/useContainerPolicy';
 
+const ACTIVE_SNOOZE_UNTIL = '2099-04-14T12:00:00.000Z';
+
 vi.mock('@/composables/useToast', () => ({
   useToast: () => ({
     toasts: { value: [] },
@@ -111,7 +113,7 @@ describe('useContainerPolicy', () => {
             maturityMode: 'all',
             skipTags: ['latest'],
             skipDigests: [],
-            snoozeUntil: '2026-04-14T12:00:00.000Z',
+            snoozeUntil: ACTIVE_SNOOZE_UNTIL,
           },
         },
       },
@@ -129,7 +131,7 @@ describe('useContainerPolicy', () => {
         skipped: true,
         skipCount: 1,
         snoozed: true,
-        snoozeUntil: '2026-04-14T12:00:00.000Z',
+        snoozeUntil: ACTIVE_SNOOZE_UNTIL,
         updateDetectedAt: '2026-04-13T10:00:00.000Z',
       }),
     );
@@ -216,7 +218,7 @@ describe('useContainerPolicy', () => {
           updatePolicy: {
             skipTags: ['latest'],
             skipDigests: ['sha256:abc'],
-            snoozeUntil: '2026-04-14T12:00:00.000Z',
+            snoozeUntil: ACTIVE_SNOOZE_UNTIL,
             maturityMode: 'mature',
             maturityMinAgeDays: 9,
           },
@@ -236,18 +238,18 @@ describe('useContainerPolicy', () => {
       expect.objectContaining({
         skipTags: ['latest'],
         skipDigests: ['sha256:abc'],
-        snoozeUntil: '2026-04-14T12:00:00.000Z',
+        snoozeUntil: ACTIVE_SNOOZE_UNTIL,
         maturityMode: 'mature',
         maturityMinAgeDays: 9,
       }),
     );
     expect(harness.composable.selectedSkipTags.value).toEqual(['latest']);
     expect(harness.composable.selectedSkipDigests.value).toEqual(['sha256:abc']);
-    expect(harness.composable.selectedSnoozeUntil.value).toBe('2026-04-14T12:00:00.000Z');
+    expect(harness.composable.selectedSnoozeUntil.value).toBe(ACTIVE_SNOOZE_UNTIL);
     expect(harness.composable.selectedMaturityMode.value).toBe('mature');
     expect(harness.composable.selectedHasMaturityPolicy.value).toBe(true);
     expect(harness.composable.selectedMaturityMinAgeDays.value).toBe(9);
-    expect(harness.composable.snoozeDateInput.value).toBe('2026-04-14');
+    expect(harness.composable.snoozeDateInput.value).toBe('2099-04-14');
     expect(harness.composable.maturityModeInput.value).toBe('mature');
     expect(harness.composable.maturityMinAgeDaysInput.value).toBe(9);
 
