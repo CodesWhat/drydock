@@ -14,6 +14,7 @@ import {
   refreshContainer,
   revealContainerEnv,
   runTrigger,
+  scanAllContainersApi,
   scanContainer,
   updateContainerPolicy,
 } from '@/services/container';
@@ -891,6 +892,130 @@ describe('Container Service', () => {
       await expect(getContainerSbom('c1')).rejects.toThrow(
         'Failed to get SBOM for container c1: Bad Request',
       );
+    });
+  });
+
+  describe('scanAllContainersApi', () => {
+    it('posts to scan-all and returns cycleId + scheduledCount', async () => {
+      const mockResult = { cycleId: 'cycle-abc', scheduledCount: 5 };
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockResult,
+      } as any);
+
+      const result = await scanAllContainersApi();
+
+      expect(fetch).toHaveBeenCalledWith('/api/v1/containers/scan-all', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      expect(result).toEqual(mockResult);
+    });
+
+    it('passes abort signal when provided', async () => {
+      const controller = new AbortController();
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ cycleId: 'cycle-sig', scheduledCount: 2 }),
+      } as any);
+
+      const result = await scanAllContainersApi(controller.signal);
+
+      expect(fetch).toHaveBeenCalledWith('/api/v1/containers/scan-all', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
+      });
+      expect(result).toEqual({ cycleId: 'cycle-sig', scheduledCount: 2 });
+    });
+
+    it('throws ApiError with 429 on rate limit', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        status: 429,
+        statusText: 'Too Many Requests',
+        json: async () => ({}),
+      } as any);
+
+      const thrown = await scanAllContainersApi().catch((e) => e);
+
+      expect(thrown).toBeInstanceOf(ApiError);
+      expect(thrown.status).toBe(429);
+      expect(thrown.message).toContain('Failed to scan all containers');
+    });
+
+    it('throws with error detail when response body has error', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        status: 400,
+        statusText: 'Bad Request',
+        json: async () => ({ error: 'Scanner not configured' }),
+      } as any);
+
+      await expect(scanAllContainersApi()).rejects.toThrow(
+        'Failed to scan all containers: Bad Request (Scanner not configured)',
+      );
+    });
+
+    it('throws without detail when response body has no error field', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        status: 503,
+        statusText: 'Service Unavailable',
+        json: async () => ({}),
+      } as any);
+
+      await expect(scanAllContainersApi()).rejects.toThrow(
+        'Failed to scan all containers: Service Unavailable',
+      );
+    });
+
+    it('throws without detail when response body parsing fails', async () => {
+      const debugSpy = vi.spyOn(console, 'debug').mockImplementation(() => {});
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        statusText: 'Internal Server Error',
+        json: async () => {
+          throw new Error('parse error');
+        },
+      } as any);
+
+      try {
+        await expect(scanAllContainersApi()).rejects.toThrow(
+          'Failed to scan all containers: Internal Server Error',
+        );
+        expect(debugSpy).toHaveBeenCalledWith(
+          'Unable to parse scan-all response payload: parse error',
+        );
+      } finally {
+        debugSpy.mockRestore();
+      }
+    });
+
+    it('logs parse failures when response json throws a non-Error value', async () => {
+      const debugSpy = vi.spyOn(console, 'debug').mockImplementation(() => {});
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        statusText: 'Internal Server Error',
+        json: async () => {
+          throw 'scan-all-parse-failed';
+        },
+      } as any);
+
+      try {
+        await expect(scanAllContainersApi()).rejects.toThrow(
+          'Failed to scan all containers: Internal Server Error',
+        );
+        expect(debugSpy).toHaveBeenCalledWith(
+          'Unable to parse scan-all response payload: scan-all-parse-failed',
+        );
+      } finally {
+        debugSpy.mockRestore();
+      }
     });
   });
 

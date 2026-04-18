@@ -327,6 +327,34 @@ async function getContainerGroups(): Promise<ContainerGroup[]> {
   return extractCollectionData<ContainerGroup>(payload);
 }
 
+interface BulkScanResponse {
+  cycleId: string;
+  scheduledCount: number;
+}
+
+async function scanAllContainersApi(signal?: AbortSignal): Promise<BulkScanResponse> {
+  const response = await fetch('/api/v1/containers/scan-all', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    ...(signal ? { signal } : {}),
+  });
+  if (!response.ok) {
+    let details = '';
+    try {
+      const body = await response.json();
+      details = body?.error ? ` (${body.error})` : '';
+    } catch (e: unknown) {
+      console.debug(`Unable to parse scan-all response payload: ${errorMessage(e)}`);
+    }
+    throw new ApiError(
+      `Failed to scan all containers: ${response.statusText}${details}`,
+      response.status,
+    );
+  }
+  return response.json();
+}
+
 async function scanContainer(containerId: string, signal?: AbortSignal) {
   const response = await fetch(`/api/v1/containers/${containerId}/scan`, {
     method: 'POST',
@@ -393,6 +421,7 @@ export {
   refreshContainer,
   revealContainerEnv,
   runTrigger,
+  scanAllContainersApi,
   scanContainer,
   updateContainerPolicy,
 };
