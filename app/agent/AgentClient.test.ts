@@ -1600,6 +1600,22 @@ describe('AgentClient', () => {
       });
     });
 
+    test('should omit invalid optional forwarded security-scan-cycle-complete fields from agents', async () => {
+      await client.handleEvent('dd:security-scan-cycle-complete', {
+        cycleId: 'agent-cycle-43',
+        scannedCount: 4,
+        alertCount: '2',
+        startedAt: '',
+        completedAt: 123,
+      });
+
+      expect(event.emitSecurityScanCycleComplete).toHaveBeenCalledWith({
+        cycleId: 'agent-cycle-43',
+        scannedCount: 4,
+        scope: 'agent-forwarded',
+      });
+    });
+
     test('should ignore invalid security-scan-cycle-complete payloads', async () => {
       await client.handleEvent('dd:security-scan-cycle-complete', null);
       await client.handleEvent('dd:security-scan-cycle-complete', {

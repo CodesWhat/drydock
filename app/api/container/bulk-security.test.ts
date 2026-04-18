@@ -377,6 +377,22 @@ describe('api/container/bulk-security', () => {
       expect(harness.deps.emitSecurityAlert).not.toHaveBeenCalled();
     });
 
+    test('does not emit security alert when scan result has no summary', async () => {
+      const harness = createHarness({
+        containers: [{ id: 'c1', name: 'nginx' }],
+      });
+      harness.deps.scanImageForVulnerabilities.mockResolvedValueOnce(
+        createScanResult({ summary: undefined }),
+      );
+
+      await callScanAll(harness.handlers);
+      await waitForCycleComplete(harness.deps);
+
+      expect(harness.deps.emitSecurityAlert).not.toHaveBeenCalled();
+      const cyclePayload = harness.deps.emitSecurityScanCycleComplete.mock.calls[0][0];
+      expect(cyclePayload.alertCount).toBe(0);
+    });
+
     test('all alerts and cycle-complete share the same cycleId', async () => {
       const harness = createHarness({
         containers: [
@@ -519,6 +535,25 @@ describe('api/container/bulk-security', () => {
 
       expect(harness.deps.log.info).toHaveBeenCalledWith(expect.stringContaining('scan exploded'));
       expect(harness.deps.emitSecurityScanCycleComplete).toHaveBeenCalledTimes(1);
+    });
+
+    test('logs background cycle failure when cycle-complete emission rejects', async () => {
+      const harness = createHarness({
+        containers: [{ id: 'c1', name: 'nginx' }],
+      });
+      const cycleFailure = new Error('cycle emission failed');
+      harness.deps.scanImageForVulnerabilities.mockResolvedValueOnce(createScanResult());
+      harness.deps.emitSecurityScanCycleComplete.mockRejectedValueOnce(cycleFailure);
+
+      const { res } = await callScanAll(harness.handlers);
+
+      expect(res.status).toHaveBeenCalledWith(202);
+      await vi.waitFor(() => {
+        expect(harness.deps.log.error).toHaveBeenCalledWith(
+          expect.stringContaining('cycle emission failed'),
+        );
+      });
+      expect(harness.deps.getErrorMessage).toHaveBeenCalledWith(cycleFailure);
     });
   });
 

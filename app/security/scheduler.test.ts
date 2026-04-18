@@ -1500,12 +1500,12 @@ describe('runScheduledScans', () => {
     expect(cycleIds[0]).not.toBe(cycleIds[1]);
   });
 
-  test('should NOT emit a security alert when only low/medium findings are present', async () => {
+  test('should NOT emit a security alert when only low/medium findings are present and high/critical are absent', async () => {
     const container = createContainer();
     mockGetContainers.mockReturnValue([container]);
     mockScanImageWithDedup.mockResolvedValue({
       scanResult: createScanResult({
-        summary: { unknown: 0, low: 3, medium: 5, high: 0, critical: 0 },
+        summary: { unknown: 0, low: 3, medium: 5 },
       }),
       fromCache: false,
     });
@@ -1513,6 +1513,13 @@ describe('runScheduledScans', () => {
     await runScheduledScans();
 
     expect(mockEmitSecurityAlert).not.toHaveBeenCalled();
+    expect(mockEmitSecurityScanCycleComplete).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scope: 'scheduled',
+        scannedCount: 1,
+        alertCount: 0,
+      }),
+    );
   });
 
   test('should NOT emit a security alert when summary is missing', async () => {

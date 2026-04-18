@@ -6678,6 +6678,37 @@ describe('security digest mode (SECURITYMODE=digest)', () => {
     expect(unregisterFn).toHaveBeenCalled();
   });
 
+  test('init wires the registered securityScanCycleComplete callback to the trigger handler', async () => {
+    let cycleCompleteCallback;
+    vi.mocked(event.registerSecurityScanCycleComplete).mockImplementation((cb) => {
+      cycleCompleteCallback = cb;
+      return vi.fn();
+    });
+
+    await trigger.register('trigger', 'test', 'smtp', {
+      ...configurationValid,
+      mode: 'simple',
+      securitymode: 'digest',
+    });
+    const handlerSpy = vi
+      .spyOn(trigger, 'handleSecurityScanCycleCompleteEvent')
+      .mockResolvedValue(undefined);
+
+    await trigger.init();
+
+    const payload = {
+      cycleId: 'cycle-001',
+      scannedCount: 2,
+      alertCount: 1,
+      startedAt: '2026-04-17T10:00:00.000Z',
+      completedAt: '2026-04-17T10:01:00.000Z',
+    };
+
+    await cycleCompleteCallback?.(payload);
+
+    expect(handlerSpy).toHaveBeenCalledWith(payload);
+  });
+
   test('handleSecurityAlertEvent in simple mode dispatches immediately (unchanged)', async () => {
     await trigger.register('trigger', 'test', 'smtp', {
       ...configurationValid,
@@ -6765,6 +6796,28 @@ describe('security digest mode (SECURITYMODE=digest)', () => {
     expect(cycleBuffer.size).toBe(1);
   });
 
+  test('handleSecurityAlertEvent falls back to payload values when container lookup and summary are missing', async () => {
+    await trigger.register('trigger', 'test', 'smtp', {
+      ...configurationValid,
+      mode: 'simple',
+      securitymode: 'digest',
+    });
+    trigger.init();
+
+    await trigger.handleSecurityAlertEvent({
+      containerName: 'remote_agent-app',
+      details: 'summary unavailable',
+      cycleId: 'cycle-fallback',
+    });
+
+    const cycleBuffer = (trigger as any).securityDigestBuffer.get('cycle-fallback');
+    expect(cycleBuffer).toBeDefined();
+    expect(cycleBuffer.get('remote_agent-app')).toMatchObject({
+      containerName: 'remote_agent-app',
+      summary: { critical: 0, high: 0, medium: 0, low: 0, unknown: 0 },
+    });
+  });
+
   test('handleSecurityAlertEvent buffers multiple alerts independently by container key', async () => {
     await trigger.register('trigger', 'test', 'smtp', {
       ...configurationValid,
@@ -6842,6 +6895,28 @@ describe('security digest mode (SECURITYMODE=digest)', () => {
     expect(cycleBuffer.size).toBe(1);
     const entry = Array.from(cycleBuffer.values())[0];
     expect(entry.summary.critical).toBe(3);
+  });
+
+  test('handleSecurityAlertEvent falls back to containerName and an empty summary when details are missing', async () => {
+    await trigger.register('trigger', 'test', 'smtp', {
+      ...configurationValid,
+      mode: 'simple',
+      securitymode: 'digest',
+    });
+    trigger.init();
+
+    await trigger.handleSecurityAlertEvent({
+      containerName: 'local_missing-app',
+      details: '',
+      cycleId: 'cycle-fallback',
+    } as any);
+
+    const cycleBuffer = (trigger as any).securityDigestBuffer.get('cycle-fallback');
+    const entry = cycleBuffer.get('local_missing-app');
+    expect(entry).toMatchObject({
+      containerName: 'local_missing-app',
+      summary: { critical: 0, high: 0, medium: 0, low: 0, unknown: 0 },
+    });
   });
 
   test('overlapping cycles buffer independently by cycleId', async () => {
@@ -6962,6 +7037,164 @@ describe('security digest mode (SECURITYMODE=digest)', () => {
     expect((trigger as any).securityDigestBuffer.has('cycle-001')).toBe(false);
   });
 
+  test('cycle-complete falls back to the current time and logs failures when security digest dispatch fails', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-04-17T10:02:03.000Z'));
+
+    try {
+      await trigger.register('trigger', 'test', 'smtp', {
+        ...configurationValid,
+        mode: 'simple',
+        securitymode: 'digest',
+        securitydigesttitle: 'Started ${scan.startedAt}',
+        securitydigestbody: 'Completed ${scan.completedAt}',
+      });
+      trigger.init();
+
+      const container = {
+        id: 'c1',
+        watcher: 'local',
+        name: 'app',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', semverDiff: 'major' },
+      };
+      await trigger.handleSecurityAlertEvent({
+        containerName: 'local_app',
+        details: 'critical=1',
+        container,
+        cycleId: 'cycle-001',
+        summary: { critical: 1, high: 0, medium: 0, low: 0, unknown: 0 },
+      });
+
+      const warnSpy = vi.spyOn(trigger.log, 'warn');
+      const debugSpy = vi.spyOn(trigger.log, 'debug');
+      let batchContext;
+      const error = new Error('batch fail');
+      const triggerBatchSpy = vi
+        .spyOn(trigger, 'triggerBatch')
+        .mockImplementation(async (_rows, runtimeContext) => {
+          batchContext = runtimeContext;
+          throw error;
+        });
+
+      await trigger.handleSecurityScanCycleCompleteEvent({
+        cycleId: 'cycle-001',
+        scannedCount: 3,
+        alertCount: 1,
+      });
+
+      expect(batchContext).toMatchObject({
+        eventKind: 'security-alert-digest',
+        title: 'Started 2026-04-17T10:02:03.000Z',
+        body: 'Completed 2026-04-17T10:02:03.000Z',
+      });
+      expect(warnSpy).toHaveBeenCalledWith(
+        'Security digest flush failed for cycle cycle-001 (batch fail)',
+      );
+      expect(debugSpy).toHaveBeenCalledWith(error);
+      expect((trigger as any).securityDigestBuffer.has('cycle-001')).toBe(true);
+
+      triggerBatchSpy.mockRestore();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('cycle-complete sorts findings by severity and computes each severity bucket count', async () => {
+    await trigger.register('trigger', 'test', 'smtp', {
+      ...configurationValid,
+      mode: 'simple',
+      securitymode: 'digest',
+      securitydigesttitle:
+        'c=${scan.criticalCount} h=${scan.highCount} m=${scan.mediumCount} l=${scan.lowCount} u=${scan.unknownCount}',
+    });
+    trigger.init();
+
+    await trigger.handleSecurityAlertEvent({
+      containerName: 'unknown-only',
+      details: 'unknown=5',
+      cycleId: 'cycle-severity-order',
+      summary: { critical: 0, high: 0, medium: 0, low: 0, unknown: 5 },
+    });
+    await trigger.handleSecurityAlertEvent({
+      containerName: 'unknown-only-2',
+      details: 'unknown=1',
+      cycleId: 'cycle-severity-order',
+      summary: { critical: 0, high: 0, medium: 0, low: 0, unknown: 1 },
+    });
+    await trigger.handleSecurityAlertEvent({
+      containerName: 'low-only',
+      details: 'low=4',
+      cycleId: 'cycle-severity-order',
+      summary: { critical: 0, high: 0, medium: 0, low: 4, unknown: 0 },
+    });
+    await trigger.handleSecurityAlertEvent({
+      containerName: 'medium-only',
+      details: 'medium=3',
+      cycleId: 'cycle-severity-order',
+      summary: { critical: 0, high: 0, medium: 3, low: 0, unknown: 0 },
+    });
+    await trigger.handleSecurityAlertEvent({
+      containerName: 'high-only',
+      details: 'high=2',
+      cycleId: 'cycle-severity-order',
+      summary: { critical: 0, high: 2, medium: 0, low: 0, unknown: 0 },
+    });
+    await trigger.handleSecurityAlertEvent({
+      containerName: 'critical-only',
+      details: 'critical=1',
+      cycleId: 'cycle-severity-order',
+      summary: { critical: 1, high: 0, medium: 0, low: 0, unknown: 0 },
+    });
+
+    let batchContext: { eventKind: string; title: string; body: string } | undefined;
+    let batchRows:
+      | Array<{
+          name: string;
+          critical: number;
+          high: number;
+          medium: number;
+          low: number;
+          unknown: number;
+        }>
+      | undefined;
+    const triggerBatchSpy = vi
+      .spyOn(trigger, 'triggerBatch')
+      .mockImplementation(async (rows, runtimeContext) => {
+        batchRows = rows as Array<{
+          name: string;
+          critical: number;
+          high: number;
+          medium: number;
+          low: number;
+          unknown: number;
+        }>;
+        batchContext = runtimeContext as { eventKind: string; title: string; body: string };
+      });
+
+    await trigger.handleSecurityScanCycleCompleteEvent({
+      cycleId: 'cycle-severity-order',
+      scannedCount: 6,
+      alertCount: 6,
+      startedAt: '2026-04-17T10:00:00.000Z',
+      completedAt: '2026-04-17T10:01:00.000Z',
+    });
+
+    expect(triggerBatchSpy).toHaveBeenCalledTimes(1);
+    expect(batchRows).toEqual([
+      { name: 'critical-only', critical: 1, high: 0, medium: 0, low: 0, unknown: 0 },
+      { name: 'high-only', critical: 0, high: 2, medium: 0, low: 0, unknown: 0 },
+      { name: 'medium-only', critical: 0, high: 0, medium: 3, low: 0, unknown: 0 },
+      { name: 'low-only', critical: 0, high: 0, medium: 0, low: 4, unknown: 0 },
+      { name: 'unknown-only', critical: 0, high: 0, medium: 0, low: 0, unknown: 5 },
+      { name: 'unknown-only-2', critical: 0, high: 0, medium: 0, low: 0, unknown: 1 },
+    ]);
+    expect(batchContext).toMatchObject({
+      eventKind: 'security-alert-digest',
+      title: 'c=1 h=1 m=1 l=1 u=2',
+    });
+  });
+
   test('cycle-complete is idempotent: second call with same cycleId is a no-op', async () => {
     await trigger.register('trigger', 'test', 'smtp', {
       ...configurationValid,
@@ -7073,6 +7306,163 @@ describe('security digest mode (SECURITYMODE=digest)', () => {
 
     expect(triggerBatchSpy).toHaveBeenCalledTimes(2);
     expect((trigger as any).securityDigestBuffer.has('cycle-B')).toBe(false);
+  });
+
+  test('cycle-complete sorts security digest rows by severity before dispatch', async () => {
+    await trigger.register('trigger', 'test', 'smtp', {
+      ...configurationValid,
+      mode: 'simple',
+      securitymode: 'digest',
+    });
+    trigger.init();
+
+    await trigger.handleSecurityAlertEvent({
+      containerName: 'local_high-app',
+      details: 'high=1',
+      container: {
+        id: 'c1',
+        watcher: 'local',
+        name: 'high-app',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', semverDiff: 'major' },
+      },
+      cycleId: 'cycle-001',
+      summary: { critical: 0, high: 1, medium: 0, low: 0, unknown: 0 },
+    });
+    await trigger.handleSecurityAlertEvent({
+      containerName: 'local_critical-app',
+      details: 'critical=1',
+      container: {
+        id: 'c2',
+        watcher: 'local',
+        name: 'critical-app',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', semverDiff: 'major' },
+      },
+      cycleId: 'cycle-001',
+      summary: { critical: 1, high: 0, medium: 0, low: 0, unknown: 0 },
+    });
+
+    const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+
+    await trigger.handleSecurityScanCycleCompleteEvent({
+      cycleId: 'cycle-001',
+      scannedCount: 2,
+      alertCount: 2,
+      startedAt: '2026-04-17T10:00:00.000Z',
+      completedAt: '2026-04-17T10:01:00.000Z',
+    });
+
+    expect(triggerBatchSpy).toHaveBeenCalledWith(
+      [
+        expect.objectContaining({ name: 'local_critical-app', critical: 1, high: 0 }),
+        expect.objectContaining({ name: 'local_high-app', critical: 0, high: 1 }),
+      ],
+      expect.objectContaining({ eventKind: 'security-alert-digest' }),
+    );
+  });
+
+  test('cycle-complete tracks medium, low, and unknown findings in severity order', async () => {
+    await trigger.register('trigger', 'test', 'smtp', {
+      ...configurationValid,
+      mode: 'simple',
+      securitymode: 'digest',
+      securitydigesttitle:
+        'medium=${scan.mediumCount}, low=${scan.lowCount}, unknown=${scan.unknownCount}',
+    });
+    trigger.init();
+
+    await trigger.handleSecurityAlertEvent({
+      containerName: 'local_low-app',
+      details: 'low=1',
+      container: {
+        id: 'c1',
+        watcher: 'local',
+        name: 'low-app',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', semverDiff: 'major' },
+      },
+      cycleId: 'cycle-xyz',
+      summary: { critical: 0, high: 0, medium: 0, low: 1, unknown: 0 },
+    });
+    await trigger.handleSecurityAlertEvent({
+      containerName: 'local_unknown-app',
+      details: 'unknown=1',
+      container: {
+        id: 'c2',
+        watcher: 'local',
+        name: 'unknown-app',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', semverDiff: 'major' },
+      },
+      cycleId: 'cycle-xyz',
+      summary: { critical: 0, high: 0, medium: 0, low: 0, unknown: 1 },
+    });
+    await trigger.handleSecurityAlertEvent({
+      containerName: 'local_medium-app',
+      details: 'medium=1',
+      container: {
+        id: 'c3',
+        watcher: 'local',
+        name: 'medium-app',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', semverDiff: 'major' },
+      },
+      cycleId: 'cycle-xyz',
+      summary: { critical: 0, high: 0, medium: 1, low: 0, unknown: 0 },
+    });
+
+    const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+
+    await trigger.handleSecurityScanCycleCompleteEvent({
+      cycleId: 'cycle-xyz',
+      scannedCount: 3,
+      alertCount: 3,
+      startedAt: '2026-04-17T10:00:00.000Z',
+      completedAt: '2026-04-17T10:01:00.000Z',
+    });
+
+    expect(triggerBatchSpy).toHaveBeenCalledWith(
+      [
+        expect.objectContaining({ name: 'local_medium-app', medium: 1, low: 0, unknown: 0 }),
+        expect.objectContaining({ name: 'local_low-app', medium: 0, low: 1, unknown: 0 }),
+        expect.objectContaining({ name: 'local_unknown-app', medium: 0, low: 0, unknown: 1 }),
+      ],
+      expect.objectContaining({
+        eventKind: 'security-alert-digest',
+        title: 'medium=1, low=1, unknown=1',
+      }),
+    );
+  });
+
+  test('flushDigestBuffer warns and skips security digest flushes without complete cycle metadata', async () => {
+    const flushSecurityDigestBufferSpy = vi
+      .spyOn(trigger as any, 'flushSecurityDigestBuffer')
+      .mockResolvedValue(undefined);
+
+    await trigger.flushDigestBuffer({
+      eventKind: 'security-alert-digest',
+      cyclePayload: {
+        cycleId: 'cycle-001',
+        scannedCount: 3,
+        alertCount: 1,
+      } as any,
+    });
+    await trigger.flushDigestBuffer({
+      eventKind: 'security-alert-digest',
+      cycleId: 'cycle-001',
+    });
+
+    expect(trigger.log.warn).toHaveBeenCalledTimes(2);
+    expect(trigger.log.warn).toHaveBeenNthCalledWith(
+      1,
+      'flushDigestBuffer called for security-alert-digest without cycleId/cyclePayload — skipping',
+    );
+    expect(trigger.log.warn).toHaveBeenNthCalledWith(
+      2,
+      'flushDigestBuffer called for security-alert-digest without cycleId/cyclePayload — skipping',
+    );
+    expect(flushSecurityDigestBufferSpy).not.toHaveBeenCalled();
   });
 
   test('seedNotificationHistoryFromStore seeds security-alert-digest for digest-capable securitymode', async () => {
@@ -7227,6 +7617,25 @@ describe('security digest templates (6.7)', () => {
     expect(title).toContain('3 containers with findings');
   });
 
+  test('formatDigestBody reuses the batch body renderer for update digests', () => {
+    const containers = [
+      {
+        id: 'c1',
+        name: 'app',
+        watcher: 'local',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      },
+    ] as any;
+
+    expect(
+      (trigger as any).formatDigestBody('update-available-digest', {
+        kind: 'update',
+        containers,
+      }),
+    ).toBe(trigger.renderBatchBody(containers));
+  });
+
   test('custom securitydigesttitle overrides default', async () => {
     await trigger.register('trigger', 'test', 'smtp', {
       ...configurationValid,
@@ -7253,6 +7662,35 @@ describe('security digest templates (6.7)', () => {
 
     const title = (trigger as any).formatDigestTitle('security-alert-digest', ctx);
     expect(title).toBe('Scan done: 5 alerts');
+  });
+
+  test('renderSecurityDigestTemplate falls back to the raw template on syntax errors', async () => {
+    await trigger.register('trigger', 'test', 'smtp', {
+      ...configurationValid,
+      mode: 'simple',
+      securitymode: 'digest',
+    });
+    trigger.init();
+
+    const malformedTemplate = 'Alerts: ${scan.alertCount';
+    const ctx = {
+      kind: 'security' as const,
+      containers: [],
+      scannedCount: 2,
+      alertCount: 5,
+      criticalCount: 0,
+      highCount: 0,
+      mediumCount: 0,
+      lowCount: 0,
+      unknownCount: 0,
+      startedAt: '2026-04-17T10:00:00.000Z',
+      completedAt: '2026-04-17T10:01:00.000Z',
+      cycleId: 'cycle-001',
+    };
+
+    expect((trigger as any).renderSecurityDigestTemplate(malformedTemplate, ctx)).toBe(
+      malformedTemplate,
+    );
   });
 
   test('default security digest body includes scan metadata', async () => {
