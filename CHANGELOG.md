@@ -10,6 +10,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **[#300](https://github.com/CodesWhat/drydock/discussions/300)** — **Security scan digest mode.** Every scan cycle (scheduled cron, on-demand single, or the new bulk `POST /api/v1/containers/scan-all` endpoint) now carries a stable `cycleId` (UUID v7) and emits a `security-scan-cycle-complete` event with `scannedCount` / `alertCount` / `startedAt` / `completedAt` / `scope`. Triggers can configure `SECURITYMODE=digest` (or `batch+digest`) to receive one summary per cycle grouped by severity (critical → high → medium → low → unknown) instead of one notification per container. Templates are customizable via `SECURITYDIGESTTITLE` / `SECURITYDIGESTBODY`. Per-channel `once=true` dedup is tracked under a new `'security-alert-digest'` `NotificationEventKind` so simple / batch / digest channels never stomp on each other (same per-channel pattern introduced for updates in #282). The UI **Scan All** button now issues one bulk-scan request instead of N per-container HTTP calls, so a 40-container inventory produces one email instead of forty.
+- **Opt-in scheduled-scan notifications** — New `DD_SECURITY_SCAN_NOTIFICATIONS=true` flag enables `security-alert` event emission from scheduled scans. Default is `false` to preserve pre-rc.10 behavior for existing users; on-demand scans always emit. Scheduled scans always emit the `security-scan-cycle-complete` event regardless of the flag (so audit-log and OpenTelemetry consumers see every cycle, even zero-alert ones).
+- **Bulk security scan endpoint** — `POST /api/v1/containers/scan-all` scans all (or a filtered subset of) watched containers server-side, respects a bulk-scan concurrency pool, streams per-container progress over the existing scan SSE channel, emits a single `security-scan-cycle-complete` at the end, and honors client-disconnect aborts. Rate-limited to 1 request / 60s per IP (authenticated-admin bypass).
+
+### Changed
+
+- **Trigger digest flush DRY refactor** — `flushDigestBuffer` / `shouldHandleDigestContainerReport` are now parameterized on the event kind so update-digest and security-digest share a single implementation, keeping the rc.9 #282 dedup invariants (no cross-channel stomping, per-cycle partitioning) in one place instead of duplicated per feature.
+
 ## [1.5.0-rc.9] — 2026-04-17
 
 ### Added
