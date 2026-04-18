@@ -86,6 +86,14 @@ function dismissOne(entry: AuditEntry) {
   dismissedIds.value = [...dismissedIds.value, entry.id];
 }
 
+function dismissAll() {
+  if (visibleEntries.value.length === 0) return;
+  const existing = new Set(dismissedIds.value);
+  const toAdd = visibleEntries.value.map((e) => e.id).filter((id) => !existing.has(id));
+  if (toAdd.length === 0) return;
+  dismissedIds.value = [...dismissedIds.value, ...toAdd];
+}
+
 function handleClickOutside(e: PointerEvent) {
   const target = e.target as HTMLElement;
   if (!target.closest('.notification-bell-wrapper')) {
@@ -151,10 +159,17 @@ function isUnread(entry: AuditEntry): boolean {
       <div v-if="showBell" data-test="notification-dropdown"
            class="w-[calc(100vw-1rem)] max-w-[380px] dd-rounded-lg shadow-lg"
            :style="{ ...bellPanelStyle, zIndex: 'var(--z-popover)', backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)', boxShadow: 'var(--dd-shadow-tooltip)' }">
-        <!-- Header: title only -->
-        <div class="flex items-center px-3 py-2"
+        <!-- Header: title + Clear -->
+        <div class="flex items-center justify-between px-3 py-2"
              :style="{ backgroundColor: 'var(--dd-bg-sidebar)' }">
           <span class="text-2xs-plus font-semibold uppercase tracking-wider dd-text-secondary">Notifications</span>
+          <AppButton v-if="visibleEntries.length > 0"
+                  size="none" variant="plain" weight="none"
+                  class="text-2xs-plus font-medium dd-text hover:dd-text-primary transition-colors"
+                  data-test="clear-all-btn"
+                  @click="dismissAll">
+            Clear
+          </AppButton>
         </div>
 
         <!-- Scrollable list -->

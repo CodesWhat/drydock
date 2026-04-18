@@ -297,14 +297,13 @@ describe('NotificationBell', () => {
     expect(markBtn.text()).toContain('Mark all as read');
   });
 
-  it('header no longer carries any bulk-action buttons (variant A layout)', async () => {
+  it('header contains the Notifications label', async () => {
     const wrapper = factory();
     await flushPromises();
     await openBell(wrapper);
     const header = findDropdown(wrapper).find('div.px-3.py-2');
     expect(header.exists()).toBe(true);
     expect(header.text()).toContain('Notifications');
-    expect(header.find('button').exists()).toBe(false);
   });
 
   it('mark all read clears unread badge', async () => {
@@ -586,6 +585,92 @@ describe('NotificationBell', () => {
       await openBell(wrapper);
       expect(findEntryRows(wrapper)).toHaveLength(1);
       expect(wrapper.text()).toContain('postgres');
+    });
+  });
+
+  describe('bulk clear', () => {
+    it('Clear button is hidden when there are no entries', async () => {
+      mockGetAuditLog.mockResolvedValue({ entries: [] });
+      const wrapper = factory();
+      await flushPromises();
+      await openBell(wrapper);
+      expect(wrapper.find('[data-test="clear-all-btn"]').exists()).toBe(false);
+    });
+
+    it('Clear button is hidden when all entries are already dismissed', async () => {
+      localStorage.setItem('dd-bell-dismissed-ids', JSON.stringify(['1', '2']));
+      const wrapper = factory();
+      await flushPromises();
+      await openBell(wrapper);
+      expect(wrapper.find('[data-test="clear-all-btn"]').exists()).toBe(false);
+    });
+
+    it('Clear button is visible when entries exist', async () => {
+      const wrapper = factory();
+      await flushPromises();
+      await openBell(wrapper);
+      expect(wrapper.find('[data-test="clear-all-btn"]').exists()).toBe(true);
+    });
+
+    it('clicking Clear dismisses all visible entries', async () => {
+      const wrapper = factory();
+      await flushPromises();
+      await openBell(wrapper);
+      expect(findEntryRows(wrapper)).toHaveLength(2);
+
+      await wrapper.find('[data-test="clear-all-btn"]').trigger('click');
+      await new Promise((r) => setTimeout(r, 200));
+
+      expect(findEntryRows(wrapper)).toHaveLength(0);
+      expect(wrapper.text()).toContain('No notifications yet');
+    });
+
+    it('clicking Clear persists dismissed ids to localStorage', async () => {
+      const wrapper = factory();
+      await flushPromises();
+      await openBell(wrapper);
+      await wrapper.find('[data-test="clear-all-btn"]').trigger('click');
+      await new Promise((r) => setTimeout(r, 200));
+
+      const raw = localStorage.getItem('dd-bell-dismissed-ids');
+      const stored = JSON.parse(raw ?? '[]') as string[];
+      expect(stored).toContain('1');
+      expect(stored).toContain('2');
+    });
+
+    it('Clear hides after dismissing everything', async () => {
+      const wrapper = factory();
+      await flushPromises();
+      await openBell(wrapper);
+      await wrapper.find('[data-test="clear-all-btn"]').trigger('click');
+      await new Promise((r) => setTimeout(r, 200));
+
+      expect(wrapper.find('[data-test="clear-all-btn"]').exists()).toBe(false);
+    });
+
+    it('Clear does not duplicate existing dismissed ids', async () => {
+      localStorage.setItem('dd-bell-dismissed-ids', JSON.stringify(['1']));
+      const wrapper = factory();
+      await flushPromises();
+      await openBell(wrapper);
+      await wrapper.find('[data-test="clear-all-btn"]').trigger('click');
+      await new Promise((r) => setTimeout(r, 200));
+
+      const raw = localStorage.getItem('dd-bell-dismissed-ids');
+      const stored = JSON.parse(raw ?? '[]') as string[];
+      const count1 = stored.filter((id) => id === '1').length;
+      expect(count1).toBe(1);
+      expect(stored).toContain('2');
+    });
+
+    it('Clear does not mark entries as read (lastSeen unchanged)', async () => {
+      const wrapper = factory();
+      await flushPromises();
+      await openBell(wrapper);
+      await wrapper.find('[data-test="clear-all-btn"]').trigger('click');
+      await new Promise((r) => setTimeout(r, 200));
+
+      expect(localStorage.getItem('dd-bell-last-seen')).toBeNull();
     });
   });
 });
