@@ -305,6 +305,27 @@ test('deregistration of security alert handler should work', async () => {
   expect(handler).not.toHaveBeenCalled();
 });
 
+test('emitSecurityScanCycleComplete should call registered handlers with payload', async () => {
+  const handler = vi.fn();
+  const payload = {
+    scannedCount: 12,
+    alertCount: 3,
+    cycleId: 'cycle-42',
+    scope: 'scheduled' as const,
+  };
+  event.registerSecurityScanCycleComplete(handler, { order: 10 });
+  await event.emitSecurityScanCycleComplete(payload);
+  expect(handler).toHaveBeenCalledWith(payload);
+});
+
+test('deregistration of security scan cycle complete handler should work', async () => {
+  const handler = vi.fn();
+  const deregister = event.registerSecurityScanCycleComplete(handler, { order: 10 });
+  deregister();
+  await event.emitSecurityScanCycleComplete({ scannedCount: 0 });
+  expect(handler).not.toHaveBeenCalled();
+});
+
 test('emitAgentDisconnected should call registered handlers with payload', async () => {
   const handler = vi.fn();
   const payload = {

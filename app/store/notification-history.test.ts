@@ -141,6 +141,22 @@ describe('notification-history store', () => {
         notificationHistory.getLastNotifiedHash('trigger.a', 'c1', 'update-available-digest'),
       ).toBe('hash-digest');
     });
+
+    test('security-alert and security-alert-digest track independently', () => {
+      notificationHistory.recordNotification('trigger.a', 'c1', 'security-alert', 'hash-immediate');
+      notificationHistory.recordNotification(
+        'trigger.a',
+        'c1',
+        'security-alert-digest',
+        'hash-cycle',
+      );
+      expect(notificationHistory.getLastNotifiedHash('trigger.a', 'c1', 'security-alert')).toBe(
+        'hash-immediate',
+      );
+      expect(
+        notificationHistory.getLastNotifiedHash('trigger.a', 'c1', 'security-alert-digest'),
+      ).toBe('hash-cycle');
+    });
   });
 
   describe('clear', () => {

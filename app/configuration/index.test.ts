@@ -559,6 +559,7 @@ describe('getSecurityConfiguration', () => {
         jitter: 60000,
         concurrency: 4,
         batchTimeout: 1800000,
+        notifications: false,
       },
     });
   });
@@ -610,6 +611,7 @@ describe('getSecurityConfiguration', () => {
         jitter: 60000,
         concurrency: 8,
         batchTimeout: 900000,
+        notifications: false,
       },
     });
 

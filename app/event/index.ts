@@ -102,6 +102,15 @@ export interface SecurityAlertEventPayload {
   container?: Container;
 }
 
+export interface SecurityScanCycleCompleteEventPayload {
+  scannedCount: number;
+  alertCount?: number;
+  cycleId?: string;
+  startedAt?: string;
+  completedAt?: string;
+  scope?: 'scheduled' | 'on-demand';
+}
+
 export interface AgentConnectedEventPayload {
   agentName: string;
   reconnected: boolean;
@@ -141,6 +150,10 @@ const updateOperationChangedHandlers = new Map<
   OrderedEventHandler<UpdateOperationChangedEventPayload>
 >();
 const securityAlertHandlers = new Map<number, OrderedEventHandler<SecurityAlertEventPayload>>();
+const securityScanCycleCompleteHandlers = new Map<
+  number,
+  OrderedEventHandler<SecurityScanCycleCompleteEventPayload>
+>();
 const agentConnectedHandlers = new Map<number, OrderedEventHandler<AgentConnectedEventPayload>>();
 const agentDisconnectedHandlers = new Map<
   number,
@@ -340,6 +353,28 @@ export function registerSecurityAlert(
 }
 
 /**
+ * Emit SecurityScanCycleComplete event. Fired after a scan cycle finishes so digest-mode
+ * triggers can flush any buffered per-container alerts into a single summary notification.
+ * @param payload
+ */
+export async function emitSecurityScanCycleComplete(
+  payload: SecurityScanCycleCompleteEventPayload,
+): Promise<void> {
+  await emitOrderedHandlers(securityScanCycleCompleteHandlers, payload);
+}
+
+/**
+ * Register to SecurityScanCycleComplete event.
+ * @param handler
+ */
+export function registerSecurityScanCycleComplete(
+  handler: OrderedEventHandlerFn<SecurityScanCycleCompleteEventPayload>,
+  options: EventHandlerRegistrationOptions = {},
+): () => void {
+  return registerOrderedEventHandler(securityScanCycleCompleteHandlers, handler, options);
+}
+
+/**
  * Emit AgentConnected event.
  * @param payload
  */
@@ -513,6 +548,7 @@ export function clearAllListenersForTests(): void {
   containerUpdateFailedHandlers.clear();
   updateOperationChangedHandlers.clear();
   securityAlertHandlers.clear();
+  securityScanCycleCompleteHandlers.clear();
   agentConnectedHandlers.clear();
   agentDisconnectedHandlers.clear();
   selfUpdateStartingHandlers.clear();
