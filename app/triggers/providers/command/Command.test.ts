@@ -55,6 +55,7 @@ const configurationValid = {
     '${isDigestUpdate ? container.notificationAgentPrefix + "Container " + container.name + container.notificationWatcherSuffix + " running tag " + currentTag + " has a newer image available" : container.notificationAgentPrefix + "Container " + container.name + container.notificationWatcherSuffix + " running with " + container.updateKind.kind + " " + container.updateKind.localValue + " can be updated to " + container.updateKind.kind + " " + container.updateKind.remoteValue}${container.result && container.result.link ? "\\n" + container.result.link : ""}',
   batchtitle: '${containers.length} updates available',
   resolvenotifications: false,
+  securitymode: 'simple',
   digestcron: '0 8 * * *',
 };
 

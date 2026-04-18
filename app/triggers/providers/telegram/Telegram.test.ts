@@ -27,6 +27,7 @@ const configurationValid = {
 
   batchtitle: '${containers.length} updates available',
   resolvenotifications: false,
+  securitymode: 'simple',
   disabletitle: false,
   messageformat: 'Markdown',
   digestcron: '0 8 * * *',
@@ -65,6 +66,7 @@ test('maskConfiguration should mask sensitive data', async () => {
       '${isDigestUpdate ? "New image available for container " + container.name + " (tag " + currentTag + ")" : "New " + container.updateKind.kind + " found for container " + container.name}',
     threshold: 'all',
     resolvenotifications: false,
+    securitymode: 'simple',
     disabletitle: false,
     messageformat: 'Markdown',
     digestcron: '0 8 * * *',

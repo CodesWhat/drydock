@@ -29,6 +29,7 @@ const configurationValid = {
 
   batchtitle: '${containers.length} updates available',
   resolvenotifications: false,
+  securitymode: 'simple',
   digestcron: '0 8 * * *',
 };
 
@@ -83,6 +84,7 @@ test('maskConfiguration should mask sensitive data', async () => {
     simplebody: configurationValid.simplebody,
     batchtitle: configurationValid.batchtitle,
     resolvenotifications: false,
+    securitymode: 'simple',
     digestcron: '0 8 * * *',
   });
 });

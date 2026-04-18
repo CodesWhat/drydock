@@ -56,6 +56,7 @@ const configurationValid = {
 
   batchtitle: '${containers.length} updates available',
   resolvenotifications: false,
+  securitymode: 'simple',
   digestcron: '0 8 * * *',
 };
 

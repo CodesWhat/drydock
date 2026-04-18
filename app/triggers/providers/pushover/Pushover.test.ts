@@ -31,6 +31,7 @@ const configurationValid = {
 
   batchtitle: '${containers.length} updates available',
   resolvenotifications: false,
+  securitymode: 'simple',
   digestcron: '0 8 * * *',
 };
 
@@ -114,6 +115,7 @@ test('maskConfiguration should mask sensitive data', async () => {
 
     batchtitle: '${containers.length} updates available',
     resolvenotifications: false,
+    securitymode: 'simple',
     sound: 'pushover',
     html: 0,
     threshold: 'all',
