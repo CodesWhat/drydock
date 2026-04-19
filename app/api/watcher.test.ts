@@ -81,8 +81,7 @@ describe('Watcher Router', () => {
       },
     });
     agentManager.getAgent.mockReturnValue({
-      getWatcher: vi.fn().mockResolvedValue({
-        id: 'docker.remote',
+      getWatcherSnapshot: vi.fn().mockReturnValue({
         type: 'docker',
         name: 'remote',
         configuration: { cron: '*/15 * * * *' },
@@ -125,8 +124,7 @@ describe('Watcher Router', () => {
       },
     });
     agentManager.getAgent.mockReturnValue({
-      getWatcher: vi.fn().mockResolvedValue({
-        id: 'docker.remote',
+      getWatcherSnapshot: vi.fn().mockReturnValue({
         type: 'docker',
         name: 'remote',
         configuration: { cron: '*/15 * * * *' },
@@ -300,12 +298,9 @@ describe('Watcher Router', () => {
       },
     });
     agentManager.getAgent.mockReturnValue({
-      getWatcher: vi.fn().mockResolvedValue({
-        id: 'docker.remote',
+      getWatcherSnapshot: vi.fn().mockReturnValue({
         type: 'docker',
         name: 'remote',
-        configuration: undefined,
-        metadata: undefined,
       }),
     });
 
@@ -330,7 +325,7 @@ describe('Watcher Router', () => {
     });
   });
 
-  test('getWatchers should fall back when refreshing remote watcher metadata throws', async () => {
+  test('getWatchers should fall back when agent snapshot cache is empty', async () => {
     registry.getState.mockReturnValue({
       watcher: {
         'edge.docker.remote': {
@@ -344,7 +339,7 @@ describe('Watcher Router', () => {
       },
     });
     agentManager.getAgent.mockReturnValue({
-      getWatcher: vi.fn().mockRejectedValue(new Error('refresh failed')),
+      getWatcherSnapshot: vi.fn().mockReturnValue(undefined),
     });
 
     const res = createMockResponse();
@@ -389,8 +384,7 @@ describe('Watcher Router', () => {
       },
     });
     agentManager.getAgent.mockReturnValue({
-      getWatcher: vi.fn().mockResolvedValue({
-        id: 'docker.remote',
+      getWatcherSnapshot: vi.fn().mockReturnValue({
         type: 'docker',
         name: 'remote',
         configuration: { cron: '*/15 * * * *' },

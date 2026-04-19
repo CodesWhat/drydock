@@ -511,7 +511,12 @@ describe('Docker Watcher', () => {
       });
       expect(event.emitContainerReports).toHaveBeenCalledWith(result);
       expect(event.emitWatcherSnapshot).toHaveBeenCalledWith({
-        watcher: { type: docker.type, name: docker.name },
+        watcher: expect.objectContaining({
+          type: docker.type,
+          name: docker.name,
+          configuration: expect.any(Object),
+          metadata: expect.objectContaining({ lastRunAt: expect.any(String) }),
+        }),
         containers: result.map((report) => report.container),
       });
     });

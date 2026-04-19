@@ -1066,10 +1066,13 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
         containerReports.push(fallbackContainerReport);
       }
       await event.emitContainerReports(containerReports);
+      this.lastRunAt = new Date().toISOString();
       await event.emitWatcherSnapshot({
         watcher: {
           type: this.type,
           name: this.name,
+          configuration: this.maskConfiguration() as Record<string, unknown>,
+          metadata: this.getMetadata(),
         },
         containers: containerReports.map((containerReport) => containerReport.container),
       });

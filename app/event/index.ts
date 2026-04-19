@@ -133,6 +133,8 @@ export interface WatcherSnapshotEventPayload {
   watcher: {
     type: string;
     name: string;
+    configuration?: Record<string, unknown>;
+    metadata?: Record<string, unknown>;
   };
   containers: Container[];
 }

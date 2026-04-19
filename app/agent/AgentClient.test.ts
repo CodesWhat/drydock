@@ -2165,4 +2165,138 @@ describe('AgentClient', () => {
       expect(url).toContain(encodeURIComponent('../../etc/passwd'));
     });
   });
+
+  describe('watcher snapshot cache', () => {
+    test('getWatcherSnapshot returns undefined before handshake or SSE event fires', () => {
+      expect(client.getWatcherSnapshot('docker', 'remote')).toBeUndefined();
+    });
+
+    test('handshake seeds the watcher snapshot cache from GET /api/watchers response', async () => {
+      axios.get
+        .mockResolvedValueOnce({ data: [] }) // containers
+        .mockResolvedValueOnce({
+          data: [
+            {
+              type: 'docker',
+              name: 'remote',
+              configuration: { cron: '*/5 * * * *' },
+              metadata: { nextRunAt: '2026-04-19T00:05:00.000Z' },
+            },
+          ],
+        }) // watchers
+        .mockResolvedValueOnce({ data: [] }); // triggers
+
+      storeContainer.getContainers.mockReturnValue([]);
+
+      await client.handshake();
+
+      expect(client.getWatcherSnapshot('docker', 'remote')).toEqual({
+        type: 'docker',
+        name: 'remote',
+        configuration: { cron: '*/5 * * * *' },
+        metadata: { nextRunAt: '2026-04-19T00:05:00.000Z' },
+      });
+    });
+
+    test('dd:watcher-snapshot SSE event updates the cache with fresh configuration and metadata', async () => {
+      // Seed via handshake first
+      axios.get
+        .mockResolvedValueOnce({ data: [] })
+        .mockResolvedValueOnce({
+          data: [
+            {
+              type: 'docker',
+              name: 'remote',
+              configuration: { cron: '0 * * * *' },
+              metadata: { nextRunAt: '2026-04-19T01:00:00.000Z' },
+            },
+          ],
+        })
+        .mockResolvedValueOnce({ data: [] });
+      storeContainer.getContainers.mockReturnValue([]);
+      await client.handshake();
+
+      // Now fire a snapshot SSE with updated values
+      await client.handleEvent('dd:watcher-snapshot', {
+        watcher: {
+          type: 'docker',
+          name: 'remote',
+          configuration: { cron: '*/15 * * * *' },
+          metadata: { nextRunAt: '2026-04-19T01:15:00.000Z' },
+        },
+        containers: [],
+      });
+
+      expect(client.getWatcherSnapshot('docker', 'remote')).toEqual({
+        type: 'docker',
+        name: 'remote',
+        configuration: { cron: '*/15 * * * *' },
+        metadata: { nextRunAt: '2026-04-19T01:15:00.000Z' },
+      });
+    });
+
+    test('dd:watcher-snapshot event with only partial watcher fields preserves existing cache values', async () => {
+      // Seed with full data via handshake
+      axios.get
+        .mockResolvedValueOnce({ data: [] })
+        .mockResolvedValueOnce({
+          data: [
+            {
+              type: 'docker',
+              name: 'remote',
+              configuration: { cron: '0 * * * *' },
+              metadata: { nextRunAt: '2026-04-19T01:00:00.000Z' },
+            },
+          ],
+        })
+        .mockResolvedValueOnce({ data: [] });
+      storeContainer.getContainers.mockReturnValue([]);
+      await client.handshake();
+
+      // Fire a snapshot with only type and name (no configuration or metadata)
+      await client.handleEvent('dd:watcher-snapshot', {
+        watcher: { type: 'docker', name: 'remote' },
+        containers: [],
+      });
+
+      // Existing values must be preserved
+      expect(client.getWatcherSnapshot('docker', 'remote')).toEqual({
+        type: 'docker',
+        name: 'remote',
+        configuration: { cron: '0 * * * *' },
+        metadata: { nextRunAt: '2026-04-19T01:00:00.000Z' },
+      });
+    });
+
+    test('dd:watcher-snapshot event with only type and name populates the cache with undefined configuration and metadata', async () => {
+      // No prior handshake — first SSE event for an unknown watcher
+      storeContainer.getContainers.mockReturnValue([]);
+
+      await client.handleEvent('dd:watcher-snapshot', {
+        watcher: { type: 'docker', name: 'newbie' },
+        containers: [],
+      });
+
+      expect(client.getWatcherSnapshot('docker', 'newbie')).toEqual({
+        type: 'docker',
+        name: 'newbie',
+        configuration: undefined,
+        metadata: undefined,
+      });
+    });
+
+    test('getWatcherSnapshot with unknown watcher returns undefined', async () => {
+      // Populate cache with docker.a
+      axios.get
+        .mockResolvedValueOnce({ data: [] })
+        .mockResolvedValueOnce({
+          data: [{ type: 'docker', name: 'a', configuration: {}, metadata: {} }],
+        })
+        .mockResolvedValueOnce({ data: [] });
+      storeContainer.getContainers.mockReturnValue([]);
+      await client.handshake();
+
+      expect(client.getWatcherSnapshot('docker', 'b')).toBeUndefined();
+    });
+  });
 });
