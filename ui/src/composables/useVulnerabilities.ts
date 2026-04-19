@@ -2,6 +2,7 @@ import { computed, type Ref, ref } from 'vue';
 import { getSecurityVulnerabilityOverview } from '../services/container';
 import type {
   Container,
+  ContainerReleaseNotes,
   ContainerSecurityDelta,
   ContainerSecuritySummary,
 } from '../types/container';
@@ -29,6 +30,8 @@ export interface ImageSummary {
   delta?: ContainerSecurityDelta;
   hasUpdate?: boolean;
   containersWithUpdate?: string[];
+  releaseNotes?: ContainerReleaseNotes | null;
+  releaseLink?: string;
 }
 
 export interface ImageSummaryWithVulns extends ImageSummary {
@@ -241,17 +244,28 @@ function annotateImageSummariesWithUpdates(
   if (containers.length === 0) {
     return;
   }
-  const containerUpdateMap = new Map<string, boolean>();
+  const containerById = new Map<string, Container>();
   for (const container of containers) {
-    containerUpdateMap.set(container.id, Boolean(container.newTag));
+    containerById.set(container.id, container);
   }
 
   for (const summary of summaries) {
     const ids = containerIdsByImage[summary.image] ?? [];
-    const withUpdate = ids.filter((id) => containerUpdateMap.get(id) === true);
+    const withUpdate = ids.filter((id) => Boolean(containerById.get(id)?.newTag));
     if (withUpdate.length > 0) {
       summary.hasUpdate = true;
       summary.containersWithUpdate = withUpdate;
+      for (const id of withUpdate) {
+        const container = containerById.get(id);
+        if (container?.releaseNotes) {
+          summary.releaseNotes = container.releaseNotes;
+          summary.releaseLink = container.releaseLink;
+          break;
+        }
+        if (container?.releaseLink && !summary.releaseLink) {
+          summary.releaseLink = container.releaseLink;
+        }
+      }
     }
   }
 }

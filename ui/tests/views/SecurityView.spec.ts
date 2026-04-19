@@ -1193,6 +1193,59 @@ describe('SecurityView', () => {
       expect(mockRouterPush).not.toHaveBeenCalled();
     });
 
+    it('propagates releaseNotes and releaseLink from updating container onto the image summary', async () => {
+      mockContainers([
+        makeContainer({
+          id: 'c1',
+          name: 'nginx',
+          displayName: 'nginx',
+          security: {
+            scan: {
+              vulnerabilities: [{ id: 'CVE-1', severity: 'HIGH', packageName: 'openssl' }],
+            },
+          },
+        }),
+      ]);
+      mockGetAllContainers.mockResolvedValue([
+        {
+          id: 'c1',
+          name: 'nginx',
+          displayName: 'nginx',
+          image: { name: 'nginx', tag: { value: '1.25' } },
+          newTag: '1.26',
+          status: 'running',
+          registry: 'dockerhub',
+          updateKind: 'minor',
+          updateMaturity: null,
+          bouncer: 'safe',
+          server: 'Local',
+          releaseLink: 'https://github.com/nginx/nginx/releases',
+          releaseNotes: {
+            title: 'v1.26.0',
+            body: 'Security and bug fixes',
+            url: 'https://github.com/nginx/nginx/releases/tag/v1.26.0',
+            publishedAt: '2026-04-01T00:00:00Z',
+            provider: 'github',
+          },
+        },
+      ]);
+
+      const w = factory();
+      await vi.waitFor(() => expect(mockGetSecurityVulnerabilityOverview).toHaveBeenCalledOnce());
+      await flushPromises();
+
+      const vm = w.vm as any;
+      const summary = vm.filteredSummaries[0];
+      expect(summary.releaseNotes).toEqual({
+        title: 'v1.26.0',
+        body: 'Security and bug fixes',
+        url: 'https://github.com/nginx/nginx/releases/tag/v1.26.0',
+        publishedAt: '2026-04-01T00:00:00Z',
+        provider: 'github',
+      });
+      expect(summary.releaseLink).toBe('https://github.com/nginx/nginx/releases');
+    });
+
     it('navigateToContainerUpdate joins multiple container IDs with comma', async () => {
       mockContainers([
         makeContainer({

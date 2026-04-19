@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router';
 import AppBadge from '../components/AppBadge.vue';
 import AppIconButton from '../components/AppIconButton.vue';
 import ContainerUpdateDialog from '../components/containers/ContainerUpdateDialog.vue';
+import ReleaseNotesLink from '../components/containers/ReleaseNotesLink.vue';
 import ScanProgressBanner from '../components/ScanProgressBanner.vue';
 import SecurityEmptyState from '../components/SecurityEmptyState.vue';
 import StatusDot from '../components/StatusDot.vue';
@@ -490,6 +491,11 @@ onUnmounted(() => {
                 @click.stop="navigateToContainerUpdate(row)">
                 View in Containers
               </AppButton>
+              <ReleaseNotesLink
+                v-if="row.releaseNotes || row.releaseLink"
+                :release-notes="row.releaseNotes"
+                :release-link="row.releaseLink"
+                data-test="security-release-notes" />
             </template>
           </div>
         </template>
@@ -619,6 +625,11 @@ onUnmounted(() => {
                 @click.stop="navigateToContainerUpdate(summary)">
                 View in Containers
               </AppButton>
+              <ReleaseNotesLink
+                v-if="summary.releaseNotes || summary.releaseLink"
+                :release-notes="summary.releaseNotes"
+                :release-link="summary.releaseLink"
+                data-test="security-release-notes" />
             </template>
             <span v-else class="text-2xs dd-text-muted">{{ summary.total }} total</span>
           </div>
@@ -747,6 +758,11 @@ onUnmounted(() => {
               @click="navigateToContainerUpdate(selectedImage)">
               View in Containers
             </AppButton>
+            <ReleaseNotesLink
+              v-if="selectedImage.releaseNotes || selectedImage.releaseLink"
+              :release-notes="selectedImage.releaseNotes"
+              :release-link="selectedImage.releaseLink"
+              data-test="security-detail-release-notes" />
           </div>
         </template>
 
