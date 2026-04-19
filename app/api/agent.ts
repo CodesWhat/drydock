@@ -1,9 +1,7 @@
 import express, { type Request, type Response } from 'express';
 import { getAgent, getAgents } from '../agent/index.js';
 import { formatLogDisplayTimestamp } from '../log/display-timestamp.js';
-import type { Container } from '../model/container.js';
 import * as storeContainer from '../store/container.js';
-import { getContainerStatusSummary } from '../util/container-summary.js';
 import { sendErrorResponse } from './error-response.js';
 
 const router = express.Router();
@@ -34,31 +32,53 @@ interface NormalizedAgentLogEntry {
   displayTimestamp: string;
 }
 
-function getAgentContainerStats(containers: Container[]) {
-  const containerStatus = getContainerStatusSummary(containers);
-  const images = new Set(
-    containers.map(
-      (container: Container) => container.image?.id ?? container.image?.name ?? container.id,
-    ),
-  ).size;
+interface AgentStatsBucket {
+  total: number;
+  running: number;
+  updatesAvailable: number;
+  imageFingerprints: Set<string>;
+}
+
+function createEmptyStatsBucket(): AgentStatsBucket {
   return {
-    containers: containerStatus,
-    images,
+    total: 0,
+    running: 0,
+    updatesAvailable: 0,
+    imageFingerprints: new Set<string>(),
   };
 }
 
-function groupContainersByAgent(containers: Container[]) {
-  const containersByAgent = new Map<string, Container[]>();
-  for (const container of containers) {
+/**
+ * Build per-agent container stats in a single pass over the container
+ * store. Replaces the previous O(agents × containers) pattern (full clone +
+ * per-agent group + 3 `.filter()` passes) — see #301.
+ */
+function buildStatsByAgent(agentNames: string[]): Map<string, AgentStatsBucket> {
+  const statsByAgent = new Map<string, AgentStatsBucket>();
+  for (const name of agentNames) {
+    statsByAgent.set(name, createEmptyStatsBucket());
+  }
+  for (const container of storeContainer.getContainersRaw({})) {
     if (typeof container.agent !== 'string') {
       continue;
     }
-    if (!containersByAgent.has(container.agent)) {
-      containersByAgent.set(container.agent, []);
+    const bucket = statsByAgent.get(container.agent);
+    if (!bucket) {
+      continue;
     }
-    containersByAgent.get(container.agent)?.push(container);
+    bucket.total += 1;
+    if (String(container.status ?? '').toLowerCase() === 'running') {
+      bucket.running += 1;
+    }
+    if (container.updateAvailable === true) {
+      bucket.updatesAvailable += 1;
+    }
+    const imageKey = container.image?.id ?? container.image?.name ?? container.id;
+    if (typeof imageKey === 'string' && imageKey !== '') {
+      bucket.imageFingerprints.add(imageKey);
+    }
   }
-  return containersByAgent;
+  return statsByAgent;
 }
 
 function getValidatedLogLevel(level: unknown): string | undefined | null {
@@ -147,9 +167,10 @@ function normalizeAgentLogEntries(entries: unknown) {
 
 function getAgentsList(req: Request, res: Response) {
   const agents = getAgents();
-  const containersByAgent = groupContainersByAgent(storeContainer.getContainers());
+  const statsByAgent = buildStatsByAgent(agents.map((agent) => agent.name));
   const safeAgents = agents.map((agent) => {
-    const stats = getAgentContainerStats(containersByAgent.get(agent.name) ?? []);
+    const bucket = statsByAgent.get(agent.name) ?? createEmptyStatsBucket();
+    const stopped = Math.max(bucket.total - bucket.running, 0);
     return {
       name: agent.name,
       host: agent.config.host,
@@ -164,7 +185,13 @@ function getAgentsList(req: Request, res: Response) {
       lastSeen: agent.info?.lastSeen,
       logLevel: agent.info?.logLevel,
       pollInterval: agent.info?.pollInterval,
-      ...stats,
+      containers: {
+        total: bucket.total,
+        running: bucket.running,
+        stopped,
+        updatesAvailable: bucket.updatesAvailable,
+      },
+      images: bucket.imageFingerprints.size,
     };
   });
   res.status(200).json({
