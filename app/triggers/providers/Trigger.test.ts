@@ -6265,7 +6265,7 @@ describe('batch+digest mode', () => {
     expect(batchRecordCalls.length).toBe(0);
   });
 
-  test('seedNotificationHistoryFromStore seeds both update-available and update-available-digest for batch+digest mode', async () => {
+  test('seedNotificationHistoryFromStore seeds only update-available for batch+digest mode (digest channel must NOT be seeded — #282)', async () => {
     const container = {
       id: 'c1',
       name: 'app',
@@ -6284,13 +6284,17 @@ describe('batch+digest mode', () => {
     expect(
       notificationHistoryStore.getLastNotifiedHash(trigger.getId(), 'c1', 'update-available'),
     ).toBeDefined();
+    // Digest history represents "a digest email was sent" — seeding it would
+    // suppress the first cron after startup, leaving the morning digest
+    // empty. The digest channel is populated exclusively by a successful
+    // `flushUpdateDigestBuffer`.
     expect(
       notificationHistoryStore.getLastNotifiedHash(
         trigger.getId(),
         'c1',
         'update-available-digest',
       ),
-    ).toBeDefined();
+    ).toBeUndefined();
   });
 
   test('seedNotificationHistoryFromStore seeds only update-available for pure batch mode', async () => {
@@ -6365,6 +6369,51 @@ describe('batch+digest mode', () => {
     expect(
       notificationHistoryStore.getLastNotifiedHash(trigger.getId(), 'c1', 'update-available'),
     ).toBeDefined();
+  });
+
+  test('seedNotificationHistoryFromStore does not suppress first digest flush after startup (#282 regression)', async () => {
+    let digestCallback: any;
+    vi.mocked(event.registerContainerReport).mockImplementation((cb) => {
+      digestCallback = cb;
+      return vi.fn();
+    });
+
+    const container = {
+      id: 'c1',
+      name: 'app',
+      watcher: 'test',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+    };
+    storeContainer.getContainersRaw.mockReturnValue([container]);
+
+    await trigger.register('trigger', 'test', 'combined-trigger', {
+      ...configurationValid,
+      mode: 'batch+digest',
+    });
+    trigger.init();
+
+    // After seeding: batch channel is primed (prevents spurious re-batch),
+    // but digest channel MUST be empty so the next scan can buffer.
+    expect(
+      notificationHistoryStore.getLastNotifiedHash(trigger.getId(), 'c1', 'update-available'),
+    ).toBeDefined();
+    expect(
+      notificationHistoryStore.getLastNotifiedHash(
+        trigger.getId(),
+        'c1',
+        'update-available-digest',
+      ),
+    ).toBeUndefined();
+
+    // Simulate the next scan cycle emitting the same container (no hash change).
+    // Pre-rc.9 fix: this would be silently dropped because the seeded
+    // update-available-digest hash matched. Post-fix: container must land
+    // in the digest buffer so the morning cron has something to send.
+    await digestCallback?.({ container, changed: false } as any);
+
+    expect(trigger.digestBuffer.size).toBe(1);
+    expect(trigger.digestBuffer.get('c1')).toMatchObject({ id: 'c1' });
   });
 
   test('handleContainerReportDigest emits debug log on once+alreadyNotified skip', async () => {

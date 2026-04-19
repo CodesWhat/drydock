@@ -1266,10 +1266,18 @@ class Trigger<
       return;
     }
     const triggerId = this.getId();
+    // Only seed the simple/batch channel. The digest channel must NOT be
+    // seeded from store state: an entry in `update-available-digest` history
+    // semantically means "a digest email was sent for this hash", and seeding
+    // it conflates "update existed in store at startup" with "digest sent".
+    // That false equivalence caused #282 on rc.9 — a container that was never
+    // digested would be suppressed because its store hash matched the seeded
+    // history hash, leaving the morning cron with an empty buffer. The digest
+    // channel is populated exclusively by `flushUpdateDigestBuffer` after a
+    // successful send; the first cron after startup therefore sends a
+    // catch-up digest of everything in the buffer, which matches the
+    // "periodic summary" semantics of digest mode.
     const kindsToSeed: notificationHistoryStore.NotificationEventKind[] = ['update-available'];
-    if (Trigger.isDigestCapableMode(this.configuration.mode)) {
-      kindsToSeed.push('update-available-digest');
-    }
     if (Trigger.isSecurityDigestCapableMode(this.configuration.securitymode)) {
       kindsToSeed.push('security-alert-digest');
     }
