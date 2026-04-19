@@ -52,11 +52,10 @@ describe('DataTable', () => {
       expect(ths[3].text()).toBe('Actions');
     });
 
-    it('centers Actions header text', () => {
+    it('right-aligns Actions header text to match action buttons', () => {
       const w = factory({ showActions: true });
       const actionsHeader = w.findAll('thead th')[3];
-      expect(actionsHeader.classes()).toContain('text-center');
-      expect(actionsHeader.classes()).not.toContain('text-right');
+      expect(actionsHeader.classes()).toContain('text-right');
     });
 
     it('does not show Actions header when showActions is false', () => {
@@ -68,6 +67,20 @@ describe('DataTable', () => {
     it('uses fixed table layout when fixedLayout is enabled', () => {
       const w = factory({ fixedLayout: true });
       expect(w.find('table').attributes('style')).toContain('table-layout: fixed');
+    });
+
+    it('applies width from column def to <th> style when fixedLayout is true', () => {
+      const cols = [
+        { key: 'name', label: 'Name', width: '320px' },
+        { key: 'status', label: 'Status', width: '90px' },
+      ];
+      const w = mount(DataTable, {
+        props: { columns: cols, rows: [], rowKey: 'id', fixedLayout: true },
+        global: { stubs: { AppIcon: { template: '<span />' } } },
+      });
+      const ths = w.findAll('thead th');
+      expect(ths[0].attributes('style')).toContain('width: 320px');
+      expect(ths[1].attributes('style')).toContain('width: 90px');
     });
   });
 

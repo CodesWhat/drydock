@@ -271,6 +271,7 @@ watchEffect(() => {
       <DataTable
         v-if="containerViewMode === 'table'"
         :columns="tableColumns"
+        :fixed-layout="true"
         :rows="tableRows"
         :row-key="getTableRowKey"
         :sort-key="containerSortKey"
@@ -404,7 +405,7 @@ watchEffect(() => {
         </template>
         <!-- Version comparison -->
         <template #cell-version="{ row: c }">
-          <div v-if="c.newTag" class="flex items-center justify-center gap-1.5 min-w-0 max-w-[260px]">
+            <div v-if="c.newTag" class="flex items-center justify-center gap-1.5 w-full">
             <span class="text-2xs-plus dd-text-secondary truncate shrink-0 max-w-[100px]" v-tooltip.top="c.currentTag">{{ c.currentTag }}</span>
             <AppIcon name="arrow-right" :size="8" class="dd-text-muted shrink-0" />
             <CopyableTag :tag="c.newTag" class="text-2xs-plus font-semibold truncate max-w-[140px]" style="color: var(--dd-primary);" @click.stop>{{ c.newTag }}</CopyableTag>
@@ -446,40 +447,58 @@ watchEffect(() => {
             </div>
           </div>
         </template>
-        <!-- Kind badge -->
+        <!-- Kind badge (3 breaks: icon-only → stack → row) -->
         <template #cell-kind="{ row: c }">
-          <div class="inline-flex items-center gap-1">
-          <AppBadge v-if="c.updateKind" size="xs" :custom="{ bg: updateKindColor(c.updateKind).bg, text: updateKindColor(c.updateKind).text }">
-            {{ c.updateKind }}
-          </AppBadge>
-          <AppBadge v-else-if="getContainerListPolicyState(c).skipped" size="xs" v-tooltip.top="'Pinned'" :custom="{ bg: 'var(--dd-success-muted)', text: 'var(--dd-success)' }">
-            <AppIcon name="pin" :size="12" />
-          </AppBadge>
-          <AppBadge v-else-if="!c.updateKind && !c.updateMaturity && !c.suggestedTag" size="xs" v-tooltip.top="'Up to date'" :custom="{ bg: 'var(--dd-success-muted)', text: 'var(--dd-success)' }">
-            <AppIcon name="up-to-date" :size="12" />
-          </AppBadge>
-          <AppBadge
-            v-if="c.newTag && c.bouncer === 'blocked'"
-            tone="danger"
-            size="xs"
-            class="px-1.5 py-0"
-            v-tooltip.top="tt(blockedUpdateTooltip(c))"
-          >
-            <AppIcon name="lock" :size="12" class="mr-0.5" />
-            Blocked
-          </AppBadge>
-          <UpdateMaturityBadge :maturity="c.updateMaturity" :tooltip="c.updateMaturityTooltip" />
-          <SuggestedTagBadge :tag="c.suggestedTag" :current-tag="c.currentTag" />
+          <div class="flex flex-col @[160px]:flex-row items-center justify-center gap-1">
+            <AppBadge
+              v-if="c.updateKind"
+              size="xs"
+              :custom="{ bg: updateKindColor(c.updateKind).bg, text: updateKindColor(c.updateKind).text }"
+              v-tooltip.top="tt(c.updateKind)"
+            >
+              <AppIcon :name="c.updateKind === 'major' ? 'chevrons-up' : c.updateKind === 'minor' ? 'chevron-up' : c.updateKind === 'patch' ? 'hashtag' : 'fingerprint'" :size="12" />
+              <span class="dd-cell-show-100 ml-1">{{ c.updateKind }}</span>
+            </AppBadge>
+            <AppBadge
+              v-else-if="getContainerListPolicyState(c).skipped"
+              size="xs"
+              v-tooltip.top="'Pinned'"
+              :custom="{ bg: 'var(--dd-success-muted)', text: 'var(--dd-success)' }"
+            >
+              <AppIcon name="pin" :size="12" />
+              <span class="dd-cell-show-100 ml-1">Pinned</span>
+            </AppBadge>
+            <AppBadge
+              v-else-if="!c.updateKind && !c.updateMaturity && !c.suggestedTag"
+              size="xs"
+              v-tooltip.top="'Up to date'"
+              :custom="{ bg: 'var(--dd-success-muted)', text: 'var(--dd-success)' }"
+            >
+              <AppIcon name="up-to-date" :size="12" />
+              <span class="dd-cell-show-100 ml-1">Up to date</span>
+            </AppBadge>
+            <AppBadge
+              v-if="c.newTag && c.bouncer === 'blocked'"
+              tone="danger"
+              size="xs"
+              class="px-1.5 py-0 dd-cell-show-100"
+              v-tooltip.top="tt(blockedUpdateTooltip(c))"
+            >
+              <AppIcon name="lock" :size="12" class="mr-0.5" />
+              Blocked
+            </AppBadge>
+            <UpdateMaturityBadge class="dd-cell-show-100" :maturity="c.updateMaturity" :tooltip="c.updateMaturityTooltip" />
+            <SuggestedTagBadge class="dd-cell-show-100" :tag="c.suggestedTag" :current-tag="c.currentTag" />
           </div>
         </template>
-        <!-- Status -->
+        <!-- Status (2 breaks: icon-only → badge+text) -->
         <template #cell-status="{ row: c }">
-          <AppIcon :name="getContainerStatusIcon(c)" :size="13" class="shrink-0 md:!hidden"
-                   :style="getContainerStatusIconStyle(c)"
-                   v-tooltip.top="tt(getContainerStatusLabel(c))" />
-          <AppBadge class="max-md:!hidden" size="xs" :tone="getContainerStatusTone(c)">
-            {{ getContainerStatusLabel(c) }}
-          </AppBadge>
+          <div class="flex items-center justify-center">
+            <AppBadge size="xs" :tone="getContainerStatusTone(c)" v-tooltip.top="tt(getContainerStatusLabel(c))">
+              <AppIcon :name="getContainerStatusIcon(c)" :size="12" :style="getContainerStatusIconStyle(c)" />
+              <span class="dd-cell-show-80 ml-1">{{ getContainerStatusLabel(c) }}</span>
+            </AppBadge>
+          </div>
         </template>
         <!-- Bouncer column removed — blocked state integrated into update button -->
         <!-- Image Age -->

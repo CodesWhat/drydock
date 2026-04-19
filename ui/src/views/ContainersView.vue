@@ -924,7 +924,8 @@ const tableColumns = computed(() =>
     label: column.label,
     align: column.align,
     sortable: column.key !== 'icon',
-    width: column.key === 'name' ? '99%' : column.key === 'icon' ? '56px' : undefined,
+    width: column.width,
+    px: column.px,
     icon: column.key === 'icon',
   })),
 );

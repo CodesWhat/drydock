@@ -125,4 +125,12 @@ describe('useColumnVisibility', () => {
     const { showColumnPicker } = useColumnVisibility(ref(false));
     expect(showColumnPicker.value).toBe(false);
   });
+
+  it('should define a non-empty width for every column', async () => {
+    const { useColumnVisibility } = await loadColumnVisibility();
+    const { allColumns } = useColumnVisibility(ref(false));
+    for (const col of allColumns) {
+      expect(col.width).toBeTruthy();
+    }
+  });
 });

@@ -759,3 +759,28 @@ html.dd-transitioning::view-transition-new(*) {
   opacity: 0;
   transform: translateY(var(--dd-motion-menu-enter-y));
 }
+
+/* Table-cell responsive visibility via container queries.
+   Note: @container (inline-size) evaluates the td's *content* box, not border box —
+   so a 130px-wide td with px-3 (24px) padding queries as ~106px. Thresholds are
+   content-box widths. */
+.dd-cell-show-80,
+.dd-cell-show-100,
+.dd-cell-show-160 {
+  display: none;
+}
+@container (min-width: 80px) {
+  .dd-cell-show-80 {
+    display: inline-flex;
+  }
+}
+@container (min-width: 100px) {
+  .dd-cell-show-100 {
+    display: inline-flex;
+  }
+}
+@container (min-width: 160px) {
+  .dd-cell-show-160 {
+    display: inline-flex;
+  }
+}
