@@ -212,14 +212,35 @@ async function main() {
   console.log(`Iterations per scenario: ${ITERATIONS} (reported: median / min / max)\n`);
 
   const rows = [];
-  rows.push(['GET /api/watchers (before)', await timeRuns('', () => benchWatchersBefore(fixtures))]);
+  rows.push([
+    'GET /api/watchers (before)',
+    await timeRuns('', () => benchWatchersBefore(fixtures)),
+  ]);
   rows.push(['GET /api/watchers (after)', await timeRuns('', () => benchWatchersAfter(fixtures))]);
-  rows.push(['GET /api/agents stats (before)', await timeRuns('', () => benchAgentsStatsBefore(fixtures))]);
-  rows.push(['GET /api/agents stats (after)', await timeRuns('', () => benchAgentsStatsAfter(fixtures))]);
-  rows.push(['AgentsView mount logs fetch (before)', await timeRuns('', () => benchAgentsViewBefore(fixtures))]);
-  rows.push(['AgentsView mount logs fetch (after)', await timeRuns('', () => benchAgentsViewAfter())]);
-  rows.push(['ServersView mount (before)', await timeRuns('', () => benchServersViewBefore(fixtures))]);
-  rows.push(['ServersView mount (after)', await timeRuns('', () => benchServersViewAfter(fixtures))]);
+  rows.push([
+    'GET /api/agents stats (before)',
+    await timeRuns('', () => benchAgentsStatsBefore(fixtures)),
+  ]);
+  rows.push([
+    'GET /api/agents stats (after)',
+    await timeRuns('', () => benchAgentsStatsAfter(fixtures)),
+  ]);
+  rows.push([
+    'AgentsView mount logs fetch (before)',
+    await timeRuns('', () => benchAgentsViewBefore(fixtures)),
+  ]);
+  rows.push([
+    'AgentsView mount logs fetch (after)',
+    await timeRuns('', () => benchAgentsViewAfter()),
+  ]);
+  rows.push([
+    'ServersView mount (before)',
+    await timeRuns('', () => benchServersViewBefore(fixtures)),
+  ]);
+  rows.push([
+    'ServersView mount (after)',
+    await timeRuns('', () => benchServersViewAfter(fixtures)),
+  ]);
 
   const label = 'Scenario'.padEnd(42);
   console.log(`| ${label} | Median ms | Min ms | Max ms |`);
@@ -238,7 +259,9 @@ async function main() {
     ['ServersView mount', rows[6][1], rows[7][1]],
   ];
   for (const [name, before, after] of pairs) {
-    console.log(`- ${name}: ${fmtMs(before.median)}ms → ${fmtMs(after.median)}ms (${speedup(before.median, after.median)})`);
+    console.log(
+      `- ${name}: ${fmtMs(before.median)}ms → ${fmtMs(after.median)}ms (${speedup(before.median, after.median)})`,
+    );
   }
   console.log('');
 }

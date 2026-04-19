@@ -638,9 +638,10 @@ describe('api/container/bulk-security', () => {
           }),
       );
 
-      let abortHandler: (() => void) | undefined;
       const { req } = await callScanAll(harness.handlers);
-      abortHandler = (req.on as any).mock.calls.find((c: any[]) => c[0] === 'close')?.[1];
+      const abortHandler: (() => void) | undefined = (req.on as any).mock.calls.find(
+        (c: any[]) => c[0] === 'close',
+      )?.[1];
 
       // Trigger abort after first scan slot fills
       await new Promise((r) => setTimeout(r, 5));
