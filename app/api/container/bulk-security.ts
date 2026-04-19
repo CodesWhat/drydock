@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import type { SecurityConfiguration } from '../../configuration/index.js';
 import type { SecurityScanCycleCompleteEventPayload } from '../../event/index.js';
 import type { Container } from '../../model/container.js';
+import type { TrivyDatabaseStatus } from '../../security/runtime.js';
 import type { ContainerSecurityScan } from '../../security/scan.js';
 import { uuidv7 } from '../../util/uuid.js';
 import { sendErrorResponse } from '../error-response.js';
@@ -24,6 +25,7 @@ interface BulkSecurityAlertPayload {
 interface BulkSecurityStoreApi {
   getAllContainers: () => Container[];
   getContainer: (id: string) => Container | undefined;
+  updateContainer: (container: Container) => Container;
 }
 
 interface BulkSecurityHandlerDependencies {
@@ -43,6 +45,12 @@ interface BulkSecurityHandlerDependencies {
     container: Container,
   ) => Promise<{ username?: string; password?: string } | undefined>;
   getErrorMessage: (error: unknown) => string;
+  updateDigestScanCache?: (
+    digest: string,
+    scanResult: ContainerSecurityScan,
+    trivyDbUpdatedAt: string,
+  ) => void;
+  getTrivyDatabaseStatus?: () => Promise<TrivyDatabaseStatus | undefined>;
   log: {
     info: (message: string) => void;
     error: (message: string) => void;
@@ -164,6 +172,41 @@ async function runBulkScan(
           const auth = await deps.getContainerRegistryAuth(container);
           const scanResult = await deps.scanImageForVulnerabilities({ image, auth });
           scannedCount += 1;
+
+          try {
+            deps.storeContainer.updateContainer({
+              ...container,
+              security: {
+                ...(container.security || {}),
+                scan: scanResult,
+              },
+            });
+          } catch (persistErr: unknown) {
+            deps.log.info(
+              `Bulk scan persistence failed for container ${containerId} (${deps.getErrorMessage(persistErr)})`,
+            );
+          }
+
+          const containerDigest = container.image?.digest?.value;
+          if (
+            deps.updateDigestScanCache &&
+            deps.getTrivyDatabaseStatus &&
+            containerDigest &&
+            scanResult.status !== 'error'
+          ) {
+            try {
+              const trivyDbStatus = await deps.getTrivyDatabaseStatus();
+              deps.updateDigestScanCache(
+                containerDigest,
+                scanResult,
+                trivyDbStatus?.updatedAt || '',
+              );
+            } catch (cacheErr: unknown) {
+              deps.log.info(
+                `Bulk scan digest cache update failed for container ${containerId} (${deps.getErrorMessage(cacheErr)})`,
+              );
+            }
+          }
 
           if (shouldEmitAlert(scanResult.summary, severity)) {
             const s = scanResult.summary!;

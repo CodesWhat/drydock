@@ -40,6 +40,13 @@ function createHarness(options: { containers?: Record<string, unknown>[] } = {})
   const storeContainer = {
     getAllContainers: vi.fn(() => [...containers]),
     getContainer: vi.fn((id: string) => containers.find((c) => c.id === id)),
+    updateContainer: vi.fn((c: any) => {
+      const idx = containers.findIndex((existing) => existing.id === c.id);
+      if (idx >= 0) {
+        containers[idx] = c;
+      }
+      return c;
+    }),
   };
 
   const deps = {
@@ -61,6 +68,8 @@ function createHarness(options: { containers?: Record<string, unknown>[] } = {})
     ),
     getContainerRegistryAuth: vi.fn(async () => ({ username: 'user', password: 'token' })),
     getErrorMessage: vi.fn((e: unknown) => (e instanceof Error ? e.message : 'unknown error')),
+    updateDigestScanCache: vi.fn(),
+    getTrivyDatabaseStatus: vi.fn(async () => ({ updatedAt: '2026-04-01T00:00:00.000Z' })),
     log: { info: vi.fn(), error: vi.fn() },
   };
 
@@ -656,6 +665,211 @@ describe('api/container/bulk-security', () => {
       expect(harness.deps.scanImageForVulnerabilities.mock.calls.length).toBeLessThanOrEqual(5);
       // Cycle-complete always fires
       expect(harness.deps.emitSecurityScanCycleComplete).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('persistence', () => {
+    test('writes scanResult to container.security.scan after each successful scan', async () => {
+      const harness = createHarness({
+        containers: [
+          { id: 'c1', name: 'nginx' },
+          { id: 'c2', name: 'redis' },
+        ],
+      });
+      const scan = createScanResult({
+        summary: { unknown: 0, low: 1, medium: 0, high: 0, critical: 0 },
+      });
+      harness.deps.scanImageForVulnerabilities.mockResolvedValue(scan);
+
+      await callScanAll(harness.handlers);
+      await waitForCycleComplete(harness.deps);
+
+      expect(harness.storeContainer.updateContainer).toHaveBeenCalledTimes(2);
+      const calls = harness.storeContainer.updateContainer.mock.calls;
+      for (const [arg] of calls) {
+        expect(arg.security.scan).toEqual(scan);
+      }
+    });
+
+    test('writes scan when container has no prior security field', async () => {
+      const harness = createHarness({
+        containers: [{ id: 'c1', name: 'nginx', security: undefined }],
+      });
+      const scan = createScanResult();
+      harness.deps.scanImageForVulnerabilities.mockResolvedValue(scan);
+
+      await callScanAll(harness.handlers);
+      await waitForCycleComplete(harness.deps);
+
+      const [[arg]] = harness.storeContainer.updateContainer.mock.calls;
+      expect(arg.security).toEqual({ scan });
+    });
+
+    test('preserves existing security fields (e.g., sbom) when writing scan', async () => {
+      const harness = createHarness({
+        containers: [{ id: 'c1', name: 'nginx', security: { sbom: { status: 'generated' } } }],
+      });
+      const scan = createScanResult();
+      harness.deps.scanImageForVulnerabilities.mockResolvedValue(scan);
+
+      await callScanAll(harness.handlers);
+      await waitForCycleComplete(harness.deps);
+
+      const [[arg]] = harness.storeContainer.updateContainer.mock.calls;
+      expect(arg.security.scan).toEqual(scan);
+      expect(arg.security.sbom).toEqual({ status: 'generated' });
+    });
+
+    test('does not persist when the scan throws', async () => {
+      const harness = createHarness({
+        containers: [{ id: 'c1', name: 'nginx' }],
+      });
+      harness.deps.scanImageForVulnerabilities.mockRejectedValueOnce(new Error('trivy crashed'));
+
+      await callScanAll(harness.handlers);
+      await waitForCycleComplete(harness.deps);
+
+      expect(harness.storeContainer.updateContainer).not.toHaveBeenCalled();
+    });
+
+    test('logs and continues when store.updateContainer throws', async () => {
+      const harness = createHarness({
+        containers: [
+          { id: 'c1', name: 'nginx' },
+          { id: 'c2', name: 'redis' },
+        ],
+      });
+      harness.deps.scanImageForVulnerabilities.mockResolvedValue(createScanResult());
+      harness.storeContainer.updateContainer
+        .mockImplementationOnce(() => {
+          throw new Error('store down');
+        })
+        .mockImplementationOnce((c: any) => c);
+
+      await callScanAll(harness.handlers);
+      await waitForCycleComplete(harness.deps);
+
+      expect(harness.deps.log.info).toHaveBeenCalledWith(
+        expect.stringContaining('Bulk scan persistence failed'),
+      );
+      const cyclePayload = harness.deps.emitSecurityScanCycleComplete.mock.calls[0][0];
+      expect(cyclePayload.scannedCount).toBe(2);
+    });
+
+    test('populates digest scan cache when digest and trivy db are available', async () => {
+      const harness = createHarness({
+        containers: [
+          {
+            id: 'c1',
+            name: 'nginx',
+            image: {
+              registry: { name: 'hub', url: 'my-registry' },
+              name: 'test/app',
+              tag: { value: '1.2.3' },
+              digest: { value: 'sha256:abc' },
+            },
+          },
+        ],
+      });
+      const scan = createScanResult();
+      harness.deps.scanImageForVulnerabilities.mockResolvedValue(scan);
+
+      await callScanAll(harness.handlers);
+      await waitForCycleComplete(harness.deps);
+
+      expect(harness.deps.updateDigestScanCache).toHaveBeenCalledWith(
+        'sha256:abc',
+        scan,
+        '2026-04-01T00:00:00.000Z',
+      );
+    });
+
+    test('skips digest scan cache when scan status is error', async () => {
+      const harness = createHarness({
+        containers: [
+          {
+            id: 'c1',
+            name: 'nginx',
+            image: {
+              registry: { name: 'hub', url: 'my-registry' },
+              name: 'test/app',
+              tag: { value: '1.2.3' },
+              digest: { value: 'sha256:abc' },
+            },
+          },
+        ],
+      });
+      harness.deps.scanImageForVulnerabilities.mockResolvedValue(
+        createScanResult({ status: 'error' }),
+      );
+
+      await callScanAll(harness.handlers);
+      await waitForCycleComplete(harness.deps);
+
+      expect(harness.deps.updateDigestScanCache).not.toHaveBeenCalled();
+    });
+
+    test('skips digest scan cache when container has no digest', async () => {
+      const harness = createHarness({
+        containers: [{ id: 'c1', name: 'nginx' }],
+      });
+      harness.deps.scanImageForVulnerabilities.mockResolvedValue(createScanResult());
+
+      await callScanAll(harness.handlers);
+      await waitForCycleComplete(harness.deps);
+
+      expect(harness.deps.updateDigestScanCache).not.toHaveBeenCalled();
+    });
+
+    test('logs and continues when digest cache update throws', async () => {
+      const harness = createHarness({
+        containers: [
+          {
+            id: 'c1',
+            name: 'nginx',
+            image: {
+              registry: { name: 'hub', url: 'my-registry' },
+              name: 'test/app',
+              tag: { value: '1.2.3' },
+              digest: { value: 'sha256:abc' },
+            },
+          },
+        ],
+      });
+      harness.deps.scanImageForVulnerabilities.mockResolvedValue(createScanResult());
+      harness.deps.getTrivyDatabaseStatus.mockRejectedValueOnce(new Error('db down'));
+
+      await callScanAll(harness.handlers);
+      await waitForCycleComplete(harness.deps);
+
+      expect(harness.deps.log.info).toHaveBeenCalledWith(
+        expect.stringContaining('Bulk scan digest cache update failed'),
+      );
+    });
+
+    test('uses empty string for trivyDbUpdatedAt when status is undefined', async () => {
+      const harness = createHarness({
+        containers: [
+          {
+            id: 'c1',
+            name: 'nginx',
+            image: {
+              registry: { name: 'hub', url: 'my-registry' },
+              name: 'test/app',
+              tag: { value: '1.2.3' },
+              digest: { value: 'sha256:abc' },
+            },
+          },
+        ],
+      });
+      const scan = createScanResult();
+      harness.deps.scanImageForVulnerabilities.mockResolvedValue(scan);
+      harness.deps.getTrivyDatabaseStatus.mockResolvedValueOnce(undefined as any);
+
+      await callScanAll(harness.handlers);
+      await waitForCycleComplete(harness.deps);
+
+      expect(harness.deps.updateDigestScanCache).toHaveBeenCalledWith('sha256:abc', scan, '');
     });
   });
 
