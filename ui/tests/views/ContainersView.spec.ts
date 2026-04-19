@@ -2447,6 +2447,75 @@ describe('ContainersView', () => {
     });
   });
 
+  describe('containerIds query filter', () => {
+    it('shows all containers when containerIds query param is absent', async () => {
+      mockRoute.query = {};
+      const containers = [
+        makeContainer({ id: 'c1', name: 'nginx' }),
+        makeContainer({ id: 'c2', name: 'redis' }),
+      ];
+      const wrapper = await mountContainersView(containers);
+      const vm = wrapper.vm as any;
+
+      expect(vm.filterContainerIds.size).toBe(0);
+      expect(vm.displayContainers.map((c: Container) => c.id)).toEqual(
+        expect.arrayContaining(['c1', 'c2']),
+      );
+    });
+
+    it('filters displayContainers to matched IDs when containerIds query param is set', async () => {
+      mockRoute.query = { containerIds: 'c1,c2' };
+      const containers = [
+        makeContainer({ id: 'c1', name: 'nginx' }),
+        makeContainer({ id: 'c2', name: 'redis' }),
+        makeContainer({ id: 'c3', name: 'postgres' }),
+      ];
+      mockFilteredContainers.value = containers;
+      const wrapper = await mountContainersView(containers);
+      const vm = wrapper.vm as any;
+
+      expect(vm.filterContainerIds.size).toBe(2);
+      const displayIds = vm.displayContainers.map((c: Container) => c.id);
+      expect(displayIds).toContain('c1');
+      expect(displayIds).toContain('c2');
+      expect(displayIds).not.toContain('c3');
+    });
+
+    it('clearContainerIdsFilter empties the set and removes query param', async () => {
+      mockRoute.query = { containerIds: 'c1' };
+      const containers = [makeContainer({ id: 'c1', name: 'nginx' })];
+      const wrapper = await mountContainersView(containers);
+      const vm = wrapper.vm as any;
+
+      expect(vm.filterContainerIds.size).toBe(1);
+
+      vm.clearContainerIdsFilter();
+      await flushPromises();
+
+      expect(vm.filterContainerIds.size).toBe(0);
+    });
+
+    it('reacts to route query changes updating containerIds', async () => {
+      const query = reactive({ containerIds: '' }) as Record<string, unknown>;
+      mockRoute.query = query;
+      const containers = [
+        makeContainer({ id: 'c1', name: 'nginx' }),
+        makeContainer({ id: 'c2', name: 'redis' }),
+      ];
+      mockFilteredContainers.value = containers;
+      const wrapper = await mountContainersView(containers);
+      const vm = wrapper.vm as any;
+
+      expect(vm.filterContainerIds.size).toBe(0);
+
+      query.containerIds = 'c2';
+      await flushPromises();
+
+      expect(vm.filterContainerIds.size).toBe(1);
+      expect(vm.filterContainerIds.has('c2')).toBe(true);
+    });
+  });
+
   describe('sort stability during held update (fix #289)', () => {
     it('does not change sort position when status and updateKind flip mid-recreate', async () => {
       const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');

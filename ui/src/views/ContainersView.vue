@@ -360,6 +360,36 @@ const {
 } = useContainerFilters(containers);
 const route = useRoute();
 const router = useRouter();
+
+const filterContainerIds = ref<Set<string>>(new Set());
+
+function parseContainerIdsQuery(queryValue: unknown): Set<string> {
+  const raw = Array.isArray(queryValue) ? queryValue[0] : queryValue;
+  if (typeof raw !== 'string' || raw.trim().length === 0) {
+    return new Set();
+  }
+  return new Set(
+    raw
+      .split(',')
+      .map((id) => id.trim())
+      .filter((id) => id.length > 0),
+  );
+}
+
+watch(
+  () => route.query.containerIds,
+  (queryValue) => {
+    filterContainerIds.value = parseContainerIdsQuery(queryValue);
+  },
+  { immediate: true },
+);
+
+function clearContainerIdsFilter() {
+  filterContainerIds.value = new Set();
+  const { containerIds: _omit, ...rest } = route.query as Record<string, unknown>;
+  void router.replace({ query: rest as Record<string, string> });
+}
+
 const VALID_FILTER_KIND_VALUES = ['all', 'a\u006Ey', 'major', 'minor', 'patch', 'digest'] as const;
 type FilterKindQueryValue = (typeof VALID_FILTER_KIND_VALUES)[number];
 const DEFAULT_FILTER_KIND: FilterKindQueryValue = 'all';
@@ -647,6 +677,9 @@ function buildSyncedRouteQuery(): Record<string, string> {
   for (const key of QUERY_SYNC_KEYS) {
     delete nextQuery[key];
   }
+  if (filterContainerIds.value.size === 0) {
+    delete nextQuery.containerIds;
+  }
 
   if (filterSearch.value) {
     nextQuery.q = filterSearch.value;
@@ -731,7 +764,12 @@ function toggleContainerSort(key: string) {
 // displayContainers runs projection BEFORE sort so sort-affecting fields (status, updateKind,
 // newTag) reflect the held snapshot during a docker recreate window, preventing position shifts.
 const displayContainers = computed<Array<Container & { _pending?: true }>>(() => {
-  const live = filteredContainers.value.map((container) =>
+  const ids = filterContainerIds.value;
+  const sourceContainers =
+    ids.size > 0
+      ? filteredContainers.value.filter((container) => ids.has(container.id))
+      : filteredContainers.value;
+  const live = sourceContainers.map((container) =>
     skippedUpdates.value.has(container.id) || skippedUpdates.value.has(container.name)
       ? {
           ...container,
@@ -1304,6 +1342,8 @@ provide(containersViewTemplateContextKey, {
   formatRollbackReason,
   updateOperationsError,
   closeFullPage,
+  filterContainerIds,
+  clearContainerIdsFilter,
 });
 </script>
 

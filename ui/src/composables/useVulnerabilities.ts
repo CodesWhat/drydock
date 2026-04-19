@@ -1,6 +1,10 @@
 import { computed, type Ref, ref } from 'vue';
 import { getSecurityVulnerabilityOverview } from '../services/container';
-import type { ContainerSecurityDelta, ContainerSecuritySummary } from '../types/container';
+import type {
+  Container,
+  ContainerSecurityDelta,
+  ContainerSecuritySummary,
+} from '../types/container';
 import { computeSecurityDelta } from '../utils/container-mapper';
 import { errorMessage } from '../utils/error';
 import { normalizeSeverity } from '../utils/security';
@@ -23,6 +27,8 @@ export interface ImageSummary {
   total: number;
   fixable: number;
   delta?: ContainerSecurityDelta;
+  hasUpdate?: boolean;
+  containersWithUpdate?: string[];
 }
 
 export interface ImageSummaryWithVulns extends ImageSummary {
@@ -70,6 +76,7 @@ function readNumericSortValue(summary: ImageSummary, field: SecurityNumericSortF
 interface UseVulnerabilitiesOptions {
   securitySortField: Ref<string>;
   securitySortAsc: Ref<boolean>;
+  containers?: Ref<Container[]>;
 }
 
 interface UpdateScanSummary extends ContainerSecuritySummary {}
@@ -226,9 +233,34 @@ function incrementImageSummary(summary: ImageSummary, vulnerability: Vulnerabili
   summary.total += 1;
 }
 
+function annotateImageSummariesWithUpdates(
+  summaries: ImageSummary[],
+  containerIdsByImage: Record<string, string[]>,
+  containers: Container[],
+): void {
+  if (containers.length === 0) {
+    return;
+  }
+  const containerUpdateMap = new Map<string, boolean>();
+  for (const container of containers) {
+    containerUpdateMap.set(container.id, Boolean(container.newTag));
+  }
+
+  for (const summary of summaries) {
+    const ids = containerIdsByImage[summary.image] ?? [];
+    const withUpdate = ids.filter((id) => containerUpdateMap.get(id) === true);
+    if (withUpdate.length > 0) {
+      summary.hasUpdate = true;
+      summary.containersWithUpdate = withUpdate;
+    }
+  }
+}
+
 function buildImageSummaries(
   vulnerabilities: Vulnerability[],
   updateSummaries: Record<string, UpdateScanSummary>,
+  containerIdsByImage: Record<string, string[]>,
+  containers: Container[],
 ): ImageSummary[] {
   const map = new Map<string, ImageSummary>();
 
@@ -252,7 +284,9 @@ function buildImageSummaries(
     summary.delta = computeSecurityDelta(currentSummary, updateSummaries[summary.image]);
   }
 
-  return [...map.values()];
+  const result = [...map.values()];
+  annotateImageSummariesWithUpdates(result, containerIdsByImage, containers);
+  return result;
 }
 
 function filterSummariesBySeverity(summaries: ImageSummary[], severity: string): ImageSummary[] {
@@ -352,6 +386,7 @@ function createFetchVulnerabilities(state: FetchVulnerabilityStateRefs) {
 export function useVulnerabilities({
   securitySortField,
   securitySortAsc,
+  containers,
 }: UseVulnerabilitiesOptions) {
   const loading = ref(true);
   const error = ref<string | null>(null);
@@ -380,7 +415,12 @@ export function useVulnerabilities({
   );
 
   const imageSummaries = computed<ImageSummary[]>(() =>
-    buildImageSummaries(securityVulnerabilities.value, updateScanSummaries.value),
+    buildImageSummaries(
+      securityVulnerabilities.value,
+      updateScanSummaries.value,
+      containerIdsByImage.value,
+      containers?.value ?? [],
+    ),
   );
 
   const filteredSummaries = computed(() =>

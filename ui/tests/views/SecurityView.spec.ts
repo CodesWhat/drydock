@@ -5,6 +5,8 @@ const mockGetSecurityVulnerabilityOverview = vi.fn();
 const mockScanContainer = vi.fn();
 const mockGetContainerSbom = vi.fn();
 const mockGetSecurityRuntime = vi.fn();
+const mockGetAllContainers = vi.fn();
+const mockRouterPush = vi.fn().mockResolvedValue(undefined);
 const mockIsMobile = { value: false };
 const mockWindowNarrow = { value: false };
 const { mockComputeSecurityDelta, mockToSafeExternalUrl } = vi.hoisted(() => ({
@@ -12,11 +14,16 @@ const { mockComputeSecurityDelta, mockToSafeExternalUrl } = vi.hoisted(() => ({
   mockToSafeExternalUrl: vi.fn(),
 }));
 
+vi.mock('vue-router', () => ({
+  useRouter: () => ({ push: mockRouterPush }),
+}));
+
 vi.mock('@/services/container', () => ({
   getSecurityVulnerabilityOverview: (...args: any[]) =>
     mockGetSecurityVulnerabilityOverview(...args),
   scanContainer: (...args: any[]) => mockScanContainer(...args),
   getContainerSbom: (...args: any[]) => mockGetContainerSbom(...args),
+  getAllContainers: (...args: any[]) => mockGetAllContainers(...args),
 }));
 
 vi.mock('@/services/server', () => ({
@@ -35,6 +42,7 @@ vi.mock('@/utils/container-mapper', async () => {
   return {
     ...actual,
     computeSecurityDelta: mockComputeSecurityDelta,
+    mapApiContainers: (containers: any[]) => containers,
   };
 });
 
@@ -148,6 +156,17 @@ const stubs: Record<string, any> = {
   AppIcon: defineComponent({
     props: ['name', 'size'],
     template: '<span class="app-icon-stub" />',
+  }),
+  AppButton: defineComponent({
+    inheritAttrs: false,
+    props: ['size', 'variant', 'disabled'],
+    emits: ['click'],
+    template:
+      '<button class="app-button-stub" v-bind="$attrs" :disabled="disabled" @click="$emit(\'click\')"><slot /></button>',
+  }),
+  AppBadge: defineComponent({
+    props: ['tone', 'size', 'custom'],
+    template: '<span class="app-badge-stub"><slot /></span>',
   }),
   RouterLink: defineComponent({
     props: ['to'],
@@ -273,6 +292,8 @@ describe('SecurityView', () => {
     mockIsMobile.value = false;
     mockWindowNarrow.value = false;
     mockGetSecurityRuntime.mockResolvedValue(readyRuntimeStatus());
+    mockGetAllContainers.mockResolvedValue([]);
+    mockRouterPush.mockResolvedValue(undefined);
   });
 
   describe('data loading', () => {
@@ -1008,6 +1029,211 @@ describe('SecurityView', () => {
       } as any);
 
       await expect(clearIconCache()).rejects.toThrow('Unknown error');
+    });
+  });
+
+  describe('View update affordance', () => {
+    it('sets hasUpdate on image summaries when containers with newTag are provided', async () => {
+      mockContainers([
+        makeContainer({
+          id: 'c1',
+          name: 'nginx',
+          displayName: 'nginx',
+          security: {
+            scan: {
+              vulnerabilities: [{ id: 'CVE-1', severity: 'HIGH', packageName: 'openssl' }],
+            },
+          },
+        }),
+      ]);
+      mockGetAllContainers.mockResolvedValue([
+        {
+          id: 'c1',
+          name: 'nginx',
+          displayName: 'nginx',
+          image: { name: 'nginx', tag: { value: '1.25' } },
+          newTag: '1.26',
+          status: 'running',
+          registry: 'dockerhub',
+          updateKind: 'patch',
+          updateMaturity: null,
+          bouncer: 'safe',
+          server: 'Local',
+        },
+      ]);
+
+      const w = factory();
+      await vi.waitFor(() => expect(mockGetSecurityVulnerabilityOverview).toHaveBeenCalledOnce());
+      await flushPromises();
+
+      const vm = w.vm as any;
+      const summary = vm.filteredSummaries[0];
+      expect(summary.hasUpdate).toBe(true);
+      expect(summary.containersWithUpdate).toEqual(['c1']);
+    });
+
+    it('does not set hasUpdate when no containers have pending updates', async () => {
+      mockContainers([
+        makeContainer({
+          id: 'c1',
+          name: 'nginx',
+          displayName: 'nginx',
+          security: {
+            scan: {
+              vulnerabilities: [{ id: 'CVE-1', severity: 'HIGH', packageName: 'openssl' }],
+            },
+          },
+        }),
+      ]);
+      mockGetAllContainers.mockResolvedValue([
+        {
+          id: 'c1',
+          name: 'nginx',
+          displayName: 'nginx',
+          image: { name: 'nginx', tag: { value: '1.25' } },
+          newTag: null,
+          status: 'running',
+          registry: 'dockerhub',
+          updateKind: null,
+          updateMaturity: null,
+          bouncer: 'safe',
+          server: 'Local',
+        },
+      ]);
+
+      const w = factory();
+      await vi.waitFor(() => expect(mockGetSecurityVulnerabilityOverview).toHaveBeenCalledOnce());
+      await flushPromises();
+
+      const vm = w.vm as any;
+      const summary = vm.filteredSummaries[0];
+      expect(summary.hasUpdate).toBeUndefined();
+    });
+
+    it('navigateToContainerUpdate pushes to containers route with containerIds query', async () => {
+      mockContainers([
+        makeContainer({
+          id: 'c1',
+          name: 'nginx',
+          displayName: 'nginx',
+          security: {
+            scan: {
+              vulnerabilities: [{ id: 'CVE-1', severity: 'HIGH', packageName: 'openssl' }],
+            },
+          },
+        }),
+      ]);
+      mockGetAllContainers.mockResolvedValue([
+        {
+          id: 'c1',
+          name: 'nginx',
+          displayName: 'nginx',
+          image: { name: 'nginx', tag: { value: '1.25' } },
+          newTag: '1.26',
+          status: 'running',
+          registry: 'dockerhub',
+          updateKind: 'patch',
+          updateMaturity: null,
+          bouncer: 'safe',
+          server: 'Local',
+        },
+      ]);
+
+      const w = factory();
+      await vi.waitFor(() => expect(mockGetSecurityVulnerabilityOverview).toHaveBeenCalledOnce());
+      await flushPromises();
+
+      const vm = w.vm as any;
+      const summary = vm.filteredSummaries[0];
+      vm.navigateToContainerUpdate(summary);
+      await nextTick();
+
+      expect(mockRouterPush).toHaveBeenCalledWith({
+        path: '/containers',
+        query: { containerIds: 'c1' },
+      });
+    });
+
+    it('does nothing when navigateToContainerUpdate called with no containersWithUpdate', async () => {
+      mockContainers([makeContainer()]);
+      mockGetAllContainers.mockResolvedValue([]);
+
+      const w = factory();
+      await vi.waitFor(() => expect(mockGetSecurityVulnerabilityOverview).toHaveBeenCalledOnce());
+      await flushPromises();
+
+      const vm = w.vm as any;
+      vm.navigateToContainerUpdate({ image: 'nginx', hasUpdate: false, containersWithUpdate: [] });
+      await nextTick();
+
+      expect(mockRouterPush).not.toHaveBeenCalled();
+    });
+
+    it('navigateToContainerUpdate joins multiple container IDs with comma', async () => {
+      mockContainers([
+        makeContainer({
+          id: 'c1',
+          name: 'app-1',
+          displayName: 'app',
+          security: {
+            scan: {
+              vulnerabilities: [{ id: 'CVE-1', severity: 'CRITICAL', packageName: 'pkg' }],
+            },
+          },
+        }),
+        makeContainer({
+          id: 'c2',
+          name: 'app-2',
+          displayName: 'app',
+          security: {
+            scan: {
+              vulnerabilities: [{ id: 'CVE-2', severity: 'HIGH', packageName: 'pkg2' }],
+            },
+          },
+        }),
+      ]);
+      mockGetAllContainers.mockResolvedValue([
+        {
+          id: 'c1',
+          name: 'app-1',
+          displayName: 'app',
+          image: { name: 'app', tag: { value: '1.0' } },
+          newTag: '2.0',
+          status: 'running',
+          registry: 'dockerhub',
+          updateKind: 'major',
+          updateMaturity: null,
+          bouncer: 'safe',
+          server: 'Local',
+        },
+        {
+          id: 'c2',
+          name: 'app-2',
+          displayName: 'app',
+          image: { name: 'app', tag: { value: '1.0' } },
+          newTag: '2.0',
+          status: 'running',
+          registry: 'dockerhub',
+          updateKind: 'major',
+          updateMaturity: null,
+          bouncer: 'safe',
+          server: 'Local',
+        },
+      ]);
+
+      const w = factory();
+      await vi.waitFor(() => expect(mockGetSecurityVulnerabilityOverview).toHaveBeenCalledOnce());
+      await flushPromises();
+
+      const vm = w.vm as any;
+      const summary = vm.filteredSummaries[0];
+      vm.navigateToContainerUpdate(summary);
+      await nextTick();
+
+      expect(mockRouterPush).toHaveBeenCalledWith({
+        path: '/containers',
+        query: { containerIds: 'c1,c2' },
+      });
     });
   });
 });

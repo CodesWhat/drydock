@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **[#299](https://github.com/CodesWhat/drydock/discussions/299)** — **Inline update action in Security view.** Image rows in the Security view now show an "Update" action button directly next to the vulnerability data when a newer image is available, instead of only offering navigation away to the Containers view. Single-container images open a confirmation dialog in place; multi-container images open a compact chooser popover to pick which instance to update. A secondary "View in Containers" link remains for cases where the user wants to inspect the full container state first. The `ContainerUpdateDialog` component is extracted as a standalone reusable piece. The Containers view now accepts a `?containerIds=<csv>` query parameter to pre-filter to a specific set of containers, with a dismissable filter chip in the toolbar.
+
 ### Fixed
 
 - **[#305](https://github.com/CodesWhat/drydock/issues/305)** — Hide Pinned now hides *every* pinned container again, matching rc.8 behavior and the reporter's expectation when combining Hide Pinned with Has Update. #293 had carved out an exception for pinned rows with a pending update, but that conflated "declutter" with "surface actionable pins" and broke the filter for users who pin infrastructure containers (databases, edge, etc.) and want Hide Pinned to simply remove every pinned row from the list. The pin-to-wait-out-a-regression scenario from #293 is now addressed by simply unchecking Hide Pinned — predictable filter semantics over clever cross-filter logic.
