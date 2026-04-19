@@ -30,7 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **[#305](https://github.com/CodesWhat/drydock/issues/305)** — Hide Pinned now hides *every* pinned container again, matching rc.8 behavior and the reporter's expectation when combining Hide Pinned with Has Update. #293 had carved out an exception for pinned rows with a pending update, but that conflated "declutter" with "surface actionable pins" and broke the filter for users who pin infrastructure containers (databases, edge, etc.) and want Hide Pinned to simply remove every pinned row from the list. The pin-to-wait-out-a-regression scenario from #293 is now addressed by simply unchecking Hide Pinned — predictable filter semantics over clever cross-filter logic.
 - **[#296](https://github.com/CodesWhat/drydock/issues/296)** (follow-up) — When `docker-socket-proxy` blocks `GET /info` (the default — `INFO=0`), drydock now logs an actionable warning naming the watcher, the error, and the fix (`set INFO=1 on your docker-socket-proxy config, or set DD_SERVER_NAME to override`) instead of silently falling back to the container short ID. The socket-proxy setup doc and compose examples now include `INFO=1` in the required environment variables. Default notification body templates no longer repeat the `[server]` source prefix that already appears in the title — providers that concatenate title + body (Telegram, Slack, Mattermost, Matrix, Teams, Google Chat, Rocket.Chat) are unaffected because source context is carried by the title.
 
-## [1.5.0-rc.10] — 2026-04-18
+## [1.5.0-rc.10] — 2026-04-19
 
 ### Added
 
@@ -45,6 +45,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **Trigger digest flush DRY refactor** — `flushDigestBuffer` / `shouldHandleDigestContainerReport` are now parameterized on the event kind so update-digest and security-digest share a single implementation, keeping the rc.9 #282 dedup invariants (no cross-channel stomping, per-cycle partitioning) in one place instead of duplicated per feature.
+
+### Fixed
+
+- **Bulk security scan persistence** — `POST /api/v1/containers/scan-all` ran Trivy scans, emitted alerts, and broadcast `security-scan-cycle-complete`, but never wrote the scan result back to the container record — leaving the Security page on "0/N scanned — No vulnerability data yet" after every bulk cycle even when real CVEs were found, and losing all data on page reload. Fix persists `scanResult` to `container.security.scan` via `storeContainer.updateContainer` and populates the Trivy digest scan cache, mirroring the single-container scan path. This was a regression introduced by the rc.10 bulk-scan feature itself; no prior build was ever working end-to-end. ([#14b527be](https://github.com/CodesWhat/drydock/commit/14b527be))
+- **Notification bell icon collapse on scroll** — In the notification bell dropdown, rows that had scrolled above the visible fold would lose their icon entirely — the `<iconify-icon>` web component defaults to `display: inline`, so the flex item's reserved slot collapsed to zero width and subsequent row text left-aligned where the icon should have been. Fix sets explicit `width`, `height`, `display: inline-block`, and `flex: none` via inline style on `AppIcon.vue` (the shared icon wrapper) so the icon box stays reserved regardless of layout or intersection state. Applies project-wide because AppIcon is the shared wrapper all icons use. ([#3acaafcd](https://github.com/CodesWhat/drydock/commit/3acaafcd))
 
 ## [1.5.0-rc.9] — 2026-04-17
 
