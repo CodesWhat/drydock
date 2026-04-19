@@ -6,7 +6,6 @@ import DetailField from '@/components/DetailField.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
 import { useViewMode } from '../preferences/useViewMode';
-import { getAllContainers } from '../services/container';
 import { getAllWatchers, getWatcher } from '../services/watcher';
 import type { ApiComponent } from '../types/api';
 import { ROUTES } from '../router/routes';
@@ -31,8 +30,6 @@ let detailRequestId = 0;
 const watchersData = ref<Record<string, unknown>[]>([]);
 const loading = ref(true);
 const error = ref('');
-const containerCounts = ref<Record<string, number>>({});
-const totalContainers = ref(0);
 
 function watcherStatusColor(status: string) {
   if (status === 'watching') return 'var(--dd-success)';
@@ -87,13 +84,21 @@ const tableColumns = [
   { key: 'lastRun', label: 'Last Run', width: '15%', align: 'text-right', sortable: false },
 ];
 
+function readWatcherContainerTotal(metadata: unknown): number {
+  if (!metadata || typeof metadata !== 'object') return 0;
+  const containers = (metadata as { containers?: unknown }).containers;
+  if (!containers || typeof containers !== 'object') return 0;
+  const total = (containers as { total?: unknown }).total;
+  return typeof total === 'number' ? total : 0;
+}
+
 function mapWatcher(watcher: ApiComponent, status = 'watching') {
   return {
     id: watcher.id,
     name: watcher.name,
     type: watcher.type,
     status,
-    containers: containerCounts.value[watcher.name] ?? 0,
+    containers: readWatcherContainerTotal(watcher.metadata),
     cron: watcher.configuration?.cron ?? '',
     nextRunAt: watcher.metadata?.nextRunAt ? String(watcher.metadata.nextRunAt) : undefined,
     nextRun: watcher.metadata?.nextRunAt ? timeUntil(String(watcher.metadata.nextRunAt)) : '\u2014',
@@ -148,16 +153,7 @@ async function openDetail(watcher: Record<string, unknown>) {
 
 onMounted(async () => {
   try {
-    const [watcherData, containerData] = await Promise.all([getAllWatchers(), getAllContainers()]);
-
-    const counts: Record<string, number> = {};
-    for (const c of containerData) {
-      const key = c.watcher || 'unknown';
-      counts[key] = (counts[key] || 0) + 1;
-    }
-    containerCounts.value = counts;
-    totalContainers.value = containerData.length;
-
+    const watcherData = await getAllWatchers();
     watchersData.value = watcherData.map((watcher: ApiComponent) => mapWatcher(watcher));
   } catch {
     error.value = 'Failed to load watchers';

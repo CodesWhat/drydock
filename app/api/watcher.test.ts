@@ -1,5 +1,6 @@
 import * as agentManager from '../agent/manager.js';
 import * as registry from '../registry/index.js';
+import * as storeContainer from '../store/container.js';
 import * as watcherRouter from './watcher.js';
 
 vi.mock('../registry/index.js', () => ({
@@ -9,6 +10,15 @@ vi.mock('../registry/index.js', () => ({
 vi.mock('../agent/manager.js', () => ({
   getAgent: vi.fn(),
 }));
+
+vi.mock('../store/container.js', () => ({
+  getContainersRaw: vi.fn(() => []),
+}));
+
+const EMPTY_WATCHER_STATS = {
+  containers: { total: 0, running: 0, stopped: 0, updatesAvailable: 0 },
+  images: 0,
+};
 
 function createMockResponse() {
   return {
@@ -47,7 +57,7 @@ describe('Watcher Router', () => {
           name: 'local',
           configuration: { cron: '0 * * * *' },
           agent: undefined,
-          metadata: { nextRunAt: '2026-04-09T13:00:00.000Z' },
+          metadata: { nextRunAt: '2026-04-09T13:00:00.000Z', ...EMPTY_WATCHER_STATS },
         },
       ],
       total: 1,
@@ -91,7 +101,7 @@ describe('Watcher Router', () => {
           name: 'remote',
           configuration: { cron: '*/15 * * * *' },
           agent: 'edge',
-          metadata: { nextRunAt: '2026-04-09T12:45:00.000Z' },
+          metadata: { nextRunAt: '2026-04-09T12:45:00.000Z', ...EMPTY_WATCHER_STATS },
         },
       ],
       total: 1,
@@ -137,7 +147,7 @@ describe('Watcher Router', () => {
       name: 'remote',
       configuration: { cron: '*/15 * * * *' },
       agent: 'edge',
-      metadata: { nextRunAt: '2026-04-09T12:45:00.000Z' },
+      metadata: { nextRunAt: '2026-04-09T12:45:00.000Z', ...EMPTY_WATCHER_STATS },
     });
   });
 
@@ -189,7 +199,7 @@ describe('Watcher Router', () => {
           name: 'zeta',
           configuration: { cron: '0 * * * *' },
           agent: undefined,
-          metadata: { nextRunAt: '2026-04-09T13:00:00.000Z' },
+          metadata: { nextRunAt: '2026-04-09T13:00:00.000Z', ...EMPTY_WATCHER_STATS },
         },
       ],
       total: 3,
@@ -266,7 +276,7 @@ describe('Watcher Router', () => {
           name: 'remote',
           configuration: { cron: '0 * * * *' },
           agent: 'edge',
-          metadata: { nextRunAt: '2026-04-09T13:00:00.000Z' },
+          metadata: { nextRunAt: '2026-04-09T13:00:00.000Z', ...EMPTY_WATCHER_STATS },
         },
       ],
       total: 1,
@@ -310,7 +320,7 @@ describe('Watcher Router', () => {
           name: 'remote',
           configuration: { cron: '0 * * * *' },
           agent: 'edge',
-          metadata: { nextRunAt: '2026-04-09T13:00:00.000Z' },
+          metadata: { nextRunAt: '2026-04-09T13:00:00.000Z', ...EMPTY_WATCHER_STATS },
         },
       ],
       total: 1,
@@ -348,7 +358,7 @@ describe('Watcher Router', () => {
           name: 'remote',
           configuration: { cron: '0 * * * *' },
           agent: 'edge',
-          metadata: { nextRunAt: '2026-04-09T13:00:00.000Z' },
+          metadata: { nextRunAt: '2026-04-09T13:00:00.000Z', ...EMPTY_WATCHER_STATS },
         },
       ],
       total: 1,
@@ -429,5 +439,120 @@ describe('Watcher Router', () => {
     await Promise.resolve();
     await Promise.resolve();
     expect(agentWatcherRes.status).toHaveBeenCalledWith(200);
+  });
+
+  test('getWatchers should populate per-watcher container and image stats from store (#301)', async () => {
+    registry.getState.mockReturnValue({
+      watcher: {
+        'docker.primary': {
+          type: 'docker',
+          name: 'primary',
+          configuration: { cron: '0 * * * *' },
+          maskConfiguration: vi.fn(() => ({ cron: '0 * * * *' })),
+          getMetadata: vi.fn(() => ({})),
+        },
+        'docker.secondary': {
+          type: 'docker',
+          name: 'secondary',
+          configuration: { cron: '*/5 * * * *' },
+          maskConfiguration: vi.fn(() => ({ cron: '*/5 * * * *' })),
+          getMetadata: vi.fn(() => ({})),
+        },
+      },
+    });
+    storeContainer.getContainersRaw.mockReturnValue([
+      {
+        id: 'c1',
+        watcher: 'primary',
+        status: 'running',
+        updateAvailable: true,
+        image: { id: 'img-a', name: 'nginx:1' },
+      },
+      {
+        id: 'c2',
+        watcher: 'primary',
+        status: 'exited',
+        updateAvailable: false,
+        image: { id: 'img-a', name: 'nginx:1' },
+      },
+      {
+        id: 'c3',
+        watcher: 'primary',
+        status: 'running',
+        updateAvailable: false,
+        image: { id: 'img-b', name: 'grafana:10' },
+      },
+      {
+        id: 'c4',
+        watcher: 'secondary',
+        status: 'running',
+        updateAvailable: false,
+        image: { id: 'img-c', name: 'redis:7' },
+      },
+      {
+        id: 'c5',
+        watcher: 'unrelated',
+        status: 'running',
+        updateAvailable: false,
+        image: { id: 'img-z', name: 'other:1' },
+      },
+    ]);
+
+    const res = createMockResponse();
+    await watcherRouter.getWatchers({ query: {} }, res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    const payload = res.json.mock.calls[0][0];
+    const primary = payload.data.find((item) => item.id === 'docker.primary');
+    const secondary = payload.data.find((item) => item.id === 'docker.secondary');
+
+    expect(primary.metadata).toEqual({
+      containers: { total: 3, running: 2, stopped: 1, updatesAvailable: 1 },
+      images: 2,
+    });
+    expect(secondary.metadata).toEqual({
+      containers: { total: 1, running: 1, stopped: 0, updatesAvailable: 0 },
+      images: 1,
+    });
+  });
+
+  test('getWatcher should populate stats for the single watcher and skip unrelated containers (#301)', async () => {
+    registry.getState.mockReturnValue({
+      watcher: {
+        'docker.primary': {
+          type: 'docker',
+          name: 'primary',
+          configuration: { cron: '0 * * * *' },
+          maskConfiguration: vi.fn(() => ({ cron: '0 * * * *' })),
+          getMetadata: vi.fn(() => ({})),
+        },
+      },
+    });
+    storeContainer.getContainersRaw.mockReturnValue([
+      {
+        id: 'c1',
+        watcher: 'primary',
+        status: 'running',
+        updateAvailable: true,
+        image: { id: 'img-a' },
+      },
+      {
+        id: 'c2',
+        watcher: 'other',
+        status: 'running',
+        updateAvailable: true,
+        image: { id: 'img-z' },
+      },
+    ]);
+
+    const res = createMockResponse();
+    await watcherRouter.getWatcher({ params: { type: 'docker', name: 'primary' } }, res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    const payload = res.json.mock.calls[0][0];
+    expect(payload.metadata).toEqual({
+      containers: { total: 1, running: 1, stopped: 0, updatesAvailable: 1 },
+      images: 1,
+    });
   });
 });

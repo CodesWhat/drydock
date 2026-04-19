@@ -5,7 +5,6 @@ import DetailField from '@/components/DetailField.vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
 import { useViewMode } from '../preferences/useViewMode';
 import { getAgents } from '../services/agent';
-import { getAllContainers } from '../services/container';
 import { getServer } from '../services/server';
 import { getAllWatchers } from '../services/watcher';
 import { errorMessage } from '../utils/error';
@@ -59,37 +58,32 @@ const tableColumns = [
   { key: 'lastSeen', label: 'Last Seen', align: 'text-right', sortable: false },
 ];
 
-function countContainersByWatcher(
-  containers: Record<string, unknown>[],
-): Record<string, { total: number; running: number; stopped: number }> {
-  const counts: Record<string, { total: number; running: number; stopped: number }> = {};
-  for (const c of containers) {
-    const watcher = c.watcher ?? 'local';
-    if (!counts[watcher]) {
-      counts[watcher] = { total: 0, running: 0, stopped: 0 };
-    }
-    counts[watcher].total++;
-    if (c.status === 'running') {
-      counts[watcher].running++;
-    } else {
-      counts[watcher].stopped++;
-    }
-  }
-  return counts;
+interface WatcherContainerCounts {
+  total: number;
+  running: number;
+  stopped: number;
 }
 
-function countImagesByWatcher(containers: Record<string, unknown>[]): Record<string, number> {
-  const imagesByWatcher: Record<string, Set<string>> = {};
-  for (const c of containers) {
-    const watcher = c.watcher ?? 'local';
-    if (!imagesByWatcher[watcher]) imagesByWatcher[watcher] = new Set();
-    imagesByWatcher[watcher].add(c.image ?? 'unknown');
+function readContainerCounts(metadata: unknown): WatcherContainerCounts {
+  if (!metadata || typeof metadata !== 'object') {
+    return { total: 0, running: 0, stopped: 0 };
   }
-  const counts: Record<string, number> = {};
-  for (const [watcher, images] of Object.entries(imagesByWatcher)) {
-    counts[watcher] = images.size;
+  const containers = (metadata as { containers?: unknown }).containers;
+  if (!containers || typeof containers !== 'object') {
+    return { total: 0, running: 0, stopped: 0 };
   }
-  return counts;
+  const c = containers as { total?: unknown; running?: unknown; stopped?: unknown };
+  return {
+    total: typeof c.total === 'number' ? c.total : 0,
+    running: typeof c.running === 'number' ? c.running : 0,
+    stopped: typeof c.stopped === 'number' ? c.stopped : 0,
+  };
+}
+
+function readImageCount(metadata: unknown): number {
+  if (!metadata || typeof metadata !== 'object') return 0;
+  const images = (metadata as { images?: unknown }).images;
+  return typeof images === 'number' ? images : 0;
 }
 
 function deriveWatcherHost(config: Record<string, unknown>): string {
@@ -113,15 +107,11 @@ async function fetchServers() {
   loading.value = true;
   error.value = null;
   try {
-    const [, agentsData, containersData, watchersData] = await Promise.all([
+    const [, agentsData, watchersData] = await Promise.all([
       getServer(),
       getAgents(),
-      getAllContainers(),
       getAllWatchers(),
     ]);
-    const safeContainers = containersData ?? [];
-    const containerCounts = countContainersByWatcher(safeContainers);
-    const imageCounts = countImagesByWatcher(safeContainers);
     const entries: ServerEntry[] = [];
 
     const localWatchers = (watchersData ?? []).filter((w: Record<string, unknown>) => !w.agent);
@@ -129,34 +119,32 @@ async function fetchServers() {
     for (const watcher of localWatchers) {
       const name = String(watcher.name ?? 'unknown');
       const config = (watcher.configuration ?? {}) as Record<string, unknown>;
-      const counts = containerCounts[name] ?? { total: 0, running: 0, stopped: 0 };
 
       entries.push({
         id: String(watcher.id ?? name),
         name: capitalize(name),
         host: deriveWatcherHost(config),
         status: 'connected',
-        containers: counts,
-        images: imageCounts[name] ?? 0,
+        containers: readContainerCounts(watcher.metadata),
+        images: readImageCount(watcher.metadata),
         lastSeen: 'Just now',
       });
     }
 
     for (const agent of agentsData) {
       const agentConnected = !!agent.connected;
-      const watcherName = agent.name?.toLowerCase();
-      const agentCounts =
-        watcherName && containerCounts[watcherName]
-          ? containerCounts[watcherName]
-          : { total: 0, running: 0, stopped: 0 };
 
       entries.push({
         id: agent.name,
         name: agent.name,
         host: `${agent.host}${agent.port ? `:${agent.port}` : ''}`,
         status: agentConnected ? 'connected' : 'disconnected',
-        containers: agentCounts,
-        images: watcherName && imageCounts[watcherName] ? imageCounts[watcherName] : 0,
+        containers: {
+          total: agent.containers?.total ?? 0,
+          running: agent.containers?.running ?? 0,
+          stopped: agent.containers?.stopped ?? 0,
+        },
+        images: typeof agent.images === 'number' ? agent.images : 0,
         lastSeen: agentConnected ? 'Just now' : 'Never',
       });
     }

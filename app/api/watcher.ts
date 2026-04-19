@@ -4,6 +4,13 @@ import { byString, byValues } from 'sort-es';
 import { getAgent } from '../agent/manager.js';
 import logger from '../log/index.js';
 import * as registry from '../registry/index.js';
+import * as storeContainer from '../store/container.js';
+import {
+  buildContainerStatsByKey,
+  type ContainerStatsBucket,
+  createEmptyContainerStatsBucket,
+  projectStatsBucket,
+} from '../util/container-summary.js';
 import { getErrorMessage } from '../util/error.js';
 import type Watcher from '../watchers/Watcher.js';
 import { type ApiComponent, mapComponentToItem } from './component.js';
@@ -49,8 +56,24 @@ function sortWatcherItems(watchers: ApiComponent[]): ApiComponent[] {
   );
 }
 
-async function resolveWatcherItem(id: string, watcher: Watcher): Promise<ApiComponent> {
-  const fallback = mapComponentToItem(id, watcher, 'watcher');
+function attachStatsToMetadata(item: ApiComponent, bucket: ContainerStatsBucket): ApiComponent {
+  const stats = projectStatsBucket(bucket);
+  return {
+    ...item,
+    metadata: {
+      ...(item.metadata ?? {}),
+      containers: stats.containers,
+      images: stats.images,
+    },
+  };
+}
+
+async function resolveWatcherItem(
+  id: string,
+  watcher: Watcher,
+  statsBucket: ContainerStatsBucket = createEmptyContainerStatsBucket(),
+): Promise<ApiComponent> {
+  const fallback = attachStatsToMetadata(mapComponentToItem(id, watcher, 'watcher'), statsBucket);
 
   if (!watcher.agent) {
     return fallback;
@@ -66,7 +89,11 @@ async function resolveWatcherItem(id: string, watcher: Watcher): Promise<ApiComp
     return {
       ...fallback,
       configuration: remoteWatcher.configuration ?? fallback.configuration,
-      metadata: remoteWatcher.metadata ?? fallback.metadata,
+      metadata: {
+        ...(remoteWatcher.metadata ?? fallback.metadata ?? {}),
+        containers: fallback.metadata?.containers,
+        images: fallback.metadata?.images,
+      },
     };
   } catch (error: unknown) {
     log.debug(
@@ -78,8 +105,20 @@ async function resolveWatcherItem(id: string, watcher: Watcher): Promise<ApiComp
 
 export async function getWatchers(req: Request, res: Response): Promise<void> {
   const watchers = registry.getState().watcher || {};
+  const watcherEntries = Object.entries(watchers);
+  const statsByWatcher = buildContainerStatsByKey(
+    storeContainer.getContainersRaw({}),
+    watcherEntries.map(([, watcher]) => watcher.name),
+    (container) => (typeof container.watcher === 'string' ? container.watcher : undefined),
+  );
   const items = await Promise.all(
-    Object.entries(watchers).map(([id, watcher]) => resolveWatcherItem(id, watcher)),
+    watcherEntries.map(([id, watcher]) =>
+      resolveWatcherItem(
+        id,
+        watcher,
+        statsByWatcher.get(watcher.name) ?? createEmptyContainerStatsBucket(),
+      ),
+    ),
   );
   const allItems = sortWatcherItems(items);
   const pagination = normalizeLimitOffsetPagination(req.query, {
@@ -105,7 +144,16 @@ export async function getWatcher(req: Request<WatcherRouteParams>, res: Response
     return;
   }
 
-  const item = await resolveWatcherItem(watcherId, watcher);
+  const statsByWatcher = buildContainerStatsByKey(
+    storeContainer.getContainersRaw({}),
+    [watcher.name],
+    (container) => (typeof container.watcher === 'string' ? container.watcher : undefined),
+  );
+  const item = await resolveWatcherItem(
+    watcherId,
+    watcher,
+    statsByWatcher.get(watcher.name) ?? createEmptyContainerStatsBucket(),
+  );
   res.status(200).json(item);
 }
 
