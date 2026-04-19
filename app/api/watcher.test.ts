@@ -1,6 +1,7 @@
 import * as agentManager from '../agent/manager.js';
 import * as registry from '../registry/index.js';
 import * as storeContainer from '../store/container.js';
+import * as containerSummary from '../util/container-summary.js';
 import * as watcherRouter from './watcher.js';
 
 vi.mock('../registry/index.js', () => ({
@@ -67,6 +68,40 @@ describe('Watcher Router', () => {
     });
   });
 
+  test('getWatchers should fall back to empty metadata and stats when local metadata is missing', async () => {
+    registry.getState.mockReturnValue({
+      watcher: {
+        'docker.local': {
+          type: 'docker',
+          name: 'local',
+          configuration: { cron: '0 * * * *' },
+          maskConfiguration: vi.fn(() => ({ cron: '0 * * * *' })),
+          getMetadata: vi.fn(() => undefined),
+        },
+      },
+    });
+
+    const res = createMockResponse();
+    await watcherRouter.getWatchers({ query: {} }, res);
+
+    expect(res.json).toHaveBeenCalledWith({
+      data: [
+        {
+          id: 'docker.local',
+          type: 'docker',
+          name: 'local',
+          configuration: { cron: '0 * * * *' },
+          agent: undefined,
+          metadata: { ...EMPTY_WATCHER_STATS },
+        },
+      ],
+      total: 1,
+      limit: 0,
+      offset: 0,
+      hasMore: false,
+    });
+  });
+
   test('getWatchers should merge fresh metadata from agent-backed watchers', async () => {
     registry.getState.mockReturnValue({
       watcher: {
@@ -101,6 +136,52 @@ describe('Watcher Router', () => {
           configuration: { cron: '*/15 * * * *' },
           agent: 'edge',
           metadata: { nextRunAt: '2026-04-09T12:45:00.000Z', ...EMPTY_WATCHER_STATS },
+        },
+      ],
+      total: 1,
+      limit: 0,
+      offset: 0,
+      hasMore: false,
+    });
+  });
+
+  test('getWatchers should fall back to empty stats when watcher names change after preallocation', async () => {
+    let nameReads = 0;
+    registry.getState.mockReturnValue({
+      watcher: {
+        'edge.docker.remote': {
+          type: 'docker',
+          get name() {
+            nameReads += 1;
+            return nameReads === 1 ? 'indexed-remote' : 'remote';
+          },
+          agent: 'edge',
+          configuration: { cron: '0 * * * *' },
+          maskConfiguration: vi.fn(() => ({ cron: '0 * * * *' })),
+          getMetadata: vi.fn(() => undefined),
+        },
+      },
+    });
+    agentManager.getAgent.mockReturnValue({
+      getWatcherSnapshot: vi.fn().mockReturnValue({
+        type: 'docker',
+        name: 'remote',
+        configuration: { cron: '*/15 * * * *' },
+      }),
+    });
+
+    const res = createMockResponse();
+    await watcherRouter.getWatchers({ query: {} }, res);
+
+    expect(res.json).toHaveBeenCalledWith({
+      data: [
+        {
+          id: 'edge.docker.remote',
+          type: 'docker',
+          name: 'remote',
+          configuration: { cron: '*/15 * * * *' },
+          agent: 'edge',
+          metadata: { ...EMPTY_WATCHER_STATS },
         },
       ],
       total: 1,
@@ -146,6 +227,41 @@ describe('Watcher Router', () => {
       configuration: { cron: '*/15 * * * *' },
       agent: 'edge',
       metadata: { nextRunAt: '2026-04-09T12:45:00.000Z', ...EMPTY_WATCHER_STATS },
+    });
+  });
+
+  test('getWatcher should fall back to empty stats when watcher names change after preallocation', async () => {
+    let nameReads = 0;
+    registry.getState.mockReturnValue({
+      watcher: {
+        'docker.primary': {
+          type: 'docker',
+          get name() {
+            nameReads += 1;
+            return nameReads === 1 ? 'indexed-primary' : 'primary';
+          },
+          configuration: { cron: '0 * * * *' },
+          maskConfiguration: vi.fn(() => ({ cron: '0 * * * *' })),
+          getMetadata: vi.fn(() => ({})),
+        },
+      },
+    });
+    storeContainer.getContainersRaw.mockReturnValue([
+      { id: 'c1', watcher: ['primary'], status: 'running', image: { id: 'img-a' } },
+      { id: 'c2', watcher: null, status: 'running', image: { id: 'img-b' } },
+    ]);
+
+    const res = createMockResponse();
+    await watcherRouter.getWatcher({ params: { type: 'docker', name: 'primary' } }, res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith({
+      id: 'docker.primary',
+      type: 'docker',
+      name: 'primary',
+      configuration: { cron: '0 * * * *' },
+      agent: undefined,
+      metadata: { ...EMPTY_WATCHER_STATS },
     });
   });
 
@@ -246,6 +362,88 @@ describe('Watcher Router', () => {
       offset: 0,
       hasMore: false,
     });
+  });
+
+  test('getWatchers should ignore containers with non-string watcher identifiers when grouping', async () => {
+    registry.getState.mockReturnValue({
+      watcher: {
+        'docker.primary': {
+          type: 'docker',
+          name: 'primary',
+          configuration: { cron: '0 * * * *' },
+          maskConfiguration: vi.fn(() => ({ cron: '0 * * * *' })),
+          getMetadata: vi.fn(() => ({})),
+        },
+      },
+    });
+    storeContainer.getContainersRaw.mockReturnValue([
+      { id: 'c1', watcher: ['primary'], status: 'running', image: { id: 'img-a' } },
+      { id: 'c2', watcher: undefined, status: 'running', image: { id: 'img-b' } },
+    ]);
+
+    const res = createMockResponse();
+    await watcherRouter.getWatchers({ query: {} }, res);
+
+    expect(res.json).toHaveBeenCalledWith({
+      data: [
+        {
+          id: 'docker.primary',
+          type: 'docker',
+          name: 'primary',
+          configuration: { cron: '0 * * * *' },
+          agent: undefined,
+          metadata: { ...EMPTY_WATCHER_STATS },
+        },
+      ],
+      total: 1,
+      limit: 0,
+      offset: 0,
+      hasMore: false,
+    });
+  });
+
+  test('getWatchers should fall back to empty stats when the stats map omits a watcher bucket', async () => {
+    const statsSpy = vi
+      .spyOn(containerSummary, 'buildContainerStatsByKey')
+      .mockReturnValue(new Map());
+
+    try {
+      registry.getState.mockReturnValue({
+        watcher: {
+          'docker.nometa': {
+            type: 'docker',
+            name: 'nometa',
+            configuration: { cron: '0 * * * *' },
+            maskConfiguration: vi.fn(() => ({ cron: '0 * * * *' })),
+          },
+        },
+      });
+      storeContainer.getContainersRaw.mockReturnValue([
+        { id: 'c1', watcher: 'nometa', status: 'running', image: { id: 'img-a' } },
+      ]);
+
+      const res = createMockResponse();
+      await watcherRouter.getWatchers({ query: {} }, res);
+
+      expect(res.json).toHaveBeenCalledWith({
+        data: [
+          {
+            id: 'docker.nometa',
+            type: 'docker',
+            name: 'nometa',
+            configuration: { cron: '0 * * * *' },
+            agent: undefined,
+            metadata: { ...EMPTY_WATCHER_STATS },
+          },
+        ],
+        total: 1,
+        limit: 0,
+        offset: 0,
+        hasMore: false,
+      });
+    } finally {
+      statsSpy.mockRestore();
+    }
   });
 
   test('getWatchers should fall back to local metadata when no agent client is available', async () => {
@@ -548,5 +746,74 @@ describe('Watcher Router', () => {
       containers: { total: 1, running: 1, stopped: 0, updatesAvailable: 1 },
       images: 1,
     });
+  });
+
+  test('getWatcher should ignore containers with non-string watcher identifiers when grouping', async () => {
+    registry.getState.mockReturnValue({
+      watcher: {
+        'docker.primary': {
+          type: 'docker',
+          name: 'primary',
+          configuration: { cron: '0 * * * *' },
+          maskConfiguration: vi.fn(() => ({ cron: '0 * * * *' })),
+          getMetadata: vi.fn(() => ({})),
+        },
+      },
+    });
+    storeContainer.getContainersRaw.mockReturnValue([
+      { id: 'c1', watcher: ['primary'], status: 'running', image: { id: 'img-a' } },
+      { id: 'c2', watcher: null, status: 'running', image: { id: 'img-b' } },
+    ]);
+
+    const res = createMockResponse();
+    await watcherRouter.getWatcher({ params: { type: 'docker', name: 'primary' } }, res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith({
+      id: 'docker.primary',
+      type: 'docker',
+      name: 'primary',
+      configuration: { cron: '0 * * * *' },
+      agent: undefined,
+      metadata: { ...EMPTY_WATCHER_STATS },
+    });
+  });
+
+  test('getWatcher should fall back to empty stats when the stats map omits the watcher bucket', async () => {
+    const statsSpy = vi
+      .spyOn(containerSummary, 'buildContainerStatsByKey')
+      .mockReturnValue(new Map());
+
+    try {
+      registry.getState.mockReturnValue({
+        watcher: {
+          'docker.primary': {
+            type: 'docker',
+            name: 'primary',
+            configuration: { cron: '0 * * * *' },
+            maskConfiguration: vi.fn(() => ({ cron: '0 * * * *' })),
+            getMetadata: vi.fn(() => ({})),
+          },
+        },
+      });
+      storeContainer.getContainersRaw.mockReturnValue([
+        { id: 'c1', watcher: 'primary', status: 'running', image: { id: 'img-a' } },
+      ]);
+
+      const res = createMockResponse();
+      await watcherRouter.getWatcher({ params: { type: 'docker', name: 'primary' } }, res);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        id: 'docker.primary',
+        type: 'docker',
+        name: 'primary',
+        configuration: { cron: '0 * * * *' },
+        agent: undefined,
+        metadata: { ...EMPTY_WATCHER_STATS },
+      });
+    } finally {
+      statsSpy.mockRestore();
+    }
   });
 });

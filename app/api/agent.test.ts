@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createMockRequest, createMockResponse } from '../test/helpers.js';
+import * as containerSummary from '../util/container-summary.js';
 
 const { mockRouter, mockGetAgent } = vi.hoisted(() => ({
   mockRouter: { get: vi.fn() },
@@ -246,6 +247,77 @@ describe('Agent Router', () => {
       data: [
         expect.objectContaining({
           name: 'agent-typed',
+          containers: { total: 0, running: 0, stopped: 0, updatesAvailable: 0 },
+          images: 0,
+        }),
+      ],
+      total: 1,
+    });
+  });
+
+  test('should fall back to empty stats when the stats map omits an agent bucket', () => {
+    const statsSpy = vi
+      .spyOn(containerSummary, 'buildContainerStatsByKey')
+      .mockReturnValue(new Map());
+
+    try {
+      getAgents.mockReturnValue([
+        {
+          name: 'agent-missing-bucket',
+          config: { host: 'localhost', port: 3000 },
+          isConnected: true,
+          info: {},
+        },
+      ]);
+      getContainersRaw.mockReturnValue([
+        { id: 'c1', agent: 'agent-missing-bucket', status: 'running', image: { id: 'img-a' } },
+      ]);
+
+      agentRouter.init();
+      const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/')[1];
+      const res = createResponse();
+
+      handler({}, res);
+
+      expect(res.json).toHaveBeenCalledWith({
+        data: [
+          expect.objectContaining({
+            name: 'agent-missing-bucket',
+            containers: { total: 0, running: 0, stopped: 0, updatesAvailable: 0 },
+            images: 0,
+          }),
+        ],
+        total: 1,
+      });
+    } finally {
+      statsSpy.mockRestore();
+    }
+  });
+
+  test('should fall back to empty stats when an agent name changes after stats preallocation', () => {
+    let nameReads = 0;
+    getAgents.mockReturnValue([
+      {
+        get name() {
+          nameReads += 1;
+          return nameReads === 1 ? 'agent-indexed' : 'agent-live';
+        },
+        config: { host: 'localhost', port: 3000 },
+        isConnected: true,
+        info: {},
+      },
+    ]);
+    getContainersRaw.mockReturnValue([]);
+
+    agentRouter.init();
+    const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/')[1];
+    const res = createResponse();
+    handler({}, res);
+
+    expect(res.json).toHaveBeenCalledWith({
+      data: [
+        expect.objectContaining({
+          name: 'agent-live',
           containers: { total: 0, running: 0, stopped: 0, updatesAvailable: 0 },
           images: 0,
         }),

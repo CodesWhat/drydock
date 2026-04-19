@@ -86,11 +86,13 @@ function resolveWatcherItem(
     return fallback;
   }
 
+  const mergedMetadata = cached.metadata ?? fallback.metadata;
+
   return {
     ...fallback,
     configuration: cached.configuration ?? fallback.configuration,
     metadata: {
-      ...(cached.metadata ?? fallback.metadata ?? {}),
+      ...(mergedMetadata as Record<string, unknown>),
       containers: fallback.metadata?.containers,
       images: fallback.metadata?.images,
     },

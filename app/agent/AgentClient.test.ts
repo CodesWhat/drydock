@@ -680,6 +680,29 @@ describe('AgentClient', () => {
       expect(client.isConnected).toBe(true);
     });
 
+    test('should ignore invalid watcher descriptors when seeding the snapshot cache', async () => {
+      (client as any).seedWatcherSnapshotCacheFromHandshake([
+        null,
+        { type: 123, name: 'bad-type', configuration: { cron: '0 * * * *' } },
+        { type: 'docker', name: ['bad-name'], configuration: { cron: '0 * * * *' } },
+        {
+          type: 'docker',
+          name: 'remote',
+          configuration: { cron: '*/5 * * * *' },
+          metadata: { nextRunAt: '2026-04-19T00:05:00.000Z' },
+        },
+      ]);
+
+      expect(client.getWatcherSnapshot('docker', 'remote')).toEqual({
+        type: 'docker',
+        name: 'remote',
+        configuration: { cron: '*/5 * * * *' },
+        metadata: { nextRunAt: '2026-04-19T00:05:00.000Z' },
+      });
+      expect(client.getWatcherSnapshot('123', 'bad-type')).toBeUndefined();
+      expect(client.getWatcherSnapshot('docker', 'bad-name')).toBeUndefined();
+    });
+
     test('should handle trigger fetch failure gracefully', async () => {
       axios.get
         .mockResolvedValueOnce({ data: [] })
@@ -1788,6 +1811,15 @@ describe('AgentClient', () => {
       expect(storeContainer.getContainers).not.toHaveBeenCalled();
     });
 
+    test('should skip watcher snapshot cache updates when the watcher type is not a string', async () => {
+      await client.handleEvent('dd:watcher-snapshot', {
+        watcher: { type: 42, name: 'local' },
+        containers: [],
+      });
+
+      expect(client.getWatcherSnapshot('docker', 'local')).toBeUndefined();
+    });
+
     test('should ignore unknown event types', async () => {
       const processSpy = vi.spyOn(client, 'processContainer');
       await client.handleEvent('dd:unknown', {});
@@ -2198,6 +2230,50 @@ describe('AgentClient', () => {
       });
     });
 
+    test('handshake ignores watcher descriptors missing type or name when seeding the cache', async () => {
+      axios.get
+        .mockResolvedValueOnce({ data: [] }) // containers
+        .mockResolvedValueOnce({
+          data: [
+            {
+              type: 'docker',
+              name: 'remote',
+              configuration: { cron: '*/5 * * * *' },
+              metadata: { nextRunAt: '2026-04-19T00:05:00.000Z' },
+            },
+            {
+              type: 'docker',
+              configuration: { cron: '*/10 * * * *' },
+              metadata: { nextRunAt: '2026-04-19T00:10:00.000Z' },
+            },
+            {
+              name: 'missing-type',
+              configuration: { cron: '*/15 * * * *' },
+              metadata: { nextRunAt: '2026-04-19T00:15:00.000Z' },
+            },
+          ],
+        }) // watchers
+        .mockResolvedValueOnce({ data: [] }); // triggers
+
+      storeContainer.getContainers.mockReturnValue([]);
+
+      await client.handshake();
+
+      expect(client.getWatcherSnapshot('docker', 'remote')).toEqual({
+        type: 'docker',
+        name: 'remote',
+        configuration: { cron: '*/5 * * * *' },
+        metadata: { nextRunAt: '2026-04-19T00:05:00.000Z' },
+      });
+      expect(
+        (
+          client as unknown as {
+            watcherSnapshotCache: Map<string, unknown>;
+          }
+        ).watcherSnapshotCache.size,
+      ).toBe(1);
+    });
+
     test('dd:watcher-snapshot SSE event updates the cache with fresh configuration and metadata', async () => {
       // Seed via handshake first
       axios.get
@@ -2266,6 +2342,17 @@ describe('AgentClient', () => {
         configuration: { cron: '0 * * * *' },
         metadata: { nextRunAt: '2026-04-19T01:00:00.000Z' },
       });
+    });
+
+    test('dd:watcher-snapshot event without a watcher type does not seed the cache', async () => {
+      storeContainer.getContainers.mockReturnValue([]);
+
+      await client.handleEvent('dd:watcher-snapshot', {
+        watcher: { name: 'remote' },
+        containers: [],
+      });
+
+      expect(client.getWatcherSnapshot('docker', 'remote')).toBeUndefined();
     });
 
     test('dd:watcher-snapshot event with only type and name populates the cache with undefined configuration and metadata', async () => {
