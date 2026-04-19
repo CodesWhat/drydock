@@ -2271,4 +2271,328 @@ describe('ContainersView', () => {
       }
     });
   });
+
+  describe('update completion toast (fix #289)', () => {
+    it('fires toast.success when a tracked in-progress operation succeeds', async () => {
+      const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
+      vi.useFakeTimers();
+      try {
+        const c = makeContainer({ id: 'c1', name: 'nginx' });
+        const wrapper = await mountContainersView(
+          [c],
+          [{ id: 'c1', name: 'nginx', displayName: 'nginx' }],
+        );
+        const operationListener = addEventListenerSpy.mock.calls.findLast(
+          ([eventName]) => eventName === 'dd:sse-update-operation-changed',
+        )?.[1] as EventListener | undefined;
+
+        // First fire in-progress so the hold is registered
+        operationListener?.(
+          new CustomEvent('dd:sse-update-operation-changed', {
+            detail: {
+              operationId: 'op-1',
+              containerId: 'c1',
+              containerName: 'nginx',
+              status: 'in-progress',
+              phase: 'pulling',
+            },
+          }),
+        );
+
+        const { useToast } = await import('@/composables/useToast');
+        const { toasts } = useToast();
+        const countBefore = toasts.value.length;
+
+        // Terminal succeeded SSE — operation was tracked → toast should fire
+        operationListener?.(
+          new CustomEvent('dd:sse-update-operation-changed', {
+            detail: {
+              operationId: 'op-1',
+              containerId: 'c1',
+              containerName: 'nginx',
+              status: 'succeeded',
+              phase: 'succeeded',
+            },
+          }),
+        );
+
+        expect(toasts.value.length).toBe(countBefore + 1);
+        expect(toasts.value.at(-1)).toMatchObject({ tone: 'success', title: 'Updated: nginx' });
+
+        wrapper.unmount();
+      } finally {
+        addEventListenerSpy.mockRestore();
+        vi.useRealTimers();
+      }
+    });
+
+    it('does NOT fire a toast when succeeded SSE has no tracked in-progress operation (replay guard)', async () => {
+      const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
+      vi.useFakeTimers();
+      try {
+        const c = makeContainer({ id: 'c1', name: 'nginx' });
+        const wrapper = await mountContainersView(
+          [c],
+          [{ id: 'c1', name: 'nginx', displayName: 'nginx' }],
+        );
+        const operationListener = addEventListenerSpy.mock.calls.findLast(
+          ([eventName]) => eventName === 'dd:sse-update-operation-changed',
+        )?.[1] as EventListener | undefined;
+
+        const { useToast } = await import('@/composables/useToast');
+        const { toasts } = useToast();
+        const countBefore = toasts.value.length;
+
+        // Fire succeeded directly with no prior in-progress (replay scenario)
+        operationListener?.(
+          new CustomEvent('dd:sse-update-operation-changed', {
+            detail: {
+              operationId: 'op-replay',
+              containerId: 'c1',
+              containerName: 'nginx',
+              status: 'succeeded',
+              phase: 'succeeded',
+            },
+          }),
+        );
+
+        expect(toasts.value.length).toBe(countBefore);
+
+        wrapper.unmount();
+      } finally {
+        addEventListenerSpy.mockRestore();
+        vi.useRealTimers();
+      }
+    });
+
+    it('fires individual toasts for multiple distinct containers completing in parallel', async () => {
+      const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
+      vi.useFakeTimers();
+      try {
+        const c1 = makeContainer({ id: 'c1', name: 'nginx' });
+        const c2 = makeContainer({ id: 'c2', name: 'redis' });
+        const wrapper = await mountContainersView(
+          [c1, c2],
+          [
+            { id: 'c1', name: 'nginx', displayName: 'nginx' },
+            { id: 'c2', name: 'redis', displayName: 'redis' },
+          ],
+        );
+        const operationListener = addEventListenerSpy.mock.calls.findLast(
+          ([eventName]) => eventName === 'dd:sse-update-operation-changed',
+        )?.[1] as EventListener | undefined;
+
+        // Register both in-progress
+        operationListener?.(
+          new CustomEvent('dd:sse-update-operation-changed', {
+            detail: {
+              operationId: 'op-c1',
+              containerId: 'c1',
+              containerName: 'nginx',
+              status: 'in-progress',
+              phase: 'pulling',
+            },
+          }),
+        );
+        operationListener?.(
+          new CustomEvent('dd:sse-update-operation-changed', {
+            detail: {
+              operationId: 'op-c2',
+              containerId: 'c2',
+              containerName: 'redis',
+              status: 'in-progress',
+              phase: 'pulling',
+            },
+          }),
+        );
+
+        const { useToast } = await import('@/composables/useToast');
+        const { toasts } = useToast();
+        const countBefore = toasts.value.length;
+
+        // Both succeed
+        operationListener?.(
+          new CustomEvent('dd:sse-update-operation-changed', {
+            detail: {
+              operationId: 'op-c1',
+              containerId: 'c1',
+              containerName: 'nginx',
+              status: 'succeeded',
+              phase: 'succeeded',
+            },
+          }),
+        );
+        operationListener?.(
+          new CustomEvent('dd:sse-update-operation-changed', {
+            detail: {
+              operationId: 'op-c2',
+              containerId: 'c2',
+              containerName: 'redis',
+              status: 'succeeded',
+              phase: 'succeeded',
+            },
+          }),
+        );
+
+        expect(toasts.value.length).toBe(countBefore + 2);
+        const newToasts = toasts.value.slice(countBefore);
+        expect(newToasts.some((t) => t.title === 'Updated: nginx')).toBe(true);
+        expect(newToasts.some((t) => t.title === 'Updated: redis')).toBe(true);
+
+        wrapper.unmount();
+      } finally {
+        addEventListenerSpy.mockRestore();
+        vi.useRealTimers();
+      }
+    });
+  });
+
+  describe('sort stability during held update (fix #289)', () => {
+    it('does not change sort position when status and updateKind flip mid-recreate', async () => {
+      const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
+      vi.useFakeTimers();
+      try {
+        // Two containers: nginx (minor, running) should sort BEFORE redis (patch, running) by kind
+        const nginx = makeContainer({
+          id: 'c1',
+          name: 'nginx',
+          updateKind: 'minor',
+          status: 'running',
+        });
+        const redis = makeContainer({
+          id: 'c2',
+          name: 'redis',
+          updateKind: 'patch',
+          status: 'running',
+        });
+        const wrapper = await mountContainersView(
+          [nginx, redis],
+          [
+            { id: 'c1', name: 'nginx', displayName: 'nginx' },
+            { id: 'c2', name: 'redis', displayName: 'redis' },
+          ],
+        );
+        const vm = wrapper.vm as any;
+        const operationListener = addEventListenerSpy.mock.calls.findLast(
+          ([eventName]) => eventName === 'dd:sse-update-operation-changed',
+        )?.[1] as EventListener | undefined;
+
+        // Set sort to 'kind' ascending (major=0, minor=1, patch=2)
+        vm.containerSortKey = 'kind';
+        vm.containerSortAsc = true;
+        await flushPromises();
+
+        const sortedBefore = vm.sortedContainers.map((c: any) => c.id);
+        expect(sortedBefore[0]).toBe('c1'); // nginx (minor=1) before redis (patch=2)
+
+        // nginx starts updating — captures sort snapshot
+        operationListener?.(
+          new CustomEvent('dd:sse-update-operation-changed', {
+            detail: {
+              operationId: 'op-nginx',
+              containerId: 'c1',
+              containerName: 'nginx',
+              status: 'in-progress',
+              phase: 'pulling',
+            },
+          }),
+        );
+
+        // Simulate docker recreate window: nginx raw data flips to stopped + no updateKind
+        vm.containers = [{ ...nginx, status: 'stopped', updateKind: null, newTag: null }, redis];
+        mockFilteredContainers.value = vm.containers;
+        await flushPromises();
+
+        // sortedContainers must be stable — nginx should still be first because projection freezes sort fields
+        const sortedDuring = vm.sortedContainers.map((c: any) => c.id);
+        expect(sortedDuring[0]).toBe('c1');
+
+        wrapper.unmount();
+      } finally {
+        addEventListenerSpy.mockRestore();
+        vi.useRealTimers();
+      }
+    });
+
+    it('restores natural sort order once the hold window expires', async () => {
+      const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
+      vi.useFakeTimers();
+      try {
+        const nginx = makeContainer({
+          id: 'c1',
+          name: 'nginx',
+          updateKind: 'minor',
+          status: 'running',
+        });
+        const redis = makeContainer({
+          id: 'c2',
+          name: 'redis',
+          updateKind: 'patch',
+          status: 'running',
+        });
+        const wrapper = await mountContainersView(
+          [nginx, redis],
+          [
+            { id: 'c1', name: 'nginx', displayName: 'nginx' },
+            { id: 'c2', name: 'redis', displayName: 'redis' },
+          ],
+        );
+        const vm = wrapper.vm as any;
+        const operationListener = addEventListenerSpy.mock.calls.findLast(
+          ([eventName]) => eventName === 'dd:sse-update-operation-changed',
+        )?.[1] as EventListener | undefined;
+
+        vm.containerSortKey = 'kind';
+        vm.containerSortAsc = true;
+        await flushPromises();
+
+        operationListener?.(
+          new CustomEvent('dd:sse-update-operation-changed', {
+            detail: {
+              operationId: 'op-nginx',
+              containerId: 'c1',
+              containerName: 'nginx',
+              status: 'in-progress',
+              phase: 'pulling',
+            },
+          }),
+        );
+
+        // Terminal succeeded — schedules release
+        operationListener?.(
+          new CustomEvent('dd:sse-update-operation-changed', {
+            detail: {
+              operationId: 'op-nginx',
+              containerId: 'c1',
+              containerName: 'nginx',
+              status: 'succeeded',
+              phase: 'succeeded',
+            },
+          }),
+        );
+
+        // After reload: nginx has no updateKind (already up-to-date); redis still has patch
+        const nginxUpdated = { ...nginx, updateKind: null as null, newTag: null };
+        vm.containers = [nginxUpdated, redis];
+        mockFilteredContainers.value = vm.containers;
+        await flushPromises();
+
+        // During hold window, projected sort fields still keep nginx in position 0
+        // (updateKind='minor' frozen), so sort order is unchanged
+        expect(vm.sortedContainers[0].id).toBe('c1');
+
+        // Advance past the hold window
+        vi.advanceTimersByTime(1600);
+        await flushPromises();
+
+        // Now projection releases — nginx has no updateKind (sorts to 9), redis (patch=2) wins
+        expect(vm.sortedContainers[0].id).toBe('c2');
+
+        wrapper.unmount();
+      } finally {
+        addEventListenerSpy.mockRestore();
+        vi.useRealTimers();
+      }
+    });
+  });
 });
