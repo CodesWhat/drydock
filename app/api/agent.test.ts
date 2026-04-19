@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createMockRequest, createMockResponse } from '../test/helpers.js';
+import * as containerSummary from '../util/container-summary.js';
 
 const { mockRouter, mockGetAgent } = vi.hoisted(() => ({
   mockRouter: { get: vi.fn() },
@@ -17,11 +18,11 @@ vi.mock('../agent', () => ({
 }));
 
 vi.mock('../store/container.js', () => ({
-  getContainers: vi.fn(() => []),
+  getContainersRaw: vi.fn(() => []),
 }));
 
 import { getAgents } from '../agent/index.js';
-import { getContainers } from '../store/container.js';
+import { getContainersRaw } from '../store/container.js';
 import * as agentRouter from './agent.js';
 
 function createResponse() {
@@ -66,7 +67,7 @@ describe('Agent Router', () => {
         info: {},
       },
     ]);
-    getContainers.mockReturnValue([
+    getContainersRaw.mockReturnValue([
       { id: 'c1', agent: 'agent-1', status: 'running', image: { id: 'img-a' } },
       { id: 'c2', agent: 'agent-1', status: 'exited', image: { id: 'img-b' } },
       { id: 'c3', agent: 'agent-1', status: 'running', image: { id: 'img-a' } },
@@ -106,7 +107,7 @@ describe('Agent Router', () => {
       ],
       total: 2,
     });
-    expect(getContainers).toHaveBeenCalledTimes(1);
+    expect(getContainersRaw).toHaveBeenCalledTimes(1);
   });
 
   test('should fetch containers once for agent list stats', () => {
@@ -124,14 +125,59 @@ describe('Agent Router', () => {
         info: {},
       },
     ]);
-    getContainers.mockReturnValue([]);
+    getContainersRaw.mockReturnValue([]);
 
     agentRouter.init();
     const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/')[1];
     const res = createResponse();
     handler({}, res);
 
-    expect(getContainers).toHaveBeenCalledTimes(1);
+    expect(getContainersRaw).toHaveBeenCalledTimes(1);
+  });
+
+  test('should compute per-agent stats in a single pass regardless of agent count (#301 regression)', () => {
+    // 10 agents × 60 containers = 600 rows. Pre-fix: 3 filter passes per
+    // agent meant 10 × 3 × 60 = 1800 predicate evaluations. Post-fix: a
+    // single pass over 600 containers. We can't measure flops directly in
+    // a unit test, but we CAN assert the store is hit exactly once and the
+    // response shape is correct no matter how many agents there are.
+    const agents = Array.from({ length: 10 }, (_, i) => ({
+      name: `agent-${i}`,
+      config: { host: `host-${i}`, port: 3000 + i },
+      isConnected: true,
+      info: {},
+    }));
+    const containers = [];
+    for (let i = 0; i < 10; i += 1) {
+      for (let j = 0; j < 60; j += 1) {
+        containers.push({
+          id: `c-${i}-${j}`,
+          agent: `agent-${i}`,
+          status: j % 2 === 0 ? 'running' : 'exited',
+          image: { id: `img-${i}-${j % 3}` },
+          updateAvailable: j % 5 === 0,
+        });
+      }
+    }
+    getAgents.mockReturnValue(agents);
+    getContainersRaw.mockReturnValue(containers);
+
+    agentRouter.init();
+    const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/')[1];
+    const res = createResponse();
+    handler({}, res);
+
+    expect(getContainersRaw).toHaveBeenCalledTimes(1);
+
+    const payload = res.json.mock.calls[0][0];
+    expect(payload.total).toBe(10);
+    for (const entry of payload.data) {
+      expect(entry.containers.total).toBe(60);
+      expect(entry.containers.running).toBe(30);
+      expect(entry.containers.stopped).toBe(30);
+      expect(entry.containers.updatesAvailable).toBe(12);
+      expect(entry.images).toBe(3);
+    }
   });
 
   test('should return empty array when no agents', () => {
@@ -155,7 +201,7 @@ describe('Agent Router', () => {
         info: {},
       },
     ]);
-    getContainers.mockReturnValue([
+    getContainersRaw.mockReturnValue([
       { id: 'c1', agent: 'agent-fallbacks', status: undefined, image: { name: 'img-name' } },
       { id: 'c2', agent: 'agent-fallbacks', status: 'running', image: {} },
       { id: 'c3', agent: 'agent-fallbacks', status: null },
@@ -187,7 +233,7 @@ describe('Agent Router', () => {
         info: {},
       },
     ]);
-    getContainers.mockReturnValue([
+    getContainersRaw.mockReturnValue([
       { id: 'c1', agent: ['agent-typed'], status: 'running', image: { id: 'img-a' } },
       { id: 'c2', agent: undefined, status: 'running', image: { id: 'img-b' } },
     ]);
@@ -201,6 +247,77 @@ describe('Agent Router', () => {
       data: [
         expect.objectContaining({
           name: 'agent-typed',
+          containers: { total: 0, running: 0, stopped: 0, updatesAvailable: 0 },
+          images: 0,
+        }),
+      ],
+      total: 1,
+    });
+  });
+
+  test('should fall back to empty stats when the stats map omits an agent bucket', () => {
+    const statsSpy = vi
+      .spyOn(containerSummary, 'buildContainerStatsByKey')
+      .mockReturnValue(new Map());
+
+    try {
+      getAgents.mockReturnValue([
+        {
+          name: 'agent-missing-bucket',
+          config: { host: 'localhost', port: 3000 },
+          isConnected: true,
+          info: {},
+        },
+      ]);
+      getContainersRaw.mockReturnValue([
+        { id: 'c1', agent: 'agent-missing-bucket', status: 'running', image: { id: 'img-a' } },
+      ]);
+
+      agentRouter.init();
+      const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/')[1];
+      const res = createResponse();
+
+      handler({}, res);
+
+      expect(res.json).toHaveBeenCalledWith({
+        data: [
+          expect.objectContaining({
+            name: 'agent-missing-bucket',
+            containers: { total: 0, running: 0, stopped: 0, updatesAvailable: 0 },
+            images: 0,
+          }),
+        ],
+        total: 1,
+      });
+    } finally {
+      statsSpy.mockRestore();
+    }
+  });
+
+  test('should fall back to empty stats when an agent name changes after stats preallocation', () => {
+    let nameReads = 0;
+    getAgents.mockReturnValue([
+      {
+        get name() {
+          nameReads += 1;
+          return nameReads === 1 ? 'agent-indexed' : 'agent-live';
+        },
+        config: { host: 'localhost', port: 3000 },
+        isConnected: true,
+        info: {},
+      },
+    ]);
+    getContainersRaw.mockReturnValue([]);
+
+    agentRouter.init();
+    const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/')[1];
+    const res = createResponse();
+    handler({}, res);
+
+    expect(res.json).toHaveBeenCalledWith({
+      data: [
+        expect.objectContaining({
+          name: 'agent-live',
           containers: { total: 0, running: 0, stopped: 0, updatesAvailable: 0 },
           images: 0,
         }),

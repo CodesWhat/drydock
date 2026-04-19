@@ -113,7 +113,7 @@ describe('AgentsView', () => {
     expect(wrapper.find('.data-table').attributes('data-row-count')).toBe('2');
   });
 
-  it('logs fetch is called only for connected agents', async () => {
+  it('logs are not eagerly fetched on mount (issue #301 lazy fetch)', async () => {
     mockGetAgents.mockResolvedValue([
       makeAgent({ name: 'edge-1', connected: true }),
       makeAgent({ name: 'edge-2', connected: false }),
@@ -122,10 +122,23 @@ describe('AgentsView', () => {
 
     await mountAgentsView();
 
-    expect(mockGetLogEntries).toHaveBeenCalledTimes(2);
-    expect(mockGetLogEntries).toHaveBeenCalledWith({ agent: 'edge-1', tail: 50 });
-    expect(mockGetLogEntries).toHaveBeenCalledWith({ agent: 'edge-3', tail: 50 });
-    expect(mockGetLogEntries).not.toHaveBeenCalledWith({ agent: 'edge-2', tail: 50 });
+    expect(mockGetLogEntries).not.toHaveBeenCalled();
+  });
+
+  it('logs are fetched lazily when the Logs tab is selected in the detail panel', async () => {
+    mockGetAgents.mockResolvedValue([makeAgent({ name: 'edge-1', connected: true })]);
+
+    const wrapper = await mountAgentsView();
+    await wrapper.find('.row-click-first').trigger('click');
+    await flushPromises();
+
+    const logsTab = wrapper.findAll('button').find((button) => button.text().includes('Logs'));
+    expect(logsTab).toBeDefined();
+    await logsTab?.trigger('click');
+    await flushPromises();
+
+    expect(mockGetLogEntries).toHaveBeenCalledTimes(1);
+    expect(mockGetLogEntries).toHaveBeenCalledWith({ agent: 'edge-1', tail: 100 });
   });
 
   it('route query q filters rows', async () => {

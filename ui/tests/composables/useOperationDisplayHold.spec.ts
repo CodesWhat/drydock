@@ -328,31 +328,13 @@ describe('useOperationDisplayHold', () => {
     );
   });
 
-  it('projects container display state without cloning when no held update applies', async () => {
+  it('returns the same container reference when no held update or sort snapshot applies', async () => {
     const hold = await loadComposable();
     const updateOperation = makeOperation({ id: 'op-base' });
     const container = makeContainer({ updateOperation });
 
+    // No held operation for this container — must return same reference
     expect(hold.projectContainerDisplayState(container)).toBe(container);
-
-    const sameHeld = makeOperation({ id: 'op-same' });
-    hold.holdOperationDisplay({
-      operationId: sameHeld.id,
-      operation: sameHeld,
-      containerId: container.id,
-      containerName: container.name,
-      now: Date.now(),
-    });
-
-    const heldOperation = hold.getDisplayUpdateOperation(container);
-    const sameContainer = makeContainer({
-      id: 'container-2',
-      identityKey: 'container-2',
-      name: 'api',
-      updateOperation: heldOperation,
-    });
-
-    expect(hold.projectContainerDisplayState(sameContainer)).toBe(sameContainer);
   });
 
   it('projects container display state by cloning when a different held update applies', async () => {
@@ -415,5 +397,180 @@ describe('useOperationDisplayHold', () => {
 
     await vi.advanceTimersByTimeAsync(5000);
     expect(hold.heldOperations.value.size).toBe(0);
+  });
+
+  it('stores the sort snapshot on holdOperationDisplay and projects it in place of volatile fields', async () => {
+    const hold = await loadComposable();
+    const operation = makeOperation({ id: 'op-sort' });
+    const sortSnapshot = {
+      status: 'running' as const,
+      updateKind: 'minor' as const,
+      newTag: '2.0.0',
+    };
+
+    hold.holdOperationDisplay({
+      operationId: operation.id,
+      operation,
+      containerId: 'container-a',
+      containerName: 'web',
+      sortSnapshot,
+      now: Date.now(),
+    });
+
+    // Simulates mid-recreate container state: status flipped to stopped, updateKind wiped
+    const volatileContainer = makeContainer({
+      id: 'container-a',
+      name: 'web',
+      status: 'stopped',
+      updateKind: null,
+      newTag: null,
+    });
+
+    const projected = hold.projectContainerDisplayState(volatileContainer);
+
+    // Sort-stable fields should reflect the pre-op snapshot, not the volatile mid-recreate values
+    expect(projected.status).toBe('running');
+    expect(projected.updateKind).toBe('minor');
+    expect(projected.newTag).toBe('2.0.0');
+  });
+
+  it('does not override sort fields when no sort snapshot is held', async () => {
+    const hold = await loadComposable();
+    const operation = makeOperation({ id: 'op-no-snapshot' });
+
+    hold.holdOperationDisplay({
+      operationId: operation.id,
+      operation,
+      containerId: 'container-a',
+      containerName: 'web',
+      // no sortSnapshot
+      now: Date.now(),
+    });
+
+    const container = makeContainer({
+      id: 'container-a',
+      name: 'web',
+      status: 'stopped',
+      updateKind: null,
+      newTag: null,
+    });
+
+    const projected = hold.projectContainerDisplayState(container);
+    // Without a snapshot the container fields are left untouched
+    expect(projected.status).toBe('stopped');
+    expect(projected.updateKind).toBeNull();
+    expect(projected.newTag).toBeNull();
+  });
+
+  it('preserves the first sort snapshot when holdOperationDisplay is called again without one', async () => {
+    const hold = await loadComposable();
+    const operation = makeOperation({ id: 'op-preserve' });
+    const sortSnapshot = {
+      status: 'running' as const,
+      updateKind: 'patch' as const,
+      newTag: '1.1.1',
+    };
+
+    hold.holdOperationDisplay({
+      operationId: operation.id,
+      operation,
+      containerId: 'container-a',
+      containerName: 'web',
+      sortSnapshot,
+      now: Date.now(),
+    });
+
+    // Second call without sortSnapshot (e.g. a phase update) must not wipe the snapshot
+    hold.holdOperationDisplay({
+      operationId: operation.id,
+      operation,
+      containerId: 'container-a',
+      containerName: 'web',
+      now: Date.now() + 100,
+    });
+
+    expect(hold.heldOperations.value.get(operation.id)?.sortSnapshot).toEqual(sortSnapshot);
+  });
+
+  it('projects both sort fields and held updateOperation when container fields are volatile', async () => {
+    const hold = await loadComposable();
+    const operation = makeOperation({ id: 'op-sort-only' });
+    const sortSnapshot = {
+      status: 'running' as const,
+      updateKind: 'minor' as const,
+      newTag: '2.0.0',
+    };
+
+    hold.holdOperationDisplay({
+      operationId: operation.id,
+      operation,
+      containerId: 'container-a',
+      containerName: 'web',
+      sortSnapshot,
+      now: Date.now(),
+    });
+
+    // Container in mid-recreate volatile state
+    const container = makeContainer({
+      id: 'container-a',
+      name: 'web',
+      status: 'stopped', // volatile: differs from snapshot
+      updateKind: null, // volatile: differs from snapshot
+      newTag: null, // volatile: differs from snapshot
+    });
+
+    const projected = hold.projectContainerDisplayState(container);
+    // Sort fields projected from snapshot
+    expect(projected.status).toBe('running');
+    expect(projected.updateKind).toBe('minor');
+    expect(projected.newTag).toBe('2.0.0');
+    // updateOperation also applied from held operation
+    expect(projected.updateOperation).toStrictEqual(operation);
+  });
+
+  it('sort snapshot projection does not override sort fields when they already match the snapshot', async () => {
+    const hold = await loadComposable();
+    const operation = makeOperation({ id: 'op-same-sort' });
+    const sortSnapshot = {
+      status: 'running' as const,
+      updateKind: 'minor' as const,
+      newTag: '2.0.0',
+    };
+
+    hold.holdOperationDisplay({
+      operationId: operation.id,
+      operation,
+      containerId: 'container-a',
+      containerName: 'web',
+      sortSnapshot,
+      now: Date.now(),
+    });
+
+    const container = makeContainer({
+      id: 'container-a',
+      name: 'web',
+      status: 'running',
+      updateKind: 'minor',
+      newTag: '2.0.0',
+      updateOperation: operation,
+    });
+
+    const projected = hold.projectContainerDisplayState(container);
+    // Fields must be unchanged — projection should be a no-op in value terms
+    expect(projected.status).toBe('running');
+    expect(projected.updateKind).toBe('minor');
+    expect(projected.newTag).toBe('2.0.0');
+    // Verify that volatile-field changes ARE projected when they don't match
+    const volatile = makeContainer({
+      id: 'container-a',
+      name: 'web',
+      status: 'stopped',
+      updateKind: null,
+      newTag: null,
+    });
+    const projectedVolatile = hold.projectContainerDisplayState(volatile);
+    expect(projectedVolatile.status).toBe('running');
+    expect(projectedVolatile.updateKind).toBe('minor');
+    expect(projectedVolatile.newTag).toBe('2.0.0');
   });
 });

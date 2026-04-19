@@ -35,6 +35,7 @@
     "next": "16.2.3",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
+    "remark-custom-heading-id": "^2.0.0",
     "tailwind-merge": "^3.5.0"
   },
   "devDependencies": {

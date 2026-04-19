@@ -171,6 +171,21 @@ function sanitizeSecurityAlertPayloadForAgentSse(payload: unknown): unknown {
     status: securityAlertPayload.status,
     summary: securityAlertPayload.summary,
     blockingCount: securityAlertPayload.blockingCount,
+    cycleId: securityAlertPayload.cycleId,
+  };
+}
+
+function sanitizeSecurityScanCycleCompletePayloadForAgentSse(payload: unknown): unknown {
+  if (!payload || typeof payload !== 'object') {
+    return payload;
+  }
+  const p = payload as Record<string, unknown>;
+  return {
+    cycleId: p.cycleId,
+    scannedCount: p.scannedCount,
+    alertCount: p.alertCount,
+    startedAt: p.startedAt,
+    completedAt: p.completedAt,
   };
 }
 
@@ -271,6 +286,12 @@ export function initEvents() {
   );
   event.registerSecurityAlert((payload: event.SecurityAlertEventPayload) =>
     sendSseEvent('dd:security-alert', sanitizeSecurityAlertPayloadForAgentSse(payload)),
+  );
+  event.registerSecurityScanCycleComplete((payload: event.SecurityScanCycleCompleteEventPayload) =>
+    sendSseEvent(
+      'dd:security-scan-cycle-complete',
+      sanitizeSecurityScanCycleCompletePayloadForAgentSse(payload),
+    ),
   );
 }
 

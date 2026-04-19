@@ -177,13 +177,6 @@ async function fetchAgents() {
         closeAgentPanel();
       }
     }
-
-    // Fetch logs for connected agents
-    for (const agent of agentsData.value) {
-      if (agent.status === 'connected') {
-        void fetchAgentLogs(agent.name, { tail: 50, silent: true });
-      }
-    }
   } catch (e: unknown) {
     error.value = errorMessage(e, 'Failed to load agents');
   } finally {

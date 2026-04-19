@@ -7,6 +7,8 @@ export interface DataTableColumn {
   align?: string;
   sortable?: boolean;
   width?: string;
+  /** Tailwind horizontal padding class (e.g. 'px-3', 'px-5'). Defaults to px-5. */
+  px?: string;
   /** Narrow icon-only column — no header text, tight padding, vertically centered */
   icon?: boolean;
 }
@@ -370,7 +372,7 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
             <th v-for="(col, colIdx) in columns" :key="col.key"
                 :data-col-key="col.key"
                 :class="[
-                  col.icon ? 'text-center pl-5 pr-0' : [col.align ?? 'text-center', 'px-5'],
+                  col.icon ? 'text-center pl-5 pr-0' : [col.align ?? 'text-center', col.px ?? 'px-5'],
                   'whitespace-nowrap py-2.5 font-semibold uppercase tracking-wider text-2xs select-none transition-colors relative',
                   isSortableColumn(col) ? 'cursor-pointer' : '',
                   sortKey === col.key ? 'dd-text-secondary' : 'dd-text-muted hover:dd-text-secondary',
@@ -392,7 +394,7 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
                      style="background: var(--dd-text-muted)" />
               </div>
             </th>
-            <th v-if="showActions" class="text-center px-4 py-2.5 font-semibold uppercase tracking-wider text-2xs whitespace-nowrap dd-text-muted relative">
+            <th v-if="showActions" class="text-right px-3 py-2.5 font-semibold uppercase tracking-wider text-2xs whitespace-nowrap dd-text-muted relative" style="width: 80px">
               Actions
               <div v-if="lastResizableColumnKey"
                    role="separator"
@@ -439,10 +441,17 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
             <template v-else>
               <td v-for="col in columns" :key="col.key"
                   class="py-3 align-middle"
-                  :class="col.icon ? 'text-center pl-5 pr-0' : ['overflow-hidden text-ellipsis', col.align ?? 'text-center', 'px-5']">
-                <slot :name="'cell-' + col.key" :row="row" :value="row[col.key]">
-                  {{ row[col.key] }}
-                </slot>
+                  :class="col.icon ? 'text-center pl-5 pr-0' : ['overflow-hidden', col.align ?? 'text-center', col.px ?? 'px-5']">
+                <div v-if="!col.icon" class="@container dd-cell">
+                  <slot :name="'cell-' + col.key" :row="row" :value="row[col.key]">
+                    {{ row[col.key] }}
+                  </slot>
+                </div>
+                <template v-else>
+                  <slot :name="'cell-' + col.key" :row="row" :value="row[col.key]">
+                    {{ row[col.key] }}
+                  </slot>
+                </template>
               </td>
               <td v-if="showActions" class="px-3 py-3 text-right whitespace-nowrap relative">
                 <slot name="actions" :row="row" />

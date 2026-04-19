@@ -700,12 +700,10 @@ describe('DashboardView', () => {
       expect(updatesCard?.text()).toContain('1');
     });
 
-    it('keeps pinned containers with pending updates visible across dashboard widgets when hidePinned is enabled (#293)', async () => {
-      // Hide Pinned is a decluttering filter for static pinned containers; a
-      // pinned container with an active update is exactly what the user is
-      // watching for (reporter pinned `grafana:12.3.2` to wait out a
-      // regression and wanted the next release to appear). The filter should
-      // only hide pinned containers that have no pending update.
+    it('hides pinned containers across dashboard widgets when hidePinned is enabled, including ones with updates (#305)', async () => {
+      // Hide Pinned is a pure declutter: pinned containers are hidden from
+      // dashboard widgets regardless of update status. Users who want to see
+      // a pinned row with a pending update uncheck the filter.
       const { flushPreferences, preferences } = await import('@/preferences/store');
       preferences.containers.filters.hidePinned = true;
       flushPreferences();
@@ -732,15 +730,14 @@ describe('DashboardView', () => {
 
       const statCards = wrapper.findAll('.stat-card');
       const updatesCard = statCards.find((c) => c.text().includes('Updates Available'));
-      expect(updatesCard?.text()).toContain('2');
+      expect(updatesCard?.text()).toContain('1');
 
       const recentUpdatesWidget = wrapper.find('[data-widget-id="recent-updates"]');
       expect(recentUpdatesWidget.text()).toContain('floating');
-      expect(recentUpdatesWidget.text()).toContain('pinned');
+      expect(recentUpdatesWidget.text()).not.toContain('pinned');
 
       const updateBreakdownWidget = wrapper.find('[data-widget-id="update-breakdown"]');
       expect(updateBreakdownWidget.text()).toContain('Major');
-      expect(updateBreakdownWidget.text()).toContain('Minor');
     });
 
     it('computes security issues count from blocked and unsafe', async () => {
@@ -2284,6 +2281,225 @@ describe('DashboardView', () => {
           (toast) => toast.tone === 'success' && toast.title === 'Started updates for 2 containers',
         ),
       ).toBe(true);
+    });
+
+    it('shows the Updating badge immediately on click before the API call resolves (Fix A optimistic state)', async () => {
+      // Defect 1: the badge was only rendered after capturePendingDashboardRows ran
+      // post-fetch, meaning a full round-trip elapsed before the row showed any
+      // in-progress indicator. dashboardUpdatingById should be set synchronously
+      // on the accept handler before the API call, so nextTick is enough.
+      let resolveUpdate: (() => void) | undefined;
+      mockUpdateContainer.mockImplementation(
+        () =>
+          new Promise<void>((resolve) => {
+            resolveUpdate = resolve;
+          }),
+      );
+
+      const wrapper = await mountDashboard(
+        [pendingContainer],
+        [],
+        {},
+        { recentStatuses: { nginx: 'pending' } },
+      );
+
+      const { useConfirmDialog } = await import('@/composables/useConfirmDialog');
+      const confirm = useConfirmDialog();
+
+      await wrapper.find('[data-test="dashboard-update-btn"]').trigger('click');
+      // Accept synchronously — do NOT await so the API promise stays pending
+      void confirm.accept();
+      await nextTick();
+
+      // The Updating badge should appear before the API resolves
+      const widgetText = wrapper.find('[data-widget-id="recent-updates"]').text();
+      expect(widgetText).toContain('Updating');
+
+      // Cleanup: resolve the pending promise
+      resolveUpdate?.();
+      await flushPromises();
+    });
+
+    it('clears optimistic updating state when the API returns stale/up-to-date', async () => {
+      // Optimistic state should be removed when the operation resolves as stale
+      // so the row returns to its normal pending state rather than staying stuck
+      // showing an "Updating" badge.
+      mockUpdateContainer.mockRejectedValueOnce(
+        new Error('No update available for this container'),
+      );
+
+      const wrapper = await mountDashboard(
+        [pendingContainer],
+        [],
+        {},
+        { recentStatuses: { nginx: 'pending' } },
+      );
+      mockGetAllContainers.mockResolvedValueOnce([pendingContainer]);
+      mockGetContainerRecentStatus.mockResolvedValueOnce({ statuses: { nginx: 'pending' } });
+      const { mapApiContainers } = await import('@/utils/container-mapper');
+      (mapApiContainers as ReturnType<typeof vi.fn>).mockReturnValueOnce([pendingContainer]);
+
+      const { useConfirmDialog } = await import('@/composables/useConfirmDialog');
+      const confirm = useConfirmDialog();
+
+      await wrapper.find('[data-test="dashboard-update-btn"]').trigger('click');
+      await confirm.accept();
+      await flushPromises();
+
+      // After stale response, the row should no longer show Updating
+      const widgetText = wrapper.find('[data-widget-id="recent-updates"]').text();
+      expect(widgetText).not.toContain('Updating');
+    });
+
+    it('prunes ghost updating row immediately when a terminal SSE operation phase fires (Fix B)', async () => {
+      // Defect 2: ghost rows persisted until the Docker watcher rescanned and the
+      // new container id appeared in the live list. The terminal SSE phase should
+      // prune the ghost immediately without waiting for watcher rediscovery.
+      vi.useFakeTimers();
+      try {
+        mockUpdateContainer.mockResolvedValueOnce({});
+
+        const wrapper = await mountDashboard(
+          [pendingContainer],
+          [],
+          {},
+          { recentStatuses: { nginx: 'pending' } },
+        );
+        const { mapApiContainers } = await import('@/utils/container-mapper');
+
+        // After update accepted: containers list is empty (container being recreated)
+        mockGetAllContainers.mockResolvedValueOnce([]);
+        mockGetContainerRecentStatus.mockResolvedValueOnce({ statuses: {} });
+        (mapApiContainers as ReturnType<typeof vi.fn>).mockReturnValueOnce([]);
+
+        const { useConfirmDialog } = await import('@/composables/useConfirmDialog');
+        const confirm = useConfirmDialog();
+
+        await wrapper.find('[data-test="dashboard-update-btn"]').trigger('click');
+        await confirm.accept();
+        await flushPromises();
+
+        // Ghost row should be visible at this point
+        expect(wrapper.find('[data-widget-id="recent-updates"]').text()).toContain('Updating');
+
+        // Fire a terminal SSE event for this container — succeeded phase
+        globalThis.dispatchEvent(
+          new CustomEvent('dd:sse-update-operation-changed', {
+            detail: {
+              containerId: pendingContainer.id,
+              containerName: pendingContainer.name,
+              status: 'succeeded',
+              phase: 'succeeded',
+            },
+          }),
+        );
+        await nextTick();
+
+        // Ghost should be pruned immediately without waiting for watcher rediscovery
+        expect(wrapper.find('[data-widget-id="recent-updates"]').text()).not.toContain('Updating');
+        expect(wrapper.find('[data-widget-id="recent-updates"]').text()).toContain(
+          'No updates available',
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('does not prune ghost rows for non-terminal SSE operation phases', async () => {
+      // In-progress phases like old-stopped should not trigger ghost pruning —
+      // only terminal statuses (succeeded, failed, rolled-back) should.
+      vi.useFakeTimers();
+      try {
+        mockUpdateContainer.mockResolvedValueOnce({});
+
+        const wrapper = await mountDashboard(
+          [pendingContainer],
+          [],
+          {},
+          { recentStatuses: { nginx: 'pending' } },
+        );
+        const { mapApiContainers } = await import('@/utils/container-mapper');
+
+        mockGetAllContainers.mockResolvedValueOnce([]);
+        mockGetContainerRecentStatus.mockResolvedValueOnce({ statuses: {} });
+        (mapApiContainers as ReturnType<typeof vi.fn>).mockReturnValueOnce([]);
+
+        const { useConfirmDialog } = await import('@/composables/useConfirmDialog');
+        const confirm = useConfirmDialog();
+
+        await wrapper.find('[data-test="dashboard-update-btn"]').trigger('click');
+        await confirm.accept();
+        await flushPromises();
+
+        expect(wrapper.find('[data-widget-id="recent-updates"]').text()).toContain('Updating');
+
+        // Fire a non-terminal in-progress phase
+        globalThis.dispatchEvent(
+          new CustomEvent('dd:sse-update-operation-changed', {
+            detail: {
+              containerId: pendingContainer.id,
+              containerName: pendingContainer.name,
+              status: 'in-progress',
+              phase: 'old-stopped',
+            },
+          }),
+        );
+        await nextTick();
+
+        // Ghost should still be visible
+        expect(wrapper.find('[data-widget-id="recent-updates"]').text()).toContain('Updating');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('prunes ghost by newContainerId when terminal SSE carries a recreated container id', async () => {
+      // When a container is updated, Docker recreates it with a new id. The SSE
+      // payload's newContainerId should match the ghost row's key so the ghost
+      // is pruned even if containerId no longer matches.
+      vi.useFakeTimers();
+      try {
+        mockUpdateContainer.mockResolvedValueOnce({});
+
+        const wrapper = await mountDashboard(
+          [pendingContainer],
+          [],
+          {},
+          { recentStatuses: { nginx: 'pending' } },
+        );
+        const { mapApiContainers } = await import('@/utils/container-mapper');
+
+        mockGetAllContainers.mockResolvedValueOnce([]);
+        mockGetContainerRecentStatus.mockResolvedValueOnce({ statuses: {} });
+        (mapApiContainers as ReturnType<typeof vi.fn>).mockReturnValueOnce([]);
+
+        const { useConfirmDialog } = await import('@/composables/useConfirmDialog');
+        const confirm = useConfirmDialog();
+
+        await wrapper.find('[data-test="dashboard-update-btn"]').trigger('click');
+        await confirm.accept();
+        await flushPromises();
+
+        expect(wrapper.find('[data-widget-id="recent-updates"]').text()).toContain('Updating');
+
+        // Terminal SSE with newContainerId (the recreated container's id)
+        globalThis.dispatchEvent(
+          new CustomEvent('dd:sse-update-operation-changed', {
+            detail: {
+              containerId: 'old-id',
+              newContainerId: pendingContainer.identityKey,
+              containerName: pendingContainer.name,
+              status: 'succeeded',
+              phase: 'succeeded',
+            },
+          }),
+        );
+        await nextTick();
+
+        expect(wrapper.find('[data-widget-id="recent-updates"]').text()).not.toContain('Updating');
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 });

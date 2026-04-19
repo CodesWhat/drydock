@@ -9,6 +9,10 @@ import { Step, Steps } from 'fumadocs-ui/components/steps';
 
 Drydock ships with a full security stack: vulnerability scanning, image signature verification, SBOM generation, report export, and multiple Docker socket isolation options. This guide walks through each layer so you can build up a defense-in-depth deployment.
 
+<Callout type="info">
+Before you run Drydock, verify the image or archive you downloaded. See [Verify Your Drydock Install](/docs/guides/verifying-releases) for the `cosign verify` and `gh attestation verify` commands.
+</Callout>
+
 <Steps>
 <Step>
 
@@ -184,7 +188,30 @@ environment:
   - DD_SECURITY_SCAN_CRON=0 3 * * *        # daily at 3 AM
   - DD_SECURITY_SCAN_CONCURRENCY=4          # parallel scans
   - DD_SECURITY_SCAN_BATCH_TIMEOUT=1800000  # 30 min max
+  - DD_SECURITY_SCAN_NOTIFICATIONS=true     # emit security-alert events for findings
 ```
+
+Scheduled scans only route findings through notification triggers when `DD_SECURITY_SCAN_NOTIFICATIONS=true` is set. This preserves the pre-v1.5.0-rc.10 default (scheduled scans update the UI but do not notify) while letting operators opt in to cron-driven notifications. On-demand scans (UI button, single-container API, bulk `scan-all` endpoint) always emit.
+
+### Quiet scan notifications with digest mode
+
+On a large inventory, a single scheduled scan that surfaces 40 vulnerable containers used to fire 40 separate emails — one per container. Since v1.5.0-rc.10, each scan cycle (scheduled cron, on-demand single, or the new bulk `POST /api/v1/containers/scan-all` endpoint) carries a stable `cycleId`, and triggers can deliver one digest per cycle instead of one per container.
+
+Configure any notification trigger with `SECURITYMODE=digest` to receive one summary email per scan cycle:
+
+```yaml
+environment:
+  - DD_SECURITY_SCAN_CRON=0 3 * * *
+  - DD_SECURITY_SCAN_NOTIFICATIONS=true
+
+  - DD_TRIGGER_SMTP_GMAIL_FROM=drydock@example.com
+  - DD_TRIGGER_SMTP_GMAIL_TO=security-team@example.com
+  - DD_TRIGGER_SMTP_GMAIL_SECURITYMODE=digest
+```
+
+The digest fires once per scan cycle, grouped by severity (critical → high → medium → low → unknown). Cycles with zero findings never emit — `once=true` per-channel dedup (tracked independently of update notifications) stops a digest from re-sending for the same set of findings across cycles. The UI **Scan All** button now issues one server-side bulk scan that produces a single digest per click instead of N per-container HTTP calls.
+
+The `SECURITYMODE` setting is independent of the update-notification `MODE`. A trigger can combine, for example, `MODE=batch` (one update email per scan cycle) with `SECURITYMODE=digest` (one security email per scan cycle).
 
 ### High-volume environments
 

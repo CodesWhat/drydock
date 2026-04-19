@@ -9,6 +9,7 @@ const mockVerifyImageSignature = vi.hoisted(() => vi.fn());
 const mockBroadcastScanStarted = vi.hoisted(() => vi.fn());
 const mockBroadcastScanCompleted = vi.hoisted(() => vi.fn());
 const mockEmitSecurityAlert = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+const mockEmitSecurityScanCycleComplete = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const mockGetOperationsByContainerName = vi.hoisted(() => vi.fn());
 const mockCreateAuthenticatedRouteRateLimitKeyGenerator = vi.hoisted(() => vi.fn(() => undefined));
 const mockIsIdentityAwareRateLimitKeyingEnabled = vi.hoisted(() => vi.fn(() => false));
@@ -122,6 +123,7 @@ vi.mock('../agent/manager', () => ({
 
 vi.mock('../event/index.js', () => ({
   emitSecurityAlert: (...args: unknown[]) => mockEmitSecurityAlert(...args),
+  emitSecurityScanCycleComplete: (...args: unknown[]) => mockEmitSecurityScanCycleComplete(...args),
 }));
 
 vi.mock('../stats/collector.js', () => ({
@@ -205,6 +207,15 @@ async function callWatchContainer(id = 'c1') {
   return res;
 }
 
+/** Helper: invoke the scanAll handler */
+async function callScanAll(body) {
+  const handler = getHandler('post', '/scan-all');
+  const res = createResponse();
+  const req = { body, on: vi.fn() };
+  await handler(req, res);
+  return { req, res };
+}
+
 /** Helper: set up trigger filter test scenario */
 async function callGetContainerTriggers(container, triggers) {
   storeContainer.getContainer.mockReturnValue(container);
@@ -223,6 +234,12 @@ function getTriggersFromResponse(res) {
 /** Get the updatePolicy from the first updateContainer call */
 function getUpdatedPolicy() {
   return storeContainer.updateContainer.mock.calls[0][0].updatePolicy;
+}
+
+async function waitForBulkScanCycleComplete() {
+  await vi.waitFor(() => {
+    expect(mockEmitSecurityScanCycleComplete).toHaveBeenCalled();
+  });
 }
 
 describe('Container Router', () => {
@@ -312,7 +329,7 @@ describe('Container Router', () => {
 
     test('should enforce strict rate limit on env reveal endpoint', () => {
       containerRouter.init();
-      const envRevealRateLimitOptions = rateLimit.mock.calls[0][0];
+      const envRevealRateLimitOptions = rateLimit.mock.calls[1][0];
       expect(envRevealRateLimitOptions).toEqual(
         expect.objectContaining({
           windowMs: 60_000,
@@ -331,12 +348,12 @@ describe('Container Router', () => {
 
       containerRouter.init();
 
-      expect(rateLimit.mock.calls[0][0]).toEqual(
+      expect(rateLimit.mock.calls[1][0]).toEqual(
         expect.objectContaining({
           keyGenerator,
         }),
       );
-      expect(rateLimit.mock.calls[1][0]).toEqual(
+      expect(rateLimit.mock.calls[2][0]).toEqual(
         expect.objectContaining({
           keyGenerator,
         }),
@@ -1503,6 +1520,76 @@ describe('Container Router', () => {
       handlers.revealContainerEnv({ params: { id: 'c1' } }, res);
 
       expect(res.status).toHaveBeenCalledWith(501);
+    });
+  });
+
+  describe('scanAll', () => {
+    test('should resolve all containers from the store when bulk scan has no containerIds', async () => {
+      getSecurityConfiguration.mockReturnValue({
+        enabled: true,
+        scanner: 'trivy',
+        signature: { verify: false },
+        sbom: { enabled: false, formats: [] },
+      });
+      storeContainer.getContainers.mockReturnValue([]);
+
+      const { req, res } = await callScanAll();
+      await waitForBulkScanCycleComplete();
+
+      expect(req.on).toHaveBeenCalledWith('close', expect.any(Function));
+      expect(storeContainer.getContainers).toHaveBeenCalledWith({});
+      expect(storeContainer.getContainer).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(202);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          cycleId: expect.any(String),
+          scheduledCount: 0,
+        }),
+      );
+    });
+
+    test('should resolve requested containers by id for the bulk scan route', async () => {
+      getSecurityConfiguration.mockReturnValue({
+        enabled: true,
+        scanner: 'trivy',
+        signature: { verify: false },
+        sbom: { enabled: false, formats: [] },
+      });
+      storeContainer.getContainer.mockReturnValue({
+        id: 'c1',
+        name: 'nginx',
+        watcher: 'local',
+        image: {
+          registry: { name: 'hub', url: 'my-registry' },
+          name: 'test/app',
+          tag: { value: '1.2.3' },
+        },
+        security: {},
+      });
+      mockScanImageForVulnerabilities.mockResolvedValue({
+        status: 'scanned',
+        blockingCount: 0,
+        summary: { unknown: 0, low: 0, medium: 0, high: 0, critical: 0 },
+        vulnerabilities: [],
+      });
+
+      const { res } = await callScanAll({ containerIds: ['c1'] });
+      await waitForBulkScanCycleComplete();
+
+      expect(storeContainer.getContainer).toHaveBeenCalledWith('c1');
+      expect(storeContainer.getContainers).not.toHaveBeenCalled();
+      expect(mockScanImageForVulnerabilities).toHaveBeenCalledWith(
+        expect.objectContaining({
+          image: 'my-registry/test/app:1.2.3',
+        }),
+      );
+      expect(res.status).toHaveBeenCalledWith(202);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          cycleId: expect.any(String),
+          scheduledCount: 1,
+        }),
+      );
     });
   });
 

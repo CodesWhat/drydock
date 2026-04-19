@@ -36,6 +36,8 @@ const {
   groupByStack,
   rechecking,
   recheckAll,
+  filterContainerIds,
+  clearContainerIdsFilter,
 } = templateContext;
 
 const FILTER_STATUS_LABELS: Record<string, string> = {
@@ -199,7 +201,22 @@ const activeFilterChips = computed(() => {
       </template>
       <template #center>
         <div
-          v-if="!showFilters && activeFilterChips.length > 0"
+          v-if="filterContainerIds.size > 0"
+          class="inline-flex items-center gap-1.5 px-2 py-1 dd-rounded text-2xs font-medium"
+          :style="{ backgroundColor: 'var(--dd-info-muted)', color: 'var(--dd-info)' }">
+          <span>Filtered to {{ filterContainerIds.size }} container{{ filterContainerIds.size !== 1 ? 's' : '' }}</span>
+          <AppButton
+            size="none"
+            variant="plain"
+            weight="none"
+            class="ml-1 font-semibold hover:opacity-70 transition-opacity"
+            aria-label="Clear container ID filter"
+            @click="clearContainerIdsFilter">
+            &times;
+          </AppButton>
+        </div>
+        <div
+          v-else-if="!showFilters && activeFilterChips.length > 0"
           class="flex flex-wrap items-center gap-1.5 min-w-0"
         >
           <span

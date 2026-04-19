@@ -163,6 +163,60 @@ export const containerPaths = {
       },
     },
   },
+  '/api/containers/scan-all': {
+    post: {
+      tags: ['Containers', 'Actions'],
+      summary: 'Trigger a bulk security scan for all or a subset of containers',
+      operationId: 'bulkScanContainers',
+      requestBody: {
+        required: false,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                containerIds: {
+                  type: 'array',
+                  items: { type: 'string' },
+                  description:
+                    'Optional list of container IDs to scan. When omitted, all containers are scanned.',
+                },
+                severity: {
+                  type: 'string',
+                  enum: ['critical', 'high', 'all'],
+                  description:
+                    'Minimum severity threshold for emitting alerts. Defaults to "all" (critical or high).',
+                },
+              },
+              additionalProperties: false,
+            },
+          },
+        },
+      },
+      responses: {
+        202: jsonResponse('Bulk scan accepted — work runs asynchronously', {
+          type: 'object',
+          properties: {
+            cycleId: {
+              type: 'string',
+              description:
+                'UUID v7 correlation ID for this scan cycle. Appears on SSE events and emitted security alerts.',
+            },
+            scheduledCount: {
+              type: 'integer',
+              minimum: 0,
+              description: 'Number of containers scheduled to be scanned in this cycle.',
+            },
+          },
+          required: ['cycleId', 'scheduledCount'],
+          additionalProperties: false,
+        }),
+        400: errorResponse('Invalid request body or unknown container ID'),
+        401: errorResponse('Authentication required'),
+        429: errorResponse('Bulk scan rate limit exceeded. Max 1 per 60 seconds.'),
+      },
+    },
+  },
   '/api/containers/summary': {
     get: {
       tags: ['Containers'],

@@ -31,6 +31,7 @@ import {
 
 type SupportedThreshold = (typeof SUPPORTED_THRESHOLDS)[number];
 type TriggerAutoMode = 'all' | 'oninclude' | 'none';
+type DigestEventKind = 'update-available-digest' | 'security-alert-digest';
 type NotificationRuleId =
   | 'update-available'
   | 'update-applied'
@@ -44,19 +45,22 @@ interface ContainerUpdateFailedPayload {
   error: string;
 }
 
+interface SecurityAlertSummary {
+  unknown: number;
+  low: number;
+  medium: number;
+  high: number;
+  critical: number;
+}
+
 interface SecurityAlertPayload {
   containerName: string;
   details: string;
   status?: string;
-  summary?: {
-    unknown: number;
-    low: number;
-    medium: number;
-    high: number;
-    critical: number;
-  };
+  summary?: SecurityAlertSummary;
   blockingCount?: number;
   container?: Container;
+  cycleId?: string;
 }
 
 interface AgentDisconnectedPayload {
@@ -198,9 +202,9 @@ const DEFAULT_SIMPLE_TITLE_DIGEST_EXPRESSION =
 const DEFAULT_SIMPLE_TITLE_UPDATE_EXPRESSION =
   'container.notificationAgentPrefix + "New " + container.updateKind.kind + " found for container " + container.name + container.notificationWatcherSuffix';
 const DEFAULT_SIMPLE_BODY_DIGEST_EXPRESSION =
-  'container.notificationAgentPrefix + "Container " + container.name + container.notificationWatcherSuffix + " running tag " + currentTag + " has a newer image available"';
+  '"Container " + container.name + container.notificationWatcherSuffix + " running tag " + currentTag + " has a newer image available"';
 const DEFAULT_SIMPLE_BODY_UPDATE_EXPRESSION =
-  'container.notificationAgentPrefix + "Container " + container.name + container.notificationWatcherSuffix + " running with " + container.updateKind.kind + " " + container.updateKind.localValue + " can be updated to " + container.updateKind.kind + " " + container.updateKind.remoteValue';
+  '"Container " + container.name + container.notificationWatcherSuffix + " running with " + container.updateKind.kind + " " + container.updateKind.localValue + " can be updated to " + container.updateKind.kind + " " + container.updateKind.remoteValue';
 const DEFAULT_SIMPLE_BODY_RESULT_LINK_EXPRESSION =
   'container.result && container.result.link ? "\\n" + container.result.link : ""';
 const DEFAULT_SIMPLE_TITLE_TEMPLATE = buildLiteralTemplateExpression(
@@ -215,11 +219,11 @@ const AGENT_DISCONNECT_SIMPLE_BODY_TEMPLATE = `Agent ${buildLiteralTemplateExpre
 const AGENT_RECONNECT_SIMPLE_TITLE_TEMPLATE = `Agent ${buildLiteralTemplateExpression('event.agentName')} reconnected`;
 const AGENT_RECONNECT_SIMPLE_BODY_TEMPLATE = `Agent ${buildLiteralTemplateExpression('event.agentName')} reconnected`;
 const UPDATE_APPLIED_SIMPLE_TITLE_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Container ${buildLiteralTemplateExpression('container.name')} updated successfully`;
-const UPDATE_APPLIED_SIMPLE_BODY_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Container ${buildLiteralTemplateExpression('container.name')} updated successfully`;
+const UPDATE_APPLIED_SIMPLE_BODY_TEMPLATE = `Container ${buildLiteralTemplateExpression('container.name')} updated successfully`;
 const UPDATE_FAILED_SIMPLE_TITLE_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Container ${buildLiteralTemplateExpression('container.name')} update failed`;
-const UPDATE_FAILED_SIMPLE_BODY_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Container ${buildLiteralTemplateExpression('container.name')} update failed${buildLiteralTemplateExpression('event.error ? ": " + event.error : ""')}`;
+const UPDATE_FAILED_SIMPLE_BODY_TEMPLATE = `Container ${buildLiteralTemplateExpression('container.name')} update failed${buildLiteralTemplateExpression('event.error ? ": " + event.error : ""')}`;
 const SECURITY_ALERT_SIMPLE_TITLE_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Security alert for container ${buildLiteralTemplateExpression('container.name')}`;
-const SECURITY_ALERT_SIMPLE_BODY_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Security alert for container ${buildLiteralTemplateExpression('container.name')}${buildLiteralTemplateExpression('event.blockingCount ? " (" + event.blockingCount + " blocking vulnerabilities)" : ""')}${buildLiteralTemplateExpression('event.details ? "\\n" + event.details : ""')}`;
+const SECURITY_ALERT_SIMPLE_BODY_TEMPLATE = `Security alert for container ${buildLiteralTemplateExpression('container.name')}${buildLiteralTemplateExpression('event.blockingCount ? " (" + event.blockingCount + " blocking vulnerabilities)" : ""')}${buildLiteralTemplateExpression('event.details ? "\\n" + event.details : ""')}`;
 const NOTIFICATION_SIMPLE_TITLE_TEMPLATES: Partial<
   Record<TriggerNotificationEvent['kind'], string>
 > = {
@@ -245,6 +249,54 @@ const NOTIFICATION_BATCH_TITLE_TEMPLATES: Partial<
   'update-failed': `${buildLiteralTemplateExpression('containers.length')} updates failed`,
   'security-alert': `${buildLiteralTemplateExpression('containers.length')} security alerts`,
 };
+
+/** Per-container row used in the security digest body template. */
+interface SecurityDigestContainerRow {
+  name: string;
+  critical: number;
+  high: number;
+  medium: number;
+  low: number;
+  unknown: number;
+}
+
+/**
+ * Context passed to formatDigestTitle / formatDigestBody.
+ * Discriminated on `kind` so each branch has access to exactly the fields it needs.
+ */
+type UpdateDigestContext = {
+  kind: 'update';
+  containers: Container[];
+};
+
+type SecurityDigestContext = {
+  kind: 'security';
+  containers: SecurityDigestContainerRow[];
+  scannedCount: number;
+  alertCount: number;
+  criticalCount: number;
+  highCount: number;
+  mediumCount: number;
+  lowCount: number;
+  unknownCount: number;
+  startedAt: string;
+  completedAt: string;
+  cycleId: string;
+};
+
+type DigestContext = UpdateDigestContext | SecurityDigestContext;
+
+const DEFAULT_SECURITY_DIGEST_TITLE_TEMPLATE = `Security scan complete: \${scan.alertCount} container\${scan.alertCount === 1 ? '' : 's'} with findings`;
+
+const DEFAULT_SECURITY_DIGEST_BODY_TEMPLATE = `Security scan complete: \${scan.alertCount} of \${scan.scannedCount} containers have findings.
+
+CRITICAL (\${scan.criticalCount}):
+\${scan.containers.filter(c => c.critical > 0).map(c => '- ' + c.name + ': critical=' + c.critical + ', high=' + c.high).join('\\n')}
+
+HIGH (\${scan.highCount}):
+\${scan.containers.filter(c => c.critical === 0 && c.high > 0).map(c => '- ' + c.name + ': high=' + c.high + ', medium=' + c.medium).join('\\n')}
+
+Scan ran from \${scan.startedAt} to \${scan.completedAt}.`;
 
 function truncateReleaseNotesBody(body: string, maxLength: number) {
   if (body.length <= maxLength) {
@@ -437,6 +489,9 @@ export interface TriggerConfiguration extends ComponentConfiguration {
   batchtitle?: string;
   digestcron?: string;
   resolvenotifications?: boolean;
+  securitymode?: string;
+  securitydigesttitle?: string;
+  securitydigestbody?: string;
 }
 
 interface ContainerReport {
@@ -451,6 +506,16 @@ interface EventBatchDispatchState {
 
 type BufferedContainerMap = Map<string, Container>;
 type BufferedContainerTimestamps = Map<string, number>;
+
+/**
+ * Entry stored in the security digest buffer while waiting for cycle-complete.
+ */
+interface SecurityDigestEntry {
+  containerName: string;
+  summary: SecurityAlertSummary;
+  status?: string;
+  bufferedAt: string;
+}
 
 function splitAndTrimCommaSeparatedList(value: string): string[] {
   return value
@@ -480,6 +545,11 @@ class Trigger<
   private readonly notificationRuleWarningsSeen: Set<string> = new Set();
   private readonly digestBuffer: Map<string, Container> = new Map();
   private readonly batchRetryBuffer: Map<string, Container> = new Map();
+  /**
+   * Security digest buffer. Keyed by cycleId → (containerKey → SecurityDigestEntry).
+   * Separate from the update digestBuffer so the two paths never share state.
+   */
+  private readonly securityDigestBuffer: Map<string, Map<string, SecurityDigestEntry>> = new Map();
   private digestBufferUpdatedAt: Map<string, number> = new Map();
   private batchRetryBufferUpdatedAt: Map<string, number> = new Map();
   private bufferEntryRetentionMs = 7 * 24 * 60 * 60 * 1000;
@@ -489,6 +559,7 @@ class Trigger<
     new Map();
   private digestCronTask?: ScheduledTask;
   private isDigestFlushInProgress = false;
+  private unregisterSecurityScanCycleComplete?: () => void;
 
   static getSupportedThresholds() {
     return [...SUPPORTED_THRESHOLDS];
@@ -520,6 +591,17 @@ class Trigger<
   private static isDigestCapableMode(mode: TriggerConfiguration['mode']): boolean {
     const normalizedMode = Trigger.normalizeMode(mode);
     return normalizedMode === 'digest' || normalizedMode === 'batch+digest';
+  }
+
+  private static normalizeSecurityMode(securitymode: TriggerConfiguration['securitymode']): string {
+    return typeof securitymode === 'string' ? securitymode.toLowerCase() : 'simple';
+  }
+
+  private static isSecurityDigestCapableMode(
+    securitymode: TriggerConfiguration['securitymode'],
+  ): boolean {
+    const normalized = Trigger.normalizeSecurityMode(securitymode);
+    return normalized === 'digest' || normalized === 'batch+digest';
   }
 
   private getCategory() {
@@ -1009,6 +1091,33 @@ class Trigger<
   }
 
   async handleSecurityAlertEvent(payload: SecurityAlertPayload) {
+    const securityMode = Trigger.normalizeSecurityMode(this.configuration.securitymode);
+
+    // Digest mode: buffer the alert for the cycle-complete flush.
+    if ((securityMode === 'digest' || securityMode === 'batch+digest') && payload.cycleId) {
+      const cycleId = payload.cycleId;
+      const container = payload.container || this.findContainerByBusinessId(payload.containerName);
+      const containerKey =
+        (container ? getContainerNotificationKey(container) : undefined) ?? payload.containerName;
+      const containerName = (container ? fullName(container) : undefined) ?? payload.containerName;
+
+      if (!this.securityDigestBuffer.has(cycleId)) {
+        this.securityDigestBuffer.set(cycleId, new Map());
+      }
+      // Last-write-wins within same cycle.
+      this.securityDigestBuffer.get(cycleId)!.set(containerKey, {
+        containerName,
+        summary: payload.summary ?? { critical: 0, high: 0, medium: 0, low: 0, unknown: 0 },
+        status: payload.status,
+        bufferedAt: new Date().toISOString(),
+      });
+      this.log.debug(
+        `Buffered security alert for ${containerName} in cycle ${cycleId} (cycle buffer size: ${this.securityDigestBuffer.get(cycleId)!.size})`,
+      );
+      return;
+    }
+
+    // Simple / batch modes: immediate dispatch (unchanged behavior).
     const container = payload.container || this.findContainerByBusinessId(payload.containerName);
     await this.dispatchContainerForEvent(
       'security-alert',
@@ -1026,6 +1135,24 @@ class Trigger<
         defaultWhenRuleMissing: false,
       },
     );
+  }
+
+  /**
+   * Handle a security scan cycle-complete event.
+   * For security-digest-capable triggers: flush buffered alerts for this cycle.
+   * Idempotent: second call with same cycleId is a no-op (buffer already drained).
+   */
+  async handleSecurityScanCycleCompleteEvent(
+    payload: event.SecurityScanCycleCompleteEventPayload,
+  ): Promise<void> {
+    if (!Trigger.isSecurityDigestCapableMode(this.configuration.securitymode)) {
+      return;
+    }
+    await this.flushDigestBuffer({
+      eventKind: 'security-alert-digest',
+      cycleId: payload.cycleId,
+      cyclePayload: payload,
+    });
   }
 
   async handleAgentDisconnectedEvent(payload: AgentDisconnectedPayload) {
@@ -1139,9 +1266,20 @@ class Trigger<
       return;
     }
     const triggerId = this.getId();
+    // Only seed the simple/batch channel. The digest channel must NOT be
+    // seeded from store state: an entry in `update-available-digest` history
+    // semantically means "a digest email was sent for this hash", and seeding
+    // it conflates "update existed in store at startup" with "digest sent".
+    // That false equivalence caused #282 on rc.9 — a container that was never
+    // digested would be suppressed because its store hash matched the seeded
+    // history hash, leaving the morning cron with an empty buffer. The digest
+    // channel is populated exclusively by `flushUpdateDigestBuffer` after a
+    // successful send; the first cron after startup therefore sends a
+    // catch-up digest of everything in the buffer, which matches the
+    // "periodic summary" semantics of digest mode.
     const kindsToSeed: notificationHistoryStore.NotificationEventKind[] = ['update-available'];
-    if (Trigger.isDigestCapableMode(this.configuration.mode)) {
-      kindsToSeed.push('update-available-digest');
+    if (Trigger.isSecurityDigestCapableMode(this.configuration.securitymode)) {
+      kindsToSeed.push('security-alert-digest');
     }
     let seeded = 0;
     for (const rawContainer of storeContainer.getContainersRaw()) {
@@ -1188,14 +1326,17 @@ class Trigger<
     return !this.hasAlreadyNotifiedForResult(containerReport.container, 'update-available');
   }
 
-  private shouldHandleDigestContainerReport(containerReport: ContainerReport) {
+  private shouldHandleDigestContainerReport(
+    containerReport: ContainerReport,
+    eventKind: DigestEventKind = 'update-available-digest',
+  ) {
     if (!containerReport.container.updateAvailable) {
       return false;
     }
     if (!this.configuration.once) {
       return true;
     }
-    return !this.hasAlreadyNotifiedForResult(containerReport.container, 'update-available-digest');
+    return !this.hasAlreadyNotifiedForResult(containerReport.container, eventKind);
   }
 
   private getContainerLogger(container: Container): Component['log'] {
@@ -1605,10 +1746,68 @@ class Trigger<
   }
 
   /**
-   * Flush the digest buffer: send a single batch notification with all
-   * accumulated containers, then clear the buffer.
+   * Format the digest title for a given event kind and context.
+   * Pure helper — does not touch instance state.
    */
-  async flushDigestBuffer() {
+  private formatDigestTitle(eventKind: DigestEventKind, ctx: DigestContext): string {
+    if (eventKind === 'update-available-digest') {
+      // Update digest uses the batch title template (same as today).
+      const containers = (ctx as UpdateDigestContext).containers;
+      return this.renderBatchTitle(containers);
+    }
+    // Security digest — use configured or default title template.
+    const secCtx = ctx as SecurityDigestContext;
+    const titleTemplate =
+      this.configuration.securitydigesttitle ?? DEFAULT_SECURITY_DIGEST_TITLE_TEMPLATE;
+    return this.renderSecurityDigestTemplate(titleTemplate, secCtx);
+  }
+
+  /**
+   * Format the digest body for a given event kind and context.
+   * Pure helper — does not touch instance state.
+   */
+  private formatDigestBody(eventKind: DigestEventKind, ctx: DigestContext): string {
+    if (eventKind === 'update-available-digest') {
+      const containers = (ctx as UpdateDigestContext).containers;
+      return this.renderBatchBody(containers);
+    }
+    const secCtx = ctx as SecurityDigestContext;
+    const bodyTemplate =
+      this.configuration.securitydigestbody ?? DEFAULT_SECURITY_DIGEST_BODY_TEMPLATE;
+    return this.renderSecurityDigestTemplate(bodyTemplate, secCtx);
+  }
+
+  /**
+   * Render a security digest template string, substituting `scan.*` variables.
+   */
+  private renderSecurityDigestTemplate(template: string, ctx: SecurityDigestContext): string {
+    const scan = {
+      alertCount: ctx.alertCount,
+      scannedCount: ctx.scannedCount,
+      criticalCount: ctx.criticalCount,
+      highCount: ctx.highCount,
+      mediumCount: ctx.mediumCount,
+      lowCount: ctx.lowCount,
+      unknownCount: ctx.unknownCount,
+      startedAt: ctx.startedAt,
+      completedAt: ctx.completedAt,
+      cycleId: ctx.cycleId,
+      containers: ctx.containers,
+    };
+    try {
+      // Template variables use ${...} syntax — evaluate as a template literal body.
+      const renderFn = new Function('scan', `return \`${template}\`;`);
+      return renderFn(scan) as string;
+    } catch {
+      return template;
+    }
+  }
+
+  /**
+   * Flush the update-available digest buffer (update-available-digest path).
+   * Called by the digest cron and by the explicit options-based flush.
+   */
+  private async flushUpdateDigestBuffer(): Promise<void> {
     if (this.isDigestFlushInProgress) {
       this.log.debug('Digest flush already in progress');
       return;
@@ -1705,6 +1904,126 @@ class Trigger<
       this.isDigestFlushInProgress = false;
       this.incrementTriggerCounter(status);
     }
+  }
+
+  /**
+   * Flush the security digest buffer for a specific cycleId.
+   * No-op when the cycle has no buffered entries (zero-alert cycle suppression per Section 7.5).
+   * Idempotent: a second call with the same cycleId is a no-op (entries already drained).
+   */
+  private async flushSecurityDigestBuffer(
+    cycleId: string,
+    cyclePayload: event.SecurityScanCycleCompleteEventPayload,
+  ): Promise<void> {
+    const cycleEntries = this.securityDigestBuffer.get(cycleId);
+    if (!cycleEntries || cycleEntries.size === 0) {
+      this.log.debug(
+        `Security digest cycle-complete for ${cycleId} — no buffered entries, suppressing notification`,
+      );
+      return;
+    }
+
+    const rows: SecurityDigestContainerRow[] = Array.from(cycleEntries.values()).map((entry) => ({
+      name: entry.containerName,
+      critical: entry.summary.critical,
+      high: entry.summary.high,
+      medium: entry.summary.medium,
+      low: entry.summary.low,
+      unknown: entry.summary.unknown,
+    }));
+
+    // Sort by severity descending: critical → high → medium → low → unknown
+    rows.sort(
+      (a, b) =>
+        b.critical - a.critical ||
+        b.high - a.high ||
+        b.medium - a.medium ||
+        b.low - a.low ||
+        b.unknown - a.unknown,
+    );
+
+    const alertCount = rows.length;
+    const criticalCount = rows.reduce((s, r) => s + (r.critical > 0 ? 1 : 0), 0);
+    const highCount = rows.reduce((s, r) => s + (r.critical === 0 && r.high > 0 ? 1 : 0), 0);
+    const mediumCount = rows.reduce(
+      (s, r) => s + (r.critical === 0 && r.high === 0 && r.medium > 0 ? 1 : 0),
+      0,
+    );
+    const lowCount = rows.reduce(
+      (s, r) => s + (r.critical === 0 && r.high === 0 && r.medium === 0 && r.low > 0 ? 1 : 0),
+      0,
+    );
+    const unknownCount = rows.reduce(
+      (s, r) =>
+        s +
+        (r.critical === 0 && r.high === 0 && r.medium === 0 && r.low === 0 && r.unknown > 0
+          ? 1
+          : 0),
+      0,
+    );
+
+    const now = new Date().toISOString();
+    const secCtx: SecurityDigestContext = {
+      kind: 'security',
+      containers: rows,
+      scannedCount: cyclePayload.scannedCount,
+      alertCount,
+      criticalCount,
+      highCount,
+      mediumCount,
+      lowCount,
+      unknownCount,
+      startedAt: cyclePayload.startedAt ?? now,
+      completedAt: cyclePayload.completedAt ?? now,
+      cycleId,
+    };
+
+    this.log.info(`Security digest flush for cycle ${cycleId}: sending ${alertCount} finding(s)`);
+    let status: 'success' | 'error' = 'error';
+    try {
+      await this.triggerBatch(rows as unknown as Container[], {
+        eventKind: 'security-alert-digest' as DigestEventKind,
+        title: this.formatDigestTitle('security-alert-digest', secCtx),
+        body: this.formatDigestBody('security-alert-digest', secCtx),
+      });
+      status = 'success';
+      // Drain the cycle's entries after successful flush.
+      this.securityDigestBuffer.delete(cycleId);
+    } catch (e: unknown) {
+      const errorMessage = Trigger.getErrorMessage(e);
+      this.log.warn(`Security digest flush failed for cycle ${cycleId} (${errorMessage})`);
+      this.log.debug(e);
+    } finally {
+      this.incrementTriggerCounter(status);
+    }
+  }
+
+  /**
+   * Public entry-point for the digest flush — parameterized on eventKind.
+   * The update-digest path (`'update-available-digest'`) ignores cycleId and
+   * flushes the entire update buffer (preserving pre-existing cron behavior).
+   * The security-digest path (`'security-alert-digest'`) requires cycleId and
+   * flushes only entries for that cycle (cycle-partitioned flush).
+   */
+  async flushDigestBuffer(options?: {
+    eventKind?: DigestEventKind;
+    cycleId?: string;
+    cyclePayload?: event.SecurityScanCycleCompleteEventPayload;
+  }): Promise<void> {
+    const eventKind = options?.eventKind ?? 'update-available-digest';
+    if (eventKind === 'update-available-digest') {
+      return this.flushUpdateDigestBuffer();
+    }
+    // security-alert-digest
+    const cycleId = options?.cycleId;
+    const cyclePayload = options?.cyclePayload;
+    if (!cycleId || !cyclePayload) {
+      this.log.warn(
+        'flushDigestBuffer called for security-alert-digest without cycleId/cyclePayload — skipping',
+      );
+      return;
+    }
+    return this.flushSecurityDigestBuffer(cycleId, cyclePayload);
   }
 
   isTriggerIncludedOrExcluded(containerResult: Container, trigger: string) {
@@ -1805,7 +2124,7 @@ class Trigger<
         );
         const digestCronExpression = this.configuration.digestcron ?? '0 8 * * *';
         this.digestCronTask = cron.schedule(digestCronExpression, () => {
-          void this.flushDigestBuffer();
+          void this.flushDigestBuffer({ eventKind: 'update-available-digest' });
         });
         this.log.info(`Digest scheduled (${digestCronExpression})`);
       }
@@ -1826,6 +2145,13 @@ class Trigger<
       );
       this.unregisterSecurityAlert = event.registerSecurityAlert(
         async (payload) => this.handleSecurityAlertEvent(payload),
+        {
+          id: this.getId(),
+          order: this.configuration.order,
+        },
+      );
+      this.unregisterSecurityScanCycleComplete = event.registerSecurityScanCycleComplete(
+        async (payload) => this.handleSecurityScanCycleCompleteEvent(payload),
         {
           id: this.getId(),
           order: this.configuration.order,
@@ -1874,6 +2200,9 @@ class Trigger<
     this.unregisterSecurityAlert?.();
     this.unregisterSecurityAlert = undefined;
 
+    this.unregisterSecurityScanCycleComplete?.();
+    this.unregisterSecurityScanCycleComplete = undefined;
+
     this.unregisterAgentConnected?.();
     this.unregisterAgentConnected = undefined;
 
@@ -1888,6 +2217,7 @@ class Trigger<
     this.isDigestFlushInProgress = false;
     this.digestBuffer.clear();
     this.digestBufferUpdatedAt.clear();
+    this.securityDigestBuffer.clear();
     this.batchRetryBuffer.clear();
     this.batchRetryBufferUpdatedAt.clear();
     this.clearEventBatchDispatches();
@@ -1934,6 +2264,13 @@ class Trigger<
       simplebody: this.joi.string().default(DEFAULT_SIMPLE_BODY_TEMPLATE),
       batchtitle: this.joi.string().default('${containers.length} updates available'),
       resolvenotifications: this.joi.boolean().default(false),
+      securitymode: this.joi
+        .string()
+        .insensitive()
+        .valid('simple', 'batch', 'digest', 'batch+digest')
+        .default('simple'),
+      securitydigesttitle: this.joi.string().optional(),
+      securitydigestbody: this.joi.string().optional(),
     });
     const schemaValidated = schemaWithDefaultOptions.validate(configuration);
     if (schemaValidated.error) {

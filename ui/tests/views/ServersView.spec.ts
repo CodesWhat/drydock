@@ -2,7 +2,6 @@ import { flushPromises } from '@vue/test-utils';
 import { defineComponent, nextTick, ref } from 'vue';
 import { resetPreferences } from '@/preferences/store';
 import { getAgents } from '@/services/agent';
-import { getAllContainers } from '@/services/container';
 import { getServer } from '@/services/server';
 import { getAllWatchers } from '@/services/watcher';
 import ServersView from '@/views/ServersView.vue';
@@ -23,17 +22,12 @@ vi.mock('@/services/agent', () => ({
   getAgents: vi.fn(),
 }));
 
-vi.mock('@/services/container', () => ({
-  getAllContainers: vi.fn(),
-}));
-
 vi.mock('@/services/watcher', () => ({
   getAllWatchers: vi.fn(),
 }));
 
 const mockGetServer = getServer as ReturnType<typeof vi.fn>;
 const mockGetAgents = getAgents as ReturnType<typeof vi.fn>;
-const mockGetAllContainers = getAllContainers as ReturnType<typeof vi.fn>;
 const mockGetAllWatchers = getAllWatchers as ReturnType<typeof vi.fn>;
 
 const richDataTableStub = defineComponent({
@@ -83,7 +77,6 @@ describe('ServersView', () => {
     resetPreferences();
     mockGetServer.mockResolvedValue({ name: 'drydock', version: '1.0.0' });
     mockGetAgents.mockResolvedValue([]);
-    mockGetAllContainers.mockResolvedValue([]);
     mockGetAllWatchers.mockResolvedValue([
       {
         id: 'docker.local',
@@ -102,20 +95,27 @@ describe('ServersView', () => {
 
   it('loads Local and remote agent rows on successful fetch', async () => {
     mockGetAgents.mockResolvedValue([
-      { name: 'Edge-1', connected: true, host: '10.0.0.21', port: 2376 },
-      { name: 'Edge-2', connected: false, host: '10.0.0.22' },
-    ]);
-    mockGetAllContainers.mockResolvedValue([
-      { id: 'c-local-1', watcher: 'local', status: 'running', image: 'nginx:1.27' },
-      { id: 'c-edge-1', watcher: 'edge-1', status: 'stopped', image: 'redis:7' },
-      { id: 'c-edge-2', watcher: 'edge-2', status: 'running', image: 'postgres:16' },
+      {
+        name: 'Edge-1',
+        connected: true,
+        host: '10.0.0.21',
+        port: 2376,
+        containers: { total: 1, running: 0, stopped: 1, updatesAvailable: 0 },
+        images: 1,
+      },
+      {
+        name: 'Edge-2',
+        connected: false,
+        host: '10.0.0.22',
+        containers: { total: 1, running: 1, stopped: 0, updatesAvailable: 0 },
+        images: 1,
+      },
     ]);
 
     const wrapper = await mountServersView();
 
     expect(mockGetServer).toHaveBeenCalledTimes(1);
     expect(mockGetAgents).toHaveBeenCalledTimes(1);
-    expect(mockGetAllContainers).toHaveBeenCalledTimes(1);
     expect(mockGetAllWatchers).toHaveBeenCalledTimes(1);
 
     const rows = tableRows(wrapper);
@@ -185,6 +185,10 @@ describe('ServersView', () => {
           port: 2375,
           protocol: 'http',
         },
+        metadata: {
+          containers: { total: 1, running: 1, stopped: 0, updatesAvailable: 0 },
+          images: 1,
+        },
       },
       {
         id: 'docker.nas',
@@ -196,12 +200,11 @@ describe('ServersView', () => {
           port: 2376,
           protocol: 'https',
         },
+        metadata: {
+          containers: { total: 2, running: 1, stopped: 1, updatesAvailable: 0 },
+          images: 2,
+        },
       },
-    ]);
-    mockGetAllContainers.mockResolvedValue([
-      { id: 'c1', watcher: 'local', status: 'running', image: 'nginx:1.27' },
-      { id: 'c2', watcher: 'nas', status: 'running', image: 'redis:7' },
-      { id: 'c3', watcher: 'nas', status: 'stopped', image: 'postgres:16' },
     ]);
 
     const wrapper = await mountServersView();
@@ -286,10 +289,6 @@ describe('ServersView', () => {
     mockGetAgents.mockResolvedValue([
       { name: 'Edge-1', connected: true, host: '10.0.0.21', port: 2376 },
     ]);
-    mockGetAllContainers.mockResolvedValue([
-      { id: 'c-local-1', watcher: 'local', status: 'running', image: 'nginx:1.27' },
-      { id: 'c-edge-1', watcher: 'edge-1', status: 'stopped', image: 'redis:7' },
-    ]);
 
     const wrapper = await mountServersView();
 
@@ -365,5 +364,24 @@ describe('ServersView', () => {
 
     expect(rows.map((row) => row.name)).toEqual(['Local', 'Edge-1']);
     expect(rows).toHaveLength(2);
+  });
+
+  it('reads agent container stats from agent payload (issue #301)', async () => {
+    mockGetAgents.mockResolvedValue([
+      {
+        name: 'Edge-1',
+        connected: true,
+        host: '10.0.0.21',
+        port: 2376,
+        containers: { total: 4, running: 3, stopped: 1, updatesAvailable: 0 },
+        images: 2,
+      },
+    ]);
+
+    const wrapper = await mountServersView();
+    const rows = tableRows(wrapper);
+    const agentRow = rows.find((r) => r.name === 'Edge-1') as any;
+
+    expect(agentRow.containers).toEqual({ total: 4, running: 3, stopped: 1 });
   });
 });

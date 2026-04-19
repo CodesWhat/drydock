@@ -6,7 +6,7 @@ interface ColumnDef {
   label: string;
   align?: string;
   px: string;
-  style: string;
+  width: string;
   required: boolean;
 }
 
@@ -15,7 +15,7 @@ const allColumns: ColumnDef[] = [
     key: 'icon',
     label: '',
     px: 'px-0',
-    style: 'width: 40px;',
+    width: '40px',
     required: true,
   },
   {
@@ -23,25 +23,25 @@ const allColumns: ColumnDef[] = [
     label: 'Container',
     align: 'text-left',
     px: 'px-5',
-    style: 'width: 99%;',
+    width: '360px',
     required: true,
   },
   {
     key: 'version',
     label: 'Version',
     px: 'px-5',
-    style: '',
+    width: '260px',
     required: false,
   },
-  { key: 'kind', label: 'Kind', px: 'px-3', style: '', required: false },
-  { key: 'status', label: 'Status', px: 'px-3', style: '', required: false },
-  { key: 'imageAge', label: 'Image Age', px: 'px-3', style: '', required: false },
-  { key: 'server', label: 'Host', px: 'px-3', style: '', required: false },
+  { key: 'kind', label: 'Kind', px: 'px-3', width: '130px', required: false },
+  { key: 'status', label: 'Status', px: 'px-3', width: '90px', required: false },
+  { key: 'imageAge', label: 'Image Age', px: 'px-3', width: '90px', required: false },
+  { key: 'server', label: 'Host', px: 'px-3', width: '100px', required: false },
   {
     key: 'registry',
     label: 'Registry',
     px: 'px-3',
-    style: '',
+    width: '120px',
     required: false,
   },
 ];

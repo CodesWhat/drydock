@@ -6,11 +6,10 @@ import DetailField from '@/components/DetailField.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
 import { useViewMode } from '../preferences/useViewMode';
-import { getAllContainers } from '../services/container';
 import { getAllWatchers, getWatcher } from '../services/watcher';
 import type { ApiComponent } from '../types/api';
 import { ROUTES } from '../router/routes';
-import { timeAgo } from '../utils/audit-helpers';
+import { formatAbsoluteTime, timeAgo } from '../utils/audit-helpers';
 
 function watcherServerName(name: unknown): string {
   const s = String(name || '');
@@ -31,8 +30,6 @@ let detailRequestId = 0;
 const watchersData = ref<Record<string, unknown>[]>([]);
 const loading = ref(true);
 const error = ref('');
-const containerCounts = ref<Record<string, number>>({});
-const totalContainers = ref(0);
 
 function watcherStatusColor(status: string) {
   if (status === 'watching') return 'var(--dd-success)';
@@ -87,14 +84,23 @@ const tableColumns = [
   { key: 'lastRun', label: 'Last Run', width: '15%', align: 'text-right', sortable: false },
 ];
 
+function readWatcherContainerTotal(metadata: unknown): number {
+  if (!metadata || typeof metadata !== 'object') return 0;
+  const containers = (metadata as { containers?: unknown }).containers;
+  if (!containers || typeof containers !== 'object') return 0;
+  const total = (containers as { total?: unknown }).total;
+  return typeof total === 'number' ? total : 0;
+}
+
 function mapWatcher(watcher: ApiComponent, status = 'watching') {
   return {
     id: watcher.id,
     name: watcher.name,
     type: watcher.type,
     status,
-    containers: containerCounts.value[watcher.name] ?? 0,
+    containers: readWatcherContainerTotal(watcher.metadata),
     cron: watcher.configuration?.cron ?? '',
+    nextRunAt: watcher.metadata?.nextRunAt ? String(watcher.metadata.nextRunAt) : undefined,
     nextRun: watcher.metadata?.nextRunAt ? timeUntil(String(watcher.metadata.nextRunAt)) : '\u2014',
     lastRun: watcher.metadata?.lastRunAt ? timeAgo(String(watcher.metadata.lastRunAt)) : '\u2014',
     config: Object.fromEntries(
@@ -147,16 +153,7 @@ async function openDetail(watcher: Record<string, unknown>) {
 
 onMounted(async () => {
   try {
-    const [watcherData, containerData] = await Promise.all([getAllWatchers(), getAllContainers()]);
-
-    const counts: Record<string, number> = {};
-    for (const c of containerData) {
-      const key = c.watcher || 'unknown';
-      counts[key] = (counts[key] || 0) + 1;
-    }
-    containerCounts.value = counts;
-    totalContainers.value = containerData.length;
-
+    const watcherData = await getAllWatchers();
     watchersData.value = watcherData.map((watcher: ApiComponent) => mapWatcher(watcher));
   } catch {
     error.value = 'Failed to load watchers';
@@ -229,7 +226,7 @@ onMounted(async () => {
         </span>
       </template>
       <template #cell-nextRun="{ row }">
-        <span class="dd-text-secondary">{{ row.nextRun }}</span>
+        <span class="dd-text-secondary" v-tooltip.top="row.nextRunAt ? formatAbsoluteTime(row.nextRunAt) : ''">{{ row.nextRun }}</span>
       </template>
       <template #cell-lastRun="{ row }">
         <span class="dd-text-muted">{{ row.lastRun }}</span>
@@ -270,7 +267,7 @@ onMounted(async () => {
             </div>
             <div>
               <span class="dd-text-muted">Next run</span>
-              <span class="ml-1 font-semibold dd-text">{{ watcher.nextRun }}</span>
+              <span class="ml-1 font-semibold dd-text" v-tooltip.top="watcher.nextRunAt ? formatAbsoluteTime(watcher.nextRunAt) : ''">{{ watcher.nextRun }}</span>
             </div>
             <div>
               <span class="dd-text-muted">Last run</span>
@@ -370,7 +367,7 @@ onMounted(async () => {
               </AppButton>
             </DetailField>
             <DetailField label="Schedule" mono>{{ selectedWatcher.cron || '\u2014' }}</DetailField>
-            <DetailField label="Next Run">{{ selectedWatcher.nextRun }}</DetailField>
+            <DetailField label="Next Run" v-tooltip.top="selectedWatcher.nextRunAt ? formatAbsoluteTime(String(selectedWatcher.nextRunAt)) : ''">{{ selectedWatcher.nextRun }}</DetailField>
             <DetailField label="Last Run">{{ selectedWatcher.lastRun }}</DetailField>
             <DetailField v-for="(val, key) in selectedWatcher.config" :key="key" :label="String(key)" mono>{{ val }}</DetailField>
           </div>

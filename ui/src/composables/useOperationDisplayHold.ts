@@ -9,11 +9,20 @@ interface OperationDisplayHoldTarget {
   containerName?: string;
 }
 
+/** Frozen snapshot of sort-affecting container fields captured at hold start. */
+export interface ContainerSortSnapshot {
+  status: Container['status'];
+  updateKind: Container['updateKind'];
+  newTag: Container['newTag'];
+}
+
 interface OperationDisplayHoldRecord {
   containerIds: string[];
   containerName?: string;
   displayUntil: number;
   operation: ContainerUpdateOperation;
+  /** Pre-operation sort-field values; stabilises sort position during the docker recreate window. */
+  sortSnapshot?: ContainerSortSnapshot;
 }
 
 const heldOperations = ref(new Map<string, OperationDisplayHoldRecord>());
@@ -141,6 +150,7 @@ function holdOperationDisplay(args: {
   containerId?: string;
   newContainerId?: string;
   containerName?: string;
+  sortSnapshot?: ContainerSortSnapshot;
   now?: number;
 }) {
   dropConflictingHolds(args);
@@ -162,6 +172,7 @@ function holdOperationDisplay(args: {
         : existing?.containerName,
     displayUntil,
     operation: args.operation,
+    sortSnapshot: args.sortSnapshot ?? existing?.sortSnapshot,
   });
 }
 
@@ -220,14 +231,45 @@ function getDisplayUpdateOperation(
   );
 }
 
+function getHeldState(
+  target: Pick<Container, 'id' | 'name'>,
+): { operation: ContainerUpdateOperation; sortSnapshot?: ContainerSortSnapshot } | undefined {
+  const now = Date.now();
+  for (const hold of heldOperations.value.values()) {
+    if (hold.displayUntil <= now) {
+      continue;
+    }
+    if (holdMatchesTarget(hold, target)) {
+      return { operation: hold.operation, sortSnapshot: hold.sortSnapshot };
+    }
+  }
+  return undefined;
+}
+
 function projectContainerDisplayState<T extends Container>(container: T): T {
-  const displayUpdateOperation = getHeldOperation(container);
-  if (!displayUpdateOperation || displayUpdateOperation === container.updateOperation) {
+  const held = getHeldState(container);
+
+  if (held === undefined) {
     return container;
   }
+
+  const { sortSnapshot } = held;
+  const needsSortFields =
+    sortSnapshot !== undefined &&
+    (sortSnapshot.status !== container.status ||
+      sortSnapshot.updateKind !== container.updateKind ||
+      sortSnapshot.newTag !== container.newTag);
+
   return {
     ...container,
-    updateOperation: displayUpdateOperation,
+    updateOperation: held.operation,
+    ...(needsSortFields
+      ? {
+          status: sortSnapshot.status,
+          updateKind: sortSnapshot.updateKind,
+          newTag: sortSnapshot.newTag,
+        }
+      : {}),
   } as T;
 }
 
@@ -244,6 +286,7 @@ export function useOperationDisplayHold() {
     heldOperations,
     clearAllOperationDisplayHolds,
     clearHeldOperation,
+    findMatchingOperationIds,
     getDisplayUpdateOperation,
     holdOperationDisplay,
     projectContainerDisplayState,

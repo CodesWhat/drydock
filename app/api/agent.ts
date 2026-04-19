@@ -1,9 +1,12 @@
 import express, { type Request, type Response } from 'express';
 import { getAgent, getAgents } from '../agent/index.js';
 import { formatLogDisplayTimestamp } from '../log/display-timestamp.js';
-import type { Container } from '../model/container.js';
 import * as storeContainer from '../store/container.js';
-import { getContainerStatusSummary } from '../util/container-summary.js';
+import {
+  buildContainerStatsByKey,
+  createEmptyContainerStatsBucket,
+  projectStatsBucket,
+} from '../util/container-summary.js';
 import { sendErrorResponse } from './error-response.js';
 
 const router = express.Router();
@@ -32,33 +35,6 @@ interface NormalizedAgentLogEntry {
   msg?: string;
   message?: string;
   displayTimestamp: string;
-}
-
-function getAgentContainerStats(containers: Container[]) {
-  const containerStatus = getContainerStatusSummary(containers);
-  const images = new Set(
-    containers.map(
-      (container: Container) => container.image?.id ?? container.image?.name ?? container.id,
-    ),
-  ).size;
-  return {
-    containers: containerStatus,
-    images,
-  };
-}
-
-function groupContainersByAgent(containers: Container[]) {
-  const containersByAgent = new Map<string, Container[]>();
-  for (const container of containers) {
-    if (typeof container.agent !== 'string') {
-      continue;
-    }
-    if (!containersByAgent.has(container.agent)) {
-      containersByAgent.set(container.agent, []);
-    }
-    containersByAgent.get(container.agent)?.push(container);
-  }
-  return containersByAgent;
 }
 
 function getValidatedLogLevel(level: unknown): string | undefined | null {
@@ -147,9 +123,13 @@ function normalizeAgentLogEntries(entries: unknown) {
 
 function getAgentsList(req: Request, res: Response) {
   const agents = getAgents();
-  const containersByAgent = groupContainersByAgent(storeContainer.getContainers());
+  const statsByAgent = buildContainerStatsByKey(
+    storeContainer.getContainersRaw({}),
+    agents.map((agent) => agent.name),
+    (container) => (typeof container.agent === 'string' ? container.agent : undefined),
+  );
   const safeAgents = agents.map((agent) => {
-    const stats = getAgentContainerStats(containersByAgent.get(agent.name) ?? []);
+    const bucket = statsByAgent.get(agent.name) ?? createEmptyContainerStatsBucket();
     return {
       name: agent.name,
       host: agent.config.host,
@@ -164,7 +144,7 @@ function getAgentsList(req: Request, res: Response) {
       lastSeen: agent.info?.lastSeen,
       logLevel: agent.info?.logLevel,
       pollInterval: agent.info?.pollInterval,
-      ...stats,
+      ...projectStatsBucket(bucket),
     };
   });
   res.status(200).json({

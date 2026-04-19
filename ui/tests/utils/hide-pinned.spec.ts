@@ -43,10 +43,10 @@ describe('hide-pinned', () => {
       expect(matchesHidePinnedFilter(makeContainer(), true)).toBe(true);
     });
 
-    it('returns true for pinned containers with a pending update (#293) when hidePinned is enabled', () => {
-      // User pins a container to dodge a regression and still wants to see the
-      // next upstream release as an available update. Hide Pinned must not
-      // hide actionable pinned rows.
+    it('returns false for pinned containers with a pending update when hidePinned is enabled (#305)', () => {
+      // Hide Pinned is a pure declutter: pinned rows stay hidden regardless of
+      // whether an update is pending. Users who want to see the pending update
+      // uncheck the filter.
       expect(
         matchesHidePinnedFilter(
           makeContainer({
@@ -58,7 +58,7 @@ describe('hide-pinned', () => {
           }),
           true,
         ),
-      ).toBe(true);
+      ).toBe(false);
     });
   });
 
@@ -89,10 +89,10 @@ describe('hide-pinned', () => {
       ).toEqual(['floating', 'pinned', 'pinned-with-update', 'unspecified']);
     });
 
-    it('filters only pinned containers without a pending update when hidePinned is enabled', () => {
+    it('filters out every pinned container when hidePinned is enabled, including ones with updates (#305)', () => {
       expect(
         filterContainersByHidePinned(containers, true).map((container) => container.id),
-      ).toEqual(['floating', 'pinned-with-update', 'unspecified']);
+      ).toEqual(['floating', 'unspecified']);
     });
   });
 });

@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { createMockResponse } from '../../test/helpers.js';
 import { createSecurityHandlers } from './security.js';
 
+const UUID_V7_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
 const AUTH = { username: 'user', password: 'token' };
 const CURRENT_IMAGE = 'my-registry/test/app:1.2.3';
 const UPDATE_IMAGE = 'my-registry/test/app:2.0.0';
@@ -94,6 +96,7 @@ function createHarness(
     scanImageForVulnerabilities: vi.fn(),
     verifyImageSignature: vi.fn(),
     emitSecurityAlert: vi.fn().mockResolvedValue(undefined),
+    emitSecurityScanCycleComplete: vi.fn().mockResolvedValue(undefined),
     fullName: vi.fn(() => 'local_nginx'),
     broadcastScanStarted: vi.fn(),
     broadcastScanCompleted: vi.fn(),
@@ -521,6 +524,7 @@ describe('api/container/security', () => {
           id: 'c1',
           name: 'nginx',
         }),
+        cycleId: expect.stringMatching(UUID_V7_PATTERN),
       });
       expect(harness.deps.broadcastScanCompleted).toHaveBeenCalledWith('c1', 'blocked');
       expect(res.status).toHaveBeenCalledWith(200);
@@ -661,6 +665,94 @@ describe('api/container/security', () => {
       );
       expect(harness.deps.broadcastScanCompleted).toHaveBeenCalledWith('c1', 'passed');
       expect(res.status).toHaveBeenCalledWith(200);
+    });
+  });
+
+  describe('scanContainer cycle-complete emission', () => {
+    test('emits cycle-complete with 0 alerts on a clean scan', async () => {
+      const harness = createHarness({
+        container: createContainer({ updateAvailable: false, result: undefined }),
+      });
+      harness.deps.scanImageForVulnerabilities.mockResolvedValueOnce(createScanResult());
+
+      await callScanContainer(harness.handlers);
+
+      expect(harness.deps.emitSecurityScanCycleComplete).toHaveBeenCalledTimes(1);
+      expect(harness.deps.emitSecurityScanCycleComplete).toHaveBeenCalledWith(
+        expect.objectContaining({
+          scannedCount: 1,
+          alertCount: 0,
+          scope: 'on-demand-single',
+          cycleId: expect.stringMatching(UUID_V7_PATTERN),
+          startedAt: expect.any(String),
+          completedAt: expect.any(String),
+        }),
+      );
+      expect(harness.deps.emitSecurityAlert).not.toHaveBeenCalled();
+    });
+
+    test('cycle-complete and alert share the same cycleId when alert fires', async () => {
+      const harness = createHarness({
+        container: createContainer({ updateAvailable: false, result: undefined }),
+      });
+      const summary = { unknown: 0, low: 0, medium: 0, high: 2, critical: 1 };
+      harness.deps.scanImageForVulnerabilities.mockResolvedValueOnce(
+        createScanResult({ status: 'blocked', blockingCount: 3, summary }),
+      );
+
+      await callScanContainer(harness.handlers);
+
+      expect(harness.deps.emitSecurityAlert).toHaveBeenCalledTimes(1);
+      expect(harness.deps.emitSecurityScanCycleComplete).toHaveBeenCalledTimes(1);
+
+      const alertPayload = harness.deps.emitSecurityAlert.mock.calls[0][0];
+      const cyclePayload = harness.deps.emitSecurityScanCycleComplete.mock.calls[0][0];
+
+      expect(alertPayload.cycleId).toBe(cyclePayload.cycleId);
+      expect(cyclePayload.alertCount).toBe(1);
+      expect(UUID_V7_PATTERN.test(cyclePayload.cycleId)).toBe(true);
+    });
+
+    test('cycle-complete fires even when scan throws', async () => {
+      const harness = createHarness();
+      harness.deps.scanImageForVulnerabilities.mockRejectedValueOnce(new Error('scan exploded'));
+
+      const res = await callScanContainer(harness.handlers);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(harness.deps.emitSecurityScanCycleComplete).toHaveBeenCalledTimes(1);
+      expect(harness.deps.emitSecurityScanCycleComplete).toHaveBeenCalledWith(
+        expect.objectContaining({
+          scannedCount: 1,
+          alertCount: 0,
+          scope: 'on-demand-single',
+        }),
+      );
+    });
+
+    test('scope is always on-demand-single and scannedCount is always 1', async () => {
+      const harness = createHarness({
+        container: createContainer({ updateAvailable: false, result: undefined }),
+      });
+      harness.deps.scanImageForVulnerabilities.mockResolvedValueOnce(createScanResult());
+
+      await callScanContainer(harness.handlers);
+
+      const cyclePayload = harness.deps.emitSecurityScanCycleComplete.mock.calls[0][0];
+      expect(cyclePayload.scope).toBe('on-demand-single');
+      expect(cyclePayload.scannedCount).toBe(1);
+    });
+
+    test('cycleId is UUID v7 shape', async () => {
+      const harness = createHarness({
+        container: createContainer({ updateAvailable: false, result: undefined }),
+      });
+      harness.deps.scanImageForVulnerabilities.mockResolvedValueOnce(createScanResult());
+
+      await callScanContainer(harness.handlers);
+
+      const cyclePayload = harness.deps.emitSecurityScanCycleComplete.mock.calls[0][0];
+      expect(UUID_V7_PATTERN.test(cyclePayload.cycleId)).toBe(true);
     });
   });
 

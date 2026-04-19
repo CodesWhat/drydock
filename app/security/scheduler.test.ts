@@ -20,6 +20,8 @@ const mockLogInfo = vi.hoisted(() => vi.fn());
 const mockLogWarn = vi.hoisted(() => vi.fn());
 const mockLogError = vi.hoisted(() => vi.fn());
 const mockLogDebug = vi.hoisted(() => vi.fn());
+const mockEmitSecurityAlert = vi.hoisted(() => vi.fn(async () => {}));
+const mockEmitSecurityScanCycleComplete = vi.hoisted(() => vi.fn(async () => {}));
 
 vi.mock('../configuration/index.js', () => ({
   getSecurityConfiguration: mockGetSecurityConfiguration,
@@ -76,6 +78,11 @@ vi.mock('./runtime.js', () => ({
   getTrivyDatabaseStatus: (...args: unknown[]) => mockGetTrivyDatabaseStatus(...args),
 }));
 
+vi.mock('../event/index.js', () => ({
+  emitSecurityAlert: (...args: unknown[]) => mockEmitSecurityAlert(...args),
+  emitSecurityScanCycleComplete: (...args: unknown[]) => mockEmitSecurityScanCycleComplete(...args),
+}));
+
 import {
   _isScanInProgress,
   _resetForTesting,
@@ -96,7 +103,13 @@ function createEnabledConfiguration() {
       cosign: { command: 'cosign', timeout: 60000, key: '', identity: '', issuer: '' },
     },
     sbom: { enabled: false, formats: ['spdx-json'] },
-    scan: { cron: '0 3 * * *', jitter: 60000, concurrency: 1, batchTimeout: 0 },
+    scan: {
+      cron: '0 3 * * *',
+      jitter: 60000,
+      concurrency: 1,
+      batchTimeout: 0,
+      notifications: true,
+    },
   };
 }
 
@@ -536,7 +549,7 @@ describe('runScheduledScans', () => {
       'Scanning 2 unique digests across 2 containers (concurrency: 1, batch timeout: 30ms)',
     );
     expect(mockLogInfo).toHaveBeenCalledWith(
-      'Scheduled scan complete: 2 digests, 0 cached, 0 scanned fresh, 0 errors, 1 aborted, 1 skipped',
+      'Scheduled scan complete: 2 digests, 0 cached, 0 scanned fresh, 0 errors, 1 aborted, 1 skipped, 0 alerts emitted',
     );
     expect(clearTimeoutSpy).toHaveBeenCalledTimes(1);
     clearTimeoutSpy.mockRestore();
@@ -652,7 +665,7 @@ describe('runScheduledScans', () => {
     await runScheduledScans();
 
     expect(mockLogInfo).toHaveBeenCalledWith(
-      'Scheduled scan complete: 2 digests, 1 cached, 1 scanned fresh, 0 errors, 0 aborted, 0 skipped',
+      'Scheduled scan complete: 2 digests, 1 cached, 1 scanned fresh, 0 errors, 0 aborted, 0 skipped, 0 alerts emitted',
     );
   });
 
@@ -685,7 +698,7 @@ describe('runScheduledScans', () => {
     expect(mockUpdateContainer).toHaveBeenCalledTimes(1);
     expect(mockUpdateContainer).toHaveBeenCalledWith(expect.objectContaining({ id: 'c2' }));
     expect(mockLogInfo).toHaveBeenCalledWith(
-      'Scheduled scan complete: 2 digests, 0 cached, 1 scanned fresh, 1 errors, 0 aborted, 0 skipped',
+      'Scheduled scan complete: 2 digests, 0 cached, 1 scanned fresh, 1 errors, 0 aborted, 0 skipped, 0 alerts emitted',
     );
   });
 
@@ -1395,6 +1408,203 @@ describe('runScheduledScans', () => {
     expect(mockScanImageWithDedup).toHaveBeenCalledWith(
       expect.objectContaining({ digest: 'sha256:abc123' }),
       14400000,
+    );
+  });
+
+  test('should emit a security alert for each container with critical or high findings', async () => {
+    const container1 = createContainer({ id: 'c1', name: 'nginx' });
+    const container2 = createContainer({
+      id: 'c2',
+      name: 'redis',
+      image: {
+        ...createContainer().image,
+        name: 'library/redis',
+        digest: { watch: true, value: 'sha256:def456' },
+      },
+    });
+    mockGetContainers.mockReturnValue([container1, container2]);
+    mockScanImageWithDedup
+      .mockResolvedValueOnce({
+        scanResult: createScanResult({
+          status: 'blocked',
+          summary: { unknown: 0, low: 1, medium: 2, high: 3, critical: 1 },
+        }),
+        fromCache: false,
+      })
+      .mockResolvedValueOnce({
+        scanResult: createScanResult({
+          summary: { unknown: 0, low: 0, medium: 0, high: 2, critical: 0 },
+        }),
+        fromCache: false,
+      });
+
+    await runScheduledScans();
+
+    expect(mockEmitSecurityAlert).toHaveBeenCalledTimes(2);
+    expect(mockEmitSecurityAlert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        containerName: 'local_nginx',
+        details: 'critical=1, high=3, medium=2, low=1, unknown=0',
+        status: 'blocked',
+        cycleId: expect.stringMatching(
+          /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+        ),
+      }),
+    );
+    expect(mockEmitSecurityAlert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        containerName: 'local_redis',
+        details: 'critical=0, high=2, medium=0, low=0, unknown=0',
+        cycleId: expect.any(String),
+      }),
+    );
+  });
+
+  test('should share the same cycleId across every alert and the cycle-complete signal in one run', async () => {
+    const container = createContainer();
+    mockGetContainers.mockReturnValue([container]);
+    mockScanImageWithDedup.mockResolvedValue({
+      scanResult: createScanResult({
+        summary: { unknown: 0, low: 0, medium: 0, high: 1, critical: 0 },
+      }),
+      fromCache: false,
+    });
+
+    await runScheduledScans();
+
+    const alertCycleIds = mockEmitSecurityAlert.mock.calls.map(
+      ([payload]) => (payload as { cycleId: string }).cycleId,
+    );
+    const completeCycleId = mockEmitSecurityScanCycleComplete.mock.calls[0]?.[0]?.cycleId;
+    expect(alertCycleIds.every((id) => id === completeCycleId)).toBe(true);
+    expect(completeCycleId).toEqual(expect.any(String));
+  });
+
+  test('should produce distinct cycleIds across two successive runs', async () => {
+    const container = createContainer();
+    mockGetContainers.mockReturnValue([container]);
+    mockScanImageWithDedup.mockResolvedValue({
+      scanResult: createScanResult({
+        summary: { unknown: 0, low: 0, medium: 0, high: 1, critical: 0 },
+      }),
+      fromCache: false,
+    });
+
+    await runScheduledScans();
+    await runScheduledScans();
+
+    const cycleIds = mockEmitSecurityScanCycleComplete.mock.calls.map(
+      ([payload]) => payload.cycleId,
+    );
+    expect(cycleIds).toHaveLength(2);
+    expect(cycleIds[0]).not.toBe(cycleIds[1]);
+  });
+
+  test('should NOT emit a security alert when only low/medium findings are present and high/critical are absent', async () => {
+    const container = createContainer();
+    mockGetContainers.mockReturnValue([container]);
+    mockScanImageWithDedup.mockResolvedValue({
+      scanResult: createScanResult({
+        summary: { unknown: 0, low: 3, medium: 5 },
+      }),
+      fromCache: false,
+    });
+
+    await runScheduledScans();
+
+    expect(mockEmitSecurityAlert).not.toHaveBeenCalled();
+    expect(mockEmitSecurityScanCycleComplete).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scope: 'scheduled',
+        scannedCount: 1,
+        alertCount: 0,
+      }),
+    );
+  });
+
+  test('should NOT emit a security alert when summary is missing', async () => {
+    const container = createContainer();
+    mockGetContainers.mockReturnValue([container]);
+    mockScanImageWithDedup.mockResolvedValue({
+      scanResult: { ...createScanResult(), summary: undefined },
+      fromCache: false,
+    });
+
+    await runScheduledScans();
+
+    expect(mockEmitSecurityAlert).not.toHaveBeenCalled();
+  });
+
+  test('should emit security scan cycle complete after every scheduled run', async () => {
+    const container = createContainer();
+    mockGetContainers.mockReturnValue([container]);
+    mockScanImageWithDedup.mockResolvedValue({
+      scanResult: createScanResult({
+        summary: { unknown: 0, low: 0, medium: 0, high: 1, critical: 0 },
+      }),
+      fromCache: false,
+    });
+
+    await runScheduledScans();
+
+    expect(mockEmitSecurityScanCycleComplete).toHaveBeenCalledTimes(1);
+    expect(mockEmitSecurityScanCycleComplete).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scope: 'scheduled',
+        scannedCount: 1,
+        alertCount: 1,
+      }),
+    );
+  });
+
+  test('should emit cycle complete with zero counts when no containers qualify for scanning', async () => {
+    mockGetContainers.mockReturnValue([]);
+
+    await runScheduledScans();
+
+    expect(mockEmitSecurityScanCycleComplete).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scope: 'scheduled',
+        scannedCount: 0,
+        alertCount: 0,
+      }),
+    );
+  });
+
+  test('should emit cycle complete even when the scan batch throws partway through', async () => {
+    const container = createContainer();
+    mockGetContainers.mockReturnValue([container]);
+    mockScanImageWithDedup.mockRejectedValue(new Error('scan exploded'));
+
+    await runScheduledScans();
+
+    expect(mockEmitSecurityScanCycleComplete).toHaveBeenCalledWith(
+      expect.objectContaining({ scope: 'scheduled' }),
+    );
+  });
+
+  test('should NOT emit alerts when scan.notifications is disabled, but still emit cycle complete', async () => {
+    mockGetSecurityConfiguration.mockReturnValue({
+      ...createEnabledConfiguration(),
+      scan: {
+        ...createEnabledConfiguration().scan,
+        notifications: false,
+      },
+    });
+    const container = createContainer();
+    mockGetContainers.mockReturnValue([container]);
+    mockScanImageWithDedup.mockResolvedValue({
+      scanResult: createScanResult({
+        summary: { unknown: 0, low: 0, medium: 0, high: 5, critical: 2 },
+      }),
+      fromCache: false,
+    });
+
+    await runScheduledScans();
+
+    expect(mockEmitSecurityAlert).not.toHaveBeenCalled();
+    expect(mockEmitSecurityScanCycleComplete).toHaveBeenCalledWith(
+      expect.objectContaining({ scope: 'scheduled', alertCount: 0 }),
     );
   });
 });

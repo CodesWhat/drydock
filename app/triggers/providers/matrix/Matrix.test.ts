@@ -29,6 +29,7 @@ const configurationValid = {
   simplebody: 'Test Body',
   batchtitle: 'Batch Title',
   resolvenotifications: false,
+  securitymode: 'simple',
   disabletitle: false,
   digestcron: '0 8 * * *',
 };

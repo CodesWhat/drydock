@@ -11,6 +11,7 @@ import { useContainerFilters } from '../composables/useContainerFilters';
 import { useDetailPanel, useDetailPanelStorage } from '../composables/useDetailPanel';
 import { LOG_AUTO_FETCH_INTERVALS } from '../composables/useLogViewerBehavior';
 import { useOperationDisplayHold } from '../composables/useOperationDisplayHold';
+import { useToast } from '../composables/useToast';
 import { preferences } from '../preferences/store';
 import { usePreference } from '../preferences/usePreference';
 import { useViewMode } from '../preferences/useViewMode';
@@ -59,11 +60,13 @@ const containerIdMap = ref<Record<string, string>>({});
 const containerMetaMap = ref<Record<string, unknown>>({});
 const {
   clearAllOperationDisplayHolds,
+  findMatchingOperationIds,
   holdOperationDisplay,
   projectContainerDisplayState,
   scheduleHeldOperationRelease,
   clearHeldOperation,
 } = useOperationDisplayHold();
+const toast = useToast();
 
 function buildContainerLookupMaps(apiContainers: Record<string, unknown>[]) {
   const idMap: Record<string, string> = {};
@@ -357,6 +360,36 @@ const {
 } = useContainerFilters(containers);
 const route = useRoute();
 const router = useRouter();
+
+const filterContainerIds = ref<Set<string>>(new Set());
+
+function parseContainerIdsQuery(queryValue: unknown): Set<string> {
+  const raw = Array.isArray(queryValue) ? queryValue[0] : queryValue;
+  if (typeof raw !== 'string' || raw.trim().length === 0) {
+    return new Set();
+  }
+  return new Set(
+    raw
+      .split(',')
+      .map((id) => id.trim())
+      .filter((id) => id.length > 0),
+  );
+}
+
+watch(
+  () => route.query.containerIds,
+  (queryValue) => {
+    filterContainerIds.value = parseContainerIdsQuery(queryValue);
+  },
+  { immediate: true },
+);
+
+function clearContainerIdsFilter() {
+  filterContainerIds.value = new Set();
+  const { containerIds: _omit, ...rest } = route.query as Record<string, unknown>;
+  void router.replace({ query: rest as Record<string, string> });
+}
+
 const VALID_FILTER_KIND_VALUES = ['all', 'a\u006Ey', 'major', 'minor', 'patch', 'digest'] as const;
 type FilterKindQueryValue = (typeof VALID_FILTER_KIND_VALUES)[number];
 const DEFAULT_FILTER_KIND: FilterKindQueryValue = 'all';
@@ -644,6 +677,9 @@ function buildSyncedRouteQuery(): Record<string, string> {
   for (const key of QUERY_SYNC_KEYS) {
     delete nextQuery[key];
   }
+  if (filterContainerIds.value.size === 0) {
+    delete nextQuery.containerIds;
+  }
 
   if (filterSearch.value) {
     nextQuery.q = filterSearch.value;
@@ -725,8 +761,35 @@ function toggleContainerSort(key: string) {
   }
 }
 
+// displayContainers runs projection BEFORE sort so sort-affecting fields (status, updateKind,
+// newTag) reflect the held snapshot during a docker recreate window, preventing position shifts.
+const displayContainers = computed<Array<Container & { _pending?: true }>>(() => {
+  const ids = filterContainerIds.value;
+  const sourceContainers =
+    ids.size > 0
+      ? filteredContainers.value.filter((container) => ids.has(container.id))
+      : filteredContainers.value;
+  const live = sourceContainers.map((container) =>
+    skippedUpdates.value.has(container.id) || skippedUpdates.value.has(container.name)
+      ? {
+          ...container,
+          newTag: undefined,
+          releaseLink: undefined,
+          updateKind: undefined,
+        }
+      : container,
+  );
+  const liveIdentityKeys = new Set(
+    live.map((container) => getContainerActionIdentityKey(container)).filter(Boolean),
+  );
+  const ghosts = [...actionPending.value.values()]
+    .filter((snapshot) => !liveIdentityKeys.has(getContainerActionIdentityKey(snapshot)))
+    .map((snapshot) => ({ ...snapshot, _pending: true as const }));
+  return [...live, ...ghosts].map(projectContainerDisplayState);
+});
+
 const sortedContainers = computed(() => {
-  const list = [...filteredContainers.value];
+  const list = [...displayContainers.value];
   const key = containerSortKey.value;
   const dir = containerSortAsc.value ? 1 : -1;
   return list.sort((left, right) => {
@@ -765,26 +828,6 @@ const sortedContainers = computed(() => {
     }
     return leftValue < rightValue ? -dir : leftValue > rightValue ? dir : 0;
   });
-});
-
-const displayContainers = computed<Array<Container & { _pending?: true }>>(() => {
-  const live = sortedContainers.value.map((container) =>
-    skippedUpdates.value.has(container.id) || skippedUpdates.value.has(container.name)
-      ? {
-          ...container,
-          newTag: undefined,
-          releaseLink: undefined,
-          updateKind: undefined,
-        }
-      : container,
-  );
-  const liveIdentityKeys = new Set(
-    live.map((container) => getContainerActionIdentityKey(container)).filter(Boolean),
-  );
-  const ghosts = [...actionPending.value.values()]
-    .filter((snapshot) => !liveIdentityKeys.has(getContainerActionIdentityKey(snapshot)))
-    .map((snapshot) => ({ ...snapshot, _pending: true as const }));
-  return [...live, ...ghosts].map(projectContainerDisplayState);
 });
 
 const groupMembershipMap = ref<Record<string, string>>({});
@@ -919,7 +962,8 @@ const tableColumns = computed(() =>
     label: column.label,
     align: column.align,
     sortable: column.key !== 'icon',
-    width: column.key === 'name' ? '99%' : column.key === 'icon' ? '56px' : undefined,
+    width: column.width,
+    px: column.px,
     icon: column.key === 'icon',
   })),
 );
@@ -1070,6 +1114,11 @@ function applyOperationPatch(event: Event) {
         containerId: typeof containerId === 'string' ? containerId : undefined,
         newContainerId: typeof newContainerId === 'string' ? newContainerId : undefined,
         containerName: typeof containerName === 'string' ? containerName : undefined,
+        sortSnapshot: {
+          status: updated.status,
+          updateKind: updated.updateKind,
+          newTag: updated.newTag,
+        },
       });
     }
   } else {
@@ -1081,7 +1130,11 @@ function applyOperationPatch(event: Event) {
       containerName: typeof containerName === 'string' ? containerName : undefined,
     };
     if (status === 'succeeded') {
+      const wasTracked = findMatchingOperationIds(target).length > 0;
       scheduleHeldOperationRelease(target);
+      if (wasTracked) {
+        toast.success(`Updated: ${updated.name}`);
+      }
     } else {
       clearHeldOperation(target);
     }
@@ -1289,6 +1342,8 @@ provide(containersViewTemplateContextKey, {
   formatRollbackReason,
   updateOperationsError,
   closeFullPage,
+  filterContainerIds,
+  clearContainerIdsFilter,
 });
 </script>
 

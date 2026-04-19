@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 
 import {
+  markSelfUpdateOperationFailed,
   type PrepareSelfUpdateOperationArgs,
   prepareSelfUpdateOperation,
 } from './self-update-operation.js';
@@ -9,11 +10,13 @@ import {
 const mockInsertOperation = vi.hoisted(() => vi.fn());
 const mockUpdateOperation = vi.hoisted(() => vi.fn());
 const mockGetOperationById = vi.hoisted(() => vi.fn());
+const mockMarkOperationTerminal = vi.hoisted(() => vi.fn());
 
 vi.mock('../../../store/update-operation.js', () => ({
   insertOperation: (...args: unknown[]) => mockInsertOperation(...args),
   updateOperation: (...args: unknown[]) => mockUpdateOperation(...args),
   getOperationById: (...args: unknown[]) => mockGetOperationById(...args),
+  markOperationTerminal: (...args: unknown[]) => mockMarkOperationTerminal(...args),
 }));
 
 function createArgs(
@@ -363,5 +366,80 @@ describe('prepareSelfUpdateOperation', () => {
         }),
       ),
     ).toThrow('Failed to prepare self-update operation');
+  });
+});
+
+describe('markSelfUpdateOperationFailed', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test('marks an existing active operation as failed with the given lastError', () => {
+    const existing = {
+      id: 'op-123',
+      status: 'in-progress',
+      phase: 'prepare',
+      kind: 'self-update',
+      containerId: 'c-1',
+      containerName: 'drydock',
+      fromVersion: '1.0.0',
+      toVersion: '2.0.0',
+      targetImage: 'ghcr.io/acme/drydock:2.0.0',
+    };
+    const terminal = {
+      ...existing,
+      status: 'failed',
+      phase: 'failed',
+      lastError: 'pull failed: connection refused',
+      completedAt: '2026-04-11T13:00:00.000Z',
+    };
+    mockMarkOperationTerminal.mockReturnValue(terminal);
+
+    const result = markSelfUpdateOperationFailed('op-123', 'pull failed: connection refused');
+
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith('op-123', {
+      status: 'failed',
+      lastError: 'pull failed: connection refused',
+    });
+    expect(result).toEqual(terminal);
+  });
+
+  test('returns undefined (no-op) when the operation ID does not exist', () => {
+    mockMarkOperationTerminal.mockReturnValue(undefined);
+
+    const result = markSelfUpdateOperationFailed('nonexistent-op', 'some error');
+
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith('nonexistent-op', {
+      status: 'failed',
+      lastError: 'some error',
+    });
+    expect(result).toBeUndefined();
+  });
+
+  test('preserves other fields after the terminal transition', () => {
+    const terminal = {
+      id: 'op-456',
+      status: 'failed',
+      phase: 'failed',
+      kind: 'self-update',
+      containerId: 'c-2',
+      containerName: 'myapp',
+      fromVersion: '3.0.0',
+      toVersion: '4.0.0',
+      targetImage: 'ghcr.io/acme/myapp:4.0.0',
+      lastError: 'socket bind failed',
+      completedAt: '2026-04-11T14:00:00.000Z',
+    };
+    mockMarkOperationTerminal.mockReturnValue(terminal);
+
+    const result = markSelfUpdateOperationFailed('op-456', 'socket bind failed');
+
+    expect(result).toMatchObject({
+      containerId: 'c-2',
+      containerName: 'myapp',
+      fromVersion: '3.0.0',
+      toVersion: '4.0.0',
+      targetImage: 'ghcr.io/acme/myapp:4.0.0',
+    });
   });
 });

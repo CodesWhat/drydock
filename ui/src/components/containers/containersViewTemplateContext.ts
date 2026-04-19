@@ -135,6 +135,8 @@ export interface ContainersViewTemplateContext
   registryLabel: typeof registryLabel;
   isMobile: ReturnType<typeof useBreakpoints>['isMobile'];
   LOG_AUTO_FETCH_INTERVALS: ReadonlyArray<LogAutoFetchIntervalOption>;
+  filterContainerIds: Ref<Set<string>>;
+  clearContainerIdsFilter: () => void;
 }
 
 export const containersViewTemplateContextKey: InjectionKey<ContainersViewTemplateContext> = Symbol(

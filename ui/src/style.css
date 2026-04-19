@@ -236,11 +236,20 @@ html.dd-font-comic-mono {
    Marker class put on a <tr> by DataTable's row-class callback. Each
    direct grandchild of every <td> is dimmed to 50% so the row reads
    as inactive, while the centered "Updating / Queued" badge — marked
-   `.dd-row-overlay` — stays at full opacity. The TR is set to
-   position: relative so the overlay's absolute positioning resolves
-   to the row boundary and spans the full row width. */
+   `.dd-row-overlay` — stays at full opacity.
+
+   `position: relative` alone on <tr> does not reliably establish a
+   containing block for absolutely-positioned descendants (the CSS
+   spec is undefined for table-internal elements and most browsers
+   let the overlay escape up the ancestor chain, producing a
+   badge floating near viewport-center instead of on the row).
+   Adding `transform: translateZ(0)` forces the <tr> to create a
+   stacking context and containing block, pinning the `.dd-row-overlay`
+   to the row's bounding box so it centers horizontally and vertically
+   on the row like the card view. */
 tr.dd-row-updating {
   position: relative;
+  transform: translateZ(0);
 }
 tr.dd-row-updating > td > *:not(.dd-row-overlay) {
   opacity: 0.3;
@@ -749,4 +758,29 @@ html.dd-transitioning::view-transition-new(*) {
 .menu-fade-leave-to {
   opacity: 0;
   transform: translateY(var(--dd-motion-menu-enter-y));
+}
+
+/* Table-cell responsive visibility via container queries.
+   Note: @container (inline-size) evaluates the td's *content* box, not border box —
+   so a 130px-wide td with px-3 (24px) padding queries as ~106px. Thresholds are
+   content-box widths. */
+.dd-cell-show-80,
+.dd-cell-show-100,
+.dd-cell-show-160 {
+  display: none;
+}
+@container (min-width: 80px) {
+  .dd-cell-show-80 {
+    display: inline-flex;
+  }
+}
+@container (min-width: 100px) {
+  .dd-cell-show-100 {
+    display: inline-flex;
+  }
+}
+@container (min-width: 160px) {
+  .dd-cell-show-160 {
+    display: inline-flex;
+  }
 }

@@ -68,6 +68,7 @@ type UpdateLifecycleExecutorCallbacks = {
     operationId: string,
     runtimeContext?: unknown,
   ) => Promise<boolean>;
+  markSelfUpdateOperationFailed: (operationId: string, lastError: string) => Promise<void> | void;
   runPreRuntimeUpdateLifecycle: (
     context: UpdateLifecycleContext,
     container: UpdateLifecycleContainer,
@@ -128,6 +129,7 @@ type UpdateLifecycleSelfUpdateServices = Pick<
   | 'prepareSelfUpdateOperation'
   | 'maybeNotifySelfUpdate'
   | 'executeSelfUpdate'
+  | 'markSelfUpdateOperationFailed'
 >;
 
 type UpdateLifecycleRuntimeUpdateServices = Pick<
@@ -181,6 +183,7 @@ const REQUIRED_UPDATE_LIFECYCLE_EXECUTOR_DEPENDENCY_KEYS = {
     'prepareSelfUpdateOperation',
     'maybeNotifySelfUpdate',
     'executeSelfUpdate',
+    'markSelfUpdateOperationFailed',
   ],
   runtimeUpdate: ['runPreRuntimeUpdateLifecycle', 'performContainerUpdate'],
   postUpdate: ['cleanupOldImages', 'getRollbackConfig', 'maybeStartAutoRollbackMonitor'],
@@ -279,22 +282,37 @@ class UpdateLifecycleExecutor {
           containerLogger,
           runtimeContext,
         );
-        await this.selfUpdate.maybeNotifySelfUpdate(
-          container,
-          containerLogger,
-          selfUpdateOperationId,
-        );
-        const updated = await this.selfUpdate.executeSelfUpdate(
-          context,
-          container,
-          containerLogger,
-          selfUpdateOperationId,
-          runtimeContext,
-        );
-        if (!updated) {
+        try {
+          await this.selfUpdate.maybeNotifySelfUpdate(
+            container,
+            containerLogger,
+            selfUpdateOperationId,
+          );
+          const updated = await this.selfUpdate.executeSelfUpdate(
+            context,
+            container,
+            containerLogger,
+            selfUpdateOperationId,
+            runtimeContext,
+          );
+          if (!updated) {
+            return;
+          }
           return;
+        } catch (e: unknown) {
+          const errorMessage = String((e as Error)?.message ?? e);
+          try {
+            await this.selfUpdate.markSelfUpdateOperationFailed(
+              selfUpdateOperationId,
+              errorMessage,
+            );
+          } catch (markErr: unknown) {
+            containerLogger.warn?.(
+              `Failed to mark self-update operation ${selfUpdateOperationId} as failed: ${String((markErr as Error)?.message ?? markErr)}`,
+            );
+          }
+          throw e;
         }
-        return;
       }
 
       await this.runtimeUpdate.runPreRuntimeUpdateLifecycle(

@@ -394,7 +394,13 @@ describe('AppLayout', () => {
 
     const banner = wrapper.find('[data-testid="oidc-http-compat-banner"]');
     expect(banner.exists()).toBe(true);
-    expect(banner.text()).toContain('Migration guide');
+    expect(banner.text()).toContain('View migration guide');
+    expect(banner.text()).toContain('DD_AUTH_OIDC_{name}_ALLOW_INSECURE_HTTP=true');
+
+    const link = wrapper.find('[data-testid="oidc-http-compat-banner-link"]');
+    expect(link.attributes('href')).toBe(
+      'https://getdrydock.com/docs/deprecations#oidc-http-discovery',
+    );
   });
 
   it('supports dismissing OIDC HTTP compatibility banner for current session', async () => {
@@ -487,6 +493,13 @@ describe('AppLayout', () => {
     const banner = wrapper.find('[data-testid="sha-hash-deprecation-banner"]');
     expect(banner.exists()).toBe(true);
     expect(banner.text()).toContain('legacy password hash format');
+    expect(banner.text()).toContain('argon2id');
+    expect(banner.text()).toContain('View migration guide');
+
+    const link = wrapper.find('[data-testid="sha-hash-deprecation-banner-link"]');
+    expect(link.attributes('href')).toBe(
+      'https://getdrydock.com/docs/deprecations#legacy-password-hashes',
+    );
   });
 
   it('supports dismissing legacy hash deprecation banner for current session', async () => {
@@ -613,6 +626,14 @@ describe('AppLayout', () => {
     expect(banner.text()).toContain('Env keys (20):');
     expect(banner.text()).toContain('DD_TRIGGER_DOCKER_LOCAL_AUTO');
     expect(banner.text()).toContain('(+2 more)');
+    expect(banner.text()).toContain('DD_*');
+    expect(banner.text()).toContain('dd.*');
+    expect(banner.text()).toContain('View migration guide');
+
+    const link = wrapper.find('[data-testid="legacy-config-deprecation-banner-link"]');
+    expect(link.attributes('href')).toBe(
+      'https://getdrydock.com/docs/deprecations#legacy-env-vars',
+    );
   });
 
   it('shows consolidated legacy config banner when only labels are detected', async () => {
@@ -663,6 +684,14 @@ describe('AppLayout', () => {
     expect(banner.exists()).toBe(true);
     expect(banner.text()).toContain('7 legacy API paths detected');
     expect(banner.text()).toContain('/api/containers');
+    expect(banner.text()).toContain('/api/v1/*');
+    expect(banner.text()).toContain('v1.6.0');
+    expect(banner.text()).toContain('View migration guide');
+
+    const link = wrapper.find('[data-testid="legacy-api-path-deprecation-banner-link"]');
+    expect(link.attributes('href')).toBe(
+      'https://getdrydock.com/docs/deprecations#unversioned-api-paths',
+    );
   });
 
   it('shows a curl healthcheck deprecation banner when server reports a custom override', async () => {
@@ -688,6 +717,13 @@ describe('AppLayout', () => {
     expect(banner.exists()).toBe(true);
     expect(banner.text()).toContain('custom curl-based healthcheck override');
     expect(banner.text()).toContain('v1.7.0');
+    expect(banner.text()).toContain('wget');
+    expect(banner.text()).toContain('View migration guide');
+
+    const link = wrapper.find('[data-testid="curl-healthcheck-deprecation-banner-link"]');
+    expect(link.attributes('href')).toBe(
+      'https://getdrydock.com/docs/deprecations#curl-healthcheck-override',
+    );
   });
 
   it('dismisses consolidated legacy config banner', async () => {

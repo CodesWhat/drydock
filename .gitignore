@@ -29,6 +29,7 @@ coverage
 .coverage-logs/
 .build-logs/
 CLAUDE.md
+test/qa-compose.demo.yml
 
 # nyc test coverage
 .nyc_output

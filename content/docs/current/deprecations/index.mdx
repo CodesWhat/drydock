@@ -11,7 +11,7 @@ This page lists every deprecated feature, the version it will be removed in, and
 
 ## Removal in v1.6.0
 
-### Unversioned API paths (`/api/*`)
+### Unversioned API paths (`/api/*`) {#unversioned-api-paths}
 
 The unversioned `/api/*` path is a backward-compatible alias for `/api/v1/*`. Both return identical responses.
 
@@ -31,7 +31,7 @@ When `DD_SERVER_CORS_ENABLED=true` and `DD_SERVER_CORS_ORIGIN` is not set, drydo
 | **Detection** | Startup log warning when CORS is enabled without an explicit origin |
 | **Migration** | Set `DD_SERVER_CORS_ORIGIN` to your trusted origin(s), e.g. `DD_SERVER_CORS_ORIGIN=https://drydock.example.com` |
 
-### Legacy `WUD_*` environment variables
+### Legacy `WUD_*` environment variables {#legacy-env-vars}
 
 `WUD_*` prefixed environment variables (from the upstream WUD project) are accepted as fallbacks for their `DD_*` equivalents.
 
@@ -41,7 +41,7 @@ When `DD_SERVER_CORS_ENABLED=true` and `DD_SERVER_CORS_ORIGIN` is not set, drydo
 | **Detection** | Startup console warning; Prometheus counter `dd_legacy_input_total{source="env"}`; UI deprecation banner |
 | **Migration** | Rename all `WUD_*` vars to `DD_*`. Run `drydock config migrate --dry-run` to preview changes |
 
-### Legacy `wud.*` container labels
+### Legacy `wud.*` container labels {#legacy-labels}
 
 `wud.*` prefixed Docker labels are accepted as fallbacks for their `dd.*` equivalents (20 labels total including `wud.watch`, `wud.tag.include`, `wud.tag.exclude`, etc.).
 
@@ -71,7 +71,7 @@ The `PUT` method on `/api/settings` is a compatibility alias for `PATCH`. Respon
 | **Detection** | Log warning on each `PUT` request; `Deprecation` and `Sunset` response headers |
 | **Migration** | Change `PUT /api/settings` to `PATCH /api/settings` |
 
-### HTTP OIDC discovery URLs
+### HTTP OIDC discovery URLs {#oidc-http-discovery}
 
 OIDC providers configured with `http://` discovery URLs are deprecated. Identity Providers must support HTTPS.
 
@@ -81,7 +81,7 @@ OIDC providers configured with `http://` discovery URLs are deprecated. Identity
 | **Detection** | Startup log warning; UI deprecation banner |
 | **Migration** | Update your IdP discovery URL to use `https://`. If your IdP uses a self-signed certificate, set `DD_AUTH_OIDC_{name}_INSECURE=true` |
 
-### Legacy password hash formats
+### Legacy password hash formats {#legacy-password-hashes}
 
 SHA-1, APR1/MD5 (Apache), crypt, and plain text password hashes from v1.3.9 are deprecated.
 
@@ -133,7 +133,7 @@ Token-based authentication for public registries has been replaced by password-b
 
 ## Removal in v1.7.0
 
-### `curl` in Docker image
+### `curl` in Docker image {#curl-healthcheck-override}
 
 The official Docker image keeps `curl` available in v1.5.x and v1.6.x for backward compatibility with custom healthcheck overrides. The default built-in `HEALTHCHECK` uses the lightweight static binary (`/bin/healthcheck`) instead.
 
@@ -143,7 +143,7 @@ The official Docker image keeps `curl` available in v1.5.x and v1.6.x for backwa
 | **Detection** | UI deprecation banner when Drydock can inspect its own container via the local Docker socket; otherwise manual config review |
 | **Migration** | Custom `curl`-based healthcheck overrides remain supported in v1.5.x. v1.6.0 is the final warning release. Removal is scheduled for v1.7.0. Prefer the built-in image healthcheck, or switch custom intervals to `test: /bin/healthcheck ${DD_SERVER_PORT:-3000}`. See [Monitoring](/docs/monitoring) |
 
-### `DD_TRIGGER_*` environment variable prefix
+### `DD_TRIGGER_*` environment variable prefix {#legacy-trigger-prefix}
 
 The `DD_TRIGGER_*` prefix is being replaced by semantic prefixes that distinguish action triggers from notification triggers.
 

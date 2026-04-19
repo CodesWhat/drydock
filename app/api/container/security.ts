@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import type { SecurityConfiguration, SecuritySbomFormat } from '../../configuration/index.js';
+import type { SecurityScanCycleCompleteEventPayload } from '../../event/index.js';
 import type { Container, ContainerSecurityState } from '../../model/container.js';
 import {
   getTrivyDatabaseStatus as getTrivyDatabaseStatusDefault,
@@ -10,6 +11,7 @@ import type {
   ContainerSecurityScan,
   ContainerSignatureVerification,
 } from '../../security/scan.js';
+import { uuidv7 } from '../../util/uuid.js';
 import { sendErrorResponse } from '../error-response.js';
 import { getPathParamValue } from './request-helpers.js';
 
@@ -30,6 +32,7 @@ interface SecurityAlertPayload {
   summary?: ContainerSecurityScan['summary'];
   blockingCount?: number;
   container?: Container;
+  cycleId?: string;
 }
 
 interface SecurityHandlerDependencies {
@@ -50,6 +53,7 @@ interface SecurityHandlerDependencies {
     auth?: RegistryAuth;
   }) => Promise<ContainerSignatureVerification>;
   emitSecurityAlert: (payload: SecurityAlertPayload) => Promise<void>;
+  emitSecurityScanCycleComplete: (payload: SecurityScanCycleCompleteEventPayload) => Promise<void>;
   fullName: (container: Container) => string;
   broadcastScanStarted: (containerId: string) => void;
   broadcastScanCompleted: (containerId: string, status: string) => void;
@@ -223,12 +227,14 @@ async function scanCurrentImage(options: {
   context: ResolvedSecurityHandlerContext;
   container: Container;
   securityConfiguration: SecurityConfiguration;
+  cycleId: string;
 }): Promise<{
   auth: RegistryAuth | undefined;
   scanResult: ContainerSecurityScan;
   securityPatch: Partial<ContainerSecurityState>;
+  alertCount: number;
 }> {
-  const { context, container, securityConfiguration } = options;
+  const { context, container, securityConfiguration, cycleId } = options;
   const image = context.getContainerImageFullName(container);
   context.log.info(`Running on-demand security scan for ${image}`);
   const auth = await context.getContainerRegistryAuth(container);
@@ -242,6 +248,7 @@ async function scanCurrentImage(options: {
     context.updateDigestScanCache(containerDigest, scanResult, trivyDbStatus?.updatedAt || '');
   }
 
+  let alertCount = 0;
   const summary = scanResult.summary;
   if (summary && (summary.critical > 0 || summary.high > 0)) {
     const details = `critical=${summary.critical}, high=${summary.high}, medium=${summary.medium}, low=${summary.low}, unknown=${summary.unknown}`;
@@ -252,7 +259,9 @@ async function scanCurrentImage(options: {
       summary,
       blockingCount: scanResult.blockingCount,
       container,
+      cycleId,
     });
+    alertCount = 1;
   }
 
   if (securityConfiguration.signature.verify) {
@@ -269,7 +278,7 @@ async function scanCurrentImage(options: {
     securityPatch.sbom = sbomResult;
   }
 
-  return { auth, scanResult, securityPatch };
+  return { auth, scanResult, securityPatch, alertCount };
 }
 
 async function scanUpdateImage(options: {
@@ -367,15 +376,25 @@ async function handleScanContainer(
     return;
   }
 
+  const cycleId = uuidv7();
+  const startedAt = new Date().toISOString();
   scanState.inFlightOnDemandScans += 1;
   context.broadcastScanStarted(id);
 
+  let alertCount = 0;
   try {
-    const { auth, scanResult, securityPatch } = await scanCurrentImage({
+    const {
+      auth,
+      scanResult,
+      securityPatch,
+      alertCount: scanAlertCount,
+    } = await scanCurrentImage({
       context,
       container,
       securityConfiguration,
+      cycleId,
     });
+    alertCount = scanAlertCount;
     await scanUpdateImage({
       context,
       container,
@@ -397,6 +416,15 @@ async function handleScanContainer(
     sendErrorResponse(res, 500, GENERIC_SCAN_ERROR_MESSAGE);
   } finally {
     scanState.inFlightOnDemandScans = Math.max(0, scanState.inFlightOnDemandScans - 1);
+    const completedAt = new Date().toISOString();
+    await context.emitSecurityScanCycleComplete({
+      cycleId,
+      scannedCount: 1,
+      alertCount,
+      scope: 'on-demand-single',
+      startedAt,
+      completedAt,
+    });
   }
 }
 

@@ -100,3 +100,13 @@ export function prepareSelfUpdateOperation(args: PrepareSelfUpdateOperationArgs)
 
   return operation.id;
 }
+
+export function markSelfUpdateOperationFailed(
+  operationId: string,
+  lastError: string,
+): ReturnType<typeof updateOperationStore.markOperationTerminal> {
+  return updateOperationStore.markOperationTerminal(operationId, {
+    status: 'failed',
+    lastError,
+  });
+}

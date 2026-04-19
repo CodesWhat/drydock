@@ -30,6 +30,7 @@ vi.mock('../../event/index.js', () => ({
   registerContainerUpdateApplied: vi.fn(),
   registerContainerUpdateFailed: vi.fn(),
   registerSecurityAlert: vi.fn(),
+  registerSecurityScanCycleComplete: vi.fn(),
 }));
 
 vi.mock('../../configuration/index.js', () => ({
@@ -458,6 +459,60 @@ describe('agent API event', () => {
       expect(payload).toContain('dd:security-alert');
       expect(payload).not.toContain('"containerName"');
       expect(payload).not.toContain('"details"');
+    });
+
+    test('security-alert handler should include cycleId so controller can correlate cycles', () => {
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+      eventApi.initEvents();
+
+      const securityAlertHandler = event.registerSecurityAlert.mock.calls[0][0];
+      securityAlertHandler({
+        containerName: 'local_nginx',
+        details: '1 critical vulnerability',
+        status: 'blocked',
+        blockingCount: 1,
+        cycleId: 'cycle-xyz',
+      });
+
+      const payload = res.write.mock.calls[0][0];
+      expect(payload).toContain('"cycleId":"cycle-xyz"');
+    });
+
+    test('security-scan-cycle-complete handler should forward cycle metadata to subscribers', () => {
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+      eventApi.initEvents();
+
+      const cycleHandler = event.registerSecurityScanCycleComplete.mock.calls[0][0];
+      cycleHandler({
+        cycleId: 'cycle-xyz',
+        scannedCount: 5,
+        alertCount: 2,
+        startedAt: '2026-04-17T22:30:00.000Z',
+        completedAt: '2026-04-17T22:30:10.000Z',
+        scope: 'scheduled',
+      });
+
+      expect(res.write).toHaveBeenCalled();
+      const payload = res.write.mock.calls[0][0];
+      expect(payload).toContain('dd:security-scan-cycle-complete');
+      expect(payload).toContain('"cycleId":"cycle-xyz"');
+      expect(payload).toContain('"scannedCount":5');
+      expect(payload).toContain('"alertCount":2');
+    });
+
+    test('security-scan-cycle-complete handler should tolerate non-object payloads', () => {
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+      eventApi.initEvents();
+
+      const cycleHandler = event.registerSecurityScanCycleComplete.mock.calls[0][0];
+      cycleHandler(null);
+
+      expect(res.write).toHaveBeenCalled();
+      const payload = res.write.mock.calls[0][0];
+      expect(payload).toContain('dd:security-scan-cycle-complete');
     });
 
     test('watcher-snapshot handler should send watcher identity and sanitized containers', () => {
