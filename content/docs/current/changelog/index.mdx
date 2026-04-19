@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **[#305](https://github.com/CodesWhat/drydock/issues/305)** — Hide Pinned now hides *every* pinned container again, matching rc.8 behavior and the reporter's expectation when combining Hide Pinned with Has Update. #293 had carved out an exception for pinned rows with a pending update, but that conflated "declutter" with "surface actionable pins" and broke the filter for users who pin infrastructure containers (databases, edge, etc.) and want Hide Pinned to simply remove every pinned row from the list. The pin-to-wait-out-a-regression scenario from #293 is now addressed by simply unchecking Hide Pinned — predictable filter semantics over clever cross-filter logic.
 - **[#296](https://github.com/CodesWhat/drydock/issues/296)** (follow-up) — When `docker-socket-proxy` blocks `GET /info` (the default — `INFO=0`), drydock now logs an actionable warning naming the watcher, the error, and the fix (`set INFO=1 on your docker-socket-proxy config, or set DD_SERVER_NAME to override`) instead of silently falling back to the container short ID. The socket-proxy setup doc and compose examples now include `INFO=1` in the required environment variables. Default notification body templates no longer repeat the `[server]` source prefix that already appears in the title — providers that concatenate title + body (Telegram, Slack, Mattermost, Matrix, Teams, Google Chat, Rocket.Chat) are unaffected because source context is carried by the title.
 
 ## [1.5.0-rc.10] — 2026-04-18

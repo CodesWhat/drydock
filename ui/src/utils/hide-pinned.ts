@@ -1,21 +1,15 @@
 import type { Container } from '../types/container';
 
 /**
- * Hide Pinned is a decluttering filter for static pinned containers the user
- * doesn't expect to rotate (databases, infra services pinned to specific
- * versions). It should NOT hide a pinned container that has a pending update,
- * because that update is exactly the signal the user is watching for — pinning
- * to `12.3.2` to wait out a regression is common, and the point is to notice
- * when `12.3.3` ships. See #293.
+ * Hide Pinned is a simple decluttering filter: when active, hide every
+ * container whose tag is a specific/pinned version. A pinned container with a
+ * pending update is still pinned — users who want to see it can uncheck the
+ * filter. #293 briefly kept such rows visible, but that conflated "declutter"
+ * with "surface actionable pins" and broke the filter for reporters combining
+ * Hide Pinned with Has Update (#305).
  */
 export function matchesHidePinnedFilter(container: Container, hidePinned: boolean): boolean {
-  if (!hidePinned) {
-    return true;
-  }
-  if (container.tagPinned !== true) {
-    return true;
-  }
-  return Boolean(container.newTag);
+  return !hidePinned || container.tagPinned !== true;
 }
 
 export function filterContainersByHidePinned(

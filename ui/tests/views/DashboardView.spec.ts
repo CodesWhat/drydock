@@ -700,12 +700,10 @@ describe('DashboardView', () => {
       expect(updatesCard?.text()).toContain('1');
     });
 
-    it('keeps pinned containers with pending updates visible across dashboard widgets when hidePinned is enabled (#293)', async () => {
-      // Hide Pinned is a decluttering filter for static pinned containers; a
-      // pinned container with an active update is exactly what the user is
-      // watching for (reporter pinned `grafana:12.3.2` to wait out a
-      // regression and wanted the next release to appear). The filter should
-      // only hide pinned containers that have no pending update.
+    it('hides pinned containers across dashboard widgets when hidePinned is enabled, including ones with updates (#305)', async () => {
+      // Hide Pinned is a pure declutter: pinned containers are hidden from
+      // dashboard widgets regardless of update status. Users who want to see
+      // a pinned row with a pending update uncheck the filter.
       const { flushPreferences, preferences } = await import('@/preferences/store');
       preferences.containers.filters.hidePinned = true;
       flushPreferences();
@@ -732,15 +730,14 @@ describe('DashboardView', () => {
 
       const statCards = wrapper.findAll('.stat-card');
       const updatesCard = statCards.find((c) => c.text().includes('Updates Available'));
-      expect(updatesCard?.text()).toContain('2');
+      expect(updatesCard?.text()).toContain('1');
 
       const recentUpdatesWidget = wrapper.find('[data-widget-id="recent-updates"]');
       expect(recentUpdatesWidget.text()).toContain('floating');
-      expect(recentUpdatesWidget.text()).toContain('pinned');
+      expect(recentUpdatesWidget.text()).not.toContain('pinned');
 
       const updateBreakdownWidget = wrapper.find('[data-widget-id="update-breakdown"]');
       expect(updateBreakdownWidget.text()).toContain('Major');
-      expect(updateBreakdownWidget.text()).toContain('Minor');
     });
 
     it('computes security issues count from blocked and unsafe', async () => {
