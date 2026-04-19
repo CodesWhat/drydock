@@ -384,6 +384,30 @@ describe('SecurityView', () => {
       }
     });
 
+    it('refetches container update state when a container change SSE event arrives', async () => {
+      vi.useFakeTimers();
+      try {
+        mockContainers([makeContainer()]);
+        const w = factory();
+        await vi.waitFor(() => {
+          expect(mockGetAllContainers).toHaveBeenCalledOnce();
+        });
+        await flushPromises();
+        const callsBeforeEvent = mockGetAllContainers.mock.calls.length;
+
+        globalThis.dispatchEvent(new CustomEvent('dd:sse-container-changed'));
+        await flushPromises();
+        expect(mockGetAllContainers.mock.calls.length).toBe(callsBeforeEvent);
+
+        vi.advanceTimersByTime(400);
+        await flushPromises();
+        expect(mockGetAllContainers.mock.calls.length).toBeGreaterThan(callsBeforeEvent);
+        w.unmount();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('skips containers without security scan data', async () => {
       mockContainers([
         makeContainer(),

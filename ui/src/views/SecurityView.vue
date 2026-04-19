@@ -270,12 +270,20 @@ const chooserChoices = computed<ContainerChoice[]>(() => {
 });
 
 let scanCompletedDebounceTimer: ReturnType<typeof setTimeout> | undefined;
+let containerChangedDebounceTimer: ReturnType<typeof setTimeout> | undefined;
 
 function handleSseScanCompleted() {
   clearTimeout(scanCompletedDebounceTimer);
   scanCompletedDebounceTimer = setTimeout(() => {
     void fetchVulnerabilities();
   }, 800);
+}
+
+function handleSseContainerChanged() {
+  clearTimeout(containerChangedDebounceTimer);
+  containerChangedDebounceTimer = setTimeout(() => {
+    void fetchContainers();
+  }, 400);
 }
 
 async function scanAllContainers() {
@@ -307,6 +315,7 @@ const tableColumns = computed(() => {
 
 const sseScanCompletedListener = handleSseScanCompleted as EventListener;
 const sseConnectedListener = handleSseScanCompleted as EventListener;
+const sseContainerChangedListener = handleSseContainerChanged as EventListener;
 
 onMounted(() => {
   void fetchSecurityRuntimeStatus();
@@ -314,12 +323,15 @@ onMounted(() => {
   void fetchVulnerabilities();
   globalThis.addEventListener('dd:sse-scan-completed', sseScanCompletedListener);
   globalThis.addEventListener('dd:sse-connected', sseConnectedListener);
+  globalThis.addEventListener('dd:sse-container-changed', sseContainerChangedListener);
 });
 
 onUnmounted(() => {
   clearTimeout(scanCompletedDebounceTimer);
+  clearTimeout(containerChangedDebounceTimer);
   globalThis.removeEventListener('dd:sse-scan-completed', sseScanCompletedListener);
   globalThis.removeEventListener('dd:sse-connected', sseConnectedListener);
+  globalThis.removeEventListener('dd:sse-container-changed', sseContainerChangedListener);
 });
 </script>
 
