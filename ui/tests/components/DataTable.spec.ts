@@ -474,5 +474,64 @@ describe('DataTable', () => {
       expect(w.findAll('tbody tr').some((tr) => tr.text().includes('Container 1'))).toBe(false);
       expect(w.findAll('tbody tr').some((tr) => tr.text().includes('Container 25'))).toBe(true);
     });
+
+    it('honors a caller-provided rowHeight estimator for heterogeneous rows', async () => {
+      // Two tall anchor rows (200px each) bracket many thin rows (20px each). The bottom
+      // spacer should reflect the real prefix-sum total, not rows.length * fallback height.
+      const rows = [
+        { id: 'tall-top', name: 'TallTop', status: '', kind: 'tall' },
+        ...Array.from({ length: 100 }, (_, i) => ({
+          id: `thin-${i}`,
+          name: `Thin ${i}`,
+          status: '',
+          kind: 'thin',
+        })),
+        { id: 'tall-bottom', name: 'TallBottom', status: '', kind: 'tall' },
+      ];
+      const rowHeight = (row: Record<string, unknown>) => (row.kind === 'tall' ? 200 : 20);
+
+      const w = factory({
+        rows,
+        virtualScroll: true,
+        virtualRowHeight: 20,
+        virtualMaxHeight: '100px',
+        rowHeight,
+      });
+
+      const scrollViewport = w.find('[data-test="data-table-scroll"]');
+      expect(scrollViewport.exists()).toBe(true);
+
+      // Initial: only the tall top + first few thin rows visible.
+      expect(w.findAll('tbody tr').some((tr) => tr.text().includes('TallTop'))).toBe(true);
+      expect(w.findAll('tbody tr').some((tr) => tr.text().includes('TallBottom'))).toBe(false);
+
+      // Scroll far enough to reach the bottom anchor (200 + 100*20 = 2200).
+      (scrollViewport.element as HTMLElement).scrollTop = 2400;
+      scrollViewport.trigger('scroll');
+      await nextTick();
+
+      expect(w.findAll('tbody tr').some((tr) => tr.text().includes('TallBottom'))).toBe(true);
+      expect(w.findAll('tbody tr').some((tr) => tr.text().includes('TallTop'))).toBe(false);
+    });
+
+    it('falls back to virtualRowHeight when the rowHeight estimator returns an invalid value', () => {
+      const rows = [
+        { id: '1', name: 'A', status: '' },
+        { id: '2', name: 'B', status: '' },
+      ];
+      const rowHeight = () => Number.NaN;
+
+      const w = factory({
+        rows,
+        virtualScroll: true,
+        virtualRowHeight: 50,
+        virtualMaxHeight: '200px',
+        rowHeight,
+      });
+
+      // Both rows fit within 200px at 50px each, so both should render.
+      const dataRows = w.findAll('tbody tr').filter((tr) => !tr.attributes('aria-hidden'));
+      expect(dataRows).toHaveLength(2);
+    });
   });
 });
