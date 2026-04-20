@@ -487,6 +487,99 @@ describe('ContainersView', () => {
       expect(vm.containerMetaMap.c2).toMatchObject({ id: 'c2', name: 'tdarr_node' });
       expect(vm.containerMetaMap.tdarr_node).toBeUndefined();
     });
+
+    describe('identical-list dedup optimisation', () => {
+      it('does not reassign containers.value when a reload returns identical data', async () => {
+        const container = makeContainer({ id: 'c1', name: 'nginx', status: 'running' });
+        const wrapper = await mountContainersView([container]);
+        const vm = wrapper.vm as any;
+
+        const firstRef = vm.containers;
+
+        // Simulate a second loadContainers call returning identical data
+        const identicalContainer = { ...container };
+        mockGetAllContainers.mockResolvedValue([
+          { ...identicalContainer, displayName: identicalContainer.name },
+        ]);
+        const { mapApiContainers } = await import('@/utils/container-mapper');
+        (mapApiContainers as ReturnType<typeof vi.fn>).mockReturnValue([identicalContainer]);
+
+        await vm.loadContainers();
+        await flushPromises();
+
+        // The containers array reference must be the same object (no reassignment occurred)
+        expect(vm.containers).toBe(firstRef);
+      });
+
+      it('reassigns containers.value when a field changes', async () => {
+        const container = makeContainer({ id: 'c1', name: 'nginx', status: 'running' });
+        const wrapper = await mountContainersView([container]);
+        const vm = wrapper.vm as any;
+
+        const firstRef = vm.containers;
+
+        // New data with a changed field (newTag appeared)
+        const updatedContainer = { ...container, newTag: '2.0.0', updateKind: 'major' as const };
+        mockGetAllContainers.mockResolvedValue([
+          { ...updatedContainer, displayName: updatedContainer.name },
+        ]);
+        const { mapApiContainers } = await import('@/utils/container-mapper');
+        (mapApiContainers as ReturnType<typeof vi.fn>).mockReturnValue([updatedContainer]);
+
+        await vm.loadContainers();
+        await flushPromises();
+
+        // The containers array reference must be a new object (reassignment occurred)
+        expect(vm.containers).not.toBe(firstRef);
+        expect(vm.containers[0].newTag).toBe('2.0.0');
+      });
+
+      it('reassigns containers.value when container count changes', async () => {
+        const container = makeContainer({ id: 'c1', name: 'nginx' });
+        const wrapper = await mountContainersView([container]);
+        const vm = wrapper.vm as any;
+
+        const firstRef = vm.containers;
+
+        // New data with an extra container
+        const redis = makeContainer({ id: 'c2', name: 'redis' });
+        mockGetAllContainers.mockResolvedValue([
+          { ...container, displayName: container.name },
+          { ...redis, displayName: redis.name },
+        ]);
+        const { mapApiContainers } = await import('@/utils/container-mapper');
+        (mapApiContainers as ReturnType<typeof vi.fn>).mockReturnValue([container, redis]);
+
+        await vm.loadContainers();
+        await flushPromises();
+
+        expect(vm.containers).not.toBe(firstRef);
+        expect(vm.containers).toHaveLength(2);
+      });
+
+      it('reassigns containers.value when container order changes', async () => {
+        const nginx = makeContainer({ id: 'c1', name: 'nginx' });
+        const redis = makeContainer({ id: 'c2', name: 'redis' });
+        const wrapper = await mountContainersView([nginx, redis]);
+        const vm = wrapper.vm as any;
+
+        const firstRef = vm.containers;
+
+        // Same containers, reversed order
+        mockGetAllContainers.mockResolvedValue([
+          { ...redis, displayName: redis.name },
+          { ...nginx, displayName: nginx.name },
+        ]);
+        const { mapApiContainers } = await import('@/utils/container-mapper');
+        (mapApiContainers as ReturnType<typeof vi.fn>).mockReturnValue([redis, nginx]);
+
+        await vm.loadContainers();
+        await flushPromises();
+
+        expect(vm.containers).not.toBe(firstRef);
+        expect(vm.containers[0].id).toBe('c2');
+      });
+    });
   });
 
   describe('route query filters', () => {
@@ -2113,6 +2206,131 @@ describe('ContainersView', () => {
         expect(mockGetContainerGroups).toHaveBeenCalledTimes(1);
         expect(mockGetContainerVulnerabilities).toHaveBeenCalledTimes(1);
         expect(mockGetContainerSbom).toHaveBeenCalledTimes(1);
+
+        wrapper.unmount();
+      } finally {
+        addEventListenerSpy.mockRestore();
+        vi.useRealTimers();
+      }
+    });
+
+    it('dd:sse-scan-completed does NOT call loadContainers (only security detail refresh)', async () => {
+      vi.useFakeTimers();
+      const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
+      try {
+        const c = makeContainer({ id: 'c1', name: 'nginx' });
+        const wrapper = await mountContainersView(
+          [c],
+          [{ id: 'c1', name: 'nginx', displayName: 'nginx' }],
+        );
+        const vm = wrapper.vm as any;
+        const scanCompletedListener = addEventListenerSpy.mock.calls.findLast(
+          ([eventName]) => eventName === 'dd:sse-scan-completed',
+        )?.[1] as EventListener | undefined;
+
+        expect(scanCompletedListener).toBeTypeOf('function');
+
+        mockGetAllContainers.mockClear();
+        mockGetContainerVulnerabilities.mockClear();
+
+        // No selected container: scan-completed must NOT trigger loadContainers
+        vm.selectedContainer = null;
+        scanCompletedListener?.(new Event('dd:sse-scan-completed'));
+        await flushPromises();
+        vi.runAllTimers();
+        await flushPromises();
+
+        expect(mockGetAllContainers).not.toHaveBeenCalled();
+
+        // With selected container: scan-completed still must NOT trigger loadContainers,
+        // but SHOULD trigger loadDetailSecurityData (vulnerability/sbom refresh)
+        vm.selectedContainer = c;
+        mockGetAllContainers.mockClear();
+        mockGetContainerVulnerabilities.mockClear();
+        scanCompletedListener?.(new Event('dd:sse-scan-completed'));
+        await flushPromises();
+        vi.runAllTimers();
+        await flushPromises();
+
+        expect(mockGetAllContainers).not.toHaveBeenCalled();
+        // loadDetailSecurityData should fire (vulnerability refresh is the legit side-effect)
+        expect(mockGetContainerVulnerabilities).toHaveBeenCalled();
+
+        wrapper.unmount();
+      } finally {
+        addEventListenerSpy.mockRestore();
+        vi.useRealTimers();
+      }
+    });
+
+    it('dd:sse-update-operation-changed does NOT call loadContainers', async () => {
+      vi.useFakeTimers();
+      const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
+      try {
+        const c = makeContainer({ id: 'c1', name: 'nginx' });
+        const wrapper = await mountContainersView(
+          [c],
+          [{ id: 'c1', name: 'nginx', displayName: 'nginx' }],
+        );
+        const operationListener = addEventListenerSpy.mock.calls.findLast(
+          ([eventName]) => eventName === 'dd:sse-update-operation-changed',
+        )?.[1] as EventListener | undefined;
+
+        expect(operationListener).toBeTypeOf('function');
+
+        mockGetAllContainers.mockClear();
+
+        operationListener?.(
+          new CustomEvent('dd:sse-update-operation-changed', {
+            detail: {
+              operationId: 'op-1',
+              containerId: 'c1',
+              containerName: 'nginx',
+              status: 'in-progress',
+              phase: 'pulling',
+            },
+          }),
+        );
+        await flushPromises();
+        vi.runAllTimers();
+        await flushPromises();
+
+        expect(mockGetAllContainers).not.toHaveBeenCalled();
+
+        wrapper.unmount();
+      } finally {
+        addEventListenerSpy.mockRestore();
+        vi.useRealTimers();
+      }
+    });
+
+    it('dd:sse-container-changed DOES trigger loadContainers after debounce', async () => {
+      vi.useFakeTimers();
+      const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
+      try {
+        const c = makeContainer({ id: 'c1', name: 'nginx' });
+        const wrapper = await mountContainersView(
+          [c],
+          [{ id: 'c1', name: 'nginx', displayName: 'nginx' }],
+        );
+        const containerChangedListener = addEventListenerSpy.mock.calls.findLast(
+          ([eventName]) => eventName === 'dd:sse-container-changed',
+        )?.[1] as EventListener | undefined;
+
+        expect(containerChangedListener).toBeTypeOf('function');
+
+        vi.clearAllTimers();
+        mockGetAllContainers.mockClear();
+
+        containerChangedListener?.(new Event('dd:sse-container-changed'));
+        await flushPromises();
+        // Before debounce fires — no call yet
+        expect(mockGetAllContainers).not.toHaveBeenCalled();
+
+        vi.advanceTimersByTime(500);
+        await flushPromises();
+        // After debounce fires — exactly one call
+        expect(mockGetAllContainers).toHaveBeenCalledTimes(1);
 
         wrapper.unmount();
       } finally {

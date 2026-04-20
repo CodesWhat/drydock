@@ -117,10 +117,38 @@ function buildContainerLookupMaps(apiContainers: Record<string, unknown>[]) {
   return { idMap, metaMap };
 }
 
+/**
+ * Produce a stable fingerprint string for a container list so that
+ * loadContainers() can skip reassigning `containers.value` — and thereby
+ * avoid re-running the full displayContainers → sortedContainers →
+ * groupedContainers computed chain — when the incoming data is identical to
+ * what is already stored.
+ *
+ * Performance note: this walk is O(N × fields) but produces no Vue reactive
+ * side-effects and allocates far less than the chain re-eval + DOM diffing
+ * that would otherwise occur on every cron-triggered reload.
+ */
+function containerListFingerprint(list: Container[]): string {
+  // JSON.stringify per container gives a stable, field-complete signature.
+  // Sorting each object's keys makes the comparison order-independent within
+  // a single container (guards against mapApiContainers ever changing key order).
+  return list
+    .map((c) => JSON.stringify(c, Object.keys(c as unknown as Record<string, unknown>).sort()))
+    .join('\x00');
+}
+
 async function loadContainers() {
   try {
     const apiContainers = await getAllContainers();
-    containers.value = mapApiContainers(apiContainers);
+    const mapped = mapApiContainers(apiContainers);
+    // Skip reactive assignment (and downstream chain re-eval) when incoming
+    // data is bit-for-bit identical to the current list.
+    if (
+      containers.value.length !== mapped.length ||
+      containerListFingerprint(mapped) !== containerListFingerprint(containers.value)
+    ) {
+      containers.value = mapped;
+    }
     const { idMap, metaMap } = buildContainerLookupMaps(apiContainers as Record<string, unknown>[]);
     containerIdMap.value = idMap;
     containerMetaMap.value = metaMap;
@@ -1040,8 +1068,19 @@ function clearSseContainerChangedTimer() {
   sseContainerChangedTimer = undefined;
 }
 
-async function handleSseScanCompleted() {
+// Refreshes container list and security detail data. Used by container-changed and connected
+// events where the container set itself may have changed.
+async function handleSseContainerChanged() {
   await loadContainers();
+  if (selectedContainerId.value) {
+    await loadDetailSecurityData();
+  }
+}
+
+// Scan-completed only refreshes security detail — container-changed events emitted by the same
+// scan cycle already drive loadContainers() via the debounced container-changed listener.
+// Calling loadContainers() here would produce a duplicate GET /api/containers per scan.
+async function handleSseScanCompleted() {
   if (selectedContainerId.value) {
     await loadDetailSecurityData();
   }
@@ -1052,7 +1091,7 @@ const sseContainerChangedListener = (() => {
   clearSseContainerChangedTimer();
   sseContainerChangedTimer = setTimeout(() => {
     sseContainerChangedTimer = undefined;
-    void handleSseScanCompleted();
+    void handleSseContainerChanged();
   }, SSE_CONTAINER_CHANGED_DEBOUNCE_MS);
 }) as EventListener;
 function resolveActiveOperationPhase(args: {
@@ -1146,7 +1185,7 @@ function applyOperationPatch(event: Event) {
   }
 }
 
-const sseConnectedListener = handleSseScanCompleted as EventListener;
+const sseConnectedListener = handleSseContainerChanged as EventListener;
 const sseUpdateOperationChangedListener = ((event: Event) => {
   clearSseContainerChangedTimer();
   applyOperationPatch(event);
