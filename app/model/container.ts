@@ -634,12 +634,12 @@ function getLink(container: Container, originalTagValue: string) {
 }
 
 function addTagPinnedProperty(container: Container) {
-  Object.defineProperty(container, 'tagPinned', {
-    enumerable: true,
-    get(this: Container) {
-      return isTagPinned(this.image.tag.value, this.transformTags);
-    },
-  });
+  // Materialize to a plain data property instead of a live getter. Store reads clone
+  // containers via spread + structuredClone on every request, and an enumerable getter
+  // would recompile the user's transform-tags regex for every container in every clone.
+  // Tag values don't mutate in production once validate() runs, so the cached value stays
+  // accurate; `validate()` recomputes it on any re-entry into the model.
+  container.tagPinned = isTagPinned(container.image.tag.value, container.transformTags);
 }
 
 /**
