@@ -231,7 +231,7 @@ const {
 } = useDetailPanel();
 const detailPanelStorage = useDetailPanelStorage();
 
-const isCompact = computed(() => windowNarrow.value || detailPanelOpen.value);
+const isCompact = computed(() => windowNarrow.value);
 
 function syncSelectedContainerReference() {
   if (!selectedContainer.value) {
