@@ -358,6 +358,7 @@ describe('Docker Watcher', () => {
 
     test('should expose nextRunAt via getMetadata when cron is scheduled', async () => {
       mockCron.createTask.mockReturnValue({
+        destroy: vi.fn(),
         timeMatcher: {
           getNextMatch: vi.fn(() => new Date('2026-02-13T03:00:00.000Z')),
         },
@@ -373,6 +374,7 @@ describe('Docker Watcher', () => {
     test('should expose queued maintenance window as the next run', async () => {
       maintenance.getNextMaintenanceWindow.mockReturnValue(new Date('2026-02-13T04:00:00.000Z'));
       mockCron.createTask.mockReturnValue({
+        destroy: vi.fn(),
         timeMatcher: {
           getNextMatch: vi.fn(() => new Date('2026-02-13T03:00:00.000Z')),
         },
@@ -395,6 +397,7 @@ describe('Docker Watcher', () => {
       );
       maintenance.getNextMaintenanceWindow.mockReturnValue(new Date('2026-02-13T04:00:00.000Z'));
       mockCron.createTask.mockReturnValue({
+        destroy: vi.fn(),
         timeMatcher: {
           getNextMatch: vi.fn(() => new Date('2026-02-13T03:00:00.000Z')),
         },
