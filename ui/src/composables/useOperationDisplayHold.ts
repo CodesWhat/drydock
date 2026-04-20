@@ -14,6 +14,9 @@ export interface ContainerSortSnapshot {
   status: Container['status'];
   updateKind: Container['updateKind'];
   newTag: Container['newTag'];
+  currentTag: Container['currentTag'];
+  image: Container['image'];
+  imageCreated?: Container['imageCreated'];
 }
 
 interface OperationDisplayHoldRecord {
@@ -258,7 +261,10 @@ function projectContainerDisplayState<T extends Container>(container: T): T {
     sortSnapshot !== undefined &&
     (sortSnapshot.status !== container.status ||
       sortSnapshot.updateKind !== container.updateKind ||
-      sortSnapshot.newTag !== container.newTag);
+      sortSnapshot.newTag !== container.newTag ||
+      sortSnapshot.currentTag !== container.currentTag ||
+      sortSnapshot.image !== container.image ||
+      sortSnapshot.imageCreated !== container.imageCreated);
 
   return {
     ...container,
@@ -268,6 +274,9 @@ function projectContainerDisplayState<T extends Container>(container: T): T {
           status: sortSnapshot.status,
           updateKind: sortSnapshot.updateKind,
           newTag: sortSnapshot.newTag,
+          currentTag: sortSnapshot.currentTag,
+          image: sortSnapshot.image,
+          imageCreated: sortSnapshot.imageCreated,
         }
       : {}),
   } as T;

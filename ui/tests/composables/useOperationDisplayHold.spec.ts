@@ -406,6 +406,9 @@ describe('useOperationDisplayHold', () => {
       status: 'running' as const,
       updateKind: 'minor' as const,
       newTag: '2.0.0',
+      currentTag: '1.0.0',
+      image: 'nginx',
+      imageCreated: '2026-04-01T00:00:00.000Z',
     };
 
     hold.holdOperationDisplay({
@@ -469,6 +472,9 @@ describe('useOperationDisplayHold', () => {
       status: 'running' as const,
       updateKind: 'patch' as const,
       newTag: '1.1.1',
+      currentTag: '1.1.0',
+      image: 'nginx',
+      imageCreated: '2026-04-01T00:00:00.000Z',
     };
 
     hold.holdOperationDisplay({
@@ -499,6 +505,9 @@ describe('useOperationDisplayHold', () => {
       status: 'running' as const,
       updateKind: 'minor' as const,
       newTag: '2.0.0',
+      currentTag: '1.0.0',
+      image: 'nginx',
+      imageCreated: '2026-04-01T00:00:00.000Z',
     };
 
     hold.holdOperationDisplay({
@@ -528,6 +537,45 @@ describe('useOperationDisplayHold', () => {
     expect(projected.updateOperation).toStrictEqual(operation);
   });
 
+  it('stabilises currentTag, image, and imageCreated so version/image/imageAge sorts do not shift mid-update', async () => {
+    const hold = await loadComposable();
+    const operation = makeOperation({ id: 'op-version-sort' });
+    const sortSnapshot = {
+      status: 'running' as const,
+      updateKind: 'minor' as const,
+      newTag: '2.0.0',
+      currentTag: '1.0.0',
+      image: 'nginx',
+      imageCreated: '2026-01-01T00:00:00.000Z',
+    };
+
+    hold.holdOperationDisplay({
+      operationId: operation.id,
+      operation,
+      containerId: 'container-a',
+      containerName: 'web',
+      sortSnapshot,
+      now: Date.now(),
+    });
+
+    // Post-update container with new tag applied and new image-created timestamp
+    const updatedContainer = makeContainer({
+      id: 'container-a',
+      name: 'web',
+      status: 'running',
+      updateKind: null,
+      newTag: null,
+      currentTag: '2.0.0',
+      image: 'nginx',
+      imageCreated: '2026-04-13T12:00:00.000Z',
+    });
+
+    const projected = hold.projectContainerDisplayState(updatedContainer);
+    expect(projected.currentTag).toBe('1.0.0');
+    expect(projected.imageCreated).toBe('2026-01-01T00:00:00.000Z');
+    expect(projected.newTag).toBe('2.0.0');
+  });
+
   it('sort snapshot projection does not override sort fields when they already match the snapshot', async () => {
     const hold = await loadComposable();
     const operation = makeOperation({ id: 'op-same-sort' });
@@ -535,6 +583,9 @@ describe('useOperationDisplayHold', () => {
       status: 'running' as const,
       updateKind: 'minor' as const,
       newTag: '2.0.0',
+      currentTag: '1.0.0',
+      image: 'nginx',
+      imageCreated: '2026-04-01T00:00:00.000Z',
     };
 
     hold.holdOperationDisplay({

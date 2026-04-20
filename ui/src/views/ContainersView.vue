@@ -1192,7 +1192,7 @@ function applyOperationPatch(event: Event) {
       updatedAt: new Date().toISOString(),
     };
     row.updateOperation = nextOperation;
-    if (status === 'in-progress' && typeof operationId === 'string' && operationId.length > 0) {
+    if (typeof operationId === 'string' && operationId.length > 0) {
       holdOperationDisplay({
         operationId,
         operation: nextOperation,
@@ -1203,6 +1203,9 @@ function applyOperationPatch(event: Event) {
           status: row.status,
           updateKind: row.updateKind,
           newTag: row.newTag,
+          currentTag: row.currentTag,
+          image: row.image,
+          imageCreated: row.imageCreated,
         },
       });
     }

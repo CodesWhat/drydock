@@ -2621,6 +2621,58 @@ describe('ContainersView', () => {
       }
     });
 
+    it('fires toast.success when succeeded follows only a queued SSE (fast single update, no in-progress)', async () => {
+      const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
+      vi.useFakeTimers();
+      try {
+        const c = makeContainer({ id: 'c1', name: 'nginx' });
+        const wrapper = await mountContainersView(
+          [c],
+          [{ id: 'c1', name: 'nginx', displayName: 'nginx' }],
+        );
+        const operationListener = addEventListenerSpy.mock.calls.findLast(
+          ([eventName]) => eventName === 'dd:sse-update-operation-changed',
+        )?.[1] as EventListener | undefined;
+
+        // Only queued SSE fires — backend skips in-progress phase on fast standalone updates
+        operationListener?.(
+          new CustomEvent('dd:sse-update-operation-changed', {
+            detail: {
+              operationId: 'op-fast',
+              containerId: 'c1',
+              containerName: 'nginx',
+              status: 'queued',
+              phase: 'queued',
+            },
+          }),
+        );
+
+        const { useToast } = await import('@/composables/useToast');
+        const { toasts } = useToast();
+        const countBefore = toasts.value.length;
+
+        operationListener?.(
+          new CustomEvent('dd:sse-update-operation-changed', {
+            detail: {
+              operationId: 'op-fast',
+              containerId: 'c1',
+              containerName: 'nginx',
+              status: 'succeeded',
+              phase: 'succeeded',
+            },
+          }),
+        );
+
+        expect(toasts.value.length).toBe(countBefore + 1);
+        expect(toasts.value.at(-1)).toMatchObject({ tone: 'success', title: 'Updated: nginx' });
+
+        wrapper.unmount();
+      } finally {
+        addEventListenerSpy.mockRestore();
+        vi.useRealTimers();
+      }
+    });
+
     it('does NOT fire a toast when succeeded SSE has no tracked in-progress operation (replay guard)', async () => {
       const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
       vi.useFakeTimers();
