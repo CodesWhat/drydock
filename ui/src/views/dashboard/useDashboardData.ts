@@ -6,6 +6,12 @@ import { getServer } from '../../services/server';
 import { type ContainerStatsSummaryItem, getAllContainerStats } from '../../services/stats';
 import { getAllWatchers } from '../../services/watcher';
 import type { Container } from '../../types/container';
+import {
+  type ActiveContainerUpdateOperationPhase,
+  isActiveContainerUpdateOperationPhaseForStatus,
+  isActiveContainerUpdateOperationStatus,
+  isContainerUpdateOperationStatus,
+} from '../../types/update-operation';
 import { type ApiContainerInput, mapApiContainers } from '../../utils/container-mapper';
 import { errorMessage } from '../../utils/error';
 import type {
@@ -128,6 +134,64 @@ function hasRenderedDashboardData(state: DashboardStateRefs): boolean {
   );
 }
 
+function resolveActiveOperationPhase(args: {
+  status: 'queued' | 'in-progress';
+  phase: unknown;
+  previousPhase?: unknown;
+}): ActiveContainerUpdateOperationPhase {
+  if (isActiveContainerUpdateOperationPhaseForStatus(args.status, args.phase)) {
+    return args.phase;
+  }
+  if (
+    args.previousPhase !== undefined &&
+    isActiveContainerUpdateOperationPhaseForStatus(args.status, args.previousPhase)
+  ) {
+    return args.previousPhase;
+  }
+  return args.status === 'queued' ? 'queued' : 'pulling';
+}
+
+function applyDashboardOperationPatch(state: DashboardStateRefs, event: Event): void {
+  const payload = (event as CustomEvent)?.detail;
+  if (!payload || typeof payload !== 'object') {
+    return;
+  }
+
+  const { operationId, containerId, newContainerId, containerName, status, phase } =
+    payload as Record<string, unknown>;
+  if (!isContainerUpdateOperationStatus(status)) {
+    return;
+  }
+
+  const idx = state.containers.value.findIndex(
+    (container) =>
+      (typeof containerId === 'string' && container.id === containerId) ||
+      (typeof newContainerId === 'string' && container.id === newContainerId) ||
+      (typeof containerName === 'string' && container.name === containerName),
+  );
+  if (idx === -1) {
+    return;
+  }
+
+  const row = state.containers.value[idx]!;
+  if (isActiveContainerUpdateOperationStatus(status)) {
+    row.updateOperation = {
+      ...(row.updateOperation ?? {}),
+      id: typeof operationId === 'string' ? operationId : (row.updateOperation?.id ?? ''),
+      status,
+      phase: resolveActiveOperationPhase({
+        status,
+        phase,
+        previousPhase: row.updateOperation?.phase,
+      }),
+      updatedAt: new Date().toISOString(),
+    };
+    return;
+  }
+
+  row.updateOperation = undefined;
+}
+
 function applyFetchedDashboardData(state: DashboardStateRefs, response: DashboardDataResponse) {
   state.containers.value = mapApiContainers(response.containersRes);
   state.containerSummary.value = buildContainerSummaryFromContainers(state.containers.value);
@@ -245,11 +309,15 @@ export function useDashboardData() {
   });
 
   const fullRefreshListener = (() => realtimeRefreshScheduler.schedule('full')) as EventListener;
+  const operationPatchListener = ((event: Event) => {
+    applyDashboardOperationPatch(state, event);
+  }) as EventListener;
   const visibilityChangeListener = maintenanceCountdownController.sync as EventListener;
   let stopMaintenanceWindowWatch: ReturnType<typeof watch> | undefined;
 
   onMounted(async () => {
     globalThis.addEventListener('dd:sse-container-changed', fullRefreshListener);
+    globalThis.addEventListener('dd:sse-update-operation-changed', operationPatchListener);
     globalThis.addEventListener('dd:sse-connected', fullRefreshListener);
     document.addEventListener('visibilitychange', visibilityChangeListener);
     stopMaintenanceWindowWatch = watch(hasMaintenanceWindows, maintenanceCountdownController.sync, {
@@ -260,6 +328,7 @@ export function useDashboardData() {
 
   onUnmounted(() => {
     globalThis.removeEventListener('dd:sse-container-changed', fullRefreshListener);
+    globalThis.removeEventListener('dd:sse-update-operation-changed', operationPatchListener);
     globalThis.removeEventListener('dd:sse-connected', fullRefreshListener);
     document.removeEventListener('visibilitychange', visibilityChangeListener);
     stopMaintenanceWindowWatch?.();

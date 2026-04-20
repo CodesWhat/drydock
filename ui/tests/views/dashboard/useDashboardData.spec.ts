@@ -240,22 +240,48 @@ describe('useDashboardData', () => {
     expect(mocks.getAllContainers).toHaveBeenCalledTimes(1);
   });
 
-  it('does NOT trigger fetchDashboardData on dd:sse-update-operation-changed events', async () => {
+  it('patches queued/in-progress dashboard operation state without fetch fan-out', async () => {
     vi.useFakeTimers();
 
+    mocks.mapApiContainers.mockReturnValue([makeContainer({ id: 'c1' })]);
     const { state } = await mountDashboardData();
     mocks.getAllContainers.mockClear();
 
-    // Operation phase transitions (queued → pulling → restarting → success) are UI
-    // signaling events only. Terminal dd:container-updated emits dd:sse-container-changed
-    // which covers the actual data mutation. Operation events must NOT trigger a
-    // dashboard refresh.
-    globalThis.dispatchEvent(new CustomEvent('dd:sse-update-operation-changed'));
-    globalThis.dispatchEvent(new CustomEvent('dd:sse-update-operation-changed'));
-    globalThis.dispatchEvent(new CustomEvent('dd:sse-update-operation-changed'));
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-update-operation-changed', {
+        detail: {
+          operationId: 'op-1',
+          containerId: 'c1',
+          status: 'queued',
+          phase: 'queued',
+        },
+      }),
+    );
+    await nextTick();
 
-    vi.advanceTimersByTime(5_000);
-    await flushPromises();
+    expect(state.containers.value[0]?.updateOperation).toMatchObject({
+      id: 'op-1',
+      status: 'queued',
+      phase: 'queued',
+    });
+
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-update-operation-changed', {
+        detail: {
+          operationId: 'op-1',
+          containerId: 'c1',
+          status: 'in-progress',
+          phase: 'pulling',
+        },
+      }),
+    );
+    await nextTick();
+
+    expect(state.containers.value[0]?.updateOperation).toMatchObject({
+      id: 'op-1',
+      status: 'in-progress',
+      phase: 'pulling',
+    });
 
     expect(mocks.getAllContainers).not.toHaveBeenCalled();
     expect(state.error.value).toBeNull();
@@ -274,7 +300,7 @@ describe('useDashboardData', () => {
     expect(mocks.getAllContainers).toHaveBeenCalledTimes(1);
   });
 
-  it('removes only container-changed and connected listeners on unmount (symmetric with add)', async () => {
+  it('removes container, operation, and connected listeners on unmount (symmetric with add)', async () => {
     const addSpy = vi.spyOn(globalThis, 'addEventListener');
     const removeSpy = vi.spyOn(globalThis, 'removeEventListener');
 
@@ -282,16 +308,16 @@ describe('useDashboardData', () => {
 
     const addedEvents = addSpy.mock.calls.map((c) => c[0]);
     expect(addedEvents).toContain('dd:sse-container-changed');
+    expect(addedEvents).toContain('dd:sse-update-operation-changed');
     expect(addedEvents).toContain('dd:sse-connected');
-    expect(addedEvents).not.toContain('dd:sse-update-operation-changed');
     expect(addedEvents).not.toContain('dd:sse-scan-completed');
 
     wrapper.unmount();
 
     const removedEvents = removeSpy.mock.calls.map((c) => c[0]);
     expect(removedEvents).toContain('dd:sse-container-changed');
+    expect(removedEvents).toContain('dd:sse-update-operation-changed');
     expect(removedEvents).toContain('dd:sse-connected');
-    expect(removedEvents).not.toContain('dd:sse-update-operation-changed');
     expect(removedEvents).not.toContain('dd:sse-scan-completed');
   });
 
