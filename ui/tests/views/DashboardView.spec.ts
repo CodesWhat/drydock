@@ -514,7 +514,7 @@ describe('DashboardView', () => {
         const timerId = setIntervalSpy.mock.results[0]?.value;
 
         mockGetAllWatchers.mockResolvedValueOnce([]);
-        globalThis.dispatchEvent(new CustomEvent('dd:sse-scan-completed'));
+        globalThis.dispatchEvent(new CustomEvent('dd:sse-container-changed'));
         vi.advanceTimersByTime(1_000);
         await flushPromises();
 
