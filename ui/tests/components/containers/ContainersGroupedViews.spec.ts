@@ -1592,4 +1592,52 @@ describe('ContainersGroupedViews', () => {
     expect(projectLink.element.tagName).toBe('A');
     expect(releaseLink.element.tagName).toBe('A');
   });
+
+  it('flat-mode tableRows reads from renderGroups[0].containers, not displayContainers', async () => {
+    const containerA = makeContainer({ id: 'c-a', name: 'alpha' });
+    const containerB = makeContainer({ id: 'c-b', name: 'beta' });
+    const { context, refs } = makeContext();
+    refs.containerViewMode.value = 'table';
+    refs.groupByStack.value = false;
+    // renderGroups holds only containerA
+    refs.renderGroups.value = [
+      {
+        key: '__flat__',
+        name: null,
+        containers: [containerA],
+        containerCount: 1,
+        updatesAvailable: 0,
+        updatableCount: 0,
+      },
+    ];
+    // displayContainers holds both — if tableRows reads here, 2 rows would render
+    refs.displayContainers.value = [containerA, containerB];
+    refs.filteredContainers.value = [containerA, containerB];
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+    await nextTick();
+
+    // Only 1 row should render because tableRows sources from renderGroups[0].containers
+    const rows = wrapper.findAll('.table-row-stub');
+    expect(rows).toHaveLength(1);
+  });
+
+  it('tableRows falls back to displayContainers when renderGroups is empty', async () => {
+    const oneContainer = makeContainer({ id: 'c-only', name: 'only' });
+    const { context, refs } = makeContext();
+    refs.containerViewMode.value = 'table';
+    refs.groupByStack.value = false;
+    // renderGroups is empty — flat branch falls back to displayContainers
+    refs.renderGroups.value = [];
+    refs.displayContainers.value = [oneContainer];
+    refs.filteredContainers.value = [oneContainer];
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+    await nextTick();
+
+    const rows = wrapper.findAll('.table-row-stub');
+    expect(rows).toHaveLength(1);
+  });
 });

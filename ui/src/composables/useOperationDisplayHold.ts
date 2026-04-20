@@ -2,6 +2,7 @@ import { ref } from 'vue';
 import type { Container, ContainerUpdateOperation } from '../types/container';
 
 export const OPERATION_DISPLAY_HOLD_MS = 1500;
+export const OPERATION_ACTIVE_HOLD_MS = 10 * 60 * 1000;
 
 interface OperationDisplayHoldTarget {
   containerId?: string;
@@ -160,8 +161,7 @@ function holdOperationDisplay(args: {
   clearReleaseTimer(args.operationId);
 
   const existing = heldOperations.value.get(args.operationId);
-  const displayUntil =
-    existing?.displayUntil ?? (args.now ?? Date.now()) + OPERATION_DISPLAY_HOLD_MS;
+  const displayUntil = (args.now ?? Date.now()) + OPERATION_ACTIVE_HOLD_MS;
 
   setHeldOperation(args.operationId, {
     containerIds: normalizeContainerIds(
@@ -190,10 +190,14 @@ function scheduleHeldOperationRelease(args: {
   let scheduled = false;
 
   for (const operationId of operationIds) {
-    const nextHold = updateHoldTargets(heldOperations.value.get(operationId)!, args);
+    const now = args.now ?? Date.now();
+    const nextHold = {
+      ...updateHoldTargets(heldOperations.value.get(operationId)!, args),
+      displayUntil: now + OPERATION_DISPLAY_HOLD_MS,
+    };
     setHeldOperation(operationId, nextHold);
 
-    const remaining = nextHold.displayUntil - (args.now ?? Date.now());
+    const remaining = nextHold.displayUntil - now;
     clearReleaseTimer(operationId);
 
     if (remaining <= 0) {

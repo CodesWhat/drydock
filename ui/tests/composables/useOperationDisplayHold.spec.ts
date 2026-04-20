@@ -102,7 +102,7 @@ describe('useOperationDisplayHold', () => {
     expect(clearTimeoutSpy).toHaveBeenCalled();
   });
 
-  it('refreshes the same operation without dropping its existing hold', async () => {
+  it('extends the hold window on every refresh so active operations survive until terminal', async () => {
     const hold = await loadComposable();
     const operation = makeOperation({ id: 'op-refresh' });
 
@@ -125,7 +125,7 @@ describe('useOperationDisplayHold', () => {
     });
 
     const refreshed = hold.heldOperations.value.get(operation.id);
-    expect(refreshed?.displayUntil).toBe(firstDisplayUntil);
+    expect(refreshed?.displayUntil).toBe((firstDisplayUntil ?? 0) + 100);
     expect(refreshed).toEqual(
       expect.objectContaining({
         containerIds: expect.arrayContaining(['container-a', 'container-b', 'container-c']),
@@ -166,16 +166,17 @@ describe('useOperationDisplayHold', () => {
       containerId: 'container-only',
     });
 
-    expect(hold.heldOperations.value.get(unnamed.id)?.displayUntil).toBe(Date.now() + 1500);
+    expect(hold.heldOperations.value.get(unnamed.id)?.displayUntil).toBe(
+      Date.now() + 10 * 60 * 1000,
+    );
 
     hold.clearHeldOperation({ containerId: 'container-only' });
     expect(hold.heldOperations.value.has(unnamed.id)).toBe(false);
   });
 
-  it('schedules release for active holds and removes expired holds immediately', async () => {
+  it('trims active hold to the short settle window on scheduleHeldOperationRelease', async () => {
     const hold = await loadComposable();
     const active = makeOperation({ id: 'op-active' });
-    const expired = makeOperation({ id: 'op-expired' });
 
     hold.holdOperationDisplay({
       operationId: active.id,
@@ -199,6 +200,7 @@ describe('useOperationDisplayHold', () => {
       expect.objectContaining({
         containerIds: expect.arrayContaining(['container-a', 'container-b', 'container-c']),
         containerName: 'web-renamed',
+        displayUntil: Date.now() + 1500,
       }),
     );
 
@@ -208,23 +210,6 @@ describe('useOperationDisplayHold', () => {
 
     await vi.advanceTimersByTimeAsync(1);
     expect(hold.getDisplayUpdateOperation('web-renamed')).toBeUndefined();
-
-    hold.holdOperationDisplay({
-      operationId: expired.id,
-      operation: expired,
-      containerId: 'container-expired',
-      containerName: 'expired',
-      now: Date.now(),
-    });
-
-    expect(
-      hold.scheduleHeldOperationRelease({
-        operationId: expired.id,
-        containerId: 'container-expired',
-        now: Date.now() + 5000,
-      }),
-    ).toBe(false);
-    expect(hold.heldOperations.value.has(expired.id)).toBe(false);
   });
 
   it('clears held operations by operation id and target aliases', async () => {
@@ -305,6 +290,13 @@ describe('useOperationDisplayHold', () => {
     hold.holdOperationDisplay({
       operationId: operation.id,
       operation,
+      containerId: 'container-expired',
+      containerName: 'expired',
+      now: Date.now(),
+    });
+
+    hold.scheduleHeldOperationRelease({
+      operationId: operation.id,
       containerId: 'container-expired',
       containerName: 'expired',
       now: Date.now(),

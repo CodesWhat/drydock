@@ -959,7 +959,7 @@ interface RenderGroup {
 const groupedContainers = computed<RenderGroup[]>(() => {
   const map = groupMembershipMap.value;
   const buckets: Record<string, typeof displayContainers.value> = {};
-  for (const container of displayContainers.value) {
+  for (const container of sortedContainers.value) {
     const groupName = map[container.id] ?? map[container.name] ?? null;
     const key = groupName ?? '__ungrouped__';
     if (!buckets[key]) {
@@ -1010,10 +1010,10 @@ const renderGroups = computed<RenderGroup[]>(() => {
       {
         key: '__flat__',
         name: null,
-        containers: displayContainers.value,
-        containerCount: displayContainers.value.length,
-        updatesAvailable: displayContainers.value.filter((container) => container.newTag).length,
-        updatableCount: displayContainers.value.filter(
+        containers: sortedContainers.value,
+        containerCount: sortedContainers.value.length,
+        updatesAvailable: sortedContainers.value.filter((container) => container.newTag).length,
+        updatableCount: sortedContainers.value.filter(
           (container) => container.newTag && container.bouncer !== 'blocked',
         ).length,
       },
@@ -1217,11 +1217,21 @@ function applyOperationPatch(event: Event) {
       newContainerId: typeof newContainerId === 'string' ? newContainerId : undefined,
       containerName: typeof containerName === 'string' ? containerName : undefined,
     };
+    const wasTracked = findMatchingOperationIds(target).length > 0;
     if (status === 'succeeded') {
-      const wasTracked = findMatchingOperationIds(target).length > 0;
       scheduleHeldOperationRelease(target);
       if (wasTracked) {
         toast.success(`Updated: ${row.name}`);
+      }
+    } else if (status === 'failed') {
+      scheduleHeldOperationRelease(target);
+      if (wasTracked) {
+        toast.error(`Update failed: ${row.name}`);
+      }
+    } else if (status === 'rolled-back') {
+      scheduleHeldOperationRelease(target);
+      if (wasTracked) {
+        toast.error(`Rolled back: ${row.name}`);
       }
     } else {
       clearHeldOperation(target);

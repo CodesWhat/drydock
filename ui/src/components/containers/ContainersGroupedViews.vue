@@ -105,7 +105,8 @@ function makeContainerTableRow(container: DisplayContainer, groupKey: string): C
 
 const tableRows = computed<GroupedTableRow[]>(() => {
   if (!groupByStack.value) {
-    return displayContainers.value.map((container) => makeContainerTableRow(container, '__flat__'));
+    const flat = renderGroups.value[0]?.containers ?? displayContainers.value;
+    return flat.map((container) => makeContainerTableRow(container, '__flat__'));
   }
 
   const rows: GroupedTableRow[] = [];
