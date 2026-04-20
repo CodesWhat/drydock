@@ -215,7 +215,7 @@ async function recheckAll() {
   }
 }
 
-const { isMobile, windowNarrow } = useBreakpoints();
+const { isMobile, windowNarrow, windowWidth } = useBreakpoints();
 
 const {
   selectedContainer,
@@ -231,7 +231,12 @@ const {
 } = useDetailPanel();
 const detailPanelStorage = useDetailPanelStorage();
 
-const isCompact = computed(() => windowNarrow.value);
+const PANEL_WIDTH_PX = { sm: 420, md: 560, lg: 720 } as const;
+const isCompact = computed(() => {
+  if (!detailPanelOpen.value) return windowNarrow.value;
+  const panelPx = PANEL_WIDTH_PX[panelSize.value];
+  return windowWidth.value - panelPx < 1024;
+});
 
 function syncSelectedContainerReference() {
   if (!selectedContainer.value) {

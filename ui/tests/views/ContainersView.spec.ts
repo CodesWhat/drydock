@@ -127,11 +127,13 @@ vi.mock('@/composables/useBreakpoints', () => ({
   useBreakpoints: vi.fn(() => ({
     isMobile: mockIsMobile,
     windowNarrow: mockWindowNarrow,
+    windowWidth: mockWindowWidth,
   })),
 }));
 
 const mockIsMobile = ref(false);
 const mockWindowNarrow = ref(false);
+const mockWindowWidth = ref(1440);
 
 const mockVisibleColumns = ref(
   new Set(['icon', 'name', 'version', 'kind', 'status', 'bouncer', 'server', 'registry']),
@@ -186,6 +188,7 @@ const mockSelectedContainer = ref<Container | null>(null);
 const mockDetailPanelOpen = ref(false);
 const mockContainerFullPage = ref(false);
 const mockActiveDetailTab = ref('overview');
+const mockPanelSize = ref<'sm' | 'md' | 'lg'>('sm');
 const mockSelectContainer = vi.fn();
 const mockDetailPanelStorageRead = vi.fn(() => null);
 
@@ -194,7 +197,7 @@ vi.mock('@/composables/useDetailPanel', () => ({
     selectedContainer: mockSelectedContainer,
     detailPanelOpen: mockDetailPanelOpen,
     activeDetailTab: mockActiveDetailTab,
-    panelSize: ref('sm'),
+    panelSize: mockPanelSize,
     containerFullPage: mockContainerFullPage,
     panelFlex: computed(() => '0 0 30%'),
     detailTabs: [
@@ -397,6 +400,9 @@ describe('ContainersView', () => {
     mockContainerActionsEnabled.value = true;
     mockIsMobile.value = false;
     mockWindowNarrow.value = false;
+    mockWindowWidth.value = 1440;
+    mockDetailPanelOpen.value = false;
+    mockPanelSize.value = 'sm';
     mockGetContainerGroups.mockResolvedValue([]);
     mockGetContainerUpdateOperations.mockResolvedValue([]);
     mockGetContainerVulnerabilities.mockResolvedValue({
@@ -843,6 +849,34 @@ describe('ContainersView', () => {
       const wrapper = await mountContainersView([makeContainer()]);
       const dataTable = wrapper.findComponent(childStubs.DataTable as any);
       expect(dataTable.props('showActions')).toBe(true);
+    });
+
+    it('treats desktop as non-compact when the detail panel is closed', async () => {
+      mockWindowNarrow.value = false;
+      mockDetailPanelOpen.value = false;
+      mockWindowWidth.value = 1440;
+      const wrapper = await mountContainersView([makeContainer()]);
+      expect((wrapper.vm as any).isCompact).toBe(false);
+    });
+
+    it('goes compact when detail panel is open and effective width < 1024', async () => {
+      mockWindowNarrow.value = false;
+      mockPanelSize.value = 'lg';
+      mockWindowWidth.value = 1500;
+      const wrapper = await mountContainersView([makeContainer()]);
+      mockDetailPanelOpen.value = true;
+      await flushPromises();
+      expect((wrapper.vm as any).isCompact).toBe(true);
+    });
+
+    it('stays full-width when detail panel is open but effective width >= 1024', async () => {
+      mockWindowNarrow.value = false;
+      mockPanelSize.value = 'sm';
+      mockWindowWidth.value = 1800;
+      const wrapper = await mountContainersView([makeContainer()]);
+      mockDetailPanelOpen.value = true;
+      await flushPromises();
+      expect((wrapper.vm as any).isCompact).toBe(false);
     });
 
     it('shows disabled action controls when container actions are disabled server-side', async () => {
