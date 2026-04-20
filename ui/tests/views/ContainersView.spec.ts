@@ -236,6 +236,7 @@ const childStubs = {
       'virtualScroll',
       'virtualRowHeight',
       'virtualMaxHeight',
+      'rowHeight',
       'maxHeight',
       'fullWidthRow',
       'rowInteractive',
@@ -718,11 +719,11 @@ describe('ContainersView', () => {
       expect(wrapper.findAll('button[disabled]').length).toBeGreaterThan(0);
     });
 
-    it('uses native scrolling for the containers table and lets the page handle overflow', async () => {
+    it('enables virtualization with a row-height estimator for the containers table', async () => {
       const wrapper = await mountContainersView([makeContainer()]);
       const dataTable = wrapper.findComponent(childStubs.DataTable as any);
-      expect(dataTable.props('virtualScroll')).toBe(false);
-      expect(dataTable.props('maxHeight')).toBeUndefined();
+      expect(dataTable.props('virtualScroll')).toBe(true);
+      expect(typeof dataTable.props('rowHeight')).toBe('function');
     });
 
     it('renders DataFilterBar', async () => {
