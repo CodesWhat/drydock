@@ -148,21 +148,22 @@ function cloneContainers(containersToClone) {
 }
 
 function cloneContainer(containerToClone) {
+  const clonedContainer = structuredClone(containerToClone);
   if (
-    !containerToClone ||
-    typeof containerToClone !== 'object' ||
-    typeof containerToClone.resultChanged !== 'function'
+    clonedContainer &&
+    typeof clonedContainer === 'object' &&
+    typeof containerToClone?.resultChanged === 'function'
   ) {
-    return structuredClone(containerToClone);
+    // resultChanged lives as a non-enumerable function on validated containers, so
+    // structuredClone skips it. Re-attach (non-enumerable) so consumers that call
+    // existing.resultChanged(other) keep working on the clone.
+    Object.defineProperty(clonedContainer, 'resultChanged', {
+      value: containerToClone.resultChanged,
+      enumerable: false,
+      writable: true,
+      configurable: true,
+    });
   }
-
-  const resultChanged = containerToClone.resultChanged;
-  const containerWithoutResultChanged = {
-    ...containerToClone,
-    resultChanged: undefined,
-  };
-  const clonedContainer = structuredClone(containerWithoutResultChanged);
-  clonedContainer.resultChanged = resultChanged;
   return clonedContainer;
 }
 

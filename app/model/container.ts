@@ -750,9 +750,16 @@ function resultChangedFunction(this: Container, otherContainer: Container | unde
  * @returns {*}
  */
 function addResultChangedFunction(container: Container) {
-  const containerWithResultChanged = container;
-  containerWithResultChanged.resultChanged = resultChangedFunction;
-  return containerWithResultChanged;
+  // Non-enumerable so structuredClone skips it and the store-clone hotpath can avoid a
+  // preliminary spread to strip the function off. structuredClone throws DataCloneError
+  // on function values, so the store re-attaches resultChanged to the clone directly.
+  Object.defineProperty(container, 'resultChanged', {
+    value: resultChangedFunction,
+    enumerable: false,
+    writable: true,
+    configurable: true,
+  });
+  return container;
 }
 
 /**
