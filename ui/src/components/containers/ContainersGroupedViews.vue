@@ -891,6 +891,14 @@ watchEffect(() => {
             >
               {{ c.noUpdateReason }}
             </div>
+            <div
+              v-if="c.suggestedTag || c.releaseNotes || c.releaseLink || c.sourceRepo"
+              class="flex items-center gap-2 flex-wrap mt-1"
+            >
+              <SuggestedTagBadge :tag="c.suggestedTag" :current-tag="c.currentTag" />
+              <ReleaseNotesLink :release-notes="c.releaseNotes" :release-link="c.releaseLink" />
+              <ProjectLink :source-repo="c.sourceRepo" />
+            </div>
           </div>
           <div class="flex items-center gap-1.5 shrink-0">
             <!-- Update kind: icon on mobile, badge on desktop -->

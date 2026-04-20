@@ -1516,4 +1516,40 @@ describe('ContainersGroupedViews', () => {
     expect(queuedOverlay.exists()).toBe(true);
     expect(queuedOverlay.text()).toBe('Queued');
   });
+
+  it('renders ReleaseNotesLink and ProjectLink in the list view when the container exposes them (#295)', async () => {
+    // rc.10 wired project/release-notes links into the cards view only. Users on
+    // the list accordion view (the default on many installs) never saw the new
+    // links. Assert the list view renders both when sourceRepo / releaseLink
+    // are populated.
+    const container = makeContainer({
+      id: 'c-list-links',
+      name: 'grafana',
+      newTag: '12.3.3',
+      updateKind: 'patch',
+      sourceRepo: 'github.com/grafana/grafana',
+      releaseLink: 'https://github.com/grafana/grafana/releases/tag/v12.3.3',
+    });
+    const { context, refs } = makeContext();
+    refs.containerViewMode.value = 'list';
+    refs.filteredContainers.value = [container];
+    refs.displayContainers.value = [container];
+    refs.renderGroups.value = [
+      {
+        key: '__flat__',
+        name: null,
+        containers: [container],
+        containerCount: 1,
+        updatesAvailable: 1,
+        updatableCount: 1,
+      },
+    ];
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+    await nextTick();
+
+    expect(wrapper.find('[data-test="project-link"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test="release-link"]').exists()).toBe(true);
+  });
 });
