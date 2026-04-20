@@ -719,11 +719,12 @@ describe('ContainersView', () => {
       expect(wrapper.findAll('button[disabled]').length).toBeGreaterThan(0);
     });
 
-    it('enables virtualization with a row-height estimator for the containers table', async () => {
+    it('uses native page scrolling for the containers table so it stretches to viewport bottom', async () => {
       const wrapper = await mountContainersView([makeContainer()]);
       const dataTable = wrapper.findComponent(childStubs.DataTable as any);
-      expect(dataTable.props('virtualScroll')).toBe(true);
-      expect(typeof dataTable.props('rowHeight')).toBe('function');
+      expect(dataTable.props('virtualScroll')).toBe(false);
+      expect(dataTable.props('maxHeight')).toBeUndefined();
+      expect(dataTable.props('virtualMaxHeight')).toBeUndefined();
     });
 
     it('renders DataFilterBar', async () => {

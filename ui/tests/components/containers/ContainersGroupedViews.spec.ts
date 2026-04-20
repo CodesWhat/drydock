@@ -797,7 +797,7 @@ describe('ContainersGroupedViews', () => {
     expect(wrapper.text()).toContain('stack-b');
   });
 
-  it('enables virtualization with a per-row height estimator', async () => {
+  it('uses native page scrolling for the containers table, unbounded height', async () => {
     const normalRow = makeContainer({
       id: 'c-alpha',
       name: 'alpha',
@@ -805,80 +805,17 @@ describe('ContainersGroupedViews', () => {
       updateKind: 'minor',
       status: 'running',
     });
-    const rowWithReason = makeContainer({
-      id: 'c-beta',
-      name: 'beta',
-      newTag: null,
-      noUpdateReason: 'Pinned tag',
-      status: 'running',
-    });
 
     const { context } = makeContext();
     context.groupByStack.value = true;
     context.containerViewMode.value = 'table';
-    context.filteredContainers.value = [normalRow, rowWithReason];
-    context.displayContainers.value = [normalRow, rowWithReason];
+    context.filteredContainers.value = [normalRow];
+    context.displayContainers.value = [normalRow];
     context.renderGroups.value = [
       {
         key: 'stack-a',
         name: 'stack-a',
-        containers: [normalRow, rowWithReason],
-        containerCount: 2,
-        updatesAvailable: 1,
-        updatableCount: 1,
-      },
-    ];
-    mocked.context = context;
-
-    const wrapper = mountSubject();
-    await nextTick();
-
-    const dataTable = wrapper.findComponent(DataTableStub);
-    expect(dataTable.props('virtualScroll')).toBe(true);
-    expect(typeof dataTable.props('virtualMaxHeight')).toBe('string');
-
-    const estimator = dataTable.props('rowHeight') as (row: Record<string, unknown>) => number;
-    expect(typeof estimator).toBe('function');
-
-    const groupHeaderRow = dataTable
-      .props('rows')
-      .find((row: Record<string, unknown>) => row.__rowType === 'group');
-    const normalTableRow = dataTable
-      .props('rows')
-      .find(
-        (row: Record<string, unknown>) => row.__rowType === 'container' && row.id === 'c-alpha',
-      );
-    const noUpdateReasonRow = dataTable
-      .props('rows')
-      .find((row: Record<string, unknown>) => row.__rowType === 'container' && row.id === 'c-beta');
-
-    const groupHeight = estimator(groupHeaderRow);
-    const normalHeight = estimator(normalTableRow);
-    const noUpdateReasonHeight = estimator(noUpdateReasonRow);
-
-    expect(noUpdateReasonHeight).toBeGreaterThan(normalHeight);
-    expect(groupHeight).toBeLessThan(normalHeight);
-  });
-
-  it('increases the per-row height estimate in compact mode', async () => {
-    const row = makeContainer({
-      id: 'c-compact',
-      name: 'alpha',
-      newTag: '1.1.0',
-      updateKind: 'minor',
-      status: 'running',
-    });
-
-    const { context, refs } = makeContext();
-    refs.isCompact.value = false;
-    context.containerViewMode.value = 'table';
-    context.filteredContainers.value = [row];
-    context.displayContainers.value = [row];
-    context.renderGroups.value = [
-      {
-        key: '__flat__',
-        name: null,
-        containers: [row],
+        containers: [normalRow],
         containerCount: 1,
         updatesAvailable: 1,
         updatableCount: 1,
@@ -890,18 +827,10 @@ describe('ContainersGroupedViews', () => {
     await nextTick();
 
     const dataTable = wrapper.findComponent(DataTableStub);
-    const estimator = dataTable.props('rowHeight') as (row: Record<string, unknown>) => number;
-    const containerRow = dataTable
-      .props('rows')
-      .find((r: Record<string, unknown>) => r.__rowType === 'container');
-
-    const regularHeight = estimator(containerRow);
-
-    refs.isCompact.value = true;
-    await nextTick();
-
-    const compactHeight = estimator(containerRow);
-    expect(compactHeight).toBeGreaterThan(regularHeight);
+    expect(dataTable.props('virtualScroll')).toBe(false);
+    expect(dataTable.props('virtualMaxHeight')).toBeUndefined();
+    expect(dataTable.props('maxHeight')).toBeUndefined();
+    expect(dataTable.props('rowHeight')).toBeUndefined();
   });
 
   it('covers card/list view events and footer action handlers', async () => {

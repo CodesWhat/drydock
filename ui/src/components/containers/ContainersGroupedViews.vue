@@ -225,29 +225,6 @@ function isTableRowFullWidth(row: Record<string, unknown>) {
   return isGroupHeaderTableRow(row as GroupedTableRow);
 }
 
-// Row-height estimates for virtualization. Desktop-only (mobile uses card/list views)
-// so variance is bounded: group header, regular row, row with policy indicator,
-// row with noUpdateReason text, compact rows with a trailing badge row.
-const TABLE_ROW_HEIGHT_GROUP = 52;
-const TABLE_ROW_HEIGHT_BASE = 64;
-const TABLE_ROW_HEIGHT_COMPACT = 96;
-const TABLE_ROW_HEIGHT_EXTRA_NO_UPDATE_REASON = 20;
-
-function estimateTableRowHeight(row: Record<string, unknown>): number {
-  const typedRow = row as GroupedTableRow;
-  if (isGroupHeaderTableRow(typedRow)) {
-    return TABLE_ROW_HEIGHT_GROUP;
-  }
-  if (isCompact.value) {
-    return TABLE_ROW_HEIGHT_COMPACT;
-  }
-  const hasNoUpdateReason =
-    typeof typedRow.noUpdateReason === 'string' && typedRow.noUpdateReason.trim().length > 0;
-  return hasNoUpdateReason
-    ? TABLE_ROW_HEIGHT_BASE + TABLE_ROW_HEIGHT_EXTRA_NO_UPDATE_REASON
-    : TABLE_ROW_HEIGHT_BASE;
-}
-
 function isTableRowInteractive(row: Record<string, unknown>) {
   return isContainerTableRow(row as GroupedTableRow);
 }
@@ -301,9 +278,7 @@ watchEffect(() => {
         :sort-asc="containerSortAsc"
         :selected-key="selectedContainerKey"
         :show-actions="true"
-        :virtual-scroll="true"
-        :virtual-max-height="'calc(100vh - 240px)'"
-        :row-height="estimateTableRowHeight"
+        :virtual-scroll="false"
         :full-width-row="isTableRowFullWidth"
         :row-interactive="isTableRowInteractive"
         :row-class="tableRowClass"
