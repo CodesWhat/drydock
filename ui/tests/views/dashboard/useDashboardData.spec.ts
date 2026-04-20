@@ -240,25 +240,59 @@ describe('useDashboardData', () => {
     expect(mocks.getAllContainers).toHaveBeenCalledTimes(1);
   });
 
-  it('coalesces rapid dd:sse-update-operation-changed events into a single debounced refresh', async () => {
+  it('does NOT trigger fetchDashboardData on dd:sse-update-operation-changed events', async () => {
     vi.useFakeTimers();
 
     const { state } = await mountDashboardData();
     mocks.getAllContainers.mockClear();
 
-    // During an update sequence the backend can fire several operation-phase events
-    // in quick succession. They must debounce onto the shared realtime-refresh
-    // scheduler instead of triggering a full 7-endpoint refetch per event.
+    // Operation phase transitions (queued → pulling → restarting → success) are UI
+    // signaling events only. Terminal dd:container-updated emits dd:sse-container-changed
+    // which covers the actual data mutation. Operation events must NOT trigger a
+    // dashboard refresh.
     globalThis.dispatchEvent(new CustomEvent('dd:sse-update-operation-changed'));
     globalThis.dispatchEvent(new CustomEvent('dd:sse-update-operation-changed'));
     globalThis.dispatchEvent(new CustomEvent('dd:sse-update-operation-changed'));
-    expect(mocks.getAllContainers).not.toHaveBeenCalled();
 
+    vi.advanceTimersByTime(5_000);
+    await flushPromises();
+
+    expect(mocks.getAllContainers).not.toHaveBeenCalled();
+    expect(state.error.value).toBeNull();
+  });
+
+  it('triggers fetchDashboardData on dd:sse-connected to resolve staleness after reconnect', async () => {
+    vi.useFakeTimers();
+
+    await mountDashboardData();
+    mocks.getAllContainers.mockClear();
+
+    globalThis.dispatchEvent(new CustomEvent('dd:sse-connected'));
     vi.advanceTimersByTime(1_000);
     await flushPromises();
 
     expect(mocks.getAllContainers).toHaveBeenCalledTimes(1);
-    expect(state.error.value).toBeNull();
+  });
+
+  it('removes only container-changed and connected listeners on unmount (symmetric with add)', async () => {
+    const addSpy = vi.spyOn(globalThis, 'addEventListener');
+    const removeSpy = vi.spyOn(globalThis, 'removeEventListener');
+
+    const { wrapper } = await mountDashboardData();
+
+    const addedEvents = addSpy.mock.calls.map((c) => c[0]);
+    expect(addedEvents).toContain('dd:sse-container-changed');
+    expect(addedEvents).toContain('dd:sse-connected');
+    expect(addedEvents).not.toContain('dd:sse-update-operation-changed');
+    expect(addedEvents).not.toContain('dd:sse-scan-completed');
+
+    wrapper.unmount();
+
+    const removedEvents = removeSpy.mock.calls.map((c) => c[0]);
+    expect(removedEvents).toContain('dd:sse-container-changed');
+    expect(removedEvents).toContain('dd:sse-connected');
+    expect(removedEvents).not.toContain('dd:sse-update-operation-changed');
+    expect(removedEvents).not.toContain('dd:sse-scan-completed');
   });
 
   it('sets error for a failed foreground fetch and clears loading', async () => {
@@ -282,9 +316,10 @@ describe('useDashboardData', () => {
 
     mocks.getAllContainers.mockRejectedValueOnce(new Error('background refresh failed'));
 
+    // Two rapid container-changed events collapse into one debounced refresh
     globalThis.dispatchEvent(new CustomEvent('dd:sse-container-changed'));
     const clearTimeoutCallsBeforeSecondEvent = clearTimeoutSpy.mock.calls.length;
-    globalThis.dispatchEvent(new CustomEvent('dd:sse-scan-completed'));
+    globalThis.dispatchEvent(new CustomEvent('dd:sse-container-changed'));
     expect(clearTimeoutSpy.mock.calls.length).toBeGreaterThan(clearTimeoutCallsBeforeSecondEvent);
 
     vi.advanceTimersByTime(999);
@@ -299,6 +334,25 @@ describe('useDashboardData', () => {
     expect(debugSpy).toHaveBeenCalledWith('background refresh failed');
 
     wrapper.unmount();
+  });
+
+  it('does NOT trigger fetchDashboardData on dd:sse-scan-completed events', async () => {
+    vi.useFakeTimers();
+
+    const { state } = await mountDashboardData();
+    mocks.getAllContainers.mockClear();
+
+    // scan-completed fires every watcher cron tick (~every 2 min). dd:sse-container-changed
+    // already fires when scan finds new state, so scan-completed must NOT independently
+    // trigger a dashboard refresh (would cause 14 fetches per cron tick).
+    globalThis.dispatchEvent(new CustomEvent('dd:sse-scan-completed'));
+    globalThis.dispatchEvent(new CustomEvent('dd:sse-scan-completed'));
+
+    vi.advanceTimersByTime(5_000);
+    await flushPromises();
+
+    expect(mocks.getAllContainers).not.toHaveBeenCalled();
+    expect(state.error.value).toBeNull();
   });
 
   it('logs full refresh failures when data has already rendered via container-changed SSE', async () => {
