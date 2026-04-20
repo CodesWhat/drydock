@@ -658,11 +658,18 @@ function toPendingRecentUpdateCandidate(
   };
 }
 
+const containerNameCountsCache = new WeakMap<readonly Container[], Map<string, number>>();
+
 function buildContainerNameCounts(containers: readonly Container[]): Map<string, number> {
+  const cached = containerNameCountsCache.get(containers);
+  if (cached !== undefined) {
+    return cached;
+  }
   const counts = new Map<string, number>();
   for (const container of containers) {
     counts.set(container.name, (counts.get(container.name) ?? 0) + 1);
   }
+  containerNameCountsCache.set(containers, counts);
   return counts;
 }
 
