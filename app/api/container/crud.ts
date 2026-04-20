@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import { getContainerStatusSummary } from '../../util/container-summary.js';
+import { buildContainerDashboardSummary } from '../../util/container-summary.js';
 import { sendErrorResponse } from '../error-response.js';
 import {
   buildCrudHandlerContext,
@@ -18,39 +18,17 @@ import { createGetContainerReleaseNotesHandler } from './handlers/release-notes.
 import { getPathParamValue } from './request-helpers.js';
 import {
   buildSecurityVulnerabilityOverviewResponse,
-  getSecurityIssueCount,
   type SecurityVulnerabilityOverviewResponse,
 } from './security-overview.js';
 
 function getContainerSummaryHandler(context: CrudHandlerContext, _req: Request, res: Response) {
   const containers = context.getContainersFromStore({});
-  const containerStatus = getContainerStatusSummary(containers);
-  const { hotUpdates, matureUpdates } = containers.reduce(
-    (summary, container) => {
-      if (!container.updateAvailable) {
-        return summary;
-      }
-      if (container.updateMaturityLevel === 'hot') {
-        summary.hotUpdates += 1;
-        return summary;
-      }
-      if (
-        container.updateMaturityLevel === 'mature' ||
-        container.updateMaturityLevel === 'established'
-      ) {
-        summary.matureUpdates += 1;
-      }
-      return summary;
-    },
-    { hotUpdates: 0, matureUpdates: 0 },
-  );
+  const summary = buildContainerDashboardSummary(containers);
   res.status(200).json({
-    containers: containerStatus,
-    security: {
-      issues: getSecurityIssueCount(containers),
-    },
-    hotUpdates,
-    matureUpdates,
+    containers: summary.status,
+    security: { issues: summary.securityIssues },
+    hotUpdates: summary.hotUpdates,
+    matureUpdates: summary.matureUpdates,
   });
 }
 

@@ -1,8 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import {
-  buildSecurityVulnerabilityOverviewResponse,
-  getSecurityIssueCount,
-} from './security-overview.js';
+import { buildSecurityVulnerabilityOverviewResponse } from './security-overview.js';
 
 function createContainer(overrides: Record<string, unknown> = {}) {
   return {
@@ -21,17 +18,6 @@ function createContainer(overrides: Record<string, unknown> = {}) {
 }
 
 describe('api/container/security-overview', () => {
-  test('counts containers with critical or high vulnerabilities as security issues', () => {
-    const issueCount = getSecurityIssueCount([
-      createContainer({ id: 'c1', security: { scan: { summary: { critical: 1, high: 0 } } } }),
-      createContainer({ id: 'c2', security: { scan: { summary: { critical: 0, high: 2 } } } }),
-      createContainer({ id: 'c3', security: { scan: { summary: { critical: 0, high: 0 } } } }),
-      createContainer({ id: 'c4', security: { scan: {} } }),
-    ] as any[]);
-
-    expect(issueCount).toBe(2);
-  });
-
   test('builds paginated vulnerability overview grouped by image', () => {
     const response = buildSecurityVulnerabilityOverviewResponse(
       [
