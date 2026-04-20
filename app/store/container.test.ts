@@ -1209,6 +1209,133 @@ test('getContainersRaw should preserve Date and RegExp values when cloning', asy
   expect((result[0].labels.namePattern as unknown as RegExp).flags).toBe('i');
 });
 
+test('getContainersForStats should return projected stat fields only', async () => {
+  const containerExample = createContainerFixture({
+    agent: 'edge-agent',
+    result: { tag: 'newer' },
+    security: {
+      scan: {
+        scanner: 'trivy',
+        image: 'org/img:v1',
+        scannedAt: '2026-01-01T00:00:00.000Z',
+        status: 'passed',
+        blockSeverities: [],
+        blockingCount: 0,
+        summary: { unknown: 0, low: 0, medium: 0, high: 0, critical: 0 },
+        vulnerabilities: [
+          {
+            id: 'CVE-2025-0001',
+            severity: 'HIGH',
+            title: 'test vuln',
+            primaryUrl: 'https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2025-0001',
+          },
+        ],
+      },
+    },
+    details: {
+      ports: ['80/tcp'],
+      volumes: ['/data:/data'],
+      env: [{ key: 'SECRET', value: 'my-secret' }],
+    },
+  });
+  const containers = [{ data: containerExample }];
+  const collection = { find: () => containers };
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => ({ findOne: () => {}, insert: () => {} }),
+  };
+  container.createCollections(db);
+
+  const result = container.getContainersForStats({});
+
+  expect(result).toHaveLength(1);
+  const projection = result[0];
+
+  // Required stat fields are present
+  expect(projection.id).toBe(containerExample.id);
+  expect(projection.watcher).toBe(containerExample.watcher);
+  expect(projection.agent).toBe('edge-agent');
+  expect(projection.status).toBe('unknown');
+  expect(typeof projection.updateAvailable).toBe('boolean');
+  expect(projection.image.id).toBe(containerExample.image.id);
+  expect(projection.image.name).toBe(containerExample.image.name);
+
+  // Heavy fields are NOT present on the projection
+  expect((projection as Record<string, unknown>).security).toBeUndefined();
+  expect((projection as Record<string, unknown>).details).toBeUndefined();
+  expect((projection as Record<string, unknown>).labels).toBeUndefined();
+  expect((projection as Record<string, unknown>).result).toBeUndefined();
+});
+
+test('getContainersForStats should reflect live updateAvailable from stored container', async () => {
+  const containerExample = createContainerFixture({
+    result: { tag: 'newer-tag' },
+  });
+  // image.tag.value is 'version', result.tag is 'newer-tag' => updateAvailable true
+  const containers = [{ data: containerExample }];
+  const collection = { find: () => containers };
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => ({ findOne: () => {}, insert: () => {} }),
+  };
+  container.createCollections(db);
+
+  const result = container.getContainersForStats({});
+
+  expect(result[0].updateAvailable).toBe(true);
+});
+
+test('getContainersForStats should return empty array when collection is not initialized', async () => {
+  vi.resetModules();
+  const freshContainer = await import('./container.js');
+  const result = freshContainer.getContainersForStats();
+  expect(result).toEqual([]);
+});
+
+test('getContainersForStats mutation isolation: mutating projection does not affect store', async () => {
+  const containerExample = createContainerFixture();
+  const containers = [{ data: containerExample }];
+  const collection = {
+    find: vi.fn(() => containers),
+    findOne: vi.fn(() => null),
+  };
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => ({ findOne: () => {}, insert: () => {} }),
+  };
+  container.createCollections(db);
+
+  const result = container.getContainersForStats({});
+  const projection = result[0];
+
+  // Mutate the projected image sub-object
+  (projection.image as Record<string, unknown>).id = 'MUTATED';
+  (projection.image as Record<string, unknown>).name = 'MUTATED';
+  projection.watcher = 'MUTATED';
+
+  // The stored container's values are unchanged — re-fetch to confirm
+  const rawResult = container.getContainersRaw({});
+  expect(rawResult[0].image.id).toBe(containerExample.image.id);
+  expect(rawResult[0].image.name).toBe(containerExample.image.name);
+  expect(rawResult[0].watcher).toBe(containerExample.watcher);
+});
+
+test('getContainersForStats should return undefined agent for containers without agent field', async () => {
+  const containerExample = createContainerFixture();
+  // No agent field
+  const containers = [{ data: containerExample }];
+  const collection = { find: () => containers };
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => ({ findOne: () => {}, insert: () => {} }),
+  };
+  container.createCollections(db);
+
+  const result = container.getContainersForStats({});
+
+  expect(result[0].agent).toBeUndefined();
+});
+
 test('getContainers should preserve Map values when cloning', async () => {
   const metadataByKey = new Map([['release', '2026.03.05']]);
   const containerExample = createContainerFixture();

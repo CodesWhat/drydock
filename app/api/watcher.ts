@@ -103,7 +103,7 @@ export function getWatchers(req: Request, res: Response): void {
   const watchers = registry.getState().watcher || {};
   const watcherEntries = Object.entries(watchers);
   const statsByWatcher = buildContainerStatsByKey(
-    storeContainer.getContainersRaw({}),
+    storeContainer.getContainersForStats({}),
     watcherEntries.map(([, watcher]) => watcher.name),
     (container) => (typeof container.watcher === 'string' ? container.watcher : undefined),
   );
@@ -139,7 +139,7 @@ export function getWatcher(req: Request<WatcherRouteParams>, res: Response): voi
   }
 
   const statsByWatcher = buildContainerStatsByKey(
-    storeContainer.getContainersRaw({}),
+    storeContainer.getContainersForStats({}),
     [watcher.name],
     (container) => (typeof container.watcher === 'string' ? container.watcher : undefined),
   );

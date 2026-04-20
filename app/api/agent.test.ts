@@ -19,10 +19,11 @@ vi.mock('../agent', () => ({
 
 vi.mock('../store/container.js', () => ({
   getContainersRaw: vi.fn(() => []),
+  getContainersForStats: vi.fn(() => []),
 }));
 
 import { getAgents } from '../agent/index.js';
-import { getContainersRaw } from '../store/container.js';
+import { getContainersForStats } from '../store/container.js';
 import * as agentRouter from './agent.js';
 
 function createResponse() {
@@ -67,7 +68,7 @@ describe('Agent Router', () => {
         info: {},
       },
     ]);
-    getContainersRaw.mockReturnValue([
+    getContainersForStats.mockReturnValue([
       { id: 'c1', agent: 'agent-1', status: 'running', image: { id: 'img-a' } },
       { id: 'c2', agent: 'agent-1', status: 'exited', image: { id: 'img-b' } },
       { id: 'c3', agent: 'agent-1', status: 'running', image: { id: 'img-a' } },
@@ -107,7 +108,7 @@ describe('Agent Router', () => {
       ],
       total: 2,
     });
-    expect(getContainersRaw).toHaveBeenCalledTimes(1);
+    expect(getContainersForStats).toHaveBeenCalledTimes(1);
   });
 
   test('should fetch containers once for agent list stats', () => {
@@ -125,14 +126,14 @@ describe('Agent Router', () => {
         info: {},
       },
     ]);
-    getContainersRaw.mockReturnValue([]);
+    getContainersForStats.mockReturnValue([]);
 
     agentRouter.init();
     const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/')[1];
     const res = createResponse();
     handler({}, res);
 
-    expect(getContainersRaw).toHaveBeenCalledTimes(1);
+    expect(getContainersForStats).toHaveBeenCalledTimes(1);
   });
 
   test('should compute per-agent stats in a single pass regardless of agent count (#301 regression)', () => {
@@ -160,14 +161,14 @@ describe('Agent Router', () => {
       }
     }
     getAgents.mockReturnValue(agents);
-    getContainersRaw.mockReturnValue(containers);
+    getContainersForStats.mockReturnValue(containers);
 
     agentRouter.init();
     const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/')[1];
     const res = createResponse();
     handler({}, res);
 
-    expect(getContainersRaw).toHaveBeenCalledTimes(1);
+    expect(getContainersForStats).toHaveBeenCalledTimes(1);
 
     const payload = res.json.mock.calls[0][0];
     expect(payload.total).toBe(10);
@@ -201,7 +202,7 @@ describe('Agent Router', () => {
         info: {},
       },
     ]);
-    getContainersRaw.mockReturnValue([
+    getContainersForStats.mockReturnValue([
       { id: 'c1', agent: 'agent-fallbacks', status: undefined, image: { name: 'img-name' } },
       { id: 'c2', agent: 'agent-fallbacks', status: 'running', image: {} },
       { id: 'c3', agent: 'agent-fallbacks', status: null },
@@ -233,7 +234,7 @@ describe('Agent Router', () => {
         info: {},
       },
     ]);
-    getContainersRaw.mockReturnValue([
+    getContainersForStats.mockReturnValue([
       { id: 'c1', agent: ['agent-typed'], status: 'running', image: { id: 'img-a' } },
       { id: 'c2', agent: undefined, status: 'running', image: { id: 'img-b' } },
     ]);
@@ -269,7 +270,7 @@ describe('Agent Router', () => {
           info: {},
         },
       ]);
-      getContainersRaw.mockReturnValue([
+      getContainersForStats.mockReturnValue([
         { id: 'c1', agent: 'agent-missing-bucket', status: 'running', image: { id: 'img-a' } },
       ]);
 
@@ -307,7 +308,7 @@ describe('Agent Router', () => {
         info: {},
       },
     ]);
-    getContainersRaw.mockReturnValue([]);
+    getContainersForStats.mockReturnValue([]);
 
     agentRouter.init();
     const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/')[1];

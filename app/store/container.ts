@@ -837,6 +837,55 @@ export function getContainersRaw(
 }
 
 /**
+ * Lightweight projection of a container for stats/summary callers.
+ * Contains only scalar fields and a simple image sub-object with no shared
+ * references to stored data. Callers that mutate these objects cannot affect
+ * the store.
+ */
+export interface ContainerStatProjection {
+  id: string;
+  watcher: string;
+  agent: string | undefined;
+  status: string;
+  updateAvailable: boolean;
+  updateMaturityLevel: container.Container['updateMaturityLevel'];
+  image: {
+    id: string;
+    name: string;
+  };
+}
+
+function projectContainerForStats(c: container.Container): ContainerStatProjection {
+  return {
+    id: c.id,
+    watcher: c.watcher,
+    agent: c.agent,
+    status: c.status,
+    updateAvailable: c.updateAvailable,
+    updateMaturityLevel: c.updateMaturityLevel,
+    image: {
+      id: c.image.id,
+      name: c.image.name,
+    },
+  };
+}
+
+/**
+ * Get lightweight stat projections for all (filtered) containers.
+ * Returns newly-constructed objects containing only the scalar fields needed
+ * by summary/stats callers (watchers, agents). Avoids structuredClone overhead
+ * entirely — each projection is mutation-safe by construction (no shared
+ * references to stored sub-objects).
+ * @param query
+ */
+export function getContainersForStats(
+  query: Record<string, unknown> = {},
+): ContainerStatProjection[] {
+  const containerListSorted = getCachedOrComputedContainersByQuery(query);
+  return containerListSorted.map(projectContainerForStats);
+}
+
+/**
  * Get the total number of (filtered) containers.
  * Uses cached query results when available and avoids cloning.
  * @param query
