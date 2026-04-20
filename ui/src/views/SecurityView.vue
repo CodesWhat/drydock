@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { useRouter } from 'vue-router';
 import AppBadge from '../components/AppBadge.vue';
 import AppIconButton from '../components/AppIconButton.vue';
+import ContainerUpdateDialog from '../components/containers/ContainerUpdateDialog.vue';
+import ReleaseNotesLink from '../components/containers/ReleaseNotesLink.vue';
 import ScanProgressBanner from '../components/ScanProgressBanner.vue';
 import SecurityEmptyState from '../components/SecurityEmptyState.vue';
 import StatusDot from '../components/StatusDot.vue';
@@ -12,8 +15,12 @@ import { useVulnerabilities, type ImageSummary } from '../composables/useVulnera
 import { preferences } from '../preferences/store';
 import { usePreference } from '../preferences/usePreference';
 import { useViewMode } from '../preferences/useViewMode';
+import { getAllContainers } from '../services/container';
 import { getSecurityRuntime } from '../services/server';
+import type { Container } from '../types/container';
+import { mapApiContainers } from '../utils/container-mapper';
 import { errorMessage } from '../utils/error';
+import { ROUTES } from '../router/routes';
 import type { SecurityRuntimeStatus } from './security/securityViewTypes';
 import {
   fixableColor,
@@ -26,8 +33,41 @@ import {
   toSafeExternalUrl,
 } from './security/securityViewUtils';
 
+const router = useRouter();
+
+const updateDialogContainerId = ref<string | null>(null);
+const updateDialogContainerName = ref<string | undefined>(undefined);
+const updateDialogCurrentTag = ref<string | undefined>(undefined);
+const updateDialogNewTag = ref<string | undefined>(undefined);
+const updateDialogUpdateKind = ref<'major' | 'minor' | 'patch' | 'digest' | null | undefined>(
+  undefined,
+);
+
+const chooserSummary = ref<ImageSummary | null>(null);
+const chooserAnchorStyle = ref<Record<string, string>>({});
+
+interface ContainerChoice {
+  id: string;
+  name: string;
+  host?: string;
+  currentTag?: string;
+  newTag?: string;
+  updateKind?: 'major' | 'minor' | 'patch' | 'digest' | null;
+}
+
 const { isMobile, windowNarrow: isCompact } = useBreakpoints();
 const { scanning, scanProgress, scanAllContainers: runScanAll } = useScanProgress();
+
+const containers = ref<Container[]>([]);
+
+async function fetchContainers() {
+  try {
+    const apiContainers = await getAllContainers();
+    containers.value = mapApiContainers(apiContainers);
+  } catch {
+    containers.value = [];
+  }
+}
 
 const runtimeLoading = ref(true);
 const runtimeError = ref<string | null>(null);
@@ -113,6 +153,7 @@ const {
 } = useVulnerabilities({
   securitySortField,
   securitySortAsc,
+  containers,
 });
 
 const displayFilteredCount = computed(() =>
@@ -164,13 +205,86 @@ function openDetail(summary: ImageSummary) {
   });
 }
 
+function navigateToContainerUpdate(summary: ImageSummary) {
+  const ids = summary.containersWithUpdate;
+  if (!ids || ids.length === 0) {
+    return;
+  }
+  void router.push({
+    path: ROUTES.CONTAINERS,
+    query: { containerIds: ids.join(',') },
+  });
+}
+
+function resolveContainerChoices(summary: ImageSummary): ContainerChoice[] {
+  const ids = summary.containersWithUpdate ?? [];
+  return ids.map((id) => {
+    const found = containers.value.find((c) => c.id === id);
+    return {
+      id,
+      name: found?.name ?? id,
+      host: found?.server,
+      currentTag: found?.currentTag,
+      newTag: found?.newTag ?? undefined,
+      updateKind: found?.updateKind,
+    };
+  });
+}
+
+function openUpdateAction(summary: ImageSummary) {
+  const ids = summary.containersWithUpdate ?? [];
+  if (ids.length === 0) {
+    return;
+  }
+  if (ids.length === 1) {
+    const choices = resolveContainerChoices(summary);
+    const choice = choices[0];
+    updateDialogContainerId.value = choice.id;
+    updateDialogContainerName.value = choice.name;
+    updateDialogCurrentTag.value = choice.currentTag;
+    updateDialogNewTag.value = choice.newTag;
+    updateDialogUpdateKind.value = choice.updateKind;
+    chooserSummary.value = null;
+  } else {
+    chooserSummary.value = summary;
+  }
+}
+
+function openUpdateFromChooser(choice: ContainerChoice) {
+  updateDialogContainerId.value = choice.id;
+  updateDialogContainerName.value = choice.name;
+  updateDialogCurrentTag.value = choice.currentTag;
+  updateDialogNewTag.value = choice.newTag;
+  updateDialogUpdateKind.value = choice.updateKind;
+  chooserSummary.value = null;
+}
+
+function closeChooser() {
+  chooserSummary.value = null;
+}
+
+const chooserChoices = computed<ContainerChoice[]>(() => {
+  if (!chooserSummary.value) {
+    return [];
+  }
+  return resolveContainerChoices(chooserSummary.value);
+});
+
 let scanCompletedDebounceTimer: ReturnType<typeof setTimeout> | undefined;
+let containerChangedDebounceTimer: ReturnType<typeof setTimeout> | undefined;
 
 function handleSseScanCompleted() {
   clearTimeout(scanCompletedDebounceTimer);
   scanCompletedDebounceTimer = setTimeout(() => {
     void fetchVulnerabilities();
   }, 800);
+}
+
+function handleSseContainerChanged() {
+  clearTimeout(containerChangedDebounceTimer);
+  containerChangedDebounceTimer = setTimeout(() => {
+    void fetchContainers();
+  }, 400);
 }
 
 async function scanAllContainers() {
@@ -202,18 +316,23 @@ const tableColumns = computed(() => {
 
 const sseScanCompletedListener = handleSseScanCompleted as EventListener;
 const sseConnectedListener = handleSseScanCompleted as EventListener;
+const sseContainerChangedListener = handleSseContainerChanged as EventListener;
 
 onMounted(() => {
   void fetchSecurityRuntimeStatus();
+  void fetchContainers();
   void fetchVulnerabilities();
   globalThis.addEventListener('dd:sse-scan-completed', sseScanCompletedListener);
   globalThis.addEventListener('dd:sse-connected', sseConnectedListener);
+  globalThis.addEventListener('dd:sse-container-changed', sseContainerChangedListener);
 });
 
 onUnmounted(() => {
   clearTimeout(scanCompletedDebounceTimer);
+  clearTimeout(containerChangedDebounceTimer);
   globalThis.removeEventListener('dd:sse-scan-completed', sseScanCompletedListener);
   globalThis.removeEventListener('dd:sse-connected', sseConnectedListener);
+  globalThis.removeEventListener('dd:sse-container-changed', sseContainerChangedListener);
 });
 </script>
 
@@ -348,6 +467,36 @@ onUnmounted(() => {
                   v-tooltip.top="`Update: ${row.delta.fixed} fixed, ${row.delta.new} new`">
               {{ row.delta.fixed }} fixed, {{ row.delta.new }} new
             </AppBadge>
+            <template v-if="row.hasUpdate">
+              <AppButton
+                size="none"
+                variant="plain"
+                weight="none"
+                class="inline-flex items-center gap-1 px-1.5 py-0.5 dd-rounded text-3xs font-semibold uppercase tracking-wide shrink-0 transition-colors"
+                :style="{ backgroundColor: 'var(--dd-info-muted)', color: 'var(--dd-info)' }"
+                data-test="security-update-btn"
+                v-tooltip.top="(row.containersWithUpdate?.length ?? 0) > 1 ? `Update one of ${row.containersWithUpdate?.length} containers` : 'Update this container'"
+                @click.stop="openUpdateAction(row)">
+                <AppIcon name="cloud-download" :size="9" />
+                Update
+              </AppButton>
+              <AppButton
+                size="none"
+                variant="plain"
+                weight="none"
+                class="inline-flex items-center gap-1 px-1.5 py-0.5 dd-rounded text-3xs font-medium shrink-0 transition-colors"
+                :style="{ color: 'var(--dd-text-secondary)' }"
+                data-test="security-containers-link"
+                v-tooltip.top="'View in Containers'"
+                @click.stop="navigateToContainerUpdate(row)">
+                View in Containers
+              </AppButton>
+              <ReleaseNotesLink
+                v-if="row.releaseNotes || row.releaseLink"
+                :release-notes="row.releaseNotes"
+                :release-link="row.releaseLink"
+                data-test="security-release-notes" />
+            </template>
           </div>
         </template>
         <template #cell-critical="{ row }">
@@ -454,7 +603,35 @@ onUnmounted(() => {
               {{ fixablePercent(summary.fixable, summary.total) }}% fixable
             </span>
             <span v-else class="text-2xs-plus dd-text-muted">No fixes available</span>
-            <span class="text-2xs dd-text-muted">{{ summary.total }} total</span>
+            <template v-if="summary.hasUpdate">
+              <AppButton
+                size="none"
+                variant="plain"
+                weight="none"
+                class="inline-flex items-center gap-1 px-1.5 py-0.5 dd-rounded text-3xs font-semibold uppercase tracking-wide transition-colors"
+                :style="{ backgroundColor: 'var(--dd-info-muted)', color: 'var(--dd-info)' }"
+                data-test="security-update-btn"
+                @click.stop="openUpdateAction(summary)">
+                <AppIcon name="cloud-download" :size="9" />
+                Update
+              </AppButton>
+              <AppButton
+                size="none"
+                variant="plain"
+                weight="none"
+                class="inline-flex items-center gap-1 px-1.5 py-0.5 dd-rounded text-3xs font-medium transition-colors"
+                :style="{ color: 'var(--dd-text-secondary)' }"
+                data-test="security-containers-link"
+                @click.stop="navigateToContainerUpdate(summary)">
+                View in Containers
+              </AppButton>
+              <ReleaseNotesLink
+                v-if="summary.releaseNotes || summary.releaseLink"
+                :release-notes="summary.releaseNotes"
+                :release-link="summary.releaseLink"
+                data-test="security-release-notes" />
+            </template>
+            <span v-else class="text-2xs dd-text-muted">{{ summary.total }} total</span>
           </div>
         </template>
       </DataCardGrid>
@@ -560,6 +737,32 @@ onUnmounted(() => {
               {{ selectedImage.low }} Low
             </AppBadge>
             <span class="text-2xs dd-text-muted ml-auto">{{ selectedImage?.total }} total</span>
+          </div>
+          <div v-if="selectedImage?.hasUpdate" class="mt-2 flex items-center gap-2 flex-wrap">
+            <AppButton
+              size="xs"
+              variant="secondary"
+              class="inline-flex items-center gap-1.5"
+              data-test="security-detail-update-btn"
+              @click="openUpdateAction(selectedImage)">
+              <AppIcon name="cloud-download" :size="10" />
+              Update
+            </AppButton>
+            <AppButton
+              size="none"
+              variant="plain"
+              weight="none"
+              class="inline-flex items-center text-2xs font-medium underline hover:no-underline"
+              :style="{ color: 'var(--dd-text-secondary)' }"
+              data-test="security-detail-containers-link"
+              @click="navigateToContainerUpdate(selectedImage)">
+              View in Containers
+            </AppButton>
+            <ReleaseNotesLink
+              v-if="selectedImage.releaseNotes || selectedImage.releaseLink"
+              :release-notes="selectedImage.releaseNotes"
+              :release-link="selectedImage.releaseLink"
+              data-test="security-detail-release-notes" />
           </div>
         </template>
 
@@ -682,4 +885,63 @@ onUnmounted(() => {
       </DetailPanel>
     </template>
   </DataViewLayout>
+
+  <ContainerUpdateDialog
+    v-model:containerId="updateDialogContainerId"
+    :container-name="updateDialogContainerName"
+    :current-tag="updateDialogCurrentTag"
+    :new-tag="updateDialogNewTag"
+    :update-kind="updateDialogUpdateKind" />
+
+  <!-- Multi-container chooser -->
+  <Teleport v-if="chooserSummary" to="body">
+    <div
+      class="fixed inset-0 z-overlay"
+      @pointerdown.self="closeChooser"
+      @keydown.escape="closeChooser">
+      <div
+        class="fixed left-1/2 top-1/3 -translate-x-1/2 w-full max-w-xs mx-4 dd-rounded-lg overflow-hidden shadow-lg"
+        :style="{
+          backgroundColor: 'var(--dd-bg-card)',
+          border: '1px solid var(--dd-border-strong)',
+          boxShadow: 'var(--dd-shadow-modal)',
+        }">
+        <div class="px-4 pt-3 pb-2" :style="{ borderBottom: '1px solid var(--dd-border)' }">
+          <span class="text-2xs-plus font-semibold dd-text">Select container to update</span>
+        </div>
+        <div class="py-1 max-h-64 overflow-y-auto">
+          <AppButton
+            v-for="choice in chooserChoices"
+            :key="choice.id"
+            size="none"
+            variant="plain"
+            weight="none"
+            class="w-full text-left px-4 py-2.5 flex items-start gap-2 hover:dd-bg-hover transition-colors"
+            data-test="security-chooser-item"
+            @click="openUpdateFromChooser(choice)">
+            <div class="min-w-0 flex-1">
+              <div class="text-2xs-plus font-semibold dd-text truncate">{{ choice.name }}</div>
+              <div v-if="choice.host" class="text-3xs dd-text-muted mt-0.5">{{ choice.host }}</div>
+            </div>
+            <AppBadge v-if="choice.newTag" tone="info" size="xs" class="shrink-0 mt-0.5">
+              {{ choice.newTag }}
+            </AppBadge>
+          </AppButton>
+        </div>
+        <div class="px-4 py-2.5 flex items-center justify-between" :style="{ borderTop: '1px solid var(--dd-border)' }">
+          <AppButton
+            size="none"
+            variant="plain"
+            weight="none"
+            class="text-2xs font-medium underline hover:no-underline"
+            :style="{ color: 'var(--dd-text-secondary)' }"
+            data-test="security-chooser-view-all"
+            @click="navigateToContainerUpdate(chooserSummary!); closeChooser()">
+            View all in Containers
+          </AppButton>
+          <AppButton size="xs" variant="secondary" @click="closeChooser">Cancel</AppButton>
+        </div>
+      </div>
+    </div>
+  </Teleport>
 </template>

@@ -1,64 +1,14 @@
 import { readonly, ref } from 'vue';
-import { getAllContainers, scanContainer } from '../services/container';
+import { scanAllContainersApi } from '../services/container';
 import { ApiError } from '../utils/error';
 
 const scanning = ref(false);
 const scanProgress = ref({ done: 0, total: 0 });
+const currentCycleId = ref<string | null>(null);
 let scanAbortController: AbortController | null = null;
-
-function createAbortError() {
-  const error = new Error('Aborted');
-  error.name = 'AbortError';
-  return error;
-}
 
 function isAbortError(error: unknown) {
   return error instanceof Error && error.name === 'AbortError';
-}
-
-function sleep(ms: number, signal?: AbortSignal) {
-  return new Promise<void>((resolve, reject) => {
-    if (signal?.aborted) {
-      reject(createAbortError());
-      return;
-    }
-
-    const timeout = setTimeout(() => {
-      signal?.removeEventListener('abort', onAbort);
-      resolve();
-    }, ms);
-
-    const onAbort = () => {
-      clearTimeout(timeout);
-      signal?.removeEventListener('abort', onAbort);
-      reject(createAbortError());
-    };
-
-    signal?.addEventListener('abort', onAbort, { once: true });
-  });
-}
-
-async function scanContainerWithRetry(containerId: string, signal?: AbortSignal, maxRetries = 3) {
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    if (signal?.aborted) {
-      throw createAbortError();
-    }
-
-    try {
-      return await scanContainer(containerId, signal);
-    } catch (e: unknown) {
-      if (isAbortError(e) || signal?.aborted) {
-        throw createAbortError();
-      }
-
-      const is429 = e instanceof ApiError && e.status === 429;
-      if (is429 && attempt < maxRetries) {
-        await sleep(12_000, signal);
-        continue;
-      }
-      throw e;
-    }
-  }
 }
 
 interface ScanAllContainersOptions {
@@ -81,55 +31,52 @@ function startScanSession() {
   const { signal } = scanAbortController;
   scanning.value = true;
   scanProgress.value = { done: 0, total: 0 };
+  currentCycleId.value = null;
   return signal;
 }
 
 function endScanSession() {
   scanAbortController = null;
   scanning.value = false;
-}
-
-function throwUnlessAbortError(error: unknown) {
-  if (!isAbortError(error)) {
-    throw error;
-  }
-}
-
-async function processSingleContainer(containerId: string, signal: AbortSignal) {
-  try {
-    await scanContainerWithRetry(containerId, signal);
-  } catch {
-    if (signal.aborted) {
-      return false;
-    }
-    // Individual scan failures shouldn't stop the batch
-  }
-
-  return !signal.aborted;
+  currentCycleId.value = null;
 }
 
 async function processContainerBatch(signal: AbortSignal) {
-  const containers = await getAllContainers(signal);
-  scanProgress.value.total = containers.length;
+  const result = await scanAllContainersApi(signal);
+  currentCycleId.value = result.cycleId;
+  scanProgress.value.total = result.scheduledCount;
 
-  for (const container of containers) {
-    if (signal.aborted) {
-      break;
-    }
-
-    const containerId = typeof container?.id === 'string' ? container.id : '';
-    if (containerId === '') {
-      scanProgress.value.done++;
-      continue;
-    }
-
-    const shouldCountAsDone = await processSingleContainer(containerId, signal);
-    if (!shouldCountAsDone) {
-      break;
-    }
-
-    scanProgress.value.done++;
+  if (result.scheduledCount === 0) {
+    return;
   }
+
+  await new Promise<void>((resolve) => {
+    if (signal.aborted) {
+      resolve();
+      return;
+    }
+
+    const onScanCompleted = () => {
+      scanProgress.value.done = Math.min(scanProgress.value.done + 1, scanProgress.value.total);
+      if (scanProgress.value.done >= scanProgress.value.total) {
+        cleanup();
+        resolve();
+      }
+    };
+
+    const onAbort = () => {
+      cleanup();
+      resolve();
+    };
+
+    function cleanup() {
+      globalThis.removeEventListener('dd:sse-scan-completed', onScanCompleted);
+      signal.removeEventListener('abort', onAbort);
+    }
+
+    globalThis.addEventListener('dd:sse-scan-completed', onScanCompleted);
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
 }
 
 async function scanAllContainers(opts: ScanAllContainersOptions) {
@@ -141,7 +88,13 @@ async function scanAllContainers(opts: ScanAllContainersOptions) {
   try {
     await processContainerBatch(signal);
   } catch (error: unknown) {
-    throwUnlessAbortError(error);
+    if (error instanceof ApiError && error.status === 429) {
+      throw error;
+    }
+    if (!isAbortError(error)) {
+      throw error;
+    }
+    // AbortError = user cancellation, treat as clean exit
   } finally {
     endScanSession();
   }
@@ -155,6 +108,7 @@ export function useScanProgress() {
   return {
     scanning: readonly(scanning),
     scanProgress: readonly(scanProgress),
+    currentCycleId: readonly(currentCycleId),
     scanAllContainers,
     cancelScan,
   };

@@ -85,6 +85,19 @@ export function timeAgo(isoString: string): string {
   return `${months[d.getMonth()]} ${d.getDate()}`;
 }
 
+export function formatAbsoluteTime(isoString: string | null | undefined): string {
+  if (!isoString) return '';
+  const date = new Date(isoString);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+}
+
 /** Format an ISO timestamp as a compact relative age string (e.g. "3d", "2w", "5mo", "1y"). */
 export function imageAge(isoString: string | undefined): string {
   if (!isoString) return '\u2014';

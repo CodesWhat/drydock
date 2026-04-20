@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
+import AppIcon from '@/components/AppIcon.vue';
 import AppIconButton from '@/components/AppIconButton.vue';
 import { ROUTES } from '../router/routes';
 import { useStorageRef } from '../composables/useStorageRef';
@@ -24,11 +25,15 @@ const bellPanelStyle = ref<Record<string, string>>({});
 const entries = ref<AuditEntry[]>([]);
 const loading = ref(false);
 const lastSeen = useStorageRef('dd-bell-last-seen', '');
-const clearedAt = useStorageRef('dd-bell-cleared-at', '');
+const dismissedIds = useStorageRef<string[]>(
+  'dd-bell-dismissed-ids',
+  [],
+  (v): v is string[] => Array.isArray(v) && v.every((x) => typeof x === 'string'),
+);
 
 const visibleEntries = computed(() => {
-  if (!clearedAt.value) return entries.value;
-  return entries.value.filter((e) => e.timestamp > clearedAt.value);
+  const dismissed = new Set(dismissedIds.value);
+  return entries.value.filter((e) => !dismissed.has(e.id));
 });
 
 const unreadCount = computed(() => {
@@ -67,7 +72,7 @@ function navigateToEntry(entry: AuditEntry) {
   router.push({ path: ROUTES.AUDIT, query: { container: entry.containerName } });
 }
 
-function viewAll() {
+function openAuditLog() {
   showBell.value = false;
   router.push(ROUTES.AUDIT);
 }
@@ -76,10 +81,17 @@ function markAllRead() {
   lastSeen.value = new Date().toISOString();
 }
 
-function clearAll() {
-  const now = new Date().toISOString();
-  clearedAt.value = now;
-  lastSeen.value = now;
+function dismissOne(entry: AuditEntry) {
+  if (dismissedIds.value.includes(entry.id)) return;
+  dismissedIds.value = [...dismissedIds.value, entry.id];
+}
+
+function dismissAll() {
+  if (visibleEntries.value.length === 0) return;
+  const existing = new Set(dismissedIds.value);
+  const toAdd = visibleEntries.value.map((e) => e.id).filter((id) => !existing.has(id));
+  if (toAdd.length === 0) return;
+  dismissedIds.value = [...dismissedIds.value, ...toAdd];
 }
 
 function handleClickOutside(e: PointerEvent) {
@@ -147,23 +159,17 @@ function isUnread(entry: AuditEntry): boolean {
       <div v-if="showBell" data-test="notification-dropdown"
            class="w-[calc(100vw-1rem)] max-w-[380px] dd-rounded-lg shadow-lg"
            :style="{ ...bellPanelStyle, zIndex: 'var(--z-popover)', backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)', boxShadow: 'var(--dd-shadow-tooltip)' }">
-        <!-- Header -->
+        <!-- Header: title + Clear -->
         <div class="flex items-center justify-between px-3 py-2"
-             :style="{ borderBottom: '1px solid var(--dd-border)' }">
-          <span class="text-2xs-plus font-semibold uppercase tracking-wider dd-text-muted">Notifications</span>
-          <div class="flex items-center gap-2">
-            <AppButton size="none" variant="plain" weight="none" v-if="unreadCount > 0"
-                    class="text-2xs font-medium dd-text-secondary hover:dd-text transition-colors"
-                    @click="markAllRead">
-              Mark all read
-            </AppButton>
-            <AppButton size="none" variant="plain" weight="none" v-if="visibleEntries.length > 0"
-                    class="text-2xs font-medium dd-text-secondary hover:dd-text transition-colors"
-                    data-test="clear-all-btn"
-                    @click="clearAll">
-              Clear all
-            </AppButton>
-          </div>
+             :style="{ backgroundColor: 'var(--dd-bg-sidebar)' }">
+          <span class="text-2xs-plus font-semibold uppercase tracking-wider dd-text-secondary">Notifications</span>
+          <AppButton v-if="visibleEntries.length > 0"
+                  size="none" variant="plain" weight="none"
+                  class="text-2xs-plus font-medium dd-text hover:dd-text-primary transition-colors"
+                  data-test="clear-all-btn"
+                  @click="dismissAll">
+            Clear
+          </AppButton>
         </div>
 
         <!-- Scrollable list -->
@@ -174,46 +180,80 @@ function isUnread(entry: AuditEntry): boolean {
           <div v-else-if="visibleEntries.length === 0" class="px-3 py-6 text-center text-2xs-plus dd-text-muted">
             No notifications yet
           </div>
-          <AppButton size="none" variant="plain" weight="none" v-for="(entry, index) in visibleEntries"
-                  :key="entry.id"
-                  class="w-full text-left px-3 py-2 flex items-start gap-2.5 transition-colors hover:dd-bg-elevated"
-                  :style="{ backgroundColor: index % 2 === 0 ? 'var(--dd-bg-card)' : 'var(--dd-bg-inset)' }"
-                  @click="navigateToEntry(entry)">
-            <AppIcon :name="actionIcon(entry.action)"
-                     :size="13"
-                     class="shrink-0 mt-0.5"
-                     :style="{ color: statusColor(entry.status) }" />
-            <div class="flex-1 min-w-0">
-              <div class="text-2xs-plus truncate dd-text"
-                   :class="{ 'font-bold': isUnread(entry), 'font-medium': !isUnread(entry) }">
-                {{ actionLabel(entry.action) }}
+          <div v-for="(entry, index) in visibleEntries"
+               :key="entry.id"
+               data-test="notification-row"
+               class="group relative flex items-stretch transition-colors hover:dd-bg-elevated"
+               :style="{ backgroundColor: index % 2 === 0 ? 'var(--dd-bg-card)' : 'var(--dd-zebra-stripe)' }">
+            <AppButton size="none" variant="plain" weight="none"
+                    class="flex-1 text-left px-3 py-2 flex items-start gap-2.5 min-w-0"
+                    @click="navigateToEntry(entry)">
+              <AppIcon :name="actionIcon(entry.action)"
+                       :size="13"
+                       class="shrink-0 mt-0.5"
+                       :style="{ color: statusColor(entry.status) }" />
+              <div class="flex-1 min-w-0">
+                <div class="text-2xs-plus truncate dd-text"
+                     :class="{ 'font-bold': isUnread(entry), 'font-medium': !isUnread(entry) }">
+                  {{ actionLabel(entry.action) }}
+                </div>
+                <div class="text-2xs truncate dd-text-muted font-mono mt-0.5"
+                     :title="entry.containerName"
+                     v-tooltip.top="entry.containerName">
+                  {{ entry.containerName }}
+                </div>
+                <div v-if="versionSummary(entry)"
+                     class="text-2xs dd-text-secondary font-mono mt-0.5 truncate"
+                     data-test="notification-version-summary"
+                     :title="versionSummary(entry)"
+                     v-tooltip.top="versionSummary(entry)">
+                  {{ versionSummary(entry) }}
+                </div>
               </div>
-              <div class="text-2xs truncate dd-text-muted font-mono mt-0.5"
-                   :title="entry.containerName"
-                   v-tooltip.top="entry.containerName">
-                {{ entry.containerName }}
-              </div>
-              <div v-if="versionSummary(entry)"
-                   class="text-2xs dd-text-secondary font-mono mt-0.5 truncate"
-                   data-test="notification-version-summary"
-                   :title="versionSummary(entry)"
-                   v-tooltip.top="versionSummary(entry)">
-                {{ versionSummary(entry) }}
-              </div>
+              <span class="text-2xs dd-text-muted whitespace-nowrap shrink-0 mt-0.5">
+                {{ timeAgo(entry.timestamp) }}
+              </span>
+            </AppButton>
+            <div class="dd-bell-dismiss flex items-center pr-1.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+              <AppIconButton icon="xmark"
+                             size="sm"
+                             variant="danger"
+                             tooltip="Dismiss"
+                             aria-label="Dismiss notification"
+                             data-test="notification-dismiss"
+                             @click.stop="dismissOne(entry)" />
             </div>
-            <span class="text-2xs dd-text-muted whitespace-nowrap shrink-0 mt-0.5">
-              {{ timeAgo(entry.timestamp) }}
-            </span>
-          </AppButton>
+          </div>
         </div>
 
-        <!-- Footer -->
-        <AppButton size="none" variant="plain" weight="none" class="w-full text-center px-3 py-2 text-2xs-plus font-medium dd-text-secondary hover:dd-text transition-colors"
-                :style="{ borderTop: '1px solid var(--dd-border)' }"
-                @click="viewAll">
-          View all
-        </AppButton>
+        <!-- Footer: split actions -->
+        <div class="flex items-stretch"
+             :style="{ backgroundColor: 'var(--dd-bg-sidebar)' }">
+          <AppButton v-if="unreadCount > 0"
+                  size="none" variant="plain" weight="none"
+                  class="flex-1 px-3 py-2 text-2xs-plus font-medium dd-text hover:dd-text-primary transition-colors flex items-center justify-center gap-1.5"
+                  data-test="mark-all-read-btn"
+                  @click="markAllRead">
+            <AppIcon name="check" :size="11" />
+            Mark all as read
+          </AppButton>
+          <AppButton size="none" variant="plain" weight="none"
+                  class="flex-1 px-3 py-2 text-2xs-plus font-medium dd-text hover:dd-text-primary transition-colors flex items-center justify-center gap-1.5"
+                  data-test="open-audit-log-btn"
+                  @click="openAuditLog">
+            Open audit log
+            <AppIcon name="external-link" :size="10" />
+          </AppButton>
+        </div>
       </div>
     </Transition>
   </div>
 </template>
+
+<style scoped>
+@media (pointer: coarse) {
+  .dd-bell-dismiss {
+    opacity: 1 !important;
+  }
+}
+</style>

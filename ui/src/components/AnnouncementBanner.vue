@@ -85,7 +85,7 @@ const toneStyles = computed(() => {
           color: toneStyles.buttonTextColor,
           backgroundColor: toneStyles.buttonBackgroundColor,
         }">
-        {{ linkLabel ?? 'Learn more' }}
+        {{ linkLabel ?? 'View migration guide' }}
         <AppIcon name="external-link" :size="10" />
       </a>
       <AppButton size="none" variant="plain" weight="none"

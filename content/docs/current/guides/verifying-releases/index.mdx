@@ -1,0 +1,187 @@
+---
+title: "Verify Your Drydock Install"
+description: "Verify Drydock container images and release archives with cosign and GitHub attestations before deploying."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+Every Drydock release is signed with [cosign](https://docs.sigstore.dev/) (keyless, via the Sigstore public-good infrastructure) and ships with [SLSA build provenance](https://slsa.dev/) attestations generated inside GitHub Actions. You can — and should — verify both before running the image or extracting the archive.
+
+The examples on this page use `v1.5.0-rc.9` as a placeholder. Replace it with the tag you're verifying.
+
+## What you need
+
+| Tool | Install | Used for |
+| --- | --- | --- |
+| `cosign` | [sigstore/cosign releases](https://github.com/sigstore/cosign/releases) or `brew install cosign` | Signature verification |
+| `gh` | [cli.github.com](https://cli.github.com/) or `brew install gh` | SLSA attestation verification (recommended) |
+| `slsa-verifier` | [slsa-framework/slsa-verifier](https://github.com/slsa-framework/slsa-verifier) | Alternate attestation verifier |
+| `sha256sum` | Standard on Linux; `shasum -a 256` on macOS | Checksum check |
+
+Everything is keyless — you do NOT need a Drydock-specific public key. Sigstore and GitHub's attestation framework use short-lived certificates tied to the release workflow's OIDC identity.
+
+## Verify container images
+
+The release workflow signs every pushed tag (`ghcr.io`, `docker.io`, `quay.io`) with the same identity. Use this policy to verify:
+
+```bash
+TAG="v1.5.0-rc.9"
+VERSION="${TAG#v}"
+IMAGE="ghcr.io/codeswhat/drydock:${VERSION}"
+IDENTITY_REGEX='^https://github.com/CodesWhat/drydock/.github/workflows/release-from-tag.yml@refs/tags/.+$'
+OIDC_ISSUER='https://token.actions.githubusercontent.com'
+
+cosign verify \
+  --certificate-identity-regexp "${IDENTITY_REGEX}" \
+  --certificate-oidc-issuer "${OIDC_ISSUER}" \
+  "${IMAGE}"
+```
+
+Swap `IMAGE` for any of the three registries we publish to:
+
+<Tabs items={['GHCR', 'Docker Hub', 'Quay.io']}>
+<Tab value="GHCR">
+
+```bash
+IMAGE="ghcr.io/codeswhat/drydock:1.5.0-rc.9"
+```
+
+</Tab>
+<Tab value="Docker Hub">
+
+```bash
+IMAGE="docker.io/codeswhat/drydock:1.5.0-rc.9"
+```
+
+</Tab>
+<Tab value="Quay.io">
+
+```bash
+IMAGE="quay.io/codeswhat/drydock:1.5.0-rc.9"
+```
+
+</Tab>
+</Tabs>
+
+A successful verification prints the signature payload and exits 0. Any other outcome — failure, missing signature, identity mismatch — means **do not run the image**.
+
+### Verify image provenance (SLSA)
+
+The container image also carries a signed [SLSA provenance](https://slsa.dev/spec/v1.0/provenance) attestation published to the registry. Verify it with the GitHub CLI:
+
+```bash
+gh attestation verify \
+  oci://ghcr.io/codeswhat/drydock:1.5.0-rc.9 \
+  --repo CodesWhat/drydock
+```
+
+`gh` will confirm the image was built by `CodesWhat/drydock`'s release workflow on the matching tag. This is a stronger claim than "signed by the expected workflow" — it also attests to the build inputs, commit SHA, and runner environment.
+
+## Verify the release tarball
+
+Each GitHub release includes six files for the source archive:
+
+| File | Purpose |
+| --- | --- |
+| `drydock-v<tag>.tar.gz` | The archive |
+| `drydock-v<tag>.tar.gz.sha256` | SHA-256 checksum |
+| `drydock-v<tag>.tar.gz.sig` | Cosign detached signature |
+| `drydock-v<tag>.tar.gz.pem` | Signing certificate |
+| `drydock-v<tag>.tar.gz.bundle` | Cosign bundle (sig + cert + Rekor proof) |
+| `drydock-v<tag>.tar.gz.intoto.jsonl` | SLSA provenance attestation |
+
+### 1. Download
+
+```bash
+TAG="v1.5.0-rc.9"
+BASE_URL="https://github.com/CodesWhat/drydock/releases/download/${TAG}"
+ARCHIVE="drydock-${TAG}.tar.gz"
+
+curl -fsSLO "${BASE_URL}/${ARCHIVE}"
+curl -fsSLO "${BASE_URL}/${ARCHIVE}.sha256"
+curl -fsSLO "${BASE_URL}/${ARCHIVE}.sig"
+curl -fsSLO "${BASE_URL}/${ARCHIVE}.pem"
+curl -fsSLO "${BASE_URL}/${ARCHIVE}.intoto.jsonl"
+```
+
+### 2. Check the SHA-256
+
+Fast integrity check. Doesn't prove authenticity — only that the bytes match what's on the release page.
+
+```bash
+sha256sum --check "${ARCHIVE}.sha256"
+# drydock-v1.5.0-rc.9.tar.gz: OK
+```
+
+On macOS, use `shasum -a 256 -c "${ARCHIVE}.sha256"`.
+
+### 3. Verify the cosign signature
+
+This proves the tarball was signed by the Drydock release workflow at this tag.
+
+```bash
+IDENTITY_REGEX='^https://github.com/CodesWhat/drydock/.github/workflows/release-from-tag.yml@refs/tags/.+$'
+OIDC_ISSUER='https://token.actions.githubusercontent.com'
+
+cosign verify-blob \
+  --signature "${ARCHIVE}.sig" \
+  --certificate "${ARCHIVE}.pem" \
+  --certificate-identity-regexp "${IDENTITY_REGEX}" \
+  --certificate-oidc-issuer "${OIDC_ISSUER}" \
+  "${ARCHIVE}"
+# Verified OK
+```
+
+### 4. Verify the SLSA provenance
+
+The `.intoto.jsonl` file is a signed [in-toto](https://in-toto.io/) attestation describing how, when, and where the tarball was built. Two ways to verify:
+
+<Tabs items={['gh attestation (simplest)', 'slsa-verifier']}>
+<Tab value="gh attestation (simplest)">
+
+```bash
+gh attestation verify "${ARCHIVE}" --repo CodesWhat/drydock
+```
+
+`gh` downloads the attestation from GitHub, confirms the signing identity matches the repo, and verifies the subject digest matches your local file.
+
+</Tab>
+<Tab value="slsa-verifier">
+
+```bash
+slsa-verifier verify-artifact \
+  --provenance-path "${ARCHIVE}.intoto.jsonl" \
+  --source-uri github.com/CodesWhat/drydock \
+  --source-tag "${TAG}" \
+  "${ARCHIVE}"
+```
+
+`slsa-verifier` is offline-capable — it verifies directly against the `.intoto.jsonl` file you downloaded, without re-fetching from GitHub.
+
+</Tab>
+</Tabs>
+
+A PASS on both the cosign signature AND the SLSA attestation is the strongest guarantee we offer: the tarball came from our workflow, on this tag, unchanged.
+
+## Why some older tags look different
+
+Releases before v1.5 were signed by `.github/workflows/release.yml` (now renamed `release-from-tag.yml`). If you're verifying an older tag, adjust the identity regex:
+
+```bash
+# v1.4.x and older:
+IDENTITY_REGEX='^https://github.com/CodesWhat/drydock/.github/workflows/release.yml@refs/(heads/main|tags/.+)$'
+```
+
+Some older image tags also expose legacy `sha256-<digest>.sig` tags in registries. Newer releases store signatures via [OCI referrers](https://github.com/opencontainers/distribution-spec/blob/main/spec.md#listing-referrers) instead, so you may not see a `.sig` tag in the registry even though `cosign verify` succeeds.
+
+<Callout type="warn">
+If any verification step fails, do not run the image or extract the archive. Open a [security advisory](https://github.com/CodesWhat/drydock/security/advisories) with the tag and the exact failure output — a verification failure on a published release is always worth investigating.
+</Callout>
+
+## See also
+
+- [Security Hardening Guide](/docs/guides/security) — lock down a running Drydock deployment
+- [Update Bouncer](/docs/configuration/security) — use Drydock's built-in cosign support to verify the images Drydock itself is watching
+- [Sigstore documentation](https://docs.sigstore.dev/) — background on keyless signing and Rekor transparency log
+- [SLSA framework](https://slsa.dev/) — what the provenance attestation proves

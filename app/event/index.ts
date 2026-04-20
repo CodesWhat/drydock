@@ -100,6 +100,23 @@ export interface SecurityAlertEventPayload {
   summary?: SecurityAlertSummary;
   blockingCount?: number;
   container?: Container;
+  /**
+   * Optional correlation id linking this alert to its scan cycle. When present, consumers
+   * should match the same id on a subsequent `emitSecurityScanCycleComplete` to group the
+   * alert into a cycle-level digest. Absent for legacy callers (pre-v1.5.0 agents, etc.);
+   * consumers should treat an unset id as a single-alert cycle.
+   */
+  cycleId?: string;
+}
+
+export interface SecurityScanCycleCompleteEventPayload {
+  scannedCount: number;
+  alertCount?: number;
+  /** Correlation id shared with each `emitSecurityAlert` emitted during this cycle. */
+  cycleId: string;
+  startedAt?: string;
+  completedAt?: string;
+  scope?: 'scheduled' | 'on-demand-single' | 'on-demand-bulk' | 'agent-forwarded';
 }
 
 export interface AgentConnectedEventPayload {
@@ -116,6 +133,8 @@ export interface WatcherSnapshotEventPayload {
   watcher: {
     type: string;
     name: string;
+    configuration?: Record<string, unknown>;
+    metadata?: Record<string, unknown>;
   };
   containers: Container[];
 }
@@ -141,6 +160,10 @@ const updateOperationChangedHandlers = new Map<
   OrderedEventHandler<UpdateOperationChangedEventPayload>
 >();
 const securityAlertHandlers = new Map<number, OrderedEventHandler<SecurityAlertEventPayload>>();
+const securityScanCycleCompleteHandlers = new Map<
+  number,
+  OrderedEventHandler<SecurityScanCycleCompleteEventPayload>
+>();
 const agentConnectedHandlers = new Map<number, OrderedEventHandler<AgentConnectedEventPayload>>();
 const agentDisconnectedHandlers = new Map<
   number,
@@ -340,6 +363,28 @@ export function registerSecurityAlert(
 }
 
 /**
+ * Emit SecurityScanCycleComplete event. Fired after a scan cycle finishes so digest-mode
+ * triggers can flush any buffered per-container alerts into a single summary notification.
+ * @param payload
+ */
+export async function emitSecurityScanCycleComplete(
+  payload: SecurityScanCycleCompleteEventPayload,
+): Promise<void> {
+  await emitOrderedHandlers(securityScanCycleCompleteHandlers, payload);
+}
+
+/**
+ * Register to SecurityScanCycleComplete event.
+ * @param handler
+ */
+export function registerSecurityScanCycleComplete(
+  handler: OrderedEventHandlerFn<SecurityScanCycleCompleteEventPayload>,
+  options: EventHandlerRegistrationOptions = {},
+): () => void {
+  return registerOrderedEventHandler(securityScanCycleCompleteHandlers, handler, options);
+}
+
+/**
  * Emit AgentConnected event.
  * @param payload
  */
@@ -513,6 +558,7 @@ export function clearAllListenersForTests(): void {
   containerUpdateFailedHandlers.clear();
   updateOperationChangedHandlers.clear();
   securityAlertHandlers.clear();
+  securityScanCycleCompleteHandlers.clear();
   agentConnectedHandlers.clear();
   agentDisconnectedHandlers.clear();
   selfUpdateStartingHandlers.clear();

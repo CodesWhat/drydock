@@ -4,7 +4,7 @@ import rateLimit from 'express-rate-limit';
 import nocache from 'nocache';
 import { getAgent } from '../agent/manager.js';
 import { getSecurityConfiguration, getServerConfiguration } from '../configuration/index.js';
-import { emitSecurityAlert } from '../event/index.js';
+import { emitSecurityAlert, emitSecurityScanCycleComplete } from '../event/index.js';
 import logger from '../log/index.js';
 import { sanitizeLogParam } from '../log/sanitize.js';
 import { fullName } from '../model/container.js';
@@ -24,6 +24,7 @@ import Trigger from '../triggers/providers/Trigger.js';
 import { getErrorMessage } from '../util/error.js';
 import { uniqStrings } from '../util/string-array.js';
 import { mapComponentsToList } from './component.js';
+import { createBulkSecurityHandlers } from './container/bulk-security.js';
 import { createCrudHandlers } from './container/crud.js';
 import { createLogHandlers } from './container/logs.js';
 import { createSecurityHandlers } from './container/security.js';
@@ -207,6 +208,7 @@ const securityHandlers = createSecurityHandlers({
   scanImageForVulnerabilities,
   verifyImageSignature,
   emitSecurityAlert,
+  emitSecurityScanCycleComplete,
   fullName,
   broadcastScanStarted,
   broadcastScanCompleted,
@@ -214,6 +216,26 @@ const securityHandlers = createSecurityHandlers({
   getErrorMessage,
   getContainerImageFullName,
   getContainerRegistryAuth,
+  updateDigestScanCache,
+  log,
+});
+
+const bulkSecurityHandlers = createBulkSecurityHandlers({
+  storeContainer: {
+    getAllContainers: () => storeContainer.getContainers({}),
+    getContainer: (id) => storeContainer.getContainer(id),
+    updateContainer: (c) => storeContainer.updateContainer(c),
+  },
+  getSecurityConfiguration,
+  scanImageForVulnerabilities,
+  emitSecurityAlert,
+  emitSecurityScanCycleComplete,
+  fullName,
+  broadcastScanStarted,
+  broadcastScanCompleted,
+  getContainerImageFullName,
+  getContainerRegistryAuth,
+  getErrorMessage,
   updateDigestScanCache,
   log,
 });
@@ -253,6 +275,19 @@ export function init() {
   router.get('/summary', crudHandlers.getContainerSummary);
   router.get('/recent-status', getContainerRecentStatus);
   router.get('/security/vulnerabilities', crudHandlers.getContainerSecurityVulnerabilities);
+  router.post(
+    '/scan-all',
+    rateLimit({
+      windowMs: 60_000,
+      max: 1,
+      standardHeaders: true,
+      legacyHeaders: false,
+      validate: { xForwardedForHeader: false },
+      message: 'Bulk scan rate limit exceeded. Max 1 per 60 seconds.',
+      ...identityAwareRateLimitOptions,
+    }),
+    bulkSecurityHandlers.scanAll,
+  );
   router.get('/:id/stats', statsHandlers.getContainerStats);
   router.get('/:id/stats/stream', statsHandlers.streamContainerStats);
   router.get('/:id/release-notes', crudHandlers.getContainerReleaseNotes);

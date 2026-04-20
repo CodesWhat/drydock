@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { type RouteLocationRaw, useRouter } from 'vue-router';
+import type { OperationChangedPayload } from '../services/sse';
+import { TERMINAL_CONTAINER_UPDATE_OPERATION_STATUSES } from '../types/update-operation';
 import { GridItem, GridLayout } from 'grid-layout-plus';
 import AppIconButton from '@/components/AppIconButton.vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
@@ -52,6 +54,7 @@ const gridMargin = computed<[number, number]>(() => {
   return [16, 16]; // desktop
 });
 const dashboardUpdateInProgress = ref<string | null>(null);
+const dashboardUpdatingById = ref<Map<string, true>>(new Map());
 const dashboardUpdateAllInProgress = ref(false);
 const dashboardUpdateError = ref<string | null>(null);
 const dashboardPendingUpdateRows = ref<Map<string, { row: RecentUpdateRow; startedAt: number }>>(
@@ -320,6 +323,37 @@ function pruneDashboardPendingUpdateRows(now: number = Date.now()) {
   }
 }
 
+function pruneGhostsForOperation(operation: OperationChangedPayload) {
+  // Build a set of all identifiers from the operation payload for matching
+  const operationIdentifiers = new Set<string>(
+    [operation.containerId, operation.newContainerId, operation.containerName].filter(
+      (v): v is string => typeof v === 'string' && v.length > 0,
+    ),
+  );
+  if (operationIdentifiers.size === 0) {
+    return;
+  }
+  // A ghost row matches when any of the stored row's identifiers (map key, id,
+  // name, or identityKey) appears in the operation's identifier set.
+  for (const [key, { row }] of dashboardPendingUpdateRows.value.entries()) {
+    const rowIdentifiers = new Set<string>(
+      [key, row.id, row.name, row.identityKey].filter(
+        (v): v is string => typeof v === 'string' && v.length > 0,
+      ),
+    );
+    const matches = [...rowIdentifiers].some((v) => operationIdentifiers.has(v));
+    if (matches) {
+      clearDashboardPendingUpdateRow(key);
+    }
+  }
+  // Also clear optimistic updating state for this operation
+  const nextUpdating = new Map(dashboardUpdatingById.value);
+  for (const id of operationIdentifiers) {
+    nextUpdating.delete(id);
+  }
+  dashboardUpdatingById.value = nextUpdating;
+}
+
 async function pollDashboardPendingUpdateRows() {
   if (dashboardPendingUpdatePollInFlight.value) {
     return;
@@ -389,7 +423,24 @@ watch(containers, () => {
   pruneDashboardUpdateSequence();
 });
 
+const terminalOperationStatusSet = new Set<string>(TERMINAL_CONTAINER_UPDATE_OPERATION_STATUSES);
+
+function handleTerminalOperationSse(event: Event) {
+  const payload = (event as CustomEvent<OperationChangedPayload>).detail;
+  if (!payload) {
+    return;
+  }
+  if (terminalOperationStatusSet.has(payload.status)) {
+    pruneGhostsForOperation(payload);
+  }
+}
+
+onMounted(() => {
+  globalThis.addEventListener('dd:sse-update-operation-changed', handleTerminalOperationSse);
+});
+
 onUnmounted(() => {
+  globalThis.removeEventListener('dd:sse-update-operation-changed', handleTerminalOperationSse);
   stopDashboardPendingUpdatePolling();
 });
 
@@ -437,6 +488,12 @@ function confirmDashboardUpdate(row: RecentUpdateRow) {
     accept: async () => {
       dashboardUpdateInProgress.value = row.id;
       dashboardUpdateError.value = null;
+      // Optimistic state: mark this row as updating immediately, before the API
+      // call resolves, so the badge appears on click rather than after the next
+      // dashboard refetch (Defect 1).
+      const nextUpdating = new Map(dashboardUpdatingById.value);
+      nextUpdating.set(row.id, true);
+      dashboardUpdatingById.value = nextUpdating;
       try {
         const result = await runContainerUpdateRequest({
           request: () => updateContainer(row.id),
@@ -452,9 +509,17 @@ function confirmDashboardUpdate(row: RecentUpdateRow) {
         if (result === 'accepted') {
           toast.success(getContainerUpdateStartedMessage(row.name));
         } else {
+          // Stale/up-to-date: clear optimistic state immediately since no update started
+          const next = new Map(dashboardUpdatingById.value);
+          next.delete(row.id);
+          dashboardUpdatingById.value = next;
           toast.info(getContainerAlreadyUpToDateMessage(row.name));
         }
       } catch (e: unknown) {
+        // Clear optimistic state on error so the row returns to its normal state
+        const next = new Map(dashboardUpdatingById.value);
+        next.delete(row.id);
+        dashboardUpdatingById.value = next;
         dashboardUpdateError.value = errorMessage(e, `Failed to update ${row.name}`);
       } finally {
         dashboardUpdateInProgress.value = null;
@@ -662,6 +727,7 @@ function confirmDashboardUpdateAll() {
               :pending-updates-count="pendingUpdates.length"
               :dashboard-update-error="dashboardUpdateError"
               :dashboard-update-in-progress="dashboardUpdateInProgress"
+              :dashboard-updating-by-id="dashboardUpdatingById"
               :dashboard-update-all-in-progress="dashboardUpdateAllInProgress"
               :dashboard-update-sequence="dashboardUpdateSequence"
               :get-update-kind-color="getUpdateKindColor"

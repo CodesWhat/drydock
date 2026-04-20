@@ -9,6 +9,7 @@ export type NotificationEventKind =
   | 'update-applied'
   | 'update-failed'
   | 'security-alert'
+  | 'security-alert-digest'
   | 'agent-connect'
   | 'agent-disconnect'
   | 'agent-reconnect';

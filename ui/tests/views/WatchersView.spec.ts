@@ -1,7 +1,6 @@
 import { flushPromises } from '@vue/test-utils';
 import { defineComponent } from 'vue';
 import { resetPreferences } from '@/preferences/store';
-import { getAllContainers } from '@/services/container';
 import { getAllWatchers, getWatcher } from '@/services/watcher';
 import WatchersView from '@/views/WatchersView.vue';
 import { dataViewStubs } from '../helpers/data-view-stubs';
@@ -27,13 +26,17 @@ vi.mock('@/services/watcher', () => ({
   getWatcher: vi.fn(),
 }));
 
-vi.mock('@/services/container', () => ({
-  getAllContainers: vi.fn(),
-}));
-
 const mockGetAllWatchers = getAllWatchers as ReturnType<typeof vi.fn>;
 const mockGetWatcher = getWatcher as ReturnType<typeof vi.fn>;
-const mockGetAllContainers = getAllContainers as ReturnType<typeof vi.fn>;
+
+function withStats(total: number) {
+  return {
+    metadata: {
+      containers: { total, running: total, stopped: 0, updatesAvailable: 0 },
+      images: total,
+    },
+  };
+}
 
 const richDataTableStub = defineComponent({
   props: ['columns', 'rows', 'rowKey', 'activeRow'],
@@ -86,25 +89,20 @@ describe('WatchersView', () => {
         name: 'Alpha Watcher',
         type: 'docker',
         configuration: { cron: '*/5 * * * *' },
+        ...withStats(2),
       },
       {
         id: 'watcher-beta',
         name: 'Beta Watcher',
         type: 'docker',
         configuration: { cron: '0 * * * *' },
+        ...withStats(1),
       },
-    ]);
-
-    mockGetAllContainers.mockResolvedValue([
-      { id: 'c-1', watcher: 'Alpha Watcher' },
-      { id: 'c-2', watcher: 'Alpha Watcher' },
-      { id: 'c-3', watcher: 'Beta Watcher' },
     ]);
 
     const wrapper = await mountWatchersView();
 
     expect(mockGetAllWatchers).toHaveBeenCalledTimes(1);
-    expect(mockGetAllContainers).toHaveBeenCalledTimes(1);
     expect(wrapper.find('.data-table').attributes('data-row-count')).toBe('2');
 
     const table = wrapper.findComponent(richDataTableStub);
@@ -125,12 +123,14 @@ describe('WatchersView', () => {
         name: 'esk00',
         type: 'docker',
         configuration: { cron: '*/5 * * * *' },
+        ...withStats(2),
       },
       {
         id: 'docker.esk83',
         name: 'esk83',
         type: 'docker',
         configuration: { cron: '0 * * * *' },
+        ...withStats(1),
       },
       {
         id: 'docker.empty',
@@ -138,12 +138,6 @@ describe('WatchersView', () => {
         type: 'docker',
         configuration: { cron: '0 * * * *' },
       },
-    ]);
-
-    mockGetAllContainers.mockResolvedValue([
-      { id: 'c-1', watcher: 'esk00' },
-      { id: 'c-2', watcher: 'esk00' },
-      { id: 'c-3', watcher: 'esk83' },
     ]);
 
     const wrapper = await mountWatchersView();
@@ -176,7 +170,6 @@ describe('WatchersView', () => {
         configuration: { cron: '0 * * * *' },
       },
     ]);
-    mockGetAllContainers.mockResolvedValue([{ id: 'c-1', watcher: 'watcher-edge' }]);
 
     const wrapper = await mountWatchersView();
 
@@ -190,7 +183,6 @@ describe('WatchersView', () => {
 
   it('API failure shows “Failed to load watchers”', async () => {
     mockGetAllWatchers.mockRejectedValue(new Error('boom'));
-    mockGetAllContainers.mockResolvedValue([]);
 
     const wrapper = await mountWatchersView();
 
@@ -208,7 +200,6 @@ describe('WatchersView', () => {
         metadata: { lastRunAt: fiveMinutesAgo },
       },
     ]);
-    mockGetAllContainers.mockResolvedValue([]);
 
     const wrapper = await mountWatchersView();
     const table = wrapper.findComponent(richDataTableStub);
@@ -226,7 +217,6 @@ describe('WatchersView', () => {
         configuration: { cron: '*/5 * * * *' },
       },
     ]);
-    mockGetAllContainers.mockResolvedValue([]);
 
     const wrapper = await mountWatchersView();
     const table = wrapper.findComponent(richDataTableStub);
@@ -248,7 +238,6 @@ describe('WatchersView', () => {
         metadata: { nextRunAt: '2026-04-09T13:30:00.000Z' },
       },
     ]);
-    mockGetAllContainers.mockResolvedValue([]);
 
     const wrapper = await mountWatchersView();
     const table = wrapper.findComponent(richDataTableStub);
@@ -257,6 +246,57 @@ describe('WatchersView', () => {
     expect(rows[0].nextRun).toBe('1h 30m');
 
     vi.useRealTimers();
+  });
+
+  it('renders nextRunAt on the row and the next-run span has a tooltip with the absolute time', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-04-09T12:00:00.000Z'));
+
+    mockGetAllWatchers.mockResolvedValue([
+      {
+        id: 'watcher-alpha',
+        name: 'Alpha Watcher',
+        type: 'docker',
+        configuration: { cron: '*/5 * * * *' },
+        metadata: { nextRunAt: '2026-04-09T13:30:00.000Z' },
+      },
+    ]);
+
+    const wrapper = await mountWatchersView();
+    const table = wrapper.findComponent(richDataTableStub);
+    const rows = table.props('rows') as Array<{ nextRun: string; nextRunAt: string | undefined }>;
+
+    expect(rows[0].nextRun).toBe('1h 30m');
+    expect(rows[0].nextRunAt).toBe('2026-04-09T13:30:00.000Z');
+
+    const nextRunSpan = wrapper.findAll('span').find((s) => s.text() === '1h 30m');
+    expect(nextRunSpan).toBeDefined();
+    const title = nextRunSpan?.element.getAttribute('title');
+    expect(title).toBeTruthy();
+    expect(title).toMatch(/\d{2}:\d{2}:\d{2}/);
+
+    vi.useRealTimers();
+  });
+
+  it('next-run span has empty tooltip when nextRunAt is absent', async () => {
+    mockGetAllWatchers.mockResolvedValue([
+      {
+        id: 'watcher-alpha',
+        name: 'Alpha Watcher',
+        type: 'docker',
+        configuration: { cron: '*/5 * * * *' },
+      },
+    ]);
+
+    const wrapper = await mountWatchersView();
+    const table = wrapper.findComponent(richDataTableStub);
+    const rows = table.props('rows') as Array<{ nextRun: string; nextRunAt: string | undefined }>;
+
+    expect(rows[0].nextRunAt).toBeUndefined();
+
+    const emDashSpan = wrapper.findAll('span').find((s) => s.text() === '\u2014');
+    expect(emDashSpan).toBeDefined();
+    expect(emDashSpan?.element.getAttribute('title')).toBeFalsy();
   });
 
   it('caps long cron strings in the table view', async () => {
@@ -269,7 +309,6 @@ describe('WatchersView', () => {
         configuration: { cron: longCron },
       },
     ]);
-    mockGetAllContainers.mockResolvedValue([{ id: 'c-1', watcher: 'Alpha Watcher' }]);
 
     const wrapper = await mountWatchersView();
 
@@ -289,7 +328,6 @@ describe('WatchersView', () => {
         configuration: { cron: '*/5 * * * *' },
       },
     ]);
-    mockGetAllContainers.mockResolvedValue([{ id: 'c-1', watcher: 'watcher-alpha' }]);
     mockGetWatcher.mockResolvedValue({
       id: 'watcher-alpha',
       name: 'Alpha Watcher',
@@ -319,7 +357,6 @@ describe('WatchersView', () => {
         configuration: { cron: '*/5 * * * *' },
       },
     ]);
-    mockGetAllContainers.mockResolvedValue([{ id: 'c-1', watcher: 'Alpha Watcher' }]);
     mockGetWatcher.mockResolvedValue({
       id: 'watcher-alpha',
       name: 'Alpha Watcher',
@@ -342,5 +379,26 @@ describe('WatchersView', () => {
     });
     expect(wrapper.text()).toContain('*/1 * * * *');
     expect(wrapper.text()).toContain('30s');
+  });
+
+  it('reads containers total from metadata (issue #301)', async () => {
+    mockGetAllWatchers.mockResolvedValue([
+      {
+        id: 'watcher-alpha',
+        name: 'Alpha Watcher',
+        type: 'docker',
+        configuration: { cron: '*/5 * * * *' },
+        metadata: {
+          containers: { total: 5, running: 3, stopped: 2, updatesAvailable: 1 },
+          images: 3,
+        },
+      },
+    ]);
+
+    const wrapper = await mountWatchersView();
+    const table = wrapper.findComponent(richDataTableStub);
+    const rows = table.props('rows') as Array<{ containers: number }>;
+
+    expect(rows[0].containers).toBe(5);
   });
 });

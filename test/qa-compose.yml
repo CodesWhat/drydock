@@ -237,6 +237,22 @@ services:
       - dd.display.name=MongoDB
       - dd.group=data
 
+  # TimescaleDB HA — wide version tags exercise the fixed-column-width fix (#286).
+  # Tag format pg16.X-ts2.X.X[-oss] produces ~30-40 char version strings
+  # (e.g. "pg16.2-ts2.14.2 → pg16.6-ts2.17.2-oss") so the Version column
+  # has a row that would cause auto-layout reflow on scroll in the old build.
+  timescale-db:
+    image: timescale/timescaledb-ha:pg16.2-ts2.14.2
+    pull_policy: missing
+    container_name: drydock-playwright-timescale-db
+    environment:
+      - POSTGRES_PASSWORD=testpass
+    labels:
+      - dd.watch=true
+      - dd.display.name=TimescaleDB HA
+      - dd.group=data
+      - dd.tag.include=^pg16\.\d+-ts2\.\d+\.\d+.*$$
+
   # ── Security scan test containers ──────────────────────
 
   # Node 16 Alpine — EOL, newer versions have known CRITICAL CVEs

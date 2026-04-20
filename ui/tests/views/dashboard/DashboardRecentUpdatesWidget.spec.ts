@@ -81,6 +81,7 @@ function mountWidget(
       dashboardUpdateAllInProgress: false,
       dashboardUpdateError: null,
       dashboardUpdateInProgress: null,
+      dashboardUpdatingById: new Map<string, true>(),
       dashboardUpdateSequence: new Map(),
       editMode: false,
       getUpdateKindColor: vi.fn(() => 'var(--dd-warning)'),
@@ -152,6 +153,18 @@ describe('DashboardRecentUpdatesWidget', () => {
     expect(wrapper.text()).toContain('2 updates available');
     expect(wrapper.find('.drag-handle').exists()).toBe(true);
     expect(wrapper.find('.app-icon-stub[data-icon="ph:dots-six"]').exists()).toBe(true);
+  });
+
+  it('shows an updating state via dashboardUpdatingById before dashboardUpdateInProgress is set', () => {
+    // Asserts that the optimistic pre-API map drives the Updating badge
+    // independently of dashboardUpdateInProgress (which is set after the modal).
+    const wrapper = mountWidget({
+      dashboardUpdatingById: new Map<string, true>([['c1', true]]),
+    });
+
+    const row = wrapper.find('.dashboard-row-stub');
+    expect(row.classes()).toContain('opacity-50');
+    expect(wrapper.text()).toContain('Updating');
   });
 
   it('shows an updating state while a dashboard row is being updated', () => {

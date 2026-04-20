@@ -35,7 +35,10 @@ import RegistryResolver from './RegistryResolver.js';
 import RollbackMonitor from './RollbackMonitor.js';
 import SecurityGate from './SecurityGate.js';
 import SelfUpdateOrchestrator from './SelfUpdateOrchestrator.js';
-import { prepareSelfUpdateOperation as preparePersistedSelfUpdateOperation } from './self-update-operation.js';
+import {
+  markSelfUpdateOperationFailed as markSelfUpdateOperationFailedFromStore,
+  prepareSelfUpdateOperation as preparePersistedSelfUpdateOperation,
+} from './self-update-operation.js';
 import UpdateLifecycleExecutor from './UpdateLifecycleExecutor.js';
 import { getRequestedOperationId } from './update-runtime-context.js';
 
@@ -182,6 +185,7 @@ const UPDATE_LIFECYCLE_ORCHESTRATOR_METHODS = [
   'prepareSelfUpdateOperation',
   'maybeNotifySelfUpdate',
   'executeSelfUpdate',
+  'markSelfUpdateOperationFailed',
   'runPreRuntimeUpdateLifecycle',
   'performContainerUpdate',
   'runPostUpdateHook',
@@ -370,6 +374,7 @@ class Docker<
         prepareSelfUpdateOperation: updateLifecycleCallbacks.prepareSelfUpdateOperation,
         maybeNotifySelfUpdate: updateLifecycleCallbacks.maybeNotifySelfUpdate,
         executeSelfUpdate: updateLifecycleCallbacks.executeSelfUpdate,
+        markSelfUpdateOperationFailed: updateLifecycleCallbacks.markSelfUpdateOperationFailed,
       },
       runtimeUpdate: {
         runPreRuntimeUpdateLifecycle: updateLifecycleCallbacks.runPreRuntimeUpdateLifecycle,
@@ -1185,6 +1190,10 @@ class Docker<
 
   async maybeNotifySelfUpdate(container, logContainer, operationId?: string) {
     await this.selfUpdateOrchestrator.maybeNotify(container, logContainer, operationId);
+  }
+
+  async markSelfUpdateOperationFailed(operationId: string, lastError: string): Promise<void> {
+    markSelfUpdateOperationFailedFromStore(operationId, lastError);
   }
 
   async persistSecurityState(container, securityPatch, logContainer) {

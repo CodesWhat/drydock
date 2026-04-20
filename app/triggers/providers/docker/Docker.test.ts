@@ -26,6 +26,7 @@ const configurationValid = {
     '${isDigestUpdate ? "Container " + container.name + " running tag " + currentTag + " has a newer image available" : "Container " + container.name + " running with " + container.updateKind.kind + " " + container.updateKind.localValue + " can be updated to " + container.updateKind.kind + " " + container.updateKind.remoteValue}${container.result && container.result.link ? "\\n" + container.result.link : ""}',
   batchtitle: '${containers.length} updates available',
   resolvenotifications: false,
+  securitymode: 'simple',
   digestcron: '0 8 * * *',
 };
 
@@ -3688,6 +3689,17 @@ describe('extracted lifecycle delegation', () => {
     } finally {
       docker.selfUpdateOrchestrator = originalSelfUpdateOrchestrator;
     }
+  });
+
+  test('markSelfUpdateOperationFailed should call markOperationTerminal with failed status', async () => {
+    mockMarkOperationTerminal.mockReturnValue(undefined);
+
+    await docker.markSelfUpdateOperationFailed('op-stuck-123', 'pull failed: connection refused');
+
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith('op-stuck-123', {
+      status: 'failed',
+      lastError: 'pull failed: connection refused',
+    });
   });
 
   test('executeContainerUpdate should delegate to containerUpdateExecutor', async () => {

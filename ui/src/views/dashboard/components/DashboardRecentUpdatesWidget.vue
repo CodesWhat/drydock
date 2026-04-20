@@ -28,6 +28,7 @@ interface Props {
   dashboardUpdateAllInProgress: boolean;
   dashboardUpdateError: string | null;
   dashboardUpdateInProgress: string | null;
+  dashboardUpdatingById: Map<string, true>;
   dashboardUpdateSequence: Map<string, DashboardUpdateSequenceEntry>;
   editMode: boolean;
   getUpdateKindColor: (kind: UpdateKind | null) => string;
@@ -81,7 +82,11 @@ function getRowUpdateState(row: Record<string, unknown>): 'queued' | 'updating' 
   }
 
   const id = row.id as string;
-  if (status === 'updating' || props.dashboardUpdateInProgress === id) {
+  if (
+    status === 'updating' ||
+    props.dashboardUpdateInProgress === id ||
+    props.dashboardUpdatingById.has(id)
+  ) {
     return 'updating';
   }
 

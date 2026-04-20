@@ -298,6 +298,7 @@ services:
       - IMAGES=1
       - EVENTS=1
       - SERVICES=1
+      - INFO=1       # required for daemon hostname detection (notification identity)
     healthcheck:
       test: wget --spider http://localhost:2375/version || exit 1
       interval: 5s
@@ -314,6 +315,7 @@ The `:ro` (read-only) flag on the Docker socket mount is omitted intentionally. 
 | Feature | Required proxy env vars |
 | --- | --- |
 | Watch containers (default) | `CONTAINERS=1`, `IMAGES=1`, `EVENTS=1`, `SERVICES=1` |
+| Notification identity (daemon hostname) | All of the above **plus** `INFO=1` — required so drydock can read the Docker daemon's hostname for notification prefixes (e.g. `[datavault]`). Without this, notifications fall back to `os.hostname()` which inside a container resolves to the container's short ID. Alternative: set `DD_SERVER_NAME` on the drydock container to override detection entirely. |
 | Container actions (start/stop/restart) | All of the above **plus** `POST=1` and a [Docker trigger](/docs/configuration/triggers/docker) |
 | Docker trigger (auto-updates) | All of the above **plus** `POST=1`, `NETWORKS=1` |
 
@@ -557,6 +559,7 @@ services:
       - IMAGES=1
       - EVENTS=1
       - SERVICES=1
+      - INFO=1       # required for daemon hostname detection (notification identity)
       - POST=1
       - NETWORKS=1
     volumes:

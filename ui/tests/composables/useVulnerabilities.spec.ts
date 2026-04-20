@@ -852,4 +852,348 @@ describe('useVulnerabilities', () => {
     expect(state.totalContainerCount.value).toBe(0);
     expect(state.scannedContainerCount.value).toBe(0);
   });
+
+  describe('hasUpdate / containersWithUpdate cross-reference', () => {
+    function makeContainerRef(overrides: any[]) {
+      return ref(overrides);
+    }
+
+    it('sets hasUpdate and containersWithUpdate when a container has newTag', async () => {
+      mockGetSecurityVulnerabilityOverview.mockResolvedValue({
+        totalContainers: 1,
+        scannedContainers: 1,
+        latestScannedAt: null,
+        images: [
+          {
+            image: 'nginx',
+            containerIds: ['c1'],
+            vulnerabilities: [{ id: 'CVE-1', severity: 'HIGH', package: 'openssl' }],
+          },
+        ],
+      });
+
+      const containers = makeContainerRef([
+        {
+          id: 'c1',
+          name: 'nginx',
+          image: 'nginx:1.25',
+          newTag: '1.26',
+          identityKey: '::Local::nginx',
+          currentTag: '1.25',
+          status: 'running',
+          registry: 'dockerhub',
+          updateKind: 'minor',
+          updateMaturity: null,
+          bouncer: 'safe',
+          server: 'Local',
+          icon: 'docker',
+          details: { ports: [], volumes: [], env: [], labels: [] },
+        },
+      ]);
+
+      const state = useVulnerabilities({
+        securitySortField: ref('critical'),
+        securitySortAsc: ref(false),
+        containers,
+      });
+      await state.fetchVulnerabilities();
+
+      const summary = state.filteredSummaries.value[0];
+      expect(summary.hasUpdate).toBe(true);
+      expect(summary.containersWithUpdate).toEqual(['c1']);
+    });
+
+    it('does not set hasUpdate when container newTag is null', async () => {
+      mockGetSecurityVulnerabilityOverview.mockResolvedValue({
+        totalContainers: 1,
+        scannedContainers: 1,
+        latestScannedAt: null,
+        images: [
+          {
+            image: 'redis',
+            containerIds: ['c2'],
+            vulnerabilities: [{ id: 'CVE-2', severity: 'LOW', package: 'glibc' }],
+          },
+        ],
+      });
+
+      const containers = makeContainerRef([
+        {
+          id: 'c2',
+          name: 'redis',
+          image: 'redis:7',
+          newTag: null,
+          identityKey: '::Local::redis',
+          currentTag: '7',
+          status: 'running',
+          registry: 'dockerhub',
+          updateKind: null,
+          updateMaturity: null,
+          bouncer: 'safe',
+          server: 'Local',
+          icon: 'docker',
+          details: { ports: [], volumes: [], env: [], labels: [] },
+        },
+      ]);
+
+      const state = useVulnerabilities({
+        securitySortField: ref('critical'),
+        securitySortAsc: ref(false),
+        containers,
+      });
+      await state.fetchVulnerabilities();
+
+      const summary = state.filteredSummaries.value[0];
+      expect(summary.hasUpdate).toBeUndefined();
+      expect(summary.containersWithUpdate).toBeUndefined();
+    });
+
+    it('handles multiple containers per image with mixed update states', async () => {
+      mockGetSecurityVulnerabilityOverview.mockResolvedValue({
+        totalContainers: 3,
+        scannedContainers: 3,
+        latestScannedAt: null,
+        images: [
+          {
+            image: 'app',
+            containerIds: ['c1', 'c2', 'c3'],
+            vulnerabilities: [{ id: 'CVE-X', severity: 'CRITICAL', package: 'pkg' }],
+          },
+        ],
+      });
+
+      const containers = makeContainerRef([
+        {
+          id: 'c1',
+          name: 'app-1',
+          image: 'app:1.0',
+          newTag: '2.0',
+          identityKey: '::Local::app-1',
+          currentTag: '1.0',
+          status: 'running',
+          registry: 'dockerhub',
+          updateKind: 'major',
+          updateMaturity: null,
+          bouncer: 'safe',
+          server: 'Local',
+          icon: 'docker',
+          details: { ports: [], volumes: [], env: [], labels: [] },
+        },
+        {
+          id: 'c2',
+          name: 'app-2',
+          image: 'app:1.0',
+          newTag: null,
+          identityKey: '::Local::app-2',
+          currentTag: '1.0',
+          status: 'running',
+          registry: 'dockerhub',
+          updateKind: null,
+          updateMaturity: null,
+          bouncer: 'safe',
+          server: 'Local',
+          icon: 'docker',
+          details: { ports: [], volumes: [], env: [], labels: [] },
+        },
+        {
+          id: 'c3',
+          name: 'app-3',
+          image: 'app:1.0',
+          newTag: '2.0',
+          identityKey: '::Local::app-3',
+          currentTag: '1.0',
+          status: 'running',
+          registry: 'dockerhub',
+          updateKind: 'major',
+          updateMaturity: null,
+          bouncer: 'safe',
+          server: 'Local',
+          icon: 'docker',
+          details: { ports: [], volumes: [], env: [], labels: [] },
+        },
+      ]);
+
+      const state = useVulnerabilities({
+        securitySortField: ref('critical'),
+        securitySortAsc: ref(false),
+        containers,
+      });
+      await state.fetchVulnerabilities();
+
+      const summary = state.filteredSummaries.value[0];
+      expect(summary.hasUpdate).toBe(true);
+      expect(summary.containersWithUpdate).toEqual(['c1', 'c3']);
+    });
+
+    it('does not annotate when containers prop is not provided', async () => {
+      mockGetSecurityVulnerabilityOverview.mockResolvedValue({
+        totalContainers: 1,
+        scannedContainers: 1,
+        latestScannedAt: null,
+        images: [
+          {
+            image: 'alpine',
+            containerIds: ['c1'],
+            vulnerabilities: [{ id: 'CVE-3', severity: 'LOW', package: 'busybox' }],
+          },
+        ],
+      });
+
+      const state = useVulnerabilities({
+        securitySortField: ref('critical'),
+        securitySortAsc: ref(false),
+      });
+      await state.fetchVulnerabilities();
+
+      const summary = state.filteredSummaries.value[0];
+      expect(summary.hasUpdate).toBeUndefined();
+      expect(summary.containersWithUpdate).toBeUndefined();
+    });
+
+    it('propagates releaseNotes and releaseLink from an updating container to the summary', async () => {
+      mockGetSecurityVulnerabilityOverview.mockResolvedValue({
+        totalContainers: 1,
+        scannedContainers: 1,
+        latestScannedAt: null,
+        images: [
+          {
+            image: 'nginx',
+            containerIds: ['c1'],
+            vulnerabilities: [{ id: 'CVE-5', severity: 'HIGH', package: 'openssl' }],
+          },
+        ],
+      });
+
+      const notes = {
+        title: 'v1.26.0',
+        body: 'Security fixes and bug fixes',
+        url: 'https://github.com/nginx/nginx/releases/tag/v1.26.0',
+        publishedAt: '2026-04-01T00:00:00Z',
+        provider: 'github',
+      };
+
+      const containers = ref([
+        {
+          id: 'c1',
+          name: 'nginx',
+          image: 'nginx:1.25',
+          newTag: '1.26',
+          identityKey: '::Local::nginx',
+          currentTag: '1.25',
+          status: 'running',
+          registry: 'dockerhub',
+          updateKind: 'minor',
+          updateMaturity: null,
+          bouncer: 'safe',
+          server: 'Local',
+          icon: 'docker',
+          releaseNotes: notes,
+          releaseLink: 'https://github.com/nginx/nginx/releases',
+          details: { ports: [], volumes: [], env: [], labels: [] },
+        },
+      ]);
+
+      const state = useVulnerabilities({
+        securitySortField: ref('critical'),
+        securitySortAsc: ref(false),
+        containers,
+      });
+      await state.fetchVulnerabilities();
+
+      const summary = state.filteredSummaries.value[0];
+      expect(summary.releaseNotes).toEqual(notes);
+      expect(summary.releaseLink).toBe('https://github.com/nginx/nginx/releases');
+    });
+
+    it('falls back to releaseLink when no container has releaseNotes', async () => {
+      mockGetSecurityVulnerabilityOverview.mockResolvedValue({
+        totalContainers: 1,
+        scannedContainers: 1,
+        latestScannedAt: null,
+        images: [
+          {
+            image: 'redis',
+            containerIds: ['c1'],
+            vulnerabilities: [{ id: 'CVE-6', severity: 'LOW', package: 'glibc' }],
+          },
+        ],
+      });
+
+      const containers = ref([
+        {
+          id: 'c1',
+          name: 'redis',
+          image: 'redis:7',
+          newTag: '7.2',
+          identityKey: '::Local::redis',
+          currentTag: '7.0',
+          status: 'running',
+          registry: 'dockerhub',
+          updateKind: 'minor',
+          updateMaturity: null,
+          bouncer: 'safe',
+          server: 'Local',
+          icon: 'docker',
+          releaseLink: 'https://redis.io/releases',
+          details: { ports: [], volumes: [], env: [], labels: [] },
+        },
+      ]);
+
+      const state = useVulnerabilities({
+        securitySortField: ref('critical'),
+        securitySortAsc: ref(false),
+        containers,
+      });
+      await state.fetchVulnerabilities();
+
+      const summary = state.filteredSummaries.value[0];
+      expect(summary.releaseNotes).toBeUndefined();
+      expect(summary.releaseLink).toBe('https://redis.io/releases');
+    });
+
+    it('does not set hasUpdate when image has no containerIds entry in the overview', async () => {
+      mockGetSecurityVulnerabilityOverview.mockResolvedValue({
+        totalContainers: 1,
+        scannedContainers: 1,
+        latestScannedAt: null,
+        images: [
+          {
+            image: 'orphan',
+            containerIds: [],
+            vulnerabilities: [{ id: 'CVE-4', severity: 'HIGH', package: 'pkg' }],
+          },
+        ],
+      });
+
+      const containers = ref([
+        {
+          id: 'c99',
+          name: 'orphan',
+          image: 'orphan:1.0',
+          newTag: '2.0',
+          identityKey: '::Local::orphan',
+          currentTag: '1.0',
+          status: 'running',
+          registry: 'dockerhub',
+          updateKind: 'major',
+          updateMaturity: null,
+          bouncer: 'safe',
+          server: 'Local',
+          icon: 'docker',
+          details: { ports: [], volumes: [], env: [], labels: [] },
+        },
+      ]);
+
+      const state = useVulnerabilities({
+        securitySortField: ref('critical'),
+        securitySortAsc: ref(false),
+        containers,
+      });
+      await state.fetchVulnerabilities();
+
+      const summary = state.filteredSummaries.value[0];
+      expect(summary.hasUpdate).toBeUndefined();
+      expect(summary.containersWithUpdate).toBeUndefined();
+    });
+  });
 });

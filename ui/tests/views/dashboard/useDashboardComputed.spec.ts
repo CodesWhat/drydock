@@ -1120,11 +1120,10 @@ describe('useDashboardComputed recent updates', () => {
     ]);
   });
 
-  it('keeps pinned containers with a pending update visible on dashboard widgets when hidePinned is enabled (#293)', () => {
-    // Hide Pinned declutters static pinned containers, but a pinned container
-    // with a pending update is exactly the signal the user is watching for —
-    // reporter pinned `grafana:12.3.2` to dodge a regression and wanted to
-    // see the next release appear as an available update.
+  it('hides pinned containers on dashboard widgets when hidePinned is enabled, even with pending updates (#305)', () => {
+    // Hide Pinned is a pure declutter; a pinned container with an update is
+    // still pinned. Users who want to see the pending update uncheck Hide
+    // Pinned — this keeps the filter semantics predictable.
     const state = createState({
       hidePinned: true,
       containers: [
@@ -1150,19 +1149,16 @@ describe('useDashboardComputed recent updates', () => {
       ],
     });
 
-    expect(state.recentUpdates.value.map((row) => row.name)).toEqual([
-      'floating-major',
-      'pinned-minor',
-    ]);
-    expect(state.totalUpdates.value).toBe(2);
+    expect(state.recentUpdates.value.map((row) => row.name)).toEqual(['floating-major']);
+    expect(state.totalUpdates.value).toBe(1);
     expect(state.updateBreakdownBuckets.value.map(({ kind, count }) => ({ kind, count }))).toEqual([
       { kind: 'major', count: 1 },
-      { kind: 'minor', count: 1 },
+      { kind: 'minor', count: 0 },
       { kind: 'patch', count: 0 },
       { kind: 'digest', count: 0 },
     ]);
     expect(state.stats.value.find((card) => card.id === 'stat-updates')).toMatchObject({
-      value: '2',
+      value: '1',
     });
   });
 

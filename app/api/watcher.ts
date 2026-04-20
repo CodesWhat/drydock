@@ -2,15 +2,19 @@ import express, { type Request, type Response } from 'express';
 import nocache from 'nocache';
 import { byString, byValues } from 'sort-es';
 import { getAgent } from '../agent/manager.js';
-import logger from '../log/index.js';
 import * as registry from '../registry/index.js';
-import { getErrorMessage } from '../util/error.js';
+import * as storeContainer from '../store/container.js';
+import {
+  buildContainerStatsByKey,
+  type ContainerStatsBucket,
+  createEmptyContainerStatsBucket,
+  projectStatsBucket,
+} from '../util/container-summary.js';
 import type Watcher from '../watchers/Watcher.js';
 import { type ApiComponent, mapComponentToItem } from './component.js';
 import { normalizeLimitOffsetPagination } from './container/request-helpers.js';
 import { sendErrorResponse } from './error-response.js';
 
-const log = logger.child({ component: 'api-watcher' });
 const WATCHER_LIST_MAX_LIMIT = 200;
 
 interface WatcherRouteParams {
@@ -49,8 +53,24 @@ function sortWatcherItems(watchers: ApiComponent[]): ApiComponent[] {
   );
 }
 
-async function resolveWatcherItem(id: string, watcher: Watcher): Promise<ApiComponent> {
-  const fallback = mapComponentToItem(id, watcher, 'watcher');
+function attachStatsToMetadata(item: ApiComponent, bucket: ContainerStatsBucket): ApiComponent {
+  const stats = projectStatsBucket(bucket);
+  return {
+    ...item,
+    metadata: {
+      ...(item.metadata ?? {}),
+      containers: stats.containers,
+      images: stats.images,
+    },
+  };
+}
+
+function resolveWatcherItem(
+  id: string,
+  watcher: Watcher,
+  statsBucket: ContainerStatsBucket = createEmptyContainerStatsBucket(),
+): ApiComponent {
+  const fallback = attachStatsToMetadata(mapComponentToItem(id, watcher, 'watcher'), statsBucket);
 
   if (!watcher.agent) {
     return fallback;
@@ -61,25 +81,38 @@ async function resolveWatcherItem(id: string, watcher: Watcher): Promise<ApiComp
     return fallback;
   }
 
-  try {
-    const remoteWatcher = await agentClient.getWatcher(watcher.type, watcher.name);
-    return {
-      ...fallback,
-      configuration: remoteWatcher.configuration ?? fallback.configuration,
-      metadata: remoteWatcher.metadata ?? fallback.metadata,
-    };
-  } catch (error: unknown) {
-    log.debug(
-      `Unable to refresh watcher ${watcher.agent}.${watcher.type}.${watcher.name} (${getErrorMessage(error)})`,
-    );
+  const cached = agentClient.getWatcherSnapshot(watcher.type, watcher.name);
+  if (!cached) {
     return fallback;
   }
+
+  const mergedMetadata = cached.metadata ?? fallback.metadata;
+
+  return {
+    ...fallback,
+    configuration: cached.configuration ?? fallback.configuration,
+    metadata: {
+      ...(mergedMetadata as Record<string, unknown>),
+      containers: fallback.metadata?.containers,
+      images: fallback.metadata?.images,
+    },
+  };
 }
 
-export async function getWatchers(req: Request, res: Response): Promise<void> {
+export function getWatchers(req: Request, res: Response): void {
   const watchers = registry.getState().watcher || {};
-  const items = await Promise.all(
-    Object.entries(watchers).map(([id, watcher]) => resolveWatcherItem(id, watcher)),
+  const watcherEntries = Object.entries(watchers);
+  const statsByWatcher = buildContainerStatsByKey(
+    storeContainer.getContainersRaw({}),
+    watcherEntries.map(([, watcher]) => watcher.name),
+    (container) => (typeof container.watcher === 'string' ? container.watcher : undefined),
+  );
+  const items = watcherEntries.map(([id, watcher]) =>
+    resolveWatcherItem(
+      id,
+      watcher,
+      statsByWatcher.get(watcher.name) ?? createEmptyContainerStatsBucket(),
+    ),
   );
   const allItems = sortWatcherItems(items);
   const pagination = normalizeLimitOffsetPagination(req.query, {
@@ -96,7 +129,7 @@ export async function getWatchers(req: Request, res: Response): Promise<void> {
   });
 }
 
-export async function getWatcher(req: Request<WatcherRouteParams>, res: Response): Promise<void> {
+export function getWatcher(req: Request<WatcherRouteParams>, res: Response): void {
   const watcherId = resolveWatcherId(req.params);
   const watcher = registry.getState().watcher[watcherId];
 
@@ -105,7 +138,16 @@ export async function getWatcher(req: Request<WatcherRouteParams>, res: Response
     return;
   }
 
-  const item = await resolveWatcherItem(watcherId, watcher);
+  const statsByWatcher = buildContainerStatsByKey(
+    storeContainer.getContainersRaw({}),
+    [watcher.name],
+    (container) => (typeof container.watcher === 'string' ? container.watcher : undefined),
+  );
+  const item = resolveWatcherItem(
+    watcherId,
+    watcher,
+    statsByWatcher.get(watcher.name) ?? createEmptyContainerStatsBucket(),
+  );
   res.status(200).json(item);
 }
 
@@ -116,13 +158,13 @@ export function init() {
   const router = express.Router();
   router.use(nocache());
   router.get('/', (req: Request, res: Response) => {
-    void getWatchers(req, res);
+    getWatchers(req, res);
   });
   router.get('/:type/:name', (req: Request<WatcherRouteParams>, res: Response) => {
-    void getWatcher(req, res);
+    getWatcher(req, res);
   });
   router.get('/:type/:name/:agent', (req: Request<WatcherRouteParams>, res: Response) => {
-    void getWatcher(req, res);
+    getWatcher(req, res);
   });
   return router;
 }

@@ -8,6 +8,7 @@ import type {
   ContainerUpdateFailedEventPayload,
   SecurityAlertEventPayload,
   SecurityAlertSummary,
+  SecurityScanCycleCompleteEventPayload,
 } from '../event/index.js';
 import {
   emitAgentConnected,
@@ -17,6 +18,7 @@ import {
   emitContainerUpdateApplied,
   emitContainerUpdateFailed,
   emitSecurityAlert,
+  emitSecurityScanCycleComplete,
 } from '../event/index.js';
 import logger from '../log/index.js';
 import { sanitizeLogParam } from '../log/sanitize.js';
@@ -29,6 +31,7 @@ import * as registry from '../registry/index.js';
 import { resolveConfiguredPath } from '../runtime/paths.js';
 import * as storeContainer from '../store/container.js';
 import { getErrorMessage } from '../util/error.js';
+import { uuidv7 } from '../util/uuid.js';
 
 export interface AgentClientConfig {
   host: string;
@@ -79,8 +82,17 @@ interface WatcherSnapshotPayload {
   watcher?: {
     type?: unknown;
     name?: unknown;
+    configuration?: unknown;
+    metadata?: unknown;
   };
   containers?: unknown;
+}
+
+export interface WatcherSnapshotCacheEntry {
+  type: string;
+  name: string;
+  configuration?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
 }
 
 interface RemoteTriggerErrorPayload {
@@ -93,6 +105,17 @@ const SECURITY_ALERT_SUMMARY_KEYS = ['unknown', 'low', 'medium', 'high', 'critic
 const INITIAL_SSE_RECONNECT_DELAY_MS = 1_000;
 const MAX_SSE_RECONNECT_DELAY_MS = 60_000;
 const REMOTE_UPDATE_TRIGGER_TYPES = new Set(['docker', 'dockercompose']);
+
+function watcherSnapshotCacheKey(watcherType: string, watcherName: string): string {
+  return `${watcherType}.${watcherName}`;
+}
+
+function toOptionalRecord(value: unknown): Record<string, unknown> | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined;
+  }
+  return value as Record<string, unknown>;
+}
 
 function isContainerUpdateAppliedEventPayload(
   data: unknown,
@@ -118,6 +141,7 @@ export class AgentClient {
   private hasConnectedOnce: boolean;
   private readonly pendingFreshStateAfterRemoteUpdate: Set<string>;
   private readonly pendingWatcherCycleReports: Map<string, Map<string, ContainerReport>>;
+  private readonly watcherSnapshotCache: Map<string, WatcherSnapshotCacheEntry>;
 
   constructor(name: string, config: AgentClientConfig) {
     this.name = name;
@@ -135,6 +159,14 @@ export class AgentClient {
     this.hasConnectedOnce = false;
     this.pendingFreshStateAfterRemoteUpdate = new Set();
     this.pendingWatcherCycleReports = new Map();
+    this.watcherSnapshotCache = new Map();
+  }
+
+  getWatcherSnapshot(
+    watcherType: string,
+    watcherName: string,
+  ): WatcherSnapshotCacheEntry | undefined {
+    return this.watcherSnapshotCache.get(watcherSnapshotCacheKey(watcherType, watcherName));
   }
 
   private parseBaseUrl(): URL {
@@ -445,6 +477,7 @@ export class AgentClient {
         this.axiosOptions,
       );
       await this.registerAgentComponents('watcher', responseWatchers.data);
+      this.seedWatcherSnapshotCacheFromHandshake(responseWatchers.data);
     } catch (error: unknown) {
       this.log.warn(`Failed to fetch/register watchers: ${getErrorMessage(error)}`);
     }
@@ -638,11 +671,22 @@ export class AgentClient {
 
   private async handleWatcherSnapshotEvent(data: unknown) {
     const snapshotPayload = data as WatcherSnapshotPayload;
+    const watcherType =
+      typeof snapshotPayload?.watcher?.type === 'string' ? snapshotPayload.watcher.type : undefined;
     const watcherName =
       typeof snapshotPayload?.watcher?.name === 'string' ? snapshotPayload.watcher.name : undefined;
     const containers = Array.isArray(snapshotPayload?.containers)
       ? (snapshotPayload.containers as Container[])
       : [];
+
+    if (watcherType && watcherName) {
+      this.updateWatcherSnapshotCache({
+        type: watcherType,
+        name: watcherName,
+        configuration: toOptionalRecord(snapshotPayload.watcher?.configuration),
+        metadata: toOptionalRecord(snapshotPayload.watcher?.metadata),
+      });
+    }
 
     const containerReports: ContainerReport[] = [];
     for (const container of containers) {
@@ -660,6 +704,35 @@ export class AgentClient {
     if (watcherName) {
       this.pruneOldContainers(containers, watcherName);
     }
+  }
+
+  private seedWatcherSnapshotCacheFromHandshake(descriptors: AgentComponentDescriptor[]): void {
+    for (const descriptor of descriptors) {
+      if (
+        !descriptor ||
+        typeof descriptor.type !== 'string' ||
+        typeof descriptor.name !== 'string'
+      ) {
+        continue;
+      }
+      this.updateWatcherSnapshotCache({
+        type: descriptor.type,
+        name: descriptor.name,
+        configuration: toOptionalRecord(descriptor.configuration),
+        metadata: toOptionalRecord(descriptor.metadata),
+      });
+    }
+  }
+
+  private updateWatcherSnapshotCache(entry: WatcherSnapshotCacheEntry): void {
+    const key = watcherSnapshotCacheKey(entry.type, entry.name);
+    const existing = this.watcherSnapshotCache.get(key);
+    this.watcherSnapshotCache.set(key, {
+      type: entry.type,
+      name: entry.name,
+      configuration: entry.configuration ?? existing?.configuration,
+      metadata: entry.metadata ?? existing?.metadata,
+    });
   }
 
   private parseUpdateFailedEventPayload(
@@ -730,7 +803,41 @@ export class AgentClient {
     if (summary) {
       parsedPayload.summary = summary;
     }
+    if (typeof payload.cycleId === 'string' && payload.cycleId.length > 0) {
+      parsedPayload.cycleId = payload.cycleId;
+    }
     return parsedPayload;
+  }
+
+  private parseSecurityScanCycleCompleteEventPayload(
+    data: unknown,
+  ): SecurityScanCycleCompleteEventPayload | undefined {
+    if (!data || typeof data !== 'object') {
+      return undefined;
+    }
+    const payload = data as Record<string, unknown>;
+    if (
+      typeof payload.cycleId !== 'string' ||
+      payload.cycleId.length === 0 ||
+      !Number.isFinite(payload.scannedCount)
+    ) {
+      return undefined;
+    }
+    const parsed: SecurityScanCycleCompleteEventPayload = {
+      cycleId: payload.cycleId,
+      scannedCount: Number(payload.scannedCount),
+    };
+    if (Number.isFinite(payload.alertCount)) {
+      parsed.alertCount = Number(payload.alertCount);
+    }
+    if (typeof payload.startedAt === 'string' && payload.startedAt.length > 0) {
+      parsed.startedAt = payload.startedAt;
+    }
+    if (typeof payload.completedAt === 'string' && payload.completedAt.length > 0) {
+      parsed.completedAt = payload.completedAt;
+    }
+    parsed.scope = 'agent-forwarded';
+    return parsed;
   }
 
   async handleEvent(eventName: string, data: unknown) {
@@ -774,7 +881,28 @@ export class AgentClient {
       case 'dd:security-alert': {
         const payload = this.parseSecurityAlertEventPayload(data);
         if (payload) {
-          await emitSecurityAlert(payload);
+          if (payload.cycleId) {
+            await emitSecurityAlert(payload);
+          } else {
+            const cycleId = uuidv7();
+            const nowIso = new Date().toISOString();
+            await emitSecurityAlert({ ...payload, cycleId });
+            await emitSecurityScanCycleComplete({
+              cycleId,
+              scannedCount: 1,
+              alertCount: 1,
+              scope: 'agent-forwarded',
+              startedAt: nowIso,
+              completedAt: nowIso,
+            });
+          }
+        }
+        return;
+      }
+      case 'dd:security-scan-cycle-complete': {
+        const payload = this.parseSecurityScanCycleCompleteEventPayload(data);
+        if (payload) {
+          await emitSecurityScanCycleComplete(payload);
         }
         return;
       }

@@ -39,6 +39,7 @@
   --dd-log-line: color-mix(in srgb, var(--dd-border) 55%, transparent);
   --dd-log-divider: color-mix(in srgb, var(--dd-border-strong) 70%, transparent);
   --dd-log-footer-bg: color-mix(in srgb, var(--dd-bg-code) 80%, var(--dd-bg-elevated) 20%);
+  --dd-zebra-stripe: color-mix(in srgb, var(--dd-bg-card) 92%, var(--dd-text) 8%);
 }
 
 /* One Dark Light */

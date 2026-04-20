@@ -16,5 +16,10 @@ const scaled = computed(() => Math.round(props.size * iconScale.value));
 </script>
 
 <template>
-  <iconify-icon :icon="resolved" :width="scaled" :height="scaled" />
+  <iconify-icon
+    :icon="resolved"
+    :width="scaled"
+    :height="scaled"
+    :style="{ width: `${scaled}px`, height: `${scaled}px`, display: 'inline-block', flex: 'none' }"
+  />
 </template>

@@ -3,6 +3,7 @@ import AppButton from '../AppButton.vue';
 import UpdateMaturityBadge from './UpdateMaturityBadge.vue';
 import SuggestedTagBadge from './SuggestedTagBadge.vue';
 import ReleaseNotesLink from './ReleaseNotesLink.vue';
+import ProjectLink from './ProjectLink.vue';
 import { useContainersViewTemplateContext } from './containersViewTemplateContext';
 
 const {
@@ -147,6 +148,7 @@ const {
           <SuggestedTagBadge :tag="selectedContainer.suggestedTag" :current-tag="selectedContainer.currentTag" />
         </div>
         <ReleaseNotesLink :release-notes="selectedContainer.releaseNotes" :release-link="selectedContainer.releaseLink" />
+        <ProjectLink :source-repo="selectedContainer.sourceRepo" />
         <div class="pt-1 space-y-1.5">
           <div class="text-2xs font-semibold uppercase tracking-wider dd-text-muted">Tag Filters</div>
           <div class="flex items-start gap-2 px-3 py-2 dd-rounded text-2xs-plus"

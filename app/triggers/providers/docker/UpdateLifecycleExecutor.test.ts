@@ -38,6 +38,7 @@ function createHarness(overrides = {}) {
     prepareSelfUpdateOperation: vi.fn().mockResolvedValue('prepared-self-update-op-id'),
     maybeNotifySelfUpdate: vi.fn().mockResolvedValue(undefined),
     executeSelfUpdate: vi.fn().mockResolvedValue(true),
+    markSelfUpdateOperationFailed: vi.fn().mockResolvedValue(undefined),
     runPreRuntimeUpdateLifecycle: vi.fn().mockResolvedValue(undefined),
     performContainerUpdate: vi.fn().mockResolvedValue(true),
     runPostUpdateHook: vi.fn().mockResolvedValue(undefined),
@@ -74,6 +75,7 @@ function createHarness(overrides = {}) {
       prepareSelfUpdateOperation: deps.prepareSelfUpdateOperation,
       maybeNotifySelfUpdate: deps.maybeNotifySelfUpdate,
       executeSelfUpdate: deps.executeSelfUpdate,
+      markSelfUpdateOperationFailed: deps.markSelfUpdateOperationFailed,
     },
     runtimeUpdate: {
       runPreRuntimeUpdateLifecycle: deps.runPreRuntimeUpdateLifecycle,
@@ -127,6 +129,7 @@ describe('UpdateLifecycleExecutor', () => {
         prepareSelfUpdateOperation: vi.fn().mockResolvedValue('prepared-self-update-op-id'),
         maybeNotifySelfUpdate: vi.fn().mockResolvedValue(undefined),
         executeSelfUpdate: vi.fn().mockResolvedValue(true),
+        markSelfUpdateOperationFailed: vi.fn().mockResolvedValue(undefined),
       },
       runtimeUpdate: {
         runPreRuntimeUpdateLifecycle: vi.fn().mockResolvedValue(undefined),
@@ -174,6 +177,7 @@ describe('UpdateLifecycleExecutor', () => {
         prepareSelfUpdateOperation: vi.fn(),
         maybeNotifySelfUpdate: vi.fn(),
         executeSelfUpdate: vi.fn(),
+        markSelfUpdateOperationFailed: vi.fn(),
       },
       runtimeUpdate: {
         runPreRuntimeUpdateLifecycle: vi.fn(),
@@ -215,6 +219,7 @@ describe('UpdateLifecycleExecutor', () => {
         prepareSelfUpdateOperation: vi.fn().mockResolvedValue('prepared-self-update-op-id'),
         maybeNotifySelfUpdate: vi.fn().mockResolvedValue(undefined),
         executeSelfUpdate: vi.fn().mockResolvedValue(true),
+        markSelfUpdateOperationFailed: vi.fn().mockResolvedValue(undefined),
       },
       runtimeUpdate: {
         runPreRuntimeUpdateLifecycle: vi.fn().mockResolvedValue(undefined),
@@ -268,6 +273,7 @@ describe('UpdateLifecycleExecutor', () => {
         prepareSelfUpdateOperation: vi.fn().mockResolvedValue('prepared-self-update-op-id'),
         maybeNotifySelfUpdate: vi.fn().mockResolvedValue(undefined),
         executeSelfUpdate: vi.fn().mockResolvedValue(true),
+        markSelfUpdateOperationFailed: vi.fn().mockResolvedValue(undefined),
       },
       runtimeUpdate: {
         runPreRuntimeUpdateLifecycle: vi.fn().mockResolvedValue(undefined),
@@ -495,5 +501,90 @@ describe('UpdateLifecycleExecutor', () => {
       containerName: 'docker.local_web',
       error: '503',
     });
+  });
+
+  test('marks self-update operation as failed when executeSelfUpdate throws', async () => {
+    const orchestrationError = new Error('pull failed: connection refused');
+    const harness = createHarness({
+      isSelfUpdate: vi.fn(() => true),
+      prepareSelfUpdateOperation: vi.fn().mockResolvedValue('op-self-update-123'),
+      executeSelfUpdate: vi.fn().mockRejectedValue(orchestrationError),
+    });
+
+    await expect(harness.executor.run(createContainer())).rejects.toThrow(
+      'pull failed: connection refused',
+    );
+
+    expect(harness.markSelfUpdateOperationFailed).toHaveBeenCalledWith(
+      'op-self-update-123',
+      'pull failed: connection refused',
+    );
+  });
+
+  test('still emits container-update-failed telemetry when self-update throws', async () => {
+    const orchestrationError = new Error('socket bind failed');
+    const harness = createHarness({
+      isSelfUpdate: vi.fn(() => true),
+      prepareSelfUpdateOperation: vi.fn().mockResolvedValue('op-self-update-456'),
+      executeSelfUpdate: vi.fn().mockRejectedValue(orchestrationError),
+    });
+
+    await expect(harness.executor.run(createContainer())).rejects.toThrow('socket bind failed');
+
+    expect(harness.emitContainerUpdateFailed).toHaveBeenCalledWith({
+      containerName: 'docker.local_web',
+      error: 'socket bind failed',
+    });
+  });
+
+  test('logs but swallows markSelfUpdateOperationFailed errors so original error still propagates', async () => {
+    const orchestrationError = new Error('rename failed');
+    const warn = vi.fn();
+    const harness = createHarness({
+      isSelfUpdate: vi.fn(() => true),
+      prepareSelfUpdateOperation: vi.fn().mockResolvedValue('op-self-update-789'),
+      executeSelfUpdate: vi.fn().mockRejectedValue(orchestrationError),
+      markSelfUpdateOperationFailed: vi.fn().mockRejectedValue(new Error('store unavailable')),
+    });
+    harness.rootLogger.child.mockReturnValue({ info: vi.fn(), warn, debug: vi.fn() });
+
+    await expect(harness.executor.run(createContainer())).rejects.toThrow('rename failed');
+
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'Failed to mark self-update operation op-self-update-789 as failed: store unavailable',
+      ),
+    );
+  });
+
+  test('stringifies non-Error thrown from executeSelfUpdate when marking self-update operation failed', async () => {
+    const harness = createHarness({
+      isSelfUpdate: vi.fn(() => true),
+      prepareSelfUpdateOperation: vi.fn().mockResolvedValue('op-self-update-noe'),
+      executeSelfUpdate: vi.fn().mockRejectedValue(503),
+    });
+
+    await expect(harness.executor.run(createContainer())).rejects.toBe(503);
+
+    expect(harness.markSelfUpdateOperationFailed).toHaveBeenCalledWith('op-self-update-noe', '503');
+  });
+
+  test('stringifies non-Error thrown from markSelfUpdateOperationFailed in the warn log', async () => {
+    const warn = vi.fn();
+    const harness = createHarness({
+      isSelfUpdate: vi.fn(() => true),
+      prepareSelfUpdateOperation: vi.fn().mockResolvedValue('op-self-update-mark-noe'),
+      executeSelfUpdate: vi.fn().mockRejectedValue(new Error('pull failed')),
+      markSelfUpdateOperationFailed: vi.fn().mockRejectedValue(404),
+    });
+    harness.rootLogger.child.mockReturnValue({ info: vi.fn(), warn, debug: vi.fn() });
+
+    await expect(harness.executor.run(createContainer())).rejects.toThrow('pull failed');
+
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'Failed to mark self-update operation op-self-update-mark-noe as failed: 404',
+      ),
+    );
   });
 });

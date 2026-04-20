@@ -7,6 +7,7 @@ import UpdateMaturityBadge from './UpdateMaturityBadge.vue';
 import SuggestedTagBadge from './SuggestedTagBadge.vue';
 import FloatingTagBadge from './FloatingTagBadge.vue';
 import ReleaseNotesLink from './ReleaseNotesLink.vue';
+import ProjectLink from './ProjectLink.vue';
 import { hasTrackedContainerAction } from '../../utils/container-action-key';
 import { revealContainerEnv } from '../../services/container';
 import { errorMessage } from '../../utils/error';
@@ -236,6 +237,7 @@ function isActionInProgress(container: { id?: unknown; name?: unknown }) {
               </div>
               <div class="mt-2">
                 <ReleaseNotesLink :release-notes="selectedContainer.releaseNotes" :release-link="selectedContainer.releaseLink" />
+                <ProjectLink :source-repo="selectedContainer.sourceRepo" />
               </div>
             </div>
 
