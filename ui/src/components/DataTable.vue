@@ -22,6 +22,8 @@ const props = withDefaults(
     sortAsc?: boolean;
     selectedKey?: string | null;
     showActions?: boolean;
+    /** Optional width (e.g. '160px') for the trailing actions column. Defaults to 80px. */
+    actionsWidth?: string;
     compact?: boolean;
     fixedLayout?: boolean;
     virtualScroll?: boolean;
@@ -40,6 +42,7 @@ const props = withDefaults(
   }>(),
   {
     showActions: false,
+    actionsWidth: '80px',
     compact: false,
     fixedLayout: false,
     virtualScroll: false,
@@ -461,7 +464,7 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
                      style="background: var(--dd-text-muted)" />
               </div>
             </th>
-            <th v-if="showActions" class="text-right px-3 py-2.5 font-semibold uppercase tracking-wider text-2xs whitespace-nowrap dd-text-muted relative" style="width: 80px">
+            <th v-if="showActions" class="text-right px-3 py-2.5 font-semibold uppercase tracking-wider text-2xs whitespace-nowrap dd-text-muted relative" :style="{ width: actionsWidth }">
               Actions
               <div v-if="lastResizableColumnKey"
                    role="separator"

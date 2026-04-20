@@ -64,6 +64,18 @@ describe('DataTable', () => {
       expect(ths).toHaveLength(3);
     });
 
+    it('defaults actions column width to 80px', () => {
+      const w = factory({ showActions: true });
+      const actionsHeader = w.findAll('thead th')[3];
+      expect(actionsHeader.attributes('style')).toContain('width: 80px');
+    });
+
+    it('applies actionsWidth override to the actions header', () => {
+      const w = factory({ showActions: true, actionsWidth: '180px' });
+      const actionsHeader = w.findAll('thead th')[3];
+      expect(actionsHeader.attributes('style')).toContain('width: 180px');
+    });
+
     it('uses fixed table layout when fixedLayout is enabled', () => {
       const w = factory({ fixedLayout: true });
       expect(w.find('table').attributes('style')).toContain('table-layout: fixed');

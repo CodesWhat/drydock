@@ -278,6 +278,7 @@ watchEffect(() => {
         :sort-asc="containerSortAsc"
         :selected-key="selectedContainerKey"
         :show-actions="true"
+        actions-width="180px"
         :virtual-scroll="false"
         :full-width-row="isTableRowFullWidth"
         :row-interactive="isTableRowInteractive"
