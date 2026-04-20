@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import type { ContainerReleaseNotes } from '../../types/container';
+import AppIconButton from '../AppIconButton.vue';
 
 const props = defineProps<{
   releaseNotes?: ContainerReleaseNotes | null;
   releaseLink?: string;
+  iconOnly?: boolean;
 }>();
 
 const expanded = ref(false);
@@ -20,8 +22,22 @@ function truncateBody(body: string, maxLength: number = 200): string {
 </script>
 
 <template>
+  <!-- Icon-only variant: tappable icon that opens the external release URL directly -->
+  <AppIconButton
+    v-if="iconOnly && (props.releaseNotes?.url || props.releaseLink)"
+    icon="file-text"
+    size="sm"
+    variant="muted"
+    :href="props.releaseNotes?.url ?? props.releaseLink"
+    target="_blank"
+    rel="noopener noreferrer"
+    :tooltip="'Release notes'"
+    aria-label="Release notes"
+    :data-test="props.releaseNotes ? 'release-notes-link' : 'release-link'"
+    @click.stop
+  />
   <!-- Inline release notes with expandable preview -->
-  <div v-if="props.releaseNotes" class="inline-flex flex-col" data-test="release-notes-link">
+  <div v-else-if="props.releaseNotes" class="inline-flex flex-col" data-test="release-notes-link">
     <AppButton size="none" variant="plain" weight="none"
       class="inline-flex items-center gap-1 text-2xs-plus underline hover:no-underline transition-colors"
       style="color: var(--dd-info);"

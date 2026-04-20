@@ -17,6 +17,9 @@ const props = withDefaults(
     loading?: boolean;
     tooltip?: string | Record<string, unknown>;
     ariaLabel?: string;
+    href?: string;
+    target?: string;
+    rel?: string;
   }>(),
   {
     size: 'sm',
@@ -48,14 +51,32 @@ const buttonClasses = computed(() => [
   variantClasses[props.variant],
   props.disabled ? 'opacity-40 cursor-not-allowed' : '',
 ]);
+
+const resolvedAriaLabel = computed(
+  () => props.ariaLabel || (typeof props.tooltip === 'string' ? props.tooltip : undefined),
+);
 </script>
 
 <template>
+  <a
+    v-if="href"
+    v-bind="attrs"
+    v-tooltip="tooltip"
+    :href="href"
+    :target="target"
+    :rel="rel"
+    :aria-label="resolvedAriaLabel"
+    :class="buttonClasses"
+  >
+    <AppIcon v-if="loading" name="spinner" :size="iconSize" class="dd-spin" />
+    <AppIcon v-else :name="icon" :size="iconSize" />
+  </a>
   <button
+    v-else
     v-bind="attrs"
     v-tooltip="tooltip"
     type="button"
-    :aria-label="ariaLabel || (typeof tooltip === 'string' ? tooltip : undefined)"
+    :aria-label="resolvedAriaLabel"
     :disabled="disabled"
     :class="buttonClasses"
   >

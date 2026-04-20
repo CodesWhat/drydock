@@ -69,4 +69,24 @@ describe('ProjectLink', () => {
     });
     expect(wrapper.find('[data-test="project-link"]').text()).toContain('View project');
   });
+
+  it('renders nothing in iconOnly mode when sourceRepo is empty', () => {
+    const wrapper = mount(ProjectLink, {
+      props: { iconOnly: true },
+      global: globalConfig,
+    });
+    expect(wrapper.find('[data-test="project-link"]').exists()).toBe(false);
+  });
+
+  it('renders icon-only variant with aria-label and href when iconOnly is true', () => {
+    const wrapper = mount(ProjectLink, {
+      props: { sourceRepo: 'github.com/grafana/grafana', iconOnly: true },
+      global: globalConfig,
+    });
+    const link = wrapper.find('[data-test="project-link"]');
+    expect(link.exists()).toBe(true);
+    expect(link.attributes('aria-label')).toBe('View project');
+    expect(link.attributes('href')).toBe('https://github.com/grafana/grafana');
+    expect(link.text()).not.toContain('View project');
+  });
 });

@@ -1552,4 +1552,44 @@ describe('ContainersGroupedViews', () => {
     expect(wrapper.find('[data-test="project-link"]').exists()).toBe(true);
     expect(wrapper.find('[data-test="release-link"]').exists()).toBe(true);
   });
+
+  it('renders icon-only ReleaseNotesLink and ProjectLink inside the table actions column (#295)', async () => {
+    // rc.10 wired project/release-notes links into the cards + detail panel
+    // only. Table rows never showed them. We surface them as icon-style
+    // AppIconButton links in the actions column itself so they match the
+    // existing action icons and give finger-friendly tap targets.
+    const container = makeContainer({
+      id: 'c-table-actions-links',
+      name: 'grafana',
+      newTag: '12.3.3',
+      updateKind: 'patch',
+      sourceRepo: 'github.com/grafana/grafana',
+      releaseLink: 'https://github.com/grafana/grafana/releases/tag/v12.3.3',
+    });
+    const { context, refs } = makeContext();
+    refs.containerViewMode.value = 'table';
+    refs.filteredContainers.value = [container];
+    refs.displayContainers.value = [container];
+    refs.renderGroups.value = [
+      {
+        key: '__flat__',
+        name: null,
+        containers: [container],
+        containerCount: 1,
+        updatesAvailable: 1,
+        updatableCount: 1,
+      },
+    ];
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+    await nextTick();
+
+    const projectLink = wrapper.find('[data-test="project-link"]');
+    const releaseLink = wrapper.find('[data-test="release-link"]');
+    expect(projectLink.exists()).toBe(true);
+    expect(releaseLink.exists()).toBe(true);
+    expect(projectLink.element.tagName).toBe('A');
+    expect(releaseLink.element.tagName).toBe('A');
+  });
 });

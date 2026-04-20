@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import AppIconButton from '../AppIconButton.vue';
 
 const props = defineProps<{
   sourceRepo?: string;
+  iconOnly?: boolean;
 }>();
 
 const trimmed = computed(() => props.sourceRepo?.trim() ?? '');
@@ -18,8 +20,21 @@ const iconName = computed(() => {
 </script>
 
 <template>
+  <AppIconButton
+    v-if="trimmed && iconOnly"
+    :icon="iconName"
+    size="sm"
+    variant="muted"
+    :href="projectUrl"
+    target="_blank"
+    rel="noopener noreferrer"
+    :tooltip="'View project'"
+    aria-label="View project"
+    data-test="project-link"
+    @click.stop
+  />
   <a
-    v-if="trimmed"
+    v-else-if="trimmed"
     :href="projectUrl"
     target="_blank"
     rel="noopener noreferrer"

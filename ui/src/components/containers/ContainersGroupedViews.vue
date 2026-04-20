@@ -556,6 +556,13 @@ watchEffect(() => {
           <!-- Icon-style actions (compact) -->
           <template v-else-if="tableActionStyle === 'icons'">
             <div class="flex items-center justify-end gap-0.5">
+              <ReleaseNotesLink
+                v-if="c.releaseNotes?.url || c.releaseLink"
+                :release-notes="c.releaseNotes"
+                :release-link="c.releaseLink"
+                icon-only
+              />
+              <ProjectLink v-if="c.sourceRepo" :source-repo="c.sourceRepo" icon-only />
               <AppIconButton v-if="c.newTag && c.bouncer === 'blocked'" icon="lock" size="sm" variant="muted"
                       class="cursor-not-allowed opacity-50"
                       :disabled="true"
@@ -587,6 +594,14 @@ watchEffect(() => {
           </template>
           <!-- Button-style actions (full) -->
           <template v-else>
+            <div class="flex items-center justify-end gap-1">
+              <ReleaseNotesLink
+                v-if="c.releaseNotes?.url || c.releaseLink"
+                :release-notes="c.releaseNotes"
+                :release-link="c.releaseLink"
+                icon-only
+              />
+              <ProjectLink v-if="c.sourceRepo" :source-repo="c.sourceRepo" icon-only />
             <div v-if="c.newTag" class="inline-flex items-center gap-1">
               <!-- Blocked: muted split button -->
               <div v-if="c.bouncer === 'blocked'" class="inline-flex dd-rounded overflow-hidden" style="min-width: 110px;"
@@ -634,6 +649,7 @@ watchEffect(() => {
               <AppIconButton icon="restart" size="toolbar" variant="muted"
                       :disabled="isContainerUpdating(c) || isContainerQueued(c)"
                       :tooltip="tt('Restart')" @click.stop="confirmRestart(c)" />
+            </div>
             </div>
           </template>
         </template>
