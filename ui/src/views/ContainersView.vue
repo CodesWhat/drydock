@@ -128,13 +128,46 @@ function buildContainerLookupMaps(apiContainers: Record<string, unknown>[]) {
  * side-effects and allocates far less than the chain re-eval + DOM diffing
  * that would otherwise occur on every cron-triggered reload.
  */
+function fingerprintValue(value: unknown): string | undefined {
+  if (value === null) {
+    return 'null';
+  }
+
+  switch (typeof value) {
+    case 'string':
+    case 'number':
+    case 'boolean':
+      return JSON.stringify(value);
+    case 'undefined':
+    case 'function':
+    case 'symbol':
+      return undefined;
+    case 'object':
+      break;
+    default:
+      return JSON.stringify(String(value));
+  }
+
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => fingerprintValue(item) ?? 'null').join(',')}]`;
+  }
+
+  if (value instanceof Date) {
+    return JSON.stringify(value.toJSON());
+  }
+
+  const record = value as Record<string, unknown>;
+  const entries = Object.keys(record)
+    .sort()
+    .flatMap((key) => {
+      const serialized = fingerprintValue(record[key]);
+      return serialized === undefined ? [] : [`${JSON.stringify(key)}:${serialized}`];
+    });
+  return `{${entries.join(',')}}`;
+}
+
 function containerListFingerprint(list: Container[]): string {
-  // JSON.stringify per container gives a stable, field-complete signature.
-  // Sorting each object's keys makes the comparison order-independent within
-  // a single container (guards against mapApiContainers ever changing key order).
-  return list
-    .map((c) => JSON.stringify(c, Object.keys(c as unknown as Record<string, unknown>).sort()))
-    .join('\x00');
+  return fingerprintValue(list) ?? '[]';
 }
 
 async function loadContainers() {

@@ -534,6 +534,47 @@ describe('ContainersView', () => {
         expect(vm.containers[0].newTag).toBe('2.0.0');
       });
 
+      it('reassigns containers.value when only nested fields change', async () => {
+        const container = makeContainer({
+          id: 'c1',
+          name: 'nginx',
+          updateOperation: {
+            id: 'op-1',
+            status: 'in-progress',
+            phase: 'pulling',
+            updatedAt: '2026-04-20T12:00:00.000Z',
+          },
+        });
+        const wrapper = await mountContainersView([container]);
+        const vm = wrapper.vm as any;
+
+        const firstRef = vm.containers;
+
+        const updatedContainer = makeContainer({
+          ...container,
+          updateOperation: {
+            id: 'op-1',
+            status: 'in-progress',
+            phase: 'prepare',
+            updatedAt: '2026-04-20T12:00:01.000Z',
+          },
+        });
+        mockGetAllContainers.mockResolvedValue([
+          { ...updatedContainer, displayName: updatedContainer.name },
+        ]);
+        const { mapApiContainers } = await import('@/utils/container-mapper');
+        (mapApiContainers as ReturnType<typeof vi.fn>).mockReturnValue([updatedContainer]);
+
+        await vm.loadContainers();
+        await flushPromises();
+
+        expect(vm.containers).not.toBe(firstRef);
+        expect(vm.containers[0].updateOperation).toMatchObject({
+          status: 'in-progress',
+          phase: 'prepare',
+        });
+      });
+
       it('reassigns containers.value when container count changes', async () => {
         const container = makeContainer({ id: 'c1', name: 'nginx' });
         const wrapper = await mountContainersView([container]);
