@@ -1093,20 +1093,25 @@ function applyOperationPatch(event: Event) {
     return;
   }
 
-  const updated = { ...containers.value[idx] };
+  // Mutate the container at idx in place instead of spreading containers.value into a new
+  // 88-element array. Reassigning the array reference invalidates every downstream computed
+  // (filteredContainers, sortedContainers, groupedContainers) on every SSE phase event —
+  // targeted mutation triggers re-evaluation only for effects that actually read
+  // updateOperation on the matched row.
+  const row = containers.value[idx]!;
   if (isActiveContainerUpdateOperationStatus(status)) {
     const nextOperation = {
-      ...(updated.updateOperation || {}),
-      id: typeof operationId === 'string' ? operationId : (updated.updateOperation?.id ?? ''),
+      ...(row.updateOperation || {}),
+      id: typeof operationId === 'string' ? operationId : (row.updateOperation?.id ?? ''),
       status,
       phase: resolveActiveOperationPhase({
         status,
         phase,
-        previousPhase: updated.updateOperation?.phase,
+        previousPhase: row.updateOperation?.phase,
       }),
       updatedAt: new Date().toISOString(),
     };
-    updated.updateOperation = nextOperation;
+    row.updateOperation = nextOperation;
     if (status === 'in-progress' && typeof operationId === 'string' && operationId.length > 0) {
       holdOperationDisplay({
         operationId,
@@ -1115,14 +1120,14 @@ function applyOperationPatch(event: Event) {
         newContainerId: typeof newContainerId === 'string' ? newContainerId : undefined,
         containerName: typeof containerName === 'string' ? containerName : undefined,
         sortSnapshot: {
-          status: updated.status,
-          updateKind: updated.updateKind,
-          newTag: updated.newTag,
+          status: row.status,
+          updateKind: row.updateKind,
+          newTag: row.newTag,
         },
       });
     }
   } else {
-    updated.updateOperation = undefined;
+    row.updateOperation = undefined;
     const target = {
       operationId: typeof operationId === 'string' ? operationId : undefined,
       containerId: typeof containerId === 'string' ? containerId : undefined,
@@ -1133,16 +1138,12 @@ function applyOperationPatch(event: Event) {
       const wasTracked = findMatchingOperationIds(target).length > 0;
       scheduleHeldOperationRelease(target);
       if (wasTracked) {
-        toast.success(`Updated: ${updated.name}`);
+        toast.success(`Updated: ${row.name}`);
       }
     } else {
       clearHeldOperation(target);
     }
   }
-
-  const next = [...containers.value];
-  next[idx] = updated;
-  containers.value = next;
 }
 
 const sseConnectedListener = handleSseScanCompleted as EventListener;
