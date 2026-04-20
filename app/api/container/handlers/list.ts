@@ -91,22 +91,40 @@ function stripScanVulnerabilityArray<T extends object>(scan: T): T {
   return createProjectionView(scan, [['vulnerabilities', []]]);
 }
 
-function stripContainerVulnerabilityArrays(container: Container): Container {
+// Fields in security that are detail-only (not used by the list view).
+// - sbom / updateSbom: SBOM documents (potentially MB-scale); fetched via GET /:id/sbom
+// - signature / updateSignature: cosign verification data; not rendered in the list
+const SECURITY_LIST_STRIPPED_FIELDS = [
+  'sbom',
+  'updateSbom',
+  'signature',
+  'updateSignature',
+] as const;
+
+function stripContainerDetailOnlySecurityFields(
+  container: Container,
+  stripVulnerabilities = true,
+): Container {
   if (!container.security) {
     return container;
   }
 
+  const scanOverride = stripVulnerabilities
+    ? container.security.scan
+      ? stripScanVulnerabilityArray(container.security.scan)
+      : undefined
+    : container.security.scan;
+
+  const updateScanOverride = stripVulnerabilities
+    ? container.security.updateScan
+      ? stripScanVulnerabilityArray(container.security.updateScan)
+      : undefined
+    : container.security.updateScan;
+
   const projectedSecurity = createProjectionView(container.security, [
-    [
-      'scan',
-      container.security.scan ? stripScanVulnerabilityArray(container.security.scan) : undefined,
-    ],
-    [
-      'updateScan',
-      container.security.updateScan
-        ? stripScanVulnerabilityArray(container.security.updateScan)
-        : undefined,
-    ],
+    ['scan', scanOverride],
+    ['updateScan', updateScanOverride],
+    ...SECURITY_LIST_STRIPPED_FIELDS.map((field) => [field, undefined] as const),
   ]);
 
   return createProjectionView(container, [['security', projectedSecurity]]);
@@ -336,9 +354,11 @@ export function buildContainerListResponse(
   }
 
   const redactedContainers = context.redactContainersRuntimeEnv(pagedContainers);
-  const strippedContainers = includeVulnerabilities
-    ? redactedContainers
-    : redactedContainers.map((container) => stripContainerVulnerabilityArrays(container));
+  // Always strip detail-only security fields (sbom, signature, etc.) from list responses.
+  // Vulnerability arrays are additionally stripped unless the caller explicitly opts in.
+  const strippedContainers = redactedContainers.map((container) =>
+    stripContainerDetailOnlySecurityFields(container, !includeVulnerabilities),
+  );
   const preloadedActiveOperationLookup = buildPreloadedActiveOperationLookup(
     context.updateOperationStore.listActiveOperations?.() ?? [],
   );

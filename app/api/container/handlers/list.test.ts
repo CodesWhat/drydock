@@ -996,6 +996,140 @@ describe('buildContainerListResponse', () => {
     expect(response.data).toHaveLength(2);
     expect(response.hasMore).toBe(false);
   });
+
+  test('strips sbom, updateSbom, signature, and updateSignature from security when includeVulnerabilities is false', () => {
+    const sbomDoc = { generator: 'trivy', formats: ['spdx-json'], documents: { large: true } };
+    const sigDoc = { verifier: 'cosign', status: 'verified', signatures: 1 };
+    const containers = [
+      createContainer({
+        id: 'c1',
+        name: 'service',
+        security: {
+          scan: {
+            status: 'passed',
+            summary: { unknown: 0, low: 1, medium: 0, high: 0, critical: 0 },
+            vulnerabilities: [],
+          },
+          updateScan: { status: 'passed', vulnerabilities: [] },
+          sbom: sbomDoc,
+          updateSbom: sbomDoc,
+          signature: sigDoc,
+          updateSignature: sigDoc,
+        } as any,
+      }),
+    ];
+    const context: CrudHandlerContext = {
+      ...createMockContext(),
+      getContainersFromStore: vi.fn(() => containers),
+      getContainerCountFromStore: vi.fn(() => 1),
+      redactContainersRuntimeEnv: vi.fn((items: Container[]) => items),
+    };
+
+    const response = buildContainerListResponse(
+      context,
+      { limit: '10', offset: '0' } as any,
+      '/api/containers',
+    );
+
+    expect(response.data[0]?.security?.sbom).toBeUndefined();
+    expect(response.data[0]?.security?.updateSbom).toBeUndefined();
+    expect(response.data[0]?.security?.signature).toBeUndefined();
+    expect(response.data[0]?.security?.updateSignature).toBeUndefined();
+    // scan and updateScan are still present (only vulnerabilities stripped)
+    expect(response.data[0]?.security?.scan?.status).toBe('passed');
+    expect(response.data[0]?.security?.scan?.summary).toEqual({
+      unknown: 0,
+      low: 1,
+      medium: 0,
+      high: 0,
+      critical: 0,
+    });
+  });
+
+  test('strips sbom, updateSbom, signature, and updateSignature from security even when includeVulnerabilities is true', () => {
+    const sbomDoc = { generator: 'trivy', formats: ['spdx-json'], documents: { large: true } };
+    const sigDoc = { verifier: 'cosign', status: 'verified', signatures: 1 };
+    const containers = [
+      createContainer({
+        id: 'c1',
+        name: 'service',
+        security: {
+          scan: { status: 'passed', vulnerabilities: ['v1'] },
+          updateScan: { status: 'passed', vulnerabilities: ['v2'] },
+          sbom: sbomDoc,
+          updateSbom: sbomDoc,
+          signature: sigDoc,
+          updateSignature: sigDoc,
+        } as any,
+      }),
+    ];
+    const context: CrudHandlerContext = {
+      ...createMockContext(),
+      getContainersFromStore: vi.fn(() => containers),
+      getContainerCountFromStore: vi.fn(() => 1),
+      redactContainersRuntimeEnv: vi.fn((items: Container[]) => items),
+    };
+
+    const response = buildContainerListResponse(
+      context,
+      { includeVulnerabilities: 'true', limit: '10', offset: '0' } as any,
+      '/api/containers',
+    );
+
+    // Vulnerabilities are preserved when explicitly opted in
+    expect(response.data[0]?.security?.scan?.vulnerabilities).toEqual(['v1']);
+    expect(response.data[0]?.security?.updateScan?.vulnerabilities).toEqual(['v2']);
+    // Detail-only fields are always stripped regardless of includeVulnerabilities
+    expect(response.data[0]?.security?.sbom).toBeUndefined();
+    expect(response.data[0]?.security?.updateSbom).toBeUndefined();
+    expect(response.data[0]?.security?.signature).toBeUndefined();
+    expect(response.data[0]?.security?.updateSignature).toBeUndefined();
+  });
+
+  test('returns container unchanged when security is absent', () => {
+    const container = createContainer({ id: 'c1', name: 'no-security' });
+    const context: CrudHandlerContext = {
+      ...createMockContext(),
+      getContainersFromStore: vi.fn(() => [container]),
+      getContainerCountFromStore: vi.fn(() => 1),
+      redactContainersRuntimeEnv: vi.fn((items: Container[]) => items),
+    };
+
+    const response = buildContainerListResponse(
+      context,
+      { limit: '10', offset: '0' } as any,
+      '/api/containers',
+    );
+
+    expect(response.data[0]?.security).toBeUndefined();
+    expect(response.data[0]?.id).toBe('c1');
+  });
+
+  test('stripping detail-only security fields does not mutate the underlying store container', () => {
+    const sbomDoc = { generator: 'trivy', formats: ['spdx-json'], documents: { large: true } };
+    const container = createContainer({
+      id: 'c1',
+      name: 'service',
+      security: {
+        scan: { status: 'passed', vulnerabilities: ['v1'] },
+        sbom: sbomDoc,
+        signature: { verifier: 'cosign', status: 'verified', signatures: 1 },
+      } as any,
+    });
+    const context: CrudHandlerContext = {
+      ...createMockContext(),
+      getContainersFromStore: vi.fn(() => [container]),
+      getContainerCountFromStore: vi.fn(() => 1),
+      redactContainersRuntimeEnv: vi.fn((items: Container[]) => items),
+    };
+
+    buildContainerListResponse(context, { limit: '10', offset: '0' } as any, '/api/containers');
+
+    // The underlying store container must not be mutated
+    expect((container.security as any).sbom).toBe(sbomDoc);
+    expect((container.security as any).signature).toBeDefined();
+    expect((container.security?.scan as any).vulnerabilities).toEqual(['v1']);
+  });
 });
 
 describe('createGetContainersHandler', () => {
