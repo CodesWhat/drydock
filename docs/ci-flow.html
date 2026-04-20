@@ -371,8 +371,7 @@ header p{font-size:14px;color:#666;margin-top:4px}
     <h3>Workflow Files</h3>
     <ul>
       <li><span class="label">CI Verify</span> ci-verify.yml (includes 🛡️ CodeQL and 🎯 Fuzz Testing jobs)</li>
-      <li><span class="label">Release Cut</span> release-cut.yml (manual dispatch)</li>
-      <li><span class="label">Release From Tag</span> release-from-tag.yml (on tag push)</li>
+      <li><span class="label">Release Cut</span> release-cut.yml (manual dispatch; builds, signs, attests, and tags as the final step)</li>
       <li><span class="label">Scorecard</span> security-scorecard.yml</li>
       <li><span class="label">Snyk</span> security-snyk-weekly.yml (weekly + manual)</li>
       <li><span class="label">Stryker</span> quality-mutation-monthly.yml (monthly + manual)</li>

@@ -1,6 +1,11 @@
 name: "🏷️ Release: Cut"
 run-name: "🏷️ Release: Cut — manual by ${{ github.actor }}"
 
+# Tag-last release pipeline. Everything that can fail (CI check, Docker build,
+# multi-registry push, cosign signing, SLSA attestation, artifact sign) runs
+# BEFORE the git tag is pushed. The tag is a receipt that the release
+# succeeded end-to-end — if you see the tag, the image exists.
+
 on:
   workflow_dispatch:
 
@@ -11,21 +16,37 @@ concurrency:
   cancel-in-progress: false
 
 env:
+  DOCKER_PLATFORMS: linux/amd64,linux/arm64
   CI_VERIFY_WORKFLOW_FILE: ci-verify.yml
 
 jobs:
-  cut:
-    name: "🏷️ Release: Cut Tag"
+  release:
+    name: "🚀 Release: Build, Publish, Tag"
     runs-on: ubuntu-latest
-    timeout-minutes: 75  # Includes CI-success polling (up to 60 min) for target SHA before tagging
+    timeout-minutes: 120  # Multi-arch build, signing, attestations, release upload, and CI-success polling budget
+    environment: release-publish
     permissions:
-      contents: write
-      actions: read
+      contents: write      # git push tag, gh release create
+      packages: write      # ghcr push
+      id-token: write      # cosign keyless signing
+      attestations: write  # attest-build-provenance
+      actions: read        # wait-for-successful-branch-ci queries workflow runs
+
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594  # v2.16.0
         with:
           egress-policy: audit
+
+      - name: Assert dispatched from main
+        env:
+          GIT_REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          if [ "${GIT_REF}" != "refs/heads/main" ]; then
+            echo "::error::release-cut must be dispatched from refs/heads/main, got ${GIT_REF}. The cosign OIDC identity is pinned to main."
+            exit 1
+          fi
 
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
@@ -41,12 +62,16 @@ jobs:
           echo "sha=${sha}" >> "$GITHUB_OUTPUT"
           echo "Target SHA: ${sha}"
 
-      - name: Verify successful branch CI on target SHA
+      - name: Wait for successful branch CI on target SHA
         uses: ./.github/actions/wait-for-successful-branch-ci
         with:
           github-token: ${{ github.token }}
           workflow-file: ${{ env.CI_VERIFY_WORKFLOW_FILE }}
           target-sha: ${{ steps.target.outputs.sha }}
+          # 60-min budget at 5-min cadence. CI Verify runs 20-30m typically;
+          # pathological CodeQL/mutation overlap can push to ~60m. Polling
+          # more often than every 5m is wasteful because CI jobs only change
+          # state on completion, not mid-flight.
           max-attempts: '12'
           sleep-seconds: '300'
 
@@ -126,23 +151,406 @@ jobs:
             echo "release_tag=${release_tag}"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Validate CHANGELOG entry for release tag
+      - name: Parse release tag
+        id: tag
         env:
           RELEASE_TAG: ${{ steps.next.outputs.release_tag }}
         run: |
           set -euo pipefail
+
+          output="$(node scripts/release-tag.mjs --tag "${RELEASE_TAG}")"
+          while IFS= read -r kv; do
+            key="${kv%%=*}"
+            value="${kv#*=}"
+            echo "${key}=${value}" >> "$GITHUB_OUTPUT"
+          done <<< "${output}"
+
+      - name: Assert tag version matches package versions
+        env:
+          BASE_VERSION: ${{ steps.tag.outputs.base_version }}
+          RELEASE_TAG: ${{ steps.next.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+
+          for package_path in package.json app/package.json ui/package.json; do
+            package_version="$(jq -r '.version // empty' "${package_path}")"
+            if [ -z "${package_version}" ]; then
+              echo "::error::Missing required version field in ${package_path}"
+              exit 1
+            fi
+            if [ "${package_version}" != "${BASE_VERSION}" ]; then
+              echo "::error::Version mismatch: tag base=${BASE_VERSION} (from ${RELEASE_TAG}), ${package_path}=${package_version}"
+              exit 1
+            fi
+          done
+
+          echo "Tag version ${BASE_VERSION} matches package.json, app/package.json, and ui/package.json."
+
+      - name: Validate CHANGELOG entry for release tag
+        env:
+          RELEASE_TAG: ${{ steps.next.outputs.release_tag }}
+          IS_PRERELEASE: ${{ steps.tag.outputs.is_prerelease }}
+        run: |
+          set -euo pipefail
           entry_file="$(mktemp)"
 
-          node scripts/extract-changelog-entry.mjs --version "${RELEASE_TAG}" --file CHANGELOG.md > "${entry_file}"
+          if node scripts/extract-changelog-entry.mjs --version "${RELEASE_TAG}" --file CHANGELOG.md > "${entry_file}" 2>/dev/null; then
+            echo "Found exact CHANGELOG entry for ${RELEASE_TAG}."
+          elif [ "${IS_PRERELEASE}" = "true" ] && node scripts/extract-changelog-entry.mjs --version "Unreleased" --file CHANGELOG.md > "${entry_file}" 2>/dev/null; then
+            echo "Using [Unreleased] CHANGELOG section for pre-release ${RELEASE_TAG}."
+          else
+            echo "::error::CHANGELOG entry for ${RELEASE_TAG} missing. Add heading '## [${RELEASE_TAG#v}] - YYYY-MM-DD' and retry."
+            exit 1
+          fi
 
           if ! awk 'NR > 1 && NF { found = 1; exit } END { exit found ? 0 : 1 }' "${entry_file}"; then
-            echo "::error::CHANGELOG entry for ${RELEASE_TAG} is empty. Add release notes under the heading before cutting a tag."
+            echo "::error::CHANGELOG entry for ${RELEASE_TAG} is empty."
             exit 1
           fi
 
           echo "Validated CHANGELOG entry for ${RELEASE_TAG}."
 
-      - name: Create and push release tag
+      - name: Compute image tags
+        id: image_tags
+        env:
+          VERSION: ${{ steps.next.outputs.next_version }}
+          IS_PRERELEASE: ${{ steps.tag.outputs.is_prerelease }}
+        run: |
+          set -euo pipefail
+
+          registries=("ghcr.io/${GITHUB_REPOSITORY}" "docker.io/codeswhat/drydock" "quay.io/codeswhat/drydock")
+          suffixes=("${VERSION}")
+
+          if [ "${IS_PRERELEASE}" = "false" ]; then
+            major="${VERSION%%.*}"
+            rest="${VERSION#*.}"
+            minor="${rest%%.*}"
+            suffixes+=("${major}.${minor}" "${major}" "latest")
+          fi
+
+          tags=""
+          for registry in "${registries[@]}"; do
+            for suffix in "${suffixes[@]}"; do
+              if [ -z "${tags}" ]; then
+                tags="${registry}:${suffix}"
+              else
+                tags="${tags}"$'\n'"${registry}:${suffix}"
+              fi
+            done
+          done
+
+          {
+            echo "tags<<EOF"
+            echo "${tags}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a  # v4.0.0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd  # v4.0.0
+
+      - name: Log in to GHCR
+        uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2  # v4.0.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2  # v4.0.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Log in to Quay.io
+        uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2  # v4.0.0
+        with:
+          registry: quay.io
+          username: ${{ secrets.QUAY_USERNAME }}
+          password: ${{ secrets.QUAY_PASSWORD }}
+
+      - name: Docker metadata labels
+        id: meta
+        uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf  # v6.0.0
+        with:
+          images: ghcr.io/${{ github.repository }}
+          # The tags input is required. We pass the full tag list to
+          # build-push-action via steps.image_tags; this single raw tag
+          # exists only to drive the OCI label values
+          # (org.opencontainers.image.version, .revision, etc.) correctly.
+          tags: |
+            type=raw,value=${{ steps.next.outputs.next_version }}
+
+      - name: Build and push
+        id: build
+        continue-on-error: true  # allow manifest retry path on transient push failures
+        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294  # v7.0.0
+        with:
+          context: .
+          push: true
+          platforms: ${{ env.DOCKER_PLATFORMS }}
+          tags: ${{ steps.image_tags.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: DD_VERSION=${{ steps.next.outputs.next_version }}
+          sbom: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Retry manifest publish on transient registry failure
+        id: manifest-retry
+        if: steps.build.outcome == 'failure'
+        env:
+          BUILD_DIGEST: ${{ steps.build.outputs.digest }}
+          TAGS: ${{ steps.image_tags.outputs.tags }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${BUILD_DIGEST:-}" ]; then
+            echo "::error::Build step failed before producing a digest; cannot retry manifest publish without a source digest."
+            exit 1
+          fi
+
+          source_candidates=(
+            "ghcr.io/${GITHUB_REPOSITORY}@${BUILD_DIGEST}"
+            "docker.io/codeswhat/drydock@${BUILD_DIGEST}"
+            "quay.io/codeswhat/drydock@${BUILD_DIGEST}"
+          )
+
+          source_ref=""
+          for candidate in "${source_candidates[@]}"; do
+            if docker buildx imagetools inspect "${candidate}" >/dev/null 2>&1; then
+              source_ref="${candidate}"
+              break
+            fi
+          done
+
+          if [ -z "${source_ref}" ]; then
+            echo "::error::No registry contains source manifest digest ${BUILD_DIGEST}; cannot perform manifest-only retry."
+            exit 1
+          fi
+
+          while IFS= read -r tag; do
+            [ -z "${tag}" ] && continue
+            echo "Re-pushing manifest tag: ${tag} (source: ${source_ref})"
+            for attempt in 1 2 3; do
+              if docker buildx imagetools create --tag "${tag}" "${source_ref}" >/dev/null; then
+                break
+              fi
+
+              if [ "${attempt}" -eq 3 ]; then
+                echo "::error::Manifest publish retry failed for ${tag}"
+                exit 1
+              fi
+
+              sleep 5
+            done
+          done <<< "${TAGS}"
+
+          echo "digest=${BUILD_DIGEST}" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve image digest
+        id: digest
+        if: steps.build.outcome == 'success' || steps.manifest-retry.outcome == 'success'
+        env:
+          RETRY_DIGEST: ${{ steps.manifest-retry.outputs.digest }}
+          BUILD_DIGEST: ${{ steps.build.outputs.digest }}
+        run: echo "value=${RETRY_DIGEST:-$BUILD_DIGEST}" >> "$GITHUB_OUTPUT"
+
+      - name: Install cosign
+        if: steps.build.outcome == 'success' || steps.manifest-retry.outcome == 'success'
+        uses: sigstore/cosign-installer@ba7bc0a3fef59531c69a25acd34668d6d3fe6f22  # v4.1.0
+
+      - name: Sign container images
+        if: steps.digest.outputs.value
+        env:
+          DIGEST: ${{ steps.digest.outputs.value }}
+          TAGS: ${{ steps.image_tags.outputs.tags }}
+        run: |
+          set -euo pipefail
+          images=()
+          while IFS= read -r tag; do
+            [ -n "${tag}" ] && images+=("${tag}@${DIGEST}")
+          done <<< "${TAGS}"
+          cosign sign --yes "${images[@]}"
+
+      - name: Verify container image signatures
+        if: steps.digest.outputs.value
+        env:
+          DIGEST: ${{ steps.digest.outputs.value }}
+          TAGS: ${{ steps.image_tags.outputs.tags }}
+        run: |
+          set -euo pipefail
+          # OIDC identity pinned to release-cut.yml@refs/heads/main; the
+          # branch guard at the top of this job enforces the ref. See
+          # content/docs/current/guides/verifying-releases for the user-facing
+          # identity regex.
+          identity_regex="^https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release-cut.yml@refs/heads/main$"
+          issuer="https://token.actions.githubusercontent.com"
+
+          images=()
+          while IFS= read -r tag; do
+            [ -n "${tag}" ] && images+=("${tag}@${DIGEST}")
+          done <<< "${TAGS}"
+
+          if [ "${#images[@]}" -eq 0 ]; then
+            echo "::error::No images found to verify"
+            exit 1
+          fi
+
+          for image in "${images[@]}"; do
+            echo "Verifying cosign signature for ${image}"
+            for attempt in 1 2 3; do
+              if cosign verify \
+                --certificate-identity-regexp "${identity_regex}" \
+                --certificate-oidc-issuer "${issuer}" \
+                "${image}" >/dev/null; then
+                break
+              fi
+
+              if [ "${attempt}" -eq 3 ]; then
+                echo "::error::Cosign verification failed for ${image}"
+                exit 1
+              fi
+
+              sleep 5
+            done
+          done
+
+      - name: Attest container build provenance
+        if: steps.digest.outputs.value
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32  # v4.1.0
+        with:
+          subject-name: ghcr.io/${{ github.repository }}
+          subject-digest: ${{ steps.digest.outputs.value }}
+          push-to-registry: true
+
+      - name: Build release artifact
+        env:
+          RELEASE_TAG: ${{ steps.next.outputs.release_tag }}
+          TARGET_SHA: ${{ steps.target.outputs.sha }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          artifact="dist/drydock-${RELEASE_TAG}.tar.gz"
+          git archive --format=tar.gz --prefix="drydock-${RELEASE_TAG}/" --output="${artifact}" "${TARGET_SHA}"
+          sha256sum "${artifact}" > "${artifact}.sha256"
+
+      - name: Sign release artifact
+        env:
+          RELEASE_TAG: ${{ steps.next.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+          artifact="dist/drydock-${RELEASE_TAG}.tar.gz"
+          cosign sign-blob --yes \
+            --bundle "${artifact}.bundle" \
+            --new-bundle-format=false \
+            --output-signature "${artifact}.sig" \
+            --output-certificate "${artifact}.pem" \
+            "${artifact}"
+
+          # Cosign v3 may only emit bundle output in some keyless flows.
+          # Materialize legacy signature/cert files from the bundle when needed.
+          if [ ! -s "${artifact}.sig" ]; then
+            sig_b64="$(jq -r '.base64Signature // .messageSignature.signature // empty' "${artifact}.bundle")"
+            if [ -n "${sig_b64}" ]; then
+              printf '%s' "${sig_b64}" | base64 --decode > "${artifact}.sig"
+            fi
+          fi
+
+          if [ ! -s "${artifact}.pem" ]; then
+            cert_pem="$(jq -r '.cert // empty' "${artifact}.bundle")"
+            if [ -n "${cert_pem}" ]; then
+              printf '%s\n' "${cert_pem}" > "${artifact}.pem"
+            else
+              cert_der_b64="$(jq -r '.verificationMaterial.certificate.rawBytes // empty' "${artifact}.bundle")"
+              if [ -n "${cert_der_b64}" ]; then
+                printf '%s' "${cert_der_b64}" | base64 --decode | openssl x509 -inform DER -out "${artifact}.pem"
+              fi
+            fi
+          fi
+
+          if [ ! -s "${artifact}.sig" ] || [ ! -s "${artifact}.pem" ]; then
+            echo "::error::Expected signature outputs were not generated"
+            ls -la dist
+            jq 'keys' "${artifact}.bundle" || true
+            exit 1
+          fi
+
+      - name: Verify release artifact signature
+        env:
+          RELEASE_TAG: ${{ steps.next.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+          artifact="dist/drydock-${RELEASE_TAG}.tar.gz"
+          identity_regex="^https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release-cut.yml@refs/heads/main$"
+          issuer="https://token.actions.githubusercontent.com"
+
+          cosign verify-blob \
+            --signature "${artifact}.sig" \
+            --certificate "${artifact}.pem" \
+            --certificate-identity-regexp "${identity_regex}" \
+            --certificate-oidc-issuer "${issuer}" \
+            "${artifact}" >/dev/null
+
+      - name: Attest release artifact provenance
+        id: attest_release_artifact
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32  # v4.1.0
+        with:
+          subject-path: dist/drydock-${{ steps.next.outputs.release_tag }}.tar.gz
+
+      - name: Export release provenance asset
+        env:
+          RELEASE_TAG: ${{ steps.next.outputs.release_tag }}
+          BUNDLE_PATH: ${{ steps.attest_release_artifact.outputs.bundle-path }}
+        run: |
+          set -euo pipefail
+          artifact="dist/drydock-${RELEASE_TAG}.tar.gz"
+          cp "${BUNDLE_PATH}" "${artifact}.intoto.jsonl"
+
+      - name: Generate release notes from changelog
+        id: release_notes
+        env:
+          IS_PRERELEASE: ${{ steps.tag.outputs.is_prerelease }}
+          RELEASE_TAG: ${{ steps.next.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+          notes_path="dist/release-notes-${RELEASE_TAG}.md"
+
+          entry_path="$(mktemp)"
+          missing_heading="## [${RELEASE_TAG#v}] - YYYY-MM-DD"
+          if ! node scripts/extract-changelog-entry.mjs --version "${RELEASE_TAG}" --file CHANGELOG.md > "${entry_path}"; then
+            if [ "${IS_PRERELEASE}" = "true" ] && node scripts/extract-changelog-entry.mjs --version "Unreleased" --file CHANGELOG.md > "${entry_path}" 2>/dev/null; then
+              echo "Using [Unreleased] changelog section for pre-release ${RELEASE_TAG}."
+            else
+              rm -f "${entry_path}" "${notes_path}"
+              echo "::error::Release notes generation failed: CHANGELOG entry missing for ${RELEASE_TAG}. Add heading '${missing_heading}' and retry release."
+              {
+                echo "### Release Notes Generation"
+                echo "- Result: FAIL"
+                echo "- AI_ACTION_REQUIRED: Add CHANGELOG entry for \`${RELEASE_TAG}\` using heading \`${missing_heading}\`, then re-run release."
+              } >> "${GITHUB_STEP_SUMMARY}"
+              exit 1
+            fi
+          fi
+          {
+            echo "# ${RELEASE_TAG}"
+            echo ""
+            cat "${entry_path}"
+          } > "${notes_path}"
+          rm -f "${entry_path}"
+          echo "path=${notes_path}" >> "$GITHUB_OUTPUT"
+
+      # ────────────────────────────────────────────────────────────────────
+      # POINT OF NO RETURN
+      # Everything above this line can fail without leaking a tag or release
+      # to users. The tag push below is the public commitment that this
+      # release exists; it runs ONLY after image push, signing, attestation,
+      # and artifact generation have all succeeded.
+      # ────────────────────────────────────────────────────────────────────
+
+      - name: Push release tag
         env:
           RELEASE_TAG: ${{ steps.next.outputs.release_tag }}
           TARGET_SHA: ${{ steps.target.outputs.sha }}
@@ -154,19 +562,43 @@ jobs:
           git tag -a "${RELEASE_TAG}" "${TARGET_SHA}" -m "release: ${RELEASE_TAG}"
           git push origin "${RELEASE_TAG}"
 
+      - name: Create GitHub Release and upload signed assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IS_PRERELEASE: ${{ steps.tag.outputs.is_prerelease }}
+          RELEASE_TAG: ${{ steps.next.outputs.release_tag }}
+          RELEASE_NOTES_PATH: ${{ steps.release_notes.outputs.path }}
+        run: |
+          set -euo pipefail
+          prerelease_flag=""
+          if [ "${IS_PRERELEASE}" = "true" ]; then
+            prerelease_flag="--prerelease"
+          fi
+
+          gh release view "${RELEASE_TAG}" >/dev/null 2>&1 || gh release create "${RELEASE_TAG}" --title "${RELEASE_TAG}" --notes-file "${RELEASE_NOTES_PATH}" ${prerelease_flag}
+          gh release edit "${RELEASE_TAG}" --title "${RELEASE_TAG}" --notes-file "${RELEASE_NOTES_PATH}" ${prerelease_flag}
+          gh release upload "${RELEASE_TAG}" \
+            "dist/drydock-${RELEASE_TAG}.tar.gz" \
+            "dist/drydock-${RELEASE_TAG}.tar.gz.sha256" \
+            "dist/drydock-${RELEASE_TAG}.tar.gz.bundle" \
+            "dist/drydock-${RELEASE_TAG}.tar.gz.sig" \
+            "dist/drydock-${RELEASE_TAG}.tar.gz.intoto.jsonl" \
+            "dist/drydock-${RELEASE_TAG}.tar.gz.pem" \
+            --clobber
+
       - name: Release summary
         env:
           TARGET_SHA: ${{ steps.target.outputs.sha }}
           RELEASE_LEVEL: ${{ steps.next.outputs.release_level }}
           NEXT_VERSION: ${{ steps.next.outputs.next_version }}
           RELEASE_TAG: ${{ steps.next.outputs.release_tag }}
+          DIGEST: ${{ steps.digest.outputs.value }}
         run: |
           {
-            echo "### Release Cut Summary"
+            echo "### Release Summary"
             echo "- Target SHA: \`${TARGET_SHA}\`"
             echo "- Bump level: \`${RELEASE_LEVEL}\`"
-            echo "- Next version: \`${NEXT_VERSION}\`"
+            echo "- Version: \`${NEXT_VERSION}\`"
             echo "- Tag: \`${RELEASE_TAG}\`"
-            echo "- Docker build tag format: \`${NEXT_VERSION}-b###\` (generated in release workflow)"
-            echo "- Nightly-ready format: \`vX.Y.Z-nightly.YYYYMMDD.N\`"
+            echo "- Image digest: \`${DIGEST}\`"
           } >> "$GITHUB_STEP_SUMMARY"
