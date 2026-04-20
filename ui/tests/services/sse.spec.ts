@@ -189,13 +189,13 @@ describe('SseService', () => {
     expect(mockEventBus.emit).toHaveBeenCalledWith('container-changed');
   });
 
-  it('emits both container-changed and update-operation-changed on update-operation changes', () => {
+  it('emits only update-operation-changed on operation phase transitions, never container-changed', () => {
     sseService.connect(mockEventBus);
 
     eventListeners['dd:update-operation-changed']();
 
-    expect(mockEventBus.emit).toHaveBeenCalledWith('container-changed');
     expect(mockEventBus.emit).toHaveBeenCalledWith('update-operation-changed', undefined);
+    expect(mockEventBus.emit).not.toHaveBeenCalledWith('container-changed');
   });
 
   it('parses operation payload from SSE event data', () => {

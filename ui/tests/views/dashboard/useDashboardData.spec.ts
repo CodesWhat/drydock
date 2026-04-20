@@ -240,11 +240,21 @@ describe('useDashboardData', () => {
     expect(mocks.getAllContainers).toHaveBeenCalledTimes(1);
   });
 
-  it('performs immediate data refresh on dd:sse-update-operation-changed without debounce', async () => {
+  it('coalesces rapid dd:sse-update-operation-changed events into a single debounced refresh', async () => {
+    vi.useFakeTimers();
+
     const { state } = await mountDashboardData();
     mocks.getAllContainers.mockClear();
 
+    // During an update sequence the backend can fire several operation-phase events
+    // in quick succession. They must debounce onto the shared realtime-refresh
+    // scheduler instead of triggering a full 7-endpoint refetch per event.
     globalThis.dispatchEvent(new CustomEvent('dd:sse-update-operation-changed'));
+    globalThis.dispatchEvent(new CustomEvent('dd:sse-update-operation-changed'));
+    globalThis.dispatchEvent(new CustomEvent('dd:sse-update-operation-changed'));
+    expect(mocks.getAllContainers).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(1_000);
     await flushPromises();
 
     expect(mocks.getAllContainers).toHaveBeenCalledTimes(1);

@@ -245,9 +245,7 @@ export function useDashboardData() {
   });
 
   const fullRefreshListener = (() => realtimeRefreshScheduler.schedule('full')) as EventListener;
-  const operationRefreshListener = (() => {
-    void fetchDashboardData({ background: true });
-  }) as EventListener;
+  const operationRefreshListener = fullRefreshListener;
   const visibilityChangeListener = maintenanceCountdownController.sync as EventListener;
   let stopMaintenanceWindowWatch: ReturnType<typeof watch> | undefined;
 

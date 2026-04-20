@@ -92,7 +92,9 @@ class SseService {
     });
 
     this.eventSource.addEventListener('dd:update-operation-changed', (event) => {
-      this.eventBus?.emit('container-changed');
+      // Operation phase changes (queued/pulling/restarting/failed/cancelled) do not mutate
+      // container state. Terminal success fires dd:container-updated on its own, so emitting
+      // container-changed here triggers a redundant full refresh on every phase transition.
       this.eventBus?.emit('update-operation-changed', this.parseOperationPayload(event));
     });
 
