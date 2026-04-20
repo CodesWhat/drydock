@@ -2734,6 +2734,32 @@ describe('ContainersView', () => {
       expect(vm.filterContainerIds.size).toBe(1);
       expect(vm.filterContainerIds.has('c2')).toBe(true);
     });
+
+    it('deep-link by containerIds bypasses active filters like Hide Pinned (#299)', async () => {
+      // A directed deep-link (e.g. Security's "View in Containers") must always
+      // show the linked container, even when Hide Pinned / kind / server filters
+      // would otherwise hide it. Simulate Hide Pinned being active by shrinking
+      // mockFilteredContainers to exclude the pinned row AFTER mount — the
+      // deep-link still finds it because the id filter works from the raw
+      // container list, not the pre-filtered one.
+      mockRoute.query = { containerIds: 'pinned' };
+      const containers = [
+        makeContainer({
+          id: 'pinned',
+          name: 'grafana',
+          currentTag: '12.3.2',
+          tagPinned: true,
+          newTag: '12.3.3',
+        }),
+        makeContainer({ id: 'other', name: 'nginx' }),
+      ];
+      const wrapper = await mountContainersView(containers);
+      mockFilteredContainers.value = [containers[1]];
+      await flushPromises();
+      const vm = wrapper.vm as any;
+
+      expect(vm.displayContainers.map((c: Container) => c.id)).toEqual(['pinned']);
+    });
   });
 
   describe('sort stability during held update (fix #289)', () => {

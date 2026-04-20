@@ -791,11 +791,14 @@ function toggleContainerSort(key: string) {
 
 // displayContainers runs projection BEFORE sort so sort-affecting fields (status, updateKind,
 // newTag) reflect the held snapshot during a docker recreate window, preventing position shifts.
+// When containerIds is set (deep-link e.g. from Security's "View in Containers") it's a directed
+// lookup, so it bypasses filter state — otherwise Hide Pinned / kind / server filters could hide
+// the exact container the link targets (#299).
 const displayContainers = computed<Array<Container & { _pending?: true }>>(() => {
   const ids = filterContainerIds.value;
   const sourceContainers =
     ids.size > 0
-      ? filteredContainers.value.filter((container) => ids.has(container.id))
+      ? containers.value.filter((container) => ids.has(container.id))
       : filteredContainers.value;
   const live = sourceContainers.map((container) =>
     skippedUpdates.value.has(container.id) || skippedUpdates.value.has(container.name)
