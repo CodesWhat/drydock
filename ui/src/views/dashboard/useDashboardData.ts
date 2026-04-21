@@ -319,6 +319,7 @@ export function useDashboardData() {
     globalThis.addEventListener('dd:sse-container-changed', fullRefreshListener);
     globalThis.addEventListener('dd:sse-update-operation-changed', operationPatchListener);
     globalThis.addEventListener('dd:sse-connected', fullRefreshListener);
+    globalThis.addEventListener('dd:sse-resync-required', fullRefreshListener);
     document.addEventListener('visibilitychange', visibilityChangeListener);
     stopMaintenanceWindowWatch = watch(hasMaintenanceWindows, maintenanceCountdownController.sync, {
       immediate: true,
@@ -330,6 +331,7 @@ export function useDashboardData() {
     globalThis.removeEventListener('dd:sse-container-changed', fullRefreshListener);
     globalThis.removeEventListener('dd:sse-update-operation-changed', operationPatchListener);
     globalThis.removeEventListener('dd:sse-connected', fullRefreshListener);
+    globalThis.removeEventListener('dd:sse-resync-required', fullRefreshListener);
     document.removeEventListener('visibilitychange', visibilityChangeListener);
     stopMaintenanceWindowWatch?.();
     realtimeRefreshScheduler.dispose();

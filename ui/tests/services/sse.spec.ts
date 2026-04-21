@@ -47,7 +47,7 @@ describe('SseService', () => {
     expect(MockEventSourceCtor).toHaveBeenCalledWith('/api/v1/events/ui');
   });
 
-  it('registers event listeners for dd:connected, dd:self-update, container lifecycle events, update-operation changes, agent status events, dd:scan-started, and dd:scan-completed', () => {
+  it('registers event listeners for dd:connected, dd:self-update, container lifecycle events, update-operation changes, agent status events, dd:scan-started, dd:scan-completed, and dd:resync-required', () => {
     sseService.connect(mockEventBus);
     expect(mockEventSource.addEventListener).toHaveBeenCalledWith(
       'dd:connected',
@@ -87,6 +87,10 @@ describe('SseService', () => {
     );
     expect(mockEventSource.addEventListener).toHaveBeenCalledWith(
       'dd:scan-completed',
+      expect.any(Function),
+    );
+    expect(mockEventSource.addEventListener).toHaveBeenCalledWith(
+      'dd:resync-required',
       expect.any(Function),
     );
   });
@@ -277,6 +281,51 @@ describe('SseService', () => {
 
     eventListeners['dd:agent-disconnected']();
     expect(mockEventBus.emit).toHaveBeenCalledWith('agent-status-changed');
+  });
+
+  it('emits resync-required with boot-mismatch reason on dd:resync-required event', () => {
+    sseService.connect(mockEventBus);
+    eventListeners['dd:resync-required']({ data: '{"reason":"boot-mismatch"}' });
+    expect(mockEventBus.emit).toHaveBeenCalledWith('resync-required', { reason: 'boot-mismatch' });
+  });
+
+  it('emits resync-required with buffer-evicted reason on dd:resync-required event', () => {
+    sseService.connect(mockEventBus);
+    eventListeners['dd:resync-required']({ data: '{"reason":"buffer-evicted"}' });
+    expect(mockEventBus.emit).toHaveBeenCalledWith('resync-required', { reason: 'buffer-evicted' });
+  });
+
+  it('falls back to boot-mismatch for dd:resync-required with unknown reason', () => {
+    sseService.connect(mockEventBus);
+    eventListeners['dd:resync-required']({ data: '{"reason":"something-else"}' });
+    expect(mockEventBus.emit).toHaveBeenCalledWith('resync-required', { reason: 'boot-mismatch' });
+  });
+
+  it('falls back to boot-mismatch for dd:resync-required with non-object JSON', () => {
+    sseService.connect(mockEventBus);
+    eventListeners['dd:resync-required']({ data: '"not-an-object"' });
+    expect(mockEventBus.emit).toHaveBeenCalledWith('resync-required', { reason: 'boot-mismatch' });
+  });
+
+  it('falls back to boot-mismatch for dd:resync-required with invalid JSON', () => {
+    sseService.connect(mockEventBus);
+    eventListeners['dd:resync-required']({ data: '{broken' });
+    expect(mockEventBus.emit).toHaveBeenCalledWith('resync-required', { reason: 'boot-mismatch' });
+  });
+
+  it('falls back to boot-mismatch for dd:resync-required with falsy data', () => {
+    sseService.connect(mockEventBus);
+    eventListeners['dd:resync-required']({ data: null });
+    expect(mockEventBus.emit).toHaveBeenCalledWith('resync-required', { reason: 'boot-mismatch' });
+  });
+
+  it('does not emit connection-lost or schedule reconnect on dd:resync-required', () => {
+    sseService.connect(mockEventBus);
+    eventListeners['dd:resync-required']({ data: '{"reason":"boot-mismatch"}' });
+    expect(mockEventBus.emit).not.toHaveBeenCalledWith('connection-lost');
+    vi.advanceTimersByTime(10000);
+    // No reconnect should be triggered
+    expect(MockEventSourceCtor).toHaveBeenCalledTimes(1);
   });
 
   it('emits connection-lost on error when in self-update mode', () => {

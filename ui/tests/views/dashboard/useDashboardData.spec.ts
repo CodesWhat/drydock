@@ -300,7 +300,22 @@ describe('useDashboardData', () => {
     expect(mocks.getAllContainers).toHaveBeenCalledTimes(1);
   });
 
-  it('removes container, operation, and connected listeners on unmount (symmetric with add)', async () => {
+  it('triggers fetchDashboardData on dd:sse-resync-required to recover missed state', async () => {
+    vi.useFakeTimers();
+
+    await mountDashboardData();
+    mocks.getAllContainers.mockClear();
+
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-resync-required', { detail: { reason: 'boot-mismatch' } }),
+    );
+    vi.advanceTimersByTime(1_000);
+    await flushPromises();
+
+    expect(mocks.getAllContainers).toHaveBeenCalledTimes(1);
+  });
+
+  it('removes container, operation, connected, and resync listeners on unmount (symmetric with add)', async () => {
     const addSpy = vi.spyOn(globalThis, 'addEventListener');
     const removeSpy = vi.spyOn(globalThis, 'removeEventListener');
 
@@ -310,6 +325,7 @@ describe('useDashboardData', () => {
     expect(addedEvents).toContain('dd:sse-container-changed');
     expect(addedEvents).toContain('dd:sse-update-operation-changed');
     expect(addedEvents).toContain('dd:sse-connected');
+    expect(addedEvents).toContain('dd:sse-resync-required');
     expect(addedEvents).not.toContain('dd:sse-scan-completed');
 
     wrapper.unmount();
@@ -318,6 +334,7 @@ describe('useDashboardData', () => {
     expect(removedEvents).toContain('dd:sse-container-changed');
     expect(removedEvents).toContain('dd:sse-update-operation-changed');
     expect(removedEvents).toContain('dd:sse-connected');
+    expect(removedEvents).toContain('dd:sse-resync-required');
     expect(removedEvents).not.toContain('dd:sse-scan-completed');
   });
 

@@ -317,6 +317,7 @@ const tableColumns = computed(() => {
 const sseScanCompletedListener = handleSseScanCompleted as EventListener;
 const sseConnectedListener = handleSseScanCompleted as EventListener;
 const sseContainerChangedListener = handleSseContainerChanged as EventListener;
+const sseResyncRequiredListener = handleSseScanCompleted as EventListener;
 
 onMounted(() => {
   void fetchSecurityRuntimeStatus();
@@ -325,6 +326,7 @@ onMounted(() => {
   globalThis.addEventListener('dd:sse-scan-completed', sseScanCompletedListener);
   globalThis.addEventListener('dd:sse-connected', sseConnectedListener);
   globalThis.addEventListener('dd:sse-container-changed', sseContainerChangedListener);
+  globalThis.addEventListener('dd:sse-resync-required', sseResyncRequiredListener);
 });
 
 onUnmounted(() => {
@@ -333,6 +335,7 @@ onUnmounted(() => {
   globalThis.removeEventListener('dd:sse-scan-completed', sseScanCompletedListener);
   globalThis.removeEventListener('dd:sse-connected', sseConnectedListener);
   globalThis.removeEventListener('dd:sse-container-changed', sseContainerChangedListener);
+  globalThis.removeEventListener('dd:sse-resync-required', sseResyncRequiredListener);
 });
 </script>
 

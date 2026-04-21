@@ -1242,6 +1242,7 @@ function applyOperationPatch(event: Event) {
 }
 
 const sseConnectedListener = handleSseContainerChanged as EventListener;
+const sseResyncRequiredListener = handleSseContainerChanged as EventListener;
 const sseUpdateOperationChangedListener = ((event: Event) => {
   clearSseContainerChangedTimer();
   applyOperationPatch(event);
@@ -1252,6 +1253,7 @@ onMounted(() => {
   globalThis.addEventListener('dd:sse-container-changed', sseContainerChangedListener);
   globalThis.addEventListener('dd:sse-update-operation-changed', sseUpdateOperationChangedListener);
   globalThis.addEventListener('dd:sse-connected', sseConnectedListener);
+  globalThis.addEventListener('dd:sse-resync-required', sseResyncRequiredListener);
 });
 onUnmounted(() => {
   clearSseContainerChangedTimer();
@@ -1264,6 +1266,7 @@ onUnmounted(() => {
     sseUpdateOperationChangedListener,
   );
   globalThis.removeEventListener('dd:sse-connected', sseConnectedListener);
+  globalThis.removeEventListener('dd:sse-resync-required', sseResyncRequiredListener);
 });
 
 const tt = (label: string) => ({ value: label, showDelay: 400 });

@@ -2087,6 +2087,18 @@ describe('ContainersView', () => {
       expect(mockGetAllContainers.mock.calls.length).toBeGreaterThan(callsBeforeReconnect);
     });
 
+    it('reloads containers when dd:sse-resync-required fires', async () => {
+      await mountContainersView([makeContainer({ id: 'c1', name: 'nginx' })]);
+      const callsBeforeResync = mockGetAllContainers.mock.calls.length;
+
+      globalThis.dispatchEvent(
+        new CustomEvent('dd:sse-resync-required', { detail: { reason: 'boot-mismatch' } }),
+      );
+      await flushPromises();
+
+      expect(mockGetAllContainers.mock.calls.length).toBeGreaterThan(callsBeforeResync);
+    });
+
     it('covers loadGroups success/skip/error paths', async () => {
       const wrapper = await mountContainersView([makeContainer({ name: 'nginx' })]);
       const vm = wrapper.vm as any;
