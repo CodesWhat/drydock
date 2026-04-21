@@ -105,7 +105,8 @@ function makeContainerTableRow(container: DisplayContainer, groupKey: string): C
 
 const tableRows = computed<GroupedTableRow[]>(() => {
   if (!groupByStack.value) {
-    return displayContainers.value.map((container) => makeContainerTableRow(container, '__flat__'));
+    const flat = renderGroups.value[0]?.containers ?? displayContainers.value;
+    return flat.map((container) => makeContainerTableRow(container, '__flat__'));
   }
 
   const rows: GroupedTableRow[] = [];
@@ -278,6 +279,7 @@ watchEffect(() => {
         :sort-asc="containerSortAsc"
         :selected-key="selectedContainerKey"
         :show-actions="true"
+        actions-width="180px"
         :virtual-scroll="false"
         :full-width-row="isTableRowFullWidth"
         :row-interactive="isTableRowInteractive"
@@ -334,73 +336,6 @@ watchEffect(() => {
                 <div class="font-medium truncate dd-text flex-1">{{ c.name }}</div>
               </div>
               <div class="text-2xs mt-0.5 truncate dd-text-muted">{{ c.image }}</div>
-              <!-- Compact mode: folded badge row -->
-              <div v-if="isCompact" class="flex items-center gap-1.5 mt-1.5 min-w-0 overflow-hidden">
-                <span v-if="c.newTag" class="inline-flex items-center gap-0.5 text-3xs font-semibold dd-text-secondary min-w-0">
-                  <span class="truncate max-w-[80px]">{{ c.currentTag }}</span>
-                  <AppIcon name="arrow-right" :size="14" class="dd-text-muted mx-0.5 shrink-0" />
-                  <CopyableTag :tag="c.newTag" class="truncate max-w-[100px]" style="color: var(--dd-primary);" @click.stop>{{ c.newTag }}</CopyableTag>
-                </span>
-                <span
-                  v-else-if="c.noUpdateReason"
-                  class="inline-flex items-center gap-1 text-3xs min-w-0"
-                  style="color: var(--dd-warning);"
-                  v-tooltip.top="c.noUpdateReason"
-                >
-                  <AppIcon name="warning" :size="10" class="shrink-0" />
-                  <span class="truncate max-w-[130px]">{{ c.noUpdateReason }}</span>
-                </span>
-                <div class="flex items-center gap-1.5 ml-auto shrink-0">
-                <AppBadge v-if="c.updateKind" size="xs" :custom="{ bg: updateKindColor(c.updateKind).bg, text: updateKindColor(c.updateKind).text }"
-                      class="px-1.5 py-0"
-                      v-tooltip.top="tt(c.updateKind)">
-                  <AppIcon :name="c.updateKind === 'major' ? 'chevrons-up' : c.updateKind === 'minor' ? 'chevron-up' : c.updateKind === 'patch' ? 'hashtag' : 'fingerprint'" :size="12" />
-                </AppBadge>
-                <UpdateMaturityBadge :maturity="c.updateMaturity" :tooltip="c.updateMaturityTooltip" size="sm" />
-                <SuggestedTagBadge :tag="c.suggestedTag" :current-tag="c.currentTag" />
-                <AppBadge v-if="c.bouncer === 'blocked'" tone="danger" size="xs" class="px-1.5 py-0"
-                      v-tooltip.top="tt('Blocked')">
-                  <AppIcon name="blocked" :size="12" />
-                </AppBadge>
-                <AppBadge v-else-if="c.bouncer !== 'safe'" tone="warning" size="xs" class="px-1.5 py-0"
-                      v-tooltip.top="tt(c.bouncer)">
-                  <AppIcon name="warning" :size="12" />
-                </AppBadge>
-                <AppBadge v-if="hasRegistryError(c)" tone="danger" size="xs" class="px-1.5 py-0"
-                      aria-label="Registry error"
-                      v-tooltip.top="tt(registryErrorTooltip(c))">
-                  <AppIcon name="warning" :size="12" />
-                </AppBadge>
-                <AppBadge v-if="getContainerListPolicyState(c).snoozed"
-                      tone="info" size="xs" class="px-1.5 py-0"
-                      aria-label="Snoozed updates"
-                      v-tooltip.top="tt(containerPolicyTooltip(c, 'snoozed'))">
-                  <AppIcon name="pause" :size="12" />
-                </AppBadge>
-                <AppBadge v-if="getContainerListPolicyState(c).skipped"
-                      tone="warning" size="xs" class="px-1.5 py-0"
-                      aria-label="Skipped updates"
-                      v-tooltip.top="tt(containerPolicyTooltip(c, 'skipped'))">
-                  <AppIcon name="skip-forward" :size="12" />
-                </AppBadge>
-                <AppBadge v-if="getContainerListPolicyState(c).maturityBlocked"
-                      tone="primary" size="xs" class="px-1.5 py-0"
-                      aria-label="Maturity-blocked updates"
-                      v-tooltip.top="tt(containerPolicyTooltip(c, 'maturity'))">
-                  <AppIcon name="clock" :size="12" />
-                </AppBadge>
-                <AppBadge size="xs" class="px-1.5 py-0"
-                      :tone="c.status === 'running' ? 'success' : 'danger'"
-                      v-tooltip.top="tt(c.status)">
-                  <AppIcon :name="c.status === 'running' ? 'play' : 'stop'" :size="12" />
-                </AppBadge>
-                <AppBadge size="xs" class="px-1.5 py-0"
-                      :custom="{ bg: serverBadgeColor(c.server).bg, text: serverBadgeColor(c.server).text }"
-                      v-tooltip.top="tt(c.server)">
-                  <AppIcon :name="parseServer(c.server).name === 'Local' ? 'home' : 'remote'" :size="12" />
-                </AppBadge>
-                </div>
-              </div>
           </div>
         </template>
         <!-- Version comparison -->
@@ -556,6 +491,13 @@ watchEffect(() => {
           <!-- Icon-style actions (compact) -->
           <template v-else-if="tableActionStyle === 'icons'">
             <div class="flex items-center justify-end gap-0.5">
+              <ReleaseNotesLink
+                v-if="c.releaseNotes?.url || c.releaseLink"
+                :release-notes="c.releaseNotes"
+                :release-link="c.releaseLink"
+                icon-only
+              />
+              <ProjectLink v-if="c.sourceRepo" :source-repo="c.sourceRepo" icon-only />
               <AppIconButton v-if="c.newTag && c.bouncer === 'blocked'" icon="lock" size="sm" variant="muted"
                       class="cursor-not-allowed opacity-50"
                       :disabled="true"
@@ -587,6 +529,14 @@ watchEffect(() => {
           </template>
           <!-- Button-style actions (full) -->
           <template v-else>
+            <div class="flex items-center justify-end gap-1">
+              <ReleaseNotesLink
+                v-if="c.releaseNotes?.url || c.releaseLink"
+                :release-notes="c.releaseNotes"
+                :release-link="c.releaseLink"
+                icon-only
+              />
+              <ProjectLink v-if="c.sourceRepo" :source-repo="c.sourceRepo" icon-only />
             <div v-if="c.newTag" class="inline-flex items-center gap-1">
               <!-- Blocked: muted split button -->
               <div v-if="c.bouncer === 'blocked'" class="inline-flex dd-rounded overflow-hidden" style="min-width: 110px;"
@@ -634,6 +584,7 @@ watchEffect(() => {
               <AppIconButton icon="restart" size="toolbar" variant="muted"
                       :disabled="isContainerUpdating(c) || isContainerQueued(c)"
                       :tooltip="tt('Restart')" @click.stop="confirmRestart(c)" />
+            </div>
             </div>
           </template>
         </template>
@@ -890,6 +841,14 @@ watchEffect(() => {
               v-tooltip.top="c.noUpdateReason"
             >
               {{ c.noUpdateReason }}
+            </div>
+            <div
+              v-if="c.suggestedTag || c.releaseNotes || c.releaseLink || c.sourceRepo"
+              class="flex items-center gap-2 flex-wrap mt-1"
+            >
+              <SuggestedTagBadge :tag="c.suggestedTag" :current-tag="c.currentTag" />
+              <ReleaseNotesLink :release-notes="c.releaseNotes" :release-link="c.releaseLink" />
+              <ProjectLink :source-repo="c.sourceRepo" />
             </div>
           </div>
           <div class="flex items-center gap-1.5 shrink-0">

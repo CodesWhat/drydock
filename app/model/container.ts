@@ -634,12 +634,12 @@ function getLink(container: Container, originalTagValue: string) {
 }
 
 function addTagPinnedProperty(container: Container) {
-  Object.defineProperty(container, 'tagPinned', {
-    enumerable: true,
-    get(this: Container) {
-      return isTagPinned(this.image.tag.value, this.transformTags);
-    },
-  });
+  // Materialize to a plain data property instead of a live getter. Store reads clone
+  // containers via spread + structuredClone on every request, and an enumerable getter
+  // would recompile the user's transform-tags regex for every container in every clone.
+  // Tag values don't mutate in production once validate() runs, so the cached value stays
+  // accurate; `validate()` recomputes it on any re-entry into the model.
+  container.tagPinned = isTagPinned(container.image.tag.value, container.transformTags);
 }
 
 /**
@@ -750,9 +750,16 @@ function resultChangedFunction(this: Container, otherContainer: Container | unde
  * @returns {*}
  */
 function addResultChangedFunction(container: Container) {
-  const containerWithResultChanged = container;
-  containerWithResultChanged.resultChanged = resultChangedFunction;
-  return containerWithResultChanged;
+  // Non-enumerable so structuredClone skips it and the store-clone hotpath can avoid a
+  // preliminary spread to strip the function off. structuredClone throws DataCloneError
+  // on function values, so the store re-attaches resultChanged to the clone directly.
+  Object.defineProperty(container, 'resultChanged', {
+    value: resultChangedFunction,
+    enumerable: false,
+    writable: true,
+    configurable: true,
+  });
+  return container;
 }
 
 /**

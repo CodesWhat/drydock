@@ -14,6 +14,7 @@ vi.mock('../agent/manager.js', () => ({
 
 vi.mock('../store/container.js', () => ({
   getContainersRaw: vi.fn(() => []),
+  getContainersForStats: vi.fn(() => []),
 }));
 
 const EMPTY_WATCHER_STATS = {
@@ -246,7 +247,7 @@ describe('Watcher Router', () => {
         },
       },
     });
-    storeContainer.getContainersRaw.mockReturnValue([
+    storeContainer.getContainersForStats.mockReturnValue([
       { id: 'c1', watcher: ['primary'], status: 'running', image: { id: 'img-a' } },
       { id: 'c2', watcher: null, status: 'running', image: { id: 'img-b' } },
     ]);
@@ -376,7 +377,7 @@ describe('Watcher Router', () => {
         },
       },
     });
-    storeContainer.getContainersRaw.mockReturnValue([
+    storeContainer.getContainersForStats.mockReturnValue([
       { id: 'c1', watcher: ['primary'], status: 'running', image: { id: 'img-a' } },
       { id: 'c2', watcher: undefined, status: 'running', image: { id: 'img-b' } },
     ]);
@@ -418,7 +419,7 @@ describe('Watcher Router', () => {
           },
         },
       });
-      storeContainer.getContainersRaw.mockReturnValue([
+      storeContainer.getContainersForStats.mockReturnValue([
         { id: 'c1', watcher: 'nometa', status: 'running', image: { id: 'img-a' } },
       ]);
 
@@ -652,7 +653,7 @@ describe('Watcher Router', () => {
         },
       },
     });
-    storeContainer.getContainersRaw.mockReturnValue([
+    storeContainer.getContainersForStats.mockReturnValue([
       {
         id: 'c1',
         watcher: 'primary',
@@ -720,7 +721,7 @@ describe('Watcher Router', () => {
         },
       },
     });
-    storeContainer.getContainersRaw.mockReturnValue([
+    storeContainer.getContainersForStats.mockReturnValue([
       {
         id: 'c1',
         watcher: 'primary',
@@ -760,7 +761,7 @@ describe('Watcher Router', () => {
         },
       },
     });
-    storeContainer.getContainersRaw.mockReturnValue([
+    storeContainer.getContainersForStats.mockReturnValue([
       { id: 'c1', watcher: ['primary'], status: 'running', image: { id: 'img-a' } },
       { id: 'c2', watcher: null, status: 'running', image: { id: 'img-b' } },
     ]);
@@ -796,7 +797,7 @@ describe('Watcher Router', () => {
           },
         },
       });
-      storeContainer.getContainersRaw.mockReturnValue([
+      storeContainer.getContainersForStats.mockReturnValue([
         { id: 'c1', watcher: 'primary', status: 'running', image: { id: 'img-a' } },
       ]);
 

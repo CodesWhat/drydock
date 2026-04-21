@@ -3,6 +3,22 @@ interface ContainerStatusLike {
   updateAvailable?: boolean;
 }
 
+interface ContainerDashboardLike extends ContainerStatusLike {
+  updateMaturityLevel?: unknown;
+  security?: {
+    scan?: {
+      summary?: { critical?: unknown; high?: unknown } | null;
+    } | null;
+  } | null;
+}
+
+export interface ContainerDashboardSummary {
+  status: ContainerStatusSummary;
+  securityIssues: number;
+  hotUpdates: number;
+  matureUpdates: number;
+}
+
 interface ContainerWithImageLike extends ContainerStatusLike {
   id?: unknown;
   image?: { id?: unknown; name?: unknown } | null;
@@ -41,6 +57,59 @@ export function getContainerStatusSummary(
     running,
     stopped: Math.max(total - running, 0),
     updatesAvailable,
+  };
+}
+
+function hasSecurityIssue(container: ContainerDashboardLike): boolean {
+  const summary = container.security?.scan?.summary;
+  return Number(summary?.critical ?? 0) > 0 || Number(summary?.high ?? 0) > 0;
+}
+
+// Computes containers.total/running/stopped/updatesAvailable, security issues, and the
+// hot/mature update breakdown in a single pass. Previously the summary handler filtered
+// the container list four separate times — on a large tenant each pass re-read reactive
+// fields (and, pre-fix, the tagPinned getter) for every container.
+export function buildContainerDashboardSummary(
+  containers: Iterable<ContainerDashboardLike>,
+): ContainerDashboardSummary {
+  let total = 0;
+  let running = 0;
+  let updatesAvailable = 0;
+  let securityIssues = 0;
+  let hotUpdates = 0;
+  let matureUpdates = 0;
+
+  for (const container of containers) {
+    total += 1;
+    if (isContainerRunning(container)) {
+      running += 1;
+    }
+    if (container.updateAvailable === true) {
+      updatesAvailable += 1;
+      if (container.updateMaturityLevel === 'hot') {
+        hotUpdates += 1;
+      } else if (
+        container.updateMaturityLevel === 'mature' ||
+        container.updateMaturityLevel === 'established'
+      ) {
+        matureUpdates += 1;
+      }
+    }
+    if (hasSecurityIssue(container)) {
+      securityIssues += 1;
+    }
+  }
+
+  return {
+    status: {
+      total,
+      running,
+      stopped: Math.max(total - running, 0),
+      updatesAvailable,
+    },
+    securityIssues,
+    hotUpdates,
+    matureUpdates,
   };
 }
 

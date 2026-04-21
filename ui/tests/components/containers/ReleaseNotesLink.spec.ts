@@ -120,4 +120,37 @@ describe('ReleaseNotesLink', () => {
     expect(wrapper.text()).toContain(exactBody);
     expect(wrapper.text()).not.toContain('...');
   });
+
+  it('renders nothing in iconOnly mode when neither releaseNotes nor releaseLink is provided', () => {
+    const wrapper = mount(ReleaseNotesLink, {
+      props: { iconOnly: true },
+      global: globalConfig,
+    });
+    expect(wrapper.find('[data-test="release-notes-link"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test="release-link"]').exists()).toBe(false);
+  });
+
+  it('renders icon-only anchor linking to releaseNotes.url when iconOnly is true', () => {
+    const wrapper = mount(ReleaseNotesLink, {
+      props: { releaseNotes: sampleNotes, iconOnly: true },
+      global: globalConfig,
+    });
+    const link = wrapper.find('[data-test="release-notes-link"]');
+    expect(link.exists()).toBe(true);
+    expect(link.attributes('href')).toBe(sampleNotes.url);
+    expect(link.attributes('aria-label')).toBe('Release notes');
+    expect(link.element.tagName).toBe('A');
+    expect(link.text()).not.toContain('Release notes');
+  });
+
+  it('renders icon-only anchor linking to releaseLink fallback when iconOnly is true', () => {
+    const wrapper = mount(ReleaseNotesLink, {
+      props: { releaseLink: 'https://example.com/releases', iconOnly: true },
+      global: globalConfig,
+    });
+    const link = wrapper.find('[data-test="release-link"]');
+    expect(link.exists()).toBe(true);
+    expect(link.attributes('href')).toBe('https://example.com/releases');
+    expect(link.attributes('aria-label')).toBe('Release notes');
+  });
 });

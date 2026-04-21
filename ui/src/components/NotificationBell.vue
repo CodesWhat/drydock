@@ -116,6 +116,7 @@ onMounted(() => {
   globalThis.addEventListener('dd:sse-container-changed', handleSseEvent);
   globalThis.addEventListener('dd:sse-scan-completed', handleSseEvent);
   globalThis.addEventListener('dd:sse-connected', handleSseEvent);
+  globalThis.addEventListener('dd:sse-resync-required', handleSseEvent);
 });
 
 onUnmounted(() => {
@@ -124,6 +125,7 @@ onUnmounted(() => {
   globalThis.removeEventListener('dd:sse-container-changed', handleSseEvent);
   globalThis.removeEventListener('dd:sse-scan-completed', handleSseEvent);
   globalThis.removeEventListener('dd:sse-connected', handleSseEvent);
+  globalThis.removeEventListener('dd:sse-resync-required', handleSseEvent);
 });
 
 function versionSummary(entry: AuditEntry): string {

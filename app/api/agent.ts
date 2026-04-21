@@ -124,7 +124,7 @@ function normalizeAgentLogEntries(entries: unknown) {
 function getAgentsList(req: Request, res: Response) {
   const agents = getAgents();
   const statsByAgent = buildContainerStatsByKey(
-    storeContainer.getContainersRaw({}),
+    storeContainer.getContainersForStats({}),
     agents.map((agent) => agent.name),
     (container) => (typeof container.agent === 'string' ? container.agent : undefined),
   );

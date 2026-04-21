@@ -36,6 +36,9 @@ const {
   groupByStack,
   rechecking,
   recheckAll,
+  expandAllGroups,
+  collapseAllGroups,
+  allGroupsCollapsed,
   filterContainerIds,
   clearContainerIdsFilter,
 } = templateContext;
@@ -192,6 +195,14 @@ const activeFilterChips = computed(() => {
           :class="groupByStack ? 'dd-text dd-bg-elevated' : ''"
           :tooltip="tt('Group by stack')"
           @click="groupByStack = !groupByStack" />
+        <AppIconButton
+          v-if="groupByStack"
+          :icon="allGroupsCollapsed ? 'chevron-down' : 'chevron-up'"
+          size="toolbar"
+          variant="secondary"
+          :tooltip="allGroupsCollapsed ? tt('Expand all stacks') : tt('Collapse all stacks')"
+          :data-test="allGroupsCollapsed ? 'expand-all-groups' : 'collapse-all-groups'"
+          @click="allGroupsCollapsed ? expandAllGroups() : collapseAllGroups()" />
         <AppIconButton icon="restart" size="toolbar" variant="secondary"
           :class="rechecking ? 'dd-text-muted cursor-wait' : ''"
           :disabled="rechecking"

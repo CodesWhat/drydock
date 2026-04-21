@@ -2446,6 +2446,7 @@ describe('Docker Watcher', () => {
     test('getNextScheduledRunDate should return undefined when cron next match is not a Date', () => {
       docker.configuration.cron = '*/5 * * * *';
       mockCron.createTask.mockReturnValue({
+        destroy: vi.fn(),
         timeMatcher: {
           getNextMatch: vi.fn().mockReturnValue('not-a-date'),
         },
@@ -2460,6 +2461,7 @@ describe('Docker Watcher', () => {
       mockCron.createTask.mockImplementation((_, callback) => {
         callback();
         return {
+          destroy: vi.fn(),
           timeMatcher: {
             getNextMatch: vi.fn().mockReturnValue(nextRun),
           },
@@ -2476,6 +2478,64 @@ describe('Docker Watcher', () => {
       });
 
       expect(docker.getNextScheduledRunDate(new Date('2026-04-09T12:00:00.000Z'))).toBeUndefined();
+    });
+
+    test('getNextScheduledRunDate calls createTask only once for repeated calls with same cron', () => {
+      const nextRun = new Date('2026-04-09T12:05:00.000Z');
+      docker.configuration.cron = '*/5 * * * *';
+      const mockDestroy = vi.fn();
+      const mockGetNextMatch = vi.fn().mockReturnValue(nextRun);
+      mockCron.createTask.mockReturnValue({
+        destroy: mockDestroy,
+        timeMatcher: { getNextMatch: mockGetNextMatch },
+      });
+
+      const result1 = docker.getNextScheduledRunDate(new Date('2026-04-09T12:00:00.000Z'));
+      const result2 = docker.getNextScheduledRunDate(new Date('2026-04-09T12:00:00.000Z'));
+      const result3 = docker.getNextScheduledRunDate(new Date('2026-04-09T12:00:00.000Z'));
+
+      expect(mockCron.createTask).toHaveBeenCalledTimes(1);
+      expect(mockGetNextMatch).toHaveBeenCalledTimes(3);
+      expect(result1).toEqual(nextRun);
+      expect(result2).toEqual(nextRun);
+      expect(result3).toEqual(nextRun);
+    });
+
+    test('getNextScheduledRunDate destroys the task after caching timeMatcher', () => {
+      const nextRun = new Date('2026-04-09T12:05:00.000Z');
+      docker.configuration.cron = '*/5 * * * *';
+      const mockDestroy = vi.fn();
+      mockCron.createTask.mockReturnValue({
+        destroy: mockDestroy,
+        timeMatcher: { getNextMatch: vi.fn().mockReturnValue(nextRun) },
+      });
+
+      docker.getNextScheduledRunDate(new Date('2026-04-09T12:00:00.000Z'));
+
+      expect(mockDestroy).toHaveBeenCalledTimes(1);
+    });
+
+    test('getNextScheduledRunDate re-initializes timeMatcher when cron expression changes', () => {
+      const nextRun1 = new Date('2026-04-09T12:05:00.000Z');
+      const nextRun2 = new Date('2026-04-09T13:00:00.000Z');
+      docker.configuration.cron = '*/5 * * * *';
+      mockCron.createTask
+        .mockReturnValueOnce({
+          destroy: vi.fn(),
+          timeMatcher: { getNextMatch: vi.fn().mockReturnValue(nextRun1) },
+        })
+        .mockReturnValueOnce({
+          destroy: vi.fn(),
+          timeMatcher: { getNextMatch: vi.fn().mockReturnValue(nextRun2) },
+        });
+
+      const result1 = docker.getNextScheduledRunDate(new Date('2026-04-09T12:00:00.000Z'));
+      docker.configuration.cron = '0 * * * *';
+      const result2 = docker.getNextScheduledRunDate(new Date('2026-04-09T12:00:00.000Z'));
+
+      expect(mockCron.createTask).toHaveBeenCalledTimes(2);
+      expect(result1).toEqual(nextRun1);
+      expect(result2).toEqual(nextRun2);
     });
 
     test('should consider maintenance window open and next date undefined when no window is configured', () => {

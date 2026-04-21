@@ -6,7 +6,8 @@ type SseBusEvent =
   | 'update-operation-changed'
   | 'agent-status-changed'
   | 'scan-started'
-  | 'scan-completed';
+  | 'scan-completed'
+  | 'resync-required';
 
 export type OperationChangedPayload = {
   operationId?: string;
@@ -22,6 +23,10 @@ type SelfUpdateSsePayload = {
   requiresAck?: boolean;
   ackTimeoutMs?: number;
   startedAt?: string;
+};
+
+export type ResyncRequiredPayload = {
+  reason: 'boot-mismatch' | 'buffer-evicted';
 };
 
 type ConnectedSsePayload = {
@@ -92,7 +97,9 @@ class SseService {
     });
 
     this.eventSource.addEventListener('dd:update-operation-changed', (event) => {
-      this.eventBus?.emit('container-changed');
+      // Operation phase changes (queued/pulling/restarting/failed/cancelled) do not mutate
+      // container state. Terminal success fires dd:container-updated on its own, so emitting
+      // container-changed here triggers a redundant full refresh on every phase transition.
       this.eventBus?.emit('update-operation-changed', this.parseOperationPayload(event));
     });
 
@@ -102,6 +109,11 @@ class SseService {
 
     this.eventSource.addEventListener('dd:agent-disconnected', () => {
       this.eventBus?.emit('agent-status-changed');
+    });
+
+    this.eventSource.addEventListener('dd:resync-required', (event: MessageEvent) => {
+      const payload = this.parseResyncRequiredPayload(event?.data);
+      this.eventBus?.emit('resync-required', payload);
     });
 
     this.eventSource.onerror = (): void => {
@@ -179,6 +191,25 @@ class SseService {
       return { clientId, clientToken };
     } catch {
       return {};
+    }
+  }
+
+  private parseResyncRequiredPayload(rawData: unknown): ResyncRequiredPayload {
+    if (!rawData || typeof rawData !== 'string') {
+      return { reason: 'boot-mismatch' };
+    }
+    try {
+      const parsed = JSON.parse(rawData);
+      if (!parsed || typeof parsed !== 'object') {
+        return { reason: 'boot-mismatch' };
+      }
+      const reason = (parsed as Record<string, unknown>).reason;
+      if (reason === 'boot-mismatch' || reason === 'buffer-evicted') {
+        return { reason };
+      }
+      return { reason: 'boot-mismatch' };
+    } catch {
+      return { reason: 'boot-mismatch' };
     }
   }
 

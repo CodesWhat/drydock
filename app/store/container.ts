@@ -148,21 +148,22 @@ function cloneContainers(containersToClone) {
 }
 
 function cloneContainer(containerToClone) {
+  const clonedContainer = structuredClone(containerToClone);
   if (
-    !containerToClone ||
-    typeof containerToClone !== 'object' ||
-    typeof containerToClone.resultChanged !== 'function'
+    clonedContainer &&
+    typeof clonedContainer === 'object' &&
+    typeof containerToClone?.resultChanged === 'function'
   ) {
-    return structuredClone(containerToClone);
+    // resultChanged lives as a non-enumerable function on validated containers, so
+    // structuredClone skips it. Re-attach (non-enumerable) so consumers that call
+    // existing.resultChanged(other) keep working on the clone.
+    Object.defineProperty(clonedContainer, 'resultChanged', {
+      value: containerToClone.resultChanged,
+      enumerable: false,
+      writable: true,
+      configurable: true,
+    });
   }
-
-  const resultChanged = containerToClone.resultChanged;
-  const containerWithoutResultChanged = {
-    ...containerToClone,
-    resultChanged: undefined,
-  };
-  const clonedContainer = structuredClone(containerWithoutResultChanged);
-  clonedContainer.resultChanged = resultChanged;
   return clonedContainer;
 }
 
@@ -833,6 +834,55 @@ export function getContainersRaw(
   const containerListSorted = getCachedOrComputedContainersByQuery(query);
   const containerListSortedPaged = applyContainerListPagination(containerListSorted, pagination);
   return cloneContainers(containerListSortedPaged);
+}
+
+/**
+ * Lightweight projection of a container for stats/summary callers.
+ * Contains only scalar fields and a simple image sub-object with no shared
+ * references to stored data. Callers that mutate these objects cannot affect
+ * the store.
+ */
+export interface ContainerStatProjection {
+  id: string;
+  watcher: string;
+  agent: string | undefined;
+  status: string;
+  updateAvailable: boolean;
+  updateMaturityLevel: container.Container['updateMaturityLevel'];
+  image: {
+    id: string;
+    name: string;
+  };
+}
+
+function projectContainerForStats(c: container.Container): ContainerStatProjection {
+  return {
+    id: c.id,
+    watcher: c.watcher,
+    agent: c.agent,
+    status: c.status,
+    updateAvailable: c.updateAvailable,
+    updateMaturityLevel: c.updateMaturityLevel,
+    image: {
+      id: c.image.id,
+      name: c.image.name,
+    },
+  };
+}
+
+/**
+ * Get lightweight stat projections for all (filtered) containers.
+ * Returns newly-constructed objects containing only the scalar fields needed
+ * by summary/stats callers (watchers, agents). Avoids structuredClone overhead
+ * entirely — each projection is mutation-safe by construction (no shared
+ * references to stored sub-objects).
+ * @param query
+ */
+export function getContainersForStats(
+  query: Record<string, unknown> = {},
+): ContainerStatProjection[] {
+  const containerListSorted = getCachedOrComputedContainersByQuery(query);
+  return containerListSorted.map(projectContainerForStats);
 }
 
 /**

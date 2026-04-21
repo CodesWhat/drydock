@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import {
+  buildContainerDashboardSummary,
   buildContainerStatsByKey,
   createEmptyContainerStatsBucket,
   getContainerStatusSummary,
@@ -48,6 +49,70 @@ describe('getContainerStatusSummary', () => {
       running: 2,
       stopped: 0,
       updatesAvailable: 0,
+    });
+  });
+});
+
+describe('buildContainerDashboardSummary', () => {
+  test('computes status, security issues, and hot/mature updates in one pass', () => {
+    const containers = [
+      {
+        status: 'running',
+        updateAvailable: true,
+        updateMaturityLevel: 'hot',
+        security: { scan: { summary: { critical: 1, high: 0 } } },
+      },
+      {
+        status: 'running',
+        updateAvailable: true,
+        updateMaturityLevel: 'mature',
+        security: { scan: { summary: { critical: 0, high: 2 } } },
+      },
+      {
+        status: 'exited',
+        updateAvailable: true,
+        updateMaturityLevel: 'established',
+      },
+      {
+        status: 'running',
+        updateAvailable: true,
+        updateMaturityLevel: 'fresh',
+      },
+      {
+        status: 'exited',
+        updateAvailable: false,
+      },
+    ];
+
+    expect(buildContainerDashboardSummary(containers)).toEqual({
+      status: { total: 5, running: 3, stopped: 2, updatesAvailable: 4 },
+      securityIssues: 2,
+      hotUpdates: 1,
+      matureUpdates: 2,
+    });
+  });
+
+  test('treats missing security scan summaries as no issue', () => {
+    const containers = [
+      { status: 'running', updateAvailable: false },
+      { status: 'running', updateAvailable: false, security: null },
+      { status: 'running', updateAvailable: false, security: { scan: null } },
+      {
+        status: 'running',
+        updateAvailable: false,
+        security: { scan: { summary: { critical: 0, high: 0 } } },
+      },
+    ];
+
+    expect(buildContainerDashboardSummary(containers).securityIssues).toBe(0);
+  });
+
+  test('returns zeroed fields for an empty iterable', () => {
+    expect(buildContainerDashboardSummary([])).toEqual({
+      status: { total: 0, running: 0, stopped: 0, updatesAvailable: 0 },
+      securityIssues: 0,
+      hotUpdates: 0,
+      matureUpdates: 0,
     });
   });
 });

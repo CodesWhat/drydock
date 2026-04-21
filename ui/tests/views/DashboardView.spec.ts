@@ -514,7 +514,7 @@ describe('DashboardView', () => {
         const timerId = setIntervalSpy.mock.results[0]?.value;
 
         mockGetAllWatchers.mockResolvedValueOnce([]);
-        globalThis.dispatchEvent(new CustomEvent('dd:sse-scan-completed'));
+        globalThis.dispatchEvent(new CustomEvent('dd:sse-container-changed'));
         vi.advanceTimersByTime(1_000);
         await flushPromises();
 
@@ -2497,6 +2497,221 @@ describe('DashboardView', () => {
         await nextTick();
 
         expect(wrapper.find('[data-widget-id="recent-updates"]').text()).not.toContain('Updating');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('fires success toast when terminal SSE succeeded and operation was tracked', async () => {
+      vi.useFakeTimers();
+      try {
+        mockUpdateContainer.mockResolvedValueOnce({});
+
+        const wrapper = await mountDashboard(
+          [pendingContainer],
+          [],
+          {},
+          { recentStatuses: { nginx: 'pending' } },
+        );
+        const { mapApiContainers } = await import('@/utils/container-mapper');
+        mockGetAllContainers.mockResolvedValueOnce([]);
+        mockGetContainerRecentStatus.mockResolvedValueOnce({ statuses: {} });
+        (mapApiContainers as ReturnType<typeof vi.fn>).mockReturnValueOnce([]);
+
+        const { useConfirmDialog } = await import('@/composables/useConfirmDialog');
+        const confirm = useConfirmDialog();
+        await wrapper.find('[data-test="dashboard-update-btn"]').trigger('click');
+        await confirm.accept();
+        await flushPromises();
+
+        const { toasts } = useToast();
+        const beforeCount = toasts.value.length;
+
+        globalThis.dispatchEvent(
+          new CustomEvent('dd:sse-update-operation-changed', {
+            detail: {
+              containerId: pendingContainer.id,
+              containerName: pendingContainer.name,
+              status: 'succeeded',
+              phase: 'succeeded',
+            },
+          }),
+        );
+        await nextTick();
+
+        const successToast = toasts.value.find(
+          (t) => t.tone === 'success' && t.title === 'Updated: nginx',
+        );
+        expect(successToast).toBeDefined();
+        expect(toasts.value.length).toBeGreaterThan(beforeCount);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('fires error toast when terminal SSE failed and operation was tracked', async () => {
+      vi.useFakeTimers();
+      try {
+        mockUpdateContainer.mockResolvedValueOnce({});
+
+        const wrapper = await mountDashboard(
+          [pendingContainer],
+          [],
+          {},
+          { recentStatuses: { nginx: 'pending' } },
+        );
+        const { mapApiContainers } = await import('@/utils/container-mapper');
+        mockGetAllContainers.mockResolvedValueOnce([]);
+        mockGetContainerRecentStatus.mockResolvedValueOnce({ statuses: {} });
+        (mapApiContainers as ReturnType<typeof vi.fn>).mockReturnValueOnce([]);
+
+        const { useConfirmDialog } = await import('@/composables/useConfirmDialog');
+        const confirm = useConfirmDialog();
+        await wrapper.find('[data-test="dashboard-update-btn"]').trigger('click');
+        await confirm.accept();
+        await flushPromises();
+
+        const { toasts } = useToast();
+        const beforeCount = toasts.value.length;
+
+        globalThis.dispatchEvent(
+          new CustomEvent('dd:sse-update-operation-changed', {
+            detail: {
+              containerId: pendingContainer.id,
+              containerName: pendingContainer.name,
+              status: 'failed',
+              phase: 'failed',
+            },
+          }),
+        );
+        await nextTick();
+
+        const errorToast = toasts.value.find(
+          (t) => t.tone === 'error' && t.title === 'Update failed: nginx',
+        );
+        expect(errorToast).toBeDefined();
+        expect(toasts.value.length).toBeGreaterThan(beforeCount);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('fires error toast when terminal SSE rolled-back and operation was tracked', async () => {
+      vi.useFakeTimers();
+      try {
+        mockUpdateContainer.mockResolvedValueOnce({});
+
+        const wrapper = await mountDashboard(
+          [pendingContainer],
+          [],
+          {},
+          { recentStatuses: { nginx: 'pending' } },
+        );
+        const { mapApiContainers } = await import('@/utils/container-mapper');
+        mockGetAllContainers.mockResolvedValueOnce([]);
+        mockGetContainerRecentStatus.mockResolvedValueOnce({ statuses: {} });
+        (mapApiContainers as ReturnType<typeof vi.fn>).mockReturnValueOnce([]);
+
+        const { useConfirmDialog } = await import('@/composables/useConfirmDialog');
+        const confirm = useConfirmDialog();
+        await wrapper.find('[data-test="dashboard-update-btn"]').trigger('click');
+        await confirm.accept();
+        await flushPromises();
+
+        const { toasts } = useToast();
+        const beforeCount = toasts.value.length;
+
+        globalThis.dispatchEvent(
+          new CustomEvent('dd:sse-update-operation-changed', {
+            detail: {
+              containerId: pendingContainer.id,
+              containerName: pendingContainer.name,
+              status: 'rolled-back',
+              phase: 'rolled-back',
+            },
+          }),
+        );
+        await nextTick();
+
+        const errorToast = toasts.value.find(
+          (t) => t.tone === 'error' && t.title === 'Rolled back: nginx',
+        );
+        expect(errorToast).toBeDefined();
+        expect(toasts.value.length).toBeGreaterThan(beforeCount);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('does not fire toast when terminal SSE succeeded but operation was not tracked', async () => {
+      const wrapper = await mountDashboard([pendingContainer], [], {}, {});
+      // No update action triggered — dashboardPendingUpdateRows is empty
+
+      const { toasts } = useToast();
+      const beforeCount = toasts.value.length;
+
+      globalThis.dispatchEvent(
+        new CustomEvent('dd:sse-update-operation-changed', {
+          detail: {
+            containerId: 'unrelated-container-id',
+            containerName: 'unrelated-container',
+            status: 'succeeded',
+            phase: 'succeeded',
+          },
+        }),
+      );
+      await nextTick();
+
+      expect(toasts.value.length).toBe(beforeCount);
+      void wrapper;
+    });
+
+    it('still calls pruneGhostsForOperation even when no toast fires for untracked operation', async () => {
+      vi.useFakeTimers();
+      try {
+        mockUpdateContainer.mockResolvedValueOnce({});
+
+        const wrapper = await mountDashboard(
+          [pendingContainer],
+          [],
+          {},
+          { recentStatuses: { nginx: 'pending' } },
+        );
+        const { mapApiContainers } = await import('@/utils/container-mapper');
+        mockGetAllContainers.mockResolvedValueOnce([]);
+        mockGetContainerRecentStatus.mockResolvedValueOnce({ statuses: {} });
+        (mapApiContainers as ReturnType<typeof vi.fn>).mockReturnValueOnce([]);
+
+        const { useConfirmDialog } = await import('@/composables/useConfirmDialog');
+        const confirm = useConfirmDialog();
+        await wrapper.find('[data-test="dashboard-update-btn"]').trigger('click');
+        await confirm.accept();
+        await flushPromises();
+
+        // Ghost row visible
+        expect(wrapper.find('[data-widget-id="recent-updates"]').text()).toContain('Updating');
+
+        const { toasts } = useToast();
+        const beforeCount = toasts.value.length;
+
+        // Fire terminal SSE for a completely different container — toast should NOT fire,
+        // but the ghost pruning for our container should still remain (unrelated id won't match)
+        globalThis.dispatchEvent(
+          new CustomEvent('dd:sse-update-operation-changed', {
+            detail: {
+              containerId: 'completely-unrelated-id',
+              containerName: 'completely-unrelated-name',
+              status: 'succeeded',
+              phase: 'succeeded',
+            },
+          }),
+        );
+        await nextTick();
+
+        // No toast for untracked operation
+        expect(toasts.value.length).toBe(beforeCount);
+        // Ghost for our container should still be visible (unrelated event shouldn't prune it)
+        expect(wrapper.find('[data-widget-id="recent-updates"]').text()).toContain('Updating');
       } finally {
         vi.useRealTimers();
       }

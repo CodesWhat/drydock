@@ -70,13 +70,6 @@ function normalizeSecurityOverviewPagination(query: Request['query']) {
   return normalizeLimitOffsetPagination(query, { maxLimit: SECURITY_VULNERABILITY_MAX_LIMIT });
 }
 
-export function getSecurityIssueCount(containers: Container[]): number {
-  return containers.filter((container) => {
-    const summary = container.security?.scan?.summary;
-    return Number(summary?.critical ?? 0) > 0 || Number(summary?.high ?? 0) > 0;
-  }).length;
-}
-
 function toNonNegativeInteger(value: unknown): number {
   if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
     return 0;

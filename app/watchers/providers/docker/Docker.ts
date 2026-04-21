@@ -181,6 +181,7 @@ interface DockerEventsStream {
 }
 
 interface CronTaskWithNextMatch {
+  destroy: () => void;
   timeMatcher: {
     getNextMatch: (fromDate: Date) => unknown;
   };
@@ -313,6 +314,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
   public isCronWatchInProgress: boolean = false;
   public recentDockerEvents: DockerRecentEvent[] = [];
   public recentAliasFilterDecisions: AliasFilterDecision[] = [];
+  #cachedTimeMatcher: { cron: string; matcher: CronTaskWithNextMatch['timeMatcher'] } | undefined;
 
   ensureLogger() {
     if (!this.log) {
@@ -479,13 +481,18 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
     }
 
     try {
-      const task = cron.createTask(
-        this.configuration.cron,
-        () => {},
-      ) as unknown as CronTaskWithNextMatch;
-      const nextMatch = task.timeMatcher.getNextMatch(fromDate);
+      if (this.#cachedTimeMatcher?.cron !== this.configuration.cron) {
+        const task = cron.createTask(
+          this.configuration.cron,
+          () => {},
+        ) as unknown as CronTaskWithNextMatch;
+        task.destroy();
+        this.#cachedTimeMatcher = { cron: this.configuration.cron, matcher: task.timeMatcher };
+      }
+      const nextMatch = this.#cachedTimeMatcher.matcher.getNextMatch(fromDate);
       return nextMatch instanceof Date ? nextMatch : undefined;
     } catch {
+      this.#cachedTimeMatcher = undefined;
       return undefined;
     }
   }

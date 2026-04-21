@@ -26,6 +26,10 @@ interface SelfUpdateAckProtocolDependencies {
   clients: Set<FlushableResponse>;
   activeClientRegistry: ActiveSseClientRegistry;
   defaultAckTimeoutMs: number;
+  /** Optional hook so callers can route self-update writes through a shared
+   *  broadcaster (e.g. one that stamps event IDs and fills a ring buffer).
+   *  When omitted the protocol writes directly to each client socket. */
+  broadcastFn?: (eventName: string, payload: unknown) => void;
 }
 
 interface SelfUpdateAckSweepOptions {
@@ -48,6 +52,7 @@ interface SelfUpdateAckProtocolContext {
   clients: Set<FlushableResponse>;
   activeClientRegistry: ActiveSseClientRegistry;
   defaultAckTimeoutMs: number;
+  broadcastFn?: (eventName: string, payload: unknown) => void;
   pendingSelfUpdateAcks: Map<string, PendingSelfUpdateAck>;
 }
 
@@ -191,7 +196,11 @@ async function broadcastSelfUpdate(
     (token) => hashToken(token),
   );
 
-  writeSelfUpdateEventToAllClients(context.clients, serializedPayload);
+  if (context.broadcastFn) {
+    context.broadcastFn('dd:self-update', eventPayload);
+  } else {
+    writeSelfUpdateEventToAllClients(context.clients, serializedPayload);
+  }
 
   if (!requiresAck || eligibleClientTokenHashes.length === 0) {
     return;

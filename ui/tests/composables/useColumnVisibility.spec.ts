@@ -77,14 +77,14 @@ describe('useColumnVisibility', () => {
     const isCompact = ref(true);
     const { activeColumns } = useColumnVisibility(isCompact);
     const keys = activeColumns.value.map((c) => c.key);
-    expect(keys).toEqual(['icon', 'name']);
+    expect(keys).toEqual(['icon', 'name', 'version']);
   });
 
   it('should restore full columns when isCompact toggles back to false', async () => {
     const { useColumnVisibility } = await loadColumnVisibility();
     const isCompact = ref(true);
     const { allColumns, activeColumns } = useColumnVisibility(isCompact);
-    expect(activeColumns.value).toHaveLength(2);
+    expect(activeColumns.value).toHaveLength(3);
 
     isCompact.value = false;
     await nextTick();

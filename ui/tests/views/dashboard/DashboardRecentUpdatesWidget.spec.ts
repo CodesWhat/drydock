@@ -94,6 +94,7 @@ function mountWidget(
     global: {
       stubs: {
         DataTable: defineComponent({
+          emits: ['row-click'],
           props: ['rows', 'rowClass'],
           template: `
             <div data-test="data-table-stub">
@@ -101,7 +102,8 @@ function mountWidget(
                 v-for="row in rows"
                 :key="row.id"
                 class="dashboard-row-stub"
-                :class="typeof rowClass === 'function' ? rowClass(row) : ''">
+                :class="typeof rowClass === 'function' ? rowClass(row) : ''"
+                @click="$emit('row-click', row)">
                 <slot name="cell-icon" :row="row" />
                 <slot name="cell-container" :row="row" />
                 <slot name="cell-version" :row="row" />
@@ -163,7 +165,7 @@ describe('DashboardRecentUpdatesWidget', () => {
     });
 
     const row = wrapper.find('.dashboard-row-stub');
-    expect(row.classes()).toContain('opacity-50');
+    expect(row.classes()).toContain('dd-row-updating');
     expect(wrapper.text()).toContain('Updating');
   });
 
@@ -173,7 +175,7 @@ describe('DashboardRecentUpdatesWidget', () => {
     });
 
     const row = wrapper.find('.dashboard-row-stub');
-    expect(row.classes()).toContain('opacity-50');
+    expect(row.classes()).toContain('dd-row-updating');
     expect(wrapper.text()).toContain('Updating');
   });
 
@@ -183,7 +185,7 @@ describe('DashboardRecentUpdatesWidget', () => {
     });
 
     const row = wrapper.find('.dashboard-row-stub');
-    expect(row.classes()).toContain('opacity-50');
+    expect(row.classes()).toContain('dd-row-updating');
     expect(wrapper.text()).toContain('Updating');
   });
 
@@ -202,8 +204,8 @@ describe('DashboardRecentUpdatesWidget', () => {
 
     const rows = wrapper.findAll('.dashboard-row-stub');
     expect(rows).toHaveLength(2);
-    expect(rows[0]?.classes()).toContain('opacity-50');
-    expect(rows[1]?.classes()).toContain('opacity-50');
+    expect(rows[0]?.classes()).toContain('dd-row-updating');
+    expect(rows[1]?.classes()).toContain('dd-row-updating');
     expect(wrapper.text()).toContain('Updating');
     expect(wrapper.text()).toContain('Queued');
     expect(wrapper.text()).not.toContain('1 of 2');
@@ -232,6 +234,41 @@ describe('DashboardRecentUpdatesWidget', () => {
     expect(wrapper.text()).toContain('Queued');
     expect(wrapper.text()).not.toContain('1 of 2');
     expect(wrapper.text()).not.toContain('2 of 2');
+  });
+
+  it('keeps pending row Update button enabled while a different row is updating', () => {
+    const wrapper = mountWidget({
+      pendingUpdatesCount: 2,
+      recentUpdates: [
+        makeRecentUpdate({ id: 'c1', status: 'updating' as RecentUpdateRow['status'] }),
+        makeRecentUpdate({
+          id: 'c2',
+          name: 'redis',
+          image: 'redis:7.0.0',
+          status: 'pending' as RecentUpdateRow['status'],
+        }),
+      ],
+      dashboardUpdateInProgress: 'c1',
+      dashboardUpdateSequence: new Map<string, DashboardUpdateSequenceEntry>([
+        ['c1', { position: 1, total: 2 }],
+      ]),
+    });
+
+    // Row B is pending, so its Update button should render and not be disabled.
+    const updateBtn = wrapper.find('[data-test="dashboard-update-btn"]');
+    expect(updateBtn.exists()).toBe(true);
+    expect(updateBtn.attributes('disabled')).toBeUndefined();
+  });
+
+  it('emits openContainer with the row payload when a data table row is clicked', async () => {
+    const row = makeRecentUpdate({ id: 'c1', name: 'nginx' });
+    const wrapper = mountWidget({ recentUpdates: [row] });
+
+    await wrapper.find('.dashboard-row-stub').trigger('click');
+
+    const emitted = wrapper.emitted('openContainer');
+    expect(emitted).toHaveLength(1);
+    expect(emitted?.[0]?.[0]).toEqual(row);
   });
 
   it('renders persisted backend queue rows with phase-only labels', () => {

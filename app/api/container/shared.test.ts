@@ -166,4 +166,69 @@ describe('api/container/shared', () => {
       expect(redactContainersRuntimeEnv('not-an-array')).toBe('not-an-array');
     });
   });
+
+  describe('redactContainerRuntimeEnv — non-enumerable resultChanged preservation', () => {
+    test('preserves a non-enumerable resultChanged function through redaction when details has env', () => {
+      const resultChanged = vi.fn().mockReturnValue(false);
+      const container = {
+        id: 'c-rc-1',
+        details: {
+          env: [{ key: 'TOKEN', value: 'secret' }],
+        },
+      };
+      Object.defineProperty(container, 'resultChanged', {
+        value: resultChanged,
+        enumerable: false,
+        writable: true,
+        configurable: true,
+      });
+
+      const redacted = redactContainerRuntimeEnv(container);
+
+      // resultChanged must survive the spread and still be callable
+      expect(typeof (redacted as { resultChanged?: unknown }).resultChanged).toBe('function');
+      expect(() => (redacted as { resultChanged: () => unknown }).resultChanged()).not.toThrow();
+
+      // The descriptor must remain non-enumerable so spread and structuredClone still skip it
+      const descriptor = Object.getOwnPropertyDescriptor(redacted, 'resultChanged');
+      expect(descriptor?.enumerable).toBe(false);
+
+      // Sensitive env values must still be redacted
+      expect((redacted as typeof container).details.env).toEqual([
+        { key: 'TOKEN', value: '[REDACTED]', sensitive: true },
+      ]);
+    });
+
+    test('does not attach resultChanged when source container lacks it', () => {
+      const container = {
+        id: 'c-rc-2',
+        details: {
+          env: [{ key: 'PATH', value: '/usr/bin' }],
+        },
+      };
+
+      const redacted = redactContainerRuntimeEnv(container);
+
+      expect(Object.getOwnPropertyDescriptor(redacted, 'resultChanged')).toBeUndefined();
+    });
+
+    test('preserves resultChanged even when details has no env array', () => {
+      const resultChanged = vi.fn();
+      const container = { id: 'c-rc-3', details: { ports: ['80:80'] } };
+      Object.defineProperty(container, 'resultChanged', {
+        value: resultChanged,
+        enumerable: false,
+        writable: true,
+        configurable: true,
+      });
+
+      // details is present but has no env array — classifyContainerRuntimeDetails returns it
+      // unchanged but classifyContainerRuntimeEnv still spreads into a new object
+      const result = redactContainerRuntimeEnv(container);
+      expect((result as typeof container).id).toBe('c-rc-3');
+      expect(typeof (result as { resultChanged?: unknown }).resultChanged).toBe('function');
+      const descriptor = Object.getOwnPropertyDescriptor(result, 'resultChanged');
+      expect(descriptor?.enumerable).toBe(false);
+    });
+  });
 });

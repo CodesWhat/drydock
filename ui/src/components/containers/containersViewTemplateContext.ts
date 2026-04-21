@@ -114,6 +114,9 @@ export interface ContainersViewTemplateContext
   renderGroups: ComputedRef<ContainersViewRenderGroup[]>;
   toggleGroupCollapse: (key: string) => void;
   collapsedGroups: Ref<Set<string>>;
+  expandAllGroups: () => void;
+  collapseAllGroups: () => void;
+  allGroupsCollapsed: ComputedRef<boolean>;
   tableColumns: ComputedRef<ContainersViewTableColumn[]>;
   containerSortKey: WritableComputedRef<string>;
   containerSortAsc: WritableComputedRef<boolean>;

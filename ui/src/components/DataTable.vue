@@ -22,12 +22,15 @@ const props = withDefaults(
     sortAsc?: boolean;
     selectedKey?: string | null;
     showActions?: boolean;
+    /** Optional width (e.g. '160px') for the trailing actions column. Defaults to 80px. */
+    actionsWidth?: string;
     compact?: boolean;
     fixedLayout?: boolean;
     virtualScroll?: boolean;
     virtualRowHeight?: number;
     virtualOverscan?: number;
     virtualMaxHeight?: string;
+    rowHeight?: (row: Record<string, unknown>) => number;
     /** Optional max-height for scroll area when virtualScroll is false (e.g., '340px') */
     maxHeight?: string;
     /** Optional function returning extra CSS classes for a row (e.g. dim during actions) */
@@ -39,6 +42,7 @@ const props = withDefaults(
   }>(),
   {
     showActions: false,
+    actionsWidth: '80px',
     compact: false,
     fixedLayout: false,
     virtualScroll: false,
@@ -146,14 +150,77 @@ function syncViewportHeight() {
   virtualViewportHeight.value = measured > 0 ? measured : fallbackViewportHeight();
 }
 
+// Prefix sums over caller-estimated row heights so the visible window and spacers can be
+// resolved with binary search when rows have a few discrete heights (group headers,
+// policy-indicator rows, etc.).
+function estimateRowHeight(row: Record<string, unknown>): number {
+  const estimator = props.rowHeight;
+  if (typeof estimator === 'function') {
+    const candidate = estimator(row);
+    if (Number.isFinite(candidate) && candidate > 0) {
+      return candidate;
+    }
+  }
+  return normalizedRowHeight.value;
+}
+
+const rowOffsets = computed<number[]>(() => {
+  const rows = props.rows;
+  const offsets = new Array<number>(rows.length + 1);
+  offsets[0] = 0;
+  let acc = 0;
+  for (let i = 0; i < rows.length; i += 1) {
+    acc += Math.max(1, estimateRowHeight(rows[i]));
+    offsets[i + 1] = acc;
+  }
+  return offsets;
+});
+
+const totalContentHeight = computed(() => {
+  const offsets = rowOffsets.value;
+  return offsets[offsets.length - 1] ?? 0;
+});
+
+function findFirstVisibleIndex(scrollTop: number): number {
+  const offsets = rowOffsets.value;
+  const last = offsets.length - 1;
+  if (last <= 0) {
+    return 0;
+  }
+  let lo = 0;
+  let hi = last;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >>> 1;
+    if (offsets[mid] <= scrollTop) {
+      lo = mid;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  return lo;
+}
+
+function findLastVisibleIndex(scrollBottom: number, start: number): number {
+  const offsets = rowOffsets.value;
+  const n = offsets.length - 1;
+  let lo = Math.max(start, 0);
+  let hi = n;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (offsets[mid] >= scrollBottom) {
+      hi = mid;
+    } else {
+      lo = mid + 1;
+    }
+  }
+  return lo;
+}
+
 function clampScrollTop() {
   if (!props.virtualScroll) {
     return;
   }
-  const maxScrollTop = Math.max(
-    props.rows.length * normalizedRowHeight.value - virtualViewportHeight.value,
-    0,
-  );
+  const maxScrollTop = Math.max(totalContentHeight.value - virtualViewportHeight.value, 0);
   if (virtualScrollTop.value <= maxScrollTop) {
     return;
   }
@@ -212,8 +279,7 @@ const visibleRangeStart = computed(() => {
   if (!virtualizationEnabled.value) {
     return 0;
   }
-  const candidate =
-    Math.floor(virtualScrollTop.value / normalizedRowHeight.value) - normalizedOverscan.value;
+  const candidate = findFirstVisibleIndex(virtualScrollTop.value) - normalizedOverscan.value;
   return Math.max(0, candidate);
 });
 
@@ -223,11 +289,9 @@ const visibleRangeEnd = computed(() => {
   }
   const viewport =
     virtualViewportHeight.value > 0 ? virtualViewportHeight.value : fallbackViewportHeight();
-  const visibleRows = Math.max(
-    1,
-    Math.ceil(viewport / normalizedRowHeight.value) + normalizedOverscan.value * 2,
-  );
-  return Math.min(props.rows.length, visibleRangeStart.value + visibleRows);
+  const scrollBottom = virtualScrollTop.value + viewport;
+  const endInclusive = findLastVisibleIndex(scrollBottom, visibleRangeStart.value);
+  return Math.min(props.rows.length, endInclusive + 1 + normalizedOverscan.value);
 });
 
 const visibleRows = computed(() => {
@@ -237,15 +301,21 @@ const visibleRows = computed(() => {
   return props.rows.slice(visibleRangeStart.value, visibleRangeEnd.value);
 });
 
-const topSpacerHeight = computed(() =>
-  virtualizationEnabled.value ? visibleRangeStart.value * normalizedRowHeight.value : 0,
-);
+const topSpacerHeight = computed(() => {
+  if (!virtualizationEnabled.value) {
+    return 0;
+  }
+  return rowOffsets.value[visibleRangeStart.value] ?? 0;
+});
 
-const bottomSpacerHeight = computed(() =>
-  virtualizationEnabled.value
-    ? (props.rows.length - visibleRangeEnd.value) * normalizedRowHeight.value
-    : 0,
-);
+const bottomSpacerHeight = computed(() => {
+  if (!virtualizationEnabled.value) {
+    return 0;
+  }
+  const total = totalContentHeight.value;
+  const offset = rowOffsets.value[visibleRangeEnd.value] ?? total;
+  return Math.max(0, total - offset);
+});
 
 function rowAbsoluteIndex(localIndex: number): number {
   if (!virtualizationEnabled.value) {
@@ -394,7 +464,7 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
                      style="background: var(--dd-text-muted)" />
               </div>
             </th>
-            <th v-if="showActions" class="text-right px-3 py-2.5 font-semibold uppercase tracking-wider text-2xs whitespace-nowrap dd-text-muted relative" style="width: 80px">
+            <th v-if="showActions" class="text-right px-3 py-2.5 font-semibold uppercase tracking-wider text-2xs whitespace-nowrap dd-text-muted relative" :style="{ width: actionsWidth }">
               Actions
               <div v-if="lastResizableColumnKey"
                    role="separator"

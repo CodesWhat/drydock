@@ -3,6 +3,10 @@ import type { Container } from '@/types/container';
 import { useContainerPolicy } from '@/views/containers/useContainerPolicy';
 
 const ACTIVE_SNOOZE_UNTIL = '2099-04-14T12:00:00.000Z';
+// Relative-to-now so the tests stay in the "still recent" window regardless of the
+// calendar date. Hardcoded dates were flaking whenever real time drifted past the
+// maturity threshold.
+const RECENT_UPDATE_DETECTED_AT = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
 vi.mock('@/composables/useToast', () => ({
   useToast: () => ({
@@ -107,7 +111,7 @@ describe('useContainerPolicy', () => {
       containerMetaMap: {
         web: {
           updateAvailable: false,
-          updateDetectedAt: '2026-04-13T10:00:00.000Z',
+          updateDetectedAt: RECENT_UPDATE_DETECTED_AT,
           updateKind: { kind: 'digest' },
           updatePolicy: {
             maturityMode: 'all',
@@ -132,7 +136,7 @@ describe('useContainerPolicy', () => {
         skipCount: 1,
         snoozed: true,
         snoozeUntil: ACTIVE_SNOOZE_UNTIL,
-        updateDetectedAt: '2026-04-13T10:00:00.000Z',
+        updateDetectedAt: RECENT_UPDATE_DETECTED_AT,
       }),
     );
     expect(
@@ -150,7 +154,7 @@ describe('useContainerPolicy', () => {
       containerMetaMap: {
         digestOnly: {
           updateAvailable: true,
-          updateDetectedAt: '2026-04-13T10:00:00.000Z',
+          updateDetectedAt: RECENT_UPDATE_DETECTED_AT,
           updateKind: { kind: 'digest' },
           updatePolicy: {
             maturityMode: 'mature',
@@ -181,7 +185,7 @@ describe('useContainerPolicy', () => {
       containerMetaMap: {
         tagged: {
           updateAvailable: false,
-          updateDetectedAt: '2026-04-13T10:00:00.000Z',
+          updateDetectedAt: RECENT_UPDATE_DETECTED_AT,
           updateKind: { kind: 'tag' },
           updatePolicy: {
             maturityMode: 'mature',

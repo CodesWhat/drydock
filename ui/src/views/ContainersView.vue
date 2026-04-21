@@ -63,6 +63,7 @@ const {
   findMatchingOperationIds,
   holdOperationDisplay,
   projectContainerDisplayState,
+  reconcileHoldsAgainstContainers,
   scheduleHeldOperationRelease,
   clearHeldOperation,
 } = useOperationDisplayHold();
@@ -117,13 +118,75 @@ function buildContainerLookupMaps(apiContainers: Record<string, unknown>[]) {
   return { idMap, metaMap };
 }
 
+/**
+ * Produce a stable fingerprint string for a container list so that
+ * loadContainers() can skip reassigning `containers.value` — and thereby
+ * avoid re-running the full displayContainers → sortedContainers →
+ * groupedContainers computed chain — when the incoming data is identical to
+ * what is already stored.
+ *
+ * Performance note: this walk is O(N × fields) but produces no Vue reactive
+ * side-effects and allocates far less than the chain re-eval + DOM diffing
+ * that would otherwise occur on every cron-triggered reload.
+ */
+function fingerprintValue(value: unknown): string | undefined {
+  if (value === null) {
+    return 'null';
+  }
+
+  switch (typeof value) {
+    case 'string':
+    case 'number':
+    case 'boolean':
+      return JSON.stringify(value);
+    case 'undefined':
+    case 'function':
+    case 'symbol':
+      return undefined;
+    case 'object':
+      break;
+    default:
+      return JSON.stringify(String(value));
+  }
+
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => fingerprintValue(item) ?? 'null').join(',')}]`;
+  }
+
+  if (value instanceof Date) {
+    return JSON.stringify(value.toJSON());
+  }
+
+  const record = value as Record<string, unknown>;
+  const entries = Object.keys(record)
+    .sort()
+    .flatMap((key) => {
+      const serialized = fingerprintValue(record[key]);
+      return serialized === undefined ? [] : [`${JSON.stringify(key)}:${serialized}`];
+    });
+  return `{${entries.join(',')}}`;
+}
+
+function containerListFingerprint(list: Container[]): string {
+  return fingerprintValue(list) ?? '[]';
+}
+
 async function loadContainers() {
   try {
     const apiContainers = await getAllContainers();
-    containers.value = mapApiContainers(apiContainers);
+    const mapped = mapApiContainers(apiContainers);
+    // Skip reactive assignment (and downstream chain re-eval) when incoming
+    // data is bit-for-bit identical to the current list.
+    if (
+      containers.value.length !== mapped.length ||
+      containerListFingerprint(mapped) !== containerListFingerprint(containers.value)
+    ) {
+      containers.value = mapped;
+    }
     const { idMap, metaMap } = buildContainerLookupMaps(apiContainers as Record<string, unknown>[]);
     containerIdMap.value = idMap;
     containerMetaMap.value = metaMap;
+    reconcileHoldsAgainstContainers(containers.value);
     if (groupByStack.value) {
       await loadGroups();
     }
@@ -154,7 +217,7 @@ async function recheckAll() {
   }
 }
 
-const { isMobile, windowNarrow } = useBreakpoints();
+const { isMobile, windowNarrow, windowWidth } = useBreakpoints();
 
 const {
   selectedContainer,
@@ -170,7 +233,12 @@ const {
 } = useDetailPanel();
 const detailPanelStorage = useDetailPanelStorage();
 
-const isCompact = computed(() => windowNarrow.value || detailPanelOpen.value);
+const PANEL_WIDTH_PX = { sm: 420, md: 560, lg: 720 } as const;
+const isCompact = computed(() => {
+  if (!detailPanelOpen.value) return windowNarrow.value;
+  const panelPx = PANEL_WIDTH_PX[panelSize.value];
+  return windowWidth.value - panelPx < 1024;
+});
 
 function syncSelectedContainerReference() {
   if (!selectedContainer.value) {
@@ -763,11 +831,14 @@ function toggleContainerSort(key: string) {
 
 // displayContainers runs projection BEFORE sort so sort-affecting fields (status, updateKind,
 // newTag) reflect the held snapshot during a docker recreate window, preventing position shifts.
+// When containerIds is set (deep-link e.g. from Security's "View in Containers") it's a directed
+// lookup, so it bypasses filter state — otherwise Hide Pinned / kind / server filters could hide
+// the exact container the link targets (#299).
 const displayContainers = computed<Array<Container & { _pending?: true }>>(() => {
   const ids = filterContainerIds.value;
   const sourceContainers =
     ids.size > 0
-      ? filteredContainers.value.filter((container) => ids.has(container.id))
+      ? containers.value.filter((container) => ids.has(container.id))
       : filteredContainers.value;
   const live = sourceContainers.map((container) =>
     skippedUpdates.value.has(container.id) || skippedUpdates.value.has(container.name)
@@ -852,6 +923,26 @@ function toggleGroupCollapse(key: string) {
   collapsedGroups.value = next;
 }
 
+function expandAllGroups() {
+  collapsedGroups.value = new Set();
+}
+
+function collapseAllGroups() {
+  collapsedGroups.value = new Set(
+    renderGroups.value.map((group) => group.key).filter((key) => key !== '__flat__'),
+  );
+}
+
+const allGroupsCollapsed = computed(() => {
+  const collapsibleKeys = renderGroups.value
+    .map((group) => group.key)
+    .filter((key) => key !== '__flat__');
+  if (collapsibleKeys.length === 0) {
+    return false;
+  }
+  return collapsibleKeys.every((key) => collapsedGroups.value.has(key));
+});
+
 async function loadGroups() {
   try {
     const groups: ContainerGroup[] = await getContainerGroups();
@@ -890,7 +981,7 @@ interface RenderGroup {
 const groupedContainers = computed<RenderGroup[]>(() => {
   const map = groupMembershipMap.value;
   const buckets: Record<string, typeof displayContainers.value> = {};
-  for (const container of displayContainers.value) {
+  for (const container of sortedContainers.value) {
     const groupName = map[container.id] ?? map[container.name] ?? null;
     const key = groupName ?? '__ungrouped__';
     if (!buckets[key]) {
@@ -941,10 +1032,10 @@ const renderGroups = computed<RenderGroup[]>(() => {
       {
         key: '__flat__',
         name: null,
-        containers: displayContainers.value,
-        containerCount: displayContainers.value.length,
-        updatesAvailable: displayContainers.value.filter((container) => container.newTag).length,
-        updatableCount: displayContainers.value.filter(
+        containers: sortedContainers.value,
+        containerCount: sortedContainers.value.length,
+        updatesAvailable: sortedContainers.value.filter((container) => container.newTag).length,
+        updatableCount: sortedContainers.value.filter(
           (container) => container.newTag && container.bouncer !== 'blocked',
         ).length,
       },
@@ -1040,8 +1131,19 @@ function clearSseContainerChangedTimer() {
   sseContainerChangedTimer = undefined;
 }
 
-async function handleSseScanCompleted() {
+// Refreshes container list and security detail data. Used by container-changed and connected
+// events where the container set itself may have changed.
+async function handleSseContainerChanged() {
   await loadContainers();
+  if (selectedContainerId.value) {
+    await loadDetailSecurityData();
+  }
+}
+
+// Scan-completed only refreshes security detail — container-changed events emitted by the same
+// scan cycle already drive loadContainers() via the debounced container-changed listener.
+// Calling loadContainers() here would produce a duplicate GET /api/containers per scan.
+async function handleSseScanCompleted() {
   if (selectedContainerId.value) {
     await loadDetailSecurityData();
   }
@@ -1052,7 +1154,7 @@ const sseContainerChangedListener = (() => {
   clearSseContainerChangedTimer();
   sseContainerChangedTimer = setTimeout(() => {
     sseContainerChangedTimer = undefined;
-    void handleSseScanCompleted();
+    void handleSseContainerChanged();
   }, SSE_CONTAINER_CHANGED_DEBOUNCE_MS);
 }) as EventListener;
 function resolveActiveOperationPhase(args: {
@@ -1093,21 +1195,26 @@ function applyOperationPatch(event: Event) {
     return;
   }
 
-  const updated = { ...containers.value[idx] };
+  // Mutate the container at idx in place instead of spreading containers.value into a new
+  // 88-element array. Reassigning the array reference invalidates every downstream computed
+  // (filteredContainers, sortedContainers, groupedContainers) on every SSE phase event —
+  // targeted mutation triggers re-evaluation only for effects that actually read
+  // updateOperation on the matched row.
+  const row = containers.value[idx]!;
   if (isActiveContainerUpdateOperationStatus(status)) {
     const nextOperation = {
-      ...(updated.updateOperation || {}),
-      id: typeof operationId === 'string' ? operationId : (updated.updateOperation?.id ?? ''),
+      ...(row.updateOperation || {}),
+      id: typeof operationId === 'string' ? operationId : (row.updateOperation?.id ?? ''),
       status,
       phase: resolveActiveOperationPhase({
         status,
         phase,
-        previousPhase: updated.updateOperation?.phase,
+        previousPhase: row.updateOperation?.phase,
       }),
       updatedAt: new Date().toISOString(),
     };
-    updated.updateOperation = nextOperation;
-    if (status === 'in-progress' && typeof operationId === 'string' && operationId.length > 0) {
+    row.updateOperation = nextOperation;
+    if (typeof operationId === 'string' && operationId.length > 0) {
       holdOperationDisplay({
         operationId,
         operation: nextOperation,
@@ -1115,37 +1222,47 @@ function applyOperationPatch(event: Event) {
         newContainerId: typeof newContainerId === 'string' ? newContainerId : undefined,
         containerName: typeof containerName === 'string' ? containerName : undefined,
         sortSnapshot: {
-          status: updated.status,
-          updateKind: updated.updateKind,
-          newTag: updated.newTag,
+          status: row.status,
+          updateKind: row.updateKind,
+          newTag: row.newTag,
+          currentTag: row.currentTag,
+          image: row.image,
+          imageCreated: row.imageCreated,
         },
       });
     }
   } else {
-    updated.updateOperation = undefined;
+    row.updateOperation = undefined;
     const target = {
       operationId: typeof operationId === 'string' ? operationId : undefined,
       containerId: typeof containerId === 'string' ? containerId : undefined,
       newContainerId: typeof newContainerId === 'string' ? newContainerId : undefined,
       containerName: typeof containerName === 'string' ? containerName : undefined,
     };
+    const wasTracked = findMatchingOperationIds(target).length > 0;
     if (status === 'succeeded') {
-      const wasTracked = findMatchingOperationIds(target).length > 0;
       scheduleHeldOperationRelease(target);
       if (wasTracked) {
-        toast.success(`Updated: ${updated.name}`);
+        toast.success(`Updated: ${row.name}`);
+      }
+    } else if (status === 'failed') {
+      scheduleHeldOperationRelease(target);
+      if (wasTracked) {
+        toast.error(`Update failed: ${row.name}`);
+      }
+    } else if (status === 'rolled-back') {
+      scheduleHeldOperationRelease(target);
+      if (wasTracked) {
+        toast.error(`Rolled back: ${row.name}`);
       }
     } else {
       clearHeldOperation(target);
     }
   }
-
-  const next = [...containers.value];
-  next[idx] = updated;
-  containers.value = next;
 }
 
-const sseConnectedListener = handleSseScanCompleted as EventListener;
+const sseConnectedListener = handleSseContainerChanged as EventListener;
+const sseResyncRequiredListener = handleSseContainerChanged as EventListener;
 const sseUpdateOperationChangedListener = ((event: Event) => {
   clearSseContainerChangedTimer();
   applyOperationPatch(event);
@@ -1156,6 +1273,7 @@ onMounted(() => {
   globalThis.addEventListener('dd:sse-container-changed', sseContainerChangedListener);
   globalThis.addEventListener('dd:sse-update-operation-changed', sseUpdateOperationChangedListener);
   globalThis.addEventListener('dd:sse-connected', sseConnectedListener);
+  globalThis.addEventListener('dd:sse-resync-required', sseResyncRequiredListener);
 });
 onUnmounted(() => {
   clearSseContainerChangedTimer();
@@ -1168,6 +1286,7 @@ onUnmounted(() => {
     sseUpdateOperationChangedListener,
   );
   globalThis.removeEventListener('dd:sse-connected', sseConnectedListener);
+  globalThis.removeEventListener('dd:sse-resync-required', sseResyncRequiredListener);
 });
 
 const tt = (label: string) => ({ value: label, showDelay: 400 });
@@ -1213,6 +1332,9 @@ provide(containersViewTemplateContextKey, {
   renderGroups,
   toggleGroupCollapse,
   collapsedGroups,
+  expandAllGroups,
+  collapseAllGroups,
+  allGroupsCollapsed,
   containerActionsEnabled,
   containerActionsDisabledReason,
   actionInProgress,

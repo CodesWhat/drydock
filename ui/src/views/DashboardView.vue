@@ -430,8 +430,49 @@ function handleTerminalOperationSse(event: Event) {
   if (!payload) {
     return;
   }
-  if (terminalOperationStatusSet.has(payload.status)) {
-    pruneGhostsForOperation(payload);
+  if (!terminalOperationStatusSet.has(payload.status)) {
+    return;
+  }
+  // Determine whether this operation was tracked on this view before pruning
+  const operationIdentifiers = new Set<string>(
+    [payload.containerId, payload.newContainerId, payload.containerName].filter(
+      (v): v is string => typeof v === 'string' && v.length > 0,
+    ),
+  );
+  let resolvedName: string | null = null;
+  let wasTracked = false;
+  for (const [key, { row }] of dashboardPendingUpdateRows.value.entries()) {
+    const rowIdentifiers = new Set<string>(
+      [key, row.id, row.name, row.identityKey].filter(
+        (v): v is string => typeof v === 'string' && v.length > 0,
+      ),
+    );
+    if ([...rowIdentifiers].some((v) => operationIdentifiers.has(v))) {
+      wasTracked = true;
+      resolvedName = resolvedName ?? row.name;
+    }
+  }
+  if (!wasTracked) {
+    for (const id of operationIdentifiers) {
+      if (dashboardUpdatingById.value.has(id)) {
+        wasTracked = true;
+        break;
+      }
+    }
+  }
+  // Fall back to the payload name if we couldn't resolve from tracked rows
+  if (!resolvedName && payload.containerName) {
+    resolvedName = payload.containerName;
+  }
+  pruneGhostsForOperation(payload);
+  if (wasTracked && resolvedName) {
+    if (payload.status === 'succeeded') {
+      toast.success(`Updated: ${resolvedName}`);
+    } else if (payload.status === 'failed') {
+      toast.error(`Update failed: ${resolvedName}`);
+    } else if (payload.status === 'rolled-back') {
+      toast.error(`Rolled back: ${resolvedName}`);
+    }
   }
 }
 
@@ -736,6 +777,7 @@ function confirmDashboardUpdateAll() {
               :edit-mode="editMode"
               @confirm-update="confirmDashboardUpdate"
               @confirm-update-all="confirmDashboardUpdateAll"
+              @open-container="navigateTo({ path: ROUTES.CONTAINERS, query: { containerIds: $event.id } })"
               @view-all="navigateTo({ path: ROUTES.CONTAINERS, query: { filterKind: 'any' } })" />
 
             <DashboardSecurityOverviewWidget

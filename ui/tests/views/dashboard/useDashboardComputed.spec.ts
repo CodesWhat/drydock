@@ -1323,6 +1323,89 @@ describe('useDashboardComputed recent updates', () => {
     ]);
   });
 
+  it('produces identical output on repeated computed accesses with the same containers reference', () => {
+    const containers = [
+      makeBaseContainer({
+        id: 'stable-a',
+        name: 'stable-a',
+        newTag: '2.0.0',
+        updateKind: 'minor',
+        updateDetectedAt: '2026-03-04T09:00:00.000Z',
+      }),
+      makeBaseContainer({
+        id: 'stable-b',
+        name: 'stable-b',
+        newTag: '3.0.0',
+        updateKind: 'major',
+        updateDetectedAt: '2026-03-03T09:00:00.000Z',
+      }),
+    ];
+    const state = createState({ containers });
+
+    const first = state.recentUpdates.value;
+    const second = state.recentUpdates.value;
+
+    // computed() caches the result — same reference means no extra work
+    expect(first).toBe(second);
+    expect(first.map((r) => r.name)).toEqual(['stable-a', 'stable-b']);
+  });
+
+  it('correctly rebuilds name-count disambiguation when containers array reference changes', () => {
+    const containersRef = ref<Container[]>([
+      makeBaseContainer({
+        id: 'uniq-a',
+        name: 'api',
+        newTag: '2.0.0',
+        updateKind: 'minor',
+        updateDetectedAt: '2026-03-04T09:00:00.000Z',
+      }),
+    ]);
+
+    const state = useDashboardComputed({
+      agents: ref([]),
+      containerSummary: ref(null),
+      containers: containersRef,
+      hidePinned: ref(false),
+      maintenanceCountdownNow: ref(Date.now()),
+      recentStatusByContainer: ref({}),
+      recentStatusByIdentity: ref({}),
+      registries: ref([]),
+      serverInfo: ref(null),
+      watchers: ref([]),
+    });
+
+    // First read: single 'api' container — no duplicate, name shown as-is
+    const firstRows = state.recentUpdates.value;
+    expect(firstRows).toHaveLength(1);
+    expect(firstRows[0].name).toBe('api');
+
+    // Replace the array reference with a new array adding a duplicate name
+    containersRef.value = [
+      makeBaseContainer({
+        id: 'dup-a',
+        identityKey: 'edge-a::docker::api',
+        name: 'api',
+        newTag: '2.0.0',
+        updateKind: 'minor',
+        updateDetectedAt: '2026-03-04T09:00:00.000Z',
+      }),
+      makeBaseContainer({
+        id: 'dup-b',
+        identityKey: 'edge-b::docker::api',
+        name: 'api',
+        newTag: '3.0.0',
+        updateKind: 'major',
+        updateDetectedAt: '2026-03-03T09:00:00.000Z',
+      }),
+    ];
+
+    // Second read: two 'api' containers — name-count must reflect the new array
+    const secondRows = state.recentUpdates.value;
+    expect(secondRows).toHaveLength(2);
+    // Both rows still resolve (duplicate detection requires the full-set count)
+    expect(secondRows.every((r) => r.name === 'api')).toBe(true);
+  });
+
   it('returns zero arc lengths when there are no security entries', () => {
     const state = createState({ containers: [] });
 

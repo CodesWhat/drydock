@@ -65,7 +65,7 @@ function toggleColumn(key: string) {
 }
 
 export function useColumnVisibility(isCompact: { value: boolean }) {
-  const compactVisibleKeys = new Set(['icon', 'name']);
+  const compactVisibleKeys = new Set(['icon', 'name', 'version']);
   const activeColumns = computed(() =>
     allColumns.filter(
       (c) => visibleColumns.value.has(c.key) && (!isCompact.value || compactVisibleKeys.has(c.key)),

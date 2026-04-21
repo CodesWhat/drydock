@@ -1237,6 +1237,14 @@ function handleSseEvent(event: string, payload?: unknown) {
     emitUiSseEvent('dd:sse-agent-status-changed');
     return;
   }
+  if (event === 'resync-required') {
+    const reason =
+      payload && typeof payload === 'object'
+        ? String((payload as Record<string, unknown>).reason || 'boot-mismatch')
+        : 'boot-mismatch';
+    emitUiSseEvent('dd:sse-resync-required', { reason });
+    return;
+  }
   if (event === 'connection-lost') {
     connectionLost.value = true;
     startConnectivityPolling();

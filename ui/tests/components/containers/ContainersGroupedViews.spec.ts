@@ -20,6 +20,8 @@ const DataTableStub = defineComponent({
     'fullWidthRow',
     'rowKey',
     'virtualScroll',
+    'virtualMaxHeight',
+    'rowHeight',
     'maxHeight',
   ],
   emits: ['update:sort-key', 'update:sort-asc', 'row-click'],
@@ -795,8 +797,8 @@ describe('ContainersGroupedViews', () => {
     expect(wrapper.text()).toContain('stack-b');
   });
 
-  it('disables virtualization and lets the page scroll handle overflow', async () => {
-    const alpha = makeContainer({
+  it('uses native page scrolling for the containers table, unbounded height', async () => {
+    const normalRow = makeContainer({
       id: 'c-alpha',
       name: 'alpha',
       newTag: '1.1.0',
@@ -807,13 +809,13 @@ describe('ContainersGroupedViews', () => {
     const { context } = makeContext();
     context.groupByStack.value = true;
     context.containerViewMode.value = 'table';
-    context.filteredContainers.value = [alpha];
-    context.displayContainers.value = [alpha];
+    context.filteredContainers.value = [normalRow];
+    context.displayContainers.value = [normalRow];
     context.renderGroups.value = [
       {
         key: 'stack-a',
         name: 'stack-a',
-        containers: [alpha],
+        containers: [normalRow],
         containerCount: 1,
         updatesAvailable: 1,
         updatableCount: 1,
@@ -826,7 +828,9 @@ describe('ContainersGroupedViews', () => {
 
     const dataTable = wrapper.findComponent(DataTableStub);
     expect(dataTable.props('virtualScroll')).toBe(false);
+    expect(dataTable.props('virtualMaxHeight')).toBeUndefined();
     expect(dataTable.props('maxHeight')).toBeUndefined();
+    expect(dataTable.props('rowHeight')).toBeUndefined();
   });
 
   it('covers card/list view events and footer action handlers', async () => {
@@ -1511,5 +1515,129 @@ describe('ContainersGroupedViews', () => {
     const queuedOverlay = cards[1]!.find('.absolute.inset-0');
     expect(queuedOverlay.exists()).toBe(true);
     expect(queuedOverlay.text()).toBe('Queued');
+  });
+
+  it('renders ReleaseNotesLink and ProjectLink in the list view when the container exposes them (#295)', async () => {
+    // rc.10 wired project/release-notes links into the cards view only. Users on
+    // the list accordion view (the default on many installs) never saw the new
+    // links. Assert the list view renders both when sourceRepo / releaseLink
+    // are populated.
+    const container = makeContainer({
+      id: 'c-list-links',
+      name: 'grafana',
+      newTag: '12.3.3',
+      updateKind: 'patch',
+      sourceRepo: 'github.com/grafana/grafana',
+      releaseLink: 'https://github.com/grafana/grafana/releases/tag/v12.3.3',
+    });
+    const { context, refs } = makeContext();
+    refs.containerViewMode.value = 'list';
+    refs.filteredContainers.value = [container];
+    refs.displayContainers.value = [container];
+    refs.renderGroups.value = [
+      {
+        key: '__flat__',
+        name: null,
+        containers: [container],
+        containerCount: 1,
+        updatesAvailable: 1,
+        updatableCount: 1,
+      },
+    ];
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+    await nextTick();
+
+    expect(wrapper.find('[data-test="project-link"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test="release-link"]').exists()).toBe(true);
+  });
+
+  it('renders icon-only ReleaseNotesLink and ProjectLink inside the table actions column (#295)', async () => {
+    // rc.10 wired project/release-notes links into the cards + detail panel
+    // only. Table rows never showed them. We surface them as icon-style
+    // AppIconButton links in the actions column itself so they match the
+    // existing action icons and give finger-friendly tap targets.
+    const container = makeContainer({
+      id: 'c-table-actions-links',
+      name: 'grafana',
+      newTag: '12.3.3',
+      updateKind: 'patch',
+      sourceRepo: 'github.com/grafana/grafana',
+      releaseLink: 'https://github.com/grafana/grafana/releases/tag/v12.3.3',
+    });
+    const { context, refs } = makeContext();
+    refs.containerViewMode.value = 'table';
+    refs.filteredContainers.value = [container];
+    refs.displayContainers.value = [container];
+    refs.renderGroups.value = [
+      {
+        key: '__flat__',
+        name: null,
+        containers: [container],
+        containerCount: 1,
+        updatesAvailable: 1,
+        updatableCount: 1,
+      },
+    ];
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+    await nextTick();
+
+    const projectLink = wrapper.find('[data-test="project-link"]');
+    const releaseLink = wrapper.find('[data-test="release-link"]');
+    expect(projectLink.exists()).toBe(true);
+    expect(releaseLink.exists()).toBe(true);
+    expect(projectLink.element.tagName).toBe('A');
+    expect(releaseLink.element.tagName).toBe('A');
+  });
+
+  it('flat-mode tableRows reads from renderGroups[0].containers, not displayContainers', async () => {
+    const containerA = makeContainer({ id: 'c-a', name: 'alpha' });
+    const containerB = makeContainer({ id: 'c-b', name: 'beta' });
+    const { context, refs } = makeContext();
+    refs.containerViewMode.value = 'table';
+    refs.groupByStack.value = false;
+    // renderGroups holds only containerA
+    refs.renderGroups.value = [
+      {
+        key: '__flat__',
+        name: null,
+        containers: [containerA],
+        containerCount: 1,
+        updatesAvailable: 0,
+        updatableCount: 0,
+      },
+    ];
+    // displayContainers holds both — if tableRows reads here, 2 rows would render
+    refs.displayContainers.value = [containerA, containerB];
+    refs.filteredContainers.value = [containerA, containerB];
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+    await nextTick();
+
+    // Only 1 row should render because tableRows sources from renderGroups[0].containers
+    const rows = wrapper.findAll('.table-row-stub');
+    expect(rows).toHaveLength(1);
+  });
+
+  it('tableRows falls back to displayContainers when renderGroups is empty', async () => {
+    const oneContainer = makeContainer({ id: 'c-only', name: 'only' });
+    const { context, refs } = makeContext();
+    refs.containerViewMode.value = 'table';
+    refs.groupByStack.value = false;
+    // renderGroups is empty — flat branch falls back to displayContainers
+    refs.renderGroups.value = [];
+    refs.displayContainers.value = [oneContainer];
+    refs.filteredContainers.value = [oneContainer];
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+    await nextTick();
+
+    const rows = wrapper.findAll('.table-row-stub');
+    expect(rows).toHaveLength(1);
   });
 });

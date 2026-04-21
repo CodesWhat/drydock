@@ -70,6 +70,7 @@ describe('useBreakpoints', () => {
     const { result } = mountWithBreakpoints(useBreakpoints);
     expect(result.isMobile.value).toBe(false);
     expect(result.windowNarrow.value).toBe(false);
+    expect(result.windowWidth.value).toBe(1200);
   });
 
   it('should report mobile when width < 768', async () => {
@@ -156,6 +157,7 @@ describe('useBreakpoints', () => {
 
     expect(result.isMobile.value).toBe(true);
     expect(result.windowNarrow.value).toBe(true);
+    expect(result.windowWidth.value).toBe(500);
   });
 
   it('should coalesce resize updates into a single animation frame', async () => {
