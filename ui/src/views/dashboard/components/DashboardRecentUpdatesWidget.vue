@@ -359,10 +359,10 @@ watchEffect(() => {
               variant="plain"
               data-test="dashboard-update-btn"
               class="dd-rounded-sm transition-colors"
-              :class="dashboardUpdateInProgress === row.id || isDashboardBulkUpdateLocked
+              :class="dashboardUpdateInProgress === row.id
                 ? 'dd-text-muted opacity-50 cursor-not-allowed'
                 : 'dd-text-muted hover:dd-text-success hover:dd-bg-elevated'"
-              :disabled="dashboardUpdateInProgress === row.id || isDashboardBulkUpdateLocked"
+              :disabled="dashboardUpdateInProgress === row.id"
               :loading="dashboardUpdateInProgress === row.id"
               tooltip="Update container"
               aria-label="Update container"

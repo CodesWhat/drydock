@@ -234,6 +234,30 @@ describe('DashboardRecentUpdatesWidget', () => {
     expect(wrapper.text()).not.toContain('2 of 2');
   });
 
+  it('keeps pending row Update button enabled while a different row is updating', () => {
+    const wrapper = mountWidget({
+      pendingUpdatesCount: 2,
+      recentUpdates: [
+        makeRecentUpdate({ id: 'c1', status: 'updating' as RecentUpdateRow['status'] }),
+        makeRecentUpdate({
+          id: 'c2',
+          name: 'redis',
+          image: 'redis:7.0.0',
+          status: 'pending' as RecentUpdateRow['status'],
+        }),
+      ],
+      dashboardUpdateInProgress: 'c1',
+      dashboardUpdateSequence: new Map<string, DashboardUpdateSequenceEntry>([
+        ['c1', { position: 1, total: 2 }],
+      ]),
+    });
+
+    // Row B is pending, so its Update button should render and not be disabled.
+    const updateBtn = wrapper.find('[data-test="dashboard-update-btn"]');
+    expect(updateBtn.exists()).toBe(true);
+    expect(updateBtn.attributes('disabled')).toBeUndefined();
+  });
+
   it('renders persisted backend queue rows with phase-only labels', () => {
     const wrapper = mountWidget({
       pendingUpdatesCount: 2,
