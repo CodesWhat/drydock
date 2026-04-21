@@ -13,8 +13,35 @@ var {
   mockTimingSafeEqual,
   mockLoggerDebug,
   mockLoggerWarn,
+  mockBootId,
+  mockSseEventBuffer,
 } = vi.hoisted(() => {
   let uuidCounter = 0;
+  const bootId = 'test-boot-id';
+
+  const bufferEvents: Array<{ id: string; event: string; data: unknown; timestamp: number }> = [];
+  const mockSseEventBuffer = {
+    push: vi.fn((id, event, data, timestamp) => {
+      bufferEvents.push({ id, event, data, timestamp });
+    }),
+    replaySince: vi.fn((_lastEventId: string, _now: number) => ({
+      kind: 'replay' as const,
+      events: [] as Array<{ id: string; event: string; data: unknown; timestamp: number }>,
+    })),
+    evict: vi.fn(),
+    _bufferEvents: bufferEvents,
+    _reset() {
+      bufferEvents.length = 0;
+      mockSseEventBuffer.push.mockClear();
+      mockSseEventBuffer.replaySince.mockClear();
+      mockSseEventBuffer.evict.mockClear();
+      mockSseEventBuffer.replaySince.mockImplementation((_lastEventId: string, _now: number) => ({
+        kind: 'replay' as const,
+        events: [] as Array<{ id: string; event: string; data: unknown; timestamp: number }>,
+      }));
+    },
+  };
+
   return {
     mockRouter: { get: vi.fn(), post: vi.fn() },
     mockRegisterSelfUpdateStarting: vi.fn(),
@@ -53,8 +80,25 @@ var {
     ),
     mockLoggerDebug: vi.fn(),
     mockLoggerWarn: vi.fn(),
+    mockBootId: bootId,
+    mockSseEventBuffer,
   };
 });
+
+vi.mock('./sse-event-buffer.js', () => ({
+  bootId: mockBootId,
+  SseEventBuffer: class {
+    push(...args) {
+      mockSseEventBuffer.push(...args);
+    }
+    replaySince(...args) {
+      return mockSseEventBuffer.replaySince(...args);
+    }
+    evict(...args) {
+      return mockSseEventBuffer.evict(...args);
+    }
+  },
+}));
 
 vi.mock('express', () => ({
   default: { Router: vi.fn(() => mockRouter) },
@@ -130,6 +174,7 @@ function createSSERequest(ip = '127.0.0.1', sessionID = `session-${ip}`) {
   return {
     ip,
     sessionID,
+    headers: {} as Record<string, string>,
     on: vi.fn((event, handler) => {
       listeners[event] = handler;
     }),
@@ -161,9 +206,13 @@ function hashClientTokens(tokens: string[]): Buffer[] {
 }
 
 function parseSseEventPayload(res, eventName) {
-  const call = res.write.mock.calls.find(
-    ([payload]) => typeof payload === 'string' && payload.startsWith(`event: ${eventName}\n`),
-  );
+  const call = res.write.mock.calls.find(([payload]) => {
+    if (typeof payload !== 'string') return false;
+    // Allow either `event: name\n...` (ephemeral) or `id: ...\nevent: name\n...` (buffered)
+    return (
+      payload.startsWith(`event: ${eventName}\n`) || payload.includes(`\nevent: ${eventName}\n`)
+    );
+  });
   if (!call) {
     throw new Error(`Missing SSE event ${eventName}`);
   }
@@ -193,6 +242,8 @@ describe('SSE Router', () => {
     vi.useFakeTimers();
     delete process.env.DD_SSE_DEBUG_LOG_IP;
     sseRouter._resetInitializationStateForTests();
+    sseRouter._resetEventCounterForTests();
+    mockSseEventBuffer._reset();
     // Clear clients and connection tracking between tests
     sseRouter._clients.clear();
     sseRouter._activeSseClientRegistry.clear();
@@ -880,6 +931,217 @@ describe('SSE Router', () => {
     });
   });
 
+  describe('event IDs and buffering', () => {
+    test('buffered event gets id: line with bootId prefix', () => {
+      const res = createSSEResponse();
+      sseRouter._clients.add(res);
+
+      sseRouter._broadcastScanStarted('container-1');
+
+      const calls = res.write.mock.calls.map(([v]) => v);
+      const eventCall = calls.find((v) => v.includes('dd:scan-started'));
+      expect(eventCall).toBeDefined();
+      expect(eventCall).toMatch(/^id: test-boot-id:1\nevent: dd:scan-started\ndata: /);
+    });
+
+    test('heartbeat does not get an id: line', () => {
+      const handler = getHandler();
+      const { res } = connectSseClient(handler);
+      res.write.mockClear();
+
+      vi.advanceTimersByTime(sseRouter._SSE_HEARTBEAT_INTERVAL_MS);
+
+      const heartbeatCall = res.write.mock.calls.find(([v]) => v.includes('dd:heartbeat'));
+      expect(heartbeatCall).toBeDefined();
+      expect(heartbeatCall[0]).toBe('event: dd:heartbeat\ndata: {}\n\n');
+      expect(heartbeatCall[0]).not.toMatch(/^id:/);
+    });
+
+    test('per-client dd:connected does not get an id: line', () => {
+      const handler = getHandler();
+      const req = createSSERequest();
+      const res = createSSEResponse();
+
+      handler(req, res);
+
+      const connectedCall = res.write.mock.calls.find(([v]) => v.includes('dd:connected'));
+      expect(connectedCall).toBeDefined();
+      expect(connectedCall[0]).toMatch(/^event: dd:connected\n/);
+      expect(connectedCall[0]).not.toMatch(/^id:/);
+    });
+
+    test('broadcast counter increments consecutively across event types', () => {
+      const res = createSSEResponse();
+      sseRouter._clients.add(res);
+
+      sseRouter._broadcastScanStarted('container-1');
+      sseRouter._broadcastScanCompleted('container-1', 'success');
+
+      const writes = res.write.mock.calls.map(([v]) => v);
+      const scanStarted = writes.find((v) => v.includes('dd:scan-started'));
+      const scanCompleted = writes.find((v) => v.includes('dd:scan-completed'));
+
+      expect(scanStarted).toMatch(/^id: test-boot-id:1\n/);
+      expect(scanCompleted).toMatch(/^id: test-boot-id:2\n/);
+    });
+
+    test('buffered events are pushed to the ring buffer', () => {
+      const res = createSSEResponse();
+      sseRouter._clients.add(res);
+
+      sseRouter._broadcastScanStarted('container-42');
+
+      expect(mockSseEventBuffer.push).toHaveBeenCalledWith(
+        'test-boot-id:1',
+        'dd:scan-started',
+        { containerId: 'container-42' },
+        expect.any(Number),
+      );
+    });
+
+    test('broadcastWithId with ephemeral event name writes directly without id or buffer', () => {
+      const res = createSSEResponse();
+      sseRouter._clients.add(res);
+
+      sseRouter._broadcastWithId('dd:heartbeat', { tick: 1 });
+
+      const writes = res.write.mock.calls.map(([v]) => v);
+      expect(writes).toHaveLength(1);
+      expect(writes[0]).toBe('event: dd:heartbeat\ndata: {"tick":1}\n\n');
+      expect(writes[0]).not.toMatch(/^id:/);
+      expect(mockSseEventBuffer.push).not.toHaveBeenCalled();
+    });
+
+    test('broadcastWithId with ephemeral event and null payload serializes as {}', () => {
+      const res = createSSEResponse();
+      sseRouter._clients.add(res);
+
+      sseRouter._broadcastWithId('dd:heartbeat', null);
+
+      const writes = res.write.mock.calls.map(([v]) => v);
+      expect(writes[0]).toBe('event: dd:heartbeat\ndata: {}\n\n');
+    });
+  });
+
+  describe('Last-Event-ID replay', () => {
+    test('reconnect with valid Last-Event-ID replays buffered events then sends dd:connected', () => {
+      const handler = getHandler();
+      const req = createSSERequest();
+      req.headers = {
+        'last-event-id': 'test-boot-id:3',
+      };
+
+      const replayEvents = [
+        {
+          id: 'test-boot-id:4',
+          event: 'dd:scan-started',
+          data: { containerId: 'c1' },
+          timestamp: Date.now(),
+        },
+        {
+          id: 'test-boot-id:5',
+          event: 'dd:container-updated',
+          data: { id: 'c1' },
+          timestamp: Date.now(),
+        },
+      ];
+      mockSseEventBuffer.replaySince.mockReturnValueOnce({ kind: 'replay', events: replayEvents });
+
+      const res = createSSEResponse();
+      handler(req, res);
+
+      const writes = res.write.mock.calls.map(([v]) => v);
+
+      // The replayed events must appear before dd:connected
+      const replayIdx4 = writes.findIndex((v) => v.includes('test-boot-id:4'));
+      const replayIdx5 = writes.findIndex((v) => v.includes('test-boot-id:5'));
+      const connectedIdx = writes.findIndex((v) => v.includes('dd:connected'));
+
+      expect(replayIdx4).toBeGreaterThanOrEqual(0);
+      expect(replayIdx5).toBeGreaterThan(replayIdx4);
+      expect(connectedIdx).toBeGreaterThan(replayIdx5);
+
+      expect(writes[replayIdx4]).toBe(
+        'id: test-boot-id:4\nevent: dd:scan-started\ndata: {"containerId":"c1"}\n\n',
+      );
+    });
+
+    test('reconnect with no Last-Event-ID behaves exactly as today (no replay)', () => {
+      const handler = getHandler();
+      const req = createSSERequest();
+      const res = createSSEResponse();
+
+      handler(req, res);
+
+      expect(mockSseEventBuffer.replaySince).not.toHaveBeenCalled();
+      // Should still get dd:connected
+      const connectedCall = res.write.mock.calls.find(([v]) => v.includes('dd:connected'));
+      expect(connectedCall).toBeDefined();
+    });
+
+    test('reconnect with Last-Event-ID from different bootId emits dd:resync-required with boot-mismatch', () => {
+      const handler = getHandler();
+      const req = createSSERequest();
+      req.headers = { 'last-event-id': 'old-boot-id:99' };
+
+      mockSseEventBuffer.replaySince.mockReturnValueOnce({
+        kind: 'resync-required',
+        events: [],
+      });
+
+      const res = createSSEResponse();
+      handler(req, res);
+
+      const writes = res.write.mock.calls.map(([v]) => v);
+      const resyncCall = writes.find((v) => v.includes('dd:resync-required'));
+      expect(resyncCall).toBeDefined();
+      expect(resyncCall).toContain('"reason":"boot-mismatch"');
+      expect(resyncCall).toMatch(/^id: test-boot-id:1\n/);
+
+      // dd:connected still sent after resync signal
+      const connectedCall = writes.find((v) => v.includes('dd:connected'));
+      expect(connectedCall).toBeDefined();
+    });
+
+    test('reconnect with evicted Last-Event-ID emits dd:resync-required with buffer-evicted', () => {
+      const handler = getHandler();
+      const req = createSSERequest();
+      // Same bootId but old counter — buffer evicted it
+      req.headers = { 'last-event-id': 'test-boot-id:1' };
+
+      mockSseEventBuffer.replaySince.mockReturnValueOnce({
+        kind: 'resync-required',
+        events: [],
+      });
+
+      const res = createSSEResponse();
+      handler(req, res);
+
+      const writes = res.write.mock.calls.map(([v]) => v);
+      const resyncCall = writes.find((v) => v.includes('dd:resync-required'));
+      expect(resyncCall).toBeDefined();
+      expect(resyncCall).toContain('"reason":"buffer-evicted"');
+    });
+
+    test('replay with empty events list does not flush before dd:connected', () => {
+      const handler = getHandler();
+      const req = createSSERequest();
+      req.headers = { 'last-event-id': 'test-boot-id:5' };
+
+      mockSseEventBuffer.replaySince.mockReturnValueOnce({ kind: 'replay', events: [] });
+
+      const res = createSSEResponse();
+      handler(req, res);
+
+      // Should not have written any replay events, but dd:connected must be present
+      const writes = res.write.mock.calls.map(([v]) => v);
+      const connectedCall = writes.find((v) => v.includes('dd:connected'));
+      expect(connectedCall).toBeDefined();
+      // Only the dd:connected flush fires (empty replay list skips the extra flush)
+      expect(res.flush).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('broadcastSelfUpdate', () => {
     test('should send dd:self-update to all connected clients', () => {
       const handler = getHandler();
@@ -891,10 +1153,10 @@ describe('SSE Router', () => {
       });
 
       expect(res1.write).toHaveBeenCalledWith(
-        expect.stringContaining('event: dd:self-update\ndata: {"opId":"op-1"'),
+        expect.stringContaining('\nevent: dd:self-update\ndata: '),
       );
       expect(res2.write).toHaveBeenCalledWith(
-        expect.stringContaining('event: dd:self-update\ndata: {"opId":"op-1"'),
+        expect.stringContaining('\nevent: dd:self-update\ndata: '),
       );
     });
 
@@ -913,7 +1175,7 @@ describe('SSE Router', () => {
       await registeredCallback({ opId: 'op-3' });
 
       expect(res.write).toHaveBeenCalledWith(
-        expect.stringContaining('event: dd:self-update\ndata: {"opId":"op-3"'),
+        expect.stringContaining('\nevent: dd:self-update\ndata: '),
       );
     });
 
@@ -1181,9 +1443,12 @@ describe('SSE Router', () => {
 
       sseRouter._broadcastScanStarted('container-1');
 
-      const expected = 'event: dd:scan-started\ndata: {"containerId":"container-1"}\n\n';
-      expect(res1.write).toHaveBeenCalledWith(expected);
-      expect(res2.write).toHaveBeenCalledWith(expected);
+      expect(res1.write).toHaveBeenCalledWith(
+        expect.stringContaining('event: dd:scan-started\ndata: {"containerId":"container-1"}'),
+      );
+      expect(res2.write).toHaveBeenCalledWith(
+        expect.stringContaining('event: dd:scan-started\ndata: {"containerId":"container-1"}'),
+      );
     });
 
     test('should handle empty client set', () => {
@@ -1200,10 +1465,16 @@ describe('SSE Router', () => {
 
       sseRouter._broadcastScanCompleted('container-1', 'success');
 
-      const expected =
-        'event: dd:scan-completed\ndata: {"containerId":"container-1","status":"success"}\n\n';
-      expect(res1.write).toHaveBeenCalledWith(expected);
-      expect(res2.write).toHaveBeenCalledWith(expected);
+      expect(res1.write).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'event: dd:scan-completed\ndata: {"containerId":"container-1","status":"success"}',
+        ),
+      );
+      expect(res2.write).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'event: dd:scan-completed\ndata: {"containerId":"container-1","status":"success"}',
+        ),
+      );
     });
 
     test('should handle empty client set', () => {
@@ -1216,9 +1487,11 @@ describe('SSE Router', () => {
 
       sseRouter._broadcastScanCompleted('container-1', 'error');
 
-      const expected =
-        'event: dd:scan-completed\ndata: {"containerId":"container-1","status":"error"}\n\n';
-      expect(res.write).toHaveBeenCalledWith(expected);
+      expect(res.write).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'event: dd:scan-completed\ndata: {"containerId":"container-1","status":"error"}',
+        ),
+      );
     });
   });
 
@@ -1231,7 +1504,9 @@ describe('SSE Router', () => {
       onContainerAdded({ id: 'container-1', name: 'nginx' });
 
       expect(res.write).toHaveBeenCalledWith(
-        'event: dd:container-added\ndata: {"id":"container-1","name":"nginx"}\n\n',
+        expect.stringContaining(
+          'event: dd:container-added\ndata: {"id":"container-1","name":"nginx"}',
+        ),
       );
     });
 
@@ -1243,7 +1518,9 @@ describe('SSE Router', () => {
       onContainerUpdated({ id: 'container-1', name: 'nginx' });
 
       expect(res.write).toHaveBeenCalledWith(
-        'event: dd:container-updated\ndata: {"id":"container-1","name":"nginx"}\n\n',
+        expect.stringContaining(
+          'event: dd:container-updated\ndata: {"id":"container-1","name":"nginx"}',
+        ),
       );
     });
 
@@ -1255,7 +1532,7 @@ describe('SSE Router', () => {
       onContainerRemoved({ id: 'container-1' });
 
       expect(res.write).toHaveBeenCalledWith(
-        'event: dd:container-removed\ndata: {"id":"container-1"}\n\n',
+        expect.stringContaining('event: dd:container-removed\ndata: {"id":"container-1"}'),
       );
     });
 
@@ -1272,7 +1549,9 @@ describe('SSE Router', () => {
       });
 
       expect(res.write).toHaveBeenCalledWith(
-        'event: dd:update-operation-changed\ndata: {"operationId":"op-1","containerName":"nginx","status":"failed","phase":"failed"}\n\n',
+        expect.stringContaining(
+          'event: dd:update-operation-changed\ndata: {"operationId":"op-1","containerName":"nginx","status":"failed","phase":"failed"}',
+        ),
       );
     });
 
@@ -1283,7 +1562,9 @@ describe('SSE Router', () => {
 
       onContainerAdded(null);
 
-      expect(res.write).toHaveBeenCalledWith('event: dd:container-added\ndata: {}\n\n');
+      expect(res.write).toHaveBeenCalledWith(
+        expect.stringContaining('event: dd:container-added\ndata: {}'),
+      );
     });
 
     test('should drop invalid event names before writing to the SSE stream', () => {
@@ -1310,7 +1591,9 @@ describe('SSE Router', () => {
       onAgentConnected({ agentName: 'edge-1', reconnected: false });
 
       expect(res.write).toHaveBeenCalledWith(
-        'event: dd:agent-connected\ndata: {"agentName":"edge-1","reconnected":false}\n\n',
+        expect.stringContaining(
+          'event: dd:agent-connected\ndata: {"agentName":"edge-1","reconnected":false}',
+        ),
       );
     });
 
@@ -1322,7 +1605,9 @@ describe('SSE Router', () => {
       onAgentDisconnected({ agentName: 'edge-1', reason: 'SSE connection lost' });
 
       expect(res.write).toHaveBeenCalledWith(
-        'event: dd:agent-disconnected\ndata: {"agentName":"edge-1","reason":"SSE connection lost"}\n\n',
+        expect.stringContaining(
+          'event: dd:agent-disconnected\ndata: {"agentName":"edge-1","reason":"SSE connection lost"}',
+        ),
       );
     });
   });

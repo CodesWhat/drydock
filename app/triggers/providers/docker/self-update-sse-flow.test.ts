@@ -61,6 +61,7 @@ function createSseRequest(ip = '127.0.0.1', sessionID = `session-${ip}`) {
   return {
     ip,
     sessionID,
+    headers: {} as Record<string, string>,
     on: vi.fn((event: string, handler: () => void) => {
       listeners[event] = handler;
     }),
@@ -102,9 +103,12 @@ function createJsonResponse() {
 }
 
 function parseSseEventPayload(res: ReturnType<typeof createSseResponse>, eventName: string) {
-  const call = res.write.mock.calls.find(
-    ([payload]) => typeof payload === 'string' && payload.startsWith(`event: ${eventName}\n`),
-  );
+  const call = res.write.mock.calls.find(([payload]) => {
+    if (typeof payload !== 'string') return false;
+    return (
+      payload.startsWith(`event: ${eventName}\n`) || payload.includes(`\nevent: ${eventName}\n`)
+    );
+  });
   if (!call) {
     throw new Error(`Missing SSE event ${eventName}`);
   }
