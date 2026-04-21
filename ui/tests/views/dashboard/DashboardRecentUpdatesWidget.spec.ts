@@ -163,7 +163,7 @@ describe('DashboardRecentUpdatesWidget', () => {
     });
 
     const row = wrapper.find('.dashboard-row-stub');
-    expect(row.classes()).toContain('opacity-50');
+    expect(row.classes()).toContain('dd-row-updating');
     expect(wrapper.text()).toContain('Updating');
   });
 
@@ -173,7 +173,7 @@ describe('DashboardRecentUpdatesWidget', () => {
     });
 
     const row = wrapper.find('.dashboard-row-stub');
-    expect(row.classes()).toContain('opacity-50');
+    expect(row.classes()).toContain('dd-row-updating');
     expect(wrapper.text()).toContain('Updating');
   });
 
@@ -183,7 +183,7 @@ describe('DashboardRecentUpdatesWidget', () => {
     });
 
     const row = wrapper.find('.dashboard-row-stub');
-    expect(row.classes()).toContain('opacity-50');
+    expect(row.classes()).toContain('dd-row-updating');
     expect(wrapper.text()).toContain('Updating');
   });
 
@@ -202,8 +202,8 @@ describe('DashboardRecentUpdatesWidget', () => {
 
     const rows = wrapper.findAll('.dashboard-row-stub');
     expect(rows).toHaveLength(2);
-    expect(rows[0]?.classes()).toContain('opacity-50');
-    expect(rows[1]?.classes()).toContain('opacity-50');
+    expect(rows[0]?.classes()).toContain('dd-row-updating');
+    expect(rows[1]?.classes()).toContain('dd-row-updating');
     expect(wrapper.text()).toContain('Updating');
     expect(wrapper.text()).toContain('Queued');
     expect(wrapper.text()).not.toContain('1 of 2');

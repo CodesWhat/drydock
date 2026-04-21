@@ -112,7 +112,7 @@ function getRowUpdateLabel(row: Record<string, unknown>): string {
 
 function getRowClass(row: Record<string, unknown>): string {
   if (isRowUpdating(row) || isRowQueued(row)) {
-    return 'opacity-50 pointer-events-none transition-opacity duration-300';
+    return 'dd-row-updating pointer-events-none transition-opacity duration-300';
   }
   return '';
 }
@@ -231,12 +231,24 @@ watchEffect(() => {
           fixed-layout
           compact>
           <template #cell-icon="{ row }">
-            <AppIcon
-              v-if="isRowUpdating(row)"
-              name="spinner"
-              :size="18"
-              class="dd-spin dd-text-muted" />
-            <ContainerIcon v-else :icon="row.icon" :size="28" />
+            <div
+              v-if="isRowUpdating(row) || isRowQueued(row)"
+              class="dd-row-overlay absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+              <div
+                class="flex items-center gap-2 px-4 py-1.5 dd-rounded text-2xs-plus font-bold uppercase tracking-wider shadow-lg"
+                :style="{
+                  backgroundColor: 'var(--dd-bg-elevated)',
+                  border: '1px solid var(--dd-border)',
+                  color: 'var(--dd-text)',
+                }">
+                <AppIcon
+                  :name="isRowQueued(row) && !isRowUpdating(row) ? 'clock' : 'spinner'"
+                  :size="14"
+                  :class="isRowQueued(row) && !isRowUpdating(row) ? '' : 'dd-spin'" />
+                <span>{{ getRowUpdateLabel(row) }}</span>
+              </div>
+            </div>
+            <ContainerIcon :icon="row.icon" :size="28" />
           </template>
 
           <template #cell-container="{ row }">
@@ -249,20 +261,6 @@ watchEffect(() => {
               <div class="min-w-0">
                 <div class="flex items-center gap-1.5 flex-wrap">
                   <div class="font-medium dd-text leading-tight truncate">{{ row.name }}</div>
-                  <AppBadge
-                    v-if="isRowUpdating(row)"
-                    size="xs"
-                    :custom="{ bg: 'var(--dd-warning-muted)', text: 'var(--dd-warning)' }">
-                    <AppIcon name="spinner" :size="12" class="mr-1 dd-spin" />
-                    {{ getRowUpdateLabel(row) }}
-                  </AppBadge>
-                  <AppBadge
-                    v-else-if="isRowQueued(row)"
-                    size="xs"
-                    :custom="{ bg: 'var(--dd-warning-muted)', text: 'var(--dd-warning)' }">
-                    <AppIcon name="clock" :size="12" class="mr-1" />
-                    {{ getRowUpdateLabel(row) }}
-                  </AppBadge>
                 </div>
                 <div class="text-2xs dd-text-muted mt-0.5 truncate">{{ row.image }}</div>
                 <div v-if="row.registryError" class="text-2xs mt-0.5 truncate" style="color: var(--dd-danger);">
