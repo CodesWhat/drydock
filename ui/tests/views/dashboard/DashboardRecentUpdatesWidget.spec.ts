@@ -94,6 +94,7 @@ function mountWidget(
     global: {
       stubs: {
         DataTable: defineComponent({
+          emits: ['row-click'],
           props: ['rows', 'rowClass'],
           template: `
             <div data-test="data-table-stub">
@@ -101,7 +102,8 @@ function mountWidget(
                 v-for="row in rows"
                 :key="row.id"
                 class="dashboard-row-stub"
-                :class="typeof rowClass === 'function' ? rowClass(row) : ''">
+                :class="typeof rowClass === 'function' ? rowClass(row) : ''"
+                @click="$emit('row-click', row)">
                 <slot name="cell-icon" :row="row" />
                 <slot name="cell-container" :row="row" />
                 <slot name="cell-version" :row="row" />
@@ -256,6 +258,17 @@ describe('DashboardRecentUpdatesWidget', () => {
     const updateBtn = wrapper.find('[data-test="dashboard-update-btn"]');
     expect(updateBtn.exists()).toBe(true);
     expect(updateBtn.attributes('disabled')).toBeUndefined();
+  });
+
+  it('emits openContainer with the row payload when a data table row is clicked', async () => {
+    const row = makeRecentUpdate({ id: 'c1', name: 'nginx' });
+    const wrapper = mountWidget({ recentUpdates: [row] });
+
+    await wrapper.find('.dashboard-row-stub').trigger('click');
+
+    const emitted = wrapper.emitted('openContainer');
+    expect(emitted).toHaveLength(1);
+    expect(emitted?.[0]?.[0]).toEqual(row);
   });
 
   it('renders persisted backend queue rows with phase-only labels', () => {

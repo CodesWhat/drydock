@@ -121,6 +121,7 @@ const emit = defineEmits<{
   confirmUpdate: [row: RecentUpdateRow];
   confirmUpdateAll: [];
   viewAll: [];
+  openContainer: [row: RecentUpdateRow];
 }>();
 
 function handleConfirmUpdate(row: RecentUpdateRow) {
@@ -133,6 +134,10 @@ function handleConfirmUpdateAll() {
 
 function handleViewAll() {
   emit('viewAll');
+}
+
+function handleRowClick(row: Record<string, unknown>) {
+  emit('openContainer', row as RecentUpdateRow);
 }
 
 const rootEl = ref<HTMLElement | null>(null);
@@ -229,7 +234,8 @@ watchEffect(() => {
           row-key="id"
           :row-class="getRowClass"
           fixed-layout
-          compact>
+          compact
+          @row-click="handleRowClick">
           <template #cell-icon="{ row }">
             <div
               v-if="isRowUpdating(row) || isRowQueued(row)"
@@ -272,7 +278,8 @@ watchEffect(() => {
                   target="_blank"
                   rel="noopener noreferrer"
                   class="text-2xs mt-0.5 inline-flex underline hover:no-underline"
-                  style="color: var(--dd-info);">
+                  style="color: var(--dd-info);"
+                  @click.stop>
                   Release notes
                 </a>
               </div>

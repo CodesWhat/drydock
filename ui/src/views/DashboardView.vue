@@ -777,6 +777,7 @@ function confirmDashboardUpdateAll() {
               :edit-mode="editMode"
               @confirm-update="confirmDashboardUpdate"
               @confirm-update-all="confirmDashboardUpdateAll"
+              @open-container="navigateTo({ path: ROUTES.CONTAINERS, query: { containerIds: $event.id } })"
               @view-all="navigateTo({ path: ROUTES.CONTAINERS, query: { filterKind: 'any' } })" />
 
             <DashboardSecurityOverviewWidget
