@@ -1768,6 +1768,85 @@ describe('ContainersView', () => {
       expect(vm.collapsedGroups.has('web-stack')).toBe(false);
     });
 
+    it('expandAllGroups clears collapsedGroups', async () => {
+      const wrapper = await mountContainersView([makeContainer()]);
+      const vm = wrapper.vm as any;
+
+      vm.collapsedGroups = new Set(['web-stack', 'db-stack', 'cache-stack']);
+      expect(vm.collapsedGroups.size).toBe(3);
+
+      vm.expandAllGroups();
+      expect(vm.collapsedGroups.size).toBe(0);
+    });
+
+    it('collapseAllGroups collapses every non-flat group key from renderGroups', async () => {
+      // Need ≥2 containers per named group — the view flattens single-container
+      // stacks into __ungrouped__ and they won't appear as collapsible group keys.
+      const containers = [
+        makeContainer({ name: 'nginx' }),
+        makeContainer({ id: 'c2', name: 'redis' }),
+        makeContainer({ id: 'c3', name: 'postgres' }),
+        makeContainer({ id: 'c4', name: 'mysql' }),
+      ];
+      const wrapper = await mountContainersView(containers);
+      const vm = wrapper.vm as any;
+
+      vm.groupByStack = true;
+      vm.groupMembershipMap = {
+        nginx: 'web-stack',
+        redis: 'web-stack',
+        postgres: 'db-stack',
+        mysql: 'db-stack',
+      };
+      await flushPromises();
+
+      expect(vm.collapsedGroups.size).toBe(0);
+      vm.collapseAllGroups();
+
+      const collapsedKeys = [...vm.collapsedGroups];
+      expect(collapsedKeys).toContain('web-stack');
+      expect(collapsedKeys).toContain('db-stack');
+      expect(collapsedKeys).not.toContain('__flat__');
+    });
+
+    it('allGroupsCollapsed reflects collapsed state correctly', async () => {
+      // Need ≥2 containers per named group so each stack appears as a real
+      // collapsible group key (single-container stacks are flattened to __ungrouped__).
+      const containers = [
+        makeContainer({ name: 'nginx' }),
+        makeContainer({ id: 'c2', name: 'redis' }),
+        makeContainer({ id: 'c3', name: 'postgres' }),
+        makeContainer({ id: 'c4', name: 'mysql' }),
+      ];
+      const wrapper = await mountContainersView(containers);
+      const vm = wrapper.vm as any;
+
+      // No collapsible groups (flat mode) → false
+      expect(vm.allGroupsCollapsed).toBe(false);
+
+      vm.groupByStack = true;
+      vm.groupMembershipMap = {
+        nginx: 'web-stack',
+        redis: 'web-stack',
+        postgres: 'db-stack',
+        mysql: 'db-stack',
+      };
+      await flushPromises();
+
+      // Some groups present but none collapsed → false
+      expect(vm.allGroupsCollapsed).toBe(false);
+
+      // Collapse only one of two groups → still false
+      vm.collapsedGroups = new Set(['web-stack']);
+      await flushPromises();
+      expect(vm.allGroupsCollapsed).toBe(false);
+
+      // All non-flat groups collapsed → true
+      vm.collapsedGroups = new Set(['web-stack', 'db-stack']);
+      await flushPromises();
+      expect(vm.allGroupsCollapsed).toBe(true);
+    });
+
     it('counts updates within groups from actual container data', async () => {
       const containers = [
         makeContainer({ name: 'nginx', newTag: '2.0.0', updateKind: 'major' }),

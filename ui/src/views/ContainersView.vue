@@ -923,6 +923,26 @@ function toggleGroupCollapse(key: string) {
   collapsedGroups.value = next;
 }
 
+function expandAllGroups() {
+  collapsedGroups.value = new Set();
+}
+
+function collapseAllGroups() {
+  collapsedGroups.value = new Set(
+    renderGroups.value.map((group) => group.key).filter((key) => key !== '__flat__'),
+  );
+}
+
+const allGroupsCollapsed = computed(() => {
+  const collapsibleKeys = renderGroups.value
+    .map((group) => group.key)
+    .filter((key) => key !== '__flat__');
+  if (collapsibleKeys.length === 0) {
+    return false;
+  }
+  return collapsibleKeys.every((key) => collapsedGroups.value.has(key));
+});
+
 async function loadGroups() {
   try {
     const groups: ContainerGroup[] = await getContainerGroups();
@@ -1312,6 +1332,9 @@ provide(containersViewTemplateContextKey, {
   renderGroups,
   toggleGroupCollapse,
   collapsedGroups,
+  expandAllGroups,
+  collapseAllGroups,
+  allGroupsCollapsed,
   containerActionsEnabled,
   containerActionsDisabledReason,
   actionInProgress,
