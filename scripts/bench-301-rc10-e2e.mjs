@@ -16,14 +16,6 @@ const CONTAINERS = 88;
 const LIST_ITERATIONS = 50;
 const SUMMARY_ITERATIONS = 200;
 
-function maturityForIndex(i) {
-  const mod = i % 6;
-  if (mod === 0) return 'hot';
-  if (mod === 1) return 'mature';
-  if (mod === 2) return 'established';
-  return undefined;
-}
-
 function buildFixture(i) {
   return {
     id: `${-i}`.padStart(12, '0'),
