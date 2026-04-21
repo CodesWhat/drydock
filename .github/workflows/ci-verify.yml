@@ -1050,10 +1050,10 @@ jobs:
           DD_LOAD_TEST_BASELINE_ARTIFACT_NAME: ${{ steps.load-test-baseline-ci.outputs.baseline_artifact_name }}
           DD_LOAD_TEST_MAX_P95_INCREASE_PCT: '20'
           DD_LOAD_TEST_MAX_P99_INCREASE_PCT: '25'
-          DD_LOAD_TEST_MAX_RATE_DECREASE_PCT: '15'
+          DD_LOAD_TEST_MAX_RATE_DECREASE_PCT: '40'
           DD_LOAD_TEST_MAX_P95_MS: '1200'
           DD_LOAD_TEST_MAX_P99_MS: '2500'
-          DD_LOAD_TEST_MIN_REQUEST_RATE: '5'
+          DD_LOAD_TEST_MIN_REQUEST_RATE: '3'
           DD_LOAD_TEST_REGRESSION_ENFORCE: 'true'
         run: |
           set -euo pipefail

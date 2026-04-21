@@ -47,15 +47,17 @@ export function extractChangelogEntry(changelog, version) {
     );
   }
 
-  // Skip date format validation for [Unreleased] heading
+  // Skip date format validation for [Unreleased] heading. Accept ASCII hyphen,
+  // en-dash, or em-dash between the version and the date so Keep-a-Changelog
+  // entries that use typographic dashes (the repo convention) still parse.
   if (normalizedVersion.toLowerCase() !== 'unreleased') {
     const strictHeadingRegex = new RegExp(
-      `^##\\s+\\[${escapeRegExp(normalizedVersion)}\\]\\s+-\\s+\\d{4}-\\d{2}-\\d{2}\\s*$`,
+      `^##\\s+\\[${escapeRegExp(normalizedVersion)}\\]\\s+[-\u2013\u2014]\\s+\\d{4}-\\d{2}-\\d{2}\\s*$`,
       'u',
     );
     if (!strictHeadingRegex.test(startMatch[0])) {
       throw new Error(
-        `Invalid changelog heading for version ${normalizedVersion}. Expected heading format: ## [${normalizedVersion}] - YYYY-MM-DD.`,
+        `Invalid changelog heading for version ${normalizedVersion}. Expected heading format: ## [${normalizedVersion}] - YYYY-MM-DD (hyphen, en-dash, or em-dash).`,
       );
     }
   }

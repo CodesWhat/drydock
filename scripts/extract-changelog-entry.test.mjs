@@ -45,3 +45,28 @@ test('throws when matched version heading does not use YYYY-MM-DD date', () => {
 
   assert.throws(() => extractChangelogEntry(invalidDateChangelog, '1.4.2'), /YYYY-MM-DD/u);
 });
+
+test('accepts em-dash separator in heading', () => {
+  const emDashChangelog = `# Changelog
+
+## [1.5.0-rc.11] \u2014 2026-04-21
+
+### Added
+- thing
+`;
+  const entry = extractChangelogEntry(emDashChangelog, 'v1.5.0-rc.11');
+  assert.match(entry, /\[1\.5\.0-rc\.11\]/u);
+  assert.match(entry, /thing/u);
+});
+
+test('accepts en-dash separator in heading', () => {
+  const enDashChangelog = `# Changelog
+
+## [1.2.3] \u2013 2026-01-02
+
+### Fixed
+- bug
+`;
+  const entry = extractChangelogEntry(enDashChangelog, '1.2.3');
+  assert.match(entry, /\[1\.2\.3\]/u);
+});
