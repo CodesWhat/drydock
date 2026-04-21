@@ -8,8 +8,8 @@
 // Run as: node scripts/bench-301-rc10-e2e.mjs
 
 import { performance } from 'node:perf_hooks';
-import { init as storeInit } from '../app/dist/store/index.js';
 import { getContainersRaw, insertContainer } from '../app/dist/store/container.js';
+import { init as storeInit } from '../app/dist/store/index.js';
 import { buildContainerDashboardSummary } from '../app/dist/util/container-summary.js';
 
 const CONTAINERS = 88;
@@ -52,13 +52,14 @@ function buildFixture(i) {
       os: 'linux',
       created: '2026-04-01T00:00:00.000Z',
     },
-    result: i % 3 === 0
-      ? {
-          tag: `1.${i + 1}.0-arm64`,
-          digest: `sha256:${(i + 100).toString(16).padStart(64, '0')}`,
-          created: '2026-04-15T00:00:00.000Z',
-        }
-      : undefined,
+    result:
+      i % 3 === 0
+        ? {
+            tag: `1.${i + 1}.0-arm64`,
+            digest: `sha256:${(i + 100).toString(16).padStart(64, '0')}`,
+            created: '2026-04-15T00:00:00.000Z',
+          }
+        : undefined,
     error: undefined,
   };
 }
@@ -121,9 +122,7 @@ async function main() {
   console.log(`  hotUpdates=${summary.hotUpdates}`);
   console.log(`  matureUpdates=${summary.matureUpdates}`);
   console.log(`  securityIssues=${summary.securityIssues}`);
-  console.log(
-    `  (sanity: list length ${list.length}, first tagPinned=${list[0].tagPinned})`,
-  );
+  console.log(`  (sanity: list length ${list.length}, first tagPinned=${list[0].tagPinned})`);
   console.log('');
 
   process.exit(0);

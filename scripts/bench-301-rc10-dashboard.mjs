@@ -94,8 +94,9 @@ function buildContainersMaterialized(count) {
 // Old summary handler: four independent filter passes over the list.
 function summaryBefore(containers) {
   const total = containers.length;
-  const running = containers.filter((c) => String(c.status ?? '').toLowerCase() === 'running')
-    .length;
+  const running = containers.filter(
+    (c) => String(c.status ?? '').toLowerCase() === 'running',
+  ).length;
   const updatesAvailable = containers.filter((c) => c.updateAvailable === true).length;
   const hotUpdates = containers.filter(
     (c) => c.updateAvailable === true && c.updateMaturityLevel === 'hot',
@@ -220,15 +221,23 @@ function main() {
 
   rows.push([
     'Container clone (spread + structuredClone, before)',
-    timeRuns('cloneBefore', () => {
-      for (const c of before) cloneBefore(c);
-    }, CLONE_ITERATIONS),
+    timeRuns(
+      'cloneBefore',
+      () => {
+        for (const c of before) cloneBefore(c);
+      },
+      CLONE_ITERATIONS,
+    ),
   ]);
   rows.push([
     'Container clone (structuredClone only, after)',
-    timeRuns('cloneAfter', () => {
-      for (const c of after) cloneAfter(c);
-    }, CLONE_ITERATIONS),
+    timeRuns(
+      'cloneAfter',
+      () => {
+        for (const c of after) cloneAfter(c);
+      },
+      CLONE_ITERATIONS,
+    ),
   ]);
 
   // Pure "read tagPinned once per container" cost — the getter hot path
@@ -252,9 +261,7 @@ function main() {
 
   const label = 'Scenario'.padEnd(54);
   console.log(`| ${label} | Median ms | p95 ms | Min ms | Max ms |`);
-  console.log(
-    `| ${'-'.repeat(label.length)} | --------- | ------ | ------ | ------ |`,
-  );
+  console.log(`| ${'-'.repeat(label.length)} | --------- | ------ | ------ | ------ |`);
   for (const [name, r] of rows) {
     console.log(
       `| ${name.padEnd(label.length)} | ${fmtMs(r.median).padStart(9)} | ${fmtMs(r.p95).padStart(6)} | ${fmtMs(r.min).padStart(6)} | ${fmtMs(r.max).padStart(6)} |`,
