@@ -2081,7 +2081,10 @@ test('renderSimpleTitle should omit agent prefix when container has no agent', (
   ).toBe('New tag found for container nginx');
 });
 
-test('renderSimpleBody should not include agent prefix (prefix is title-only)', () => {
+// Reverted from commit 30287c24: body now includes agent prefix for batch-email disambiguation.
+// Each bullet must identify its own watcher/server so recipients can tell which host
+// an update belongs to when Gmail threads N bullets under one subject. See #310.
+test('renderSimpleBody should include agent prefix in body for batch email disambiguation', () => {
   const { simplebody, ...rest } = configurationValid;
   trigger.configuration = trigger.validateConfiguration(rest);
   expect(
@@ -2094,7 +2097,7 @@ test('renderSimpleBody should not include agent prefix (prefix is title-only)', 
         remoteValue: '2.0.0',
       },
     }),
-  ).toBe('Container nginx running with tag 1.0.0 can be updated to tag 2.0.0');
+  ).toBe('[prod-server] Container nginx running with tag 1.0.0 can be updated to tag 2.0.0');
 });
 
 test('renderSimpleTitle should include agent prefix for digest updates', () => {
@@ -2140,7 +2143,7 @@ test('renderSimpleTitle should include agent prefix for update-applied events', 
   );
 });
 
-test('renderSimpleBody should not include agent prefix for update-failed events (prefix is title-only)', () => {
+test('renderSimpleBody should include agent prefix for update-failed events for batch email disambiguation', () => {
   const container = {
     id: 'container-nginx',
     name: 'nginx',
@@ -2165,11 +2168,11 @@ test('renderSimpleBody should not include agent prefix for update-failed events 
   } as any;
 
   expect(trigger.renderSimpleBody(container)).toBe(
-    'Container nginx update failed: pull access denied',
+    '[prod-server] Container nginx update failed: pull access denied',
   );
 });
 
-test('renderSimpleBody should not include agent prefix for security-alert events (prefix is title-only)', () => {
+test('renderSimpleBody should include agent prefix for security-alert events for batch email disambiguation', () => {
   const container = {
     id: 'container-nginx',
     name: 'nginx',
@@ -2195,11 +2198,11 @@ test('renderSimpleBody should not include agent prefix for security-alert events
   } as any;
 
   expect(trigger.renderSimpleBody(container)).toBe(
-    'Security alert for container nginx (2 blocking vulnerabilities)\ncritical=1 high=1',
+    '[prod-server] Security alert for container nginx (2 blocking vulnerabilities)\ncritical=1 high=1',
   );
 });
 
-test('renderSimpleBody should include watcher suffix but not agent prefix (prefix is title-only)', () => {
+test('renderSimpleBody should include agent prefix and watcher suffix for batch email disambiguation', () => {
   const { simplebody, ...rest } = configurationValid;
   trigger.configuration = trigger.validateConfiguration(rest);
   expect(
@@ -2213,10 +2216,12 @@ test('renderSimpleBody should include watcher suffix but not agent prefix (prefi
         remoteValue: '2.0.0',
       },
     }),
-  ).toBe('Container nginx (servicevault) running with tag 1.0.0 can be updated to tag 2.0.0');
+  ).toBe(
+    '[prod-server] Container nginx (servicevault) running with tag 1.0.0 can be updated to tag 2.0.0',
+  );
 });
 
-test('renderSimpleBody should omit watcher suffix when it matches the agent prefix (and no prefix in body)', () => {
+test('renderSimpleBody should include agent prefix but omit redundant watcher suffix when watcher matches agent', () => {
   const { simplebody, ...rest } = configurationValid;
   trigger.configuration = trigger.validateConfiguration(rest);
   expect(
@@ -2230,10 +2235,10 @@ test('renderSimpleBody should omit watcher suffix when it matches the agent pref
         remoteValue: '2.0.0',
       },
     }),
-  ).toBe('Container nginx running with tag 1.0.0 can be updated to tag 2.0.0');
+  ).toBe('[mediavault] Container nginx running with tag 1.0.0 can be updated to tag 2.0.0');
 });
 
-test('renderSimpleBody should omit watcher suffix when it matches the controller prefix (and no prefix in body)', () => {
+test('renderSimpleBody should include controller prefix but omit redundant watcher suffix when watcher matches controller', () => {
   const { simplebody, ...rest } = configurationValid;
   trigger.configuration = trigger.validateConfiguration(rest);
   mockGetAgents.mockReturnValue([{ name: 'remote-1' }]);
@@ -2248,12 +2253,12 @@ test('renderSimpleBody should omit watcher suffix when it matches the controller
         remoteValue: '2.0.0',
       },
     }),
-  ).toBe('Container nginx running with tag 1.0.0 can be updated to tag 2.0.0');
+  ).toBe('[controller-host] Container nginx running with tag 1.0.0 can be updated to tag 2.0.0');
 
   mockGetAgents.mockReturnValue([]);
 });
 
-test('renderBatchBody should not include agent prefix per container (prefix is title-only)', () => {
+test('renderBatchBody should include agent prefix per container for batch email disambiguation', () => {
   const { simplebody, ...rest } = configurationValid;
   trigger.configuration = trigger.validateConfiguration(rest);
   expect(
@@ -2278,8 +2283,8 @@ test('renderBatchBody should not include agent prefix per container (prefix is t
       },
     ]),
   ).toBe(
-    '- Container nginx running with tag 1.0.0 can be updated to tag 2.0.0\n\n' +
-      '- Container nginx running with tag 1.0.0 can be updated to tag 2.0.0\n',
+    '- [prod-server] Container nginx running with tag 1.0.0 can be updated to tag 2.0.0\n\n' +
+      '- [staging-server] Container nginx running with tag 1.0.0 can be updated to tag 2.0.0\n',
   );
 });
 
@@ -2315,7 +2320,7 @@ test('renderSimpleTitle should not include controller prefix when no agents are 
   ).toBe('New tag found for container nginx');
 });
 
-test('renderSimpleBody should not include controller prefix (prefix is title-only, body has no prefix even when agents exist)', () => {
+test('renderSimpleBody should include controller prefix in body for batch email disambiguation when agents exist', () => {
   const { simplebody, ...rest } = configurationValid;
   trigger.configuration = trigger.validateConfiguration(rest);
   mockGetAgents.mockReturnValue([{ name: 'remote-1' }]);
@@ -2329,7 +2334,7 @@ test('renderSimpleBody should not include controller prefix (prefix is title-onl
         remoteValue: '2.0.0',
       },
     }),
-  ).toBe('Container nginx running with tag 1.0.0 can be updated to tag 2.0.0');
+  ).toBe('[controller-host] Container nginx running with tag 1.0.0 can be updated to tag 2.0.0');
 
   mockGetAgents.mockReturnValue([]);
 });
@@ -2390,8 +2395,9 @@ test('renderSimpleBody should expose notificationServerName as controller name e
   ).toBe('controller-host');
 });
 
-test('default title starts with [server] prefix for non-standalone deployments, body does not', () => {
-  // Regression guard for #296 fix: source identity belongs in the title only.
+test('default title and body both start with [server] prefix for non-standalone deployments', () => {
+  // Reverted from commit 30287c24: body now also carries the prefix so each bullet
+  // in a batched Gmail thread identifies its own watcher/server. See #310.
   const { simpletitle, simplebody, ...rest } = configurationValid;
   trigger.configuration = trigger.validateConfiguration(rest);
   mockGetAgents.mockReturnValue([{ name: 'remote-1' }]);
@@ -2405,14 +2411,17 @@ test('default title starts with [server] prefix for non-standalone deployments, 
   const body = trigger.renderSimpleBody(container);
 
   expect(title.startsWith('[controller-host]')).toBe(true);
-  expect(body.startsWith('[controller-host]')).toBe(false);
-  expect(body).toBe('Container nginx running with tag 1.0.0 can be updated to tag 2.0.0');
+  expect(body.startsWith('[controller-host]')).toBe(true);
+  expect(body).toBe(
+    '[controller-host] Container nginx running with tag 1.0.0 can be updated to tag 2.0.0',
+  );
 
   mockGetAgents.mockReturnValue([]);
 });
 
-test('default digest-update title starts with [server] prefix, body does not', () => {
-  // Regression guard for #296 fix: both digest and tag-update body templates omit prefix.
+test('default digest-update title and body both start with [server] prefix for non-standalone deployments', () => {
+  // Reverted from commit 30287c24: body now also carries the prefix so each bullet
+  // in a batched Gmail thread identifies its own watcher/server. See #310.
   const { simpletitle, simplebody, ...rest } = configurationValid;
   trigger.configuration = trigger.validateConfiguration(rest);
   mockGetAgents.mockReturnValue([{ name: 'remote-1' }]);
@@ -2427,8 +2436,10 @@ test('default digest-update title starts with [server] prefix, body does not', (
   const body = trigger.renderSimpleBody(container);
 
   expect(title.startsWith('[controller-host]')).toBe(true);
-  expect(body.startsWith('[controller-host]')).toBe(false);
-  expect(body).toBe('Container nginx running tag latest has a newer image available');
+  expect(body.startsWith('[controller-host]')).toBe(true);
+  expect(body).toBe(
+    '[controller-host] Container nginx running tag latest has a newer image available',
+  );
 
   mockGetAgents.mockReturnValue([]);
 });
