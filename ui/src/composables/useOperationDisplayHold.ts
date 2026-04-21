@@ -196,14 +196,7 @@ function scheduleHeldOperationRelease(args: {
       displayUntil: now + OPERATION_DISPLAY_HOLD_MS,
     };
     setHeldOperation(operationId, nextHold);
-
-    const remaining = nextHold.displayUntil - now;
     clearReleaseTimer(operationId);
-
-    if (remaining <= 0) {
-      removeHeldOperation(operationId);
-      continue;
-    }
 
     scheduled = true;
     releaseTimers.set(
@@ -211,7 +204,7 @@ function scheduleHeldOperationRelease(args: {
       setTimeout(() => {
         releaseTimers.delete(operationId);
         removeHeldOperation(operationId);
-      }, remaining),
+      }, OPERATION_DISPLAY_HOLD_MS),
     );
   }
 
@@ -294,6 +287,42 @@ function clearAllOperationDisplayHolds() {
   heldOperations.value = new Map();
 }
 
+/**
+ * Safety net for missed terminal SSEs: active holds now live for 10 minutes so the
+ * row stays stable through a full recreate, but if the terminal SSE is ever lost
+ * (reconnect, stream hiccup), the hold would otherwise stay up for the full window.
+ * After each container list reload, fold any hold whose matching container has no
+ * active operation in the raw API response into the short settle window — so the
+ * row releases within ~1.5s of the next refresh instead of 10 minutes.
+ */
+function reconcileHoldsAgainstContainers(
+  containers: readonly Pick<Container, 'id' | 'name' | 'updateOperation'>[],
+  now?: number,
+) {
+  const currentNow = now ?? Date.now();
+  for (const [operationId, hold] of heldOperations.value.entries()) {
+    const remainingActiveWindow = hold.displayUntil - currentNow;
+    if (remainingActiveWindow <= OPERATION_DISPLAY_HOLD_MS) {
+      continue;
+    }
+    const match = containers.find((container) => holdMatchesTarget(hold, container));
+    if (!match) {
+      continue;
+    }
+    const rawStatus = match.updateOperation?.status;
+    const rawIsActive = rawStatus === 'queued' || rawStatus === 'in-progress';
+    if (rawIsActive) {
+      continue;
+    }
+    scheduleHeldOperationRelease({
+      operationId,
+      containerId: hold.containerIds[0],
+      containerName: hold.containerName,
+      now: currentNow,
+    });
+  }
+}
+
 export function useOperationDisplayHold() {
   return {
     heldOperations,
@@ -303,6 +332,7 @@ export function useOperationDisplayHold() {
     getDisplayUpdateOperation,
     holdOperationDisplay,
     projectContainerDisplayState,
+    reconcileHoldsAgainstContainers,
     scheduleHeldOperationRelease,
   };
 }

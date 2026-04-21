@@ -568,6 +568,241 @@ describe('useOperationDisplayHold', () => {
     expect(projected.newTag).toBe('2.0.0');
   });
 
+  describe('reconcileHoldsAgainstContainers', () => {
+    it('reconciles a hold when the raw container has no updateOperation', async () => {
+      const hold = await loadComposable();
+      const operation = makeOperation({ id: 'op-reconcile-undef' });
+      const t0 = Date.now();
+
+      hold.holdOperationDisplay({
+        operationId: operation.id,
+        operation,
+        containerId: 'c1',
+        containerName: 'web',
+        now: t0,
+      });
+
+      hold.reconcileHoldsAgainstContainers(
+        [makeContainer({ id: 'c1', name: 'web', updateOperation: undefined })],
+        t0,
+      );
+
+      expect(hold.heldOperations.value.get(operation.id)?.displayUntil).toBe(t0 + 1500);
+
+      await vi.advanceTimersByTimeAsync(1500);
+      expect(hold.heldOperations.value.has(operation.id)).toBe(false);
+    });
+
+    it('reconciles a hold when the raw container updateOperation is terminal (succeeded)', async () => {
+      const hold = await loadComposable();
+      const operation = makeOperation({ id: 'op-reconcile-terminal' });
+      const t0 = Date.now();
+
+      hold.holdOperationDisplay({
+        operationId: operation.id,
+        operation,
+        containerId: 'c1',
+        containerName: 'web',
+        now: t0,
+      });
+
+      hold.reconcileHoldsAgainstContainers(
+        [
+          makeContainer({
+            id: 'c1',
+            name: 'web',
+            updateOperation: makeOperation({ id: 'op-reconcile-terminal', status: 'succeeded' }),
+          }),
+        ],
+        t0,
+      );
+
+      expect(hold.heldOperations.value.get(operation.id)?.displayUntil).toBe(t0 + 1500);
+
+      await vi.advanceTimersByTimeAsync(1500);
+      expect(hold.heldOperations.value.has(operation.id)).toBe(false);
+    });
+
+    it('does not reconcile when the raw container updateOperation is still active', async () => {
+      const hold = await loadComposable();
+      const operation = makeOperation({ id: 'op-reconcile-active', status: 'in-progress' });
+      const t0 = Date.now();
+
+      hold.holdOperationDisplay({
+        operationId: operation.id,
+        operation,
+        containerId: 'c1',
+        containerName: 'web',
+        now: t0,
+      });
+
+      const fullWindow = t0 + 10 * 60 * 1000;
+
+      hold.reconcileHoldsAgainstContainers(
+        [
+          makeContainer({
+            id: 'c1',
+            name: 'web',
+            updateOperation: makeOperation({ id: 'op-reconcile-active', status: 'in-progress' }),
+          }),
+        ],
+        t0,
+      );
+
+      expect(hold.heldOperations.value.get(operation.id)?.displayUntil).toBe(fullWindow);
+    });
+
+    it('does not reconcile when no matching container is in the list', async () => {
+      const hold = await loadComposable();
+      const operation = makeOperation({ id: 'op-reconcile-no-match' });
+      const t0 = Date.now();
+
+      hold.holdOperationDisplay({
+        operationId: operation.id,
+        operation,
+        containerId: 'c1',
+        containerName: 'nginx',
+        now: t0,
+      });
+
+      const fullWindow = t0 + 10 * 60 * 1000;
+
+      hold.reconcileHoldsAgainstContainers(
+        [makeContainer({ id: 'c2', name: 'redis', updateOperation: undefined })],
+        t0,
+      );
+
+      expect(hold.heldOperations.value.get(operation.id)?.displayUntil).toBe(fullWindow);
+    });
+
+    it('does not re-trim a hold already in the settle window', async () => {
+      const hold = await loadComposable();
+      const operation = makeOperation({ id: 'op-reconcile-already-settling' });
+      const t0 = Date.now();
+
+      hold.holdOperationDisplay({
+        operationId: operation.id,
+        operation,
+        containerId: 'c1',
+        containerName: 'web',
+        now: t0,
+      });
+
+      // Manually trim into settle window at t0 → displayUntil = t0 + 1500
+      hold.scheduleHeldOperationRelease({
+        operationId: operation.id,
+        containerId: 'c1',
+        now: t0,
+      });
+
+      // Advance 500ms so now = t0 + 500; displayUntil is still t0 + 1500
+      await vi.advanceTimersByTimeAsync(500);
+      const t500 = Date.now(); // t0 + 500
+
+      hold.reconcileHoldsAgainstContainers(
+        [makeContainer({ id: 'c1', name: 'web', updateOperation: undefined })],
+        t500,
+      );
+
+      // displayUntil must remain t0 + 1500, not be reset to t500 + 1500 = t0 + 2000
+      expect(hold.heldOperations.value.get(operation.id)?.displayUntil).toBe(t0 + 1500);
+    });
+
+    it('matches by container name when the container id has changed (recreate scenario)', async () => {
+      const hold = await loadComposable();
+      const operation = makeOperation({ id: 'op-reconcile-name-fallback' });
+      const t0 = Date.now();
+
+      // Hold was keyed under old container id
+      hold.holdOperationDisplay({
+        operationId: operation.id,
+        operation,
+        containerId: 'old-id',
+        containerName: 'web',
+        now: t0,
+      });
+
+      // New container has a different id but the same name (post-recreate)
+      hold.reconcileHoldsAgainstContainers(
+        [makeContainer({ id: 'new-id', name: 'web', updateOperation: undefined })],
+        t0,
+      );
+
+      expect(hold.heldOperations.value.get(operation.id)?.displayUntil).toBe(t0 + 1500);
+
+      await vi.advanceTimersByTimeAsync(1500);
+      expect(hold.heldOperations.value.has(operation.id)).toBe(false);
+    });
+  });
+
+  it('getHeldOperation skips a hold whose displayUntil has already passed (line 142 branch)', async () => {
+    const hold = await loadComposable();
+    const heldOp = makeOperation({ id: 'op-expired-skip' });
+    const fallbackOp = makeOperation({ id: 'op-fallback-skip' });
+    const t0 = Date.now();
+
+    // Place an active hold, then schedule release so displayUntil = t0 + 1500
+    hold.holdOperationDisplay({
+      operationId: heldOp.id,
+      operation: heldOp,
+      containerId: 'container-skip',
+      containerName: 'skip-web',
+      now: t0,
+    });
+    hold.scheduleHeldOperationRelease({
+      operationId: heldOp.id,
+      containerId: 'container-skip',
+      containerName: 'skip-web',
+      now: t0,
+    });
+
+    // Advance past displayUntil so the record is stale but NOT yet removed by the timer
+    // (we're testing the guard inside getHeldOperation, not the timer removal)
+    vi.setSystemTime(new Date(t0 + 1500 + 1));
+
+    // The hold record may still be in the map (timer hasn't fired in this test), but
+    // getHeldOperation must skip it because displayUntil <= now
+    const container = makeContainer({
+      id: 'container-skip',
+      name: 'skip-web',
+      updateOperation: fallbackOp,
+    });
+    expect(hold.getDisplayUpdateOperation(container)).toBe(fallbackOp);
+  });
+
+  it('getHeldState skips expired holds so projectContainerDisplayState returns container unchanged (line 247 branch)', async () => {
+    const hold = await loadComposable();
+    const heldOp = makeOperation({ id: 'op-state-expired' });
+    const containerOp = makeOperation({ id: 'op-container-own' });
+    const t0 = Date.now();
+
+    hold.holdOperationDisplay({
+      operationId: heldOp.id,
+      operation: heldOp,
+      containerId: 'container-state',
+      containerName: 'state-web',
+      now: t0,
+    });
+    hold.scheduleHeldOperationRelease({
+      operationId: heldOp.id,
+      containerId: 'container-state',
+      containerName: 'state-web',
+      now: t0,
+    });
+
+    // Advance past displayUntil before the timer fires
+    vi.setSystemTime(new Date(t0 + 1500 + 1));
+
+    const container = makeContainer({
+      id: 'container-state',
+      name: 'state-web',
+      updateOperation: containerOp,
+    });
+
+    // Expired hold — projectContainerDisplayState must return container as-is (same reference)
+    expect(hold.projectContainerDisplayState(container)).toBe(container);
+  });
+
   it('sort snapshot projection does not override sort fields when they already match the snapshot', async () => {
     const hold = await loadComposable();
     const operation = makeOperation({ id: 'op-same-sort' });

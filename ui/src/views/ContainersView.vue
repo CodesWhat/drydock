@@ -63,6 +63,7 @@ const {
   findMatchingOperationIds,
   holdOperationDisplay,
   projectContainerDisplayState,
+  reconcileHoldsAgainstContainers,
   scheduleHeldOperationRelease,
   clearHeldOperation,
 } = useOperationDisplayHold();
@@ -185,6 +186,7 @@ async function loadContainers() {
     const { idMap, metaMap } = buildContainerLookupMaps(apiContainers as Record<string, unknown>[]);
     containerIdMap.value = idMap;
     containerMetaMap.value = metaMap;
+    reconcileHoldsAgainstContainers(containers.value);
     if (groupByStack.value) {
       await loadGroups();
     }
