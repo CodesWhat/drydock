@@ -483,4 +483,222 @@ describe('useDashboardData', () => {
 
     expect(clearTimeoutSpy).toHaveBeenCalled();
   });
+
+  it('ignores operation-patch events with null or non-object payload (line 157 guard)', async () => {
+    mocks.mapApiContainers.mockReturnValue([makeContainer({ id: 'c1' })]);
+    const { state } = await mountDashboardData();
+    mocks.getAllContainers.mockClear();
+
+    // null detail — payload is falsy, should return early without throwing
+    globalThis.dispatchEvent(new CustomEvent('dd:sse-update-operation-changed', { detail: null }));
+    await nextTick();
+    expect(state.containers.value[0]?.updateOperation).toBeUndefined();
+
+    // string detail — payload is not an object, should return early
+    globalThis.dispatchEvent(new CustomEvent('dd:sse-update-operation-changed', { detail: 'bad' }));
+    await nextTick();
+    expect(state.containers.value[0]?.updateOperation).toBeUndefined();
+    expect(mocks.getAllContainers).not.toHaveBeenCalled();
+  });
+
+  it('ignores operation-patch events with an invalid status value (line 163 guard)', async () => {
+    mocks.mapApiContainers.mockReturnValue([makeContainer({ id: 'c1' })]);
+    const { state } = await mountDashboardData();
+    mocks.getAllContainers.mockClear();
+
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-update-operation-changed', {
+        detail: { containerId: 'c1', status: 'not-a-valid-status' },
+      }),
+    );
+    await nextTick();
+
+    expect(state.containers.value[0]?.updateOperation).toBeUndefined();
+    expect(mocks.getAllContainers).not.toHaveBeenCalled();
+  });
+
+  it('ignores operation-patch events when no container matches (line 173 guard)', async () => {
+    mocks.mapApiContainers.mockReturnValue([makeContainer({ id: 'c1' })]);
+    const { state } = await mountDashboardData();
+    mocks.getAllContainers.mockClear();
+
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-update-operation-changed', {
+        detail: { containerId: 'no-such-container', status: 'queued', phase: 'queued' },
+      }),
+    );
+    await nextTick();
+
+    expect(state.containers.value[0]?.updateOperation).toBeUndefined();
+    expect(mocks.getAllContainers).not.toHaveBeenCalled();
+  });
+
+  it('clears updateOperation on terminal status patch (line 192 — succeeded/failed/rolled-back)', async () => {
+    mocks.mapApiContainers.mockReturnValue([makeContainer({ id: 'c1' })]);
+    const { state } = await mountDashboardData();
+
+    // First set an active operation so there is something to clear
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-update-operation-changed', {
+        detail: { operationId: 'op-1', containerId: 'c1', status: 'in-progress', phase: 'pulling' },
+      }),
+    );
+    await nextTick();
+    expect(state.containers.value[0]?.updateOperation).toBeDefined();
+
+    // Now a terminal status should clear it
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-update-operation-changed', {
+        detail: { operationId: 'op-1', containerId: 'c1', status: 'succeeded' },
+      }),
+    );
+    await nextTick();
+    expect(state.containers.value[0]?.updateOperation).toBeUndefined();
+  });
+
+  it('finds container by newContainerId when containerId does not match', async () => {
+    mocks.mapApiContainers.mockReturnValue([makeContainer({ id: 'c-new', name: 'nginx' })]);
+    const { state } = await mountDashboardData();
+
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-update-operation-changed', {
+        detail: {
+          operationId: 'op-2',
+          newContainerId: 'c-new',
+          status: 'in-progress',
+          phase: 'pulling',
+        },
+      }),
+    );
+    await nextTick();
+
+    expect(state.containers.value[0]?.updateOperation).toMatchObject({
+      id: 'op-2',
+      status: 'in-progress',
+      phase: 'pulling',
+    });
+  });
+
+  it('finds container by containerName when neither id field matches', async () => {
+    mocks.mapApiContainers.mockReturnValue([makeContainer({ id: 'c1', name: 'my-app' })]);
+    const { state } = await mountDashboardData();
+
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-update-operation-changed', {
+        detail: { operationId: 'op-3', containerName: 'my-app', status: 'queued', phase: 'queued' },
+      }),
+    );
+    await nextTick();
+
+    expect(state.containers.value[0]?.updateOperation).toMatchObject({
+      status: 'queued',
+      phase: 'queued',
+    });
+  });
+
+  it('falls back to previousPhase when incoming phase is invalid for the status (lines 145-149)', async () => {
+    mocks.mapApiContainers.mockReturnValue([makeContainer({ id: 'c1' })]);
+    const { state } = await mountDashboardData();
+
+    // Establish a valid in-progress operation with phase 'pulling'
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-update-operation-changed', {
+        detail: { operationId: 'op-1', containerId: 'c1', status: 'in-progress', phase: 'pulling' },
+      }),
+    );
+    await nextTick();
+    expect(state.containers.value[0]?.updateOperation?.phase).toBe('pulling');
+
+    // Send in-progress with an invalid phase for in-progress ('queued' is only valid for 'queued' status)
+    // previousPhase is 'pulling' which IS valid for in-progress → should fall back to 'pulling'
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-update-operation-changed', {
+        detail: { operationId: 'op-1', containerId: 'c1', status: 'in-progress', phase: 'queued' },
+      }),
+    );
+    await nextTick();
+
+    expect(state.containers.value[0]?.updateOperation?.phase).toBe('pulling');
+  });
+
+  it('uses row.updateOperation.id when operationId in payload is not a string (line 180 branch)', async () => {
+    mocks.mapApiContainers.mockReturnValue([makeContainer({ id: 'c1' })]);
+    const { state } = await mountDashboardData();
+
+    // Establish existing operation with a known id
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-update-operation-changed', {
+        detail: {
+          operationId: 'existing-op',
+          containerId: 'c1',
+          status: 'queued',
+          phase: 'queued',
+        },
+      }),
+    );
+    await nextTick();
+    expect(state.containers.value[0]?.updateOperation?.id).toBe('existing-op');
+
+    // Send patch with non-string operationId — should retain existing id
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-update-operation-changed', {
+        detail: { operationId: 42, containerId: 'c1', status: 'queued', phase: 'queued' },
+      }),
+    );
+    await nextTick();
+    expect(state.containers.value[0]?.updateOperation?.id).toBe('existing-op');
+
+    // Also test: non-string operationId with no prior updateOperation → id defaults to ''
+    mocks.mapApiContainers.mockReturnValue([makeContainer({ id: 'c2' })]);
+    await state.fetchDashboardData();
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-update-operation-changed', {
+        detail: { operationId: null, containerId: 'c2', status: 'queued', phase: 'queued' },
+      }),
+    );
+    await nextTick();
+    expect(state.containers.value[0]?.updateOperation?.id).toBe('');
+  });
+
+  it('defaults phase to queued/pulling when both phase and previousPhase are invalid (line 151)', async () => {
+    mocks.mapApiContainers.mockReturnValue([makeContainer({ id: 'c1' })]);
+    const { state } = await mountDashboardData();
+
+    // No prior updateOperation — previousPhase is undefined. Phase is also invalid.
+    // status 'queued' + invalid phase → default 'queued'
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-update-operation-changed', {
+        detail: {
+          operationId: 'op-1',
+          containerId: 'c1',
+          status: 'queued',
+          phase: 'invalid-phase',
+        },
+      }),
+    );
+    await nextTick();
+    expect(state.containers.value[0]?.updateOperation?.phase).toBe('queued');
+
+    // Clear it
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-update-operation-changed', {
+        detail: { containerId: 'c1', status: 'succeeded' },
+      }),
+    );
+    await nextTick();
+
+    // status 'in-progress' + invalid phase and no valid previousPhase → default 'pulling'
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-update-operation-changed', {
+        detail: {
+          operationId: 'op-2',
+          containerId: 'c1',
+          status: 'in-progress',
+          phase: 'invalid-phase',
+        },
+      }),
+    );
+    await nextTick();
+    expect(state.containers.value[0]?.updateOperation?.phase).toBe('pulling');
+  });
 });
