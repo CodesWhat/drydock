@@ -91,10 +91,24 @@ function classifyContainerRuntimeEnv<T>(container: T): T {
     return container;
   }
 
-  return {
+  const redacted = {
     ...containerWithDetails,
     details: classifyContainerRuntimeDetails(containerWithDetails.details),
-  } as T;
+  };
+
+  // Re-attach non-enumerable resultChanged so structuredClone-based copies don't
+  // silently drop the function that the watcher cron relies on for change detection.
+  const src = container as { resultChanged?: unknown };
+  if (typeof src.resultChanged === 'function') {
+    Object.defineProperty(redacted, 'resultChanged', {
+      value: src.resultChanged,
+      enumerable: false,
+      writable: true,
+      configurable: true,
+    });
+  }
+
+  return redacted as T;
 }
 
 function classifyContainersRuntimeEnv<T>(containers: T): T {
