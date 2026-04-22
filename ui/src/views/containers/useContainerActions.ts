@@ -538,7 +538,7 @@ export function prunePendingActionsState(args: {
   }
 }
 
-async function pollPendingActionsState(args: {
+export async function pollPendingActionsState(args: {
   pendingActionsPollInFlight: Ref<boolean>;
   loadContainers: () => Promise<void>;
   prunePendingActions: (now: number) => void;

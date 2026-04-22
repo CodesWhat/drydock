@@ -12,6 +12,7 @@ import {
   ACTION_TAB_DETAIL_REFRESH_DEBOUNCE_MS,
   isPendingUpdateSettled,
   PENDING_ACTIONS_POLL_INTERVAL_MS,
+  pollPendingActionsState,
   prunePendingActionsState,
   useContainerActions,
 } from '@/views/containers/useContainerActions';
@@ -3492,5 +3493,21 @@ describe('useContainerActions', () => {
     expect(result).toBe(false);
     expect(mocks.deleteContainer).not.toHaveBeenCalled();
     expect(error.value).toBe('Container actions disabled by server configuration');
+  });
+
+  it('pollPendingActionsState returns early without calling prunePendingActions when in-flight flag is set', async () => {
+    const pendingActionsPollInFlight = ref(true);
+    const loadContainers = vi.fn().mockResolvedValue(undefined);
+    const prunePendingActions = vi.fn();
+
+    await pollPendingActionsState({
+      pendingActionsPollInFlight,
+      loadContainers,
+      prunePendingActions,
+    });
+
+    expect(prunePendingActions).not.toHaveBeenCalled();
+    // Flag must remain true — the early return did not acquire/release the lock
+    expect(pendingActionsPollInFlight.value).toBe(true);
   });
 });
