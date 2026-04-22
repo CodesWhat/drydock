@@ -543,11 +543,13 @@ function confirmDashboardUpdate(row: RecentUpdateRow) {
         const result = await runContainerUpdateRequest({
           request: () => updateContainer(row.id),
           onAccepted: async () => {
-            await fetchDashboardData();
+            // Background refresh — don't flip `loading` and unmount the grid,
+            // which would cause the whole dashboard to fly back in.
+            await fetchDashboardData({ background: true });
             capturePendingDashboardRows([row]);
           },
           onStale: async () => {
-            await fetchDashboardData();
+            await fetchDashboardData({ background: true });
           },
           isStaleError: isStaleContainerUpdateError,
         });
@@ -618,7 +620,7 @@ function confirmDashboardUpdateAll() {
           }
         }
 
-        await fetchDashboardData();
+        await fetchDashboardData({ background: true });
         capturePendingDashboardRows(successfulRows);
         if (successfulRows.length > 0) {
           toast.success(formatContainerUpdateStartedCountMessage(successfulRows.length));
