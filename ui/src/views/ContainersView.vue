@@ -10,7 +10,10 @@ import { useColumnVisibility } from '../composables/useColumnVisibility';
 import { useContainerFilters } from '../composables/useContainerFilters';
 import { useDetailPanel, useDetailPanelStorage } from '../composables/useDetailPanel';
 import { LOG_AUTO_FETCH_INTERVALS } from '../composables/useLogViewerBehavior';
-import { useOperationDisplayHold } from '../composables/useOperationDisplayHold';
+import {
+  OPERATION_DISPLAY_HOLD_MS,
+  useOperationDisplayHold,
+} from '../composables/useOperationDisplayHold';
 import { useToast } from '../composables/useToast';
 import { preferences } from '../preferences/store';
 import { usePreference } from '../preferences/usePreference';
@@ -1333,20 +1336,23 @@ function applyOperationPatch(event: Event) {
     const toastName =
       row?.name ??
       (typeof containerName === 'string' && containerName.length > 0 ? containerName : 'container');
+    // Defer terminal toasts until the hold window expires so the row settles
+    // to its new state first — firing a "Updated" toast while the row still
+    // shows the "updating" spinner confuses users.
     if (status === 'succeeded') {
       scheduleHeldOperationRelease(target);
       if (wasTracked) {
-        toast.success(`Updated: ${toastName}`);
+        setTimeout(() => toast.success(`Updated: ${toastName}`), OPERATION_DISPLAY_HOLD_MS);
       }
     } else if (status === 'failed') {
       scheduleHeldOperationRelease(target);
       if (wasTracked) {
-        toast.error(`Update failed: ${toastName}`);
+        setTimeout(() => toast.error(`Update failed: ${toastName}`), OPERATION_DISPLAY_HOLD_MS);
       }
     } else if (status === 'rolled-back') {
       scheduleHeldOperationRelease(target);
       if (wasTracked) {
-        toast.error(`Rolled back: ${toastName}`);
+        setTimeout(() => toast.error(`Rolled back: ${toastName}`), OPERATION_DISPLAY_HOLD_MS);
       }
     } else {
       clearHeldOperation(target);

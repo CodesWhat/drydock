@@ -2729,6 +2729,9 @@ describe('ContainersView', () => {
           }),
         );
 
+        vi.advanceTimersByTime(1500);
+        await flushPromises();
+
         expect(toasts.value.length).toBe(countBefore + 1);
         expect(toasts.value.at(-1)).toMatchObject({ tone: 'success', title: 'Updated: nginx' });
 
@@ -2780,6 +2783,9 @@ describe('ContainersView', () => {
             },
           }),
         );
+
+        vi.advanceTimersByTime(1500);
+        await flushPromises();
 
         expect(toasts.value.length).toBe(countBefore + 1);
         expect(toasts.value.at(-1)).toMatchObject({ tone: 'success', title: 'Updated: nginx' });
@@ -2899,6 +2905,9 @@ describe('ContainersView', () => {
           }),
         );
 
+        vi.advanceTimersByTime(1500);
+        await flushPromises();
+
         expect(toasts.value.length).toBe(countBefore + 2);
         const newToasts = toasts.value.slice(countBefore);
         expect(newToasts.some((t) => t.title === 'Updated: nginx')).toBe(true);
@@ -2952,6 +2961,9 @@ describe('ContainersView', () => {
           }),
         );
 
+        vi.advanceTimersByTime(1500);
+        await flushPromises();
+
         expect(toasts.value.length).toBe(countBefore + 1);
         expect(toasts.value.at(-1)).toMatchObject({ tone: 'error', title: 'Update failed: nginx' });
 
@@ -3002,6 +3014,9 @@ describe('ContainersView', () => {
             },
           }),
         );
+
+        vi.advanceTimersByTime(1500);
+        await flushPromises();
 
         expect(toasts.value.length).toBe(countBefore + 1);
         expect(toasts.value.at(-1)).toMatchObject({ tone: 'error', title: 'Rolled back: nginx' });
@@ -3061,6 +3076,9 @@ describe('ContainersView', () => {
           }),
         );
 
+        vi.advanceTimersByTime(1500);
+        await flushPromises();
+
         expect(toasts.value.length).toBe(countBefore + 1);
         expect(toasts.value.at(-1)).toMatchObject({ tone: 'success', title: 'Updated: nginx' });
 
@@ -3118,6 +3136,9 @@ describe('ContainersView', () => {
             },
           }),
         );
+
+        vi.advanceTimersByTime(1500);
+        await flushPromises();
 
         expect(toasts.value.length).toBe(countBefore + 1);
         expect(toasts.value.at(-1)).toMatchObject({ tone: 'error', title: 'Rolled back: nginx' });

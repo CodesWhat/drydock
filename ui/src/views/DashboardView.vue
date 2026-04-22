@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { OPERATION_DISPLAY_HOLD_MS } from '../composables/useOperationDisplayHold';
 import { type RouteLocationRaw, useRouter } from 'vue-router';
 import type { OperationChangedPayload } from '../services/sse';
 import { TERMINAL_CONTAINER_UPDATE_OPERATION_STATUSES } from '../types/update-operation';
@@ -466,12 +467,15 @@ function handleTerminalOperationSse(event: Event) {
   }
   pruneGhostsForOperation(payload);
   if (wasTracked && resolvedName) {
+    // Match ContainersView: defer terminal toasts until the hold window ends so
+    // the row settles before the toast fires.
+    const name = resolvedName;
     if (payload.status === 'succeeded') {
-      toast.success(`Updated: ${resolvedName}`);
+      setTimeout(() => toast.success(`Updated: ${name}`), OPERATION_DISPLAY_HOLD_MS);
     } else if (payload.status === 'failed') {
-      toast.error(`Update failed: ${resolvedName}`);
+      setTimeout(() => toast.error(`Update failed: ${name}`), OPERATION_DISPLAY_HOLD_MS);
     } else if (payload.status === 'rolled-back') {
-      toast.error(`Rolled back: ${resolvedName}`);
+      setTimeout(() => toast.error(`Rolled back: ${name}`), OPERATION_DISPLAY_HOLD_MS);
     }
   }
 }

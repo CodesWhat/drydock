@@ -2540,6 +2540,8 @@ describe('DashboardView', () => {
           }),
         );
         await nextTick();
+        vi.advanceTimersByTime(1500);
+        await flushPromises();
 
         const successToast = toasts.value.find(
           (t) => t.tone === 'success' && t.title === 'Updated: nginx',
@@ -2587,6 +2589,8 @@ describe('DashboardView', () => {
           }),
         );
         await nextTick();
+        vi.advanceTimersByTime(1500);
+        await flushPromises();
 
         const errorToast = toasts.value.find(
           (t) => t.tone === 'error' && t.title === 'Update failed: nginx',
@@ -2634,6 +2638,8 @@ describe('DashboardView', () => {
           }),
         );
         await nextTick();
+        vi.advanceTimersByTime(1500);
+        await flushPromises();
 
         const errorToast = toasts.value.find(
           (t) => t.tone === 'error' && t.title === 'Rolled back: nginx',
