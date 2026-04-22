@@ -3186,9 +3186,9 @@ describe('resolveHelperImage for infrastructure updates', () => {
       {
         name: 'drydock',
         image: {
-          name: 'ghcr.io/codeswhat/drydock',
+          name: 'codeswhat/drydock',
           tag: { value: '1.5.0' },
-          registry: { url: 'ghcr.io' },
+          registry: { url: 'https://ghcr.io/v2' },
         },
       },
     ]);
@@ -3198,7 +3198,7 @@ describe('resolveHelperImage for infrastructure updates', () => {
       image: { name: 'linuxserver/socket-proxy' },
       labels: { 'dd.update.mode': 'infrastructure' },
     });
-    expect(resolved).toBe('ghcr.io/ghcr.io/codeswhat/drydock:1.5.0');
+    expect(resolved).toBe('ghcr.io/codeswhat/drydock:1.5.0');
   });
 
   test('should return undefined for self-update containers', async () => {
@@ -3279,6 +3279,92 @@ describe('resolveHelperImage for infrastructure updates', () => {
       image: { name: 'linuxserver/socket-proxy' },
     });
     expect(resolved).toBeUndefined();
+  });
+
+  // Regression tests for issue #315: registry.url is a v2 API base URL
+  // (e.g. "https://ghcr.io/v2"), which Docker's POST /containers/create
+  // rejects with HTTP 400. The fix strips the scheme and /v2 segment.
+
+  test('strips v2 registry URL scheme and path segment', async () => {
+    const storeContainer = await import('../../../store/container.js');
+    (storeContainer.getContainers as any).mockReturnValueOnce([
+      {
+        name: 'drydock',
+        image: {
+          name: 'codeswhat/drydock',
+          tag: { value: '1.5.0-rc.11' },
+          registry: { url: 'https://ghcr.io/v2' },
+        },
+      },
+    ]);
+
+    const resolved = (docker as any).selfUpdateOrchestrator.resolveHelperImage?.({
+      image: { name: 'linuxserver/socket-proxy' },
+      labels: { 'dd.update.mode': 'infrastructure' },
+    });
+    expect(resolved).toBe('ghcr.io/codeswhat/drydock:1.5.0-rc.11');
+  });
+
+  test('normalizes docker hub v2 registry URL', async () => {
+    const storeContainer = await import('../../../store/container.js');
+    (storeContainer.getContainers as any).mockReturnValueOnce([
+      {
+        name: 'drydock',
+        image: {
+          name: 'codeswhat/drydock',
+          tag: { value: '1.5.0' },
+          registry: { url: 'https://registry-1.docker.io/v2' },
+        },
+      },
+    ]);
+
+    const resolved = (docker as any).selfUpdateOrchestrator.resolveHelperImage?.({
+      image: { name: 'linuxserver/socket-proxy' },
+      labels: { 'dd.update.mode': 'infrastructure' },
+    });
+    expect(resolved).not.toMatch(/https?:\/\//);
+    expect(resolved).not.toMatch(/\/v2\//);
+    expect(resolved).toBe('registry-1.docker.io/codeswhat/drydock:1.5.0');
+  });
+
+  test('handles registry URL without scheme', async () => {
+    const storeContainer = await import('../../../store/container.js');
+    (storeContainer.getContainers as any).mockReturnValueOnce([
+      {
+        name: 'drydock',
+        image: {
+          name: 'codeswhat/drydock',
+          tag: { value: '1.5.0' },
+          registry: { url: 'ghcr.io/v2' },
+        },
+      },
+    ]);
+
+    const resolved = (docker as any).selfUpdateOrchestrator.resolveHelperImage?.({
+      image: { name: 'linuxserver/socket-proxy' },
+      labels: { 'dd.update.mode': 'infrastructure' },
+    });
+    expect(resolved).toBe('ghcr.io/codeswhat/drydock:1.5.0');
+  });
+
+  test('handles registry URL without v2 suffix', async () => {
+    const storeContainer = await import('../../../store/container.js');
+    (storeContainer.getContainers as any).mockReturnValueOnce([
+      {
+        name: 'drydock',
+        image: {
+          name: 'codeswhat/drydock',
+          tag: { value: '1.5.0' },
+          registry: { url: 'ghcr.io' },
+        },
+      },
+    ]);
+
+    const resolved = (docker as any).selfUpdateOrchestrator.resolveHelperImage?.({
+      image: { name: 'linuxserver/socket-proxy' },
+      labels: { 'dd.update.mode': 'infrastructure' },
+    });
+    expect(resolved).toBe('ghcr.io/codeswhat/drydock:1.5.0');
   });
 });
 
