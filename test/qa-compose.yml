@@ -167,7 +167,7 @@ services:
   # Nginx with lifecycle hooks (tests hooks UI + group view)
   # Icon uses colon separator with nested prefix (tests Fix 03 + Fix 06)
   nginx-hooked:
-    image: nginx:1.25.5
+    image: nginx:1.25.5-alpine
     pull_policy: missing
     container_name: drydock-playwright-nginx-hooked
     labels:
@@ -182,7 +182,7 @@ services:
   # Redis in same group (tests group view)
   # Icon uses colon separator (tests Fix 06)
   redis-cache:
-    image: redis:7.2.0
+    image: redis:7.2.0-alpine
     pull_policy: missing
     container_name: drydock-playwright-redis-cache
     labels:
@@ -218,7 +218,7 @@ services:
 
   # PostgreSQL ungrouped (tests ungrouped container)
   postgres-db:
-    image: postgres:16.0
+    image: postgres:16.0-alpine
     pull_policy: missing
     container_name: drydock-playwright-postgres-db
     environment:
@@ -226,32 +226,6 @@ services:
     labels:
       - dd.watch=true
       - dd.display.name=PostgreSQL
-
-  # Mongo — old version with update (tests another registry + more data)
-  mongo-db:
-    image: mongo:7.0.0
-    pull_policy: missing
-    container_name: drydock-playwright-mongo-db
-    labels:
-      - dd.watch=true
-      - dd.display.name=MongoDB
-      - dd.group=data
-
-  # TimescaleDB HA — wide version tags exercise the fixed-column-width fix (#286).
-  # Tag format pg16.X-ts2.X.X[-oss] produces ~30-40 char version strings
-  # (e.g. "pg16.2-ts2.14.2 → pg16.6-ts2.17.2-oss") so the Version column
-  # has a row that would cause auto-layout reflow on scroll in the old build.
-  timescale-db:
-    image: timescale/timescaledb-ha:pg16.2-ts2.14.2
-    pull_policy: missing
-    container_name: drydock-playwright-timescale-db
-    environment:
-      - POSTGRES_PASSWORD=testpass
-    labels:
-      - dd.watch=true
-      - dd.display.name=TimescaleDB HA
-      - dd.group=data
-      - dd.tag.include=^pg16\.\d+-ts2\.\d+\.\d+.*$$
 
   # ── Security scan test containers ──────────────────────
 

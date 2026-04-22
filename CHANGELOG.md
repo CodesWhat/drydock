@@ -10,6 +10,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0-rc.12] — 2026-04-22
+
+### Fixed
+
+- **[#315](https://github.com/CodesWhat/drydock/issues/315)** — Self-update now works against private registries whose `registry.url` is stored as the v2 API base (e.g. `https://ghcr.io/v2`). `resolveHelperImage` in the Docker action trigger was building the helper image reference by concatenating `registry.url` verbatim with `name:tag`, producing `https://ghcr.io/v2/codeswhat/drydock:1.5.0` — which Docker's `POST /containers/create` rejects with HTTP 400. The fix normalizes the reference to match `Registry.getImageFullName` (scheme and `/v2` stripped) so the self-update helper spawn uses the same image shape as the pull path. No-scheme / no-v2 registries fall back to `name:tag`.
+- **[#309](https://github.com/CodesWhat/drydock/issues/309)** — Status column in the Containers list now shows its label alongside the icon at typical widths. The column was width-capped at 90px which fell below the shared `dd-cell-show-80` container-query threshold (80px) once the 10px padding was subtracted — widened to 120px so the label renders whenever the column is visible.
+- **[#291](https://github.com/CodesWhat/drydock/issues/291)** (rc.11 follow-up) — Terminal update toasts (`Updated: <name>` / `Update failed: <name>` / `Rolled back: <name>`) now fire *after* the operation display hold ends instead of on the raw terminal SSE. The container row stays visually in "updating" for another 1.5s (`OPERATION_DISPLAY_HOLD_MS`) after the terminal event so it settles without flicker, but the toast was announcing the outcome before the UI reflected it. Wrapped the three terminal toast calls in `setTimeout(..., OPERATION_DISPLAY_HOLD_MS)` in both `ContainersView.applyOperationPatch` and `DashboardView.handleTerminalOperationSse` so the row releases first and the toast lands right after.
+- **Dashboard fly-in animation on update actions** — Three `fetchDashboardData()` calls in `DashboardView` (single-update `onAccepted`, `onStale`, and the update-all finalizer) were refreshing without `{ background: true }`, which flipped `state.loading` to true and caused the `<GridLayout v-if="!loading">` to unmount and remount — re-triggering grid-layout-plus's initial positioning transitions (the "fly in from the left" rebuild reporters saw after every update). Switched those three calls to the background variant so the grid stays mounted and only the underlying widget data refreshes in place.
+- **Pre-push e2e hook timeout** — `scripts/run-e2e-tests.sh` unconditionally restarted Colima before every run, which scaled badly once the dev host accumulated QA fixtures (VM cold-boot with 45+ attached containers exceeded the lefthook 10m timeout before cucumber started). Default `DD_E2E_RESTART_COLIMA` to `auto` — skip the restart when `docker info` already succeeds, and only force one when the engine is actually wedged. Set to `true` / `false` to override.
+
+### Security
+
+- **fast-xml-parser override 5.5.8 → 5.7.1** — Addresses [GHSA-gh4j-gqv2-49f6](https://github.com/NaturalIntelligence/fast-xml-parser/security/advisories/GHSA-gh4j-gqv2-49f6) / CVE-2026-41650 (XML comment/CDATA injection via unescaped delimiters in `XMLBuilder`, medium). Vulnerable range ≤ 5.5.12, patched in 5.7.0; bumped both `app/` and `e2e/` workspace overrides to 5.7.1 (latest).
+- **uuid 13.0.0 → 14.0.0** — Addresses [GHSA-w5hq-g745-h8pq](https://github.com/uuidjs/uuid/security/advisories/GHSA-w5hq-g745-h8pq) (missing buffer bounds check in `v3`/`v5`/`v6` when `buf` is provided, medium). Vulnerable range ≤ 13.0.0, patched in 14.0.0. Drydock only uses `v4` (unaffected by the buffer path) but the scanner flags any vulnerable version in the tree. Bumped the app's direct dep and added `uuid: 14.0.0` to both `app/` and `e2e/` overrides so transitive callers (dockerode, artillery, @azure/msal-node, @ngneat/falso) also resolve the patched version.
+
+### Performance
+
+- **Granular SSE container patch** — Container list updates triggered by `dd:sse-container-added` / `-updated` / `-removed` now patch the local containers array in place instead of refetching the full list over HTTP. Preserves row identity via a prototype-chain merge so Vue's reactivity system reuses the existing row DOM nodes, eliminating the post-SSE flicker and the polling refetch that the previous debounced-reload path required.
+- **`shallowRef` for `heldOperations` map** — The operation display-hold store swapped from a deep `ref(Map)` to `shallowRef(Map)` plus explicit `triggerRef` on mutation. Avoids Vue walking the entire map on every held-row render in large inventories.
+
+### Changed
+
+- **Expand all / Collapse all bulk toggle** — Replaced the single chevron toggle in the Containers toolbar with an explicit "Expand all" / "Collapse all" button whose label reflects the current global expand state. Individual stack headers still toggle their own group; this is the bulk shortcut on top.
+- **Compact "Suggested" badge** — The "Suggested" tag badge on container rows now renders compact (the full suggested tag moves into a tooltip on hover) so the row metadata band stays readable at narrower column widths.
+
+### Tests / CI
+
+- **Thin test hardening** — `app/agent/index.test.ts` grew 5 → 11 tests. Existing coverage verified call *counts* but not argument correctness, same-instance registration, fire-and-forget `client.init()` behavior, skip-branch warning messages, or mixed valid/invalid registry state. Added behavioral assertions for each while keeping 100% coverage.
+- **SSE / pending-poll / hold-release edge coverage** — New tests for `useOperationDisplayHold`, `useContainerActions.pollPendingActionsState`, and `applyDashboardContainerPatch` close the remaining uncovered branches (delete-no-op, in-flight poll guard, removed-kind patches, Object.assign merge, push-new, mapApiContainer throw, container-removed SSE listener).
+- **QA compose fixture trims** — Shrank test-fixture images so update flows finish in seconds instead of minutes, and swapped `timescaledb-ha` → non-HA to unblock scan tests that were failing against the HA variant's readiness probe.
+- **Release pipeline fragility fixes** — Three recurring CI failures in the release cut path addressed (see `a1ea1a82` on `fix/ci-release-fragility`, renamed to `feature/v1.5-rc12`).
+
 ## [1.5.0-rc.11] — 2026-04-21
 
 ### Added

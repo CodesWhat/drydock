@@ -23,14 +23,16 @@ describe('SuggestedTagBadge', () => {
     expect(wrapper.find('[data-test="suggested-tag-badge"]').exists()).toBe(false);
   });
 
-  it('renders badge with "Suggested: v1.3.0" when tag is v1.3.0 and currentTag is latest', () => {
+  it('renders compact "Suggested" label when tag is v1.3.0 and currentTag is latest', () => {
     const wrapper = mount(SuggestedTagBadge, {
       props: { tag: 'v1.3.0', currentTag: 'latest' },
       global: globalConfig,
     });
     const badge = wrapper.find('[data-test="suggested-tag-badge"]');
     expect(badge.exists()).toBe(true);
-    expect(badge.text()).toContain('Suggested: v1.3.0');
+    expect(badge.text()).toBe('Suggested');
+    // Full tag is carried in the tooltip so the cell never needs to grow.
+    expect(badge.text()).not.toContain('v1.3.0');
   });
 
   it('renders when currentTag is Latest (case insensitive)', () => {

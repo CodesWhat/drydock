@@ -514,7 +514,8 @@ describe('DashboardView', () => {
         const timerId = setIntervalSpy.mock.results[0]?.value;
 
         mockGetAllWatchers.mockResolvedValueOnce([]);
-        globalThis.dispatchEvent(new CustomEvent('dd:sse-container-changed'));
+        // dd:sse-connected triggers a debounced full refresh (same as the old container-changed path)
+        globalThis.dispatchEvent(new CustomEvent('dd:sse-connected'));
         vi.advanceTimersByTime(1_000);
         await flushPromises();
 
@@ -553,13 +554,14 @@ describe('DashboardView', () => {
   });
 
   describe('SSE refresh behavior', () => {
-    it('performs full data refresh on dd:sse-container-changed (#229)', async () => {
+    it('performs full data refresh on dd:sse-connected and dd:sse-resync-required (#229)', async () => {
       vi.useFakeTimers();
       try {
         await mountDashboard([makeContainer()]);
         const containersCallsBefore = mockGetAllContainers.mock.calls.length;
 
-        globalThis.dispatchEvent(new CustomEvent('dd:sse-container-changed'));
+        // dd:sse-connected schedules a debounced full refresh (replaces old container-changed path)
+        globalThis.dispatchEvent(new CustomEvent('dd:sse-connected'));
         vi.advanceTimersByTime(1000);
         await flushPromises();
 
@@ -2538,6 +2540,8 @@ describe('DashboardView', () => {
           }),
         );
         await nextTick();
+        vi.advanceTimersByTime(1500);
+        await flushPromises();
 
         const successToast = toasts.value.find(
           (t) => t.tone === 'success' && t.title === 'Updated: nginx',
@@ -2585,6 +2589,8 @@ describe('DashboardView', () => {
           }),
         );
         await nextTick();
+        vi.advanceTimersByTime(1500);
+        await flushPromises();
 
         const errorToast = toasts.value.find(
           (t) => t.tone === 'error' && t.title === 'Update failed: nginx',
@@ -2632,6 +2638,8 @@ describe('DashboardView', () => {
           }),
         );
         await nextTick();
+        vi.advanceTimersByTime(1500);
+        await flushPromises();
 
         const errorToast = toasts.value.find(
           (t) => t.tone === 'error' && t.title === 'Rolled back: nginx',

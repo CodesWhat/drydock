@@ -2334,17 +2334,14 @@ describe('ContainersView', () => {
         vm.selectedContainer = null;
         globalThis.dispatchEvent(new Event('dd:sse-scan-completed'));
         await flushPromises();
-        globalThis.dispatchEvent(new Event('dd:sse-container-changed'));
-        await flushPromises();
-        vi.advanceTimersByTime(500);
+        // dd:sse-connected triggers handleSseContainerChanged → loadContainers
+        globalThis.dispatchEvent(new Event('dd:sse-connected'));
         await flushPromises();
 
         vm.selectedContainer = c;
         globalThis.dispatchEvent(new Event('dd:sse-scan-completed'));
         await flushPromises();
-        globalThis.dispatchEvent(new Event('dd:sse-container-changed'));
-        await flushPromises();
-        vi.advanceTimersByTime(500);
+        globalThis.dispatchEvent(new Event('dd:sse-connected'));
         await flushPromises();
         expect(mockGetAllContainers.mock.calls.length).toBeGreaterThan(1);
 
@@ -2354,7 +2351,7 @@ describe('ContainersView', () => {
       }
     });
 
-    it('debounces burst dd:sse-container-changed events into one refresh cycle', async () => {
+    it('registers granular container lifecycle listeners and triggers load on connected', async () => {
       vi.useFakeTimers();
       const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
       try {
@@ -2364,38 +2361,43 @@ describe('ContainersView', () => {
           [{ id: 'c1', name: 'nginx', displayName: 'nginx' }],
         );
         const vm = wrapper.vm as any;
-        const containerChangedListener = addEventListenerSpy.mock.calls.findLast(
-          ([eventName]) => eventName === 'dd:sse-container-changed',
+
+        // Verify granular listeners are registered (replacing the old debounced container-changed listener)
+        const addedListener = addEventListenerSpy.mock.calls.findLast(
+          ([eventName]) => eventName === 'dd:sse-container-added',
+        )?.[1] as EventListener | undefined;
+        const updatedListener = addEventListenerSpy.mock.calls.findLast(
+          ([eventName]) => eventName === 'dd:sse-container-updated',
+        )?.[1] as EventListener | undefined;
+        const removedListener = addEventListenerSpy.mock.calls.findLast(
+          ([eventName]) => eventName === 'dd:sse-container-removed',
+        )?.[1] as EventListener | undefined;
+        const connectedListener = addEventListenerSpy.mock.calls.findLast(
+          ([eventName]) => eventName === 'dd:sse-connected',
         )?.[1] as EventListener | undefined;
 
-        expect(containerChangedListener).toBeTypeOf('function');
+        expect(addedListener).toBeTypeOf('function');
+        expect(updatedListener).toBeTypeOf('function');
+        expect(removedListener).toBeTypeOf('function');
+        expect(connectedListener).toBeTypeOf('function');
+
+        // dd:sse-container-changed must NOT be registered (debounce machinery removed)
+        const changedListener = addEventListenerSpy.mock.calls.findLast(
+          ([eventName]) => eventName === 'dd:sse-container-changed',
+        )?.[1] as EventListener | undefined;
+        expect(changedListener).toBeUndefined();
 
         vm.groupByStack = true;
         vm.selectedContainer = c;
         await flushPromises();
 
-        vi.clearAllTimers();
         mockGetAllContainers.mockClear();
         mockGetContainerGroups.mockClear();
         mockGetContainerVulnerabilities.mockClear();
         mockGetContainerSbom.mockClear();
 
-        containerChangedListener?.(new Event('dd:sse-container-changed'));
-        containerChangedListener?.(new Event('dd:sse-container-changed'));
-        containerChangedListener?.(new Event('dd:sse-container-changed'));
-        await flushPromises();
-
-        expect(mockGetAllContainers).not.toHaveBeenCalled();
-        expect(mockGetContainerGroups).not.toHaveBeenCalled();
-        expect(mockGetContainerVulnerabilities).not.toHaveBeenCalled();
-        expect(mockGetContainerSbom).not.toHaveBeenCalled();
-
-        vi.advanceTimersByTime(499);
-        await flushPromises();
-        expect(mockGetAllContainers).not.toHaveBeenCalled();
-        expect(mockGetContainerGroups).not.toHaveBeenCalled();
-
-        vi.advanceTimersByTime(1);
+        // dd:sse-connected triggers handleSseContainerChanged → immediate loadContainers (no debounce)
+        connectedListener?.(new Event('dd:sse-connected'));
         await flushPromises();
 
         expect(mockGetAllContainers).toHaveBeenCalledTimes(1);
@@ -2500,7 +2502,7 @@ describe('ContainersView', () => {
       }
     });
 
-    it('dd:sse-container-changed DOES trigger loadContainers after debounce', async () => {
+    it('dd:sse-connected triggers loadContainers immediately (no debounce)', async () => {
       vi.useFakeTimers();
       const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
       try {
@@ -2509,23 +2511,17 @@ describe('ContainersView', () => {
           [c],
           [{ id: 'c1', name: 'nginx', displayName: 'nginx' }],
         );
-        const containerChangedListener = addEventListenerSpy.mock.calls.findLast(
-          ([eventName]) => eventName === 'dd:sse-container-changed',
+        const connectedListener = addEventListenerSpy.mock.calls.findLast(
+          ([eventName]) => eventName === 'dd:sse-connected',
         )?.[1] as EventListener | undefined;
 
-        expect(containerChangedListener).toBeTypeOf('function');
+        expect(connectedListener).toBeTypeOf('function');
 
-        vi.clearAllTimers();
         mockGetAllContainers.mockClear();
 
-        containerChangedListener?.(new Event('dd:sse-container-changed'));
+        connectedListener?.(new Event('dd:sse-connected'));
         await flushPromises();
-        // Before debounce fires — no call yet
-        expect(mockGetAllContainers).not.toHaveBeenCalled();
-
-        vi.advanceTimersByTime(500);
-        await flushPromises();
-        // After debounce fires — exactly one call
+        // Fires immediately — no debounce timer needed
         expect(mockGetAllContainers).toHaveBeenCalledTimes(1);
 
         wrapper.unmount();
@@ -2733,6 +2729,9 @@ describe('ContainersView', () => {
           }),
         );
 
+        vi.advanceTimersByTime(1500);
+        await flushPromises();
+
         expect(toasts.value.length).toBe(countBefore + 1);
         expect(toasts.value.at(-1)).toMatchObject({ tone: 'success', title: 'Updated: nginx' });
 
@@ -2784,6 +2783,9 @@ describe('ContainersView', () => {
             },
           }),
         );
+
+        vi.advanceTimersByTime(1500);
+        await flushPromises();
 
         expect(toasts.value.length).toBe(countBefore + 1);
         expect(toasts.value.at(-1)).toMatchObject({ tone: 'success', title: 'Updated: nginx' });
@@ -2903,6 +2905,9 @@ describe('ContainersView', () => {
           }),
         );
 
+        vi.advanceTimersByTime(1500);
+        await flushPromises();
+
         expect(toasts.value.length).toBe(countBefore + 2);
         const newToasts = toasts.value.slice(countBefore);
         expect(newToasts.some((t) => t.title === 'Updated: nginx')).toBe(true);
@@ -2956,6 +2961,9 @@ describe('ContainersView', () => {
           }),
         );
 
+        vi.advanceTimersByTime(1500);
+        await flushPromises();
+
         expect(toasts.value.length).toBe(countBefore + 1);
         expect(toasts.value.at(-1)).toMatchObject({ tone: 'error', title: 'Update failed: nginx' });
 
@@ -3006,6 +3014,9 @@ describe('ContainersView', () => {
             },
           }),
         );
+
+        vi.advanceTimersByTime(1500);
+        await flushPromises();
 
         expect(toasts.value.length).toBe(countBefore + 1);
         expect(toasts.value.at(-1)).toMatchObject({ tone: 'error', title: 'Rolled back: nginx' });
@@ -3065,6 +3076,9 @@ describe('ContainersView', () => {
           }),
         );
 
+        vi.advanceTimersByTime(1500);
+        await flushPromises();
+
         expect(toasts.value.length).toBe(countBefore + 1);
         expect(toasts.value.at(-1)).toMatchObject({ tone: 'success', title: 'Updated: nginx' });
 
@@ -3122,6 +3136,9 @@ describe('ContainersView', () => {
             },
           }),
         );
+
+        vi.advanceTimersByTime(1500);
+        await flushPromises();
 
         expect(toasts.value.length).toBe(countBefore + 1);
         expect(toasts.value.at(-1)).toMatchObject({ tone: 'error', title: 'Rolled back: nginx' });

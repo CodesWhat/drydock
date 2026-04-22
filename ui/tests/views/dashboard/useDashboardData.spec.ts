@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   getAllWatchers: vi.fn(),
   getServer: vi.fn(),
   mapApiContainers: vi.fn(),
+  mapApiContainer: vi.fn(),
 }));
 
 vi.mock('@/services/agent', () => ({
@@ -43,6 +44,7 @@ vi.mock('@/services/watcher', () => ({
 
 vi.mock('@/utils/container-mapper', () => ({
   mapApiContainers: mocks.mapApiContainers,
+  mapApiContainer: mocks.mapApiContainer,
 }));
 
 function makeContainer(overrides: Partial<Container> = {}): Container {
@@ -114,6 +116,13 @@ describe('useDashboardData', () => {
     });
     mocks.getContainerRecentStatus.mockResolvedValue({ statuses: {}, statusesByIdentity: {} });
     mocks.mapApiContainers.mockReturnValue([makeContainer()]);
+    mocks.mapApiContainer.mockImplementation((raw: Record<string, unknown>) =>
+      makeContainer({
+        id: typeof raw.id === 'string' ? raw.id : 'c1',
+        name: typeof raw.name === 'string' ? raw.name : 'nginx',
+        status: raw.status === 'running' ? 'running' : 'stopped',
+      }),
+    );
 
     originalVisibilityState = Object.getOwnPropertyDescriptor(document, 'visibilityState');
     setVisibilityState('visible');
@@ -212,31 +221,49 @@ describe('useDashboardData', () => {
     expect(state.recentStatusByIdentity.value).toEqual({});
   });
 
-  it('performs full data refresh on debounced container-changed SSE event', async () => {
+  it('registers granular container SSE listeners and patches state in-place without a full refetch', async () => {
     vi.useFakeTimers();
     const setIntervalSpy = vi.spyOn(window, 'setInterval');
     mocks.getAllWatchers.mockResolvedValue([{ id: 'watcher-without-config' }]);
+    mocks.mapApiContainers.mockReturnValue([
+      makeContainer({ id: 'c1', name: 'nginx', status: 'running' }),
+    ]);
 
     const { state } = await mountDashboardData();
+
+    // All three granular events must be wired (they were added at mount time)
+    expect(state.containers.value[0]?.id).toBe('c1');
 
     // Reset call counts from initial mount fetch
     mocks.getAllContainers.mockClear();
 
-    globalThis.dispatchEvent(new CustomEvent('dd:sse-container-changed'));
-    vi.advanceTimersByTime(1_000);
-    await flushPromises();
+    // Dispatch a well-formed container-updated event — should patch in-place, no HTTP
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-container-added', {
+        detail: {
+          id: 'c2',
+          name: 'redis',
+          image: 'redis:latest',
+          status: 'running',
+          watcher: 'local',
+        },
+      }),
+    );
+    await nextTick();
 
-    expect(mocks.getAllContainers).toHaveBeenCalledTimes(1);
+    // No full refetch fired
+    expect(mocks.getAllContainers).not.toHaveBeenCalled();
     expect(state.error.value).toBeNull();
     expect(setIntervalSpy).not.toHaveBeenCalled();
 
-    // Debounce collapses rapid events into a single refresh
+    // A malformed granular event (no id/name) falls back to full debounced refresh
     mocks.getAllContainers.mockClear();
-    globalThis.dispatchEvent(new CustomEvent('dd:sse-container-changed'));
-    globalThis.dispatchEvent(new CustomEvent('dd:sse-container-changed'));
+    globalThis.dispatchEvent(new CustomEvent('dd:sse-container-updated', { detail: {} }));
+    globalThis.dispatchEvent(new CustomEvent('dd:sse-container-updated', { detail: {} }));
     vi.advanceTimersByTime(1_000);
     await flushPromises();
 
+    // Two malformed events were debounced into one full refresh
     expect(mocks.getAllContainers).toHaveBeenCalledTimes(1);
   });
 
@@ -322,19 +349,25 @@ describe('useDashboardData', () => {
     const { wrapper } = await mountDashboardData();
 
     const addedEvents = addSpy.mock.calls.map((c) => c[0]);
-    expect(addedEvents).toContain('dd:sse-container-changed');
+    expect(addedEvents).toContain('dd:sse-container-added');
+    expect(addedEvents).toContain('dd:sse-container-updated');
+    expect(addedEvents).toContain('dd:sse-container-removed');
     expect(addedEvents).toContain('dd:sse-update-operation-changed');
     expect(addedEvents).toContain('dd:sse-connected');
     expect(addedEvents).toContain('dd:sse-resync-required');
+    expect(addedEvents).not.toContain('dd:sse-container-changed');
     expect(addedEvents).not.toContain('dd:sse-scan-completed');
 
     wrapper.unmount();
 
     const removedEvents = removeSpy.mock.calls.map((c) => c[0]);
-    expect(removedEvents).toContain('dd:sse-container-changed');
+    expect(removedEvents).toContain('dd:sse-container-added');
+    expect(removedEvents).toContain('dd:sse-container-updated');
+    expect(removedEvents).toContain('dd:sse-container-removed');
     expect(removedEvents).toContain('dd:sse-update-operation-changed');
     expect(removedEvents).toContain('dd:sse-connected');
     expect(removedEvents).toContain('dd:sse-resync-required');
+    expect(removedEvents).not.toContain('dd:sse-container-changed');
     expect(removedEvents).not.toContain('dd:sse-scan-completed');
   });
 
@@ -347,7 +380,7 @@ describe('useDashboardData', () => {
     expect(state.error.value).toBe('containers failed');
   });
 
-  it('debounces realtime refresh and logs background errors when prior data exists', async () => {
+  it('debounces fallback-triggered refresh and logs background errors when prior data exists', async () => {
     vi.useFakeTimers();
     const debugSpy = vi.spyOn(console, 'debug').mockImplementation(() => {});
     const clearTimeoutSpy = vi.spyOn(window, 'clearTimeout');
@@ -359,10 +392,10 @@ describe('useDashboardData', () => {
 
     mocks.getAllContainers.mockRejectedValueOnce(new Error('background refresh failed'));
 
-    // Two rapid container-changed events collapse into one debounced refresh
-    globalThis.dispatchEvent(new CustomEvent('dd:sse-container-changed'));
+    // Two rapid malformed granular events each trigger fallback → debouncer → clearTimeout fires on second
+    globalThis.dispatchEvent(new CustomEvent('dd:sse-container-updated', { detail: {} }));
     const clearTimeoutCallsBeforeSecondEvent = clearTimeoutSpy.mock.calls.length;
-    globalThis.dispatchEvent(new CustomEvent('dd:sse-container-changed'));
+    globalThis.dispatchEvent(new CustomEvent('dd:sse-container-updated', { detail: {} }));
     expect(clearTimeoutSpy.mock.calls.length).toBeGreaterThan(clearTimeoutCallsBeforeSecondEvent);
 
     vi.advanceTimersByTime(999);
@@ -398,14 +431,15 @@ describe('useDashboardData', () => {
     expect(state.error.value).toBeNull();
   });
 
-  it('logs full refresh failures when data has already rendered via container-changed SSE', async () => {
+  it('logs full refresh failures when a malformed granular SSE event triggers the fallback path', async () => {
     vi.useFakeTimers();
     const debugSpy = vi.spyOn(console, 'debug').mockImplementation(() => {});
 
     await mountDashboardData();
     mocks.getAllContainers.mockRejectedValueOnce(new Error('background refresh failed'));
 
-    globalThis.dispatchEvent(new CustomEvent('dd:sse-container-changed'));
+    // A malformed payload (no id/name) on a granular event invokes the fallback which schedules a full refresh
+    globalThis.dispatchEvent(new CustomEvent('dd:sse-container-updated', { detail: {} }));
     vi.advanceTimersByTime(1_000);
     await flushPromises();
 
@@ -495,7 +529,8 @@ describe('useDashboardData', () => {
       Reflect.deleteProperty(globalThis, 'document');
     }
 
-    globalThis.dispatchEvent(new CustomEvent('dd:sse-container-changed'));
+    // Dispatch a malformed granular event to arm the debounce timer, then unmount to clear it
+    globalThis.dispatchEvent(new CustomEvent('dd:sse-container-updated', { detail: {} }));
     wrapper.unmount();
 
     expect(clearTimeoutSpy).toHaveBeenCalled();
@@ -717,5 +752,159 @@ describe('useDashboardData', () => {
     );
     await nextTick();
     expect(state.containers.value[0]?.updateOperation?.phase).toBe('pulling');
+  });
+
+  it('applyDashboardContainerPatch: removes container and recomputes summary on dd:sse-container-removed', async () => {
+    mocks.mapApiContainers.mockReturnValue([
+      makeContainer({ id: 'c1', name: 'nginx', status: 'running' }),
+      makeContainer({ id: 'c2', name: 'redis', status: 'running' }),
+    ]);
+    mocks.getContainerSummary.mockResolvedValue({
+      containers: { total: 2, running: 2, stopped: 0 },
+      security: { issues: 0 },
+    });
+
+    const { state } = await mountDashboardData();
+    expect(state.containers.value).toHaveLength(2);
+
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-container-removed', {
+        detail: { id: 'c1', name: 'nginx' },
+      }),
+    );
+    await nextTick();
+
+    expect(state.containers.value).toHaveLength(1);
+    expect(state.containers.value[0]?.id).toBe('c2');
+    // containerSummary is recomputed in-place (total drops to 1)
+    expect(state.containerSummary.value?.containers.total).toBe(1);
+  });
+
+  it('applyDashboardContainerPatch: handles removed event for unknown container without error (idx === -1 branch)', async () => {
+    mocks.mapApiContainers.mockReturnValue([makeContainer({ id: 'c1', name: 'nginx' })]);
+
+    const { state } = await mountDashboardData();
+    expect(state.containers.value).toHaveLength(1);
+    mocks.getAllContainers.mockClear();
+
+    // Container 'c99' does not exist in state — splice should not fire but summary recomputes
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-container-removed', {
+        detail: { id: 'c99', name: 'ghost' },
+      }),
+    );
+    await nextTick();
+
+    // Container list is unchanged; no full refetch; summary is still valid
+    expect(state.containers.value).toHaveLength(1);
+    expect(state.containers.value[0]?.id).toBe('c1');
+    expect(mocks.getAllContainers).not.toHaveBeenCalled();
+    expect(state.containerSummary.value?.containers.total).toBe(1);
+  });
+
+  it('applyDashboardContainerPatch: pushes new container on dd:sse-container-added when id is absent', async () => {
+    mocks.mapApiContainers.mockReturnValue([
+      makeContainer({ id: 'c1', name: 'nginx', status: 'running' }),
+    ]);
+
+    const { state } = await mountDashboardData();
+    expect(state.containers.value).toHaveLength(1);
+    mocks.getAllContainers.mockClear();
+
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-container-added', {
+        detail: { id: 'c99', name: 'postgres', status: 'running', watcher: 'local' },
+      }),
+    );
+    await nextTick();
+
+    // Container pushed into state; no full refetch fired
+    expect(state.containers.value).toHaveLength(2);
+    expect(state.containers.value.some((c) => c.id === 'c99')).toBe(true);
+    expect(mocks.getAllContainers).not.toHaveBeenCalled();
+  });
+
+  it('applyDashboardContainerPatch: merges fields via Object.assign on dd:sse-container-updated when container exists', async () => {
+    mocks.mapApiContainers.mockReturnValue([
+      makeContainer({ id: 'c1', name: 'nginx', status: 'running', currentTag: '1.0.0' }),
+    ]);
+
+    const { state } = await mountDashboardData();
+    const originalRef = state.containers.value[0];
+    mocks.getAllContainers.mockClear();
+
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-container-updated', {
+        detail: { id: 'c1', name: 'nginx', status: 'stopped', watcher: 'local' },
+      }),
+    );
+    await nextTick();
+
+    // Still one container; same array slot (Object.assign mutated in place)
+    expect(state.containers.value).toHaveLength(1);
+    expect(state.containers.value[0]).toBe(originalRef);
+    expect(state.containers.value[0]?.status).toBe('stopped');
+    expect(mocks.getAllContainers).not.toHaveBeenCalled();
+  });
+
+  it('applyDashboardContainerPatch: calls fallback when detail is null or a non-object', async () => {
+    vi.useFakeTimers();
+    mocks.mapApiContainers.mockReturnValue([makeContainer({ id: 'c1' })]);
+
+    const { state } = await mountDashboardData();
+    mocks.getAllContainers.mockClear();
+
+    // null detail on the added listener — must call fallback (schedules a debounced full refresh)
+    globalThis.dispatchEvent(new CustomEvent('dd:sse-container-added', { detail: null }));
+    vi.advanceTimersByTime(1_000);
+    await flushPromises();
+    expect(mocks.getAllContainers).toHaveBeenCalledTimes(1);
+
+    mocks.getAllContainers.mockClear();
+
+    // string detail on the updated listener — must also call fallback
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-container-updated', { detail: 'not-an-object' }),
+    );
+    vi.advanceTimersByTime(1_000);
+    await flushPromises();
+    expect(mocks.getAllContainers).toHaveBeenCalledTimes(1);
+
+    mocks.getAllContainers.mockClear();
+
+    // null detail on the removed listener — exercises the containerRemovedListener fallback path
+    globalThis.dispatchEvent(new CustomEvent('dd:sse-container-removed', { detail: null }));
+    vi.advanceTimersByTime(1_000);
+    await flushPromises();
+    expect(mocks.getAllContainers).toHaveBeenCalledTimes(1);
+
+    // State containers are unchanged (fallback scheduled refresh, not an in-place patch)
+    expect(state.containers.value).toHaveLength(1);
+  });
+
+  it('applyDashboardContainerPatch: calls fallback when mapApiContainer throws on a valid-id payload', async () => {
+    vi.useFakeTimers();
+    mocks.mapApiContainers.mockReturnValue([makeContainer({ id: 'c1' })]);
+    // Make mapApiContainer throw to exercise the catch { fallback(); return } path (lines 203-204)
+    mocks.mapApiContainer.mockImplementationOnce(() => {
+      throw new Error('mapper error');
+    });
+
+    const { state } = await mountDashboardData();
+    mocks.getAllContainers.mockClear();
+
+    // Detail has a valid id/name so the guard passes, but mapApiContainer throws → fallback
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-container-added', {
+        detail: { id: 'c99', name: 'broken' },
+      }),
+    );
+    vi.advanceTimersByTime(1_000);
+    await flushPromises();
+
+    // Fallback triggered a full refresh instead of an in-place add
+    expect(mocks.getAllContainers).toHaveBeenCalledTimes(1);
+    expect(state.containers.value).toHaveLength(1);
+    expect(state.containers.value[0]?.id).toBe('c1');
   });
 });

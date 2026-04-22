@@ -17,7 +17,7 @@ jobs:
   cut:
     name: "🏷️ Release: Cut Tag"
     runs-on: ubuntu-latest
-    timeout-minutes: 20  # Includes CI-success polling for target SHA before tagging
+    timeout-minutes: 75  # Includes CI-success polling (up to 60 min) for target SHA before tagging
     permissions:
       contents: write
       actions: read
@@ -47,8 +47,8 @@ jobs:
           github-token: ${{ github.token }}
           workflow-file: ${{ env.CI_VERIFY_WORKFLOW_FILE }}
           target-sha: ${{ steps.target.outputs.sha }}
-          max-attempts: '20'
-          sleep-seconds: '15'
+          max-attempts: '12'
+          sleep-seconds: '300'
 
       - name: Find latest release tag
         id: base

@@ -14,11 +14,11 @@ inputs:
   max-attempts:
     description: Maximum polling attempts before timing out
     required: false
-    default: '20'
+    default: '12'
   sleep-seconds:
     description: Seconds to sleep between polling attempts
     required: false
-    default: '15'
+    default: '300'
 
 runs:
   using: composite

@@ -259,6 +259,37 @@ describe('useOperationDisplayHold', () => {
     expect(hold.heldOperations.value.size).toBe(0);
   });
 
+  it('removeHeldOperation false branch: release timer fires after entry was already evicted', async () => {
+    const hold = await loadComposable();
+    const operation = makeOperation({ id: 'op-evicted' });
+
+    hold.holdOperationDisplay({
+      operationId: operation.id,
+      operation,
+      containerId: 'container-evicted',
+      containerName: 'evicted',
+      now: Date.now(),
+    });
+    // Arms a release timer (setTimeout of OPERATION_DISPLAY_HOLD_MS)
+    hold.scheduleHeldOperationRelease({
+      operationId: operation.id,
+      containerId: 'container-evicted',
+      containerName: 'evicted',
+      now: Date.now(),
+    });
+
+    // Manually remove the entry from the map without cancelling the pending timer.
+    // This simulates an external eviction that bypasses clearReleaseTimer.
+    hold.heldOperations.value.delete(operation.id);
+    expect(hold.heldOperations.value.size).toBe(0);
+
+    // Advance time so the timer fires; removeHeldOperation is called but delete
+    // returns false (entry already gone). Must not throw and map stays empty.
+    await vi.advanceTimersByTimeAsync(1500);
+
+    expect(hold.heldOperations.value.size).toBe(0);
+  });
+
   it('falls back to the held operation or the container update operation', async () => {
     const hold = await loadComposable();
     const held = makeOperation({ id: 'op-held' });

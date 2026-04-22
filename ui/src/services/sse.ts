@@ -3,6 +3,9 @@ type SseBusEvent =
   | 'self-update'
   | 'connection-lost'
   | 'container-changed'
+  | 'container-added'
+  | 'container-updated'
+  | 'container-removed'
   | 'update-operation-changed'
   | 'agent-status-changed'
   | 'scan-started'
@@ -16,6 +19,18 @@ export type OperationChangedPayload = {
   newContainerId?: string;
   status: string;
   phase?: string;
+};
+
+// The backend spreads the full validated container object into the SSE payload
+// for dd:container-added/-updated (app/store/container.ts) and adds
+// `replacementExpected` on dd:container-removed when the remove is part of a
+// recreate cycle. We forward the raw object to let consumers run it through
+// mapApiContainer() for in-place row patching — avoiding the full-list refetch
+// that the previous bare 'container-changed' signal forced.
+export type ContainerLifecycleChangedPayload = Record<string, unknown> & {
+  id?: string;
+  name?: string;
+  replacementExpected?: boolean;
 };
 
 type SelfUpdateSsePayload = {
@@ -84,16 +99,22 @@ class SseService {
       this.eventBus?.emit('scan-completed');
     });
 
-    this.eventSource.addEventListener('dd:container-added', () => {
-      this.eventBus?.emit('container-changed');
+    this.eventSource.addEventListener('dd:container-added', (event) => {
+      const payload = this.parseContainerLifecyclePayload(event);
+      this.eventBus?.emit('container-added', payload);
+      this.eventBus?.emit('container-changed', payload);
     });
 
-    this.eventSource.addEventListener('dd:container-updated', () => {
-      this.eventBus?.emit('container-changed');
+    this.eventSource.addEventListener('dd:container-updated', (event) => {
+      const payload = this.parseContainerLifecyclePayload(event);
+      this.eventBus?.emit('container-updated', payload);
+      this.eventBus?.emit('container-changed', payload);
     });
 
-    this.eventSource.addEventListener('dd:container-removed', () => {
-      this.eventBus?.emit('container-changed');
+    this.eventSource.addEventListener('dd:container-removed', (event) => {
+      const payload = this.parseContainerLifecyclePayload(event);
+      this.eventBus?.emit('container-removed', payload);
+      this.eventBus?.emit('container-changed', payload);
     });
 
     this.eventSource.addEventListener('dd:update-operation-changed', (event) => {
@@ -157,6 +178,24 @@ class SseService {
         status: p.status,
         phase: typeof p.phase === 'string' ? p.phase : undefined,
       };
+    } catch {
+      return undefined;
+    }
+  }
+
+  private parseContainerLifecyclePayload(
+    event: Event,
+  ): ContainerLifecycleChangedPayload | undefined {
+    const rawData = (event as MessageEvent)?.data;
+    if (!rawData || typeof rawData !== 'string') {
+      return undefined;
+    }
+    try {
+      const parsed = JSON.parse(rawData);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return undefined;
+      }
+      return parsed as ContainerLifecycleChangedPayload;
     } catch {
       return undefined;
     }

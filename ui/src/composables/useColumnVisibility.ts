@@ -34,7 +34,7 @@ const allColumns: ColumnDef[] = [
     required: false,
   },
   { key: 'kind', label: 'Kind', px: 'px-3', width: '130px', required: false },
-  { key: 'status', label: 'Status', px: 'px-3', width: '90px', required: false },
+  { key: 'status', label: 'Status', px: 'px-3', width: '120px', required: false },
   { key: 'imageAge', label: 'Image Age', px: 'px-3', width: '90px', required: false },
   { key: 'server', label: 'Host', px: 'px-3', width: '100px', required: false },
   {

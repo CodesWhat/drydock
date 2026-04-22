@@ -12,7 +12,11 @@ import {
   isActiveContainerUpdateOperationStatus,
   isContainerUpdateOperationStatus,
 } from '../../types/update-operation';
-import { type ApiContainerInput, mapApiContainers } from '../../utils/container-mapper';
+import {
+  type ApiContainerInput,
+  mapApiContainer,
+  mapApiContainers,
+} from '../../utils/container-mapper';
 import { errorMessage } from '../../utils/error';
 import type {
   DashboardAgent,
@@ -149,6 +153,63 @@ function resolveActiveOperationPhase(args: {
     return args.previousPhase;
   }
   return args.status === 'queued' ? 'queued' : 'pulling';
+}
+
+type DashboardContainerPatchKind = 'added' | 'updated' | 'removed';
+
+// Apply a single-container SSE payload to the dashboard's containers ref in place,
+// then recompute the in-memory containerSummary (O(N) walk, no HTTP). Replaces
+// the previous behaviour of firing fetchDashboardData({ background: true }) —
+// which issued 7 parallel GETs — for every single-container event.
+// Stats (containerStats) and recent-status maps are NOT patched here; they use
+// independent data sources and the caller keeps a periodic reconciliation refresh
+// for them.
+function applyDashboardContainerPatch(
+  state: DashboardStateRefs,
+  event: Event,
+  kind: DashboardContainerPatchKind,
+  fallback: () => void,
+): void {
+  const raw = (event as CustomEvent)?.detail as Record<string, unknown> | undefined;
+  if (!raw || typeof raw !== 'object') {
+    fallback();
+    return;
+  }
+  const id = typeof raw.id === 'string' ? raw.id : undefined;
+  const name = typeof raw.name === 'string' ? raw.name : undefined;
+  if (!id && !name) {
+    fallback();
+    return;
+  }
+
+  const idx = state.containers.value.findIndex(
+    (container) =>
+      (typeof id === 'string' && id.length > 0 && container.id === id) ||
+      (typeof name === 'string' && name.length > 0 && container.name === name),
+  );
+
+  if (kind === 'removed') {
+    if (idx !== -1) {
+      state.containers.value.splice(idx, 1);
+    }
+    state.containerSummary.value = buildContainerSummaryFromContainers(state.containers.value);
+    return;
+  }
+
+  let mapped: Container;
+  try {
+    mapped = mapApiContainer(raw);
+  } catch {
+    fallback();
+    return;
+  }
+
+  if (idx === -1) {
+    state.containers.value.push(mapped);
+  } else {
+    Object.assign(state.containers.value[idx]!, mapped);
+  }
+  state.containerSummary.value = buildContainerSummaryFromContainers(state.containers.value);
 }
 
 function applyDashboardOperationPatch(state: DashboardStateRefs, event: Event): void {
@@ -312,11 +373,28 @@ export function useDashboardData() {
   const operationPatchListener = ((event: Event) => {
     applyDashboardOperationPatch(state, event);
   }) as EventListener;
+  const containerAddedListener = ((event: Event) => {
+    applyDashboardContainerPatch(state, event, 'added', () =>
+      realtimeRefreshScheduler.schedule('full'),
+    );
+  }) as EventListener;
+  const containerUpdatedListener = ((event: Event) => {
+    applyDashboardContainerPatch(state, event, 'updated', () =>
+      realtimeRefreshScheduler.schedule('full'),
+    );
+  }) as EventListener;
+  const containerRemovedListener = ((event: Event) => {
+    applyDashboardContainerPatch(state, event, 'removed', () =>
+      realtimeRefreshScheduler.schedule('full'),
+    );
+  }) as EventListener;
   const visibilityChangeListener = maintenanceCountdownController.sync as EventListener;
   let stopMaintenanceWindowWatch: ReturnType<typeof watch> | undefined;
 
   onMounted(async () => {
-    globalThis.addEventListener('dd:sse-container-changed', fullRefreshListener);
+    globalThis.addEventListener('dd:sse-container-added', containerAddedListener);
+    globalThis.addEventListener('dd:sse-container-updated', containerUpdatedListener);
+    globalThis.addEventListener('dd:sse-container-removed', containerRemovedListener);
     globalThis.addEventListener('dd:sse-update-operation-changed', operationPatchListener);
     globalThis.addEventListener('dd:sse-connected', fullRefreshListener);
     globalThis.addEventListener('dd:sse-resync-required', fullRefreshListener);
@@ -328,7 +406,9 @@ export function useDashboardData() {
   });
 
   onUnmounted(() => {
-    globalThis.removeEventListener('dd:sse-container-changed', fullRefreshListener);
+    globalThis.removeEventListener('dd:sse-container-added', containerAddedListener);
+    globalThis.removeEventListener('dd:sse-container-updated', containerUpdatedListener);
+    globalThis.removeEventListener('dd:sse-container-removed', containerRemovedListener);
     globalThis.removeEventListener('dd:sse-update-operation-changed', operationPatchListener);
     globalThis.removeEventListener('dd:sse-connected', fullRefreshListener);
     globalThis.removeEventListener('dd:sse-resync-required', fullRefreshListener);

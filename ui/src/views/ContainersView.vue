@@ -10,7 +10,10 @@ import { useColumnVisibility } from '../composables/useColumnVisibility';
 import { useContainerFilters } from '../composables/useContainerFilters';
 import { useDetailPanel, useDetailPanelStorage } from '../composables/useDetailPanel';
 import { LOG_AUTO_FETCH_INTERVALS } from '../composables/useLogViewerBehavior';
-import { useOperationDisplayHold } from '../composables/useOperationDisplayHold';
+import {
+  OPERATION_DISPLAY_HOLD_MS,
+  useOperationDisplayHold,
+} from '../composables/useOperationDisplayHold';
 import { useToast } from '../composables/useToast';
 import { preferences } from '../preferences/store';
 import { usePreference } from '../preferences/usePreference';
@@ -25,7 +28,7 @@ import {
   type ActiveContainerUpdateOperationPhase,
 } from '../types/update-operation';
 import { getContainerActionIdentityKey } from '../utils/container-action-key';
-import { mapApiContainers } from '../utils/container-mapper';
+import { mapApiContainer, mapApiContainers } from '../utils/container-mapper';
 import {
   maturityColor,
   parseServer,
@@ -176,16 +179,20 @@ async function loadContainers() {
     const apiContainers = await getAllContainers();
     const mapped = mapApiContainers(apiContainers);
     // Skip reactive assignment (and downstream chain re-eval) when incoming
-    // data is bit-for-bit identical to the current list.
+    // data is bit-for-bit identical to the current list. Gate the lookup map
+    // reassignment on the same guard so unchanged reloads don't churn
+    // containerIdMap/containerMetaMap reactivity either.
     if (
       containers.value.length !== mapped.length ||
       containerListFingerprint(mapped) !== containerListFingerprint(containers.value)
     ) {
       containers.value = mapped;
+      const { idMap, metaMap } = buildContainerLookupMaps(
+        apiContainers as Record<string, unknown>[],
+      );
+      containerIdMap.value = idMap;
+      containerMetaMap.value = metaMap;
     }
-    const { idMap, metaMap } = buildContainerLookupMaps(apiContainers as Record<string, unknown>[]);
-    containerIdMap.value = idMap;
-    containerMetaMap.value = metaMap;
     reconcileHoldsAgainstContainers(containers.value);
     if (groupByStack.value) {
       await loadGroups();
@@ -1120,19 +1127,9 @@ function handleGlobalClick() {
   showColumnPicker.value = false;
 }
 
-const SSE_CONTAINER_CHANGED_DEBOUNCE_MS = 500;
-let sseContainerChangedTimer: ReturnType<typeof setTimeout> | undefined;
-
-function clearSseContainerChangedTimer() {
-  if (sseContainerChangedTimer === undefined) {
-    return;
-  }
-  clearTimeout(sseContainerChangedTimer);
-  sseContainerChangedTimer = undefined;
-}
-
-// Refreshes container list and security detail data. Used by container-changed and connected
-// events where the container set itself may have changed.
+// Refreshes container list and security detail data. Used on (re)connect and resync-required
+// events where the whole list needs a reconciliation sweep, and as the fallback path when
+// applyContainerPatch cannot derive identity from a malformed SSE payload.
 async function handleSseContainerChanged() {
   await loadContainers();
   if (selectedContainerId.value) {
@@ -1150,13 +1147,6 @@ async function handleSseScanCompleted() {
 }
 
 const sseScanCompletedListener = handleSseScanCompleted as EventListener;
-const sseContainerChangedListener = (() => {
-  clearSseContainerChangedTimer();
-  sseContainerChangedTimer = setTimeout(() => {
-    sseContainerChangedTimer = undefined;
-    void handleSseContainerChanged();
-  }, SSE_CONTAINER_CHANGED_DEBOUNCE_MS);
-}) as EventListener;
 function resolveActiveOperationPhase(args: {
   status: 'queued' | 'in-progress';
   phase: unknown;
@@ -1172,6 +1162,107 @@ function resolveActiveOperationPhase(args: {
     return args.previousPhase;
   }
   return args.status === 'queued' ? 'queued' : 'pulling';
+}
+
+type ContainerPatchKind = 'added' | 'updated' | 'removed';
+
+function findContainerIndexByIdOrName(id: unknown, name: unknown): number {
+  return containers.value.findIndex(
+    (c) =>
+      (typeof id === 'string' && id.length > 0 && c.id === id) ||
+      (typeof name === 'string' && name.length > 0 && c.name === name),
+  );
+}
+
+function updateLookupMapsForContainer(raw: Record<string, unknown>) {
+  const containerId = typeof raw.id === 'string' ? raw.id : '';
+  if (!containerId) {
+    return;
+  }
+  containerIdMap.value = { ...containerIdMap.value, [containerId]: containerId };
+  containerMetaMap.value = { ...containerMetaMap.value, [containerId]: raw };
+  const uiName =
+    typeof raw.displayName === 'string' && raw.displayName.trim().length > 0
+      ? raw.displayName
+      : typeof raw.name === 'string'
+        ? raw.name
+        : '';
+  if (uiName) {
+    containerIdMap.value = { ...containerIdMap.value, [uiName]: containerId };
+    containerMetaMap.value = { ...containerMetaMap.value, [uiName]: raw };
+  }
+}
+
+function removeLookupMapsForContainer(id: string, name: string | undefined) {
+  if (id && containerIdMap.value[id] !== undefined) {
+    const nextId = { ...containerIdMap.value };
+    const nextMeta = { ...containerMetaMap.value };
+    delete nextId[id];
+    delete nextMeta[id];
+    containerIdMap.value = nextId;
+    containerMetaMap.value = nextMeta;
+  }
+  if (name && containerIdMap.value[name] !== undefined) {
+    const nextId = { ...containerIdMap.value };
+    const nextMeta = { ...containerMetaMap.value };
+    delete nextId[name];
+    delete nextMeta[name];
+    containerIdMap.value = nextId;
+    containerMetaMap.value = nextMeta;
+  }
+}
+
+// Apply a single-container SSE payload in place instead of falling back to a
+// full GET /api/v1/containers + remap + array reassign. The backend emits the
+// full validated container object on dd:container-added/-updated, so we can
+// run it through mapApiContainer() and merge field-by-field onto the matching
+// row — preserving row object identity so downstream computeds
+// (filteredContainers → displayContainers → sortedContainers → groupedContainers)
+// do not invalidate for unaffected rows. Falls back to loadContainers() when
+// the payload is malformed or the mapper cannot derive identity.
+function applyContainerPatch(event: Event, kind: ContainerPatchKind) {
+  const raw = (event as CustomEvent)?.detail as Record<string, unknown> | undefined;
+  if (!raw || typeof raw !== 'object') {
+    void handleSseContainerChanged();
+    return;
+  }
+  const id = typeof raw.id === 'string' ? raw.id : undefined;
+  const name = typeof raw.name === 'string' ? raw.name : undefined;
+  if (!id && !name) {
+    void handleSseContainerChanged();
+    return;
+  }
+
+  if (kind === 'removed') {
+    const idx = findContainerIndexByIdOrName(id, name);
+    if (idx !== -1) {
+      containers.value.splice(idx, 1);
+    }
+    removeLookupMapsForContainer(id ?? '', name);
+    reconcileHoldsAgainstContainers(containers.value);
+    return;
+  }
+
+  let mapped: Container;
+  try {
+    mapped = mapApiContainer(raw);
+  } catch {
+    void handleSseContainerChanged();
+    return;
+  }
+
+  const idx = findContainerIndexByIdOrName(id, name);
+  if (idx === -1) {
+    if (kind === 'added' || kind === 'updated') {
+      containers.value.push(mapped);
+    }
+  } else {
+    // In-place merge preserves the row object identity; downstream row wrappers
+    // and :key bindings therefore keep pointing at the same object reference.
+    Object.assign(containers.value[idx]!, mapped);
+  }
+  updateLookupMapsForContainer(raw);
+  reconcileHoldsAgainstContainers(containers.value);
 }
 
 function applyOperationPatch(event: Event) {
@@ -1191,17 +1282,17 @@ function applyOperationPatch(event: Event) {
       (typeof newContainerId === 'string' && c.id === newContainerId) ||
       (typeof containerName === 'string' && c.name === containerName),
   );
-  if (idx === -1) {
-    return;
-  }
 
-  // Mutate the container at idx in place instead of spreading containers.value into a new
-  // 88-element array. Reassigning the array reference invalidates every downstream computed
-  // (filteredContainers, sortedContainers, groupedContainers) on every SSE phase event —
-  // targeted mutation triggers re-evaluation only for effects that actually read
-  // updateOperation on the matched row.
-  const row = containers.value[idx]!;
+  // Mutate the matched row in place when found, but do NOT early-return on miss.
+  // Terminal SSEs can race ahead of the container-list refresh that renames the row
+  // post-recreate — the hold map + toast are keyed on operationId/name, not on the
+  // row existing in containers.value, so we must still release the hold and surface
+  // the toast even when idx === -1.
+  const row = idx === -1 ? undefined : containers.value[idx]!;
   if (isActiveContainerUpdateOperationStatus(status)) {
+    if (!row) {
+      return;
+    }
     const nextOperation = {
       ...(row.updateOperation || {}),
       id: typeof operationId === 'string' ? operationId : (row.updateOperation?.id ?? ''),
@@ -1232,7 +1323,9 @@ function applyOperationPatch(event: Event) {
       });
     }
   } else {
-    row.updateOperation = undefined;
+    if (row) {
+      row.updateOperation = undefined;
+    }
     const target = {
       operationId: typeof operationId === 'string' ? operationId : undefined,
       containerId: typeof containerId === 'string' ? containerId : undefined,
@@ -1240,20 +1333,26 @@ function applyOperationPatch(event: Event) {
       containerName: typeof containerName === 'string' ? containerName : undefined,
     };
     const wasTracked = findMatchingOperationIds(target).length > 0;
+    const toastName =
+      row?.name ??
+      (typeof containerName === 'string' && containerName.length > 0 ? containerName : 'container');
+    // Defer terminal toasts until the hold window expires so the row settles
+    // to its new state first — firing a "Updated" toast while the row still
+    // shows the "updating" spinner confuses users.
     if (status === 'succeeded') {
       scheduleHeldOperationRelease(target);
       if (wasTracked) {
-        toast.success(`Updated: ${row.name}`);
+        setTimeout(() => toast.success(`Updated: ${toastName}`), OPERATION_DISPLAY_HOLD_MS);
       }
     } else if (status === 'failed') {
       scheduleHeldOperationRelease(target);
       if (wasTracked) {
-        toast.error(`Update failed: ${row.name}`);
+        setTimeout(() => toast.error(`Update failed: ${toastName}`), OPERATION_DISPLAY_HOLD_MS);
       }
     } else if (status === 'rolled-back') {
       scheduleHeldOperationRelease(target);
       if (wasTracked) {
-        toast.error(`Rolled back: ${row.name}`);
+        setTimeout(() => toast.error(`Rolled back: ${toastName}`), OPERATION_DISPLAY_HOLD_MS);
       }
     } else {
       clearHeldOperation(target);
@@ -1264,23 +1363,34 @@ function applyOperationPatch(event: Event) {
 const sseConnectedListener = handleSseContainerChanged as EventListener;
 const sseResyncRequiredListener = handleSseContainerChanged as EventListener;
 const sseUpdateOperationChangedListener = ((event: Event) => {
-  clearSseContainerChangedTimer();
   applyOperationPatch(event);
+}) as EventListener;
+const sseContainerAddedListener = ((event: Event) => {
+  applyContainerPatch(event, 'added');
+}) as EventListener;
+const sseContainerUpdatedListener = ((event: Event) => {
+  applyContainerPatch(event, 'updated');
+}) as EventListener;
+const sseContainerRemovedListener = ((event: Event) => {
+  applyContainerPatch(event, 'removed');
 }) as EventListener;
 onMounted(() => {
   document.addEventListener('click', handleGlobalClick);
   globalThis.addEventListener('dd:sse-scan-completed', sseScanCompletedListener);
-  globalThis.addEventListener('dd:sse-container-changed', sseContainerChangedListener);
+  globalThis.addEventListener('dd:sse-container-added', sseContainerAddedListener);
+  globalThis.addEventListener('dd:sse-container-updated', sseContainerUpdatedListener);
+  globalThis.addEventListener('dd:sse-container-removed', sseContainerRemovedListener);
   globalThis.addEventListener('dd:sse-update-operation-changed', sseUpdateOperationChangedListener);
   globalThis.addEventListener('dd:sse-connected', sseConnectedListener);
   globalThis.addEventListener('dd:sse-resync-required', sseResyncRequiredListener);
 });
 onUnmounted(() => {
-  clearSseContainerChangedTimer();
   clearAllOperationDisplayHolds();
   document.removeEventListener('click', handleGlobalClick);
   globalThis.removeEventListener('dd:sse-scan-completed', sseScanCompletedListener);
-  globalThis.removeEventListener('dd:sse-container-changed', sseContainerChangedListener);
+  globalThis.removeEventListener('dd:sse-container-added', sseContainerAddedListener);
+  globalThis.removeEventListener('dd:sse-container-updated', sseContainerUpdatedListener);
+  globalThis.removeEventListener('dd:sse-container-removed', sseContainerRemovedListener);
   globalThis.removeEventListener(
     'dd:sse-update-operation-changed',
     sseUpdateOperationChangedListener,

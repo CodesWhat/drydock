@@ -538,7 +538,7 @@ export function prunePendingActionsState(args: {
   }
 }
 
-async function pollPendingActionsState(args: {
+export async function pollPendingActionsState(args: {
   pendingActionsPollInFlight: Ref<boolean>;
   loadContainers: () => Promise<void>;
   prunePendingActions: (now: number) => void;
@@ -548,9 +548,14 @@ async function pollPendingActionsState(args: {
   }
   args.pendingActionsPollInFlight.value = true;
   try {
-    await args.loadContainers();
-  } finally {
+    // containers.value is now kept fresh by granular SSE patches
+    // (applyContainerPatch + applyOperationPatch). prunePendingActions walks
+    // the current in-memory list to settle/time-out pending actions — no
+    // GET /api/v1/containers needed each tick. loadContainers remains on args
+    // for back-compat with callers that may wire it, but is no longer called
+    // from the happy-path poll.
     args.prunePendingActions(Date.now());
+  } finally {
     args.pendingActionsPollInFlight.value = false;
   }
 }

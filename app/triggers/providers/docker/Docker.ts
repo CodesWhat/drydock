@@ -302,7 +302,16 @@ class Docker<
         if (!name || !tag?.value) {
           return undefined;
         }
-        return registry?.url ? `${registry.url}/${name}:${tag.value}` : `${name}:${tag.value}`;
+        // registry.url is the v2 API base (e.g. "https://ghcr.io/v2"). Docker's
+        // POST /containers/create rejects that form with HTTP 400 — strip the
+        // scheme and "/v2" segment to match Registry.getImageFullName so the
+        // helper spawn uses the same reference shape as the pull path.
+        if (!registry?.url) {
+          return `${name}:${tag.value}`;
+        }
+        return `${registry.url}/${name}:${tag.value}`
+          .replace(/https?:\/\//, '')
+          .replace(/\/v2\//, '/');
       },
     });
     this.containerUpdateExecutor = new ContainerUpdateExecutor({

@@ -82,6 +82,9 @@ interface SearchContainerIndexItem {
   image: string;
   status: string;
   host: string;
+  // Cached flag so the sidebar security badge can update from a single-container
+  // SSE patch without re-walking the raw API response's nested security.scan.summary.
+  hasSecurityIssues: boolean;
 }
 interface SearchResultItem {
   id: string;
@@ -1145,6 +1148,80 @@ const connectionOverlayStatus = computed(() =>
   selfUpdateInProgress.value ? 'Restarting service' : 'Reconnecting',
 );
 
+function rawContainerHasSecurityIssues(container: Record<string, unknown>): boolean {
+  const summary = container.security?.scan?.summary;
+  return Number(summary?.critical || 0) > 0 || Number(summary?.high || 0) > 0;
+}
+
+function buildSidebarContainerEntry(container: Record<string, unknown>): SearchContainerIndexItem {
+  const displayName = String(
+    container.displayName || container.name || container.id || 'container',
+  );
+  const displayIcon = String(container.displayIcon || '');
+  const imageName = String(container.image?.name || '');
+  const imageTag = String(container.image?.tag?.value || '');
+  const image = imageName ? `${imageName}${imageTag ? `:${imageTag}` : ''}` : 'unknown image';
+  return {
+    id: String(container.id || displayName),
+    name: String(container.name || displayName),
+    displayName,
+    icon: getEffectiveDisplayIcon(displayIcon, imageName),
+    image,
+    status: String(container.status || 'unknown'),
+    host: String(container.agent || container.watcher || 'local'),
+    hasSecurityIssues: rawContainerHasSecurityIssues(container),
+  };
+}
+
+function recomputeSidebarCounts() {
+  containerCount.value = String(searchContainers.value.length);
+  const issues = searchContainers.value.filter((entry) => entry.hasSecurityIssues).length;
+  securityIssueCount.value = issues > 0 ? String(issues) : '';
+}
+
+// Apply a single-container SSE payload to the sidebar's search index in place,
+// then recompute the container + security badge counts. Replaces the previous
+// 800ms-debounced full GET /api/v1/containers for every lifecycle event.
+// Returns false if the payload cannot be patched (caller falls back to a full
+// refresh).
+function applySidebarContainerPatch(
+  payload: unknown,
+  kind: 'added' | 'updated' | 'removed',
+): boolean {
+  if (!payload || typeof payload !== 'object') {
+    return false;
+  }
+  const raw = payload as Record<string, unknown>;
+  const id = typeof raw.id === 'string' ? raw.id : undefined;
+  const name = typeof raw.name === 'string' ? raw.name : undefined;
+  if (!id && !name) {
+    return false;
+  }
+
+  const idx = searchContainers.value.findIndex(
+    (entry) =>
+      (typeof id === 'string' && id.length > 0 && entry.id === id) ||
+      (typeof name === 'string' && name.length > 0 && entry.name === name),
+  );
+
+  if (kind === 'removed') {
+    if (idx !== -1) {
+      searchContainers.value.splice(idx, 1);
+    }
+    recomputeSidebarCounts();
+    return true;
+  }
+
+  const entry = buildSidebarContainerEntry(raw);
+  if (idx === -1) {
+    searchContainers.value.push(entry);
+  } else {
+    searchContainers.value.splice(idx, 1, entry);
+  }
+  recomputeSidebarCounts();
+  return true;
+}
+
 async function refreshSidebarData() {
   sidebarDataLoading.value = true;
   try {
@@ -1153,30 +1230,10 @@ async function refreshSidebarData() {
       searchContainers.value = [];
       return;
     }
-    containerCount.value = String(containers.length);
-    searchContainers.value = containers.map((container: Record<string, unknown>) => {
-      const displayName = String(
-        container.displayName || container.name || container.id || 'container',
-      );
-      const displayIcon = String(container.displayIcon || '');
-      const imageName = String(container.image?.name || '');
-      const imageTag = String(container.image?.tag?.value || '');
-      const image = imageName ? `${imageName}${imageTag ? `:${imageTag}` : ''}` : 'unknown image';
-      return {
-        id: String(container.id || displayName),
-        name: String(container.name || displayName),
-        displayName,
-        icon: getEffectiveDisplayIcon(displayIcon, imageName),
-        image,
-        status: String(container.status || 'unknown'),
-        host: String(container.agent || container.watcher || 'local'),
-      };
-    });
-    const issues = containers.filter((c: Record<string, unknown>) => {
-      const summary = c.security?.scan?.summary;
-      return Number(summary?.critical || 0) > 0 || Number(summary?.high || 0) > 0;
-    }).length;
-    securityIssueCount.value = issues > 0 ? String(issues) : '';
+    searchContainers.value = containers.map((container: Record<string, unknown>) =>
+      buildSidebarContainerEntry(container),
+    );
+    recomputeSidebarCounts();
   } catch {
     // Sidebar works without badge data
   } finally {
@@ -1224,9 +1281,32 @@ function handleSseEvent(event: string, payload?: unknown) {
     scheduleSidebarDataRefresh();
     return;
   }
+  if (event === 'container-added') {
+    emitUiSseEvent('dd:sse-container-added', payload);
+    if (!applySidebarContainerPatch(payload, 'added')) {
+      scheduleSidebarDataRefresh();
+    }
+    return;
+  }
+  if (event === 'container-updated') {
+    emitUiSseEvent('dd:sse-container-updated', payload);
+    if (!applySidebarContainerPatch(payload, 'updated')) {
+      scheduleSidebarDataRefresh();
+    }
+    return;
+  }
+  if (event === 'container-removed') {
+    emitUiSseEvent('dd:sse-container-removed', payload);
+    if (!applySidebarContainerPatch(payload, 'removed')) {
+      scheduleSidebarDataRefresh();
+    }
+    return;
+  }
   if (event === 'container-changed') {
-    emitUiSseEvent('dd:sse-container-changed');
-    scheduleSidebarDataRefresh();
+    // Legacy bare signal — still fired from sse.ts alongside the granular
+    // events for back-compat. The granular branches above already patched the
+    // sidebar in place, so do not schedule a redundant full refresh here.
+    emitUiSseEvent('dd:sse-container-changed', payload);
     return;
   }
   if (event === 'update-operation-changed') {
