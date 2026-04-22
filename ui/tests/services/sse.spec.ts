@@ -183,14 +183,92 @@ describe('SseService', () => {
   it('emits container-changed on container lifecycle events', () => {
     sseService.connect(mockEventBus);
 
-    eventListeners['dd:container-added']();
-    expect(mockEventBus.emit).toHaveBeenCalledWith('container-changed');
+    const samplePayload = { id: 'abc123', name: 'web-1', image: { name: 'nginx' } };
 
-    eventListeners['dd:container-updated']();
-    expect(mockEventBus.emit).toHaveBeenCalledWith('container-changed');
+    // added
+    mockEventBus.emit.mockClear();
+    const addedEvent = new MessageEvent('dd:container-added', {
+      data: JSON.stringify(samplePayload),
+    });
+    eventListeners['dd:container-added'](addedEvent);
+    expect(mockEventBus.emit).toHaveBeenCalledWith('container-added', samplePayload);
+    expect(mockEventBus.emit).toHaveBeenCalledWith('container-changed', samplePayload);
 
-    eventListeners['dd:container-removed']();
-    expect(mockEventBus.emit).toHaveBeenCalledWith('container-changed');
+    // updated
+    mockEventBus.emit.mockClear();
+    const updatedEvent = new MessageEvent('dd:container-updated', {
+      data: JSON.stringify(samplePayload),
+    });
+    eventListeners['dd:container-updated'](updatedEvent);
+    expect(mockEventBus.emit).toHaveBeenCalledWith('container-updated', samplePayload);
+    expect(mockEventBus.emit).toHaveBeenCalledWith('container-changed', samplePayload);
+
+    // removed
+    mockEventBus.emit.mockClear();
+    const removedEvent = new MessageEvent('dd:container-removed', {
+      data: JSON.stringify(samplePayload),
+    });
+    eventListeners['dd:container-removed'](removedEvent);
+    expect(mockEventBus.emit).toHaveBeenCalledWith('container-removed', samplePayload);
+    expect(mockEventBus.emit).toHaveBeenCalledWith('container-changed', samplePayload);
+  });
+
+  it('emits container lifecycle events with undefined payload when event.data is missing', () => {
+    sseService.connect(mockEventBus);
+
+    mockEventBus.emit.mockClear();
+    eventListeners['dd:container-added']({});
+    expect(mockEventBus.emit).toHaveBeenCalledWith('container-added', undefined);
+    expect(mockEventBus.emit).toHaveBeenCalledWith('container-changed', undefined);
+
+    mockEventBus.emit.mockClear();
+    eventListeners['dd:container-updated']({});
+    expect(mockEventBus.emit).toHaveBeenCalledWith('container-updated', undefined);
+    expect(mockEventBus.emit).toHaveBeenCalledWith('container-changed', undefined);
+
+    mockEventBus.emit.mockClear();
+    eventListeners['dd:container-removed']({});
+    expect(mockEventBus.emit).toHaveBeenCalledWith('container-removed', undefined);
+    expect(mockEventBus.emit).toHaveBeenCalledWith('container-changed', undefined);
+  });
+
+  it('emits container lifecycle events with undefined payload when event.data is malformed JSON', () => {
+    sseService.connect(mockEventBus);
+
+    const badEvent = new MessageEvent('dd:container-added', { data: '{bad json' });
+
+    mockEventBus.emit.mockClear();
+    eventListeners['dd:container-added'](badEvent);
+    expect(mockEventBus.emit).toHaveBeenCalledWith('container-added', undefined);
+    expect(mockEventBus.emit).toHaveBeenCalledWith('container-changed', undefined);
+
+    const badUpdatedEvent = new MessageEvent('dd:container-updated', { data: '{bad json' });
+    mockEventBus.emit.mockClear();
+    eventListeners['dd:container-updated'](badUpdatedEvent);
+    expect(mockEventBus.emit).toHaveBeenCalledWith('container-updated', undefined);
+    expect(mockEventBus.emit).toHaveBeenCalledWith('container-changed', undefined);
+
+    const badRemovedEvent = new MessageEvent('dd:container-removed', { data: '{bad json' });
+    mockEventBus.emit.mockClear();
+    eventListeners['dd:container-removed'](badRemovedEvent);
+    expect(mockEventBus.emit).toHaveBeenCalledWith('container-removed', undefined);
+    expect(mockEventBus.emit).toHaveBeenCalledWith('container-changed', undefined);
+  });
+
+  it('emits container lifecycle events with undefined payload when event.data is a non-object JSON value', () => {
+    sseService.connect(mockEventBus);
+
+    const arrayEvent = new MessageEvent('dd:container-added', { data: '["not","an","object"]' });
+    mockEventBus.emit.mockClear();
+    eventListeners['dd:container-added'](arrayEvent);
+    expect(mockEventBus.emit).toHaveBeenCalledWith('container-added', undefined);
+    expect(mockEventBus.emit).toHaveBeenCalledWith('container-changed', undefined);
+
+    const stringEvent = new MessageEvent('dd:container-updated', { data: '"just-a-string"' });
+    mockEventBus.emit.mockClear();
+    eventListeners['dd:container-updated'](stringEvent);
+    expect(mockEventBus.emit).toHaveBeenCalledWith('container-updated', undefined);
+    expect(mockEventBus.emit).toHaveBeenCalledWith('container-changed', undefined);
   });
 
   it('emits only update-operation-changed on operation phase transitions, never container-changed', () => {

@@ -212,31 +212,51 @@ describe('useDashboardData', () => {
     expect(state.recentStatusByIdentity.value).toEqual({});
   });
 
-  it('performs full data refresh on debounced container-changed SSE event', async () => {
+  it('registers granular container SSE listeners and patches state in-place without a full refetch', async () => {
     vi.useFakeTimers();
     const setIntervalSpy = vi.spyOn(window, 'setInterval');
     mocks.getAllWatchers.mockResolvedValue([{ id: 'watcher-without-config' }]);
+    mocks.mapApiContainers.mockReturnValue([
+      makeContainer({ id: 'c1', name: 'nginx', status: 'running' }),
+    ]);
 
     const { state } = await mountDashboardData();
+
+    // Verify granular listeners are registered
+    const addSpy = vi.spyOn(globalThis, 'addEventListener');
+    // All three granular events must be wired (they were added at mount time)
+    expect(state.containers.value[0]?.id).toBe('c1');
 
     // Reset call counts from initial mount fetch
     mocks.getAllContainers.mockClear();
 
-    globalThis.dispatchEvent(new CustomEvent('dd:sse-container-changed'));
-    vi.advanceTimersByTime(1_000);
-    await flushPromises();
+    // Dispatch a well-formed container-updated event — should patch in-place, no HTTP
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-container-added', {
+        detail: {
+          id: 'c2',
+          name: 'redis',
+          image: 'redis:latest',
+          status: 'running',
+          watcher: 'local',
+        },
+      }),
+    );
+    await nextTick();
 
-    expect(mocks.getAllContainers).toHaveBeenCalledTimes(1);
+    // No full refetch fired
+    expect(mocks.getAllContainers).not.toHaveBeenCalled();
     expect(state.error.value).toBeNull();
     expect(setIntervalSpy).not.toHaveBeenCalled();
 
-    // Debounce collapses rapid events into a single refresh
+    // A malformed granular event (no id/name) falls back to full debounced refresh
     mocks.getAllContainers.mockClear();
-    globalThis.dispatchEvent(new CustomEvent('dd:sse-container-changed'));
-    globalThis.dispatchEvent(new CustomEvent('dd:sse-container-changed'));
+    globalThis.dispatchEvent(new CustomEvent('dd:sse-container-updated', { detail: {} }));
+    globalThis.dispatchEvent(new CustomEvent('dd:sse-container-updated', { detail: {} }));
     vi.advanceTimersByTime(1_000);
     await flushPromises();
 
+    // Two malformed events were debounced into one full refresh
     expect(mocks.getAllContainers).toHaveBeenCalledTimes(1);
   });
 
@@ -322,19 +342,25 @@ describe('useDashboardData', () => {
     const { wrapper } = await mountDashboardData();
 
     const addedEvents = addSpy.mock.calls.map((c) => c[0]);
-    expect(addedEvents).toContain('dd:sse-container-changed');
+    expect(addedEvents).toContain('dd:sse-container-added');
+    expect(addedEvents).toContain('dd:sse-container-updated');
+    expect(addedEvents).toContain('dd:sse-container-removed');
     expect(addedEvents).toContain('dd:sse-update-operation-changed');
     expect(addedEvents).toContain('dd:sse-connected');
     expect(addedEvents).toContain('dd:sse-resync-required');
+    expect(addedEvents).not.toContain('dd:sse-container-changed');
     expect(addedEvents).not.toContain('dd:sse-scan-completed');
 
     wrapper.unmount();
 
     const removedEvents = removeSpy.mock.calls.map((c) => c[0]);
-    expect(removedEvents).toContain('dd:sse-container-changed');
+    expect(removedEvents).toContain('dd:sse-container-added');
+    expect(removedEvents).toContain('dd:sse-container-updated');
+    expect(removedEvents).toContain('dd:sse-container-removed');
     expect(removedEvents).toContain('dd:sse-update-operation-changed');
     expect(removedEvents).toContain('dd:sse-connected');
     expect(removedEvents).toContain('dd:sse-resync-required');
+    expect(removedEvents).not.toContain('dd:sse-container-changed');
     expect(removedEvents).not.toContain('dd:sse-scan-completed');
   });
 
@@ -347,7 +373,7 @@ describe('useDashboardData', () => {
     expect(state.error.value).toBe('containers failed');
   });
 
-  it('debounces realtime refresh and logs background errors when prior data exists', async () => {
+  it('debounces fallback-triggered refresh and logs background errors when prior data exists', async () => {
     vi.useFakeTimers();
     const debugSpy = vi.spyOn(console, 'debug').mockImplementation(() => {});
     const clearTimeoutSpy = vi.spyOn(window, 'clearTimeout');
@@ -359,10 +385,10 @@ describe('useDashboardData', () => {
 
     mocks.getAllContainers.mockRejectedValueOnce(new Error('background refresh failed'));
 
-    // Two rapid container-changed events collapse into one debounced refresh
-    globalThis.dispatchEvent(new CustomEvent('dd:sse-container-changed'));
+    // Two rapid malformed granular events each trigger fallback → debouncer → clearTimeout fires on second
+    globalThis.dispatchEvent(new CustomEvent('dd:sse-container-updated', { detail: {} }));
     const clearTimeoutCallsBeforeSecondEvent = clearTimeoutSpy.mock.calls.length;
-    globalThis.dispatchEvent(new CustomEvent('dd:sse-container-changed'));
+    globalThis.dispatchEvent(new CustomEvent('dd:sse-container-updated', { detail: {} }));
     expect(clearTimeoutSpy.mock.calls.length).toBeGreaterThan(clearTimeoutCallsBeforeSecondEvent);
 
     vi.advanceTimersByTime(999);
@@ -398,14 +424,15 @@ describe('useDashboardData', () => {
     expect(state.error.value).toBeNull();
   });
 
-  it('logs full refresh failures when data has already rendered via container-changed SSE', async () => {
+  it('logs full refresh failures when a malformed granular SSE event triggers the fallback path', async () => {
     vi.useFakeTimers();
     const debugSpy = vi.spyOn(console, 'debug').mockImplementation(() => {});
 
     await mountDashboardData();
     mocks.getAllContainers.mockRejectedValueOnce(new Error('background refresh failed'));
 
-    globalThis.dispatchEvent(new CustomEvent('dd:sse-container-changed'));
+    // A malformed payload (no id/name) on a granular event invokes the fallback which schedules a full refresh
+    globalThis.dispatchEvent(new CustomEvent('dd:sse-container-updated', { detail: {} }));
     vi.advanceTimersByTime(1_000);
     await flushPromises();
 
@@ -495,7 +522,8 @@ describe('useDashboardData', () => {
       Reflect.deleteProperty(globalThis, 'document');
     }
 
-    globalThis.dispatchEvent(new CustomEvent('dd:sse-container-changed'));
+    // Dispatch a malformed granular event to arm the debounce timer, then unmount to clear it
+    globalThis.dispatchEvent(new CustomEvent('dd:sse-container-updated', { detail: {} }));
     wrapper.unmount();
 
     expect(clearTimeoutSpy).toHaveBeenCalled();
