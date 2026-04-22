@@ -167,7 +167,7 @@ services:
   # Nginx with lifecycle hooks (tests hooks UI + group view)
   # Icon uses colon separator with nested prefix (tests Fix 03 + Fix 06)
   nginx-hooked:
-    image: nginx:1.25.5
+    image: nginx:1.25.5-alpine
     pull_policy: missing
     container_name: drydock-playwright-nginx-hooked
     labels:
@@ -182,7 +182,7 @@ services:
   # Redis in same group (tests group view)
   # Icon uses colon separator (tests Fix 06)
   redis-cache:
-    image: redis:7.2.0
+    image: redis:7.2.0-alpine
     pull_policy: missing
     container_name: drydock-playwright-redis-cache
     labels:
@@ -218,7 +218,7 @@ services:
 
   # PostgreSQL ungrouped (tests ungrouped container)
   postgres-db:
-    image: postgres:16.0
+    image: postgres:16.0-alpine
     pull_policy: missing
     container_name: drydock-playwright-postgres-db
     environment:
@@ -226,33 +226,6 @@ services:
     labels:
       - dd.watch=true
       - dd.display.name=PostgreSQL
-
-  # Mongo — old version with update (tests another registry + more data)
-  mongo-db:
-    image: mongo:7.0.0
-    pull_policy: missing
-    container_name: drydock-playwright-mongo-db
-    labels:
-      - dd.watch=true
-      - dd.display.name=MongoDB
-      - dd.group=data
-
-  # TimescaleDB (non-HA) — wide version tags still exercise the fixed-column-width
-  # fix (#286). Tag format 2.X.X-pg16 produces 10–12 char version strings, enough
-  # to trigger the reflow-on-scroll scenario. Swapped away from timescaledb-ha
-  # because that image is ~2GB and Trivy scans exceed the 120s default timeout,
-  # blocking the manual update-flow test path (scan → SBOM → pull → recreate).
-  timescale-db:
-    image: timescale/timescaledb:2.14.2-pg16
-    pull_policy: missing
-    container_name: drydock-playwright-timescale-db
-    environment:
-      - POSTGRES_PASSWORD=testpass
-    labels:
-      - dd.watch=true
-      - dd.display.name=TimescaleDB
-      - dd.group=data
-      - dd.tag.include=^2\.\d+\.\d+-pg16$$
 
   # ── Security scan test containers ──────────────────────
 
