@@ -67,7 +67,7 @@
     "sort-es": "1.7.18",
     "undici": "7.24.6",
     "unix-crypt-td-js": "1.1.4",
-    "uuid": "13.0.0",
+    "uuid": "14.0.0",
     "ws": "8.20.0",
     "yaml": "2.8.3"
   },
@@ -75,7 +75,8 @@
     "body-parser": "2.2.2",
     "fast-xml-parser": "5.7.1",
     "picomatch": "4.0.4",
-    "qs": "6.15.0"
+    "qs": "6.15.0",
+    "uuid": "14.0.0"
   },
   "devDependencies": {
     "@fast-check/vitest": "0.3.0",

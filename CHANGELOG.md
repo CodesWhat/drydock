@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 
 - **fast-xml-parser override 5.5.8 → 5.7.1** — Addresses [GHSA-gh4j-gqv2-49f6](https://github.com/NaturalIntelligence/fast-xml-parser/security/advisories/GHSA-gh4j-gqv2-49f6) / CVE-2026-41650 (XML comment/CDATA injection via unescaped delimiters in `XMLBuilder`, medium). Vulnerable range ≤ 5.5.12, patched in 5.7.0; bumped both `app/` and `e2e/` workspace overrides to 5.7.1 (latest).
+- **uuid 13.0.0 → 14.0.0** — Addresses [GHSA-w5hq-g745-h8pq](https://github.com/uuidjs/uuid/security/advisories/GHSA-w5hq-g745-h8pq) (missing buffer bounds check in `v3`/`v5`/`v6` when `buf` is provided, medium). Vulnerable range ≤ 13.0.0, patched in 14.0.0. Drydock only uses `v4` (unaffected by the buffer path) but the scanner flags any vulnerable version in the tree. Bumped the app's direct dep and added `uuid: 14.0.0` to both `app/` and `e2e/` overrides so transitive callers (dockerode, artillery, @azure/msal-node, @ngneat/falso) also resolve the patched version.
 
 ### Performance
 
