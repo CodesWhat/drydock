@@ -93,14 +93,27 @@ function isContainerTableRow(row: GroupedTableRow): row is ContainerTableRow {
   return row.__rowType === 'container';
 }
 
+// Build the row using the container as a prototype so field reads (c.name,
+// c.image, ...) fall through to the live container — no spread snapshot that
+// would go stale when applyContainerPatch mutates the container in place. The
+// only own properties on the row are the meta fields (__rowType/__rowKey/
+// __groupKey/__source) plus the Vue key computed from the container view key.
+// Rows are memoized by container reference so unchanged rows keep identity
+// across recomputes, preserving slot-prop identity for cell templates.
+const containerTableRowCache = new WeakMap<DisplayContainer, ContainerTableRow>();
+
 function makeContainerTableRow(container: DisplayContainer, groupKey: string): ContainerTableRow {
-  return {
-    ...container,
-    __rowType: 'container',
-    __rowKey: getContainerViewKey(container),
-    __groupKey: groupKey,
-    __source: container,
-  };
+  const cached = containerTableRowCache.get(container);
+  if (cached && cached.__groupKey === groupKey) {
+    return cached;
+  }
+  const row = Object.create(container as object) as ContainerTableRow;
+  row.__rowType = 'container';
+  row.__rowKey = getContainerViewKey(container);
+  row.__groupKey = groupKey;
+  row.__source = container;
+  containerTableRowCache.set(container, row);
+  return row;
 }
 
 const tableRows = computed<GroupedTableRow[]>(() => {

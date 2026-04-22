@@ -886,24 +886,33 @@ describe('useContainerActions', () => {
       containers: [web],
       containerIdMap: { web: 'container-1' },
     });
-    let loadCallCount = 0;
+
+    // loadContainers is called during startContainer's onAccepted → simulate disappearance
     loadContainers.mockImplementation(async () => {
-      loadCallCount += 1;
-      containers.value = loadCallCount === 1 ? [] : [web];
+      containers.value = [];
     });
 
     await composable.startContainer('web');
     expect(composable.actionPending.value.has('web')).toBe(true);
 
+    // Poll tick: prunePendingActions runs against in-memory state (no loadContainers call)
+    // Container is absent → still pending (presence mode waits for reappearance)
     vi.advanceTimersByTime(PENDING_ACTIONS_POLL_INTERVAL_MS);
     await flushPromises();
+    expect(composable.actionPending.value.has('web')).toBe(true);
 
-    expect(loadContainers).toHaveBeenCalledTimes(2);
+    // Simulate SSE patch: container reappears in-memory
+    containers.value = [web];
+    await nextTick();
+
+    // watch(containers) fires prunePendingActions → container present → settled
     expect(composable.actionPending.value.has('web')).toBe(false);
 
+    // Poll stops after settling — no further loadContainers calls
+    loadContainers.mockClear();
     vi.advanceTimersByTime(PENDING_ACTIONS_POLL_INTERVAL_MS * 2);
     await flushPromises();
-    expect(loadContainers).toHaveBeenCalledTimes(2);
+    expect(loadContainers).not.toHaveBeenCalled();
   });
 
   it('captures the pending snapshot by container name when the mapped id is stale', async () => {
@@ -1051,15 +1060,9 @@ describe('useContainerActions', () => {
       selectedContainerId: web.id,
       containerIdMap: { web: web.id },
     });
-    let loadCallCount = 0;
+    // loadContainers is still called during updateContainer's onAccepted
     loadContainers.mockImplementation(async () => {
-      loadCallCount += 1;
-      containers.value =
-        loadCallCount === 1
-          ? [makeContainer({ id: 'container-1', name: 'web', status: 'running' })]
-          : loadCallCount === 2
-            ? [stoppedDuringUpdate]
-            : [runningAgain];
+      containers.value = [makeContainer({ id: 'container-1', name: 'web', status: 'running' })];
     });
 
     await composable.updateContainer('web');
@@ -1067,15 +1070,19 @@ describe('useContainerActions', () => {
     expect(composable.actionPending.value.has('web')).toBe(true);
     expect(composable.isContainerUpdateInProgress('web')).toBe(true);
 
-    vi.advanceTimersByTime(PENDING_ACTIONS_POLL_INTERVAL_MS);
-    await flushPromises();
+    // Simulate SSE patch: container goes to stopped+in-progress (update in flight)
+    containers.value = [stoppedDuringUpdate];
+    await nextTick();
 
+    // watch(containers) fires → lifecycle signal observed → still pending
     expect(composable.actionPending.value.has('web')).toBe(true);
     expect(composable.isContainerUpdateInProgress('web')).toBe(true);
 
-    vi.advanceTimersByTime(PENDING_ACTIONS_POLL_INTERVAL_MS);
-    await flushPromises();
+    // Simulate SSE patch: container back to running (update complete)
+    containers.value = [runningAgain];
+    await nextTick();
 
+    // watch(containers) fires → container present + status matches snapshot → settled
     expect(composable.actionPending.value.has('web')).toBe(false);
     expect(composable.isContainerUpdateInProgress('web')).toBe(false);
   });
@@ -1095,30 +1102,28 @@ describe('useContainerActions', () => {
       selectedContainerId: web.id,
       containerIdMap: { web: web.id },
     });
-    let loadCallCount = 0;
+    // loadContainers is still called during updateContainer's onAccepted
     loadContainers.mockImplementation(async () => {
-      loadCallCount += 1;
-      containers.value =
-        loadCallCount === 1
-          ? [makeContainer({ id: 'container-1', name: 'web', status: 'running' })]
-          : loadCallCount === 2
-            ? []
-            : [runningAgain];
+      containers.value = [makeContainer({ id: 'container-1', name: 'web', status: 'running' })];
     });
 
     await composable.updateContainer('web');
 
     expect(composable.actionPending.value.has('web')).toBe(true);
 
-    vi.advanceTimersByTime(PENDING_ACTIONS_POLL_INTERVAL_MS);
-    await flushPromises();
+    // Simulate SSE patch: container removed mid-update
+    containers.value = [];
+    await nextTick();
 
+    // watch fires → container absent → lifecycle signal observed, still pending (update mode requires lifecycle)
     expect(composable.actionPending.value.has('web')).toBe(true);
     expect(composable.isContainerUpdateInProgress('web')).toBe(true);
 
-    vi.advanceTimersByTime(PENDING_ACTIONS_POLL_INTERVAL_MS);
-    await flushPromises();
+    // Simulate SSE patch: container reappears running
+    containers.value = [runningAgain];
+    await nextTick();
 
+    // watch fires → container present + lifecycle observed → settled
     expect(composable.actionPending.value.has('web')).toBe(false);
     expect(composable.isContainerUpdateInProgress('web')).toBe(false);
   });
@@ -1143,30 +1148,28 @@ describe('useContainerActions', () => {
       selectedContainerId: web.id,
       containerIdMap: { web: web.id },
     });
-    let loadCallCount = 0;
+    // loadContainers is still called during updateContainer's onAccepted
     loadContainers.mockImplementation(async () => {
-      loadCallCount += 1;
-      containers.value =
-        loadCallCount === 1
-          ? [makeContainer({ id: 'container-1', name: 'web', status: 'running' })]
-          : loadCallCount === 2
-            ? [stoppedAfterReplace]
-            : [runningAgain];
+      containers.value = [makeContainer({ id: 'container-1', name: 'web', status: 'running' })];
     });
 
     await composable.updateContainer('web');
 
     expect(composable.actionPending.value.has('web')).toBe(true);
 
-    vi.advanceTimersByTime(PENDING_ACTIONS_POLL_INTERVAL_MS);
-    await flushPromises();
+    // Simulate SSE patch: container replaced with stopped version
+    containers.value = [stoppedAfterReplace];
+    await nextTick();
 
+    // watch fires → status differs from snapshot (running) → lifecycle signal observed, still pending
     expect(composable.actionPending.value.has('web')).toBe(true);
     expect(composable.isContainerUpdateInProgress('web')).toBe(true);
 
-    vi.advanceTimersByTime(PENDING_ACTIONS_POLL_INTERVAL_MS);
-    await flushPromises();
+    // Simulate SSE patch: container running again
+    containers.value = [runningAgain];
+    await nextTick();
 
+    // watch fires → status matches snapshot + lifecycle observed → settled
     expect(composable.actionPending.value.has('web')).toBe(false);
     expect(composable.isContainerUpdateInProgress('web')).toBe(false);
   });
@@ -2440,37 +2443,30 @@ describe('useContainerActions', () => {
       containers: [web],
       containerIdMap: { web: 'container-1' },
     });
-
-    let resolvePoll: (() => void) | undefined;
-    const inFlightPoll = new Promise<void>((resolve) => {
-      resolvePoll = resolve;
-    });
-    let loadCallCount = 0;
-    loadContainers.mockImplementation(() => {
-      loadCallCount += 1;
-      if (loadCallCount === 1) {
-        containers.value = [];
-        return Promise.resolve();
-      }
-      if (loadCallCount === 2) {
-        return inFlightPoll;
-      }
-      return Promise.resolve();
+    // loadContainers is called during startContainer's onAccepted
+    loadContainers.mockImplementation(async () => {
+      containers.value = [];
     });
 
     await composable.startContainer('web');
     expect(composable.actionPending.value.has('web')).toBe(true);
 
+    // Poll ticks use in-memory state — no loadContainers call during prune
+    loadContainers.mockClear();
     vi.advanceTimersByTime(PENDING_ACTIONS_POLL_INTERVAL_MS);
     await flushPromises();
-    expect(loadCallCount).toBe(2);
+    expect(loadContainers).not.toHaveBeenCalled();
 
+    // Still pending because container is absent; poll runs again
     vi.advanceTimersByTime(PENDING_ACTIONS_POLL_INTERVAL_MS);
     await flushPromises();
-    expect(loadCallCount).toBe(2);
+    expect(loadContainers).not.toHaveBeenCalled();
+    expect(composable.actionPending.value.has('web')).toBe(true);
 
-    resolvePoll?.();
-    await flushPromises();
+    // Container reappears via SSE patch → watch fires → settled
+    containers.value = [web];
+    await nextTick();
+    expect(composable.actionPending.value.has('web')).toBe(false);
   });
 
   it('stops pending-action polling when the harness is unmounted', async () => {
@@ -2628,26 +2624,31 @@ describe('useContainerActions', () => {
     const { composable, containers, loadContainers } = await mountActionsHarness({
       containers: [localNode, remoteNode],
     });
-    let loadCallCount = 0;
+    // loadContainers is called during updateContainer's onAccepted; simulate localNode disappearing
     loadContainers.mockImplementation(async () => {
-      loadCallCount += 1;
-      containers.value = loadCallCount < 5 ? [remoteNode] : [remoteNode, localReplacement];
+      containers.value = [remoteNode];
     });
 
     await composable.updateContainer(localNode);
 
+    // localNode is gone; remoteNode has same name but different identityKey → still pending for localNode
+    // Poll ticks prune against in-memory state — no loadContainers calls
+    loadContainers.mockClear();
     for (let i = 0; i < 3; i += 1) {
       vi.advanceTimersByTime(PENDING_ACTIONS_POLL_INTERVAL_MS);
       await flushPromises();
     }
+    expect(loadContainers).not.toHaveBeenCalled();
 
     expect(composable.actionPending.value.has('container-1')).toBe(true);
     expect(composable.isContainerUpdateInProgress(localNode)).toBe(true);
     expect(composable.isContainerUpdateInProgress(remoteNode)).toBe(false);
 
-    vi.advanceTimersByTime(PENDING_ACTIONS_POLL_INTERVAL_MS);
-    await flushPromises();
+    // Simulate SSE patch: localReplacement appears with same identityKey as localNode
+    containers.value = [remoteNode, localReplacement];
+    await nextTick();
 
+    // watch fires → identity key matched → lifecycle signal observed + settled
     expect(composable.actionPending.value.has('container-1')).toBe(false);
     expect(composable.isContainerUpdateInProgress(localNode)).toBe(false);
   });
@@ -3330,20 +3331,20 @@ describe('useContainerActions', () => {
       containers: [web],
       containerIdMap: { web: 'container-1' },
     });
-    let loadCallCount = 0;
+    // loadContainers is called during startContainer's onAccepted; simulate container disappearing
     loadContainers.mockImplementation(async () => {
-      loadCallCount += 1;
-      containers.value =
-        loadCallCount === 1 ? [] : [makeContainer({ id: 'container-1', name: 'web' })];
+      containers.value = [];
     });
 
     await composable.startContainer('web');
     expect(composable.actionPending.value.has('web')).toBe(true);
 
+    // Replace snapshot with one that has an empty id (but valid identityKey ::local::web)
     composable.actionPending.value.set('web', makeContainer({ id: '', name: 'web' }));
 
-    vi.advanceTimersByTime(PENDING_ACTIONS_POLL_INTERVAL_MS);
-    await flushPromises();
+    // Simulate SSE patch: container reappears — prune finds it by identityKey and clears pending
+    containers.value = [makeContainer({ id: 'container-1', name: 'web' })];
+    await nextTick();
 
     expect(composable.actionPending.value.has('web')).toBe(false);
   });
