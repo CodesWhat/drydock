@@ -1,4 +1,4 @@
-import { ref } from 'vue';
+import { shallowRef, triggerRef } from 'vue';
 import type { Container, ContainerUpdateOperation } from '../types/container';
 
 export const OPERATION_DISPLAY_HOLD_MS = 1500;
@@ -29,19 +29,25 @@ interface OperationDisplayHoldRecord {
   sortSnapshot?: ContainerSortSnapshot;
 }
 
-const heldOperations = ref(new Map<string, OperationDisplayHoldRecord>());
+// shallowRef + in-place Map mutation with triggerRef — avoids allocating a
+// fresh Map on every set/remove. The ref identity stays stable; only the
+// internal Map is mutated, and triggerRef notifies reactive subscribers.
+// This is O(1) per mutation instead of O(N) copy, and matters because
+// projectContainerDisplayState (called for every container in displayContainers)
+// reads heldOperations.value — so every set/remove used to invalidate the
+// computed for ALL N containers.
+const heldOperations = shallowRef(new Map<string, OperationDisplayHoldRecord>());
 const releaseTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 function setHeldOperation(operationId: string, hold: OperationDisplayHoldRecord) {
-  const next = new Map(heldOperations.value);
-  next.set(operationId, hold);
-  heldOperations.value = next;
+  heldOperations.value.set(operationId, hold);
+  triggerRef(heldOperations);
 }
 
 function removeHeldOperation(operationId: string) {
-  const next = new Map(heldOperations.value);
-  next.delete(operationId);
-  heldOperations.value = next;
+  if (heldOperations.value.delete(operationId)) {
+    triggerRef(heldOperations);
+  }
 }
 
 function clearReleaseTimer(operationId: string) {
@@ -284,7 +290,10 @@ function clearAllOperationDisplayHolds() {
     clearTimeout(timer);
   }
   releaseTimers.clear();
-  heldOperations.value = new Map();
+  if (heldOperations.value.size > 0) {
+    heldOperations.value.clear();
+    triggerRef(heldOperations);
+  }
 }
 
 /**
