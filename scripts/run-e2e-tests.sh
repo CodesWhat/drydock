@@ -5,14 +5,21 @@ set -euo pipefail
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 LOCK_DIR="${TMPDIR:-/tmp}/drydock-e2e.lock"
 LOCK_TIMEOUT_SECONDS="${LOCK_TIMEOUT_SECONDS:-300}"
-RESTART_COLIMA="${DD_E2E_RESTART_COLIMA:-true}"
+# Only restart Colima if docker is actually broken. Forcing a restart on every
+# run makes the pre-push hook scale with the number of containers on the VM
+# and blows past the lefthook timeout once the host accumulates QA fixtures.
+RESTART_COLIMA="${DD_E2E_RESTART_COLIMA:-auto}"
 
 restart_colima() {
-	if [[ $RESTART_COLIMA != "true" ]]; then
+	if [[ $RESTART_COLIMA == "false" ]]; then
 		return
 	fi
 
 	if ! command -v colima >/dev/null 2>&1; then
+		return
+	fi
+
+	if [[ $RESTART_COLIMA == "auto" ]] && docker info >/dev/null 2>&1; then
 		return
 	fi
 
