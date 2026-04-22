@@ -195,14 +195,16 @@ const activeFilterChips = computed(() => {
           :class="groupByStack ? 'dd-text dd-bg-elevated' : ''"
           :tooltip="tt('Group by stack')"
           @click="groupByStack = !groupByStack" />
-        <AppIconButton
+        <AppButton
           v-if="groupByStack"
-          :icon="allGroupsCollapsed ? 'chevron-down' : 'chevron-up'"
-          size="toolbar"
+          size="sm"
           variant="secondary"
-          :tooltip="allGroupsCollapsed ? tt('Expand all stacks') : tt('Collapse all stacks')"
+          weight="semibold"
+          class="uppercase tracking-wide"
           :data-test="allGroupsCollapsed ? 'expand-all-groups' : 'collapse-all-groups'"
-          @click="allGroupsCollapsed ? expandAllGroups() : collapseAllGroups()" />
+          @click="allGroupsCollapsed ? expandAllGroups() : collapseAllGroups()">
+          {{ allGroupsCollapsed ? 'Expand all' : 'Collapse all' }}
+        </AppButton>
         <AppIconButton icon="restart" size="toolbar" variant="secondary"
           :class="rechecking ? 'dd-text-muted cursor-wait' : ''"
           :disabled="rechecking"
