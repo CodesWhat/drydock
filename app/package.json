@@ -73,7 +73,7 @@
   },
   "overrides": {
     "body-parser": "2.2.2",
-    "fast-xml-parser": "5.5.8",
+    "fast-xml-parser": "5.7.1",
     "picomatch": "4.0.4",
     "qs": "6.15.0"
   },

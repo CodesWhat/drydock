@@ -231,8 +231,6 @@ describe('useDashboardData', () => {
 
     const { state } = await mountDashboardData();
 
-    // Verify granular listeners are registered
-    const addSpy = vi.spyOn(globalThis, 'addEventListener');
     // All three granular events must be wired (they were added at mount time)
     expect(state.containers.value[0]?.id).toBe('c1');
 
