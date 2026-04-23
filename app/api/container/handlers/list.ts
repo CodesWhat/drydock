@@ -5,6 +5,11 @@ import {
   isActiveContainerUpdateOperationStatus,
   isContainerUpdateOperationKind,
 } from '../../../model/container-update-operation.js';
+import {
+  computeUpdateEligibility,
+  type UpdateEligibility,
+  type UpdateEligibilityContext,
+} from '../../../model/update-eligibility.js';
 import { sendErrorResponse } from '../../error-response.js';
 import { buildPaginationLinks } from '../../pagination-links.js';
 import type { ContainerListResponse, CrudHandlerContext } from '../crud-context.js';
@@ -197,6 +202,47 @@ export function attachInProgressUpdateOperation(
   return createProjectionView(container, [['updateOperation', operation]]);
 }
 
+function buildEligibilityContext(context: CrudHandlerContext): UpdateEligibilityContext {
+  return {
+    triggers: context.getTriggers ? context.getTriggers() : undefined,
+    getActiveOperation: (container: Container) => {
+      const byId = context.updateOperationStore.getActiveOperationByContainerId(container.id);
+      const byName = byId
+        ? undefined
+        : context.updateOperationStore.getActiveOperationByContainerName(container.name);
+      const isLegacyOp =
+        byName &&
+        typeof byName === 'object' &&
+        !('containerId' in (byName as Record<string, unknown>));
+      const matched = byId ?? (isLegacyOp ? byName : undefined);
+      if (!matched || typeof matched !== 'object') {
+        return undefined;
+      }
+      const m = matched as Record<string, unknown>;
+      const id = typeof m.id === 'string' ? m.id : undefined;
+      const status = m.status === 'queued' || m.status === 'in-progress' ? m.status : undefined;
+      if (!id || !status) {
+        return undefined;
+      }
+      return {
+        id,
+        status,
+        updatedAt: typeof m.updatedAt === 'string' ? m.updatedAt : undefined,
+      };
+    },
+  };
+}
+
+export function attachUpdateEligibility(
+  context: CrudHandlerContext,
+  container: Container,
+  eligibilityContext?: UpdateEligibilityContext,
+): Container {
+  const ctx = eligibilityContext ?? buildEligibilityContext(context);
+  const updateEligibility: UpdateEligibility = computeUpdateEligibility(container, ctx);
+  return createProjectionView(container, [['updateEligibility', updateEligibility]]);
+}
+
 interface PreloadedActiveOperationLookup {
   byContainerId: Map<string, ContainerUpdateOperationState>;
   byLegacyContainerName: Map<string, ContainerUpdateOperationState>;
@@ -362,11 +408,13 @@ export function buildContainerListResponse(
   const preloadedActiveOperationLookup = buildPreloadedActiveOperationLookup(
     context.updateOperationStore.listActiveOperations?.() ?? [],
   );
-  const data = strippedContainers.map((container) =>
-    preloadedActiveOperationLookup
+  const eligibilityContext = buildEligibilityContext(context);
+  const data = strippedContainers.map((container) => {
+    const withOperation = preloadedActiveOperationLookup
       ? attachPreloadedActiveUpdateOperation(preloadedActiveOperationLookup, container)
-      : attachInProgressUpdateOperation(context, container),
-  );
+      : attachInProgressUpdateOperation(context, container);
+    return attachUpdateEligibility(context, withOperation, eligibilityContext);
+  });
   const hasMore = pagination.limit > 0 && pagination.offset + data.length < total;
   const links = buildPaginationLinks({
     basePath,

@@ -13,7 +13,11 @@ import {
   createWatchContainersHandler,
 } from './handlers/actions.js';
 import { getContainerOrNotFound } from './handlers/common.js';
-import { attachInProgressUpdateOperation, createGetContainersHandler } from './handlers/list.js';
+import {
+  attachInProgressUpdateOperation,
+  attachUpdateEligibility,
+  createGetContainersHandler,
+} from './handlers/list.js';
 import { createGetContainerReleaseNotesHandler } from './handlers/release-notes.js';
 import { getPathParamValue } from './request-helpers.js';
 import {
@@ -52,9 +56,10 @@ function getContainerHandler(context: CrudHandlerContext, req: Request, res: Res
   const id = getPathParamValue(req.params.id);
   const container = context.storeContainer.getContainer(id);
   if (container) {
-    res
-      .status(200)
-      .json(attachInProgressUpdateOperation(context, context.redactContainerRuntimeEnv(container)));
+    const redacted = context.redactContainerRuntimeEnv(container);
+    const withOperation = attachInProgressUpdateOperation(context, redacted);
+    const withEligibility = attachUpdateEligibility(context, withOperation);
+    res.status(200).json(withEligibility);
   } else {
     sendErrorResponse(res, 404, 'Container not found');
   }

@@ -1,5 +1,6 @@
 import type { AgentClient } from '../../agent/AgentClient.js';
 import type { Container, ContainerReport } from '../../model/container.js';
+import type Trigger from '../../triggers/providers/Trigger.js';
 import type { PaginationLinks } from '../pagination-links.js';
 
 export interface CrudStoreContainerApi {
@@ -71,6 +72,7 @@ export interface CrudHandlerDependencies {
     getServerConfiguration: () => ServerConfiguration;
     getAgent: (name: string) => AgentClient | undefined;
     getWatchers: () => Record<string, LocalContainerWatcher>;
+    getTriggers?: () => Record<string, Trigger> | undefined;
   };
   errorApi: {
     getErrorMessage: (error: unknown) => string;
@@ -92,6 +94,7 @@ export interface CrudHandlerContext {
   getServerConfiguration: CrudHandlerDependencies['agentApi']['getServerConfiguration'];
   getAgent: CrudHandlerDependencies['agentApi']['getAgent'];
   getWatchers: CrudHandlerDependencies['agentApi']['getWatchers'];
+  getTriggers?: () => Record<string, Trigger> | undefined;
   getErrorMessage: CrudHandlerDependencies['errorApi']['getErrorMessage'];
   getErrorStatusCode: CrudHandlerDependencies['errorApi']['getErrorStatusCode'];
   redactContainerRuntimeEnv: CrudHandlerDependencies['securityApi']['redactContainerRuntimeEnv'];
@@ -112,7 +115,7 @@ export function buildCrudHandlerContext({
     updateOperationStore,
     getContainerRaw,
   },
-  agentApi: { getServerConfiguration, getAgent, getWatchers },
+  agentApi: { getServerConfiguration, getAgent, getWatchers, getTriggers },
   errorApi: { getErrorMessage, getErrorStatusCode },
   securityApi: { redactContainerRuntimeEnv, redactContainersRuntimeEnv, auditStore },
 }: CrudHandlerDependencies): CrudHandlerContext {
@@ -125,6 +128,7 @@ export function buildCrudHandlerContext({
     getServerConfiguration,
     getAgent,
     getWatchers,
+    ...(getTriggers ? { getTriggers } : {}),
     getErrorMessage,
     getErrorStatusCode,
     redactContainerRuntimeEnv,

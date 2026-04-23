@@ -615,7 +615,14 @@ describe('api/container/crud', () => {
 
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
-        data: [container],
+        data: [
+          expect.objectContaining({
+            id: 'c1',
+            security: expect.objectContaining({
+              scan: expect.objectContaining({ vulnerabilities: [{ id: 'CVE-1' }] }),
+            }),
+          }),
+        ],
         total: 1,
         limit: 0,
         offset: 0,
@@ -2364,7 +2371,7 @@ describe('api/container/crud', () => {
         expect.objectContaining({ id: 'c1' }),
       );
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith(redacted);
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining(redacted));
     });
 
     test('returns 404 when container id does not exist', () => {

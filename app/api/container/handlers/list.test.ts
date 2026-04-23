@@ -2,6 +2,7 @@ import type { Container } from '../../../model/container.js';
 import type { CrudHandlerContext } from '../crud-context.js';
 import {
   attachInProgressUpdateOperation,
+  attachUpdateEligibility,
   buildContainerListResponse,
   createGetContainersHandler,
 } from './list.js';
@@ -1129,6 +1130,127 @@ describe('buildContainerListResponse', () => {
     expect((container.security as any).sbom).toBe(sbomDoc);
     expect((container.security as any).signature).toBeDefined();
     expect((container.security?.scan as any).vulnerabilities).toEqual(['v1']);
+  });
+});
+
+describe('attachUpdateEligibility / buildEligibilityContext', () => {
+  // Helper: container with a raw tag update so computeUpdateEligibility reaches getActiveOperation
+  function createContainerWithUpdate(): Container {
+    return createContainer({
+      result: { tag: '1.1.0' },
+      updateKind: { kind: 'tag', localValue: '1.0.0', remoteValue: '1.1.0', semverDiff: 'minor' },
+    });
+  }
+
+  test('calls getTriggers when it is defined on the context', () => {
+    const getTriggers = vi.fn().mockReturnValue({});
+    const context: CrudHandlerContext = {
+      ...createMockContext(),
+      getTriggers,
+    };
+    const container = createContainerWithUpdate();
+    attachUpdateEligibility(context, container);
+    expect(getTriggers).toHaveBeenCalled();
+  });
+
+  test('returns active-operation from legacy byName operation when byId is missing', () => {
+    // byId=undefined, byName has no containerId → isLegacyOp=true → matched=byName
+    const context: CrudHandlerContext = {
+      ...createMockContext(),
+      updateOperationStore: {
+        ...createMockContext().updateOperationStore,
+        getActiveOperationByContainerId: vi.fn().mockReturnValue(undefined),
+        getActiveOperationByContainerName: vi.fn().mockReturnValue({
+          id: 'op-1',
+          status: 'in-progress',
+          updatedAt: '2026-04-23T12:00:00.000Z', // also tests updatedAt string branch
+        }), // no containerId → isLegacyOp=true
+      },
+    };
+    const container = createContainerWithUpdate();
+    const result = attachUpdateEligibility(context, container);
+    const blocker = (result as any).updateEligibility.blockers.find(
+      (b: any) => b.reason === 'active-operation',
+    );
+    expect(blocker).toBeDefined();
+    expect(blocker.details.operationId).toBe('op-1');
+  });
+
+  test('returns undefined when byId is missing and byName is a non-legacy op (has containerId)', () => {
+    // byId=undefined, byName has containerId → isLegacyOp=false → matched=undefined → line 221 fires
+    const context: CrudHandlerContext = {
+      ...createMockContext(),
+      updateOperationStore: {
+        ...createMockContext().updateOperationStore,
+        getActiveOperationByContainerId: vi.fn().mockReturnValue(undefined),
+        getActiveOperationByContainerName: vi
+          .fn()
+          .mockReturnValue({ id: 'op-1', status: 'in-progress', containerId: 'c1' }),
+      },
+    };
+    const container = createContainerWithUpdate();
+    const result = attachUpdateEligibility(context, container);
+    expect((result as any).updateEligibility).toBeDefined();
+    expect(
+      (result as any).updateEligibility.blockers.find((b: any) => b.reason === 'active-operation'),
+    ).toBeUndefined();
+  });
+
+  test('returns undefined from getActiveOperation when matched has no valid id', () => {
+    // matched object exists but has non-string id → should return undefined (line 227)
+    const context: CrudHandlerContext = {
+      ...createMockContext(),
+      updateOperationStore: {
+        ...createMockContext().updateOperationStore,
+        getActiveOperationByContainerId: vi.fn().mockReturnValue({ status: 'in-progress' }), // no id
+        getActiveOperationByContainerName: vi.fn().mockReturnValue(undefined),
+      },
+    };
+    const container = createContainerWithUpdate();
+    const result = attachUpdateEligibility(context, container);
+    expect((result as any).updateEligibility).toBeDefined();
+    expect(
+      (result as any).updateEligibility.blockers.find((b: any) => b.reason === 'active-operation'),
+    ).toBeUndefined();
+  });
+
+  test('returns undefined from getActiveOperation when matched has invalid status', () => {
+    // matched object exists, has valid id but invalid status value (line 227)
+    const context: CrudHandlerContext = {
+      ...createMockContext(),
+      updateOperationStore: {
+        ...createMockContext().updateOperationStore,
+        getActiveOperationByContainerId: vi
+          .fn()
+          .mockReturnValue({ id: 'op-1', status: 'completed' }), // not queued/in-progress
+        getActiveOperationByContainerName: vi.fn().mockReturnValue(undefined),
+      },
+    };
+    const container = createContainerWithUpdate();
+    const result = attachUpdateEligibility(context, container);
+    expect(
+      (result as any).updateEligibility.blockers.find((b: any) => b.reason === 'active-operation'),
+    ).toBeUndefined();
+  });
+
+  test('returns active-operation blocker when operation has valid id and in-progress status', () => {
+    const context: CrudHandlerContext = {
+      ...createMockContext(),
+      updateOperationStore: {
+        ...createMockContext().updateOperationStore,
+        getActiveOperationByContainerId: vi
+          .fn()
+          .mockReturnValue({ id: 'op-1', status: 'in-progress' }),
+        getActiveOperationByContainerName: vi.fn().mockReturnValue(undefined),
+      },
+    };
+    const container = createContainerWithUpdate();
+    const result = attachUpdateEligibility(context, container);
+    const activeOpBlocker = (result as any).updateEligibility.blockers.find(
+      (b: any) => b.reason === 'active-operation',
+    );
+    expect(activeOpBlocker).toBeDefined();
+    expect(activeOpBlocker.details.status).toBe('in-progress');
   });
 });
 

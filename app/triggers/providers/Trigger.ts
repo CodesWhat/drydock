@@ -543,6 +543,9 @@ class Trigger<
   private readonly notificationResults: Map<string, unknown> = new Map();
   private readonly autoTriggerErrorSeenAt: Map<string, number> = new Map();
   private readonly notificationRuleWarningsSeen: Set<string> = new Set();
+  // Tracks container+reason keys that have already produced an auto-update-blocked audit event.
+  // Cleared when the reason lifts, so we only emit once per (container, reason) until it clears.
+  private readonly autoUpdateBlockedSeen: Set<string> = new Set();
   private readonly digestBuffer: Map<string, Container> = new Map();
   private readonly batchRetryBuffer: Map<string, Container> = new Map();
   /**
@@ -1489,6 +1492,39 @@ class Trigger<
     }
   }
 
+  private emitAutoUpdateBlockedAuditOnTransition(
+    container: Container,
+    reason: string,
+    message: string,
+  ) {
+    const containerKey = getContainerNotificationKey(container) || fullName(container);
+    const seenKey = `${containerKey}|${reason}`;
+
+    if (this.autoUpdateBlockedSeen.has(seenKey)) {
+      return;
+    }
+
+    this.autoUpdateBlockedSeen.add(seenKey);
+    auditStore.insertAudit({
+      id: '',
+      timestamp: new Date().toISOString(),
+      action: 'auto-update-blocked',
+      containerName: fullName(container),
+      containerImage: container.image?.name,
+      triggerName: this.getId(),
+      status: 'info',
+      details: `${reason}: ${message}`,
+    });
+  }
+
+  private clearAutoUpdateBlockedForContainerKey(containerKey: string) {
+    for (const key of this.autoUpdateBlockedSeen) {
+      if (key.startsWith(`${containerKey}|`)) {
+        this.autoUpdateBlockedSeen.delete(key);
+      }
+    }
+  }
+
   private async runUpdateAvailableSimpleTrigger(
     container: Container,
     logContainer: Component['log'],
@@ -1535,6 +1571,7 @@ class Trigger<
   ) {
     if (error instanceof UpdateRequestError) {
       logContainer.debug(`Skipped auto update (${error.message})`);
+      this.emitAutoUpdateBlockedAuditOnTransition(container, 'admission-blocked', error.message);
       return;
     }
 
@@ -2336,6 +2373,11 @@ class Trigger<
       this.log.debug(
         `Skipped batched auto update for ${getContainerNotificationKey(entry.container) || fullName(entry.container)} (${entry.message})`,
       );
+      this.emitAutoUpdateBlockedAuditOnTransition(
+        entry.container,
+        'admission-blocked',
+        entry.message,
+      );
     }
 
     if (accepted.length === 0) {
@@ -2387,6 +2429,8 @@ class Trigger<
       this.log.debug(e);
     } finally {
       this.notificationResults.delete(containerId);
+      // Clear any blocked-audit dedup entries so the next block emits a fresh audit event.
+      this.clearAutoUpdateBlockedForContainerKey(containerId);
     }
   }
 

@@ -166,6 +166,7 @@ const crudHandlers = createCrudHandlers({
     getServerConfiguration,
     getAgent,
     getWatchers,
+    getTriggers,
   },
   errorApi: {
     getErrorMessage,
