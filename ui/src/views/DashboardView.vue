@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
-import { OPERATION_DISPLAY_HOLD_MS } from '../composables/useOperationDisplayHold';
+import {
+  OPERATION_DISPLAY_HOLD_MS,
+  useOperationDisplayHold,
+} from '../composables/useOperationDisplayHold';
 import { type RouteLocationRaw, useRouter } from 'vue-router';
 import type { OperationChangedPayload } from '../services/sse';
 import { TERMINAL_CONTAINER_UPDATE_OPERATION_STATUSES } from '../types/update-operation';
@@ -46,6 +49,7 @@ import { useDashboardWidgetOrder } from './dashboard/useDashboardWidgetOrder';
 const router = useRouter();
 const confirm = useConfirmDialog();
 const toast = useToast();
+const { markToastFired, wasToastFired } = useOperationDisplayHold();
 const { isMobile, windowNarrow } = useBreakpoints();
 const dashboardScrollEl = ref<HTMLElement | null>(null);
 // Responsive grid margins: slightly wider vertical gaps on touch screens for scroll room
@@ -469,12 +473,18 @@ function handleTerminalOperationSse(event: Event) {
   if (wasTracked && resolvedName) {
     // Match ContainersView: defer terminal toasts until the hold window ends so
     // the row settles before the toast fires.
+    // Mark the operation as having had its toast fired so the reconciliation
+    // fallback path on ContainersView does not fire a duplicate.
     const name = resolvedName;
+    const opId = payload.operationId;
     if (payload.status === 'succeeded') {
+      if (opId) markToastFired(opId);
       setTimeout(() => toast.success(`Updated: ${name}`), OPERATION_DISPLAY_HOLD_MS);
     } else if (payload.status === 'failed') {
+      if (opId) markToastFired(opId);
       setTimeout(() => toast.error(`Update failed: ${name}`), OPERATION_DISPLAY_HOLD_MS);
     } else if (payload.status === 'rolled-back') {
+      if (opId) markToastFired(opId);
       setTimeout(() => toast.error(`Rolled back: ${name}`), OPERATION_DISPLAY_HOLD_MS);
     }
   }

@@ -882,4 +882,206 @@ describe('useOperationDisplayHold', () => {
     expect(projectedVolatile.updateKind).toBe('minor');
     expect(projectedVolatile.newTag).toBe('2.0.0');
   });
+
+  describe('reconcileHoldsAgainstContainers — onTerminalResolved callback', () => {
+    it('invokes onTerminalResolved when a hold is collapsed due to missing active operation', async () => {
+      const hold = await loadComposable();
+      const operation = makeOperation({ id: 'op-cb-basic' });
+      const t0 = Date.now();
+
+      hold.holdOperationDisplay({
+        operationId: operation.id,
+        operation,
+        containerId: 'c1',
+        containerName: 'web',
+        now: t0,
+      });
+
+      const callback = vi.fn();
+      hold.reconcileHoldsAgainstContainers(
+        [makeContainer({ id: 'c1', name: 'web', updateOperation: undefined })],
+        t0,
+        callback,
+      );
+
+      expect(callback).toHaveBeenCalledOnce();
+      expect(callback).toHaveBeenCalledWith(
+        expect.objectContaining({
+          operationId: 'op-cb-basic',
+          containerName: 'web',
+          containerIds: expect.arrayContaining(['c1']),
+        }),
+      );
+    });
+
+    it('does NOT invoke onTerminalResolved when the container still has an active operation', async () => {
+      const hold = await loadComposable();
+      const operation = makeOperation({ id: 'op-cb-active', status: 'in-progress' });
+      const t0 = Date.now();
+
+      hold.holdOperationDisplay({
+        operationId: operation.id,
+        operation,
+        containerId: 'c1',
+        containerName: 'web',
+        now: t0,
+      });
+
+      const callback = vi.fn();
+      hold.reconcileHoldsAgainstContainers(
+        [
+          makeContainer({
+            id: 'c1',
+            name: 'web',
+            updateOperation: makeOperation({ id: 'op-cb-active', status: 'in-progress' }),
+          }),
+        ],
+        t0,
+        callback,
+      );
+
+      expect(callback).not.toHaveBeenCalled();
+    });
+
+    it('does NOT invoke onTerminalResolved when the hold is already in the settle window', async () => {
+      const hold = await loadComposable();
+      const operation = makeOperation({ id: 'op-cb-settling' });
+      const t0 = Date.now();
+
+      hold.holdOperationDisplay({
+        operationId: operation.id,
+        operation,
+        containerId: 'c1',
+        containerName: 'web',
+        now: t0,
+      });
+
+      // Trim hold into settle window first
+      hold.scheduleHeldOperationRelease({ operationId: operation.id, now: t0 });
+
+      const callback = vi.fn();
+      hold.reconcileHoldsAgainstContainers(
+        [makeContainer({ id: 'c1', name: 'web', updateOperation: undefined })],
+        t0,
+        callback,
+      );
+
+      expect(callback).not.toHaveBeenCalled();
+    });
+
+    it('does NOT invoke onTerminalResolved when no matching container is found', async () => {
+      const hold = await loadComposable();
+      const operation = makeOperation({ id: 'op-cb-no-match' });
+      const t0 = Date.now();
+
+      hold.holdOperationDisplay({
+        operationId: operation.id,
+        operation,
+        containerId: 'c1',
+        containerName: 'web',
+        now: t0,
+      });
+
+      const callback = vi.fn();
+      hold.reconcileHoldsAgainstContainers(
+        [makeContainer({ id: 'c2', name: 'redis', updateOperation: undefined })],
+        t0,
+        callback,
+      );
+
+      expect(callback).not.toHaveBeenCalled();
+    });
+
+    it('still collapses the hold even when onTerminalResolved is provided', async () => {
+      const hold = await loadComposable();
+      const operation = makeOperation({ id: 'op-cb-collapse' });
+      const t0 = Date.now();
+
+      hold.holdOperationDisplay({
+        operationId: operation.id,
+        operation,
+        containerId: 'c1',
+        containerName: 'web',
+        now: t0,
+      });
+
+      const callback = vi.fn();
+      hold.reconcileHoldsAgainstContainers(
+        [makeContainer({ id: 'c1', name: 'web', updateOperation: undefined })],
+        t0,
+        callback,
+      );
+
+      // Hold should have been trimmed to settle window
+      expect(hold.heldOperations.value.get(operation.id)?.displayUntil).toBe(t0 + 1500);
+
+      await vi.advanceTimersByTimeAsync(1500);
+      expect(hold.heldOperations.value.has(operation.id)).toBe(false);
+    });
+
+    it('does not re-invoke onTerminalResolved on subsequent reconcile passes for the same hold', async () => {
+      const hold = await loadComposable();
+      const operation = makeOperation({ id: 'op-cb-once' });
+      const t0 = Date.now();
+
+      hold.holdOperationDisplay({
+        operationId: operation.id,
+        operation,
+        containerId: 'c1',
+        containerName: 'web',
+        now: t0,
+      });
+
+      const callback = vi.fn();
+
+      // First reconcile — hold is still in active window → collapses to settle window
+      hold.reconcileHoldsAgainstContainers(
+        [makeContainer({ id: 'c1', name: 'web', updateOperation: undefined })],
+        t0,
+        callback,
+      );
+      expect(callback).toHaveBeenCalledOnce();
+
+      // Second reconcile with the same hold already in settle window → skip
+      hold.reconcileHoldsAgainstContainers(
+        [makeContainer({ id: 'c1', name: 'web', updateOperation: undefined })],
+        t0,
+        callback,
+      );
+      expect(callback).toHaveBeenCalledOnce();
+    });
+  });
+
+  describe('toast dedup helpers (markToastFired / wasToastFired / resetToastFiredOperations)', () => {
+    it('wasToastFired returns false before marking', async () => {
+      const hold = await loadComposable();
+      hold.resetToastFiredOperations();
+      expect(hold.wasToastFired('op-dedup-1')).toBe(false);
+    });
+
+    it('wasToastFired returns true after markToastFired', async () => {
+      const hold = await loadComposable();
+      hold.resetToastFiredOperations();
+      hold.markToastFired('op-dedup-2');
+      expect(hold.wasToastFired('op-dedup-2')).toBe(true);
+    });
+
+    it('wasToastFired is independent per operation id', async () => {
+      const hold = await loadComposable();
+      hold.resetToastFiredOperations();
+      hold.markToastFired('op-a');
+      expect(hold.wasToastFired('op-a')).toBe(true);
+      expect(hold.wasToastFired('op-b')).toBe(false);
+    });
+
+    it('resetToastFiredOperations clears all previously marked ids', async () => {
+      const hold = await loadComposable();
+      hold.resetToastFiredOperations();
+      hold.markToastFired('op-c');
+      hold.markToastFired('op-d');
+      hold.resetToastFiredOperations();
+      expect(hold.wasToastFired('op-c')).toBe(false);
+      expect(hold.wasToastFired('op-d')).toBe(false);
+    });
+  });
 });

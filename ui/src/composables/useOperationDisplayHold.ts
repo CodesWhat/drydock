@@ -39,6 +39,25 @@ interface OperationDisplayHoldRecord {
 const heldOperations = shallowRef(new Map<string, OperationDisplayHoldRecord>());
 const releaseTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
+/**
+ * Tracks operation IDs whose terminal outcome has already been surfaced to the
+ * user (either via the primary SSE path or the reconciliation fallback). Shared
+ * between both paths to prevent duplicate toasts.
+ */
+const toastFiredOperations = new Set<string>();
+
+function markToastFired(operationId: string) {
+  toastFiredOperations.add(operationId);
+}
+
+function wasToastFired(operationId: string): boolean {
+  return toastFiredOperations.has(operationId);
+}
+
+function resetToastFiredOperations() {
+  toastFiredOperations.clear();
+}
+
 function setHeldOperation(operationId: string, hold: OperationDisplayHoldRecord) {
   heldOperations.value.set(operationId, hold);
   triggerRef(heldOperations);
@@ -296,6 +315,13 @@ function clearAllOperationDisplayHolds() {
   }
 }
 
+export interface TerminalResolvedArgs {
+  operationId: string;
+  containerName?: string;
+  containerIds: readonly string[];
+  hold: OperationDisplayHoldRecord;
+}
+
 /**
  * Safety net for missed terminal SSEs: active holds now live for 10 minutes so the
  * row stays stable through a full recreate, but if the terminal SSE is ever lost
@@ -303,10 +329,15 @@ function clearAllOperationDisplayHolds() {
  * After each container list reload, fold any hold whose matching container has no
  * active operation in the raw API response into the short settle window — so the
  * row releases within ~1.5s of the next refresh instead of 10 minutes.
+ *
+ * When `onTerminalResolved` is provided, it is invoked (at most once per operationId
+ * per hold lifetime) before scheduling the release so the caller can fetch the
+ * terminal operation state and fire the appropriate toast.
  */
 function reconcileHoldsAgainstContainers(
   containers: readonly Pick<Container, 'id' | 'name' | 'updateOperation'>[],
   now?: number,
+  onTerminalResolved?: (args: TerminalResolvedArgs) => void | Promise<void>,
 ) {
   const currentNow = now ?? Date.now();
   for (const [operationId, hold] of heldOperations.value.entries()) {
@@ -322,6 +353,14 @@ function reconcileHoldsAgainstContainers(
     const rawIsActive = rawStatus === 'queued' || rawStatus === 'in-progress';
     if (rawIsActive) {
       continue;
+    }
+    if (onTerminalResolved) {
+      void onTerminalResolved({
+        operationId,
+        containerName: hold.containerName,
+        containerIds: hold.containerIds,
+        hold,
+      });
     }
     scheduleHeldOperationRelease({
       operationId,
@@ -340,6 +379,9 @@ export function useOperationDisplayHold() {
     findMatchingOperationIds,
     getDisplayUpdateOperation,
     holdOperationDisplay,
+    markToastFired,
+    wasToastFired,
+    resetToastFiredOperations,
     projectContainerDisplayState,
     reconcileHoldsAgainstContainers,
     scheduleHeldOperationRelease,
