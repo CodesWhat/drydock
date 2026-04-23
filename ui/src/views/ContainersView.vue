@@ -1381,6 +1381,7 @@ function applyOperationPatch(event: Event) {
           currentTag: row.currentTag,
           image: row.image,
           imageCreated: row.imageCreated,
+          updateDetectedAt: row.updateDetectedAt,
         },
       });
     }

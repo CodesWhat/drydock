@@ -18,6 +18,10 @@ export interface ContainerSortSnapshot {
   currentTag: Container['currentTag'];
   image: Container['image'];
   imageCreated?: Container['imageCreated'];
+  // Captured so the dashboard Updates Available widget keeps its detectedAt-based
+  // sort stable while the backend transiently clears `updateAvailable` (and with
+  // it `updateDetectedAt`) during an active update.
+  updateDetectedAt?: Container['updateDetectedAt'];
 }
 
 interface OperationDisplayHoldRecord {
@@ -286,7 +290,8 @@ function projectContainerDisplayState<T extends Container>(container: T): T {
       sortSnapshot.newTag !== container.newTag ||
       sortSnapshot.currentTag !== container.currentTag ||
       sortSnapshot.image !== container.image ||
-      sortSnapshot.imageCreated !== container.imageCreated);
+      sortSnapshot.imageCreated !== container.imageCreated ||
+      sortSnapshot.updateDetectedAt !== container.updateDetectedAt);
 
   return {
     ...container,
@@ -299,6 +304,7 @@ function projectContainerDisplayState<T extends Container>(container: T): T {
           currentTag: sortSnapshot.currentTag,
           image: sortSnapshot.image,
           imageCreated: sortSnapshot.imageCreated,
+          updateDetectedAt: sortSnapshot.updateDetectedAt,
         }
       : {}),
   } as T;
