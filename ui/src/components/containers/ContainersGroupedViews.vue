@@ -8,6 +8,7 @@ import { useUpdateBatches } from '../../composables/useUpdateBatches';
 import { getContainerViewKey } from '../../utils/container-view-key';
 import { imageAge } from '../../utils/audit-helpers';
 import UpdateMaturityBadge from './UpdateMaturityBadge.vue';
+import UpdateEligibilityBadges from './UpdateEligibilityBadges.vue';
 import SuggestedTagBadge from './SuggestedTagBadge.vue';
 import ReleaseNotesLink from './ReleaseNotesLink.vue';
 import ProjectLink from './ProjectLink.vue';
@@ -436,6 +437,7 @@ watchEffect(() => {
               Blocked
             </AppBadge>
             <UpdateMaturityBadge class="dd-cell-show-100" :maturity="c.updateMaturity" :tooltip="c.updateMaturityTooltip" />
+            <UpdateEligibilityBadges class="dd-cell-show-100" :eligibility="c.updateEligibility" :has-active-operation-badge="isContainerUpdateInProgress(c) || isContainerUpdateQueued(c)" />
             <SuggestedTagBadge class="dd-cell-show-100" :tag="c.suggestedTag" :current-tag="c.currentTag" />
           </div>
         </template>
@@ -702,6 +704,7 @@ watchEffect(() => {
                   {{ c.newTag }}
                 </CopyableTag>
                 <span class="ml-1 shrink-0"><UpdateMaturityBadge :maturity="c.updateMaturity" :tooltip="c.updateMaturityTooltip" /></span>
+                <span class="ml-1 shrink-0"><UpdateEligibilityBadges :eligibility="c.updateEligibility" :has-active-operation-badge="isContainerUpdateInProgress(c) || isContainerUpdateQueued(c)" /></span>
               </template>
               <template v-else>
                 <span
@@ -876,6 +879,7 @@ watchEffect(() => {
               {{ c.updateKind }}
             </AppBadge>
             <UpdateMaturityBadge :maturity="c.updateMaturity" :tooltip="c.updateMaturityTooltip" />
+            <UpdateEligibilityBadges :eligibility="c.updateEligibility" :has-active-operation-badge="isContainerUpdateInProgress(c) || isContainerUpdateQueued(c)" />
             <!-- Status: icon on mobile, badge on desktop -->
             <AppIcon :name="getContainerStatusIcon(c)" :size="13" class="shrink-0 md:!hidden"
                      :class="isContainerUpdating(c) ? 'dd-spin' : ''"

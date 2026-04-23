@@ -647,6 +647,7 @@ function toPendingRecentUpdateCandidate(
       running: container.status === 'running',
       registryError: undefined,
       blocked,
+      updateEligibility: container.updateEligibility,
       ...(batchId && queuePosition && queueTotal && queuePosition <= queueTotal
         ? {
             batchId,

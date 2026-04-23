@@ -4,6 +4,36 @@ import type {
   ActiveContainerUpdateOperationStatus,
 } from './update-operation';
 
+export type UpdateBlockerReason =
+  | 'no-update-available'
+  | 'rollback-container'
+  | 'active-operation'
+  | 'security-scan-blocked'
+  | 'snoozed'
+  | 'skip-tag'
+  | 'skip-digest'
+  | 'maturity-not-reached'
+  | 'threshold-not-reached'
+  | 'trigger-excluded'
+  | 'trigger-not-included'
+  | 'agent-mismatch'
+  | 'no-update-trigger-configured';
+
+export interface UpdateBlocker {
+  reason: UpdateBlockerReason;
+  message: string;
+  actionable: boolean;
+  actionHint?: string;
+  liftableAt?: string;
+  details?: Record<string, unknown>;
+}
+
+export interface UpdateEligibility {
+  eligible: boolean;
+  blockers: UpdateBlocker[];
+  evaluatedAt: string;
+}
+
 /** Shared UI container type used across views, composables, and templates. */
 
 export interface ContainerDetails {
@@ -98,5 +128,6 @@ export interface Container {
   transformTags?: string;
   triggerInclude?: string;
   triggerExclude?: string;
+  updateEligibility?: UpdateEligibility;
   details: ContainerDetails;
 }

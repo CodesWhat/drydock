@@ -1,5 +1,5 @@
 import type { RouteLocationRaw } from 'vue-router';
-import type { Container } from '../../types/container';
+import type { Container, UpdateEligibility } from '../../types/container';
 
 export const DASHBOARD_WIDGET_IDS = [
   'stat-containers',
@@ -158,6 +158,7 @@ export interface RecentUpdateRow {
   running: boolean;
   registryError?: string;
   blocked: boolean;
+  updateEligibility?: UpdateEligibility;
 }
 
 export interface DashboardUpdateSequenceEntry {
