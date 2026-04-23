@@ -295,6 +295,13 @@ interface UseDashboardComputedInput {
   registries: Ref<unknown[]>;
   serverInfo: Ref<DashboardServerInfo | null>;
   watchers: Ref<unknown[]>;
+  /**
+   * Optional per-container projection, applied only to the Updates Available
+   * widget before sort. Lets DashboardView overlay a held operation's
+   * sortSnapshot (notably `updateDetectedAt`) onto live containers so the row
+   * keeps its pre-update position through the active-update window (#291).
+   */
+  projectContainerForRecentUpdates?: (container: Container) => Container;
 }
 
 type DashboardContainerMetrics = ReturnType<typeof buildDashboardContainerMetrics>;
@@ -709,14 +716,21 @@ function useRecentUpdatesComputed(
   updateContainers: ComputedRef<Container[]>,
   input: UseDashboardComputedInput,
 ) {
-  return computed<RecentUpdateRow[]>(() =>
-    buildRecentUpdateRows(
-      updateContainers.value,
-      input.containers.value,
+  return computed<RecentUpdateRow[]>(() => {
+    const project = input.projectContainerForRecentUpdates;
+    const visibleContainers = project
+      ? updateContainers.value.map((container) => project(container))
+      : updateContainers.value;
+    const allContainers = project
+      ? input.containers.value.map((container) => project(container))
+      : input.containers.value;
+    return buildRecentUpdateRows(
+      visibleContainers,
+      allContainers,
       input.recentStatusByContainer.value,
       input.recentStatusByIdentity.value,
-    ),
-  );
+    );
+  });
 }
 
 function getContainerVulnerabilityTotal(container: Container): number {

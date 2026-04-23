@@ -226,6 +226,8 @@ describe('DashboardView', () => {
     localStorage.removeItem(PREFERENCES_STORAGE_KEY);
     const { resetPreferences } = await import('@/preferences/store');
     resetPreferences();
+    const { useOperationDisplayHold } = await import('@/composables/useOperationDisplayHold');
+    useOperationDisplayHold().clearAllOperationDisplayHolds();
   });
 
   afterEach(() => {
@@ -2507,24 +2509,27 @@ describe('DashboardView', () => {
     it('fires success toast when terminal SSE succeeded and operation was tracked', async () => {
       vi.useFakeTimers();
       try {
-        mockUpdateContainer.mockResolvedValueOnce({});
-
         const wrapper = await mountDashboard(
           [pendingContainer],
           [],
           {},
           { recentStatuses: { nginx: 'pending' } },
         );
-        const { mapApiContainers } = await import('@/utils/container-mapper');
-        mockGetAllContainers.mockResolvedValueOnce([]);
-        mockGetContainerRecentStatus.mockResolvedValueOnce({ statuses: {} });
-        (mapApiContainers as ReturnType<typeof vi.fn>).mockReturnValueOnce([]);
 
-        const { useConfirmDialog } = await import('@/composables/useConfirmDialog');
-        const confirm = useConfirmDialog();
-        await wrapper.find('[data-test="dashboard-update-btn"]').trigger('click');
-        await confirm.accept();
-        await flushPromises();
+        // Establish the hold via in-progress SSE — the hold map is the
+        // "tracked" marker now (previously it was dashboardPendingUpdateRows).
+        globalThis.dispatchEvent(
+          new CustomEvent('dd:sse-update-operation-changed', {
+            detail: {
+              operationId: 'op-nginx',
+              containerId: pendingContainer.id,
+              containerName: pendingContainer.name,
+              status: 'in-progress',
+              phase: 'pulling',
+            },
+          }),
+        );
+        await nextTick();
 
         const { toasts } = useToast();
         const beforeCount = toasts.value.length;
@@ -2532,6 +2537,7 @@ describe('DashboardView', () => {
         globalThis.dispatchEvent(
           new CustomEvent('dd:sse-update-operation-changed', {
             detail: {
+              operationId: 'op-nginx',
               containerId: pendingContainer.id,
               containerName: pendingContainer.name,
               status: 'succeeded',
@@ -2548,6 +2554,7 @@ describe('DashboardView', () => {
         );
         expect(successToast).toBeDefined();
         expect(toasts.value.length).toBeGreaterThan(beforeCount);
+        void wrapper;
       } finally {
         vi.useRealTimers();
       }
@@ -2556,24 +2563,25 @@ describe('DashboardView', () => {
     it('fires error toast when terminal SSE failed and operation was tracked', async () => {
       vi.useFakeTimers();
       try {
-        mockUpdateContainer.mockResolvedValueOnce({});
-
         const wrapper = await mountDashboard(
           [pendingContainer],
           [],
           {},
           { recentStatuses: { nginx: 'pending' } },
         );
-        const { mapApiContainers } = await import('@/utils/container-mapper');
-        mockGetAllContainers.mockResolvedValueOnce([]);
-        mockGetContainerRecentStatus.mockResolvedValueOnce({ statuses: {} });
-        (mapApiContainers as ReturnType<typeof vi.fn>).mockReturnValueOnce([]);
 
-        const { useConfirmDialog } = await import('@/composables/useConfirmDialog');
-        const confirm = useConfirmDialog();
-        await wrapper.find('[data-test="dashboard-update-btn"]').trigger('click');
-        await confirm.accept();
-        await flushPromises();
+        globalThis.dispatchEvent(
+          new CustomEvent('dd:sse-update-operation-changed', {
+            detail: {
+              operationId: 'op-nginx',
+              containerId: pendingContainer.id,
+              containerName: pendingContainer.name,
+              status: 'in-progress',
+              phase: 'pulling',
+            },
+          }),
+        );
+        await nextTick();
 
         const { toasts } = useToast();
         const beforeCount = toasts.value.length;
@@ -2581,6 +2589,7 @@ describe('DashboardView', () => {
         globalThis.dispatchEvent(
           new CustomEvent('dd:sse-update-operation-changed', {
             detail: {
+              operationId: 'op-nginx',
               containerId: pendingContainer.id,
               containerName: pendingContainer.name,
               status: 'failed',
@@ -2597,6 +2606,7 @@ describe('DashboardView', () => {
         );
         expect(errorToast).toBeDefined();
         expect(toasts.value.length).toBeGreaterThan(beforeCount);
+        void wrapper;
       } finally {
         vi.useRealTimers();
       }
@@ -2605,24 +2615,25 @@ describe('DashboardView', () => {
     it('fires error toast when terminal SSE rolled-back and operation was tracked', async () => {
       vi.useFakeTimers();
       try {
-        mockUpdateContainer.mockResolvedValueOnce({});
-
         const wrapper = await mountDashboard(
           [pendingContainer],
           [],
           {},
           { recentStatuses: { nginx: 'pending' } },
         );
-        const { mapApiContainers } = await import('@/utils/container-mapper');
-        mockGetAllContainers.mockResolvedValueOnce([]);
-        mockGetContainerRecentStatus.mockResolvedValueOnce({ statuses: {} });
-        (mapApiContainers as ReturnType<typeof vi.fn>).mockReturnValueOnce([]);
 
-        const { useConfirmDialog } = await import('@/composables/useConfirmDialog');
-        const confirm = useConfirmDialog();
-        await wrapper.find('[data-test="dashboard-update-btn"]').trigger('click');
-        await confirm.accept();
-        await flushPromises();
+        globalThis.dispatchEvent(
+          new CustomEvent('dd:sse-update-operation-changed', {
+            detail: {
+              operationId: 'op-nginx',
+              containerId: pendingContainer.id,
+              containerName: pendingContainer.name,
+              status: 'in-progress',
+              phase: 'pulling',
+            },
+          }),
+        );
+        await nextTick();
 
         const { toasts } = useToast();
         const beforeCount = toasts.value.length;
@@ -2630,6 +2641,7 @@ describe('DashboardView', () => {
         globalThis.dispatchEvent(
           new CustomEvent('dd:sse-update-operation-changed', {
             detail: {
+              operationId: 'op-nginx',
               containerId: pendingContainer.id,
               containerName: pendingContainer.name,
               status: 'rolled-back',
@@ -2646,6 +2658,7 @@ describe('DashboardView', () => {
         );
         expect(errorToast).toBeDefined();
         expect(toasts.value.length).toBeGreaterThan(beforeCount);
+        void wrapper;
       } finally {
         vi.useRealTimers();
       }
