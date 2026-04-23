@@ -64,13 +64,8 @@ function toggleColumn(key: string) {
   else visibleColumns.value.add(key);
 }
 
-export function useColumnVisibility(isCompact: { value: boolean }) {
-  const compactVisibleKeys = new Set(['icon', 'name', 'version']);
-  const activeColumns = computed(() =>
-    allColumns.filter(
-      (c) => visibleColumns.value.has(c.key) && (!isCompact.value || compactVisibleKeys.has(c.key)),
-    ),
-  );
+export function useColumnVisibility() {
+  const activeColumns = computed(() => allColumns.filter((c) => visibleColumns.value.has(c.key)));
 
   return { allColumns, visibleColumns, activeColumns, showColumnPicker, toggleColumn };
 }

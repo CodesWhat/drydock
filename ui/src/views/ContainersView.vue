@@ -1106,7 +1106,7 @@ const renderGroups = computed<RenderGroup[]>(() => {
 });
 
 const { allColumns, visibleColumns, activeColumns, showColumnPicker, toggleColumn } =
-  useColumnVisibility(isCompact);
+  useColumnVisibility();
 
 const tableColumns = computed(() =>
   activeColumns.value.map((column) => ({
