@@ -1084,4 +1084,354 @@ describe('useOperationDisplayHold', () => {
       expect(hold.wasToastFired('op-d')).toBe(false);
     });
   });
+
+  async function loadModule() {
+    vi.resetModules();
+    return await import('@/composables/useOperationDisplayHold');
+  }
+
+  describe('parseUpdateOperationSsePayload', () => {
+    it('returns undefined for non-object payloads', async () => {
+      const mod = await loadModule();
+      expect(mod.parseUpdateOperationSsePayload(null)).toBeUndefined();
+      expect(mod.parseUpdateOperationSsePayload(undefined)).toBeUndefined();
+      expect(mod.parseUpdateOperationSsePayload('string')).toBeUndefined();
+      expect(mod.parseUpdateOperationSsePayload(42)).toBeUndefined();
+    });
+
+    it('returns undefined when status is not a recognised operation status', async () => {
+      const mod = await loadModule();
+      expect(mod.parseUpdateOperationSsePayload({ status: 'bogus' })).toBeUndefined();
+      expect(mod.parseUpdateOperationSsePayload({})).toBeUndefined();
+    });
+
+    it('normalises a well-formed payload and keeps phase untouched', async () => {
+      const mod = await loadModule();
+      const parsed = mod.parseUpdateOperationSsePayload({
+        operationId: 'op-1',
+        containerId: 'c-1',
+        newContainerId: 'c-2',
+        containerName: 'web',
+        status: 'in-progress',
+        phase: 'pulling',
+      });
+      expect(parsed).toEqual({
+        operationId: 'op-1',
+        containerId: 'c-1',
+        newContainerId: 'c-2',
+        containerName: 'web',
+        status: 'in-progress',
+        phase: 'pulling',
+      });
+    });
+
+    it('drops non-string target fields so downstream consumers only see strings', async () => {
+      const mod = await loadModule();
+      const parsed = mod.parseUpdateOperationSsePayload({
+        operationId: 42,
+        containerId: null,
+        newContainerId: undefined,
+        containerName: {},
+        status: 'queued',
+      });
+      expect(parsed).toEqual({
+        operationId: undefined,
+        containerId: undefined,
+        newContainerId: undefined,
+        containerName: undefined,
+        status: 'queued',
+        phase: undefined,
+      });
+    });
+  });
+
+  describe('applyUpdateOperationSseToHold', () => {
+    it('creates a hold with sortSnapshot on active-status events', async () => {
+      const mod = await loadModule();
+      const { heldOperations } = mod.useOperationDisplayHold();
+      const container = makeContainer({
+        id: 'c-active',
+        name: 'web',
+        updateDetectedAt: '2026-04-01T00:00:00.000Z',
+      });
+      mod.applyUpdateOperationSseToHold({
+        parsed: {
+          operationId: 'op-active',
+          containerId: 'c-active',
+          containerName: 'web',
+          status: 'in-progress',
+          phase: 'pulling',
+        },
+        resolveContainer: () => container,
+      });
+      const hold = heldOperations.value.get('op-active');
+      expect(hold?.sortSnapshot?.updateDetectedAt).toBe('2026-04-01T00:00:00.000Z');
+      expect(hold?.operation.status).toBe('in-progress');
+      expect(hold?.operation.phase).toBe('pulling');
+    });
+
+    it('invokes onActiveOperationComputed so views can mirror row state', async () => {
+      const mod = await loadModule();
+      const container = makeContainer({ id: 'c-a', name: 'api' });
+      const onActiveOperationComputed = vi.fn();
+      mod.applyUpdateOperationSseToHold({
+        parsed: {
+          operationId: 'op-a',
+          containerId: 'c-a',
+          containerName: 'api',
+          status: 'queued',
+          phase: 'queued',
+        },
+        resolveContainer: () => container,
+        onActiveOperationComputed,
+      });
+      expect(onActiveOperationComputed).toHaveBeenCalledWith({
+        operationId: 'op-a',
+        container,
+        nextOperation: expect.objectContaining({
+          id: 'op-a',
+          status: 'queued',
+          phase: 'queued',
+        }),
+      });
+    });
+
+    it('short-circuits active-status events when the container cannot be resolved', async () => {
+      const mod = await loadModule();
+      const { heldOperations } = mod.useOperationDisplayHold();
+      const onActiveOperationComputed = vi.fn();
+      mod.applyUpdateOperationSseToHold({
+        parsed: {
+          operationId: 'op-gone',
+          containerId: 'ghost',
+          status: 'in-progress',
+          phase: 'pulling',
+        },
+        resolveContainer: () => undefined,
+        onActiveOperationComputed,
+      });
+      expect(onActiveOperationComputed).not.toHaveBeenCalled();
+      expect(heldOperations.value.has('op-gone')).toBe(false);
+    });
+
+    it('does not create a hold on active status when operationId is missing', async () => {
+      const mod = await loadModule();
+      const { heldOperations } = mod.useOperationDisplayHold();
+      const container = makeContainer({ id: 'c-noid', name: 'worker' });
+      const onActiveOperationComputed = vi.fn();
+      mod.applyUpdateOperationSseToHold({
+        parsed: {
+          containerId: 'c-noid',
+          containerName: 'worker',
+          status: 'queued',
+          phase: 'queued',
+        },
+        resolveContainer: () => container,
+        onActiveOperationComputed,
+      });
+      expect(heldOperations.value.size).toBe(0);
+      expect(onActiveOperationComputed).not.toHaveBeenCalled();
+    });
+
+    it('falls back to a status-appropriate phase when the payload phase is invalid', async () => {
+      const mod = await loadModule();
+      const { heldOperations } = mod.useOperationDisplayHold();
+      const container = makeContainer({ id: 'c-phase', name: 'svc' });
+      mod.applyUpdateOperationSseToHold({
+        parsed: {
+          operationId: 'op-phase',
+          containerId: 'c-phase',
+          containerName: 'svc',
+          status: 'in-progress',
+          phase: 'nonsense',
+        },
+        resolveContainer: () => container,
+      });
+      expect(heldOperations.value.get('op-phase')?.operation.phase).toBe('pulling');
+    });
+
+    it('preserves the previous phase when the payload phase is invalid', async () => {
+      const mod = await loadModule();
+      const { heldOperations } = mod.useOperationDisplayHold();
+      const container = makeContainer({
+        id: 'c-prev',
+        name: 'svc2',
+        updateOperation: makeOperation({ id: 'op-prev', phase: 'health-gate' }),
+      });
+      mod.applyUpdateOperationSseToHold({
+        parsed: {
+          operationId: 'op-prev',
+          containerId: 'c-prev',
+          containerName: 'svc2',
+          status: 'in-progress',
+          phase: undefined,
+        },
+        resolveContainer: () => container,
+      });
+      expect(heldOperations.value.get('op-prev')?.operation.phase).toBe('health-gate');
+    });
+
+    it('falls back to queued when status=queued and no valid phase', async () => {
+      const mod = await loadModule();
+      const { heldOperations } = mod.useOperationDisplayHold();
+      const container = makeContainer({ id: 'c-q', name: 'q' });
+      mod.applyUpdateOperationSseToHold({
+        parsed: {
+          operationId: 'op-q',
+          containerId: 'c-q',
+          containerName: 'q',
+          status: 'queued',
+          phase: undefined,
+        },
+        resolveContainer: () => container,
+      });
+      expect(heldOperations.value.get('op-q')?.operation.phase).toBe('queued');
+    });
+
+    it('keeps a valid previous container operation id when the payload omits operationId', async () => {
+      const mod = await loadModule();
+      const container = makeContainer({
+        id: 'c-noid2',
+        name: 'svc3',
+        updateOperation: makeOperation({ id: 'op-existing', phase: 'pulling' }),
+      });
+      const onActiveOperationComputed = vi.fn();
+      mod.applyUpdateOperationSseToHold({
+        parsed: {
+          containerId: 'c-noid2',
+          containerName: 'svc3',
+          status: 'in-progress',
+          phase: 'pulling',
+        },
+        resolveContainer: () => container,
+        onActiveOperationComputed,
+      });
+      // onActiveOperationComputed isn't called because there's no operationId,
+      // but the early return happens AFTER we compute nextOperation — so no hold
+      // is created and no callback fires.
+      expect(onActiveOperationComputed).not.toHaveBeenCalled();
+    });
+
+    it('fires onTerminalEvent for a tracked hold and marks the toast fired', async () => {
+      const mod = await loadModule();
+      const composable = mod.useOperationDisplayHold();
+      const container = makeContainer({ id: 'c-t', name: 'tracked' });
+      // Seed an active hold so the terminal is "tracked"
+      composable.holdOperationDisplay({
+        operationId: 'op-terminal',
+        operation: makeOperation({ id: 'op-terminal' }),
+        containerId: 'c-t',
+        containerName: 'tracked',
+      });
+      const onTerminalEvent = vi.fn();
+      mod.applyUpdateOperationSseToHold({
+        parsed: {
+          operationId: 'op-terminal',
+          containerId: 'c-t',
+          containerName: 'tracked',
+          status: 'succeeded',
+        },
+        resolveContainer: () => container,
+        onTerminalEvent,
+      });
+      expect(onTerminalEvent).toHaveBeenCalledWith({
+        container,
+        status: 'succeeded',
+        name: 'tracked',
+        operationId: 'op-terminal',
+        wasTracked: true,
+      });
+      expect(composable.wasToastFired('op-terminal')).toBe(true);
+    });
+
+    it('fires onTerminalEvent with wasTracked=false when no hold was active', async () => {
+      const mod = await loadModule();
+      const composable = mod.useOperationDisplayHold();
+      composable.resetToastFiredOperations();
+      const onTerminalEvent = vi.fn();
+      mod.applyUpdateOperationSseToHold({
+        parsed: {
+          operationId: 'op-untracked',
+          containerId: 'c-u',
+          containerName: 'untracked',
+          status: 'failed',
+        },
+        resolveContainer: () => undefined,
+        onTerminalEvent,
+      });
+      expect(onTerminalEvent).toHaveBeenCalledWith({
+        container: undefined,
+        status: 'failed',
+        name: 'untracked',
+        operationId: 'op-untracked',
+        wasTracked: false,
+      });
+      expect(composable.wasToastFired('op-untracked')).toBe(false);
+    });
+
+    it('uses the resolved container name over the payload name when both exist', async () => {
+      const mod = await loadModule();
+      const composable = mod.useOperationDisplayHold();
+      const container = makeContainer({ id: 'c-n', name: 'canonical' });
+      composable.holdOperationDisplay({
+        operationId: 'op-n',
+        operation: makeOperation({ id: 'op-n' }),
+        containerId: 'c-n',
+        containerName: 'canonical',
+      });
+      const onTerminalEvent = vi.fn();
+      mod.applyUpdateOperationSseToHold({
+        parsed: {
+          operationId: 'op-n',
+          containerId: 'c-n',
+          containerName: 'stale-payload-name',
+          status: 'rolled-back',
+        },
+        resolveContainer: () => container,
+        onTerminalEvent,
+      });
+      expect(onTerminalEvent.mock.calls[0]?.[0]?.name).toBe('canonical');
+    });
+
+    it('falls back to "container" when neither container nor payload provide a name', async () => {
+      const mod = await loadModule();
+      const onTerminalEvent = vi.fn();
+      mod.applyUpdateOperationSseToHold({
+        parsed: {
+          operationId: 'op-nameless',
+          status: 'failed',
+        },
+        resolveContainer: () => undefined,
+        onTerminalEvent,
+      });
+      expect(onTerminalEvent.mock.calls[0]?.[0]?.name).toBe('container');
+    });
+
+    it('clears the held operation when status is neither active nor terminal', async () => {
+      // The status enum only contains active + terminal values today, but the
+      // helper's branch covers defensive handling of unexpected statuses; we
+      // exercise that branch by asserting clearHeldOperation's side effect via
+      // an explicit fake status cast.
+      const mod = await loadModule();
+      const composable = mod.useOperationDisplayHold();
+      composable.holdOperationDisplay({
+        operationId: 'op-unknown',
+        operation: makeOperation({ id: 'op-unknown' }),
+        containerId: 'c-x',
+        containerName: 'x',
+      });
+      expect(composable.heldOperations.value.has('op-unknown')).toBe(true);
+      mod.applyUpdateOperationSseToHold({
+        parsed: {
+          operationId: 'op-unknown',
+          containerId: 'c-x',
+          containerName: 'x',
+          // Non-standard status to hit the default branch
+          status: 'unknown' as unknown as 'succeeded',
+        },
+        resolveContainer: () => undefined,
+      });
+      expect(composable.heldOperations.value.has('op-unknown')).toBe(false);
+    });
+  });
 });

@@ -11,7 +11,9 @@ import { useContainerFilters } from '../composables/useContainerFilters';
 import { useDetailPanel, useDetailPanelStorage } from '../composables/useDetailPanel';
 import { LOG_AUTO_FETCH_INTERVALS } from '../composables/useLogViewerBehavior';
 import {
+  applyUpdateOperationSseToHold,
   OPERATION_DISPLAY_HOLD_MS,
+  parseUpdateOperationSsePayload,
   type TerminalResolvedArgs,
   useOperationDisplayHold,
 } from '../composables/useOperationDisplayHold';
@@ -27,12 +29,6 @@ import {
   refreshAllContainers,
 } from '../services/container';
 import type { Container } from '../types/container';
-import {
-  isActiveContainerUpdateOperationPhaseForStatus,
-  isActiveContainerUpdateOperationStatus,
-  isContainerUpdateOperationStatus,
-  type ActiveContainerUpdateOperationPhase,
-} from '../types/update-operation';
 import { getContainerActionIdentityKey } from '../utils/container-action-key';
 import { mapApiContainer, mapApiContainers } from '../utils/container-mapper';
 import {
@@ -69,14 +65,10 @@ const containerIdMap = ref<Record<string, string>>({});
 const containerMetaMap = ref<Record<string, unknown>>({});
 const {
   clearAllOperationDisplayHolds,
-  findMatchingOperationIds,
-  holdOperationDisplay,
   markToastFired,
   wasToastFired,
   projectContainerDisplayState,
   reconcileHoldsAgainstContainers,
-  scheduleHeldOperationRelease,
-  clearHeldOperation,
 } = useOperationDisplayHold();
 const toast = useToast();
 
@@ -1201,22 +1193,6 @@ async function handleSseScanCompleted() {
 }
 
 const sseScanCompletedListener = handleSseScanCompleted as EventListener;
-function resolveActiveOperationPhase(args: {
-  status: 'queued' | 'in-progress';
-  phase: unknown;
-  previousPhase?: unknown;
-}): ActiveContainerUpdateOperationPhase {
-  if (isActiveContainerUpdateOperationPhaseForStatus(args.status, args.phase)) {
-    return args.phase;
-  }
-  if (
-    args.previousPhase !== undefined &&
-    isActiveContainerUpdateOperationPhaseForStatus(args.status, args.previousPhase)
-  ) {
-    return args.previousPhase;
-  }
-  return args.status === 'queued' ? 'queued' : 'pulling';
-}
 
 type ContainerPatchKind = 'added' | 'updated' | 'removed';
 
@@ -1327,105 +1303,56 @@ function applyContainerPatch(event: Event, kind: ContainerPatchKind) {
   );
 }
 
-function applyOperationPatch(event: Event) {
-  const payload = (event as CustomEvent)?.detail;
-  if (!payload || typeof payload !== 'object') {
-    return;
-  }
-  const { operationId, containerId, newContainerId, containerName, status, phase } =
-    payload as Record<string, unknown>;
-  if (!isContainerUpdateOperationStatus(status)) {
-    return;
-  }
-
+function findContainerForOperationTarget(target: {
+  containerId?: string;
+  newContainerId?: string;
+  containerName?: string;
+}): Container | undefined {
   const idx = containers.value.findIndex(
     (c) =>
-      (typeof containerId === 'string' && c.id === containerId) ||
-      (typeof newContainerId === 'string' && c.id === newContainerId) ||
-      (typeof containerName === 'string' && c.name === containerName),
+      (typeof target.containerId === 'string' && c.id === target.containerId) ||
+      (typeof target.newContainerId === 'string' && c.id === target.newContainerId) ||
+      (typeof target.containerName === 'string' && c.name === target.containerName),
   );
+  return idx === -1 ? undefined : containers.value[idx];
+}
 
-  // Mutate the matched row in place when found, but do NOT early-return on miss.
-  // Terminal SSEs can race ahead of the container-list refresh that renames the row
-  // post-recreate — the hold map + toast are keyed on operationId/name, not on the
-  // row existing in containers.value, so we must still release the hold and surface
-  // the toast even when idx === -1.
-  const row = idx === -1 ? undefined : containers.value[idx]!;
-  if (isActiveContainerUpdateOperationStatus(status)) {
-    if (!row) {
-      return;
-    }
-    const nextOperation = {
-      ...(row.updateOperation || {}),
-      id: typeof operationId === 'string' ? operationId : (row.updateOperation?.id ?? ''),
-      status,
-      phase: resolveActiveOperationPhase({
-        status,
-        phase,
-        previousPhase: row.updateOperation?.phase,
-      }),
-      updatedAt: new Date().toISOString(),
-    };
-    row.updateOperation = nextOperation;
-    if (typeof operationId === 'string' && operationId.length > 0) {
-      holdOperationDisplay({
-        operationId,
-        operation: nextOperation,
-        containerId: typeof containerId === 'string' ? containerId : undefined,
-        newContainerId: typeof newContainerId === 'string' ? newContainerId : undefined,
-        containerName: typeof containerName === 'string' ? containerName : undefined,
-        sortSnapshot: {
-          status: row.status,
-          updateKind: row.updateKind,
-          newTag: row.newTag,
-          currentTag: row.currentTag,
-          image: row.image,
-          imageCreated: row.imageCreated,
-          updateDetectedAt: row.updateDetectedAt,
-        },
-      });
-    }
-  } else {
-    if (row) {
-      row.updateOperation = undefined;
-    }
-    const target = {
-      operationId: typeof operationId === 'string' ? operationId : undefined,
-      containerId: typeof containerId === 'string' ? containerId : undefined,
-      newContainerId: typeof newContainerId === 'string' ? newContainerId : undefined,
-      containerName: typeof containerName === 'string' ? containerName : undefined,
-    };
-    const wasTracked = findMatchingOperationIds(target).length > 0;
-    const toastName =
-      row?.name ??
-      (typeof containerName === 'string' && containerName.length > 0 ? containerName : 'container');
-    // Defer terminal toasts until the hold window expires so the row settles
-    // to its new state first — firing a "Updated" toast while the row still
-    // shows the "updating" spinner confuses users.
-    // Mark the toast as fired so the reconciliation fallback path does not
-    // fire a duplicate if the hold is later collapsed (e.g. next list refresh).
-    if (status === 'succeeded') {
-      scheduleHeldOperationRelease(target);
-      if (wasTracked) {
-        if (target.operationId) markToastFired(target.operationId);
-        setTimeout(() => toast.success(`Updated: ${toastName}`), OPERATION_DISPLAY_HOLD_MS);
-      }
-    } else if (status === 'failed') {
-      scheduleHeldOperationRelease(target);
-      if (wasTracked) {
-        if (target.operationId) markToastFired(target.operationId);
-        setTimeout(() => toast.error(`Update failed: ${toastName}`), OPERATION_DISPLAY_HOLD_MS);
-      }
-    } else if (status === 'rolled-back') {
-      scheduleHeldOperationRelease(target);
-      if (wasTracked) {
-        if (target.operationId) markToastFired(target.operationId);
-        setTimeout(() => toast.error(`Rolled back: ${toastName}`), OPERATION_DISPLAY_HOLD_MS);
-      }
-    } else {
-      clearHeldOperation(target);
-    }
+function applyOperationPatch(event: Event) {
+  const parsed = parseUpdateOperationSsePayload((event as CustomEvent)?.detail);
+  if (!parsed) {
+    return;
   }
+  applyUpdateOperationSseToHold({
+    parsed,
+    resolveContainer: findContainerForOperationTarget,
+    // ContainersView drives row reactivity by mutating updateOperation in place,
+    // so the view keeps responsibility for that while the composable owns the
+    // hold map + snapshot.
+    onActiveOperationComputed: ({ container, nextOperation }) => {
+      (container as Container).updateOperation = nextOperation;
+    },
+    // Terminal SSEs can race ahead of the container-list refresh that renames
+    // the row post-recreate — the hold + toast are keyed on operationId/name,
+    // so we still release the hold and (if tracked) fire the deferred toast
+    // even when the row has already fallen out of containers.value.
+    onTerminalEvent: ({ container, status, name, wasTracked }) => {
+      if (container) {
+        (container as Container).updateOperation = undefined;
+      }
+      if (!wasTracked) {
+        return;
+      }
+      // Defer terminal toasts until the hold window ends so the row settles
+      // before the toast announces the outcome (rc.12 9d48922a).
+      if (status === 'succeeded') {
+        setTimeout(() => toast.success(`Updated: ${name}`), OPERATION_DISPLAY_HOLD_MS);
+      } else if (status === 'failed') {
+        setTimeout(() => toast.error(`Update failed: ${name}`), OPERATION_DISPLAY_HOLD_MS);
+      } else {
+        setTimeout(() => toast.error(`Rolled back: ${name}`), OPERATION_DISPLAY_HOLD_MS);
+      }
+    },
+  });
 }
 
 const sseConnectedListener = handleSseContainerChanged as EventListener;
