@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **[#291](https://github.com/CodesWhat/drydock/issues/291)** (rc.13 follow-up) — Dashboard update flow now shares the same `useOperationDisplayHold` composable that the Containers view uses, fixing the last two reporter symptoms that survived rc.12/rc.13 on the dashboard path. (1) The updating row no longer drops to the bottom of the Recent Updates widget mid-update: the backend transiently clears `updateDetectedAt` while the container recreates, which was sorting the ghost row last — the shared hold now overlays the snapshotted `updateDetectedAt` so sort position is stable through the whole update window. (2) A dropped terminal SSE (Synology DSM reverse-proxy style reconnect-without-replay) no longer leaves the dashboard silent: the view now reconciles holds against refreshed container data and falls through to `GET /update-operations/:id` the same way the Containers view did in rc.13. Both views are now driven by one hold map, one sort-snapshot overlay, and one reconciliation fallback.
+
 ## [1.5.0-rc.12] — 2026-04-22
 
 ### Fixed
