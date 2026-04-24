@@ -181,8 +181,19 @@ export async function getContainerStats(containerId: string): Promise<ContainerS
   };
 }
 
-export async function getAllContainerStats(): Promise<ContainerStatsSummaryItem[]> {
-  const response = await fetch('/api/v1/containers/stats', {
+export interface GetAllContainerStatsOptions {
+  // When false, the server returns cached snapshots without starting a Docker
+  // stats stream per container. Dashboard summary reads use this to avoid
+  // spawning per-container streams on every refresh. See #301.
+  touch?: boolean;
+}
+
+export async function getAllContainerStats(
+  options: GetAllContainerStatsOptions = {},
+): Promise<ContainerStatsSummaryItem[]> {
+  const url =
+    options.touch === false ? '/api/v1/containers/stats?touch=false' : '/api/v1/containers/stats';
+  const response = await fetch(url, {
     credentials: 'include',
   });
   if (!response.ok) {

@@ -220,6 +220,38 @@ describe('stats service', () => {
     expect(result[0]?.name).toBe('web');
   });
 
+  it('passes ?touch=false when called with { touch: false }', async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [] }),
+    });
+
+    await getAllContainerStats({ touch: false });
+
+    expect(mockFetch).toHaveBeenCalledWith('/api/v1/containers/stats?touch=false', {
+      credentials: 'include',
+    });
+  });
+
+  it('does not append query string when called with { touch: true } or no options', async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [] }),
+    });
+
+    await getAllContainerStats();
+    expect(mockFetch).toHaveBeenCalledWith('/api/v1/containers/stats', {
+      credentials: 'include',
+    });
+
+    mockFetch.mockClear();
+
+    await getAllContainerStats({ touch: true });
+    expect(mockFetch).toHaveBeenCalledWith('/api/v1/containers/stats', {
+      credentials: 'include',
+    });
+  });
+
   it('filters malformed summary items while keeping well-formed rows', async () => {
     mockFetch.mockResolvedValue({
       ok: true,

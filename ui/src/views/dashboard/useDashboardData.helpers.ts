@@ -1,10 +1,16 @@
 import type { ComputedRef, Ref } from 'vue';
 
-type RealtimeRefreshMode = 'summary' | 'full';
+// 'full-live' is a reduced refresh used by reconnect events (dd:sse-connected):
+// fetches the live endpoints (containers/stats/recent-status) but lets the
+// cheap-to-stale static endpoints (watchers/registries/agents/server) ride
+// their TTL. 'full' is the no-skip refresh used when the server signals
+// dd:sse-resync-required. Precedence: full > full-live > summary. See #301.
+type RealtimeRefreshMode = 'summary' | 'full-live' | 'full';
 
 interface RealtimeRefreshSchedulerOptions {
   debounceMs: number;
   refreshSummary?: () => void;
+  refreshFullLive?: () => void;
   refreshFull: () => void;
   setTimeoutFn?: typeof setTimeout;
   clearTimeoutFn?: typeof clearTimeout;
@@ -26,12 +32,16 @@ function selectRealtimeRefreshMode(
   if (current === 'full' || requested === 'full') {
     return 'full';
   }
+  if (current === 'full-live' || requested === 'full-live') {
+    return 'full-live';
+  }
   return 'summary';
 }
 
 export function createRealtimeRefreshScheduler({
   debounceMs,
   refreshSummary,
+  refreshFullLive,
   refreshFull,
   setTimeoutFn = globalThis.setTimeout.bind(globalThis),
   clearTimeoutFn = globalThis.clearTimeout.bind(globalThis),
@@ -50,6 +60,10 @@ export function createRealtimeRefreshScheduler({
       scheduledMode = undefined;
       if (modeToRefresh === 'full') {
         refreshFull();
+        return;
+      }
+      if (modeToRefresh === 'full-live') {
+        (refreshFullLive ?? refreshFull)();
         return;
       }
       refreshSummary?.();

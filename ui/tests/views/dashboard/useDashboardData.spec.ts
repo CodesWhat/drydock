@@ -907,4 +907,78 @@ describe('useDashboardData', () => {
     expect(state.containers.value).toHaveLength(1);
     expect(state.containers.value[0]?.id).toBe('c1');
   });
+
+  it('skips watchers/registries/agents/server on reconnect-driven refresh when within TTL', async () => {
+    vi.useFakeTimers();
+
+    // Mount — initial fetch calls all 7 endpoints
+    await mountDashboardData();
+
+    // Confirm each static endpoint was called exactly once during initial load
+    expect(mocks.getServer).toHaveBeenCalledTimes(1);
+    expect(mocks.getAgents).toHaveBeenCalledTimes(1);
+    expect(mocks.getAllWatchers).toHaveBeenCalledTimes(1);
+    expect(mocks.getAllRegistries).toHaveBeenCalledTimes(1);
+    expect(mocks.getAllContainers).toHaveBeenCalledTimes(1);
+    expect(mocks.getAllContainerStats).toHaveBeenCalledTimes(1);
+    expect(mocks.getContainerRecentStatus).toHaveBeenCalledTimes(1);
+
+    // Dispatch reconnect — debouncer waits 1000ms then calls fetchDashboardData({ background: true, skipStaticIfFresh: true })
+    // lastStaticFetchAt was just set, so the static endpoints are within TTL and will be skipped
+    globalThis.dispatchEvent(new CustomEvent('dd:sse-connected'));
+    vi.advanceTimersByTime(1_000);
+    await flushPromises();
+
+    // Live endpoints always fetch — now called 2× total
+    expect(mocks.getAllContainers).toHaveBeenCalledTimes(2);
+    expect(mocks.getAllContainerStats).toHaveBeenCalledTimes(2);
+    expect(mocks.getContainerRecentStatus).toHaveBeenCalledTimes(2);
+
+    // Static endpoints skipped — still only 1× (TTL fresh)
+    expect(mocks.getServer).toHaveBeenCalledTimes(1);
+    expect(mocks.getAgents).toHaveBeenCalledTimes(1);
+    expect(mocks.getAllWatchers).toHaveBeenCalledTimes(1);
+    expect(mocks.getAllRegistries).toHaveBeenCalledTimes(1);
+  });
+
+  it('refetches static endpoints after TTL expires on reconnect-driven refresh', async () => {
+    vi.useFakeTimers();
+
+    // Mount — initial fetch records lastStaticFetchAt = Date.now()
+    await mountDashboardData();
+
+    // Advance wall clock past the 30s TTL so the next skipStaticIfFresh check finds stale data
+    vi.setSystemTime(Date.now() + 31_000);
+
+    // Dispatch reconnect — debouncer waits 1000ms, then TTL has expired so static endpoints are included
+    globalThis.dispatchEvent(new CustomEvent('dd:sse-connected'));
+    vi.advanceTimersByTime(1_000);
+    await flushPromises();
+
+    // All 7 endpoints called 2× total
+    expect(mocks.getAllContainers).toHaveBeenCalledTimes(2);
+    expect(mocks.getAllContainerStats).toHaveBeenCalledTimes(2);
+    expect(mocks.getContainerRecentStatus).toHaveBeenCalledTimes(2);
+    expect(mocks.getServer).toHaveBeenCalledTimes(2);
+    expect(mocks.getAgents).toHaveBeenCalledTimes(2);
+    expect(mocks.getAllWatchers).toHaveBeenCalledTimes(2);
+    expect(mocks.getAllRegistries).toHaveBeenCalledTimes(2);
+  });
+
+  it('always refetches all endpoints on foreground fetchDashboardData call regardless of TTL', async () => {
+    // Mount — initial fetch (foreground, no skipStaticIfFresh)
+    const { state } = await mountDashboardData();
+
+    // Call fetchDashboardData directly with no options → foreground, skipStaticIfFresh is false
+    await state.fetchDashboardData();
+
+    // All 7 endpoints called 2× total — TTL guard is never consulted for foreground calls
+    expect(mocks.getAllContainers).toHaveBeenCalledTimes(2);
+    expect(mocks.getAllContainerStats).toHaveBeenCalledTimes(2);
+    expect(mocks.getContainerRecentStatus).toHaveBeenCalledTimes(2);
+    expect(mocks.getServer).toHaveBeenCalledTimes(2);
+    expect(mocks.getAgents).toHaveBeenCalledTimes(2);
+    expect(mocks.getAllWatchers).toHaveBeenCalledTimes(2);
+    expect(mocks.getAllRegistries).toHaveBeenCalledTimes(2);
+  });
 });
