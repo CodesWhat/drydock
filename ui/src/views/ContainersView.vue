@@ -170,50 +170,42 @@ function buildContainerLookupMaps(apiContainers: Record<string, unknown>[]) {
  * groupedContainers computed chain — when the incoming data is identical to
  * what is already stored.
  *
- * Performance note: this walk is O(N × fields) but produces no Vue reactive
- * side-effects and allocates far less than the chain re-eval + DOM diffing
- * that would otherwise occur on every cron-triggered reload.
+ * Only hashes fields that affect row rendering or the downstream computed
+ * chain (identity, tag, status, update indicators, safety state). Deep
+ * structures like `details` (ports/volumes/env/labels) are intentionally
+ * excluded — they do not change the grouped table render and would dominate
+ * the cost of this walk on every reload. See #301.
+ *
+ * This is a best-effort dedup, not a correctness primitive: a false-positive
+ * (hash collision / missed change) results in a redundant reactive
+ * reassignment, i.e. the same work the pre-fingerprint code already did
+ * unconditionally.
  */
-function fingerprintValue(value: unknown): string | undefined {
-  if (value === null) {
-    return 'null';
-  }
-
-  switch (typeof value) {
-    case 'string':
-    case 'number':
-    case 'boolean':
-      return JSON.stringify(value);
-    case 'undefined':
-    case 'function':
-    case 'symbol':
-      return undefined;
-    case 'object':
-      break;
-    default:
-      return JSON.stringify(String(value));
-  }
-
-  if (Array.isArray(value)) {
-    return `[${value.map((item) => fingerprintValue(item) ?? 'null').join(',')}]`;
-  }
-
-  if (value instanceof Date) {
-    return JSON.stringify(value.toJSON());
-  }
-
-  const record = value as Record<string, unknown>;
-  const entries = Object.keys(record)
-    .sort()
-    .flatMap((key) => {
-      const serialized = fingerprintValue(record[key]);
-      return serialized === undefined ? [] : [`${JSON.stringify(key)}:${serialized}`];
-    });
-  return `{${entries.join(',')}}`;
+function containerRowFingerprint(c: Container): string {
+  const op = c.updateOperation;
+  return [
+    c.id,
+    c.name,
+    c.currentTag,
+    c.newTag ?? '',
+    c.status,
+    c.updateKind ?? '',
+    c.updateDetectedAt ?? '',
+    c.bouncer,
+    c.updateBouncer ?? '',
+    c.updatePolicyState ?? '',
+    c.noUpdateReason ?? '',
+    c.registryError ?? '',
+    op ? `${op.id}:${op.status}:${op.phase}:${op.updatedAt}` : '',
+  ].join('|');
 }
 
 function containerListFingerprint(list: Container[]): string {
-  return fingerprintValue(list) ?? '[]';
+  const parts = new Array<string>(list.length);
+  for (let i = 0; i < list.length; i += 1) {
+    parts[i] = containerRowFingerprint(list[i]!);
+  }
+  return parts.join('\n');
 }
 
 async function loadContainers() {
@@ -1204,42 +1196,52 @@ function findContainerIndexByIdOrName(id: unknown, name: unknown): number {
   );
 }
 
+// Patch the id+meta maps once per SSE event instead of spread-copying the full
+// map per field. On a 400-container deployment the old code did 4 full
+// O(N) spreads per event (id-key, meta-key, alias-key, alias-meta-key); this
+// does 2. Identity still changes per call so downstream caches keyed on
+// `containerMetaMap.value !== cached` invalidate correctly. See #301.
 function updateLookupMapsForContainer(raw: Record<string, unknown>) {
   const containerId = typeof raw.id === 'string' ? raw.id : '';
   if (!containerId) {
     return;
   }
-  containerIdMap.value = { ...containerIdMap.value, [containerId]: containerId };
-  containerMetaMap.value = { ...containerMetaMap.value, [containerId]: raw };
   const uiName =
     typeof raw.displayName === 'string' && raw.displayName.trim().length > 0
       ? raw.displayName
       : typeof raw.name === 'string'
         ? raw.name
         : '';
+
+  const nextId = { ...containerIdMap.value, [containerId]: containerId };
+  const nextMeta = { ...containerMetaMap.value, [containerId]: raw };
   if (uiName) {
-    containerIdMap.value = { ...containerIdMap.value, [uiName]: containerId };
-    containerMetaMap.value = { ...containerMetaMap.value, [uiName]: raw };
+    nextId[uiName] = containerId;
+    nextMeta[uiName] = raw;
   }
+  containerIdMap.value = nextId;
+  containerMetaMap.value = nextMeta;
 }
 
 function removeLookupMapsForContainer(id: string, name: string | undefined) {
-  if (id && containerIdMap.value[id] !== undefined) {
-    const nextId = { ...containerIdMap.value };
-    const nextMeta = { ...containerMetaMap.value };
+  const current = containerIdMap.value;
+  const hasId = !!id && current[id] !== undefined;
+  const hasName = !!name && current[name] !== undefined;
+  if (!hasId && !hasName) {
+    return;
+  }
+  const nextId = { ...containerIdMap.value };
+  const nextMeta = { ...containerMetaMap.value };
+  if (hasId) {
     delete nextId[id];
     delete nextMeta[id];
-    containerIdMap.value = nextId;
-    containerMetaMap.value = nextMeta;
   }
-  if (name && containerIdMap.value[name] !== undefined) {
-    const nextId = { ...containerIdMap.value };
-    const nextMeta = { ...containerMetaMap.value };
-    delete nextId[name];
-    delete nextMeta[name];
-    containerIdMap.value = nextId;
-    containerMetaMap.value = nextMeta;
+  if (hasName) {
+    delete nextId[name!];
+    delete nextMeta[name!];
   }
+  containerIdMap.value = nextId;
+  containerMetaMap.value = nextMeta;
 }
 
 // Apply a single-container SSE payload in place instead of falling back to a
