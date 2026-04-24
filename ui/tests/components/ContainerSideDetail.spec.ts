@@ -50,7 +50,7 @@ vi.mock('@/components/containers/containersViewTemplateContext', () => ({
     isContainerUpdateInProgress,
     isContainerUpdateQueued,
     getContainerUpdateSequenceLabel,
-    actionInProgress: ref(new Set<string>()),
+    actionInProgress: ref(new Map<string, 'update' | 'scan' | 'lifecycle' | 'delete'>()),
     tt,
   }),
 }));

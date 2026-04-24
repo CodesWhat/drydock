@@ -1079,7 +1079,7 @@ describe('ContainersView', () => {
       const vm = wrapper.vm as any;
 
       // Simulate action already in progress on container c1
-      vm.actionInProgress = new Set(['c1']);
+      vm.actionInProgress = new Map([['c1', 'update']]);
 
       // Attempting the same container should be blocked
       mockApiUpdate.mockResolvedValue({});
@@ -1097,7 +1097,7 @@ describe('ContainersView', () => {
       const vm = wrapper.vm as any;
 
       // Simulate action already in progress on container c1
-      vm.actionInProgress = new Set(['c1']);
+      vm.actionInProgress = new Map([['c1', 'update']]);
 
       // Attempting a different container should NOT be blocked
       mockApiUpdate.mockResolvedValue({});

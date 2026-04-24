@@ -16,7 +16,7 @@ const selectedContainer = ref({
 });
 
 const activeDetailTab = ref('overview');
-const actionInProgress = ref(new Set<string>());
+const actionInProgress = ref(new Map<string, 'update' | 'scan' | 'lifecycle' | 'delete'>());
 const closeFullPage = vi.fn();
 const confirmStop = vi.fn();
 const startContainer = vi.fn();
@@ -65,7 +65,7 @@ function factory() {
 describe('ContainerFullPageDetail', () => {
   afterEach(() => {
     activeDetailTab.value = 'overview';
-    actionInProgress.value = new Set();
+    actionInProgress.value = new Map();
     isContainerUpdateInProgress.mockReset();
     isContainerUpdateInProgress.mockReturnValue(false);
     isContainerUpdateQueued.mockReset();
@@ -152,7 +152,7 @@ describe('ContainerFullPageDetail', () => {
 
   describe('disabled state during action', () => {
     it('disables action buttons when actionInProgress matches container id', () => {
-      actionInProgress.value = new Set(['container-1']);
+      actionInProgress.value = new Map([['container-1', 'update']]);
       const wrapper = factory();
       const actionButtons = wrapper
         .findAll('button')
@@ -163,7 +163,7 @@ describe('ContainerFullPageDetail', () => {
     });
 
     it('does not disable buttons when actionInProgress is a different container', () => {
-      actionInProgress.value = new Set(['other-container-id']);
+      actionInProgress.value = new Map([['other-container-id', 'update']]);
       const wrapper = factory();
       const actionButtons = wrapper
         .findAll('button')
@@ -174,7 +174,7 @@ describe('ContainerFullPageDetail', () => {
     });
 
     it('applies opacity-50 class when disabled', () => {
-      actionInProgress.value = new Set(['container-1']);
+      actionInProgress.value = new Map([['container-1', 'update']]);
       const wrapper = factory();
       const stopBtn = wrapper.find('button[aria-label="Stop container"]');
       expect(stopBtn.classes()).toContain('opacity-50');
@@ -182,7 +182,7 @@ describe('ContainerFullPageDetail', () => {
     });
 
     it('does not apply opacity-50 class when not disabled', () => {
-      actionInProgress.value = new Set();
+      actionInProgress.value = new Map();
       const wrapper = factory();
       const stopBtn = wrapper.find('button[aria-label="Stop container"]');
       expect(stopBtn.classes()).not.toContain('opacity-50');

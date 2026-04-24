@@ -3510,4 +3510,107 @@ describe('useContainerActions', () => {
     // Flag must remain true — the early return did not acquire/release the lock
     expect(pendingActionsPollInFlight.value).toBe(true);
   });
+
+  it('isContainerScanInProgress returns true during a scan and false during an update', async () => {
+    const container = makeContainer({ id: 'container-1', name: 'web' });
+    const { composable } = await mountActionsHarness({
+      containers: [container],
+      containerIdMap: { web: 'container-1' },
+    });
+
+    const resolvers: Array<() => void> = [];
+    mocks.scanContainer.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolvers.push(resolve);
+        }),
+    );
+    mocks.updateContainer.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolvers.push(resolve);
+        }),
+    );
+
+    // During a scan: isContainerScanInProgress must be true, isContainerUpdateInProgress must be false.
+    // The action is keyed by container id (resolved from the containerIdMap), so we check by
+    // container object (which carries the id) rather than by the string name.
+    // Also verify the string-target path of isContainerScanInProgress: when the string matches
+    // the map key it returns true, when it doesn't match it returns false.
+    const scanPromise = composable.scanContainer('web');
+    await nextTick();
+
+    expect(composable.isContainerScanInProgress(container)).toBe(true);
+    // String 'container-1' matches the keyed entry via the name path
+    expect(composable.isContainerScanInProgress('container-1')).toBe(true);
+    // String 'unrelated' doesn't match any entry
+    expect(composable.isContainerScanInProgress('unrelated')).toBe(false);
+    expect(composable.isContainerUpdateInProgress(container)).toBe(false);
+
+    resolvers[0]?.();
+    await scanPromise;
+
+    // After the scan completes the flag clears
+    expect(composable.isContainerScanInProgress(container)).toBe(false);
+
+    // During an update: isContainerUpdateInProgress must be true, isContainerScanInProgress must be false
+    const updatePromise = composable.updateContainer('web');
+    await nextTick();
+
+    expect(composable.isContainerUpdateInProgress(container)).toBe(true);
+    expect(composable.isContainerScanInProgress(container)).toBe(false);
+
+    resolvers[1]?.();
+    await updatePromise;
+  });
+
+  it('isContainerRowLocked returns false during a scan and true during an update', async () => {
+    const container = makeContainer({ id: 'container-1', name: 'web' });
+    const { composable } = await mountActionsHarness({
+      containers: [container],
+      containerIdMap: { web: 'container-1' },
+    });
+
+    const resolvers: Array<() => void> = [];
+    mocks.scanContainer.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolvers.push(resolve);
+        }),
+    );
+    mocks.updateContainer.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolvers.push(resolve);
+        }),
+    );
+
+    // Before any action: not locked
+    expect(composable.isContainerRowLocked(container)).toBe(false);
+
+    // During a scan: the row must NOT be locked so other buttons remain enabled.
+    // Check by container object so the id-keyed actionInProgress map is resolved correctly.
+    const scanPromise = composable.scanContainer('web');
+    await nextTick();
+
+    expect(composable.isContainerRowLocked(container)).toBe(false);
+
+    resolvers[0]?.();
+    await scanPromise;
+
+    // During an update: the row must be locked while actionInProgress carries the 'update' kind
+    const updatePromise = composable.updateContainer('web');
+    await nextTick();
+
+    expect(composable.isContainerRowLocked(container)).toBe(true);
+
+    resolvers[1]?.();
+    await flushPromises();
+    await updatePromise;
+
+    // After the update the actionInProgress entry is cleared; pending state may still report
+    // in-progress (that behaviour is covered by other dedicated pending-state tests).
+    // Verify only that actionInProgress no longer carries the update entry.
+    expect(composable.actionInProgress.value.has('container-1')).toBe(false);
+  });
 });
