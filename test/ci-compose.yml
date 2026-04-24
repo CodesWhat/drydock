@@ -12,7 +12,7 @@ services:
       - DD_ALLOW_INSECURE_ROOT=true
       - DD_LOG_FORMAT=text
       - DD_WATCHER_LOCAL_WATCHBYDEFAULT=false
-      - DD_TRIGGER_DOCKER_LOCAL_AUTO=false
+      - DD_ACTION_DOCKER_LOCAL_AUTO=false
       - DD_AUTH_BASIC_ADMIN_USER=admin
       - "DD_AUTH_BASIC_ADMIN_HASH=argon2id$$65536$$3$$4$$H/LzIyo+5tbepUCiuRU2bFai+nbf+y/ZjMYH7h+vf1g=$$GeCkn8cI/+DbKXUiPydlqKUvj5Ujb4wL5sUkSm83rQWyIejvWoejrk6zWmQ2x5an7qvSHYL9gZHpibCXAJNdYw=="
       - DD_SESSION_SECRET=ci-load-test-secret

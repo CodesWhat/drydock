@@ -27,9 +27,9 @@ services:
       - DD_LOG_FORMAT=text
       - DD_WATCHER_LOCAL_WATCHBYDEFAULT=false
       - DD_WATCHER_LOCAL_CRON=*/2 * * * *
-      - DD_TRIGGER_DOCKER_LOCAL_AUTO=false
-      - DD_TRIGGER_DOCKERCOMPOSE_QA_FILE=/drydock/qa-compose.yml
-      - DD_TRIGGER_DOCKERCOMPOSE_QA_AUTO=false
+      - DD_ACTION_DOCKER_LOCAL_AUTO=false
+      - DD_ACTION_DOCKERCOMPOSE_QA_FILE=/drydock/qa-compose.yml
+      - DD_ACTION_DOCKERCOMPOSE_QA_AUTO=false
       - DD_AUTH_BASIC_ADMIN_USER=admin
       - "DD_AUTH_BASIC_ADMIN_HASH=argon2id$$65536$$3$$4$$zUAK9+ktVWNHyQdv3SaOSgMv3T02F1Zj8D+t1un7D98=$$KEmn6d94w03YxIlw7U7l/ikD9lW+H3IC1N7xbAhOB9yKofA3HoxUBmuvBawvShhv337zDv4+g9hobNWeQEWwkQ=="
       - DD_SESSION_SECRET=qa-test-session-secret
