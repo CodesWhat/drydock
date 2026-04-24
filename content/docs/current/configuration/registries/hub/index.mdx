@@ -23,12 +23,12 @@ Don't forget to configure authentication if you're using [Docker Hub Private Rep
 
 | Env var | Required | Description | Supported values | Default value when missing |
 | --- | :---: | --- | --- | --- |
-| `DD_REGISTRY_HUB_{REGISTRY_NAME}_LOGIN` | ⚪ | A valid Docker Hub Login (required with `PASSWORD` or `TOKEN`) | Docker Hub username | |
+| `DD_REGISTRY_HUB_{REGISTRY_NAME}_LOGIN` | ⚪ | A valid Docker Hub Login (required with `PASSWORD`) | Docker Hub username | |
 | `DD_REGISTRY_HUB_{REGISTRY_NAME}_PASSWORD` | ⚪ | A valid Docker Hub password or access token (`LOGIN` must be defined) | Docker Hub password or [access token](https://docs.docker.com/security/access-tokens/) | |
-| `DD_REGISTRY_HUB_{REGISTRY_NAME}_TOKEN` | ⚪ | A valid Docker Hub access token, alternative to `PASSWORD` (`LOGIN` must be defined) | Docker Hub [access token](https://docs.docker.com/security/access-tokens/) | |
+| `DD_REGISTRY_HUB_{REGISTRY_NAME}_TOKEN` | ⚪ | **Deprecated** — use `PASSWORD` instead (accepted as an alias until v1.6.0) | Docker Hub [access token](https://docs.docker.com/security/access-tokens/) | |
 | `DD_REGISTRY_HUB_{REGISTRY_NAME}_AUTH` | ⚪ | A valid Docker Hub Base64 Auth String (cannot be combined with `LOGIN`/`PASSWORD`/`TOKEN`) | Base64 encoded `username:password` string | |
 
-<Callout type="warn">Registry auth now fails closed for invalid combinations. `LOGIN` must be paired with `PASSWORD` (or `TOKEN` alias), and `AUTH` cannot be combined with `LOGIN`/`PASSWORD`/`TOKEN`.</Callout>
+<Callout type="warn">Registry auth now fails closed for invalid combinations. `LOGIN` must be paired with `PASSWORD`, and `AUTH` cannot be combined with `LOGIN`/`PASSWORD`/`TOKEN`. The `TOKEN` key is a deprecated alias for `PASSWORD` (removed in v1.6.0) — use `PASSWORD` for new configs.</Callout>
 
 ## Examples
 
@@ -41,7 +41,7 @@ Don't forget to configure authentication if you're using [Docker Hub Private Rep
 #### 2. Go to your&nbsp;[Security Settings](https://hub.docker.com/settings/security)
 
 - Create a new Access Token
-- Copy it and use it as the `DD_REGISTRY_HUB_PUBLIC_TOKEN` value
+- Copy it and use it as the `DD_REGISTRY_HUB_PUBLIC_PASSWORD` value
 
 ![image](/docs/assets/configuration/registries/hub/hub_token.png)
 
