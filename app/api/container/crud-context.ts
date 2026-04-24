@@ -44,7 +44,10 @@ export interface ServerConfiguration {
 export interface LocalContainerWatcher {
   watch: () => Promise<unknown>;
   getContainers?: () => Promise<Container[]>;
-  watchContainer: (container: Container) => Promise<ContainerReport>;
+  watchContainer: (
+    container: Container,
+    options?: { emitBatchEvent?: boolean },
+  ) => Promise<ContainerReport>;
 }
 
 export interface AuditStoreApi {

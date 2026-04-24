@@ -7,6 +7,11 @@ vi.mock('../../release-notes/index.js', () => ({
     mockGetFullReleaseNotesForContainer(...args),
 }));
 
+const mockEmitContainerReports = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+vi.mock('../../event/index.js', () => ({
+  emitContainerReports: (...args: unknown[]) => mockEmitContainerReports(...args),
+}));
+
 import { isRollbackContainer } from '../../model/container.js';
 import { createCrudHandlers } from './crud.js';
 
@@ -283,6 +288,7 @@ describe('api/container/crud', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockGetFullReleaseNotesForContainer.mockResolvedValue(undefined);
+    mockEmitContainerReports.mockResolvedValue(undefined);
   });
 
   describe('createCrudHandlers dependency grouping', () => {
@@ -3140,6 +3146,8 @@ describe('api/container/crud', () => {
         expect.objectContaining({ id: 'c1' }),
       );
       expect(watcherRemote.watchContainer).not.toHaveBeenCalled();
+      // Targeted watch must emit emitContainerReports so batch-mode triggers fire
+      expect(mockEmitContainerReports).toHaveBeenCalledWith([{ container: c1 }]);
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
         data: [expect.objectContaining({ id: 'c1' }), expect.objectContaining({ id: 'c2' })],
@@ -3252,6 +3260,7 @@ describe('api/container/crud', () => {
 
       expect(watcher.watchContainer).toHaveBeenCalledWith(
         expect.objectContaining({ id: 'c1', agent: 'agent-a' }),
+        { emitBatchEvent: true },
       );
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith(
@@ -3299,7 +3308,9 @@ describe('api/container/crud', () => {
       const res = await callWatchContainer(harness.handlers, 'c1');
 
       expect(watcher.getContainers).toHaveBeenCalledTimes(1);
-      expect(watcher.watchContainer).toHaveBeenCalledWith(expect.objectContaining({ id: 'c1' }));
+      expect(watcher.watchContainer).toHaveBeenCalledWith(expect.objectContaining({ id: 'c1' }), {
+        emitBatchEvent: true,
+      });
       expect(harness.deps.redactContainerRuntimeEnv).toHaveBeenCalledWith(reportContainer);
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith(reportContainer);
@@ -3323,6 +3334,55 @@ describe('api/container/crud', () => {
       expect(res.json).toHaveBeenCalledWith({
         error: 'Error when watching container c1',
       });
+    });
+
+    test('watchContainers bulk watch-all does not emit emitContainerReports (watcher.watch handles it)', async () => {
+      const harness = createHarness({
+        containers: [createContainer({ id: 'c1' })],
+      });
+      harness.deps.getWatchers.mockReturnValue({
+        'docker.local': { watch: vi.fn().mockResolvedValue(undefined), watchContainer: vi.fn() },
+      });
+
+      await callWatchContainers(harness.handlers, {});
+
+      expect(mockEmitContainerReports).not.toHaveBeenCalled();
+    });
+
+    test('watchContainers targeted containerIds emits emitContainerReports with all resolved reports', async () => {
+      const c1 = createContainer({ id: 'c1', watcher: 'local', agent: undefined });
+      const c2 = createContainer({ id: 'c2', watcher: 'local', agent: undefined });
+      const report1 = { container: c1, changed: true };
+      const report2 = { container: c2, changed: false };
+      const harness = createHarness({ containers: [c1, c2] });
+      const watcher = {
+        watch: vi.fn(),
+        watchContainer: vi.fn().mockResolvedValueOnce(report1).mockResolvedValueOnce(report2),
+      };
+      harness.deps.getWatchers.mockReturnValue({ 'docker.local': watcher });
+
+      await callWatchContainers(harness.handlers, {
+        body: { containerIds: ['c1', 'c2'] },
+      });
+
+      expect(mockEmitContainerReports).toHaveBeenCalledTimes(1);
+      expect(mockEmitContainerReports).toHaveBeenCalledWith([report1, report2]);
+    });
+
+    test('watchContainers targeted containerIds does not call emitContainerReports when watcher returns undefined', async () => {
+      const c1 = createContainer({ id: 'c1', watcher: 'local', agent: undefined });
+      const harness = createHarness({ containers: [c1] });
+      const watcher = {
+        watch: vi.fn(),
+        watchContainer: vi.fn().mockResolvedValue(undefined),
+      };
+      harness.deps.getWatchers.mockReturnValue({ 'docker.local': watcher });
+
+      await callWatchContainers(harness.handlers, {
+        body: { containerIds: ['c1'] },
+      });
+
+      expect(mockEmitContainerReports).not.toHaveBeenCalled();
     });
   });
 });

@@ -1095,9 +1095,17 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
   /**
    * Watch a Container.
    * @param container
+   * @param options.emitBatchEvent - When true, also emit a single-element
+   *   `emitContainerReports` event so that batch-mode triggers fire for
+   *   standalone per-container scans. Must be false (default) when called
+   *   from the bulk `watch()` loop because that path emits its own
+   *   `emitContainerReports` for the full set at the end.
    * @returns {Promise<*>}
    */
-  async watchContainer(container: Container) {
+  async watchContainer(
+    container: Container,
+    { emitBatchEvent = false }: { emitBatchEvent?: boolean } = {},
+  ) {
     this.ensureLogger();
     return watchContainerState(container, {
       ensureLogger: () => this.ensureLogger(),
@@ -1106,6 +1114,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
         this.findNewVersion(containerToCheck, logContainer),
       mapContainerToContainerReport: (containerWithResult, watchStartedAtMs) =>
         this.mapContainerToContainerReport(containerWithResult, watchStartedAtMs),
+      emitBatchEvent,
     });
   }
 
