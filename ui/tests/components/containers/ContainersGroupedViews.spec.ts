@@ -149,7 +149,7 @@ function makeContext(overrides: Record<string, unknown> = {}) {
   const groupUpdateInProgress = ref(new Set<string>());
   const groupUpdateQueue = ref(new Set<string>());
   const containerActionsEnabled = ref(true);
-  const actionInProgress = ref(new Set<string>());
+  const actionInProgress = ref(new Map<string, 'update' | 'scan' | 'lifecycle' | 'delete'>());
   const containerViewMode = ref<'table' | 'cards' | 'list'>('table');
   const tableColumns = ref([
     { key: 'icon', label: '', align: 'text-center' },
@@ -234,13 +234,26 @@ function makeContext(overrides: Record<string, unknown> = {}) {
     }) =>
       Boolean(target._pending) ||
       target.updateOperation?.status === 'in-progress' ||
-      actionInProgress.value.has(target.id ?? target.name ?? ''),
+      actionInProgress.value.get(target.id ?? target.name ?? '') === 'update',
     isContainerUpdateQueued: (target: {
       id?: string;
       name?: string;
       updateOperation?: { status?: string };
     }) =>
       target.updateOperation?.status === 'queued' || groupUpdateQueue.value.has(target.id ?? ''),
+    isContainerScanInProgress: (target: { id?: string; name?: string }) =>
+      actionInProgress.value.get(target.id ?? target.name ?? '') === 'scan',
+    isContainerRowLocked: (target: {
+      id?: string;
+      name?: string;
+      _pending?: true;
+      updateOperation?: { status?: string };
+    }) =>
+      Boolean(target._pending) ||
+      target.updateOperation?.status === 'in-progress' ||
+      actionInProgress.value.get(target.id ?? target.name ?? '') === 'update' ||
+      target.updateOperation?.status === 'queued' ||
+      groupUpdateQueue.value.has(target.id ?? ''),
     getContainerUpdateSequenceLabel: () => null,
     updateAllInGroup: spies.updateAllInGroup,
     tt: (label: string) => ({ value: label, showDelay: 400 }),
@@ -1018,7 +1031,7 @@ describe('ContainersGroupedViews', () => {
     refs.groupByStack.value = true;
     refs.containerActionsEnabled.value = false;
     refs.groupUpdateInProgress.value = new Set(['stack-disabled']);
-    refs.actionInProgress.value = new Set(['c-disabled']);
+    refs.actionInProgress.value = new Map([['c-disabled', 'update']]);
     refs.filteredContainers.value = [item];
     refs.displayContainers.value = [item];
     refs.renderGroups.value = [
@@ -1076,7 +1089,7 @@ describe('ContainersGroupedViews', () => {
     ];
     refs.containerViewMode.value = 'table';
     refs.tableActionStyle.value = 'icons';
-    refs.actionInProgress.value = new Set(['c-local']);
+    refs.actionInProgress.value = new Map([['c-local', 'update']]);
     mocked.context = context;
 
     const wrapper = mountSubject();
@@ -1195,19 +1208,19 @@ describe('ContainersGroupedViews', () => {
     ];
     refs.containerViewMode.value = 'table';
     refs.tableActionStyle.value = 'buttons';
-    refs.actionInProgress.value = new Set(['c-progress-1']);
+    refs.actionInProgress.value = new Map([['c-progress-1', 'update']]);
     mocked.context = context;
 
     const wrapper = mountSubject();
     expect(wrapper.text()).toContain('alpha');
 
-    refs.actionInProgress.value = new Set(['c-progress-2']);
+    refs.actionInProgress.value = new Map([['c-progress-2', 'update']]);
     await nextTick();
-    refs.actionInProgress.value = new Set(['c-progress-3']);
+    refs.actionInProgress.value = new Map([['c-progress-3', 'update']]);
     await nextTick();
 
     refs.tableActionStyle.value = 'icons';
-    refs.actionInProgress.value = new Set(['c-progress-3']);
+    refs.actionInProgress.value = new Map([['c-progress-3', 'update']]);
     await nextTick();
   });
 
@@ -1235,7 +1248,7 @@ describe('ContainersGroupedViews', () => {
       },
     ];
     refs.containerViewMode.value = 'table';
-    refs.actionInProgress.value = new Set(['c-progress-1']);
+    refs.actionInProgress.value = new Map([['c-progress-1', 'update']]);
     mocked.context = context;
 
     const wrapper = mountSubject();
@@ -1426,16 +1439,16 @@ describe('ContainersGroupedViews', () => {
         updatableCount: 4,
       },
     ];
-    refs.actionInProgress.value = new Set(['c-card-running']);
+    refs.actionInProgress.value = new Map([['c-card-running', 'update']]);
     mocked.context = context;
 
     const wrapper = mountSubject();
 
-    refs.actionInProgress.value = new Set(['c-list-minor']);
+    refs.actionInProgress.value = new Map([['c-list-minor', 'update']]);
     await nextTick();
 
     refs.containerActionsEnabled.value = false;
-    refs.actionInProgress.value = new Set();
+    refs.actionInProgress.value = new Map();
     await nextTick();
     const cardLockButtons = wrapper
       .findAll('button[disabled]')
