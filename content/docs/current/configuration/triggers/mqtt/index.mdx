@@ -14,22 +14,22 @@ The `mqtt` trigger lets you send container update notifications to an MQTT broke
 
 | Env var | Required | Description | Supported values | Default value when missing |
 | --- | :---: | --- | --- | --- |
-| `DD_TRIGGER_MQTT_{trigger_name}_URL` | 🔴 | The URL of the MQTT broker | Valid mqtt, mqtts, tcp, tls, ws, wss url | |
-| `DD_TRIGGER_MQTT_{trigger_name}_USER` | ⚪ | The username if broker authentication is enabled | | |
-| `DD_TRIGGER_MQTT_{trigger_name}_PASSWORD` | ⚪ | The password if broker authentication is enabled | | |
-| `DD_TRIGGER_MQTT_{trigger_name}_CLIENTID` | ⚪ | The Mqtt client Id to use | | `dd_$random` |
-| `DD_TRIGGER_MQTT_{trigger_name}_TOPIC` | ⚪ | The base topic where the updates are published to | | `dd/container` |
-| `DD_TRIGGER_MQTT_{trigger_name}_HASS_ENABLED` | ⚪ | Enable [Home-assistant](https://www.home-assistant.io/) integration and deliver additional topics | `true`, `false` | `false` |
-| `DD_TRIGGER_MQTT_{trigger_name}_HASS_DISCOVERY` | ⚪ | Enable [Home-assistant](https://www.home-assistant.io/) integration including discovery. When omitted, defaults to the value of `HASS_ENABLED`. | `true`, `false` | Same as `HASS_ENABLED` |
-| `DD_TRIGGER_MQTT_{trigger_name}_HASS_PREFIX` | ⚪ | Base topic for hass entity discovery | | `homeassistant` |
-| `DD_TRIGGER_MQTT_{trigger_name}_HASS_ATTRIBUTES` | ⚪ | Attribute preset controlling which container fields are included in MQTT payloads. `full` sends everything; `short` excludes large fields like SBOM documents, scan vulnerabilities, details, and labels. | `full`, `short` | `short` |
-| `DD_TRIGGER_MQTT_{trigger_name}_HASS_FILTER_INCLUDE` | ⚪ | Comma-separated list of flattened MQTT attribute keys to keep (include-mode). When set, only these keys are published. | Comma-separated flattened keys | |
-| `DD_TRIGGER_MQTT_{trigger_name}_HASS_FILTER_EXCLUDE` | ⚪ | Comma-separated list of flattened MQTT attribute keys to remove (exclude-mode). Used when `HASS_FILTER_INCLUDE` is empty. | Comma-separated flattened keys | |
-| `DD_TRIGGER_MQTT_{trigger_name}_EXCLUDE` | ⚪ | Legacy comma-separated dot-paths to exclude from the nested container object before flattening. Used only when both `HASS_FILTER_INCLUDE` and `HASS_FILTER_EXCLUDE` are empty. | Comma-separated dot-paths | |
-| `DD_TRIGGER_MQTT_{trigger_name}_TLS_CACHAIN` | ⚪ | The path to the file containing the server CA chain (when TLS with a private Certificate Authority) | Any valid file path | |
-| `DD_TRIGGER_MQTT_{trigger_name}_TLS_CLIENTCERT` | ⚪ | The path to the file containing the client public certificate (when TLS mutual authentication) | Any valid file path | |
-| `DD_TRIGGER_MQTT_{trigger_name}_TLS_CLIENTKEY` | ⚪ | The path to the file containing the client private key (when TLS mutual authentication) | Any valid file path | |
-| `DD_TRIGGER_MQTT_{trigger_name}_TLS_REJECTUNAUTHORIZED` | ⚪ | Accept or reject when the TLS server certificate cannot be trusted | `true`, `false` | `true` |
+| `DD_NOTIFICATION_MQTT_{trigger_name}_URL` | 🔴 | The URL of the MQTT broker | Valid mqtt, mqtts, tcp, tls, ws, wss url | |
+| `DD_NOTIFICATION_MQTT_{trigger_name}_USER` | ⚪ | The username if broker authentication is enabled | | |
+| `DD_NOTIFICATION_MQTT_{trigger_name}_PASSWORD` | ⚪ | The password if broker authentication is enabled | | |
+| `DD_NOTIFICATION_MQTT_{trigger_name}_CLIENTID` | ⚪ | The Mqtt client Id to use | | `dd_$random` |
+| `DD_NOTIFICATION_MQTT_{trigger_name}_TOPIC` | ⚪ | The base topic where the updates are published to | | `dd/container` |
+| `DD_NOTIFICATION_MQTT_{trigger_name}_HASS_ENABLED` | ⚪ | Enable [Home-assistant](https://www.home-assistant.io/) integration and deliver additional topics | `true`, `false` | `false` |
+| `DD_NOTIFICATION_MQTT_{trigger_name}_HASS_DISCOVERY` | ⚪ | Enable [Home-assistant](https://www.home-assistant.io/) integration including discovery. When omitted, defaults to the value of `HASS_ENABLED`. | `true`, `false` | Same as `HASS_ENABLED` |
+| `DD_NOTIFICATION_MQTT_{trigger_name}_HASS_PREFIX` | ⚪ | Base topic for hass entity discovery | | `homeassistant` |
+| `DD_NOTIFICATION_MQTT_{trigger_name}_HASS_ATTRIBUTES` | ⚪ | Attribute preset controlling which container fields are included in MQTT payloads. `full` sends everything; `short` excludes large fields like SBOM documents, scan vulnerabilities, details, and labels. | `full`, `short` | `short` |
+| `DD_NOTIFICATION_MQTT_{trigger_name}_HASS_FILTER_INCLUDE` | ⚪ | Comma-separated list of flattened MQTT attribute keys to keep (include-mode). When set, only these keys are published. | Comma-separated flattened keys | |
+| `DD_NOTIFICATION_MQTT_{trigger_name}_HASS_FILTER_EXCLUDE` | ⚪ | Comma-separated list of flattened MQTT attribute keys to remove (exclude-mode). Used when `HASS_FILTER_INCLUDE` is empty. | Comma-separated flattened keys | |
+| `DD_NOTIFICATION_MQTT_{trigger_name}_EXCLUDE` | ⚪ | Legacy comma-separated dot-paths to exclude from the nested container object before flattening. Used only when both `HASS_FILTER_INCLUDE` and `HASS_FILTER_EXCLUDE` are empty. | Comma-separated dot-paths | |
+| `DD_NOTIFICATION_MQTT_{trigger_name}_TLS_CACHAIN` | ⚪ | The path to the file containing the server CA chain (when TLS with a private Certificate Authority) | Any valid file path | |
+| `DD_NOTIFICATION_MQTT_{trigger_name}_TLS_CLIENTCERT` | ⚪ | The path to the file containing the client public certificate (when TLS mutual authentication) | Any valid file path | |
+| `DD_NOTIFICATION_MQTT_{trigger_name}_TLS_CLIENTKEY` | ⚪ | The path to the file containing the client private key (when TLS mutual authentication) | Any valid file path | |
+| `DD_NOTIFICATION_MQTT_{trigger_name}_TLS_REJECTUNAUTHORIZED` | ⚪ | Accept or reject when the TLS server certificate cannot be trusted | `true`, `false` | `true` |
 
 <Callout type="info">This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration). but only supports the `simple` mode.</Callout>
 
@@ -51,14 +51,14 @@ services:
     image: codeswhat/drydock
     ...
     environment:
-      - DD_TRIGGER_MQTT_MOSQUITTO_URL=mqtt://localhost:1883
+      - DD_NOTIFICATION_MQTT_MOSQUITTO_URL=mqtt://localhost:1883
 ```
 
 </Tab>
 <Tab value="Docker (Mosquitto)">
 ```bash
 docker run \
-    -e DD_TRIGGER_MQTT_MOSQUITTO_URL="mqtt://localhost:1883" \
+    -e DD_NOTIFICATION_MQTT_MOSQUITTO_URL="mqtt://localhost:1883" \
   ...
   codeswhat/drydock
 ```
@@ -76,10 +76,10 @@ services:
     image: codeswhat/drydock
     ...
     environment:
-      - DD_TRIGGER_MQTT_MOSQUITTO_URL=mqtts://localhost:8883
-      - DD_TRIGGER_MQTT_MOSQUITTO_TLS_CLIENTKEY=/drydock/mqtt/client-key.pem
-      - DD_TRIGGER_MQTT_MOSQUITTO_TLS_CLIENTCERT=/drydock/mqtt/client-cert.pem
-      - DD_TRIGGER_MQTT_MOSQUITTO_TLS_CACHAIN=/drydock/mqtt/ca.pem
+      - DD_NOTIFICATION_MQTT_MOSQUITTO_URL=mqtts://localhost:8883
+      - DD_NOTIFICATION_MQTT_MOSQUITTO_TLS_CLIENTKEY=/drydock/mqtt/client-key.pem
+      - DD_NOTIFICATION_MQTT_MOSQUITTO_TLS_CLIENTCERT=/drydock/mqtt/client-cert.pem
+      - DD_NOTIFICATION_MQTT_MOSQUITTO_TLS_CACHAIN=/drydock/mqtt/ca.pem
     volumes:
       - /mosquitto/tls/client/client-key.pem:/drydock/mqtt/client-key.pem
       - /mosquitto/tls/client/client-cert.pem:/drydock/mqtt/client-cert.pem
@@ -90,10 +90,10 @@ services:
 <Tab value="Docker (Mosquitto mTLS)">
 ```bash
 docker run \
-    -e DD_TRIGGER_MQTT_MOSQUITTO_URL="mqtts://localhost:8883" \
-    -e DD_TRIGGER_MQTT_MOSQUITTO_TLS_CLIENTKEY="/drydock/mqtt/client-key.pem" \
-    -e DD_TRIGGER_MQTT_MOSQUITTO_TLS_CLIENTCERT="/drydock/mqtt/client-cert.pem" \
-    -e DD_TRIGGER_MQTT_MOSQUITTO_TLS_CACHAIN="/drydock/mqtt/ca.pem" \
+    -e DD_NOTIFICATION_MQTT_MOSQUITTO_URL="mqtts://localhost:8883" \
+    -e DD_NOTIFICATION_MQTT_MOSQUITTO_TLS_CLIENTKEY="/drydock/mqtt/client-key.pem" \
+    -e DD_NOTIFICATION_MQTT_MOSQUITTO_TLS_CLIENTCERT="/drydock/mqtt/client-cert.pem" \
+    -e DD_NOTIFICATION_MQTT_MOSQUITTO_TLS_CACHAIN="/drydock/mqtt/ca.pem" \
   ...
   codeswhat/drydock
 ```
@@ -111,20 +111,20 @@ services:
     image: codeswhat/drydock
     ...
     environment:
-      - DD_TRIGGER_MQTT_MAQIATTO_URL=tcp://maqiatto.com:1883
-      - DD_TRIGGER_MQTT_MAQIATTO_USER=john@doe.com
-      - DD_TRIGGER_MQTT_MAQIATTO_PASSWORD=mysecretpassword
-      - DD_TRIGGER_MQTT_MAQIATTO_TOPIC=john@doe.com/drydock/image
+      - DD_NOTIFICATION_MQTT_MAQIATTO_URL=tcp://maqiatto.com:1883
+      - DD_NOTIFICATION_MQTT_MAQIATTO_USER=john@doe.com
+      - DD_NOTIFICATION_MQTT_MAQIATTO_PASSWORD=mysecretpassword
+      - DD_NOTIFICATION_MQTT_MAQIATTO_TOPIC=john@doe.com/drydock/image
 ```
 
 </Tab>
 <Tab value="Docker (Maqiatto)">
 ```bash
 docker run \
-    -e DD_TRIGGER_MQTT_MAQIATTO_URL="tcp://maqiatto.com:1883" \
-    -e DD_TRIGGER_MQTT_MAQIATTO_USER="john@doe.com" \
-    -e DD_TRIGGER_MQTT_MAQIATTO_PASSWORD="mysecretpassword" \
-    -e DD_TRIGGER_MQTT_MAQIATTO_TOPIC="john@doe.com/drydock/image" \
+    -e DD_NOTIFICATION_MQTT_MAQIATTO_URL="tcp://maqiatto.com:1883" \
+    -e DD_NOTIFICATION_MQTT_MAQIATTO_USER="john@doe.com" \
+    -e DD_NOTIFICATION_MQTT_MAQIATTO_PASSWORD="mysecretpassword" \
+    -e DD_NOTIFICATION_MQTT_MAQIATTO_TOPIC="john@doe.com/drydock/image" \
   ...
   codeswhat/drydock
 ```
@@ -170,18 +170,18 @@ services:
     image: codeswhat/drydock
     ...
     environment:
-      - DD_TRIGGER_MQTT_MOSQUITTO_URL=mqtt://localhost:1883
-      - DD_TRIGGER_MQTT_MOSQUITTO_HASS_ENABLED=true
-      - DD_TRIGGER_MQTT_MOSQUITTO_HASS_DISCOVERY=true
+      - DD_NOTIFICATION_MQTT_MOSQUITTO_URL=mqtt://localhost:1883
+      - DD_NOTIFICATION_MQTT_MOSQUITTO_HASS_ENABLED=true
+      - DD_NOTIFICATION_MQTT_MOSQUITTO_HASS_DISCOVERY=true
 ```
 
 </Tab>
 <Tab value="Docker (Home-Assistant)">
 ```bash
 docker run \
-    -e DD_TRIGGER_MQTT_MOSQUITTO_URL="mqtt://localhost:1883" \
-    -e DD_TRIGGER_MQTT_MOSQUITTO_HASS_ENABLED="true" \
-    -e DD_TRIGGER_MQTT_MOSQUITTO_HASS_DISCOVERY="true" \
+    -e DD_NOTIFICATION_MQTT_MOSQUITTO_URL="mqtt://localhost:1883" \
+    -e DD_NOTIFICATION_MQTT_MOSQUITTO_HASS_ENABLED="true" \
+    -e DD_NOTIFICATION_MQTT_MOSQUITTO_HASS_DISCOVERY="true" \
   ...
   codeswhat/drydock
 ```
@@ -229,25 +229,25 @@ Filtering is applied in this precedence order:
 
 ### Include mode (`HASS_FILTER_INCLUDE`)
 
-Set `DD_TRIGGER_MQTT_{trigger_name}_HASS_FILTER_INCLUDE` to keep only selected flattened keys.
+Set `DD_NOTIFICATION_MQTT_{trigger_name}_HASS_FILTER_INCLUDE` to keep only selected flattened keys.
 
 ```yaml
 environment:
-  - DD_TRIGGER_MQTT_MOSQUITTO_HASS_FILTER_INCLUDE=name,image_name,update_available,result_tag
+  - DD_NOTIFICATION_MQTT_MOSQUITTO_HASS_FILTER_INCLUDE=name,image_name,update_available,result_tag
 ```
 
 ### Exclude mode (`HASS_FILTER_EXCLUDE`)
 
-Set `DD_TRIGGER_MQTT_{trigger_name}_HASS_FILTER_EXCLUDE` to remove selected flattened keys.
+Set `DD_NOTIFICATION_MQTT_{trigger_name}_HASS_FILTER_EXCLUDE` to remove selected flattened keys.
 
 ```yaml
 environment:
-  - DD_TRIGGER_MQTT_MOSQUITTO_HASS_FILTER_EXCLUDE=security_sbom_documents_0_spdx_version,security_scan_vulnerabilities_0_id
+  - DD_NOTIFICATION_MQTT_MOSQUITTO_HASS_FILTER_EXCLUDE=security_sbom_documents_0_spdx_version,security_scan_vulnerabilities_0_id
 ```
 
 ### Legacy nested exclude (`EXCLUDE`)
 
-`DD_TRIGGER_MQTT_{trigger_name}_EXCLUDE` still supports comma-separated nested dot-paths (for example `security.sbom.documents,labels`). This legacy filter is only used when `HASS_FILTER_INCLUDE` and `HASS_FILTER_EXCLUDE` are both empty.
+`DD_NOTIFICATION_MQTT_{trigger_name}_EXCLUDE` still supports comma-separated nested dot-paths (for example `security.sbom.documents,labels`). This legacy filter is only used when `HASS_FILTER_INCLUDE` and `HASS_FILTER_EXCLUDE` are both empty.
 
 ### Attribute preset fallback (`HASS_ATTRIBUTES`)
 

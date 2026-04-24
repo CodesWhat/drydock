@@ -14,10 +14,10 @@ The `apprise` trigger lets you send container update notifications via the [Appr
 
 | Env var | Required | Description | Supported values | Default value when missing |
 | --------------------------------------------- | :--------------: | ------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
-| `DD_TRIGGER_APPRISE_{trigger_name}_URL` | 🔴 | The Base URL of the Apprise API | | |
-| `DD_TRIGGER_APPRISE_{trigger_name}_URLS` | ⚪ | The comma separated list of Apprise service urls | [See the list of the supported Apprise notification URLs](https://github.com/caronc/apprise#popular-notification-services) | |
-| `DD_TRIGGER_APPRISE_{trigger_name}_CONFIG` | ⚪ | The name of an Apprise yaml configuration | [See Apprise persistent configuration documentation](https://appriseit.com/getting-started/configuration/) | |
-| `DD_TRIGGER_APPRISE_{trigger_name}_TAG` | ⚪ | The optional tags(s) to expand when using an Apprise yaml configuration | [See Apprise persistent configuration documentation](https://appriseit.com/getting-started/configuration/) | |
+| `DD_NOTIFICATION_APPRISE_{trigger_name}_URL` | 🔴 | The Base URL of the Apprise API | | |
+| `DD_NOTIFICATION_APPRISE_{trigger_name}_URLS` | ⚪ | The comma separated list of Apprise service urls | [See the list of the supported Apprise notification URLs](https://github.com/caronc/apprise#popular-notification-services) | |
+| `DD_NOTIFICATION_APPRISE_{trigger_name}_CONFIG` | ⚪ | The name of an Apprise yaml configuration | [See Apprise persistent configuration documentation](https://appriseit.com/getting-started/configuration/) | |
+| `DD_NOTIFICATION_APPRISE_{trigger_name}_TAG` | ⚪ | The optional tags(s) to expand when using an Apprise yaml configuration | [See Apprise persistent configuration documentation](https://appriseit.com/getting-started/configuration/) | |
 
 <Callout type="warn">Either `URLS` or `CONFIG` must be set, but not both. These options are mutually exclusive.</Callout>
 
@@ -36,16 +36,16 @@ services:
     image: codeswhat/drydock
     ...
     environment:
-      - DD_TRIGGER_APPRISE_LOCAL_URL=http://apprise:8000
-      - DD_TRIGGER_APPRISE_LOCAL_URLS=mailto://john.doe:secret@gmail.com,sns://AHIAJGNT76XIMXDBIJYA/bu1dHSdO22pfaaVy/wmNsdljF4C07D3bndi9PQJ9/us-east-2/+1(800)555-1223
+      - DD_NOTIFICATION_APPRISE_LOCAL_URL=http://apprise:8000
+      - DD_NOTIFICATION_APPRISE_LOCAL_URLS=mailto://john.doe:secret@gmail.com,sns://AHIAJGNT76XIMXDBIJYA/bu1dHSdO22pfaaVy/wmNsdljF4C07D3bndi9PQJ9/us-east-2/+1(800)555-1223
 ```
 
 </Tab>
 <Tab value="Docker (Mail & SMS)">
 ```bash
 docker run \
-  -e DD_TRIGGER_APPRISE_LOCAL_URL="http://apprise:8000" \
-  -e DD_TRIGGER_APPRISE_LOCAL_URLS="mailto://john.doe:secret@gmail.com,sns://AHIAJGNT76XIMXDBIJYA/bu1dHSdO22pfaaVy/wmNsdljF4C07D3bndi9PQJ9/us-east-2/+1(800)555-1223" \
+  -e DD_NOTIFICATION_APPRISE_LOCAL_URL="http://apprise:8000" \
+  -e DD_NOTIFICATION_APPRISE_LOCAL_URLS="mailto://john.doe:secret@gmail.com,sns://AHIAJGNT76XIMXDBIJYA/bu1dHSdO22pfaaVy/wmNsdljF4C07D3bndi9PQJ9/us-east-2/+1(800)555-1223" \
   ...
   codeswhat/drydock
 ```
@@ -72,18 +72,18 @@ services:
     image: codeswhat/drydock
     ...
     environment:
-      - DD_TRIGGER_APPRISE_LOCAL_URL=http://apprise:8000
-      - DD_TRIGGER_APPRISE_LOCAL_CONFIG=drydock # the name of the yaml config file
-      - DD_TRIGGER_APPRISE_LOCAL_TAG=devops # the tags to use with the config (optional)
+      - DD_NOTIFICATION_APPRISE_LOCAL_URL=http://apprise:8000
+      - DD_NOTIFICATION_APPRISE_LOCAL_CONFIG=drydock # the name of the yaml config file
+      - DD_NOTIFICATION_APPRISE_LOCAL_TAG=devops # the tags to use with the config (optional)
 ```
 
 </Tab>
 <Tab value="Docker (YAML Config)">
 ```bash
 docker run \
-  -e DD_TRIGGER_APPRISE_LOCAL_URL="http://apprise:8000" \
-  -e DD_TRIGGER_APPRISE_LOCAL_CONFIG="drydock" \
-  -e DD_TRIGGER_APPRISE_LOCAL_TAG="devops" \
+  -e DD_NOTIFICATION_APPRISE_LOCAL_URL="http://apprise:8000" \
+  -e DD_NOTIFICATION_APPRISE_LOCAL_CONFIG="drydock" \
+  -e DD_NOTIFICATION_APPRISE_LOCAL_TAG="devops" \
   ...
   codeswhat/drydock
 ```

@@ -204,9 +204,9 @@ environment:
   - DD_SECURITY_SCAN_CRON=0 3 * * *
   - DD_SECURITY_SCAN_NOTIFICATIONS=true
 
-  - DD_TRIGGER_SMTP_GMAIL_FROM=drydock@example.com
-  - DD_TRIGGER_SMTP_GMAIL_TO=security-team@example.com
-  - DD_TRIGGER_SMTP_GMAIL_SECURITYMODE=digest
+  - DD_NOTIFICATION_SMTP_GMAIL_FROM=drydock@example.com
+  - DD_NOTIFICATION_SMTP_GMAIL_TO=security-team@example.com
+  - DD_NOTIFICATION_SMTP_GMAIL_SECURITYMODE=digest
 ```
 
 The digest fires once per scan cycle, grouped by severity (critical → high → medium → low → unknown). Cycles with zero findings never emit — `once=true` per-channel dedup (tracked independently of update notifications) stops a digest from re-sending for the same set of findings across cycles. The UI **Scan All** button now issues one server-side bulk scan that produces a single digest per click instead of N per-container HTTP calls.

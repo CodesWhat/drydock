@@ -14,8 +14,8 @@ The `ifttt` trigger lets you send container update notifications to Ifttt via th
 
 | Env var | Required | Description | Supported values | Default value when missing |
 | --- | :---: | --- | --- | --- |
-| `DD_TRIGGER_IFTTT_{trigger_name}_KEY` | 🔴 | The Webhook key | | |
-| `DD_TRIGGER_IFTTT_{trigger_name}_EVENT` | ⚪ | The event name | | `dd-image` |
+| `DD_NOTIFICATION_IFTTT_{trigger_name}_KEY` | 🔴 | The Webhook key | | |
+| `DD_NOTIFICATION_IFTTT_{trigger_name}_EVENT` | ⚪ | The event name | | `dd-image` |
 
 <Callout type="info">This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration).</Callout>
 
@@ -48,14 +48,14 @@ services:
     image: codeswhat/drydock
     ...
     environment:
-      - DD_TRIGGER_IFTTT_PROD_KEY=*******************************************
+      - DD_NOTIFICATION_IFTTT_PROD_KEY=*******************************************
 ```
 
 </Tab>
 <Tab value="Docker">
 ```bash
 docker run \
-  -e DD_TRIGGER_IFTTT_PROD_KEY="*******************************************" \
+  -e DD_NOTIFICATION_IFTTT_PROD_KEY="*******************************************" \
   ...
   codeswhat/drydock
 ```

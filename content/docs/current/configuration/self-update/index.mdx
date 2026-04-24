@@ -55,7 +55,7 @@ The ack timeout defaults to 3 seconds. If no browsers are connected, the update 
 
 ## Dry-run mode
 
-When `DD_TRIGGER_DOCKER_{trigger_name}_DRYRUN=true`, the self-update is logged but not executed. The new image is pulled ahead of time but no container replacement occurs.
+When `DD_ACTION_DOCKER_{trigger_name}_DRYRUN=true`, the self-update is logged but not executed. The new image is pulled ahead of time but no container replacement occurs.
 
 ## Example
 
@@ -70,7 +70,7 @@ services:
     labels:
       - dd.watch=true
     environment:
-      - DD_TRIGGER_DOCKER_LOCAL_PRUNE=true
+      - DD_ACTION_DOCKER_LOCAL_PRUNE=true
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - drydock-data:/store

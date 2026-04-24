@@ -14,13 +14,13 @@ The `command` trigger lets you run arbitrary commands upon container update noti
 
 | Env var | Required | Description | Supported values | Default value when missing |
 | --- | :---: | --- | --- | --- |
-| `DD_TRIGGER_COMMAND_{trigger_name}_CMD` | 🔴 | The command to run | | |
-| `DD_TRIGGER_COMMAND_{trigger_name}_SHELL` | ⚪ | The shell to use | Any valid installed shell path | `/bin/sh` |
-| `DD_TRIGGER_COMMAND_{trigger_name}_TIMEOUT` | ⚪ | The command timeout (in ms) | Any positive integer (`0` means no timeout) | `60000` |
+| `DD_ACTION_COMMAND_{trigger_name}_CMD` | 🔴 | The command to run | | |
+| `DD_ACTION_COMMAND_{trigger_name}_SHELL` | ⚪ | The shell to use | Any valid installed shell path | `/bin/sh` |
+| `DD_ACTION_COMMAND_{trigger_name}_TIMEOUT` | ⚪ | The command timeout (in ms) | Any positive integer (`0` means no timeout) | `60000` |
 
 This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration). Update information is passed as environment variables (see below).
 
-<Callout type="warn">Security: `DD_TRIGGER_COMMAND_{trigger_name}_CMD` is executed as `{shell} -c {cmd}` with drydock process privileges. This is an intentional admin-only feature configured through environment variables (not API-exposed). Use only trusted command strings and validate any interpolated values.</Callout>
+<Callout type="warn">Security: `DD_ACTION_COMMAND_{trigger_name}_CMD` is executed as `{shell} -c {cmd}` with drydock process privileges. This is an intentional admin-only feature configured through environment variables (not API-exposed). Use only trusted command strings and validate any interpolated values.</Callout>
 
 ## Environment variables passed to the executed command
 
@@ -97,14 +97,14 @@ services:
     image: codeswhat/drydock
     ...
     environment:
-      - DD_TRIGGER_COMMAND_LOCAL_CMD=echo $${display_name} can be updated to $${update_kind_remote_value}
+      - DD_ACTION_COMMAND_LOCAL_CMD=echo $${display_name} can be updated to $${update_kind_remote_value}
 ```
 
 </Tab>
 <Tab value="Docker (Arbitrary Command)">
 ```bash
 docker run \
-  -e DD_TRIGGER_COMMAND_LOCAL_CMD=echo ${display_name} can be updated to ${update_kind_remote_value} \
+  -e DD_ACTION_COMMAND_LOCAL_CMD=echo ${display_name} can be updated to ${update_kind_remote_value} \
   ...
   codeswhat/drydock
 ```
@@ -122,7 +122,7 @@ services:
     image: codeswhat/drydock
     ...
     environment:
-      - DD_TRIGGER_COMMAND_LOCAL_CMD=bash -c /drydock/trigger.sh
+      - DD_ACTION_COMMAND_LOCAL_CMD=bash -c /drydock/trigger.sh
     volumes:
       - ${PWD}/drydock/trigger.sh:/drydock/trigger.sh
 ```
@@ -131,7 +131,7 @@ services:
 <Tab value="Docker (Bash Script)">
 ```bash
 docker run \
-  -e DD_TRIGGER_COMMAND_LOCAL_CMD="bash -c /drydock/trigger.sh" \
+  -e DD_ACTION_COMMAND_LOCAL_CMD="bash -c /drydock/trigger.sh" \
   -v ${PWD}/drydock/trigger.sh:/drydock/trigger.sh
   ...
   codeswhat/drydock

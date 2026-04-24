@@ -12,9 +12,9 @@ The `teams` trigger posts container update notifications to a Microsoft Teams in
 
 | Env var | Required | Description | Supported values | Default value when missing |
 | --- | :---: | --- | --- | --- |
-| `DD_TRIGGER_TEAMS_{trigger_name}_URL` | 🔴 | Incoming webhook URL | `https` URL | |
-| `DD_TRIGGER_TEAMS_{trigger_name}_CARDVERSION` | ⚪ | Adaptive Card schema version | Version string | `1.4` |
-| `DD_TRIGGER_TEAMS_{trigger_name}_DISABLETITLE` | ⚪ | Disable title to keep full message-body control | `true`, `false` | `false` |
+| `DD_NOTIFICATION_TEAMS_{trigger_name}_URL` | 🔴 | Incoming webhook URL | `https` URL | |
+| `DD_NOTIFICATION_TEAMS_{trigger_name}_CARDVERSION` | ⚪ | Adaptive Card schema version | Version string | `1.4` |
+| `DD_NOTIFICATION_TEAMS_{trigger_name}_DISABLETITLE` | ⚪ | Disable title to keep full message-body control | `true`, `false` | `false` |
 
 <Callout type="info">This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration).</Callout>
 
@@ -31,14 +31,14 @@ services:
     image: codeswhat/drydock
     ...
     environment:
-      - DD_TRIGGER_TEAMS_LOCAL_URL=https://outlook.office.com/webhook/abc123
+      - DD_NOTIFICATION_TEAMS_LOCAL_URL=https://outlook.office.com/webhook/abc123
 ```
 
 </Tab>
 <Tab value="Docker">
 ```bash
 docker run \
-  -e DD_TRIGGER_TEAMS_LOCAL_URL="https://outlook.office.com/webhook/abc123" \
+  -e DD_NOTIFICATION_TEAMS_LOCAL_URL="https://outlook.office.com/webhook/abc123" \
   ...
   codeswhat/drydock
 ```

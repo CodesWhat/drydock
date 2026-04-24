@@ -14,15 +14,15 @@ The `rocketchat` trigger lets you post image update notifications to a Rocket.Ch
 
 | Env var | Required | Description | Supported values | Default value when missing |
 | --- | :---: | --- | --- | --- |
-| `DD_TRIGGER_ROCKETCHAT_{trigger_name}_URL` | 🔴 | Rocket.Chat workspace URL, e.g. `https://example.com`. | | |
-| `DD_TRIGGER_ROCKETCHAT_{trigger_name}_USER_ID` | 🔴 | User id of the user sending the notification. Displayed when generating a personal access token (PAT). | | |
-| `DD_TRIGGER_ROCKETCHAT_{trigger_name}_AUTH_TOKEN` | 🔴 | PAT of the user sending the notification. | | |
-| `DD_TRIGGER_ROCKETCHAT_{trigger_name}_CHANNEL` | 🔴 | Where the message is sent to. | Channel ID (`6561ce603d237c33797650d7`), channel name (`#example`) or username (`@example`). | |
-| `DD_TRIGGER_ROCKETCHAT_{trigger_name}_ALIAS` | ⚪ | Alters the sender's name shown for the message, but keeps the username as is. Requires `message-impersonate` permission, typically only present on the `bot` role. | | |
-| `DD_TRIGGER_ROCKETCHAT_{trigger_name}_AVATAR` | ⚪ | Display the sender's avatar as the provided image URL. Requires `message-impersonate` permission, typically only on the `bot` role. | | |
-| `DD_TRIGGER_ROCKETCHAT_{trigger_name}_EMOJI` | ⚪ | Display the sender's avatar as an emoji, e.g. `:smile:`. | | |
-| `DD_TRIGGER_ROCKETCHAT_{trigger_name}_PARSE_URLS` | ⚪ | Whether Rocket.Chat should generate link previews when the message text contains URLs. Default is unset (defers to Rocket.Chat server default). | `true`, `false` | |
-| `DD_TRIGGER_ROCKETCHAT_{trigger_name}_DISABLETITLE` | ⚪ | Disable title to have full control over the message formatting. | `true`, `false` | `false` |
+| `DD_NOTIFICATION_ROCKETCHAT_{trigger_name}_URL` | 🔴 | Rocket.Chat workspace URL, e.g. `https://example.com`. | | |
+| `DD_NOTIFICATION_ROCKETCHAT_{trigger_name}_USER_ID` | 🔴 | User id of the user sending the notification. Displayed when generating a personal access token (PAT). | | |
+| `DD_NOTIFICATION_ROCKETCHAT_{trigger_name}_AUTH_TOKEN` | 🔴 | PAT of the user sending the notification. | | |
+| `DD_NOTIFICATION_ROCKETCHAT_{trigger_name}_CHANNEL` | 🔴 | Where the message is sent to. | Channel ID (`6561ce603d237c33797650d7`), channel name (`#example`) or username (`@example`). | |
+| `DD_NOTIFICATION_ROCKETCHAT_{trigger_name}_ALIAS` | ⚪ | Alters the sender's name shown for the message, but keeps the username as is. Requires `message-impersonate` permission, typically only present on the `bot` role. | | |
+| `DD_NOTIFICATION_ROCKETCHAT_{trigger_name}_AVATAR` | ⚪ | Display the sender's avatar as the provided image URL. Requires `message-impersonate` permission, typically only on the `bot` role. | | |
+| `DD_NOTIFICATION_ROCKETCHAT_{trigger_name}_EMOJI` | ⚪ | Display the sender's avatar as an emoji, e.g. `:smile:`. | | |
+| `DD_NOTIFICATION_ROCKETCHAT_{trigger_name}_PARSE_URLS` | ⚪ | Whether Rocket.Chat should generate link previews when the message text contains URLs. Default is unset (defers to Rocket.Chat server default). | `true`, `false` | |
+| `DD_NOTIFICATION_ROCKETCHAT_{trigger_name}_DISABLETITLE` | ⚪ | Disable title to have full control over the message formatting. | `true`, `false` | `false` |
 
 <Callout type="warn">The Rocket.Chat channel must already exist on the workspace (the trigger won't automatically create it)</Callout>
 
@@ -41,20 +41,20 @@ services:
     image: codeswhat/drydock
     ...
     environment:
-        - DD_TRIGGER_ROCKETCHAT_LOCAL_URL=https://example.com
-        - DD_TRIGGER_ROCKETCHAT_LOCAL_USER_ID=jDdn8oh9BfJKnWdDY
-        - DD_TRIGGER_ROCKETCHAT_LOCAL_AUTH_TOKEN=Rbqz90hnkRyVwRfcmE5PzkP5Pqwml_fo7ZUXzxv2_zx
-        - DD_TRIGGER_ROCKETCHAT_LOCAL_CHANNEL=#drydock
+        - DD_NOTIFICATION_ROCKETCHAT_LOCAL_URL=https://example.com
+        - DD_NOTIFICATION_ROCKETCHAT_LOCAL_USER_ID=jDdn8oh9BfJKnWdDY
+        - DD_NOTIFICATION_ROCKETCHAT_LOCAL_AUTH_TOKEN=Rbqz90hnkRyVwRfcmE5PzkP5Pqwml_fo7ZUXzxv2_zx
+        - DD_NOTIFICATION_ROCKETCHAT_LOCAL_CHANNEL=#drydock
 ```
 
 </Tab>
 <Tab value="Docker">
 ```bash
 docker run \
-    -e DD_TRIGGER_ROCKETCHAT_LOCAL_URL="https://example.com" \
-    -e DD_TRIGGER_ROCKETCHAT_LOCAL_USER_ID="jDdn8oh9BfJKnWdDY" \
-    -e DD_TRIGGER_ROCKETCHAT_LOCAL_AUTH_TOKEN="Rbqz90hnkRyVwRfcmE5PzkP5Pqwml_fo7ZUXzxv2_zx" \
-    -e DD_TRIGGER_ROCKETCHAT_LOCAL_CHANNEL="#drydock" \
+    -e DD_NOTIFICATION_ROCKETCHAT_LOCAL_URL="https://example.com" \
+    -e DD_NOTIFICATION_ROCKETCHAT_LOCAL_USER_ID="jDdn8oh9BfJKnWdDY" \
+    -e DD_NOTIFICATION_ROCKETCHAT_LOCAL_AUTH_TOKEN="Rbqz90hnkRyVwRfcmE5PzkP5Pqwml_fo7ZUXzxv2_zx" \
+    -e DD_NOTIFICATION_ROCKETCHAT_LOCAL_CHANNEL="#drydock" \
   ...
   codeswhat/drydock
 ```

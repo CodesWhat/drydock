@@ -18,7 +18,7 @@ The number of backups retained per container is configurable via a trigger envir
 
 | Env var | Required | Description | Supported values | Default value when missing |
 | -------------------------------------------------- | :--------------: | ---------------------------------------- | ---------------- | -------------------------- |
-| `DD_TRIGGER_DOCKER_{trigger_name}_BACKUPCOUNT` | ⚪ | Number of backups to retain per container | integer | `3` |
+| `DD_ACTION_DOCKER_{trigger_name}_BACKUPCOUNT` | ⚪ | Number of backups to retain per container | integer | `3` |
 
 <Callout type="info">This variable is set on the [Docker trigger](/docs/configuration/triggers/docker), not on the target container.</Callout>
 
