@@ -567,8 +567,6 @@ To fine-tune the behaviour of drydock _per container_, you can add labels on the
 | `dd.watch` | ⚪ | Explicitly include or exclude this container from monitoring (overrides `WATCHBYDEFAULT`) | Valid Boolean | Inherits from `WATCHBYDEFAULT` (`true` by default) |
 | `dd.compose.file` | ⚪ | Path to the docker-compose.yml file for compose-native updates (also configurable via trigger `COMPOSEFILELABEL`) | file path | |
 | `dd.webhook.enabled` | ⚪ | Allow or block [webhook API](/docs/configuration/webhooks) calls targeting this container | `true`, `false` | `true` |
-| `dd.updatePolicy.maturityMode` | ⚪ | Update maturity policy — `all` allows any update, `mature` blocks updates detected less than `maturityMinAgeDays` ago | `all`, `mature` | `all` |
-| `dd.updatePolicy.maturityMinAgeDays` | ⚪ | Minimum age in days before an update is considered mature (only applies when `maturityMode` is `mature`) | integer (`>=1`) | `7` |
 | `dd.runtime.entrypoint.origin` | ⚪ | Tracks whether the container's entrypoint was explicitly set or inherited from the image. Used during updates to decide whether to preserve the current entrypoint or let the new image defaults apply. | `explicit`, `inherited`, `unknown` | auto-detected |
 | `dd.runtime.cmd.origin` | ⚪ | Tracks whether the container's cmd was explicitly set or inherited from the image. Used during updates to decide whether to preserve the current cmd or let the new image defaults apply. | `explicit`, `inherited`, `unknown` | auto-detected |
 
