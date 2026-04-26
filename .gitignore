@@ -172,3 +172,6 @@ artifacts/
 
 # Local scratch/output directory used during issue triage
 /tmp/
+
+# Local debug-repro scratch tests (never shipped, never CI'd)
+**/__tmp__/
