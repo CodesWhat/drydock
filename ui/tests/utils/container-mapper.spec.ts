@@ -1580,6 +1580,23 @@ describe('container-mapper', () => {
       expect(c.updateEligibility).toBeUndefined();
     });
 
+    it('treats non-array blockers as empty list', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateEligibility: {
+            eligible: true,
+            evaluatedAt: '2026-04-25T12:00:00.000Z',
+            blockers: 'not-an-array',
+          },
+        }),
+      );
+      expect(c.updateEligibility).toEqual({
+        eligible: true,
+        evaluatedAt: '2026-04-25T12:00:00.000Z',
+        blockers: [],
+      });
+    });
+
     it('filters out blockers with an invalid reason string', () => {
       const c = mapApiContainer(
         makeApiContainer({
