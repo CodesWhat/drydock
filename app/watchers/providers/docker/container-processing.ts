@@ -31,6 +31,14 @@ interface WatchContainerDependencies {
     containerWithResult: Container,
     watchStartedAtMs?: number,
   ) => ContainerReport;
+  /**
+   * When true, emit a single-element `emitContainerReports` event in addition to
+   * `emitContainerReport`. Set this for standalone single-container scans (e.g. API
+   * `POST /:id/watch`) so that batch-mode triggers also fire — the bulk `watch()` path
+   * already emits `emitContainerReports` for the full set after processing all containers,
+   * so it must leave this as false to avoid double-firing batch triggers.
+   */
+  emitBatchEvent?: boolean;
 }
 
 interface MapContainerToReportDependencies {
@@ -45,7 +53,13 @@ interface MapContainerToReportDependencies {
  */
 export async function watchContainer(
   container: Container,
-  { ensureLogger, log, findNewVersion, mapContainerToContainerReport }: WatchContainerDependencies,
+  {
+    ensureLogger,
+    log,
+    findNewVersion,
+    mapContainerToContainerReport,
+    emitBatchEvent = false,
+  }: WatchContainerDependencies,
 ): Promise<ContainerReport> {
   ensureLogger();
   // Child logger for the container to process
@@ -72,6 +86,9 @@ export async function watchContainer(
 
   const containerReport = mapContainerToContainerReport(containerWithResult, watchStartedAtMs);
   await event.emitContainerReport(containerReport);
+  if (emitBatchEvent) {
+    await event.emitContainerReports([containerReport]);
+  }
   return containerReport;
 }
 

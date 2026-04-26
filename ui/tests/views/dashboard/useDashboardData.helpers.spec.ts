@@ -60,4 +60,23 @@ describe('createRealtimeRefreshScheduler', () => {
 
     scheduler.dispose();
   });
+
+  it('falls back to refreshFull for a full-live refresh when no full-live handler is configured', () => {
+    vi.useFakeTimers();
+    const refreshSummary = vi.fn();
+    const refreshFull = vi.fn();
+    const scheduler = createRealtimeRefreshScheduler({
+      debounceMs: 1_000,
+      refreshSummary,
+      refreshFull,
+    });
+
+    scheduler.schedule('full-live');
+
+    vi.advanceTimersByTime(1_000);
+    expect(refreshSummary).not.toHaveBeenCalled();
+    expect(refreshFull).toHaveBeenCalledTimes(1);
+
+    scheduler.dispose();
+  });
 });

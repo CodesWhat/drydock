@@ -394,7 +394,7 @@ describe('Container Router', () => {
       });
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
-        data: [{ id: 'c1' }],
+        data: [expect.objectContaining({ id: 'c1' })],
         total: 1,
         limit: 0,
         offset: 0,
@@ -414,7 +414,7 @@ describe('Container Router', () => {
       });
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
-        data: [{ id: 'c1' }],
+        data: [expect.objectContaining({ id: 'c1' })],
         total: 1,
         limit: 0,
         offset: 0,
@@ -501,7 +501,16 @@ describe('Container Router', () => {
       });
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
-        data: [container],
+        data: [
+          expect.objectContaining({
+            id: 'c1',
+            security: expect.objectContaining({
+              scan: expect.objectContaining({
+                vulnerabilities: [{ id: 'CVE-1', severity: 'HIGH' }],
+              }),
+            }),
+          }),
+        ],
         total: 1,
         limit: 0,
         offset: 0,
@@ -576,7 +585,7 @@ describe('Container Router', () => {
       );
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
-        data: [{ id: 'c2' }],
+        data: [expect.objectContaining({ id: 'c2' })],
         total: 3,
         limit: 1,
         offset: 1,
@@ -624,7 +633,7 @@ describe('Container Router', () => {
       );
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
-        data: [{ id: 'c3' }, { id: 'c4' }],
+        data: [expect.objectContaining({ id: 'c3' }), expect.objectContaining({ id: 'c4' })],
         total: 4,
         limit: 0,
         offset: 2,
@@ -653,7 +662,7 @@ describe('Container Router', () => {
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
         data: [
-          {
+          expect.objectContaining({
             id: 'c1',
             details: {
               ports: ['8080:8080'],
@@ -663,7 +672,7 @@ describe('Container Router', () => {
                 { key: 'API_TOKEN', value: '[REDACTED]', sensitive: true },
               ],
             },
-          },
+          }),
         ],
         total: 1,
         limit: 0,
@@ -908,7 +917,7 @@ describe('Container Router', () => {
       handler({ params: { id: 'c1' } }, res);
 
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith({ id: 'c1', name: 'test' });
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ id: 'c1', name: 'test' }));
       const contractValidation = validateOpenApiJsonResponse({
         path: '/api/containers/{id}',
         method: 'get',
@@ -935,15 +944,17 @@ describe('Container Router', () => {
       handler({ params: { id: 'c1' } }, res);
 
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith({
-        id: 'c1',
-        name: 'test',
-        details: {
-          ports: ['8080:8080'],
-          volumes: ['/tmp:/tmp'],
-          env: [{ key: 'AWS_SECRET_ACCESS_KEY', value: '[REDACTED]', sensitive: true }],
-        },
-      });
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'c1',
+          name: 'test',
+          details: {
+            ports: ['8080:8080'],
+            volumes: ['/tmp:/tmp'],
+            env: [{ key: 'AWS_SECRET_ACCESS_KEY', value: '[REDACTED]', sensitive: true }],
+          },
+        }),
+      );
       expect(container.details.env[0].value).toBe('top-secret');
     });
 

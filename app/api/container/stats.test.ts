@@ -175,6 +175,49 @@ describe('api/container/stats', () => {
     });
   });
 
+  test('does NOT call statsCollector.touch when ?touch=false', () => {
+    const harness = createHarness();
+    const req = createRequest({ query: { touch: 'false' } });
+    const res = createResponse();
+
+    harness.handlers.getAllContainerStats(req as any, res as any);
+
+    expect(harness.touch).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith({
+      data: [
+        {
+          id: 'c1',
+          name: 'web',
+          status: 'running',
+          watcher: 'local',
+          agent: undefined,
+          stats: { containerId: 'c1', cpuPercent: 10 },
+        },
+        {
+          id: 'c2',
+          name: 'db',
+          status: undefined,
+          watcher: 'local',
+          agent: undefined,
+          stats: null,
+        },
+      ],
+    });
+  });
+
+  test('calls statsCollector.touch per container when touch query is absent', () => {
+    const harness = createHarness();
+    const req = createRequest({ query: {} });
+    const res = createResponse();
+
+    harness.handlers.getAllContainerStats(req as any, res as any);
+
+    expect(harness.touch).toHaveBeenCalledTimes(2);
+    expect(harness.touch).toHaveBeenCalledWith('c1');
+    expect(harness.touch).toHaveBeenCalledWith('c2');
+  });
+
   test('streams container stats over SSE with heartbeat and cleans up on disconnect', async () => {
     const harness = createHarness();
     const req = createRequest({

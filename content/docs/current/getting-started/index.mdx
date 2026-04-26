@@ -150,35 +150,35 @@ Drydock can notify you when updates are available. Add one or more notification 
 
 ```yaml
 environment:
-  - DD_TRIGGER_SLACK_ALERTS_TOKEN=xoxb-xxxxx
-  - DD_TRIGGER_SLACK_ALERTS_CHANNEL=#docker-updates
+  - DD_NOTIFICATION_SLACK_ALERTS_TOKEN=xoxb-xxxxx
+  - DD_NOTIFICATION_SLACK_ALERTS_CHANNEL=#docker-updates
 ```
 
 </Tab>
 <Tab value="Discord">
 ```yaml
 environment:
-  - DD_TRIGGER_DISCORD_ALERTS_URL=https://discord.com/api/webhooks/xxxxx
+  - DD_NOTIFICATION_DISCORD_ALERTS_URL=https://discord.com/api/webhooks/xxxxx
 ```
 </Tab>
 <Tab value="Email (SMTP)">
 ```yaml
 environment:
-  - DD_TRIGGER_SMTP_ALERTS_HOST=smtp.gmail.com
-  - DD_TRIGGER_SMTP_ALERTS_PORT=465
-  - DD_TRIGGER_SMTP_ALERTS_FROM=drydock@example.com
-  - DD_TRIGGER_SMTP_ALERTS_TO=admin@example.com
-  - DD_TRIGGER_SMTP_ALERTS_USER=drydock@example.com
-  - DD_TRIGGER_SMTP_ALERTS_PASS=xxxxx
+  - DD_NOTIFICATION_SMTP_ALERTS_HOST=smtp.gmail.com
+  - DD_NOTIFICATION_SMTP_ALERTS_PORT=465
+  - DD_NOTIFICATION_SMTP_ALERTS_FROM=drydock@example.com
+  - DD_NOTIFICATION_SMTP_ALERTS_TO=admin@example.com
+  - DD_NOTIFICATION_SMTP_ALERTS_USER=drydock@example.com
+  - DD_NOTIFICATION_SMTP_ALERTS_PASS=xxxxx
 ```
 </Tab>
 <Tab value="ntfy">
 ```yaml
 environment:
-  - DD_TRIGGER_NTFY_ALERTS_TOPIC=drydock-updates
+  - DD_NOTIFICATION_NTFY_ALERTS_TOPIC=drydock-updates
 ```
 
-Uses `https://ntfy.sh` by default. Set `DD_TRIGGER_NTFY_ALERTS_URL` for a self-hosted instance.
+Uses `https://ntfy.sh` by default. Set `DD_NOTIFICATION_NTFY_ALERTS_URL` for a self-hosted instance.
 </Tab>
 <Tab value="Other">
 Drydock supports 20+ notification services. See the [Triggers configuration](/docs/configuration/triggers) page for all options including Telegram, Teams, Matrix, Gotify, Pushover, Apprise, IFTTT, HTTP webhooks, Kafka, MQTT, and more.
@@ -199,9 +199,9 @@ By default, triggers fire on every detected update. Use `THRESHOLD` to only noti
 
 ```yaml
 environment:
-  - DD_TRIGGER_SLACK_ALERTS_TOKEN=xoxb-xxxxx
-  - DD_TRIGGER_SLACK_ALERTS_CHANNEL=#docker-updates
-  - DD_TRIGGER_SLACK_ALERTS_THRESHOLD=minor  # skip digest-only and major bumps
+  - DD_NOTIFICATION_SLACK_ALERTS_TOKEN=xoxb-xxxxx
+  - DD_NOTIFICATION_SLACK_ALERTS_CHANNEL=#docker-updates
+  - DD_NOTIFICATION_SLACK_ALERTS_THRESHOLD=minor  # skip digest-only and major bumps
 ```
 
 **Docs:** [Triggers configuration](/docs/configuration/triggers)
@@ -219,8 +219,8 @@ Drydock can pull new images and recreate containers automatically. The trigger t
 
 ```yaml
 environment:
-  - DD_TRIGGER_DOCKER_LOCAL_PRUNE=true      # clean up old images
-  - DD_TRIGGER_DOCKER_LOCAL_DRYRUN=true     # preview only — remove when ready
+  - DD_ACTION_DOCKER_LOCAL_PRUNE=true      # clean up old images
+  - DD_ACTION_DOCKER_LOCAL_DRYRUN=true     # preview only — remove when ready
 ```
 
 When you click **Update** in the UI (or an auto-trigger fires), Drydock will:
@@ -235,8 +235,8 @@ When you click **Update** in the UI (or an auto-trigger fires), Drydock will:
 
 ```yaml
 environment:
-  - DD_TRIGGER_DOCKERCOMPOSE_MYSTACK_FILE=/compose/my-stack.yml
-  - DD_TRIGGER_DOCKERCOMPOSE_MYSTACK_DRYRUN=true  # preview only
+  - DD_ACTION_DOCKERCOMPOSE_MYSTACK_FILE=/compose/my-stack.yml
+  - DD_ACTION_DOCKERCOMPOSE_MYSTACK_DRYRUN=true  # preview only
 volumes:
   - /path/to/my-stack/compose.yml:/compose/my-stack.yml  # must be writable
 ```
@@ -254,8 +254,8 @@ You can run both triggers simultaneously. Drydock auto-associates:
 
 ```yaml
 environment:
-  - DD_TRIGGER_DOCKER_LOCAL_PRUNE=true
-  - DD_TRIGGER_DOCKERCOMPOSE_STACK_FILE=/compose/stack.yml
+  - DD_ACTION_DOCKER_LOCAL_PRUNE=true
+  - DD_ACTION_DOCKERCOMPOSE_STACK_FILE=/compose/stack.yml
 volumes:
   - /path/to/stack/compose.yml:/compose/stack.yml
 ```
@@ -275,7 +275,7 @@ Enabled by default when using the Docker trigger. Drydock keeps the previous ima
 
 ```yaml
 environment:
-  - DD_TRIGGER_DOCKER_LOCAL_BACKUPCOUNT=3
+  - DD_ACTION_DOCKER_LOCAL_BACKUPCOUNT=3
 ```
 
 ### Auto-rollback on failure
@@ -385,12 +385,12 @@ services:
       - DD_AUTH_BASIC_ADMIN_HASH__FILE=/run/secrets/admin_hash
 
       # Notifications
-      - DD_TRIGGER_SLACK_ALERTS_TOKEN=xoxb-xxxxx
-      - DD_TRIGGER_SLACK_ALERTS_CHANNEL=#docker-updates
+      - DD_NOTIFICATION_SLACK_ALERTS_TOKEN=xoxb-xxxxx
+      - DD_NOTIFICATION_SLACK_ALERTS_CHANNEL=#docker-updates
 
       # Auto-updates
-      - DD_TRIGGER_DOCKER_LOCAL_PRUNE=true
-      - DD_TRIGGER_DOCKERCOMPOSE_STACK_FILE=/compose/stack.yml
+      - DD_ACTION_DOCKER_LOCAL_PRUNE=true
+      - DD_ACTION_DOCKERCOMPOSE_STACK_FILE=/compose/stack.yml
 
       # Security
       - DD_SECURITY_SCANNER=trivy

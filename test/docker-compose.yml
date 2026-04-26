@@ -10,7 +10,7 @@ services:
     labels:
       - dd.watch=true
       - dd.tag.include=^\d+\.\d+.\d+$$
-      - dd.trigger.include=ntfy.one
+      - dd.notification.include=ntfy.one
       - dd.display.icon=sh-plex
 
   traefik2:
@@ -18,5 +18,5 @@ services:
     labels:
       - dd.watch=true
       - dd.tag.include=^\d+\.\d+.\d+$$
-      - dd.trigger.exclude=ntfy.two
+      - dd.notification.exclude=ntfy.two
       - dd.display.icon=hl-plex

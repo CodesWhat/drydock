@@ -392,6 +392,21 @@ async function getContainerReleaseNotes(containerId: string) {
   return response.json();
 }
 
+async function getUpdateOperationById(
+  operationId: string,
+): Promise<ApiContainerUpdateOperation | null> {
+  const response = await fetch(`/api/v1/update-operations/${encodeURIComponent(operationId)}`, {
+    credentials: 'include',
+  });
+  if (response.status === 404) {
+    return null;
+  }
+  if (!response.ok) {
+    throw new Error(`Failed to get update operation ${operationId}: ${response.statusText}`);
+  }
+  return response.json();
+}
+
 async function revealContainerEnv(containerId: string) {
   const response = await fetch(`/api/v1/containers/${containerId}/env/reveal`, {
     method: 'POST',
@@ -417,6 +432,7 @@ export {
   getContainerUpdateOperations,
   getContainerVulnerabilities,
   getSecurityVulnerabilityOverview,
+  getUpdateOperationById,
   refreshAllContainers,
   refreshContainer,
   revealContainerEnv,

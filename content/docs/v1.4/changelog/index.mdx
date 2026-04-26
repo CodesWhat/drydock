@@ -171,7 +171,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Headless mode (`DD_SERVER_UI_ENABLED`)** — Run drydock as an API-only service by setting `DD_SERVER_UI_ENABLED=false`. The REST API, SSE, and healthcheck endpoints remain fully functional while the UI is not served. Useful for controller nodes that only manage agents.
-- **Maturity-based update policy** — Per-container update maturity policy via `dd.updatePolicy.maturityMode` (`all` or `mature`) and `dd.updatePolicy.maturityMinAgeDays` (default 7). When set to `mature`, containers with updates detected less than the configured age threshold are blocked from triggering until the update has settled. UI shows NEW/MATURE badges with flame/clock icons on containers with available updates. ([#120](https://github.com/CodesWhat/drydock/discussions/120))
+- **Maturity-based update policy** — Per-container update maturity policy configurable from the container row's **Update policy** menu (or `PATCH /api/v1/containers/:id/update-policy`). Modes: `all` (default — allow any update) and `mature` (block updates detected less than `maturityMinAgeDays` ago, default 7). UI shows NEW/MATURE badges with flame/clock icons on containers with available updates. ([#120](https://github.com/CodesWhat/drydock/discussions/120))
 - **`?groupByStack=true` URL parameter** — Bookmarkable URL parameter to enable stack grouping on the containers page. Also accepts `?groupByStack=1`. ([#145](https://github.com/CodesWhat/drydock/issues/145))
 
 ### Changed

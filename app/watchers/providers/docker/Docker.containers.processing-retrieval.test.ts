@@ -43,6 +43,32 @@ describe('Docker Watcher', () => {
       expect(hEvent.emitContainerReport).toHaveBeenCalled();
     });
 
+    test('should not emit emitContainerReports when emitBatchEvent is false (default)', async () => {
+      const container = { id: 'test123', name: 'test' };
+      const mockLog = createMockLogWithChild(['debug']);
+      docker.log = mockLog;
+      docker.findNewVersion = vi.fn().mockResolvedValue({ tag: '2.0.0' });
+      docker.mapContainerToContainerReport = vi.fn().mockReturnValue({ container, changed: false });
+
+      await docker.watchContainer(container);
+
+      expect(hEvent.emitContainerReports).not.toHaveBeenCalled();
+    });
+
+    test('should emit emitContainerReports with single-element array when emitBatchEvent is true', async () => {
+      const container = { id: 'test123', name: 'test' };
+      const report = { container, changed: true };
+      const mockLog = createMockLogWithChild(['debug']);
+      docker.log = mockLog;
+      docker.findNewVersion = vi.fn().mockResolvedValue({ tag: '2.0.0' });
+      docker.mapContainerToContainerReport = vi.fn().mockReturnValue(report);
+
+      await docker.watchContainer(container, { emitBatchEvent: true });
+
+      expect(hEvent.emitContainerReport).toHaveBeenCalledWith(report);
+      expect(hEvent.emitContainerReports).toHaveBeenCalledWith([report]);
+    });
+
     test('should wait for container report handlers before resolving watchContainer', async () => {
       const container = { id: 'test123', name: 'test' };
       const mockLog = createMockLogWithChild(['debug']);

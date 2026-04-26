@@ -64,23 +64,23 @@ When the same trigger property is set under multiple prefixes, the merge priorit
 
 ## Common trigger configuration
 
-All implemented triggers, in addition to their specific configuration, also support the following common configuration variables. The table uses the `DD_TRIGGER_*` prefix for brevity, but `DD_ACTION_*` and `DD_NOTIFICATION_*` work identically (see [Environment variable prefixes](#environment-variable-prefixes) above).
+All implemented triggers, in addition to their specific configuration, also support the following common configuration variables. The table uses `DD_NOTIFICATION_{trigger_type}_{trigger_name}_*` for notification triggers and `DD_ACTION_{trigger_type}_{trigger_name}_*` for action triggers (see [Environment variable prefixes](#environment-variable-prefixes) above). For brevity the rows below show the `DD_NOTIFICATION_*` form; replace with `DD_ACTION_*` for Docker, Docker Compose, and Command triggers.
 
 | Env var | Required | Description | Supported values | Default value when missing |
 | --------------------------------------------------------- | :--------------: | ----------------------------------------------------------------------------------------------- | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `DD_TRIGGER_{trigger_type}_{trigger_name}_AUTO` | ⚪ | Controls automatic execution. `true` — auto-execute for all watched containers. `oninclude` — auto-execute only for containers with an explicit `dd.action.include` or `dd.notification.include` label. `false` — manual only (from UI, API...) | `true`, `false`, `oninclude` | `oninclude` for action triggers (docker, dockercompose, command); `true` for notification triggers |
-| `DD_TRIGGER_{trigger_type}_{trigger_name}_BATCHTITLE` | ⚪ | The template to use to render the title of the notification (batch mode) | String template with placeholders `${count}` | `${containers.length} updates available` |
-| `DD_TRIGGER_{trigger_type}_{trigger_name}_MODE` | ⚪ | Trigger for each container update, trigger once with all available updates as a list, or accumulate updates and send on a schedule | `simple`, `batch`, `digest`, `batch+digest` | `simple` |
-| `DD_TRIGGER_{trigger_type}_{trigger_name}_DIGESTCRON` | ⚪ | Cron schedule for digest mode flush (only used when `MODE=digest` or `MODE=batch+digest`) | Cron expression | `0 8 * * *` |
-| `DD_TRIGGER_{trigger_type}_{trigger_name}_SECURITYMODE` | ⚪ | How `security-alert` events are delivered: one notification per container (`simple`), all alerts in a cycle batched on completion (`batch`), or one digest per scan cycle (`digest`) | `simple`, `batch`, `digest`, `batch+digest` | `simple` |
-| `DD_TRIGGER_{trigger_type}_{trigger_name}_SECURITYDIGESTTITLE` | ⚪ | The template to use to render the title of the security digest (only used when `SECURITYMODE=digest` or `SECURITYMODE=batch+digest`) | String template with `scan.*` vars | `Security scan complete: ${scan.alertCount} container${scan.alertCount === 1 ? '' : 's'} with findings` |
-| `DD_TRIGGER_{trigger_type}_{trigger_name}_SECURITYDIGESTBODY` | ⚪ | The template to use to render the body of the security digest | String template with `scan.*` vars | Severity-grouped list (critical → high → medium → low) |
-| `DD_TRIGGER_{trigger_type}_{trigger_name}_ONCE` | ⚪ | Run trigger once (do not repeat previous results) | `true`, `false` | `true` |
-| `DD_TRIGGER_{trigger_type}_{trigger_name}_ORDER` | ⚪ | Trigger execution order (lower runs first) | Number | `100` |
-| `DD_TRIGGER_{trigger_type}_{trigger_name}_SIMPLEBODY` | ⚪ | The template to use to render the body of the notification | JS string template with vars `container` | `Container ${container.name} running with ${container.updateKind.kind} ${container.updateKind.localValue} can be updated to ${container.updateKind.kind} ${container.updateKind.remoteValue}${container.result && container.result.link ? "\\n" + container.result.link : ""}` |
-| `DD_TRIGGER_{trigger_type}_{trigger_name}_SIMPLETITLE` | ⚪ | The template to use to render the title of the notification (simple mode) | JS string template with vars `${containers}` | `New ${container.updateKind.kind} found for container ${container.name}` |
-| `DD_TRIGGER_{trigger_type}_{trigger_name}_THRESHOLD` | ⚪ | The threshold to reach to run the trigger | `all`, `major`, `major-only`, `minor`, `minor-only`, `patch`, `digest`, and `*-no-digest` variants (`major-no-digest`, `major-only-no-digest`, `minor-no-digest`, `minor-only-no-digest`, `patch-no-digest`) | `all` |
-| `DD_TRIGGER_{trigger_type}_{trigger_name}_RESOLVENOTIFICATIONS` | ⚪ | Auto-dismiss the notification after the container is successfully updated | `true`, `false` | `false` |
+| `DD_NOTIFICATION_{trigger_type}_{trigger_name}_AUTO` | ⚪ | Controls automatic execution. `true` — auto-execute for all watched containers. `oninclude` — auto-execute only for containers with an explicit `dd.action.include` or `dd.notification.include` label. `false` — manual only (from UI, API...) | `true`, `false`, `oninclude` | `oninclude` for action triggers (docker, dockercompose, command); `true` for notification triggers |
+| `DD_NOTIFICATION_{trigger_type}_{trigger_name}_BATCHTITLE` | ⚪ | The template to use to render the title of the notification (batch mode) | String template with placeholders `${count}` | `${containers.length} updates available` |
+| `DD_NOTIFICATION_{trigger_type}_{trigger_name}_MODE` | ⚪ | Trigger for each container update, trigger once with all available updates as a list, or accumulate updates and send on a schedule | `simple`, `batch`, `digest`, `batch+digest` | `simple` |
+| `DD_NOTIFICATION_{trigger_type}_{trigger_name}_DIGESTCRON` | ⚪ | Cron schedule for digest mode flush (only used when `MODE=digest` or `MODE=batch+digest`) | Cron expression | `0 8 * * *` |
+| `DD_NOTIFICATION_{trigger_type}_{trigger_name}_SECURITYMODE` | ⚪ | How `security-alert` events are delivered: one notification per container (`simple`), all alerts in a cycle batched on completion (`batch`), or one digest per scan cycle (`digest`) | `simple`, `batch`, `digest`, `batch+digest` | `simple` |
+| `DD_NOTIFICATION_{trigger_type}_{trigger_name}_SECURITYDIGESTTITLE` | ⚪ | The template to use to render the title of the security digest (only used when `SECURITYMODE=digest` or `SECURITYMODE=batch+digest`) | String template with `scan.*` vars | `Security scan complete: ${scan.alertCount} container${scan.alertCount === 1 ? '' : 's'} with findings` |
+| `DD_NOTIFICATION_{trigger_type}_{trigger_name}_SECURITYDIGESTBODY` | ⚪ | The template to use to render the body of the security digest | String template with `scan.*` vars | Severity-grouped list (critical → high → medium → low) |
+| `DD_NOTIFICATION_{trigger_type}_{trigger_name}_ONCE` | ⚪ | Run trigger once (do not repeat previous results) | `true`, `false` | `true` |
+| `DD_NOTIFICATION_{trigger_type}_{trigger_name}_ORDER` | ⚪ | Trigger execution order (lower runs first) | Number | `100` |
+| `DD_NOTIFICATION_{trigger_type}_{trigger_name}_SIMPLEBODY` | ⚪ | The template to use to render the body of the notification | JS string template with vars `container` | `Container ${container.name} running with ${container.updateKind.kind} ${container.updateKind.localValue} can be updated to ${container.updateKind.kind} ${container.updateKind.remoteValue}${container.result && container.result.link ? "\\n" + container.result.link : ""}` |
+| `DD_NOTIFICATION_{trigger_type}_{trigger_name}_SIMPLETITLE` | ⚪ | The template to use to render the title of the notification (simple mode) | JS string template with vars `${containers}` | `New ${container.updateKind.kind} found for container ${container.name}` |
+| `DD_NOTIFICATION_{trigger_type}_{trigger_name}_THRESHOLD` | ⚪ | The threshold to reach to run the trigger | `all`, `major`, `major-only`, `minor`, `minor-only`, `patch`, `digest`, and `*-no-digest` variants (`major-no-digest`, `major-only-no-digest`, `minor-no-digest`, `minor-only-no-digest`, `patch-no-digest`) | `all` |
+| `DD_NOTIFICATION_{trigger_type}_{trigger_name}_RESOLVENOTIFICATIONS` | ⚪ | Auto-dismiss the notification after the container is successfully updated | `true`, `false` | `false` |
 
 ### Threshold reference
 
@@ -100,11 +100,11 @@ Any threshold can be suffixed with `-no-digest` to exclude digest-only updates (
 
 - `RESOLVENOTIFICATIONS` is currently implemented for Gotify (auto-deletes the notification message after a successful update). Other providers can be extended to support it.
 - Some messaging triggers (Slack, Telegram, Teams, Matrix, Mattermost, Rocket.Chat, Google Chat) also support `DISABLETITLE` (default `false`) to send only the body without a title line.
-- You can set `DD_TRIGGER_{trigger_type}_THRESHOLD` to define a default threshold for all triggers of the same type, e.g. `DD_TRIGGER_NTFY_THRESHOLD=minor`.
+- You can set `DD_NOTIFICATION_{trigger_type}_THRESHOLD` to define a default threshold for all triggers of the same type, e.g. `DD_NOTIFICATION_NTFY_THRESHOLD=minor` (or `DD_ACTION_{trigger_type}_THRESHOLD` for action triggers).
 - Triggers are executed by ascending `ORDER`; when two triggers have the same `ORDER`, they are sorted by trigger id.
 - Triggers sharing the same trigger name (e.g. `docker.update` and `discord.update`) can share `THRESHOLD`; if exactly one threshold value is defined among them, that value is used for the others unless they override it explicitly.
 - Setting `ONCE=false` with `MODE=batch` gives a report with all pending updates on every run.
-- `MODE=digest` accumulates update events in an in-memory buffer and flushes them as a single batch notification on the `DIGESTCRON` schedule. If the same container has multiple updates within the window, only the latest is included. Containers that are updated before the digest fires are automatically evicted from the buffer. Useful for daily email digests: `DD_TRIGGER_SMTP_GMAIL_MODE=digest` + `DD_TRIGGER_SMTP_GMAIL_DIGESTCRON=0 8 * * *`.
+- `MODE=digest` accumulates update events in an in-memory buffer and flushes them as a single batch notification on the `DIGESTCRON` schedule. If the same container has multiple updates within the window, only the latest is included. Containers that are updated before the digest fires are automatically evicted from the buffer. Useful for daily email digests: `DD_NOTIFICATION_SMTP_GMAIL_MODE=digest` + `DD_NOTIFICATION_SMTP_GMAIL_DIGESTCRON=0 8 * * *`.
 - `MODE=batch+digest` enables both modes simultaneously — immediate batch emails on each scan cycle plus a scheduled digest summary. Requires `DIGESTCRON` to be set.
 - **Note:** Digest and batch modes still depend on the `update-available` notification rule being enabled (see below). If the trigger is excluded from `update-available` routing, no events reach the buffer.
 - `SECURITYMODE` governs `security-alert` delivery independently of `MODE`. A trigger may legitimately want `MODE=batch` for update notifications and `SECURITYMODE=digest` for security findings. Digest and batch+digest modes buffer alerts per-scan-cycle (keyed by `cycleId`) and flush one summary per cycle on completion. Cycles with zero findings never emit. See the [Security Hardening Guide](/docs/guides/security#quiet-scan-notifications-with-digest-mode) for an end-to-end example.
@@ -235,16 +235,16 @@ services:
     image: codeswhat/drydock
     ...
     environment:
-      - DD_TRIGGER_SMTP_GMAIL_SIMPLETITLE=Container $${container.name} can be updated
-      - DD_TRIGGER_SMTP_GMAIL_SIMPLEBODY=Container $${name} can be updated from $${local.substring(0, 15)} to $${remote.substring(0, 15)}
+      - DD_NOTIFICATION_SMTP_GMAIL_SIMPLETITLE=Container $${container.name} can be updated
+      - DD_NOTIFICATION_SMTP_GMAIL_SIMPLEBODY=Container $${name} can be updated from $${local.substring(0, 15)} to $${remote.substring(0, 15)}
 ```
 
 </Tab>
 <Tab value="Docker">
 ```bash
 docker run \
-  -e 'DD_TRIGGER_SMTP_GMAIL_SIMPLETITLE=Container ${container.name} can be updated' \
-  -e 'DD_TRIGGER_SMTP_GMAIL_SIMPLEBODY=Container ${name} can be updated from ${local.substring(0, 15)} to ${remote.substring(0, 15)}'
+  -e 'DD_NOTIFICATION_SMTP_GMAIL_SIMPLETITLE=Container ${container.name} can be updated' \
+  -e 'DD_NOTIFICATION_SMTP_GMAIL_SIMPLEBODY=Container ${name} can be updated from ${local.substring(0, 15)} to ${remote.substring(0, 15)}'
   ...
   codeswhat/drydock
 ```

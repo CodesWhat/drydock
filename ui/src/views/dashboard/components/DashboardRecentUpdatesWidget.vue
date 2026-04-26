@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watchEffect } from 'vue';
 import AppBadge from '@/components/AppBadge.vue';
 import AppIconButton from '@/components/AppIconButton.vue';
+import UpdateEligibilityBadges from '@/components/containers/UpdateEligibilityBadges.vue';
 import { useBreakpoints } from '@/composables/useBreakpoints';
 import type { DashboardUpdateSequenceEntry, RecentUpdateRow, UpdateKind } from '../dashboardTypes';
 
@@ -267,6 +268,11 @@ watchEffect(() => {
               <div class="min-w-0">
                 <div class="flex items-center gap-1.5 flex-wrap">
                   <div class="font-medium dd-text leading-tight truncate">{{ row.name }}</div>
+                  <UpdateEligibilityBadges
+                    v-if="row.updateEligibility"
+                    :eligibility="row.updateEligibility"
+                    :has-active-operation-badge="isRowUpdating(row) || isRowQueued(row)"
+                  />
                 </div>
                 <div class="text-2xs dd-text-muted mt-0.5 truncate">{{ row.image }}</div>
                 <div v-if="row.registryError" class="text-2xs mt-0.5 truncate" style="color: var(--dd-danger);">

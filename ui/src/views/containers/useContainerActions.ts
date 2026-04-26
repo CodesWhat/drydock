@@ -16,10 +16,12 @@ import {
   updateContainers as apiUpdateContainers,
 } from '../../services/container-actions';
 import type { Container } from '../../types/container';
+import type { ContainerActionKind } from '../../utils/container-action-key';
 import {
   getContainerActionIdentityKey,
   getContainerActionKey,
   hasTrackedContainerAction,
+  hasTrackedContainerActionOfKind,
 } from '../../utils/container-action-key';
 import {
   formatContainerUpdateStartedCountMessage,
@@ -149,7 +151,8 @@ async function executeContainerActionState(args: {
   actionKey: string;
   pendingKey: string;
   name: string;
-  actionInProgress: Ref<Set<string>>;
+  kind: ContainerActionKind;
+  actionInProgress: Ref<Map<string, ContainerActionKind>>;
   inputError: Ref<string | null>;
   containers: Readonly<Ref<Container[]>>;
   action: (id: string) => Promise<unknown>;
@@ -175,8 +178,8 @@ async function executeContainerActionState(args: {
   if (!containerId || args.actionInProgress.value.has(args.actionKey)) {
     return false;
   }
-  const next = new Set(args.actionInProgress.value);
-  next.add(args.actionKey);
+  const next = new Map(args.actionInProgress.value);
+  next.set(args.actionKey, args.kind);
   args.actionInProgress.value = next;
   args.inputError.value = null;
   const shouldReloadContainers = args.reloadContainers ?? true;
@@ -248,7 +251,7 @@ async function executeContainerActionState(args: {
     }
     return false;
   } finally {
-    const next = new Set(args.actionInProgress.value);
+    const next = new Map(args.actionInProgress.value);
     next.delete(args.actionKey);
     args.actionInProgress.value = next;
   }
@@ -260,7 +263,7 @@ async function updateAllInGroupState(args: {
   containers: Readonly<Ref<Container[]>>;
   projectContainerDisplayState: (container: Container) => Container;
   inputError: Ref<string | null>;
-  actionInProgress: Ref<Set<string>>;
+  actionInProgress: Ref<Map<string, ContainerActionKind>>;
   actionPending: Ref<Map<string, Container>>;
   actionPendingLifecycleModes: Ref<Map<string, PendingActionLifecycleMode>>;
   actionPendingLifecycleObserved: Ref<Set<string>>;
@@ -303,8 +306,8 @@ async function updateAllInGroupState(args: {
   }
   const groupContainerIds = frozenUpdateTargets.map((t) => t.id);
   const firstTargetActionKey = resolveContainerActionTargetKey(frozenUpdateTargets[0]!);
-  const headActionInProgress = new Set(args.actionInProgress.value);
-  headActionInProgress.add(firstTargetActionKey);
+  const headActionInProgress = new Map(args.actionInProgress.value);
+  headActionInProgress.set(firstTargetActionKey, 'update');
   args.actionInProgress.value = headActionInProgress;
   let acceptedTargetIds: string[] = [];
   try {
@@ -357,7 +360,7 @@ async function updateAllInGroupState(args: {
     if (acceptedTargetIds.length === 0) {
       args.clearBatch(args.group.key);
     }
-    const nextActionInProgress = new Set(args.actionInProgress.value);
+    const nextActionInProgress = new Map(args.actionInProgress.value);
     nextActionInProgress.delete(firstTargetActionKey);
     args.actionInProgress.value = nextActionInProgress;
   }
@@ -370,7 +373,7 @@ async function deleteContainerState(args: {
   actionKey: string;
   name: string;
   skipKey: string;
-  actionInProgress: Ref<Set<string>>;
+  actionInProgress: Ref<Map<string, ContainerActionKind>>;
   inputError: Ref<string | null>;
   skippedUpdates: Ref<Set<string>>;
   selectedContainerId: string | undefined;
@@ -386,8 +389,8 @@ async function deleteContainerState(args: {
   if (!containerId || args.actionInProgress.value.has(args.actionKey)) {
     return false;
   }
-  const next = new Set(args.actionInProgress.value);
-  next.add(args.actionKey);
+  const next = new Map(args.actionInProgress.value);
+  next.set(args.actionKey, 'delete');
   args.actionInProgress.value = next;
   try {
     await apiDeleteContainer(containerId);
@@ -407,7 +410,7 @@ async function deleteContainerState(args: {
     toast.error(`Delete failed: ${args.name}`, msg);
     return false;
   } finally {
-    const next = new Set(args.actionInProgress.value);
+    const next = new Map(args.actionInProgress.value);
     next.delete(args.actionKey);
     args.actionInProgress.value = next;
   }
@@ -584,6 +587,7 @@ function createConfirmHandlers(args: {
     target: ContainerActionTarget,
     action: (id: string) => Promise<unknown>,
     options?: {
+      kind?: ContainerActionKind;
       containerId?: string;
       reloadContainers?: boolean;
       successMessage?: string;
@@ -608,6 +612,7 @@ function createConfirmHandlers(args: {
       severity: 'danger',
       accept: () =>
         args.executeAction(target, apiStopContainer, {
+          kind: 'lifecycle',
           successMessage: `Stopped: ${name}`,
         }) as unknown as Promise<void>,
     });
@@ -623,6 +628,7 @@ function createConfirmHandlers(args: {
       severity: 'warn',
       accept: () =>
         args.executeAction(target, apiRestartContainer, {
+          kind: 'lifecycle',
           successMessage: `Restarted: ${name}`,
         }) as unknown as Promise<void>,
     });
@@ -661,6 +667,7 @@ function createConfirmHandlers(args: {
       severity: 'warn',
       accept: () =>
         args.executeAction(target, apiUpdateContainer, {
+          kind: 'update',
           successMessage: getContainerUpdateStartedMessage(name),
           treatNoUpdateAsStale: true,
           pendingLifecycleMode: 'update',
@@ -727,6 +734,7 @@ function createContainerActionHandlers(args: {
     target: ContainerActionTarget,
     action: (id: string) => Promise<unknown>,
     options?: {
+      kind?: ContainerActionKind;
       containerId?: string;
       reloadContainers?: boolean;
       successMessage?: string;
@@ -748,12 +756,16 @@ function createContainerActionHandlers(args: {
 }) {
   async function startContainer(target: ContainerActionTarget) {
     const name = typeof target === 'string' ? target : target.name;
-    await args.executeAction(target, apiStartContainer, { successMessage: `Started: ${name}` });
+    await args.executeAction(target, apiStartContainer, {
+      kind: 'lifecycle',
+      successMessage: `Started: ${name}`,
+    });
   }
 
   async function updateContainer(target: ContainerActionTarget) {
     const name = typeof target === 'string' ? target : target.name;
     await args.executeAction(target, apiUpdateContainer, {
+      kind: 'update',
       successMessage: getContainerUpdateStartedMessage(name),
       staleMessage: getContainerAlreadyUpToDateMessage(name),
       treatNoUpdateAsStale: true,
@@ -764,6 +776,7 @@ function createContainerActionHandlers(args: {
   async function scanContainer(target: ContainerActionTarget) {
     const name = typeof target === 'string' ? target : target.name;
     await args.executeAction(target, apiScanContainer, {
+      kind: 'scan',
       successMessage: `Scan triggered: ${name}`,
     });
   }
@@ -792,6 +805,7 @@ function createContainerActionHandlers(args: {
     const name = typeof target === 'string' ? target : target.name;
     await args.applyPolicy(target, 'clear', {}, `Cleared update policy for ${name}`);
     await args.executeAction(target, apiUpdateContainer, {
+      kind: 'update',
       successMessage: getForceContainerUpdateStartedMessage(name),
       staleMessage: getContainerAlreadyUpToDateMessage(name),
       treatNoUpdateAsStale: true,
@@ -906,7 +920,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
     { immediate: true },
   );
 
-  const actionInProgress = ref(new Set<string>());
+  const actionInProgress = ref(new Map<string, ContainerActionKind>());
   const actionPending = ref<Map<string, Container>>(new Map());
   const actionPendingStartTimes = ref<Map<string, number>>(new Map());
   const actionPendingLifecycleModes = ref<Map<string, PendingActionLifecycleMode>>(new Map());
@@ -968,7 +982,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
 
   function hasOtherLocalTrackedAction(target: Exclude<ContainerActionTarget, string>) {
     const targetKey = resolveContainerActionTargetKey(target);
-    return [...actionInProgress.value].some((actionKey) => actionKey !== targetKey);
+    return [...actionInProgress.value.keys()].some((actionKey) => actionKey !== targetKey);
   }
 
   function getDisplayContainers() {
@@ -976,9 +990,10 @@ export function useContainerActions(input: UseContainerActionsInput) {
   }
 
   function isContainerUpdateInProgress(target: ContainerActionTarget) {
-    const hasTrackedAction = hasTrackedContainerAction(
+    const hasTrackedAction = hasTrackedContainerActionOfKind(
       actionInProgress.value,
       typeof target === 'string' ? { name: target } : target,
+      'update',
     );
     if (hasTrackedAction) {
       return true;
@@ -1015,8 +1030,16 @@ export function useContainerActions(input: UseContainerActionsInput) {
     if (typeof target === 'string') {
       return false;
     }
-    const hasTrackedAction = hasTrackedContainerAction(actionInProgress.value, target);
-    if (hasTrackedAction) {
+    const hasTrackedUpdateAction = hasTrackedContainerActionOfKind(
+      actionInProgress.value,
+      target,
+      'update',
+    );
+    if (hasTrackedUpdateAction) {
+      return false;
+    }
+    const hasAnyTrackedAction = hasTrackedContainerAction(actionInProgress.value, target);
+    if (hasAnyTrackedAction) {
       return false;
     }
     const displayContainers = getDisplayContainers();
@@ -1038,10 +1061,23 @@ export function useContainerActions(input: UseContainerActionsInput) {
     return liveOperation?.status === 'queued';
   }
 
+  function isContainerScanInProgress(target: ContainerActionTarget) {
+    return hasTrackedContainerActionOfKind(
+      actionInProgress.value,
+      typeof target === 'string' ? { name: target } : target,
+      'scan',
+    );
+  }
+
+  function isContainerRowLocked(target: ContainerActionTarget) {
+    return isContainerUpdateInProgress(target) || isContainerUpdateQueued(target);
+  }
+
   async function executeAction(
     target: ContainerActionTarget,
     action: (id: string) => Promise<unknown>,
     options?: {
+      kind?: ContainerActionKind;
       containerId?: string;
       reloadContainers?: boolean;
       successMessage?: string;
@@ -1064,6 +1100,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
       actionKey,
       pendingKey,
       name,
+      kind: options?.kind ?? 'lifecycle',
       actionInProgress,
       inputError: input.error,
       containers: input.containers,
@@ -1183,6 +1220,8 @@ export function useContainerActions(input: UseContainerActionsInput) {
     getContainerListPolicyState: policy.getContainerListPolicyState,
     getOperationStatusStyle: backups.getOperationStatusStyle,
     getTriggerKey: triggers.getTriggerKey,
+    isContainerRowLocked,
+    isContainerScanInProgress,
     isContainerUpdateInProgress,
     isContainerUpdateQueued,
     policyError: policy.policyError,

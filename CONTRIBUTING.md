@@ -102,9 +102,9 @@ e2e/                        # End-to-end tests (Cucumber + Playwright)
 **Component registry pattern:** Components are loaded dynamically from environment variables:
 
 ```text
-DD_REGISTRY_GHCR_PRIVATE_TOKEN=xxx  →  loads registries/providers/ghcr/Ghcr.ts
-DD_TRIGGER_SLACK_MYSLACK_TOKEN=xxx  →  loads triggers/providers/slack/Slack.ts
-DD_WATCHER_LOCAL_SOCKET=xxx         →  loads watchers/providers/docker/Docker.ts
+DD_REGISTRY_GHCR_PRIVATE_TOKEN=xxx       →  loads registries/providers/ghcr/Ghcr.ts
+DD_NOTIFICATION_SLACK_MYSLACK_TOKEN=xxx  →  loads triggers/providers/slack/Slack.ts
+DD_WATCHER_LOCAL_SOCKET=xxx              →  loads watchers/providers/docker/Docker.ts
 ```
 
 Each component type extends a base class with `init()`, `deregister()`, and type-specific methods.

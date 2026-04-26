@@ -10,6 +10,7 @@ import {
   getContainerUpdateOperations,
   getContainerVulnerabilities,
   getSecurityVulnerabilityOverview,
+  getUpdateOperationById,
   refreshAllContainers,
   refreshContainer,
   revealContainerEnv,
@@ -1062,6 +1063,62 @@ describe('Container Service', () => {
       await expect(getContainerReleaseNotes('c1')).rejects.toThrow(
         'Failed to get release notes for container c1: Internal Server Error',
       );
+    });
+  });
+
+  describe('getUpdateOperationById', () => {
+    it('fetches and returns an update operation by id', async () => {
+      const mockOperation = { id: 'op-1', status: 'succeeded', containerName: 'nginx' };
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => mockOperation,
+      } as any);
+
+      const result = await getUpdateOperationById('op-1');
+
+      expect(fetch).toHaveBeenCalledWith('/api/v1/update-operations/op-1', {
+        credentials: 'include',
+      });
+      expect(result).toEqual(mockOperation);
+    });
+
+    it('returns null when operation is not found (404)', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+        statusText: 'Not Found',
+      } as any);
+
+      const result = await getUpdateOperationById('op-missing');
+      expect(result).toBeNull();
+    });
+
+    it('throws when fetching operation fails with non-404 error', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        statusText: 'Internal Server Error',
+      } as any);
+
+      await expect(getUpdateOperationById('op-1')).rejects.toThrow(
+        'Failed to get update operation op-1: Internal Server Error',
+      );
+    });
+
+    it('encodes special characters in operation id', async () => {
+      const mockOperation = { id: 'op/1', status: 'failed', containerName: 'nginx' };
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => mockOperation,
+      } as any);
+
+      await getUpdateOperationById('op/1');
+
+      expect(fetch).toHaveBeenCalledWith('/api/v1/update-operations/op%2F1', {
+        credentials: 'include',
+      });
     });
   });
 });

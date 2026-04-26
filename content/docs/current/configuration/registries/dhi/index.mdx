@@ -17,12 +17,12 @@ Supported credentials:
 
 | Env var | Required | Description | Supported values | Default value when missing |
 | --- | :---: | --- | --- | --- |
-| `DD_REGISTRY_DHI_{REGISTRY_NAME}_LOGIN` | ⚪ | Docker ID login | Required with `PASSWORD` or `TOKEN` | |
+| `DD_REGISTRY_DHI_{REGISTRY_NAME}_LOGIN` | ⚪ | Docker ID login | Required with `PASSWORD` | |
 | `DD_REGISTRY_DHI_{REGISTRY_NAME}_PASSWORD` | ⚪ | Docker ID password or access token | `DD_REGISTRY_DHI_{REGISTRY_NAME}_LOGIN` must be defined | |
-| `DD_REGISTRY_DHI_{REGISTRY_NAME}_TOKEN` | ⚪ | Access token (alternative to `PASSWORD`) | `DD_REGISTRY_DHI_{REGISTRY_NAME}_LOGIN` must be defined | |
+| `DD_REGISTRY_DHI_{REGISTRY_NAME}_TOKEN` | ⚪ | **Deprecated** — use `PASSWORD` instead (accepted as an alias until v1.6.0) | `DD_REGISTRY_DHI_{REGISTRY_NAME}_LOGIN` must be defined | |
 | `DD_REGISTRY_DHI_{REGISTRY_NAME}_AUTH` | ⚪ | Base64 auth string (`login:password`) | Cannot be combined with `LOGIN`/`PASSWORD`/`TOKEN` | |
 
-<Callout type="warn">Registry auth now fails closed for invalid combinations. `LOGIN` must be paired with `PASSWORD` (or `TOKEN` alias), and `AUTH` cannot be combined with `LOGIN`/`PASSWORD`/`TOKEN`.</Callout>
+<Callout type="warn">Registry auth now fails closed for invalid combinations. `LOGIN` must be paired with `PASSWORD`, and `AUTH` cannot be combined with `LOGIN`/`PASSWORD`/`TOKEN`. The `TOKEN` key is a deprecated alias for `PASSWORD` (removed in v1.6.0) — use `PASSWORD` for new configs.</Callout>
 
 ## Examples
 

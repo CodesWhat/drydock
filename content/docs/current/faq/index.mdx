@@ -159,7 +159,7 @@ See the full mapping table in [Podman Quick Start](/docs/configuration/watchers#
 
 There are no Podman-specific trigger variables in v1.5. Trigger setup is the same as Docker:
 
-- Add a Docker trigger (`DD_TRIGGER_DOCKER_{name}_AUTO=false` or `true`).
+- Add a Docker trigger (`DD_ACTION_DOCKER_{name}_AUTO=false` or `true`).
 - If using socket proxy, include `POST=1` and `NETWORKS=1` on the proxy.
 
 Without a Docker trigger, UI actions show `No docker trigger found for this container`.

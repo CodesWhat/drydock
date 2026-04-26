@@ -31,9 +31,18 @@ import {
 import { getWatcherConfiguration } from './watcherConfiguration';
 
 const DASHBOARD_REALTIME_REFRESH_DEBOUNCE_MS = 1_000;
+// Watchers / registries / agents / server info change rarely and have their own
+// SSE refresh paths where relevant. On reconnect-driven background refreshes we
+// skip refetching them unless this TTL has elapsed, so a reconnect storm on a
+// flaky LAN does not stampede 7 endpoints for every blip. See #301.
+const DASHBOARD_STATIC_ENDPOINT_TTL_MS = 30_000;
 
 interface DashboardRefreshOptions {
   background?: boolean;
+  // When true, skip watchers/registries/agents/server info if their last
+  // successful fetch is within DASHBOARD_STATIC_ENDPOINT_TTL_MS. Used for the
+  // reconnect-driven background refresh path.
+  skipStaticIfFresh?: boolean;
 }
 
 interface DashboardStateRefs {
@@ -53,10 +62,12 @@ interface DashboardStateRefs {
 interface DashboardDataResponse {
   containersRes: ApiContainerInput[];
   containerStatsRes: ContainerStatsSummaryItem[];
-  serverRes: DashboardServerInfo;
-  agentsRes: DashboardAgent[];
-  watchersRes: unknown;
-  registriesRes: unknown;
+  // The static-endpoint fields are optional so a reconnect-driven refresh can
+  // skip them when the cached values are still within the TTL.
+  serverRes?: DashboardServerInfo;
+  agentsRes?: DashboardAgent[];
+  watchersRes?: unknown;
+  registriesRes?: unknown;
   recentStatusRes: unknown;
 }
 
@@ -257,10 +268,18 @@ function applyFetchedDashboardData(state: DashboardStateRefs, response: Dashboar
   state.containers.value = mapApiContainers(response.containersRes);
   state.containerSummary.value = buildContainerSummaryFromContainers(state.containers.value);
   state.containerStats.value = response.containerStatsRes;
-  state.serverInfo.value = response.serverRes;
-  state.agents.value = response.agentsRes;
-  state.watchers.value = Array.isArray(response.watchersRes) ? response.watchersRes : [];
-  state.registries.value = Array.isArray(response.registriesRes) ? response.registriesRes : [];
+  if (response.serverRes !== undefined) {
+    state.serverInfo.value = response.serverRes;
+  }
+  if (response.agentsRes !== undefined) {
+    state.agents.value = response.agentsRes;
+  }
+  if (response.watchersRes !== undefined) {
+    state.watchers.value = Array.isArray(response.watchersRes) ? response.watchersRes : [];
+  }
+  if (response.registriesRes !== undefined) {
+    state.registries.value = Array.isArray(response.registriesRes) ? response.registriesRes : [];
+  }
   const normalizedRecentStatuses = normalizeRecentStatuses(response.recentStatusRes);
   state.recentStatusByContainer.value = normalizedRecentStatuses.byContainer;
   state.recentStatusByIdentity.value = normalizedRecentStatuses.byIdentity;
@@ -268,9 +287,16 @@ function applyFetchedDashboardData(state: DashboardStateRefs, response: Dashboar
 }
 
 function createDashboardDataFetchers(state: DashboardStateRefs) {
+  let lastStaticFetchAt = 0;
+
   async function fetchDashboardData(options: DashboardRefreshOptions = {}) {
     const background = options.background === true;
     const hasRenderedData = hasRenderedDashboardData(state);
+    const now = Date.now();
+    const staticFresh =
+      options.skipStaticIfFresh === true &&
+      lastStaticFetchAt > 0 &&
+      now - lastStaticFetchAt < DASHBOARD_STATIC_ENDPOINT_TTL_MS;
 
     if (!background) {
       state.loading.value = true;
@@ -278,23 +304,33 @@ function createDashboardDataFetchers(state: DashboardStateRefs) {
     }
 
     try {
-      const [
-        containersRes,
-        containerStatsRes,
-        serverRes,
-        agentsRes,
-        watchersRes,
-        registriesRes,
-        recentStatusRes,
-      ] = await Promise.all([
+      const livePromises = Promise.all([
         getAllContainers(),
-        getAllContainerStats(),
-        getServer(),
-        getAgents(),
-        getAllWatchers(),
-        getAllRegistries(),
+        // touch: false — the dashboard summary does not need the server to
+        // spawn a Docker stats stream per container; it only renders
+        // already-warm cached snapshots. See #301.
+        getAllContainerStats({ touch: false }),
         getContainerRecentStatus(),
       ]);
+
+      const staticPromises = staticFresh
+        ? Promise.resolve([undefined, undefined, undefined, undefined] as [
+            DashboardServerInfo | undefined,
+            DashboardAgent[] | undefined,
+            unknown,
+            unknown,
+          ])
+        : Promise.all([getServer(), getAgents(), getAllWatchers(), getAllRegistries()]);
+
+      const [
+        [containersRes, containerStatsRes, recentStatusRes],
+        [serverRes, agentsRes, watchersRes, registriesRes],
+      ] = await Promise.all([livePromises, staticPromises]);
+
+      if (!staticFresh) {
+        lastStaticFetchAt = Date.now();
+      }
+
       applyFetchedDashboardData(state, {
         containersRes,
         containerStatsRes,
@@ -362,6 +398,9 @@ export function useDashboardData() {
   });
   const realtimeRefreshScheduler = createRealtimeRefreshScheduler({
     debounceMs: DASHBOARD_REALTIME_REFRESH_DEBOUNCE_MS,
+    refreshFullLive: () => {
+      void fetchDashboardData({ background: true, skipStaticIfFresh: true });
+    },
     refreshFull: () => {
       void fetchDashboardData({ background: true });
     },
@@ -369,7 +408,12 @@ export function useDashboardData() {
     clearTimeoutFn: window.clearTimeout.bind(window),
   });
 
-  const fullRefreshListener = (() => realtimeRefreshScheduler.schedule('full')) as EventListener;
+  // dd:sse-connected blips during network flaps — cheap refresh that TTL-guards
+  // watchers/registries/agents/server. dd:sse-resync-required is the server
+  // telling us we definitely missed events, so always do the full fan-out.
+  const reconnectRefreshListener = (() =>
+    realtimeRefreshScheduler.schedule('full-live')) as EventListener;
+  const resyncRefreshListener = (() => realtimeRefreshScheduler.schedule('full')) as EventListener;
   const operationPatchListener = ((event: Event) => {
     applyDashboardOperationPatch(state, event);
   }) as EventListener;
@@ -396,8 +440,8 @@ export function useDashboardData() {
     globalThis.addEventListener('dd:sse-container-updated', containerUpdatedListener);
     globalThis.addEventListener('dd:sse-container-removed', containerRemovedListener);
     globalThis.addEventListener('dd:sse-update-operation-changed', operationPatchListener);
-    globalThis.addEventListener('dd:sse-connected', fullRefreshListener);
-    globalThis.addEventListener('dd:sse-resync-required', fullRefreshListener);
+    globalThis.addEventListener('dd:sse-connected', reconnectRefreshListener);
+    globalThis.addEventListener('dd:sse-resync-required', resyncRefreshListener);
     document.addEventListener('visibilitychange', visibilityChangeListener);
     stopMaintenanceWindowWatch = watch(hasMaintenanceWindows, maintenanceCountdownController.sync, {
       immediate: true,
@@ -410,8 +454,8 @@ export function useDashboardData() {
     globalThis.removeEventListener('dd:sse-container-updated', containerUpdatedListener);
     globalThis.removeEventListener('dd:sse-container-removed', containerRemovedListener);
     globalThis.removeEventListener('dd:sse-update-operation-changed', operationPatchListener);
-    globalThis.removeEventListener('dd:sse-connected', fullRefreshListener);
-    globalThis.removeEventListener('dd:sse-resync-required', fullRefreshListener);
+    globalThis.removeEventListener('dd:sse-connected', reconnectRefreshListener);
+    globalThis.removeEventListener('dd:sse-resync-required', resyncRefreshListener);
     document.removeEventListener('visibilitychange', visibilityChangeListener);
     stopMaintenanceWindowWatch?.();
     realtimeRefreshScheduler.dispose();

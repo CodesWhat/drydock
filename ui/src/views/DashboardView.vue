@@ -1,6 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
-import { OPERATION_DISPLAY_HOLD_MS } from '../composables/useOperationDisplayHold';
+import {
+  applyUpdateOperationSseToHold,
+  OPERATION_DISPLAY_HOLD_MS,
+  parseUpdateOperationSsePayload,
+  type TerminalResolvedArgs,
+  useOperationDisplayHold,
+} from '../composables/useOperationDisplayHold';
+import { getUpdateOperationById } from '../services/container';
+import type { Container } from '../types/container';
 import { type RouteLocationRaw, useRouter } from 'vue-router';
 import type { OperationChangedPayload } from '../services/sse';
 import { TERMINAL_CONTAINER_UPDATE_OPERATION_STATUSES } from '../types/update-operation';
@@ -46,6 +54,13 @@ import { useDashboardWidgetOrder } from './dashboard/useDashboardWidgetOrder';
 const router = useRouter();
 const confirm = useConfirmDialog();
 const toast = useToast();
+const {
+  heldOperations,
+  markToastFired,
+  wasToastFired,
+  projectContainerDisplayState,
+  reconcileHoldsAgainstContainers,
+} = useOperationDisplayHold();
 const { isMobile, windowNarrow } = useBreakpoints();
 const dashboardScrollEl = ref<HTMLElement | null>(null);
 // Responsive grid margins: slightly wider vertical gaps on touch screens for scroll room
@@ -198,6 +213,12 @@ const {
   registries,
   serverInfo,
   watchers,
+  // Project held containers through the snapshot so the Updates Available
+  // widget's detectedAt-based sort sees the pre-update timestamp even while
+  // the backend transiently clears updateAvailable/updateDetectedAt during
+  // the active update window (#291 symptom 1).
+  projectContainerForRecentUpdates: (container: Container) =>
+    projectContainerDisplayState(container),
 });
 
 const pendingUpdates = computed(() =>
@@ -209,6 +230,13 @@ const pendingUpdates = computed(() =>
   ),
 );
 
+// recentUpdates is projected through projectContainerDisplayState in
+// useDashboardComputed so held containers retain their in-progress
+// updateOperation + sortSnapshot across the full hold window, including the
+// 1.5s settle window after a terminal SSE arrives. The dashboardPendingUpdateRows
+// ghost merge below is the rc.9-era fallback for when the container drops out
+// of containers.value entirely mid-recreate; the hold-based projection
+// subsumes it once the SSE active path is in use, and commit-4 removes it.
 const displayRecentUpdates = computed<RecentUpdateRow[]>(() => {
   const liveRowIdentityKeys = new Set(
     recentUpdates.value.map((row) => getDashboardRecentUpdateReconciliationKey(row)),
@@ -424,68 +452,108 @@ watch(containers, () => {
   pruneDashboardUpdateSequence();
 });
 
-const terminalOperationStatusSet = new Set<string>(TERMINAL_CONTAINER_UPDATE_OPERATION_STATUSES);
+function findDashboardContainerForOperationTarget(target: {
+  containerId?: string;
+  newContainerId?: string;
+  containerName?: string;
+}): Container | undefined {
+  for (const container of containers.value) {
+    if (
+      (target.containerId && container.id === target.containerId) ||
+      (target.newContainerId && container.id === target.newContainerId) ||
+      (target.containerName && container.name === target.containerName)
+    ) {
+      return container;
+    }
+  }
+  return undefined;
+}
 
-function handleTerminalOperationSse(event: Event) {
-  const payload = (event as CustomEvent<OperationChangedPayload>).detail;
-  if (!payload) {
+/**
+ * REST-backed fallback for when the terminal SSE is dropped on the dashboard
+ * path (Synology DSM 7-style reverse-proxy hiccups that don't trigger native
+ * EventSource reconnect, #291 rc.11). Fetches the terminal operation and fires
+ * the matching toast; guarded against double-firing via wasToastFired because
+ * the primary SSE handler also calls markToastFired.
+ */
+async function handleDashboardTerminalResolvedFromReconciliation(args: TerminalResolvedArgs) {
+  const { operationId, containerName } = args;
+  if (wasToastFired(operationId)) {
     return;
   }
-  if (!terminalOperationStatusSet.has(payload.status)) {
+  let operation: Awaited<ReturnType<typeof getUpdateOperationById>>;
+  try {
+    operation = await getUpdateOperationById(operationId);
+  } catch {
     return;
   }
-  // Determine whether this operation was tracked on this view before pruning
-  const operationIdentifiers = new Set<string>(
-    [payload.containerId, payload.newContainerId, payload.containerName].filter(
-      (v): v is string => typeof v === 'string' && v.length > 0,
-    ),
-  );
-  let resolvedName: string | null = null;
-  let wasTracked = false;
-  for (const [key, { row }] of dashboardPendingUpdateRows.value.entries()) {
-    const rowIdentifiers = new Set<string>(
-      [key, row.id, row.name, row.identityKey].filter(
-        (v): v is string => typeof v === 'string' && v.length > 0,
-      ),
-    );
-    if ([...rowIdentifiers].some((v) => operationIdentifiers.has(v))) {
-      wasTracked = true;
-      resolvedName = resolvedName ?? row.name;
-    }
+  if (!operation) {
+    return;
   }
-  if (!wasTracked) {
-    for (const id of operationIdentifiers) {
-      if (dashboardUpdatingById.value.has(id)) {
-        wasTracked = true;
-        break;
-      }
-    }
+  if (wasToastFired(operationId)) {
+    return;
   }
-  // Fall back to the payload name if we couldn't resolve from tracked rows
-  if (!resolvedName && payload.containerName) {
-    resolvedName = payload.containerName;
-  }
-  pruneGhostsForOperation(payload);
-  if (wasTracked && resolvedName) {
-    // Match ContainersView: defer terminal toasts until the hold window ends so
-    // the row settles before the toast fires.
-    const name = resolvedName;
-    if (payload.status === 'succeeded') {
-      setTimeout(() => toast.success(`Updated: ${name}`), OPERATION_DISPLAY_HOLD_MS);
-    } else if (payload.status === 'failed') {
-      setTimeout(() => toast.error(`Update failed: ${name}`), OPERATION_DISPLAY_HOLD_MS);
-    } else if (payload.status === 'rolled-back') {
-      setTimeout(() => toast.error(`Rolled back: ${name}`), OPERATION_DISPLAY_HOLD_MS);
-    }
+  markToastFired(operationId);
+  const name = containerName ?? 'container';
+  if (operation.status === 'succeeded') {
+    toast.success(`Updated: ${name}`);
+  } else if (operation.status === 'failed') {
+    toast.error(`Update failed: ${name}`);
+  } else if (operation.status === 'rolled-back') {
+    toast.error(`Rolled back: ${name}`);
   }
 }
 
+function applyDashboardOperationSse(event: Event) {
+  const parsed = parseUpdateOperationSsePayload((event as CustomEvent)?.detail);
+  if (!parsed) {
+    return;
+  }
+  applyUpdateOperationSseToHold({
+    parsed,
+    resolveContainer: findDashboardContainerForOperationTarget,
+    // DashboardView doesn't mutate container rows — the widget projects held
+    // containers through projectContainerDisplayState, so reactivity flows from
+    // the hold map into the derived computed.
+    onTerminalEvent: ({ status, name, wasTracked }) => {
+      pruneGhostsForOperation({
+        containerId: parsed.containerId,
+        newContainerId: parsed.newContainerId,
+        containerName: parsed.containerName,
+      });
+      if (!wasTracked) {
+        return;
+      }
+      // Defer terminal toasts until the hold window ends so the row settles
+      // before the toast announces the outcome (rc.12 9d48922a).
+      if (status === 'succeeded') {
+        setTimeout(() => toast.success(`Updated: ${name}`), OPERATION_DISPLAY_HOLD_MS);
+      } else if (status === 'failed') {
+        setTimeout(() => toast.error(`Update failed: ${name}`), OPERATION_DISPLAY_HOLD_MS);
+      } else {
+        setTimeout(() => toast.error(`Rolled back: ${name}`), OPERATION_DISPLAY_HOLD_MS);
+      }
+    },
+  });
+}
+
+watch(containers, (next) => {
+  // After every container-list refresh, reconcile holds against the raw container
+  // state so a dropped terminal SSE still releases the hold + fires the right
+  // toast via REST (#291 symptom 2 on the dashboard path).
+  reconcileHoldsAgainstContainers(
+    next,
+    Date.now(),
+    handleDashboardTerminalResolvedFromReconciliation,
+  );
+});
+
 onMounted(() => {
-  globalThis.addEventListener('dd:sse-update-operation-changed', handleTerminalOperationSse);
+  globalThis.addEventListener('dd:sse-update-operation-changed', applyDashboardOperationSse);
 });
 
 onUnmounted(() => {
-  globalThis.removeEventListener('dd:sse-update-operation-changed', handleTerminalOperationSse);
+  globalThis.removeEventListener('dd:sse-update-operation-changed', applyDashboardOperationSse);
   stopDashboardPendingUpdatePolling();
 });
 

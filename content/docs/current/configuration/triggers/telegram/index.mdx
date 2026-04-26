@@ -14,10 +14,10 @@ The `telegram` trigger lets you send realtime notifications using [Telegram](htt
 
 | Env var | Required | Description | Supported values | Default value when missing |
 | --- | :---: | --- | --- | --- |
-| `DD_TRIGGER_TELEGRAM_{trigger_name}_BOTTOKEN` | 🔴 | The Bot token | | |
-| `DD_TRIGGER_TELEGRAM_{trigger_name}_CHATID` | 🔴 | The Chat ID | | |
-| `DD_TRIGGER_TELEGRAM_{trigger_name}_DISABLETITLE` | ⚪ | Disable title to have full control over the message formatting | `true`, `false` | `false` |
-| `DD_TRIGGER_TELEGRAM_{trigger_name}_MESSAGEFORMAT` | ⚪ | Send the message as markdown or as html (useful for custom message formatting). `Markdown` uses Telegram's [MarkdownV2](https://core.telegram.org/bots/api#markdownv2-style) parse mode, which requires escaping special characters. Case-insensitive. | `Markdown`, `HTML` | `Markdown` |
+| `DD_NOTIFICATION_TELEGRAM_{trigger_name}_BOTTOKEN` | 🔴 | The Bot token | | |
+| `DD_NOTIFICATION_TELEGRAM_{trigger_name}_CHATID` | 🔴 | The Chat ID | | |
+| `DD_NOTIFICATION_TELEGRAM_{trigger_name}_DISABLETITLE` | ⚪ | Disable title to have full control over the message formatting | `true`, `false` | `false` |
+| `DD_NOTIFICATION_TELEGRAM_{trigger_name}_MESSAGEFORMAT` | ⚪ | Send the message as markdown or as html (useful for custom message formatting). `Markdown` uses Telegram's [MarkdownV2](https://core.telegram.org/bots/api#markdownv2-style) parse mode, which requires escaping special characters. Case-insensitive. | `Markdown`, `HTML` | `Markdown` |
 
 <Callout type="info">This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration).</Callout>
 
@@ -34,16 +34,16 @@ services:
     image: codeswhat/drydock
     ...
     environment:
-      - DD_TRIGGER_TELEGRAM_1_BOTTOKEN=0123456789:AApFzFLD0g0NVg8l0bZf55ex3sajC4Aw84Q
-      - DD_TRIGGER_TELEGRAM_1_CHATID=9876543210
+      - DD_NOTIFICATION_TELEGRAM_1_BOTTOKEN=0123456789:AApFzFLD0g0NVg8l0bZf55ex3sajC4Aw84Q
+      - DD_NOTIFICATION_TELEGRAM_1_CHATID=9876543210
 ```
 
 </Tab>
 <Tab value="Docker">
 ```bash
 docker run \
-  -e DD_TRIGGER_TELEGRAM_1_BOTTOKEN="0123456789:AApFzFLD0g0NVg8l0bZf55ex3sajC4Aw84Q" \
-  -e DD_TRIGGER_TELEGRAM_1_CHATID="9876543210" \
+  -e DD_NOTIFICATION_TELEGRAM_1_BOTTOKEN="0123456789:AApFzFLD0g0NVg8l0bZf55ex3sajC4Aw84Q" \
+  -e DD_NOTIFICATION_TELEGRAM_1_CHATID="9876543210" \
   ...
   codeswhat/drydock
 ```

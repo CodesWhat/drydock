@@ -2776,3 +2776,138 @@ test('pending fresh state helpers should store and clear agent-qualified keys', 
 
   expect(container._getPendingFreshStateAfterManualUpdateForTests().size).toBe(0);
 });
+
+// Rollback container SSE suppression tests
+
+test('insertContainer with a rollback-named container should NOT emit emitContainerAdded', () => {
+  const collection = {
+    findOne: () => {},
+    insert: () => {},
+  };
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => null,
+  };
+  const spyAdded = vi.spyOn(event, 'emitContainerAdded');
+  container.createCollections(db);
+  container.insertContainer(createContainerFixture({ name: 'service-old-1773933154786' }));
+  expect(spyAdded).not.toHaveBeenCalled();
+});
+
+test('insertContainer with a normal container name DOES emit emitContainerAdded', () => {
+  const collection = {
+    findOne: () => {},
+    insert: () => {},
+  };
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => null,
+  };
+  const spyAdded = vi.spyOn(event, 'emitContainerAdded');
+  container.createCollections(db);
+  container.insertContainer(createContainerFixture({ name: 'service' }));
+  expect(spyAdded).toHaveBeenCalledTimes(1);
+});
+
+test('updateContainer where the resulting name matches the rollback pattern does NOT emit emitContainerUpdated', () => {
+  const collection = {
+    findOne: () => undefined,
+    insert: () => {},
+    chain: () => ({
+      find: () => ({
+        remove: () => ({}),
+      }),
+    }),
+  };
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => null,
+  };
+  const spyUpdated = vi.spyOn(event, 'emitContainerUpdated');
+  container.createCollections(db);
+  container.updateContainer(createContainerFixture({ name: 'api-old-1773933154786' }));
+  expect(spyUpdated).not.toHaveBeenCalled();
+});
+
+test('updateContainer where a rollback-named container is renamed back to a normal name DOES emit emitContainerUpdated', () => {
+  const rollbackFixture = createContainerFixture({
+    id: 'un-rollback-container',
+    name: 'service-old-1773933154786',
+    status: 'running',
+  });
+  const existingDoc = { data: rollbackFixture };
+  const collection = {
+    findOne: () => existingDoc,
+    update: vi.fn(),
+    insert: vi.fn(),
+    chain: vi.fn(() => ({
+      find: () => ({
+        remove: () => ({}),
+      }),
+    })),
+  };
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => null,
+  };
+  const spyUpdated = vi.spyOn(event, 'emitContainerUpdated');
+  container.createCollections(db);
+
+  // Simulate rollback monitor restoring the original name — the final name is no longer rollback-patterned
+  container.updateContainer(
+    createContainerFixture({
+      id: 'un-rollback-container',
+      name: 'service',
+      status: 'running',
+    }),
+  );
+
+  expect(spyUpdated).toHaveBeenCalledTimes(1);
+  expect(spyUpdated.mock.calls[0][0]).toMatchObject({ name: 'service' });
+});
+
+test('deleteContainer with a rollback-named container does NOT emit emitContainerRemoved', () => {
+  const rollbackFixture = createContainerFixture({
+    id: 'rollback-to-delete',
+    name: 'worker-old-1773933154786',
+  });
+  const collection = {
+    findOne: () => ({ data: rollbackFixture }),
+    chain: () => ({
+      find: () => ({
+        remove: () => ({}),
+      }),
+    }),
+  };
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => null,
+  };
+  const spyRemoved = vi.spyOn(event, 'emitContainerRemoved');
+  container.createCollections(db);
+  container.deleteContainer('rollback-to-delete');
+  expect(spyRemoved).not.toHaveBeenCalled();
+});
+
+test('deleteContainer with a normal container name DOES emit emitContainerRemoved', () => {
+  const normalFixture = createContainerFixture({
+    id: 'normal-to-delete',
+    name: 'worker',
+  });
+  const collection = {
+    findOne: () => ({ data: normalFixture }),
+    chain: () => ({
+      find: () => ({
+        remove: () => ({}),
+      }),
+    }),
+  };
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => null,
+  };
+  const spyRemoved = vi.spyOn(event, 'emitContainerRemoved');
+  container.createCollections(db);
+  container.deleteContainer('normal-to-delete');
+  expect(spyRemoved).toHaveBeenCalledTimes(1);
+});

@@ -14,15 +14,15 @@ The `pushover` trigger lets you send realtime notifications to your devices (And
 
 | Env var | Required | Description | Supported values | Default value when missing |
 | --- | :---: | --- | --- | --- |
-| `DD_TRIGGER_PUSHOVER_{trigger_name}_DEVICE` | ⚪ | Optional device(s) to notify | Coma separated list of devices (e.g. dev1,dev2) ([see here](https://pushover.net/api#identifiers)) | |
-| `DD_TRIGGER_PUSHOVER_{trigger_name}_EXPIRE` | ⚪ | Optional notification expire in seconds (only when priority=2) | [see here](https://pushover.net/api#priority) | |
-| `DD_TRIGGER_PUSHOVER_{trigger_name}_HTML` | ⚪ | Allow HTML formatting in message body (supported in Pushover 2.3+) | [see here](https://pushover.net/api#html) | `0` |
-| `DD_TRIGGER_PUSHOVER_{trigger_name}_PRIORITY` | ⚪ | The notification priority | [see here](https://pushover.net/api#priority) | `0` |
-| `DD_TRIGGER_PUSHOVER_{trigger_name}_RETRY` | ⚪ | Optional notification retry in seconds (only when priority=2) | [see here](https://pushover.net/api#priority) | |
-| `DD_TRIGGER_PUSHOVER_{trigger_name}_SOUND` | ⚪ | The notification sound | [see here](https://pushover.net/api#sounds) | `pushover` |
-| `DD_TRIGGER_PUSHOVER_{trigger_name}_TOKEN` | 🔴 | The API token | | |
-| `DD_TRIGGER_PUSHOVER_{trigger_name}_TTL` | ⚪ | Optional message time to live (in seconds) | [see here](https://pushover.net/api#ttl) | |
-| `DD_TRIGGER_PUSHOVER_{trigger_name}_USER` | 🔴 | The User key | | |
+| `DD_NOTIFICATION_PUSHOVER_{trigger_name}_DEVICE` | ⚪ | Optional device(s) to notify | Coma separated list of devices (e.g. dev1,dev2) ([see here](https://pushover.net/api#identifiers)) | |
+| `DD_NOTIFICATION_PUSHOVER_{trigger_name}_EXPIRE` | ⚪ | Optional notification expire in seconds (only when priority=2) | [see here](https://pushover.net/api#priority) | |
+| `DD_NOTIFICATION_PUSHOVER_{trigger_name}_HTML` | ⚪ | Allow HTML formatting in message body (supported in Pushover 2.3+) | [see here](https://pushover.net/api#html) | `0` |
+| `DD_NOTIFICATION_PUSHOVER_{trigger_name}_PRIORITY` | ⚪ | The notification priority | [see here](https://pushover.net/api#priority) | `0` |
+| `DD_NOTIFICATION_PUSHOVER_{trigger_name}_RETRY` | ⚪ | Optional notification retry in seconds (only when priority=2) | [see here](https://pushover.net/api#priority) | |
+| `DD_NOTIFICATION_PUSHOVER_{trigger_name}_SOUND` | ⚪ | The notification sound | [see here](https://pushover.net/api#sounds) | `pushover` |
+| `DD_NOTIFICATION_PUSHOVER_{trigger_name}_TOKEN` | 🔴 | The API token | | |
+| `DD_NOTIFICATION_PUSHOVER_{trigger_name}_TTL` | ⚪ | Optional message time to live (in seconds) | [see here](https://pushover.net/api#ttl) | |
+| `DD_NOTIFICATION_PUSHOVER_{trigger_name}_USER` | 🔴 | The User key | | |
 
 <Callout type="info">This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration).</Callout>
 
@@ -41,16 +41,16 @@ services:
     image: codeswhat/drydock
     ...
     environment:
-      - DD_TRIGGER_PUSHOVER_1_TOKEN=*****************************
-      - DD_TRIGGER_PUSHOVER_1_USER=******************************
+      - DD_NOTIFICATION_PUSHOVER_1_TOKEN=*****************************
+      - DD_NOTIFICATION_PUSHOVER_1_USER=******************************
 ```
 
 </Tab>
 <Tab value="Docker (Minimal)">
 ```bash
 docker run \
-  -e DD_TRIGGER_PUSHOVER_1_TOKEN="*****************************" \
-  -e DD_TRIGGER_PUSHOVER_1_USER="******************************" \
+  -e DD_NOTIFICATION_PUSHOVER_1_TOKEN="*****************************" \
+  -e DD_NOTIFICATION_PUSHOVER_1_USER="******************************" \
   ...
   codeswhat/drydock
 ```
@@ -68,30 +68,30 @@ services:
     image: codeswhat/drydock
     ...
     environment:
-        - DD_TRIGGER_PUSHOVER_1_TOKEN=*****************************
-        - DD_TRIGGER_PUSHOVER_1_USER=******************************
-        - DD_TRIGGER_PUSHOVER_1_DEVICE=myIphone,mySamsung
-        - DD_TRIGGER_PUSHOVER_1_SOUND=cosmic
-        - DD_TRIGGER_PUSHOVER_1_PRIORITY=2
-        - DD_TRIGGER_PUSHOVER_1_EXPIRE=600
-        - DD_TRIGGER_PUSHOVER_1_RETRY=60
-        - DD_TRIGGER_PUSHOVER_1_HTML=1
-        - DD_TRIGGER_PUSHOVER_1_TTL=3600
+        - DD_NOTIFICATION_PUSHOVER_1_TOKEN=*****************************
+        - DD_NOTIFICATION_PUSHOVER_1_USER=******************************
+        - DD_NOTIFICATION_PUSHOVER_1_DEVICE=myIphone,mySamsung
+        - DD_NOTIFICATION_PUSHOVER_1_SOUND=cosmic
+        - DD_NOTIFICATION_PUSHOVER_1_PRIORITY=2
+        - DD_NOTIFICATION_PUSHOVER_1_EXPIRE=600
+        - DD_NOTIFICATION_PUSHOVER_1_RETRY=60
+        - DD_NOTIFICATION_PUSHOVER_1_HTML=1
+        - DD_NOTIFICATION_PUSHOVER_1_TTL=3600
 ```
 
 </Tab>
 <Tab value="Docker (Full)">
 ```bash
 docker run \
-    -e DD_TRIGGER_PUSHOVER_1_TOKEN="*****************************" \
-    -e DD_TRIGGER_PUSHOVER_1_USER="******************************" \
-    -e DD_TRIGGER_PUSHOVER_1_DEVICE="myIphone,mySamsung" \
-    -e DD_TRIGGER_PUSHOVER_1_SOUND="cosmic" \
-    -e DD_TRIGGER_PUSHOVER_1_PRIORITY="2" \
-    -e DD_TRIGGER_PUSHOVER_1_EXPIRE="600" \
-    -e DD_TRIGGER_PUSHOVER_1_RETRY="60" \
-    -e DD_TRIGGER_PUSHOVER_1_HTML="1" \
-    -e DD_TRIGGER_PUSHOVER_1_TTL="3600" \
+    -e DD_NOTIFICATION_PUSHOVER_1_TOKEN="*****************************" \
+    -e DD_NOTIFICATION_PUSHOVER_1_USER="******************************" \
+    -e DD_NOTIFICATION_PUSHOVER_1_DEVICE="myIphone,mySamsung" \
+    -e DD_NOTIFICATION_PUSHOVER_1_SOUND="cosmic" \
+    -e DD_NOTIFICATION_PUSHOVER_1_PRIORITY="2" \
+    -e DD_NOTIFICATION_PUSHOVER_1_EXPIRE="600" \
+    -e DD_NOTIFICATION_PUSHOVER_1_RETRY="60" \
+    -e DD_NOTIFICATION_PUSHOVER_1_HTML="1" \
+    -e DD_NOTIFICATION_PUSHOVER_1_TTL="3600" \
   ...
   codeswhat/drydock
 ```

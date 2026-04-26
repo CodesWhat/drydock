@@ -30,6 +30,7 @@ import * as settingsRouter from './settings.js';
 import * as sseRouter from './sse.js';
 import * as storeRouter from './store.js';
 import * as triggerRouter from './trigger.js';
+import * as updateOperationsRouter from './update-operations.js';
 import * as watcherRouter from './watcher.js';
 import * as webhookRouter from './webhook.js';
 import * as webhooksRouter from './webhooks.js';
@@ -123,6 +124,9 @@ export function init(): express.Router {
 
   // Mount container actions router (start/stop/restart)
   router.use('/containers', containerActionsRouter.init());
+
+  // Mount update-operations router (single-operation lookup by id)
+  router.use('/update-operations', updateOperationsRouter.init());
 
   // Mount trigger router
   router.use('/triggers', triggerRouter.init());

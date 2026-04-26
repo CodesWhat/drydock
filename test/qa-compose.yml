@@ -15,11 +15,11 @@ services:
       - DD_WATCHER_LOCAL_WATCHBYDEFAULT=false
       - DD_WATCHER_LOCAL_CRON=*/2 * * * *
       - DD_WATCHER_LOCAL_WATCHEVENTS=true
-      # Docker trigger (manual only — auto=false prevents auto-updating test containers)
-      - DD_TRIGGER_DOCKER_LOCAL_AUTO=false
-      - DD_TRIGGER_DOCKER_LOCAL_PRUNE=true
-      - DD_TRIGGER_HTTP_MYWEBHOOK_URL=http://httpbin.org/post
-      - DD_TRIGGER_HTTP_MYWEBHOOK_METHOD=POST
+      # Docker action (manual only — auto=false prevents auto-updating test containers)
+      - DD_ACTION_DOCKER_LOCAL_AUTO=false
+      - DD_ACTION_DOCKER_LOCAL_PRUNE=true
+      - DD_NOTIFICATION_HTTP_MYWEBHOOK_URL=http://httpbin.org/post
+      - DD_NOTIFICATION_HTTP_MYWEBHOOK_METHOD=POST
       - DD_AUTH_BASIC_ADMIN_USER=admin
       - "DD_AUTH_BASIC_ADMIN_HASH=argon2id$$65536$$3$$4$$zUAK9+ktVWNHyQdv3SaOSgMv3T02F1Zj8D+t1un7D98=$$KEmn6d94w03YxIlw7U7l/ikD9lW+H3IC1N7xbAhOB9yKofA3HoxUBmuvBawvShhv337zDv4+g9hobNWeQEWwkQ=="
       - DD_SERVER_WEBHOOK_ENABLED=true
@@ -30,26 +30,26 @@ services:
       - DD_AUTH_OIDC_DEX_DISCOVERY=http://dex:5556/dex/.well-known/openid-configuration
       - DD_AUTH_OIDC_DEX_CLIENTID=drydock
       - DD_AUTH_OIDC_DEX_CLIENTSECRET=drydock-qa-secret
-      # --- Slack trigger ---
-      - DD_TRIGGER_SLACK_MYSLACK_TOKEN=xoxb-fake-slack-token-for-testing
-      - DD_TRIGGER_SLACK_MYSLACK_CHANNEL=C01FAKECHANNEL
-      # --- SMTP trigger ---
-      - DD_TRIGGER_SMTP_MYEMAIL_HOST=smtp.example.com
-      - DD_TRIGGER_SMTP_MYEMAIL_PORT=587
-      - DD_TRIGGER_SMTP_MYEMAIL_USER=alerts@example.com
-      - DD_TRIGGER_SMTP_MYEMAIL_PASS=fakesmtppassword
-      - DD_TRIGGER_SMTP_MYEMAIL_FROM=alerts@example.com
-      - DD_TRIGGER_SMTP_MYEMAIL_TO=admin@example.com
-      # --- MQTT trigger (Home Assistant mode with filtering) ---
-      - DD_TRIGGER_MQTT_QA_URL=mqtt://mosquitto:1883
-      - DD_TRIGGER_MQTT_QA_HASS_ENABLED=true
-      - DD_TRIGGER_MQTT_QA_HASS_PREFIX=homeassistant
-      - DD_TRIGGER_MQTT_QA_HASS_DISCOVERY=true
-      - DD_TRIGGER_MQTT_QA_HASS_ATTRIBUTES=short
-      - DD_TRIGGER_MQTT_QA_HASS_FILTER_INCLUDE=name,image_name,result_tag,update_kind_kind
-      # --- Docker Compose trigger (manual only) ---
-      - DD_TRIGGER_DOCKERCOMPOSE_QA_FILE=/drydock/qa-compose.yml
-      - DD_TRIGGER_DOCKERCOMPOSE_QA_AUTO=false
+      # --- Slack notification ---
+      - DD_NOTIFICATION_SLACK_MYSLACK_TOKEN=xoxb-fake-slack-token-for-testing
+      - DD_NOTIFICATION_SLACK_MYSLACK_CHANNEL=C01FAKECHANNEL
+      # --- SMTP notification ---
+      - DD_NOTIFICATION_SMTP_MYEMAIL_HOST=smtp.example.com
+      - DD_NOTIFICATION_SMTP_MYEMAIL_PORT=587
+      - DD_NOTIFICATION_SMTP_MYEMAIL_USER=alerts@example.com
+      - DD_NOTIFICATION_SMTP_MYEMAIL_PASS=fakesmtppassword
+      - DD_NOTIFICATION_SMTP_MYEMAIL_FROM=alerts@example.com
+      - DD_NOTIFICATION_SMTP_MYEMAIL_TO=admin@example.com
+      # --- MQTT notification (Home Assistant mode with filtering) ---
+      - DD_NOTIFICATION_MQTT_QA_URL=mqtt://mosquitto:1883
+      - DD_NOTIFICATION_MQTT_QA_HASS_ENABLED=true
+      - DD_NOTIFICATION_MQTT_QA_HASS_PREFIX=homeassistant
+      - DD_NOTIFICATION_MQTT_QA_HASS_DISCOVERY=true
+      - DD_NOTIFICATION_MQTT_QA_HASS_ATTRIBUTES=short
+      - DD_NOTIFICATION_MQTT_QA_HASS_FILTER_INCLUDE=name,image_name,result_tag,update_kind_kind
+      # --- Docker Compose action (manual only) ---
+      - DD_ACTION_DOCKERCOMPOSE_QA_FILE=/drydock/qa-compose.yml
+      - DD_ACTION_DOCKERCOMPOSE_QA_AUTO=false
       # --- GHCR registry (authenticated) ---
       - DD_REGISTRY_GHCR_PRIVATE_USERNAME=myghuser
       - DD_REGISTRY_GHCR_PRIVATE_TOKEN=ghp_fakeGitHubTokenForTesting123

@@ -14,13 +14,13 @@ The `kafka` trigger lets you publish container update notifications to a Kafka t
 
 | Env var | Required | Description | Supported values | Default value when missing |
 | --- | :---: | --- | --- | --- |
-| `DD_TRIGGER_KAFKA_{trigger_name}_BROKERS` | 🔴 | Comma separated list of Kafka brokers | | |
-| `DD_TRIGGER_KAFKA_{trigger_name}_CLIENTID` | ⚪ | The Kafka client ID | | `drydock` |
-| `DD_TRIGGER_KAFKA_{trigger_name}_SSL` | ⚪ | Is SSL enabled on the TLS connection | `true`, `false` | `false` |
-| `DD_TRIGGER_KAFKA_{trigger_name}_TOPIC` | ⚪ | The name of the topic to publish | | `drydock-container` |
-| `DD_TRIGGER_KAFKA_{trigger_name}_AUTHENTICATION_TYPE` | ⚪ | The type for authentication | `PLAIN`, `SCRAM-SHA-256`, `SCRAM-SHA-512` | `PLAIN` |
-| `DD_TRIGGER_KAFKA_{trigger_name}_AUTHENTICATION_USER` | ⚪ | The name of the user (required if authentication is enabled) | | |
-| `DD_TRIGGER_KAFKA_{trigger_name}_AUTHENTICATION_PASSWORD` | ⚪ | The password of the user (required if authentication is enabled) | | |
+| `DD_NOTIFICATION_KAFKA_{trigger_name}_BROKERS` | 🔴 | Comma separated list of Kafka brokers | | |
+| `DD_NOTIFICATION_KAFKA_{trigger_name}_CLIENTID` | ⚪ | The Kafka client ID | | `drydock` |
+| `DD_NOTIFICATION_KAFKA_{trigger_name}_SSL` | ⚪ | Is SSL enabled on the TLS connection | `true`, `false` | `false` |
+| `DD_NOTIFICATION_KAFKA_{trigger_name}_TOPIC` | ⚪ | The name of the topic to publish | | `drydock-container` |
+| `DD_NOTIFICATION_KAFKA_{trigger_name}_AUTHENTICATION_TYPE` | ⚪ | The type for authentication | `PLAIN`, `SCRAM-SHA-256`, `SCRAM-SHA-512` | `PLAIN` |
+| `DD_NOTIFICATION_KAFKA_{trigger_name}_AUTHENTICATION_USER` | ⚪ | The name of the user (required if authentication is enabled) | | |
+| `DD_NOTIFICATION_KAFKA_{trigger_name}_AUTHENTICATION_PASSWORD` | ⚪ | The password of the user (required if authentication is enabled) | | |
 
 <Callout type="warn">The topic must already exist on the broker (the trigger won't automatically create it)</Callout>
 
@@ -39,24 +39,24 @@ services:
     image: codeswhat/drydock
     ...
     environment:
-        - DD_TRIGGER_KAFKA_KARAKFA_BROKERS=ark-01.srvs.cloudkafka.com:9094,ark-02.srvs.cloudkafka.com:9094,ark-03.srvs.cloudkafka.com:9094
-        - DD_TRIGGER_KAFKA_KARAKFA_SSL="true"
-        - DD_TRIGGER_KAFKA_KARAKFA_TOPIC=my-user-id-drydock-image
-        - DD_TRIGGER_KAFKA_KARAKFA_AUTHENTICATION_USER=my-user-id
-        - DD_TRIGGER_KAFKA_KARAKFA_AUTHENTICATION_PASSWORD=my-secret
-        - DD_TRIGGER_KAFKA_KARAKFA_AUTHENTICATION_TYPE=SCRAM-SHA-256
+        - DD_NOTIFICATION_KAFKA_KARAKFA_BROKERS=ark-01.srvs.cloudkafka.com:9094,ark-02.srvs.cloudkafka.com:9094,ark-03.srvs.cloudkafka.com:9094
+        - DD_NOTIFICATION_KAFKA_KARAKFA_SSL="true"
+        - DD_NOTIFICATION_KAFKA_KARAKFA_TOPIC=my-user-id-drydock-image
+        - DD_NOTIFICATION_KAFKA_KARAKFA_AUTHENTICATION_USER=my-user-id
+        - DD_NOTIFICATION_KAFKA_KARAKFA_AUTHENTICATION_PASSWORD=my-secret
+        - DD_NOTIFICATION_KAFKA_KARAKFA_AUTHENTICATION_TYPE=SCRAM-SHA-256
 ```
 
 </Tab>
 <Tab value="Docker">
 ```bash
 docker run \
-    -e DD_TRIGGER_KAFKA_KARAKFA_BROKERS="ark-01.srvs.cloudkafka.com:9094,ark-02.srvs.cloudkafka.com:9094,ark-03.srvs.cloudkafka.com:9094" \
-    -e DD_TRIGGER_KAFKA_KARAKFA_SSL="true" \
-    -e DD_TRIGGER_KAFKA_KARAKFA_TOPIC="my-user-id-drydock-image" \
-    -e DD_TRIGGER_KAFKA_KARAKFA_AUTHENTICATION_USER="my-user-id" \
-    -e DD_TRIGGER_KAFKA_KARAKFA_AUTHENTICATION_PASSWORD="my-secret" \
-    -e DD_TRIGGER_KAFKA_KARAKFA_AUTHENTICATION_TYPE="SCRAM-SHA-256" \
+    -e DD_NOTIFICATION_KAFKA_KARAKFA_BROKERS="ark-01.srvs.cloudkafka.com:9094,ark-02.srvs.cloudkafka.com:9094,ark-03.srvs.cloudkafka.com:9094" \
+    -e DD_NOTIFICATION_KAFKA_KARAKFA_SSL="true" \
+    -e DD_NOTIFICATION_KAFKA_KARAKFA_TOPIC="my-user-id-drydock-image" \
+    -e DD_NOTIFICATION_KAFKA_KARAKFA_AUTHENTICATION_USER="my-user-id" \
+    -e DD_NOTIFICATION_KAFKA_KARAKFA_AUTHENTICATION_PASSWORD="my-secret" \
+    -e DD_NOTIFICATION_KAFKA_KARAKFA_AUTHENTICATION_TYPE="SCRAM-SHA-256" \
   ...
   codeswhat/drydock
 ```

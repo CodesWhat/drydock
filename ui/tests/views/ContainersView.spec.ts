@@ -55,6 +55,7 @@ vi.mock('@/services/container', () => ({
     summary: { critical: 0, high: 0, medium: 0, low: 0, unknown: 0 },
     vulnerabilities: [],
   }),
+  getUpdateOperationById: vi.fn().mockResolvedValue(null),
   refreshAllContainers: vi.fn().mockResolvedValue([]),
   scanContainer: vi.fn().mockResolvedValue({}),
   runTrigger: vi.fn().mockResolvedValue({}),
@@ -1078,7 +1079,7 @@ describe('ContainersView', () => {
       const vm = wrapper.vm as any;
 
       // Simulate action already in progress on container c1
-      vm.actionInProgress = new Set(['c1']);
+      vm.actionInProgress = new Map([['c1', 'update']]);
 
       // Attempting the same container should be blocked
       mockApiUpdate.mockResolvedValue({});
@@ -1096,7 +1097,7 @@ describe('ContainersView', () => {
       const vm = wrapper.vm as any;
 
       // Simulate action already in progress on container c1
-      vm.actionInProgress = new Set(['c1']);
+      vm.actionInProgress = new Map([['c1', 'update']]);
 
       // Attempting a different container should NOT be blocked
       mockApiUpdate.mockResolvedValue({});
@@ -3447,6 +3448,225 @@ describe('ContainersView', () => {
 
         // Now projection releases — nginx has no updateKind (sorts to 9), redis (patch=2) wins
         expect(vm.sortedContainers[0].id).toBe('c2');
+
+        wrapper.unmount();
+      } finally {
+        addEventListenerSpy.mockRestore();
+        vi.useRealTimers();
+      }
+    });
+  });
+
+  describe('reconciliation fallback toast (fix #317 — missed terminal SSE)', () => {
+    it('calls getUpdateOperationById when reconciliation collapses a hold', async () => {
+      const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
+      vi.useFakeTimers();
+      try {
+        const c = makeContainer({ id: 'c1', name: 'nginx' });
+        const wrapper = await mountContainersView(
+          [c],
+          [{ id: 'c1', name: 'nginx', displayName: 'nginx' }],
+        );
+        const operationListener = addEventListenerSpy.mock.calls.findLast(
+          ([eventName]) => eventName === 'dd:sse-update-operation-changed',
+        )?.[1] as EventListener | undefined;
+
+        // Primary SSE: in-progress — registers the hold
+        operationListener?.(
+          new CustomEvent('dd:sse-update-operation-changed', {
+            detail: {
+              operationId: 'op-fallback-317',
+              containerId: 'c1',
+              containerName: 'nginx',
+              status: 'in-progress',
+              phase: 'pulling',
+            },
+          }),
+        );
+
+        const { getUpdateOperationById } = await import('@/services/container');
+        const mockGetUpdateOp = getUpdateOperationById as ReturnType<typeof vi.fn>;
+        mockGetUpdateOp.mockResolvedValue({
+          id: 'op-fallback-317',
+          status: 'succeeded',
+          phase: 'succeeded',
+          containerName: 'nginx',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
+
+        // Reload with the container having no active op (terminal SSE was missed)
+        const { mapApiContainers } = await import('@/utils/container-mapper');
+        const containerWithoutOp = makeContainer({
+          id: 'c1',
+          name: 'nginx',
+          updateOperation: undefined,
+        });
+        (mapApiContainers as ReturnType<typeof vi.fn>).mockReturnValueOnce([containerWithoutOp]);
+        mockGetAllContainers.mockResolvedValueOnce([
+          { id: 'c1', name: 'nginx', displayName: 'nginx' },
+        ]);
+        await (wrapper.vm as any).loadContainers?.();
+        await flushPromises();
+        await flushPromises();
+
+        // The reconciliation fallback must have triggered the lookup
+        expect(mockGetUpdateOp).toHaveBeenCalledWith('op-fallback-317');
+
+        wrapper.unmount();
+      } finally {
+        addEventListenerSpy.mockRestore();
+        vi.useRealTimers();
+      }
+    });
+
+    it('fires toast.success via reconciliation when terminal SSE was not received', async () => {
+      const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
+      vi.useFakeTimers();
+      try {
+        const c = makeContainer({ id: 'c1', name: 'nginx' });
+        const wrapper = await mountContainersView(
+          [c],
+          [{ id: 'c1', name: 'nginx', displayName: 'nginx' }],
+        );
+        const operationListener = addEventListenerSpy.mock.calls.findLast(
+          ([eventName]) => eventName === 'dd:sse-update-operation-changed',
+        )?.[1] as EventListener | undefined;
+
+        // Primary SSE: in-progress — registers the hold
+        operationListener?.(
+          new CustomEvent('dd:sse-update-operation-changed', {
+            detail: {
+              operationId: 'op-fallback-toast',
+              containerId: 'c1',
+              containerName: 'nginx',
+              status: 'in-progress',
+              phase: 'pulling',
+            },
+          }),
+        );
+
+        const { getUpdateOperationById } = await import('@/services/container');
+        (getUpdateOperationById as ReturnType<typeof vi.fn>).mockResolvedValue({
+          id: 'op-fallback-toast',
+          status: 'succeeded',
+          phase: 'succeeded',
+          containerName: 'nginx',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
+
+        const { useToast } = await import('@/composables/useToast');
+        const { toasts } = useToast();
+        const countBefore = toasts.value.length;
+
+        // Reload with the container having no active op (terminal SSE was missed)
+        const { mapApiContainers } = await import('@/utils/container-mapper');
+        const containerWithoutOp = makeContainer({
+          id: 'c1',
+          name: 'nginx',
+          updateOperation: undefined,
+        });
+        (mapApiContainers as ReturnType<typeof vi.fn>).mockReturnValueOnce([containerWithoutOp]);
+        mockGetAllContainers.mockResolvedValueOnce([
+          { id: 'c1', name: 'nginx', displayName: 'nginx' },
+        ]);
+        await (wrapper.vm as any).loadContainers?.();
+        await flushPromises();
+        await flushPromises();
+        vi.advanceTimersByTime(1500);
+        await flushPromises();
+
+        expect(toasts.value.length).toBe(countBefore + 1);
+        expect(toasts.value.at(-1)).toMatchObject({ tone: 'success', title: 'Updated: nginx' });
+
+        wrapper.unmount();
+      } finally {
+        addEventListenerSpy.mockRestore();
+        vi.useRealTimers();
+      }
+    });
+
+    it('does NOT fire a duplicate toast when both SSE and reconciliation paths complete', async () => {
+      const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
+      vi.useFakeTimers();
+      try {
+        const c = makeContainer({ id: 'c1', name: 'nginx' });
+        const wrapper = await mountContainersView(
+          [c],
+          [{ id: 'c1', name: 'nginx', displayName: 'nginx' }],
+        );
+        const operationListener = addEventListenerSpy.mock.calls.findLast(
+          ([eventName]) => eventName === 'dd:sse-update-operation-changed',
+        )?.[1] as EventListener | undefined;
+
+        // Primary SSE: in-progress
+        operationListener?.(
+          new CustomEvent('dd:sse-update-operation-changed', {
+            detail: {
+              operationId: 'op-dedup-317',
+              containerId: 'c1',
+              containerName: 'nginx',
+              status: 'in-progress',
+              phase: 'pulling',
+            },
+          }),
+        );
+
+        const { useToast } = await import('@/composables/useToast');
+        const { toasts } = useToast();
+        const countBefore = toasts.value.length;
+
+        // Primary SSE: terminal succeeded — marks toast as fired
+        operationListener?.(
+          new CustomEvent('dd:sse-update-operation-changed', {
+            detail: {
+              operationId: 'op-dedup-317',
+              containerId: 'c1',
+              containerName: 'nginx',
+              status: 'succeeded',
+              phase: 'succeeded',
+            },
+          }),
+        );
+
+        vi.advanceTimersByTime(1500);
+        await flushPromises();
+
+        expect(toasts.value.length).toBe(countBefore + 1);
+
+        // Now trigger reconciliation as if the next list reload saw no active op.
+        // Even though getUpdateOperationById would say succeeded, wasToastFired
+        // should prevent a second toast from firing.
+        const { getUpdateOperationById } = await import('@/services/container');
+        (getUpdateOperationById as ReturnType<typeof vi.fn>).mockResolvedValue({
+          id: 'op-dedup-317',
+          status: 'succeeded',
+          phase: 'succeeded',
+          containerName: 'nginx',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
+
+        const { mapApiContainers } = await import('@/utils/container-mapper');
+        const containerWithoutOp = makeContainer({
+          id: 'c1',
+          name: 'nginx',
+          updateOperation: undefined,
+        });
+        (mapApiContainers as ReturnType<typeof vi.fn>).mockReturnValueOnce([containerWithoutOp]);
+        mockGetAllContainers.mockResolvedValueOnce([
+          { id: 'c1', name: 'nginx', displayName: 'nginx' },
+        ]);
+        await (wrapper.vm as any).loadContainers?.();
+
+        await flushPromises();
+        await flushPromises();
+        vi.advanceTimersByTime(1500);
+        await flushPromises();
+
+        // Still only 1 toast — dedup prevents a second one
+        expect(toasts.value.length).toBe(countBefore + 1);
 
         wrapper.unmount();
       } finally {

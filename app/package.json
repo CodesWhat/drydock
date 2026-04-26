@@ -1,6 +1,6 @@
 {
   "name": "drydock-app",
-  "version": "1.5.0",
+  "version": "1.5.0-rc.13",
   "description": "Drydock backend — Docker container update manager",
   "engines": {
     "node": ">=24.0.0"
@@ -75,6 +75,7 @@
     "body-parser": "2.2.2",
     "fast-xml-parser": "5.7.1",
     "picomatch": "4.0.4",
+    "postcss": "8.5.10",
     "qs": "6.15.0",
     "uuid": "14.0.0"
   },

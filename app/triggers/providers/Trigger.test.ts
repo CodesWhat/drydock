@@ -7918,3 +7918,76 @@ describe('security digest templates (6.7)', () => {
     expect((callArgs?.[1] as any).title).toContain('1 container with findings');
   });
 });
+
+// ---------------------------------------------------------------------------
+// emitAutoUpdateBlockedAuditOnTransition + clearAutoUpdateBlockedForContainerKey
+// ---------------------------------------------------------------------------
+
+test('handleUpdateAvailableSimpleTriggerError should emit auto-update-blocked audit on first UpdateRequestError', () => {
+  const error = new UpdateRequestError(400, 'snooze active');
+  const container = { id: 'c1', name: 'web', watcher: 'local' } as any;
+
+  (trigger as any).handleUpdateAvailableSimpleTriggerError(error, container, trigger.log);
+
+  expect(auditStore.insertAudit).toHaveBeenCalledWith(
+    expect.objectContaining({
+      action: 'auto-update-blocked',
+      details: expect.stringContaining('snooze active'),
+    }),
+  );
+});
+
+test('handleUpdateAvailableSimpleTriggerError should not emit duplicate audit for same container+reason', () => {
+  const error = new UpdateRequestError(400, 'snooze active');
+  const container = { id: 'c1', name: 'web', watcher: 'local' } as any;
+
+  (trigger as any).handleUpdateAvailableSimpleTriggerError(error, container, trigger.log);
+  (trigger as any).handleUpdateAvailableSimpleTriggerError(error, container, trigger.log);
+
+  // insertAudit should only have been called once (second call is deduped)
+  expect(auditStore.insertAudit).toHaveBeenCalledTimes(1);
+});
+
+test('handleContainerUpdateApplied clears auto-update-blocked dedup so next block emits a fresh audit', async () => {
+  const error = new UpdateRequestError(400, 'snooze active');
+  // Container with no id so fullName ('local_web') is used as the notification key
+  const container = { name: 'web', watcher: 'local' } as any;
+  // Second container with a different key — ensures the false-branch of startsWith is exercised
+  const otherContainer = { name: 'db', watcher: 'local' } as any;
+
+  // Emit audit for both containers
+  (trigger as any).handleUpdateAvailableSimpleTriggerError(error, container, trigger.log);
+  (trigger as any).handleUpdateAvailableSimpleTriggerError(error, otherContainer, trigger.log);
+  expect(auditStore.insertAudit).toHaveBeenCalledTimes(2);
+
+  // Simulate update applied for 'web' only — should clear 'local_web|*' but not 'local_db|*'
+  trigger.notificationResults = new Map();
+  trigger.notificationResults.set('local_web', { messageId: '1' });
+  trigger.dismiss = vi.fn().mockResolvedValue(undefined);
+  await trigger.handleContainerUpdateApplied({ containerName: 'local_web', container } as any);
+
+  // Reset the insertAudit mock call count
+  (auditStore.insertAudit as ReturnType<typeof vi.fn>).mockClear();
+
+  // 'web' dedup cleared — should emit again
+  (trigger as any).handleUpdateAvailableSimpleTriggerError(error, container, trigger.log);
+  expect(auditStore.insertAudit).toHaveBeenCalledTimes(1);
+
+  // 'db' was NOT cleared — still deduped
+  (trigger as any).handleUpdateAvailableSimpleTriggerError(error, otherContainer, trigger.log);
+  expect(auditStore.insertAudit).toHaveBeenCalledTimes(1); // still 1, no new call
+});
+
+test('runAcceptedUpdateBatch should emit auto-update-blocked audit for rejected entries', async () => {
+  forceRejectedUpdateBatch.enabled = true;
+  try {
+    await (trigger as any).runAcceptedUpdateBatch([
+      { id: 'c1', name: 'app', watcher: 'test', updateAvailable: false },
+    ]);
+    expect(auditStore.insertAudit).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'auto-update-blocked' }),
+    );
+  } finally {
+    forceRejectedUpdateBatch.enabled = false;
+  }
+});

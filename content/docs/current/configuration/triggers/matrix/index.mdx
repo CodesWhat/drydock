@@ -12,11 +12,11 @@ The `matrix` trigger posts container update notifications to a Matrix room using
 
 | Env var | Required | Description | Supported values | Default value when missing |
 | --- | :---: | --- | --- | --- |
-| `DD_TRIGGER_MATRIX_{trigger_name}_URL` | 🔴 | Matrix homeserver URL | `http`, `https` URL | |
-| `DD_TRIGGER_MATRIX_{trigger_name}_ROOMID` | 🔴 | Target room ID | Room ID (for example `!abc123:matrix.org`) | |
-| `DD_TRIGGER_MATRIX_{trigger_name}_ACCESSTOKEN` | 🔴 | Access token for authentication | String | |
-| `DD_TRIGGER_MATRIX_{trigger_name}_MSGTYPE` | ⚪ | Message type | `m.notice`, `m.text` | `m.notice` |
-| `DD_TRIGGER_MATRIX_{trigger_name}_DISABLETITLE` | ⚪ | Disable title to keep full message-body control | `true`, `false` | `false` |
+| `DD_NOTIFICATION_MATRIX_{trigger_name}_URL` | 🔴 | Matrix homeserver URL | `http`, `https` URL | |
+| `DD_NOTIFICATION_MATRIX_{trigger_name}_ROOMID` | 🔴 | Target room ID | Room ID (for example `!abc123:matrix.org`) | |
+| `DD_NOTIFICATION_MATRIX_{trigger_name}_ACCESSTOKEN` | 🔴 | Access token for authentication | String | |
+| `DD_NOTIFICATION_MATRIX_{trigger_name}_MSGTYPE` | ⚪ | Message type | `m.notice`, `m.text` | `m.notice` |
+| `DD_NOTIFICATION_MATRIX_{trigger_name}_DISABLETITLE` | ⚪ | Disable title to keep full message-body control | `true`, `false` | `false` |
 
 <Callout type="info">This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration).</Callout>
 
@@ -33,18 +33,18 @@ services:
     image: codeswhat/drydock
     ...
     environment:
-      - DD_TRIGGER_MATRIX_LOCAL_URL=https://matrix.example.com
-      - DD_TRIGGER_MATRIX_LOCAL_ROOMID=!abc123:matrix.example.com
-      - DD_TRIGGER_MATRIX_LOCAL_ACCESSTOKEN=syt_xxx
+      - DD_NOTIFICATION_MATRIX_LOCAL_URL=https://matrix.example.com
+      - DD_NOTIFICATION_MATRIX_LOCAL_ROOMID=!abc123:matrix.example.com
+      - DD_NOTIFICATION_MATRIX_LOCAL_ACCESSTOKEN=syt_xxx
 ```
 
 </Tab>
 <Tab value="Docker">
 ```bash
 docker run \
-  -e DD_TRIGGER_MATRIX_LOCAL_URL="https://matrix.example.com" \
-  -e DD_TRIGGER_MATRIX_LOCAL_ROOMID="!abc123:matrix.example.com" \
-  -e DD_TRIGGER_MATRIX_LOCAL_ACCESSTOKEN="syt_xxx" \
+  -e DD_NOTIFICATION_MATRIX_LOCAL_URL="https://matrix.example.com" \
+  -e DD_NOTIFICATION_MATRIX_LOCAL_ROOMID="!abc123:matrix.example.com" \
+  -e DD_NOTIFICATION_MATRIX_LOCAL_ACCESSTOKEN="syt_xxx" \
   ...
   codeswhat/drydock
 ```

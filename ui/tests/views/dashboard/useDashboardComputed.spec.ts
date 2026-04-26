@@ -1350,6 +1350,42 @@ describe('useDashboardComputed recent updates', () => {
     expect(first.map((r) => r.name)).toEqual(['stable-a', 'stable-b']);
   });
 
+  it('reuses cached name counts when the computed re-runs with the same containers array reference', () => {
+    const containersRef = ref<Container[]>([
+      makeBaseContainer({
+        id: 'svc-a',
+        name: 'svc',
+        newTag: '2.0.0',
+        updateKind: 'minor',
+        updateDetectedAt: '2026-03-04T09:00:00.000Z',
+      }),
+    ]);
+    const recentStatusByContainer = ref<Record<string, RecentAuditStatus>>({});
+
+    const state = useDashboardComputed({
+      agents: ref([]),
+      containerSummary: ref(null),
+      containers: containersRef,
+      hidePinned: ref(false),
+      maintenanceCountdownNow: ref(Date.now()),
+      recentStatusByContainer,
+      recentStatusByIdentity: ref({}),
+      registries: ref([]),
+      serverInfo: ref(null),
+      watchers: ref([]),
+    });
+
+    const firstRows = state.recentUpdates.value;
+    expect(firstRows.map((r) => r.name)).toEqual(['svc']);
+
+    // Invalidate the computed without replacing the containers array — forces a
+    // re-run that will hit the WeakMap cache for buildContainerNameCounts.
+    recentStatusByContainer.value = { svc: 'updated' };
+    const secondRows = state.recentUpdates.value;
+    expect(secondRows.map((r) => r.name)).toEqual(['svc']);
+    expect(secondRows[0].status).toBe('updated');
+  });
+
   it('correctly rebuilds name-count disambiguation when containers array reference changes', () => {
     const containersRef = ref<Container[]>([
       makeBaseContainer({

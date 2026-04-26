@@ -10,6 +10,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0-rc.13] — 2026-04-24
+
+### Added
+
+- **Update-eligibility blockers on container rows** — Backend surfaces 12 structured blocker reasons (`maturity-not-reached`, `container-paused`, `no-update-detected`, etc.) per container, and the Containers list renders them inline so users see *why* a row isn't updating without opening the detail drawer. Amber for `maturity-not-reached` (informational — will self-clear at the maturity threshold), red for terminal blockers.
+- **`GET /update-operations/:id` endpoint** — Returns the current state of a specific update operation. The UI falls back to this endpoint when the terminal SSE is missed (reverse-proxy reconnect-without-replay), so update toasts and hold release still fire even when the browser never saw the final server-sent event.
+
+### Fixed
+
+- **[#308](https://github.com/CodesWhat/drydock/issues/308)** (partial) — Two of the three reporter symptoms are resolved:
+  - **Row status during scan.** Triggering a scan from the row's `...` menu no longer shows "Updating" on the row. `actionInProgress` now tracks the *kind* of action per container (`update` / `scan` / `lifecycle` / `delete`) instead of a bare id set, and the status label and row-lock predicates read from the per-kind map so a scan in progress shows "Scanning" and doesn't dim other row actions.
+  - **Batch-mode triggers on single-container scans.** Providers that only listen to `emitContainerReports` (batch-mode, e.g. Pushover) were silently skipped on single-container scan paths, which only emitted the `emitContainerReport` singleton. Threaded `{ emitBatchEvent: true }` through the `watchContainer` call from the single-scan handler so batch-mode triggers fire too.
+  - **Still open:** the empty `updateKind.{kind,localValue,remoteValue}` fields in simple-template notification email bodies reported by begunfx. The dispatch snapshot shouldn't normally lose `updateKind` — needs a repro to chase the root cause.
+- **[#317](https://github.com/CodesWhat/drydock/issues/317)** — Two fixes around reconnect-without-replay SSE:
+  - Rollback actions no longer broadcast spurious container-lifecycle events (`dd:sse-container-added`/`-removed` in quick succession) while the store is mid-recreate.
+  - When the terminal update-operation SSE is missed, the Containers view's reconciliation pass now releases the display hold and fires the update toast from the reconciled state, matching what would've happened on a live SSE.
+- **[#318](https://github.com/CodesWhat/drydock/issues/318)** — Kind and status columns in the Containers list now stay visible at narrow viewports. The container-query thresholds that gated column visibility were tripping too early; adjusted so the columns survive down to the minimum useful table width.
+- **[#291](https://github.com/CodesWhat/drydock/issues/291)** (rc.12 follow-up) — Dashboard update flow now shares the same `useOperationDisplayHold` composable that the Containers view uses, fixing the last two reporter symptoms that survived rc.12 on the dashboard path. (1) The updating row no longer drops to the bottom of the Recent Updates widget mid-update: the backend transiently clears `updateDetectedAt` while the container recreates, which was sorting the ghost row last — the shared hold now overlays the snapshotted `updateDetectedAt` so sort position is stable through the whole update window. (2) A dropped terminal SSE (Synology DSM reverse-proxy style reconnect-without-replay) no longer leaves the dashboard silent: the view now reconciles holds against refreshed container data and falls through to `GET /update-operations/:id` the same way the Containers view did. Both views are now driven by one hold map, one sort-snapshot overlay, and one reconciliation fallback.
+
+### Performance
+
+- **[#301](https://github.com/CodesWhat/drydock/issues/301)** (rc.11 follow-up) — Dashboard and Containers view now do dramatically less work on every SSE reconnect. Addresses the residual slow-load reports on those two pages after the rc.10/rc.11 backend fixes.
+  - **Dashboard reconnect refresh is live-only.** On `dd:sse-connected` the dashboard now refetches only the endpoints that can go stale between frames (`/containers`, `/containers/stats`, `/containers/recent-status`) and TTL-guards the static ones (`/server`, `/agents`, `/watchers`, `/registries`) for 30s. `dd:sse-resync-required` (server-signaled state loss) still forces a full 7-endpoint fan-out — the TTL skip only applies to reconnect blips. On a flaky Synology LAN this turns a reconnect storm into a handful of requests instead of 7× that.
+  - **Dashboard stats read no longer warms Docker stats streams per container.** `GET /api/v1/containers/stats` accepts a new `?touch=false` query param; the dashboard uses it so a summary read returns already-cached snapshots without spinning up a per-container Docker stats stream. The Containers view / detail panel still pass the default (`touch=true`) so streaming stats stay warm where they actually render.
+  - **Containers list dedup fingerprint is ~30× cheaper.** `loadContainers()` was recursively fingerprinting every field (including `details.ports`/`volumes`/`env`/`labels` arrays) on both the incoming and current lists to skip redundant reactive reassignment. Replaced with a flat hash of the ~13 scalar fields that actually affect row rendering. Identity-and-tag changes still trigger reassignment; deep-field-only changes that never reach the list render no longer do.
+  - **SSE lookup-map churn halved.** `updateLookupMapsForContainer` was doing 4 full-map spreads (`{ ...map, ...key }`) per container SSE event; collapsed to 2. `removeLookupMapsForContainer` collapsed the same way and skips reassignment entirely when neither the id nor the alias is present.
+
+### Docs
+
+- **v1.5.0 deprecation sweep.** Migrated every documentation example and test fixture off the v1.5.0-deprecated `DD_TRIGGER_*` / `dd.trigger.*` prefixes onto canonical `DD_NOTIFICATION_*` + `dd.notification.*` (messaging providers) and `DD_ACTION_*` + `dd.action.*` (update executors). Touched 29 files in `content/docs/current/**`, the in-repo README roadmap and Recent Updates sections, CONTRIBUTING, all QA/CI/demo compose fixtures (except `migration-test-compose.yml`, which intentionally exercises the legacy prefix), and the apps/web landing-page roadmap. The legacy prefixes still work as aliases through v1.7.0 — this sweep makes every *example* in the project canonical so new users stop copy-pasting deprecated forms. See `DEPRECATIONS.md`.
+- **Registry credentials: `*_TOKEN` → `*_PASSWORD`.** The Docker Hub and DHI provider docs no longer instruct users to set `DD_REGISTRY_HUB_PUBLIC_TOKEN` (deprecated) — examples now use `DD_REGISTRY_HUB_PUBLIC_PASSWORD`, matching the canonical form every other registry provider already documents.
+
+### Tests / CI
+
+- **Dashboard helper + computed coverage** — Added targeted tests for `createRealtimeRefreshScheduler`'s `full-live` → `refreshFull` fallback branch (when no full-live handler is configured) and for the WeakMap cache-hit branch of `useDashboardComputed`'s name-counts memoization. Closes the last two UI coverage gaps left after rc.12.
+
 ## [1.5.0-rc.12] — 2026-04-22
 
 ### Fixed
@@ -592,7 +628,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Headless mode (`DD_SERVER_UI_ENABLED`)** — Run drydock as an API-only service by setting `DD_SERVER_UI_ENABLED=false`. The REST API, SSE, and healthcheck endpoints remain fully functional while the UI is not served. Useful for controller nodes that only manage agents.
-- **Maturity-based update policy** — Per-container update maturity policy via `dd.updatePolicy.maturityMode` (`all` or `mature`) and `dd.updatePolicy.maturityMinAgeDays` (default 7). When set to `mature`, containers with updates detected less than the configured age threshold are blocked from triggering until the update has settled. UI shows NEW/MATURE badges with flame/clock icons on containers with available updates. ([#120](https://github.com/CodesWhat/drydock/discussions/120))
+- **Maturity-based update policy** — Per-container update maturity policy configurable from the container row's **Update policy** menu (or `PATCH /api/v1/containers/:id/update-policy`). Modes: `all` (default — allow any update) and `mature` (block updates detected less than `maturityMinAgeDays` ago, default 7). UI shows NEW/MATURE badges with flame/clock icons on containers with available updates. ([#120](https://github.com/CodesWhat/drydock/discussions/120))
 - **`?groupByStack=true` URL parameter** — Bookmarkable URL parameter to enable stack grouping on the containers page. Also accepts `?groupByStack=1`. ([#145](https://github.com/CodesWhat/drydock/issues/145))
 
 ### Changed
@@ -1354,7 +1390,12 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.5.0-rc.8...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.5.0-rc.13...HEAD
+[1.5.0-rc.13]: https://github.com/CodesWhat/drydock/compare/v1.5.0-rc.12...v1.5.0-rc.13
+[1.5.0-rc.12]: https://github.com/CodesWhat/drydock/compare/v1.5.0-rc.11...v1.5.0-rc.12
+[1.5.0-rc.11]: https://github.com/CodesWhat/drydock/compare/v1.5.0-rc.10...v1.5.0-rc.11
+[1.5.0-rc.10]: https://github.com/CodesWhat/drydock/compare/v1.5.0-rc.9...v1.5.0-rc.10
+[1.5.0-rc.9]: https://github.com/CodesWhat/drydock/compare/v1.5.0-rc.8...v1.5.0-rc.9
 [1.5.0-rc.8]: https://github.com/CodesWhat/drydock/compare/v1.5.0-rc.7...v1.5.0-rc.8
 [1.5.0-rc.7]: https://github.com/CodesWhat/drydock/compare/v1.5.0-rc.6...v1.5.0-rc.7
 [1.5.0-rc.6]: https://github.com/CodesWhat/drydock/compare/v1.5.0-rc.5...v1.5.0-rc.6

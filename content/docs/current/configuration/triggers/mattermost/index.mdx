@@ -12,12 +12,12 @@ The `mattermost` trigger posts container update notifications to a Mattermost in
 
 | Env var | Required | Description | Supported values | Default value when missing |
 | --- | :---: | --- | --- | --- |
-| `DD_TRIGGER_MATTERMOST_{trigger_name}_URL` | 🔴 | Incoming webhook URL | `http`, `https` URL | |
-| `DD_TRIGGER_MATTERMOST_{trigger_name}_CHANNEL` | ⚪ | Target channel override | Channel name (for example `town-square`) | |
-| `DD_TRIGGER_MATTERMOST_{trigger_name}_USERNAME` | ⚪ | Username shown in message | String | `drydock` |
-| `DD_TRIGGER_MATTERMOST_{trigger_name}_ICONEMOJI` | ⚪ | Emoji icon shown for sender | Emoji string (for example `:whale:`) | |
-| `DD_TRIGGER_MATTERMOST_{trigger_name}_ICONURL` | ⚪ | Avatar icon URL shown for sender | `http`, `https` URL | |
-| `DD_TRIGGER_MATTERMOST_{trigger_name}_DISABLETITLE` | ⚪ | Disable title to keep full message-body control | `true`, `false` | `false` |
+| `DD_NOTIFICATION_MATTERMOST_{trigger_name}_URL` | 🔴 | Incoming webhook URL | `http`, `https` URL | |
+| `DD_NOTIFICATION_MATTERMOST_{trigger_name}_CHANNEL` | ⚪ | Target channel override | Channel name (for example `town-square`) | |
+| `DD_NOTIFICATION_MATTERMOST_{trigger_name}_USERNAME` | ⚪ | Username shown in message | String | `drydock` |
+| `DD_NOTIFICATION_MATTERMOST_{trigger_name}_ICONEMOJI` | ⚪ | Emoji icon shown for sender | Emoji string (for example `:whale:`) | |
+| `DD_NOTIFICATION_MATTERMOST_{trigger_name}_ICONURL` | ⚪ | Avatar icon URL shown for sender | `http`, `https` URL | |
+| `DD_NOTIFICATION_MATTERMOST_{trigger_name}_DISABLETITLE` | ⚪ | Disable title to keep full message-body control | `true`, `false` | `false` |
 
 <Callout type="info">This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration).</Callout>
 
@@ -34,18 +34,18 @@ services:
     image: codeswhat/drydock
     ...
     environment:
-      - DD_TRIGGER_MATTERMOST_LOCAL_URL=https://mattermost.example.com/hooks/abc123
-      - DD_TRIGGER_MATTERMOST_LOCAL_CHANNEL=town-square
-      - DD_TRIGGER_MATTERMOST_LOCAL_USERNAME=drydock
+      - DD_NOTIFICATION_MATTERMOST_LOCAL_URL=https://mattermost.example.com/hooks/abc123
+      - DD_NOTIFICATION_MATTERMOST_LOCAL_CHANNEL=town-square
+      - DD_NOTIFICATION_MATTERMOST_LOCAL_USERNAME=drydock
 ```
 
 </Tab>
 <Tab value="Docker">
 ```bash
 docker run \
-  -e DD_TRIGGER_MATTERMOST_LOCAL_URL="https://mattermost.example.com/hooks/abc123" \
-  -e DD_TRIGGER_MATTERMOST_LOCAL_CHANNEL="town-square" \
-  -e DD_TRIGGER_MATTERMOST_LOCAL_USERNAME="drydock" \
+  -e DD_NOTIFICATION_MATTERMOST_LOCAL_URL="https://mattermost.example.com/hooks/abc123" \
+  -e DD_NOTIFICATION_MATTERMOST_LOCAL_CHANNEL="town-square" \
+  -e DD_NOTIFICATION_MATTERMOST_LOCAL_USERNAME="drydock" \
   ...
   codeswhat/drydock
 ```

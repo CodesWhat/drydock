@@ -27,10 +27,10 @@ To run drydock in Agent mode, start the application with the `--agent` command l
 | `DD_SERVER_PORT` | ⚪ | Port to listen on | `3000` |
 | `DD_SERVER_TLS_*` | ⚪ | Standard [Server](/docs/configuration/server) TLS options | |
 | `DD_WATCHER_{name}_*` | 🔴 | [Watcher](/docs/configuration/watchers) configuration (At least one is required) | |
-| `DD_TRIGGER_DOCKER_{name}_*` | ⚪ | [Docker trigger](/docs/configuration/triggers/docker) for container updates (required to update containers from UI/API) | |
+| `DD_ACTION_DOCKER_{name}_*` | ⚪ | [Docker trigger](/docs/configuration/triggers/docker) for container updates (required to update containers from UI/API) | |
 | `DD_REGISTRY_{name}_*` | ⚪ | [Registry](/docs/configuration/registries) configuration (For update checks) | |
 
-<Callout type="warn">**Watcher and trigger env vars use different naming patterns.** Watchers are `DD_WATCHER_{name}_{option}` (no provider segment — Docker is the only watcher type). Triggers are `DD_TRIGGER_DOCKER_{name}_{option}` (provider segment required). A common mistake is writing `DD_TRIGGER_DOCKER_PRUNE=true` (missing the name) — this creates a broken trigger named "prune" instead of a trigger with `PRUNE=true`. Use `DD_TRIGGER_DOCKER_{name}_PRUNE=true` instead.</Callout>
+<Callout type="warn">**Watcher and trigger env vars use different naming patterns.** Watchers are `DD_WATCHER_{name}_{option}` (no provider segment — Docker is the only watcher type). Triggers are `DD_ACTION_DOCKER_{name}_{option}` (provider segment required). A common mistake is writing `DD_ACTION_DOCKER_PRUNE=true` (missing the name) — this creates a broken trigger named "prune" instead of a trigger with `PRUNE=true`. Use `DD_ACTION_DOCKER_{name}_PRUNE=true` instead.</Callout>
 
 ### Agent Example (Docker Compose)
 
@@ -77,7 +77,7 @@ services:
       - DD_WATCHER_LOCAL_HOST=drydock-socket-proxy
       - DD_WATCHER_LOCAL_PORT=2375
       # Docker trigger — allows updating containers from UI/API
-      - DD_TRIGGER_DOCKER_LOCAL_PRUNE=true
+      - DD_ACTION_DOCKER_LOCAL_PRUNE=true
 ```
 
 ## Controller Configuration
@@ -135,7 +135,7 @@ services:
       - DD_WATCHER_LOCAL_WATCHBYDEFAULT=true
 
       # --- Local docker trigger (update controller's own containers) ---
-      - DD_TRIGGER_DOCKER_LOCAL_PRUNE=true
+      - DD_ACTION_DOCKER_LOCAL_PRUNE=true
 
       # --- Remote agent connection ---
       - DD_AGENT_REMOTE1_HOST=192.168.1.50
@@ -143,12 +143,12 @@ services:
       - DD_AGENT_REMOTE1_SECRET=mysecretkey
 
       # --- Notifications (run on controller only) ---
-      - DD_TRIGGER_SMTP_ALERTS_HOST=smtp.example.com
-      - DD_TRIGGER_SMTP_ALERTS_PORT=587
-      - DD_TRIGGER_SMTP_ALERTS_USER=user@example.com
-      - DD_TRIGGER_SMTP_ALERTS_PASS=password
-      - DD_TRIGGER_SMTP_ALERTS_FROM=drydock@example.com
-      - DD_TRIGGER_SMTP_ALERTS_TO=admin@example.com
+      - DD_NOTIFICATION_SMTP_ALERTS_HOST=smtp.example.com
+      - DD_NOTIFICATION_SMTP_ALERTS_PORT=587
+      - DD_NOTIFICATION_SMTP_ALERTS_USER=user@example.com
+      - DD_NOTIFICATION_SMTP_ALERTS_PASS=password
+      - DD_NOTIFICATION_SMTP_ALERTS_FROM=drydock@example.com
+      - DD_NOTIFICATION_SMTP_ALERTS_TO=admin@example.com
 
   socket-proxy:
     image: lscr.io/linuxserver/socket-proxy:latest
@@ -208,12 +208,12 @@ services:
       - DD_WATCHER_LOCAL_HOST=drydock-socket-proxy
       - DD_WATCHER_LOCAL_PORT=2375
       # Docker trigger — required to update containers via UI/API
-      - DD_TRIGGER_DOCKER_LOCAL_PRUNE=true
+      - DD_ACTION_DOCKER_LOCAL_PRUNE=true
 ```
 
 <Callout type="warn">**Do not configure notification triggers (Slack, SMTP, etc.) on agents.** Only `docker` and `dockercompose` triggers are supported in agent mode. Notification triggers must be configured on the controller.</Callout>
 
-<Callout type="info">**You do not need to define `DD_TRIGGER_DOCKER_*` on the controller for each agent.** During the handshake, the controller automatically discovers the agent's triggers and creates internal proxies. The controller only needs its own `DD_TRIGGER_DOCKER_*` for updating containers on its local host.</Callout>
+<Callout type="info">**You do not need to define `DD_ACTION_DOCKER_*` on the controller for each agent.** During the handshake, the controller automatically discovers the agent's triggers and creates internal proxies. The controller only needs its own `DD_ACTION_DOCKER_*` for updating containers on its local host.</Callout>
 
 ## Features in Agent Mode
 

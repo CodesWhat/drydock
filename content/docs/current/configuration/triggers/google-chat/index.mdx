@@ -12,10 +12,10 @@ The `googlechat` trigger posts container update notifications to a Google Chat s
 
 | Env var | Required | Description | Supported values | Default value when missing |
 | --- | :---: | --- | --- | --- |
-| `DD_TRIGGER_GOOGLECHAT_{trigger_name}_URL` | 🔴 | Incoming webhook URL | `https` URL | |
-| `DD_TRIGGER_GOOGLECHAT_{trigger_name}_THREADKEY` | ⚪ | Thread key for grouping messages into a thread | String | |
-| `DD_TRIGGER_GOOGLECHAT_{trigger_name}_MESSAGEREPLYOPTION` | ⚪ | Reply behavior when `threadkey` is set | `REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD`, `REPLY_MESSAGE_OR_FAIL` | |
-| `DD_TRIGGER_GOOGLECHAT_{trigger_name}_DISABLETITLE` | ⚪ | Disable title to keep full message-body control | `true`, `false` | `false` |
+| `DD_NOTIFICATION_GOOGLECHAT_{trigger_name}_URL` | 🔴 | Incoming webhook URL | `https` URL | |
+| `DD_NOTIFICATION_GOOGLECHAT_{trigger_name}_THREADKEY` | ⚪ | Thread key for grouping messages into a thread | String | |
+| `DD_NOTIFICATION_GOOGLECHAT_{trigger_name}_MESSAGEREPLYOPTION` | ⚪ | Reply behavior when `threadkey` is set | `REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD`, `REPLY_MESSAGE_OR_FAIL` | |
+| `DD_NOTIFICATION_GOOGLECHAT_{trigger_name}_DISABLETITLE` | ⚪ | Disable title to keep full message-body control | `true`, `false` | `false` |
 
 <Callout type="info">This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration).</Callout>
 
@@ -32,14 +32,14 @@ services:
     image: codeswhat/drydock
     ...
     environment:
-      - DD_TRIGGER_GOOGLECHAT_LOCAL_URL=https://chat.googleapis.com/v1/spaces/xxx/messages?key=abc&token=xyz
+      - DD_NOTIFICATION_GOOGLECHAT_LOCAL_URL=https://chat.googleapis.com/v1/spaces/xxx/messages?key=abc&token=xyz
 ```
 
 </Tab>
 <Tab value="Docker">
 ```bash
 docker run \
-  -e DD_TRIGGER_GOOGLECHAT_LOCAL_URL="https://chat.googleapis.com/v1/spaces/xxx/messages?key=abc&token=xyz" \
+  -e DD_NOTIFICATION_GOOGLECHAT_LOCAL_URL="https://chat.googleapis.com/v1/spaces/xxx/messages?key=abc&token=xyz" \
   ...
   codeswhat/drydock
 ```

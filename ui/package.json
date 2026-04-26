@@ -1,6 +1,6 @@
 {
   "name": "drydock-ui",
-  "version": "1.5.0",
+  "version": "1.5.0-rc.13",
   "description": "Drydock dashboard — Vue 3 + Tailwind CSS 4 SPA",
   "repository": "CodesWhat/drydock",
   "engines": {
@@ -63,6 +63,7 @@
   "overrides": {
     "minimatch": "10.2.4",
     "picomatch": "4.0.4",
+    "postcss": "8.5.10",
     "yaml": "2.8.3"
   }
 }

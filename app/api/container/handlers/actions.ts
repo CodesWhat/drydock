@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
-import type { Container } from '../../../model/container.js';
+import * as event from '../../../event/index.js';
+import type { Container, ContainerReport } from '../../../model/container.js';
 import { sendErrorResponse } from '../../error-response.js';
 import { buildPaginationLinks } from '../../pagination-links.js';
 import type {
@@ -163,9 +164,17 @@ export function createWatchContainersHandler(context: CrudHandlerContext) {
           sendErrorResponse(res, selected.status, selected.error);
           return;
         }
-        await Promise.all(
+        // Collect reports so batch-mode triggers receive them via emitContainerReports,
+        // mirroring what the bulk watch() path emits after processing all containers.
+        const containerReports = await Promise.all(
           selected.targets.map((target) => target.watcher.watchContainer(target.container)),
         );
+        const validReports = containerReports.filter(
+          (r): r is ContainerReport => r !== undefined && r !== null,
+        );
+        if (validReports.length > 0) {
+          await event.emitContainerReports(validReports);
+        }
       } else {
         await Promise.all(Object.values(watcherMap).map((watcher) => watcher.watch()));
       }
@@ -207,7 +216,7 @@ export function createWatchContainerHandler(context: CrudHandlerContext) {
           return;
         }
       }
-      const containerReport = await watcher.watchContainer(container);
+      const containerReport = await watcher.watchContainer(container, { emitBatchEvent: true });
       res.status(200).json(context.redactContainerRuntimeEnv(containerReport.container));
     } catch {
       sendErrorResponse(res, 500, `Error when watching container ${id}`);

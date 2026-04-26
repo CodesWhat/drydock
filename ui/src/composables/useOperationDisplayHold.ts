@@ -1,5 +1,14 @@
 import { shallowRef, triggerRef } from 'vue';
 import type { Container, ContainerUpdateOperation } from '../types/container';
+import {
+  type ActiveContainerUpdateOperationPhase,
+  type ActiveContainerUpdateOperationStatus,
+  type ContainerUpdateOperationStatus,
+  isActiveContainerUpdateOperationPhaseForStatus,
+  isActiveContainerUpdateOperationStatus,
+  isContainerUpdateOperationStatus,
+  type TerminalContainerUpdateOperationStatus,
+} from '../types/update-operation';
 
 export const OPERATION_DISPLAY_HOLD_MS = 1500;
 export const OPERATION_ACTIVE_HOLD_MS = 10 * 60 * 1000;
@@ -18,6 +27,10 @@ export interface ContainerSortSnapshot {
   currentTag: Container['currentTag'];
   image: Container['image'];
   imageCreated?: Container['imageCreated'];
+  // Captured so the dashboard Updates Available widget keeps its detectedAt-based
+  // sort stable while the backend transiently clears `updateAvailable` (and with
+  // it `updateDetectedAt`) during an active update.
+  updateDetectedAt?: Container['updateDetectedAt'];
 }
 
 interface OperationDisplayHoldRecord {
@@ -38,6 +51,25 @@ interface OperationDisplayHoldRecord {
 // computed for ALL N containers.
 const heldOperations = shallowRef(new Map<string, OperationDisplayHoldRecord>());
 const releaseTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+/**
+ * Tracks operation IDs whose terminal outcome has already been surfaced to the
+ * user (either via the primary SSE path or the reconciliation fallback). Shared
+ * between both paths to prevent duplicate toasts.
+ */
+const toastFiredOperations = new Set<string>();
+
+function markToastFired(operationId: string) {
+  toastFiredOperations.add(operationId);
+}
+
+function wasToastFired(operationId: string): boolean {
+  return toastFiredOperations.has(operationId);
+}
+
+function resetToastFiredOperations() {
+  toastFiredOperations.clear();
+}
 
 function setHeldOperation(operationId: string, hold: OperationDisplayHoldRecord) {
   heldOperations.value.set(operationId, hold);
@@ -267,7 +299,8 @@ function projectContainerDisplayState<T extends Container>(container: T): T {
       sortSnapshot.newTag !== container.newTag ||
       sortSnapshot.currentTag !== container.currentTag ||
       sortSnapshot.image !== container.image ||
-      sortSnapshot.imageCreated !== container.imageCreated);
+      sortSnapshot.imageCreated !== container.imageCreated ||
+      sortSnapshot.updateDetectedAt !== container.updateDetectedAt);
 
   return {
     ...container,
@@ -280,6 +313,7 @@ function projectContainerDisplayState<T extends Container>(container: T): T {
           currentTag: sortSnapshot.currentTag,
           image: sortSnapshot.image,
           imageCreated: sortSnapshot.imageCreated,
+          updateDetectedAt: sortSnapshot.updateDetectedAt,
         }
       : {}),
   } as T;
@@ -296,6 +330,13 @@ function clearAllOperationDisplayHolds() {
   }
 }
 
+export interface TerminalResolvedArgs {
+  operationId: string;
+  containerName?: string;
+  containerIds: readonly string[];
+  hold: OperationDisplayHoldRecord;
+}
+
 /**
  * Safety net for missed terminal SSEs: active holds now live for 10 minutes so the
  * row stays stable through a full recreate, but if the terminal SSE is ever lost
@@ -303,10 +344,15 @@ function clearAllOperationDisplayHolds() {
  * After each container list reload, fold any hold whose matching container has no
  * active operation in the raw API response into the short settle window — so the
  * row releases within ~1.5s of the next refresh instead of 10 minutes.
+ *
+ * When `onTerminalResolved` is provided, it is invoked (at most once per operationId
+ * per hold lifetime) before scheduling the release so the caller can fetch the
+ * terminal operation state and fire the appropriate toast.
  */
 function reconcileHoldsAgainstContainers(
   containers: readonly Pick<Container, 'id' | 'name' | 'updateOperation'>[],
   now?: number,
+  onTerminalResolved?: (args: TerminalResolvedArgs) => void | Promise<void>,
 ) {
   const currentNow = now ?? Date.now();
   for (const [operationId, hold] of heldOperations.value.entries()) {
@@ -323,6 +369,14 @@ function reconcileHoldsAgainstContainers(
     if (rawIsActive) {
       continue;
     }
+    if (onTerminalResolved) {
+      void onTerminalResolved({
+        operationId,
+        containerName: hold.containerName,
+        containerIds: hold.containerIds,
+        hold,
+      });
+    }
     scheduleHeldOperationRelease({
       operationId,
       containerId: hold.containerIds[0],
@@ -332,14 +386,214 @@ function reconcileHoldsAgainstContainers(
   }
 }
 
+export interface ParsedUpdateOperationSse {
+  operationId?: string;
+  containerId?: string;
+  newContainerId?: string;
+  containerName?: string;
+  status: ContainerUpdateOperationStatus;
+  phase?: unknown;
+}
+
+/**
+ * Validate + normalise a raw `dd:sse-update-operation-changed` payload into the
+ * subset of fields the hold map cares about. Returns undefined when the payload
+ * is not a recognised update-operation event so callers can short-circuit.
+ */
+export function parseUpdateOperationSsePayload(raw: unknown): ParsedUpdateOperationSse | undefined {
+  if (!raw || typeof raw !== 'object') {
+    return undefined;
+  }
+  const p = raw as Record<string, unknown>;
+  if (!isContainerUpdateOperationStatus(p.status)) {
+    return undefined;
+  }
+  return {
+    operationId: typeof p.operationId === 'string' ? p.operationId : undefined,
+    containerId: typeof p.containerId === 'string' ? p.containerId : undefined,
+    newContainerId: typeof p.newContainerId === 'string' ? p.newContainerId : undefined,
+    containerName: typeof p.containerName === 'string' ? p.containerName : undefined,
+    status: p.status,
+    phase: p.phase,
+  };
+}
+
+function resolveActiveOperationPhase(args: {
+  status: ActiveContainerUpdateOperationStatus;
+  phase: unknown;
+  previousPhase?: unknown;
+}): ActiveContainerUpdateOperationPhase {
+  if (isActiveContainerUpdateOperationPhaseForStatus(args.status, args.phase)) {
+    return args.phase;
+  }
+  if (
+    args.previousPhase !== undefined &&
+    isActiveContainerUpdateOperationPhaseForStatus(args.status, args.previousPhase)
+  ) {
+    return args.previousPhase;
+  }
+  return args.status === 'queued' ? 'queued' : 'pulling';
+}
+
+/** Subset of Container fields the hold composable reads off the live row. */
+export type HoldSourceContainer = Pick<
+  Container,
+  | 'id'
+  | 'name'
+  | 'status'
+  | 'updateKind'
+  | 'newTag'
+  | 'currentTag'
+  | 'image'
+  | 'imageCreated'
+  | 'updateDetectedAt'
+  | 'updateOperation'
+>;
+
+export interface ApplyUpdateOperationSseArgs {
+  parsed: ParsedUpdateOperationSse;
+  /**
+   * Looks up the container that the SSE event refers to from the caller's live
+   * data (ContainersView: `containers.value`; DashboardView: the same shared
+   * containers ref). Return undefined when the container has already been
+   * pruned from the list — the helper still runs the terminal release path so
+   * the hold releases even when the row no longer exists.
+   */
+  resolveContainer: (target: OperationDisplayHoldTarget) => HoldSourceContainer | undefined;
+  /**
+   * Invoked on active-status events with the computed next operation so the
+   * caller can apply view-specific row mutations (ContainersView writes this
+   * back onto containers.value[idx].updateOperation to drive its reactivity).
+   * Skip providing this if the view re-derives from heldOperations only.
+   */
+  onActiveOperationComputed?: (args: {
+    operationId: string;
+    container: HoldSourceContainer;
+    nextOperation: ContainerUpdateOperation;
+  }) => void;
+  /**
+   * Invoked on every terminal-status event (succeeded / failed / rolled-back)
+   * regardless of whether a hold was tracked. The helper has already called
+   * scheduleHeldOperationRelease — plus markToastFired when wasTracked — so the
+   * caller's job is to (a) apply any view-specific row cleanup (e.g. clearing
+   * containers.value[idx].updateOperation) and (b) surface the terminal toast
+   * when wasTracked (usually with a setTimeout(OPERATION_DISPLAY_HOLD_MS) so
+   * the row settles before the toast fires). The wasTracked flag lets views
+   * avoid firing toasts for replays of events they never held for.
+   */
+  onTerminalEvent?: (args: {
+    container?: HoldSourceContainer;
+    status: TerminalContainerUpdateOperationStatus;
+    name: string;
+    operationId?: string;
+    wasTracked: boolean;
+  }) => void;
+}
+
+/**
+ * Shared dispatcher that both ContainersView and DashboardView route their
+ * `dd:sse-update-operation-changed` events through. Keeps the hold map, sort
+ * snapshot, and terminal-toast-fired dedup in one place so both views stay in
+ * lockstep (previously DashboardView had only a terminal handler with no hold
+ * creation or REST reconciliation, which was the root of #291).
+ */
+export function applyUpdateOperationSseToHold(args: ApplyUpdateOperationSseArgs) {
+  const { parsed, resolveContainer, onActiveOperationComputed, onTerminalEvent } = args;
+  const target: OperationDisplayHoldTarget = {
+    containerId: parsed.containerId,
+    newContainerId: parsed.newContainerId,
+    containerName: parsed.containerName,
+  };
+  const container = resolveContainer(target);
+
+  if (isActiveContainerUpdateOperationStatus(parsed.status)) {
+    if (!container) {
+      return;
+    }
+    const nextOperation: ContainerUpdateOperation = {
+      ...(container.updateOperation ?? {}),
+      id: parsed.operationId ?? container.updateOperation?.id ?? '',
+      status: parsed.status,
+      phase: resolveActiveOperationPhase({
+        status: parsed.status,
+        phase: parsed.phase,
+        previousPhase: container.updateOperation?.phase,
+      }),
+      updatedAt: new Date().toISOString(),
+    };
+    if (parsed.operationId && parsed.operationId.length > 0) {
+      onActiveOperationComputed?.({
+        operationId: parsed.operationId,
+        container,
+        nextOperation,
+      });
+      holdOperationDisplay({
+        operationId: parsed.operationId,
+        operation: nextOperation,
+        containerId: parsed.containerId,
+        newContainerId: parsed.newContainerId,
+        containerName: parsed.containerName,
+        sortSnapshot: {
+          status: container.status,
+          updateKind: container.updateKind,
+          newTag: container.newTag,
+          currentTag: container.currentTag,
+          image: container.image,
+          imageCreated: container.imageCreated,
+          updateDetectedAt: container.updateDetectedAt,
+        },
+      });
+    }
+    return;
+  }
+
+  const operationTarget = {
+    operationId: parsed.operationId,
+    ...target,
+  };
+  const terminalStatus = parsed.status;
+  if (
+    terminalStatus === 'succeeded' ||
+    terminalStatus === 'failed' ||
+    terminalStatus === 'rolled-back'
+  ) {
+    const wasTracked = findMatchingOperationIds(operationTarget).length > 0;
+    scheduleHeldOperationRelease(operationTarget);
+    if (wasTracked && parsed.operationId) {
+      markToastFired(parsed.operationId);
+    }
+    const toastName =
+      (typeof container?.name === 'string' && container.name.length > 0
+        ? container.name
+        : undefined) ??
+      parsed.containerName ??
+      'container';
+    onTerminalEvent?.({
+      container,
+      status: terminalStatus,
+      name: toastName,
+      operationId: parsed.operationId,
+      wasTracked,
+    });
+    return;
+  }
+
+  clearHeldOperation(operationTarget);
+}
+
 export function useOperationDisplayHold() {
   return {
+    applyUpdateOperationSseToHold,
     heldOperations,
     clearAllOperationDisplayHolds,
     clearHeldOperation,
     findMatchingOperationIds,
     getDisplayUpdateOperation,
     holdOperationDisplay,
+    markToastFired,
+    parseUpdateOperationSsePayload,
+    wasToastFired,
+    resetToastFiredOperations,
     projectContainerDisplayState,
     reconcileHoldsAgainstContainers,
     scheduleHeldOperationRelease,

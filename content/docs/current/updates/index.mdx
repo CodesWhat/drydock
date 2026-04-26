@@ -53,7 +53,7 @@ This update improves how triggers can be coordinated when they share the same tr
 
 You can now control trigger execution order with:
 
-`DD_TRIGGER_{trigger_type}_{trigger_name}_ORDER`
+`DD_ACTION_{trigger_type}_{trigger_name}_ORDER` / `DD_NOTIFICATION_{trigger_type}_{trigger_name}_ORDER`
 
 - Lower values run first
 - Default is `100`
@@ -62,15 +62,15 @@ You can now control trigger execution order with:
 Example:
 
 ```bash
-DD_TRIGGER_DOCKER_UPDATE_ORDER=10
-DD_TRIGGER_DISCORD_UPDATE_ORDER=20
+DD_ACTION_DOCKER_UPDATE_ORDER=10
+DD_NOTIFICATION_DISCORD_UPDATE_ORDER=20
 ```
 
 This ensures the Docker update trigger runs before the Discord notification trigger for the same update event.
 
 #### 2. Trigger name aliases in container labels
 
-Container labels `dd.trigger.include` and `dd.trigger.exclude` now accept either:
+Container labels `dd.action.include` / `dd.notification.include` (and their `.exclude` counterparts) now accept either:
 
 - full trigger id (`docker.update`)
 - trigger name alias (`update`)
@@ -78,10 +78,10 @@ Container labels `dd.trigger.include` and `dd.trigger.exclude` now accept either
 Example:
 
 ```bash
-dd.trigger.exclude=update
+dd.action.exclude=update
 ```
 
-This applies to all triggers named `update` (for example `docker.update`, `discord.update`).
+This applies to all triggers named `update` (for example `docker.update`, `discord.update`). The legacy labels `dd.trigger.include` / `dd.trigger.exclude` still work as aliases until v1.7.0.
 
 #### 3. Shared threshold by trigger name
 
@@ -93,7 +93,7 @@ Triggers sharing the same trigger name can share `THRESHOLD` automatically:
 Example:
 
 ```bash
-DD_TRIGGER_DOCKER_UPDATE_THRESHOLD=minor
+DD_ACTION_DOCKER_UPDATE_THRESHOLD=minor
 ```
 
 With no explicit Discord threshold, `discord.update` inherits `minor`.
@@ -101,12 +101,12 @@ With no explicit Discord threshold, `discord.update` inherits `minor`.
 ### Recommended setup for "update then notify"
 
 ```bash
-DD_TRIGGER_DOCKER_UPDATE_THRESHOLD=minor
-DD_TRIGGER_DOCKER_UPDATE_ORDER=10
-DD_TRIGGER_DOCKER_UPDATE_PRUNE=true
+DD_ACTION_DOCKER_UPDATE_THRESHOLD=minor
+DD_ACTION_DOCKER_UPDATE_ORDER=10
+DD_ACTION_DOCKER_UPDATE_PRUNE=true
 
-DD_TRIGGER_DISCORD_UPDATE_ORDER=20
-DD_TRIGGER_DISCORD_UPDATE_URL=<discord_webhook_url>
-DD_TRIGGER_DISCORD_UPDATE_SIMPLETITLE=Updated ${container.name}
-DD_TRIGGER_DISCORD_UPDATE_SIMPLEBODY=Container ${container.name} has been updated from ${container.updateKind.localValue} to ${container.updateKind.remoteValue}
+DD_NOTIFICATION_DISCORD_UPDATE_ORDER=20
+DD_NOTIFICATION_DISCORD_UPDATE_URL=<discord_webhook_url>
+DD_NOTIFICATION_DISCORD_UPDATE_SIMPLETITLE=Updated ${container.name}
+DD_NOTIFICATION_DISCORD_UPDATE_SIMPLEBODY=Container ${container.name} has been updated from ${container.updateKind.localValue} to ${container.updateKind.remoteValue}
 ```

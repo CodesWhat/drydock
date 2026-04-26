@@ -319,7 +319,7 @@ The `:ro` (read-only) flag on the Docker socket mount is omitted intentionally. 
 | Container actions (start/stop/restart) | All of the above **plus** `POST=1` and a [Docker trigger](/docs/configuration/triggers/docker) |
 | Docker trigger (auto-updates) | All of the above **plus** `POST=1`, `NETWORKS=1` |
 
-<Callout type="warn">Container actions (start, stop, restart, update) require a Docker trigger to be configured. If you only want container actions without automatic updates, set `DD_TRIGGER_DOCKER_{name}_AUTO=false`. Without a Docker trigger, the UI will show "No docker trigger found for this container" when attempting actions.</Callout>
+<Callout type="warn">Container actions (start, stop, restart, update) require a Docker trigger to be configured. If you only want container actions without automatic updates, set `DD_ACTION_DOCKER_{name}_AUTO=false`. Without a Docker trigger, the UI will show "No docker trigger found for this container" when attempting actions.</Callout>
 
 #### Alternative socket proxies
 
@@ -513,7 +513,7 @@ services:
       - /run/podman/podman.sock:/var/run/docker.sock
     environment:
       - DD_WATCHER_LOCAL_SOCKET=/var/run/docker.sock
-      - DD_TRIGGER_DOCKER_LOCAL_AUTO=false
+      - DD_ACTION_DOCKER_LOCAL_AUTO=false
     ports:
       - 3000:3000
 ```
@@ -529,7 +529,7 @@ services:
       - ${XDG_RUNTIME_DIR}/podman/podman.sock:/var/run/docker.sock
     environment:
       - DD_WATCHER_LOCAL_SOCKET=/var/run/docker.sock
-      - DD_TRIGGER_DOCKER_LOCAL_AUTO=false
+      - DD_ACTION_DOCKER_LOCAL_AUTO=false
     ports:
       - 3000:3000
 ```
@@ -547,7 +547,7 @@ services:
     environment:
       - DD_WATCHER_LOCAL_HOST=socket-proxy
       - DD_WATCHER_LOCAL_PORT=2375
-      - DD_TRIGGER_DOCKER_LOCAL_AUTO=false
+      - DD_ACTION_DOCKER_LOCAL_AUTO=false
     ports:
       - 3000:3000
 
@@ -580,7 +580,7 @@ services:
 
 - **Rootless proxy path** — For rootless Podman with socket proxy, set `SOCKET_PATH=${XDG_RUNTIME_DIR}/podman/podman.sock` and mount the same host path into the proxy container.
 - **503 errors** — Some users have reported intermittent `503` errors when using `tecnativa/docker-socket-proxy` with Podman ([tecnativa/docker-socket-proxy#66](https://github.com/Tecnativa/docker-socket-proxy/issues/66)). If you experience this, prefer direct socket mount over the proxy — the direct mount examples above are the most reliable option with Podman.
-- **Docker Compose trigger compatibility** — The Docker Compose trigger (`DD_TRIGGER_DOCKERCOMPOSE_*`) works with Podman — it inherits the socket connection from your watcher configuration. No additional Podman-specific trigger settings are needed.
+- **Docker Compose trigger compatibility** — The Docker Compose trigger (`DD_ACTION_DOCKERCOMPOSE_*`) works with Podman — it inherits the socket connection from your watcher configuration. No additional Podman-specific trigger settings are needed.
 </Callout>
 
 #### Known limitations and tested versions
@@ -748,6 +748,8 @@ To fine-tune the behaviour of drydock _per container_, you can add labels on the
 <Callout type="info">**Automatic rollback** (`dd.rollback.auto`) monitors the container's health check after an update. If the health check fails within the `dd.rollback.window` (default 5 minutes, polled every `dd.rollback.interval` = 10 seconds), drydock automatically rolls the container back to its previous image.</Callout>
 
 <Callout type="info">**Infrastructure update mode** (`dd.update.mode=infrastructure`) is for containers that Drydock depends on for its Docker API connection, such as a socket proxy. When set, the container is updated through a helper-container path that connects directly to `/var/run/docker.sock`, bypassing the proxy so the connection isn't severed mid-update. See [Infrastructure Update Mode](/docs/configuration/triggers/docker#infrastructure-update-mode) for details.</Callout>
+
+<Callout type="info">**Per-container update policy** (maturity gate, snooze, skip-tag, skip-digest) is set from the UI rather than via labels. Open a container row → **Update policy** menu, or call `PATCH /api/v1/containers/:id/update-policy`. Policies are stored with the container record and persist across Drydock restarts. There is no `dd.updatePolicy.*` label — earlier drafts of the v1.4 docs listed label equivalents that were never implemented.</Callout>
 
 ## Label examples
 

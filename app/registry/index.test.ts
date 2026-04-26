@@ -969,9 +969,17 @@ test('init should register all components', async () => {
     'quay.public',
     'trueforge.public',
   ]);
-  expect(Object.keys(registry.getState().trigger)).toEqual(['mock.mock1', 'mock.mock2']);
-  expect(Object.keys(registry.getState().watcher)).toEqual(['docker.watcher1', 'docker.watcher2']);
-  expect(Object.keys(registry.getState().authentication)).toEqual(['basic.john', 'basic.jane']);
+  // Registration is parallel (Promise.all), so state key order is not
+  // guaranteed — assert the sorted set of registered names instead.
+  expect(Object.keys(registry.getState().trigger).sort()).toEqual(['mock.mock1', 'mock.mock2']);
+  expect(Object.keys(registry.getState().watcher).sort()).toEqual([
+    'docker.watcher1',
+    'docker.watcher2',
+  ]);
+  expect(Object.keys(registry.getState().authentication).sort()).toEqual([
+    'basic.jane',
+    'basic.john',
+  ]);
 });
 
 test('init should prune local containers whose watcher no longer exists', async () => {

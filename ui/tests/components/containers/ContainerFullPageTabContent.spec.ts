@@ -94,7 +94,7 @@ const containerAutoFetchInterval = ref(0);
 const containerLogRef = ref<HTMLElement | null>(null);
 const containerScrollBlocked = ref(false);
 const previewLoading = ref(false);
-const actionInProgress = ref(new Set<string>());
+const actionInProgress = ref(new Map<string, 'update' | 'scan' | 'lifecycle' | 'delete'>());
 const policyInProgress = ref<string | null>(null);
 const snoozeDateInput = ref('');
 const selectedSnoozeUntil = ref<string | null>(null);
@@ -312,7 +312,7 @@ function resetState() {
   containerLogRef.value = null;
   containerScrollBlocked.value = false;
   previewLoading.value = false;
-  actionInProgress.value = new Set();
+  actionInProgress.value = new Map();
   policyInProgress.value = null;
   snoozeDateInput.value = '';
   selectedSnoozeUntil.value = null;

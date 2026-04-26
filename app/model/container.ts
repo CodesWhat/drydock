@@ -170,6 +170,7 @@ export interface Container {
   updateAge?: number;
   updateMaturityLevel?: 'hot' | 'mature' | 'established';
   updateOperation?: ContainerUpdateOperationState;
+  updateEligibility?: import('./update-eligibility.js').UpdateEligibility;
   labels?: Record<string, string>;
   sourceRepo?: string;
   details?: ContainerRuntimeDetails;

@@ -12,6 +12,7 @@ import { toPositiveInteger } from '../util/parse.js';
 const { validate: validateContainer } = container;
 
 import { emitContainerAdded, emitContainerRemoved, emitContainerUpdated } from '../event/index.js';
+import { isRollbackContainerName } from '../model/container.js';
 import { initCollection } from './util.js';
 
 let containers: ReturnType<typeof initCollection> | undefined;
@@ -702,10 +703,12 @@ export function insertContainer(container) {
     data: containerToSave,
   });
   invalidateContainersCacheForMutation(undefined, containerToSave);
-  const containerAddedEventPayload: ContainerLifecycleEventPayload = redactContainerRuntimeEnv({
-    ...containerToSave,
-  });
-  emitContainerAdded(containerAddedEventPayload);
+  if (!isRollbackContainerName(containerToSave.name)) {
+    const containerAddedEventPayload: ContainerLifecycleEventPayload = redactContainerRuntimeEnv({
+      ...containerToSave,
+    });
+    emitContainerAdded(containerAddedEventPayload);
+  }
   return containerToSave;
 }
 
@@ -763,14 +766,18 @@ export function updateContainer(container) {
     });
   }
   invalidateContainersCacheForMutation(containerCurrent, containerToReturn);
+  const wasRollback = isRollbackContainerName(containerCurrent?.name);
+  const isRollback = isRollbackContainerName(containerToReturn.name);
   if (
-    !containerCurrent ||
-    hasContainerChangedWithSecurityHashes(
-      containerCurrent,
-      containerToReturn,
-      containerCurrentSecurityHash,
-      containerNextSecurityHash,
-    )
+    !isRollback &&
+    (!containerCurrent ||
+      wasRollback ||
+      hasContainerChangedWithSecurityHashes(
+        containerCurrent,
+        containerToReturn,
+        containerCurrentSecurityHash,
+        containerNextSecurityHash,
+      ))
   ) {
     const containerUpdatedEventPayload: ContainerLifecycleEventPayload = redactContainerRuntimeEnv({
       ...containerToReturn,
@@ -961,10 +968,12 @@ export function deleteContainer(id, options: DeleteContainerOptions = {}) {
       .remove();
     invalidateContainersCacheForMutation(containerRaw, undefined);
     containerSecurityStateHashCache.delete(id);
-    emitContainerRemoved({
-      ...container,
-      replacementExpected: options.replacementExpected,
-    });
+    if (!isRollbackContainerName(container.name)) {
+      emitContainerRemoved({
+        ...container,
+        replacementExpected: options.replacementExpected,
+      });
+    }
   }
 }
 

@@ -53,6 +53,7 @@ vi.mock('@/services/container', () => ({
     summary: { critical: 0, high: 0, medium: 0, low: 0, unknown: 0 },
     vulnerabilities: [],
   }),
+  getUpdateOperationById: vi.fn().mockResolvedValue(null),
   refreshAllContainers: vi.fn().mockResolvedValue([]),
   scanContainer: vi.fn().mockResolvedValue({}),
   runTrigger: vi.fn().mockResolvedValue({}),

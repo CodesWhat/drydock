@@ -11,7 +11,10 @@ import { useContainerFilters } from '../composables/useContainerFilters';
 import { useDetailPanel, useDetailPanelStorage } from '../composables/useDetailPanel';
 import { LOG_AUTO_FETCH_INTERVALS } from '../composables/useLogViewerBehavior';
 import {
+  applyUpdateOperationSseToHold,
   OPERATION_DISPLAY_HOLD_MS,
+  parseUpdateOperationSsePayload,
+  type TerminalResolvedArgs,
   useOperationDisplayHold,
 } from '../composables/useOperationDisplayHold';
 import { useToast } from '../composables/useToast';
@@ -19,14 +22,13 @@ import { preferences } from '../preferences/store';
 import { usePreference } from '../preferences/usePreference';
 import { useViewMode } from '../preferences/useViewMode';
 import type { ContainerGroup } from '../services/container';
-import { getAllContainers, getContainerGroups, refreshAllContainers } from '../services/container';
-import type { Container } from '../types/container';
 import {
-  isActiveContainerUpdateOperationPhaseForStatus,
-  isActiveContainerUpdateOperationStatus,
-  isContainerUpdateOperationStatus,
-  type ActiveContainerUpdateOperationPhase,
-} from '../types/update-operation';
+  getAllContainers,
+  getContainerGroups,
+  getUpdateOperationById,
+  refreshAllContainers,
+} from '../services/container';
+import type { Container } from '../types/container';
 import { getContainerActionIdentityKey } from '../utils/container-action-key';
 import { mapApiContainer, mapApiContainers } from '../utils/container-mapper';
 import {
@@ -63,14 +65,54 @@ const containerIdMap = ref<Record<string, string>>({});
 const containerMetaMap = ref<Record<string, unknown>>({});
 const {
   clearAllOperationDisplayHolds,
-  findMatchingOperationIds,
-  holdOperationDisplay,
+  markToastFired,
+  wasToastFired,
   projectContainerDisplayState,
   reconcileHoldsAgainstContainers,
-  scheduleHeldOperationRelease,
-  clearHeldOperation,
 } = useOperationDisplayHold();
 const toast = useToast();
+
+/**
+ * Fallback handler for the reconciliation path: when a tracked hold is collapsed
+ * because the container's active operation is gone (e.g. missed terminal SSE on
+ * Synology DSM 7, #317), fetch the terminal operation from the backend and fire
+ * the appropriate toast. Deduplicates against the primary SSE path via
+ * `wasToastFired` / `markToastFired` so only one toast fires per operation.
+ */
+async function handleTerminalResolvedFromReconciliation(args: TerminalResolvedArgs) {
+  const { operationId, containerName } = args;
+  if (wasToastFired(operationId)) {
+    return;
+  }
+  let operation: Awaited<ReturnType<typeof getUpdateOperationById>>;
+  try {
+    operation = await getUpdateOperationById(operationId);
+  } catch {
+    return;
+  }
+  if (!operation) {
+    return;
+  }
+  const { status } = operation;
+  if (status !== 'succeeded' && status !== 'failed' && status !== 'rolled-back') {
+    return;
+  }
+  if (wasToastFired(operationId)) {
+    return;
+  }
+  markToastFired(operationId);
+  const displayName =
+    (typeof operation.containerName === 'string' && operation.containerName.length > 0
+      ? operation.containerName
+      : containerName) ?? 'container';
+  if (status === 'succeeded') {
+    setTimeout(() => toast.success(`Updated: ${displayName}`), OPERATION_DISPLAY_HOLD_MS);
+  } else if (status === 'failed') {
+    setTimeout(() => toast.error(`Update failed: ${displayName}`), OPERATION_DISPLAY_HOLD_MS);
+  } else {
+    setTimeout(() => toast.error(`Rolled back: ${displayName}`), OPERATION_DISPLAY_HOLD_MS);
+  }
+}
 
 function buildContainerLookupMaps(apiContainers: Record<string, unknown>[]) {
   const idMap: Record<string, string> = {};
@@ -128,50 +170,42 @@ function buildContainerLookupMaps(apiContainers: Record<string, unknown>[]) {
  * groupedContainers computed chain — when the incoming data is identical to
  * what is already stored.
  *
- * Performance note: this walk is O(N × fields) but produces no Vue reactive
- * side-effects and allocates far less than the chain re-eval + DOM diffing
- * that would otherwise occur on every cron-triggered reload.
+ * Only hashes fields that affect row rendering or the downstream computed
+ * chain (identity, tag, status, update indicators, safety state). Deep
+ * structures like `details` (ports/volumes/env/labels) are intentionally
+ * excluded — they do not change the grouped table render and would dominate
+ * the cost of this walk on every reload. See #301.
+ *
+ * This is a best-effort dedup, not a correctness primitive: a false-positive
+ * (hash collision / missed change) results in a redundant reactive
+ * reassignment, i.e. the same work the pre-fingerprint code already did
+ * unconditionally.
  */
-function fingerprintValue(value: unknown): string | undefined {
-  if (value === null) {
-    return 'null';
-  }
-
-  switch (typeof value) {
-    case 'string':
-    case 'number':
-    case 'boolean':
-      return JSON.stringify(value);
-    case 'undefined':
-    case 'function':
-    case 'symbol':
-      return undefined;
-    case 'object':
-      break;
-    default:
-      return JSON.stringify(String(value));
-  }
-
-  if (Array.isArray(value)) {
-    return `[${value.map((item) => fingerprintValue(item) ?? 'null').join(',')}]`;
-  }
-
-  if (value instanceof Date) {
-    return JSON.stringify(value.toJSON());
-  }
-
-  const record = value as Record<string, unknown>;
-  const entries = Object.keys(record)
-    .sort()
-    .flatMap((key) => {
-      const serialized = fingerprintValue(record[key]);
-      return serialized === undefined ? [] : [`${JSON.stringify(key)}:${serialized}`];
-    });
-  return `{${entries.join(',')}}`;
+function containerRowFingerprint(c: Container): string {
+  const op = c.updateOperation;
+  return [
+    c.id,
+    c.name,
+    c.currentTag,
+    c.newTag ?? '',
+    c.status,
+    c.updateKind ?? '',
+    c.updateDetectedAt ?? '',
+    c.bouncer,
+    c.updateBouncer ?? '',
+    c.updatePolicyState ?? '',
+    c.noUpdateReason ?? '',
+    c.registryError ?? '',
+    op ? `${op.id}:${op.status}:${op.phase}:${op.updatedAt}` : '',
+  ].join('|');
 }
 
 function containerListFingerprint(list: Container[]): string {
-  return fingerprintValue(list) ?? '[]';
+  const parts = new Array<string>(list.length);
+  for (let i = 0; i < list.length; i += 1) {
+    parts[i] = containerRowFingerprint(list[i]!);
+  }
+  return parts.join('\n');
 }
 
 async function loadContainers() {
@@ -193,7 +227,11 @@ async function loadContainers() {
       containerIdMap.value = idMap;
       containerMetaMap.value = metaMap;
     }
-    reconcileHoldsAgainstContainers(containers.value);
+    reconcileHoldsAgainstContainers(
+      containers.value,
+      undefined,
+      handleTerminalResolvedFromReconciliation,
+    );
     if (groupByStack.value) {
       await loadGroups();
     }
@@ -359,6 +397,8 @@ const {
   getTriggerKey,
   isContainerUpdateInProgress,
   isContainerUpdateQueued,
+  isContainerScanInProgress,
+  isContainerRowLocked,
   policyError,
   policyInProgress,
   policyMessage,
@@ -1052,7 +1092,7 @@ const renderGroups = computed<RenderGroup[]>(() => {
 });
 
 const { allColumns, visibleColumns, activeColumns, showColumnPicker, toggleColumn } =
-  useColumnVisibility(isCompact);
+  useColumnVisibility();
 
 const tableColumns = computed(() =>
   activeColumns.value.map((column) => ({
@@ -1147,22 +1187,6 @@ async function handleSseScanCompleted() {
 }
 
 const sseScanCompletedListener = handleSseScanCompleted as EventListener;
-function resolveActiveOperationPhase(args: {
-  status: 'queued' | 'in-progress';
-  phase: unknown;
-  previousPhase?: unknown;
-}): ActiveContainerUpdateOperationPhase {
-  if (isActiveContainerUpdateOperationPhaseForStatus(args.status, args.phase)) {
-    return args.phase;
-  }
-  if (
-    args.previousPhase !== undefined &&
-    isActiveContainerUpdateOperationPhaseForStatus(args.status, args.previousPhase)
-  ) {
-    return args.previousPhase;
-  }
-  return args.status === 'queued' ? 'queued' : 'pulling';
-}
 
 type ContainerPatchKind = 'added' | 'updated' | 'removed';
 
@@ -1174,42 +1198,52 @@ function findContainerIndexByIdOrName(id: unknown, name: unknown): number {
   );
 }
 
+// Patch the id+meta maps once per SSE event instead of spread-copying the full
+// map per field. On a 400-container deployment the old code did 4 full
+// O(N) spreads per event (id-key, meta-key, alias-key, alias-meta-key); this
+// does 2. Identity still changes per call so downstream caches keyed on
+// `containerMetaMap.value !== cached` invalidate correctly. See #301.
 function updateLookupMapsForContainer(raw: Record<string, unknown>) {
   const containerId = typeof raw.id === 'string' ? raw.id : '';
   if (!containerId) {
     return;
   }
-  containerIdMap.value = { ...containerIdMap.value, [containerId]: containerId };
-  containerMetaMap.value = { ...containerMetaMap.value, [containerId]: raw };
   const uiName =
     typeof raw.displayName === 'string' && raw.displayName.trim().length > 0
       ? raw.displayName
       : typeof raw.name === 'string'
         ? raw.name
         : '';
+
+  const nextId = { ...containerIdMap.value, [containerId]: containerId };
+  const nextMeta = { ...containerMetaMap.value, [containerId]: raw };
   if (uiName) {
-    containerIdMap.value = { ...containerIdMap.value, [uiName]: containerId };
-    containerMetaMap.value = { ...containerMetaMap.value, [uiName]: raw };
+    nextId[uiName] = containerId;
+    nextMeta[uiName] = raw;
   }
+  containerIdMap.value = nextId;
+  containerMetaMap.value = nextMeta;
 }
 
 function removeLookupMapsForContainer(id: string, name: string | undefined) {
-  if (id && containerIdMap.value[id] !== undefined) {
-    const nextId = { ...containerIdMap.value };
-    const nextMeta = { ...containerMetaMap.value };
+  const current = containerIdMap.value;
+  const hasId = !!id && current[id] !== undefined;
+  const hasName = !!name && current[name] !== undefined;
+  if (!hasId && !hasName) {
+    return;
+  }
+  const nextId = { ...containerIdMap.value };
+  const nextMeta = { ...containerMetaMap.value };
+  if (hasId) {
     delete nextId[id];
     delete nextMeta[id];
-    containerIdMap.value = nextId;
-    containerMetaMap.value = nextMeta;
   }
-  if (name && containerIdMap.value[name] !== undefined) {
-    const nextId = { ...containerIdMap.value };
-    const nextMeta = { ...containerMetaMap.value };
-    delete nextId[name];
-    delete nextMeta[name];
-    containerIdMap.value = nextId;
-    containerMetaMap.value = nextMeta;
+  if (hasName) {
+    delete nextId[name!];
+    delete nextMeta[name!];
   }
+  containerIdMap.value = nextId;
+  containerMetaMap.value = nextMeta;
 }
 
 // Apply a single-container SSE payload in place instead of falling back to a
@@ -1239,7 +1273,11 @@ function applyContainerPatch(event: Event, kind: ContainerPatchKind) {
       containers.value.splice(idx, 1);
     }
     removeLookupMapsForContainer(id ?? '', name);
-    reconcileHoldsAgainstContainers(containers.value);
+    reconcileHoldsAgainstContainers(
+      containers.value,
+      undefined,
+      handleTerminalResolvedFromReconciliation,
+    );
     return;
   }
 
@@ -1262,102 +1300,63 @@ function applyContainerPatch(event: Event, kind: ContainerPatchKind) {
     Object.assign(containers.value[idx]!, mapped);
   }
   updateLookupMapsForContainer(raw);
-  reconcileHoldsAgainstContainers(containers.value);
+  reconcileHoldsAgainstContainers(
+    containers.value,
+    undefined,
+    handleTerminalResolvedFromReconciliation,
+  );
+}
+
+function findContainerForOperationTarget(target: {
+  containerId?: string;
+  newContainerId?: string;
+  containerName?: string;
+}): Container | undefined {
+  const idx = containers.value.findIndex(
+    (c) =>
+      (typeof target.containerId === 'string' && c.id === target.containerId) ||
+      (typeof target.newContainerId === 'string' && c.id === target.newContainerId) ||
+      (typeof target.containerName === 'string' && c.name === target.containerName),
+  );
+  return idx === -1 ? undefined : containers.value[idx];
 }
 
 function applyOperationPatch(event: Event) {
-  const payload = (event as CustomEvent)?.detail;
-  if (!payload || typeof payload !== 'object') {
+  const parsed = parseUpdateOperationSsePayload((event as CustomEvent)?.detail);
+  if (!parsed) {
     return;
   }
-  const { operationId, containerId, newContainerId, containerName, status, phase } =
-    payload as Record<string, unknown>;
-  if (!isContainerUpdateOperationStatus(status)) {
-    return;
-  }
-
-  const idx = containers.value.findIndex(
-    (c) =>
-      (typeof containerId === 'string' && c.id === containerId) ||
-      (typeof newContainerId === 'string' && c.id === newContainerId) ||
-      (typeof containerName === 'string' && c.name === containerName),
-  );
-
-  // Mutate the matched row in place when found, but do NOT early-return on miss.
-  // Terminal SSEs can race ahead of the container-list refresh that renames the row
-  // post-recreate — the hold map + toast are keyed on operationId/name, not on the
-  // row existing in containers.value, so we must still release the hold and surface
-  // the toast even when idx === -1.
-  const row = idx === -1 ? undefined : containers.value[idx]!;
-  if (isActiveContainerUpdateOperationStatus(status)) {
-    if (!row) {
-      return;
-    }
-    const nextOperation = {
-      ...(row.updateOperation || {}),
-      id: typeof operationId === 'string' ? operationId : (row.updateOperation?.id ?? ''),
-      status,
-      phase: resolveActiveOperationPhase({
-        status,
-        phase,
-        previousPhase: row.updateOperation?.phase,
-      }),
-      updatedAt: new Date().toISOString(),
-    };
-    row.updateOperation = nextOperation;
-    if (typeof operationId === 'string' && operationId.length > 0) {
-      holdOperationDisplay({
-        operationId,
-        operation: nextOperation,
-        containerId: typeof containerId === 'string' ? containerId : undefined,
-        newContainerId: typeof newContainerId === 'string' ? newContainerId : undefined,
-        containerName: typeof containerName === 'string' ? containerName : undefined,
-        sortSnapshot: {
-          status: row.status,
-          updateKind: row.updateKind,
-          newTag: row.newTag,
-          currentTag: row.currentTag,
-          image: row.image,
-          imageCreated: row.imageCreated,
-        },
-      });
-    }
-  } else {
-    if (row) {
-      row.updateOperation = undefined;
-    }
-    const target = {
-      operationId: typeof operationId === 'string' ? operationId : undefined,
-      containerId: typeof containerId === 'string' ? containerId : undefined,
-      newContainerId: typeof newContainerId === 'string' ? newContainerId : undefined,
-      containerName: typeof containerName === 'string' ? containerName : undefined,
-    };
-    const wasTracked = findMatchingOperationIds(target).length > 0;
-    const toastName =
-      row?.name ??
-      (typeof containerName === 'string' && containerName.length > 0 ? containerName : 'container');
-    // Defer terminal toasts until the hold window expires so the row settles
-    // to its new state first — firing a "Updated" toast while the row still
-    // shows the "updating" spinner confuses users.
-    if (status === 'succeeded') {
-      scheduleHeldOperationRelease(target);
-      if (wasTracked) {
-        setTimeout(() => toast.success(`Updated: ${toastName}`), OPERATION_DISPLAY_HOLD_MS);
+  applyUpdateOperationSseToHold({
+    parsed,
+    resolveContainer: findContainerForOperationTarget,
+    // ContainersView drives row reactivity by mutating updateOperation in place,
+    // so the view keeps responsibility for that while the composable owns the
+    // hold map + snapshot.
+    onActiveOperationComputed: ({ container, nextOperation }) => {
+      (container as Container).updateOperation = nextOperation;
+    },
+    // Terminal SSEs can race ahead of the container-list refresh that renames
+    // the row post-recreate — the hold + toast are keyed on operationId/name,
+    // so we still release the hold and (if tracked) fire the deferred toast
+    // even when the row has already fallen out of containers.value.
+    onTerminalEvent: ({ container, status, name, wasTracked }) => {
+      if (container) {
+        (container as Container).updateOperation = undefined;
       }
-    } else if (status === 'failed') {
-      scheduleHeldOperationRelease(target);
-      if (wasTracked) {
-        setTimeout(() => toast.error(`Update failed: ${toastName}`), OPERATION_DISPLAY_HOLD_MS);
+      if (!wasTracked) {
+        return;
       }
-    } else if (status === 'rolled-back') {
-      scheduleHeldOperationRelease(target);
-      if (wasTracked) {
-        setTimeout(() => toast.error(`Rolled back: ${toastName}`), OPERATION_DISPLAY_HOLD_MS);
+      // Defer terminal toasts until the hold window ends so the row settles
+      // before the toast announces the outcome (rc.12 9d48922a).
+      if (status === 'succeeded') {
+        setTimeout(() => toast.success(`Updated: ${name}`), OPERATION_DISPLAY_HOLD_MS);
+      } else if (status === 'failed') {
+        setTimeout(() => toast.error(`Update failed: ${name}`), OPERATION_DISPLAY_HOLD_MS);
+      } else {
+        setTimeout(() => toast.error(`Rolled back: ${name}`), OPERATION_DISPLAY_HOLD_MS);
       }
-    } else {
-      clearHeldOperation(target);
-    }
-  }
+    },
+  });
 }
 
 const sseConnectedListener = handleSseContainerChanged as EventListener;
@@ -1450,6 +1449,8 @@ provide(containersViewTemplateContextKey, {
   actionInProgress,
   isContainerUpdateInProgress,
   isContainerUpdateQueued,
+  isContainerScanInProgress,
+  isContainerRowLocked,
   updateAllInGroup,
   tableColumns,
   containerSortKey,

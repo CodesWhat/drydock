@@ -1,3 +1,5 @@
+export type ContainerActionKind = 'update' | 'scan' | 'lifecycle' | 'delete';
+
 interface ContainerActionKeyInput {
   id?: unknown;
   name?: unknown;
@@ -39,11 +41,35 @@ export function getContainerActionIdentityKey(container: ContainerActionKeyInput
   return buildContainerIdentityKey(container) || getContainerActionKey(container);
 }
 
-export function hasTrackedContainerAction(
-  trackedActions: Pick<Set<string>, 'has'>,
+export function getTrackedContainerActionKind(
+  trackedActions: Map<string, ContainerActionKind>,
   container: ContainerActionKeyInput,
-): boolean {
+): ContainerActionKind | undefined {
   const id = asNonEmptyString(container.id);
   const name = asNonEmptyString(container.name);
-  return Boolean((id && trackedActions.has(id)) || (name && trackedActions.has(name)));
+  if (id) {
+    const kind = trackedActions.get(id);
+    if (kind !== undefined) {
+      return kind;
+    }
+  }
+  if (name) {
+    return trackedActions.get(name);
+  }
+  return undefined;
+}
+
+export function hasTrackedContainerAction(
+  trackedActions: Map<string, ContainerActionKind>,
+  container: ContainerActionKeyInput,
+): boolean {
+  return getTrackedContainerActionKind(trackedActions, container) !== undefined;
+}
+
+export function hasTrackedContainerActionOfKind(
+  trackedActions: Map<string, ContainerActionKind>,
+  container: ContainerActionKeyInput,
+  kind: ContainerActionKind,
+): boolean {
+  return getTrackedContainerActionKind(trackedActions, container) === kind;
 }

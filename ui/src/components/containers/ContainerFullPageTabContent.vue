@@ -5,6 +5,7 @@ import AppButton from '../AppButton.vue';
 import ContainerLogs from './ContainerLogs.vue';
 import ContainerStats from './ContainerStats.vue';
 import UpdateMaturityBadge from './UpdateMaturityBadge.vue';
+import UpdateEligibilityBadges from './UpdateEligibilityBadges.vue';
 import SuggestedTagBadge from './SuggestedTagBadge.vue';
 import FloatingTagBadge from './FloatingTagBadge.vue';
 import ReleaseNotesLink from './ReleaseNotesLink.vue';
@@ -273,6 +274,12 @@ function isActionInProgress(container: { id?: unknown; name?: unknown }) {
                   :image-digest-watch="selectedContainer.imageDigestWatch"
                 />
               </div>
+              <UpdateEligibilityBadges
+                v-if="selectedContainer.updateEligibility"
+                :eligibility="selectedContainer.updateEligibility"
+                variant="full"
+                :has-active-operation-badge="Boolean(selectedContainer.updateOperation)"
+              />
               <ReleaseNotesLink :release-notes="selectedContainer.releaseNotes" :release-link="selectedContainer.releaseLink" />
               <ProjectLink :source-repo="selectedContainer.sourceRepo" />
               <div class="pt-1 space-y-1.5">
