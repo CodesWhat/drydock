@@ -1129,6 +1129,33 @@ onMounted(() => {
 const openActionsMenu = ref<string | null>(null);
 const actionsMenuStyle = ref<Record<string, string>>({});
 
+// Estimated max menu heights — used so popovers flip above the trigger when
+// available room below the viewport is shorter than the menu would render at.
+// Slightly generous to bias toward correct behavior on the boundary.
+const ACTIONS_MENU_ESTIMATED_HEIGHT_PX = 320;
+const COLUMN_PICKER_ESTIMATED_HEIGHT_PX = 360;
+const POPOVER_GAP_PX = 4;
+
+type PopoverHorizontalAnchor = { right: number } | { left: number };
+
+function buildPopoverStyle(
+  rect: DOMRect,
+  horizontalAnchor: PopoverHorizontalAnchor,
+  estimatedHeightPx: number,
+): Record<string, string> {
+  const spaceBelow = window.innerHeight - rect.bottom;
+  const spaceAbove = rect.top;
+  const flipUp = spaceBelow < estimatedHeightPx && spaceAbove > spaceBelow;
+  const verticalAnchor = flipUp
+    ? { bottom: `${window.innerHeight - rect.top + POPOVER_GAP_PX}px` }
+    : { top: `${rect.bottom + POPOVER_GAP_PX}px` };
+  const horizontal =
+    'right' in horizontalAnchor
+      ? { right: `${horizontalAnchor.right}px` }
+      : { left: `${horizontalAnchor.left}px` };
+  return { position: 'fixed', ...verticalAnchor, ...horizontal };
+}
+
 function toggleActionsMenu(name: string, event: MouseEvent) {
   if (openActionsMenu.value === name) {
     openActionsMenu.value = null;
@@ -1137,11 +1164,11 @@ function toggleActionsMenu(name: string, event: MouseEvent) {
   openActionsMenu.value = name;
   const button = event.currentTarget as HTMLElement;
   const rect = button.getBoundingClientRect();
-  actionsMenuStyle.value = {
-    position: 'fixed',
-    top: `${rect.bottom + 4}px`,
-    right: `${window.innerWidth - rect.right}px`,
-  };
+  actionsMenuStyle.value = buildPopoverStyle(
+    rect,
+    { right: window.innerWidth - rect.right },
+    ACTIONS_MENU_ESTIMATED_HEIGHT_PX,
+  );
 }
 
 function closeActionsMenu() {
@@ -1154,17 +1181,27 @@ function toggleColumnPicker(event: MouseEvent) {
   if (showColumnPicker.value) {
     const button = event.currentTarget as HTMLElement;
     const rect = button.getBoundingClientRect();
-    columnPickerStyle.value = {
-      position: 'fixed',
-      top: `${rect.bottom + 4}px`,
-      left: `${rect.left}px`,
-    };
+    columnPickerStyle.value = buildPopoverStyle(
+      rect,
+      { left: rect.left },
+      COLUMN_PICKER_ESTIMATED_HEIGHT_PX,
+    );
   }
 }
 
 function handleGlobalClick() {
   openActionsMenu.value = null;
   showColumnPicker.value = false;
+}
+
+// Popovers are position:fixed and anchored at click-time via getBoundingClientRect;
+// scrolling moves the trigger button while the popover stays put. Close on scroll
+// to keep the popover from drifting away from its visual anchor.
+function handleGlobalScroll() {
+  if (openActionsMenu.value !== null || showColumnPicker.value) {
+    openActionsMenu.value = null;
+    showColumnPicker.value = false;
+  }
 }
 
 // Refreshes container list and security detail data. Used on (re)connect and resync-required
@@ -1375,6 +1412,7 @@ const sseContainerRemovedListener = ((event: Event) => {
 }) as EventListener;
 onMounted(() => {
   document.addEventListener('click', handleGlobalClick);
+  document.addEventListener('scroll', handleGlobalScroll, true);
   globalThis.addEventListener('dd:sse-scan-completed', sseScanCompletedListener);
   globalThis.addEventListener('dd:sse-container-added', sseContainerAddedListener);
   globalThis.addEventListener('dd:sse-container-updated', sseContainerUpdatedListener);
@@ -1386,6 +1424,7 @@ onMounted(() => {
 onUnmounted(() => {
   clearAllOperationDisplayHolds();
   document.removeEventListener('click', handleGlobalClick);
+  document.removeEventListener('scroll', handleGlobalScroll, true);
   globalThis.removeEventListener('dd:sse-scan-completed', sseScanCompletedListener);
   globalThis.removeEventListener('dd:sse-container-added', sseContainerAddedListener);
   globalThis.removeEventListener('dd:sse-container-updated', sseContainerUpdatedListener);
