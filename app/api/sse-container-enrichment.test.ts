@@ -101,4 +101,143 @@ describe('enrichContainerLifecyclePayloadWithEligibility', () => {
       expect(result).toBe(payload);
     });
   });
+
+  describe('active operation lookup', () => {
+    // Fixture with differing local/remote tags so hasRawTagOrDigestUpdate returns true,
+    // allowing computeUpdateEligibility to proceed past the short-circuit and invoke
+    // getActiveOperation.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const updatePayload = (): any => ({
+      id: 'c1',
+      name: 'mysql',
+      image: { tag: { value: '9.6.0' } },
+      result: { tag: '9.7.0' },
+    });
+
+    test('byId returns valid in-progress operation → active-operation blocker added', () => {
+      mockGetActiveOperationByContainerId.mockReturnValueOnce({
+        id: 'op-1',
+        status: 'in-progress',
+        updatedAt: '2026-04-26T00:00:00Z',
+      });
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = enrichContainerLifecyclePayloadWithEligibility(updatePayload()) as any;
+
+      expect(
+        result.updateEligibility.blockers.some(
+          (b: { reason: string }) => b.reason === 'active-operation',
+        ),
+      ).toBe(true);
+      // byName must NOT have been called because byId was truthy
+      expect(mockGetActiveOperationByContainerName).not.toHaveBeenCalled();
+    });
+
+    test('byId returns undefined, byName returns valid queued operation → active-operation blocker added', () => {
+      mockGetActiveOperationByContainerId.mockReturnValueOnce(undefined);
+      mockGetActiveOperationByContainerName.mockReturnValueOnce({
+        id: 'op-2',
+        status: 'queued',
+        updatedAt: '2026-04-26T00:00:00Z',
+      });
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = enrichContainerLifecyclePayloadWithEligibility(updatePayload()) as any;
+
+      expect(
+        result.updateEligibility.blockers.some(
+          (b: { reason: string }) => b.reason === 'active-operation',
+        ),
+      ).toBe(true);
+    });
+
+    test('both byId and byName return undefined → no active-operation blocker', () => {
+      mockGetActiveOperationByContainerId.mockReturnValueOnce(undefined);
+      mockGetActiveOperationByContainerName.mockReturnValueOnce(undefined);
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = enrichContainerLifecyclePayloadWithEligibility(updatePayload()) as any;
+
+      expect(
+        result.updateEligibility.blockers.some(
+          (b: { reason: string }) => b.reason === 'active-operation',
+        ),
+      ).toBe(false);
+    });
+
+    test('byId returns a non-object (string) → falls through typeof guard → no active-operation blocker', () => {
+      mockGetActiveOperationByContainerId.mockReturnValueOnce('not-an-object');
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = enrichContainerLifecyclePayloadWithEligibility(updatePayload()) as any;
+
+      expect(
+        result.updateEligibility.blockers.some(
+          (b: { reason: string }) => b.reason === 'active-operation',
+        ),
+      ).toBe(false);
+    });
+
+    test('operation has invalid id (not a string) → no active-operation blocker', () => {
+      mockGetActiveOperationByContainerId.mockReturnValueOnce({ id: 42, status: 'queued' });
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = enrichContainerLifecyclePayloadWithEligibility(updatePayload()) as any;
+
+      expect(
+        result.updateEligibility.blockers.some(
+          (b: { reason: string }) => b.reason === 'active-operation',
+        ),
+      ).toBe(false);
+    });
+
+    test('operation has invalid status (completed) → no active-operation blocker', () => {
+      mockGetActiveOperationByContainerId.mockReturnValueOnce({
+        id: 'op-3',
+        status: 'completed',
+      });
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = enrichContainerLifecyclePayloadWithEligibility(updatePayload()) as any;
+
+      expect(
+        result.updateEligibility.blockers.some(
+          (b: { reason: string }) => b.reason === 'active-operation',
+        ),
+      ).toBe(false);
+    });
+
+    test('operation has no updatedAt → blocker still attached, updatedAt absent', () => {
+      mockGetActiveOperationByContainerId.mockReturnValueOnce({
+        id: 'op-4',
+        status: 'in-progress',
+      });
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = enrichContainerLifecyclePayloadWithEligibility(updatePayload()) as any;
+
+      expect(
+        result.updateEligibility.blockers.some(
+          (b: { reason: string }) => b.reason === 'active-operation',
+        ),
+      ).toBe(true);
+    });
+
+    test('operation has non-string updatedAt (number) → blocker still attached, updatedAt falls through to undefined', () => {
+      mockGetActiveOperationByContainerId.mockReturnValueOnce({
+        id: 'op-5',
+        status: 'in-progress',
+        updatedAt: 123,
+      });
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = enrichContainerLifecyclePayloadWithEligibility(updatePayload()) as any;
+
+      expect(
+        result.updateEligibility.blockers.some(
+          (b: { reason: string }) => b.reason === 'active-operation',
+        ),
+      ).toBe(true);
+    });
+  });
 });
