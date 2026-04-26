@@ -10,6 +10,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0-rc.14] — 2026-04-26
+
+### Fixed
+
+- **Update-eligibility pill never rendered (rc.13 regression).** The blocker pills shipped in rc.13 (`Trigger filtered`, `Below threshold`, `Maturing`, etc.) silently rendered nothing for every container in every view (table rows, side panel, full-page detail, dashboard widget). The backend computed eligibility correctly and serialised it in the API response, but the UI's `mapApiContainer()` didn't declare or pass through the `updateEligibility` field — TypeScript's structural typing dropped the unknown JSON property at the boundary. Fix is two-part:
+  - **UI mapper** — `ApiContainerInput` now declares `updateEligibility`, and `mapApiContainer` passes it through with a `deriveUpdateEligibility` validator that rejects malformed eligibility objects (missing `eligible` boolean, missing `evaluatedAt`) and filters out malformed individual blockers (bad `reason` strings, missing `message`). One change lights up every consumer (list, side panel, full-page, dashboard).
+  - **Backend SSE enrichment** — the store broadcasts raw container objects on `dd:container-added` / `dd:container-updated`, but `updateEligibility` is computed on-demand in the list handler and never persisted. Without enrichment, live SSE patches would deliver containers with eligibility undefined, flickering the pill on every update. New `sse-container-enrichment.ts` helper computes eligibility from registry triggers + active operations and attaches it to each lifecycle payload before broadcast.
+  - Reported in [#307](https://github.com/CodesWhat/drydock/discussions/307).
+- **[#323](https://github.com/CodesWhat/drydock/discussions/323) — Popovers on the Containers list rendered off-screen for the last row + drifted on scroll.** The "More" actions menu and the column picker both used `position: fixed` with coordinates captured from the trigger's `getBoundingClientRect()` and unconditionally opened *below* the trigger. When the trigger sat near the bottom of the viewport (e.g. the last container row), the menu was clipped off-screen and inaccessible. The popovers also stayed at their captured pixel coordinates while the table scrolled, drifting away from the trigger. Added a small `buildPopoverStyle` helper that measures available space below vs above and flips the popover upward when there's not enough room below; added a global `scroll` listener (capture phase, to catch internal scroll containers) that closes both popovers since their fixed coordinates can't track a moving anchor. Sibling popovers in this codebase (NotificationBell, etc.) intentionally untouched here — different UX surfaces, separate consideration.
+
+### Tests / CI
+
+- **Eligibility coverage closed end-to-end.** 13 new mapper unit tests (full eligibility roundtrip including `actionHint` / `liftableAt` / `details`, all 13 valid `UpdateBlockerReason` values, malformed-blocker filtering, missing-field rejection, non-array `blockers` handled as empty list). 7 new SSE enrichment tests (happy path, malformed payloads, error resilience). The 55 existing `UpdateEligibilityBadges` component tests already covered the render gate. Manual verification: built `drydock:dev` with the fix, ran with `DD_ACTION_DOCKER_LOCAL_AUTO=oninclude`, confirmed 23 backend `trigger-not-included` blockers render as 23 amber "Trigger filtered" pills in the Kind column.
+- **Popover positioning coverage.** 6 new tests in `ContainersView.spec.ts`: actions menu and column picker each flip up when the trigger is near viewport bottom; global scroll closes the actions menu, closes the column picker, and is a no-op when nothing is open; scroll listener is removed on unmount. Manual verification: built `drydock:dev` with the fix, scrolled the last container row to the viewport bottom, opened its More menu — the menu rendered fully within the viewport (anchored bottom: 48px from viewport top) instead of clipping off-screen.
+
 ## [1.5.0-rc.13] — 2026-04-24
 
 ### Added
@@ -1390,7 +1405,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.5.0-rc.13...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.5.0-rc.14...HEAD
+[1.5.0-rc.14]: https://github.com/CodesWhat/drydock/compare/v1.5.0-rc.13...v1.5.0-rc.14
 [1.5.0-rc.13]: https://github.com/CodesWhat/drydock/compare/v1.5.0-rc.12...v1.5.0-rc.13
 [1.5.0-rc.12]: https://github.com/CodesWhat/drydock/compare/v1.5.0-rc.11...v1.5.0-rc.12
 [1.5.0-rc.11]: https://github.com/CodesWhat/drydock/compare/v1.5.0-rc.10...v1.5.0-rc.11

@@ -2352,6 +2352,109 @@ describe('ContainersView', () => {
       }
     });
 
+    it('actions menu flips up when trigger is near the bottom of the viewport', async () => {
+      const c = makeContainer({ id: 'c1', name: 'nginx' });
+      const wrapper = await mountContainersView(
+        [c],
+        [{ id: 'c1', name: 'nginx', displayName: 'nginx' }],
+      );
+      const vm = wrapper.vm as any;
+
+      // bottom: 700, top: 680 → spaceBelow = 768 - 700 = 68 < 320 (ACTIONS_MENU_ESTIMATED_HEIGHT_PX)
+      // spaceAbove = 680 > 68 → flip up
+      // bottom style = 768 - 680 + 4 = 92px
+      const event = {
+        currentTarget: {
+          getBoundingClientRect: () => ({ bottom: 700, top: 680, right: 400, left: 80 }),
+        },
+      } as unknown as MouseEvent;
+
+      vm.toggleActionsMenu('nginx', event);
+      expect(vm.openActionsMenu).toBe('nginx');
+      expect(vm.actionsMenuStyle.bottom).toBe('92px');
+      expect(vm.actionsMenuStyle.top).toBeUndefined();
+    });
+
+    it('column picker flips up when trigger is near the bottom of the viewport', async () => {
+      const c = makeContainer({ id: 'c1', name: 'nginx' });
+      const wrapper = await mountContainersView(
+        [c],
+        [{ id: 'c1', name: 'nginx', displayName: 'nginx' }],
+      );
+      const vm = wrapper.vm as any;
+
+      // bottom: 700, top: 680 → spaceBelow = 68 < 360 (COLUMN_PICKER_ESTIMATED_HEIGHT_PX)
+      // spaceAbove = 680 > 68 → flip up
+      // bottom style = 768 - 680 + 4 = 92px
+      const event = {
+        currentTarget: {
+          getBoundingClientRect: () => ({ bottom: 700, top: 680, right: 400, left: 80 }),
+        },
+      } as unknown as MouseEvent;
+
+      vm.toggleColumnPicker(event);
+      expect(vm.showColumnPicker).toBe(true);
+      expect(vm.columnPickerStyle.bottom).toBe('92px');
+      expect(vm.columnPickerStyle.top).toBeUndefined();
+    });
+
+    it('global scroll closes the actions menu', async () => {
+      const c = makeContainer({ id: 'c1', name: 'nginx' });
+      const wrapper = await mountContainersView(
+        [c],
+        [{ id: 'c1', name: 'nginx', displayName: 'nginx' }],
+      );
+      const vm = wrapper.vm as any;
+
+      vm.openActionsMenu = 'nginx';
+      document.dispatchEvent(new Event('scroll', { bubbles: false }));
+      await flushPromises();
+      expect(vm.openActionsMenu).toBeNull();
+    });
+
+    it('global scroll closes the column picker', async () => {
+      const c = makeContainer({ id: 'c1', name: 'nginx' });
+      const wrapper = await mountContainersView(
+        [c],
+        [{ id: 'c1', name: 'nginx', displayName: 'nginx' }],
+      );
+      const vm = wrapper.vm as any;
+
+      vm.showColumnPicker = true;
+      document.dispatchEvent(new Event('scroll', { bubbles: false }));
+      await flushPromises();
+      expect(vm.showColumnPicker).toBe(false);
+    });
+
+    it('global scroll is a no-op when nothing is open', async () => {
+      const c = makeContainer({ id: 'c1', name: 'nginx' });
+      const wrapper = await mountContainersView(
+        [c],
+        [{ id: 'c1', name: 'nginx', displayName: 'nginx' }],
+      );
+      const vm = wrapper.vm as any;
+
+      expect(vm.openActionsMenu).toBeNull();
+      expect(vm.showColumnPicker).toBe(false);
+      // Dispatching scroll when nothing is open should not throw or change state
+      document.dispatchEvent(new Event('scroll', { bubbles: false }));
+      await flushPromises();
+      expect(vm.openActionsMenu).toBeNull();
+      expect(vm.showColumnPicker).toBe(false);
+    });
+
+    it('scroll listener is removed on unmount', async () => {
+      const c = makeContainer({ id: 'c1', name: 'nginx' });
+      const wrapper = await mountContainersView(
+        [c],
+        [{ id: 'c1', name: 'nginx', displayName: 'nginx' }],
+      );
+      // Unmounting should call removeEventListener for the scroll handler without throwing
+      expect(() => wrapper.unmount()).not.toThrow();
+      // After unmount, dispatching scroll should not throw (listener is gone)
+      expect(() => document.dispatchEvent(new Event('scroll', { bubbles: false }))).not.toThrow();
+    });
+
     it('registers granular container lifecycle listeners and triggers load on connected', async () => {
       vi.useFakeTimers();
       const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');

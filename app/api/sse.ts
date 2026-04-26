@@ -1,7 +1,10 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import type { Request, Response } from 'express';
 import express from 'express';
-import type { SelfUpdateStartingEventPayload } from '../event/index.js';
+import type {
+  ContainerLifecycleEventPayload,
+  SelfUpdateStartingEventPayload,
+} from '../event/index.js';
 import {
   registerAgentConnected,
   registerAgentDisconnected,
@@ -20,6 +23,7 @@ import {
   createActiveSseClientRegistryTestAdapter,
   type FlushableResponse,
 } from './sse-active-client-registry.js';
+import { enrichContainerLifecyclePayloadWithEligibility } from './sse-container-enrichment.js';
 import { bootId, SseEventBuffer } from './sse-event-buffer.js';
 import { createSelfUpdateAckProtocol } from './sse-self-update-ack-protocol.js';
 
@@ -420,13 +424,19 @@ export function init(): express.Router {
     }),
   );
   trackEventListenerDeregistration(
-    registerContainerAdded((payload: unknown) => {
-      broadcastContainerEvent('dd:container-added', payload);
+    registerContainerAdded((payload: ContainerLifecycleEventPayload) => {
+      broadcastContainerEvent(
+        'dd:container-added',
+        enrichContainerLifecyclePayloadWithEligibility(payload),
+      );
     }),
   );
   trackEventListenerDeregistration(
-    registerContainerUpdated((payload: unknown) => {
-      broadcastContainerEvent('dd:container-updated', payload);
+    registerContainerUpdated((payload: ContainerLifecycleEventPayload) => {
+      broadcastContainerEvent(
+        'dd:container-updated',
+        enrichContainerLifecyclePayloadWithEligibility(payload),
+      );
     }),
   );
   trackEventListenerDeregistration(

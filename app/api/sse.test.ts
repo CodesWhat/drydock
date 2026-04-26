@@ -121,6 +121,10 @@ vi.mock('../event/index', () => ({
   registerAgentDisconnected: mockRegisterAgentDisconnected,
 }));
 
+vi.mock('./sse-container-enrichment.js', () => ({
+  enrichContainerLifecyclePayloadWithEligibility: (payload) => payload,
+}));
+
 vi.mock('../log', () => ({
   default: {
     child: vi.fn(() => ({
