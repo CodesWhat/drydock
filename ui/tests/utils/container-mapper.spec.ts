@@ -1476,4 +1476,230 @@ describe('container-mapper', () => {
       expect(c.releaseNotes).toBeNull();
     });
   });
+
+  describe('mapApiContainer — updateEligibility', () => {
+    it('maps a complete eligibility object with all fields populated', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateEligibility: {
+            eligible: false,
+            evaluatedAt: '2026-04-25T12:00:00.000Z',
+            blockers: [
+              {
+                reason: 'snoozed',
+                message: 'Snoozed until May 1.',
+                actionable: true,
+                actionHint: 'Clear snooze from the container menu.',
+                liftableAt: '2026-05-01T00:00:00.000Z',
+                details: { snoozeUntil: '2026-05-01T00:00:00.000Z' },
+              },
+            ],
+          },
+        }),
+      );
+
+      expect(c.updateEligibility).toEqual({
+        eligible: false,
+        evaluatedAt: '2026-04-25T12:00:00.000Z',
+        blockers: [
+          {
+            reason: 'snoozed',
+            message: 'Snoozed until May 1.',
+            actionable: true,
+            actionHint: 'Clear snooze from the container menu.',
+            liftableAt: '2026-05-01T00:00:00.000Z',
+            details: { snoozeUntil: '2026-05-01T00:00:00.000Z' },
+          },
+        ],
+      });
+    });
+
+    it('maps eligibility with eligible:true and empty blockers', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateEligibility: {
+            eligible: true,
+            evaluatedAt: '2026-04-25T12:00:00.000Z',
+            blockers: [],
+          },
+        }),
+      );
+
+      expect(c.updateEligibility).toEqual({
+        eligible: true,
+        evaluatedAt: '2026-04-25T12:00:00.000Z',
+        blockers: [],
+      });
+    });
+
+    it('returns undefined when updateEligibility is absent', () => {
+      const c = mapApiContainer(makeApiContainer());
+      expect(c.updateEligibility).toBeUndefined();
+    });
+
+    it('returns undefined when updateEligibility is null', () => {
+      const c = mapApiContainer(makeApiContainer({ updateEligibility: null }));
+      expect(c.updateEligibility).toBeUndefined();
+    });
+
+    it('returns undefined when eligible is not a boolean', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateEligibility: {
+            eligible: 'yes',
+            evaluatedAt: '2026-04-25T12:00:00.000Z',
+            blockers: [],
+          },
+        }),
+      );
+      expect(c.updateEligibility).toBeUndefined();
+    });
+
+    it('returns undefined when evaluatedAt is missing', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateEligibility: {
+            eligible: false,
+            blockers: [],
+          },
+        }),
+      );
+      expect(c.updateEligibility).toBeUndefined();
+    });
+
+    it('returns undefined when evaluatedAt is not a string', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateEligibility: {
+            eligible: false,
+            evaluatedAt: 1745582400000,
+            blockers: [],
+          },
+        }),
+      );
+      expect(c.updateEligibility).toBeUndefined();
+    });
+
+    it('filters out blockers with an invalid reason string', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateEligibility: {
+            eligible: false,
+            evaluatedAt: '2026-04-25T12:00:00.000Z',
+            blockers: [
+              { reason: 'not-a-real-reason', message: 'Bad.', actionable: false },
+              { reason: 'snoozed', message: 'Snoozed.', actionable: true },
+            ],
+          },
+        }),
+      );
+
+      expect(c.updateEligibility?.blockers).toHaveLength(1);
+      expect(c.updateEligibility?.blockers[0].reason).toBe('snoozed');
+    });
+
+    it('filters out blockers with a missing message', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateEligibility: {
+            eligible: false,
+            evaluatedAt: '2026-04-25T12:00:00.000Z',
+            blockers: [
+              { reason: 'skip-tag', actionable: true },
+              { reason: 'threshold-not-reached', message: 'Threshold not met.', actionable: true },
+            ],
+          },
+        }),
+      );
+
+      expect(c.updateEligibility?.blockers).toHaveLength(1);
+      expect(c.updateEligibility?.blockers[0].reason).toBe('threshold-not-reached');
+    });
+
+    it('filters out non-object blocker entries without dropping valid ones', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateEligibility: {
+            eligible: false,
+            evaluatedAt: '2026-04-25T12:00:00.000Z',
+            blockers: [
+              null,
+              'invalid-string-entry',
+              42,
+              { reason: 'agent-mismatch', message: 'Agent mismatch.', actionable: true },
+            ],
+          },
+        }),
+      );
+
+      expect(c.updateEligibility?.blockers).toHaveLength(1);
+      expect(c.updateEligibility?.blockers[0].reason).toBe('agent-mismatch');
+    });
+
+    it('defaults actionable to false when not a boolean', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateEligibility: {
+            eligible: false,
+            evaluatedAt: '2026-04-25T12:00:00.000Z',
+            blockers: [{ reason: 'rollback-container', message: 'Rollback.', actionable: 'yes' }],
+          },
+        }),
+      );
+
+      expect(c.updateEligibility?.blockers[0].actionable).toBe(false);
+    });
+
+    it('omits optional blocker fields when absent', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateEligibility: {
+            eligible: false,
+            evaluatedAt: '2026-04-25T12:00:00.000Z',
+            blockers: [
+              { reason: 'no-update-trigger-configured', message: 'No trigger.', actionable: true },
+            ],
+          },
+        }),
+      );
+
+      const blocker = c.updateEligibility?.blockers[0];
+      expect(blocker).toBeDefined();
+      expect(blocker?.actionHint).toBeUndefined();
+      expect(blocker?.liftableAt).toBeUndefined();
+      expect(blocker?.details).toBeUndefined();
+    });
+
+    const ALL_VALID_REASONS = [
+      'no-update-available',
+      'rollback-container',
+      'active-operation',
+      'security-scan-blocked',
+      'snoozed',
+      'skip-tag',
+      'skip-digest',
+      'maturity-not-reached',
+      'threshold-not-reached',
+      'trigger-excluded',
+      'trigger-not-included',
+      'agent-mismatch',
+      'no-update-trigger-configured',
+    ] as const;
+
+    for (const reason of ALL_VALID_REASONS) {
+      it(`accepts valid UpdateBlockerReason "${reason}"`, () => {
+        const c = mapApiContainer(
+          makeApiContainer({
+            updateEligibility: {
+              eligible: false,
+              evaluatedAt: '2026-04-25T12:00:00.000Z',
+              blockers: [{ reason, message: 'Test message.', actionable: false }],
+            },
+          }),
+        );
+        expect(c.updateEligibility?.blockers).toHaveLength(1);
+        expect(c.updateEligibility?.blockers[0].reason).toBe(reason);
+      });
+    }
+  });
 });

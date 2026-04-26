@@ -22,6 +22,9 @@ import type {
   ContainerSecurityDelta,
   ContainerSecuritySummary,
   ContainerUpdateOperation,
+  UpdateBlocker,
+  UpdateBlockerReason,
+  UpdateEligibility,
 } from '../types/container';
 import {
   isActiveContainerUpdateOperationPhaseForStatus,
@@ -105,6 +108,21 @@ interface ApiContainerSecurityScan {
   summary?: ApiContainerSecuritySummary | null;
 }
 
+interface ApiContainerUpdateBlocker {
+  reason?: unknown;
+  message?: unknown;
+  actionable?: unknown;
+  actionHint?: unknown;
+  liftableAt?: unknown;
+  details?: unknown;
+}
+
+interface ApiContainerUpdateEligibility {
+  eligible?: unknown;
+  blockers?: unknown;
+  evaluatedAt?: unknown;
+}
+
 type SecurityScanType = 'scan' | 'updateScan';
 
 /**
@@ -137,6 +155,7 @@ export interface ApiContainerInput {
   updateDetectedAt?: unknown;
   updateOperation?: ApiContainerUpdateOperation | null;
   updatePolicy?: ApiContainerUpdatePolicy | null;
+  updateEligibility?: ApiContainerUpdateEligibility | null;
   details?: ApiContainerDetails | null;
   tagFamily?: unknown;
   includeTags?: unknown;
@@ -605,6 +624,59 @@ function deriveReleaseNotes(apiContainer: ApiContainerInput): ContainerReleaseNo
   return { title, body, url, publishedAt, provider };
 }
 
+const VALID_UPDATE_BLOCKER_REASONS: ReadonlySet<UpdateBlockerReason> = new Set([
+  'no-update-available',
+  'rollback-container',
+  'active-operation',
+  'security-scan-blocked',
+  'snoozed',
+  'skip-tag',
+  'skip-digest',
+  'maturity-not-reached',
+  'threshold-not-reached',
+  'trigger-excluded',
+  'trigger-not-included',
+  'agent-mismatch',
+  'no-update-trigger-configured',
+]);
+
+function isUpdateBlockerReason(value: unknown): value is UpdateBlockerReason {
+  return (
+    typeof value === 'string' && VALID_UPDATE_BLOCKER_REASONS.has(value as UpdateBlockerReason)
+  );
+}
+
+function deriveUpdateBlocker(blocker: unknown): UpdateBlocker | null {
+  if (!blocker || typeof blocker !== 'object') return null;
+  const b = blocker as ApiContainerUpdateBlocker;
+  if (!isUpdateBlockerReason(b.reason)) return null;
+  const message = asNonEmptyString(b.message);
+  if (!message) return null;
+  const actionable = typeof b.actionable === 'boolean' ? b.actionable : false;
+  const result: UpdateBlocker = { reason: b.reason, message, actionable };
+  const actionHint = asNonEmptyString(b.actionHint);
+  if (actionHint) result.actionHint = actionHint;
+  const liftableAt = asNonEmptyString(b.liftableAt);
+  if (liftableAt) result.liftableAt = liftableAt;
+  if (b.details && typeof b.details === 'object') {
+    result.details = b.details as Record<string, unknown>;
+  }
+  return result;
+}
+
+function deriveUpdateEligibility(apiContainer: ApiContainerInput): UpdateEligibility | undefined {
+  const eligibility = apiContainer.updateEligibility;
+  if (!eligibility || typeof eligibility !== 'object') return undefined;
+  if (typeof eligibility.eligible !== 'boolean') return undefined;
+  const evaluatedAt = asNonEmptyString(eligibility.evaluatedAt);
+  if (!evaluatedAt) return undefined;
+  const rawBlockers = Array.isArray(eligibility.blockers) ? eligibility.blockers : [];
+  const blockers = rawBlockers
+    .map(deriveUpdateBlocker)
+    .filter((b): b is UpdateBlocker => b !== null);
+  return { eligible: eligibility.eligible, blockers, evaluatedAt };
+}
+
 function deriveUpdateOperation(
   apiContainer: ApiContainerInput,
 ): ContainerUpdateOperation | undefined {
@@ -688,6 +760,7 @@ export function mapApiContainer(apiContainer: ApiContainerInput): Container {
     updateOperation: deriveUpdateOperation(apiContainer),
     updateMaturity: getUpdateMaturity(detectedAt, !!apiContainer.updateAvailable),
     updateMaturityTooltip: formatUpdateAge(detectedAt, !!apiContainer.updateAvailable),
+    updateEligibility: deriveUpdateEligibility(apiContainer),
     updatePolicyState,
     suppressedUpdateTag: deriveSuppressedUpdateTag(apiContainer, updatePolicyState),
     status: apiContainer.status === 'running' ? 'running' : 'stopped',
