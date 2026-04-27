@@ -30,6 +30,7 @@ import {
 } from '../services/container';
 import type { Container } from '../types/container';
 import { getContainerActionIdentityKey } from '../utils/container-action-key';
+import { hasHardBlocker } from '../utils/update-eligibility';
 import { mapApiContainer, mapApiContainers } from '../utils/container-mapper';
 import {
   maturityColor,
@@ -1056,8 +1057,12 @@ const groupedContainers = computed<RenderGroup[]>(() => {
       containers: groupContainers,
       containerCount: groupContainers.length,
       updatesAvailable: groupContainers.filter((container) => container.newTag).length,
+      // updatableCount excludes any hard-eligibility-blocked container so the Update-all
+      // button doesn't enqueue agent-mismatched / no-trigger / rollback / security-blocked
+      // rows that the API would only reject one-by-one. Soft blockers stay updatable
+      // (manual bypass via the per-row Update button + confirm modal).
       updatableCount: groupContainers.filter(
-        (container) => container.newTag && container.bouncer !== 'blocked',
+        (container) => container.newTag && !hasHardBlocker(container.updateEligibility),
       ).length,
     };
     if (key === '__ungrouped__') {
@@ -1083,7 +1088,7 @@ const renderGroups = computed<RenderGroup[]>(() => {
         containerCount: sortedContainers.value.length,
         updatesAvailable: sortedContainers.value.filter((container) => container.newTag).length,
         updatableCount: sortedContainers.value.filter(
-          (container) => container.newTag && container.bouncer !== 'blocked',
+          (container) => container.newTag && !hasHardBlocker(container.updateEligibility),
         ).length,
       },
     ];

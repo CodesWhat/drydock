@@ -7,6 +7,8 @@ import { useContainersViewTemplateContext } from './containersViewTemplateContex
 import { useUpdateBatches } from '../../composables/useUpdateBatches';
 import { getContainerViewKey } from '../../utils/container-view-key';
 import { imageAge } from '../../utils/audit-helpers';
+import { getPrimaryHardBlocker, hasHardBlocker } from '../../utils/update-eligibility';
+import type { Container } from '../../types/container';
 import UpdateMaturityBadge from './UpdateMaturityBadge.vue';
 import UpdateEligibilityBadges from './UpdateEligibilityBadges.vue';
 import SuggestedTagBadge from './SuggestedTagBadge.vue';
@@ -166,7 +168,15 @@ function blockedUpdateTooltip(container: {
   newTag?: string | null;
   updateBouncer?: string;
   updateSecuritySummary?: { critical?: number; high?: number };
+  updateEligibility?: Container['updateEligibility'];
 }) {
+  // Prefer the eligibility blocker message — it covers every hard reason (agent mismatch,
+  // no trigger configured, rollback, security scan, active op, no update). Fall back to
+  // the legacy bouncer-derived tooltip when no eligibility data is present.
+  const hardBlocker = getPrimaryHardBlocker(container.updateEligibility);
+  if (hardBlocker) {
+    return hardBlocker.message;
+  }
   const tag = container.newTag ?? 'update';
   const summary = container.updateSecuritySummary;
   const critical = summary?.critical ?? 0;
@@ -175,6 +185,10 @@ function blockedUpdateTooltip(container: {
     return `Blocked: ${tag} (${critical} ${noun})`;
   }
   return `Blocked: ${tag}`;
+}
+
+function isUpdateHardBlocked(container: { updateEligibility?: Container['updateEligibility'] }) {
+  return hasHardBlocker(container.updateEligibility);
 }
 
 function getGroupByKey(groupKey: string) {
@@ -534,10 +548,10 @@ watchEffect(() => {
                 icon-only
               />
               <ProjectLink v-if="c.sourceRepo" :source-repo="c.sourceRepo" icon-only />
-              <AppIconButton v-if="c.newTag && c.bouncer === 'blocked'" icon="lock" size="sm" variant="muted"
+              <AppIconButton v-if="c.newTag && isUpdateHardBlocked(c)" icon="lock" size="sm" variant="muted"
                       class="cursor-not-allowed opacity-50"
                       :disabled="true"
-                      :tooltip="tt('Blocked by Bouncer')" @click.stop />
+                      :tooltip="tt(blockedUpdateTooltip(c))" @click.stop />
               <AppIconButton v-else-if="c.newTag" icon="cloud-download" size="sm" variant="muted"
                       class="transition-[color,background-color,border-color,opacity,transform,box-shadow]"
                       :class="isRowLocked(c) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-success hover:dd-bg-hover hover:scale-110 active:scale-95'"
@@ -575,9 +589,9 @@ watchEffect(() => {
               />
               <ProjectLink v-if="c.sourceRepo" :source-repo="c.sourceRepo" icon-only />
             <div v-if="c.newTag" class="inline-flex items-center gap-1">
-              <!-- Blocked: muted split button -->
-              <div v-if="c.bouncer === 'blocked'" class="inline-flex dd-rounded overflow-hidden" style="min-width: 110px;"
->
+              <!-- Blocked: muted split button (any hard eligibility blocker) -->
+              <div v-if="isUpdateHardBlocked(c)" class="inline-flex dd-rounded overflow-hidden" style="min-width: 110px;"
+                   v-tooltip.top="tt(blockedUpdateTooltip(c))">
                 <AppButton size="none" variant="plain" weight="none" class="inline-flex items-center justify-center flex-1 whitespace-nowrap px-3 py-1.5 text-2xs-plus font-bold tracking-wide cursor-not-allowed"
                         :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-text-muted)' }">
                   <AppIcon name="lock" :size="14" class="mr-1" /> Blocked
@@ -806,10 +820,10 @@ watchEffect(() => {
                 <AppIconButton icon="security" size="xs" variant="muted"
                         class="hover:dd-text-secondary hover:dd-bg-elevated"
                         :tooltip="tt('Scan')" @click.stop="scanContainer(c)" />
-                <AppIconButton v-if="c.newTag && c.bouncer === 'blocked'" icon="lock" size="xs" variant="muted"
+                <AppIconButton v-if="c.newTag && isUpdateHardBlocked(c)" icon="lock" size="xs" variant="muted"
                         class="opacity-60 cursor-not-allowed"
                         :disabled="true"
-                        :tooltip="tt('Security blocked')" />
+                        :tooltip="tt(blockedUpdateTooltip(c))" />
                 <AppIconButton v-else-if="c.newTag" icon="cloud-download" size="xs" variant="muted"
                         :class="isRowLocked(c) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-success hover:dd-bg-elevated'"
                         :disabled="isRowLocked(c)"

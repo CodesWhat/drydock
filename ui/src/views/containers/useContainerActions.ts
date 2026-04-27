@@ -33,6 +33,7 @@ import {
   shouldRenderStandaloneQueuedUpdateAsUpdating,
 } from '../../utils/container-update';
 import { errorMessage } from '../../utils/error';
+import { getSoftBlockers } from '../../utils/update-eligibility';
 import { useContainerBackups } from './useContainerBackups';
 import { useContainerPolicy } from './useContainerPolicy';
 import { useContainerPreview } from './useContainerPreview';
@@ -649,6 +650,14 @@ function createConfirmHandlers(args: {
   function confirmUpdate(target: ContainerActionTarget) {
     const name = typeof target === 'string' ? target : target.name;
     const container = args.selectedContainer.value;
+    // Prefer the explicit target's eligibility (from the row) over the side-panel's
+    // selected-container view, which can be a different container when the user clicks
+    // Update from a row in a non-selected stack.
+    const eligibility =
+      typeof target === 'object' && target
+        ? target.updateEligibility
+        : container?.updateEligibility;
+
     let message = `Update ${name} now? This will apply the latest discovered image.`;
     if (container && container.currentTag && container.newTag) {
       const isTagChange = container.updateKind !== 'digest';
@@ -659,11 +668,20 @@ function createConfirmHandlers(args: {
         message = `Update ${name}? A newer build of :${container.currentTag} is available (digest change).`;
       }
     }
+
+    // Surface soft blockers so the user knows they're overriding a policy gate
+    // (snooze, threshold, maturity, skip-tag/digest, trigger-not-included/excluded).
+    const softBlockers = getSoftBlockers(eligibility);
+    if (softBlockers.length > 0) {
+      const list = softBlockers.map((b) => `• ${b.message}`).join('\n');
+      message = `${message}\n\nThis update is currently policy-blocked:\n${list}\n\nClick Update anyway to override.`;
+    }
+
     args.confirm.require({
       header: 'Update Container',
       message,
       rejectLabel: 'Cancel',
-      acceptLabel: 'Update',
+      acceptLabel: softBlockers.length > 0 ? 'Update anyway' : 'Update',
       severity: 'warn',
       accept: () =>
         args.executeAction(target, apiUpdateContainer, {
