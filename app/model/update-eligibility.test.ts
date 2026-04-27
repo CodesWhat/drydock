@@ -1,5 +1,13 @@
 import type { Container } from './container.js';
-import { computeUpdateEligibility, type UpdateEligibilityContext } from './update-eligibility.js';
+import {
+  BLOCKER_SEVERITY,
+  computeUpdateEligibility,
+  getHardBlockers,
+  getPrimaryHardBlocker,
+  getSoftBlockers,
+  hasHardBlocker,
+  type UpdateEligibilityContext,
+} from './update-eligibility.js';
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -1003,6 +1011,115 @@ describe('computeUpdateEligibility', () => {
       expect(reasons).toContain('skip-tag');
       expect(reasons).toContain('maturity-not-reached');
       expect(result.eligible).toBe(false);
+    });
+  });
+
+  describe('severity tagging', () => {
+    test('every BLOCKER_SEVERITY entry classifies the reason as hard or soft', () => {
+      const allReasons = [
+        'no-update-available',
+        'rollback-container',
+        'active-operation',
+        'security-scan-blocked',
+        'snoozed',
+        'skip-tag',
+        'skip-digest',
+        'maturity-not-reached',
+        'threshold-not-reached',
+        'trigger-excluded',
+        'trigger-not-included',
+        'agent-mismatch',
+        'no-update-trigger-configured',
+      ] as const;
+      for (const reason of allReasons) {
+        expect(BLOCKER_SEVERITY[reason]).toMatch(/^(hard|soft)$/);
+      }
+    });
+
+    test('hard severities cover server-rejected reasons', () => {
+      expect(BLOCKER_SEVERITY['no-update-available']).toBe('hard');
+      expect(BLOCKER_SEVERITY['rollback-container']).toBe('hard');
+      expect(BLOCKER_SEVERITY['active-operation']).toBe('hard');
+      expect(BLOCKER_SEVERITY['security-scan-blocked']).toBe('hard');
+      expect(BLOCKER_SEVERITY['agent-mismatch']).toBe('hard');
+      expect(BLOCKER_SEVERITY['no-update-trigger-configured']).toBe('hard');
+    });
+
+    test('soft severities cover policy reasons that manual update bypasses', () => {
+      expect(BLOCKER_SEVERITY.snoozed).toBe('soft');
+      expect(BLOCKER_SEVERITY['skip-tag']).toBe('soft');
+      expect(BLOCKER_SEVERITY['skip-digest']).toBe('soft');
+      expect(BLOCKER_SEVERITY['maturity-not-reached']).toBe('soft');
+      expect(BLOCKER_SEVERITY['threshold-not-reached']).toBe('soft');
+      // trigger-excluded / trigger-not-included are soft until v1.7.0 — see DEPRECATIONS.md
+      expect(BLOCKER_SEVERITY['trigger-excluded']).toBe('soft');
+      expect(BLOCKER_SEVERITY['trigger-not-included']).toBe('soft');
+    });
+
+    test('computeUpdateEligibility stamps severity on every emitted blocker', () => {
+      const trigger = makeTrigger();
+      const container = makeContainerWithTagUpdate({
+        updatePolicy: {
+          snoozeUntil: '2099-01-01T00:00:00.000Z',
+        },
+      } as Partial<Container>);
+
+      const result = computeUpdateEligibility(
+        container,
+        makeContext({
+          now: FIXED_NOW,
+          triggers: { 'docker.update': trigger as any },
+        }),
+      );
+
+      expect(result.blockers.length).toBeGreaterThan(0);
+      for (const blocker of result.blockers) {
+        expect(blocker.severity).toBe(BLOCKER_SEVERITY[blocker.reason]);
+      }
+    });
+  });
+
+  describe('helpers', () => {
+    test('hasHardBlocker / getHardBlockers / getPrimaryHardBlocker pick out hard reasons', () => {
+      const trigger = makeTrigger({ agent: 'edge-1' });
+      const container = makeContainerWithTagUpdate({
+        agent: 'edge-2',
+        updatePolicy: { snoozeUntil: '2099-01-01T00:00:00.000Z' },
+      } as Partial<Container>);
+      const result = computeUpdateEligibility(
+        container,
+        makeContext({ now: FIXED_NOW, triggers: { 'docker.update': trigger as any } }),
+      );
+
+      expect(hasHardBlocker(result)).toBe(true);
+      const hard = getHardBlockers(result);
+      expect(hard.map((b) => b.reason)).toContain('agent-mismatch');
+      const soft = getSoftBlockers(result);
+      expect(soft.map((b) => b.reason)).toContain('snoozed');
+      const primary = getPrimaryHardBlocker(result);
+      expect(primary?.reason).toBe('agent-mismatch');
+    });
+
+    test('helpers return empty when eligibility is undefined', () => {
+      expect(hasHardBlocker(undefined)).toBe(false);
+      expect(getHardBlockers(undefined)).toEqual([]);
+      expect(getSoftBlockers(undefined)).toEqual([]);
+      expect(getPrimaryHardBlocker(undefined)).toBeUndefined();
+    });
+
+    test('helpers return empty when eligibility has only soft blockers', () => {
+      const trigger = makeTrigger();
+      const container = makeContainerWithTagUpdate({
+        updatePolicy: { snoozeUntil: '2099-01-01T00:00:00.000Z' },
+      } as Partial<Container>);
+      const result = computeUpdateEligibility(
+        container,
+        makeContext({ now: FIXED_NOW, triggers: { 'docker.update': trigger as any } }),
+      );
+
+      expect(hasHardBlocker(result)).toBe(false);
+      expect(getHardBlockers(result)).toEqual([]);
+      expect(getSoftBlockers(result).map((b) => b.reason)).toEqual(['snoozed']);
     });
   });
 });
