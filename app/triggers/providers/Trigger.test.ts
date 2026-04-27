@@ -358,12 +358,13 @@ test('init should register handlers with trigger id and order', async () => {
   });
 });
 
-test('init should not register auto listeners when auto is none', async () => {
+test('init should not register auto-fire listeners when auto is none, but still register lifecycle listeners', async () => {
   const reportSpy = vi.spyOn(event, 'registerContainerReport');
   const reportsSpy = vi.spyOn(event, 'registerContainerReports');
   const updateAppliedSpy = vi.spyOn(event, 'registerContainerUpdateApplied');
   const updateFailedSpy = vi.spyOn(event, 'registerContainerUpdateFailed');
   const securityAlertSpy = vi.spyOn(event, 'registerSecurityAlert');
+  const agentConnectedSpy = vi.spyOn(event, 'registerAgentConnected');
   const agentDisconnectedSpy = vi.spyOn(event, 'registerAgentDisconnected');
   trigger.configuration = trigger.validateConfiguration({
     ...configurationValid,
@@ -374,18 +375,23 @@ test('init should not register auto listeners when auto is none', async () => {
 
   expect(reportSpy).not.toHaveBeenCalled();
   expect(reportsSpy).not.toHaveBeenCalled();
-  expect(updateAppliedSpy).not.toHaveBeenCalled();
-  expect(updateFailedSpy).not.toHaveBeenCalled();
-  expect(securityAlertSpy).not.toHaveBeenCalled();
-  expect(agentDisconnectedSpy).not.toHaveBeenCalled();
+  // Lifecycle handlers register regardless of auto mode so users who set
+  // `auto: false` to suppress update-available spam still receive update-applied,
+  // update-failed, security alerts, and agent connect/disconnect notifications.
+  expect(updateAppliedSpy).toHaveBeenCalled();
+  expect(updateFailedSpy).toHaveBeenCalled();
+  expect(securityAlertSpy).toHaveBeenCalled();
+  expect(agentConnectedSpy).toHaveBeenCalled();
+  expect(agentDisconnectedSpy).toHaveBeenCalled();
 });
 
-test('init should not register auto listeners when auto is false', async () => {
+test('init should not register auto-fire listeners when auto is false, but still register lifecycle listeners', async () => {
   const reportSpy = vi.spyOn(event, 'registerContainerReport');
   const reportsSpy = vi.spyOn(event, 'registerContainerReports');
   const updateAppliedSpy = vi.spyOn(event, 'registerContainerUpdateApplied');
   const updateFailedSpy = vi.spyOn(event, 'registerContainerUpdateFailed');
   const securityAlertSpy = vi.spyOn(event, 'registerSecurityAlert');
+  const agentConnectedSpy = vi.spyOn(event, 'registerAgentConnected');
   const agentDisconnectedSpy = vi.spyOn(event, 'registerAgentDisconnected');
   trigger.configuration = trigger.validateConfiguration({
     ...configurationValid,
@@ -396,10 +402,11 @@ test('init should not register auto listeners when auto is false', async () => {
 
   expect(reportSpy).not.toHaveBeenCalled();
   expect(reportsSpy).not.toHaveBeenCalled();
-  expect(updateAppliedSpy).not.toHaveBeenCalled();
-  expect(updateFailedSpy).not.toHaveBeenCalled();
-  expect(securityAlertSpy).not.toHaveBeenCalled();
-  expect(agentDisconnectedSpy).not.toHaveBeenCalled();
+  expect(updateAppliedSpy).toHaveBeenCalled();
+  expect(updateFailedSpy).toHaveBeenCalled();
+  expect(securityAlertSpy).toHaveBeenCalled();
+  expect(agentConnectedSpy).toHaveBeenCalled();
+  expect(agentDisconnectedSpy).toHaveBeenCalled();
 });
 
 test('init should register auto listeners when auto is oninclude', async () => {
@@ -2568,7 +2575,9 @@ test('init should log manual execution when auto is false', async () => {
   trigger.configuration.auto = false;
   const spyLog = vi.spyOn(log, 'info');
   await trigger.init();
-  expect(spyLog).toHaveBeenCalledWith('Registering for manual execution');
+  expect(spyLog).toHaveBeenCalledWith(
+    'Registering for manual execution (lifecycle notifications still active)',
+  );
 });
 
 test('init should register for notification resolution when resolvenotifications is true', async () => {

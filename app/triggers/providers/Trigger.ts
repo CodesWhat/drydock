@@ -2166,53 +2166,58 @@ class Trigger<
         this.log.info(`Digest scheduled (${digestCronExpression})`);
       }
 
-      this.unregisterContainerUpdateAppliedForAutoDispatch = event.registerContainerUpdateApplied(
-        async (containerName) => this.handleContainerUpdateAppliedEvent(containerName),
-        {
-          id: this.getId(),
-          order: this.configuration.order,
-        },
-      );
-      this.unregisterContainerUpdateFailed = event.registerContainerUpdateFailed(
-        async (payload) => this.handleContainerUpdateFailedEvent(payload),
-        {
-          id: this.getId(),
-          order: this.configuration.order,
-        },
-      );
-      this.unregisterSecurityAlert = event.registerSecurityAlert(
-        async (payload) => this.handleSecurityAlertEvent(payload),
-        {
-          id: this.getId(),
-          order: this.configuration.order,
-        },
-      );
-      this.unregisterSecurityScanCycleComplete = event.registerSecurityScanCycleComplete(
-        async (payload) => this.handleSecurityScanCycleCompleteEvent(payload),
-        {
-          id: this.getId(),
-          order: this.configuration.order,
-        },
-      );
-      this.unregisterAgentConnected = event.registerAgentConnected(
-        async (payload) => this.handleAgentConnectedEvent(payload),
-        {
-          id: this.getId(),
-          order: this.configuration.order,
-        },
-      );
-      this.unregisterAgentDisconnected = event.registerAgentDisconnected(
-        async (payload) => this.handleAgentDisconnectedEvent(payload),
-        {
-          id: this.getId(),
-          order: this.configuration.order,
-        },
-      );
-
       this.seedNotificationHistoryFromStore();
     } else {
-      this.log.info(`Registering for manual execution`);
+      this.log.info('Registering for manual execution (lifecycle notifications still active)');
     }
+
+    // Lifecycle event handlers register regardless of `auto` mode. `auto`
+    // controls whether the trigger fires on update-available *detection*; it
+    // must not silence completion/failure/security/agent notifications, which
+    // a manually-triggered or external update still produces. Issue #317.
+    this.unregisterContainerUpdateAppliedForAutoDispatch = event.registerContainerUpdateApplied(
+      async (containerName) => this.handleContainerUpdateAppliedEvent(containerName),
+      {
+        id: this.getId(),
+        order: this.configuration.order,
+      },
+    );
+    this.unregisterContainerUpdateFailed = event.registerContainerUpdateFailed(
+      async (payload) => this.handleContainerUpdateFailedEvent(payload),
+      {
+        id: this.getId(),
+        order: this.configuration.order,
+      },
+    );
+    this.unregisterSecurityAlert = event.registerSecurityAlert(
+      async (payload) => this.handleSecurityAlertEvent(payload),
+      {
+        id: this.getId(),
+        order: this.configuration.order,
+      },
+    );
+    this.unregisterSecurityScanCycleComplete = event.registerSecurityScanCycleComplete(
+      async (payload) => this.handleSecurityScanCycleCompleteEvent(payload),
+      {
+        id: this.getId(),
+        order: this.configuration.order,
+      },
+    );
+    this.unregisterAgentConnected = event.registerAgentConnected(
+      async (payload) => this.handleAgentConnectedEvent(payload),
+      {
+        id: this.getId(),
+        order: this.configuration.order,
+      },
+    );
+    this.unregisterAgentDisconnected = event.registerAgentDisconnected(
+      async (payload) => this.handleAgentDisconnectedEvent(payload),
+      {
+        id: this.getId(),
+        order: this.configuration.order,
+      },
+    );
+
     if (this.configuration.resolvenotifications) {
       this.log.info('Registering for notification resolution');
       this.unregisterContainerUpdateAppliedForResolution = event.registerContainerUpdateApplied(
