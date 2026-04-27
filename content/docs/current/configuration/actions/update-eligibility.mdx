@@ -38,7 +38,7 @@ If a container has an available update but **no pill**, it is eligible and the n
 | `no-update-trigger-configured` | **No trigger** | Neutral | No `docker` or `dockercompose` action trigger is configured at all. | Configure `DD_ACTION_DOCKER_<NAME>_*` or `DD_ACTION_DOCKERCOMPOSE_<NAME>_*`. See [Triggers — Docker](/docs/configuration/triggers/docker) and [Triggers — Docker Compose](/docs/configuration/triggers/docker-compose). |
 | `rollback-container` | **Rollback** | Neutral | Container was created during a previous update as a rollback artifact and isn't itself updateable. | Not actionable — remove the rollback container manually if no longer needed. |
 | `active-operation` | **In progress** | Blue | An update is queued or already running for this container. | Wait for completion. |
-| `no-update-available` | _no pill_ | — | No newer image was detected. Internal short-circuit; never rendered as a pill. | N/A |
+| `no-update-available` | *no pill* | — | No newer image was detected. Internal short-circuit; never rendered as a pill. | N/A |
 
 <Callout type="info">The pill component hides `no-update-available` and (when an "in progress" badge is already shown elsewhere on the row) `active-operation`, to avoid duplicate signals. All other reasons render whenever active.</Callout>
 
