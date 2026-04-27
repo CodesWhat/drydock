@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] — 2026-04-27
+
 ### Fixed
 
 - **[#308](https://github.com/CodesWhat/drydock/discussions/308) — Per-row scanning chip wasn't anchored to the container being scanned (begunfx, rc.14).** Backend was already broadcasting `dd:scan-started` / `dd:scan-completed` with `{ containerId, status }` payloads, but the UI's SSE service was dropping the payload on the floor — both listeners emitted bare bus events with no container reference. The per-row "Scanning" chip was therefore driven entirely by the optimistic local `actionInProgress` map populated when the user clicked Scan, which (a) couldn't reflect cron-driven scheduled scans and (b) was tied to the HTTP request lifecycle instead of the actual scan lifecycle. Threaded the `containerId` through the SSE service → bus → AppLayout `dd:sse-scan-started` / `dd:sse-scan-completed` CustomEvent payloads, added a singleton `useScanLifecycle` composable that maintains a `scansInFlight` set keyed by container id (with a 120s safety timeout), and refactored `scanContainer` so the per-row chip is set on click and cleared by the SSE completion event (or on HTTP failure). The chip now stays correctly anchored to the row whose container is actually being scanned, regardless of whether the scan was started by a click or by the scheduler.
