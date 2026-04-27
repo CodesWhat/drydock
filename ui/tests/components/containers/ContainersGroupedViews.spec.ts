@@ -1258,6 +1258,108 @@ describe('ContainersGroupedViews', () => {
     expect(row.text()).toContain('Updating');
   });
 
+  it('applies dd-row-scanning to scanning rows so the overlay chip stays anchored', () => {
+    const scanning = makeContainer({
+      id: 'c-scan-1',
+      name: 'alpha',
+      newTag: null,
+      bouncer: 'safe',
+      status: 'running',
+    });
+
+    const { context, refs } = makeContext();
+    refs.filteredContainers.value = [scanning];
+    refs.displayContainers.value = [scanning];
+    refs.renderGroups.value = [
+      {
+        key: '__flat__',
+        name: null,
+        containers: [scanning],
+        containerCount: 1,
+        updatesAvailable: 0,
+        updatableCount: 0,
+      },
+    ];
+    refs.containerViewMode.value = 'table';
+    refs.actionInProgress.value = new Map([['c-scan-1', 'scan']]);
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+    const row = rowByName(wrapper, 'alpha');
+
+    expect(row.classes()).toContain('dd-row-scanning');
+    expect(row.classes()).not.toContain('dd-row-updating');
+    expect(row.classes()).not.toContain('pointer-events-none');
+  });
+
+  it('prefers dd-row-updating over dd-row-scanning when a row is both updating and scanning', () => {
+    const both = makeContainer({
+      id: 'c-both-1',
+      name: 'alpha',
+      newTag: '2.0.0',
+      updateKind: 'major',
+      bouncer: 'safe',
+      status: 'running',
+    });
+
+    const { context, refs } = makeContext({ isContainerScanInProgress: () => true });
+    refs.filteredContainers.value = [both];
+    refs.displayContainers.value = [both];
+    refs.renderGroups.value = [
+      {
+        key: '__flat__',
+        name: null,
+        containers: [both],
+        containerCount: 1,
+        updatesAvailable: 1,
+        updatableCount: 1,
+      },
+    ];
+    refs.containerViewMode.value = 'table';
+    refs.actionInProgress.value = new Map([['c-both-1', 'update']]);
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+    const row = rowByName(wrapper, 'alpha');
+
+    expect(row.classes()).toContain('dd-row-updating');
+    expect(row.classes()).toContain('pointer-events-none');
+    expect(row.classes()).not.toContain('dd-row-scanning');
+  });
+
+  it('leaves table row class empty for non-scanning, non-locked rows', () => {
+    const idle = makeContainer({
+      id: 'c-idle-1',
+      name: 'alpha',
+      newTag: null,
+      bouncer: 'safe',
+      status: 'running',
+    });
+
+    const { context, refs } = makeContext();
+    refs.filteredContainers.value = [idle];
+    refs.displayContainers.value = [idle];
+    refs.renderGroups.value = [
+      {
+        key: '__flat__',
+        name: null,
+        containers: [idle],
+        containerCount: 1,
+        updatesAvailable: 0,
+        updatableCount: 0,
+      },
+    ];
+    refs.containerViewMode.value = 'table';
+    refs.actionInProgress.value = new Map();
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+    const row = rowByName(wrapper, 'alpha');
+
+    expect(row.classes()).not.toContain('dd-row-scanning');
+    expect(row.classes()).not.toContain('dd-row-updating');
+  });
+
   it('keeps ghost rows dimmed and labeled updating while pending', () => {
     const pendingGhost = makeContainer({
       id: 'c-pending-1',

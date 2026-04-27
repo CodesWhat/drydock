@@ -285,7 +285,13 @@ function tableRowClass(row: Record<string, unknown>) {
   if (!isContainerTableRow(typedRow)) {
     return '';
   }
-  return isRowLocked(typedRow) ? 'dd-row-updating pointer-events-none' : '';
+  if (isRowLocked(typedRow)) {
+    return 'dd-row-updating pointer-events-none';
+  }
+  if (isContainerScanning(typedRow.__source)) {
+    return 'dd-row-scanning';
+  }
+  return '';
 }
 
 function getTableRowKey(row: Record<string, unknown>) {
