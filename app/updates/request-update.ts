@@ -141,17 +141,28 @@ function getActiveUpdateOperationForContainer(container: Container) {
   return isLegacyOperation ? byName : undefined;
 }
 
-const HARD_BLOCKER_STATUS: Partial<Record<UpdateBlockerReason, number>> = {
+// Complete map covers every UpdateBlockerReason so callers never hit a missing
+// entry; soft reasons get 409 because they are not expected to reach this code
+// path (callers gate via getPrimaryHardBlocker), but if they ever do we still
+// return a sensible status code instead of undefined.
+const HARD_BLOCKER_STATUS: Record<UpdateBlockerReason, number> = {
   'no-update-available': 400,
   'agent-mismatch': 404,
   'no-update-trigger-configured': 404,
   'rollback-container': 409,
   'security-scan-blocked': 409,
   'active-operation': 409,
+  snoozed: 409,
+  'skip-tag': 409,
+  'skip-digest': 409,
+  'maturity-not-reached': 409,
+  'threshold-not-reached': 409,
+  'trigger-excluded': 409,
+  'trigger-not-included': 409,
 };
 
 function statusCodeForHardBlocker(blocker: UpdateBlocker): number {
-  return HARD_BLOCKER_STATUS[blocker.reason] ?? 409;
+  return HARD_BLOCKER_STATUS[blocker.reason];
 }
 
 function markAcceptedQueuedOperationFailed(operationId: string, error: unknown) {
