@@ -1,0 +1,118 @@
+---
+title: "Update Eligibility & Blockers"
+description: "Why a container with an available update isn't auto-updating, and how to clear the gate."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+## Overview
+
+When a container has an available update, drydock evaluates it against a stack of policy and trigger gates before the matching `docker` / `dockercompose` action trigger fires. Any active gate becomes a **blocker**. The result is exposed on every container payload as `updateEligibility` and rendered in the UI as a colored pill on the container row.
+
+A container is **eligible** when an update exists *and* no blocker applies. Eligible containers are auto-updated on the next watcher run by the action trigger that matches them.
+
+## Where blockers appear
+
+- **List / accordion / card views** — primary blocker as a pill in the row's badge cluster (next to the major/minor/patch tag). If multiple blockers are active, a `+N` chip shows the extra count.
+- **Side panel — Overview tab → Version section** — the same pills, with the full message and action hint visible on hover.
+- **Container full-page view** — every active blocker as its own card, with full message text, action hint, and `Lifts at` date when the blocker is time-limited.
+- **Dashboard — Recent Updates widget** — same pills next to each row.
+
+If a container has an available update but **no pill**, it is eligible and the next watcher run will fire the action trigger.
+
+<Callout type="info">If a container that's not auto-updating shows no pill *and* `eligible: true` on the payload, the issue is upstream of the eligibility check — usually no `docker` / `dockercompose` action trigger configured at all (which itself surfaces as the **No trigger** pill once a trigger of any matching type is added).</Callout>
+
+## Reasons reference
+
+| Reason code | Pill label | Severity | Why it fires | How to clear it |
+| --- | --- | --- | --- | --- |
+| `security-scan-blocked` | **Security blocked** | Red | Update scan flagged the candidate image with critical/high vulnerabilities exceeding the configured threshold. | Lower the scan severity threshold, fix the vulnerability upstream, or use force-update to override for one cycle. |
+| `snoozed` | **Snoozed** | Amber | Container's update policy has `snoozeUntil` set to a future timestamp. | Clear the snooze from the container row's **Update policy** menu, or wait for the lift date shown in the tooltip. |
+| `skip-tag` | **Tag skipped** | Amber | The remote tag is in the container's `skipTags` list. | Remove the tag from the skip list in the **Update policy** menu. |
+| `skip-digest` | **Digest skipped** | Amber | The remote digest is in the container's `skipDigests` list. | Remove the digest from the skip list in the **Update policy** menu. |
+| `maturity-not-reached` | **Maturing** | Amber | Container's `maturityMode` is `mature` and the update was detected less than `maturityMinAgeDays` days ago. Tooltip shows the days remaining. | Wait for the gate to lift, lower `maturityMinAgeDays`, or switch `maturityMode` to `all` from the **Update policy** menu. |
+| `threshold-not-reached` | **Below threshold** | Amber | The matching trigger's `threshold` (e.g. `major`) is more restrictive than the detected update kind (e.g. `minor`). | Lower the trigger's `THRESHOLD` env var, or wait for an update that meets it. |
+| `trigger-excluded` | **Trigger excluded** | Amber | Container's `dd.action.exclude` (or legacy `dd.trigger.exclude`) label matches the candidate trigger. | Remove the exclusion from the container label, or rename the trigger so the rule no longer matches. |
+| `trigger-not-included` | **Trigger filtered** | Amber | Action triggers default to `AUTO=oninclude`, so the container needs an explicit `dd.action.include` (or legacy `dd.trigger.include`) label naming the trigger. The label is missing or doesn't list this trigger. | Add `dd.action.include=<trigger-name>` to the container's labels, or set `DD_ACTION_DOCKER[COMPOSE]_<NAME>_AUTO=all` on the trigger to fire on every matching container. |
+| `agent-mismatch` | **Agent mismatch** | Neutral | A `docker` / `dockercompose` trigger exists, but its `agent` doesn't match the container's agent. | Configure a trigger on the container's agent, or move the container to the trigger's agent. |
+| `no-update-trigger-configured` | **No trigger** | Neutral | No `docker` or `dockercompose` action trigger is configured at all. | Configure `DD_ACTION_DOCKER_<NAME>_*` or `DD_ACTION_DOCKERCOMPOSE_<NAME>_*`. See [Triggers — Docker](/docs/configuration/triggers/docker) and [Triggers — Docker Compose](/docs/configuration/triggers/docker-compose). |
+| `rollback-container` | **Rollback** | Neutral | Container was created during a previous update as a rollback artifact and isn't itself updateable. | Not actionable — remove the rollback container manually if no longer needed. |
+| `active-operation` | **In progress** | Blue | An update is queued or already running for this container. | Wait for completion. |
+| `no-update-available` | _no pill_ | — | No newer image was detected. Internal short-circuit; never rendered as a pill. | N/A |
+
+<Callout type="info">The pill component hides `no-update-available` and (when an "in progress" badge is already shown elsewhere on the row) `active-operation`, to avoid duplicate signals. All other reasons render whenever active.</Callout>
+
+## Common scenarios
+
+### "Auto-update isn't firing on any of my compose-managed containers"
+
+Almost always **`trigger-not-included`** — `docker` and `dockercompose` action triggers default to `AUTO=oninclude`. Every container you want auto-updated needs a `dd.action.include` label that names the matching trigger.
+
+```yaml
+# drydock env
+- DD_ACTION_DOCKERCOMPOSE_MYSTACK_FILE=/drydock/mystack/compose.yaml
+
+# in mystack/compose.yaml — every service that should auto-update
+services:
+  app:
+    labels:
+      - dd.action.include=mystack
+```
+
+If you want every container in a stack to auto-update without per-container opt-in, set `AUTO=all` on the trigger instead:
+
+```yaml
+- DD_ACTION_DOCKERCOMPOSE_MYSTACK_AUTO=all
+```
+
+### "Auto-update fired before, but not for this minor release"
+
+Likely **`threshold-not-reached`** — the trigger's `THRESHOLD` is set to something stricter than the detected update kind. Common cases: `THRESHOLD=major` will skip `minor`/`patch`/`digest` updates; `THRESHOLD=patch` will skip `digest`-only updates.
+
+### "All my containers show 'Maturing' even though I never set a policy"
+
+That blocker only fires when `maturityMode === 'mature'`. If you didn't set it via the UI or API, no maturity gate applies. If you're seeing the pill anyway, check for a recent `PATCH /api/v1/containers/:id/update-policy` call, or click the row and inspect the **Update policy** menu.
+
+### "Pill says 'Agent mismatch'"
+
+The trigger and the container are bound to different agents. In the controller-agent topology, an action trigger only updates containers on the agent it runs on. Either configure an additional trigger on the container's agent, or merge the topology.
+
+## API
+
+The `updateEligibility` object is returned on every container in `GET /api/v1/containers` and pushed via SSE on changes. Shape:
+
+```json
+{
+  "eligible": false,
+  "blockers": [
+    {
+      "reason": "trigger-not-included",
+      "message": "Trigger not matched by container label dd.trigger.include='undefined'.",
+      "actionable": true,
+      "actionHint": "Adjust `dd.trigger.include` / `dd.trigger.exclude` labels on the container.",
+      "details": {
+        "triggerInclude": null,
+        "triggerId": "dockercompose.mystack"
+      }
+    }
+  ],
+  "evaluatedAt": "2026-04-26T14:44:00.000Z"
+}
+```
+
+Fields:
+
+- `eligible` — `true` only when an update exists and no blockers apply.
+- `blockers[].reason` — one of the codes in the [reasons reference](#reasons-reference) above. Stable identifier; safe to switch on programmatically.
+- `blockers[].message` — human-readable summary, with concrete values interpolated (tag, threshold, days remaining, etc.).
+- `blockers[].actionable` — `true` when a user can clear the blocker; `false` for terminal states (`rollback-container`, `active-operation`, `no-update-available`).
+- `blockers[].actionHint` — short next-step suggestion. Used as the second line in tooltips and the **Action** field on full-page cards.
+- `blockers[].liftableAt` — ISO timestamp when a time-limited blocker (snooze, maturity) will clear automatically.
+- `blockers[].details` — reason-specific payload (skipped tag, threshold value, agent IDs, etc.). Schema is per-reason and may grow over time.
+- `evaluatedAt` — ISO timestamp of the evaluation. Recomputed on every container update and watcher run.
+
+## Related
+
+- [Container Actions](/docs/configuration/actions) — the surrounding action system.
+- [Triggers](/docs/configuration/triggers) — `THRESHOLD`, `AUTO`, and per-trigger `INCLUDE` / `EXCLUDE` env vars.
+- [Watchers — Labels](/docs/configuration/watchers#labels) — `dd.action.include` / `dd.action.exclude` and the deprecated `dd.trigger.*` aliases.

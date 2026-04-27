@@ -749,7 +749,7 @@ To fine-tune the behaviour of drydock _per container_, you can add labels on the
 
 <Callout type="info">**Infrastructure update mode** (`dd.update.mode=infrastructure`) is for containers that Drydock depends on for its Docker API connection, such as a socket proxy. When set, the container is updated through a helper-container path that connects directly to `/var/run/docker.sock`, bypassing the proxy so the connection isn't severed mid-update. See [Infrastructure Update Mode](/docs/configuration/triggers/docker#infrastructure-update-mode) for details.</Callout>
 
-<Callout type="info">**Per-container update policy** (maturity gate, snooze, skip-tag, skip-digest) is set from the UI rather than via labels. Open a container row → **Update policy** menu, or call `PATCH /api/v1/containers/:id/update-policy`. Policies are stored with the container record and persist across Drydock restarts. There is no `dd.updatePolicy.*` label — earlier drafts of the v1.4 docs listed label equivalents that were never implemented.</Callout>
+<Callout type="info">**Per-container update policy** (maturity gate, snooze, skip-tag, skip-digest) is set from the UI rather than via labels. Open a container row → **Update policy** menu, or call `PATCH /api/v1/containers/:id/update-policy`. Policies are stored with the container record and persist across Drydock restarts. There is no `dd.updatePolicy.*` label — earlier drafts of the v1.4 docs listed label equivalents that were never implemented. When a policy gate fires, it surfaces as a pill on the container row — see [Update Eligibility & Blockers](/docs/configuration/actions/update-eligibility) for the full reason reference.</Callout>
 
 ## Label examples
 
