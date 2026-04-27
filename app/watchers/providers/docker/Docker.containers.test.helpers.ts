@@ -29,6 +29,7 @@ const mockDdEnvVars = vi.hoisted(() => ({}) as Record<string, string | undefined
 const mockDetectSourceRepoFromImageMetadata = vi.hoisted(() => vi.fn());
 const mockResolveSourceRepoForContainer = vi.hoisted(() => vi.fn());
 const mockGetFullReleaseNotesForContainer = vi.hoisted(() => vi.fn());
+const mockGetReleaseNotesForTag = vi.hoisted(() => vi.fn());
 const mockToContainerReleaseNotes = vi.hoisted(() => vi.fn((notes) => notes));
 vi.mock('../../../configuration/index.js', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../configuration/index.js')>()),
@@ -40,6 +41,7 @@ vi.mock('../../../release-notes/index.js', () => ({
   resolveSourceRepoForContainer: (...args: unknown[]) => mockResolveSourceRepoForContainer(...args),
   getFullReleaseNotesForContainer: (...args: unknown[]) =>
     mockGetFullReleaseNotesForContainer(...args),
+  getReleaseNotesForTag: (...args: unknown[]) => mockGetReleaseNotesForTag(...args),
   toContainerReleaseNotes: (...args: unknown[]) => mockToContainerReleaseNotes(...args),
 }));
 
@@ -477,6 +479,7 @@ export {
   mockDdEnvVars,
   mockDetectSourceRepoFromImageMetadata,
   mockGetFullReleaseNotesForContainer,
+  mockGetReleaseNotesForTag,
   mockParse,
   mockPrometheus,
   mockResolveSourceRepoForContainer,

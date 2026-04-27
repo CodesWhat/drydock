@@ -1365,4 +1365,114 @@ describe('docker image details orchestration module', () => {
     expect(result?.id).toBe('new-container-id');
     expect(deleteContainerSpy).not.toHaveBeenCalled();
   });
+
+  test('does not overwrite sourceRepo in the no-repair path when it is already set', async () => {
+    const containerInStore = {
+      id: 'container-1',
+      sourceRepo: 'github.com/acme/already-set',
+      error: undefined,
+      details: { ports: [], volumes: [], env: [] },
+      image: {
+        id: 'image-same',
+        name: 'acme/service',
+        registry: { url: 'ghcr.io' },
+        tag: { value: '1.0.0', semver: true },
+        digest: { repo: 'sha256:same', value: 'sha256:same' },
+        created: '2025-01-01T00:00:00.000Z',
+      },
+    };
+    vi.spyOn(storeContainer, 'getContainer').mockReturnValue(containerInStore as any);
+
+    const { watcher, inspectImage } = createWatcher({ configuration: { watchevents: true } });
+    inspectImage.mockResolvedValue({
+      Id: 'image-same',
+      RepoDigests: ['ghcr.io/acme/service@sha256:same'],
+      Config: {
+        Labels: {
+          'org.opencontainers.image.source': 'https://github.com/acme/should-not-replace',
+        },
+      },
+    });
+
+    await addImageDetailsToContainerOrchestration(
+      watcher as any,
+      createDockerSummaryContainer(),
+      {},
+      createHelpers({ resolveTagName: vi.fn().mockReturnValue('1.0.0') }) as any,
+    );
+
+    expect(containerInStore.sourceRepo).toBe('github.com/acme/already-set');
+  });
+
+  test('backfills sourceRepo in the no-repair path from OCI image labels when not yet set', async () => {
+    const containerInStore = {
+      id: 'container-1',
+      sourceRepo: undefined,
+      error: undefined,
+      details: { ports: [], volumes: [], env: [] },
+      image: {
+        id: 'image-same',
+        name: 'acme/service',
+        registry: { url: 'ghcr.io' },
+        tag: { value: '1.0.0', semver: true },
+        digest: { repo: 'sha256:same', value: 'sha256:same' },
+        created: '2025-01-01T00:00:00.000Z',
+      },
+    };
+    vi.spyOn(storeContainer, 'getContainer').mockReturnValue(containerInStore as any);
+
+    const { watcher, inspectImage } = createWatcher({ configuration: { watchevents: true } });
+    inspectImage.mockResolvedValue({
+      Id: 'image-same',
+      RepoDigests: ['ghcr.io/acme/service@sha256:same'],
+      Config: {
+        Labels: {
+          'org.opencontainers.image.source': 'https://github.com/acme/backfilled',
+        },
+      },
+    });
+
+    await addImageDetailsToContainerOrchestration(
+      watcher as any,
+      createDockerSummaryContainer(),
+      {},
+      createHelpers({ resolveTagName: vi.fn().mockReturnValue('1.0.0') }) as any,
+    );
+
+    expect(containerInStore.sourceRepo).toBe('github.com/acme/backfilled');
+  });
+
+  test('leaves sourceRepo undefined in the no-repair path when no labels yield a repo', async () => {
+    const containerInStore = {
+      id: 'container-1',
+      sourceRepo: undefined,
+      error: undefined,
+      details: { ports: [], volumes: [], env: [] },
+      image: {
+        id: 'image-same',
+        name: 'acme/service',
+        registry: { url: 'registry.example.com' },
+        tag: { value: '1.0.0', semver: true },
+        digest: { repo: 'sha256:same', value: 'sha256:same' },
+        created: '2025-01-01T00:00:00.000Z',
+      },
+    };
+    vi.spyOn(storeContainer, 'getContainer').mockReturnValue(containerInStore as any);
+
+    const { watcher, inspectImage } = createWatcher({ configuration: { watchevents: true } });
+    inspectImage.mockResolvedValue({
+      Id: 'image-same',
+      RepoDigests: ['registry.example.com/acme/service@sha256:same'],
+      Config: { Labels: {} },
+    });
+
+    await addImageDetailsToContainerOrchestration(
+      watcher as any,
+      createDockerSummaryContainer(),
+      {},
+      createHelpers({ resolveTagName: vi.fn().mockReturnValue('1.0.0') }) as any,
+    );
+
+    expect(containerInStore.sourceRepo).toBeUndefined();
+  });
 });

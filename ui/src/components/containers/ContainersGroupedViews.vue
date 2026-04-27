@@ -527,8 +527,9 @@ watchEffect(() => {
           <template v-else-if="tableActionStyle === 'icons'">
             <div class="flex items-center justify-end gap-0.5">
               <ReleaseNotesLink
-                v-if="c.releaseNotes?.url || c.releaseLink"
+                v-if="c.releaseNotes?.url || c.currentReleaseNotes?.url || c.releaseLink"
                 :release-notes="c.releaseNotes"
+                :current-release-notes="c.currentReleaseNotes"
                 :release-link="c.releaseLink"
                 icon-only
               />
@@ -566,8 +567,9 @@ watchEffect(() => {
           <template v-else>
             <div class="flex items-center justify-end gap-1">
               <ReleaseNotesLink
-                v-if="c.releaseNotes?.url || c.releaseLink"
+                v-if="c.releaseNotes?.url || c.currentReleaseNotes?.url || c.releaseLink"
                 :release-notes="c.releaseNotes"
+                :current-release-notes="c.currentReleaseNotes"
                 :release-link="c.releaseLink"
                 icon-only
               />
@@ -762,9 +764,13 @@ watchEffect(() => {
                 <AppIcon v-else name="check" :size="14" class="ml-1" style="color: var(--dd-success);" v-tooltip.top="tt('Up to date')" />
               </template>
             </div>
-            <div v-if="c.suggestedTag || c.releaseNotes || c.releaseLink || c.sourceRepo" class="flex items-center gap-2 flex-wrap mt-2">
+            <div v-if="c.suggestedTag || c.releaseNotes || c.currentReleaseNotes || c.releaseLink || c.sourceRepo" class="flex items-center gap-2 flex-wrap mt-2">
               <SuggestedTagBadge :tag="c.suggestedTag" :current-tag="c.currentTag" />
-              <ReleaseNotesLink :release-notes="c.releaseNotes" :release-link="c.releaseLink" />
+              <ReleaseNotesLink
+                :release-notes="c.releaseNotes"
+                :current-release-notes="c.currentReleaseNotes"
+                :release-link="c.releaseLink"
+              />
               <ProjectLink :source-repo="c.sourceRepo" />
             </div>
           </div>
@@ -884,11 +890,15 @@ watchEffect(() => {
               {{ c.noUpdateReason }}
             </div>
             <div
-              v-if="c.suggestedTag || c.releaseNotes || c.releaseLink || c.sourceRepo"
+              v-if="c.suggestedTag || c.releaseNotes || c.currentReleaseNotes || c.releaseLink || c.sourceRepo"
               class="flex items-center gap-2 flex-wrap mt-1"
             >
               <SuggestedTagBadge :tag="c.suggestedTag" :current-tag="c.currentTag" />
-              <ReleaseNotesLink :release-notes="c.releaseNotes" :release-link="c.releaseLink" />
+              <ReleaseNotesLink
+                :release-notes="c.releaseNotes"
+                :current-release-notes="c.currentReleaseNotes"
+                :release-link="c.releaseLink"
+              />
               <ProjectLink :source-repo="c.sourceRepo" />
             </div>
           </div>

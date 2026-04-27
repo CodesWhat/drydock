@@ -147,7 +147,11 @@ const {
           <UpdateMaturityBadge :maturity="selectedContainer.updateMaturity" :tooltip="selectedContainer.updateMaturityTooltip" />
           <SuggestedTagBadge :tag="selectedContainer.suggestedTag" :current-tag="selectedContainer.currentTag" />
         </div>
-        <ReleaseNotesLink :release-notes="selectedContainer.releaseNotes" :release-link="selectedContainer.releaseLink" />
+        <ReleaseNotesLink
+          :release-notes="selectedContainer.releaseNotes"
+          :current-release-notes="selectedContainer.currentReleaseNotes"
+          :release-link="selectedContainer.releaseLink"
+        />
         <ProjectLink :source-repo="selectedContainer.sourceRepo" />
         <div class="pt-1 space-y-1.5">
           <div class="text-2xs font-semibold uppercase tracking-wider dd-text-muted">Tag Filters</div>

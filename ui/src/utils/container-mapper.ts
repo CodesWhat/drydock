@@ -165,6 +165,7 @@ export interface ApiContainerInput {
   triggerExclude?: unknown;
   tagPinned?: unknown;
   sourceRepo?: unknown;
+  currentReleaseNotes?: ApiContainerReleaseNotes | null;
   error?: { message?: unknown } | null;
   ports?: unknown;
   volumes?: unknown;
@@ -611,9 +612,9 @@ function deriveRuntimeDetails(
   };
 }
 
-/** Derive inline release notes summary from API result. */
-function deriveReleaseNotes(apiContainer: ApiContainerInput): ContainerReleaseNotes | null {
-  const rn = apiContainer.result?.releaseNotes;
+function normalizeReleaseNotes(
+  rn: ApiContainerReleaseNotes | null | undefined,
+): ContainerReleaseNotes | null {
   if (!rn || typeof rn !== 'object') return null;
   const title = asNonEmptyString(rn.title);
   const body = asNonEmptyString(rn.body);
@@ -622,6 +623,16 @@ function deriveReleaseNotes(apiContainer: ApiContainerInput): ContainerReleaseNo
   const provider = asNonEmptyString(rn.provider);
   if (!title || !body || !url || !publishedAt || !provider) return null;
   return { title, body, url, publishedAt, provider };
+}
+
+/** Derive inline release notes summary for the new (update target) tag. */
+function deriveReleaseNotes(apiContainer: ApiContainerInput): ContainerReleaseNotes | null {
+  return normalizeReleaseNotes(apiContainer.result?.releaseNotes);
+}
+
+/** Derive inline release notes summary for the currently running tag. */
+function deriveCurrentReleaseNotes(apiContainer: ApiContainerInput): ContainerReleaseNotes | null {
+  return normalizeReleaseNotes(apiContainer.currentReleaseNotes);
 }
 
 const VALID_UPDATE_BLOCKER_REASONS: ReadonlySet<UpdateBlockerReason> = new Set([
@@ -755,6 +766,7 @@ export function mapApiContainer(apiContainer: ApiContainerInput): Container {
     suggestedTag: asNonEmptyString(apiContainer.result?.suggestedTag),
     sourceRepo: asNonEmptyString(apiContainer.sourceRepo),
     releaseNotes: deriveReleaseNotes(apiContainer),
+    currentReleaseNotes: deriveCurrentReleaseNotes(apiContainer),
     releaseLink: deriveReleaseLink(apiContainer),
     updateDetectedAt: detectedAt,
     updateOperation: deriveUpdateOperation(apiContainer),

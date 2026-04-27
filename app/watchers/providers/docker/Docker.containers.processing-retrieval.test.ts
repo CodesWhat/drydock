@@ -2,6 +2,7 @@ import {
   createMockLog,
   createMockLogWithChild,
   mockGetFullReleaseNotesForContainer,
+  mockGetReleaseNotesForTag,
   mockResolveSourceRepoForContainer,
   mockToContainerReleaseNotes,
   setupDockerWatcherContainerSuite,
@@ -149,7 +150,7 @@ describe('Docker Watcher', () => {
       docker.findNewVersion = vi.fn().mockResolvedValue({ tag: '2.0.0' });
       docker.mapContainerToContainerReport = vi.fn().mockReturnValue({ container, changed: false });
       mockResolveSourceRepoForContainer.mockResolvedValue('github.com/acme/service');
-      mockGetFullReleaseNotesForContainer.mockResolvedValue({
+      mockGetReleaseNotesForTag.mockResolvedValue({
         title: 'v2.0.0',
         body: 'Release body',
         url: 'https://github.com/acme/service/releases/tag/v2.0.0',
@@ -166,8 +167,8 @@ describe('Docker Watcher', () => {
 
       await docker.watchContainer(container as any);
 
-      expect(mockResolveSourceRepoForContainer).toHaveBeenCalledWith(container);
-      expect(mockGetFullReleaseNotesForContainer).toHaveBeenCalledWith(container);
+      expect(mockResolveSourceRepoForContainer).toHaveBeenCalledWith(container, undefined);
+      expect(mockGetReleaseNotesForTag).toHaveBeenCalledWith(container, '2.0.0', undefined);
       expect(container.sourceRepo).toBe('github.com/acme/service');
       expect(container.result?.releaseNotes).toEqual({
         title: 'v2.0.0',
@@ -198,7 +199,7 @@ describe('Docker Watcher', () => {
       docker.findNewVersion = vi.fn().mockResolvedValue({ tag: '2.0.0' });
       docker.mapContainerToContainerReport = vi.fn().mockReturnValue({ container, changed: false });
       mockResolveSourceRepoForContainer.mockResolvedValue('github.com/acme/service');
-      mockGetFullReleaseNotesForContainer.mockRejectedValue(new Error('rate limited'));
+      mockGetReleaseNotesForTag.mockRejectedValue(new Error('rate limited'));
 
       await docker.watchContainer(container as any);
 

@@ -236,7 +236,10 @@ export function detectSourceRepoFromImageMetadata(options: {
   return deriveSourceRepoFromGhcrImage(options.imageRegistryDomain, options.imagePath);
 }
 
-export async function resolveSourceRepoForContainer(container: Container) {
+export async function resolveSourceRepoForContainer(
+  container: Container,
+  imageLabels?: Record<string, string>,
+) {
   const sourceRepoFromContainer = normalizeSourceRepo(container.sourceRepo);
   if (sourceRepoFromContainer) {
     return sourceRepoFromContainer;
@@ -244,6 +247,7 @@ export async function resolveSourceRepoForContainer(container: Container) {
 
   const sourceRepoFromLabelsOrGhcr = detectSourceRepoFromImageMetadata({
     containerLabels: container.labels,
+    imageLabels,
     imageRegistryDomain: getImageRegistryHostname(container.image),
     imagePath: container.image?.name,
   });
@@ -319,17 +323,24 @@ async function getReleaseNotesForSourceRepo(sourceRepo: string, tag: string) {
   return releaseNotes;
 }
 
-export async function getFullReleaseNotesForContainer(container: Container) {
-  const tag = container.result?.tag;
+export async function getReleaseNotesForTag(
+  container: Container,
+  tag: string | undefined,
+  imageLabels?: Record<string, string>,
+) {
   if (typeof tag !== 'string' || tag.trim() === '') {
     return undefined;
   }
 
-  const sourceRepo = await resolveSourceRepoForContainer(container);
+  const sourceRepo = await resolveSourceRepoForContainer(container, imageLabels);
   if (!sourceRepo) {
     return undefined;
   }
   return getReleaseNotesForSourceRepo(sourceRepo, tag);
+}
+
+export async function getFullReleaseNotesForContainer(container: Container) {
+  return getReleaseNotesForTag(container, container.result?.tag);
 }
 
 export function truncateReleaseNotesBody(body: string, maxLength: number) {

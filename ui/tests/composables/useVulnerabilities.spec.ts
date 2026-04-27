@@ -1105,6 +1105,138 @@ describe('useVulnerabilities', () => {
       expect(summary.releaseLink).toBe('https://github.com/nginx/nginx/releases');
     });
 
+    it('propagates currentReleaseNotes alongside update releaseNotes when container has both', async () => {
+      mockGetSecurityVulnerabilityOverview.mockResolvedValue({
+        totalContainers: 1,
+        scannedContainers: 1,
+        latestScannedAt: null,
+        images: [
+          {
+            image: 'nginx',
+            containerIds: ['c1'],
+            vulnerabilities: [{ id: 'CVE-7', severity: 'HIGH', package: 'openssl' }],
+          },
+        ],
+      });
+
+      const updateNotes = {
+        title: 'v1.26.0',
+        body: 'Update body',
+        url: 'https://github.com/nginx/nginx/releases/tag/v1.26.0',
+        publishedAt: '2026-04-01T00:00:00Z',
+        provider: 'github',
+      };
+      const currentNotes = {
+        title: 'v1.25.0',
+        body: 'Current body',
+        url: 'https://github.com/nginx/nginx/releases/tag/v1.25.0',
+        publishedAt: '2025-12-01T00:00:00Z',
+        provider: 'github',
+      };
+
+      const containers = ref([
+        {
+          id: 'c1',
+          name: 'nginx',
+          image: 'nginx:1.25',
+          newTag: '1.26',
+          identityKey: '::Local::nginx',
+          currentTag: '1.25',
+          status: 'running',
+          registry: 'dockerhub',
+          updateKind: 'minor',
+          updateMaturity: null,
+          bouncer: 'safe',
+          server: 'Local',
+          icon: 'docker',
+          releaseNotes: updateNotes,
+          currentReleaseNotes: currentNotes,
+          details: { ports: [], volumes: [], env: [], labels: [] },
+        },
+      ]);
+
+      const state = useVulnerabilities({
+        securitySortField: ref('critical'),
+        securitySortAsc: ref(false),
+        containers,
+      });
+      await state.fetchVulnerabilities();
+
+      const summary = state.filteredSummaries.value[0];
+      expect(summary.releaseNotes).toEqual(updateNotes);
+      expect(summary.currentReleaseNotes).toEqual(currentNotes);
+    });
+
+    it('captures currentReleaseNotes from a non-primary updating container when primary lacks both', async () => {
+      mockGetSecurityVulnerabilityOverview.mockResolvedValue({
+        totalContainers: 2,
+        scannedContainers: 2,
+        latestScannedAt: null,
+        images: [
+          {
+            image: 'nginx',
+            containerIds: ['c1', 'c2'],
+            vulnerabilities: [{ id: 'CVE-8', severity: 'HIGH', package: 'openssl' }],
+          },
+        ],
+      });
+
+      const currentNotes = {
+        title: 'v1.25.0',
+        body: 'Current body',
+        url: 'https://github.com/nginx/nginx/releases/tag/v1.25.0',
+        publishedAt: '2025-12-01T00:00:00Z',
+        provider: 'github',
+      };
+
+      const containers = ref([
+        {
+          id: 'c1',
+          name: 'nginx-a',
+          image: 'nginx:1.25',
+          newTag: '1.26',
+          identityKey: '::Local::nginx-a',
+          currentTag: '1.25',
+          status: 'running',
+          registry: 'dockerhub',
+          updateKind: 'minor',
+          updateMaturity: null,
+          bouncer: 'safe',
+          server: 'Local',
+          icon: 'docker',
+          details: { ports: [], volumes: [], env: [], labels: [] },
+        },
+        {
+          id: 'c2',
+          name: 'nginx-b',
+          image: 'nginx:1.25',
+          newTag: '1.26',
+          identityKey: '::Local::nginx-b',
+          currentTag: '1.25',
+          status: 'running',
+          registry: 'dockerhub',
+          updateKind: 'minor',
+          updateMaturity: null,
+          bouncer: 'safe',
+          server: 'Local',
+          icon: 'docker',
+          currentReleaseNotes: currentNotes,
+          details: { ports: [], volumes: [], env: [], labels: [] },
+        },
+      ]);
+
+      const state = useVulnerabilities({
+        securitySortField: ref('critical'),
+        securitySortAsc: ref(false),
+        containers,
+      });
+      await state.fetchVulnerabilities();
+
+      const summary = state.filteredSummaries.value[0];
+      expect(summary.releaseNotes).toBeUndefined();
+      expect(summary.currentReleaseNotes).toEqual(currentNotes);
+    });
+
     it('falls back to releaseLink when no container has releaseNotes', async () => {
       mockGetSecurityVulnerabilityOverview.mockResolvedValue({
         totalContainers: 1,

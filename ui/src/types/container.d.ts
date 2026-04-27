@@ -101,6 +101,7 @@ export interface Container {
   suggestedTag?: string;
   sourceRepo?: string;
   releaseNotes?: ContainerReleaseNotes | null;
+  currentReleaseNotes?: ContainerReleaseNotes | null;
   status: 'running' | 'stopped';
   registry: 'dockerhub' | 'ghcr' | 'custom';
   registryName?: string;

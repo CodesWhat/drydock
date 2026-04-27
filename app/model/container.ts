@@ -173,6 +173,7 @@ export interface Container {
   updateEligibility?: import('./update-eligibility.js').UpdateEligibility;
   labels?: Record<string, string>;
   sourceRepo?: string;
+  currentReleaseNotes?: ContainerReleaseNotes;
   details?: ContainerRuntimeDetails;
   resultChanged?: (otherContainer: Container | undefined) => boolean;
 }
@@ -342,6 +343,13 @@ const schema = joi.object({
   resultChanged: joi.function(),
   labels: joi.object(),
   sourceRepo: joi.string(),
+  currentReleaseNotes: joi.object({
+    title: joi.string().required(),
+    body: joi.string().required(),
+    url: joi.string().required(),
+    publishedAt: joi.string().isoDate().required(),
+    provider: joi.string().valid('github', 'gitlab', 'gitea').required(),
+  }),
   details: joi.object({
     ports: joi.array().items(joi.string()).required(),
     volumes: joi.array().items(joi.string()).required(),

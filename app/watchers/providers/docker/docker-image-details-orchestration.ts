@@ -354,6 +354,21 @@ async function refreshStoredContainerImageFields(
         containerInStore.image.created = currentImage.Created;
       }
     }
+
+    // Backfill sourceRepo on every cycle when missing, so containers persisted
+    // before release-notes support shipped pick up their OCI image labels on
+    // the next watch tick — not only when the image id/digest changes.
+    if (!containerInStore.sourceRepo) {
+      const backfilledSourceRepo = detectSourceRepoFromImageMetadata({
+        containerLabels: container.Labels || {},
+        imageLabels: currentImage.Config?.Labels,
+        imageRegistryDomain: containerInStore.image.registry?.url,
+        imagePath: containerInStore.image.name,
+      });
+      if (backfilledSourceRepo) {
+        containerInStore.sourceRepo = backfilledSourceRepo;
+      }
+    }
   } catch {
     // Degrade gracefully to cached values.
   }

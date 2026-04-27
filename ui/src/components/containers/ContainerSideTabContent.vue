@@ -243,7 +243,11 @@ function isActionInProgress(container: { id?: unknown; name?: unknown }) {
                 class="mt-2"
               />
               <div class="mt-2">
-                <ReleaseNotesLink :release-notes="selectedContainer.releaseNotes" :release-link="selectedContainer.releaseLink" />
+                <ReleaseNotesLink
+                  :release-notes="selectedContainer.releaseNotes"
+                  :current-release-notes="selectedContainer.currentReleaseNotes"
+                  :release-link="selectedContainer.releaseLink"
+                />
                 <ProjectLink :source-repo="selectedContainer.sourceRepo" />
               </div>
             </div>
