@@ -63,15 +63,24 @@ runs:
         set -euo pipefail
 
         for attempt in $(seq 1 "${MAX_ATTEMPTS}"); do
-          runs_url="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/workflows/${workflow_id}/runs?head_sha=${TARGET_SHA}&event=push&per_page=50"
+          # GitHub's `?head_sha=` and `?event=` query filters on this endpoint
+          # have been spuriously returning 0 results since 2026-04-27 (the
+          # unfiltered endpoint still returns the runs fine). Pull the latest
+          # 100 runs unfiltered and filter client-side via jq for resilience.
+          runs_url="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/workflows/${workflow_id}/runs?per_page=100"
           runs_json="$(curl -fsSL \
             -H "Authorization: Bearer ${GH_TOKEN}" \
             -H "Accept: application/vnd.github+json" \
             "${runs_url}")"
 
-          success_count="$(echo "${runs_json}" | jq '[.workflow_runs[] | select(.conclusion == "success" and ((.head_branch // "") | length > 0))] | length')"
-          in_progress_count="$(echo "${runs_json}" | jq '[.workflow_runs[] | select(.status != "completed" and ((.head_branch // "") | length > 0))] | length')"
-          completed_count="$(echo "${runs_json}" | jq '[.workflow_runs[] | select(.status == "completed" and ((.head_branch // "") | length > 0))] | length')"
+          filtered="$(echo "${runs_json}" | jq --arg sha "${TARGET_SHA}" '{
+            workflow_runs: [.workflow_runs[]
+              | select(.head_sha == $sha and .event == "push" and ((.head_branch // "") | length > 0))]
+          }')"
+
+          success_count="$(echo "${filtered}" | jq '[.workflow_runs[] | select(.conclusion == "success")] | length')"
+          in_progress_count="$(echo "${filtered}" | jq '[.workflow_runs[] | select(.status != "completed")] | length')"
+          completed_count="$(echo "${filtered}" | jq '[.workflow_runs[] | select(.status == "completed")] | length')"
 
           if [ "${success_count}" -gt 0 ]; then
             echo "Found successful ${workflow_name} branch push run for ${TARGET_SHA}."
@@ -80,7 +89,7 @@ runs:
 
           if [ "${completed_count}" -gt 0 ] && [ "${in_progress_count}" -eq 0 ]; then
             echo "::error::${workflow_name} branch push runs for ${TARGET_SHA} completed without success."
-            echo "${runs_json}" | jq '.workflow_runs[] | select((.head_branch // "") | length > 0) | {id, status, conclusion, head_branch, html_url}'
+            echo "${filtered}" | jq '.workflow_runs[] | {id, status, conclusion, head_branch, html_url}'
             exit 1
           fi
 
