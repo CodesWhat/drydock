@@ -280,7 +280,11 @@ function isActionInProgress(container: { id?: unknown; name?: unknown }) {
                 variant="full"
                 :has-active-operation-badge="Boolean(selectedContainer.updateOperation)"
               />
-              <ReleaseNotesLink :release-notes="selectedContainer.releaseNotes" :release-link="selectedContainer.releaseLink" />
+              <ReleaseNotesLink
+                :release-notes="selectedContainer.releaseNotes"
+                :current-release-notes="selectedContainer.currentReleaseNotes"
+                :release-link="selectedContainer.releaseLink"
+              />
               <ProjectLink :source-repo="selectedContainer.sourceRepo" />
               <div class="pt-1 space-y-1.5">
                 <div class="dd-text-label dd-text-muted">Tag Filters</div>

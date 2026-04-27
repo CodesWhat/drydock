@@ -4,6 +4,12 @@ import {
   NO_DOCKER_TRIGGER_FOUND_ERROR,
 } from '../api/docker-trigger.js';
 import type { Container } from '../model/container.js';
+import {
+  computeUpdateEligibility,
+  getPrimaryHardBlocker,
+  type UpdateBlocker,
+  type UpdateBlockerReason,
+} from '../model/update-eligibility.js';
 import * as registry from '../registry/index.js';
 import * as updateOperationStore from '../store/update-operation.js';
 import Trigger from '../triggers/providers/Trigger.js';
@@ -135,6 +141,30 @@ function getActiveUpdateOperationForContainer(container: Container) {
   return isLegacyOperation ? byName : undefined;
 }
 
+// Complete map covers every UpdateBlockerReason so callers never hit a missing
+// entry; soft reasons get 409 because they are not expected to reach this code
+// path (callers gate via getPrimaryHardBlocker), but if they ever do we still
+// return a sensible status code instead of undefined.
+const HARD_BLOCKER_STATUS: Record<UpdateBlockerReason, number> = {
+  'no-update-available': 400,
+  'agent-mismatch': 404,
+  'no-update-trigger-configured': 404,
+  'rollback-container': 409,
+  'security-scan-blocked': 409,
+  'active-operation': 409,
+  snoozed: 409,
+  'skip-tag': 409,
+  'skip-digest': 409,
+  'maturity-not-reached': 409,
+  'threshold-not-reached': 409,
+  'trigger-excluded': 409,
+  'trigger-not-included': 409,
+};
+
+function statusCodeForHardBlocker(blocker: UpdateBlocker): number {
+  return HARD_BLOCKER_STATUS[blocker.reason];
+}
+
 function markAcceptedQueuedOperationFailed(operationId: string, error: unknown) {
   const operation = updateOperationStore.getOperationById(operationId);
   if (operation?.status !== 'queued') {
@@ -152,6 +182,8 @@ function prepareContainerUpdateRequest(
   container: Container,
   options: EnqueueContainerUpdateOptions = {},
 ): PreparedContainerUpdateRequest {
+  // Active-operation gate first — preserves the original error wording for callers that
+  // distinguish "queued" vs "in progress" by message text.
   const activeOperation = getActiveUpdateOperationForContainer(container);
   if (activeOperation) {
     throw new UpdateRequestError(
@@ -164,18 +196,20 @@ function prepareContainerUpdateRequest(
     throw new UpdateRequestError(400, 'No update available for this container');
   }
 
-  if (Trigger.isRollbackContainer(container)) {
-    throw new UpdateRequestError(
-      409,
-      'Cannot update temporary rollback container renamed with -old-{timestamp}',
-    );
-  }
-
-  if (container.security?.scan?.status === 'blocked') {
-    throw new UpdateRequestError(
-      409,
-      'Update blocked by security scan. Use force-update to override.',
-    );
+  // Reject on any hard eligibility blocker. Soft blockers (snooze, threshold, maturity,
+  // skip-tag/digest, trigger-not-included/excluded) still allow manual update — that
+  // mirrors the badge layer's "warn but allow" stance for user-policy gates.
+  //
+  // We trust container.updateAvailable (checked above) as the source of truth for
+  // "an update exists" and ignore eligibility's no-update-available short-circuit, which
+  // uses a stricter raw-tag/digest comparison meant for the watch loop.
+  const eligibility = computeUpdateEligibility(container, {
+    triggers: registry.getState().trigger,
+    getActiveOperation: () => undefined,
+  });
+  const hardBlocker = getPrimaryHardBlocker(eligibility);
+  if (hardBlocker && hardBlocker.reason !== 'no-update-available') {
+    throw new UpdateRequestError(statusCodeForHardBlocker(hardBlocker), hardBlocker.message);
   }
 
   return {

@@ -615,6 +615,130 @@ describe('release-notes service', () => {
     expect(releaseNotes).toBeUndefined();
   });
 
+  test('resolveSourceRepoForContainer finds source repo from imageLabels when container labels are absent', async () => {
+    const sourceRepo = await resolveSourceRepoForContainer(
+      {
+        image: {
+          name: 'acme/service',
+          registry: {
+            url: 'registry.example.com',
+          },
+        },
+        labels: {},
+      } as any,
+      {
+        'org.opencontainers.image.source': 'https://github.com/acme/from-image-labels',
+      },
+    );
+
+    expect(sourceRepo).toBe('github.com/acme/from-image-labels');
+    expect(mockAxiosGet).not.toHaveBeenCalled();
+  });
+
+  test('getReleaseNotesForTag returns undefined for empty-string tag', async () => {
+    const { getReleaseNotesForTag } = await import('./index.js');
+    const result = await getReleaseNotesForTag(
+      { sourceRepo: 'github.com/acme/service' } as any,
+      '',
+    );
+
+    expect(result).toBeUndefined();
+    expect(mockAxiosGet).not.toHaveBeenCalled();
+  });
+
+  test('getReleaseNotesForTag returns undefined for whitespace-only tag', async () => {
+    const { getReleaseNotesForTag } = await import('./index.js');
+    const result = await getReleaseNotesForTag(
+      { sourceRepo: 'github.com/acme/service' } as any,
+      '   ',
+    );
+
+    expect(result).toBeUndefined();
+    expect(mockAxiosGet).not.toHaveBeenCalled();
+  });
+
+  test('getReleaseNotesForTag returns undefined when no source repo resolvable', async () => {
+    const { getReleaseNotesForTag } = await import('./index.js');
+    const result = await getReleaseNotesForTag(
+      {
+        image: {
+          name: 'acme/service',
+          registry: { url: 'registry.example.com' },
+        },
+        labels: {},
+      } as any,
+      '1.2.3',
+    );
+
+    expect(result).toBeUndefined();
+    expect(mockAxiosGet).not.toHaveBeenCalled();
+  });
+
+  test('getReleaseNotesForTag returns undefined when no provider supports the repo (gitlab)', async () => {
+    const { getReleaseNotesForTag } = await import('./index.js');
+    const result = await getReleaseNotesForTag(
+      { sourceRepo: 'gitlab.com/acme/service' } as any,
+      '1.2.3',
+    );
+
+    expect(result).toBeUndefined();
+    expect(mockAxiosGet).not.toHaveBeenCalled();
+  });
+
+  test('getReleaseNotesForTag returns notes for an arbitrary tag string when provider supports the repo', async () => {
+    const { getReleaseNotesForTag } = await import('./index.js');
+    mockAxiosGet.mockResolvedValueOnce({
+      data: {
+        tag_name: 'v2.5.0',
+        name: 'Release 2.5.0',
+        body: 'Arbitrary tag notes',
+        html_url: 'https://github.com/acme/service/releases/tag/v2.5.0',
+        published_at: '2026-03-01T00:00:00.000Z',
+      },
+    });
+
+    const result = await getReleaseNotesForTag(
+      { sourceRepo: 'github.com/acme/service' } as any,
+      '2.5.0',
+    );
+
+    expect(result).toEqual({
+      title: 'Release 2.5.0',
+      body: 'Arbitrary tag notes',
+      url: 'https://github.com/acme/service/releases/tag/v2.5.0',
+      publishedAt: '2026-03-01T00:00:00.000Z',
+      provider: 'github',
+    });
+  });
+
+  test('getFullReleaseNotesForContainer delegates to getReleaseNotesForTag using result.tag', async () => {
+    mockAxiosGet.mockResolvedValueOnce({
+      data: {
+        tag_name: 'v3.0.0',
+        name: 'Release 3.0.0',
+        body: 'Delegation test',
+        html_url: 'https://github.com/acme/service/releases/tag/v3.0.0',
+        published_at: '2026-04-01T00:00:00.000Z',
+      },
+    });
+
+    const result = await getFullReleaseNotesForContainer({
+      sourceRepo: 'github.com/acme/service',
+      result: { tag: '3.0.0' },
+    } as any);
+
+    expect(result).toMatchObject({ title: 'Release 3.0.0' });
+  });
+
+  test('getFullReleaseNotesForContainer returns undefined when result is missing', async () => {
+    const result = await getFullReleaseNotesForContainer({
+      sourceRepo: 'github.com/acme/service',
+    } as any);
+
+    expect(result).toBeUndefined();
+    expect(mockAxiosGet).not.toHaveBeenCalled();
+  });
+
   test('truncateReleaseNotesBody and toContainerReleaseNotes should cap body length', () => {
     const fullBody = 'x'.repeat(2500);
 

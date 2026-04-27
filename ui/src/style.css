@@ -256,6 +256,15 @@ tr.dd-row-updating > td > *:not(.dd-row-overlay) {
   transition: opacity var(--dd-duration-enter);
 }
 
+/* Scanning rows need the same containing-block hack to keep the
+   `.dd-row-overlay` chip pinned to the row, but must NOT dim or
+   disable the row contents — scans are non-blocking and the row
+   stays interactive while the chip is visible. */
+tr.dd-row-scanning {
+  position: relative;
+  transform: translateZ(0);
+}
+
 /* ─── Semantic typography ─── */
 @utility dd-text-body {
   font-size: var(--text-2xs-plus); /* 11px — primary body text */

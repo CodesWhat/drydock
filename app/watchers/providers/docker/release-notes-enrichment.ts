@@ -1,6 +1,6 @@
 import type { Container } from '../../../model/container.js';
 import {
-  getFullReleaseNotesForContainer,
+  getReleaseNotesForTag,
   resolveSourceRepoForContainer,
   toContainerReleaseNotes,
 } from '../../../release-notes/index.js';
@@ -13,23 +13,37 @@ interface ReleaseNotesEnrichmentLogger {
 export async function enrichContainerWithReleaseNotes(
   containerWithResult: Container,
   logContainer: ReleaseNotesEnrichmentLogger,
+  imageLabels?: Record<string, string>,
 ) {
   try {
-    const sourceRepo = await resolveSourceRepoForContainer(containerWithResult);
+    const sourceRepo = await resolveSourceRepoForContainer(containerWithResult, imageLabels);
     if (sourceRepo) {
       containerWithResult.sourceRepo = sourceRepo;
+    }
+
+    const currentTag = containerWithResult.image?.tag?.value;
+    const newTag = containerWithResult.result?.tag;
+
+    const currentNotes = await getReleaseNotesForTag(containerWithResult, currentTag, imageLabels);
+    if (currentNotes) {
+      containerWithResult.currentReleaseNotes = toContainerReleaseNotes(currentNotes);
     }
 
     if (!containerWithResult.result || !containerWithResult.updateAvailable) {
       return;
     }
 
-    const fullReleaseNotes = await getFullReleaseNotesForContainer(containerWithResult);
-    if (!fullReleaseNotes) {
+    if (typeof newTag === 'string' && newTag.trim() !== '' && newTag === currentTag) {
+      if (currentNotes) {
+        containerWithResult.result.releaseNotes = toContainerReleaseNotes(currentNotes);
+      }
       return;
     }
 
-    containerWithResult.result.releaseNotes = toContainerReleaseNotes(fullReleaseNotes);
+    const newNotes = await getReleaseNotesForTag(containerWithResult, newTag, imageLabels);
+    if (newNotes) {
+      containerWithResult.result.releaseNotes = toContainerReleaseNotes(newNotes);
+    }
   } catch (error: unknown) {
     logContainer.debug(`Unable to fetch release notes (${getErrorMessage(error)})`);
   }

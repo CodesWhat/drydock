@@ -62,6 +62,10 @@ The update action triggers the Docker or Docker Compose trigger for the selected
 
 See [Lifecycle Hooks](/docs/configuration/hooks) and [Backup & Rollback](/docs/configuration/rollback) for related configuration.
 
+## Why isn't my container auto-updating?
+
+Drydock evaluates each container against a stack of policy and trigger gates and reports the result as a pill on the row (and as `updateEligibility` on the API payload). When auto-update doesn't fire on a container with an available update, the pill identifies the active blocker — `Below threshold`, `Trigger filtered`, `No trigger`, `Agent mismatch`, `Snoozed`, etc. See [Update Eligibility & Blockers](/docs/configuration/actions/update-eligibility) for the full reason reference and how to clear each gate.
+
 ## Preview
 
 Before updating, you can preview what will change using the dry-run endpoint:

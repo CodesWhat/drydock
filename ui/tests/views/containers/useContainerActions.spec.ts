@@ -4,6 +4,7 @@ import {
   OPERATION_DISPLAY_HOLD_MS,
   useOperationDisplayHold,
 } from '@/composables/useOperationDisplayHold';
+import { _resetScanLifecycleStateForTests } from '@/composables/useScanLifecycle';
 import { useUpdateBatches } from '@/composables/useUpdateBatches';
 import type { ApiContainerTrigger, ApiContainerUpdateOperation } from '@/types/api';
 import type { Container } from '@/types/container';
@@ -211,6 +212,7 @@ describe('useContainerActions', () => {
   beforeEach(() => {
     vi.useRealTimers();
     vi.resetAllMocks();
+    _resetScanLifecycleStateForTests();
     useOperationDisplayHold().clearAllOperationDisplayHolds();
     useUpdateBatches().batches.value = new Map();
     mocks.containerActionsEnabled.value = true;
@@ -3532,16 +3534,15 @@ describe('useContainerActions', () => {
         }),
     );
 
-    // During a scan: isContainerScanInProgress must be true, isContainerUpdateInProgress must be false.
-    // The action is keyed by container id (resolved from the containerIdMap), so we check by
-    // container object (which carries the id) rather than by the string name.
-    // Also verify the string-target path of isContainerScanInProgress: when the string matches
-    // the map key it returns true, when it doesn't match it returns false.
+    // During a scan: isContainerScanInProgress must be true via the SSE-driven
+    // scan lifecycle (anchored to container id), with isContainerUpdateInProgress false.
+    // Also verify the string-target path: container id directly OR a name that the
+    // containerIdMap resolves to that id should both return true; an unrelated string false.
     const scanPromise = composable.scanContainer('web');
     await nextTick();
 
     expect(composable.isContainerScanInProgress(container)).toBe(true);
-    // String 'container-1' matches the keyed entry via the name path
+    // String 'container-1' matches the scansInFlight set keyed by container id
     expect(composable.isContainerScanInProgress('container-1')).toBe(true);
     // String 'unrelated' doesn't match any entry
     expect(composable.isContainerScanInProgress('unrelated')).toBe(false);
@@ -3550,7 +3551,16 @@ describe('useContainerActions', () => {
     resolvers[0]?.();
     await scanPromise;
 
-    // After the scan completes the flag clears
+    // The HTTP response alone does not clear the spinner — the scan state is
+    // SSE-driven, so the per-row chip stays anchored until the backend's
+    // dd:scan-completed event arrives (or the safety timeout fires).
+    expect(composable.isContainerScanInProgress(container)).toBe(true);
+
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-scan-completed', { detail: { containerId: 'container-1' } }),
+    );
+    await nextTick();
+
     expect(composable.isContainerScanInProgress(container)).toBe(false);
 
     // During an update: isContainerUpdateInProgress must be true, isContainerScanInProgress must be false
@@ -3562,6 +3572,95 @@ describe('useContainerActions', () => {
 
     resolvers[1]?.();
     await updatePromise;
+  });
+
+  it('shows soft-blocker policy list and override label in update confirmation', async () => {
+    const container = makeContainer({
+      id: 'container-1',
+      name: 'web',
+      currentTag: '1.0.0',
+      newTag: '1.1.0',
+      updateEligibility: {
+        eligible: false,
+        evaluatedAt: new Date().toISOString(),
+        blockers: [
+          {
+            reason: 'snoozed',
+            severity: 'soft',
+            message: 'Container is snoozed until 2026-06-01',
+            actionable: true,
+          },
+          {
+            reason: 'trigger-not-included',
+            severity: 'soft',
+            message: 'Trigger is not in the include list',
+            actionable: false,
+          },
+        ],
+      },
+    });
+    const { composable } = await mountActionsHarness({
+      selectedContainer: container,
+      selectedContainerId: container.id,
+      containerIdMap: { web: 'container-1' },
+    });
+
+    composable.confirmUpdate('web');
+
+    expect(mocks.confirmRequire).toHaveBeenCalledTimes(1);
+    const confirmCall = mocks.confirmRequire.mock.calls[0][0] as {
+      message: string;
+      acceptLabel: string;
+    };
+    expect(confirmCall.message).toContain('• Container is snoozed until 2026-06-01');
+    expect(confirmCall.message).toContain('• Trigger is not in the include list');
+    expect(confirmCall.message).toContain('Click Update anyway to override.');
+    expect(confirmCall.acceptLabel).toBe('Update anyway');
+  });
+
+  it('sets inputError and returns early from scanContainer when container actions are disabled', async () => {
+    const container = makeContainer({ id: 'container-1', name: 'web' });
+    const { composable, error } = await mountActionsHarness({
+      containers: [container],
+      containerIdMap: { web: 'container-1' },
+    });
+
+    mocks.containerActionsEnabled.value = false;
+
+    await composable.scanContainer('web');
+
+    expect(mocks.scanContainer).not.toHaveBeenCalled();
+    expect(error.value).toBe('Container actions disabled by server configuration');
+  });
+
+  it('calls toastError and clears scan in-flight state when scanContainer rejects', async () => {
+    const container = makeContainer({ id: 'container-1', name: 'web' });
+    const { composable } = await mountActionsHarness({
+      containers: [container],
+      containerIdMap: { web: 'container-1' },
+    });
+
+    mocks.scanContainer.mockRejectedValueOnce(new Error('boom'));
+
+    await composable.scanContainer('web');
+
+    expect(mocks.toastError).toHaveBeenCalledWith('Scan failed: web', 'boom');
+    expect(composable.isContainerScanInProgress(container)).toBe(false);
+  });
+
+  it('resolves isContainerScanInProgress via containerIdMap name-to-id path', async () => {
+    const container = makeContainer({ id: 'container-1', name: 'web' });
+    const { composable } = await mountActionsHarness({
+      containers: [container],
+      containerIdMap: { web: 'container-1' },
+    });
+
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-scan-started', { detail: { containerId: 'container-1' } }),
+    );
+    await nextTick();
+
+    expect(composable.isContainerScanInProgress('web')).toBe(true);
   });
 
   it('isContainerRowLocked returns false during a scan and true during an update', async () => {

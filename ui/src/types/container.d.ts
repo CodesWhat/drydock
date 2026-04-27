@@ -19,8 +19,18 @@ export type UpdateBlockerReason =
   | 'agent-mismatch'
   | 'no-update-trigger-configured';
 
+/**
+ * Severity controls how the UI gates the Update button:
+ *  - 'hard': button is locked; clicking is impossible. Hover tooltip shows the blocker message.
+ *  - 'soft': button stays clickable; the confirm modal lists soft blockers and the user
+ *    can choose to override.
+ */
+export type UpdateBlockerSeverity = 'hard' | 'soft';
+
 export interface UpdateBlocker {
   reason: UpdateBlockerReason;
+  /** Optional for backwards compat with legacy payloads; treat missing as 'hard' to be safe. */
+  severity?: UpdateBlockerSeverity;
   message: string;
   actionable: boolean;
   actionHint?: string;
@@ -101,6 +111,7 @@ export interface Container {
   suggestedTag?: string;
   sourceRepo?: string;
   releaseNotes?: ContainerReleaseNotes | null;
+  currentReleaseNotes?: ContainerReleaseNotes | null;
   status: 'running' | 'stopped';
   registry: 'dockerhub' | 'ghcr' | 'custom';
   registryName?: string;

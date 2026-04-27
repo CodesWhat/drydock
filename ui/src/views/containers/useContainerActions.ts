@@ -1,6 +1,7 @@
 import { computed, onUnmounted, type Ref, ref, watch } from 'vue';
 import { useConfirmDialog } from '../../composables/useConfirmDialog';
 import { useOperationDisplayHold } from '../../composables/useOperationDisplayHold';
+import { useScanLifecycle } from '../../composables/useScanLifecycle';
 import { useServerFeatures } from '../../composables/useServerFeatures';
 import { useToast } from '../../composables/useToast';
 import { useUpdateBatches } from '../../composables/useUpdateBatches';
@@ -33,6 +34,7 @@ import {
   shouldRenderStandaloneQueuedUpdateAsUpdating,
 } from '../../utils/container-update';
 import { errorMessage } from '../../utils/error';
+import { getSoftBlockers } from '../../utils/update-eligibility';
 import { useContainerBackups } from './useContainerBackups';
 import { useContainerPolicy } from './useContainerPolicy';
 import { useContainerPreview } from './useContainerPreview';
@@ -649,6 +651,14 @@ function createConfirmHandlers(args: {
   function confirmUpdate(target: ContainerActionTarget) {
     const name = typeof target === 'string' ? target : target.name;
     const container = args.selectedContainer.value;
+    // Prefer the explicit target's eligibility (from the row) over the side-panel's
+    // selected-container view, which can be a different container when the user clicks
+    // Update from a row in a non-selected stack.
+    const eligibility =
+      typeof target === 'object' && target
+        ? target.updateEligibility
+        : container?.updateEligibility;
+
     let message = `Update ${name} now? This will apply the latest discovered image.`;
     if (container && container.currentTag && container.newTag) {
       const isTagChange = container.updateKind !== 'digest';
@@ -659,11 +669,20 @@ function createConfirmHandlers(args: {
         message = `Update ${name}? A newer build of :${container.currentTag} is available (digest change).`;
       }
     }
+
+    // Surface soft blockers so the user knows they're overriding a policy gate
+    // (snooze, threshold, maturity, skip-tag/digest, trigger-not-included/excluded).
+    const softBlockers = getSoftBlockers(eligibility);
+    if (softBlockers.length > 0) {
+      const list = softBlockers.map((b) => `• ${b.message}`).join('\n');
+      message = `${message}\n\nThis update is currently policy-blocked:\n${list}\n\nClick Update anyway to override.`;
+    }
+
     args.confirm.require({
       header: 'Update Container',
       message,
       rejectLabel: 'Cancel',
-      acceptLabel: 'Update',
+      acceptLabel: softBlockers.length > 0 ? 'Update anyway' : 'Update',
       severity: 'warn',
       accept: () =>
         args.executeAction(target, apiUpdateContainer, {
@@ -753,6 +772,12 @@ function createContainerActionHandlers(args: {
   selectedContainer: Readonly<Ref<Container | null | undefined>>;
   activeDetailTab: Readonly<Ref<string>>;
   refreshActionTabData: () => Promise<void>;
+  containerIdMap: Readonly<Ref<Record<string, string>>>;
+  containerActionsEnabled: Readonly<Ref<boolean>>;
+  containerActionsDisabledReason: Readonly<Ref<string>>;
+  inputError: Ref<string | null>;
+  markScanStarted: (containerId: string | undefined) => void;
+  markScanCompleted: (containerId: string | undefined) => void;
 }) {
   async function startContainer(target: ContainerActionTarget) {
     const name = typeof target === 'string' ? target : target.name;
@@ -774,11 +799,33 @@ function createContainerActionHandlers(args: {
   }
 
   async function scanContainer(target: ContainerActionTarget) {
-    const name = typeof target === 'string' ? target : target.name;
-    await args.executeAction(target, apiScanContainer, {
-      kind: 'scan',
-      successMessage: `Scan triggered: ${name}`,
-    });
+    if (!args.containerActionsEnabled.value) {
+      args.inputError.value = args.containerActionsDisabledReason.value;
+      return;
+    }
+    const { containerId, name } = resolveContainerActionTarget(target, args.containerIdMap.value);
+    if (!containerId) {
+      return;
+    }
+    // Anchor the per-row Scanning chip to this container immediately and let
+    // the SSE dd:scan-completed event (or the safety timeout) clear it. We
+    // intentionally do NOT clear it in the HTTP finally — the response and
+    // the completion event arrive together when the backend finishes scanning,
+    // but driving the lifecycle from SSE keeps the row spinner correctly
+    // anchored even when scheduled scans (no HTTP click) start the work.
+    args.markScanStarted(containerId);
+    args.inputError.value = null;
+    try {
+      await apiScanContainer(containerId);
+      const toast = useToast();
+      toast.success(`Scan triggered: ${name}`);
+    } catch (e: unknown) {
+      args.markScanCompleted(containerId);
+      const msg = errorMessage(e, `Scan failed for ${name}`);
+      args.inputError.value = msg;
+      const toast = useToast();
+      toast.error(`Scan failed: ${name}`, msg);
+    }
   }
 
   async function skipUpdate(target: ContainerActionTarget) {
@@ -826,6 +873,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
   const confirm = useConfirmDialog();
   const { getDisplayUpdateOperation, projectContainerDisplayState } = useOperationDisplayHold();
   const { containerActionsEnabled, containerActionsDisabledReason } = useServerFeatures();
+  const scanLifecycle = useScanLifecycle();
 
   const skippedUpdates = ref(new Set<string>());
   const selectedContainerKey = computed(() =>
@@ -1062,6 +1110,20 @@ export function useContainerActions(input: UseContainerActionsInput) {
   }
 
   function isContainerScanInProgress(target: ContainerActionTarget) {
+    if (typeof target !== 'string' && target.id && scanLifecycle.isScanInFlight(target.id)) {
+      return true;
+    }
+    if (typeof target === 'string') {
+      // Caller may pass either a container name (resolve via map) or a raw id —
+      // try both since the SSE-driven set is keyed by container id.
+      const resolvedId = input.containerIdMap.value[target];
+      if (resolvedId && scanLifecycle.isScanInFlight(resolvedId)) {
+        return true;
+      }
+      if (scanLifecycle.isScanInFlight(target)) {
+        return true;
+      }
+    }
     return hasTrackedContainerActionOfKind(
       actionInProgress.value,
       typeof target === 'string' ? { name: target } : target,
@@ -1148,6 +1210,12 @@ export function useContainerActions(input: UseContainerActionsInput) {
       selectedContainer: input.selectedContainer,
       activeDetailTab: input.activeDetailTab,
       refreshActionTabData,
+      containerIdMap: input.containerIdMap,
+      containerActionsEnabled,
+      containerActionsDisabledReason,
+      inputError: input.error,
+      markScanStarted: scanLifecycle.markScanStarted,
+      markScanCompleted: scanLifecycle.markScanCompleted,
     });
 
   async function deleteContainer(target: ContainerActionTarget) {

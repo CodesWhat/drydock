@@ -65,7 +65,7 @@ const emit = defineEmits<{
           !containerActionsEnabled
             ? containerActionsDisabledReason
             : group.updatableCount === 0
-              ? 'All updates blocked by security scan'
+              ? 'All updates blocked (agent mismatch, missing trigger, security, or another hard gate)'
               : 'Update all in group',
         )
       "

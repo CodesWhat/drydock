@@ -495,8 +495,9 @@ onUnmounted(() => {
                 View in Containers
               </AppButton>
               <ReleaseNotesLink
-                v-if="row.releaseNotes || row.releaseLink"
+                v-if="row.releaseNotes || row.currentReleaseNotes || row.releaseLink"
                 :release-notes="row.releaseNotes"
+                :current-release-notes="row.currentReleaseNotes"
                 :release-link="row.releaseLink"
                 data-test="security-release-notes" />
             </template>
@@ -629,8 +630,9 @@ onUnmounted(() => {
                 View in Containers
               </AppButton>
               <ReleaseNotesLink
-                v-if="summary.releaseNotes || summary.releaseLink"
+                v-if="summary.releaseNotes || summary.currentReleaseNotes || summary.releaseLink"
                 :release-notes="summary.releaseNotes"
+                :current-release-notes="summary.currentReleaseNotes"
                 :release-link="summary.releaseLink"
                 data-test="security-release-notes" />
             </template>
@@ -762,8 +764,9 @@ onUnmounted(() => {
               View in Containers
             </AppButton>
             <ReleaseNotesLink
-              v-if="selectedImage.releaseNotes || selectedImage.releaseLink"
+              v-if="selectedImage.releaseNotes || selectedImage.currentReleaseNotes || selectedImage.releaseLink"
               :release-notes="selectedImage.releaseNotes"
+              :current-release-notes="selectedImage.currentReleaseNotes"
               :release-link="selectedImage.releaseLink"
               data-test="security-detail-release-notes" />
           </div>

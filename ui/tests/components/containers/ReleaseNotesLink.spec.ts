@@ -153,4 +153,142 @@ describe('ReleaseNotesLink', () => {
     expect(link.attributes('href')).toBe('https://example.com/releases');
     expect(link.attributes('aria-label')).toBe('Release notes');
   });
+
+  describe('currentReleaseNotes (current running tag)', () => {
+    const currentNotes = {
+      title: 'v1.5.0 Release',
+      body: 'Notes for the version currently running.',
+      url: 'https://github.com/example/repo/releases/tag/v1.5.0',
+      publishedAt: '2026-01-01T00:00:00Z',
+      provider: 'github',
+    };
+
+    it('renders only the current panel when no update notes are present', () => {
+      const wrapper = mount(ReleaseNotesLink, {
+        props: { currentReleaseNotes: currentNotes },
+        global: globalConfig,
+      });
+      expect(wrapper.find('[data-test="current-release-notes-panel"]').exists()).toBe(true);
+      expect(wrapper.find('[data-test="update-release-notes-panel"]').exists()).toBe(false);
+    });
+
+    it('labels the current panel with the running tag title', () => {
+      const wrapper = mount(ReleaseNotesLink, {
+        props: { currentReleaseNotes: currentNotes },
+        global: globalConfig,
+      });
+      const button = wrapper.find('[data-test="current-release-notes-panel"] button');
+      expect(button.text()).toContain('Release notes — v1.5.0 Release (current)');
+    });
+
+    it('expanding the current panel reveals title, body, and view-full link', async () => {
+      const wrapper = mount(ReleaseNotesLink, {
+        props: { currentReleaseNotes: currentNotes },
+        global: globalConfig,
+      });
+      const button = wrapper.find('[data-test="current-release-notes-panel"] button');
+      await button.trigger('click');
+      await nextTick();
+      expect(wrapper.text()).toContain(currentNotes.title);
+      expect(wrapper.text()).toContain(currentNotes.body);
+      const fullLink = wrapper
+        .find('[data-test="current-release-notes-panel"]')
+        .findAll('a')
+        .find((a) => a.attributes('href') === currentNotes.url);
+      expect(fullLink).toBeDefined();
+    });
+
+    it('renders both panels when current and update notes differ', () => {
+      const wrapper = mount(ReleaseNotesLink, {
+        props: {
+          currentReleaseNotes: currentNotes,
+          releaseNotes: sampleNotes,
+        },
+        global: globalConfig,
+      });
+      expect(wrapper.find('[data-test="current-release-notes-panel"]').exists()).toBe(true);
+      expect(wrapper.find('[data-test="update-release-notes-panel"]').exists()).toBe(true);
+    });
+
+    it('update panel labels itself "(available)" when current panel also renders', () => {
+      const wrapper = mount(ReleaseNotesLink, {
+        props: {
+          currentReleaseNotes: currentNotes,
+          releaseNotes: sampleNotes,
+        },
+        global: globalConfig,
+      });
+      const updateButton = wrapper.find('[data-test="update-release-notes-panel"] button');
+      expect(updateButton.text()).toContain(`Release notes — ${sampleNotes.title} (available)`);
+    });
+
+    it('hides the current panel when current and update notes share a URL', () => {
+      const wrapper = mount(ReleaseNotesLink, {
+        props: {
+          currentReleaseNotes: { ...sampleNotes },
+          releaseNotes: sampleNotes,
+        },
+        global: globalConfig,
+      });
+      expect(wrapper.find('[data-test="current-release-notes-panel"]').exists()).toBe(false);
+      expect(wrapper.find('[data-test="update-release-notes-panel"]').exists()).toBe(true);
+    });
+
+    it('hides the current panel when current and update notes share a title', () => {
+      const wrapper = mount(ReleaseNotesLink, {
+        props: {
+          currentReleaseNotes: { ...sampleNotes, url: 'https://other-url.example/v2.0.0' },
+          releaseNotes: sampleNotes,
+        },
+        global: globalConfig,
+      });
+      expect(wrapper.find('[data-test="current-release-notes-panel"]').exists()).toBe(false);
+    });
+
+    it('icon-only prefers releaseNotes over currentReleaseNotes', () => {
+      const wrapper = mount(ReleaseNotesLink, {
+        props: {
+          currentReleaseNotes: currentNotes,
+          releaseNotes: sampleNotes,
+          iconOnly: true,
+        },
+        global: globalConfig,
+      });
+      const link = wrapper.find('[data-test="release-notes-link"]');
+      expect(link.attributes('href')).toBe(sampleNotes.url);
+    });
+
+    it('icon-only falls back to currentReleaseNotes when releaseNotes is absent', () => {
+      const wrapper = mount(ReleaseNotesLink, {
+        props: {
+          currentReleaseNotes: currentNotes,
+          iconOnly: true,
+        },
+        global: globalConfig,
+      });
+      const link = wrapper.find('[data-test="current-release-notes-link"]');
+      expect(link.exists()).toBe(true);
+      expect(link.attributes('href')).toBe(currentNotes.url);
+    });
+
+    it('expanding update panel does not affect current panel state when both rendered', async () => {
+      const wrapper = mount(ReleaseNotesLink, {
+        props: {
+          currentReleaseNotes: currentNotes,
+          releaseNotes: sampleNotes,
+        },
+        global: globalConfig,
+      });
+      const updateButton = wrapper.find('[data-test="update-release-notes-panel"] button');
+      await updateButton.trigger('click');
+      await nextTick();
+      expect(wrapper.find('[data-test="update-release-notes-panel"]').text()).toContain(
+        sampleNotes.title,
+      );
+      // Current panel stays collapsed: its body should not be in the document
+      expect(wrapper.find('[data-test="current-release-notes-panel"]').text()).not.toContain(
+        currentNotes.body,
+      );
+    });
+  });
 });

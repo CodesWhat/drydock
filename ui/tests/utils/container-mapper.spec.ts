@@ -1477,6 +1477,83 @@ describe('container-mapper', () => {
     });
   });
 
+  describe('currentReleaseNotes', () => {
+    it('maps complete currentReleaseNotes from container', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          currentReleaseNotes: {
+            title: 'Release 1.0',
+            body: 'Initial release notes',
+            url: 'https://github.com/org/repo/releases/tag/v1.0',
+            publishedAt: '2025-12-01T00:00:00Z',
+            provider: 'github',
+          },
+        }),
+      );
+      expect(c.currentReleaseNotes).toEqual({
+        title: 'Release 1.0',
+        body: 'Initial release notes',
+        url: 'https://github.com/org/repo/releases/tag/v1.0',
+        publishedAt: '2025-12-01T00:00:00Z',
+        provider: 'github',
+      });
+    });
+
+    it('returns null when currentReleaseNotes is missing', () => {
+      const c = mapApiContainer(makeApiContainer());
+      expect(c.currentReleaseNotes).toBeNull();
+    });
+
+    it('returns null when currentReleaseNotes has missing required fields', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          currentReleaseNotes: {
+            title: 'Release',
+            body: '',
+            url: '',
+            publishedAt: '',
+            provider: '',
+          },
+        }),
+      );
+      expect(c.currentReleaseNotes).toBeNull();
+    });
+
+    it('returns null when currentReleaseNotes is not an object', () => {
+      const c = mapApiContainer(
+        makeApiContainer({ currentReleaseNotes: 'oops' as unknown as null }),
+      );
+      expect(c.currentReleaseNotes).toBeNull();
+    });
+
+    it('populates both releaseNotes and currentReleaseNotes independently', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          currentReleaseNotes: {
+            title: 'Release 1.0',
+            body: 'Old notes',
+            url: 'https://github.com/org/repo/releases/tag/v1.0',
+            publishedAt: '2025-12-01T00:00:00Z',
+            provider: 'github',
+          },
+          result: {
+            tag: '2.0',
+            releaseNotes: {
+              title: 'Release 2.0',
+              body: 'New notes',
+              url: 'https://github.com/org/repo/releases/tag/v2.0',
+              publishedAt: '2026-01-15T00:00:00Z',
+              provider: 'github',
+            },
+          },
+          updateAvailable: true,
+        }),
+      );
+      expect(c.currentReleaseNotes?.title).toBe('Release 1.0');
+      expect(c.releaseNotes?.title).toBe('Release 2.0');
+    });
+  });
+
   describe('mapApiContainer — updateEligibility', () => {
     it('maps a complete eligibility object with all fields populated', () => {
       const c = mapApiContainer(

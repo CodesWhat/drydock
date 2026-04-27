@@ -343,4 +343,114 @@ describe('request-update', () => {
     });
     expect(mockMarkOperationTerminal).not.toHaveBeenCalledWith('op-2', expect.anything());
   });
+
+  describe('hard-blocker enforcement via update-eligibility', () => {
+    // These tests need a container shape that satisfies eligibility's
+    // hasRawTagOrDigestUpdate (image.tag.value differs from result.tag),
+    // since eligibility short-circuits to no-update-available otherwise.
+    function createContainerWithRawUpdate(overrides: Record<string, unknown> = {}) {
+      return createContainer({
+        image: { name: 'nginx', tag: { value: '1.0.0' } },
+        result: { tag: '1.1.0' },
+        ...overrides,
+      });
+    }
+
+    test('rejects with 409 when container is a rollback artifact', async () => {
+      const trigger = {
+        type: 'docker',
+        trigger: vi.fn(),
+        agent: undefined,
+        configuration: { threshold: 'all' },
+        getId: () => 'docker.update',
+        isTriggerIncluded: () => true,
+        isTriggerExcluded: () => false,
+      };
+      mockGetState.mockReturnValue({ trigger: { 'docker.update': trigger } });
+
+      await expect(
+        enqueueContainerUpdate(createContainerWithRawUpdate({ name: 'nginx-old-1700000000000' })),
+      ).rejects.toMatchObject<Partial<UpdateRequestError>>({
+        statusCode: 409,
+        message: 'This is a rollback container created during a previous update.',
+      });
+    });
+
+    test('rejects with 409 when security update scan is blocked', async () => {
+      const trigger = {
+        type: 'docker',
+        trigger: vi.fn(),
+        agent: undefined,
+        configuration: { threshold: 'all' },
+        getId: () => 'docker.update',
+        isTriggerIncluded: () => true,
+        isTriggerExcluded: () => false,
+      };
+      mockGetState.mockReturnValue({ trigger: { 'docker.update': trigger } });
+
+      await expect(
+        enqueueContainerUpdate(
+          createContainerWithRawUpdate({
+            security: { updateScan: { status: 'blocked' } },
+          }),
+        ),
+      ).rejects.toMatchObject<Partial<UpdateRequestError>>({
+        statusCode: 409,
+        message: expect.stringContaining('Security scan is blocking this update'),
+      });
+    });
+
+    test('rejects with 404 when no docker trigger is configured at all', async () => {
+      mockGetState.mockReturnValue({ trigger: {} });
+
+      await expect(enqueueContainerUpdate(createContainerWithRawUpdate())).rejects.toMatchObject<
+        Partial<UpdateRequestError>
+      >({
+        statusCode: 404,
+        message: expect.stringContaining('No docker or dockercompose action trigger is configured'),
+      });
+    });
+
+    test('rejects with 404 with the agent-mismatch message when trigger is on the wrong agent', async () => {
+      const trigger = {
+        type: 'docker',
+        trigger: vi.fn(),
+        agent: 'edge-1',
+        configuration: { threshold: 'all' },
+        getId: () => 'docker.update',
+        isTriggerIncluded: () => true,
+        isTriggerExcluded: () => false,
+      };
+      mockGetState.mockReturnValue({ trigger: { 'docker.update': trigger } });
+
+      await expect(
+        enqueueContainerUpdate(createContainerWithRawUpdate({ agent: 'edge-2' })),
+      ).rejects.toMatchObject<Partial<UpdateRequestError>>({
+        statusCode: 404,
+        message: expect.stringContaining("Update trigger runs on agent 'edge-1'"),
+      });
+    });
+
+    test('allows manual update when only soft blockers (snooze) are present', async () => {
+      const trigger = {
+        type: 'docker',
+        trigger: vi.fn().mockResolvedValue(undefined),
+        agent: undefined,
+        configuration: { threshold: 'all' },
+        getId: () => 'docker.update',
+        isTriggerIncluded: () => true,
+        isTriggerExcluded: () => false,
+      };
+      mockGetState.mockReturnValue({ trigger: { 'docker.update': trigger } });
+
+      const accepted = await enqueueContainerUpdate(
+        createContainerWithRawUpdate({
+          updatePolicy: { snoozeUntil: '2099-01-01T00:00:00.000Z' },
+        }),
+        { trigger: { type: 'docker', trigger: vi.fn().mockResolvedValue(undefined) } },
+      );
+      expect(accepted.operationId).toBeDefined();
+      expect(mockInsertOperation).toHaveBeenCalled();
+    });
+  });
 });

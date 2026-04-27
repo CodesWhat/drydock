@@ -701,12 +701,21 @@ describe('Container Actions Router', () => {
       const container = {
         id: 'c1',
         name: 'nginx-old-1773933154786',
-        image: { name: 'nginx' },
+        image: { name: 'nginx', tag: { value: '1.0.0' } },
+        result: { tag: '1.1.0' },
         updateAvailable: true,
       };
       mockGetContainer.mockReturnValue(container);
       const mockTriggerFn = vi.fn().mockResolvedValue(undefined);
-      const trigger = { type: 'docker', trigger: mockTriggerFn };
+      const trigger = {
+        type: 'docker',
+        trigger: mockTriggerFn,
+        agent: undefined,
+        configuration: { threshold: 'all' },
+        getId: () => 'docker.default',
+        isTriggerIncluded: () => true,
+        isTriggerExcluded: () => false,
+      };
       mockGetState.mockReturnValue({ trigger: { 'docker.default': trigger } });
 
       const handler = getHandler('post', '/:id/update');
@@ -716,7 +725,7 @@ describe('Container Actions Router', () => {
 
       expect(res.status).toHaveBeenCalledWith(409);
       expect(res.json).toHaveBeenCalledWith({
-        error: expect.stringContaining('temporary rollback container'),
+        error: expect.stringContaining('rollback container'),
       });
       expect(mockTriggerFn).not.toHaveBeenCalled();
     });
@@ -725,7 +734,8 @@ describe('Container Actions Router', () => {
       const container = {
         id: 'c1',
         name: 'nginx',
-        image: { name: 'nginx' },
+        image: { name: 'nginx', tag: { value: '1.0.0' } },
+        result: { tag: '1.1.0' },
         updateAvailable: true,
         security: {
           scan: {
@@ -734,6 +744,16 @@ describe('Container Actions Router', () => {
         },
       };
       mockGetContainer.mockReturnValue(container);
+      const trigger = {
+        type: 'docker',
+        trigger: vi.fn(),
+        agent: undefined,
+        configuration: { threshold: 'all' },
+        getId: () => 'docker.default',
+        isTriggerIncluded: () => true,
+        isTriggerExcluded: () => false,
+      };
+      mockGetState.mockReturnValue({ trigger: { 'docker.default': trigger } });
 
       const handler = getHandler('post', '/:id/update');
       const req = createMockRequest({ params: { id: 'c1' } });
@@ -742,7 +762,7 @@ describe('Container Actions Router', () => {
 
       expect(res.status).toHaveBeenCalledWith(409);
       expect(res.json).toHaveBeenCalledWith({
-        error: 'Update blocked by security scan. Use force-update to override.',
+        error: expect.stringContaining('Security scan is blocking this update'),
       });
     });
 

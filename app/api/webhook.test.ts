@@ -1045,14 +1045,25 @@ describe('Webhook Router', () => {
       const container = {
         id: 'c1',
         name: 'my-nginx-old-1234567890',
-        image: { name: 'nginx' },
+        image: { name: 'nginx', tag: { value: '1.0.0' } },
+        result: { tag: '1.1.0' },
         updateAvailable: true,
       };
       mockGetContainers.mockReturnValue([container]);
       const mockTrigger = vi.fn().mockResolvedValue(undefined);
       mockGetState.mockReturnValue({
         watcher: {},
-        trigger: { 'docker.default': { type: 'docker', trigger: mockTrigger } },
+        trigger: {
+          'docker.default': {
+            type: 'docker',
+            trigger: mockTrigger,
+            agent: undefined,
+            configuration: { threshold: 'all' },
+            getId: () => 'docker.default',
+            isTriggerIncluded: () => true,
+            isTriggerExcluded: () => false,
+          },
+        },
       });
 
       const handler = getHandler('post', '/update/:containerName');
@@ -1062,7 +1073,7 @@ describe('Webhook Router', () => {
 
       expect(res.status).toHaveBeenCalledWith(409);
       expect(res.json).toHaveBeenCalledWith({
-        error: expect.stringContaining('temporary rollback container'),
+        error: expect.stringContaining('rollback container'),
       });
       expect(mockTrigger).not.toHaveBeenCalled();
     });

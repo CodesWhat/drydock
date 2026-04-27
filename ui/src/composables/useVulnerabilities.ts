@@ -31,6 +31,7 @@ export interface ImageSummary {
   hasUpdate?: boolean;
   containersWithUpdate?: string[];
   releaseNotes?: ContainerReleaseNotes | null;
+  currentReleaseNotes?: ContainerReleaseNotes | null;
   releaseLink?: string;
 }
 
@@ -259,8 +260,12 @@ function annotateImageSummariesWithUpdates(
         const container = containerById.get(id);
         if (container?.releaseNotes) {
           summary.releaseNotes = container.releaseNotes;
+          summary.currentReleaseNotes = container.currentReleaseNotes;
           summary.releaseLink = container.releaseLink;
           break;
+        }
+        if (container?.currentReleaseNotes && !summary.currentReleaseNotes) {
+          summary.currentReleaseNotes = container.currentReleaseNotes;
         }
         if (container?.releaseLink && !summary.releaseLink) {
           summary.releaseLink = container.releaseLink;
