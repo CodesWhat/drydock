@@ -10,6 +10,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **[#317](https://github.com/CodesWhat/drydock/issues/317) — Lifecycle notifications silenced by `auto: false` (begunfx, rc.14).** A notification trigger configured with `auto: false` (a common Pushover setup to suppress every-detection update-available spam) was *also* silently losing every other lifecycle notification — `update-applied`, `update-failed`, `security-alert`, `agent-connected`, `agent-disconnected`. The init code wrapped *all* event registrations in a single `if (auto !== 'none')` block. Decoupled them: auto-fire-on-detection handlers stay gated by `auto`, lifecycle handlers register unconditionally. A user who's configured the trigger at all now gets completion / failure / security / agent notifications regardless of how `auto` is set.
+- **[#317](https://github.com/CodesWhat/drydock/issues/317) — Lifecycle notification rules silently dropped triggers without an explicit allow-list.** `update-applied` / `update-failed` / `security-alert` / `agent-connect` / `agent-reconnect` dispatched with `allowAllWhenNoTriggers: false` while `update-available` used `true`. The asymmetry meant a notification rule with no per-rule allow-list silently disabled lifecycle notifications even though `update-available` worked. Flipped the four lifecycle dispatch sites to match: empty / missing allow-lists now permit dispatch. Explicit per-rule allow-lists still win when populated.
+- **[#317](https://github.com/CodesWhat/drydock/issues/317) — Update button bypassed eligibility blockers, queuing requests the API would only reject one-by-one (s-b-e-n-s-o-n, rc.14).** The Update button (per-row + Update-all) only gated on the legacy `bouncer === 'blocked'` (security scan), even though rc.13 added 11 other eligibility blocker reasons surfaced as row pills. Clicking Update on a row pill-marked **AGENT MISMATCH** produced the toast `No docker trigger found for this container`; clicking Update-all on a stack of TRIGGER FILTERED proxies queued every row before the API rejected each one individually. Added a `severity: 'hard' | 'soft'` field to `UpdateBlocker` and made `update-eligibility` the single source of truth: the API rejects manual updates on any hard blocker with the blocker's user-friendly message; the UI locks the Update button on hard blockers and shows a confirm-modal warning on soft blockers ("This update is currently policy-blocked: …  Click Update anyway to override.").
+
+### Changed
+
+- **`security-scan-blocked` now also fires when the *current* container's scan status is blocked.** Previously the eligibility model only inspected `security.updateScan` (the candidate) while `request-update.ts` independently inspected `security.scan` (the running image). Both gates are now unified under the eligibility blocker — either being `blocked` halts a manual update with the same 409 + "Security scan is blocking this update" message. Use the existing force-update path to override.
+
+### Deprecated
+
+- **`dd.action.include` / `dd.action.exclude` (and legacy `dd.trigger.include` / `dd.trigger.exclude`) become hard manual-update blockers in v1.7.0.** v1.5.x keeps them as soft blockers — the pill reads *Trigger filtered* / *Trigger excluded* but the manual Update button stays clickable (with a warn-and-confirm). v1.7.0 will lock the button and reject the API call when the labels filter out the matching trigger. See [DEPRECATIONS.md](./DEPRECATIONS.md) for migration guidance.
+
 ## [1.5.0-rc.14] — 2026-04-26
 
 ### Fixed
