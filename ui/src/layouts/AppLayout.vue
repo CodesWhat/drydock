@@ -1273,11 +1273,11 @@ function handleSseEvent(event: string, payload?: unknown) {
     return;
   }
   if (event === 'scan-started') {
-    emitUiSseEvent('dd:sse-scan-started');
+    emitUiSseEvent('dd:sse-scan-started', payload);
     return;
   }
   if (event === 'scan-completed') {
-    emitUiSseEvent('dd:sse-scan-completed');
+    emitUiSseEvent('dd:sse-scan-completed', payload);
     scheduleSidebarDataRefresh();
     return;
   }

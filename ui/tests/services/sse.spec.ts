@@ -168,16 +168,59 @@ describe('SseService', () => {
     );
   });
 
-  it('emits scan-started on dd:scan-started event', () => {
+  it('emits scan-started with parsed containerId on dd:scan-started event', () => {
     sseService.connect(mockEventBus);
-    eventListeners['dd:scan-started']();
-    expect(mockEventBus.emit).toHaveBeenCalledWith('scan-started');
+    const event = new MessageEvent('dd:scan-started', {
+      data: JSON.stringify({ containerId: 'abc123' }),
+    });
+    eventListeners['dd:scan-started'](event);
+    expect(mockEventBus.emit).toHaveBeenCalledWith('scan-started', { containerId: 'abc123' });
   });
 
-  it('emits scan-completed on dd:scan-completed event', () => {
+  it('emits scan-completed with parsed containerId and status on dd:scan-completed event', () => {
     sseService.connect(mockEventBus);
-    eventListeners['dd:scan-completed']();
-    expect(mockEventBus.emit).toHaveBeenCalledWith('scan-completed');
+    const event = new MessageEvent('dd:scan-completed', {
+      data: JSON.stringify({ containerId: 'abc123', status: 'success' }),
+    });
+    eventListeners['dd:scan-completed'](event);
+    expect(mockEventBus.emit).toHaveBeenCalledWith('scan-completed', {
+      containerId: 'abc123',
+      status: 'success',
+    });
+  });
+
+  it('emits empty scan payload when dd:scan-started/completed event has no data', () => {
+    sseService.connect(mockEventBus);
+    eventListeners['dd:scan-started'](new MessageEvent('dd:scan-started'));
+    expect(mockEventBus.emit).toHaveBeenCalledWith('scan-started', {});
+    eventListeners['dd:scan-completed'](new MessageEvent('dd:scan-completed'));
+    expect(mockEventBus.emit).toHaveBeenCalledWith('scan-completed', {});
+  });
+
+  it('emits empty scan payload when dd:scan event data is malformed JSON', () => {
+    sseService.connect(mockEventBus);
+    const event = new MessageEvent('dd:scan-completed', { data: '{not json' });
+    eventListeners['dd:scan-completed'](event);
+    expect(mockEventBus.emit).toHaveBeenCalledWith('scan-completed', {});
+  });
+
+  it('emits empty scan payload when parsed dd:scan event data is not an object', () => {
+    sseService.connect(mockEventBus);
+    const event = new MessageEvent('dd:scan-completed', { data: '42' });
+    eventListeners['dd:scan-completed'](event);
+    expect(mockEventBus.emit).toHaveBeenCalledWith('scan-completed', {});
+  });
+
+  it('drops non-object scan payload fields and forwards only valid string values', () => {
+    sseService.connect(mockEventBus);
+    const event = new MessageEvent('dd:scan-completed', {
+      data: JSON.stringify({ containerId: 42, status: ['oops'] }),
+    });
+    eventListeners['dd:scan-completed'](event);
+    expect(mockEventBus.emit).toHaveBeenCalledWith('scan-completed', {
+      containerId: undefined,
+      status: undefined,
+    });
   });
 
   it('emits container-changed on container lifecycle events', () => {

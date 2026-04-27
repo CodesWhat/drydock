@@ -21,6 +21,16 @@ export type OperationChangedPayload = {
   phase?: string;
 };
 
+// Backend emits dd:scan-started / dd:scan-completed with the containerId so the
+// UI can pin the per-row scanning chip to the row whose container is actually
+// being scanned (manual single-container scans, scheduled scans, and bulk scans
+// all emit per-container events). dd:scan-completed additionally carries the
+// scan status so the bell / refresh hooks can react to error vs success.
+export type ScanLifecyclePayload = {
+  containerId?: string;
+  status?: string;
+};
+
 // The backend spreads the full validated container object into the SSE payload
 // for dd:container-added/-updated (app/store/container.ts) and adds
 // `replacementExpected` on dd:container-removed when the remove is part of a
@@ -91,12 +101,12 @@ class SseService {
       this.eventBus?.emit('self-update', payload);
     });
 
-    this.eventSource.addEventListener('dd:scan-started', () => {
-      this.eventBus?.emit('scan-started');
+    this.eventSource.addEventListener('dd:scan-started', (event: MessageEvent) => {
+      this.eventBus?.emit('scan-started', this.parseScanLifecyclePayload(event?.data));
     });
 
-    this.eventSource.addEventListener('dd:scan-completed', () => {
-      this.eventBus?.emit('scan-completed');
+    this.eventSource.addEventListener('dd:scan-completed', (event: MessageEvent) => {
+      this.eventBus?.emit('scan-completed', this.parseScanLifecyclePayload(event?.data));
     });
 
     this.eventSource.addEventListener('dd:container-added', (event) => {
@@ -228,6 +238,29 @@ class SseService {
       const clientId = typeof parsed.clientId === 'string' ? parsed.clientId : undefined;
       const clientToken = typeof parsed.clientToken === 'string' ? parsed.clientToken : undefined;
       return { clientId, clientToken };
+    } catch {
+      return {};
+    }
+  }
+
+  private parseScanLifecyclePayload(rawData: unknown): ScanLifecyclePayload {
+    if (!rawData || typeof rawData !== 'string') {
+      return {};
+    }
+    try {
+      const parsed = JSON.parse(rawData);
+      if (!parsed || typeof parsed !== 'object') {
+        return {};
+      }
+      const containerId =
+        typeof (parsed as Record<string, unknown>).containerId === 'string'
+          ? ((parsed as Record<string, unknown>).containerId as string)
+          : undefined;
+      const status =
+        typeof (parsed as Record<string, unknown>).status === 'string'
+          ? ((parsed as Record<string, unknown>).status as string)
+          : undefined;
+      return { containerId, status };
     } catch {
       return {};
     }
