@@ -2885,6 +2885,66 @@ test('deregisterComponent should clear digest warning suppression state', async 
   expect(warnSpy).toHaveBeenCalledTimes(2);
 });
 
+test('lifecycle dispatch should call isTriggerEnabledForRule with permissive allow-list defaults', async () => {
+  const container = {
+    watcher: 'local',
+    name: 'container1',
+    updateAvailable: true,
+    updateKind: { kind: 'tag', semverDiff: 'major' },
+  } as any;
+  storeContainer.getContainers.mockReturnValue([container]);
+  storeContainer.getContainersRaw.mockReturnValue([container]);
+  vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+  // update-applied
+  await trigger.handleContainerUpdateAppliedEvent('local_container1');
+  expect(notificationStore.isTriggerEnabledForRule).toHaveBeenCalledWith(
+    'update-applied',
+    expect.any(String),
+    expect.objectContaining({ allowAllWhenNoTriggers: true, defaultWhenRuleMissing: true }),
+  );
+
+  // update-failed
+  await trigger.handleContainerUpdateFailedEvent({
+    containerName: 'local_container1',
+    error: 'boom',
+  } as any);
+  expect(notificationStore.isTriggerEnabledForRule).toHaveBeenCalledWith(
+    'update-failed',
+    expect.any(String),
+    expect.objectContaining({ allowAllWhenNoTriggers: true, defaultWhenRuleMissing: true }),
+  );
+
+  // security-alert (simple mode skips the digest buffer branch)
+  await trigger.handleSecurityAlertEvent({
+    containerName: 'local_container1',
+    container,
+    details: 'critical:1',
+    summary: { critical: 1, high: 0, medium: 0, low: 0, unknown: 0 },
+  } as any);
+  expect(notificationStore.isTriggerEnabledForRule).toHaveBeenCalledWith(
+    'security-alert',
+    expect.any(String),
+    expect.objectContaining({ allowAllWhenNoTriggers: true, defaultWhenRuleMissing: true }),
+  );
+
+  // agent-disconnect
+  await trigger.handleAgentDisconnectedEvent({ agentName: 'edge-1', reason: 'ECONNRESET' } as any);
+  expect(notificationStore.isTriggerEnabledForRule).toHaveBeenCalledWith(
+    'agent-disconnect',
+    expect.any(String),
+    expect.objectContaining({ allowAllWhenNoTriggers: true, defaultWhenRuleMissing: true }),
+  );
+
+  // agent-reconnect (only fires on reconnected: true)
+  await trigger.handleAgentConnectedEvent({ agentName: 'edge-1', reconnected: true } as any);
+  expect(notificationStore.isTriggerEnabledForRule).toHaveBeenCalledWith(
+    'agent-reconnect',
+    expect.any(String),
+    expect.objectContaining({ allowAllWhenNoTriggers: true, defaultWhenRuleMissing: true }),
+  );
+});
+
 test('handleContainerUpdateAppliedEvent should run trigger when rule allows and container is found', async () => {
   const container = {
     watcher: 'local',

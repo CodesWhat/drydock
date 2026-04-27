@@ -1072,9 +1072,14 @@ class Trigger<
       ? withNotificationEvent(container, { kind: 'update-applied' })
       : undefined;
 
+    // Lifecycle dispatch defaults to permissive (allowAllWhenNoTriggers / defaultWhenRuleMissing
+    // = true) to match update-available. A user with the trigger configured at all should
+    // receive lifecycle notifications unless they explicitly opted out via the rule's
+    // allow-list. Issue #317 — strict defaults silently dropped Pushover update-applied toasts
+    // for any user who hadn't yet built an allow-list.
     await this.dispatchContainerForEvent('update-applied', notificationContainer, {
-      allowAllWhenNoTriggers: false,
-      defaultWhenRuleMissing: false,
+      allowAllWhenNoTriggers: true,
+      defaultWhenRuleMissing: true,
     });
   }
 
@@ -1088,8 +1093,8 @@ class Trigger<
       : undefined;
 
     await this.dispatchContainerForEvent('update-failed', notificationContainer, {
-      allowAllWhenNoTriggers: false,
-      defaultWhenRuleMissing: false,
+      allowAllWhenNoTriggers: true,
+      defaultWhenRuleMissing: true,
     });
   }
 
@@ -1134,8 +1139,8 @@ class Trigger<
           })
         : undefined,
       {
-        allowAllWhenNoTriggers: false,
-        defaultWhenRuleMissing: false,
+        allowAllWhenNoTriggers: true,
+        defaultWhenRuleMissing: true,
       },
     );
   }
@@ -1163,8 +1168,8 @@ class Trigger<
       'agent-disconnect',
       buildAgentDisconnectedContainer(payload.agentName, payload.reason),
       {
-        allowAllWhenNoTriggers: false,
-        defaultWhenRuleMissing: false,
+        allowAllWhenNoTriggers: true,
+        defaultWhenRuleMissing: true,
         skipThreshold: true,
       },
     );
@@ -1179,8 +1184,8 @@ class Trigger<
       'agent-reconnect',
       buildAgentReconnectedContainer(payload.agentName),
       {
-        allowAllWhenNoTriggers: false,
-        defaultWhenRuleMissing: false,
+        allowAllWhenNoTriggers: true,
+        defaultWhenRuleMissing: true,
         skipThreshold: true,
       },
     );
