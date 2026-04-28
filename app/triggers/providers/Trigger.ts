@@ -32,6 +32,36 @@ import {
 type SupportedThreshold = (typeof SUPPORTED_THRESHOLDS)[number];
 type TriggerAutoMode = 'all' | 'oninclude' | 'none';
 type DigestEventKind = 'update-available-digest' | 'security-alert-digest';
+
+/**
+ * Context forwarded by the framework to a provider's `triggerBatch` when the
+ * caller has already resolved the title/body for a batch dispatch — most
+ * notably the security-alert digest, whose template space is disjoint from the
+ * update-available templates and whose rows are not real Containers. Providers
+ * MUST forward this to `renderBatchTitle` / `renderBatchBody` /
+ * `composeBatchMessage` so the prerendered strings are used verbatim instead
+ * of being re-rendered with the wrong template against stub objects (#328).
+ */
+export interface BatchRuntimeContext {
+  eventKind?: DigestEventKind;
+  title?: string;
+  body?: string;
+}
+
+function isBatchRuntimeContext(value: unknown): value is BatchRuntimeContext {
+  return typeof value === 'object' && value !== null;
+}
+
+function getRuntimeContextString(
+  runtimeContext: unknown,
+  field: 'title' | 'body',
+): string | undefined {
+  if (!isBatchRuntimeContext(runtimeContext)) {
+    return undefined;
+  }
+  const value = runtimeContext[field];
+  return typeof value === 'string' ? value : undefined;
+}
 type NotificationRuleId =
   | 'update-available'
   | 'update-applied'
@@ -2360,7 +2390,7 @@ class Trigger<
    */
   async triggerBatch(
     containersWithResult: Container[],
-    _runtimeContext?: unknown,
+    _runtimeContext?: BatchRuntimeContext | unknown,
   ): Promise<unknown> {
     // do nothing by default
     this.log.warn('Cannot trigger container results; this trigger does not implement "batch" mode');
@@ -2470,13 +2500,21 @@ class Trigger<
   /**
    * Compose a batch message with optional title.
    * Providers needing custom formatting should override formatTitleAndBody().
+   *
+   * `runtimeContext` (when supplied by the caller — e.g. the security-digest
+   * cycle flush) carries a prerendered title/body that MUST be used verbatim
+   * instead of re-rendering against `containers`, since the rows passed in
+   * that path are not real `Container` objects (#328).
    */
-  protected composeBatchMessage(containers: Container[]): string {
-    const body = this.renderBatchBody(containers);
+  protected composeBatchMessage(
+    containers: Container[],
+    runtimeContext?: BatchRuntimeContext | unknown,
+  ): string {
+    const body = this.renderBatchBody(containers, runtimeContext);
     if (this.configuration.disabletitle) {
       return body;
     }
-    const title = this.renderBatchTitle(containers);
+    const title = this.renderBatchTitle(containers, runtimeContext);
     return this.formatTitleAndBody(title, body);
   }
 
@@ -2609,10 +2647,15 @@ class Trigger<
 
   /**
    * Render trigger title batch.
-   * @param containers
-   * @returns {*}
+   *
+   * When `runtimeContext.title` is set the caller has already rendered the
+   * title (e.g. security-alert-digest) — return it verbatim. See #328.
    */
-  renderBatchTitle(containers: Container[]) {
+  renderBatchTitle(containers: Container[], runtimeContext?: BatchRuntimeContext | unknown) {
+    const overrideTitle = getRuntimeContextString(runtimeContext, 'title');
+    if (overrideTitle !== undefined) {
+      return overrideTitle;
+    }
     const notificationEvent =
       containers.length > 0 ? getNotificationEvent(containers[0]) : undefined;
     const template = resolveNotificationTemplate(
@@ -2625,10 +2668,15 @@ class Trigger<
 
   /**
    * Render trigger body batch.
-   * @param containers
-   * @returns {*}
+   *
+   * When `runtimeContext.body` is set the caller has already rendered the
+   * body (e.g. security-alert-digest) — return it verbatim. See #328.
    */
-  renderBatchBody(containers: Container[]) {
+  renderBatchBody(containers: Container[], runtimeContext?: BatchRuntimeContext | unknown) {
+    const overrideBody = getRuntimeContextString(runtimeContext, 'body');
+    if (overrideBody !== undefined) {
+      return overrideBody;
+    }
     return containers.map((container) => `- ${this.renderSimpleBody(container)}\n`).join('\n');
   }
 }

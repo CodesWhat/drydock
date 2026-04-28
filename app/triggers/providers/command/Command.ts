@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 
 import { flatten } from '../../../model/container.js';
-import Trigger, { type TriggerConfiguration } from '../Trigger.js';
+import Trigger, { type BatchRuntimeContext, type TriggerConfiguration } from '../Trigger.js';
 
 let hasLoggedShellExecutionWarning = false;
 
@@ -60,9 +60,12 @@ class Command extends Trigger<CommandConfiguration> {
    * @param containers
    * @returns {Promise<*>}
    */
-  async triggerBatch(containers) {
+  async triggerBatch(containers, runtimeContext?: BatchRuntimeContext) {
     return this.runCommand({
       containers_json: JSON.stringify(containers),
+      ...(runtimeContext?.title ? { dd_title: runtimeContext.title } : {}),
+      ...(runtimeContext?.body ? { dd_body: runtimeContext.body } : {}),
+      ...(runtimeContext?.eventKind ? { dd_event_kind: runtimeContext.eventKind } : {}),
     });
   }
 

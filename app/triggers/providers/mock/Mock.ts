@@ -1,4 +1,4 @@
-import Trigger from '../Trigger.js';
+import Trigger, { type BatchRuntimeContext } from '../Trigger.js';
 
 /**
  * Mock Trigger implementation (for tests)
@@ -29,9 +29,9 @@ class Mock extends Trigger {
    * @param containers
    * @returns {Promise<void>}
    */
-  async triggerBatch(containers) {
-    this.log.info(`MOCK triggered title = \n${this.renderBatchTitle(containers)}`);
-    this.log.info(`MOCK triggered body  = \n${this.renderBatchBody(containers)}`);
+  async triggerBatch(containers, runtimeContext?: BatchRuntimeContext) {
+    this.log.info(`MOCK triggered title = \n${this.renderBatchTitle(containers, runtimeContext)}`);
+    this.log.info(`MOCK triggered body  = \n${this.renderBatchBody(containers, runtimeContext)}`);
   }
 }
 

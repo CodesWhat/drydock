@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { getOutboundHttpTimeoutMs } from '../../../configuration/runtime-defaults.js';
-import Trigger, { type TriggerConfiguration } from '../Trigger.js';
+import Trigger, { type BatchRuntimeContext, type TriggerConfiguration } from '../Trigger.js';
 
 interface RocketchatMessageBody {
   channel: string;
@@ -80,8 +80,8 @@ class Rocketchat extends Trigger<RocketchatConfiguration> {
     return this.postMessage(this.composeMessage(container));
   }
 
-  async triggerBatch(containers) {
-    return this.postMessage(this.composeBatchMessage(containers));
+  async triggerBatch(containers, runtimeContext?: BatchRuntimeContext) {
+    return this.postMessage(this.composeBatchMessage(containers, runtimeContext));
   }
 
   /**

@@ -1,5 +1,5 @@
 import { WebClient } from '@slack/web-api';
-import Trigger, { type TriggerConfiguration } from '../Trigger.js';
+import Trigger, { type BatchRuntimeContext, type TriggerConfiguration } from '../Trigger.js';
 
 interface SlackConfiguration extends TriggerConfiguration {
   token: string;
@@ -47,8 +47,8 @@ class Slack extends Trigger<SlackConfiguration> {
     return this.sendMessage(this.composeMessage(container));
   }
 
-  async triggerBatch(containers) {
-    return this.sendMessage(this.composeBatchMessage(containers));
+  async triggerBatch(containers, runtimeContext?: BatchRuntimeContext) {
+    return this.sendMessage(this.composeBatchMessage(containers, runtimeContext));
   }
 
   /**

@@ -1,5 +1,5 @@
 import nodemailer, { type Transporter } from 'nodemailer';
-import Trigger, { type TriggerConfiguration } from '../Trigger.js';
+import Trigger, { type BatchRuntimeContext, type TriggerConfiguration } from '../Trigger.js';
 
 interface SmtpConfiguration extends TriggerConfiguration {
   host: string;
@@ -179,12 +179,12 @@ class Smtp extends Trigger<SmtpConfiguration> {
    * @param containers
    * @returns {Promise<void>}
    */
-  async triggerBatch(containers) {
+  async triggerBatch(containers, runtimeContext?: BatchRuntimeContext) {
     return this.transporter.sendMail({
       from: this.configuration.from,
       to: this.configuration.to,
-      subject: this.renderBatchTitle(containers),
-      text: this.renderBatchBody(containers),
+      subject: this.renderBatchTitle(containers, runtimeContext),
+      text: this.renderBatchBody(containers, runtimeContext),
     });
   }
 }

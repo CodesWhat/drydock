@@ -1,6 +1,6 @@
 import axios, { type AxiosRequestConfig } from 'axios';
 import { getOutboundHttpTimeoutMs } from '../../../configuration/runtime-defaults.js';
-import Trigger, { type TriggerConfiguration } from '../Trigger.js';
+import Trigger, { type BatchRuntimeContext, type TriggerConfiguration } from '../Trigger.js';
 
 interface NtfyConfiguration extends TriggerConfiguration {
   url: string;
@@ -75,11 +75,11 @@ class Ntfy extends Trigger<NtfyConfiguration> {
    * @param containers
    * @returns {Promise<*>}
    */
-  async triggerBatch(containers) {
+  async triggerBatch(containers, runtimeContext?: BatchRuntimeContext) {
     return this.sendHttpRequest({
       topic: this.configuration.topic,
-      title: this.renderBatchTitle(containers),
-      message: this.renderBatchBody(containers),
+      title: this.renderBatchTitle(containers, runtimeContext),
+      message: this.renderBatchBody(containers, runtimeContext),
       priority: this.configuration.priority,
     });
   }
