@@ -1,7 +1,6 @@
 import {
   createMockLog,
   createMockLogWithChild,
-  mockGetFullReleaseNotesForContainer,
   mockGetReleaseNotesForTag,
   mockResolveSourceRepoForContainer,
   mockToContainerReleaseNotes,
