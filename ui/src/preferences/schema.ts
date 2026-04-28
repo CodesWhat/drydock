@@ -39,7 +39,6 @@ export interface PreferencesSchema {
       hidePinned: boolean;
     };
     columns: string[];
-    showAutoUpdateDiagnostic: boolean;
   };
   dashboard: {
     widgetOrder: string[];
@@ -97,7 +96,6 @@ export const DEFAULTS: PreferencesSchema = {
       hidePinned: false,
     },
     columns: [...CONTAINER_TABLE_COLUMN_KEYS],
-    showAutoUpdateDiagnostic: false,
   },
   dashboard: {
     widgetOrder: [

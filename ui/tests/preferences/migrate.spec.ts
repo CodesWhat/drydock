@@ -345,53 +345,6 @@ describe('preferences migration', () => {
 
       expect(result.views.logs.newestFirst).toBe(DEFAULTS.views.logs.newestFirst);
     });
-
-    describe('showAutoUpdateDiagnostic', () => {
-      it('v2→latest: containers ends up with showAutoUpdateDiagnostic at default (false)', () => {
-        const result = migrate({ schemaVersion: 2, containers: { viewMode: 'cards' } });
-        expect(result.schemaVersion).toBe(DEFAULTS.schemaVersion);
-        expect(result.containers.showAutoUpdateDiagnostic).toBe(
-          DEFAULTS.containers.showAutoUpdateDiagnostic,
-        );
-      });
-
-      it('v3→v4: legacy showSoft is dropped and showAutoUpdateDiagnostic resets to default (off)', () => {
-        const result = migrate({
-          schemaVersion: 3,
-          containers: { eligibilityPills: { showSoft: true, deemphasizeSoft: true } as any },
-        });
-        expect(result.schemaVersion).toBe(4);
-        expect(result.containers.showAutoUpdateDiagnostic).toBe(false);
-        // showSoft is no longer part of the schema and gets dropped by mergeDefaults
-        expect((result.containers as any).eligibilityPills?.showSoft).toBeUndefined();
-      });
-
-      it('v4 sanitization: drops invalid showAutoUpdateDiagnostic type and resets to default', () => {
-        const result = migrate({
-          schemaVersion: 4,
-          containers: { showAutoUpdateDiagnostic: 'yes' as any },
-        });
-        expect(result.containers.showAutoUpdateDiagnostic).toBe(
-          DEFAULTS.containers.showAutoUpdateDiagnostic,
-        );
-      });
-
-      it('v4: preserves user-set showAutoUpdateDiagnostic=true', () => {
-        const result = migrate({
-          schemaVersion: 4,
-          containers: { showAutoUpdateDiagnostic: true },
-        });
-        expect(result.containers.showAutoUpdateDiagnostic).toBe(true);
-      });
-
-      it('v1→latest chain: ends up at latest with showAutoUpdateDiagnostic defaulted', () => {
-        const result = migrate({ schemaVersion: 1 });
-        expect(result.schemaVersion).toBe(DEFAULTS.schemaVersion);
-        expect(result.containers.showAutoUpdateDiagnostic).toBe(
-          DEFAULTS.containers.showAutoUpdateDiagnostic,
-        );
-      });
-    });
   });
 
   describe('migrateFromLegacyKeys', () => {

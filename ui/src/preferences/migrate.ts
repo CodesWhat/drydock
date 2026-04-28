@@ -182,10 +182,6 @@ function sanitizeContainers(data: Record<string, unknown>): void {
         );
       }
     }
-
-    if ('showAutoUpdateDiagnostic' in c && !isBoolean(c.showAutoUpdateDiagnostic)) {
-      delete c.showAutoUpdateDiagnostic;
-    }
   }
 }
 
@@ -617,15 +613,7 @@ export function migrate(data: Record<string, unknown>): PreferencesSchema {
   }
 
   if (data.schemaVersion === 3) {
-    const containers = isRecord(data.containers) ? data.containers : {};
-    data = {
-      ...data,
-      schemaVersion: CURRENT_SCHEMA_VERSION,
-      containers: {
-        ...containers,
-        showAutoUpdateDiagnostic: DEFAULTS.containers.showAutoUpdateDiagnostic,
-      },
-    };
+    data = { ...data, schemaVersion: CURRENT_SCHEMA_VERSION };
   }
 
   sanitize(data);

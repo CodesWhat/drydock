@@ -1,14 +1,8 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n';
 import type { RadiusPreset, RadiusPresetId } from '../../preferences/radius';
-import { preferences } from '../../preferences/store';
 
 const { t } = useI18n();
-
-function toggleShowAutoUpdateDiagnostic() {
-  preferences.containers.showAutoUpdateDiagnostic =
-    !preferences.containers.showAutoUpdateDiagnostic;
-}
 
 interface ThemeFamilyOption {
   id: string;
@@ -336,27 +330,6 @@ function handleFontSizeInput(event: Event) {
               {{ p.label }}
             </div>
           </AppButton>
-        </div>
-      </div>
-    </div>
-
-    <!-- Auto-update diagnostic pills -->
-    <div
-      class="dd-rounded overflow-hidden"
-      :style="{ backgroundColor: 'var(--dd-bg-card)' }"
-    >
-      <div class="px-5 py-3.5 flex items-center gap-2" :style="{ borderBottom: '1px solid var(--dd-border)' }">
-        <AppIcon name="shield" :size="14" class="text-drydock-secondary" />
-        <h2 class="dd-text-heading-section dd-text">Auto-update diagnostic pills</h2>
-      </div>
-      <div class="p-5 space-y-3">
-        <div class="flex items-center justify-between gap-3">
-          <span class="text-xs dd-text">Show on container rows</span>
-          <ToggleSwitch
-            data-test="toggle-show-auto-update-diagnostic"
-            :model-value="preferences.containers.showAutoUpdateDiagnostic"
-            @update:model-value="toggleShowAutoUpdateDiagnostic"
-          />
         </div>
       </div>
     </div>
