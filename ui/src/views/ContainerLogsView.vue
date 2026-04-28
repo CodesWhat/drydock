@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import AppIconButton from '../components/AppIconButton.vue';
 import ContainerLogs from '../components/containers/ContainerLogs.vue';
@@ -10,6 +11,7 @@ import { ROUTES } from '../router/routes';
 
 const route = useRoute();
 const router = useRouter();
+const { t } = useI18n();
 
 const containerId = computed(() => {
   const raw = route.params.id;
@@ -29,10 +31,10 @@ async function loadContainer() {
     if (match) {
       container.value = mapApiContainer(match);
     } else {
-      error.value = `Container "${containerId.value}" not found`;
+      error.value = t('containerLogs.notFound', { name: containerId.value });
     }
   } catch {
-    error.value = 'Failed to load container info';
+    error.value = t('containerLogs.loadFailed');
   } finally {
     loading.value = false;
   }
@@ -44,7 +46,7 @@ onMounted(() => {
 
 const containerName = computed(() => container.value?.name ?? containerId.value);
 const containerImage = computed(() => container.value?.image ?? '');
-const containerStatus = computed(() => container.value?.status ?? 'unknown');
+const containerStatus = computed(() => container.value?.status ?? t('common.unknown'));
 
 function goBack() {
   router.push(ROUTES.CONTAINERS);
@@ -60,8 +62,8 @@ function goBack() {
         size="toolbar"
         variant="plain"
         class="dd-text-muted hover:dd-text"
-        tooltip="Back to containers"
-        aria-label="Back to containers"
+        :tooltip="t('containerLogs.backTooltip')"
+        :aria-label="t('containerLogs.backTooltip')"
         @click="goBack"
       />
 
@@ -81,13 +83,13 @@ function goBack() {
       </div>
 
       <div class="ml-auto text-2xs-plus font-semibold dd-text-muted uppercase tracking-wider">
-        Container Logs
+        {{ t('containerLogs.title') }}
       </div>
     </div>
 
     <!-- Loading -->
     <div v-if="loading" class="flex-1 flex items-center justify-center dd-text-muted text-xs">
-      Loading container...
+      {{ t('containerLogs.loading') }}
     </div>
 
     <!-- Error -->

@@ -6,6 +6,7 @@
  */
 import { type ComponentMountingOptions, mount as vtuMount } from '@vue/test-utils';
 import { type Component, defineComponent, h } from 'vue';
+import { i18n } from '@/boot/i18n';
 import { tooltip as tooltipDirective } from '@/directives/tooltip';
 
 /** Stub router for provide injection. */
@@ -34,7 +35,7 @@ export function mountWithPlugins<T extends Component>(
   return vtuMount(component, {
     ...rest,
     global: {
-      plugins: [...plugins],
+      plugins: [i18n, ...plugins],
       provide: {
         // Vue Router symbols
         'Symbol(route location)': routeStub,
