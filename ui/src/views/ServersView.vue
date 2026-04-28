@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import AppBadge from '@/components/AppBadge.vue';
 import DetailField from '@/components/DetailField.vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
@@ -19,6 +20,7 @@ interface ServerEntry {
   lastSeen: string;
 }
 
+const { t } = useI18n();
 const serversViewMode = useViewMode('servers');
 const loading = ref(true);
 const error = ref<string | null>(null);
@@ -50,13 +52,18 @@ function closeDetail() {
   selectedServer.value = null;
 }
 
-const tableColumns = [
-  { key: 'name', label: 'Host', width: '30%', sortable: false },
-  { key: 'host', label: 'Address', width: '30%', sortable: false },
-  { key: 'status', label: 'Status', sortable: false },
-  { key: 'containers', label: 'Containers', sortable: false },
-  { key: 'lastSeen', label: 'Last Seen', align: 'text-right', sortable: false },
-];
+const tableColumns = computed(() => [
+  { key: 'name', label: t('serversView.columns.host'), width: '30%', sortable: false },
+  { key: 'host', label: t('serversView.columns.address'), width: '30%', sortable: false },
+  { key: 'status', label: t('serversView.columns.status'), sortable: false },
+  { key: 'containers', label: t('serversView.columns.containers'), sortable: false },
+  {
+    key: 'lastSeen',
+    label: t('serversView.columns.lastSeen'),
+    align: 'text-right',
+    sortable: false,
+  },
+]);
 
 interface WatcherContainerCounts {
   total: number;
@@ -127,7 +134,7 @@ async function fetchServers() {
         status: 'connected',
         containers: readContainerCounts(watcher.metadata),
         images: readImageCount(watcher.metadata),
-        lastSeen: 'Just now',
+        lastSeen: t('serversView.justNow'),
       });
     }
 
@@ -145,13 +152,13 @@ async function fetchServers() {
           stopped: agent.containers?.stopped ?? 0,
         },
         images: typeof agent.images === 'number' ? agent.images : 0,
-        lastSeen: agentConnected ? 'Just now' : 'Never',
+        lastSeen: agentConnected ? t('serversView.justNow') : t('serversView.never'),
       });
     }
 
     servers.value = entries;
   } catch (e: unknown) {
-    error.value = errorMessage(e, 'Failed to load server data');
+    error.value = errorMessage(e, t('serversView.loadError'));
   } finally {
     loading.value = false;
   }
@@ -168,7 +175,7 @@ onMounted(fetchServers);
       {{ error }}
     </div>
 
-    <div v-if="loading" class="text-2xs-plus dd-text-muted py-3 px-1">Loading server data...</div>
+    <div v-if="loading" class="text-2xs-plus dd-text-muted py-3 px-1">{{ t('serversView.loadingServerData') }}</div>
 
     <!-- Filter bar -->
     <DataFilterBar
@@ -181,12 +188,12 @@ onMounted(fetchServers);
       <template #filters>
         <input v-model="searchQuery"
                type="text"
-               placeholder="Filter by name or address..."
+               :placeholder="t('serversView.filterPlaceholder')"
                class="flex-1 min-w-[120px] max-w-[var(--dd-layout-filter-max-width)] px-2.5 py-1.5 dd-rounded text-2xs-plus font-medium outline-none dd-bg dd-text dd-placeholder" />
         <AppButton size="none" variant="text-muted" weight="medium" class="text-2xs" v-if="searchQuery"
                 
                 @click="searchQuery = ''">
-          Clear
+          {{ t('serversView.clear') }}
         </AppButton>
       </template>
     </DataFilterBar>
@@ -225,7 +232,7 @@ onMounted(fetchServers);
             <div class="flex items-center justify-center gap-2">
               <span class="font-semibold dd-text">{{ row.containers.total }}</span>
               <span class="text-2xs" :style="{ color: row.containers.running > 0 ? 'var(--dd-success)' : 'var(--dd-text-muted)' }">
-                {{ row.containers.running }} running
+                {{ row.containers.running }} {{ t('serversView.detail.running') }}
               </span>
             </div>
           </template>
@@ -267,21 +274,21 @@ onMounted(fetchServers);
             <div class="px-4 py-3">
               <div class="grid grid-cols-2 gap-2 text-2xs-plus">
                 <div>
-                  <span class="dd-text-muted">Containers</span>
+                  <span class="dd-text-muted">{{ t('serversView.card.containers') }}</span>
                   <span class="ml-1 font-semibold dd-text">{{ server.containers.total }}</span>
                 </div>
                 <div>
-                  <span class="dd-text-muted">Running</span>
+                  <span class="dd-text-muted">{{ t('serversView.card.running') }}</span>
                   <span class="ml-1 font-semibold" :style="{ color: server.containers.running > 0 ? 'var(--dd-success)' : 'var(--dd-text-muted)' }">
                     {{ server.containers.running }}
                   </span>
                 </div>
                 <div>
-                  <span class="dd-text-muted">Images</span>
+                  <span class="dd-text-muted">{{ t('serversView.card.images') }}</span>
                   <span class="ml-1 font-semibold dd-text">{{ server.images }}</span>
                 </div>
                 <div>
-                  <span class="dd-text-muted">Last seen</span>
+                  <span class="dd-text-muted">{{ t('serversView.card.lastSeen') }}</span>
                   <span class="ml-1 font-semibold" :class="server.status === 'connected' ? 'dd-text' : 'dd-text-danger'">
                     {{ server.lastSeen }}
                   </span>
@@ -318,7 +325,7 @@ onMounted(fetchServers);
           </div>
             <div class="flex items-center gap-3 shrink-0">
               <span class="text-2xs-plus dd-text-muted hidden md:inline">
-                <span class="font-semibold dd-text">{{ server.containers.total }}</span> containers
+                <span class="font-semibold dd-text">{{ server.containers.total }}</span> {{ t('serversView.list.containers') }}
               </span>
               <span class="text-2xs-plus hidden md:inline"
                     :class="server.status === 'connected' ? 'dd-text-muted' : 'dd-text-danger'">
@@ -335,7 +342,7 @@ onMounted(fetchServers);
         <EmptyState
           v-if="filteredServers.length === 0 && !loading"
           icon="servers"
-          message="No hosts match your filters"
+          :message="t('serversView.emptyFiltered')"
           :show-clear="activeFilterCount > 0"
           @clear="searchQuery = ''"
         />
@@ -369,24 +376,24 @@ onMounted(fetchServers);
         <template v-if="selectedServer" #default>
           <div class="p-4 space-y-5">
             <!-- Containers -->
-            <DetailField label="Containers">
+            <DetailField :label="t('serversView.detail.containers')">
               <div class="flex items-baseline gap-3 mt-1">
                 <span class="text-lg font-bold dd-text">{{ selectedServer.containers.total }}</span>
                 <span class="text-2xs-plus font-medium" :style="{ color: 'var(--dd-success)' }">
-                  {{ selectedServer.containers.running }} running
+                  {{ selectedServer.containers.running }} {{ t('serversView.detail.running') }}
                 </span>
                 <span v-if="selectedServer.containers.stopped > 0"
                       class="text-2xs-plus font-medium" style="color: var(--dd-danger);">
-                  {{ selectedServer.containers.stopped }} stopped
+                  {{ selectedServer.containers.stopped }} {{ t('serversView.detail.stopped') }}
                 </span>
               </div>
             </DetailField>
 
             <!-- Images -->
-            <DetailField label="Images" mono>{{ selectedServer.images }}</DetailField>
+            <DetailField :label="t('serversView.detail.images')" mono>{{ selectedServer.images }}</DetailField>
 
             <!-- Last Seen -->
-            <DetailField label="Last Seen">
+            <DetailField :label="t('serversView.detail.lastSeen')">
               <div class="text-xs font-medium"
                    :class="selectedServer.status === 'connected' ? 'dd-text' : 'dd-text-danger'">
                 {{ selectedServer.lastSeen }}
@@ -399,7 +406,7 @@ onMounted(fetchServers);
               <AppButton size="none" variant="plain" weight="none" class="inline-flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-2xs-plus font-semibold transition-colors dd-text-secondary hover:dd-text hover:dd-bg-elevated"
                       @click="fetchServers()">
                 <AppIcon name="restart" :size="11" />
-                Refresh
+                {{ t('serversView.detail.refresh') }}
               </AppButton>
             </div>
           </div>

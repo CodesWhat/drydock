@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import AppButton from '../AppButton.vue';
 import { revealContainerEnv } from '../../services/container';
 import { errorMessage } from '../../utils/error';
 import { useContainersViewTemplateContext } from './containersViewTemplateContext';
+
+const { t } = useI18n();
 
 interface RevealEnvResponse {
   env?: Array<{ key: string; value: string }>;
@@ -63,7 +66,7 @@ const { selectedContainer } = useContainersViewTemplateContext();
           :style="{ backgroundColor: 'var(--dd-bg-card)' }">
       <div class="px-4 py-3 flex items-center gap-2">
         <AppIcon name="config" :size="12" class="dd-text-muted" />
-        <span class="text-2xs-plus font-semibold uppercase tracking-wider dd-text-muted">Environment Variables</span>
+        <span class="text-2xs-plus font-semibold uppercase tracking-wider dd-text-muted">{{ t('containerComponents.fullPageEnvironment.environmentVariables') }}</span>
         <span class="badge text-3xs ml-auto dd-bg-elevated dd-text-muted">{{ selectedContainer.details.env.length }}</span>
       </div>
       <div class="p-4">
@@ -85,14 +88,14 @@ const { selectedContainer } = useContainersViewTemplateContext();
             </template>
           </div>
         </div>
-        <p v-else class="text-xs dd-text-muted italic">No environment variables configured</p>
+        <p v-else class="text-xs dd-text-muted italic">{{ t('containerComponents.fullPageEnvironment.noEnvVars') }}</p>
       </div>
     </div>
     <div class="dd-rounded overflow-hidden"
           :style="{ backgroundColor: 'var(--dd-bg-card)' }">
       <div class="px-4 py-3 flex items-center gap-2">
         <AppIcon name="hard-drive" :size="12" class="dd-text-muted" />
-        <span class="text-2xs-plus font-semibold uppercase tracking-wider dd-text-muted">Volumes</span>
+        <span class="text-2xs-plus font-semibold uppercase tracking-wider dd-text-muted">{{ t('containerComponents.fullPageEnvironment.volumes') }}</span>
         <span class="badge text-3xs ml-auto dd-bg-elevated dd-text-muted">{{ selectedContainer.details.volumes.length }}</span>
       </div>
       <div class="p-4">
@@ -104,7 +107,7 @@ const { selectedContainer } = useContainersViewTemplateContext();
             <span class="truncate dd-text">{{ vol }}</span>
           </div>
         </div>
-        <p v-else class="text-xs dd-text-muted italic">No volumes mounted</p>
+        <p v-else class="text-xs dd-text-muted italic">{{ t('containerComponents.fullPageEnvironment.noVolumes') }}</p>
       </div>
     </div>
   </div>

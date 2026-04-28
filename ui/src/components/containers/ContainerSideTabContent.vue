@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import AppBadge from '@/components/AppBadge.vue';
 import ContainerLogs from './ContainerLogs.vue';
 import ContainerStats from './ContainerStats.vue';
@@ -147,6 +148,8 @@ const {
   registryLabel,
 } = useContainersViewTemplateContext();
 
+const { t } = useI18n();
+
 function isActionInProgress(container: { id?: unknown; name?: unknown }) {
   return hasTrackedContainerAction(actionInProgress.value, container);
 }
@@ -163,7 +166,7 @@ function isActionInProgress(container: { id?: unknown; name?: unknown }) {
           <div v-if="activeDetailTab === 'overview'" class="space-y-5">
             <!-- Ports -->
             <div v-if="selectedContainer.details.ports.length > 0">
-              <div class="dd-text-label mb-2 dd-text-muted">Ports</div>
+              <div class="dd-text-label mb-2 dd-text-muted">{{ t('containerComponents.fullPageOverview.ports') }}</div>
               <div class="space-y-1">
                 <div v-for="port in selectedContainer.details.ports" :key="port"
                      class="flex items-center gap-2 px-2.5 py-1.5 dd-rounded text-2xs-plus font-mono"
@@ -176,7 +179,7 @@ function isActionInProgress(container: { id?: unknown; name?: unknown }) {
 
             <!-- Volumes -->
             <div v-if="selectedContainer.details.volumes.length > 0">
-              <div class="dd-text-label mb-2 dd-text-muted">Volumes</div>
+              <div class="dd-text-label mb-2 dd-text-muted">{{ t('containerComponents.fullPageOverview.volumes') }}</div>
               <div class="space-y-1">
                 <div v-for="vol in selectedContainer.details.volumes" :key="vol"
                      class="flex items-center gap-2 px-2.5 py-1.5 dd-rounded text-2xs-plus font-mono"
@@ -189,7 +192,7 @@ function isActionInProgress(container: { id?: unknown; name?: unknown }) {
 
             <!-- Compose files -->
             <div v-if="selectedComposePaths.length > 0">
-              <div class="dd-text-label mb-2 dd-text-muted">Compose Files</div>
+              <div class="dd-text-label mb-2 dd-text-muted">{{ t('containerComponents.fullPageOverview.composeFiles') }}</div>
               <div class="space-y-1">
                 <div
                   v-for="(composePath, index) in selectedComposePaths"
@@ -207,10 +210,10 @@ function isActionInProgress(container: { id?: unknown; name?: unknown }) {
 
             <!-- Version info -->
             <div>
-              <div class="dd-text-label mb-2 dd-text-muted">Version</div>
+              <div class="dd-text-label mb-2 dd-text-muted">{{ t('containerComponents.fullPageOverview.version') }}</div>
               <div class="flex items-center gap-2 px-2.5 py-1.5 dd-rounded text-2xs-plus font-mono"
                    :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-                <span class="dd-text-secondary">Current:</span>
+                <span class="dd-text-secondary">{{ t('containerComponents.fullPageOverview.currentLabel') }}</span>
                 <CopyableTag :tag="selectedContainer.currentTag" class="font-bold dd-text">{{ selectedContainer.currentTag }}</CopyableTag>
                 <template v-if="selectedContainer.newTag">
                   <AppIcon name="arrow-right" :size="8" class="dd-text-muted" />
@@ -240,8 +243,6 @@ function isActionInProgress(container: { id?: unknown; name?: unknown }) {
                 v-if="selectedContainer.updateEligibility"
                 :eligibility="selectedContainer.updateEligibility"
                 :has-active-operation-badge="Boolean(selectedContainer.updateOperation)"
-                :respect-pref="false"
-                variant="full"
                 class="mt-2"
               />
               <div class="mt-2">
@@ -256,46 +257,46 @@ function isActionInProgress(container: { id?: unknown; name?: unknown }) {
 
             <!-- Tag filter regex -->
             <div>
-              <div class="dd-text-label mb-2 dd-text-muted">Tag Filters</div>
+              <div class="dd-text-label mb-2 dd-text-muted">{{ t('containerComponents.fullPageOverview.tagFilters') }}</div>
               <div class="space-y-1">
                 <div class="flex items-center gap-2 px-2.5 py-1.5 dd-rounded text-2xs-plus"
                      :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-                  <span class="dd-text-secondary shrink-0">Include:</span>
-                  <span class="font-mono dd-text break-all">{{ selectedContainer.includeTags || 'Not set' }}</span>
+                  <span class="dd-text-secondary shrink-0">{{ t('containerComponents.fullPageOverview.includeLabel') }}</span>
+                  <span class="font-mono dd-text break-all">{{ selectedContainer.includeTags || t('containerComponents.fullPageOverview.notSet') }}</span>
                 </div>
                 <div class="flex items-center gap-2 px-2.5 py-1.5 dd-rounded text-2xs-plus"
                      :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-                  <span class="dd-text-secondary shrink-0">Exclude:</span>
-                  <span class="font-mono dd-text break-all">{{ selectedContainer.excludeTags || 'Not set' }}</span>
+                  <span class="dd-text-secondary shrink-0">{{ t('containerComponents.fullPageOverview.excludeLabel') }}</span>
+                  <span class="font-mono dd-text break-all">{{ selectedContainer.excludeTags || t('containerComponents.fullPageOverview.notSet') }}</span>
                 </div>
                 <div class="flex items-center gap-2 px-2.5 py-1.5 dd-rounded text-2xs-plus"
                      :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-                  <span class="dd-text-secondary shrink-0">Transform:</span>
-                  <span class="font-mono dd-text break-all">{{ selectedContainer.transformTags || 'Not set' }}</span>
+                  <span class="dd-text-secondary shrink-0">{{ t('containerComponents.fullPageOverview.transformLabel') }}</span>
+                  <span class="font-mono dd-text break-all">{{ selectedContainer.transformTags || t('containerComponents.fullPageOverview.notSet') }}</span>
                 </div>
               </div>
             </div>
 
             <!-- Trigger filter include/exclude -->
             <div>
-              <div class="dd-text-label mb-2 dd-text-muted">Trigger Filters</div>
+              <div class="dd-text-label mb-2 dd-text-muted">{{ t('containerComponents.fullPageOverview.triggerFilters') }}</div>
               <div class="space-y-1">
                 <div class="flex items-center gap-2 px-2.5 py-1.5 dd-rounded text-2xs-plus"
                      :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-                  <span class="dd-text-secondary shrink-0">Include:</span>
-                  <span class="font-mono dd-text break-all">{{ selectedContainer.triggerInclude || 'Not set' }}</span>
+                  <span class="dd-text-secondary shrink-0">{{ t('containerComponents.fullPageOverview.includeLabel') }}</span>
+                  <span class="font-mono dd-text break-all">{{ selectedContainer.triggerInclude || t('containerComponents.fullPageOverview.notSet') }}</span>
                 </div>
                 <div class="flex items-center gap-2 px-2.5 py-1.5 dd-rounded text-2xs-plus"
                      :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-                  <span class="dd-text-secondary shrink-0">Exclude:</span>
-                  <span class="font-mono dd-text break-all">{{ selectedContainer.triggerExclude || 'Not set' }}</span>
+                  <span class="dd-text-secondary shrink-0">{{ t('containerComponents.fullPageOverview.excludeLabel') }}</span>
+                  <span class="font-mono dd-text break-all">{{ selectedContainer.triggerExclude || t('containerComponents.fullPageOverview.notSet') }}</span>
                 </div>
               </div>
             </div>
 
             <!-- Registry -->
             <div>
-              <div class="dd-text-label mb-2 dd-text-muted">Registry</div>
+              <div class="dd-text-label mb-2 dd-text-muted">{{ t('containerComponents.fullPageOverview.registry') }}</div>
               <div class="flex items-center gap-2 px-2.5 py-1.5 dd-rounded text-2xs-plus"
                    :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
                 <AppBadge size="xs" :custom="{ bg: registryColorBg(selectedContainer.registry), text: registryColorText(selectedContainer.registry) }">
@@ -313,11 +314,11 @@ function isActionInProgress(container: { id?: unknown; name?: unknown }) {
 
             <!-- Runtime process -->
             <div>
-              <div class="dd-text-label mb-2 dd-text-muted">Runtime Process</div>
+              <div class="dd-text-label mb-2 dd-text-muted">{{ t('containerComponents.fullPageOverview.runtimeProcess') }}</div>
               <div class="space-y-1">
                 <div class="flex items-center justify-between gap-3 px-2.5 py-1.5 dd-rounded text-2xs-plus"
                      :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-                  <span class="dd-text-secondary">Entrypoint</span>
+                  <span class="dd-text-secondary">{{ t('containerComponents.fullPageOverview.entrypoint') }}</span>
                   <span class="badge text-3xs font-bold uppercase"
                         :style="runtimeOriginStyle(selectedRuntimeOrigins.entrypoint)">
                     {{ runtimeOriginLabel(selectedRuntimeOrigins.entrypoint) }}
@@ -325,7 +326,7 @@ function isActionInProgress(container: { id?: unknown; name?: unknown }) {
                 </div>
                 <div class="flex items-center justify-between gap-3 px-2.5 py-1.5 dd-rounded text-2xs-plus"
                      :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-                  <span class="dd-text-secondary">Cmd</span>
+                  <span class="dd-text-secondary">{{ t('containerComponents.fullPageOverview.cmd') }}</span>
                   <span class="badge text-3xs font-bold uppercase"
                         :style="runtimeOriginStyle(selectedRuntimeOrigins.cmd)">
                     {{ runtimeOriginLabel(selectedRuntimeOrigins.cmd) }}
@@ -344,21 +345,21 @@ function isActionInProgress(container: { id?: unknown; name?: unknown }) {
 
             <!-- Lifecycle hooks -->
             <div>
-              <div class="dd-text-label mb-2 dd-text-muted">Lifecycle Hooks</div>
+              <div class="dd-text-label mb-2 dd-text-muted">{{ t('containerComponents.fullPageOverview.lifecycleHooks') }}</div>
               <div class="space-y-1">
                 <div class="flex items-start justify-between gap-3 px-2.5 py-1.5 dd-rounded text-2xs-plus"
                      :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-                  <span class="dd-text-secondary shrink-0">Pre-update</span>
-                  <span class="font-mono dd-text text-right break-all">{{ selectedLifecycleHooks.preUpdate || 'Not configured' }}</span>
+                  <span class="dd-text-secondary shrink-0">{{ t('containerComponents.fullPageOverview.preUpdate') }}</span>
+                  <span class="font-mono dd-text text-right break-all">{{ selectedLifecycleHooks.preUpdate || t('containerComponents.fullPageOverview.notConfigured') }}</span>
                 </div>
                 <div class="flex items-start justify-between gap-3 px-2.5 py-1.5 dd-rounded text-2xs-plus"
                      :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-                  <span class="dd-text-secondary shrink-0">Post-update</span>
-                  <span class="font-mono dd-text text-right break-all">{{ selectedLifecycleHooks.postUpdate || 'Not configured' }}</span>
+                  <span class="dd-text-secondary shrink-0">{{ t('containerComponents.fullPageOverview.postUpdate') }}</span>
+                  <span class="font-mono dd-text text-right break-all">{{ selectedLifecycleHooks.postUpdate || t('containerComponents.fullPageOverview.notConfigured') }}</span>
                 </div>
                 <div class="flex items-center justify-between gap-3 px-2.5 py-1.5 dd-rounded text-2xs-plus"
                      :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-                  <span class="dd-text-secondary">Timeout</span>
+                  <span class="dd-text-secondary">{{ t('containerComponents.fullPageOverview.timeout') }}</span>
                   <span class="font-mono dd-text">{{ selectedLifecycleHooks.timeoutLabel }}</span>
                 </div>
               </div>
@@ -369,7 +370,7 @@ function isActionInProgress(container: { id?: unknown; name?: unknown }) {
               </div>
               <div class="mt-2 px-2.5 py-1.5 dd-rounded text-2xs-plus"
                    :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-                <div class="dd-text-secondary mb-1">Template Variables</div>
+                <div class="dd-text-secondary mb-1">{{ t('containerComponents.fullPageOverview.templateVariables') }}</div>
                 <div class="space-y-1">
                   <div v-for="variable in lifecycleHookTemplateVariables" :key="variable.name"
                        class="flex items-start justify-between gap-3">
@@ -382,21 +383,21 @@ function isActionInProgress(container: { id?: unknown; name?: unknown }) {
 
             <!-- Auto-rollback -->
             <div>
-              <div class="dd-text-label mb-2 dd-text-muted">Auto-Rollback</div>
+              <div class="dd-text-label mb-2 dd-text-muted">{{ t('containerComponents.fullPageOverview.autoRollback') }}</div>
               <div class="space-y-1">
                 <div class="flex items-center justify-between gap-3 px-2.5 py-1.5 dd-rounded text-2xs-plus"
                      :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-                  <span class="dd-text-secondary">Status</span>
+                  <span class="dd-text-secondary">{{ t('containerComponents.fullPageOverview.status') }}</span>
                   <span class="font-mono dd-text">{{ selectedAutoRollbackConfig.enabledLabel }}</span>
                 </div>
                 <div class="flex items-center justify-between gap-3 px-2.5 py-1.5 dd-rounded text-2xs-plus"
                      :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-                  <span class="dd-text-secondary">Window</span>
+                  <span class="dd-text-secondary">{{ t('containerComponents.fullPageOverview.window') }}</span>
                   <span class="font-mono dd-text">{{ selectedAutoRollbackConfig.windowLabel }}</span>
                 </div>
                 <div class="flex items-center justify-between gap-3 px-2.5 py-1.5 dd-rounded text-2xs-plus"
                      :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-                  <span class="dd-text-secondary">Interval</span>
+                  <span class="dd-text-secondary">{{ t('containerComponents.fullPageOverview.interval') }}</span>
                   <span class="font-mono dd-text">{{ selectedAutoRollbackConfig.intervalLabel }}</span>
                 </div>
               </div>
@@ -404,30 +405,30 @@ function isActionInProgress(container: { id?: unknown; name?: unknown }) {
 
             <!-- Image metadata -->
             <div>
-              <div class="dd-text-label mb-2 dd-text-muted">Image Metadata</div>
+              <div class="dd-text-label mb-2 dd-text-muted">{{ t('containerComponents.sideTabContent.imageMetadata') }}</div>
               <div class="space-y-1">
                 <div class="flex items-center justify-between gap-3 px-2.5 py-1.5 dd-rounded text-2xs-plus"
                      :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-                  <span class="dd-text-secondary">Architecture</span>
-                  <span class="font-mono dd-text">{{ selectedImageMetadata.architecture || 'Unknown' }}</span>
+                  <span class="dd-text-secondary">{{ t('containerComponents.sideTabContent.architecture') }}</span>
+                  <span class="font-mono dd-text">{{ selectedImageMetadata.architecture || t('containerComponents.sideTabContent.unknown') }}</span>
                 </div>
                 <div class="flex items-center justify-between gap-3 px-2.5 py-1.5 dd-rounded text-2xs-plus"
                      :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-                  <span class="dd-text-secondary">OS</span>
-                  <span class="font-mono dd-text">{{ selectedImageMetadata.os || 'Unknown' }}</span>
+                  <span class="dd-text-secondary">{{ t('containerComponents.sideTabContent.os') }}</span>
+                  <span class="font-mono dd-text">{{ selectedImageMetadata.os || t('containerComponents.sideTabContent.unknown') }}</span>
                 </div>
                 <div class="px-2.5 py-1.5 dd-rounded text-2xs-plus"
                      :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-                  <div class="dd-text-secondary">Digest</div>
+                  <div class="dd-text-secondary">{{ t('containerComponents.sideTabContent.digest') }}</div>
                   <div class="font-mono dd-text break-all">
-                    {{ selectedImageMetadata.digest || 'Unknown' }}
+                    {{ selectedImageMetadata.digest || t('containerComponents.sideTabContent.unknown') }}
                   </div>
                 </div>
                 <div class="flex items-center justify-between gap-3 px-2.5 py-1.5 dd-rounded text-2xs-plus"
                      :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-                  <span class="dd-text-secondary">Created</span>
+                  <span class="dd-text-secondary">{{ t('containerComponents.sideTabContent.created') }}</span>
                   <span class="font-mono dd-text">
-                    {{ selectedImageMetadata.created ? formatTimestamp(selectedImageMetadata.created) : 'Unknown' }}
+                    {{ selectedImageMetadata.created ? formatTimestamp(selectedImageMetadata.created) : t('containerComponents.sideTabContent.unknown') }}
                   </span>
                 </div>
               </div>
@@ -436,17 +437,17 @@ function isActionInProgress(container: { id?: unknown; name?: unknown }) {
             <!-- Security -->
             <div>
               <div class="flex items-center justify-between gap-2 mb-2">
-                <div class="dd-text-label dd-text-muted">Security</div>
+                <div class="dd-text-label dd-text-muted">{{ t('containerComponents.fullPageOverview.security') }}</div>
                 <AppButton size="xs" :disabled="detailVulnerabilityLoading || detailSbomLoading"
                         @click="loadDetailSecurityData">
-                  {{ detailVulnerabilityLoading || detailSbomLoading ? 'Refreshing...' : 'Refresh' }}
+                  {{ detailVulnerabilityLoading || detailSbomLoading ? t('containerComponents.fullPageOverview.refreshing') : t('containerComponents.fullPageOverview.refresh') }}
                 </AppButton>
               </div>
 
               <div v-if="detailVulnerabilityLoading"
                    class="px-2.5 py-1.5 dd-rounded text-2xs-plus dd-text-muted"
                    :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-                Loading vulnerability data...
+                {{ t('containerComponents.fullPageOverview.loadingVulnerabilityData') }}
               </div>
               <div v-else-if="detailVulnerabilityError"
                    class="px-2.5 py-1.5 dd-rounded text-2xs-plus"
@@ -455,11 +456,11 @@ function isActionInProgress(container: { id?: unknown; name?: unknown }) {
               </div>
               <div v-else class="space-y-1.5">
                 <div class="flex items-center gap-1.5 flex-wrap text-2xs">
-                  <AppBadge tone="danger" size="xs">critical {{ vulnerabilitySummary.critical }}</AppBadge>
-                  <AppBadge tone="warning" size="xs">high {{ vulnerabilitySummary.high }}</AppBadge>
-                  <AppBadge tone="caution" size="xs">medium {{ vulnerabilitySummary.medium }}</AppBadge>
-                  <AppBadge tone="info" size="xs">low {{ vulnerabilitySummary.low }}</AppBadge>
-                  <span class="text-2xs dd-text-muted ml-auto">{{ vulnerabilityTotal }} total</span>
+                  <AppBadge tone="danger" size="xs">{{ t('containerComponents.fullPageOverview.critical') }} {{ vulnerabilitySummary.critical }}</AppBadge>
+                  <AppBadge tone="warning" size="xs">{{ t('containerComponents.fullPageOverview.high') }} {{ vulnerabilitySummary.high }}</AppBadge>
+                  <AppBadge tone="caution" size="xs">{{ t('containerComponents.fullPageOverview.medium') }} {{ vulnerabilitySummary.medium }}</AppBadge>
+                  <AppBadge tone="info" size="xs">{{ t('containerComponents.fullPageOverview.low') }} {{ vulnerabilitySummary.low }}</AppBadge>
+                  <span class="text-2xs dd-text-muted ml-auto">{{ vulnerabilityTotal }} {{ t('containerComponents.fullPageOverview.total') }}</span>
                 </div>
 
                 <div v-if="vulnerabilityPreview.length > 0" class="space-y-1">
@@ -475,7 +476,7 @@ function isActionInProgress(container: { id?: unknown; name?: unknown }) {
                 </div>
                 <div v-else class="px-2.5 py-1.5 dd-rounded text-2xs-plus dd-text-muted italic"
                      :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-                  No vulnerabilities reported for this container.
+                  {{ t('containerComponents.fullPageOverview.noVulnerabilities') }}
                 </div>
               </div>
 
@@ -489,7 +490,7 @@ function isActionInProgress(container: { id?: unknown; name?: unknown }) {
                   <AppButton size="xs"
                           :disabled="detailSbomLoading"
                           @click="loadDetailSbom">
-                    {{ detailSbomLoading ? 'Loading SBOM...' : 'Refresh SBOM' }}
+                    {{ detailSbomLoading ? t('containerComponents.fullPageOverview.loadingSbom') : t('containerComponents.fullPageOverview.refreshSbom') }}
                   </AppButton>
                 </div>
                 <div v-if="detailSbomError"
@@ -500,28 +501,28 @@ function isActionInProgress(container: { id?: unknown; name?: unknown }) {
                 <div v-else-if="detailSbomLoading"
                      class="px-2.5 py-1.5 dd-rounded text-2xs-plus dd-text-muted"
                      :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-                  Loading SBOM document...
+                  {{ t('containerComponents.fullPageOverview.loadingSbomDocument') }}
                 </div>
                 <div v-else-if="sbomDocument"
                      class="px-2.5 py-1.5 dd-rounded text-2xs space-y-0.5"
                      :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
                   <div class="dd-text-muted">
-                    format:
+                    {{ t('containerComponents.fullPageOverview.formatLabel') }}
                     <span class="dd-text font-mono">{{ selectedSbomFormat }}</span>
                   </div>
                   <div v-if="typeof sbomComponentCount === 'number'" class="dd-text-muted">
-                    components:
+                    {{ t('containerComponents.fullPageOverview.componentsLabel') }}
                     <span class="dd-text">{{ sbomComponentCount }}</span>
                   </div>
                   <div v-if="sbomGeneratedAt" class="dd-text-muted">
-                    generated:
+                    {{ t('containerComponents.fullPageOverview.generatedLabel') }}
                     <span class="dd-text">{{ formatTimestamp(sbomGeneratedAt) }}</span>
                   </div>
                 </div>
                 <div v-else
                      class="px-2.5 py-1.5 dd-rounded text-2xs-plus dd-text-muted italic"
                      :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-                  SBOM document is not available yet.
+                  {{ t('containerComponents.fullPageOverview.sbomNotAvailable') }}
                 </div>
               </div>
             </div>
@@ -545,7 +546,7 @@ function isActionInProgress(container: { id?: unknown; name?: unknown }) {
           <!-- Environment tab -->
           <div v-if="activeDetailTab === 'environment'" class="space-y-5">
             <div>
-              <div class="dd-text-label mb-2 dd-text-muted">Environment Variables</div>
+              <div class="dd-text-label mb-2 dd-text-muted">{{ t('containerComponents.fullPageEnvironment.environmentVariables') }}</div>
               <div v-if="selectedContainer.details.env.length > 0" class="space-y-1">
                 <div v-for="e in selectedContainer.details.env" :key="e.key"
                      class="flex items-center gap-2 px-2.5 py-1.5 dd-rounded text-2xs-plus font-mono"
@@ -557,7 +558,7 @@ function isActionInProgress(container: { id?: unknown; name?: unknown }) {
                     <span v-if="getRevealedValue(selectedContainer.id, e.key)" class="truncate dd-text">{{ getRevealedValue(selectedContainer.id, e.key) }}</span>
                     <span v-else class="truncate dd-text-muted">&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;</span>
                     <AppButton size="none" variant="plain" weight="none" class="shrink-0 p-0.5 dd-text-muted hover:dd-text transition-colors"
-                            :tooltip="getRevealedValue(selectedContainer.id, e.key) ? 'Hide value' : 'Reveal value'"
+                            :tooltip="getRevealedValue(selectedContainer.id, e.key) ? t('containerComponents.sideTabContent.hideValueTooltip') : t('containerComponents.sideTabContent.revealValueTooltip')"
                             :disabled="envRevealLoading"
                             @click="toggleReveal(selectedContainer.id, e.key)">
                       <AppIcon :name="getRevealedValue(selectedContainer.id, e.key) ? 'eye-slash' : 'eye'" :size="11" />
@@ -565,11 +566,11 @@ function isActionInProgress(container: { id?: unknown; name?: unknown }) {
                   </template>
                 </div>
               </div>
-              <p v-else class="text-2xs-plus dd-text-muted italic">No environment variables configured</p>
+              <p v-else class="text-2xs-plus dd-text-muted italic">{{ t('containerComponents.fullPageEnvironment.noEnvVars') }}</p>
               <p v-if="envRevealError" class="mt-2 text-2xs" style="color: var(--dd-danger);">{{ envRevealError }}</p>
             </div>
             <div>
-              <div class="dd-text-label mb-2 dd-text-muted">Volumes</div>
+              <div class="dd-text-label mb-2 dd-text-muted">{{ t('containerComponents.fullPageEnvironment.volumes') }}</div>
               <div v-if="selectedContainer.details.volumes.length > 0" class="space-y-1">
                 <div v-for="vol in selectedContainer.details.volumes" :key="vol"
                      class="flex items-center gap-2 px-2.5 py-1.5 dd-rounded text-2xs-plus font-mono"
@@ -578,70 +579,70 @@ function isActionInProgress(container: { id?: unknown; name?: unknown }) {
                   <span class="truncate dd-text">{{ vol }}</span>
                 </div>
               </div>
-              <p v-else class="text-2xs-plus dd-text-muted italic">No volumes mounted</p>
+              <p v-else class="text-2xs-plus dd-text-muted italic">{{ t('containerComponents.fullPageEnvironment.noVolumes') }}</p>
             </div>
           </div>
 
           <!-- Labels tab -->
           <div v-if="activeDetailTab === 'labels'">
-            <div class="dd-text-label mb-2 dd-text-muted">Labels</div>
+            <div class="dd-text-label mb-2 dd-text-muted">{{ t('containerComponents.fullPageLabels.labels') }}</div>
             <div v-if="selectedContainer.details.labels.length > 0" class="flex flex-wrap gap-1.5">
               <AppBadge v-for="label in selectedContainer.details.labels" :key="label" tone="neutral" size="sm">
                 {{ label }}
               </AppBadge>
             </div>
-            <p v-else class="text-2xs-plus dd-text-muted italic">No labels assigned</p>
+            <p v-else class="text-2xs-plus dd-text-muted italic">{{ t('containerComponents.fullPageLabels.noLabels') }}</p>
           </div>
 
           <!-- Actions tab -->
           <div v-if="activeDetailTab === 'actions'" class="space-y-5">
             <div class="space-y-3">
-              <div class="dd-text-label dd-text-muted">Update Workflow</div>
+              <div class="dd-text-label dd-text-muted">{{ t('containerComponents.fullPageActions.updateWorkflow') }}</div>
               <!-- Actions group -->
               <div>
-                <div class="text-3xs uppercase tracking-wider mb-1.5 dd-text-muted">Actions</div>
+                <div class="text-3xs uppercase tracking-wider mb-1.5 dd-text-muted">{{ t('containerComponents.fullPageActions.actionsGroup') }}</div>
                 <div class="flex flex-wrap gap-1.5">
                   <AppButton size="sm" variant="outlined"
                           :disabled="previewLoading"
                           @click="runContainerPreview">
-                    {{ previewLoading ? 'Previewing...' : 'Preview Update' }}
+                    {{ previewLoading ? t('containerComponents.fullPageActions.previewing') : t('containerComponents.fullPageActions.previewUpdate') }}
                   </AppButton>
                   <AppButton v-if="selectedContainer.bouncer === 'blocked'" size="sm" variant="plain" :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)', border: '1px solid var(--dd-danger)' }"
                           :disabled="isActionInProgress(selectedContainer)"
                           @click="confirmForceUpdate(selectedContainer)">
-                    <AppIcon name="lock" :size="10" class="mr-1 inline" />Force Update
+                    <AppIcon name="lock" :size="10" class="mr-1 inline" />{{ t('containerComponents.fullPageActions.forceUpdate') }}
                   </AppButton>
                   <AppButton v-else
                           size="sm" variant="outlined"
                           :disabled="!selectedContainer.newTag || isActionInProgress(selectedContainer)"
                           @click="confirmUpdate(selectedContainer)">
-                    Update Now
+                    {{ t('containerComponents.fullPageActions.updateNow') }}
                   </AppButton>
                   <AppButton size="sm" variant="outlined"
                           :disabled="isActionInProgress(selectedContainer)"
                           @click="scanContainer(selectedContainer)">
-                    Scan Now
+                    {{ t('containerComponents.fullPageActions.scanNow') }}
                   </AppButton>
                 </div>
               </div>
               <!-- Skip & Snooze group -->
               <div>
-                <div class="text-3xs uppercase tracking-wider mb-1.5 dd-text-muted">Skip & Snooze</div>
+                <div class="text-3xs uppercase tracking-wider mb-1.5 dd-text-muted">{{ t('containerComponents.fullPageActions.skipSnoozeGroup') }}</div>
                 <div class="flex flex-wrap gap-1.5">
                   <AppButton size="sm" variant="outlined"
                           :disabled="!selectedContainer.newTag || policyInProgress !== null"
                           @click="skipCurrentForSelected">
-                    Skip This Update
+                    {{ t('containerComponents.fullPageActions.skipThisUpdate') }}
                   </AppButton>
                   <AppButton size="sm" variant="outlined"
                           :disabled="policyInProgress !== null"
                           @click="snoozeSelected(1)">
-                    Snooze 1d
+                    {{ t('containerComponents.fullPageActions.snooze1d') }}
                   </AppButton>
                   <AppButton size="sm" variant="outlined"
                           :disabled="policyInProgress !== null"
                           @click="snoozeSelected(7)">
-                    Snooze 7d
+                    {{ t('containerComponents.fullPageActions.snooze7d') }}
                   </AppButton>
                   <input
                     v-model="snoozeDateInput"
@@ -651,26 +652,26 @@ function isActionInProgress(container: { id?: unknown; name?: unknown }) {
                   <AppButton size="sm" variant="outlined"
                           :disabled="!snoozeDateInput || policyInProgress !== null"
                           @click="snoozeSelectedUntilDate">
-                    Snooze Until
+                    {{ t('containerComponents.fullPageActions.snoozeUntil') }}
                   </AppButton>
                   <AppButton size="sm" variant="outlined"
                           :disabled="!selectedSnoozeUntil || policyInProgress !== null"
                           @click="unsnoozeSelected">
-                    Unsnooze
+                    {{ t('containerComponents.fullPageActions.unsnooze') }}
                   </AppButton>
                 </div>
               </div>
               <!-- Maturity group -->
               <div>
-                <div class="text-3xs uppercase tracking-wider mb-1.5 dd-text-muted">Maturity</div>
+                <div class="text-3xs uppercase tracking-wider mb-1.5 dd-text-muted">{{ t('containerComponents.fullPageActions.maturityGroup') }}</div>
                 <div class="flex flex-wrap gap-1.5 items-center">
                   <select
                     v-model="maturityModeInput"
                     class="px-2 py-1.5 dd-rounded text-2xs outline-none dd-bg dd-text"
                     :disabled="policyInProgress !== null"
                   >
-                    <option value="all">Allow New + Mature</option>
-                    <option value="mature">Mature Only</option>
+                    <option value="all">{{ t('containerComponents.fullPageActions.allowNewMature') }}</option>
+                    <option value="mature">{{ t('containerComponents.fullPageActions.matureOnly') }}</option>
                   </select>
                   <input
                     v-model.number="maturityMinAgeDaysInput"
@@ -683,51 +684,51 @@ function isActionInProgress(container: { id?: unknown; name?: unknown }) {
                   <AppButton size="sm" variant="outlined"
                           :disabled="policyInProgress !== null"
                           @click="setMaturityPolicySelected(maturityModeInput)">
-                    Apply Maturity
+                    {{ t('containerComponents.fullPageActions.applyMaturity') }}
                   </AppButton>
                   <AppButton size="sm" variant="outlined"
                           :disabled="!selectedHasMaturityPolicy || policyInProgress !== null"
                           @click="clearMaturityPolicySelected">
-                    Clear Maturity
+                    {{ t('containerComponents.fullPageActions.clearMaturity') }}
                   </AppButton>
                 </div>
               </div>
               <!-- Reset group -->
               <div>
-                <div class="text-3xs uppercase tracking-wider mb-1.5 dd-text-muted">Reset</div>
+                <div class="text-3xs uppercase tracking-wider mb-1.5 dd-text-muted">{{ t('containerComponents.fullPageActions.resetGroup') }}</div>
                 <div class="flex flex-wrap gap-1.5">
                   <AppButton size="sm" variant="outlined"
                           :disabled="(selectedSkipTags.length === 0 && selectedSkipDigests.length === 0) || policyInProgress !== null"
                           @click="clearSkipsSelected">
-                    Clear Skips
+                    {{ t('containerComponents.fullPageActions.clearSkips') }}
                   </AppButton>
                   <AppButton size="sm" variant="outlined"
                           :disabled="Object.keys(selectedUpdatePolicy).length === 0 || policyInProgress !== null"
                           @click="confirmClearPolicy">
-                    Clear Policy
+                    {{ t('containerComponents.fullPageActions.clearPolicy') }}
                   </AppButton>
                 </div>
               </div>
               <div class="mt-2 space-y-1 text-2xs dd-text-muted">
                 <div v-if="selectedSnoozeUntil">
-                  Snoozed until:
+                  {{ t('containerComponents.fullPageActions.snoozedUntil') }}
                   <span class="dd-text">{{ formatTimestamp(selectedSnoozeUntil) }}</span>
                 </div>
                 <div v-if="selectedHasMaturityPolicy">
-                  Maturity mode:
+                  {{ t('containerComponents.fullPageActions.maturityMode') }}
                   <span class="dd-text">
-                    {{ selectedMaturityMode === 'mature' ? `Mature only (${selectedMaturityMinAgeDays}d minimum)` : 'Allow all updates' }}
+                    {{ selectedMaturityMode === 'mature' ? t('containerComponents.fullPageActions.matureOnlyMinimum', { days: selectedMaturityMinAgeDays }) : t('containerComponents.fullPageActions.allowAllUpdates') }}
                   </span>
                 </div>
                 <div v-if="selectedSkipTags.length > 0">
-                  Skipped tags:
+                  {{ t('containerComponents.fullPageActions.skippedTags') }}
                   <div class="mt-1 flex flex-wrap gap-1">
                     <span v-for="tag in selectedSkipTags" :key="`skip-tag-${tag}`"
                           class="inline-flex items-center gap-1 px-1.5 py-0.5 dd-rounded text-2xs font-mono"
                           :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
                       <span class="dd-text">{{ tag }}</span>
                       <AppButton size="none" variant="plain" weight="none" class="inline-flex items-center justify-center w-4 h-4 dd-rounded-sm transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-                              tooltip="Remove skip"
+                              :tooltip="t('containerComponents.fullPageActions.removeSkip')"
                               :disabled="policyInProgress !== null"
                               @click="removeSkipTagSelected(tag)">
                         <AppIcon name="xmark" :size="9" />
@@ -736,14 +737,14 @@ function isActionInProgress(container: { id?: unknown; name?: unknown }) {
                   </div>
                 </div>
                 <div v-if="selectedSkipDigests.length > 0">
-                  Skipped digests:
+                  {{ t('containerComponents.fullPageActions.skippedDigests') }}
                   <div class="mt-1 flex flex-wrap gap-1">
                     <span v-for="digest in selectedSkipDigests" :key="`skip-digest-${digest}`"
                           class="inline-flex items-center gap-1 px-1.5 py-0.5 dd-rounded text-2xs font-mono"
                           :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
                       <span class="dd-text">{{ digest }}</span>
                       <AppButton size="none" variant="plain" weight="none" class="inline-flex items-center justify-center w-4 h-4 dd-rounded-sm transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-                              tooltip="Remove skip"
+                              :tooltip="t('containerComponents.fullPageActions.removeSkip')"
                               :disabled="policyInProgress !== null"
                               @click="removeSkipDigestSelected(digest)">
                         <AppIcon name="xmark" :size="9" />
@@ -753,7 +754,7 @@ function isActionInProgress(container: { id?: unknown; name?: unknown }) {
                 </div>
                 <div v-if="!selectedSnoozeUntil && selectedSkipTags.length === 0 && selectedSkipDigests.length === 0 && !selectedHasMaturityPolicy"
                      class="italic">
-                  No active update policy.
+                  {{ t('containerComponents.fullPageActions.noActivePolicy') }}
                 </div>
               </div>
               <p v-if="policyMessage" class="mt-2 text-2xs" style="color: var(--dd-success);">{{ policyMessage }}</p>
@@ -761,45 +762,45 @@ function isActionInProgress(container: { id?: unknown; name?: unknown }) {
             </div>
 
             <div>
-              <div class="dd-text-label mb-2 dd-text-muted">Preview</div>
+              <div class="dd-text-label mb-2 dd-text-muted">{{ t('containerComponents.fullPageActions.previewSection') }}</div>
               <div class="space-y-1.5">
                 <div v-if="previewLoading" class="px-2.5 py-2 dd-rounded text-2xs-plus dd-text-muted"
                      :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-                  Generating preview...
+                  {{ t('containerComponents.fullPageActions.generatingPreview') }}
                 </div>
                 <div v-else-if="detailPreview" class="px-2.5 py-2 dd-rounded text-2xs-plus space-y-1"
                      :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
                   <div v-if="detailPreview.error" style="color: var(--dd-danger);">{{ detailPreview.error }}</div>
                   <template v-else>
-                    <div class="dd-text-muted">Current: <span class="dd-text font-mono">{{ detailPreview.currentImage || '-' }}</span></div>
-                    <div class="dd-text-muted">New: <span class="dd-text font-mono">{{ detailPreview.newImage || '-' }}</span></div>
-                    <div class="dd-text-muted">Update kind:
+                    <div class="dd-text-muted">{{ t('containerComponents.fullPageActions.currentLabel') }} <span class="dd-text font-mono">{{ detailPreview.currentImage || '-' }}</span></div>
+                    <div class="dd-text-muted">{{ t('containerComponents.fullPageActions.newLabel') }} <span class="dd-text font-mono">{{ detailPreview.newImage || '-' }}</span></div>
+                    <div class="dd-text-muted">{{ t('containerComponents.fullPageActions.updateKindLabel') }}
                       <span class="dd-text font-mono">{{ detailPreview.updateKind?.kind || detailPreview.updateKind || 'unknown' }}</span>
                     </div>
-                    <div class="dd-text-muted">Running:
+                    <div class="dd-text-muted">{{ t('containerComponents.fullPageActions.runningLabel') }}
                       <span class="dd-text">{{ detailPreview.isRunning ? 'yes' : 'no' }}</span>
                     </div>
                     <div v-if="Array.isArray(detailPreview.networks)" class="dd-text-muted">
-                      Networks: <span class="dd-text font-mono">{{ detailPreview.networks.join(', ') || '-' }}</span>
+                      {{ t('containerComponents.fullPageActions.networksLabel') }} <span class="dd-text font-mono">{{ detailPreview.networks.join(', ') || '-' }}</span>
                     </div>
                     <div v-if="detailComposePreview?.files.length" class="dd-text-muted">
-                      Compose file<span v-if="detailComposePreview.files.length > 1">s</span>:
+                      {{ detailComposePreview.files.length > 1 ? t('containerComponents.fullPageActions.composeFilesLabel') : t('containerComponents.fullPageActions.composeFileLabel') }}
                       <span class="dd-text font-mono">{{ detailComposePreview.files.join(', ') }}</span>
                     </div>
                     <div v-if="detailComposePreview?.service" class="dd-text-muted">
-                      Compose service:
+                      {{ t('containerComponents.fullPageActions.composeServiceLabel') }}
                       <span class="dd-text font-mono">{{ detailComposePreview.service }}</span>
                     </div>
                     <div v-if="detailComposePreview?.writableFile" class="dd-text-muted">
-                      Writable file:
+                      {{ t('containerComponents.fullPageActions.writableFileLabel') }}
                       <span class="dd-text font-mono">{{ detailComposePreview.writableFile }}</span>
                     </div>
                     <div v-if="typeof detailComposePreview?.willWrite === 'boolean'" class="dd-text-muted">
-                      Writes compose file:
+                      {{ t('containerComponents.fullPageActions.writesComposeFileLabel') }}
                       <span class="dd-text">{{ detailComposePreview.willWrite ? 'yes' : 'no' }}</span>
                     </div>
                     <div v-if="detailComposePreview?.patch" class="dd-text-muted">
-                      Patch preview:
+                      {{ t('containerComponents.fullPageActions.patchPreviewLabel') }}
                       <pre class="mt-1 p-2 dd-rounded whitespace-pre-wrap break-all text-2xs dd-text font-mono"
                            :style="{ backgroundColor: 'var(--dd-bg)' }">{{ detailComposePreview.patch }}</pre>
                     </div>
@@ -807,15 +808,15 @@ function isActionInProgress(container: { id?: unknown; name?: unknown }) {
                 </div>
                 <div v-else class="px-2.5 py-2 dd-rounded text-2xs-plus dd-text-muted italic"
                      :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-                  Run a preview to see what update actions will be executed.
+                  {{ t('containerComponents.sideTabContent.previewEmptyState') }}
                 </div>
               </div>
               <p v-if="previewError" class="mt-2 text-2xs" style="color: var(--dd-danger);">{{ previewError }}</p>
             </div>
 
             <div>
-              <div class="dd-text-label mb-2 dd-text-muted">Associated Triggers</div>
-              <div v-if="triggersLoading" class="text-2xs-plus dd-text-muted">Loading triggers...</div>
+              <div class="dd-text-label mb-2 dd-text-muted">{{ t('containerComponents.fullPageActions.associatedTriggers') }}</div>
+              <div v-if="triggersLoading" class="text-2xs-plus dd-text-muted">{{ t('containerComponents.fullPageActions.loadingTriggers') }}</div>
               <div v-else-if="detailTriggers.length > 0" class="space-y-1.5">
                 <div v-for="trigger in detailTriggers" :key="getTriggerKey(trigger)"
                      class="flex items-center justify-between gap-2 px-2.5 py-2 dd-rounded text-2xs-plus"
@@ -827,24 +828,24 @@ function isActionInProgress(container: { id?: unknown; name?: unknown }) {
                   <AppButton size="xs"
                           :disabled="triggerRunInProgress !== null"
                           @click="runAssociatedTrigger(trigger)">
-                    {{ triggerRunInProgress === getTriggerKey(trigger) ? 'Running...' : 'Run' }}
+                    {{ triggerRunInProgress === getTriggerKey(trigger) ? t('containerComponents.fullPageActions.runningButton') : t('containerComponents.fullPageActions.runButton') }}
                   </AppButton>
                 </div>
               </div>
-              <p v-else class="text-2xs-plus dd-text-muted italic">No triggers associated with this container</p>
+              <p v-else class="text-2xs-plus dd-text-muted italic">{{ t('containerComponents.fullPageActions.noTriggersAssociated') }}</p>
               <p v-if="triggerMessage" class="mt-2 text-2xs" style="color: var(--dd-success);">{{ triggerMessage }}</p>
               <p v-if="triggerError" class="mt-2 text-2xs" style="color: var(--dd-danger);">{{ triggerError }}</p>
             </div>
 
             <div>
-              <div class="dd-text-label mb-2 dd-text-muted">Backups &amp; Rollback</div>
+              <div class="dd-text-label mb-2 dd-text-muted">{{ t('containerComponents.fullPageActions.backupsRollback') }}</div>
               <div class="mb-2">
                 <AppButton size="sm" variant="outlined" :disabled="backupsLoading || detailBackups.length === 0 || rollbackInProgress !== null"
                         @click="confirmRollback()">
-                  {{ rollbackInProgress === 'latest' ? 'Rolling back...' : 'Rollback Latest' }}
+                  {{ rollbackInProgress === 'latest' ? t('containerComponents.fullPageActions.rollingBack') : t('containerComponents.fullPageActions.rollbackLatest') }}
                 </AppButton>
               </div>
-              <div v-if="backupsLoading" class="text-2xs-plus dd-text-muted">Loading backups...</div>
+              <div v-if="backupsLoading" class="text-2xs-plus dd-text-muted">{{ t('containerComponents.fullPageActions.loadingBackups') }}</div>
               <div v-else-if="detailBackups.length > 0" class="space-y-1.5">
                 <div v-for="backup in detailBackups" :key="backup.id"
                      class="flex items-center justify-between gap-2 px-2.5 py-2 dd-rounded text-2xs-plus"
@@ -856,18 +857,18 @@ function isActionInProgress(container: { id?: unknown; name?: unknown }) {
                   <AppButton size="xs"
                           :disabled="rollbackInProgress !== null"
                           @click="confirmRollback(backup.id)">
-                    {{ rollbackInProgress === backup.id ? 'Rolling...' : 'Use' }}
+                    {{ rollbackInProgress === backup.id ? t('containerComponents.fullPageActions.rollingButton') : t('containerComponents.fullPageActions.useButton') }}
                   </AppButton>
                 </div>
               </div>
-              <p v-else class="text-2xs-plus dd-text-muted italic">No backups available yet</p>
+              <p v-else class="text-2xs-plus dd-text-muted italic">{{ t('containerComponents.fullPageActions.noBackupsAvailable') }}</p>
               <p v-if="rollbackMessage" class="mt-2 text-2xs" style="color: var(--dd-success);">{{ rollbackMessage }}</p>
               <p v-if="rollbackError" class="mt-2 text-2xs" style="color: var(--dd-danger);">{{ rollbackError }}</p>
             </div>
 
             <div>
-              <div class="dd-text-label mb-2 dd-text-muted">Update Operation History</div>
-              <div v-if="updateOperationsLoading" class="text-2xs-plus dd-text-muted">Loading operation history...</div>
+              <div class="dd-text-label mb-2 dd-text-muted">{{ t('containerComponents.fullPageActions.updateOperationHistory') }}</div>
+              <div v-if="updateOperationsLoading" class="text-2xs-plus dd-text-muted">{{ t('containerComponents.fullPageActions.loadingOperationHistory') }}</div>
               <div v-else-if="detailUpdateOperations.length > 0" class="space-y-1.5">
                 <div v-for="operation in detailUpdateOperations" :key="operation.id"
                      class="space-y-1 px-2.5 py-2 dd-rounded text-2xs-plus"
@@ -879,21 +880,21 @@ function isActionInProgress(container: { id?: unknown; name?: unknown }) {
                       {{ formatOperationStatus(operation.status) }}
                     </span>
                   </div>
-                  <div class="dd-text-muted">Phase:
+                  <div class="dd-text-muted">{{ t('containerComponents.fullPageActions.phaseLabel') }}
                     <span class="dd-text font-mono">{{ formatOperationPhase(operation.phase) }}</span>
                   </div>
                   <div v-if="operation.fromVersion || operation.toVersion" class="dd-text-muted">
-                    Version:
+                    {{ t('containerComponents.fullPageActions.versionLabel') }}
                     <span class="dd-text font-mono">{{ operation.fromVersion || '?' }}</span>
                     <span class="dd-text-muted"> → </span>
                     <span class="dd-text font-mono">{{ operation.toVersion || '?' }}</span>
                   </div>
                   <div v-if="operation.rollbackReason" class="dd-text-muted">
-                    Rollback reason:
+                    {{ t('containerComponents.fullPageActions.rollbackReasonLabel') }}
                     <span class="dd-text font-mono">{{ formatRollbackReason(operation.rollbackReason) }}</span>
                   </div>
                   <div v-if="operation.lastError" class="dd-text-muted">
-                    Last error:
+                    {{ t('containerComponents.fullPageActions.lastErrorLabel') }}
                     <span class="dd-text">{{ operation.lastError }}</span>
                   </div>
                   <div class="text-2xs dd-text-muted">
@@ -901,7 +902,7 @@ function isActionInProgress(container: { id?: unknown; name?: unknown }) {
                   </div>
                 </div>
               </div>
-              <p v-else class="text-2xs-plus dd-text-muted italic">No update operations recorded yet</p>
+              <p v-else class="text-2xs-plus dd-text-muted italic">{{ t('containerComponents.fullPageActions.noUpdateOperations') }}</p>
               <p v-if="updateOperationsError" class="mt-2 text-2xs" style="color: var(--dd-danger);">{{ updateOperationsError }}</p>
             </div>
           </div>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import AppBadge from '@/components/AppBadge.vue';
 import StatusDot from '@/components/StatusDot.vue';
 
@@ -33,6 +34,8 @@ interface Props {
 }
 
 defineProps<Props>();
+
+const { t } = useI18n();
 
 const emit = defineEmits<{
   viewAll: [];
@@ -81,23 +84,23 @@ watchEffect(() => {
 <template>
   <div
     ref="rootEl"
-    aria-label="Security Overview widget"
+    :aria-label="t('dashboardView.securityOverview.title')"
     class="dashboard-widget dd-rounded overflow-hidden flex flex-col"
     :style="{ backgroundColor: 'var(--dd-bg-card)' }">
 
     <!-- Header — hides when very small -->
     <div v-if="showHeader" class="shrink-0 flex items-center justify-between px-5 py-3.5" :style="{ borderBottom: '1px solid var(--dd-border)' }">
       <div class="flex items-center gap-2">
-        <div v-if="editMode" class="drag-handle dd-drag-handle" v-tooltip.top="'Drag to reorder'"><AppIcon name="ph:dots-six-vertical" :size="14" /></div>
+        <div v-if="editMode" class="drag-handle dd-drag-handle" v-tooltip.top="t('dashboardView.dragToReorder')"><AppIcon name="ph:dots-six-vertical" :size="14" /></div>
         <AppIcon name="security" :size="14" class="text-drydock-accent" />
-        <h2 class="dd-text-heading-section dd-text">Security Overview</h2>
+        <h2 class="dd-text-heading-section dd-text">{{ t('dashboardView.securityOverview.title') }}</h2>
       </div>
-      <AppButton size="none" variant="link-secondary" weight="medium" class="text-2xs-plus" @click="handleViewAll">View all &rarr;</AppButton>
+      <AppButton size="none" variant="link-secondary" weight="medium" class="text-2xs-plus" @click="handleViewAll">{{ t('dashboardView.viewAll') }}</AppButton>
     </div>
 
     <div class="flex-1 min-h-0 overflow-hidden p-5 flex flex-col items-center justify-center relative">
       <!-- Drag handle when header is hidden — pinned top-left -->
-      <div v-if="!showHeader && editMode" class="drag-handle dd-drag-handle absolute top-2 left-2 z-10" v-tooltip.top="'Drag to reorder'"><AppIcon name="ph:dots-six" :size="14" /></div>
+      <div v-if="!showHeader && editMode" class="drag-handle dd-drag-handle absolute top-2 left-2 z-10" v-tooltip.top="t('dashboardView.dragToReorder')"><AppIcon name="ph:dots-six" :size="14" /></div>
 
       <!-- Donut chart — always visible -->
       <div class="flex items-center justify-center" :class="showLegend ? 'mb-5' : ''">
@@ -118,7 +121,7 @@ watchEffect(() => {
           </svg>
           <div class="absolute inset-0 flex flex-col items-center justify-center">
             <span class="text-xl font-bold dd-text">{{ securityTotalCount }}</span>
-            <span class="text-2xs dd-text-muted">images</span>
+            <span class="text-2xs dd-text-muted">{{ t('dashboardView.securityOverview.images') }}</span>
           </div>
         </div>
       </div>
@@ -127,33 +130,33 @@ watchEffect(() => {
       <div v-if="showLegend" class="flex justify-center gap-5" :class="showBreakdown ? 'mb-5' : ''">
         <div class="flex items-center gap-1.5">
           <StatusDot color="var(--dd-success)" size="lg" />
-          <span class="text-2xs-plus dd-text-secondary">{{ securityCleanCount }} Clean</span>
+          <span class="text-2xs-plus dd-text-secondary">{{ securityCleanCount }} {{ t('dashboardView.securityOverview.clean') }}</span>
         </div>
         <div v-if="securityIssueCount > 0" class="flex items-center gap-1.5">
           <StatusDot color="var(--dd-danger)" size="lg" />
-          <span class="text-2xs-plus dd-text-secondary">{{ securityIssueCount }} Issues</span>
+          <span class="text-2xs-plus dd-text-secondary">{{ securityIssueCount }} {{ t('dashboardView.securityOverview.issues') }}</span>
         </div>
         <div v-if="securityNotScannedCount > 0" class="flex items-center gap-1.5">
           <StatusDot color="var(--dd-neutral)" size="lg" />
-          <span class="text-2xs-plus dd-text-secondary">{{ securityNotScannedCount }} Not Scanned</span>
+          <span class="text-2xs-plus dd-text-secondary">{{ securityNotScannedCount }} {{ t('dashboardView.securityOverview.notScanned') }}</span>
         </div>
       </div>
 
       <!-- Severity breakdown -->
       <div v-if="showBreakdown && showSecuritySeverityBreakdown" data-test="security-severity-breakdown" class="w-full mb-5">
-        <div class="dd-text-label mb-2 dd-text-muted">Severity Breakdown</div>
+        <div class="dd-text-label mb-2 dd-text-muted">{{ t('dashboardView.securityOverview.severityBreakdown') }}</div>
         <div class="grid grid-cols-2 gap-2">
           <div class="flex items-center justify-between px-2 py-1.5 dd-rounded" :style="{ backgroundColor: 'var(--dd-danger-muted)' }">
-            <span class="text-2xs font-semibold" style="color: var(--dd-danger);">{{ securitySeverityTotals.critical }} Critical</span>
+            <span class="text-2xs font-semibold" style="color: var(--dd-danger);">{{ t('dashboardView.securityOverview.critical', { count: securitySeverityTotals.critical }) }}</span>
           </div>
           <div class="flex items-center justify-between px-2 py-1.5 dd-rounded" :style="{ backgroundColor: 'var(--dd-warning-muted)' }">
-            <span class="text-2xs font-semibold" style="color: var(--dd-warning);">{{ securitySeverityTotals.high }} High</span>
+            <span class="text-2xs font-semibold" style="color: var(--dd-warning);">{{ t('dashboardView.securityOverview.high', { count: securitySeverityTotals.high }) }}</span>
           </div>
           <div class="flex items-center justify-between px-2 py-1.5 dd-rounded" :style="{ backgroundColor: 'var(--dd-caution-muted)' }">
-            <span class="text-2xs font-semibold" style="color: var(--dd-caution);">{{ securitySeverityTotals.medium }} Medium</span>
+            <span class="text-2xs font-semibold" style="color: var(--dd-caution);">{{ t('dashboardView.securityOverview.medium', { count: securitySeverityTotals.medium }) }}</span>
           </div>
           <div class="flex items-center justify-between px-2 py-1.5 dd-rounded" :style="{ backgroundColor: 'var(--dd-info-muted)' }">
-            <span class="text-2xs font-semibold" style="color: var(--dd-info);">{{ securitySeverityTotals.low }} Low</span>
+            <span class="text-2xs font-semibold" style="color: var(--dd-info);">{{ t('dashboardView.securityOverview.low', { count: securitySeverityTotals.low }) }}</span>
           </div>
         </div>
       </div>
@@ -161,7 +164,7 @@ watchEffect(() => {
       <!-- Top Vulnerabilities -->
       <template v-if="showVulns">
         <div class="w-full mb-4" :style="{ borderTop: '1px solid var(--dd-border)' }" />
-        <div class="w-full dd-text-label mb-3 dd-text-muted">Top Vulnerabilities</div>
+        <div class="w-full dd-text-label mb-3 dd-text-muted">{{ t('dashboardView.securityOverview.topVulnerabilities') }}</div>
         <div class="w-full space-y-2.5 overflow-y-auto overscroll-contain dd-scroll-stable dd-touch-scroll max-h-[200px]">
           <div v-for="vuln in vulnerabilities" :key="vuln.id"
             class="flex items-start gap-3 p-2.5 dd-rounded"
@@ -181,7 +184,7 @@ watchEffect(() => {
           <div v-if="vulnerabilities.length === 0"
             class="p-2.5 dd-rounded text-2xs-plus text-center dd-text-muted"
             :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-            No vulnerabilities reported
+            {{ t('dashboardView.securityOverview.noVulnerabilities') }}
           </div>
         </div>
       </template>

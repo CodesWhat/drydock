@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRoute } from 'vue-router';
 import AppBadge from '@/components/AppBadge.vue';
 import DetailField from '@/components/DetailField.vue';
@@ -8,6 +9,7 @@ import { useViewMode } from '../preferences/useViewMode';
 import { getAllTriggers, getTrigger, runTrigger } from '../services/trigger';
 import type { ApiComponent } from '../types/api';
 
+const { t } = useI18n();
 const triggersViewMode = useViewMode('triggers');
 const { isMobile } = useBreakpoints();
 const route = useRoute();
@@ -25,7 +27,7 @@ const testResult = ref<{ id: string; success: boolean } | null>(null);
 const testError = ref<{ id: string; message: string } | null>(null);
 
 function parseTriggerTestErrorMessage(errorValue: unknown): string {
-  const defaultMessage = 'Trigger test failed';
+  const defaultMessage = t('triggersView.test.defaultError');
   const message =
     typeof errorValue === 'string'
       ? errorValue
@@ -112,11 +114,11 @@ const filteredTriggers = computed(() => {
   return triggersData.value.filter((item) => item.name.toLowerCase().includes(q));
 });
 
-const tableColumns = [
-  { key: 'name', label: 'Trigger', sortable: false, width: '99%' },
-  { key: 'type', label: 'Type', sortable: false },
-  { key: 'status', label: 'Status', sortable: false },
-];
+const tableColumns = computed(() => [
+  { key: 'name', label: t('triggersView.columns.trigger'), sortable: false, width: '99%' },
+  { key: 'type', label: t('triggersView.columns.type'), sortable: false },
+  { key: 'status', label: t('triggersView.columns.status'), sortable: false },
+]);
 
 function clearFilters() {
   searchQuery.value = '';
@@ -179,7 +181,7 @@ onMounted(async () => {
     const data = await getAllTriggers();
     triggersData.value = data.map((trigger: ApiComponent) => mapTrigger(trigger));
   } catch {
-    error.value = 'Failed to load triggers';
+    error.value = t('triggersView.loadError');
   } finally {
     loading.value = false;
   }
@@ -194,7 +196,7 @@ onMounted(async () => {
       {{ error }}
     </div>
 
-    <div v-if="loading" class="text-2xs-plus dd-text-muted py-3 px-1">Loading triggers...</div>
+    <div v-if="loading" class="text-2xs-plus dd-text-muted py-3 px-1">{{ t('triggersView.loadingTriggers') }}</div>
 
     <!-- Filter bar -->
     <DataFilterBar
@@ -207,12 +209,12 @@ onMounted(async () => {
       <template #filters>
         <input v-model="searchQuery"
                type="text"
-               placeholder="Filter by name..."
+               :placeholder="t('triggersView.filterPlaceholder')"
                class="flex-1 min-w-[120px] max-w-[var(--dd-layout-filter-max-width)] px-2.5 py-1.5 dd-rounded text-2xs-plus font-medium outline-none dd-bg dd-text dd-placeholder" />
         <AppButton size="none" variant="text-muted" weight="medium" class="text-2xs" v-if="searchQuery"
                 
                 @click="clearFilters">
-          Clear
+          {{ t('triggersView.clear') }}
         </AppButton>
       </template>
     </DataFilterBar>
@@ -236,14 +238,14 @@ onMounted(async () => {
       </template>
       <template #cell-status="{ row }">
         <AppIcon :name="row.status === 'active' ? 'check' : 'xmark'" :size="13" class="shrink-0 md:!hidden"
-                 v-tooltip.top="row.status === 'active' ? 'Active' : 'Inactive'"
+                 v-tooltip.top="row.status === 'active' ? t('triggersView.status.active') : t('triggersView.status.inactive')"
                  :style="{ color: row.status === 'active' ? 'var(--dd-success)' : 'var(--dd-danger)' }" />
         <AppBadge :tone="row.status === 'active' ? 'success' : 'danger'" size="xs" class="max-md:!hidden">
           {{ row.status }}
         </AppBadge>
       </template>
       <template #empty>
-        <EmptyState icon="triggers" message="No triggers match your filters" show-clear @clear="clearFilters" />
+        <EmptyState icon="triggers" :message="t('triggersView.emptyFiltered')" show-clear @clear="clearFilters" />
       </template>
     </DataTable>
 
@@ -276,7 +278,7 @@ onMounted(async () => {
              :style="{ borderTop: '1px solid var(--dd-border)', backgroundColor: 'var(--dd-bg-elevated)' }">
           <div class="flex items-center justify-between">
             <AppIcon :name="item.status === 'active' ? 'check' : 'xmark'" :size="13" class="shrink-0 md:!hidden"
-                     v-tooltip.top="item.status === 'active' ? 'Active' : 'Inactive'"
+                     v-tooltip.top="item.status === 'active' ? t('triggersView.status.active') : t('triggersView.status.inactive')"
                      :style="{ color: item.status === 'active' ? 'var(--dd-success)' : 'var(--dd-danger)' }" />
             <AppBadge :tone="item.status === 'active' ? 'success' : 'danger'" size="xs" class="max-md:!hidden">
               {{ item.status }}
@@ -288,8 +290,8 @@ onMounted(async () => {
                     :disabled="testingTrigger !== null"
                     @click.stop="testTrigger(item)">
               <AppIcon :name="testingTrigger === item.id ? 'pending' : testResult?.id === item.id ? (testResult.success ? 'check' : 'xmark') : 'play'" :size="11"
-                       v-tooltip.top="testingTrigger === item.id ? 'Testing...' : testResult?.id === item.id ? (testResult.success ? 'Test passed' : 'Test failed') : 'Run test'" />
-              {{ testingTrigger === item.id ? 'Testing...' : testResult?.id === item.id ? (testResult.success ? 'Sent!' : 'Failed') : 'Test' }}
+                       v-tooltip.top="testingTrigger === item.id ? t('triggersView.test.testing') : testResult?.id === item.id ? (testResult.success ? t('triggersView.test.testPassed') : t('triggersView.test.testFailed')) : t('triggersView.test.runTest')" />
+              {{ testingTrigger === item.id ? t('triggersView.test.testing') : testResult?.id === item.id ? (testResult.success ? t('triggersView.test.sent') : t('triggersView.test.failed')) : t('triggersView.test.test') }}
             </AppButton>
           </div>
           <p v-if="testError?.id === item.id" class="mt-2 text-2xs break-words" style="color: var(--dd-danger);">
@@ -317,7 +319,7 @@ onMounted(async () => {
       <template #details="{ item }">
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3 mt-2">
           <DetailField v-for="(val, key) in item.config" :key="key" :label="String(key)" compact mono>{{ val }}</DetailField>
-          <DetailField label="Status" compact>
+          <DetailField :label="t('triggersView.list.status')" compact>
             <AppBadge :tone="item.status === 'active' ? 'success' : 'danger'" size="sm">{{ item.status }}</AppBadge>
           </DetailField>
         </div>
@@ -330,8 +332,8 @@ onMounted(async () => {
                   :disabled="testingTrigger !== null"
                   @click.stop="testTrigger(item)">
             <AppIcon :name="testingTrigger === item.id ? 'pending' : testResult?.id === item.id ? (testResult.success ? 'check' : 'xmark') : 'play'" :size="10"
-                     v-tooltip.top="testingTrigger === item.id ? 'Testing...' : testResult?.id === item.id ? (testResult.success ? 'Test passed' : 'Test failed') : 'Run test'" />
-            {{ testingTrigger === item.id ? 'Testing...' : testResult?.id === item.id ? (testResult.success ? 'Sent!' : 'Failed') : 'Test' }}
+                     v-tooltip.top="testingTrigger === item.id ? t('triggersView.test.testing') : testResult?.id === item.id ? (testResult.success ? t('triggersView.test.testPassed') : t('triggersView.test.testFailed')) : t('triggersView.test.runTest')" />
+            {{ testingTrigger === item.id ? t('triggersView.test.testing') : testResult?.id === item.id ? (testResult.success ? t('triggersView.test.sent') : t('triggersView.test.failed')) : t('triggersView.test.test') }}
           </AppButton>
           <p v-if="testError?.id === item.id" class="mt-2 text-2xs break-words" style="color: var(--dd-danger);">
             {{ testError.message }}
@@ -344,7 +346,7 @@ onMounted(async () => {
     <EmptyState
       v-if="filteredTriggers.length === 0 && !loading"
       icon="triggers"
-      message="No triggers match your filters"
+      :message="t('triggersView.emptyFiltered')"
       :show-clear="activeFilterCount > 0"
       @clear="clearFilters"
     />
@@ -374,7 +376,7 @@ onMounted(async () => {
 
         <template v-if="selectedTrigger" #default>
           <div class="p-4 space-y-5">
-            <div v-if="detailLoading" class="text-2xs-plus dd-text-muted">Refreshing trigger details...</div>
+            <div v-if="detailLoading" class="text-2xs-plus dd-text-muted">{{ t('triggersView.detail.refreshing') }}</div>
             <div v-if="detailError"
                  class="px-3 py-2 text-2xs-plus dd-rounded"
                  :style="{ backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning)' }">
@@ -383,7 +385,7 @@ onMounted(async () => {
 
             <DetailField v-for="(val, key) in selectedTrigger.config" :key="key" :label="String(key)" mono>{{ val }}</DetailField>
             <div v-if="Object.keys(selectedTrigger.config).length === 0">
-              <div class="text-2xs-plus dd-text-muted">No configuration properties</div>
+              <div class="text-2xs-plus dd-text-muted">{{ t('triggersView.detail.noConfig') }}</div>
             </div>
 
             <!-- Test trigger button -->
@@ -396,8 +398,8 @@ onMounted(async () => {
                       :disabled="testingTrigger !== null"
                       @click.stop="testTrigger(selectedTrigger)">
                 <AppIcon :name="testingTrigger === selectedTrigger.id ? 'pending' : testResult?.id === selectedTrigger.id ? (testResult.success ? 'check' : 'xmark') : 'play'" :size="11"
-                         v-tooltip.top="testingTrigger === selectedTrigger.id ? 'Testing...' : testResult?.id === selectedTrigger.id ? (testResult.success ? 'Test passed' : 'Test failed') : 'Run test'" />
-                {{ testingTrigger === selectedTrigger.id ? 'Testing...' : testResult?.id === selectedTrigger.id ? (testResult.success ? 'Sent!' : 'Failed') : 'Test Trigger' }}
+                         v-tooltip.top="testingTrigger === selectedTrigger.id ? t('triggersView.test.testing') : testResult?.id === selectedTrigger.id ? (testResult.success ? t('triggersView.test.testPassed') : t('triggersView.test.testFailed')) : t('triggersView.test.runTest')" />
+                {{ testingTrigger === selectedTrigger.id ? t('triggersView.test.testing') : testResult?.id === selectedTrigger.id ? (testResult.success ? t('triggersView.test.sent') : t('triggersView.test.failed')) : t('triggersView.test.testTrigger') }}
               </AppButton>
               <p v-if="testError?.id === selectedTrigger.id"
                  class="mt-2 text-2xs break-words"

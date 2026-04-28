@@ -1,27 +1,61 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watchEffect } from 'vue';
+import { useI18n } from 'vue-i18n';
 import AppBadge from '@/components/AppBadge.vue';
 import AppIconButton from '@/components/AppIconButton.vue';
-import UpdateEligibilityBadges from '@/components/containers/UpdateEligibilityBadges.vue';
 import { useBreakpoints } from '@/composables/useBreakpoints';
 import type { DashboardUpdateSequenceEntry, RecentUpdateRow, UpdateKind } from '../dashboardTypes';
 
+const { t } = useI18n();
 const { isMobile } = useBreakpoints();
 
 const tableColumns = computed(() =>
   isMobile.value
     ? [
-        { key: 'container', label: 'Container', sortable: false, width: '55%' },
-        { key: 'version', label: 'Version', sortable: false, align: 'text-center', width: '22%' },
+        {
+          key: 'container',
+          label: t('dashboardView.recentUpdates.columns.container'),
+          sortable: false,
+          width: '55%',
+        },
+        {
+          key: 'version',
+          label: t('dashboardView.recentUpdates.columns.version'),
+          sortable: false,
+          align: 'text-center',
+          width: '22%',
+        },
         { key: 'type', label: '', sortable: false, width: '11%' },
         { key: 'actions', label: '', sortable: false, align: 'text-center', width: '12%' },
       ]
     : [
         { key: 'icon', label: '', icon: true, width: '6%' },
-        { key: 'container', label: 'Container', sortable: false, width: '38%' },
-        { key: 'version', label: 'Version', sortable: false, align: 'text-center', width: '28%' },
-        { key: 'type', label: 'Type', sortable: false, width: '16%' },
-        { key: 'actions', label: 'Actions', sortable: false, align: 'text-center', width: '12%' },
+        {
+          key: 'container',
+          label: t('dashboardView.recentUpdates.columns.container'),
+          sortable: false,
+          width: '38%',
+        },
+        {
+          key: 'version',
+          label: t('dashboardView.recentUpdates.columns.version'),
+          sortable: false,
+          align: 'text-center',
+          width: '28%',
+        },
+        {
+          key: 'type',
+          label: t('dashboardView.recentUpdates.columns.type'),
+          sortable: false,
+          width: '16%',
+        },
+        {
+          key: 'actions',
+          label: t('dashboardView.recentUpdates.columns.actions'),
+          sortable: false,
+          align: 'text-center',
+          width: '12%',
+        },
       ],
 );
 
@@ -108,7 +142,9 @@ function getRowUpdateLabel(row: Record<string, unknown>): string {
     return '';
   }
 
-  return updateState === 'queued' ? 'Queued' : 'Updating';
+  return updateState === 'queued'
+    ? t('dashboardView.recentUpdates.status.queued')
+    : t('dashboardView.recentUpdates.status.updating');
 }
 
 function getRowClass(row: Record<string, unknown>): string {
@@ -179,10 +215,10 @@ watchEffect(() => {
     <!-- Header — hides when compact -->
     <div v-if="showHeader" class="shrink-0 flex items-center justify-between px-3 py-2.5 sm:px-5 sm:py-3.5" :style="{ borderBottom: '1px solid var(--dd-border)' }">
       <div class="flex items-center gap-2">
-        <div v-if="editMode" class="drag-handle dd-drag-handle" v-tooltip.top="'Drag to reorder'"><AppIcon name="ph:dots-six-vertical" :size="14" /></div>
+        <div v-if="editMode" class="drag-handle dd-drag-handle" v-tooltip.top="t('dashboardView.dragToReorder')"><AppIcon name="ph:dots-six-vertical" :size="14" /></div>
         <AppIcon name="recent-updates" :size="14" class="text-drydock-secondary" />
         <h2 class="dd-text-heading-section dd-text">
-          Updates Available
+          {{ t('dashboardView.recentUpdates.title') }}
         </h2>
       </div>
       <div class="flex items-center gap-3">
@@ -204,7 +240,7 @@ watchEffect(() => {
             :size="11"
             class="mr-1"
             :class="dashboardUpdateAllInProgress ? 'dd-spin' : ''" />
-          Update all
+          {{ t('dashboardView.recentUpdates.updateAll') }}
         </AppButton>
         <AppButton
           size="none"
@@ -213,7 +249,7 @@ watchEffect(() => {
           type="button"
           class="text-2xs-plus font-medium text-drydock-secondary hover:underline"
           @click="handleViewAll">
-          View all &rarr;
+          {{ t('dashboardView.viewAll') }}
         </AppButton>
       </div>
     </div>
@@ -268,11 +304,6 @@ watchEffect(() => {
               <div class="min-w-0">
                 <div class="flex items-center gap-1.5 flex-wrap">
                   <div class="font-medium dd-text leading-tight truncate">{{ row.name }}</div>
-                  <UpdateEligibilityBadges
-                    v-if="row.updateEligibility"
-                    :eligibility="row.updateEligibility"
-                    :has-active-operation-badge="isRowUpdating(row) || isRowQueued(row)"
-                  />
                 </div>
                 <div class="text-2xs dd-text-muted mt-0.5 truncate">{{ row.image }}</div>
                 <div v-if="row.registryError" class="text-2xs mt-0.5 truncate" style="color: var(--dd-danger);">
@@ -286,7 +317,7 @@ watchEffect(() => {
                   class="text-2xs mt-0.5 inline-flex underline hover:no-underline"
                   style="color: var(--dd-info);"
                   @click.stop>
-                  Release notes
+                  {{ t('dashboardView.recentUpdates.releaseNotes') }}
                 </a>
               </div>
             </div>
@@ -360,7 +391,7 @@ watchEffect(() => {
             <span
               v-else-if="row.blocked"
               class="w-7 h-7 dd-rounded-sm flex items-center justify-center dd-text-muted opacity-60 cursor-not-allowed"
-              v-tooltip.top="'Security blocked'">
+              v-tooltip.top="t('dashboardView.recentUpdates.securityBlocked')">
               <AppIcon name="lock" :size="14" />
             </span>
             <AppIconButton
@@ -375,15 +406,15 @@ watchEffect(() => {
                 : 'dd-text-muted hover:dd-text-success hover:dd-bg-elevated'"
               :disabled="dashboardUpdateInProgress === row.id"
               :loading="dashboardUpdateInProgress === row.id"
-              tooltip="Update container"
-              aria-label="Update container"
+              :tooltip="t('dashboardView.recentUpdates.updateContainer')"
+              :aria-label="t('dashboardView.recentUpdates.updateContainer')"
               @click.stop="handleConfirmUpdate(row)" />
             </div>
           </template>
 
           <template #empty>
             <div class="px-4 py-6 text-center text-2xs-plus dd-text-muted">
-              No updates available
+              {{ t('dashboardView.recentUpdates.noUpdates') }}
             </div>
           </template>
         </DataTable>
@@ -392,10 +423,10 @@ watchEffect(() => {
 
     <!-- Compact: inline summary -->
     <div v-else class="flex-1 min-h-0 flex flex-col items-center justify-center p-4">
-      <div v-if="editMode" class="drag-handle dd-drag-handle mb-2" v-tooltip.top="'Drag to reorder'"><AppIcon name="ph:dots-six" :size="14" /></div>
+      <div v-if="editMode" class="drag-handle dd-drag-handle mb-2" v-tooltip.top="t('dashboardView.dragToReorder')"><AppIcon name="ph:dots-six" :size="14" /></div>
       <div class="flex items-center gap-2 cursor-pointer" @click="handleViewAll">
         <AppIcon name="recent-updates" :size="16" class="text-drydock-secondary" />
-        <span class="text-xs font-semibold dd-text">{{ pendingUpdatesCount }} update{{ pendingUpdatesCount === 1 ? '' : 's' }} available</span>
+        <span class="text-xs font-semibold dd-text">{{ pendingUpdatesCount === 1 ? t('dashboardView.recentUpdates.compactSingle', { count: pendingUpdatesCount }) : t('dashboardView.recentUpdates.compactPlural', { count: pendingUpdatesCount }) }}</span>
         <AppBadge
           v-if="pendingUpdatesCount > 0"
           tone="warning"

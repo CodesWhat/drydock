@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { getContainerUpdateStartedMessage } from '../../utils/container-update';
 import { updateContainer as apiUpdateContainer } from '../../services/container-actions';
 import { errorMessage } from '../../utils/error';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   containerId: string | null;
@@ -28,11 +31,19 @@ const confirmMessage = computed(() => {
     const isTagChange = props.updateKind !== 'digest';
     if (isTagChange) {
       const kind = props.updateKind ? ` (${props.updateKind})` : '';
-      return `Update ${name}? This will change the image tag from :${props.currentTag} to :${props.newTag}${kind}.`;
+      return t('containerComponents.updateDialog.confirmTagChange', {
+        name,
+        currentTag: props.currentTag,
+        newTag: props.newTag,
+        kind,
+      });
     }
-    return `Update ${name}? A newer build of :${props.currentTag} is available (digest change).`;
+    return t('containerComponents.updateDialog.confirmDigestChange', {
+      name,
+      currentTag: props.currentTag,
+    });
   }
-  return `Update ${name} now? This will apply the latest discovered image.`;
+  return t('containerComponents.updateDialog.confirmLatest', { name });
 });
 
 watch(
@@ -103,7 +114,7 @@ function handleKeydown(e: KeyboardEvent) {
             boxShadow: 'var(--dd-shadow-modal)',
           }">
           <div class="px-5 pt-4 pb-3" :style="{ borderBottom: '1px solid var(--dd-border)' }">
-            <span id="container-update-dialog-title" class="text-xs-plus font-semibold dd-text">Update Container</span>
+            <span id="container-update-dialog-title" class="text-xs-plus font-semibold dd-text">{{ t('containerComponents.updateDialog.title') }}</span>
           </div>
           <div id="container-update-dialog-desc" class="px-5 py-4.5 text-xs leading-relaxed dd-text-secondary">
             {{ confirmMessage }}
@@ -127,7 +138,7 @@ function handleKeydown(e: KeyboardEvent) {
               }"
               :disabled="inProgress"
               @click="close">
-              Cancel
+              {{ t('common.cancel') }}
             </AppButton>
             <AppButton
               size="none"
@@ -142,7 +153,7 @@ function handleKeydown(e: KeyboardEvent) {
               :disabled="inProgress"
               @click="confirm">
               <AppIcon v-if="inProgress" name="restart" :size="11" class="animate-spin" />
-              {{ inProgress ? 'Updating...' : 'Update' }}
+              {{ inProgress ? t('containerComponents.updateDialog.updating') : t('containerComponents.updateDialog.update') }}
             </AppButton>
           </div>
         </div>

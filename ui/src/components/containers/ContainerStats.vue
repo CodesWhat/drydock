@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { ContainerStatsSnapshot, ContainerStatsStreamController } from '../../services/stats';
 import { connectContainerStatsStream, getContainerStats } from '../../services/stats';
 import { buildSparklinePoints } from '../../utils/stats-sparkline';
@@ -24,6 +25,8 @@ const loadError = ref<string | null>(null);
 const streamPaused = ref(false);
 const snapshots = ref<ContainerStatsSnapshot[]>([]);
 const lastHeartbeatAt = ref<string | null>(null);
+
+const { t } = useI18n();
 
 let streamController: ContainerStatsStreamController | undefined;
 let loadRequestId = 0;
@@ -273,10 +276,10 @@ onUnmounted(() => {
           class="h-2.5 w-2.5 rounded-full"
           :style="{ backgroundColor: streamPaused ? 'var(--dd-warning)' : 'var(--dd-success)' }" />
         <span class="text-2xs-plus font-semibold dd-text-secondary">
-          {{ streamPaused ? 'Paused' : 'Live' }}
+          {{ streamPaused ? t('containerComponents.stats.paused') : t('containerComponents.stats.live') }}
         </span>
         <span v-if="lastHeartbeatAt" class="text-2xs dd-text-muted">
-          heartbeat active
+          {{ t('containerComponents.stats.heartbeatActive') }}
         </span>
       </div>
 
@@ -289,7 +292,7 @@ onUnmounted(() => {
         }"
         data-test="stats-toggle-stream"
         @click="toggleStream">
-        {{ streamPaused ? 'Resume' : 'Pause' }}
+        {{ streamPaused ? t('containerComponents.stats.resume') : t('containerComponents.stats.pause') }}
       </AppButton>
     </div>
 
@@ -297,7 +300,7 @@ onUnmounted(() => {
       v-if="loading"
       class="p-3 text-2xs-plus dd-rounded dd-text-muted"
       :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-      Loading container stats...
+      {{ t('containerComponents.stats.loadingStats') }}
     </div>
 
     <div
@@ -308,13 +311,13 @@ onUnmounted(() => {
     </div>
 
     <div v-else-if="!latestSnapshot" class="p-3 text-2xs-plus dd-rounded dd-text-muted" :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-      Stats stream has not produced data yet.
+      {{ t('containerComponents.stats.noDataYet') }}
     </div>
 
     <div v-else :class="props.compact ? 'grid grid-cols-1 gap-3' : 'grid grid-cols-1 xl:grid-cols-2 gap-3'">
       <article class="p-3 dd-rounded space-y-2" :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
         <div class="flex items-center justify-between gap-3">
-          <span class="text-2xs font-semibold uppercase tracking-wider dd-text-muted">CPU</span>
+          <span class="text-2xs font-semibold uppercase tracking-wider dd-text-muted">{{ t('containerComponents.stats.cpu') }}</span>
           <span class="text-sm font-semibold dd-text" data-test="metric-cpu-value">
             {{ formatPercent(currentCpuPercent) }}
           </span>
@@ -341,7 +344,7 @@ onUnmounted(() => {
 
       <article class="p-3 dd-rounded space-y-2" :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
         <div class="flex items-center justify-between gap-3">
-          <span class="text-2xs font-semibold uppercase tracking-wider dd-text-muted">Memory</span>
+          <span class="text-2xs font-semibold uppercase tracking-wider dd-text-muted">{{ t('containerComponents.stats.memory') }}</span>
           <span class="text-sm font-semibold dd-text" data-test="metric-memory-value">
             {{ formatPercent(currentMemoryPercent) }}
           </span>
@@ -371,7 +374,7 @@ onUnmounted(() => {
 
       <article class="p-3 dd-rounded space-y-2" :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
         <div class="flex items-center justify-between gap-3">
-          <span class="text-2xs font-semibold uppercase tracking-wider dd-text-muted">Network RX/TX</span>
+          <span class="text-2xs font-semibold uppercase tracking-wider dd-text-muted">{{ t('containerComponents.stats.networkRxTx') }}</span>
           <span class="text-2xs-plus font-semibold dd-text">
             {{ formatRate(currentNetworkRxRate) }} / {{ formatRate(currentNetworkTxRate) }}
           </span>
@@ -398,7 +401,7 @@ onUnmounted(() => {
 
       <article class="p-3 dd-rounded space-y-2" :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
         <div class="flex items-center justify-between gap-3">
-          <span class="text-2xs font-semibold uppercase tracking-wider dd-text-muted">Block I/O</span>
+          <span class="text-2xs font-semibold uppercase tracking-wider dd-text-muted">{{ t('containerComponents.stats.blockIo') }}</span>
           <span class="text-2xs-plus font-semibold dd-text">
             {{ formatRate(currentBlockReadRate) }} / {{ formatRate(currentBlockWriteRate) }}
           </span>

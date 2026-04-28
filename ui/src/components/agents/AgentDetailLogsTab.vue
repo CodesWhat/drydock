@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import AppIconButton from '../AppIconButton.vue';
 import LogViewer from '../LogViewer.vue';
 
@@ -48,6 +49,8 @@ const componentFilterModel = computed({
 function asLog(entry: unknown): AgentLog {
   return entry as AgentLog;
 }
+
+const { t } = useI18n();
 </script>
 
 <template>
@@ -56,7 +59,7 @@ function asLog(entry: unknown): AgentLog {
       :entries="props.logs"
       :loading="props.loading"
       :error="props.error"
-      empty-message="No log entries found for current filters."
+      :empty-message="t('agentsView.detail.logs.emptyMessage')"
       panel-class="flex-1 min-h-0 flex flex-col overflow-hidden"
       :panel-style="{ backgroundColor: 'var(--dd-bg-code)' }"
       container-class="px-1"
@@ -71,11 +74,11 @@ function asLog(entry: unknown): AgentLog {
             data-testid="agent-log-level-filter"
             class="px-2 py-1.5 dd-rounded text-2xs-plus font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text"
           >
-            <option value="all">All Levels</option>
-            <option value="debug">Debug</option>
-            <option value="info">Info</option>
-            <option value="warn">Warn</option>
-            <option value="error">Error</option>
+            <option value="all">{{ t('agentsView.detail.logs.allLevels') }}</option>
+            <option value="debug">{{ t('agentsView.detail.logs.levelDebug') }}</option>
+            <option value="info">{{ t('agentsView.detail.logs.levelInfo') }}</option>
+            <option value="warn">{{ t('agentsView.detail.logs.levelWarn') }}</option>
+            <option value="error">{{ t('agentsView.detail.logs.levelError') }}</option>
           </select>
 
           <select
@@ -83,17 +86,17 @@ function asLog(entry: unknown): AgentLog {
             data-testid="agent-log-tail-filter"
             class="px-2 py-1.5 dd-rounded text-2xs-plus font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text"
           >
-            <option :value="50">Tail 50</option>
-            <option :value="100">Tail 100</option>
-            <option :value="500">Tail 500</option>
-            <option :value="1000">Tail 1000</option>
+            <option :value="50">{{ t('agentsView.detail.logs.tail50') }}</option>
+            <option :value="100">{{ t('agentsView.detail.logs.tail100') }}</option>
+            <option :value="500">{{ t('agentsView.detail.logs.tail500') }}</option>
+            <option :value="1000">{{ t('agentsView.detail.logs.tail1000') }}</option>
           </select>
 
           <input
             v-model="componentFilterModel"
             data-testid="agent-log-component-filter"
             type="text"
-            placeholder="Filter by component..."
+            :placeholder="t('agentsView.detail.logs.componentPlaceholder')"
             class="flex-1 min-w-[160px] px-2.5 py-1.5 dd-rounded text-2xs-plus font-medium outline-none dd-bg dd-text dd-placeholder"
             @keyup.enter="emit('refresh')"
           />
@@ -104,14 +107,14 @@ function asLog(entry: unknown): AgentLog {
             :class="props.loading ? 'opacity-50 pointer-events-none' : ''"
             @click="emit('refresh')"
           >
-            Apply
+            {{ t('agentsView.detail.logs.apply') }}
           </AppButton>
           <AppButton size="none" variant="plain" weight="none"
             class="px-3 py-1.5 dd-rounded text-2xs-plus font-semibold transition-colors dd-text-muted hover:dd-text"
             :class="props.loading ? 'opacity-50 pointer-events-none' : ''"
             @click="emit('reset')"
           >
-            Reset
+            {{ t('agentsView.detail.logs.reset') }}
           </AppButton>
           <AppIconButton
             icon="refresh"
@@ -120,7 +123,7 @@ function asLog(entry: unknown): AgentLog {
             data-testid="agent-log-refresh"
             class="dd-text-muted hover:dd-text"
             :class="props.loading ? 'pointer-events-none' : ''"
-            tooltip="Refresh"
+            :tooltip="t('agentsView.detail.logs.refresh')"
             :disabled="props.loading"
             @click="emit('refresh')"
           />
@@ -129,7 +132,7 @@ function asLog(entry: unknown): AgentLog {
 
       <template #meta>
         <div class="px-3 py-1 text-2xs dd-text-muted">
-          Last fetched: {{ props.formatLastFetched(props.lastFetchedIso) }}
+          {{ t('agentsView.detail.logs.lastFetched', { time: props.formatLastFetched(props.lastFetchedIso) }) }}
         </div>
       </template>
 
@@ -163,7 +166,7 @@ function asLog(entry: unknown): AgentLog {
           :style="{ borderTop: '1px solid var(--dd-log-divider)', backgroundColor: 'var(--dd-log-footer-bg)' }"
         >
           <span class="text-2xs font-medium" style="color: var(--dd-log-text-muted);">
-            {{ props.logs.length }} entries
+            {{ t('agentsView.detail.logs.entries', { count: props.logs.length }) }}
           </span>
           <div class="flex items-center gap-1.5">
             <div
@@ -174,7 +177,7 @@ function asLog(entry: unknown): AgentLog {
               class="text-2xs font-semibold"
               :style="{ color: props.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)' }"
             >
-              {{ props.status === 'connected' ? 'Live' : 'Offline' }}
+              {{ props.status === 'connected' ? t('agentsView.detail.logs.statusLive') : t('agentsView.detail.logs.statusOffline') }}
             </span>
           </div>
         </div>

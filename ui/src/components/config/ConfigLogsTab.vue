@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import AppIconButton from '@/components/AppIconButton.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import AppLogViewer from '../AppLogViewer.vue';
@@ -74,12 +75,14 @@ function resetFilters() {
   emit('update:componentFilter', '');
 }
 
+const { t } = useI18n();
+
 const viewerPaused = computed(() => !props.streamingEnabled);
 const statusLabel = computed(() => {
   if (viewerPaused.value) {
     return 'Paused';
   }
-  return props.streamingConnected ? 'Live' : 'Offline';
+  return props.streamingConnected ? t('configView.logs.toolbar.live') : 'Offline';
 });
 const statusColor = computed(() => {
   if (viewerPaused.value) {
@@ -119,7 +122,7 @@ function togglePin() {
       }"
     >
       <div class="p-5 flex flex-col flex-1 min-h-0 gap-4">
-        <div v-if="props.loading" class="text-xs dd-text-muted text-center py-6">Loading logs...</div>
+        <div v-if="props.loading" class="text-xs dd-text-muted text-center py-6">{{ t('configView.logs.loading') }}</div>
 
         <div
           v-else-if="props.error"
@@ -134,7 +137,7 @@ function togglePin() {
           v-model:newest-first="newestFirst"
           class="flex-1 min-h-0"
           :entries="props.entries"
-          empty-message="No log entries found for current filters."
+          :empty-message="t('configView.logs.emptyMessage')"
           :paused="viewerPaused"
           :auto-scroll-pinned="autoScrollPinned"
           :status-label="statusLabel"
@@ -158,35 +161,35 @@ function togglePin() {
                 status="connected"
                 size="md"
               />
-              Live
+              {{ t('configView.logs.toolbar.live') }}
             </label>
 
             <select
               v-model="logLevelFilterModel"
               class="px-2 py-1.5 dd-rounded text-2xs-plus font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text"
             >
-              <option value="all">All Levels</option>
-              <option value="debug">Debug</option>
-              <option value="info">Info</option>
-              <option value="warn">Warn</option>
-              <option value="error">Error</option>
+              <option value="all">{{ t('configView.logs.toolbar.allLevels') }}</option>
+              <option value="debug">{{ t('configView.logs.toolbar.debug') }}</option>
+              <option value="info">{{ t('configView.logs.toolbar.info') }}</option>
+              <option value="warn">{{ t('configView.logs.toolbar.warn') }}</option>
+              <option value="error">{{ t('configView.logs.toolbar.error') }}</option>
             </select>
 
             <select
               v-model.number="tailModel"
               class="px-2 py-1.5 dd-rounded text-2xs-plus font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text"
             >
-              <option :value="50">Tail 50</option>
-              <option :value="100">Tail 100</option>
-              <option :value="500">Tail 500</option>
-              <option :value="1000">Tail 1000</option>
+              <option :value="50">{{ t('configView.logs.tail.50') }}</option>
+              <option :value="100">{{ t('configView.logs.tail.100') }}</option>
+              <option :value="500">{{ t('configView.logs.tail.500') }}</option>
+              <option :value="1000">{{ t('configView.logs.tail.1000') }}</option>
             </select>
 
             <select
               v-model="componentFilterModel"
               class="px-2 py-1.5 dd-rounded text-2xs-plus font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text"
             >
-              <option value="">All Components</option>
+              <option value="">{{ t('configView.logs.toolbar.allComponents') }}</option>
               <option v-for="comp in props.components" :key="comp" :value="comp">{{ comp }}</option>
             </select>
           </template>
@@ -195,7 +198,7 @@ function togglePin() {
             <AppIconButton
               icon="restart"
               size="xs"
-              tooltip="Reset filters"
+              :tooltip="t('configView.logs.toolbar.resetFilters')"
               @click="resetFilters"
             />
           </template>
@@ -204,7 +207,7 @@ function togglePin() {
             <span
               class="px-1.5 py-0.5 dd-rounded text-3xs font-bold uppercase tracking-wider dd-text-muted cursor-default"
               style="background-color: var(--dd-log-footer-bg); border: 1px solid var(--dd-log-divider)"
-              v-tooltip="`Server log level: ${props.logLevel}. Only messages at this level or above are captured.`"
+              v-tooltip="t('configView.logs.logLevelBadge', { level: props.logLevel })"
             >{{ props.logLevel }}</span>
           </template>
 

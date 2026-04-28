@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import {
   applyUpdateOperationSseToHold,
   OPERATION_DISPLAY_HOLD_MS,
@@ -51,6 +52,7 @@ import { useDashboardComputed } from './dashboard/useDashboardComputed';
 import { useDashboardData } from './dashboard/useDashboardData';
 import { useDashboardWidgetOrder } from './dashboard/useDashboardWidgetOrder';
 
+const { t } = useI18n();
 const router = useRouter();
 const confirm = useConfirmDialog();
 const toast = useToast();
@@ -496,11 +498,11 @@ async function handleDashboardTerminalResolvedFromReconciliation(args: TerminalR
   markToastFired(operationId);
   const name = containerName ?? 'container';
   if (operation.status === 'succeeded') {
-    toast.success(`Updated: ${name}`);
+    toast.success(t('dashboardView.toast.updated', { name }));
   } else if (operation.status === 'failed') {
-    toast.error(`Update failed: ${name}`);
+    toast.error(t('dashboardView.toast.updateFailed', { name }));
   } else if (operation.status === 'rolled-back') {
-    toast.error(`Rolled back: ${name}`);
+    toast.error(t('dashboardView.toast.rolledBack', { name }));
   }
 }
 
@@ -527,11 +529,20 @@ function applyDashboardOperationSse(event: Event) {
       // Defer terminal toasts until the hold window ends so the row settles
       // before the toast announces the outcome (rc.12 9d48922a).
       if (status === 'succeeded') {
-        setTimeout(() => toast.success(`Updated: ${name}`), OPERATION_DISPLAY_HOLD_MS);
+        setTimeout(
+          () => toast.success(t('dashboardView.toast.updated', { name })),
+          OPERATION_DISPLAY_HOLD_MS,
+        );
       } else if (status === 'failed') {
-        setTimeout(() => toast.error(`Update failed: ${name}`), OPERATION_DISPLAY_HOLD_MS);
+        setTimeout(
+          () => toast.error(t('dashboardView.toast.updateFailed', { name })),
+          OPERATION_DISPLAY_HOLD_MS,
+        );
       } else {
-        setTimeout(() => toast.error(`Rolled back: ${name}`), OPERATION_DISPLAY_HOLD_MS);
+        setTimeout(
+          () => toast.error(t('dashboardView.toast.rolledBack', { name })),
+          OPERATION_DISPLAY_HOLD_MS,
+        );
       }
     },
   });
@@ -593,11 +604,11 @@ function isStatWidget(id: string): boolean {
 
 function confirmDashboardUpdate(row: RecentUpdateRow) {
   confirm.require({
-    header: 'Update Container',
-    message: `Update ${row.name} now? This will apply the latest discovered image.`,
+    header: t('dashboardView.confirm.updateContainer.header'),
+    message: t('dashboardView.confirm.updateContainer.message', { name: row.name }),
     severity: 'warn',
-    acceptLabel: 'Update',
-    rejectLabel: 'Cancel',
+    acceptLabel: t('dashboardView.confirm.updateContainer.accept'),
+    rejectLabel: t('common.cancel'),
     accept: async () => {
       dashboardUpdateInProgress.value = row.id;
       dashboardUpdateError.value = null;
@@ -635,7 +646,10 @@ function confirmDashboardUpdate(row: RecentUpdateRow) {
         const next = new Map(dashboardUpdatingById.value);
         next.delete(row.id);
         dashboardUpdatingById.value = next;
-        dashboardUpdateError.value = errorMessage(e, `Failed to update ${row.name}`);
+        dashboardUpdateError.value = errorMessage(
+          e,
+          t('dashboardView.toast.updateError', { name: row.name }),
+        );
       } finally {
         dashboardUpdateInProgress.value = null;
       }
@@ -645,11 +659,11 @@ function confirmDashboardUpdate(row: RecentUpdateRow) {
 
 function confirmDashboardUpdateAll() {
   confirm.require({
-    header: 'Update All Containers',
-    message: `${pendingUpdates.value.length} containers will be updated. Continue?`,
+    header: t('dashboardView.confirm.updateAll.header'),
+    message: t('dashboardView.confirm.updateAll.message', { count: pendingUpdates.value.length }),
     severity: 'warn',
-    acceptLabel: 'Update All',
-    rejectLabel: 'Cancel',
+    acceptLabel: t('dashboardView.confirm.updateAll.accept'),
+    rejectLabel: t('common.cancel'),
     accept: async () => {
       const pendingRowsSnapshot = pendingUpdates.value.filter((row) => !row.blocked);
       dashboardUpdateAllInProgress.value = true;
@@ -703,7 +717,7 @@ function confirmDashboardUpdateAll() {
         if (firstRejectedUpdate) {
           dashboardUpdateError.value = errorMessage(
             firstRejectedUpdate,
-            'Failed to update all containers',
+            t('dashboardView.toast.updateAllError'),
           );
         }
       } finally {
@@ -724,17 +738,17 @@ function confirmDashboardUpdateAll() {
     <!-- Main dashboard content -->
     <div ref="dashboardScrollEl" class="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden px-2 py-1 sm:pl-7 sm:pr-6 sm:py-6 dd-touch-scroll">
       <div v-if="loading" class="flex items-center justify-center py-16">
-        <div class="text-sm dd-text-muted">Loading dashboard...</div>
+        <div class="text-sm dd-text-muted">{{ t('dashboardView.loading') }}</div>
       </div>
 
       <div v-else-if="error" class="flex flex-col items-center justify-center py-16">
-        <div class="text-sm font-medium dd-text-danger mb-2">Failed to load dashboard</div>
+        <div class="text-sm font-medium dd-text-danger mb-2">{{ t('dashboardView.loadFailed') }}</div>
         <div class="text-xs dd-text-muted">{{ error }}</div>
         <AppButton
           size="none" variant="plain" weight="none"
           class="mt-4 px-3 py-1.5 dd-rounded text-2xs-plus font-semibold transition-colors dd-bg-elevated dd-text hover:opacity-90"
           @click="fetchDashboardData">
-          Retry
+          {{ t('common.retry') }}
         </AppButton>
       </div>
 
@@ -749,7 +763,7 @@ function confirmDashboardUpdateAll() {
               size="xs"
               variant="muted"
               class="ml-2"
-              tooltip="Show widget panel"
+              :tooltip="t('dashboardView.editToggle.showWidgetPanel')"
               @click="toggleWidgetPanel" />
             <AppIconButton
               data-test="dashboard-edit-toggle"
@@ -757,7 +771,7 @@ function confirmDashboardUpdateAll() {
               size="xs"
               :variant="editMode ? 'plain' : 'muted'"
               :class="editMode ? 'dd-bg-elevated dd-text ml-2' : 'ml-2'"
-              :tooltip="editMode ? 'Done customizing' : 'Customize dashboard'"
+              :tooltip="editMode ? t('dashboardView.editToggle.doneCustomizing') : t('dashboardView.editToggle.customize')"
               @click="handleToggleEditMode" />
           </div>
         </Teleport>
@@ -814,7 +828,7 @@ function confirmDashboardUpdateAll() {
               ]"
               :style="{ backgroundColor: 'var(--dd-bg-card)' }"
               @click="handleStatClick(item.i as DashboardWidgetId)">
-              <div v-if="editMode" class="drag-handle dd-drag-handle absolute top-1.5 left-1/2 -translate-x-1/2 z-10" v-tooltip.top="'Drag to reorder'">
+              <div v-if="editMode" class="drag-handle dd-drag-handle absolute top-1.5 left-1/2 -translate-x-1/2 z-10" v-tooltip.top="t('dashboardView.dragToReorder')">
                 <AppIcon name="ph:dots-six" :size="14" />
               </div>
               <div class="flex items-center justify-between mb-2">
@@ -918,14 +932,14 @@ function confirmDashboardUpdateAll() {
            :style="{ borderBottom: '1px solid var(--dd-border)' }">
         <div class="flex items-center gap-2">
           <AppIcon name="ph:pencil-simple" :size="12" class="dd-text-muted" />
-          <span class="text-2xs-plus font-semibold dd-text">Widgets</span>
+          <span class="text-2xs-plus font-semibold dd-text">{{ t('dashboardView.widgetPanel.title') }}</span>
         </div>
         <AppIconButton
           icon="xmark"
           size="xs"
           variant="muted"
-          tooltip="Close panel"
-          aria-label="Close panel"
+          :tooltip="t('dashboardView.widgetPanel.closePanel')"
+          :aria-label="t('dashboardView.widgetPanel.closePanel')"
           @click="closeWidgetPanel" />
       </div>
 
@@ -956,7 +970,7 @@ function confirmDashboardUpdateAll() {
             size="none" variant="plain" weight="none"
             class="w-full px-2.5 py-1.5 dd-rounded text-2xs font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated text-center"
             @click="resetAll">
-            Reset to Default
+            {{ t('dashboardView.widgetPanel.resetToDefault') }}
           </AppButton>
         </div>
       </div>

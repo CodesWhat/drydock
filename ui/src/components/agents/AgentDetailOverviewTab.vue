@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n';
+
 interface AgentDetailField {
   label: string;
   value: string | number;
@@ -22,12 +24,14 @@ const props = defineProps<{
 }>();
 
 defineEmits<{ 'view-containers': [] }>();
+
+const { t } = useI18n();
 </script>
 
 <template>
   <div class="p-4 space-y-5">
     <div v-if="props.resourceFields.length > 0">
-      <div class="text-2xs font-semibold uppercase tracking-wider mb-2 dd-text-muted">Resources</div>
+      <div class="text-2xs font-semibold uppercase tracking-wider mb-2 dd-text-muted">{{ t('agentsView.detail.overview.resources') }}</div>
       <div class="grid grid-cols-2 gap-2">
         <div
           v-for="field in props.resourceFields"
@@ -42,7 +46,7 @@ defineEmits<{ 'view-containers': [] }>();
     </div>
 
     <div v-if="props.systemFields.length > 0">
-      <div class="text-2xs font-semibold uppercase tracking-wider mb-2 dd-text-muted">System</div>
+      <div class="text-2xs font-semibold uppercase tracking-wider mb-2 dd-text-muted">{{ t('agentsView.detail.overview.system') }}</div>
       <div class="space-y-1">
         <div
           v-for="field in props.systemFields"
@@ -57,15 +61,15 @@ defineEmits<{ 'view-containers': [] }>();
     </div>
 
     <div>
-      <div class="text-2xs font-semibold uppercase tracking-wider mb-2 dd-text-muted">Containers</div>
+      <div class="text-2xs font-semibold uppercase tracking-wider mb-2 dd-text-muted">{{ t('agentsView.detail.overview.containers') }}</div>
       <div class="grid grid-cols-3 gap-2 text-center">
         <div class="px-2 py-2 dd-rounded" :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
           <div class="text-lg font-bold dd-text">{{ props.agent.containers.total }}</div>
-          <div class="text-2xs dd-text-muted">Total</div>
+          <div class="text-2xs dd-text-muted">{{ t('agentsView.detail.overview.containerTotal') }}</div>
         </div>
         <div class="px-2 py-2 dd-rounded" :style="{ backgroundColor: 'var(--dd-success-muted)' }">
           <div class="text-lg font-bold" :style="{ color: 'var(--dd-success)' }">{{ props.agent.containers.running }}</div>
-          <div class="text-2xs" :style="{ color: 'var(--dd-success)' }">Running</div>
+          <div class="text-2xs" :style="{ color: 'var(--dd-success)' }">{{ t('agentsView.detail.overview.containerRunning') }}</div>
         </div>
         <div
           class="px-2 py-2 dd-rounded"
@@ -81,7 +85,7 @@ defineEmits<{ 'view-containers': [] }>();
             class="text-2xs"
             :style="{ color: props.agent.containers.stopped > 0 ? 'var(--dd-danger)' : 'var(--dd-text-muted)' }"
           >
-            Stopped
+            {{ t('agentsView.detail.overview.containerStopped') }}
           </div>
         </div>
       </div>
@@ -93,16 +97,16 @@ defineEmits<{ 'view-containers': [] }>();
         class="mt-2 inline-flex items-center gap-1 text-2xs-plus font-medium transition-colors text-drydock-secondary hover:text-drydock-secondary-hover"
         @click="$emit('view-containers')">
         <AppIcon name="arrow-right" :size="10" />
-        View containers
+        {{ t('agentsView.detail.overview.viewContainers') }}
       </AppButton>
     </div>
 
     <div>
-      <div class="text-2xs font-semibold uppercase tracking-wider mb-2 dd-text-muted">Automation</div>
+      <div class="text-2xs font-semibold uppercase tracking-wider mb-2 dd-text-muted">{{ t('agentsView.detail.overview.automation') }}</div>
       <div class="space-y-2">
         <div class="px-2.5 py-2 dd-rounded text-2xs-plus" :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
           <div class="flex items-center justify-between gap-2">
-            <span class="font-semibold dd-text">Watchers</span>
+            <span class="font-semibold dd-text">{{ t('agentsView.detail.overview.watchers') }}</span>
             <span class="text-2xs dd-text-muted">{{ props.agent.watchers.length }}</span>
           </div>
           <div class="mt-1.5 flex flex-wrap gap-1.5">
@@ -114,14 +118,14 @@ defineEmits<{ 'view-containers': [] }>();
               {{ watcherName }}
             </span>
             <span v-if="props.agent.watchers.length === 0" class="text-2xs italic dd-text-muted">
-              None
+              {{ t('agentsView.detail.overview.none') }}
             </span>
           </div>
         </div>
 
         <div class="px-2.5 py-2 dd-rounded text-2xs-plus" :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
           <div class="flex items-center justify-between gap-2">
-            <span class="font-semibold dd-text">Triggers</span>
+            <span class="font-semibold dd-text">{{ t('agentsView.detail.overview.triggers') }}</span>
             <span class="text-2xs dd-text-muted">{{ props.agent.triggers.length }}</span>
           </div>
           <div class="mt-1.5 flex flex-wrap gap-1.5">
@@ -133,7 +137,7 @@ defineEmits<{ 'view-containers': [] }>();
               {{ triggerName }}
             </span>
             <span v-if="props.agent.triggers.length === 0" class="text-2xs italic dd-text-muted">
-              None
+              {{ t('agentsView.detail.overview.none') }}
             </span>
           </div>
         </div>

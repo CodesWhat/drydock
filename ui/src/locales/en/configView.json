@@ -1,0 +1,138 @@
+{
+  "configView": {
+    "tabs": {
+      "general": "General",
+      "appearance": "Appearance",
+      "profile": "Profile"
+    },
+    "general": {
+      "application": {
+        "title": "Application",
+        "loadingServerInfo": "Loading server info"
+      },
+      "store": {
+        "title": "Store"
+      },
+      "webhookApi": {
+        "title": "Webhook API",
+        "enabled": "Enabled",
+        "disabled": "Disabled",
+        "description": "Use these endpoints to trigger watch cycles and updates via HTTP. All requests require a Bearer token in the Authorization header.",
+        "disabledMessage": "Webhook API is disabled. Set",
+        "disabledHint": "Webhook API is disabled. Set {envEnabled} and configure at least one token ({envToken} or {envTokens}) to enable it.",
+        "table": {
+          "endpoint": "Endpoint",
+          "description": "Description"
+        },
+        "example": "Example",
+        "endpoints": {
+          "watchAll": "Trigger a full watch cycle on all watchers",
+          "watchOne": "Watch a specific container by name",
+          "updateOne": "Trigger an update on a specific container"
+        }
+      },
+      "network": {
+        "title": "Network",
+        "internetlessMode": {
+          "label": "Internetless Mode",
+          "description": "Block all outbound requests (container icons, external fetches)"
+        }
+      },
+      "iconCache": {
+        "title": "Container Icon Cache",
+        "cachedIcons": {
+          "label": "Cached Icons",
+          "description": "Common icons are bundled; other icons are cached to disk on first fetch"
+        },
+        "cleared": "{count} cleared",
+        "clearButton": "Clear Cache"
+      },
+      "diagnostics": {
+        "title": "Diagnostics",
+        "debugDump": {
+          "label": "Diagnostic Debug Dump",
+          "description": "Download a redacted JSON snapshot of runtime state for troubleshooting",
+          "preparing": "Preparing...",
+          "download": "Download Debug Dump"
+        }
+      },
+      "fields": {
+        "version": "Version",
+        "serverPort": "Server Port",
+        "containerActions": "Container Actions",
+        "webhook": "Webhook",
+        "deleteEnabled": "Delete Enabled",
+        "trustProxy": "Trust Proxy",
+        "metricsAuth": "Metrics Auth",
+        "storePath": "Store Path",
+        "storeFile": "Store File",
+        "enabled": "Enabled",
+        "disabled": "Disabled",
+        "yes": "Yes",
+        "no": "No"
+      },
+      "errors": {
+        "loadServerInfo": "Failed to load server info",
+        "loadProfileData": "Failed to load profile data",
+        "updateNetworkSettings": "Failed to update network settings",
+        "clearIconCache": "Failed to clear icon cache",
+        "downloadDebugDump": "Unable to download debug dump",
+        "errorLabel": "Error"
+      }
+    },
+    "appearance": {
+      "colorTheme": {
+        "title": "Color Theme"
+      },
+      "fontFamily": {
+        "title": "Font Family",
+        "defaultBadge": "default",
+        "preview": "The quick brown fox jumps over the lazy dog"
+      },
+      "fontSize": {
+        "title": "Font Size"
+      },
+      "iconLibrary": {
+        "title": "Icon Library"
+      },
+      "iconSize": {
+        "title": "Icon Size"
+      },
+      "borderRadius": {
+        "title": "Border Radius"
+      }
+    },
+    "profile": {
+      "loading": "Loading profile",
+      "fields": {
+        "username": "Username",
+        "email": "Email",
+        "role": "Role",
+        "provider": "Provider",
+        "lastLogin": "Last Login",
+        "activeSessions": "Active Sessions"
+      }
+    },
+    "logs": {
+      "loading": "Loading logs...",
+      "emptyMessage": "No log entries found for current filters.",
+      "toolbar": {
+        "live": "Live",
+        "allLevels": "All Levels",
+        "debug": "Debug",
+        "info": "Info",
+        "warn": "Warn",
+        "error": "Error",
+        "allComponents": "All Components",
+        "resetFilters": "Reset filters"
+      },
+      "tail": {
+        "50": "Tail 50",
+        "100": "Tail 100",
+        "500": "Tail 500",
+        "1000": "Tail 1000"
+      },
+      "logLevelBadge": "Server log level: {level}. Only messages at this level or above are captured."
+    }
+  }
+}

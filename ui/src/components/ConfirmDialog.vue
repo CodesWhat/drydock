@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useConfirmDialog } from '../composables/useConfirmDialog';
+
+const { t } = useI18n();
 
 const { visible, current, accept, reject, dismiss } = useConfirmDialog();
 const dialogTitleId = 'confirm-dialog-title';
@@ -77,18 +80,18 @@ onUnmounted(() => globalThis.removeEventListener('keydown', handleKeydown));
           <div class="px-5 pt-3 pb-4.5 flex items-center justify-end gap-2.5">
             <AppButton size="none" variant="plain" weight="none"
               class="px-4 py-1.5 dd-rounded text-2xs-plus font-semibold transition-colors cursor-pointer"
-              :aria-label="current.rejectLabel || 'Cancel'"
+              :aria-label="current.rejectLabel || t('sharedComponents.confirmDialog.cancel')"
               :style="{
                 backgroundColor: 'var(--dd-bg-inset)',
                 border: '1px solid var(--dd-border-strong)',
                 color: 'var(--dd-text)',
               }"
               @click="reject">
-              {{ current.rejectLabel || 'Cancel' }}
+              {{ current.rejectLabel || t('sharedComponents.confirmDialog.cancel') }}
             </AppButton>
             <AppButton size="none" variant="plain" weight="none"
               class="px-4 py-1.5 dd-rounded text-2xs-plus font-semibold transition-colors flex items-center gap-1.5 cursor-pointer"
-              :aria-label="current.acceptLabel || 'Confirm'"
+              :aria-label="current.acceptLabel || t('sharedComponents.confirmDialog.confirm')"
               :style="current.severity === 'danger'
                 ? {
                     backgroundColor: 'var(--dd-danger-muted)',
@@ -101,7 +104,7 @@ onUnmounted(() => globalThis.removeEventListener('keydown', handleKeydown));
                     color: 'var(--dd-warning)',
                   }"
               @click="accept">
-              {{ current.acceptLabel || 'Confirm' }}
+              {{ current.acceptLabel || t('sharedComponents.confirmDialog.confirm') }}
             </AppButton>
           </div>
         </div>

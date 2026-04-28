@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRoute } from 'vue-router';
 import AppBadge from '@/components/AppBadge.vue';
 import DetailField from '@/components/DetailField.vue';
@@ -8,6 +9,7 @@ import { useViewMode } from '../preferences/useViewMode';
 import { getAllRegistries, getRegistry } from '../services/registry';
 import type { ApiComponent } from '../types/api';
 
+const { t } = useI18n();
 const registriesViewMode = useViewMode('registries');
 
 const registriesData = ref<Record<string, unknown>[]>([]);
@@ -137,19 +139,25 @@ const filteredRegistries = computed(() => {
   );
 });
 
-const tableColumns = [
-  { key: 'name', label: 'Registry', align: 'text-left', sortable: false },
-  { key: 'type', label: 'Type', sortable: false },
-  { key: 'status', label: 'Status', sortable: false },
-  { key: 'url', label: 'URL', align: 'text-left', sortable: false, width: '99%' },
-];
+const tableColumns = computed(() => [
+  { key: 'name', label: t('registriesView.columns.registry'), align: 'text-left', sortable: false },
+  { key: 'type', label: t('registriesView.columns.type'), sortable: false },
+  { key: 'status', label: t('registriesView.columns.status'), sortable: false },
+  {
+    key: 'url',
+    label: t('registriesView.columns.url'),
+    align: 'text-left',
+    sortable: false,
+    width: '99%',
+  },
+]);
 
 onMounted(async () => {
   try {
     const data = await getAllRegistries();
     registriesData.value = data.map((registry: ApiComponent) => mapRegistry(registry));
   } catch {
-    error.value = 'Failed to load registries';
+    error.value = t('registriesView.loadError');
   } finally {
     loading.value = false;
   }
@@ -164,7 +172,7 @@ onMounted(async () => {
         {{ error }}
       </div>
 
-      <div v-if="loading" class="text-2xs-plus dd-text-muted py-3 px-1">Loading registries...</div>
+      <div v-if="loading" class="text-2xs-plus dd-text-muted py-3 px-1">{{ t('registriesView.loadingRegistries') }}</div>
 
       <!-- Filter bar -->
       <DataFilterBar
@@ -176,12 +184,12 @@ onMounted(async () => {
         <template #filters>
           <input v-model="searchQuery"
                  type="text"
-                 placeholder="Filter by name or type..."
+                 :placeholder="t('registriesView.filterPlaceholder')"
                  class="flex-1 min-w-[120px] max-w-[var(--dd-layout-filter-max-width)] px-2.5 py-1.5 dd-rounded text-2xs-plus font-medium outline-none dd-bg dd-text dd-placeholder" />
           <AppButton size="none" variant="text-muted" weight="medium" class="text-2xs" v-if="searchQuery"
                   
                   @click="searchQuery = ''">
-            Clear
+            {{ t('registriesView.clear') }}
           </AppButton>
         </template>
       </DataFilterBar>
@@ -197,10 +205,10 @@ onMounted(async () => {
           <span class="font-medium dd-text">{{ registryTypeBadge(row.type).label }}</span>
         </template>
         <template #cell-type="{ row }">
-          <AppBadge v-if="isPrivate(row)" tone="warning" size="xs" class="max-md:!hidden">Private</AppBadge>
-          <AppBadge v-else tone="neutral" size="xs" class="max-md:!hidden">Public</AppBadge>
-          <AppBadge v-if="isPrivate(row)" v-tooltip.top="'Private'" tone="warning" size="xs" class="px-1.5 py-0 md:!hidden"><AppIcon name="lock" :size="12" /></AppBadge>
-          <AppBadge v-else v-tooltip.top="'Public'" tone="neutral" size="xs" class="px-1.5 py-0 md:!hidden"><AppIcon name="eye" :size="12" /></AppBadge>
+          <AppBadge v-if="isPrivate(row)" tone="warning" size="xs" class="max-md:!hidden">{{ t('registriesView.badge.private') }}</AppBadge>
+          <AppBadge v-else tone="neutral" size="xs" class="max-md:!hidden">{{ t('registriesView.badge.public') }}</AppBadge>
+          <AppBadge v-if="isPrivate(row)" v-tooltip.top="t('registriesView.badge.private')" tone="warning" size="xs" class="px-1.5 py-0 md:!hidden"><AppIcon name="lock" :size="12" /></AppBadge>
+          <AppBadge v-else v-tooltip.top="t('registriesView.badge.public')" tone="neutral" size="xs" class="px-1.5 py-0 md:!hidden"><AppIcon name="eye" :size="12" /></AppBadge>
         </template>
         <template #cell-status="{ row }">
           <AppIcon :name="row.status === 'connected' ? 'check' : row.status === 'error' ? 'xmark' : 'warning'" :size="13" class="shrink-0 md:!hidden"
@@ -219,7 +227,7 @@ onMounted(async () => {
         </template>
         <template #empty>
           <EmptyState icon="registries"
-                      message="No registries match your filters"
+                      :message="t('registriesView.emptyFiltered')"
                       :show-clear="activeFilterCount > 0"
                       @clear="searchQuery = ''" />
         </template>
@@ -248,13 +256,13 @@ onMounted(async () => {
           <div class="px-4 py-3">
             <div class="grid grid-cols-2 gap-2 text-2xs-plus">
               <div>
-                <span class="dd-text-muted">Auth</span>
+                <span class="dd-text-muted">{{ t('registriesView.card.auth') }}</span>
                 <span class="ml-1 font-semibold" :style="{ color: isPrivate(reg) ? 'var(--dd-warning)' : 'var(--dd-text-muted)' }">
-                  {{ isPrivate(reg) ? 'Private' : 'Public' }}
+                  {{ isPrivate(reg) ? t('registriesView.badge.private') : t('registriesView.badge.public') }}
                 </span>
               </div>
               <div>
-                <span class="dd-text-muted">Status</span>
+                <span class="dd-text-muted">{{ t('registriesView.card.status') }}</span>
                 <span class="ml-1 font-semibold" :style="{ color: reg.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)' }">
                   {{ reg.status }}
                 </span>
@@ -292,10 +300,10 @@ onMounted(async () => {
           </div>
           <div class="flex items-center gap-3 shrink-0">
             <span class="text-2xs-plus hidden md:inline font-medium" :style="{ color: isPrivate(reg) ? 'var(--dd-warning)' : 'var(--dd-text-muted)' }">
-              {{ isPrivate(reg) ? 'Private' : 'Public' }}
+              {{ isPrivate(reg) ? t('registriesView.badge.private') : t('registriesView.badge.public') }}
             </span>
-            <AppBadge v-if="isPrivate(reg)" v-tooltip.top="'Private'" tone="warning" size="xs" class="px-1.5 py-0 md:!hidden"><AppIcon name="lock" :size="12" /></AppBadge>
-            <AppBadge v-else v-tooltip.top="'Public'" tone="neutral" size="xs" class="px-1.5 py-0 md:!hidden"><AppIcon name="eye" :size="12" /></AppBadge>
+            <AppBadge v-if="isPrivate(reg)" v-tooltip.top="t('registriesView.badge.private')" tone="warning" size="xs" class="px-1.5 py-0 md:!hidden"><AppIcon name="lock" :size="12" /></AppBadge>
+            <AppBadge v-else v-tooltip.top="t('registriesView.badge.public')" tone="neutral" size="xs" class="px-1.5 py-0 md:!hidden"><AppIcon name="eye" :size="12" /></AppBadge>
             <AppIcon :name="reg.status === 'connected' ? 'check' : 'xmark'" :size="13" class="shrink-0 md:!hidden"
                      v-tooltip.top="reg.status"
                      :style="{ color: reg.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)' }" />
@@ -309,7 +317,7 @@ onMounted(async () => {
       <EmptyState
         v-if="(registriesViewMode === 'cards' || registriesViewMode === 'list') && filteredRegistries.length === 0 && !loading"
         icon="registries"
-        message="No registries match your filters"
+        :message="t('registriesView.emptyFiltered')"
         :show-clear="activeFilterCount > 0"
         @clear="searchQuery = ''" />
 
@@ -340,7 +348,7 @@ onMounted(async () => {
 
         <template v-if="selectedRegistry" #default>
           <div class="p-4 space-y-5">
-            <div v-if="detailLoading" class="text-2xs-plus dd-text-muted">Refreshing registry details...</div>
+            <div v-if="detailLoading" class="text-2xs-plus dd-text-muted">{{ t('registriesView.detail.refreshing') }}</div>
             <div v-if="detailError"
                  class="px-3 py-2 text-2xs-plus dd-rounded"
                  :style="{ backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning)' }">
@@ -348,23 +356,23 @@ onMounted(async () => {
             </div>
 
             <!-- Status -->
-            <DetailField label="Status">
+            <DetailField :label="t('registriesView.detail.status')">
               <AppBadge :tone="selectedRegistry.status === 'connected' ? 'success' : 'danger'" size="sm">
                 {{ selectedRegistry.status }}
               </AppBadge>
             </DetailField>
 
             <!-- Auth type -->
-            <DetailField label="Authentication">
+            <DetailField :label="t('registriesView.detail.authentication')">
               <div class="flex items-center gap-1.5 text-xs">
                 <AppIcon v-if="isPrivate(selectedRegistry)" name="lock" :size="12" style="color: var(--dd-warning);" />
                 <AppIcon v-else name="eye" :size="12" class="dd-text-muted" />
-                <span class="dd-text font-medium">{{ isPrivate(selectedRegistry) ? 'Private' : 'Public' }}</span>
+                <span class="dd-text font-medium">{{ isPrivate(selectedRegistry) ? t('registriesView.badge.private') : t('registriesView.badge.public') }}</span>
               </div>
             </DetailField>
 
             <!-- URL -->
-            <DetailField label="URL" mono>{{ resolveUrl(selectedRegistry) }}</DetailField>
+            <DetailField :label="t('registriesView.detail.url')" mono>{{ resolveUrl(selectedRegistry) }}</DetailField>
 
             <!-- Configuration -->
             <DetailField v-for="(val, key) in selectedRegistry.config" :key="key" :label="String(key)" mono>{{ val }}</DetailField>

@@ -1,0 +1,270 @@
+{
+  "auditView": {
+    "loadingAuditLog": "Loading audit log...",
+    "loadError": "Failed to load audit log",
+    "filterPlaceholder": "Filter by target or event...",
+    "containerFilterPlaceholder": "Container name...",
+    "allEvents": "All events",
+    "clear": "Clear",
+    "fromDateLabel": "From date",
+    "toDateLabel": "To date",
+    "pagination": {
+      "summary": "Page {page} of {totalPages} ({total} entries)",
+      "previousPage": "Previous page",
+      "nextPage": "Next page"
+    },
+    "emptyFiltered": "No audit entries match your filters",
+    "columns": {
+      "time": "Time",
+      "event": "Event",
+      "target": "Target",
+      "status": "Status",
+      "details": "Details"
+    },
+    "card": {
+      "time": "Time",
+      "version": "Version"
+    },
+    "detail": {
+      "timestamp": "Timestamp",
+      "event": "Event",
+      "image": "Image",
+      "fromVersion": "From Version",
+      "toVersion": "To Version",
+      "trigger": "Trigger",
+      "details": "Details"
+    }
+  },
+  "notificationsView": {
+    "loadingRules": "Loading notification rules...",
+    "loadError": "Failed to load notification rules",
+    "filterPlaceholder": "Filter by name, description, or trigger...",
+    "clear": "Clear",
+    "allNotificationTriggers": "All notification triggers",
+    "noTriggers": "No triggers",
+    "columns": {
+      "on": "On",
+      "rule": "Rule",
+      "triggers": "Triggers"
+    },
+    "toggleAriaLabel": "Toggle notification rule",
+    "emptyFiltered": "No notification rules match your filters",
+    "detail": {
+      "ruleStatusLabel": "Rule status",
+      "ruleStatusAriaLabel": "Rule status",
+      "enabledText": "Enabled: notifications can fire for this event.",
+      "disabledText": "Disabled: notifications are suppressed for this event.",
+      "assignedTriggersLabel": "Assigned Triggers",
+      "noTriggersConfigured": "No triggers configured. Add triggers on the",
+      "triggersPageLink": "Triggers page",
+      "helpTextImplicitAll": "Leave this empty to send this event to all notification triggers. Selecting any trigger turns this rule into an allow-list.",
+      "helpTextExplicit": "Only selected triggers will receive this event. Leave it empty to suppress this event for all triggers.",
+      "saving": "Saving...",
+      "saveChanges": "Save changes",
+      "reset": "Reset",
+      "enabled": "enabled",
+      "disabled": "disabled"
+    }
+  },
+  "securityView": {
+    "loadingVulnerabilityData": "Loading vulnerability data...",
+    "scanNow": "Scan Now",
+    "scanning": "Scanning...",
+    "scanAllAriaLabel": "Scan all containers",
+    "scanAllContainers": "Scan all containers for vulnerabilities",
+    "checkingScanner": "Checking scanner availability",
+    "runtimeUnavailable": "Runtime check unavailable; scan can still be attempted",
+    "filters": {
+      "severity": "Severity",
+      "severityCritical": "Critical",
+      "severityHigh": "High",
+      "severityMedium": "Medium",
+      "severityLow": "Low",
+      "fixAvailable": "Fix Available",
+      "fixYes": "Yes",
+      "fixNo": "No",
+      "clearAll": "Clear all"
+    },
+    "columns": {
+      "image": "Image",
+      "critical": "Critical",
+      "high": "High",
+      "medium": "Medium",
+      "low": "Low",
+      "fixable": "Fixable",
+      "total": "Total"
+    },
+    "card": {
+      "vulnerabilities": "vulnerabilities",
+      "vsUpdate": "vs update",
+      "fixable": "fixable",
+      "noFixesAvailable": "No fixes available",
+      "total": "total"
+    },
+    "badge": {
+      "critical": "Critical",
+      "high": "High",
+      "medium": "Medium",
+      "low": "Low"
+    },
+    "update": "Update",
+    "viewInContainers": "View in Containers",
+    "viewAllInContainers": "View all in Containers",
+    "export": {
+      "label": "Export",
+      "downloadReport": "Download Report"
+    },
+    "sbom": {
+      "label": "SBOM",
+      "loading": "Loading SBOM document...",
+      "loadingButton": "Loading...",
+      "refresh": "Refresh",
+      "hide": "Hide",
+      "view": "View",
+      "download": "Download",
+      "format": "format:",
+      "components": "components:",
+      "generated": "generated:"
+    },
+    "vuln": {
+      "noFix": "No fix",
+      "target": "Target:"
+    },
+    "chooser": {
+      "title": "Select container to update",
+      "cancel": "Cancel"
+    }
+  },
+  "registriesView": {
+    "loadingRegistries": "Loading registries...",
+    "loadError": "Failed to load registries",
+    "filterPlaceholder": "Filter by name or type...",
+    "clear": "Clear",
+    "emptyFiltered": "No registries match your filters",
+    "columns": {
+      "registry": "Registry",
+      "type": "Type",
+      "status": "Status",
+      "url": "URL"
+    },
+    "badge": {
+      "private": "Private",
+      "public": "Public"
+    },
+    "card": {
+      "auth": "Auth",
+      "status": "Status"
+    },
+    "detail": {
+      "refreshing": "Refreshing registry details...",
+      "status": "Status",
+      "authentication": "Authentication",
+      "url": "URL"
+    }
+  },
+  "serversView": {
+    "loadingServerData": "Loading server data...",
+    "loadError": "Failed to load server data",
+    "filterPlaceholder": "Filter by name or address...",
+    "clear": "Clear",
+    "emptyFiltered": "No hosts match your filters",
+    "justNow": "Just now",
+    "never": "Never",
+    "columns": {
+      "host": "Host",
+      "address": "Address",
+      "status": "Status",
+      "containers": "Containers",
+      "lastSeen": "Last Seen"
+    },
+    "card": {
+      "containers": "Containers",
+      "running": "Running",
+      "images": "Images",
+      "lastSeen": "Last seen"
+    },
+    "list": {
+      "containers": "containers"
+    },
+    "detail": {
+      "containers": "Containers",
+      "running": "running",
+      "stopped": "stopped",
+      "images": "Images",
+      "lastSeen": "Last Seen",
+      "refresh": "Refresh"
+    }
+  },
+  "triggersView": {
+    "loadingTriggers": "Loading triggers...",
+    "loadError": "Failed to load triggers",
+    "filterPlaceholder": "Filter by name...",
+    "clear": "Clear",
+    "emptyFiltered": "No triggers match your filters",
+    "columns": {
+      "trigger": "Trigger",
+      "type": "Type",
+      "status": "Status"
+    },
+    "status": {
+      "active": "Active",
+      "inactive": "Inactive"
+    },
+    "test": {
+      "testing": "Testing...",
+      "sent": "Sent!",
+      "failed": "Failed",
+      "test": "Test",
+      "testTrigger": "Test Trigger",
+      "runTest": "Run test",
+      "testPassed": "Test passed",
+      "testFailed": "Test failed",
+      "defaultError": "Trigger test failed"
+    },
+    "detail": {
+      "status": "Status",
+      "refreshing": "Refreshing trigger details...",
+      "noConfig": "No configuration properties"
+    },
+    "list": {
+      "status": "Status"
+    }
+  },
+  "watchersView": {
+    "loadingWatchers": "Loading watchers...",
+    "loadError": "Failed to load watchers",
+    "filterPlaceholder": "Filter by name...",
+    "clear": "Clear",
+    "emptyFiltered": "No watchers match your filters",
+    "columns": {
+      "watcher": "Watcher",
+      "status": "Status",
+      "containers": "Containers",
+      "schedule": "Schedule",
+      "nextRun": "Next Run",
+      "lastRun": "Last Run"
+    },
+    "status": {
+      "watching": "Watching",
+      "paused": "Paused"
+    },
+    "card": {
+      "containers": "Containers",
+      "nextRun": "Next run",
+      "lastRun": "Last run",
+      "containersWatched": "{count} containers watched"
+    },
+    "badge": {
+      "maint": "Maint"
+    },
+    "detail": {
+      "cron": "Cron",
+      "lastRun": "Last Run",
+      "containersWatched": "Containers Watched",
+      "schedule": "Schedule",
+      "nextRun": "Next Run",
+      "viewContainers": "View containers",
+      "refreshing": "Refreshing watcher details..."
+    }
+  }
+}

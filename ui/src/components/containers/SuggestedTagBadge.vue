@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { suggestedTagColor } from '../../utils/display';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   tag: string | undefined;
@@ -8,14 +11,14 @@ const props = defineProps<{
 }>();
 
 const isLatestOrUntagged = computed(() => {
-  const t = (props.currentTag ?? '').toLowerCase();
-  return t === 'latest' || t === '';
+  const currentTag = (props.currentTag ?? '').toLowerCase();
+  return currentTag === 'latest' || currentTag === '';
 });
 
 const shouldShow = computed(() => !!props.tag && isLatestOrUntagged.value);
 
 const tooltip = computed(() => {
-  const hint = 'Best stable semver tag available \u2014 consider pinning';
+  const hint = t('containerComponents.suggestedTag.tooltip');
   return props.tag ? `Suggested: ${props.tag}\n${hint}` : hint;
 });
 
@@ -31,6 +34,6 @@ const colors = suggestedTagColor();
     data-test="suggested-tag-badge"
   >
     <AppIcon name="tag" :size="10" class="shrink-0" />
-    <span>Suggested</span>
+    <span>{{ t('containerComponents.suggestedTag.badgeText') }}</span>
   </span>
 </template>

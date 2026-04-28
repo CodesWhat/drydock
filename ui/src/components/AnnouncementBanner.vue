@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, useAttrs } from 'vue';
+import { useI18n } from 'vue-i18n';
 
 type BannerTone = 'warning' | 'error';
 
@@ -23,6 +24,7 @@ const emit = defineEmits<{
   'dismiss-permanent': [];
 }>();
 
+const { t } = useI18n();
 const attrs = useAttrs();
 const testIdPrefix = attrs['data-testid'] as string | undefined;
 
@@ -85,7 +87,7 @@ const toneStyles = computed(() => {
           color: toneStyles.buttonTextColor,
           backgroundColor: toneStyles.buttonBackgroundColor,
         }">
-        {{ linkLabel ?? 'View migration guide' }}
+        {{ linkLabel ?? t('appShell.announcementBanner.defaultLinkLabel') }}
         <AppIcon name="external-link" :size="10" />
       </a>
       <AppButton size="none" variant="plain" weight="none"
@@ -97,7 +99,7 @@ const toneStyles = computed(() => {
           backgroundColor: toneStyles.buttonBackgroundColor,
         }"
         @click="handleDismiss">
-        {{ dismissLabel ?? 'Dismiss' }}
+        {{ dismissLabel ?? t('appShell.announcementBanner.defaultDismiss') }}
       </AppButton>
       <label v-if="permanentDismissLabel !== undefined"
         :data-testid="testIdPrefix ? `${testIdPrefix}-dismiss-forever` : undefined"

@@ -1,8 +1,11 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n';
 import AppBadge from '../AppBadge.vue';
 import AppButton from '../AppButton.vue';
 import AppIcon from '../AppIcon.vue';
 import type { ContainersViewRenderGroup } from './containersViewTemplateContext';
+
+const { t } = useI18n();
 
 defineProps<{
   group: ContainersViewRenderGroup;
@@ -38,7 +41,7 @@ const emit = defineEmits<{
       class="dd-text-muted shrink-0"
     />
     <AppIcon name="stack" :size="12" class="dd-text-muted shrink-0" />
-    <span class="text-xs font-semibold dd-text">{{ group.name ?? 'Ungrouped' }}</span>
+    <span class="text-xs font-semibold dd-text">{{ group.name ?? t('containerComponents.groupHeader.ungrouped') }}</span>
     <AppBadge
       size="xs"
       :custom="{ bg: 'var(--dd-bg-elevated)', text: 'var(--dd-text-muted)' }"
@@ -46,7 +49,7 @@ const emit = defineEmits<{
       {{ group.containerCount }}
     </AppBadge>
     <AppBadge v-if="group.updatesAvailable > 0" tone="success" size="xs">
-      {{ group.updatesAvailable }} update{{ group.updatesAvailable === 1 ? '' : 's' }}
+      {{ group.updatesAvailable }} {{ group.updatesAvailable === 1 ? t('containerComponents.groupHeader.updateSingular') : t('containerComponents.groupHeader.updatePlural') }}
     </AppBadge>
     <AppButton
       v-if="group.updatesAvailable > 0 || !containerActionsEnabled"
@@ -65,8 +68,8 @@ const emit = defineEmits<{
           !containerActionsEnabled
             ? containerActionsDisabledReason
             : group.updatableCount === 0
-              ? 'All updates blocked (agent mismatch, missing trigger, security, or another hard gate)'
-              : 'Update all in group',
+              ? t('containerComponents.groupHeader.allBlockedTooltip')
+              : t('containerComponents.groupHeader.updateAllInGroupTooltip'),
         )
       "
       @click.stop="emit('updateAll', group)"
@@ -85,10 +88,10 @@ const emit = defineEmits<{
       />
       {{
         !containerActionsEnabled
-          ? 'Actions disabled'
+          ? t('containerComponents.groupHeader.actionsDisabled')
           : inProgress && frozenTotal !== undefined && doneCount !== undefined && frozenTotal >= 2
-            ? `Updating stack · ${doneCount} of ${frozenTotal} done`
-            : 'Update all'
+            ? t('containerComponents.groupHeader.updatingStack', { done: doneCount, total: frozenTotal })
+            : t('containerComponents.groupHeader.updateAll')
       }}
     </AppButton>
   </div>

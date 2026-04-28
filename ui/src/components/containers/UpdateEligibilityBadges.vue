@@ -1,23 +1,25 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { preferences } from '../../preferences/store';
+import { useI18n } from 'vue-i18n';
 import type { UpdateBlocker, UpdateBlockerReason, UpdateEligibility } from '../../types/container';
+import { preferences } from '../../preferences/store';
 import { severityOf } from '../../utils/update-eligibility';
+
+const { t } = useI18n();
 
 const props = withDefaults(
   defineProps<{
     eligibility?: UpdateEligibility;
-    variant?: 'compact' | 'full';
     hasActiveOperationBadge?: boolean;
+    variant?: 'compact' | 'full';
     respectPref?: boolean;
   }>(),
-  { variant: 'compact', hasActiveOperationBadge: false, respectPref: true },
+  { hasActiveOperationBadge: false, variant: 'compact', respectPref: true },
 );
 
 const activeBlockers = computed<UpdateBlocker[]>(() => {
   if (!props.eligibility) return [];
   if (props.eligibility.eligible) return [];
-  if (props.respectPref && !preferences.containers.showAutoUpdateDiagnostic) return [];
 
   let blockers = props.eligibility.blockers.filter((b) => b.reason !== 'no-update-available');
 
@@ -25,8 +27,6 @@ const activeBlockers = computed<UpdateBlocker[]>(() => {
     blockers = blockers.filter((b) => b.reason !== 'active-operation');
   }
 
-  // Surface hard blockers first so the primary compact pill reflects the most
-  // important reason. Stable within each severity tier.
   return [...blockers].sort((a, b) => {
     const sa = severityOf(a) === 'hard' ? 0 : 1;
     const sb = severityOf(b) === 'hard' ? 0 : 1;
@@ -34,7 +34,20 @@ const activeBlockers = computed<UpdateBlocker[]>(() => {
   });
 });
 
-const shouldRender = computed(() => activeBlockers.value.length > 0);
+const shouldRender = computed(() => {
+  if (activeBlockers.value.length === 0) return false;
+  if (
+    props.variant === 'compact' &&
+    props.respectPref &&
+    !preferences.containers.showAutoUpdateDiagnostic
+  ) {
+    return false;
+  }
+  return true;
+});
+
+const primaryBlocker = computed(() => activeBlockers.value[0] ?? null);
+const extraCount = computed(() => Math.max(0, activeBlockers.value.length - 1));
 
 function reasonIcon(reason: UpdateBlockerReason): string {
   switch (reason) {
@@ -66,29 +79,29 @@ function reasonIcon(reason: UpdateBlockerReason): string {
 function reasonLabel(reason: UpdateBlockerReason): string {
   switch (reason) {
     case 'security-scan-blocked':
-      return 'Security blocked';
+      return t('containerComponents.eligibilityBadges.securityBlocked');
     case 'snoozed':
-      return 'Snoozed';
+      return t('containerComponents.eligibilityBadges.snoozed');
     case 'skip-tag':
-      return 'Tag skipped';
+      return t('containerComponents.eligibilityBadges.tagSkipped');
     case 'skip-digest':
-      return 'Digest skipped';
+      return t('containerComponents.eligibilityBadges.digestSkipped');
     case 'maturity-not-reached':
-      return 'Maturing';
+      return t('containerComponents.eligibilityBadges.maturing');
     case 'threshold-not-reached':
-      return 'Below threshold';
+      return t('containerComponents.eligibilityBadges.belowThreshold');
     case 'rollback-container':
-      return 'Rollback';
+      return t('containerComponents.eligibilityBadges.rollback');
     case 'active-operation':
-      return 'In progress';
+      return t('containerComponents.eligibilityBadges.inProgress');
     case 'trigger-excluded':
-      return 'Trigger excluded';
+      return t('containerComponents.eligibilityBadges.triggerExcluded');
     case 'trigger-not-included':
-      return 'Trigger filtered';
+      return t('containerComponents.eligibilityBadges.triggerFiltered');
     case 'agent-mismatch':
-      return 'Agent mismatch';
+      return t('containerComponents.eligibilityBadges.agentMismatch');
     case 'no-update-trigger-configured':
-      return 'No trigger';
+      return t('containerComponents.eligibilityBadges.noTrigger');
     default:
       return reason;
   }
@@ -119,6 +132,17 @@ function blockerStyle(blocker: UpdateBlocker): BlockerStyle {
   return reasonColor(blocker.reason);
 }
 
+function blockerTooltip(blocker: UpdateBlocker): string {
+  let text = blocker.message ?? '';
+  if (blocker.actionHint) {
+    text += `\n${blocker.actionHint}`;
+  }
+  if (blocker.liftableAt) {
+    text += `\n${t('containerComponents.eligibilityBadges.liftsLabel')} ${formatLiftableAt(blocker.liftableAt)}`;
+  }
+  return text.trim();
+}
+
 function formatLiftableAt(iso: string): string {
   try {
     return new Date(iso).toLocaleDateString(undefined, {
@@ -130,79 +154,60 @@ function formatLiftableAt(iso: string): string {
     return iso;
   }
 }
-
-function blockerTooltip(blocker: UpdateBlocker): string {
-  const parts: string[] = [blocker.message];
-  if (blocker.actionHint) {
-    parts.push(blocker.actionHint);
-  }
-  if (blocker.liftableAt) {
-    parts.push(`Lifts: ${formatLiftableAt(blocker.liftableAt)}`);
-  }
-  return parts.join(' — ');
-}
-
-const primaryBlocker = computed<UpdateBlocker | null>(() => activeBlockers.value[0] ?? null);
-
-const extraCount = computed<number>(() => Math.max(0, activeBlockers.value.length - 1));
 </script>
 
 <template>
   <template v-if="shouldRender">
-    <!-- Compact: single primary badge + +N indicator -->
+    <!-- Compact variant: primary badge + optional +N overflow indicator -->
     <template v-if="variant === 'compact'">
-      <span class="inline-flex items-center gap-1">
-        <span
-          class="badge text-3xs font-bold uppercase inline-flex items-center gap-1"
-          :style="{ backgroundColor: blockerStyle(primaryBlocker!).bg, color: blockerStyle(primaryBlocker!).text }"
-          v-tooltip.top="blockerTooltip(primaryBlocker!)"
-          data-test="eligibility-badge-primary"
-        >
-          <iconify-icon
-            :icon="reasonIcon(primaryBlocker!.reason)"
-            width="10"
-            height="10"
-            :style="{ display: 'inline-block', flex: 'none' }"
-          />
-          <span class="tracking-wide leading-none">{{ reasonLabel(primaryBlocker!.reason) }}</span>
-        </span>
-        <span
-          v-if="extraCount > 0"
-          class="text-3xs font-bold dd-text-muted"
-          :style="{ lineHeight: 1 }"
-          v-tooltip.top="`${extraCount} more blocker${extraCount !== 1 ? 's' : ''}`"
-          data-test="eligibility-badge-extra"
-        >+{{ extraCount }}</span>
+      <span
+        v-if="primaryBlocker"
+        class="inline-flex items-center gap-1 px-1.5 py-0.5 dd-rounded text-3xs font-semibold"
+        :style="{ backgroundColor: blockerStyle(primaryBlocker).bg, color: blockerStyle(primaryBlocker).text }"
+        v-tooltip="blockerTooltip(primaryBlocker)"
+        data-test="eligibility-badge-primary"
+      >
+        <iconify-icon
+          :icon="reasonIcon(primaryBlocker.reason)"
+          width="10"
+          height="10"
+          :style="{ display: 'inline-block', flex: 'none' }"
+        />
+        <span>{{ reasonLabel(primaryBlocker.reason) }}</span>
+      </span>
+      <span
+        v-if="extraCount > 0"
+        class="inline-flex items-center px-1.5 py-0.5 dd-rounded text-3xs font-semibold dd-text-muted dd-bg-elevated"
+        data-test="eligibility-badge-extra"
+      >
+        +{{ extraCount }}
       </span>
     </template>
-
-    <!-- Full: stack of all blockers -->
-    <template v-else>
-      <div class="flex flex-col gap-1.5" data-test="eligibility-badge-full">
-        <div
-          v-for="blocker in activeBlockers"
-          :key="blocker.reason"
-          class="flex items-start gap-2 px-3 py-2 dd-rounded text-xs"
-          :style="{ backgroundColor: blockerStyle(blocker).bg }"
-          :data-reason="blocker.reason"
-        >
-          <iconify-icon
-            :icon="reasonIcon(blocker.reason)"
-            width="12"
-            height="12"
-            class="shrink-0 mt-0.5"
-            :style="{ display: 'inline-block', flex: 'none', color: blockerStyle(blocker).text }"
-          />
-          <div class="flex-1 min-w-0" :style="{ color: blockerStyle(blocker).text }">
-            <span class="font-semibold block">{{ reasonLabel(blocker.reason) }}</span>
-            <span class="block whitespace-normal break-words">{{ blocker.message }}</span>
-            <span v-if="blocker.actionHint" class="block mt-0.5 opacity-80">{{ blocker.actionHint }}</span>
-            <span v-if="blocker.liftableAt" class="block mt-0.5 opacity-80">
-              Lifts: {{ formatLiftableAt(blocker.liftableAt) }}
-            </span>
-          </div>
+    <!-- Full variant: all blockers stacked -->
+    <div v-else class="flex flex-col gap-1.5" data-test="eligibility-badge-full">
+      <div
+        v-for="blocker in activeBlockers"
+        :key="blocker.reason"
+        class="flex items-start gap-2 px-3 py-2 dd-rounded text-xs"
+        :style="{ backgroundColor: blockerStyle(blocker).bg }"
+        :data-reason="blocker.reason"
+      >
+        <iconify-icon
+          :icon="reasonIcon(blocker.reason)"
+          width="12"
+          height="12"
+          class="shrink-0 mt-0.5"
+          :style="{ display: 'inline-block', flex: 'none', color: blockerStyle(blocker).text }"
+        />
+        <div class="flex-1 min-w-0" :style="{ color: blockerStyle(blocker).text }">
+          <span class="font-semibold block">{{ reasonLabel(blocker.reason) }}</span>
+          <span class="block whitespace-normal break-words">{{ blocker.message }}</span>
+          <span v-if="blocker.actionHint" class="block mt-0.5 opacity-80">{{ blocker.actionHint }}</span>
+          <span v-if="blocker.liftableAt" class="block mt-0.5 opacity-80">
+            {{ t('containerComponents.eligibilityBadges.liftsLabel') }} {{ formatLiftableAt(blocker.liftableAt) }}
+          </span>
         </div>
       </div>
-    </template>
+    </div>
   </template>
 </template>

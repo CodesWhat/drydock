@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 export interface DataTableColumn {
   key: string;
@@ -457,7 +460,7 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
               <!-- Resize handle -->
               <div v-if="!col.icon && colIdx < columns.length - 1"
                    role="separator"
-                   aria-label="Resize column"
+                   :aria-label="t('sharedComponents.dataTable.resizeColumn')"
                    class="absolute top-0 right-0 w-2 h-full cursor-col-resize z-10 flex items-center justify-center transition-colors hover:bg-drydock-secondary/20"
                    @mousedown="onResizeStart(col.key, $event)">
                 <div class="w-px h-3/5 rounded-full opacity-25 hover:opacity-60 transition-opacity"
@@ -465,10 +468,10 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
               </div>
             </th>
             <th v-if="showActions" class="text-right px-3 py-2.5 font-semibold uppercase tracking-wider text-2xs whitespace-nowrap dd-text-muted relative" :style="{ width: actionsWidth }">
-              Actions
+              {{ t('sharedComponents.dataTable.actions') }}
               <div v-if="lastResizableColumnKey"
                    role="separator"
-                   aria-label="Resize column"
+                   :aria-label="t('sharedComponents.dataTable.resizeColumn')"
                    class="absolute top-0 left-0 w-2 h-full cursor-col-resize z-10 flex items-center justify-center transition-colors hover:bg-drydock-secondary/20"
                    @mousedown="onResizeStart(lastResizableColumnKey, $event)">
                 <div class="w-px h-3/5 rounded-full opacity-25 hover:opacity-60 transition-opacity"

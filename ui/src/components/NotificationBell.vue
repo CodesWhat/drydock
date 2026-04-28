@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 import AppIcon from '@/components/AppIcon.vue';
 import AppIconButton from '@/components/AppIconButton.vue';
@@ -9,6 +10,7 @@ import { getAuditLog } from '../services/audit';
 import type { AuditEntry } from '../utils/audit-helpers';
 import { actionIcon, actionLabel, statusColor, timeAgo } from '../utils/audit-helpers';
 
+const { t } = useI18n();
 const router = useRouter();
 
 const BELL_ACTIONS = [
@@ -146,8 +148,8 @@ function isUnread(entry: AuditEntry): boolean {
             icon="notifications"
             size="sm"
             variant="secondary"
-            tooltip="Notifications"
-            aria-label="Notifications"
+            :tooltip="t('appShell.notificationBell.tooltip')"
+            :aria-label="t('appShell.notificationBell.buttonLabel')"
             :aria-expanded="String(showBell)"
             class="relative"
             @click="toggle"
@@ -164,23 +166,23 @@ function isUnread(entry: AuditEntry): boolean {
         <!-- Header: title + Clear -->
         <div class="flex items-center justify-between px-3 py-2"
              :style="{ backgroundColor: 'var(--dd-bg-sidebar)' }">
-          <span class="text-2xs-plus font-semibold uppercase tracking-wider dd-text-secondary">Notifications</span>
+          <span class="text-2xs-plus font-semibold uppercase tracking-wider dd-text-secondary">{{ t('appShell.notificationBell.header') }}</span>
           <AppButton v-if="visibleEntries.length > 0"
                   size="none" variant="plain" weight="none"
                   class="text-2xs-plus font-medium dd-text hover:dd-text-primary transition-colors"
                   data-test="clear-all-btn"
                   @click="dismissAll">
-            Clear
+            {{ t('appShell.notificationBell.clear') }}
           </AppButton>
         </div>
 
         <!-- Scrollable list -->
         <div class="max-h-[400px] overflow-y-auto">
           <div v-if="loading && visibleEntries.length === 0" class="px-3 py-6 text-center text-2xs-plus dd-text-muted">
-            Loading...
+            {{ t('appShell.notificationBell.loading') }}
           </div>
           <div v-else-if="visibleEntries.length === 0" class="px-3 py-6 text-center text-2xs-plus dd-text-muted">
-            No notifications yet
+            {{ t('appShell.notificationBell.empty') }}
           </div>
           <div v-for="(entry, index) in visibleEntries"
                :key="entry.id"
@@ -220,8 +222,8 @@ function isUnread(entry: AuditEntry): boolean {
               <AppIconButton icon="xmark"
                              size="sm"
                              variant="danger"
-                             tooltip="Dismiss"
-                             aria-label="Dismiss notification"
+                             :tooltip="t('appShell.notificationBell.dismiss')"
+                             :aria-label="t('appShell.notificationBell.dismiss')"
                              data-test="notification-dismiss"
                              @click.stop="dismissOne(entry)" />
             </div>
@@ -237,13 +239,13 @@ function isUnread(entry: AuditEntry): boolean {
                   data-test="mark-all-read-btn"
                   @click="markAllRead">
             <AppIcon name="check" :size="11" />
-            Mark all as read
+            {{ t('appShell.notificationBell.markAllRead') }}
           </AppButton>
           <AppButton size="none" variant="plain" weight="none"
                   class="flex-1 px-3 py-2 text-2xs-plus font-medium dd-text hover:dd-text-primary transition-colors flex items-center justify-center gap-1.5"
                   data-test="open-audit-log-btn"
                   @click="openAuditLog">
-            Open audit log
+            {{ t('appShell.notificationBell.openAuditLog') }}
             <AppIcon name="external-link" :size="10" />
           </AppButton>
         </div>

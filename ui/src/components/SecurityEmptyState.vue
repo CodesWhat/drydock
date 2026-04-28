@@ -1,5 +1,8 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n';
 import ScanProgressText from './ScanProgressText.vue';
+
+const { t } = useI18n();
 
 withDefaults(
   defineProps<{
@@ -41,10 +44,10 @@ defineEmits<{
   >
     <AppIcon name="security" :size="24" class="mb-3 dd-text-muted" />
     <p class="text-sm font-medium mb-1 dd-text-secondary">
-      {{ hasVulnerabilityData ? 'No images match your filters' : 'No vulnerability data yet' }}
+      {{ hasVulnerabilityData ? t('sharedComponents.securityEmptyState.filteredTitle') : t('sharedComponents.securityEmptyState.noDataTitle') }}
     </p>
     <p v-if="!hasVulnerabilityData && !scannerSetupNeeded" class="text-xs dd-text-muted mb-3">
-      Run a scan to check your containers for known vulnerabilities
+      {{ t('sharedComponents.securityEmptyState.noDataBody') }}
     </p>
     <p v-if="!hasVulnerabilityData && scannerSetupNeeded" class="text-xs dd-text-muted mb-3 text-center max-w-sm">
       {{ scannerMessage }}
@@ -56,7 +59,7 @@ defineEmits<{
         class="text-xs font-medium px-3 py-1.5 dd-rounded transition-colors text-drydock-secondary bg-drydock-secondary/10 hover:bg-drydock-secondary/20"
         @click="$emit('clear-filters')"
       >
-        Clear all filters
+        {{ t('sharedComponents.securityEmptyState.clearFilters') }}
       </AppButton>
 
       <a
@@ -67,7 +70,7 @@ defineEmits<{
         class="text-xs font-medium px-3 py-1.5 dd-rounded transition-colors flex items-center gap-1.5 no-underline text-drydock-secondary bg-drydock-secondary/10 hover:bg-drydock-secondary/20"
       >
         <AppIcon name="expand" :size="12" />
-        Setup Guide
+        {{ t('sharedComponents.securityEmptyState.setupGuide') }}
       </a>
 
       <span v-if="!hasVulnerabilityData && !scannerSetupNeeded" class="inline-flex" v-tooltip.top="scanDisabledReason">
@@ -87,7 +90,7 @@ defineEmits<{
             <ScanProgressText :progress="scanProgress" />
           </template>
           <template v-else>
-            Scan Now
+            {{ t('sharedComponents.securityEmptyState.scanNow') }}
           </template>
         </AppButton>
       </span>

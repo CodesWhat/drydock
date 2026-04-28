@@ -1,5 +1,14 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n';
 import type { RadiusPreset, RadiusPresetId } from '../../preferences/radius';
+import { preferences } from '../../preferences/store';
+
+const { t } = useI18n();
+
+function toggleShowAutoUpdateDiagnostic() {
+  preferences.containers.showAutoUpdateDiagnostic =
+    !preferences.containers.showAutoUpdateDiagnostic;
+}
 
 interface ThemeFamilyOption {
   id: string;
@@ -33,14 +42,12 @@ const props = withDefaults(
     fontSize?: number;
     activeRadius?: RadiusPresetId;
     radiusPresets: RadiusPreset[];
-    showAutoUpdateDiagnostic: boolean;
     onSelectThemeFamily: (familyId: string, event: Event) => void;
     onSelectFont: (fontId: string) => void;
     onSelectIconLibrary: (library: string) => void;
     onChangeIconScale: (value: number) => void;
     onChangeFontSize: (value: number) => void;
     onSelectRadius: (id: RadiusPresetId) => void;
-    onChangeShowAutoUpdateDiagnostic: (value: boolean) => void;
   }>(),
   {
     themeFamily: '',
@@ -76,7 +83,7 @@ function handleFontSizeInput(event: Event) {
     >
       <div class="flex items-center gap-2 px-5 py-3" :style="{ borderBottom: '1px solid var(--dd-border)' }">
         <AppIcon name="settings" :size="14" class="text-drydock-secondary" />
-        <h2 class="dd-text-heading-section dd-text">Color Theme</h2>
+        <h2 class="dd-text-heading-section dd-text">{{ t('configView.appearance.colorTheme.title') }}</h2>
       </div>
       <div class="p-4">
         <div class="grid grid-cols-2 gap-3">
@@ -123,7 +130,7 @@ function handleFontSizeInput(event: Event) {
     >
       <div class="px-5 py-3.5 flex items-center gap-2" :style="{ borderBottom: '1px solid var(--dd-border)' }">
         <AppIcon name="terminal" :size="14" class="text-drydock-secondary" />
-        <h2 class="dd-text-heading-section dd-text">Font Family</h2>
+        <h2 class="dd-text-heading-section dd-text">{{ t('configView.appearance.fontFamily.title') }}</h2>
       </div>
       <div class="p-5">
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -155,14 +162,14 @@ function handleFontSizeInput(event: Event) {
                   class="text-4xs font-bold uppercase tracking-wider dd-text-muted px-1 py-0.5 dd-rounded-sm"
                   :style="{ backgroundColor: 'var(--dd-bg-elevated)' }"
                 >
-                  default
+                  {{ t('configView.appearance.fontFamily.defaultBadge') }}
                 </span>
               </div>
               <div
                 class="text-2xs mt-0.5 truncate dd-text-muted"
                 :style="props.isFontLoaded(font.id) ? { fontFamily: font.family } : {}"
               >
-                The quick brown fox jumps over the lazy dog
+                {{ t('configView.appearance.fontFamily.preview') }}
               </div>
             </div>
             <AppIcon
@@ -185,7 +192,7 @@ function handleFontSizeInput(event: Event) {
     >
       <div class="px-5 py-3.5 flex items-center gap-2" :style="{ borderBottom: '1px solid var(--dd-border)' }">
         <AppIcon name="settings" :size="14" class="text-drydock-secondary" />
-        <h2 class="dd-text-heading-section dd-text">Font Size</h2>
+        <h2 class="dd-text-heading-section dd-text">{{ t('configView.appearance.fontSize.title') }}</h2>
       </div>
       <div class="p-5">
         <div class="flex items-center gap-4">
@@ -217,7 +224,7 @@ function handleFontSizeInput(event: Event) {
     >
       <div class="px-5 py-3.5 flex items-center gap-2" :style="{ borderBottom: '1px solid var(--dd-border)' }">
         <AppIcon name="dashboard" :size="14" class="text-drydock-secondary" />
-        <h2 class="dd-text-heading-section dd-text">Icon Library</h2>
+        <h2 class="dd-text-heading-section dd-text">{{ t('configView.appearance.iconLibrary.title') }}</h2>
       </div>
       <div class="p-5">
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
@@ -270,7 +277,7 @@ function handleFontSizeInput(event: Event) {
     >
       <div class="px-5 py-3.5 flex items-center gap-2" :style="{ borderBottom: '1px solid var(--dd-border)' }">
         <AppIcon name="containers" :size="14" class="text-drydock-secondary" />
-        <h2 class="dd-text-heading-section dd-text">Icon Size</h2>
+        <h2 class="dd-text-heading-section dd-text">{{ t('configView.appearance.iconSize.title') }}</h2>
       </div>
       <div class="p-5">
         <div class="flex items-center gap-4">
@@ -293,36 +300,6 @@ function handleFontSizeInput(event: Event) {
       </div>
     </div>
 
-    <!-- Auto-update diagnostic pills -->
-    <div
-      class="dd-rounded overflow-hidden"
-      :style="{ backgroundColor: 'var(--dd-bg-card)' }"
-    >
-      <div
-        class="px-5 py-3.5 flex items-center gap-2"
-      >
-        <AppIcon name="containers" :size="14" class="text-drydock-secondary" />
-        <h2 class="dd-text-heading-section dd-text">Auto-update diagnostic pills</h2>
-      </div>
-      <div class="p-5">
-        <div class="flex items-center justify-between gap-4">
-          <div class="min-w-0">
-            <div class="text-xs font-semibold dd-text">Show on container rows</div>
-            <div class="text-2xs dd-text-muted mt-0.5">
-              Surface why a container isn't auto-updating (e.g. Snoozed, Below threshold, Trigger filtered)
-              as a pill on each row. Off by default — the full diagnostic is always visible in the
-              container's detail panel.
-            </div>
-          </div>
-          <ToggleSwitch
-            data-test="toggle-show-auto-update-diagnostic"
-            :model-value="props.showAutoUpdateDiagnostic"
-            @update:model-value="props.onChangeShowAutoUpdateDiagnostic($event)"
-          />
-        </div>
-      </div>
-    </div>
-
     <!-- Border Radius -->
     <div
       class="dd-rounded overflow-hidden"
@@ -332,7 +309,7 @@ function handleFontSizeInput(event: Event) {
         class="px-5 py-3.5 flex items-center gap-2"
       >
         <AppIcon name="settings" :size="14" class="text-drydock-secondary" />
-        <h2 class="dd-text-heading-section dd-text">Border Radius</h2>
+        <h2 class="dd-text-heading-section dd-text">{{ t('configView.appearance.borderRadius.title') }}</h2>
       </div>
       <div class="p-5">
         <div class="grid grid-cols-5 gap-2">
@@ -359,6 +336,27 @@ function handleFontSizeInput(event: Event) {
               {{ p.label }}
             </div>
           </AppButton>
+        </div>
+      </div>
+    </div>
+
+    <!-- Auto-update diagnostic pills -->
+    <div
+      class="dd-rounded overflow-hidden"
+      :style="{ backgroundColor: 'var(--dd-bg-card)' }"
+    >
+      <div class="px-5 py-3.5 flex items-center gap-2" :style="{ borderBottom: '1px solid var(--dd-border)' }">
+        <AppIcon name="shield" :size="14" class="text-drydock-secondary" />
+        <h2 class="dd-text-heading-section dd-text">Auto-update diagnostic pills</h2>
+      </div>
+      <div class="p-5 space-y-3">
+        <div class="flex items-center justify-between gap-3">
+          <span class="text-xs dd-text">Show on container rows</span>
+          <ToggleSwitch
+            data-test="toggle-show-auto-update-diagnostic"
+            :model-value="preferences.containers.showAutoUpdateDiagnostic"
+            @update:model-value="toggleShowAutoUpdateDiagnostic"
+          />
         </div>
       </div>
     </div>

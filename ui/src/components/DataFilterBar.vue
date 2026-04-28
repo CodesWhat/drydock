@@ -1,5 +1,8 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n';
 import AppIconButton from './AppIconButton.vue';
+
+const { t } = useI18n();
 
 defineProps<{
   modelValue: string;
@@ -27,7 +30,8 @@ const defaultViewModes = [
 const filterPanelId = `filter-panel-${Math.random().toString(36).slice(2, 10)}`;
 
 function viewModeLabel(id: string): string {
-  return `${id.charAt(0).toUpperCase()}${id.slice(1)} view`;
+  const label = `${id.charAt(0).toUpperCase()}${id.slice(1)}`;
+  return t('sharedComponents.dataFilterBar.viewModeLabel', { label });
 }
 </script>
 
@@ -39,10 +43,10 @@ function viewModeLabel(id: string): string {
          }">
       <div class="flex items-center gap-2.5 relative">
         <!-- Filter toggle button -->
-        <div v-if="!hideFilter" class="relative" v-tooltip.top="'Filters'">
+        <div v-if="!hideFilter" class="relative" v-tooltip.top="t('sharedComponents.dataFilterBar.filters')">
           <AppIconButton icon="filter" size="toolbar" variant="plain" class="text-2xs-plus"
                   :class="showFilters || (activeFilterCount ?? 0) > 0 ? 'dd-text dd-bg-elevated' : 'dd-text-secondary hover:dd-text hover:dd-bg-elevated'"
-                  aria-label="Toggle filters"
+                  :aria-label="t('sharedComponents.dataFilterBar.toggleFilters')"
                   :aria-expanded="String(showFilters)"
                   :aria-controls="filterPanelId"
                   @click.stop="emit('update:showFilters', !showFilters)" />
@@ -69,7 +73,7 @@ function viewModeLabel(id: string): string {
           </span>
           <div class="flex items-center dd-rounded overflow-hidden"
                role="group"
-               aria-label="View mode">
+               :aria-label="t('sharedComponents.dataFilterBar.viewMode')">
             <AppIconButton v-for="vm in (viewModes ?? defaultViewModes)" :key="vm.id"
                     :icon="vm.icon" size="toolbar" variant="plain"
                     :class="modelValue === vm.id ? 'dd-text dd-bg-elevated' : 'dd-text-secondary hover:dd-text hover:dd-bg-elevated'"

@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
+
 const props = defineProps<{
   items: Record<string, unknown>[];
   itemKey: string | ((item: Record<string, unknown>) => string);
@@ -47,7 +51,7 @@ function onCardKeydown(event: KeyboardEvent, item: Record<string, unknown>) {
          }"
          role="button"
          tabindex="0"
-         :aria-label="`Select ${cardLabel(item)}`"
+         :aria-label="t('sharedComponents.dataCardGrid.selectItem', { name: cardLabel(item) })"
          @keydown="onCardKeydown($event, item)"
          @click="emit('item-click', item)">
       <slot name="card" :item="item" :selected="selectedKey != null && getKey(item, itemKey) === selectedKey" />

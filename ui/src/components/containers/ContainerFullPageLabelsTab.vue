@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n';
 import { useContainersViewTemplateContext } from './containersViewTemplateContext';
 
+const { t } = useI18n();
 const { selectedContainer } = useContainersViewTemplateContext();
 </script>
 
@@ -10,7 +12,7 @@ const { selectedContainer } = useContainersViewTemplateContext();
           :style="{ backgroundColor: 'var(--dd-bg-card)' }">
       <div class="px-4 py-3 flex items-center gap-2">
         <AppIcon name="containers" :size="12" class="dd-text-muted" />
-        <span class="text-2xs-plus font-semibold uppercase tracking-wider dd-text-muted">Labels</span>
+        <span class="text-2xs-plus font-semibold uppercase tracking-wider dd-text-muted">{{ t('containerComponents.fullPageLabels.labels') }}</span>
         <span class="badge text-3xs ml-auto dd-bg-elevated dd-text-muted">{{ selectedContainer.details.labels.length }}</span>
       </div>
       <div class="p-4">
@@ -24,7 +26,7 @@ const { selectedContainer } = useContainersViewTemplateContext();
             {{ label }}
           </span>
         </div>
-        <p v-else class="text-xs dd-text-muted italic">No labels assigned</p>
+        <p v-else class="text-xs dd-text-muted italic">{{ t('containerComponents.fullPageLabels.noLabels') }}</p>
       </div>
     </div>
   </div>

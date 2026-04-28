@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n';
 import AppIconButton from '@/components/AppIconButton.vue';
 import AppBadge from '@/components/AppBadge.vue';
 import AppTabBar from '@/components/AppTabBar.vue';
@@ -6,6 +7,8 @@ import StatusDot from '@/components/StatusDot.vue';
 import { hasTrackedContainerAction } from '../../utils/container-action-key';
 import ContainerSideTabContent from './ContainerSideTabContent.vue';
 import { useContainersViewTemplateContext } from './containersViewTemplateContext';
+
+const { t } = useI18n();
 
 const {
   selectedContainer,
@@ -45,10 +48,10 @@ function isActionBlocked(container: { id?: unknown; name?: unknown }) {
 
 function getStatusLabel(container: { id?: unknown; name?: unknown; status?: string }) {
   if (isActionInProgress(container)) {
-    return 'Updating';
+    return t('containerComponents.sideDetail.statusUpdating');
   }
   if (isActionQueued(container)) {
-    return 'Queued';
+    return t('containerComponents.sideDetail.statusQueued');
   }
   return container.status ?? 'unknown';
 }
@@ -84,7 +87,7 @@ function getStatusTone(container: { id?: unknown; name?: unknown; status?: strin
             size="xs"
             variant="danger"
             :disabled="isActionBlocked(selectedContainer)"
-            tooltip="Stop"
+            :tooltip="t('containerComponents.sideDetail.stopTooltip')"
             @click="confirmStop(selectedContainer)" />
           <AppIconButton
             v-else
@@ -92,21 +95,21 @@ function getStatusTone(container: { id?: unknown; name?: unknown; status?: strin
             size="xs"
             variant="success"
             :disabled="isActionBlocked(selectedContainer)"
-            tooltip="Start"
+            :tooltip="t('containerComponents.sideDetail.startTooltip')"
             @click="startContainer(selectedContainer)" />
           <AppIconButton
             icon="restart"
             size="xs"
             variant="muted"
             :disabled="isActionBlocked(selectedContainer)"
-            tooltip="Restart"
+            :tooltip="t('containerComponents.sideDetail.restartTooltip')"
             @click="confirmRestart(selectedContainer)" />
           <AppIconButton
             icon="security"
             size="xs"
             variant="secondary"
             :disabled="isActionBlocked(selectedContainer)"
-            tooltip="Scan"
+            :tooltip="t('containerComponents.sideDetail.scanTooltip')"
             @click="scanContainer(selectedContainer)" />
           <AppIconButton
             v-if="selectedContainer.newTag && selectedContainer.bouncer === 'blocked'"
@@ -114,7 +117,7 @@ function getStatusTone(container: { id?: unknown; name?: unknown; status?: strin
             size="xs"
             variant="danger"
             :disabled="isActionBlocked(selectedContainer)"
-            tooltip="Blocked — Force Update"
+            :tooltip="t('containerComponents.sideDetail.blockedForceUpdateTooltip')"
             @click="confirmForceUpdate(selectedContainer)" />
           <AppIconButton
             v-else-if="selectedContainer.newTag"
@@ -122,14 +125,14 @@ function getStatusTone(container: { id?: unknown; name?: unknown; status?: strin
             size="xs"
             variant="success"
             :disabled="isActionBlocked(selectedContainer)"
-            tooltip="Update"
+            :tooltip="t('containerComponents.sideDetail.updateTooltip')"
             @click="confirmUpdate(selectedContainer)" />
           <AppIconButton
             icon="trash"
             size="xs"
             variant="danger"
             :disabled="isActionBlocked(selectedContainer)"
-            tooltip="Delete"
+            :tooltip="t('containerComponents.sideDetail.deleteTooltip')"
             @click="confirmDelete(selectedContainer)" />
         </div>
       </template>

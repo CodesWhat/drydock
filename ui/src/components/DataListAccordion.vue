@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { ref } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   items: Record<string, unknown>[];
@@ -32,7 +35,9 @@ function isExpanded(item: Record<string, unknown>): boolean {
 
 function itemLabel(item: Record<string, unknown>): string {
   const name = typeof item?.name === 'string' ? item.name : getKey(item, props.itemKey);
-  return props.expandable ? `Toggle ${name} details` : `Select ${name}`;
+  return props.expandable
+    ? t('sharedComponents.dataListAccordion.toggleDetails', { name })
+    : t('sharedComponents.dataListAccordion.selectItem', { name });
 }
 
 function activateItem(item: Record<string, unknown>) {
