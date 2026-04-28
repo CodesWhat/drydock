@@ -499,3 +499,102 @@ test('triggerBatch should use event-specific wording for update-applied notifica
   expect(response.subject).toBe('1 updates applied');
   expect(response.text).toBe('- Container homeassistant updated successfully\n');
 });
+
+test('triggerBatch should use prerendered title/body from runtimeContext for security-alert-digest', async () => {
+  smtp.configuration = configurationValid;
+  smtp.transporter = {
+    sendMail: (conf) => conf,
+  };
+  const runtimeContext = {
+    eventKind: 'security-alert-digest',
+    title: 'Security scan: 1 finding (1 critical)',
+    body: '- app1: 1 critical',
+  };
+  const response = await smtp.triggerBatch(
+    [{ name: 'app1', critical: 1, high: 0, medium: 0, low: 0, unknown: 0 }] as any,
+    runtimeContext as any,
+  );
+  expect(response.subject).toBe('Security scan: 1 finding (1 critical)');
+  expect(response.text).toBe('- app1: 1 critical');
+  expect(response.subject).not.toContain('updates available');
+  expect(response.text).not.toContain('can be updated to');
+});
+
+test('triggerBatch with no runtimeContext uses standard batch title template', async () => {
+  smtp.configuration = configurationValid;
+  smtp.transporter = {
+    sendMail: (conf) => conf,
+  };
+  const response = await smtp.triggerBatch([
+    {
+      id: '31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816',
+      name: 'homeassistant',
+      watcher: 'local',
+      image: {
+        id: 'sha256:d4a6fafb7d4da37495e5c9be3242590be24a87d7edcc4f79761098889c54fca6',
+        registry: { url: '123456789.dkr.ecr.eu-west-1.amazonaws.com' },
+        name: 'test',
+        tag: { value: '2021.6.4', semver: true },
+        digest: { watch: false },
+        architecture: 'amd64',
+        os: 'linux',
+      },
+      updateKind: { kind: 'tag', localValue: '1.0.0', remoteValue: '2.0.0' },
+    },
+  ]);
+  expect(response.subject).toBe('1 updates available');
+});
+
+test('triggerBatch flushSecurityDigestBuffer e2e: subject and body reflect security digest not update template', async () => {
+  const smtpDigest = new Smtp();
+  const sendMailCalls: any[] = [];
+  smtpDigest.configuration = {
+    ...configurationValid,
+    securitymode: 'digest',
+    mode: 'simple',
+  };
+  smtpDigest.log = log;
+  smtpDigest.transporter = {
+    sendMail: (conf) => {
+      sendMailCalls.push(conf);
+      return Promise.resolve(conf);
+    },
+  } as any;
+
+  const container = {
+    id: 'c1',
+    watcher: 'local',
+    name: 'app1',
+    updateAvailable: false,
+    updateKind: { kind: 'tag', semverDiff: 'major' },
+  };
+
+  const cycleId = 'e2e-cycle-001';
+
+  await smtpDigest.handleSecurityAlertEvent({
+    containerName: 'local_app1',
+    details: 'critical=1',
+    container,
+    cycleId,
+    summary: { critical: 1, high: 0, medium: 0, low: 0, unknown: 0 },
+  });
+
+  await smtpDigest.handleSecurityScanCycleCompleteEvent({
+    cycleId,
+    scannedCount: 1,
+    alertCount: 1,
+    startedAt: '2026-04-28T10:00:00.000Z',
+    completedAt: '2026-04-28T10:01:00.000Z',
+  });
+
+  expect(sendMailCalls).toHaveLength(1);
+  const mail = sendMailCalls[0];
+
+  // Must NOT contain the broken-render fingerprints
+  expect(mail.subject).not.toContain('updates available');
+  expect(mail.text).not.toContain('can be updated to');
+
+  // Must contain the container name and severity info
+  expect(mail.text).toContain('app1');
+  expect(mail.text).toContain('1');
+});

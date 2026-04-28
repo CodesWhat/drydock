@@ -2515,6 +2515,107 @@ test('composeBatchMessage should return body only when disabletitle is true', ()
   ).toBe('- Body for container-name\n');
 });
 
+test('renderBatchTitle should return runtimeContext.title verbatim when set', () => {
+  trigger.configuration.batchtitle = '${containers.length} updates available';
+  const runtimeContext = {
+    eventKind: 'security-alert-digest',
+    title: 'Security scan: 2 containers with findings',
+    body: 'app1: 1 critical',
+  };
+  const result = trigger.renderBatchTitle(
+    [{ name: 'stub-row', critical: 1 } as any],
+    runtimeContext,
+  );
+  expect(result).toBe('Security scan: 2 containers with findings');
+});
+
+test('renderBatchTitle should return runtimeContext.title verbatim even with empty containers', () => {
+  trigger.configuration.batchtitle = '${containers.length} updates available';
+  const runtimeContext = { eventKind: 'security-alert-digest', title: 'Pre-rendered title' };
+  const result = trigger.renderBatchTitle([], runtimeContext);
+  expect(result).toBe('Pre-rendered title');
+});
+
+test('renderBatchTitle should fall back to template rendering when runtimeContext has no title', () => {
+  trigger.configuration.batchtitle = '${containers.length} updates available';
+  const runtimeContext = { eventKind: 'security-alert-digest' };
+  const result = trigger.renderBatchTitle(
+    [{ name: 'c1', updateKind: { kind: 'tag' } } as any],
+    runtimeContext,
+  );
+  expect(result).toBe('1 updates available');
+});
+
+test('renderBatchTitle should fall back to template rendering when runtimeContext is undefined', () => {
+  trigger.configuration.batchtitle = '${containers.length} updates available';
+  const result = trigger.renderBatchTitle([{ name: 'c1', updateKind: { kind: 'tag' } } as any]);
+  expect(result).toBe('1 updates available');
+});
+
+test('renderBatchBody should return runtimeContext.body verbatim when set', () => {
+  trigger.configuration.simplebody =
+    '${isDigestUpdate ? "digest" : "Container " + container.name + " running with " + container.updateKind.kind + " " + container.updateKind.localValue + " can be updated to " + container.updateKind.kind + " " + container.updateKind.remoteValue}${container.result && container.result.link ? "\\n" + container.result.link : ""}';
+  const runtimeContext = {
+    eventKind: 'security-alert-digest' as const,
+    title: 'Security scan: 1 finding',
+    body: '- app1: 1 critical',
+  };
+  const result = trigger.renderBatchBody(
+    [{ name: 'stub-row', critical: 1 } as any],
+    runtimeContext,
+  );
+  expect(result).toBe('- app1: 1 critical');
+  expect(result).not.toContain('can be updated to');
+});
+
+test('renderBatchBody should fall back to template rendering when runtimeContext has no body', () => {
+  trigger.configuration.simplebody =
+    '${isDigestUpdate ? "digest" : "Container " + container.name + " running with " + container.updateKind.kind + " " + container.updateKind.localValue + " can be updated to " + container.updateKind.kind + " " + container.updateKind.remoteValue}${container.result && container.result.link ? "\\n" + container.result.link : ""}';
+  const runtimeContext = { eventKind: 'security-alert-digest' };
+  const result = trigger.renderBatchBody(
+    [{ name: 'c1', updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' } } as any],
+    runtimeContext,
+  );
+  expect(result).toContain('can be updated to');
+});
+
+test('renderBatchBody should fall back to template rendering when runtimeContext is undefined', () => {
+  trigger.configuration.simplebody =
+    '${isDigestUpdate ? "digest" : "Container " + container.name + " running with " + container.updateKind.kind + " " + container.updateKind.localValue + " can be updated to " + container.updateKind.kind + " " + container.updateKind.remoteValue}${container.result && container.result.link ? "\\n" + container.result.link : ""}';
+  const result = trigger.renderBatchBody([
+    { name: 'c1', updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' } } as any,
+  ]);
+  expect(result).toContain('can be updated to');
+});
+
+test('composeBatchMessage should return prerendered title+body via formatTitleAndBody when runtimeContext has both', () => {
+  trigger.configuration.disabletitle = false;
+  trigger.configuration.batchtitle = '${containers.length} updates available';
+  trigger.configuration.simplebody = 'Body for ${container.name}';
+  const runtimeContext = {
+    eventKind: 'security-alert-digest' as const,
+    title: 'Security scan: 1 finding (1 critical)',
+    body: '- app1: 1 critical',
+  };
+  const result = trigger.composeBatchMessage(
+    [{ name: 'stub-row', critical: 1 } as any],
+    runtimeContext,
+  );
+  expect(result).toBe('Security scan: 1 finding (1 critical)\n\n- app1: 1 critical');
+  expect(result).not.toContain('updates available');
+  expect(result).not.toContain('can be updated to');
+});
+
+test('composeBatchMessage should use template rendering when runtimeContext is absent (regression guard)', () => {
+  trigger.configuration.disabletitle = false;
+  trigger.configuration.batchtitle = '${containers.length} updates available';
+  trigger.configuration.simplebody = 'Body for ${container.name}';
+  const result = trigger.composeBatchMessage([
+    { name: 'container-name', updateKind: { kind: 'tag' } } as any,
+  ]);
+  expect(result).toBe('1 updates available\n\n- Body for container-name\n');
+});
+
 test('init should invoke registered simple callback when handleContainerReport is called', async () => {
   let capturedCallback;
   vi.spyOn(event, 'registerContainerReport').mockImplementation((cb) => {

@@ -83,8 +83,8 @@ describe('Discord Trigger', () => {
     const containers = [{ name: 'test1' }, { name: 'test2' }];
 
     await discord.triggerBatch(containers);
-    expect(discord.renderBatchTitle).toHaveBeenCalledWith(containers);
-    expect(discord.renderBatchBody).toHaveBeenCalledWith(containers);
+    expect(discord.renderBatchTitle).toHaveBeenCalledWith(containers, undefined);
+    expect(discord.renderBatchBody).toHaveBeenCalledWith(containers, undefined);
   });
 
   test('should send message with custom configuration', async () => {
