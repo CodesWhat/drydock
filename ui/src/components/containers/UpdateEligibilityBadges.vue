@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import { preferences } from '../../preferences/store';
 import type { UpdateBlocker, UpdateBlockerReason, UpdateEligibility } from '../../types/container';
+import { severityOf } from '../../utils/update-eligibility';
 
 const props = withDefaults(
   defineProps<{
@@ -15,12 +17,23 @@ const activeBlockers = computed<UpdateBlocker[]>(() => {
   if (!props.eligibility) return [];
   if (props.eligibility.eligible) return [];
 
-  const blockers = props.eligibility.blockers.filter((b) => b.reason !== 'no-update-available');
+  let blockers = props.eligibility.blockers.filter((b) => b.reason !== 'no-update-available');
 
   if (props.hasActiveOperationBadge) {
-    return blockers.filter((b) => b.reason !== 'active-operation');
+    blockers = blockers.filter((b) => b.reason !== 'active-operation');
   }
-  return blockers;
+
+  if (!preferences.containers.eligibilityPills.showSoft) {
+    blockers = blockers.filter((b) => severityOf(b) === 'hard');
+  }
+
+  // Surface hard blockers first so the primary compact pill reflects the most
+  // important reason. Stable within each severity tier.
+  return [...blockers].sort((a, b) => {
+    const sa = severityOf(a) === 'hard' ? 0 : 1;
+    const sb = severityOf(b) === 'hard' ? 0 : 1;
+    return sa - sb;
+  });
 });
 
 const shouldRender = computed(() => activeBlockers.value.length > 0);
@@ -83,9 +96,9 @@ function reasonLabel(reason: UpdateBlockerReason): string {
   }
 }
 
-type BlockerColor = { bg: string; text: string };
+type BlockerStyle = { bg: string; text: string };
 
-function reasonColor(reason: UpdateBlockerReason): BlockerColor {
+function reasonColor(reason: UpdateBlockerReason): BlockerStyle {
   switch (reason) {
     case 'security-scan-blocked':
       return { bg: 'var(--dd-danger-muted)', text: 'var(--dd-danger)' };
@@ -102,6 +115,19 @@ function reasonColor(reason: UpdateBlockerReason): BlockerColor {
     default:
       return { bg: 'var(--dd-neutral-muted)', text: 'var(--dd-neutral)' };
   }
+}
+
+const SOFT_DEEMPHASIZED_STYLE: BlockerStyle = {
+  bg: 'var(--dd-bg-elevated)',
+  text: 'var(--dd-text-muted)',
+};
+
+function blockerStyle(blocker: UpdateBlocker): BlockerStyle {
+  const isSoft = severityOf(blocker) === 'soft';
+  if (isSoft && preferences.containers.eligibilityPills.deemphasizeSoft) {
+    return SOFT_DEEMPHASIZED_STYLE;
+  }
+  return reasonColor(blocker.reason);
 }
 
 function formatLiftableAt(iso: string): string {
@@ -139,9 +165,10 @@ const extraCount = computed<number>(() => Math.max(0, activeBlockers.value.lengt
       <span class="inline-flex items-center gap-1">
         <span
           class="badge text-3xs font-bold uppercase inline-flex items-center gap-1"
-          :style="{ backgroundColor: reasonColor(primaryBlocker!.reason).bg, color: reasonColor(primaryBlocker!.reason).text }"
+          :style="{ backgroundColor: blockerStyle(primaryBlocker!).bg, color: blockerStyle(primaryBlocker!).text }"
           v-tooltip.top="blockerTooltip(primaryBlocker!)"
           data-test="eligibility-badge-primary"
+          :data-severity="severityOf(primaryBlocker!)"
         >
           <iconify-icon
             :icon="reasonIcon(primaryBlocker!.reason)"
@@ -168,17 +195,18 @@ const extraCount = computed<number>(() => Math.max(0, activeBlockers.value.lengt
           v-for="blocker in activeBlockers"
           :key="blocker.reason"
           class="flex items-start gap-2 px-3 py-2 dd-rounded text-xs"
-          :style="{ backgroundColor: reasonColor(blocker.reason).bg }"
+          :style="{ backgroundColor: blockerStyle(blocker).bg }"
           :data-reason="blocker.reason"
+          :data-severity="severityOf(blocker)"
         >
           <iconify-icon
             :icon="reasonIcon(blocker.reason)"
             width="12"
             height="12"
             class="shrink-0 mt-0.5"
-            :style="{ display: 'inline-block', flex: 'none', color: reasonColor(blocker.reason).text }"
+            :style="{ display: 'inline-block', flex: 'none', color: blockerStyle(blocker).text }"
           />
-          <div class="flex-1 min-w-0" :style="{ color: reasonColor(blocker.reason).text }">
+          <div class="flex-1 min-w-0" :style="{ color: blockerStyle(blocker).text }">
             <span class="font-semibold block">{{ reasonLabel(blocker.reason) }}</span>
             <span class="block whitespace-normal break-words">{{ blocker.message }}</span>
             <span v-if="blocker.actionHint" class="block mt-0.5 opacity-80">{{ blocker.actionHint }}</span>

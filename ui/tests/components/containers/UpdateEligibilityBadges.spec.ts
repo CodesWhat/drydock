@@ -1,5 +1,6 @@
 import { mount } from '@vue/test-utils';
 import UpdateEligibilityBadges from '@/components/containers/UpdateEligibilityBadges.vue';
+import { preferences } from '@/preferences/store';
 import type { UpdateBlocker, UpdateEligibility } from '@/types/container';
 
 // Stub iconify-icon globally (used directly in the template)
@@ -34,6 +35,11 @@ function makeEligibility(overrides: Partial<UpdateEligibility> = {}): UpdateElig
 }
 
 describe('UpdateEligibilityBadges', () => {
+  afterEach(() => {
+    preferences.containers.eligibilityPills.showSoft = true;
+    preferences.containers.eligibilityPills.deemphasizeSoft = true;
+  });
+
   describe('no-op conditions', () => {
     it('renders nothing when eligibility is undefined', () => {
       const wrapper = mount(UpdateEligibilityBadges, {
@@ -329,7 +335,7 @@ describe('UpdateEligibilityBadges', () => {
       expect(style).toContain('var(--dd-danger-muted)');
     });
 
-    it('applies warning color for snoozed', () => {
+    it('applies muted deemphasized style for snoozed (soft, deemphasizeSoft=true by default)', () => {
       const wrapper = mount(UpdateEligibilityBadges, {
         props: {
           eligibility: makeEligibility({
@@ -340,10 +346,10 @@ describe('UpdateEligibilityBadges', () => {
       });
       const badge = wrapper.find('[data-test="eligibility-badge-primary"]');
       const style = badge.attributes('style') ?? '';
-      expect(style).toContain('var(--dd-warning-muted)');
+      expect(style).toContain('var(--dd-bg-elevated)');
     });
 
-    it('applies warning color for skip-tag', () => {
+    it('applies muted deemphasized style for skip-tag (soft, deemphasizeSoft=true by default)', () => {
       const wrapper = mount(UpdateEligibilityBadges, {
         props: {
           eligibility: makeEligibility({
@@ -354,10 +360,10 @@ describe('UpdateEligibilityBadges', () => {
       });
       const badge = wrapper.find('[data-test="eligibility-badge-primary"]');
       const style = badge.attributes('style') ?? '';
-      expect(style).toContain('var(--dd-warning-muted)');
+      expect(style).toContain('var(--dd-bg-elevated)');
     });
 
-    it('applies warning color for skip-digest', () => {
+    it('applies muted deemphasized style for skip-digest (soft, deemphasizeSoft=true by default)', () => {
       const wrapper = mount(UpdateEligibilityBadges, {
         props: {
           eligibility: makeEligibility({
@@ -368,10 +374,10 @@ describe('UpdateEligibilityBadges', () => {
       });
       const badge = wrapper.find('[data-test="eligibility-badge-primary"]');
       const style = badge.attributes('style') ?? '';
-      expect(style).toContain('var(--dd-warning-muted)');
+      expect(style).toContain('var(--dd-bg-elevated)');
     });
 
-    it('applies warning color for maturity-not-reached', () => {
+    it('applies muted deemphasized style for maturity-not-reached (soft, deemphasizeSoft=true by default)', () => {
       const wrapper = mount(UpdateEligibilityBadges, {
         props: {
           eligibility: makeEligibility({
@@ -382,10 +388,10 @@ describe('UpdateEligibilityBadges', () => {
       });
       const badge = wrapper.find('[data-test="eligibility-badge-primary"]');
       const style = badge.attributes('style') ?? '';
-      expect(style).toContain('var(--dd-warning-muted)');
+      expect(style).toContain('var(--dd-bg-elevated)');
     });
 
-    it('applies warning color for threshold-not-reached', () => {
+    it('applies muted deemphasized style for threshold-not-reached (soft, deemphasizeSoft=true by default)', () => {
       const wrapper = mount(UpdateEligibilityBadges, {
         props: {
           eligibility: makeEligibility({
@@ -396,10 +402,10 @@ describe('UpdateEligibilityBadges', () => {
       });
       const badge = wrapper.find('[data-test="eligibility-badge-primary"]');
       const style = badge.attributes('style') ?? '';
-      expect(style).toContain('var(--dd-warning-muted)');
+      expect(style).toContain('var(--dd-bg-elevated)');
     });
 
-    it('applies warning color for trigger-excluded', () => {
+    it('applies muted deemphasized style for trigger-excluded (soft, deemphasizeSoft=true by default)', () => {
       const wrapper = mount(UpdateEligibilityBadges, {
         props: {
           eligibility: makeEligibility({
@@ -410,10 +416,10 @@ describe('UpdateEligibilityBadges', () => {
       });
       const badge = wrapper.find('[data-test="eligibility-badge-primary"]');
       const style = badge.attributes('style') ?? '';
-      expect(style).toContain('var(--dd-warning-muted)');
+      expect(style).toContain('var(--dd-bg-elevated)');
     });
 
-    it('applies warning color for trigger-not-included', () => {
+    it('applies muted deemphasized style for trigger-not-included (soft, deemphasizeSoft=true by default)', () => {
       const wrapper = mount(UpdateEligibilityBadges, {
         props: {
           eligibility: makeEligibility({
@@ -424,7 +430,7 @@ describe('UpdateEligibilityBadges', () => {
       });
       const badge = wrapper.find('[data-test="eligibility-badge-primary"]');
       const style = badge.attributes('style') ?? '';
-      expect(style).toContain('var(--dd-warning-muted)');
+      expect(style).toContain('var(--dd-bg-elevated)');
     });
 
     it('applies info color for active-operation', () => {
@@ -594,6 +600,226 @@ describe('UpdateEligibilityBadges', () => {
           global: globalConfig,
         }),
       ).not.toThrow();
+    });
+  });
+
+  describe('showSoft preference', () => {
+    it('renders nothing when showSoft=false and the only blocker is soft', () => {
+      preferences.containers.eligibilityPills.showSoft = false;
+      const wrapper = mount(UpdateEligibilityBadges, {
+        props: {
+          eligibility: makeEligibility({
+            blockers: [makeBlocker({ reason: 'snoozed' })],
+          }),
+        },
+        global: globalConfig,
+      });
+      expect(wrapper.find('[data-test="eligibility-badge-primary"]').exists()).toBe(false);
+    });
+
+    it('renders only hard blockers when showSoft=false and mixed hard+soft blockers exist', () => {
+      preferences.containers.eligibilityPills.showSoft = false;
+      const wrapper = mount(UpdateEligibilityBadges, {
+        props: {
+          eligibility: makeEligibility({
+            blockers: [
+              makeBlocker({ reason: 'agent-mismatch' }),
+              makeBlocker({ reason: 'snoozed' }),
+            ],
+          }),
+        },
+        global: globalConfig,
+      });
+      const badge = wrapper.find('[data-test="eligibility-badge-primary"]');
+      expect(badge.exists()).toBe(true);
+      expect(badge.text()).toContain('Agent mismatch');
+      // Only 1 hard blocker visible — no +N
+      expect(wrapper.find('[data-test="eligibility-badge-extra"]').exists()).toBe(false);
+    });
+
+    it('does not count hidden soft blockers in the +N indicator when showSoft=false', () => {
+      preferences.containers.eligibilityPills.showSoft = false;
+      const wrapper = mount(UpdateEligibilityBadges, {
+        props: {
+          eligibility: makeEligibility({
+            blockers: [
+              makeBlocker({ reason: 'agent-mismatch' }),
+              makeBlocker({ reason: 'no-update-trigger-configured' }),
+              makeBlocker({ reason: 'snoozed' }),
+              makeBlocker({ reason: 'skip-tag' }),
+            ],
+          }),
+        },
+        global: globalConfig,
+      });
+      // 2 hard blockers → primary + +1 (not +3)
+      const extra = wrapper.find('[data-test="eligibility-badge-extra"]');
+      expect(extra.exists()).toBe(true);
+      expect(extra.text()).toBe('+1');
+    });
+
+    it('renders soft blockers normally when showSoft=true (default)', () => {
+      // showSoft is already true (reset by afterEach), but make it explicit
+      preferences.containers.eligibilityPills.showSoft = true;
+      const wrapper = mount(UpdateEligibilityBadges, {
+        props: {
+          eligibility: makeEligibility({
+            blockers: [makeBlocker({ reason: 'snoozed' })],
+          }),
+        },
+        global: globalConfig,
+      });
+      expect(wrapper.find('[data-test="eligibility-badge-primary"]').exists()).toBe(true);
+    });
+  });
+
+  describe('deemphasizeSoft preference', () => {
+    it('renders soft blocker with warning color when deemphasizeSoft=false', () => {
+      preferences.containers.eligibilityPills.deemphasizeSoft = false;
+      const wrapper = mount(UpdateEligibilityBadges, {
+        props: {
+          eligibility: makeEligibility({
+            blockers: [makeBlocker({ reason: 'snoozed' })],
+          }),
+        },
+        global: globalConfig,
+      });
+      const badge = wrapper.find('[data-test="eligibility-badge-primary"]');
+      const style = badge.attributes('style') ?? '';
+      expect(style).toContain('var(--dd-warning-muted)');
+    });
+
+    it('renders hard blocker with its own color regardless of deemphasizeSoft', () => {
+      preferences.containers.eligibilityPills.deemphasizeSoft = false;
+      const wrapper = mount(UpdateEligibilityBadges, {
+        props: {
+          eligibility: makeEligibility({
+            blockers: [makeBlocker({ reason: 'security-scan-blocked' })],
+          }),
+        },
+        global: globalConfig,
+      });
+      const badge = wrapper.find('[data-test="eligibility-badge-primary"]');
+      const style = badge.attributes('style') ?? '';
+      expect(style).toContain('var(--dd-danger-muted)');
+    });
+
+    it('renders hard blocker with its own color when deemphasizeSoft=true', () => {
+      // deemphasizeSoft=true should not affect hard blockers
+      preferences.containers.eligibilityPills.deemphasizeSoft = true;
+      const wrapper = mount(UpdateEligibilityBadges, {
+        props: {
+          eligibility: makeEligibility({
+            blockers: [makeBlocker({ reason: 'security-scan-blocked' })],
+          }),
+        },
+        global: globalConfig,
+      });
+      const badge = wrapper.find('[data-test="eligibility-badge-primary"]');
+      const style = badge.attributes('style') ?? '';
+      expect(style).toContain('var(--dd-danger-muted)');
+    });
+  });
+
+  describe('severity sort order', () => {
+    it('shows hard blocker first even when soft blocker is first in the API payload', () => {
+      const wrapper = mount(UpdateEligibilityBadges, {
+        props: {
+          eligibility: makeEligibility({
+            // soft before hard in API order
+            blockers: [
+              makeBlocker({ reason: 'snoozed' }),
+              makeBlocker({ reason: 'agent-mismatch' }),
+            ],
+          }),
+        },
+        global: globalConfig,
+      });
+      const badge = wrapper.find('[data-test="eligibility-badge-primary"]');
+      expect(badge.exists()).toBe(true);
+      expect(badge.text()).toContain('Agent mismatch');
+    });
+
+    it('shows hard blocker as primary in full mode when soft blocker is first in payload', () => {
+      const wrapper = mount(UpdateEligibilityBadges, {
+        props: {
+          eligibility: makeEligibility({
+            blockers: [
+              makeBlocker({ reason: 'snoozed' }),
+              makeBlocker({ reason: 'agent-mismatch' }),
+            ],
+          }),
+          variant: 'full',
+        },
+        global: globalConfig,
+      });
+      const full = wrapper.find('[data-test="eligibility-badge-full"]');
+      const items = full.findAll('[data-reason]');
+      expect(items[0].attributes('data-reason')).toBe('agent-mismatch');
+      expect(items[1].attributes('data-reason')).toBe('snoozed');
+    });
+  });
+
+  describe('data-severity attribute', () => {
+    it('compact primary badge has data-severity="hard" for a hard blocker', () => {
+      const wrapper = mount(UpdateEligibilityBadges, {
+        props: {
+          eligibility: makeEligibility({
+            blockers: [makeBlocker({ reason: 'agent-mismatch' })],
+          }),
+        },
+        global: globalConfig,
+      });
+      const badge = wrapper.find('[data-test="eligibility-badge-primary"]');
+      expect(badge.attributes('data-severity')).toBe('hard');
+    });
+
+    it('compact primary badge has data-severity="soft" for a soft blocker', () => {
+      const wrapper = mount(UpdateEligibilityBadges, {
+        props: {
+          eligibility: makeEligibility({
+            blockers: [makeBlocker({ reason: 'snoozed' })],
+          }),
+        },
+        global: globalConfig,
+      });
+      const badge = wrapper.find('[data-test="eligibility-badge-primary"]');
+      expect(badge.attributes('data-severity')).toBe('soft');
+    });
+
+    it('full mode rows expose data-severity on each blocker item', () => {
+      const wrapper = mount(UpdateEligibilityBadges, {
+        props: {
+          eligibility: makeEligibility({
+            blockers: [
+              makeBlocker({ reason: 'agent-mismatch' }),
+              makeBlocker({ reason: 'snoozed' }),
+            ],
+          }),
+          variant: 'full',
+        },
+        global: globalConfig,
+      });
+      const full = wrapper.find('[data-test="eligibility-badge-full"]');
+      const items = full.findAll('[data-reason]');
+      expect(items[0].attributes('data-severity')).toBe('hard');
+      expect(items[1].attributes('data-severity')).toBe('soft');
+    });
+
+    it('data-severity uses severity field from blocker when present', () => {
+      const wrapper = mount(UpdateEligibilityBadges, {
+        props: {
+          eligibility: makeEligibility({
+            blockers: [
+              // Override via explicit severity field
+              { ...makeBlocker({ reason: 'snoozed' }), severity: 'hard' as const },
+            ],
+          }),
+        },
+        global: globalConfig,
+      });
+      const badge = wrapper.find('[data-test="eligibility-badge-primary"]');
+      expect(badge.attributes('data-severity')).toBe('hard');
     });
   });
 });

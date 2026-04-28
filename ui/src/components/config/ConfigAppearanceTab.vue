@@ -33,12 +33,16 @@ const props = withDefaults(
     fontSize?: number;
     activeRadius?: RadiusPresetId;
     radiusPresets: RadiusPreset[];
+    showSoftEligibilityPills: boolean;
+    deemphasizeSoftEligibilityPills: boolean;
     onSelectThemeFamily: (familyId: string, event: Event) => void;
     onSelectFont: (fontId: string) => void;
     onSelectIconLibrary: (library: string) => void;
     onChangeIconScale: (value: number) => void;
     onChangeFontSize: (value: number) => void;
     onSelectRadius: (id: RadiusPresetId) => void;
+    onChangeShowSoftEligibilityPills: (value: boolean) => void;
+    onChangeDeemphasizeSoftEligibilityPills: (value: boolean) => void;
   }>(),
   {
     themeFamily: '',
@@ -287,6 +291,53 @@ function handleFontSizeInput(event: Event) {
         </div>
         <div class="text-center mt-2 text-2xs-plus dd-text-muted">
           {{ Math.round(props.iconScale * 100) }}%
+        </div>
+      </div>
+    </div>
+
+    <!-- Container row pills -->
+    <div
+      class="dd-rounded overflow-hidden"
+      :style="{ backgroundColor: 'var(--dd-bg-card)' }"
+    >
+      <div
+        class="px-5 py-3.5 flex items-center gap-2"
+      >
+        <AppIcon name="containers" :size="14" class="text-drydock-secondary" />
+        <h2 class="dd-text-heading-section dd-text">Container row pills</h2>
+      </div>
+      <div class="p-5 space-y-4">
+        <div class="flex items-center justify-between gap-4">
+          <div class="min-w-0">
+            <div class="text-xs font-semibold dd-text">Show informational pills</div>
+            <div class="text-2xs dd-text-muted mt-0.5">
+              Display soft blockers like Snoozed, Below threshold, or Trigger filtered alongside hard blockers
+            </div>
+          </div>
+          <ToggleSwitch
+            data-test="toggle-show-soft-pills"
+            :model-value="props.showSoftEligibilityPills"
+            @update:model-value="props.onChangeShowSoftEligibilityPills($event)"
+          />
+        </div>
+        <div class="flex items-center justify-between gap-4">
+          <div class="min-w-0">
+            <div
+              class="text-xs font-semibold"
+              :class="props.showSoftEligibilityPills ? 'dd-text' : 'dd-text-muted'"
+            >
+              De-emphasize informational pills
+            </div>
+            <div class="text-2xs dd-text-muted mt-0.5">
+              Render soft blockers in muted neutral styling so hard blockers visually dominate
+            </div>
+          </div>
+          <ToggleSwitch
+            data-test="toggle-deemphasize-soft-pills"
+            :model-value="props.deemphasizeSoftEligibilityPills"
+            :disabled="!props.showSoftEligibilityPills"
+            @update:model-value="props.onChangeDeemphasizeSoftEligibilityPills($event)"
+          />
         </div>
       </div>
     </div>
