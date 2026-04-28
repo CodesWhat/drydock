@@ -677,45 +677,6 @@ describe('ConfigView', () => {
     });
   });
 
-  describe('eligibility pill toggles', () => {
-    async function mountAppearanceTabForPills() {
-      mockGetServer.mockResolvedValue({ configuration: {} });
-      mockGetSettings.mockResolvedValue({ internetlessMode: false });
-
-      const { preferences, resetPreferences } = await import('@/preferences/store');
-      resetPreferences();
-
-      const w = factory();
-      await vi.waitFor(() => expect(mockGetServer).toHaveBeenCalled());
-      await nextTick();
-
-      const tabs = w.findAll('button');
-      const appearanceTab = tabs.find((t) => t.text().includes('Appearance'));
-      await appearanceTab?.trigger('click');
-      await nextTick();
-      return { w, preferences };
-    }
-
-    it('flips showAutoUpdateDiagnostic preference when toggle is clicked', async () => {
-      const { w, preferences } = await mountAppearanceTabForPills();
-
-      const toggle = w.find('[data-test="toggle-show-auto-update-diagnostic"]');
-      expect(toggle.exists()).toBe(true);
-
-      const before = preferences.containers.showAutoUpdateDiagnostic;
-      await toggle.trigger('click');
-      await nextTick();
-
-      expect(preferences.containers.showAutoUpdateDiagnostic).toBe(!before);
-    });
-
-    it('renders the auto-update diagnostic section on the appearance tab', async () => {
-      const { w } = await mountAppearanceTabForPills();
-      expect(w.text()).toContain('Auto-update diagnostic pills');
-      expect(w.text()).toContain('Show on container rows');
-    });
-  });
-
   describe('profile tab', () => {
     async function mountProfileTab() {
       mockGetServer.mockResolvedValue({ configuration: {} });

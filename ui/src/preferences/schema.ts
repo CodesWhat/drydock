@@ -40,9 +40,6 @@ export interface PreferencesSchema {
     };
     columns: string[];
     showAutoUpdateDiagnostic: boolean;
-    eligibilityPills: {
-      deemphasizeSoft: boolean;
-    };
   };
   dashboard: {
     widgetOrder: string[];
@@ -101,9 +98,6 @@ export const DEFAULTS: PreferencesSchema = {
     },
     columns: [...CONTAINER_TABLE_COLUMN_KEYS],
     showAutoUpdateDiagnostic: false,
-    eligibilityPills: {
-      deemphasizeSoft: false,
-    },
   },
   dashboard: {
     widgetOrder: [
