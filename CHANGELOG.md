@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **[#328](https://github.com/CodesWhat/drydock/issues/328) — Triggering a security scan emitted a "container update" notification (begunfx).** The same symptom previously hypothesised at rc.13 as `updateKind` snapshot loss — it was actually a wrong-template render. `Trigger.flushSecurityDigestBuffer` calls `triggerBatch(rows, runtimeContext)` with the security-digest title/body prerendered in `runtimeContext`, but every notification provider's `triggerBatch` ignored the second argument and re-rendered the stub rows with the *update-available* batch templates. The result: the user saw a `"64 updates available"` subject and a body of `"Container X running with  can be updated to "` — with empty version slots because the rows have no `updateKind`. The fix is structural: the base `Trigger` now exposes a typed `BatchRuntimeContext` ({ eventKind, title, body }), and `renderBatchTitle` / `renderBatchBody` / `composeBatchMessage` honour `runtimeContext.title` / `.body` verbatim when set. All 16 notification providers (Smtp, Slack, Discord, Telegram, Teams, Mattermost, Googlechat, Rocketchat, Matrix, Apprise, Gotify, Ntfy, Pushover, Ifttt, Http, Kafka) plus Mock and Command thread `runtimeContext` through to those helpers, so the security-digest path now produces the configured `securitydigesttitle` / `securitydigestbody` (or the digest defaults) instead of update-available output. Both the scheduled cron scan path and the on-demand `POST /containers/scan-all` path are fixed. The previously-deferred half of #308 ("empty `updateKind.*` fields in security-scan emails") is closed by this — it was the same bug.
+
 ## [1.5.0-rc.15] — 2026-04-27
 
 ### Fixed
