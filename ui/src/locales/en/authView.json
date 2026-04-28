@@ -1,0 +1,24 @@
+{
+  "authView": {
+    "loadingProviders": "Loading authentication providers...",
+    "loadError": "Failed to load authentication providers",
+    "filterPlaceholder": "Filter by name...",
+    "clearFilter": "Clear",
+    "emptyFiltered": "No providers match your filters",
+    "detailRefreshing": "Refreshing authentication details...",
+    "detailLoadError": "Unable to load latest authentication details",
+    "noConfig": "No configuration properties",
+    "columns": {
+      "provider": "Provider",
+      "type": "Type",
+      "status": "Status"
+    },
+    "fields": {
+      "status": "Status"
+    },
+    "badge": {
+      "basic": "Basic",
+      "oidc": "OIDC"
+    }
+  }
+}

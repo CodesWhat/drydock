@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import { ROUTES } from '../router/routes';
 import whaleLogo from '../assets/whale-logo.png?inline';
@@ -10,6 +11,7 @@ import { errorMessage } from '../utils/error';
 const router = useRouter();
 const route = useRoute();
 const { isDark } = useTheme();
+const { t } = useI18n();
 
 interface Strategy {
   type: string;
@@ -128,7 +130,7 @@ onMounted(async () => {
   try {
     await loadStrategies();
   } catch {
-    error.value = 'Failed to load authentication methods';
+    error.value = t('loginView.errors.loadFailed');
     connectionLost.value = true;
     scheduleConnectivityRetry();
   } finally {
@@ -158,7 +160,7 @@ async function handleBasicLogin() {
       loginErrorMessage === 'Username or password error' ||
       loginErrorMessage === 'Unauthorized'
     ) {
-      error.value = 'Invalid username or password';
+      error.value = t('loginView.errors.invalidCredentials');
     } else {
       error.value = loginErrorMessage;
     }
@@ -178,9 +180,9 @@ async function handleOidc(name: string) {
       globalThis.location.assign(parsedUrl.toString());
       return;
     }
-    error.value = `Failed to connect to ${name}`;
+    error.value = t('loginView.errors.oidcFailed', { name });
   } catch {
-    error.value = `Failed to connect to ${name}`;
+    error.value = t('loginView.errors.oidcFailed', { name });
   }
 }
 
@@ -224,15 +226,28 @@ function formatAuthProviderError(authProviderError: AuthProviderError): string {
   const providerName = nameParts.join(':').trim();
 
   if (providerType === 'basic') {
-    return `Basic auth '${providerName || 'default'}': ${authProviderError.error}`;
+    return t('loginView.errors.providerBasic', {
+      name: providerName || 'default',
+      error: authProviderError.error,
+    });
   }
   if (providerType === 'oidc') {
-    return `OIDC provider '${providerName || 'default'}': ${authProviderError.error}`;
+    return t('loginView.errors.providerOidc', {
+      name: providerName || 'default',
+      error: authProviderError.error,
+    });
   }
   if (providerName.length > 0) {
-    return `${providerType} '${providerName}': ${authProviderError.error}`;
+    return t('loginView.errors.providerNamed', {
+      type: providerType,
+      name: providerName,
+      error: authProviderError.error,
+    });
   }
-  return `${authProviderError.provider}: ${authProviderError.error}`;
+  return t('loginView.errors.providerGeneric', {
+    provider: authProviderError.provider,
+    error: authProviderError.error,
+  });
 }
 
 async function checkConnectivity() {
@@ -279,7 +294,7 @@ onUnmounted(() => {
 
         <!-- Heading -->
         <h1 class="text-lg font-semibold text-center mb-6 dd-text">
-          Sign in to Drydock
+          {{ t('loginView.heading') }}
         </h1>
 
         <!-- Error message -->
@@ -294,7 +309,7 @@ onUnmounted(() => {
         <form v-if="hasBasic" @submit.prevent="handleBasicLogin" class="space-y-5">
           <div>
             <label class="block text-2xs-plus font-medium uppercase tracking-wider mb-2.5 dd-text-muted">
-              Username
+              {{ t('loginView.username.label') }}
             </label>
             <input
               v-model="username"
@@ -303,13 +318,13 @@ onUnmounted(() => {
               required
               class="w-full px-3 py-2.5 text-sm dd-rounded dd-text dd-placeholder outline-none transition-colors"
               style="background-color: var(--dd-bg-inset);"
-              placeholder="Enter your username"
+              :placeholder="t('loginView.username.placeholder')"
             />
           </div>
 
           <div>
             <label class="block text-2xs-plus font-medium uppercase tracking-wider mb-2.5 dd-text-muted">
-              Password
+              {{ t('loginView.password.label') }}
             </label>
             <input
               v-model="password"
@@ -318,7 +333,7 @@ onUnmounted(() => {
               required
               class="w-full px-3 py-2.5 text-sm dd-rounded dd-text dd-placeholder outline-none transition-colors"
               style="background-color: var(--dd-bg-inset);"
-              placeholder="Enter your password"
+              :placeholder="t('loginView.password.placeholder')"
             />
           </div>
 
@@ -330,16 +345,16 @@ onUnmounted(() => {
           >
             <template v-if="submitting">
               <AppIcon name="spinner" :size="14" class="dd-spin mr-2" />
-              Signing in...
+              {{ t('loginView.submit.signingIn') }}
             </template>
-            <template v-else>Sign in</template>
+            <template v-else>{{ t('loginView.submit.signIn') }}</template>
           </AppButton>
         </form>
 
         <!-- OIDC separator (only if both basic and OIDC exist) -->
         <div v-if="hasBasic && oidcStrategies.length > 0" class="flex items-center gap-3 my-6">
           <div class="flex-1 h-px" style="background-color: var(--dd-border-strong);" />
-          <span class="text-2xs-plus dd-text-muted">or continue with</span>
+          <span class="text-2xs-plus dd-text-muted">{{ t('loginView.separator') }}</span>
           <div class="flex-1 h-px" style="background-color: var(--dd-border-strong);" />
         </div>
 
@@ -366,7 +381,7 @@ onUnmounted(() => {
             type="checkbox"
             class="w-3.5 h-3.5 dd-rounded-sm accent-[var(--dd-primary)]"
           />
-          <span class="text-2xs-plus dd-text-muted">Remember me</span>
+          <span class="text-2xs-plus dd-text-muted">{{ t('loginView.rememberMe') }}</span>
         </label>
 
         <!-- No strategies available -->
@@ -380,7 +395,7 @@ onUnmounted(() => {
               {{ formatAuthProviderError(authProviderError) }}
             </div>
           </div>
-          <p v-else class="dd-text-muted">No authentication methods configured.</p>
+          <p v-else class="dd-text-muted">{{ t('loginView.noMethods') }}</p>
         </div>
       </div>
       </div>
@@ -397,13 +412,13 @@ onUnmounted(() => {
               <img :src="whaleLogo" alt="" class="h-10 w-auto"
                    :style="[{ transform: 'rotate(180deg) scaleX(-1)' }, isDark ? { filter: 'invert(1)' } : {}]" />
             </div>
-            <h2 class="text-sm font-bold dd-text">Connection Lost</h2>
+            <h2 class="text-sm font-bold dd-text">{{ t('loginView.connectionLost.title') }}</h2>
             <p class="text-2xs-plus dd-text-muted leading-relaxed">
-              The server is unreachable. Waiting for it to come back online...
+              {{ t('loginView.connectionLost.body') }}
             </p>
             <div class="flex items-center gap-2 mt-1">
               <AppIcon name="spinner" :size="12" class="dd-spin dd-text-muted" />
-              <span class="text-2xs dd-text-muted">Reconnecting</span>
+              <span class="text-2xs dd-text-muted">{{ t('loginView.connectionLost.reconnecting') }}</span>
             </div>
           </div>
         </div>

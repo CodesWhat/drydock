@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import ConfigLogsTab from '../components/config/ConfigLogsTab.vue';
 import { useSystemLogStream } from '../composables/useSystemLogStream';
 import { getLog, getLogComponents, getLogEntries } from '../services/log';
@@ -16,6 +17,8 @@ interface ApiLogEntry {
   msg?: string;
   message?: string;
 }
+
+const { t } = useI18n();
 
 const streamingEnabled = ref(true);
 const {
@@ -106,7 +109,7 @@ async function refreshAppLogs() {
         )
       : [];
   } catch (e: unknown) {
-    appLogsError.value = errorMessage(e, 'Failed to load application logs');
+    appLogsError.value = errorMessage(e, t('logsView.loadFailed'));
     appLogEntries.value = [];
   } finally {
     appLogsLoading.value = false;

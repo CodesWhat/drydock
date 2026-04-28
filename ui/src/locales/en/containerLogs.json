@@ -1,15 +1,4 @@
 {
-  "common": {
-    "loading": "Loading…",
-    "back": "Back",
-    "cancel": "Cancel",
-    "save": "Save",
-    "delete": "Delete",
-    "confirm": "Confirm",
-    "close": "Close",
-    "retry": "Retry",
-    "unknown": "unknown"
-  },
   "containerLogs": {
     "backTooltip": "Back to containers",
     "title": "Container Logs",
