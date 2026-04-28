@@ -39,6 +39,10 @@ export interface PreferencesSchema {
       hidePinned: boolean;
     };
     columns: string[];
+    eligibilityPills: {
+      showSoft: boolean;
+      deemphasizeSoft: boolean;
+    };
   };
   dashboard: {
     widgetOrder: string[];
@@ -60,7 +64,7 @@ export interface PreferencesSchema {
   };
 }
 
-export const CURRENT_SCHEMA_VERSION = 2;
+export const CURRENT_SCHEMA_VERSION = 3;
 
 export const CONTAINER_TABLE_COLUMN_KEYS = [
   'icon',
@@ -96,6 +100,10 @@ export const DEFAULTS: PreferencesSchema = {
       hidePinned: false,
     },
     columns: [...CONTAINER_TABLE_COLUMN_KEYS],
+    eligibilityPills: {
+      showSoft: true,
+      deemphasizeSoft: true,
+    },
   },
   dashboard: {
     widgetOrder: [

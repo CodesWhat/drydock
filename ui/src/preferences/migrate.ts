@@ -182,6 +182,17 @@ function sanitizeContainers(data: Record<string, unknown>): void {
         );
       }
     }
+
+    if ('eligibilityPills' in c) {
+      if (!isRecord(c.eligibilityPills)) {
+        delete c.eligibilityPills;
+      } else {
+        const pills = c.eligibilityPills as Record<string, unknown>;
+        if ('showSoft' in pills && !isBoolean(pills.showSoft)) delete pills.showSoft;
+        if ('deemphasizeSoft' in pills && !isBoolean(pills.deemphasizeSoft))
+          delete pills.deemphasizeSoft;
+      }
+    }
   }
 }
 
@@ -597,12 +608,27 @@ export function migrate(data: Record<string, unknown>): PreferencesSchema {
   if (data.schemaVersion === 1) {
     data = {
       ...data,
-      schemaVersion: CURRENT_SCHEMA_VERSION,
+      schemaVersion: 2,
       views: {
         ...(isRecord(data.views) ? data.views : {}),
         logs: {
           newestFirst: DEFAULTS.views.logs.newestFirst,
           ...(isRecord(data.views) && isRecord(data.views.logs) ? data.views.logs : {}),
+        },
+      },
+    };
+  }
+
+  if (data.schemaVersion === 2) {
+    const containers = isRecord(data.containers) ? data.containers : {};
+    data = {
+      ...data,
+      schemaVersion: CURRENT_SCHEMA_VERSION,
+      containers: {
+        ...containers,
+        eligibilityPills: {
+          ...DEFAULTS.containers.eligibilityPills,
+          ...(isRecord(containers.eligibilityPills) ? containers.eligibilityPills : {}),
         },
       },
     };

@@ -345,6 +345,62 @@ describe('preferences migration', () => {
 
       expect(result.views.logs.newestFirst).toBe(DEFAULTS.views.logs.newestFirst);
     });
+
+    describe('eligibilityPills', () => {
+      it('v2→v3: adds eligibilityPills with defaults when containers has no eligibilityPills', () => {
+        const result = migrate({ schemaVersion: 2, containers: { viewMode: 'cards' } });
+        expect(result.schemaVersion).toBe(3);
+        expect(result.containers.eligibilityPills).toEqual(DEFAULTS.containers.eligibilityPills);
+      });
+
+      it('v2→v3: preserves user-set showSoft=false and fills missing deemphasizeSoft from defaults', () => {
+        const result = migrate({
+          schemaVersion: 2,
+          containers: { eligibilityPills: { showSoft: false } },
+        });
+        expect(result.schemaVersion).toBe(3);
+        expect(result.containers.eligibilityPills.showSoft).toBe(false);
+        expect(result.containers.eligibilityPills.deemphasizeSoft).toBe(
+          DEFAULTS.containers.eligibilityPills.deemphasizeSoft,
+        );
+      });
+
+      it('v3 sanitization: drops invalid showSoft type and resets to default', () => {
+        const result = migrate({
+          schemaVersion: 3,
+          containers: { eligibilityPills: { showSoft: 'yes' as any, deemphasizeSoft: false } },
+        });
+        expect(result.containers.eligibilityPills.showSoft).toBe(
+          DEFAULTS.containers.eligibilityPills.showSoft,
+        );
+        expect(result.containers.eligibilityPills.deemphasizeSoft).toBe(false);
+      });
+
+      it('v3 sanitization: drops invalid deemphasizeSoft type and resets to default', () => {
+        const result = migrate({
+          schemaVersion: 3,
+          containers: { eligibilityPills: { showSoft: true, deemphasizeSoft: 'yes' as any } },
+        });
+        expect(result.containers.eligibilityPills.showSoft).toBe(true);
+        expect(result.containers.eligibilityPills.deemphasizeSoft).toBe(
+          DEFAULTS.containers.eligibilityPills.deemphasizeSoft,
+        );
+      });
+
+      it('v3 sanitization: resets eligibilityPills to defaults when value is not a record', () => {
+        const result = migrate({
+          schemaVersion: 3,
+          containers: { eligibilityPills: 'invalid' as any },
+        });
+        expect(result.containers.eligibilityPills).toEqual(DEFAULTS.containers.eligibilityPills);
+      });
+
+      it('v1→v3 chain: ends up at v3 with eligibilityPills defaulted', () => {
+        const result = migrate({ schemaVersion: 1 });
+        expect(result.schemaVersion).toBe(3);
+        expect(result.containers.eligibilityPills).toEqual(DEFAULTS.containers.eligibilityPills);
+      });
+    });
   });
 
   describe('migrateFromLegacyKeys', () => {
