@@ -240,6 +240,8 @@ function isActionInProgress(container: { id?: unknown; name?: unknown }) {
                 v-if="selectedContainer.updateEligibility"
                 :eligibility="selectedContainer.updateEligibility"
                 :has-active-operation-badge="Boolean(selectedContainer.updateOperation)"
+                :respect-pref="false"
+                variant="full"
                 class="mt-2"
               />
               <div class="mt-2">

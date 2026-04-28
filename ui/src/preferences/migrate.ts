@@ -183,15 +183,8 @@ function sanitizeContainers(data: Record<string, unknown>): void {
       }
     }
 
-    if ('eligibilityPills' in c) {
-      if (!isRecord(c.eligibilityPills)) {
-        delete c.eligibilityPills;
-      } else {
-        const pills = c.eligibilityPills as Record<string, unknown>;
-        if ('showSoft' in pills && !isBoolean(pills.showSoft)) delete pills.showSoft;
-        if ('deemphasizeSoft' in pills && !isBoolean(pills.deemphasizeSoft))
-          delete pills.deemphasizeSoft;
-      }
+    if ('showAutoUpdateDiagnostic' in c && !isBoolean(c.showAutoUpdateDiagnostic)) {
+      delete c.showAutoUpdateDiagnostic;
     }
   }
 }
@@ -620,16 +613,17 @@ export function migrate(data: Record<string, unknown>): PreferencesSchema {
   }
 
   if (data.schemaVersion === 2) {
+    data = { ...data, schemaVersion: 3 };
+  }
+
+  if (data.schemaVersion === 3) {
     const containers = isRecord(data.containers) ? data.containers : {};
     data = {
       ...data,
       schemaVersion: CURRENT_SCHEMA_VERSION,
       containers: {
         ...containers,
-        eligibilityPills: {
-          ...DEFAULTS.containers.eligibilityPills,
-          ...(isRecord(containers.eligibilityPills) ? containers.eligibilityPills : {}),
-        },
+        showAutoUpdateDiagnostic: DEFAULTS.containers.showAutoUpdateDiagnostic,
       },
     };
   }

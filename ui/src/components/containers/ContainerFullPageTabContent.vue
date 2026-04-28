@@ -279,6 +279,7 @@ function isActionInProgress(container: { id?: unknown; name?: unknown }) {
                 :eligibility="selectedContainer.updateEligibility"
                 variant="full"
                 :has-active-operation-badge="Boolean(selectedContainer.updateOperation)"
+                :respect-pref="false"
               />
               <ReleaseNotesLink
                 :release-notes="selectedContainer.releaseNotes"

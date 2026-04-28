@@ -346,59 +346,50 @@ describe('preferences migration', () => {
       expect(result.views.logs.newestFirst).toBe(DEFAULTS.views.logs.newestFirst);
     });
 
-    describe('eligibilityPills', () => {
-      it('v2→v3: adds eligibilityPills with defaults when containers has no eligibilityPills', () => {
+    describe('showAutoUpdateDiagnostic', () => {
+      it('v2→latest: containers ends up with showAutoUpdateDiagnostic at default (false)', () => {
         const result = migrate({ schemaVersion: 2, containers: { viewMode: 'cards' } });
-        expect(result.schemaVersion).toBe(3);
-        expect(result.containers.eligibilityPills).toEqual(DEFAULTS.containers.eligibilityPills);
-      });
-
-      it('v2→v3: preserves user-set showSoft=false and fills missing deemphasizeSoft from defaults', () => {
-        const result = migrate({
-          schemaVersion: 2,
-          containers: { eligibilityPills: { showSoft: false } },
-        });
-        expect(result.schemaVersion).toBe(3);
-        expect(result.containers.eligibilityPills.showSoft).toBe(false);
-        expect(result.containers.eligibilityPills.deemphasizeSoft).toBe(
-          DEFAULTS.containers.eligibilityPills.deemphasizeSoft,
+        expect(result.schemaVersion).toBe(DEFAULTS.schemaVersion);
+        expect(result.containers.showAutoUpdateDiagnostic).toBe(
+          DEFAULTS.containers.showAutoUpdateDiagnostic,
         );
       });
 
-      it('v3 sanitization: drops invalid showSoft type and resets to default', () => {
+      it('v3→v4: legacy showSoft is dropped and showAutoUpdateDiagnostic resets to default (off)', () => {
         const result = migrate({
           schemaVersion: 3,
-          containers: { eligibilityPills: { showSoft: 'yes' as any, deemphasizeSoft: false } },
+          containers: { eligibilityPills: { showSoft: true, deemphasizeSoft: true } as any },
         });
-        expect(result.containers.eligibilityPills.showSoft).toBe(
-          DEFAULTS.containers.eligibilityPills.showSoft,
+        expect(result.schemaVersion).toBe(4);
+        expect(result.containers.showAutoUpdateDiagnostic).toBe(false);
+        // showSoft is no longer part of the schema and gets dropped by mergeDefaults
+        expect((result.containers as any).eligibilityPills?.showSoft).toBeUndefined();
+      });
+
+      it('v4 sanitization: drops invalid showAutoUpdateDiagnostic type and resets to default', () => {
+        const result = migrate({
+          schemaVersion: 4,
+          containers: { showAutoUpdateDiagnostic: 'yes' as any },
+        });
+        expect(result.containers.showAutoUpdateDiagnostic).toBe(
+          DEFAULTS.containers.showAutoUpdateDiagnostic,
         );
-        expect(result.containers.eligibilityPills.deemphasizeSoft).toBe(false);
       });
 
-      it('v3 sanitization: drops invalid deemphasizeSoft type and resets to default', () => {
+      it('v4: preserves user-set showAutoUpdateDiagnostic=true', () => {
         const result = migrate({
-          schemaVersion: 3,
-          containers: { eligibilityPills: { showSoft: true, deemphasizeSoft: 'yes' as any } },
+          schemaVersion: 4,
+          containers: { showAutoUpdateDiagnostic: true },
         });
-        expect(result.containers.eligibilityPills.showSoft).toBe(true);
-        expect(result.containers.eligibilityPills.deemphasizeSoft).toBe(
-          DEFAULTS.containers.eligibilityPills.deemphasizeSoft,
-        );
+        expect(result.containers.showAutoUpdateDiagnostic).toBe(true);
       });
 
-      it('v3 sanitization: resets eligibilityPills to defaults when value is not a record', () => {
-        const result = migrate({
-          schemaVersion: 3,
-          containers: { eligibilityPills: 'invalid' as any },
-        });
-        expect(result.containers.eligibilityPills).toEqual(DEFAULTS.containers.eligibilityPills);
-      });
-
-      it('v1→v3 chain: ends up at v3 with eligibilityPills defaulted', () => {
+      it('v1→latest chain: ends up at latest with showAutoUpdateDiagnostic defaulted', () => {
         const result = migrate({ schemaVersion: 1 });
-        expect(result.schemaVersion).toBe(3);
-        expect(result.containers.eligibilityPills).toEqual(DEFAULTS.containers.eligibilityPills);
+        expect(result.schemaVersion).toBe(DEFAULTS.schemaVersion);
+        expect(result.containers.showAutoUpdateDiagnostic).toBe(
+          DEFAULTS.containers.showAutoUpdateDiagnostic,
+        );
       });
     });
   });

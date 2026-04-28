@@ -696,37 +696,23 @@ describe('ConfigView', () => {
       return { w, preferences };
     }
 
-    it('flips showSoft preference when show-soft-pills toggle is clicked', async () => {
+    it('flips showAutoUpdateDiagnostic preference when toggle is clicked', async () => {
       const { w, preferences } = await mountAppearanceTabForPills();
 
-      const toggle = w.find('[data-test="toggle-show-soft-pills"]');
+      const toggle = w.find('[data-test="toggle-show-auto-update-diagnostic"]');
       expect(toggle.exists()).toBe(true);
 
-      const before = preferences.containers.eligibilityPills.showSoft;
+      const before = preferences.containers.showAutoUpdateDiagnostic;
       await toggle.trigger('click');
       await nextTick();
 
-      expect(preferences.containers.eligibilityPills.showSoft).toBe(!before);
+      expect(preferences.containers.showAutoUpdateDiagnostic).toBe(!before);
     });
 
-    it('flips deemphasizeSoft preference when deemphasize-soft-pills toggle is clicked', async () => {
-      const { w, preferences } = await mountAppearanceTabForPills();
-
-      const toggle = w.find('[data-test="toggle-deemphasize-soft-pills"]');
-      expect(toggle.exists()).toBe(true);
-
-      const before = preferences.containers.eligibilityPills.deemphasizeSoft;
-      await toggle.trigger('click');
-      await nextTick();
-
-      expect(preferences.containers.eligibilityPills.deemphasizeSoft).toBe(!before);
-    });
-
-    it('renders the container row pills section on the appearance tab', async () => {
+    it('renders the auto-update diagnostic section on the appearance tab', async () => {
       const { w } = await mountAppearanceTabForPills();
-      expect(w.text()).toContain('Container row pills');
-      expect(w.text()).toContain('Show informational pills');
-      expect(w.text()).toContain('De-emphasize informational pills');
+      expect(w.text()).toContain('Auto-update diagnostic pills');
+      expect(w.text()).toContain('Show on container rows');
     });
   });
 

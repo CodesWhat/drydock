@@ -58,27 +58,16 @@ function setFontSize(scale: number) {
   applyFontSize(scale);
 }
 
-// --- Eligibility pills ---
-const showSoftEligibilityPills = usePreference(
-  () => preferences.containers.eligibilityPills.showSoft,
+// --- Auto-update diagnostic pills ---
+const showAutoUpdateDiagnostic = usePreference(
+  () => preferences.containers.showAutoUpdateDiagnostic,
   (v) => {
-    preferences.containers.eligibilityPills.showSoft = v;
+    preferences.containers.showAutoUpdateDiagnostic = v;
   },
 );
 
-const deemphasizeSoftEligibilityPills = usePreference(
-  () => preferences.containers.eligibilityPills.deemphasizeSoft,
-  (v) => {
-    preferences.containers.eligibilityPills.deemphasizeSoft = v;
-  },
-);
-
-function setShowSoftEligibilityPills(value: boolean) {
-  showSoftEligibilityPills.value = value;
-}
-
-function setDeemphasizeSoftEligibilityPills(value: boolean) {
-  deemphasizeSoftEligibilityPills.value = value;
+function setShowAutoUpdateDiagnostic(value: boolean) {
+  showAutoUpdateDiagnostic.value = value;
 }
 
 type SettingsTab = 'general' | 'appearance' | 'profile';
@@ -404,10 +393,8 @@ function handleSelectIconLibrary(library: string) {
       :active-radius="activeRadius"
       :radius-presets="radiusPresets"
       :on-select-radius="setRadius"
-      :show-soft-eligibility-pills="showSoftEligibilityPills"
-      :deemphasize-soft-eligibility-pills="deemphasizeSoftEligibilityPills"
-      :on-change-show-soft-eligibility-pills="setShowSoftEligibilityPills"
-      :on-change-deemphasize-soft-eligibility-pills="setDeemphasizeSoftEligibilityPills"
+      :show-auto-update-diagnostic="showAutoUpdateDiagnostic"
+      :on-change-show-auto-update-diagnostic="setShowAutoUpdateDiagnostic"
     />
 
     <ConfigProfileTab

@@ -9,22 +9,20 @@ const props = withDefaults(
     eligibility?: UpdateEligibility;
     variant?: 'compact' | 'full';
     hasActiveOperationBadge?: boolean;
+    respectPref?: boolean;
   }>(),
-  { variant: 'compact', hasActiveOperationBadge: false },
+  { variant: 'compact', hasActiveOperationBadge: false, respectPref: true },
 );
 
 const activeBlockers = computed<UpdateBlocker[]>(() => {
   if (!props.eligibility) return [];
   if (props.eligibility.eligible) return [];
+  if (props.respectPref && !preferences.containers.showAutoUpdateDiagnostic) return [];
 
   let blockers = props.eligibility.blockers.filter((b) => b.reason !== 'no-update-available');
 
   if (props.hasActiveOperationBadge) {
     blockers = blockers.filter((b) => b.reason !== 'active-operation');
-  }
-
-  if (!preferences.containers.eligibilityPills.showSoft) {
-    blockers = blockers.filter((b) => severityOf(b) === 'hard');
   }
 
   // Surface hard blockers first so the primary compact pill reflects the most
@@ -117,16 +115,7 @@ function reasonColor(reason: UpdateBlockerReason): BlockerStyle {
   }
 }
 
-const SOFT_DEEMPHASIZED_STYLE: BlockerStyle = {
-  bg: 'var(--dd-bg-elevated)',
-  text: 'var(--dd-text-muted)',
-};
-
 function blockerStyle(blocker: UpdateBlocker): BlockerStyle {
-  const isSoft = severityOf(blocker) === 'soft';
-  if (isSoft && preferences.containers.eligibilityPills.deemphasizeSoft) {
-    return SOFT_DEEMPHASIZED_STYLE;
-  }
   return reasonColor(blocker.reason);
 }
 
@@ -168,7 +157,6 @@ const extraCount = computed<number>(() => Math.max(0, activeBlockers.value.lengt
           :style="{ backgroundColor: blockerStyle(primaryBlocker!).bg, color: blockerStyle(primaryBlocker!).text }"
           v-tooltip.top="blockerTooltip(primaryBlocker!)"
           data-test="eligibility-badge-primary"
-          :data-severity="severityOf(primaryBlocker!)"
         >
           <iconify-icon
             :icon="reasonIcon(primaryBlocker!.reason)"
@@ -197,7 +185,6 @@ const extraCount = computed<number>(() => Math.max(0, activeBlockers.value.lengt
           class="flex items-start gap-2 px-3 py-2 dd-rounded text-xs"
           :style="{ backgroundColor: blockerStyle(blocker).bg }"
           :data-reason="blocker.reason"
-          :data-severity="severityOf(blocker)"
         >
           <iconify-icon
             :icon="reasonIcon(blocker.reason)"

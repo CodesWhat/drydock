@@ -39,8 +39,8 @@ export interface PreferencesSchema {
       hidePinned: boolean;
     };
     columns: string[];
+    showAutoUpdateDiagnostic: boolean;
     eligibilityPills: {
-      showSoft: boolean;
       deemphasizeSoft: boolean;
     };
   };
@@ -64,7 +64,7 @@ export interface PreferencesSchema {
   };
 }
 
-export const CURRENT_SCHEMA_VERSION = 3;
+export const CURRENT_SCHEMA_VERSION = 4;
 
 export const CONTAINER_TABLE_COLUMN_KEYS = [
   'icon',
@@ -100,9 +100,9 @@ export const DEFAULTS: PreferencesSchema = {
       hidePinned: false,
     },
     columns: [...CONTAINER_TABLE_COLUMN_KEYS],
+    showAutoUpdateDiagnostic: false,
     eligibilityPills: {
-      showSoft: true,
-      deemphasizeSoft: true,
+      deemphasizeSoft: false,
     },
   },
   dashboard: {
