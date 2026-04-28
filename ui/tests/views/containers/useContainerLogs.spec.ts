@@ -14,6 +14,7 @@ vi.mock('@/services/container', () => ({
 function makeContainer(overrides: Partial<Container> = {}): Container {
   return {
     id: 'container-1',
+    identityKey: 'container-1',
     name: 'web',
     image: 'nginx',
     icon: 'docker',

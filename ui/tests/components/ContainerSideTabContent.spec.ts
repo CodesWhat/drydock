@@ -20,6 +20,7 @@ vi.mock('@/services/container', () => ({
 function createSelectedContainer(): Container {
   return {
     id: 'container-1',
+    identityKey: 'container-1',
     name: 'nginx',
     image: 'nginx',
     icon: 'docker',

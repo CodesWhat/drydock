@@ -1,4 +1,5 @@
 import { ref } from 'vue';
+import type { Container } from '@/types/container';
 
 const { mockGetAllContainers, mockGetSecurityVulnerabilityOverview, mockComputeSecurityDelta } =
   vi.hoisted(() => ({
@@ -1072,7 +1073,7 @@ describe('useVulnerabilities', () => {
         provider: 'github',
       };
 
-      const containers = ref([
+      const containers = ref<Container[]>([
         {
           id: 'c1',
           name: 'nginx',
@@ -1134,7 +1135,7 @@ describe('useVulnerabilities', () => {
         provider: 'github',
       };
 
-      const containers = ref([
+      const containers = ref<Container[]>([
         {
           id: 'c1',
           name: 'nginx',
@@ -1189,7 +1190,7 @@ describe('useVulnerabilities', () => {
         provider: 'github',
       };
 
-      const containers = ref([
+      const containers = ref<Container[]>([
         {
           id: 'c1',
           name: 'nginx-a',
@@ -1251,7 +1252,7 @@ describe('useVulnerabilities', () => {
         ],
       });
 
-      const containers = ref([
+      const containers = ref<Container[]>([
         {
           id: 'c1',
           name: 'redis',
@@ -1297,7 +1298,7 @@ describe('useVulnerabilities', () => {
         ],
       });
 
-      const containers = ref([
+      const containers = ref<Container[]>([
         {
           id: 'c99',
           name: 'orphan',
