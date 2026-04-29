@@ -411,7 +411,12 @@ function buildUpdateAppliedSsePayload(
     payload && typeof payload === 'object' && 'container' in payload
       ? (payload.container as Record<string, unknown> | undefined)
       : undefined;
-  const containerId = typeof container?.id === 'string' && container.id !== '' ? container.id : '';
+  const topLevelContainerId =
+    typeof payload.containerId === 'string' && payload.containerId !== ''
+      ? payload.containerId
+      : '';
+  const containerId =
+    typeof container?.id === 'string' && container.id !== '' ? container.id : topLevelContainerId;
   const imageName =
     container?.image && typeof (container.image as Record<string, unknown>)?.name === 'string'
       ? ((container.image as Record<string, unknown>).name as string)

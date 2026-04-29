@@ -166,6 +166,36 @@ describe('SseEventBuffer', () => {
     });
   });
 
+  describe('eviction by size', () => {
+    test('keeps only the newest maxEntries events', () => {
+      const buf = new SseEventBuffer(WINDOW_MS, 2);
+      buf.push(makeId(1), 'dd:scan-started', { n: 1 }, NOW);
+      buf.push(makeId(2), 'dd:scan-started', { n: 2 }, NOW + 1);
+      buf.push(makeId(3), 'dd:scan-started', { n: 3 }, NOW + 2);
+
+      const resultWithGap = buf.replaySince(makeId(0), NOW + 3);
+      expect(resultWithGap.kind).toBe('resync-required');
+
+      const resultAdjacent = buf.replaySince(makeId(1), NOW + 3);
+      expect(resultAdjacent.kind).toBe('replay');
+      if (resultAdjacent.kind === 'replay') {
+        expect(resultAdjacent.events.map((event) => event.id)).toEqual([makeId(2), makeId(3)]);
+      }
+    });
+
+    test('keeps no replayable events when maxEntries is zero', () => {
+      const buf = new SseEventBuffer(WINDOW_MS, 0);
+      buf.push(makeId(1), 'dd:scan-started', { n: 1 }, NOW);
+
+      const result = buf.replaySince(makeId(0), NOW + 1);
+
+      expect(result.kind).toBe('replay');
+      if (result.kind === 'replay') {
+        expect(result.events).toHaveLength(0);
+      }
+    });
+  });
+
   describe('boot-mismatch', () => {
     test('returns resync-required when lastEventId has a different bootId prefix', () => {
       const buf = makeBuffer();

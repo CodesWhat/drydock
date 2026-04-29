@@ -404,6 +404,28 @@ describe('SSE lifecycle event handlers', () => {
       });
     });
 
+    test('update-applied handler preserves top-level containerId from canonical operation events', () => {
+      sseRouter.init();
+      const handler = getHandler();
+      const { res } = connectSseClient(handler);
+
+      const onUpdateApplied = mockRegisterContainerUpdateApplied.mock.calls.at(-1)[0];
+      onUpdateApplied({
+        containerName: 'nginx',
+        operationId: 'op-canonical',
+        containerId: 'container-from-operation-store',
+        batchId: 'batch-canonical',
+      } as any);
+
+      const payload = parseSseEventPayload(res, 'dd:update-applied');
+      expect(payload).toMatchObject({
+        operationId: 'op-canonical',
+        containerId: 'container-from-operation-store',
+        containerName: 'nginx',
+        batchId: 'batch-canonical',
+      });
+    });
+
     test('update-applied handler includes imageName from container when available', () => {
       sseRouter.init();
       const handler = getHandler();
@@ -660,6 +682,22 @@ describe('SSE lifecycle event handlers', () => {
 
       const payload = parseSseEventPayload(res, 'dd:update-failed');
       expect(payload.operationId).toBe('');
+    });
+
+    test('update-failed uses empty string containerId when containerId is undefined', () => {
+      sseRouter.init();
+      const handler = getHandler();
+      const { res } = connectSseClient(handler);
+
+      const onUpdateFailed = mockRegisterContainerUpdateFailed.mock.calls.at(-1)[0];
+      onUpdateFailed({
+        containerName: 'nginx',
+        operationId: 'op-fail-no-container',
+        error: 'image not found',
+      } as any);
+
+      const payload = parseSseEventPayload(res, 'dd:update-failed');
+      expect(payload.containerId).toBe('');
     });
   });
 
