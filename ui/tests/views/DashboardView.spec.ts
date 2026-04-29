@@ -2772,4 +2772,190 @@ describe('DashboardView', () => {
       }
     });
   });
+
+  describe('fail-safe completion toast via dd:sse-update-applied / dd:sse-update-failed', () => {
+    it('fires toast.success on dd:sse-update-applied when operation was NOT tracked by wasTracked path', async () => {
+      vi.useFakeTimers();
+      try {
+        const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
+        const c = makeContainer({ id: 'c1', name: 'nginx' });
+        const wrapper = await mountDashboard([c], []);
+        const updateAppliedListener = addEventListenerSpy.mock.calls.findLast(
+          ([eventName]) => eventName === 'dd:sse-update-applied',
+        )?.[1] as EventListener | undefined;
+
+        const { toasts } = useToast();
+        const countBefore = toasts.value.length;
+
+        globalThis.dispatchEvent(
+          new CustomEvent('dd:sse-update-applied', {
+            detail: {
+              operationId: 'op-dash-failsafe-1',
+              containerId: 'c1',
+              containerName: 'nginx',
+              batchId: null,
+              timestamp: '2026-04-28T12:00:00.000Z',
+            },
+          }),
+        );
+
+        vi.advanceTimersByTime(1500);
+        await flushPromises();
+
+        expect(toasts.value.length).toBe(countBefore + 1);
+        expect(toasts.value.at(-1)).toMatchObject({ tone: 'success', title: 'Updated: nginx' });
+
+        wrapper.unmount();
+        addEventListenerSpy.mockRestore();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('fires toast.error on dd:sse-update-failed when operation was NOT tracked by wasTracked path', async () => {
+      vi.useFakeTimers();
+      try {
+        const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
+        const c = makeContainer({ id: 'c1', name: 'nginx' });
+        const wrapper = await mountDashboard([c], []);
+        const updateFailedListener = addEventListenerSpy.mock.calls.findLast(
+          ([eventName]) => eventName === 'dd:sse-update-failed',
+        )?.[1] as EventListener | undefined;
+
+        const { toasts } = useToast();
+        const countBefore = toasts.value.length;
+
+        globalThis.dispatchEvent(
+          new CustomEvent('dd:sse-update-failed', {
+            detail: {
+              operationId: 'op-dash-failfail-1',
+              containerId: 'c1',
+              containerName: 'nginx',
+              error: 'pull failed',
+              phase: 'pulling',
+              batchId: null,
+              timestamp: '2026-04-28T12:00:00.000Z',
+            },
+          }),
+        );
+
+        vi.advanceTimersByTime(1500);
+        await flushPromises();
+
+        expect(toasts.value.length).toBe(countBefore + 1);
+        expect(toasts.value.at(-1)).toMatchObject({
+          tone: 'error',
+          title: 'Update failed: nginx',
+        });
+
+        wrapper.unmount();
+        addEventListenerSpy.mockRestore();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('deduplicates: does NOT fire a second toast when wasTracked path already fired for the same operationId', async () => {
+      vi.useFakeTimers();
+      try {
+        const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
+        const c = makeContainer({ id: 'c1', name: 'nginx' });
+        const wrapper = await mountDashboard([c], []);
+        const operationListener = addEventListenerSpy.mock.calls.findLast(
+          ([eventName]) => eventName === 'dd:sse-update-operation-changed',
+        )?.[1] as EventListener | undefined;
+        const updateAppliedListener = addEventListenerSpy.mock.calls.findLast(
+          ([eventName]) => eventName === 'dd:sse-update-applied',
+        )?.[1] as EventListener | undefined;
+
+        // wasTracked path: register a hold then fire terminal succeeded
+        globalThis.dispatchEvent(
+          new CustomEvent('dd:sse-update-operation-changed', {
+            detail: {
+              operationId: 'op-dash-dedup-1',
+              containerId: 'c1',
+              containerName: 'nginx',
+              status: 'in-progress',
+              phase: 'pulling',
+            },
+          }),
+        );
+        globalThis.dispatchEvent(
+          new CustomEvent('dd:sse-update-operation-changed', {
+            detail: {
+              operationId: 'op-dash-dedup-1',
+              containerId: 'c1',
+              containerName: 'nginx',
+              status: 'succeeded',
+              phase: 'succeeded',
+            },
+          }),
+        );
+
+        vi.advanceTimersByTime(1500);
+        await flushPromises();
+
+        const { toasts } = useToast();
+        const countAfterFirstPath = toasts.value.length;
+
+        // Fail-safe fires same operationId — should be a no-op
+        globalThis.dispatchEvent(
+          new CustomEvent('dd:sse-update-applied', {
+            detail: {
+              operationId: 'op-dash-dedup-1',
+              containerId: 'c1',
+              containerName: 'nginx',
+              batchId: null,
+              timestamp: '2026-04-28T12:00:00.000Z',
+            },
+          }),
+        );
+
+        vi.advanceTimersByTime(1500);
+        await flushPromises();
+
+        expect(toasts.value.length).toBe(countAfterFirstPath);
+
+        wrapper.unmount();
+        addEventListenerSpy.mockRestore();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('suppresses per-container toast when dd:sse-update-applied has a non-null batchId', async () => {
+      vi.useFakeTimers();
+      try {
+        const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
+        const c = makeContainer({ id: 'c1', name: 'nginx' });
+        const wrapper = await mountDashboard([c], []);
+
+        const { toasts } = useToast();
+        const countBefore = toasts.value.length;
+
+        globalThis.dispatchEvent(
+          new CustomEvent('dd:sse-update-applied', {
+            detail: {
+              operationId: 'op-dash-batch-member-1',
+              containerId: 'c1',
+              containerName: 'nginx',
+              batchId: 'batch-xyz',
+              timestamp: '2026-04-28T12:00:00.000Z',
+            },
+          }),
+        );
+
+        vi.advanceTimersByTime(1500);
+        await flushPromises();
+
+        // Track D handles the batch summary; per-container toast suppressed
+        expect(toasts.value.length).toBe(countBefore);
+
+        wrapper.unmount();
+        addEventListenerSpy.mockRestore();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
 });

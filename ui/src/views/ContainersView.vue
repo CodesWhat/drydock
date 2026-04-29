@@ -1422,6 +1422,54 @@ function applyOperationPatch(event: Event) {
   });
 }
 
+function handleSseUpdateApplied(event: Event) {
+  const detail = (event as CustomEvent)?.detail as Record<string, unknown> | undefined;
+  if (!detail) {
+    return;
+  }
+  const operationId = typeof detail.operationId === 'string' ? detail.operationId : undefined;
+  const containerName =
+    typeof detail.containerName === 'string' ? detail.containerName : 'container';
+  const batchId = detail.batchId ?? null;
+  // Batch completions are handled by Track D — suppress per-container toast.
+  if (batchId !== null) {
+    return;
+  }
+  if (!operationId || wasToastFired(operationId)) {
+    return;
+  }
+  markToastFired(operationId);
+  setTimeout(
+    () => toast.success(t('containersView.toast.updated', { name: containerName })),
+    OPERATION_DISPLAY_HOLD_MS,
+  );
+}
+
+function handleSseUpdateFailed(event: Event) {
+  const detail = (event as CustomEvent)?.detail as Record<string, unknown> | undefined;
+  if (!detail) {
+    return;
+  }
+  const operationId = typeof detail.operationId === 'string' ? detail.operationId : undefined;
+  const containerName =
+    typeof detail.containerName === 'string' ? detail.containerName : 'container';
+  const batchId = detail.batchId ?? null;
+  if (batchId !== null) {
+    return;
+  }
+  if (!operationId || wasToastFired(operationId)) {
+    return;
+  }
+  markToastFired(operationId);
+  setTimeout(
+    () => toast.error(t('containersView.toast.updateFailed', { name: containerName })),
+    OPERATION_DISPLAY_HOLD_MS,
+  );
+}
+
+const sseUpdateAppliedListener = handleSseUpdateApplied as EventListener;
+const sseUpdateFailedListener = handleSseUpdateFailed as EventListener;
+
 const sseConnectedListener = handleSseContainerChanged as EventListener;
 const sseResyncRequiredListener = handleSseContainerChanged as EventListener;
 const sseUpdateOperationChangedListener = ((event: Event) => {
@@ -1446,6 +1494,8 @@ onMounted(() => {
   globalThis.addEventListener('dd:sse-update-operation-changed', sseUpdateOperationChangedListener);
   globalThis.addEventListener('dd:sse-connected', sseConnectedListener);
   globalThis.addEventListener('dd:sse-resync-required', sseResyncRequiredListener);
+  globalThis.addEventListener('dd:sse-update-applied', sseUpdateAppliedListener);
+  globalThis.addEventListener('dd:sse-update-failed', sseUpdateFailedListener);
 });
 onUnmounted(() => {
   clearAllOperationDisplayHolds();
@@ -1461,6 +1511,8 @@ onUnmounted(() => {
   );
   globalThis.removeEventListener('dd:sse-connected', sseConnectedListener);
   globalThis.removeEventListener('dd:sse-resync-required', sseResyncRequiredListener);
+  globalThis.removeEventListener('dd:sse-update-applied', sseUpdateAppliedListener);
+  globalThis.removeEventListener('dd:sse-update-failed', sseUpdateFailedListener);
 });
 
 const tt = (label: string) => ({ value: label, showDelay: 400 });

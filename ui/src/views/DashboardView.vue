@@ -559,12 +559,61 @@ watch(containers, (next) => {
   );
 });
 
+function handleDashboardSseUpdateApplied(event: Event) {
+  const detail = (event as CustomEvent)?.detail as Record<string, unknown> | undefined;
+  if (!detail) {
+    return;
+  }
+  const operationId = typeof detail.operationId === 'string' ? detail.operationId : undefined;
+  const containerName =
+    typeof detail.containerName === 'string' ? detail.containerName : 'container';
+  const batchId = detail.batchId ?? null;
+  // Batch completions are handled by Track D — suppress per-container toast.
+  if (batchId !== null) {
+    return;
+  }
+  if (!operationId || wasToastFired(operationId)) {
+    return;
+  }
+  markToastFired(operationId);
+  setTimeout(
+    () => toast.success(t('dashboardView.toast.updated', { name: containerName })),
+    OPERATION_DISPLAY_HOLD_MS,
+  );
+}
+
+function handleDashboardSseUpdateFailed(event: Event) {
+  const detail = (event as CustomEvent)?.detail as Record<string, unknown> | undefined;
+  if (!detail) {
+    return;
+  }
+  const operationId = typeof detail.operationId === 'string' ? detail.operationId : undefined;
+  const containerName =
+    typeof detail.containerName === 'string' ? detail.containerName : 'container';
+  const batchId = detail.batchId ?? null;
+  if (batchId !== null) {
+    return;
+  }
+  if (!operationId || wasToastFired(operationId)) {
+    return;
+  }
+  markToastFired(operationId);
+  setTimeout(
+    () => toast.error(t('dashboardView.toast.updateFailed', { name: containerName })),
+    OPERATION_DISPLAY_HOLD_MS,
+  );
+}
+
 onMounted(() => {
   globalThis.addEventListener('dd:sse-update-operation-changed', applyDashboardOperationSse);
+  globalThis.addEventListener('dd:sse-update-applied', handleDashboardSseUpdateApplied);
+  globalThis.addEventListener('dd:sse-update-failed', handleDashboardSseUpdateFailed);
 });
 
 onUnmounted(() => {
   globalThis.removeEventListener('dd:sse-update-operation-changed', applyDashboardOperationSse);
+  globalThis.removeEventListener('dd:sse-update-applied', handleDashboardSseUpdateApplied);
+  globalThis.removeEventListener('dd:sse-update-failed', handleDashboardSseUpdateFailed);
   stopDashboardPendingUpdatePolling();
 });
 
