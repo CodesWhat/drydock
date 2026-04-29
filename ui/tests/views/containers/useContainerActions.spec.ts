@@ -649,6 +649,8 @@ describe('useContainerActions', () => {
     expect(useUpdateBatches().getBatch('group-1')).toEqual({
       frozenTotal: 2,
       startedAt: expect.any(Number),
+      succeededCount: 0,
+      failedCount: 0,
     });
     expect(mocks.toastSuccess).toHaveBeenCalledWith('Started updates for 2 containers in group-1');
   });
@@ -2730,6 +2732,8 @@ describe('useContainerActions', () => {
     expect(useUpdateBatches().getBatch('proxy-stack')).toEqual({
       frozenTotal: 3,
       startedAt: expect.any(Number),
+      succeededCount: 0,
+      failedCount: 0,
     });
   });
 
