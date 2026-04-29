@@ -331,6 +331,35 @@ describe('docker helper extraction module', () => {
     warnSpy.mockRestore();
   });
 
+  test('isDigestToWatch warns for index.docker.io subdomain when explicit digest label is true', () => {
+    const warnSpy = vi.spyOn(log, 'warn').mockImplementation(() => undefined);
+
+    expect(
+      isDigestToWatch(
+        'true',
+        { domain: 'index.docker.io', path: 'library/nginx' },
+        false,
+        'floating',
+      ),
+    ).toBe(true);
+    expect(warnSpy).toHaveBeenCalledWith(
+      'Watching digest for image library/nginx with domain index.docker.io may result in throttled requests',
+    );
+
+    warnSpy.mockRestore();
+  });
+
+  test('isDigestToWatch warns for empty domain when explicit digest label is true', () => {
+    const warnSpy = vi.spyOn(log, 'warn').mockImplementation(() => undefined);
+
+    expect(
+      isDigestToWatch('true', { domain: undefined, path: 'library/nginx' }, false, 'floating'),
+    ).toBe(true);
+    expect(warnSpy).toHaveBeenCalled();
+
+    warnSpy.mockRestore();
+  });
+
   test('isDigestToWatch should not warn when an explicit digest label is false', () => {
     const warnSpy = vi.spyOn(log, 'warn').mockImplementation(() => undefined);
 
