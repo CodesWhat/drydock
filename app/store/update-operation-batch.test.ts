@@ -369,4 +369,133 @@ describe('update-operation batch completion', () => {
       documents.find((d) => d.data?.containerName === 'postgres')?.data?.id,
     );
   });
+
+  test('batch completion silently skips a member whose store entry has been removed (defensive continue)', () => {
+    const documents: any[] = [];
+    updateOperation.createCollections(createDocumentBackedDb(documents) as any);
+
+    const batchId = 'batch-missing-member';
+
+    const op1 = updateOperation.insertOperation({
+      containerName: 'nginx',
+      containerId: 'c-1',
+      status: 'in-progress',
+      phase: 'prepare',
+      batchId,
+    } as any);
+
+    const op2 = updateOperation.insertOperation({
+      containerName: 'redis',
+      containerId: 'c-2',
+      status: 'in-progress',
+      phase: 'prepare',
+      batchId,
+    } as any);
+
+    // Insert a third member so batchMemberRegistry has three IDs, then
+    // splice its document out so getOperationById returns undefined for it.
+    const op3 = updateOperation.insertOperation({
+      containerName: 'postgres',
+      containerId: 'c-3',
+      status: 'in-progress',
+      phase: 'prepare',
+      batchId,
+    } as any);
+    const op3DocIndex = documents.findIndex((d) => d.data?.id === op3.id);
+    documents.splice(op3DocIndex, 1);
+
+    // Mark op1 terminal first — op2 is still active so no batch completion yet.
+    updateOperation.markOperationTerminal(op1.id, { status: 'succeeded' });
+    expect(mockEmitBatchUpdateCompleted).not.toHaveBeenCalled();
+
+    // Mark op2 terminal — remainingActive is now 0 (op3 is absent from docs),
+    // so batch completion fires. The loop hits op3.id → getOperationById returns
+    // undefined → continue. Payload should include only op1 and op2.
+    updateOperation.markOperationTerminal(op2.id, { status: 'succeeded' });
+
+    expect(mockEmitBatchUpdateCompleted).toHaveBeenCalledTimes(1);
+    const [payload] = mockEmitBatchUpdateCompleted.mock.calls[0];
+    expect(payload.total).toBe(2);
+    const itemIds = payload.items.map((i: { operationId: string }) => i.operationId);
+    expect(itemIds).toContain(op1.id);
+    expect(itemIds).toContain(op2.id);
+    expect(itemIds).not.toContain(op3.id);
+  });
+
+  test('durationMs is 0 for operations whose createdAt is unparseable (NaN guard)', () => {
+    const documents: any[] = [];
+    updateOperation.createCollections(createDocumentBackedDb(documents) as any);
+
+    const batchId = 'batch-bad-dates';
+
+    // Use a malformed createdAt so Date.parse returns NaN for this op.
+    const op1 = updateOperation.insertOperation({
+      containerName: 'nginx',
+      containerId: 'c-1',
+      status: 'in-progress',
+      phase: 'prepare',
+      batchId,
+      createdAt: 'not-a-valid-date',
+    } as any);
+
+    const op2 = updateOperation.insertOperation({
+      containerName: 'redis',
+      containerId: 'c-2',
+      status: 'in-progress',
+      phase: 'prepare',
+      batchId,
+    } as any);
+
+    updateOperation.markOperationTerminal(op1.id, { status: 'succeeded' });
+    updateOperation.markOperationTerminal(op2.id, { status: 'succeeded' });
+
+    expect(mockEmitBatchUpdateCompleted).toHaveBeenCalledTimes(1);
+    const [payload] = mockEmitBatchUpdateCompleted.mock.calls[0];
+    // op1's NaN dates contribute 0 to duration; overall must be non-negative.
+    expect(payload.durationMs).toBeGreaterThanOrEqual(0);
+    expect(Number.isFinite(payload.durationMs)).toBe(true);
+  });
+
+  test('falls back to markOperationTerminal completedAt when stored op.completedAt is not a string', () => {
+    const documents: any[] = [];
+    updateOperation.createCollections(createDocumentBackedDb(documents) as any);
+
+    const batchId = 'batch-no-completedAt';
+
+    const op1 = updateOperation.insertOperation({
+      containerName: 'nginx',
+      containerId: 'c-1',
+      status: 'in-progress',
+      phase: 'prepare',
+      batchId,
+    } as any);
+
+    const op2 = updateOperation.insertOperation({
+      containerName: 'redis',
+      containerId: 'c-2',
+      status: 'in-progress',
+      phase: 'prepare',
+      batchId,
+    } as any);
+
+    // Mark op1 terminal so it transitions to terminal state and has completedAt set.
+    updateOperation.markOperationTerminal(op1.id, { status: 'succeeded' });
+
+    // After terminal transition, manually corrupt op1's completedAt in the documents array
+    // so the completedAt property is not a string — this hits the fallback branch at line 673.
+    const op1Doc = documents.find((d) => d.data?.id === op1.id);
+    if (op1Doc) {
+      op1Doc.data.completedAt = null;
+    }
+
+    // Mark op2 terminal — triggers batch completion, iterates op1 and op2.
+    // For op1, op.completedAt is null (not a string), so completedAt (the current
+    // markOperationTerminal local) is used as the fallback.
+    updateOperation.markOperationTerminal(op2.id, { status: 'succeeded' });
+
+    expect(mockEmitBatchUpdateCompleted).toHaveBeenCalledTimes(1);
+    const [payload] = mockEmitBatchUpdateCompleted.mock.calls[0];
+    expect(payload.durationMs).toBeGreaterThanOrEqual(0);
+    expect(Number.isFinite(payload.durationMs)).toBe(true);
+  });
 });

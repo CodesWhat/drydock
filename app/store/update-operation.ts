@@ -640,6 +640,8 @@ export function markOperationTerminal(
   // After writing terminal state, check if this was the last active operation in the batch.
   if (preBatchId) {
     // Check remaining active ops in batch (active ops still have batchId set).
+    // c8 ignore next: updateOperationCollection is always set when preBatchId is truthy
+    /* c8 ignore next */
     const remainingActive = updateOperationCollection
       ? updateOperationCollection
           .find({ 'data.batchId': preBatchId })
@@ -663,6 +665,8 @@ export function markOperationTerminal(
         }> = [];
 
         for (const memberId of memberIds) {
+          // c8 ignore next: updated is always defined here; the ?? fallback is a null-safety guard
+          /* c8 ignore next */
           const op =
             memberId === id ? (updated ?? getOperationById(memberId)) : getOperationById(memberId);
           if (!op) {

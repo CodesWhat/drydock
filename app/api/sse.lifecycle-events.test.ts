@@ -485,6 +485,93 @@ describe('SSE lifecycle event handlers', () => {
       const eventWrite = writes.find((v) => v.includes('dd:update-applied'));
       expect(eventWrite).toMatch(/^id: test-boot-id:\d+\n/);
     });
+
+    test('update-applied uses empty operationId when operationId is absent from payload', () => {
+      sseRouter.init();
+      const handler = getHandler();
+      const { res } = connectSseClient(handler);
+
+      const onUpdateApplied = mockRegisterContainerUpdateApplied.mock.calls.at(-1)[0];
+      // payload is an object but operationId is intentionally omitted
+      onUpdateApplied({
+        containerName: 'nginx',
+        container: {
+          id: 'c-1',
+          name: 'nginx',
+          image: { name: 'nginx:latest', serviceImage: 'nginx:latest' },
+        },
+      } as any);
+
+      const payload = parseSseEventPayload(res, 'dd:update-applied');
+      expect(payload.operationId).toBe('');
+    });
+
+    test('update-applied sets container to undefined when payload object has no container key', () => {
+      sseRouter.init();
+      const handler = getHandler();
+      const { res } = connectSseClient(handler);
+
+      const onUpdateApplied = mockRegisterContainerUpdateApplied.mock.calls.at(-1)[0];
+      // payload is an object without a container property
+      onUpdateApplied({ containerName: 'nginx', operationId: 'op-no-container' } as any);
+
+      const payload = parseSseEventPayload(res, 'dd:update-applied');
+      expect(payload.operationId).toBe('op-no-container');
+      expect(payload.containerId).toBe('');
+      expect(payload.imageName).toBeUndefined();
+    });
+
+    test('update-applied sets imageName to undefined when container has no image', () => {
+      sseRouter.init();
+      const handler = getHandler();
+      const { res } = connectSseClient(handler);
+
+      const onUpdateApplied = mockRegisterContainerUpdateApplied.mock.calls.at(-1)[0];
+      onUpdateApplied({
+        containerName: 'nginx',
+        operationId: 'op-no-image',
+        container: { id: 'c-1', name: 'nginx' },
+      } as any);
+
+      const payload = parseSseEventPayload(res, 'dd:update-applied');
+      expect(payload.imageName).toBeUndefined();
+      expect(payload.newDigest).toBeNull();
+    });
+
+    test('update-applied sets imageName to undefined when container.image.name is not a string', () => {
+      sseRouter.init();
+      const handler = getHandler();
+      const { res } = connectSseClient(handler);
+
+      const onUpdateApplied = mockRegisterContainerUpdateApplied.mock.calls.at(-1)[0];
+      onUpdateApplied({
+        containerName: 'nginx',
+        operationId: 'op-bad-name',
+        container: {
+          id: 'c-1',
+          name: 'nginx',
+          image: { name: 42, serviceImage: 'nginx:latest' },
+        },
+      } as any);
+
+      const payload = parseSseEventPayload(res, 'dd:update-applied');
+      expect(payload.imageName).toBeUndefined();
+    });
+
+    test('update-applied uses empty containerName when payload object has no containerName field', () => {
+      sseRouter.init();
+      const handler = getHandler();
+      const { res } = connectSseClient(handler);
+
+      const onUpdateApplied = mockRegisterContainerUpdateApplied.mock.calls.at(-1)[0];
+      // No containerName field — getContainerUpdateAppliedEventContainerName returns undefined,
+      // triggering the ?? '' fallback on line 406.
+      onUpdateApplied({ operationId: 'op-no-cname' } as any);
+
+      const payload = parseSseEventPayload(res, 'dd:update-applied');
+      expect(payload.containerName).toBe('');
+      expect(payload.operationId).toBe('op-no-cname');
+    });
   });
 
   describe('dd:update-failed broadcast', () => {
@@ -558,6 +645,21 @@ describe('SSE lifecycle event handlers', () => {
       const writes = res.write.mock.calls.map(([v]) => v);
       const eventWrite = writes.find((v) => v.includes('dd:update-failed'));
       expect(eventWrite).toMatch(/^id: test-boot-id:\d+\n/);
+    });
+
+    test('update-failed uses empty string operationId when operationId is undefined', () => {
+      sseRouter.init();
+      const handler = getHandler();
+      const { res } = connectSseClient(handler);
+
+      const onUpdateFailed = mockRegisterContainerUpdateFailed.mock.calls.at(-1)[0];
+      onUpdateFailed({
+        containerName: 'nginx',
+        error: 'image not found',
+      } as any);
+
+      const payload = parseSseEventPayload(res, 'dd:update-failed');
+      expect(payload.operationId).toBe('');
     });
   });
 
