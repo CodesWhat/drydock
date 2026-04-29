@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, watchEffect } from 'vue';
+import { computed, onScopeDispose, watchEffect } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { useToast } from '../../composables/useToast';
 import AppBadge from '../AppBadge.vue';
 import AppIconButton from '../AppIconButton.vue';
 import type { ContainersViewRenderGroup } from './containersViewTemplateContext';
@@ -72,7 +73,8 @@ const {
   clearFilters,
 } = useContainersViewTemplateContext();
 const { t } = useI18n();
-const { batches, clearBatch, getBatch } = useUpdateBatches();
+const { batches, clearBatch, getBatch, incrementSucceeded, incrementFailed } = useUpdateBatches();
+const toast = useToast();
 
 const openActionsContainer = computed(
   () => displayContainers.value.find((container) => container.id === openActionsMenu.value) ?? null,
@@ -244,7 +246,7 @@ function getGroupDoneCount(group: ContainersViewRenderGroup) {
     return undefined;
   }
 
-  return Math.max(batch.frozenTotal - getGroupActiveUpdateCount(group), 0);
+  return batch.succeededCount + batch.failedCount;
 }
 
 function getContainerStatusLabel(container: { id?: unknown; name?: unknown; status?: string }) {
@@ -335,16 +337,117 @@ function selectTableRow(row: Record<string, unknown>) {
   selectContainer(typedRow.__source);
 }
 
+// Timers for the display-hold window: keyed by groupKey, hold for ~1500ms
+// at "Y of Y done" before clearing so the user can see the final count.
+const batchClearTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
 watchEffect(() => {
   batches.value;
   renderGroups.value.forEach((group) => {
-    if (!getBatch(group.key)) {
+    const batch = getBatch(group.key);
+    if (!batch) {
       return;
     }
-    if (getGroupActiveUpdateCount(group) === 0) {
-      clearBatch(group.key);
+    const done = batch.succeededCount + batch.failedCount;
+    if (done >= batch.frozenTotal) {
+      // All terminal events received — start/reset the display-hold timer.
+      if (!batchClearTimers.has(group.key)) {
+        const timer = setTimeout(() => {
+          batchClearTimers.delete(group.key);
+          clearBatch(group.key);
+        }, 1500);
+        batchClearTimers.set(group.key, timer);
+      }
     }
   });
+});
+
+// Resolve a groupKey for a given containerId by searching the current renderGroups.
+function resolveGroupKeyForContainer(containerId: string): string | undefined {
+  for (const group of renderGroups.value) {
+    if (group.containers.some((c: { id?: string }) => c.id === containerId)) {
+      return group.key;
+    }
+  }
+  return undefined;
+}
+
+// Subscribe to per-container terminal events to tick the live counter.
+function onUpdateApplied(event: Event) {
+  const payload = (event as CustomEvent).detail as Record<string, unknown> | undefined;
+  if (!payload) return;
+  const containerId = typeof payload.containerId === 'string' ? payload.containerId : undefined;
+  if (!containerId) return;
+  const groupKey = resolveGroupKeyForContainer(containerId);
+  if (!groupKey || !getBatch(groupKey)) return;
+  incrementSucceeded(groupKey);
+}
+
+function onUpdateFailed(event: Event) {
+  const payload = (event as CustomEvent).detail as Record<string, unknown> | undefined;
+  if (!payload) return;
+  const containerId = typeof payload.containerId === 'string' ? payload.containerId : undefined;
+  if (!containerId) return;
+  const groupKey = resolveGroupKeyForContainer(containerId);
+  if (!groupKey || !getBatch(groupKey)) return;
+  incrementFailed(groupKey);
+}
+
+// Subscribe to the batch-completion SSE event to fire the summary toast.
+function onBatchUpdateCompleted(event: Event) {
+  const payload = (event as CustomEvent).detail as Record<string, unknown> | undefined;
+  if (!payload) return;
+
+  const batchId = typeof payload.batchId === 'string' ? payload.batchId : undefined;
+  const total = typeof payload.total === 'number' ? payload.total : 0;
+  const succeeded = typeof payload.succeeded === 'number' ? payload.succeeded : 0;
+  const failed = typeof payload.failed === 'number' ? payload.failed : 0;
+
+  // Find the group name by looking up the first item's containerId in renderGroups.
+  let groupName: string | undefined;
+  if (Array.isArray(payload.items)) {
+    const items = payload.items as Array<{ containerId?: string }>;
+    const firstItem = items[0];
+    if (firstItem?.containerId) {
+      const groupKey = resolveGroupKeyForContainer(firstItem.containerId);
+      if (groupKey) {
+        groupName =
+          renderGroups.value.find((g: { key: string; name?: string }) => g.key === groupKey)
+            ?.name ?? groupKey;
+      }
+    }
+  }
+  groupName ??= batchId ?? t('containersView.toast.unknownGroup');
+
+  if (failed === 0) {
+    toast.success(t('containersView.toast.batchUpdated', { count: succeeded, group: groupName }));
+  } else if (succeeded === 0) {
+    toast.error(t('containersView.toast.batchFailed', { count: failed, group: groupName }));
+  } else {
+    toast.warning(
+      t('containersView.toast.batchPartial', {
+        succeeded,
+        total,
+        group: groupName,
+        failed,
+      }),
+    );
+  }
+}
+
+globalThis.addEventListener('dd:sse-update-applied', onUpdateApplied);
+globalThis.addEventListener('dd:sse-update-failed', onUpdateFailed);
+globalThis.addEventListener('dd:sse-batch-update-completed', onBatchUpdateCompleted);
+
+// Clean up timers and event listeners when the component is torn down.
+onScopeDispose(() => {
+  for (const timer of batchClearTimers.values()) {
+    clearTimeout(timer);
+  }
+  batchClearTimers.clear();
+  globalThis.removeEventListener('dd:sse-update-applied', onUpdateApplied);
+  globalThis.removeEventListener('dd:sse-update-failed', onUpdateFailed);
+  globalThis.removeEventListener('dd:sse-batch-update-completed', onBatchUpdateCompleted);
 });
 </script>
 
