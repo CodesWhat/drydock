@@ -7,6 +7,9 @@ type SseBusEvent =
   | 'container-updated'
   | 'container-removed'
   | 'update-operation-changed'
+  | 'update-applied'
+  | 'update-failed'
+  | 'batch-update-completed'
   | 'agent-status-changed'
   | 'scan-started'
   | 'scan-completed'
@@ -52,6 +55,42 @@ type SelfUpdateSsePayload = {
 
 export type ResyncRequiredPayload = {
   reason: 'boot-mismatch' | 'buffer-evicted';
+};
+
+export type UpdateAppliedPayload = {
+  operationId: string;
+  containerId: string;
+  containerName: string;
+  imageName?: string;
+  previousDigest?: string | null;
+  newDigest?: string | null;
+  batchId?: string | null;
+  timestamp: string;
+};
+
+export type UpdateFailedPayload = {
+  operationId: string;
+  containerId: string;
+  containerName: string;
+  error: string;
+  phase: string;
+  batchId?: string | null;
+  timestamp: string;
+};
+
+export type BatchUpdateCompletedPayload = {
+  batchId: string;
+  total: number;
+  succeeded: number;
+  failed: number;
+  durationMs: number;
+  items: Array<{
+    operationId: string;
+    containerId: string;
+    containerName: string;
+    status: 'succeeded' | 'failed';
+  }>;
+  timestamp: string;
 };
 
 type ConnectedSsePayload = {
@@ -145,6 +184,18 @@ class SseService {
     this.eventSource.addEventListener('dd:resync-required', (event: MessageEvent) => {
       const payload = this.parseResyncRequiredPayload(event?.data);
       this.eventBus?.emit('resync-required', payload);
+    });
+
+    this.eventSource.addEventListener('dd:update-applied', (event: MessageEvent) => {
+      this.eventBus?.emit('update-applied', this.parseJsonPayload(event?.data));
+    });
+
+    this.eventSource.addEventListener('dd:update-failed', (event: MessageEvent) => {
+      this.eventBus?.emit('update-failed', this.parseJsonPayload(event?.data));
+    });
+
+    this.eventSource.addEventListener('dd:batch-update-completed', (event: MessageEvent) => {
+      this.eventBus?.emit('batch-update-completed', this.parseJsonPayload(event?.data));
     });
 
     this.eventSource.onerror = (): void => {
@@ -263,6 +314,21 @@ class SseService {
       return { containerId, status };
     } catch {
       return {};
+    }
+  }
+
+  private parseJsonPayload(rawData: unknown): Record<string, unknown> | undefined {
+    if (!rawData || typeof rawData !== 'string') {
+      return undefined;
+    }
+    try {
+      const parsed = JSON.parse(rawData);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return undefined;
+      }
+      return parsed as Record<string, unknown>;
+    } catch {
+      return undefined;
     }
   }
 
