@@ -1,0 +1,132 @@
+{
+  "appShell": {
+    "toast": {
+      "dismiss": "关闭"
+    },
+    "logViewer": {
+      "toolbar": {
+        "resume": "恢复",
+        "pause": "暂停",
+        "unpinAutoScroll": "取消固定自动滚动",
+        "pinAutoScroll": "固定自动滚动",
+        "newestFirst": "最新在前",
+        "oldestFirst": "最旧在前",
+        "regexToggle": ".* 正则",
+        "showMatchesOnly": "仅显示匹配项",
+        "showingMatchesOnly": "仅显示匹配项",
+        "prev": "上一个",
+        "next": "下一个"
+      },
+      "search": {
+        "placeholder": "搜索日志",
+        "copied": "已复制！",
+        "copyLogs": "复制日志"
+      },
+      "empty": {
+        "noMatchingEntries": "没有匹配的条目",
+        "defaultMessage": "暂无日志条目"
+      },
+      "footer": {
+        "lines": "行",
+        "defaultStatusLabel": "离线"
+      }
+    },
+    "notificationBell": {
+      "buttonLabel": "通知",
+      "tooltip": "通知",
+      "header": "通知",
+      "clear": "清除",
+      "loading": "加载中...",
+      "empty": "暂无通知",
+      "markAllRead": "全部标记为已读",
+      "openAuditLog": "打开审计日志",
+      "dismiss": "关闭通知"
+    },
+    "themeToggle": {
+      "mobileLabel": "主题：{id}（点击切换）",
+      "switchTo": "切换到 {id} 主题",
+      "variantLabel": "{label}"
+    },
+    "layout": {
+      "nav": {
+        "dashboard": "仪表盘",
+        "containers": "容器",
+        "security": "安全",
+        "audit": "审计",
+        "systemLogs": "系统日志",
+        "manageGroup": "管理",
+        "hosts": "主机",
+        "registries": "仓库",
+        "watchers": "监视器",
+        "settingsGroup": "设置",
+        "general": "通用",
+        "notifications": "通知",
+        "triggers": "触发器",
+        "auth": "认证",
+        "agents": "代理"
+      },
+      "sidebar": {
+        "closeMobileMenu": "关闭菜单",
+        "searchButton": "搜索",
+        "searchAriaLabel": "搜索",
+        "aboutTooltip": "关于 Drydock",
+        "aboutAriaLabel": "关于 Drydock",
+        "expandSidebar": "展开侧边栏",
+        "collapseSidebar": "收起侧边栏"
+      },
+      "topbar": {
+        "openMenu": "打开菜单",
+        "closeMenu": "关闭菜单",
+        "userMenu": "用户菜单",
+        "profile": "个人资料",
+        "signOut": "退出登录"
+      },
+      "about": {
+        "title": "Drydock",
+        "subtitle": "Docker 容器更新管理器",
+        "documentation": "文档",
+        "github": "GitHub",
+        "changelog": "更新日志",
+        "close": "关闭"
+      },
+      "search": {
+        "ariaLabel": "搜索",
+        "placeholder": "跳转到页面、容器、代理、触发器...",
+        "shown": "显示 {count} 条",
+        "refreshing": "正在刷新搜索索引...",
+        "noMatches": "没有找到 \"{query}\" 的匹配项。",
+        "hint": "输入以搜索页面、容器、代理、触发器、监视器和设置。",
+        "prefixScopeHint": "前缀作用域已激活",
+        "typeHint": "输入",
+        "useTab": " 以更改作用域",
+        "moveHint": "移动",
+        "openHint": "打开"
+      },
+      "connection": {
+        "lostTitle": "连接丢失",
+        "applyingUpdateTitle": "正在应用更新",
+        "lostMessage": "服务器无法访问。正在等待其重新上线...",
+        "restartingMessage": "Drydock 正在重新启动{opId}。服务恢复后将重新连接...",
+        "reconnecting": "重新连接中",
+        "restartingService": "重启服务中"
+      }
+    },
+    "announcementBanner": {
+      "defaultDismiss": "关闭",
+      "defaultLinkLabel": "查看迁移指南"
+    },
+    "banners": {
+      "legacyConfigTitleSingular": "检测到 {total} 个旧配置别名",
+      "legacyConfigTitlePlural": "检测到 {total} 个旧配置别名",
+      "legacyApiPathTitle": "检测到 {total} 个旧 API 路径",
+      "dontShowAgain": "不再显示",
+      "oidcHttpTitle": "检测到 HTTP OIDC 发现",
+      "legacyHashTitle": "检测到旧版密码哈希",
+      "curlHealthcheckTitle": "检测到自定义 curl 健康检查覆盖",
+      "envKeysLabel": "环境变量密钥 ({count}): {keys}",
+      "labelKeysLabel": "Label keys ({count}): {keys}",
+      "apiPathsLabel": "API 路径 ({count}): {keys}",
+      "healthcheckCommandLabel": "健康检查命令：{command}"
+    }
+  }
+}

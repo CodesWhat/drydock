@@ -1,0 +1,17 @@
+{
+  "containersView": {
+    "error": {
+      "loadFailed": "无法加载容器",
+      "recheckFailed": "无法重新检查容器"
+    },
+    "toast": {
+      "updated": "已更新：{name}",
+      "updateFailed": "更新失败：{name}",
+      "rolledBack": "已回滚：{name}"
+    },
+    "registryError": {
+      "generic": "仓库错误",
+      "detail": "仓库错误：{error}"
+    }
+  }
+}

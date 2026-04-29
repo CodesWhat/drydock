@@ -1,0 +1,9 @@
+{
+  "containerLogs": {
+    "backTooltip": "返回容器列表",
+    "title": "容器日志",
+    "loading": "正在加载容器...",
+    "notFound": "未找到容器 \"{name}\"",
+    "loadFailed": "无法加载容器信息"
+  }
+}
