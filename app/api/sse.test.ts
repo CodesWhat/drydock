@@ -7,6 +7,9 @@ var {
   mockRegisterUpdateOperationChanged,
   mockRegisterAgentConnected,
   mockRegisterAgentDisconnected,
+  mockRegisterContainerUpdateApplied,
+  mockRegisterContainerUpdateFailed,
+  mockRegisterBatchUpdateCompleted,
   mockRandomUUID,
   mockRandomBytes,
   mockCreateHash,
@@ -51,6 +54,9 @@ var {
     mockRegisterUpdateOperationChanged: vi.fn(),
     mockRegisterAgentConnected: vi.fn(),
     mockRegisterAgentDisconnected: vi.fn(),
+    mockRegisterContainerUpdateApplied: vi.fn(),
+    mockRegisterContainerUpdateFailed: vi.fn(),
+    mockRegisterBatchUpdateCompleted: vi.fn(),
     mockRandomUUID: vi.fn(() => {
       uuidCounter += 1;
       return `uuid-${uuidCounter}`;
@@ -119,6 +125,15 @@ vi.mock('../event/index', () => ({
   registerUpdateOperationChanged: mockRegisterUpdateOperationChanged,
   registerAgentConnected: mockRegisterAgentConnected,
   registerAgentDisconnected: mockRegisterAgentDisconnected,
+  registerContainerUpdateApplied: mockRegisterContainerUpdateApplied,
+  registerContainerUpdateFailed: mockRegisterContainerUpdateFailed,
+  registerBatchUpdateCompleted: mockRegisterBatchUpdateCompleted,
+  getContainerUpdateAppliedEventContainerName: (payload: unknown) => {
+    if (typeof payload === 'string') return payload || undefined;
+    if (!payload || typeof payload !== 'object') return undefined;
+    const name = (payload as { containerName?: unknown }).containerName;
+    return typeof name === 'string' && name !== '' ? name : undefined;
+  },
 }));
 
 vi.mock('./sse-container-enrichment.js', () => ({

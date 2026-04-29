@@ -67,6 +67,10 @@ export interface SelfUpdateStartingEventPayload {
 export interface ContainerUpdateFailedEventPayload {
   containerName: string;
   error: string;
+  operationId?: string;
+  containerId?: string;
+  batchId?: string | null;
+  phase?: string;
 }
 
 export interface UpdateOperationChangedEventPayload {
@@ -81,9 +85,26 @@ export interface UpdateOperationChangedEventPayload {
 export interface ContainerUpdateAppliedEventPayload {
   containerName: string;
   container?: Container | Record<string, unknown>;
+  operationId?: string;
+  batchId?: string | null;
 }
 
 export type ContainerUpdateAppliedEvent = string | ContainerUpdateAppliedEventPayload;
+
+export interface BatchUpdateCompletedEventPayload {
+  batchId: string;
+  total: number;
+  succeeded: number;
+  failed: number;
+  durationMs: number;
+  items: Array<{
+    operationId: string;
+    containerId: string;
+    containerName: string;
+    status: 'succeeded' | 'failed';
+  }>;
+  timestamp: string;
+}
 
 export interface SecurityAlertSummary {
   unknown: number;
@@ -172,6 +193,10 @@ const agentDisconnectedHandlers = new Map<
 const selfUpdateStartingHandlers = new Map<
   number,
   OrderedEventHandler<SelfUpdateStartingEventPayload>
+>();
+const batchUpdateCompletedHandlers = new Map<
+  number,
+  OrderedEventHandler<BatchUpdateCompletedEventPayload>
 >();
 let handlerRegistrationSequence = 0;
 
@@ -527,6 +552,27 @@ export function registerSelfUpdateStarting(
   return registerOrderedEventHandler(selfUpdateStartingHandlers, handler, options);
 }
 
+/**
+ * Emit BatchUpdateCompleted event. Fired when every operation in a batch reaches a terminal state.
+ * @param payload
+ */
+export async function emitBatchUpdateCompleted(
+  payload: BatchUpdateCompletedEventPayload,
+): Promise<void> {
+  await emitOrderedHandlers(batchUpdateCompletedHandlers, payload);
+}
+
+/**
+ * Register to BatchUpdateCompleted event.
+ * @param handler
+ */
+export function registerBatchUpdateCompleted(
+  handler: OrderedEventHandlerFn<BatchUpdateCompletedEventPayload>,
+  options: EventHandlerRegistrationOptions = {},
+): () => void {
+  return registerOrderedEventHandler(batchUpdateCompletedHandlers, handler, options);
+}
+
 // Audit log integration
 registerAuditLogSubscriptions({
   registerContainerReport,
@@ -562,6 +608,7 @@ export function clearAllListenersForTests(): void {
   agentConnectedHandlers.clear();
   agentDisconnectedHandlers.clear();
   selfUpdateStartingHandlers.clear();
+  batchUpdateCompletedHandlers.clear();
   clearAuditSubscriptionCachesForTests();
   handlerRegistrationSequence = 0;
 }
