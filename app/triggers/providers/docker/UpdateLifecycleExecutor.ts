@@ -3,6 +3,7 @@ import {
   assertRequiredFunctionDependencies,
   resolveFunctionDependencies,
 } from './dependency-constructor.js';
+import { getRequestedOperationId } from './update-runtime-context.js';
 
 type UpdateLifecycleOperationLogger = {
   info?: (message: string) => void;
@@ -15,6 +16,7 @@ type UpdateLifecycleRootLogger = {
 };
 
 type UpdateLifecycleContainer = {
+  id?: unknown;
   name: string;
   [key: string]: unknown;
 };
@@ -255,6 +257,8 @@ class UpdateLifecycleExecutor {
     const rootLogger = this.logger.getLogger();
     const containerLogger =
       rootLogger?.child?.({ container: this.context.getContainerFullName(container) }) ?? {};
+    let emitFailureFallback = false;
+    const requestedOperationId = getRequestedOperationId(container, runtimeContext);
 
     try {
       const context = await this.context.createTriggerContext(
@@ -276,6 +280,7 @@ class UpdateLifecycleExecutor {
         this.selfUpdate.isSelfUpdate(container) ||
         this.selfUpdate.isInfrastructureUpdate(container)
       ) {
+        emitFailureFallback = true;
         const selfUpdateOperationId = await this.selfUpdate.prepareSelfUpdateOperation(
           context,
           container,
@@ -346,17 +351,21 @@ class UpdateLifecycleExecutor {
         containerLogger,
       );
 
-      await this.telemetry.emitContainerUpdateApplied({
-        containerName: this.context.getContainerFullName(container),
-        container,
-      });
+      if (!requestedOperationId) {
+        await this.telemetry.emitContainerUpdateApplied({
+          containerName: this.context.getContainerFullName(container),
+          container,
+        });
+      }
       this.postUpdate.pruneOldBackups(container.name, this.postUpdate.getBackupCount());
     } catch (e: unknown) {
       const errorMessage = String((e as Error)?.message ?? e);
-      await this.telemetry.emitContainerUpdateFailed({
-        containerName: this.context.getContainerFullName(container),
-        error: errorMessage,
-      });
+      if (emitFailureFallback || !requestedOperationId) {
+        await this.telemetry.emitContainerUpdateFailed({
+          containerName: this.context.getContainerFullName(container),
+          error: errorMessage,
+        });
+      }
       try {
         this.postUpdate.pruneOldBackups(container.name, this.postUpdate.getBackupCount());
       } catch (pruneError: unknown) {

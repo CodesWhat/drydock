@@ -1,11 +1,20 @@
-var { mockEmitBatchUpdateCompleted, mockEmitUpdateOperationChanged } = vi.hoisted(() => ({
+var {
+  mockEmitBatchUpdateCompleted,
+  mockEmitContainerUpdateApplied,
+  mockEmitContainerUpdateFailed,
+  mockEmitUpdateOperationChanged,
+} = vi.hoisted(() => ({
   mockEmitBatchUpdateCompleted: vi.fn().mockResolvedValue(undefined),
+  mockEmitContainerUpdateApplied: vi.fn().mockResolvedValue(undefined),
+  mockEmitContainerUpdateFailed: vi.fn().mockResolvedValue(undefined),
   mockEmitUpdateOperationChanged: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('../event/index.js', () => ({
   emitUpdateOperationChanged: mockEmitUpdateOperationChanged,
   emitBatchUpdateCompleted: mockEmitBatchUpdateCompleted,
+  emitContainerUpdateApplied: mockEmitContainerUpdateApplied,
+  emitContainerUpdateFailed: mockEmitContainerUpdateFailed,
 }));
 
 import * as updateOperation from './update-operation.js';

@@ -1320,10 +1320,24 @@ class Docker<
    */
   async runContainerUpdateLifecycle(container, runtimeContext?: unknown) {
     return updateConcurrencyLimit(async () => {
+      const requestedOperationId = getRequestedOperationId(container, runtimeContext);
       try {
-        return await this.updateLifecycleExecutor.run(container, runtimeContext);
+        const result: unknown = await this.updateLifecycleExecutor.run(container, runtimeContext);
+        if (result !== false && requestedOperationId) {
+          const operation = updateOperationStore.getOperationById(requestedOperationId);
+          if (
+            operation &&
+            operation.kind !== 'self-update' &&
+            (operation.status === 'queued' || operation.status === 'in-progress')
+          ) {
+            updateOperationStore.markOperationTerminal(operation.id, {
+              status: 'succeeded',
+              phase: 'succeeded',
+            });
+          }
+        }
+        return result;
       } catch (error: unknown) {
-        const requestedOperationId = getRequestedOperationId(container, runtimeContext);
         const operation = requestedOperationId
           ? updateOperationStore.getOperationById(requestedOperationId)
           : undefined;

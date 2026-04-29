@@ -78,12 +78,14 @@ export interface UpdateOperationChangedEventPayload {
   containerName: string;
   containerId?: string;
   newContainerId?: string;
+  batchId?: string;
   status?: string;
   phase?: string;
 }
 
 export interface ContainerUpdateAppliedEventPayload {
   containerName: string;
+  containerId?: string;
   container?: Container | Record<string, unknown>;
   operationId?: string;
   batchId?: string | null;

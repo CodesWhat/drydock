@@ -287,7 +287,7 @@ describe('request-update', () => {
     expect(mockMarkOperationTerminal).not.toHaveBeenCalled();
   });
 
-  test('runAcceptedContainerUpdates invokes onSuccess for successful updates', async () => {
+  test('runAcceptedContainerUpdates leaves successful terminalization to the trigger lifecycle', async () => {
     const trigger = {
       type: 'docker',
       trigger: vi.fn().mockResolvedValue(undefined),
@@ -299,14 +299,12 @@ describe('request-update', () => {
         trigger,
       },
     ];
-    const onSuccess = vi.fn();
 
-    await runAcceptedContainerUpdates(accepted, { onSuccess });
+    await runAcceptedContainerUpdates(accepted);
 
     expect(trigger.trigger).toHaveBeenCalledWith(accepted[0].container, {
       operationId: 'op-1',
     });
-    expect(onSuccess).toHaveBeenCalledWith(accepted[0]);
     expect(mockMarkOperationTerminal).not.toHaveBeenCalled();
   });
 

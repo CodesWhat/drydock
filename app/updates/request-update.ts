@@ -64,14 +64,7 @@ interface EnqueueContainerUpdateOptions {
   triggerTypes?: UpdateTriggerType[];
 }
 
-interface RunAcceptedContainerUpdatesOptions {
-  onSuccess?: (accepted: AcceptedContainerUpdateRequest) => Promise<void> | void;
-  onFailure?: (accepted: AcceptedContainerUpdateRequest, error: unknown) => Promise<void> | void;
-}
-
-export interface RequestContainerUpdateOptions
-  extends EnqueueContainerUpdateOptions,
-    RunAcceptedContainerUpdatesOptions {}
+export interface RequestContainerUpdateOptions extends EnqueueContainerUpdateOptions {}
 
 const DEFAULT_UPDATE_TRIGGER_TYPES: UpdateTriggerType[] = ['docker', 'dockercompose'];
 
@@ -304,7 +297,6 @@ export async function enqueueContainerUpdates(
 
 export async function runAcceptedContainerUpdates(
   accepted: AcceptedContainerUpdateRequest[],
-  options: RunAcceptedContainerUpdatesOptions = {},
 ): Promise<void> {
   if (accepted.length === 0) {
     return;
@@ -315,14 +307,8 @@ export async function runAcceptedContainerUpdates(
   for (const entry of accepted) {
     try {
       await entry.trigger.trigger(entry.container, { operationId: entry.operationId });
-      if (options.onSuccess) {
-        await options.onSuccess(entry);
-      }
     } catch (error: unknown) {
       markAcceptedQueuedOperationFailed(entry.operationId, error);
-      if (options.onFailure) {
-        await options.onFailure(entry, error);
-      }
       firstError ??= error;
     }
   }
@@ -337,7 +323,7 @@ export async function requestContainerUpdate(
   options: RequestContainerUpdateOptions = {},
 ): Promise<AcceptedContainerUpdateRequest> {
   const accepted = await enqueueContainerUpdate(container, options);
-  void runAcceptedContainerUpdates([accepted], options).catch(() => undefined);
+  void runAcceptedContainerUpdates([accepted]).catch(() => undefined);
   return accepted;
 }
 
@@ -346,6 +332,6 @@ export async function requestContainerUpdates(
   options: RequestContainerUpdateOptions = {},
 ): Promise<ContainerUpdateRequestBatchResult> {
   const result = await enqueueContainerUpdates(containers, options);
-  void runAcceptedContainerUpdates(result.accepted, options).catch(() => undefined);
+  void runAcceptedContainerUpdates(result.accepted).catch(() => undefined);
   return result;
 }

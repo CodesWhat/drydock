@@ -24,12 +24,25 @@ vi.mock('../store/container.js', () => ({
 vi.mock('../event/index.js', () => ({
   emitAgentConnected: vi.fn().mockResolvedValue(undefined),
   emitAgentDisconnected: vi.fn().mockResolvedValue(undefined),
+  emitBatchUpdateCompleted: vi.fn().mockResolvedValue(undefined),
   emitContainerReport: vi.fn(),
   emitContainerReports: vi.fn(),
   emitContainerUpdateApplied: vi.fn().mockResolvedValue(undefined),
   emitContainerUpdateFailed: vi.fn().mockResolvedValue(undefined),
   emitSecurityAlert: vi.fn().mockResolvedValue(undefined),
   emitSecurityScanCycleComplete: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock('../store/update-operation.js', () => ({
+  getOperationById: vi.fn(),
+  insertOperation: vi.fn((operation) => ({
+    ...operation,
+    id: operation.id ?? 'inserted-op',
+    status: operation.status ?? 'in-progress',
+    phase: operation.phase ?? 'prepare',
+  })),
+  markOperationTerminal: vi.fn((id, patch) => ({ id, ...patch })),
+  reopenTerminalOperation: vi.fn((id, patch) => ({ id, ...patch })),
+  updateOperation: vi.fn((id, patch) => ({ id, ...patch })),
 }));
 vi.mock('../util/uuid.js', () => ({
   uuidv7: vi.fn(() => '00000000-0000-7000-8000-000000000001'),
@@ -42,6 +55,7 @@ vi.mock('../registry/index.js', () => ({
 import * as event from '../event/index.js';
 import * as registry from '../registry/index.js';
 import * as storeContainer from '../store/container.js';
+import * as updateOperationStore from '../store/update-operation.js';
 import { AgentClient } from './AgentClient.js';
 
 describe('AgentClient', () => {
@@ -1006,6 +1020,20 @@ describe('AgentClient', () => {
       );
     });
 
+    test('should log non-error SSE data processing failures', async () => {
+      const stream = new EventEmitter();
+      axios.mockResolvedValue({ data: stream });
+      vi.spyOn(client as any, 'processSseBuffer').mockRejectedValueOnce('buffer failed');
+
+      client.startSse();
+      await vi.advanceTimersByTimeAsync(0);
+
+      stream.emit('data', Buffer.from('data: {"type":"dd:ack","data":{"version":"1.0"}}\n\n'));
+      await vi.waitFor(() =>
+        expect(client.log.error).toHaveBeenCalledWith('SSE data processing failed: buffer failed'),
+      );
+    });
+
     test('should handle malformed JSON in SSE data', async () => {
       const stream = new EventEmitter();
       axios.mockResolvedValue({ data: stream });
@@ -1414,8 +1442,10 @@ describe('AgentClient', () => {
       expect(event.emitContainerUpdateApplied).toHaveBeenCalledWith('local_nginx');
     });
 
-    test('should emit update-applied payload with agent context when agent sends object payload', async () => {
+    test('should terminalize agent update-applied payloads with operation ids through the store', async () => {
       await client.handleEvent('dd:update-applied', {
+        operationId: 'remote-op-1',
+        batchId: 'remote-batch-1',
         containerName: 'local_nginx',
         container: {
           id: 'c1',
@@ -1426,18 +1456,39 @@ describe('AgentClient', () => {
         },
       });
 
-      expect(event.emitContainerUpdateApplied).toHaveBeenCalledWith({
-        containerName: 'local_nginx',
-        container: expect.objectContaining({
-          id: 'c1',
-          name: 'nginx',
-          watcher: 'local',
-          agent: 'test-agent',
+      expect(event.emitContainerUpdateApplied).not.toHaveBeenCalled();
+      expect(updateOperationStore.insertOperation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'agent-test-agent-remote-op-1',
+          containerName: 'local_nginx',
+          containerId: 'c1',
+          status: 'in-progress',
         }),
-      });
+      );
+      expect(updateOperationStore.markOperationTerminal).toHaveBeenCalledWith(
+        'agent-test-agent-remote-op-1',
+        expect.objectContaining({
+          status: 'succeeded',
+          containerId: 'c1',
+        }),
+      );
     });
 
     test('should omit non-object container payloads for update-applied events', async () => {
+      await client.handleEvent('dd:update-applied', {
+        operationId: 'remote-op-no-container',
+        containerName: 'local_nginx',
+        container: 'not-an-object',
+      });
+
+      expect(event.emitContainerUpdateApplied).not.toHaveBeenCalled();
+      expect(updateOperationStore.markOperationTerminal).toHaveBeenCalledWith(
+        'agent-test-agent-remote-op-no-container',
+        expect.not.objectContaining({ containerId: expect.anything() }),
+      );
+    });
+
+    test('should emit update-applied object payloads without operation ids', async () => {
       await client.handleEvent('dd:update-applied', {
         containerName: 'local_nginx',
         container: 'not-an-object',
@@ -1447,6 +1498,24 @@ describe('AgentClient', () => {
         containerName: 'local_nginx',
         container: undefined,
       });
+      expect(updateOperationStore.getOperationById).not.toHaveBeenCalled();
+      expect(updateOperationStore.markOperationTerminal).not.toHaveBeenCalled();
+    });
+
+    test('should scope batch ids and tag container objects for update-applied payloads without operation ids', async () => {
+      await client.handleEvent('dd:update-applied', {
+        batchId: 'remote-batch-1',
+        containerName: 'local_nginx',
+        container: { id: 'c1', name: 'nginx' },
+      });
+
+      expect(event.emitContainerUpdateApplied).toHaveBeenCalledWith({
+        batchId: 'agent-test-agent-remote-batch-1',
+        containerName: 'local_nginx',
+        container: { id: 'c1', name: 'nginx', agent: 'test-agent' },
+      });
+      expect(updateOperationStore.getOperationById).not.toHaveBeenCalled();
+      expect(updateOperationStore.markOperationTerminal).not.toHaveBeenCalled();
     });
 
     test('should ignore update-applied when data is an empty string', async () => {
@@ -1455,16 +1524,61 @@ describe('AgentClient', () => {
       expect(event.emitContainerUpdateApplied).not.toHaveBeenCalled();
     });
 
-    test('should emit update-failed when agent sends dd:update-failed', async () => {
+    test('should terminalize agent update-failed payloads with operation ids through the store', async () => {
       await client.handleEvent('dd:update-failed', {
+        operationId: 'remote-fail-1',
+        batchId: 'remote-batch-fail-1',
+        containerId: 'c-fail',
+        containerName: 'local_nginx',
+        error: 'compose pull failed',
+        phase: 'pull-failed',
+      });
+
+      expect(event.emitContainerUpdateFailed).not.toHaveBeenCalled();
+      expect(updateOperationStore.markOperationTerminal).toHaveBeenCalledWith(
+        'agent-test-agent-remote-fail-1',
+        expect.objectContaining({
+          status: 'failed',
+          containerId: 'c-fail',
+          lastError: 'compose pull failed',
+          phase: 'pull-failed',
+        }),
+      );
+    });
+
+    test('should emit update-failed without touching operation store when operation id is absent', async () => {
+      await client.handleEvent('dd:update-failed', {
+        containerId: 'c-fail',
+        containerName: 'local_nginx',
+        error: 'compose pull failed',
+        phase: 'pull-failed',
+      });
+
+      expect(event.emitContainerUpdateFailed).toHaveBeenCalledWith({
+        containerId: 'c-fail',
+        containerName: 'local_nginx',
+        error: 'compose pull failed',
+        phase: 'pull-failed',
+      });
+      expect(updateOperationStore.getOperationById).not.toHaveBeenCalled();
+      expect(updateOperationStore.markOperationTerminal).not.toHaveBeenCalled();
+    });
+
+    test('should mark failed agent operations without optional fields', async () => {
+      await client.handleEvent('dd:update-failed', {
+        operationId: 'remote-fail-no-optionals',
         containerName: 'local_nginx',
         error: 'compose pull failed',
       });
 
-      expect(event.emitContainerUpdateFailed).toHaveBeenCalledWith({
-        containerName: 'local_nginx',
-        error: 'compose pull failed',
-      });
+      expect(updateOperationStore.markOperationTerminal).toHaveBeenCalledWith(
+        'agent-test-agent-remote-fail-no-optionals',
+        expect.not.objectContaining({
+          containerId: expect.anything(),
+          phase: expect.anything(),
+        }),
+      );
+      expect(event.emitContainerUpdateFailed).not.toHaveBeenCalled();
     });
 
     test('should ignore invalid update-failed payloads from agents', async () => {
@@ -1479,6 +1593,324 @@ describe('AgentClient', () => {
       });
 
       expect(event.emitContainerUpdateFailed).not.toHaveBeenCalled();
+    });
+
+    test('should insert a synthetic controller operation when an agent sends an active phase event', async () => {
+      await client.handleEvent('dd:update-operation-changed', {
+        operationId: 'remote-op-active',
+        containerName: 'local_nginx',
+        containerId: 'c1',
+        status: 'in-progress',
+        phase: 'pulling',
+      });
+
+      expect(updateOperationStore.insertOperation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'agent-test-agent-remote-op-active',
+          kind: 'container-update',
+          containerName: 'local_nginx',
+          containerId: 'c1',
+          status: 'in-progress',
+          phase: 'pulling',
+        }),
+      );
+    });
+
+    test('should insert active synthetic operations without optional fields', async () => {
+      await client.handleEvent('dd:update-operation-changed', {
+        operationId: 'remote-op-minimal-active',
+        containerName: 'local_nginx',
+        status: 'queued',
+      });
+
+      expect(updateOperationStore.insertOperation).toHaveBeenCalledWith(
+        expect.not.objectContaining({
+          containerId: expect.anything(),
+          newContainerId: expect.anything(),
+          phase: expect.anything(),
+        }),
+      );
+      expect(updateOperationStore.insertOperation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'agent-test-agent-remote-op-minimal-active',
+          containerName: 'local_nginx',
+          status: 'queued',
+        }),
+      );
+    });
+
+    test('should update an existing synthetic controller operation on active phase events', async () => {
+      vi.mocked(updateOperationStore.getOperationById).mockReturnValueOnce({
+        id: 'agent-test-agent-remote-op-existing',
+        containerName: 'local_nginx',
+        status: 'in-progress',
+        phase: 'pulling',
+      } as any);
+
+      await client.handleEvent('dd:update-operation-changed', {
+        operationId: 'remote-op-existing',
+        containerName: 'local_nginx',
+        containerId: 'c1',
+        newContainerId: 'c2',
+        status: 'in-progress',
+        phase: 'new-created',
+      });
+
+      expect(updateOperationStore.updateOperation).toHaveBeenCalledWith(
+        'agent-test-agent-remote-op-existing',
+        expect.objectContaining({
+          containerName: 'local_nginx',
+          containerId: 'c1',
+          newContainerId: 'c2',
+          status: 'in-progress',
+          phase: 'new-created',
+        }),
+      );
+      expect(updateOperationStore.insertOperation).not.toHaveBeenCalled();
+    });
+
+    test('should update active synthetic operations without optional fields', async () => {
+      vi.mocked(updateOperationStore.getOperationById).mockReturnValueOnce({
+        id: 'agent-test-agent-remote-op-existing-minimal',
+        containerName: 'local_nginx',
+        status: 'queued',
+        phase: 'queued',
+      } as any);
+
+      await client.handleEvent('dd:update-operation-changed', {
+        operationId: 'remote-op-existing-minimal',
+        containerName: 'local_nginx',
+        status: 'in-progress',
+      });
+
+      expect(updateOperationStore.updateOperation).toHaveBeenCalledWith(
+        'agent-test-agent-remote-op-existing-minimal',
+        expect.not.objectContaining({
+          containerId: expect.anything(),
+          newContainerId: expect.anything(),
+          phase: expect.anything(),
+        }),
+      );
+      expect(updateOperationStore.updateOperation).toHaveBeenCalledWith(
+        'agent-test-agent-remote-op-existing-minimal',
+        expect.objectContaining({
+          containerName: 'local_nginx',
+          status: 'in-progress',
+        }),
+      );
+    });
+
+    test('should ignore active updates for already terminal synthetic operations', async () => {
+      vi.mocked(updateOperationStore.getOperationById).mockReturnValueOnce({
+        id: 'agent-test-agent-remote-op-already-terminal',
+        containerName: 'local_nginx',
+        status: 'failed',
+        phase: 'failed',
+      } as any);
+
+      await client.handleEvent('dd:update-operation-changed', {
+        operationId: 'remote-op-already-terminal',
+        containerName: 'local_nginx',
+        status: 'in-progress',
+        phase: 'pulling',
+      });
+
+      expect(updateOperationStore.updateOperation).not.toHaveBeenCalled();
+      expect(updateOperationStore.insertOperation).not.toHaveBeenCalled();
+      expect(updateOperationStore.markOperationTerminal).not.toHaveBeenCalled();
+    });
+
+    test('should mark a synthetic controller operation terminal when an agent sends a terminal phase event', async () => {
+      vi.mocked(updateOperationStore.getOperationById).mockReturnValueOnce({
+        id: 'agent-test-agent-remote-op-terminal',
+        containerName: 'local_nginx',
+        status: 'in-progress',
+        phase: 'new-started',
+      } as any);
+
+      await client.handleEvent('dd:update-operation-changed', {
+        operationId: 'remote-op-terminal',
+        containerName: 'local_nginx',
+        containerId: 'old-c1',
+        newContainerId: 'new-c1',
+        status: 'succeeded',
+        phase: 'succeeded',
+      });
+
+      expect(updateOperationStore.markOperationTerminal).toHaveBeenCalledWith(
+        'agent-test-agent-remote-op-terminal',
+        expect.objectContaining({
+          status: 'succeeded',
+          phase: 'succeeded',
+          containerName: 'local_nginx',
+          containerId: 'old-c1',
+          newContainerId: 'new-c1',
+        }),
+      );
+    });
+
+    test('should ignore invalid update-operation-changed payloads from agents', async () => {
+      await client.handleEvent('dd:update-operation-changed', null);
+      await client.handleEvent('dd:update-operation-changed', {
+        operationId: '',
+        containerName: 'local_nginx',
+        status: 'in-progress',
+      });
+      await client.handleEvent('dd:update-operation-changed', {
+        operationId: 'remote-op-invalid-name',
+        containerName: '',
+        status: 'in-progress',
+      });
+      await client.handleEvent('dd:update-operation-changed', {
+        operationId: 'remote-op-invalid-status',
+        containerName: 'local_nginx',
+        status: 'unknown',
+      });
+
+      expect(updateOperationStore.insertOperation).not.toHaveBeenCalled();
+      expect(updateOperationStore.updateOperation).not.toHaveBeenCalled();
+      expect(updateOperationStore.markOperationTerminal).not.toHaveBeenCalled();
+    });
+
+    test('should ignore impossible operation statuses defensively', () => {
+      (client as any).applyAgentUpdateOperationChanged({
+        operationId: 'remote-op-impossible',
+        containerName: 'local_nginx',
+        status: 'unknown',
+      });
+
+      expect(updateOperationStore.insertOperation).not.toHaveBeenCalled();
+      expect(updateOperationStore.updateOperation).not.toHaveBeenCalled();
+      expect(updateOperationStore.markOperationTerminal).not.toHaveBeenCalled();
+    });
+
+    test('should not re-mark an already terminal synthetic controller operation', async () => {
+      vi.mocked(updateOperationStore.getOperationById).mockReturnValue({
+        id: 'agent-test-agent-remote-op-terminal',
+        containerName: 'local_nginx',
+        status: 'succeeded',
+        phase: 'succeeded',
+      } as any);
+
+      await client.handleEvent('dd:update-operation-changed', {
+        operationId: 'remote-op-terminal',
+        containerName: 'local_nginx',
+        status: 'succeeded',
+        phase: 'succeeded',
+      });
+
+      expect(updateOperationStore.markOperationTerminal).not.toHaveBeenCalled();
+      expect(updateOperationStore.insertOperation).not.toHaveBeenCalled();
+    });
+
+    test('should forward agent batch completion summaries with synthetic ids', async () => {
+      await client.handleEvent('dd:batch-update-completed', {
+        batchId: 'remote-batch-1',
+        total: 2,
+        succeeded: 1,
+        failed: 1,
+        durationMs: 2500,
+        items: [
+          {
+            operationId: 'remote-op-1',
+            containerId: 'c1',
+            containerName: 'local_nginx',
+            status: 'succeeded',
+          },
+          {
+            operationId: 'remote-op-2',
+            containerId: 'c2',
+            containerName: 'local_redis',
+            status: 'failed',
+          },
+        ],
+        timestamp: '2026-04-29T12:00:00.000Z',
+      });
+
+      expect(event.emitBatchUpdateCompleted).toHaveBeenCalledWith({
+        batchId: 'agent-test-agent-remote-batch-1',
+        total: 2,
+        succeeded: 1,
+        failed: 1,
+        durationMs: 2500,
+        items: [
+          expect.objectContaining({ operationId: 'agent-test-agent-remote-op-1' }),
+          expect.objectContaining({ operationId: 'agent-test-agent-remote-op-2' }),
+        ],
+        timestamp: '2026-04-29T12:00:00.000Z',
+      });
+    });
+
+    test('should default optional agent batch completion fields', async () => {
+      vi.setSystemTime(new Date('2026-04-29T12:05:00.000Z'));
+
+      await client.handleEvent('dd:batch-update-completed', {
+        batchId: 'remote-batch-defaults',
+        total: 1,
+        succeeded: 1,
+        failed: 0,
+        durationMs: 1500,
+        items: [
+          {
+            operationId: 'remote-op-defaults',
+            containerName: 'local_nginx',
+            status: 'succeeded',
+          },
+        ],
+      });
+
+      expect(event.emitBatchUpdateCompleted).toHaveBeenCalledWith({
+        batchId: 'agent-test-agent-remote-batch-defaults',
+        total: 1,
+        succeeded: 1,
+        failed: 0,
+        durationMs: 1500,
+        items: [
+          {
+            operationId: 'agent-test-agent-remote-op-defaults',
+            containerId: '',
+            containerName: 'local_nginx',
+            status: 'succeeded',
+          },
+        ],
+        timestamp: '2026-04-29T12:05:00.000Z',
+      });
+    });
+
+    test('should ignore malformed agent batch completion summaries', async () => {
+      await client.handleEvent('dd:batch-update-completed', null);
+      await client.handleEvent('dd:batch-update-completed', {
+        batchId: 'remote-batch-1',
+        total: 1,
+        succeeded: 1,
+        failed: 0,
+        durationMs: '2500',
+        items: [],
+      });
+      await client.handleEvent('dd:batch-update-completed', {
+        batchId: 'remote-batch-2',
+        total: 1,
+        succeeded: 1,
+        failed: 0,
+        durationMs: 2500,
+        items: [null],
+      });
+      await client.handleEvent('dd:batch-update-completed', {
+        batchId: 'remote-batch-3',
+        total: 1,
+        succeeded: 0,
+        failed: 1,
+        durationMs: 2500,
+        items: [
+          {
+            operationId: 'remote-op-3',
+            containerName: 'local_nginx',
+            status: 'queued',
+          },
+        ],
+      });
+
+      expect(event.emitBatchUpdateCompleted).not.toHaveBeenCalled();
     });
 
     test('should emit security-alert when agent sends dd:security-alert', async () => {
@@ -1807,6 +2239,14 @@ describe('AgentClient', () => {
       });
 
       expect(processSpy).not.toHaveBeenCalled();
+      expect(storeContainer.deleteContainer).not.toHaveBeenCalled();
+      expect(storeContainer.getContainers).not.toHaveBeenCalled();
+    });
+
+    test('should treat a null watcher snapshot payload as an empty anonymous snapshot', async () => {
+      await client.handleEvent('dd:watcher-snapshot', null);
+
+      expect(event.emitContainerReports).toHaveBeenCalledWith([]);
       expect(storeContainer.deleteContainer).not.toHaveBeenCalled();
       expect(storeContainer.getContainers).not.toHaveBeenCalled();
     });

@@ -1,6 +1,11 @@
 import crypto from 'node:crypto';
 import { getDefaultCacheMaxEntries } from '../configuration/runtime-defaults.js';
-import { emitBatchUpdateCompleted, emitUpdateOperationChanged } from '../event/index.js';
+import {
+  emitBatchUpdateCompleted,
+  emitContainerUpdateApplied,
+  emitContainerUpdateFailed,
+  emitUpdateOperationChanged,
+} from '../event/index.js';
 import type {
   ActiveContainerUpdateOperationPhase,
   ActiveContainerUpdateOperationStatus,
@@ -288,9 +293,48 @@ function emitOperationChangedEvent(operation: UpdateOperation): void {
     containerName: operation.containerName,
     containerId: operation.containerId,
     newContainerId: operation.newContainerId,
+    batchId:
+      typeof (operation as { batchId?: unknown }).batchId === 'string'
+        ? (operation as { batchId: string }).batchId
+        : undefined,
     status: operation.status,
     phase: operation.phase,
   });
+}
+
+function buildTerminalLifecycleEventBase(operation: UpdateOperation, batchId?: string) {
+  return {
+    operationId: operation.id,
+    ...(operation.containerId ? { containerId: operation.containerId } : {}),
+    containerName: operation.containerName,
+    ...(batchId ? { batchId } : {}),
+  };
+}
+
+function getTerminalOperationError(operation: UpdateOperation): string {
+  if (typeof operation.lastError === 'string' && operation.lastError.trim() !== '') {
+    return operation.lastError;
+  }
+  return operation.status === 'rolled-back' ? 'Update rolled back' : 'Update failed';
+}
+
+function emitTerminalLifecycleEvent(operation: UpdateOperation, batchId?: string): void {
+  if (operation.kind === 'self-update') {
+    return;
+  }
+
+  switch (operation.status) {
+    case 'succeeded':
+      void emitContainerUpdateApplied(buildTerminalLifecycleEventBase(operation, batchId));
+      return;
+    case 'failed':
+    case 'rolled-back':
+      void emitContainerUpdateFailed({
+        ...buildTerminalLifecycleEventBase(operation, batchId),
+        error: getTerminalOperationError(operation),
+        phase: operation.phase,
+      });
+  }
 }
 
 function expireActiveOperationWithMessage(
@@ -636,6 +680,10 @@ export function markOperationTerminal(
     queuePosition: undefined,
     queueTotal: undefined,
   });
+
+  if (updated) {
+    emitTerminalLifecycleEvent(updated, preBatchId);
+  }
 
   // After writing terminal state, check if this was the last active operation in the batch.
   if (preBatchId) {

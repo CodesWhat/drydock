@@ -4,6 +4,7 @@ import { StringDecoder } from 'node:string_decoder';
 import axios, { type AxiosRequestConfig } from 'axios';
 import type { Logger } from 'pino';
 import type {
+  BatchUpdateCompletedEventPayload,
   ContainerUpdateAppliedEventPayload,
   ContainerUpdateFailedEventPayload,
   SecurityAlertEventPayload,
@@ -13,6 +14,7 @@ import type {
 import {
   emitAgentConnected,
   emitAgentDisconnected,
+  emitBatchUpdateCompleted,
   emitContainerReport,
   emitContainerReports,
   emitContainerUpdateApplied,
@@ -27,9 +29,20 @@ import {
   type ContainerReport,
   clearDetectedUpdateState,
 } from '../model/container.js';
+import {
+  type ActiveContainerUpdateOperationStatus,
+  type ContainerUpdateOperationPhase,
+  type ContainerUpdateOperationStatus,
+  isActiveContainerUpdateOperationStatus,
+  isContainerUpdateOperationPhase,
+  isContainerUpdateOperationStatus,
+  isTerminalContainerUpdateOperationStatus,
+  type TerminalContainerUpdateOperationStatus,
+} from '../model/container-update-operation.js';
 import * as registry from '../registry/index.js';
 import { resolveConfiguredPath } from '../runtime/paths.js';
 import * as storeContainer from '../store/container.js';
+import * as updateOperationStore from '../store/update-operation.js';
 import { getErrorMessage } from '../util/error.js';
 import { uuidv7 } from '../util/uuid.js';
 
@@ -100,6 +113,15 @@ interface RemoteTriggerErrorPayload {
   details?: unknown;
 }
 
+interface AgentUpdateOperationChangedPayload {
+  operationId: string;
+  containerName: string;
+  status: ContainerUpdateOperationStatus;
+  containerId?: string;
+  newContainerId?: string;
+  phase?: ContainerUpdateOperationPhase;
+}
+
 const SECURITY_ALERT_SUMMARY_KEYS = ['unknown', 'low', 'medium', 'high', 'critical'] as const;
 
 const INITIAL_SSE_RECONNECT_DELAY_MS = 1_000;
@@ -115,6 +137,14 @@ function toOptionalRecord(value: unknown): Record<string, unknown> | undefined {
     return undefined;
   }
   return value as Record<string, unknown>;
+}
+
+function toNonEmptyString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+function toOptionalString(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined;
 }
 
 function isContainerUpdateAppliedEventPayload(
@@ -752,9 +782,240 @@ export class AgentClient {
       return undefined;
     }
 
+    const remoteOperationId = toNonEmptyString(payload.operationId);
+    const phase = toOptionalString(payload.phase);
+    const batchId = toNonEmptyString(payload.batchId);
     return {
       containerName: payload.containerName,
       error: payload.error,
+      ...(remoteOperationId
+        ? {
+            operationId: this.toAgentScopedId(remoteOperationId),
+            batchId: batchId ? this.toAgentScopedId(batchId) : undefined,
+          }
+        : {}),
+      ...(toOptionalString(payload.containerId) !== undefined
+        ? { containerId: toOptionalString(payload.containerId) }
+        : {}),
+      ...(phase !== undefined ? { phase } : {}),
+    };
+  }
+
+  private toAgentScopedId(remoteId: string): string {
+    const trimmed = remoteId.trim();
+    const prefix = `agent-${this.name}-`;
+    return trimmed.startsWith(prefix) ? trimmed : `${prefix}${trimmed}`;
+  }
+
+  private parseAgentUpdateOperationChangedPayload(
+    data: unknown,
+  ): AgentUpdateOperationChangedPayload | undefined {
+    if (!data || typeof data !== 'object') {
+      return undefined;
+    }
+
+    const payload = data as Record<string, unknown>;
+    const operationId = toNonEmptyString(payload.operationId);
+    const containerName = toNonEmptyString(payload.containerName);
+    if (!operationId || !containerName || !isContainerUpdateOperationStatus(payload.status)) {
+      return undefined;
+    }
+
+    return {
+      operationId,
+      containerName,
+      status: payload.status,
+      ...(toOptionalString(payload.containerId) !== undefined
+        ? { containerId: toOptionalString(payload.containerId) }
+        : {}),
+      ...(toOptionalString(payload.newContainerId) !== undefined
+        ? { newContainerId: toOptionalString(payload.newContainerId) }
+        : {}),
+      ...(isContainerUpdateOperationPhase(payload.phase) ? { phase: payload.phase } : {}),
+    };
+  }
+
+  private buildAgentOperationBase(payload: {
+    operationId: string;
+    containerName: string;
+    containerId?: string;
+    newContainerId?: string;
+  }) {
+    return {
+      id: this.toAgentScopedId(payload.operationId),
+      kind: 'container-update' as const,
+      containerName: payload.containerName,
+      ...(payload.containerId !== undefined ? { containerId: payload.containerId } : {}),
+      ...(payload.newContainerId !== undefined ? { newContainerId: payload.newContainerId } : {}),
+    };
+  }
+
+  private ensureAgentOperationForTerminal(payload: {
+    operationId: string;
+    containerName: string;
+    containerId?: string;
+    newContainerId?: string;
+  }): string {
+    const operationId = this.toAgentScopedId(payload.operationId);
+    const existing = updateOperationStore.getOperationById(operationId);
+    if (!existing) {
+      updateOperationStore.insertOperation({
+        ...this.buildAgentOperationBase(payload),
+        status: 'in-progress',
+        phase: 'prepare',
+      });
+    }
+    return operationId;
+  }
+
+  private applyAgentUpdateOperationChanged(payload: AgentUpdateOperationChangedPayload): void {
+    const operationId = this.toAgentScopedId(payload.operationId);
+    const existing = updateOperationStore.getOperationById(operationId);
+    const base = this.buildAgentOperationBase(payload);
+
+    if (isActiveContainerUpdateOperationStatus(payload.status)) {
+      if (existing) {
+        if (isActiveContainerUpdateOperationStatus(existing.status)) {
+          updateOperationStore.updateOperation(operationId, {
+            containerName: payload.containerName,
+            ...(payload.containerId !== undefined ? { containerId: payload.containerId } : {}),
+            ...(payload.newContainerId !== undefined
+              ? { newContainerId: payload.newContainerId }
+              : {}),
+            status: payload.status as ActiveContainerUpdateOperationStatus,
+            ...(payload.phase ? { phase: payload.phase as never } : {}),
+          });
+        }
+        return;
+      }
+      updateOperationStore.insertOperation({
+        ...base,
+        status: payload.status,
+        ...(payload.phase ? { phase: payload.phase } : {}),
+      });
+      return;
+    }
+
+    if (isTerminalContainerUpdateOperationStatus(payload.status)) {
+      this.markAgentOperationTerminal({
+        ...payload,
+        status: payload.status,
+      });
+    }
+  }
+
+  private markAgentOperationTerminal(payload: {
+    operationId: string;
+    containerName: string;
+    status: TerminalContainerUpdateOperationStatus;
+    containerId?: string;
+    newContainerId?: string;
+    phase?: ContainerUpdateOperationPhase;
+    lastError?: string;
+  }): void {
+    const operationId = this.ensureAgentOperationForTerminal(payload);
+    const existing = updateOperationStore.getOperationById(operationId);
+    if (existing && isTerminalContainerUpdateOperationStatus(existing.status)) {
+      return;
+    }
+    updateOperationStore.markOperationTerminal(operationId, {
+      status: payload.status,
+      containerName: payload.containerName,
+      ...(payload.containerId !== undefined ? { containerId: payload.containerId } : {}),
+      ...(payload.newContainerId !== undefined ? { newContainerId: payload.newContainerId } : {}),
+      ...(payload.phase ? { phase: payload.phase as never } : {}),
+      ...(payload.lastError ? { lastError: payload.lastError } : {}),
+    });
+  }
+
+  private maybeMarkAgentOperationSucceededFromAppliedPayload(
+    payload: ContainerUpdateAppliedEventPayload,
+  ): string | undefined {
+    const remoteOperationId = toNonEmptyString(payload.operationId);
+    if (!remoteOperationId) {
+      return undefined;
+    }
+    const container = toOptionalRecord(payload.container);
+    const containerId = toOptionalString(container?.id);
+    this.markAgentOperationTerminal({
+      operationId: remoteOperationId,
+      containerName: payload.containerName,
+      status: 'succeeded',
+      ...(containerId !== undefined ? { containerId } : {}),
+      phase: 'succeeded',
+    });
+    return this.toAgentScopedId(remoteOperationId);
+  }
+
+  private maybeMarkAgentOperationFailedFromFailedPayload(
+    payload: ContainerUpdateFailedEventPayload,
+  ): boolean {
+    const remoteOperationId = toNonEmptyString(payload.operationId);
+    if (!remoteOperationId) {
+      return false;
+    }
+    this.markAgentOperationTerminal({
+      operationId: remoteOperationId,
+      containerName: payload.containerName,
+      status: 'failed',
+      ...(payload.containerId !== undefined ? { containerId: payload.containerId } : {}),
+      ...(isContainerUpdateOperationPhase(payload.phase) ? { phase: payload.phase } : {}),
+      lastError: payload.error,
+    });
+    return true;
+  }
+
+  private parseBatchUpdateCompletedPayload(
+    data: unknown,
+  ): BatchUpdateCompletedEventPayload | undefined {
+    if (!data || typeof data !== 'object') {
+      return undefined;
+    }
+
+    const payload = data as Record<string, unknown>;
+    const batchId = toNonEmptyString(payload.batchId);
+    if (
+      !batchId ||
+      !Number.isFinite(payload.total) ||
+      !Number.isFinite(payload.succeeded) ||
+      !Number.isFinite(payload.failed) ||
+      !Number.isFinite(payload.durationMs) ||
+      !Array.isArray(payload.items)
+    ) {
+      return undefined;
+    }
+
+    const items: BatchUpdateCompletedEventPayload['items'] = [];
+    for (const item of payload.items) {
+      if (!item || typeof item !== 'object') {
+        return undefined;
+      }
+      const itemPayload = item as Record<string, unknown>;
+      const operationId = toNonEmptyString(itemPayload.operationId);
+      const containerName = toNonEmptyString(itemPayload.containerName);
+      if (
+        !operationId ||
+        !containerName ||
+        (itemPayload.status !== 'succeeded' && itemPayload.status !== 'failed')
+      ) {
+        return undefined;
+      }
+      items.push({
+        operationId: this.toAgentScopedId(operationId),
+        containerId: toOptionalString(itemPayload.containerId) ?? '',
+        containerName,
+        status: itemPayload.status,
+      });
+    }
+
+    return {
+      batchId: this.toAgentScopedId(batchId),
+      total: Number(payload.total),
+      succeeded: Number(payload.succeeded),
+      failed: Number(payload.failed),
+      durationMs: Number(payload.durationMs),
+      items,
+      timestamp: toNonEmptyString(payload.timestamp) ?? new Date().toISOString(),
     };
   }
 
@@ -859,7 +1120,13 @@ export class AgentClient {
         if (typeof data === 'string' && data.length > 0) {
           await emitContainerUpdateApplied(data);
         } else if (isContainerUpdateAppliedEventPayload(data)) {
+          const operationId = this.maybeMarkAgentOperationSucceededFromAppliedPayload(data);
+          if (operationId) {
+            return;
+          }
+          const batchId = toNonEmptyString(data.batchId);
           await emitContainerUpdateApplied({
+            ...(batchId ? { batchId: this.toAgentScopedId(batchId) } : {}),
             containerName: data.containerName,
             container:
               data.container && typeof data.container === 'object'
@@ -874,7 +1141,24 @@ export class AgentClient {
       case 'dd:update-failed': {
         const payload = this.parseUpdateFailedEventPayload(data);
         if (payload) {
-          await emitContainerUpdateFailed(payload);
+          const terminalized = this.maybeMarkAgentOperationFailedFromFailedPayload(payload);
+          if (!terminalized) {
+            await emitContainerUpdateFailed(payload);
+          }
+        }
+        return;
+      }
+      case 'dd:update-operation-changed': {
+        const payload = this.parseAgentUpdateOperationChangedPayload(data);
+        if (payload) {
+          this.applyAgentUpdateOperationChanged(payload);
+        }
+        return;
+      }
+      case 'dd:batch-update-completed': {
+        const payload = this.parseBatchUpdateCompletedPayload(data);
+        if (payload) {
+          await emitBatchUpdateCompleted(payload);
         }
         return;
       }

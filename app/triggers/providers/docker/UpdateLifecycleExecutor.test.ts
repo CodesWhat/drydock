@@ -361,7 +361,7 @@ describe('UpdateLifecycleExecutor', () => {
     expect(harness.performContainerUpdate).not.toHaveBeenCalled();
   });
 
-  test('runs non-self-update path and emits update-applied on success', async () => {
+  test('runs non-self-update path and emits fallback update-applied telemetry without operation id', async () => {
     const container = createContainer();
     const context = createContext();
     const hookConfig = { hookPre: 'pre', hookPost: 'post' };
@@ -425,6 +425,16 @@ describe('UpdateLifecycleExecutor', () => {
     expect(harness.pruneOldBackups).toHaveBeenCalledWith('web', 5);
   });
 
+  test('does not directly emit update-applied telemetry when operation id owns the commit', async () => {
+    const harness = createHarness({
+      performContainerUpdate: vi.fn().mockResolvedValue(true),
+    });
+
+    await harness.executor.run(createContainer(), { operationId: 'op-1' });
+
+    expect(harness.emitContainerUpdateApplied).not.toHaveBeenCalled();
+  });
+
   test('returns early when container update reports no changes', async () => {
     const harness = createHarness({
       performContainerUpdate: vi.fn().mockResolvedValue(false),
@@ -436,7 +446,7 @@ describe('UpdateLifecycleExecutor', () => {
     expect(harness.emitContainerUpdateApplied).not.toHaveBeenCalled();
   });
 
-  test('emits update-failed and rethrows when lifecycle processing throws', async () => {
+  test('emits fallback update-failed and rethrows when lifecycle processing throws without operation id', async () => {
     const failure = new Error('scan failed hard');
     const harness = createHarness({
       maybeScanAndGateUpdate: vi.fn().mockRejectedValue(failure),
@@ -491,7 +501,18 @@ describe('UpdateLifecycleExecutor', () => {
     );
   });
 
-  test('stringifies non-Error failures when emitting update-failed events', async () => {
+  test('does not directly emit update-failed events when operation id owns the failed commit', async () => {
+    const harness = createHarness({
+      maybeScanAndGateUpdate: vi.fn().mockRejectedValue(new Error('scan failed hard')),
+    });
+
+    await expect(harness.executor.run(createContainer(), { operationId: 'op-1' })).rejects.toThrow(
+      'scan failed hard',
+    );
+    expect(harness.emitContainerUpdateFailed).not.toHaveBeenCalled();
+  });
+
+  test('stringifies non-Error failures when emitting fallback update-failed events', async () => {
     const harness = createHarness({
       maybeScanAndGateUpdate: vi.fn().mockRejectedValue(503),
     });
