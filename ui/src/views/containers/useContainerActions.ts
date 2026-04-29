@@ -1,4 +1,5 @@
 import { computed, onUnmounted, type Ref, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useConfirmDialog } from '../../composables/useConfirmDialog';
 import { useOperationDisplayHold } from '../../composables/useOperationDisplayHold';
 import { useScanLifecycle } from '../../composables/useScanLifecycle';
@@ -274,6 +275,7 @@ async function updateAllInGroupState(args: {
   loadContainers: () => Promise<void>;
   captureBatch: (groupKey: string, frozenTotal: number) => void;
   clearBatch: (groupKey: string) => void;
+  alreadyInProgressMessage: string;
 }) {
   if (!args.containerActionsEnabled) {
     args.inputError.value = args.containerActionsDisabledReason;
@@ -296,7 +298,7 @@ async function updateAllInGroupState(args: {
       );
     })
   ) {
-    useToast().warning('Update already in progress for some containers in this group');
+    useToast().warning(args.alreadyInProgressMessage);
     return;
   }
   const frozenUpdateTargets = updatableContainers.map((container) => ({
@@ -872,6 +874,7 @@ function createContainerActionHandlers(args: {
 
 export function useContainerActions(input: UseContainerActionsInput) {
   const confirm = useConfirmDialog();
+  const { t } = useI18n();
   const { getDisplayUpdateOperation, projectContainerDisplayState } = useOperationDisplayHold();
   const { containerActionsEnabled, containerActionsDisabledReason } = useServerFeatures();
   const scanLifecycle = useScanLifecycle();
@@ -1200,6 +1203,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
       loadContainers: input.loadContainers,
       captureBatch,
       clearBatch,
+      alreadyInProgressMessage: t('containersView.toast.updateAlreadyInProgress'),
     });
   }
 

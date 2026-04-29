@@ -31,8 +31,7 @@
       "updateFailed": "Update failed: {name}",
       "rolledBack": "Rolled back: {name}",
       "updateError": "Failed to update {name}",
-      "updateAllError": "Failed to update all containers",
-      "updateAlreadyInProgress": "Update already in progress for some containers in this group"
+      "updateAllError": "Failed to update all containers"
     },
     "recentUpdates": {
       "title": "Updates Available",

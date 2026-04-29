@@ -55,32 +55,37 @@ async function fetchEntries() {
   }
 }
 
+function closePanel() {
+  if (!showBell.value) return;
+  showBell.value = false;
+  // Advance lastSeen on every close path so the next open only counts entries
+  // that arrived while the panel was closed.
+  lastSeen.value = new Date().toISOString();
+}
+
 function toggle(event: MouseEvent) {
-  const wasOpen = showBell.value;
-  showBell.value = !showBell.value;
   if (showBell.value) {
-    const button = event.currentTarget as HTMLElement;
-    const rect = button.getBoundingClientRect();
-    bellPanelStyle.value = {
-      position: 'fixed',
-      top: `${rect.bottom + 4}px`,
-      right: `${window.innerWidth - rect.right}px`,
-    };
-    fetchEntries();
-  } else if (wasOpen) {
-    // Advance lastSeen when the panel closes so that the next open only
-    // counts entries that arrived while the panel was closed.
-    lastSeen.value = new Date().toISOString();
+    closePanel();
+    return;
   }
+  showBell.value = true;
+  const button = event.currentTarget as HTMLElement;
+  const rect = button.getBoundingClientRect();
+  bellPanelStyle.value = {
+    position: 'fixed',
+    top: `${rect.bottom + 4}px`,
+    right: `${window.innerWidth - rect.right}px`,
+  };
+  fetchEntries();
 }
 
 function navigateToEntry(entry: AuditEntry) {
-  showBell.value = false;
+  closePanel();
   router.push({ path: ROUTES.AUDIT, query: { container: entry.containerName } });
 }
 
 function openAuditLog() {
-  showBell.value = false;
+  closePanel();
   router.push(ROUTES.AUDIT);
 }
 
@@ -104,7 +109,7 @@ function dismissAll() {
 function handleClickOutside(e: PointerEvent) {
   const target = e.target as HTMLElement;
   if (!target.closest('.notification-bell-wrapper')) {
-    showBell.value = false;
+    closePanel();
   }
 }
 

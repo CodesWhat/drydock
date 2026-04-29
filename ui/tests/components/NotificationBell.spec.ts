@@ -643,6 +643,59 @@ describe('NotificationBell', () => {
       const secondSeen = JSON.parse(localStorage.getItem('dd-bell-last-seen') ?? 'null');
       expect(secondSeen >= firstSeen).toBe(true);
     });
+
+    it('advances lastSeen when the panel closes via click-outside', async () => {
+      const attachDiv = document.createElement('div');
+      document.body.appendChild(attachDiv);
+      const wrapper = mount(NotificationBell, {
+        attachTo: attachDiv,
+        global: {
+          stubs: { AppIcon: iconStub, Transition: transitionStub },
+          directives: { tooltip: tooltipDirective },
+        },
+      });
+      mountedWrappers.push(wrapper);
+      await flushPromises();
+      await openBell(wrapper);
+
+      const before = Date.now();
+      const outside = document.createElement('div');
+      document.body.appendChild(outside);
+      outside.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      await nextTick();
+
+      const stored = JSON.parse(localStorage.getItem('dd-bell-last-seen') ?? 'null');
+      expect(new Date(stored).getTime()).toBeGreaterThanOrEqual(before);
+
+      document.body.removeChild(outside);
+      document.body.removeChild(attachDiv);
+    });
+
+    it('advances lastSeen when navigating to an entry', async () => {
+      const wrapper = factory();
+      await flushPromises();
+      await openBell(wrapper);
+
+      const before = Date.now();
+      await wrapper.find('[data-test="notification-row"] button').trigger('click');
+      await nextTick();
+
+      const stored = JSON.parse(localStorage.getItem('dd-bell-last-seen') ?? 'null');
+      expect(new Date(stored).getTime()).toBeGreaterThanOrEqual(before);
+    });
+
+    it('advances lastSeen when opening the audit log', async () => {
+      const wrapper = factory();
+      await flushPromises();
+      await openBell(wrapper);
+
+      const before = Date.now();
+      await wrapper.find('[data-test="open-audit-log-btn"]').trigger('click');
+      await nextTick();
+
+      const stored = JSON.parse(localStorage.getItem('dd-bell-last-seen') ?? 'null');
+      expect(new Date(stored).getTime()).toBeGreaterThanOrEqual(before);
+    });
   });
 
   it('sets aria-expanded on toggle', async () => {
