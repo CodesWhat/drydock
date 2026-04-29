@@ -1337,6 +1337,18 @@ function handleSseEvent(event: string, payload?: unknown) {
     emitUiSseEvent('dd:sse-resync-required', { reason });
     return;
   }
+  if (event === 'update-applied') {
+    emitUiSseEvent('dd:sse-update-applied', payload);
+    return;
+  }
+  if (event === 'update-failed') {
+    emitUiSseEvent('dd:sse-update-failed', payload);
+    return;
+  }
+  if (event === 'batch-update-completed') {
+    emitUiSseEvent('dd:sse-batch-update-completed', payload);
+    return;
+  }
   if (event === 'connection-lost') {
     connectionLost.value = true;
     startConnectivityPolling();
