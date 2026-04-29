@@ -296,6 +296,7 @@ async function updateAllInGroupState(args: {
       );
     })
   ) {
+    useToast().warning('Update already in progress for some containers in this group');
     return;
   }
   const frozenUpdateTargets = updatableContainers.map((container) => ({

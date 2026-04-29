@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => ({
   toastSuccess: vi.fn(),
   toastError: vi.fn(),
   toastInfo: vi.fn(),
+  toastWarning: vi.fn(),
   confirmRequire: vi.fn(),
   getBackups: vi.fn(),
   rollback: vi.fn(),
@@ -78,7 +79,7 @@ vi.mock('@/composables/useToast', () => ({
     success: mocks.toastSuccess,
     error: mocks.toastError,
     info: mocks.toastInfo,
-    warning: vi.fn(),
+    warning: mocks.toastWarning,
     toasts: { value: [] },
     addToast: vi.fn(),
     dismissToast: vi.fn(),
@@ -2361,7 +2362,7 @@ describe('useContainerActions', () => {
     expect(mocks.getContainerUpdateOperations).not.toHaveBeenCalled();
   });
 
-  it('skips grouped updates when already in progress or when no container is eligible', async () => {
+  it('warns and skips grouped updates when already in progress; silently skips when no container is eligible', async () => {
     const updatable = makeContainer({
       id: 'container-1',
       name: 'web',
@@ -2385,11 +2386,18 @@ describe('useContainerActions', () => {
       containerIdMap: { web: 'container-1', api: 'container-2', worker: 'container-3' },
     });
 
+    // Group-1: updatable container has a queued operation — guard fires, warning toast shown
     await composable.updateAllInGroup({ key: 'group-1', containers: [updatable] });
     expect(mocks.updateContainers).not.toHaveBeenCalled();
+    expect(mocks.toastWarning).toHaveBeenCalledWith(
+      'Update already in progress for some containers in this group',
+    );
 
+    // Group-2: no updatable containers (all blocked/unchanged) — no API call, no extra warning
+    mocks.toastWarning.mockClear();
     await composable.updateAllInGroup({ key: 'group-2', containers: [blocked, unchanged] });
     expect(mocks.updateContainers).not.toHaveBeenCalled();
+    expect(mocks.toastWarning).not.toHaveBeenCalled();
   });
 
   it('handles delete guard and delete failure paths', async () => {

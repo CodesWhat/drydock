@@ -7,7 +7,8 @@
     "toast": {
       "updated": "Updated: {name}",
       "updateFailed": "Update failed: {name}",
-      "rolledBack": "Rolled back: {name}"
+      "rolledBack": "Rolled back: {name}",
+      "updateAlreadyInProgress": "Update already in progress for some containers in this group"
     },
     "registryError": {
       "generic": "Registry error",
