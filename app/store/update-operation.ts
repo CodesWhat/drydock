@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { getDefaultCacheMaxEntries } from '../configuration/runtime-defaults.js';
-import { emitUpdateOperationChanged } from '../event/index.js';
+import { emitBatchUpdateCompleted, emitUpdateOperationChanged } from '../event/index.js';
 import type {
   ActiveContainerUpdateOperationPhase,
   ActiveContainerUpdateOperationStatus,
@@ -191,7 +191,8 @@ type UpdateOperationQuery =
   | { 'data.containerId': string }
   | { 'data.containerId': string; 'data.status': ContainerUpdateOperationStatus }
   | { 'data.newContainerId': string }
-  | { 'data.newContainerId': string; 'data.status': ContainerUpdateOperationStatus };
+  | { 'data.newContainerId': string; 'data.status': ContainerUpdateOperationStatus }
+  | { 'data.batchId': string };
 
 interface UpdateOperationCollection {
   insert(document: UpdateOperationCollectionDocument): void;
@@ -213,6 +214,10 @@ interface UpdateOperationStoreDb {
 }
 
 let updateOperationCollection: UpdateOperationCollection | undefined;
+// In-memory registry: batchId → Set of operationIds. Populated on insert, cleared when the
+// batch completes. This allows us to reconstruct full batch membership even after individual
+// operations have had their batchId cleared on terminal transition.
+const batchMemberRegistry = new Map<string, Set<string>>();
 const UPDATE_OPERATION_COLLECTION_INDICES = [
   'data.id',
   'data.containerName',
@@ -412,6 +417,7 @@ export function createCollections(db: UpdateOperationStoreDb): void {
     indices: UPDATE_OPERATION_COLLECTION_INDICES,
   }) as UpdateOperationCollection;
   updateOperationMutationsSincePrune = 0;
+  batchMemberRegistry.clear();
   // Startup repair emits update-operation change events before API/SSE route
   // initialization has registered subscribers. That is acceptable because the
   // UI reloads state over HTTP on connect instead of depending on replay of
@@ -439,6 +445,19 @@ export function insertOperation(operation: InsertUpdateOperationInput): UpdateOp
     updateOperationCollection.insert({ data: operationToSave });
     maybePruneOperationsForRetention(updateOperationCollection);
     emitOperationChangedEvent(operationToSave);
+  }
+
+  // Register batch membership for batch-completion tracking.
+  const insertedBatchId =
+    typeof (operationToSave as { batchId?: unknown }).batchId === 'string' &&
+    (operationToSave as { batchId?: unknown }).batchId !== ''
+      ? (operationToSave as { batchId: string }).batchId
+      : undefined;
+  if (insertedBatchId) {
+    if (!batchMemberRegistry.has(insertedBatchId)) {
+      batchMemberRegistry.set(insertedBatchId, new Set<string>());
+    }
+    batchMemberRegistry.get(insertedBatchId)!.add(operationToSave.id);
   }
 
   return operationToSave;
@@ -597,12 +616,19 @@ export function markOperationTerminal(
     return existing;
   }
 
+  // Capture batchId BEFORE writing terminal state — terminal ops have batchId cleared.
+  const preBatchId =
+    typeof (existing as { batchId?: unknown }).batchId === 'string' &&
+    (existing as { batchId?: unknown }).batchId !== ''
+      ? (existing as { batchId: string }).batchId
+      : undefined;
+
   const completedAt =
     typeof patch.completedAt === 'string' && patch.completedAt.trim() !== ''
       ? patch.completedAt
       : new Date().toISOString();
 
-  return persistOperationPatch(id, {
+  const updated = persistOperationPatch(id, {
     ...patch,
     phase: resolveTerminalContainerUpdateOperationPhase(patch.status, patch.phase),
     completedAt,
@@ -610,6 +636,75 @@ export function markOperationTerminal(
     queuePosition: undefined,
     queueTotal: undefined,
   });
+
+  // After writing terminal state, check if this was the last active operation in the batch.
+  if (preBatchId) {
+    // Check remaining active ops in batch (active ops still have batchId set).
+    const remainingActive = updateOperationCollection
+      ? updateOperationCollection
+          .find({ 'data.batchId': preBatchId })
+          .filter((doc) => isActiveOperationStatus(doc.data.status))
+      : [];
+
+    if (remainingActive.length === 0) {
+      // All operations in this batch have reached a terminal state.
+      // Use the in-memory registry to reconstruct full batch membership.
+      const memberIds = batchMemberRegistry.get(preBatchId);
+      if (memberIds && memberIds.size > 0) {
+        batchMemberRegistry.delete(preBatchId);
+
+        // durationMs: sum of per-operation (completedAt - createdAt) for each batch item.
+        let totalDurationMs = 0;
+        const items: Array<{
+          operationId: string;
+          containerId: string;
+          containerName: string;
+          status: 'succeeded' | 'failed';
+        }> = [];
+
+        for (const memberId of memberIds) {
+          const op =
+            memberId === id ? (updated ?? getOperationById(memberId)) : getOperationById(memberId);
+          if (!op) {
+            continue;
+          }
+          const createdAtMs = Date.parse(op.createdAt);
+          const completedAtMs = Date.parse(
+            typeof op.completedAt === 'string' ? op.completedAt : completedAt,
+          );
+          const opDuration =
+            !Number.isNaN(createdAtMs) && !Number.isNaN(completedAtMs)
+              ? Math.max(0, completedAtMs - createdAtMs)
+              : 0;
+          totalDurationMs += opDuration;
+
+          const opStatus: 'succeeded' | 'failed' =
+            op.status === 'succeeded' ? 'succeeded' : 'failed';
+          items.push({
+            operationId: op.id,
+            containerId: typeof op.containerId === 'string' ? op.containerId : '',
+            containerName: op.containerName,
+            status: opStatus,
+          });
+        }
+
+        const succeededCount = items.filter((i) => i.status === 'succeeded').length;
+        const failedCount = items.filter((i) => i.status === 'failed').length;
+
+        void emitBatchUpdateCompleted({
+          batchId: preBatchId,
+          total: items.length,
+          succeeded: succeededCount,
+          failed: failedCount,
+          durationMs: totalDurationMs,
+          items,
+          timestamp: new Date().toISOString(),
+        });
+      }
+    }
+  }
+
+  return updated;
 }
 
 /**
