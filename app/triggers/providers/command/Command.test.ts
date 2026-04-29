@@ -194,6 +194,105 @@ test('runCommand should use execFile with shell and -c arguments', async () => {
   expect(childProcessMockControl.execCalls).toBe(0);
 });
 
+test('triggerBatch should pass dd_title env var when runtimeContext.title is set', async () => {
+  const cmd = new Command();
+  await cmd.register('trigger', 'command', 'test', { cmd: 'echo batch' });
+
+  let capturedEnv: Record<string, string | undefined> | undefined;
+  childProcessMockControl.execFileImpl = (
+    _file: unknown,
+    _args: unknown,
+    options: unknown,
+    callback: (...args: unknown[]) => void,
+  ) => {
+    capturedEnv = (options as { env?: Record<string, string | undefined> }).env;
+    setImmediate(() => callback(null, '', ''));
+    return { pid: 42 };
+  };
+
+  await cmd.triggerBatch([{ name: 'c1' }], {
+    title: 'Security scan: 1 finding',
+    eventKind: 'security-alert-digest',
+  });
+
+  expect(capturedEnv?.dd_title).toBe('Security scan: 1 finding');
+  expect(capturedEnv?.dd_body).toBeUndefined();
+  expect(capturedEnv?.dd_event_kind).toBe('security-alert-digest');
+});
+
+test('triggerBatch should pass dd_body env var when runtimeContext.body is set', async () => {
+  const cmd = new Command();
+  await cmd.register('trigger', 'command', 'test', { cmd: 'echo batch' });
+
+  let capturedEnv: Record<string, string | undefined> | undefined;
+  childProcessMockControl.execFileImpl = (
+    _file: unknown,
+    _args: unknown,
+    options: unknown,
+    callback: (...args: unknown[]) => void,
+  ) => {
+    capturedEnv = (options as { env?: Record<string, string | undefined> }).env;
+    setImmediate(() => callback(null, '', ''));
+    return { pid: 42 };
+  };
+
+  await cmd.triggerBatch([{ name: 'c1' }], { body: '- app1: 1 critical' });
+
+  expect(capturedEnv?.dd_body).toBe('- app1: 1 critical');
+  expect(capturedEnv?.dd_title).toBeUndefined();
+  expect(capturedEnv?.dd_event_kind).toBeUndefined();
+});
+
+test('triggerBatch should pass all three env vars when full runtimeContext is set', async () => {
+  const cmd = new Command();
+  await cmd.register('trigger', 'command', 'test', { cmd: 'echo batch' });
+
+  let capturedEnv: Record<string, string | undefined> | undefined;
+  childProcessMockControl.execFileImpl = (
+    _file: unknown,
+    _args: unknown,
+    options: unknown,
+    callback: (...args: unknown[]) => void,
+  ) => {
+    capturedEnv = (options as { env?: Record<string, string | undefined> }).env;
+    setImmediate(() => callback(null, '', ''));
+    return { pid: 42 };
+  };
+
+  await cmd.triggerBatch([{ name: 'c1' }], {
+    title: 'Security scan: 1 finding',
+    body: '- app1: 1 critical',
+    eventKind: 'security-alert-digest',
+  });
+
+  expect(capturedEnv?.dd_title).toBe('Security scan: 1 finding');
+  expect(capturedEnv?.dd_body).toBe('- app1: 1 critical');
+  expect(capturedEnv?.dd_event_kind).toBe('security-alert-digest');
+});
+
+test('triggerBatch should not set runtimeContext env vars when runtimeContext is omitted', async () => {
+  const cmd = new Command();
+  await cmd.register('trigger', 'command', 'test', { cmd: 'echo batch' });
+
+  let capturedEnv: Record<string, string | undefined> | undefined;
+  childProcessMockControl.execFileImpl = (
+    _file: unknown,
+    _args: unknown,
+    options: unknown,
+    callback: (...args: unknown[]) => void,
+  ) => {
+    capturedEnv = (options as { env?: Record<string, string | undefined> }).env;
+    setImmediate(() => callback(null, '', ''));
+    return { pid: 42 };
+  };
+
+  await cmd.triggerBatch([{ name: 'c1' }]);
+
+  expect(capturedEnv?.dd_title).toBeUndefined();
+  expect(capturedEnv?.dd_body).toBeUndefined();
+  expect(capturedEnv?.dd_event_kind).toBeUndefined();
+});
+
 test('runCommand should coerce non-string stdout/stderr values to empty strings', async () => {
   const cmd = new Command();
   await cmd.register('trigger', 'command', 'test', { cmd: 'echo test' });

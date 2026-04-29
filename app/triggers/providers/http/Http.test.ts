@@ -457,6 +457,80 @@ describe('HTTP Trigger', () => {
     expect(axios).not.toHaveBeenCalled();
   });
 
+  test('should trigger batch with runtimeContext.title only — envelope with empty body', async () => {
+    const { default: axios } = await import('axios');
+    axios.mockResolvedValue({ data: {} });
+    await http.register('trigger', 'http', 'test', {
+      url: 'https://example.com/webhook',
+    });
+    const containers = [{ name: 'app1' }];
+
+    await http.triggerBatch(containers, {
+      title: 'Security scan: 1 finding',
+      eventKind: 'security-alert-digest',
+    });
+
+    expect(axios).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: {
+          title: 'Security scan: 1 finding',
+          body: '',
+          eventKind: 'security-alert-digest',
+          containers,
+        },
+      }),
+    );
+  });
+
+  test('should trigger batch with runtimeContext.body only — envelope with empty title', async () => {
+    const { default: axios } = await import('axios');
+    axios.mockResolvedValue({ data: {} });
+    await http.register('trigger', 'http', 'test', {
+      url: 'https://example.com/webhook',
+    });
+    const containers = [{ name: 'app1' }];
+
+    await http.triggerBatch(containers, { body: '- app1: 1 critical' });
+
+    expect(axios).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: {
+          title: '',
+          body: '- app1: 1 critical',
+          eventKind: undefined,
+          containers,
+        },
+      }),
+    );
+  });
+
+  test('should trigger batch with full runtimeContext — full envelope', async () => {
+    const { default: axios } = await import('axios');
+    axios.mockResolvedValue({ data: {} });
+    await http.register('trigger', 'http', 'test', {
+      url: 'https://example.com/webhook',
+    });
+    const containers = [{ name: 'app1' }];
+    const runtimeContext = {
+      title: 'Security scan: 1 finding',
+      body: '- app1: 1 critical',
+      eventKind: 'security-alert-digest',
+    };
+
+    await http.triggerBatch(containers, runtimeContext);
+
+    expect(axios).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: {
+          title: 'Security scan: 1 finding',
+          body: '- app1: 1 critical',
+          eventKind: 'security-alert-digest',
+          containers,
+        },
+      }),
+    );
+  });
+
   test('should use centralized outbound timeout when env override is set', async () => {
     const previousTimeout = process.env.DD_OUTBOUND_HTTP_TIMEOUT_MS;
     process.env.DD_OUTBOUND_HTTP_TIMEOUT_MS = '1234';

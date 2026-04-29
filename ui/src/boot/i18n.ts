@@ -13,9 +13,11 @@ const localeModules = import.meta.glob<Record<string, unknown>>('../locales/**/*
   import: 'default',
 });
 
-function buildMessages(): Record<SupportedLocale, Record<string, unknown>> {
+export function buildMessages(
+  modules: Record<string, Record<string, unknown>> = localeModules,
+): Record<SupportedLocale, Record<string, unknown>> {
   const messages: Record<string, Record<string, unknown>> = { en: {} };
-  for (const [path, mod] of Object.entries(localeModules)) {
+  for (const [path, mod] of Object.entries(modules)) {
     const match = path.match(/\/locales\/([^/]+)\//);
     if (!match) continue;
     const locale = match[1];

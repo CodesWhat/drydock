@@ -134,3 +134,76 @@ test('triggerBatch should send http request with containers json', async () => {
     url: 'https://maker.ifttt.com/trigger/event/with/key/key',
   });
 });
+
+test('triggerBatch should use runtimeContext.title as value1 and empty value2 when only title is set', async () => {
+  ifttt.configuration = {
+    key: 'key',
+    event: 'event',
+  };
+  const containers = [{ name: 'app1' }];
+  axios.mockResolvedValue({ data: {} });
+  await ifttt.triggerBatch(containers, {
+    title: 'Security scan: 1 finding',
+    eventKind: 'security-alert-digest',
+  });
+  expect(axios).toHaveBeenCalledWith({
+    data: {
+      value1: 'Security scan: 1 finding',
+      value2: '',
+      value3: JSON.stringify(containers),
+    },
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    method: 'POST',
+    url: 'https://maker.ifttt.com/trigger/event/with/key/key',
+  });
+});
+
+test('triggerBatch should use runtimeContext.body as value2 and empty value1 when only body is set', async () => {
+  ifttt.configuration = {
+    key: 'key',
+    event: 'event',
+  };
+  const containers = [{ name: 'app1' }];
+  axios.mockResolvedValue({ data: {} });
+  await ifttt.triggerBatch(containers, { body: '- app1: 1 critical' });
+  expect(axios).toHaveBeenCalledWith({
+    data: {
+      value1: '',
+      value2: '- app1: 1 critical',
+      value3: JSON.stringify(containers),
+    },
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    method: 'POST',
+    url: 'https://maker.ifttt.com/trigger/event/with/key/key',
+  });
+});
+
+test('triggerBatch should use both runtimeContext title and body when both are set', async () => {
+  ifttt.configuration = {
+    key: 'key',
+    event: 'event',
+  };
+  const containers = [{ name: 'app1' }];
+  axios.mockResolvedValue({ data: {} });
+  await ifttt.triggerBatch(containers, {
+    title: 'Security scan: 1 finding',
+    body: '- app1: 1 critical',
+    eventKind: 'security-alert-digest',
+  });
+  expect(axios).toHaveBeenCalledWith({
+    data: {
+      value1: 'Security scan: 1 finding',
+      value2: '- app1: 1 critical',
+      value3: JSON.stringify(containers),
+    },
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    method: 'POST',
+    url: 'https://maker.ifttt.com/trigger/event/with/key/key',
+  });
+});
