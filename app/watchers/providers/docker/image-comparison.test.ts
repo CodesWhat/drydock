@@ -27,6 +27,20 @@ function createDigestOnlyContainer(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function createFloatingAliasContainer(overrides: Record<string, unknown> = {}) {
+  return {
+    image: {
+      id: 'image-1',
+      registry: { name: 'hub' },
+      name: 'library/postgres',
+      tag: { value: '16-alpine', semver: true, tagPrecision: 'floating' },
+      digest: { watch: true, repo: 'sha256:local' },
+    },
+    tagFamily: 'strict',
+    ...overrides,
+  };
+}
+
 function createManifestLookup(version = 1) {
   return vi.fn().mockResolvedValue({
     digest: 'sha256:def456',
@@ -118,5 +132,25 @@ describe('image-comparison', () => {
     await findNewVersion(createDigestOnlyContainer() as never, log);
 
     expect(getImageManifestDigest.mock.calls[0][0].tag.value).toBe('beta');
+  });
+
+  test('compares strict floating aliases by digest without advancing to the next tag alias', async () => {
+    const getImageManifestDigest = createManifestLookup();
+    mockGetState.mockReturnValue({
+      registry: {
+        hub: {
+          getTags: vi.fn().mockResolvedValue(['16-alpine', '16.1-alpine', '17-alpine']),
+          getImageManifestDigest,
+        },
+      },
+    });
+    const log = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
+
+    const result = await findNewVersion(createFloatingAliasContainer() as never, log);
+
+    expect(result.tag).toBe('16-alpine');
+    expect(result.digest).toBe('sha256:def456');
+    expect(result.noUpdateReason).toBeUndefined();
+    expect(getImageManifestDigest.mock.calls[0][0].tag.value).toBe('16-alpine');
   });
 });

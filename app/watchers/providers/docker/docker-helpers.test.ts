@@ -265,7 +265,7 @@ describe('docker helper extraction module', () => {
     expect(isContainerToWatch('', true)).toBe(true);
   });
 
-  test('digest watch should keep digest-backed summary references enabled only when the tag is still meaningful', () => {
+  test('digest watch defaults require a meaningful current tag', () => {
     expect(
       isDigestToWatch(
         undefined as any,
@@ -315,7 +315,7 @@ describe('docker helper extraction module', () => {
         'latest',
         'repo:latest',
       ),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   test('isDigestToWatch should honor an explicit digest label and warn on Docker Hub', () => {
@@ -399,13 +399,19 @@ describe('docker helper extraction module', () => {
   });
 
   test('keeps digest-watch defaults and display-name update rule behavior', () => {
-    // Non-semver floating tags: Docker Hub stays opt-in, non-Hub defaults to watch
-    expect(isDigestToWatch(undefined as any, { domain: undefined }, false, 'floating')).toBe(false);
-    expect(isDigestToWatch(undefined as any, { domain: '' }, false, 'floating')).toBe(false);
-    expect(isDigestToWatch(undefined as any, { domain: 'docker.io' }, false, 'floating')).toBe(
-      false,
+    // Floating tags are mutable aliases, so they default to digest watch even on Docker Hub.
+    expect(
+      isDigestToWatch(undefined as any, { domain: undefined }, false, 'floating', 'latest'),
+    ).toBe(true);
+    expect(isDigestToWatch(undefined as any, { domain: '' }, false, 'floating', 'latest')).toBe(
+      true,
     );
-    expect(isDigestToWatch(undefined as any, { domain: 'ghcr.io' }, false, 'floating')).toBe(true);
+    expect(
+      isDigestToWatch(undefined as any, { domain: 'docker.io' }, false, 'floating', 'latest'),
+    ).toBe(true);
+    expect(
+      isDigestToWatch(undefined as any, { domain: 'ghcr.io' }, false, 'floating', 'latest'),
+    ).toBe(true);
 
     // Specific semver releases: digest watching disabled regardless of registry
     expect(isDigestToWatch(undefined as any, { domain: 'ghcr.io' }, true, 'specific')).toBe(false);
@@ -413,11 +419,13 @@ describe('docker helper extraction module', () => {
       false,
     );
 
-    // Floating semver aliases (v3, 1.4): Docker Hub stays opt-in, non-Hub defaults to watch
-    expect(isDigestToWatch(undefined as any, { domain: 'ghcr.io' }, true, 'floating')).toBe(true);
-    expect(isDigestToWatch(undefined as any, { domain: 'docker.io' }, true, 'floating')).toBe(
-      false,
+    // Floating semver aliases (v3, 1.4): same-tag digest comparison is the safe default.
+    expect(isDigestToWatch(undefined as any, { domain: 'ghcr.io' }, true, 'floating', '1.4')).toBe(
+      true,
     );
+    expect(
+      isDigestToWatch(undefined as any, { domain: 'docker.io' }, true, 'floating', '1.4'),
+    ).toBe(true);
 
     // Digest-pinned images have no tag-comparison path, so they default to digest watch
     // even on Docker Hub.

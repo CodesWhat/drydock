@@ -197,6 +197,50 @@ describe('docker tag candidates module', () => {
     expect(result.tags).toEqual([]);
   });
 
+  test('keeps strict floating version aliases on the current tag', () => {
+    const container = createContainer({
+      image: {
+        tag: {
+          value: '16-alpine',
+          semver: true,
+          tagPrecision: 'floating',
+        },
+      },
+      tagFamily: 'strict',
+    });
+    const log = {
+      warn: vi.fn(),
+      debug: vi.fn(),
+    };
+
+    const result = getTagCandidates(container, ['16-alpine', '16.1-alpine', '17-alpine'], log);
+
+    expect(result.tags).toEqual([]);
+    expect(result.noUpdateReason).toContain('Floating tag alias "16-alpine"');
+    expect(log.debug).toHaveBeenCalledWith(expect.stringContaining('Floating tag alias'));
+  });
+
+  test('allows floating version aliases to cross tags when tag family is loose', () => {
+    const container = createContainer({
+      image: {
+        tag: {
+          value: '16-alpine',
+          semver: true,
+          tagPrecision: 'floating',
+        },
+      },
+      tagFamily: 'loose',
+    });
+    const log = {
+      warn: vi.fn(),
+      debug: vi.fn(),
+    };
+
+    const result = getTagCandidates(container, ['16-alpine', '16.1-alpine', '17-alpine'], log);
+
+    expect(result.tags).toEqual(['17-alpine']);
+  });
+
   test('keeps segment count and prefix/suffix family in filterBySegmentCount', () => {
     const filtered = filterBySegmentCount(
       ['1.2.4', '1.2.4-ls133', '1.2.4-r1', '1.2', 'v1.2.4-ls133'],

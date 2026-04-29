@@ -2948,7 +2948,7 @@ describe('isDigestToWatch Logic', () => {
     expect(result.image.digest.watch).toBe(false);
   });
 
-  // Case 3: Non-Semver (no label) -> default true, EXCEPT Docker Hub
+  // Case 3: Non-Semver (no label) -> default true, including Docker Hub mutable aliases.
   test('should watch digest by default for non-semver images (Custom Registry)', async () => {
     const container = await setupTest({}, 'my.registry', 'latest', false);
     const result = await docker.addImageDetailsToContainer(container);
@@ -2959,9 +2959,9 @@ describe('isDigestToWatch Logic', () => {
     ['docker.io', 'Docker Hub Explicit'],
     ['registry-1.docker.io', 'Docker Hub Registry-1'],
     [undefined, 'Docker Hub Implicit'],
-  ])('should NOT watch digest by default for non-semver images (%s)', async (domain) => {
+  ])('should watch digest by default for non-semver images (%s)', async (domain) => {
     const container = await setupTest({}, domain, 'latest', false);
     const result = await docker.addImageDetailsToContainer(container);
-    expect(result.image.digest.watch).toBe(false);
+    expect(result.image.digest.watch).toBe(true);
   });
 });

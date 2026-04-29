@@ -221,7 +221,11 @@ function isGreaterCandidateTag(
   currentTransformedTag: string,
   allowIncludeFilterRecovery: boolean,
 ): boolean {
-  return allowIncludeFilterRecovery || isGreaterSemver(transformedTag, currentTransformedTag);
+  return (
+    allowIncludeFilterRecovery ||
+    (transformedTag !== currentTransformedTag &&
+      isGreaterSemver(transformedTag, currentTransformedTag))
+  );
 }
 
 function trackCrossFamilyGreaterDrop(
@@ -424,12 +428,23 @@ export function getTagCandidates(
 
   // Semver image -> find higher semver tag
   let filteredTags = baseTags;
+  const tagFamilyPolicy = getTagFamilyPolicy(container, logContainer);
+
+  if (container.image.tag.tagPrecision === 'floating' && tagFamilyPolicy === 'strict') {
+    const noUpdateReason = `Floating tag alias "${container.image.tag.value}" is compared by digest in strict tag-family mode. Set dd.tag.family=loose to allow cross-tag semver updates.`;
+    if (typeof logContainer?.debug === 'function') {
+      logContainer.debug(noUpdateReason);
+    }
+    return {
+      tags: [],
+      noUpdateReason: container.image.digest?.watch ? undefined : noUpdateReason,
+    };
+  }
 
   if (filteredTags.length === 0) {
     logContainer.warn('No tags found after filtering; check you regex filters');
   }
 
-  const tagFamilyPolicy = getTagFamilyPolicy(container, logContainer);
   const {
     filteredTags: semverTagCandidates,
     currentPrefix,
