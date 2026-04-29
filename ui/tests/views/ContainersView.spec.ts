@@ -2789,8 +2789,8 @@ describe('ContainersView', () => {
     });
   });
 
-  describe('update completion toast (fix #289)', () => {
-    it('fires toast.success when a tracked in-progress operation succeeds', async () => {
+  describe('operation terminal hold release (fix #289)', () => {
+    it('does not fire toast.success when a tracked in-progress operation succeeds', async () => {
       const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
       vi.useFakeTimers();
       try {
@@ -2820,7 +2820,7 @@ describe('ContainersView', () => {
         const { toasts } = useToast();
         const countBefore = toasts.value.length;
 
-        // Terminal succeeded SSE — operation was tracked → toast should fire
+        // Terminal operation SSE releases the hold; dd:update-applied owns the toast.
         operationListener?.(
           new CustomEvent('dd:sse-update-operation-changed', {
             detail: {
@@ -2836,8 +2836,7 @@ describe('ContainersView', () => {
         vi.advanceTimersByTime(1500);
         await flushPromises();
 
-        expect(toasts.value.length).toBe(countBefore + 1);
-        expect(toasts.value.at(-1)).toMatchObject({ tone: 'success', title: 'Updated: nginx' });
+        expect(toasts.value.length).toBe(countBefore);
 
         wrapper.unmount();
       } finally {
@@ -2846,7 +2845,7 @@ describe('ContainersView', () => {
       }
     });
 
-    it('fires toast.success when succeeded follows only a queued SSE (fast single update, no in-progress)', async () => {
+    it('does not fire toast.success when succeeded follows only a queued SSE', async () => {
       const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
       vi.useFakeTimers();
       try {
@@ -2891,8 +2890,7 @@ describe('ContainersView', () => {
         vi.advanceTimersByTime(1500);
         await flushPromises();
 
-        expect(toasts.value.length).toBe(countBefore + 1);
-        expect(toasts.value.at(-1)).toMatchObject({ tone: 'success', title: 'Updated: nginx' });
+        expect(toasts.value.length).toBe(countBefore);
 
         wrapper.unmount();
       } finally {
@@ -2940,7 +2938,7 @@ describe('ContainersView', () => {
       }
     });
 
-    it('fires individual toasts for multiple distinct containers completing in parallel', async () => {
+    it('does not fire individual toasts for multiple terminal operation events in parallel', async () => {
       const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
       vi.useFakeTimers();
       try {
@@ -3012,10 +3010,7 @@ describe('ContainersView', () => {
         vi.advanceTimersByTime(1500);
         await flushPromises();
 
-        expect(toasts.value.length).toBe(countBefore + 2);
-        const newToasts = toasts.value.slice(countBefore);
-        expect(newToasts.some((t) => t.title === 'Updated: nginx')).toBe(true);
-        expect(newToasts.some((t) => t.title === 'Updated: redis')).toBe(true);
+        expect(toasts.value.length).toBe(countBefore);
 
         wrapper.unmount();
       } finally {
@@ -3024,7 +3019,7 @@ describe('ContainersView', () => {
       }
     });
 
-    it('fires toast.error when a tracked operation transitions to failed', async () => {
+    it('does not fire toast.error when a tracked operation transitions to failed', async () => {
       const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
       vi.useFakeTimers();
       try {
@@ -3068,8 +3063,7 @@ describe('ContainersView', () => {
         vi.advanceTimersByTime(1500);
         await flushPromises();
 
-        expect(toasts.value.length).toBe(countBefore + 1);
-        expect(toasts.value.at(-1)).toMatchObject({ tone: 'error', title: 'Update failed: nginx' });
+        expect(toasts.value.length).toBe(countBefore);
 
         wrapper.unmount();
       } finally {
@@ -3078,7 +3072,7 @@ describe('ContainersView', () => {
       }
     });
 
-    it('fires toast.error when a tracked operation rolls back', async () => {
+    it('does not fire toast.error when a tracked operation rolls back', async () => {
       const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
       vi.useFakeTimers();
       try {
@@ -3122,8 +3116,7 @@ describe('ContainersView', () => {
         vi.advanceTimersByTime(1500);
         await flushPromises();
 
-        expect(toasts.value.length).toBe(countBefore + 1);
-        expect(toasts.value.at(-1)).toMatchObject({ tone: 'error', title: 'Rolled back: nginx' });
+        expect(toasts.value.length).toBe(countBefore);
 
         wrapper.unmount();
       } finally {
@@ -3183,8 +3176,7 @@ describe('ContainersView', () => {
         vi.advanceTimersByTime(1500);
         await flushPromises();
 
-        expect(toasts.value.length).toBe(countBefore + 1);
-        expect(toasts.value.at(-1)).toMatchObject({ tone: 'success', title: 'Updated: nginx' });
+        expect(toasts.value.length).toBe(countBefore);
 
         wrapper.unmount();
       } finally {
@@ -3193,7 +3185,7 @@ describe('ContainersView', () => {
       }
     });
 
-    it('fires toast.error when rolled-back arrives after a 60-second operation window', async () => {
+    it('does not fire toast.error when rolled-back arrives after a 60-second operation window', async () => {
       const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
       vi.useFakeTimers();
       try {
@@ -3244,8 +3236,7 @@ describe('ContainersView', () => {
         vi.advanceTimersByTime(1500);
         await flushPromises();
 
-        expect(toasts.value.length).toBe(countBefore + 1);
-        expect(toasts.value.at(-1)).toMatchObject({ tone: 'error', title: 'Rolled back: nginx' });
+        expect(toasts.value.length).toBe(countBefore);
 
         wrapper.unmount();
       } finally {
@@ -3317,7 +3308,7 @@ describe('ContainersView', () => {
   });
 
   describe('fail-safe completion toast via dd:sse-update-applied / dd:sse-update-failed', () => {
-    it('fires toast.success on dd:sse-update-applied when operation was NOT tracked by wasTracked path', async () => {
+    it('fires toast.success on dd:sse-update-applied when no hold was tracked', async () => {
       const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
       vi.useFakeTimers();
       try {
@@ -3359,7 +3350,7 @@ describe('ContainersView', () => {
       }
     });
 
-    it('fires toast.error on dd:sse-update-failed when operation was NOT tracked by wasTracked path', async () => {
+    it('fires toast.error on dd:sse-update-failed when no hold was tracked', async () => {
       const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
       vi.useFakeTimers();
       try {
@@ -3403,7 +3394,7 @@ describe('ContainersView', () => {
       }
     });
 
-    it('deduplicates: does NOT fire a second toast when wasTracked path already fired for the same operationId', async () => {
+    it('fires completion toast from dd:sse-update-applied even when operation terminal event arrived first', async () => {
       const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
       vi.useFakeTimers();
       try {
@@ -3418,8 +3409,12 @@ describe('ContainersView', () => {
         const updateAppliedListener = addEventListenerSpy.mock.calls.findLast(
           ([eventName]) => eventName === 'dd:sse-update-applied',
         )?.[1] as EventListener | undefined;
+        const { useToast } = await import('@/composables/useToast');
+        const { toasts } = useToast();
+        const countBefore = toasts.value.length;
 
-        // wasTracked path: register a hold then fire terminal succeeded
+        // Register a hold, then receive the terminal phase event first. This path
+        // now only releases the hold; the toast is owned by dd:sse-update-applied.
         operationListener?.(
           new CustomEvent('dd:sse-update-operation-changed', {
             detail: {
@@ -3446,11 +3441,9 @@ describe('ContainersView', () => {
         vi.advanceTimersByTime(1500);
         await flushPromises();
 
-        const { useToast } = await import('@/composables/useToast');
-        const { toasts } = useToast();
-        const countAfterFirstPath = toasts.value.length;
+        expect(toasts.value.length).toBe(countBefore);
 
-        // Now fire dd:sse-update-applied for the same operationId — should be a no-op
+        // The canonical completion event is still responsible for user feedback.
         updateAppliedListener?.(
           new CustomEvent('dd:sse-update-applied', {
             detail: {
@@ -3466,9 +3459,50 @@ describe('ContainersView', () => {
         vi.advanceTimersByTime(1500);
         await flushPromises();
 
-        expect(toasts.value.length).toBe(countAfterFirstPath);
+        expect(toasts.value.length).toBe(countBefore + 1);
+        expect(toasts.value.at(-1)).toMatchObject({ tone: 'success', title: 'Updated: nginx' });
 
         wrapper.unmount();
+      } finally {
+        addEventListenerSpy.mockRestore();
+        vi.useRealTimers();
+      }
+    });
+
+    it('clears pending fail-safe completion toast timers on unmount', async () => {
+      const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
+      vi.useFakeTimers();
+      try {
+        const c = makeContainer({ id: 'c1', name: 'nginx' });
+        const wrapper = await mountContainersView(
+          [c],
+          [{ id: 'c1', name: 'nginx', displayName: 'nginx' }],
+        );
+        const updateAppliedListener = addEventListenerSpy.mock.calls.findLast(
+          ([eventName]) => eventName === 'dd:sse-update-applied',
+        )?.[1] as EventListener | undefined;
+
+        const { useToast } = await import('@/composables/useToast');
+        const { toasts } = useToast();
+        const countBefore = toasts.value.length;
+
+        updateAppliedListener?.(
+          new CustomEvent('dd:sse-update-applied', {
+            detail: {
+              operationId: 'op-unmount-cleanup-1',
+              containerId: 'c1',
+              containerName: 'nginx',
+              batchId: null,
+              timestamp: '2026-04-28T12:00:00.000Z',
+            },
+          }),
+        );
+
+        wrapper.unmount();
+        vi.advanceTimersByTime(1500);
+        await flushPromises();
+
+        expect(toasts.value.length).toBe(countBefore);
       } finally {
         addEventListenerSpy.mockRestore();
         vi.useRealTimers();
@@ -3816,8 +3850,8 @@ describe('ContainersView', () => {
     });
   });
 
-  describe('reconciliation fallback toast (fix #317 — missed terminal SSE)', () => {
-    it('calls getUpdateOperationById when reconciliation collapses a hold', async () => {
+  describe('reconciliation terminal hold release (fix #317 — missed terminal SSE)', () => {
+    it('does not call getUpdateOperationById when reconciliation collapses a hold', async () => {
       const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
       vi.useFakeTimers();
       try {
@@ -3869,8 +3903,9 @@ describe('ContainersView', () => {
         await flushPromises();
         await flushPromises();
 
-        // The reconciliation fallback must have triggered the lookup
-        expect(mockGetUpdateOp).toHaveBeenCalledWith('op-fallback-317');
+        // Reconciliation now only releases the display hold; completion toasts
+        // and terminal state come from replayable dd:update-applied/failed events.
+        expect(mockGetUpdateOp).not.toHaveBeenCalled();
 
         wrapper.unmount();
       } finally {
@@ -3879,7 +3914,7 @@ describe('ContainersView', () => {
       }
     });
 
-    it('fires toast.success via reconciliation when terminal SSE was not received', async () => {
+    it('does not fire toast.success via reconciliation when terminal SSE was not received', async () => {
       const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
       vi.useFakeTimers();
       try {
@@ -3936,8 +3971,7 @@ describe('ContainersView', () => {
         vi.advanceTimersByTime(1500);
         await flushPromises();
 
-        expect(toasts.value.length).toBe(countBefore + 1);
-        expect(toasts.value.at(-1)).toMatchObject({ tone: 'success', title: 'Updated: nginx' });
+        expect(toasts.value.length).toBe(countBefore);
 
         wrapper.unmount();
       } finally {
@@ -3946,7 +3980,7 @@ describe('ContainersView', () => {
       }
     });
 
-    it('does NOT fire a duplicate toast when both SSE and reconciliation paths complete', async () => {
+    it('keeps reconciliation toast-free after terminal operation events', async () => {
       const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
       vi.useFakeTimers();
       try {
@@ -3976,7 +4010,7 @@ describe('ContainersView', () => {
         const { toasts } = useToast();
         const countBefore = toasts.value.length;
 
-        // Primary SSE: terminal succeeded — marks toast as fired
+        // Primary operation SSE: terminal succeeded — releases the hold only.
         operationListener?.(
           new CustomEvent('dd:sse-update-operation-changed', {
             detail: {
@@ -3992,11 +4026,11 @@ describe('ContainersView', () => {
         vi.advanceTimersByTime(1500);
         await flushPromises();
 
-        expect(toasts.value.length).toBe(countBefore + 1);
+        expect(toasts.value.length).toBe(countBefore);
 
         // Now trigger reconciliation as if the next list reload saw no active op.
-        // Even though getUpdateOperationById would say succeeded, wasToastFired
-        // should prevent a second toast from firing.
+        // It should remain toast-free because the canonical completion event owns
+        // user feedback.
         const { getUpdateOperationById } = await import('@/services/container');
         (getUpdateOperationById as ReturnType<typeof vi.fn>).mockResolvedValue({
           id: 'op-dedup-317',
@@ -4024,8 +4058,7 @@ describe('ContainersView', () => {
         vi.advanceTimersByTime(1500);
         await flushPromises();
 
-        // Still only 1 toast — dedup prevents a second one
-        expect(toasts.value.length).toBe(countBefore + 1);
+        expect(toasts.value.length).toBe(countBefore);
 
         wrapper.unmount();
       } finally {

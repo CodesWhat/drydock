@@ -2540,7 +2540,7 @@ describe('DashboardView', () => {
       }
     });
 
-    it('fires success toast when terminal SSE succeeded and operation was tracked', async () => {
+    it('does not fire success toast when terminal SSE succeeded and operation was tracked', async () => {
       vi.useFakeTimers();
       try {
         const wrapper = await mountDashboard(
@@ -2583,18 +2583,14 @@ describe('DashboardView', () => {
         vi.advanceTimersByTime(1500);
         await flushPromises();
 
-        const successToast = toasts.value.find(
-          (t) => t.tone === 'success' && t.title === 'Updated: nginx',
-        );
-        expect(successToast).toBeDefined();
-        expect(toasts.value.length).toBeGreaterThan(beforeCount);
+        expect(toasts.value.length).toBe(beforeCount);
         void wrapper;
       } finally {
         vi.useRealTimers();
       }
     });
 
-    it('fires error toast when terminal SSE failed and operation was tracked', async () => {
+    it('does not fire error toast when terminal SSE failed and operation was tracked', async () => {
       vi.useFakeTimers();
       try {
         const wrapper = await mountDashboard(
@@ -2635,18 +2631,14 @@ describe('DashboardView', () => {
         vi.advanceTimersByTime(1500);
         await flushPromises();
 
-        const errorToast = toasts.value.find(
-          (t) => t.tone === 'error' && t.title === 'Update failed: nginx',
-        );
-        expect(errorToast).toBeDefined();
-        expect(toasts.value.length).toBeGreaterThan(beforeCount);
+        expect(toasts.value.length).toBe(beforeCount);
         void wrapper;
       } finally {
         vi.useRealTimers();
       }
     });
 
-    it('fires error toast when terminal SSE rolled-back and operation was tracked', async () => {
+    it('does not fire error toast when terminal SSE rolled-back and operation was tracked', async () => {
       vi.useFakeTimers();
       try {
         const wrapper = await mountDashboard(
@@ -2687,11 +2679,7 @@ describe('DashboardView', () => {
         vi.advanceTimersByTime(1500);
         await flushPromises();
 
-        const errorToast = toasts.value.find(
-          (t) => t.tone === 'error' && t.title === 'Rolled back: nginx',
-        );
-        expect(errorToast).toBeDefined();
-        expect(toasts.value.length).toBeGreaterThan(beforeCount);
+        expect(toasts.value.length).toBe(beforeCount);
         void wrapper;
       } finally {
         vi.useRealTimers();
@@ -2774,7 +2762,7 @@ describe('DashboardView', () => {
   });
 
   describe('fail-safe completion toast via dd:sse-update-applied / dd:sse-update-failed', () => {
-    it('fires toast.success on dd:sse-update-applied when operation was NOT tracked by wasTracked path', async () => {
+    it('fires toast.success on dd:sse-update-applied when no hold was tracked', async () => {
       vi.useFakeTimers();
       try {
         const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
@@ -2812,7 +2800,7 @@ describe('DashboardView', () => {
       }
     });
 
-    it('fires toast.error on dd:sse-update-failed when operation was NOT tracked by wasTracked path', async () => {
+    it('fires toast.error on dd:sse-update-failed when no hold was tracked', async () => {
       vi.useFakeTimers();
       try {
         const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
@@ -2855,7 +2843,7 @@ describe('DashboardView', () => {
       }
     });
 
-    it('deduplicates: does NOT fire a second toast when wasTracked path already fired for the same operationId', async () => {
+    it('fires completion toast from dd:sse-update-applied even when operation terminal event arrived first', async () => {
       vi.useFakeTimers();
       try {
         const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
@@ -2867,8 +2855,11 @@ describe('DashboardView', () => {
         const updateAppliedListener = addEventListenerSpy.mock.calls.findLast(
           ([eventName]) => eventName === 'dd:sse-update-applied',
         )?.[1] as EventListener | undefined;
+        const { toasts } = useToast();
+        const countBefore = toasts.value.length;
 
-        // wasTracked path: register a hold then fire terminal succeeded
+        // Register a hold, then receive the terminal phase event first. This path
+        // now only releases the hold; the toast is owned by dd:sse-update-applied.
         globalThis.dispatchEvent(
           new CustomEvent('dd:sse-update-operation-changed', {
             detail: {
@@ -2895,10 +2886,9 @@ describe('DashboardView', () => {
         vi.advanceTimersByTime(1500);
         await flushPromises();
 
-        const { toasts } = useToast();
-        const countAfterFirstPath = toasts.value.length;
+        expect(toasts.value.length).toBe(countBefore);
 
-        // Fail-safe fires same operationId — should be a no-op
+        // The canonical completion event is still responsible for user feedback.
         globalThis.dispatchEvent(
           new CustomEvent('dd:sse-update-applied', {
             detail: {
@@ -2914,9 +2904,44 @@ describe('DashboardView', () => {
         vi.advanceTimersByTime(1500);
         await flushPromises();
 
-        expect(toasts.value.length).toBe(countAfterFirstPath);
+        expect(toasts.value.length).toBe(countBefore + 1);
+        expect(toasts.value.at(-1)).toMatchObject({ tone: 'success', title: 'Updated: nginx' });
 
         wrapper.unmount();
+        addEventListenerSpy.mockRestore();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('clears pending fail-safe completion toast timers on unmount', async () => {
+      vi.useFakeTimers();
+      try {
+        const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
+        const c = makeContainer({ id: 'c1', name: 'nginx' });
+        const wrapper = await mountDashboard([c], []);
+
+        const { toasts } = useToast();
+        const countBefore = toasts.value.length;
+
+        globalThis.dispatchEvent(
+          new CustomEvent('dd:sse-update-applied', {
+            detail: {
+              operationId: 'op-dash-unmount-cleanup-1',
+              containerId: 'c1',
+              containerName: 'nginx',
+              batchId: null,
+              timestamp: '2026-04-28T12:00:00.000Z',
+            },
+          }),
+        );
+
+        wrapper.unmount();
+        vi.advanceTimersByTime(1500);
+        await flushPromises();
+
+        expect(toasts.value.length).toBe(countBefore);
+
         addEventListenerSpy.mockRestore();
       } finally {
         vi.useRealTimers();

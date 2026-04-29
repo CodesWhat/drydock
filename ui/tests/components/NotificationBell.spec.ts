@@ -1,7 +1,9 @@
 import { flushPromises, mount } from '@vue/test-utils';
+import { createPinia, type Pinia, setActivePinia } from 'pinia';
 import { nextTick } from 'vue';
 import NotificationBell from '@/components/NotificationBell.vue';
 import { tooltip as tooltipDirective } from '@/directives/tooltip';
+import { type SseBusEvent, useEventStreamStore } from '@/stores/eventStream';
 
 const mockPush = vi.fn();
 vi.mock('vue-router', () => ({
@@ -39,6 +41,7 @@ const transitionStub = {
   props: ['name'],
 };
 const mountedWrappers: ReturnType<typeof mount>[] = [];
+let pinia: Pinia;
 
 function findDropdown(wrapper: ReturnType<typeof mount>) {
   return wrapper.find('[data-test="notification-dropdown"]');
@@ -52,8 +55,14 @@ function findEntryBodyButtons(wrapper: ReturnType<typeof mount>) {
   return wrapper.findAll('[data-test="notification-row"] button.text-left');
 }
 
+function publishSseEvent(event: SseBusEvent) {
+  useEventStreamStore().publish(event);
+}
+
 describe('NotificationBell', () => {
   beforeEach(() => {
+    pinia = createPinia();
+    setActivePinia(pinia);
     mockPush.mockClear();
     mockGetAuditLog.mockClear().mockResolvedValue({ entries: mockEntries });
     localStorage.clear();
@@ -69,6 +78,7 @@ describe('NotificationBell', () => {
   function factory() {
     const wrapper = mount(NotificationBell, {
       global: {
+        plugins: [pinia],
         stubs: { AppIcon: iconStub, Transition: transitionStub },
         directives: { tooltip: tooltipDirective },
       },
@@ -380,10 +390,10 @@ describe('NotificationBell', () => {
       await flushPromises();
       mockGetAuditLog.mockClear();
 
-      globalThis.dispatchEvent(new Event('dd:sse-container-changed'));
-      globalThis.dispatchEvent(new Event('dd:sse-scan-completed'));
-      globalThis.dispatchEvent(new Event('dd:sse-connected'));
-      globalThis.dispatchEvent(new Event('dd:sse-container-changed'));
+      publishSseEvent('container-changed');
+      publishSseEvent('scan-completed');
+      publishSseEvent('sse:connected');
+      publishSseEvent('container-changed');
       await flushPromises();
 
       expect(mockGetAuditLog).not.toHaveBeenCalled();
@@ -407,7 +417,7 @@ describe('NotificationBell', () => {
       await flushPromises();
       expect(mockGetAuditLog).toHaveBeenCalledTimes(1);
 
-      globalThis.dispatchEvent(new CustomEvent('dd:sse-connected'));
+      publishSseEvent('sse:connected');
       await flushPromises();
       expect(mockGetAuditLog).toHaveBeenCalledTimes(1);
 
@@ -426,7 +436,7 @@ describe('NotificationBell', () => {
       await flushPromises();
       mockGetAuditLog.mockClear();
 
-      globalThis.dispatchEvent(new Event('dd:sse-scan-completed'));
+      publishSseEvent('scan-completed');
       await flushPromises();
       wrapper.unmount();
 
@@ -446,7 +456,7 @@ describe('NotificationBell', () => {
         await flushPromises();
         mockGetAuditLog.mockClear();
 
-        globalThis.dispatchEvent(new Event('dd:sse-update-operation-changed'));
+        publishSseEvent('update-operation-changed');
         await flushPromises();
         expect(mockGetAuditLog).not.toHaveBeenCalled();
 
@@ -465,7 +475,7 @@ describe('NotificationBell', () => {
         await flushPromises();
         mockGetAuditLog.mockClear();
 
-        globalThis.dispatchEvent(new Event('dd:sse-update-applied'));
+        publishSseEvent('update-applied');
         await flushPromises();
         expect(mockGetAuditLog).not.toHaveBeenCalled();
 
@@ -484,9 +494,9 @@ describe('NotificationBell', () => {
         await flushPromises();
         mockGetAuditLog.mockClear();
 
-        globalThis.dispatchEvent(new Event('dd:sse-update-operation-changed'));
-        globalThis.dispatchEvent(new Event('dd:sse-update-applied'));
-        globalThis.dispatchEvent(new Event('dd:sse-update-operation-changed'));
+        publishSseEvent('update-operation-changed');
+        publishSseEvent('update-applied');
+        publishSseEvent('update-operation-changed');
         await flushPromises();
         expect(mockGetAuditLog).not.toHaveBeenCalled();
 
@@ -507,7 +517,7 @@ describe('NotificationBell', () => {
 
         wrapper.unmount();
 
-        globalThis.dispatchEvent(new Event('dd:sse-update-operation-changed'));
+        publishSseEvent('update-operation-changed');
         vi.advanceTimersByTime(800);
         await flushPromises();
         expect(mockGetAuditLog).not.toHaveBeenCalled();
@@ -525,7 +535,7 @@ describe('NotificationBell', () => {
 
         wrapper.unmount();
 
-        globalThis.dispatchEvent(new Event('dd:sse-update-applied'));
+        publishSseEvent('update-applied');
         vi.advanceTimersByTime(800);
         await flushPromises();
         expect(mockGetAuditLog).not.toHaveBeenCalled();
@@ -650,6 +660,7 @@ describe('NotificationBell', () => {
       const wrapper = mount(NotificationBell, {
         attachTo: attachDiv,
         global: {
+          plugins: [pinia],
           stubs: { AppIcon: iconStub, Transition: transitionStub },
           directives: { tooltip: tooltipDirective },
         },
@@ -756,6 +767,7 @@ describe('NotificationBell', () => {
       const wrapper = mount(NotificationBell, {
         attachTo: attachDiv,
         global: {
+          plugins: [pinia],
           stubs: { AppIcon: iconStub, Transition: transitionStub },
           directives: { tooltip: tooltipDirective },
         },
@@ -784,6 +796,7 @@ describe('NotificationBell', () => {
       const wrapper = mount(NotificationBell, {
         attachTo: attachDiv,
         global: {
+          plugins: [pinia],
           stubs: { AppIcon: iconStub, Transition: transitionStub },
           directives: { tooltip: tooltipDirective },
         },

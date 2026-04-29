@@ -1,3 +1,4 @@
+import { createPinia, setActivePinia } from 'pinia';
 import sseService from '@/services/sse';
 
 describe('SseService', () => {
@@ -13,6 +14,7 @@ describe('SseService', () => {
   };
 
   beforeEach(() => {
+    setActivePinia(createPinia());
     vi.useFakeTimers();
     eventListeners = {};
     mockEventSource = {
@@ -344,6 +346,7 @@ describe('SseService', () => {
         containerName: 'nginx',
         containerId: 'c1',
         newContainerId: 'c1-new',
+        batchId: 'batch-1',
         status: 'in-progress',
         phase: 'pulling',
       }),
@@ -355,6 +358,7 @@ describe('SseService', () => {
       containerName: 'nginx',
       containerId: 'c1',
       newContainerId: 'c1-new',
+      batchId: 'batch-1',
       status: 'in-progress',
       phase: 'pulling',
     });
@@ -391,6 +395,7 @@ describe('SseService', () => {
         containerName: null,
         containerId: true,
         newContainerId: {},
+        batchId: null,
         status: 'queued',
         phase: 42,
       }),
@@ -401,6 +406,7 @@ describe('SseService', () => {
       containerName: undefined,
       containerId: undefined,
       newContainerId: undefined,
+      batchId: undefined,
       status: 'queued',
       phase: undefined,
     });
@@ -479,6 +485,17 @@ describe('SseService', () => {
 
     vi.advanceTimersByTime(5000);
     expect(MockEventSourceCtor).toHaveBeenCalledWith('/api/v1/events/ui');
+  });
+
+  it('cancels pending manual reconnect when native EventSource reconnects successfully', () => {
+    sseService.connect(mockEventBus);
+    MockEventSourceCtor.mockClear();
+
+    mockEventSource.onerror();
+    eventListeners['dd:connected']({ data: JSON.stringify(connectedPayload) });
+
+    vi.advanceTimersByTime(5000);
+    expect(MockEventSourceCtor).not.toHaveBeenCalled();
   });
 
   it('clears pending reconnect timer before scheduling a new one', () => {

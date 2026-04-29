@@ -1052,39 +1052,6 @@ describe('useOperationDisplayHold', () => {
     });
   });
 
-  describe('toast dedup helpers (markToastFired / wasToastFired / resetToastFiredOperations)', () => {
-    it('wasToastFired returns false before marking', async () => {
-      const hold = await loadComposable();
-      hold.resetToastFiredOperations();
-      expect(hold.wasToastFired('op-dedup-1')).toBe(false);
-    });
-
-    it('wasToastFired returns true after markToastFired', async () => {
-      const hold = await loadComposable();
-      hold.resetToastFiredOperations();
-      hold.markToastFired('op-dedup-2');
-      expect(hold.wasToastFired('op-dedup-2')).toBe(true);
-    });
-
-    it('wasToastFired is independent per operation id', async () => {
-      const hold = await loadComposable();
-      hold.resetToastFiredOperations();
-      hold.markToastFired('op-a');
-      expect(hold.wasToastFired('op-a')).toBe(true);
-      expect(hold.wasToastFired('op-b')).toBe(false);
-    });
-
-    it('resetToastFiredOperations clears all previously marked ids', async () => {
-      const hold = await loadComposable();
-      hold.resetToastFiredOperations();
-      hold.markToastFired('op-c');
-      hold.markToastFired('op-d');
-      hold.resetToastFiredOperations();
-      expect(hold.wasToastFired('op-c')).toBe(false);
-      expect(hold.wasToastFired('op-d')).toBe(false);
-    });
-  });
-
   async function loadModule() {
     vi.resetModules();
     return await import('@/composables/useOperationDisplayHold');
@@ -1312,7 +1279,7 @@ describe('useOperationDisplayHold', () => {
       expect(onActiveOperationComputed).not.toHaveBeenCalled();
     });
 
-    it('fires onTerminalEvent for a tracked hold and marks the toast fired', async () => {
+    it('fires onTerminalEvent for a tracked hold and keeps the hold in its settle window', async () => {
       const mod = await loadModule();
       const composable = mod.useOperationDisplayHold();
       const container = makeContainer({ id: 'c-t', name: 'tracked' });
@@ -1339,15 +1306,13 @@ describe('useOperationDisplayHold', () => {
         status: 'succeeded',
         name: 'tracked',
         operationId: 'op-terminal',
-        wasTracked: true,
       });
-      expect(composable.wasToastFired('op-terminal')).toBe(true);
+      expect(composable.findMatchingOperationIds({ operationId: 'op-terminal' })).toHaveLength(1);
     });
 
-    it('fires onTerminalEvent with wasTracked=false when no hold was active', async () => {
+    it('fires onTerminalEvent when no hold was active', async () => {
       const mod = await loadModule();
       const composable = mod.useOperationDisplayHold();
-      composable.resetToastFiredOperations();
       const onTerminalEvent = vi.fn();
       mod.applyUpdateOperationSseToHold({
         parsed: {
@@ -1364,9 +1329,8 @@ describe('useOperationDisplayHold', () => {
         status: 'failed',
         name: 'untracked',
         operationId: 'op-untracked',
-        wasTracked: false,
       });
-      expect(composable.wasToastFired('op-untracked')).toBe(false);
+      expect(composable.findMatchingOperationIds({ operationId: 'op-untracked' })).toHaveLength(0);
     });
 
     it('uses the resolved container name over the payload name when both exist', async () => {

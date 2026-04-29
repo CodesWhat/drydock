@@ -1,66 +1,32 @@
-import { ref } from 'vue';
+import { createPinia, getActivePinia, setActivePinia } from 'pinia';
+import { computed } from 'vue';
+import { type FrozenBatch, useOperationStore } from '@/stores/operations';
 
-export interface FrozenBatch {
-  frozenTotal: number;
-  startedAt: number;
-  succeededCount: number;
-  failedCount: number;
-}
+export type { FrozenBatch };
 
-const batches = ref(new Map<string, FrozenBatch>());
+let fallbackPinia: ReturnType<typeof createPinia> | undefined;
 
-function captureBatch(groupKey: string, frozenTotal: number) {
-  const next = new Map(batches.value);
-  next.set(groupKey, {
-    frozenTotal,
-    startedAt: Date.now(),
-    succeededCount: 0,
-    failedCount: 0,
-  });
-  batches.value = next;
-}
-
-function clearBatch(groupKey: string) {
-  if (!batches.value.has(groupKey)) {
-    return;
+function getStore() {
+  if (!getActivePinia()) {
+    fallbackPinia ||= createPinia();
+    setActivePinia(fallbackPinia);
   }
-
-  const next = new Map(batches.value);
-  next.delete(groupKey);
-  batches.value = next;
+  return useOperationStore();
 }
 
-function getBatch(groupKey: string) {
-  return batches.value.get(groupKey);
-}
-
-function incrementSucceeded(groupKey: string) {
-  const batch = batches.value.get(groupKey);
-  if (!batch) {
-    return;
-  }
-  const next = new Map(batches.value);
-  next.set(groupKey, { ...batch, succeededCount: batch.succeededCount + 1 });
-  batches.value = next;
-}
-
-function incrementFailed(groupKey: string) {
-  const batch = batches.value.get(groupKey);
-  if (!batch) {
-    return;
-  }
-  const next = new Map(batches.value);
-  next.set(groupKey, { ...batch, failedCount: batch.failedCount + 1 });
-  batches.value = next;
-}
+const batches = computed<Map<string, FrozenBatch>>({
+  get: () => getStore().displayBatches,
+  set: (next) => getStore().replaceDisplayBatches(next),
+});
 
 export function useUpdateBatches() {
+  const store = getStore();
   return {
     batches,
-    captureBatch,
-    clearBatch,
-    getBatch,
-    incrementSucceeded,
-    incrementFailed,
+    captureBatch: store.captureDisplayBatch,
+    clearBatch: store.clearDisplayBatch,
+    getBatch: store.getDisplayBatch,
+    incrementSucceeded: store.incrementDisplayBatchSucceeded,
+    incrementFailed: store.incrementDisplayBatchFailed,
   };
 }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, provide, ref, watch } from 'vue';
+import { computed, onMounted, onScopeDispose, onUnmounted, provide, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import ContainerFullPageDetail from '../components/containers/ContainerFullPageDetail.vue';
@@ -15,7 +15,6 @@ import {
   applyUpdateOperationSseToHold,
   OPERATION_DISPLAY_HOLD_MS,
   parseUpdateOperationSsePayload,
-  type TerminalResolvedArgs,
   useOperationDisplayHold,
 } from '../composables/useOperationDisplayHold';
 import { useToast } from '../composables/useToast';
@@ -23,12 +22,7 @@ import { preferences } from '../preferences/store';
 import { usePreference } from '../preferences/usePreference';
 import { useViewMode } from '../preferences/useViewMode';
 import type { ContainerGroup } from '../services/container';
-import {
-  getAllContainers,
-  getContainerGroups,
-  getUpdateOperationById,
-  refreshAllContainers,
-} from '../services/container';
+import { getAllContainers, getContainerGroups, refreshAllContainers } from '../services/container';
 import type { Container } from '../types/container';
 import { getContainerActionIdentityKey } from '../utils/container-action-key';
 import { hasHardBlocker } from '../utils/update-eligibility';
@@ -69,63 +63,26 @@ const containerIdMap = ref<Record<string, string>>({});
 const containerMetaMap = ref<Record<string, unknown>>({});
 const {
   clearAllOperationDisplayHolds,
-  markToastFired,
-  wasToastFired,
   projectContainerDisplayState,
   reconcileHoldsAgainstContainers,
 } = useOperationDisplayHold();
 const toast = useToast();
+const completionToastTimers = new Set<ReturnType<typeof setTimeout>>();
 
-/**
- * Fallback handler for the reconciliation path: when a tracked hold is collapsed
- * because the container's active operation is gone (e.g. missed terminal SSE on
- * Synology DSM 7, #317), fetch the terminal operation from the backend and fire
- * the appropriate toast. Deduplicates against the primary SSE path via
- * `wasToastFired` / `markToastFired` so only one toast fires per operation.
- */
-async function handleTerminalResolvedFromReconciliation(args: TerminalResolvedArgs) {
-  const { operationId, containerName } = args;
-  if (wasToastFired(operationId)) {
-    return;
-  }
-  let operation: Awaited<ReturnType<typeof getUpdateOperationById>>;
-  try {
-    operation = await getUpdateOperationById(operationId);
-  } catch {
-    return;
-  }
-  if (!operation) {
-    return;
-  }
-  const { status } = operation;
-  if (status !== 'succeeded' && status !== 'failed' && status !== 'rolled-back') {
-    return;
-  }
-  if (wasToastFired(operationId)) {
-    return;
-  }
-  markToastFired(operationId);
-  const displayName =
-    (typeof operation.containerName === 'string' && operation.containerName.length > 0
-      ? operation.containerName
-      : containerName) ?? 'container';
-  if (status === 'succeeded') {
-    setTimeout(
-      () => toast.success(t('containersView.toast.updated', { name: displayName })),
-      OPERATION_DISPLAY_HOLD_MS,
-    );
-  } else if (status === 'failed') {
-    setTimeout(
-      () => toast.error(t('containersView.toast.updateFailed', { name: displayName })),
-      OPERATION_DISPLAY_HOLD_MS,
-    );
-  } else {
-    setTimeout(
-      () => toast.error(t('containersView.toast.rolledBack', { name: displayName })),
-      OPERATION_DISPLAY_HOLD_MS,
-    );
-  }
+function scheduleCompletionToast(callback: () => void) {
+  const timer = setTimeout(() => {
+    completionToastTimers.delete(timer);
+    callback();
+  }, OPERATION_DISPLAY_HOLD_MS);
+  completionToastTimers.add(timer);
 }
+
+onScopeDispose(() => {
+  for (const timer of completionToastTimers) {
+    clearTimeout(timer);
+  }
+  completionToastTimers.clear();
+});
 
 function buildContainerLookupMaps(apiContainers: Record<string, unknown>[]) {
   const idMap: Record<string, string> = {};
@@ -240,11 +197,7 @@ async function loadContainers() {
       containerIdMap.value = idMap;
       containerMetaMap.value = metaMap;
     }
-    reconcileHoldsAgainstContainers(
-      containers.value,
-      undefined,
-      handleTerminalResolvedFromReconciliation,
-    );
+    reconcileHoldsAgainstContainers(containers.value);
     if (groupByStack.value) {
       await loadGroups();
     }
@@ -1327,11 +1280,7 @@ function applyContainerPatch(event: Event, kind: ContainerPatchKind) {
       containers.value.splice(idx, 1);
     }
     removeLookupMapsForContainer(id ?? '', name);
-    reconcileHoldsAgainstContainers(
-      containers.value,
-      undefined,
-      handleTerminalResolvedFromReconciliation,
-    );
+    reconcileHoldsAgainstContainers(containers.value);
     return;
   }
 
@@ -1354,11 +1303,7 @@ function applyContainerPatch(event: Event, kind: ContainerPatchKind) {
     Object.assign(containers.value[idx]!, mapped);
   }
   updateLookupMapsForContainer(raw);
-  reconcileHoldsAgainstContainers(
-    containers.value,
-    undefined,
-    handleTerminalResolvedFromReconciliation,
-  );
+  reconcileHoldsAgainstContainers(containers.value);
 }
 
 function findContainerForOperationTarget(target: {
@@ -1389,34 +1334,13 @@ function applyOperationPatch(event: Event) {
     onActiveOperationComputed: ({ container, nextOperation }) => {
       (container as Container).updateOperation = nextOperation;
     },
-    // Terminal SSEs can race ahead of the container-list refresh that renames
-    // the row post-recreate — the hold + toast are keyed on operationId/name,
-    // so we still release the hold and (if tracked) fire the deferred toast
-    // even when the row has already fallen out of containers.value.
-    onTerminalEvent: ({ container, status, name, wasTracked }) => {
+    // Terminal operation SSEs can race ahead of the container-list refresh that
+    // renames the row post-recreate, so still release the hold even when the row
+    // has already fallen out of containers.value. Completion toasts are emitted
+    // only from dd:update-applied / dd:update-failed.
+    onTerminalEvent: ({ container }) => {
       if (container) {
         (container as Container).updateOperation = undefined;
-      }
-      if (!wasTracked) {
-        return;
-      }
-      // Defer terminal toasts until the hold window ends so the row settles
-      // before the toast announces the outcome (rc.12 9d48922a).
-      if (status === 'succeeded') {
-        setTimeout(
-          () => toast.success(t('containersView.toast.updated', { name })),
-          OPERATION_DISPLAY_HOLD_MS,
-        );
-      } else if (status === 'failed') {
-        setTimeout(
-          () => toast.error(t('containersView.toast.updateFailed', { name })),
-          OPERATION_DISPLAY_HOLD_MS,
-        );
-      } else {
-        setTimeout(
-          () => toast.error(t('containersView.toast.rolledBack', { name })),
-          OPERATION_DISPLAY_HOLD_MS,
-        );
       }
     },
   });
@@ -1435,13 +1359,11 @@ function handleSseUpdateApplied(event: Event) {
   if (batchId !== null) {
     return;
   }
-  if (!operationId || wasToastFired(operationId)) {
+  if (!operationId) {
     return;
   }
-  markToastFired(operationId);
-  setTimeout(
-    () => toast.success(t('containersView.toast.updated', { name: containerName })),
-    OPERATION_DISPLAY_HOLD_MS,
+  scheduleCompletionToast(() =>
+    toast.success(t('containersView.toast.updated', { name: containerName })),
   );
 }
 
@@ -1457,13 +1379,11 @@ function handleSseUpdateFailed(event: Event) {
   if (batchId !== null) {
     return;
   }
-  if (!operationId || wasToastFired(operationId)) {
+  if (!operationId) {
     return;
   }
-  markToastFired(operationId);
-  setTimeout(
-    () => toast.error(t('containersView.toast.updateFailed', { name: containerName })),
-    OPERATION_DISPLAY_HOLD_MS,
+  scheduleCompletionToast(() =>
+    toast.error(t('containersView.toast.updateFailed', { name: containerName })),
   );
 }
 

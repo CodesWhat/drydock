@@ -52,25 +52,6 @@ interface OperationDisplayHoldRecord {
 const heldOperations = shallowRef(new Map<string, OperationDisplayHoldRecord>());
 const releaseTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
-/**
- * Tracks operation IDs whose terminal outcome has already been surfaced to the
- * user (either via the primary SSE path or the reconciliation fallback). Shared
- * between both paths to prevent duplicate toasts.
- */
-const toastFiredOperations = new Set<string>();
-
-function markToastFired(operationId: string) {
-  toastFiredOperations.add(operationId);
-}
-
-function wasToastFired(operationId: string): boolean {
-  return toastFiredOperations.has(operationId);
-}
-
-function resetToastFiredOperations() {
-  toastFiredOperations.clear();
-}
-
 function setHeldOperation(operationId: string, hold: OperationDisplayHoldRecord) {
   heldOperations.value.set(operationId, hold);
   triggerRef(heldOperations);
@@ -345,9 +326,9 @@ export interface TerminalResolvedArgs {
  * active operation in the raw API response into the short settle window — so the
  * row releases within ~1.5s of the next refresh instead of 10 minutes.
  *
- * When `onTerminalResolved` is provided, it is invoked (at most once per operationId
- * per hold lifetime) before scheduling the release so the caller can fetch the
- * terminal operation state and fire the appropriate toast.
+ * When `onTerminalResolved` is provided, it is invoked before scheduling the
+ * release so callers can perform local cleanup. Toasts intentionally remain on
+ * the replayable dd:update-applied / dd:update-failed path.
  */
 function reconcileHoldsAgainstContainers(
   containers: readonly Pick<Container, 'id' | 'name' | 'updateOperation'>[],
@@ -474,26 +455,22 @@ export interface ApplyUpdateOperationSseArgs {
   /**
    * Invoked on every terminal-status event (succeeded / failed / rolled-back)
    * regardless of whether a hold was tracked. The helper has already called
-   * scheduleHeldOperationRelease — plus markToastFired when wasTracked — so the
-   * caller's job is to (a) apply any view-specific row cleanup (e.g. clearing
-   * containers.value[idx].updateOperation) and (b) surface the terminal toast
-   * when wasTracked (usually with a setTimeout(OPERATION_DISPLAY_HOLD_MS) so
-   * the row settles before the toast fires). The wasTracked flag lets views
-   * avoid firing toasts for replays of events they never held for.
+   * scheduleHeldOperationRelease, so the caller's job is to apply any
+   * view-specific row cleanup (e.g. clearing containers.value[idx].updateOperation).
+   * Completion toasts are intentionally owned by dd:update-applied / dd:update-failed.
    */
   onTerminalEvent?: (args: {
     container?: HoldSourceContainer;
     status: TerminalContainerUpdateOperationStatus;
     name: string;
     operationId?: string;
-    wasTracked: boolean;
   }) => void;
 }
 
 /**
  * Shared dispatcher that both ContainersView and DashboardView route their
  * `dd:sse-update-operation-changed` events through. Keeps the hold map, sort
- * snapshot, and terminal-toast-fired dedup in one place so both views stay in
+ * snapshot, and terminal release behavior in one place so both views stay in
  * lockstep (previously DashboardView had only a terminal handler with no hold
  * creation or REST reconciliation, which was the root of #291).
  */
@@ -557,11 +534,7 @@ export function applyUpdateOperationSseToHold(args: ApplyUpdateOperationSseArgs)
     terminalStatus === 'failed' ||
     terminalStatus === 'rolled-back'
   ) {
-    const wasTracked = findMatchingOperationIds(operationTarget).length > 0;
     scheduleHeldOperationRelease(operationTarget);
-    if (wasTracked && parsed.operationId) {
-      markToastFired(parsed.operationId);
-    }
     const toastName =
       (typeof container?.name === 'string' && container.name.length > 0
         ? container.name
@@ -573,7 +546,6 @@ export function applyUpdateOperationSseToHold(args: ApplyUpdateOperationSseArgs)
       status: terminalStatus,
       name: toastName,
       operationId: parsed.operationId,
-      wasTracked,
     });
     return;
   }
@@ -590,10 +562,7 @@ export function useOperationDisplayHold() {
     findMatchingOperationIds,
     getDisplayUpdateOperation,
     holdOperationDisplay,
-    markToastFired,
     parseUpdateOperationSsePayload,
-    wasToastFired,
-    resetToastFiredOperations,
     projectContainerDisplayState,
     reconcileHoldsAgainstContainers,
     scheduleHeldOperationRelease,

@@ -1,3 +1,4 @@
+import { createManagedEventSource } from '@/stores/eventStream';
 import { extractCollectionData } from '../utils/api';
 
 export interface ContainerStatsSnapshot {
@@ -243,7 +244,7 @@ function createEventSource(
   handlers: ContainerStatsStreamEventHandlers,
   onError: () => void,
 ): EventSource {
-  const source = new EventSource(streamUrl);
+  const source = createManagedEventSource(streamUrl);
   source.addEventListener('open', () => {
     handlers.onOpen?.();
   });

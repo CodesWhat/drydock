@@ -1,66 +1,27 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { onMounted, onUnmounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
+import { storeToRefs } from 'pinia';
 import AppIcon from '@/components/AppIcon.vue';
 import AppIconButton from '@/components/AppIconButton.vue';
 import { ROUTES } from '../router/routes';
-import { useStorageRef } from '../composables/useStorageRef';
-import { getAuditLog } from '../services/audit';
+import { useNotificationStore } from '../stores/notifications';
 import type { AuditEntry } from '../utils/audit-helpers';
 import { actionIcon, actionLabel, statusColor, timeAgo } from '../utils/audit-helpers';
 
 const { t } = useI18n();
 const router = useRouter();
-
-const BELL_ACTIONS = [
-  'update-available',
-  'update-applied',
-  'update-failed',
-  'notification-delivery-failed',
-  'security-alert',
-  'agent-disconnect',
-];
+const notificationStore = useNotificationStore();
+const { lastSeen, loading, unreadCount, visibleEntries } = storeToRefs(notificationStore);
 
 const showBell = ref(false);
 const bellPanelStyle = ref<Record<string, string>>({});
-const entries = ref<AuditEntry[]>([]);
-const loading = ref(false);
-const lastSeen = useStorageRef('dd-bell-last-seen', '');
-const dismissedIds = useStorageRef<string[]>(
-  'dd-bell-dismissed-ids',
-  [],
-  (v): v is string[] => Array.isArray(v) && v.every((x) => typeof x === 'string'),
-);
-
-const visibleEntries = computed(() => {
-  const dismissed = new Set(dismissedIds.value);
-  return entries.value.filter((e) => !dismissed.has(e.id));
-});
-
-const unreadCount = computed(() => {
-  if (!lastSeen.value) return visibleEntries.value.length;
-  return visibleEntries.value.filter((e) => e.timestamp > lastSeen.value).length;
-});
-
-async function fetchEntries() {
-  loading.value = true;
-  try {
-    const data = await getAuditLog({ limit: 20, actions: BELL_ACTIONS });
-    entries.value = data.entries ?? [];
-  } catch {
-    // Silently fail — bell is non-critical.
-  } finally {
-    loading.value = false;
-  }
-}
 
 function closePanel() {
   if (!showBell.value) return;
   showBell.value = false;
-  // Advance lastSeen on every close path so the next open only counts entries
-  // that arrived while the panel was closed.
-  lastSeen.value = new Date().toISOString();
+  notificationStore.markSeenNow();
 }
 
 function toggle(event: MouseEvent) {
@@ -76,7 +37,7 @@ function toggle(event: MouseEvent) {
     top: `${rect.bottom + 4}px`,
     right: `${window.innerWidth - rect.right}px`,
   };
-  fetchEntries();
+  void notificationStore.fetchEntries();
 }
 
 function navigateToEntry(entry: AuditEntry) {
@@ -90,20 +51,15 @@ function openAuditLog() {
 }
 
 function markAllRead() {
-  lastSeen.value = new Date().toISOString();
+  notificationStore.markSeenNow();
 }
 
 function dismissOne(entry: AuditEntry) {
-  if (dismissedIds.value.includes(entry.id)) return;
-  dismissedIds.value = [...dismissedIds.value, entry.id];
+  notificationStore.dismissOne(entry);
 }
 
 function dismissAll() {
-  if (visibleEntries.value.length === 0) return;
-  const existing = new Set(dismissedIds.value);
-  const toAdd = visibleEntries.value.map((e) => e.id).filter((id) => !existing.has(id));
-  if (toAdd.length === 0) return;
-  dismissedIds.value = [...dismissedIds.value, ...toAdd];
+  notificationStore.dismissAll();
 }
 
 function handleClickOutside(e: PointerEvent) {
@@ -113,35 +69,14 @@ function handleClickOutside(e: PointerEvent) {
   }
 }
 
-let sseDebounceTimer: ReturnType<typeof setTimeout> | undefined;
-
-function handleSseEvent() {
-  clearTimeout(sseDebounceTimer);
-  sseDebounceTimer = setTimeout(() => {
-    fetchEntries();
-  }, 800);
-}
-
 onMounted(() => {
-  fetchEntries();
+  notificationStore.start();
   document.addEventListener('pointerdown', handleClickOutside);
-  globalThis.addEventListener('dd:sse-container-changed', handleSseEvent);
-  globalThis.addEventListener('dd:sse-scan-completed', handleSseEvent);
-  globalThis.addEventListener('dd:sse-connected', handleSseEvent);
-  globalThis.addEventListener('dd:sse-resync-required', handleSseEvent);
-  globalThis.addEventListener('dd:sse-update-operation-changed', handleSseEvent);
-  globalThis.addEventListener('dd:sse-update-applied', handleSseEvent);
 });
 
 onUnmounted(() => {
-  clearTimeout(sseDebounceTimer);
+  notificationStore.stop();
   document.removeEventListener('pointerdown', handleClickOutside);
-  globalThis.removeEventListener('dd:sse-container-changed', handleSseEvent);
-  globalThis.removeEventListener('dd:sse-scan-completed', handleSseEvent);
-  globalThis.removeEventListener('dd:sse-connected', handleSseEvent);
-  globalThis.removeEventListener('dd:sse-resync-required', handleSseEvent);
-  globalThis.removeEventListener('dd:sse-update-operation-changed', handleSseEvent);
-  globalThis.removeEventListener('dd:sse-update-applied', handleSseEvent);
 });
 
 function versionSummary(entry: AuditEntry): string {

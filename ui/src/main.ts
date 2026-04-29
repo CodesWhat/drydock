@@ -1,3 +1,4 @@
+import { createPinia } from 'pinia';
 import { createApp } from 'vue';
 import App from './App.vue';
 import { i18n } from './boot/i18n';
@@ -26,6 +27,7 @@ import { preferences } from './preferences/store';
 import { isValidFontSize } from './preferences/validators';
 import router from './router';
 import { getSettings } from './services/settings';
+import { useOperationStore } from './stores/operations';
 import './theme/tokens.css';
 import './style.css';
 
@@ -56,6 +58,7 @@ getSettings()
 void loadServerFeatures();
 
 const app = createApp(App);
+const pinia = createPinia();
 app.component('AppIcon', AppIcon);
 app.component('AppButton', AppButton);
 app.component('AppLayout', AppLayout);
@@ -74,5 +77,7 @@ app.component('ConfirmDialog', ConfirmDialog);
 app.component('CopyableTag', CopyableTag);
 app.directive('tooltip', Tooltip);
 app.use(i18n);
+app.use(pinia);
+useOperationStore(pinia).start();
 app.use(router);
 app.mount('#app');
