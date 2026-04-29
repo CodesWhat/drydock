@@ -617,3 +617,55 @@ test('setHandlerTimeoutMsForTests and getHandlerTimeoutMsForTests round-trip', (
   event.setHandlerTimeoutMsForTests(undefined);
   expect(event.getHandlerTimeoutMsForTests()).toBe(30_000);
 });
+
+test('parseHandlerTimeoutMs falls back to default for missing/empty/invalid input', () => {
+  expect(event.parseHandlerTimeoutMs(undefined)).toBe(30_000);
+  expect(event.parseHandlerTimeoutMs('')).toBe(30_000);
+  expect(event.parseHandlerTimeoutMs('   ')).toBe(30_000);
+  expect(event.parseHandlerTimeoutMs('not-a-number')).toBe(30_000);
+  expect(event.parseHandlerTimeoutMs('0')).toBe(30_000);
+  expect(event.parseHandlerTimeoutMs('-100')).toBe(30_000);
+  expect(event.parseHandlerTimeoutMs('Infinity')).toBe(30_000);
+});
+
+test('parseHandlerTimeoutMs accepts valid positive numbers', () => {
+  expect(event.parseHandlerTimeoutMs('500')).toBe(500);
+  expect(event.parseHandlerTimeoutMs('60000')).toBe(60_000);
+  expect(event.parseHandlerTimeoutMs('1.5')).toBe(1.5);
+});
+
+test('timeout warning identifies anonymous handlers without an id', async () => {
+  event.setHandlerTimeoutMsForTests(50);
+  event.registerContainerReport(
+    () =>
+      new Promise<void>(() => {
+        /* never resolves */
+      }),
+    { order: 10 }, // no id
+  );
+
+  await event.emitContainerReport({});
+
+  expect(warnMock).toHaveBeenCalledTimes(1);
+  expect(warnMock.mock.calls[0][0]).toContain('id=<anonymous>');
+});
+
+test('late rejection from a timed-out handler does not surface as unhandled', async () => {
+  event.setHandlerTimeoutMsForTests(50);
+  // Handler that rejects AFTER the timeout window. Without the .catch detach
+  // in runHandlerWithTimeout, this would surface as an unhandled rejection.
+  event.registerContainerReport(
+    () =>
+      new Promise<void>((_resolve, reject) => {
+        setTimeout(() => reject(new Error('late-failure')), 150);
+      }),
+    { id: 'late.reject', order: 10 },
+  );
+
+  await event.emitContainerReport({});
+
+  // Wait past the late rejection so the registered .catch handler runs.
+  await new Promise((resolve) => setTimeout(resolve, 250));
+
+  expect(warnMock).toHaveBeenCalledTimes(1);
+});

@@ -59,12 +59,19 @@ services:
       - DD_REGISTRY_GITEA_PRIVATE_PASSWORD=replace-me
       - DD_REGISTRY_GITEA_PRIVATE_CAFILE=/certs/internal-ca.pem
       # --- Update Bouncer (security scanning) ---
-      - DD_SECURITY_SCANNER=trivy
-      - DD_SECURITY_TRIVY_SERVER=http://trivy-server:4954
-      - DD_SECURITY_BLOCK_SEVERITY=CRITICAL
-      - DD_SECURITY_SBOM_ENABLED=true
-      - DD_SECURITY_SBOM_FORMATS=spdx-json,cyclonedx-json
-      - DD_SECURITY_VERIFY_SIGNATURES=false
+      # Disabled by default for QA: trivy scans pull candidate images from
+      # Docker Hub anonymously, which the rate limiter routinely throttles
+      # (TOOMANYREQUESTS). When that happens the scan errors with
+      # security-scan-failed and the update lifecycle correctly fails the
+      # operation — but it blocks the update path we want to QA.
+      # Uncomment the trivy block below to exercise the security gate.
+      - DD_SECURITY_SCANNER=
+      # - DD_SECURITY_SCANNER=trivy
+      # - DD_SECURITY_TRIVY_SERVER=http://trivy-server:4954
+      # - DD_SECURITY_BLOCK_SEVERITY=CRITICAL
+      # - DD_SECURITY_SBOM_ENABLED=true
+      # - DD_SECURITY_SBOM_FORMATS=spdx-json,cyclonedx-json
+      # - DD_SECURITY_VERIFY_SIGNATURES=false
       # --- Maintenance window (QA) ---
       # Uncomment to test; adjust cron to match/not-match current time
       # - DD_WATCHER_LOCAL_MAINTENANCE_WINDOW=0 2-6 * * *

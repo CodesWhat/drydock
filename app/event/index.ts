@@ -53,7 +53,7 @@ const DEFAULT_HANDLER_ORDER = 100;
 const DEFAULT_HANDLER_TIMEOUT_MS = 30_000;
 let handlerTimeoutMs = parseHandlerTimeoutMs(process.env.DD_EVENT_HANDLER_TIMEOUT_MS);
 
-function parseHandlerTimeoutMs(raw: string | undefined): number {
+export function parseHandlerTimeoutMs(raw: string | undefined): number {
   if (typeof raw !== 'string' || raw.trim() === '') {
     return DEFAULT_HANDLER_TIMEOUT_MS;
   }
@@ -287,7 +287,7 @@ async function runHandlerWithTimeout<TPayload>(
       handlerPromise.catch(() => undefined);
     }
   } finally {
-    if (timer) clearTimeout(timer);
+    clearTimeout(timer);
   }
 }
 
