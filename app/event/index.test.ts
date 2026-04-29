@@ -1,7 +1,14 @@
 import * as event from './index.js';
 
+const { warnMock } = vi.hoisted(() => ({ warnMock: vi.fn() }));
+vi.mock('../log/index.js', () => ({
+  default: { child: () => ({ info: vi.fn(), warn: warnMock, error: vi.fn(), debug: vi.fn() }) },
+}));
+
 beforeEach(() => {
   event.clearAllListenersForTests();
+  warnMock.mockClear();
+  event.setHandlerTimeoutMsForTests(undefined);
 });
 
 const eventTestCases = [
@@ -460,4 +467,153 @@ test('container-added audit handler should fallback to empty string when name an
       containerImage: 'nginx',
     }),
   );
+});
+
+// ─── Per-handler timeout tests ────────────────────────────────────────────────
+
+test('fast handler completes normally within timeout', async () => {
+  event.setHandlerTimeoutMsForTests(50);
+  const calls: string[] = [];
+  event.registerContainerReport(
+    async () => {
+      calls.push('fast');
+    },
+    { id: 'fast.handler', order: 10 },
+  );
+
+  await event.emitContainerReport({});
+
+  expect(calls).toEqual(['fast']);
+  expect(warnMock).not.toHaveBeenCalled();
+});
+
+test('slow handler is skipped after timeout and next handler still runs', async () => {
+  event.setHandlerTimeoutMsForTests(50);
+  const calls: string[] = [];
+
+  event.registerContainerReport(
+    () =>
+      new Promise<void>(() => {
+        /* never resolves */
+      }),
+    { id: 'hung.handler', order: 10 },
+  );
+  event.registerContainerReport(
+    async () => {
+      calls.push('second');
+    },
+    { id: 'second.handler', order: 20 },
+  );
+
+  const start = Date.now();
+  await event.emitContainerReport({});
+  const elapsed = Date.now() - start;
+
+  // Should have completed near the timeout window (50ms), not hung indefinitely.
+  expect(elapsed).toBeLessThan(1000);
+  expect(calls).toEqual(['second']);
+}, 3000);
+
+test('synchronous throw from handler propagates as rejection', async () => {
+  event.setHandlerTimeoutMsForTests(50);
+  event.registerContainerReport(
+    () => {
+      throw new Error('sync error');
+    },
+    { id: 'throwing.handler', order: 10 },
+  );
+
+  await expect(event.emitContainerReport({})).rejects.toThrow('sync error');
+});
+
+test('async rejection from handler propagates', async () => {
+  event.setHandlerTimeoutMsForTests(50);
+  event.registerContainerReport(
+    async () => {
+      throw new Error('async error');
+    },
+    { id: 'async-throwing.handler', order: 10 },
+  );
+
+  await expect(event.emitContainerReport({})).rejects.toThrow('async error');
+});
+
+test('timeout warning is logged with handler id and order', async () => {
+  event.setHandlerTimeoutMsForTests(50);
+
+  event.registerContainerReport(
+    () =>
+      new Promise<void>(() => {
+        /* never resolves */
+      }),
+    { id: 'smtp.notification', order: 30 },
+  );
+
+  await event.emitContainerReport({});
+
+  expect(warnMock).toHaveBeenCalledTimes(1);
+  const warnMessage: string = warnMock.mock.calls[0][0];
+  expect(warnMessage).toContain('timed out');
+  expect(warnMessage).toContain('smtp.notification');
+  expect(warnMessage).toContain('order=30');
+}, 3000);
+
+test('fast handler does not trigger a timeout warning', async () => {
+  event.setHandlerTimeoutMsForTests(200);
+
+  event.registerContainerReport(
+    async () => {
+      // Resolves well within the 200ms timeout.
+    },
+    { id: 'quick.handler', order: 10 },
+  );
+
+  await event.emitContainerReport({});
+
+  // Give enough time for any stray timer to fire before asserting.
+  await new Promise<void>((resolve) => setTimeout(resolve, 10));
+  expect(warnMock).not.toHaveBeenCalled();
+});
+
+test('multiple slow handlers do not compound indefinitely; third fast handler still runs', async () => {
+  event.setHandlerTimeoutMsForTests(50);
+  const calls: string[] = [];
+
+  event.registerContainerReport(
+    () =>
+      new Promise<void>(() => {
+        /* never resolves */
+      }),
+    { id: 'slow.one', order: 10 },
+  );
+  event.registerContainerReport(
+    () =>
+      new Promise<void>(() => {
+        /* never resolves */
+      }),
+    { id: 'slow.two', order: 20 },
+  );
+  event.registerContainerReport(
+    async () => {
+      calls.push('fast');
+    },
+    { id: 'fast.three', order: 30 },
+  );
+
+  const start = Date.now();
+  await event.emitContainerReport({});
+  const elapsed = Date.now() - start;
+
+  // Two timeouts at 50ms each = ~100ms total. Should not balloon beyond a generous bound.
+  expect(elapsed).toBeLessThan(2000);
+  expect(calls).toEqual(['fast']);
+  expect(warnMock).toHaveBeenCalledTimes(2);
+}, 5000);
+
+test('setHandlerTimeoutMsForTests and getHandlerTimeoutMsForTests round-trip', () => {
+  event.setHandlerTimeoutMsForTests(1234);
+  expect(event.getHandlerTimeoutMsForTests()).toBe(1234);
+
+  event.setHandlerTimeoutMsForTests(undefined);
+  expect(event.getHandlerTimeoutMsForTests()).toBe(30_000);
 });

@@ -1,10 +1,13 @@
 import { EventEmitter } from 'node:events';
+import log from '../log/index.js';
 import type { Container, ContainerReport } from '../model/container.js';
 import {
   clearAuditSubscriptionCachesForTests,
   pruneAuditDedupeCacheForTests as pruneAuditDedupeCacheForTestsInternal,
   registerAuditLogSubscriptions,
 } from './audit-subscriptions.js';
+
+const eventLog = log.child({ component: 'event' });
 
 /**
  * Event dispatch architecture (temporary dual path):
@@ -42,6 +45,32 @@ const DD_WATCHER_START = 'dd:watcher-start';
 const DD_WATCHER_STOP = 'dd:watcher-stop';
 
 const DEFAULT_HANDLER_ORDER = 100;
+
+// Per-handler timeout. Prevents one slow/hung handler (e.g. an SMTP transport
+// stalling on retry) from stalling the entire emit chain — and, transitively,
+// the update lifecycle that awaits an emit. Configurable via env so operators
+// with legitimately slow notification providers can extend it.
+const DEFAULT_HANDLER_TIMEOUT_MS = 30_000;
+let handlerTimeoutMs = parseHandlerTimeoutMs(process.env.DD_EVENT_HANDLER_TIMEOUT_MS);
+
+function parseHandlerTimeoutMs(raw: string | undefined): number {
+  if (typeof raw !== 'string' || raw.trim() === '') {
+    return DEFAULT_HANDLER_TIMEOUT_MS;
+  }
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return DEFAULT_HANDLER_TIMEOUT_MS;
+  }
+  return parsed;
+}
+
+export function setHandlerTimeoutMsForTests(value: number | undefined): void {
+  handlerTimeoutMs = value === undefined ? DEFAULT_HANDLER_TIMEOUT_MS : value;
+}
+
+export function getHandlerTimeoutMsForTests(): number {
+  return handlerTimeoutMs;
+}
 
 interface EventHandlerRegistrationOptions {
   order?: number;
@@ -233,13 +262,42 @@ function compareOrderedHandlers<TPayload>(
   return handlerA.sequence - handlerB.sequence;
 }
 
+const TIMEOUT_SENTINEL = Symbol('event-handler-timeout');
+
+async function runHandlerWithTimeout<TPayload>(
+  handler: OrderedEventHandler<TPayload>,
+  payload: TPayload,
+): Promise<void> {
+  const timeoutMs = handlerTimeoutMs;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const handlerPromise: Promise<unknown> = Promise.resolve().then(() => handler.handler(payload));
+  const timeoutPromise = new Promise<typeof TIMEOUT_SENTINEL>((resolve) => {
+    timer = setTimeout(() => resolve(TIMEOUT_SENTINEL), timeoutMs);
+  });
+
+  try {
+    const result = await Promise.race([handlerPromise, timeoutPromise]);
+    if (result === TIMEOUT_SENTINEL) {
+      eventLog.warn(
+        `Event handler timed out after ${timeoutMs}ms (id=${handler.id || '<anonymous>'} order=${handler.order}); skipping to next handler. ` +
+          'A hung notification provider should not stall the update lifecycle. ' +
+          'Set DD_EVENT_HANDLER_TIMEOUT_MS to override the default.',
+      );
+      // Detach: prevent unhandled-rejection if the late handler eventually rejects.
+      handlerPromise.catch(() => undefined);
+    }
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 async function emitOrderedHandlers<TPayload>(
   handlers: Map<number, OrderedEventHandler<TPayload>>,
   payload: TPayload,
 ): Promise<void> {
   const handlersOrdered = [...handlers.values()].sort(compareOrderedHandlers);
   for (const handler of handlersOrdered) {
-    await handler.handler(payload);
+    await runHandlerWithTimeout(handler, payload);
   }
 }
 
