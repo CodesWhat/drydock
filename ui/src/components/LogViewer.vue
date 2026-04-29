@@ -1,5 +1,9 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import type { StyleValue } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 const props = withDefaults(
   defineProps<{
@@ -19,8 +23,8 @@ const props = withDefaults(
   }>(),
   {
     error: '',
-    emptyMessage: 'No log entries found.',
-    loadingMessage: 'Loading logs...',
+    emptyMessage: undefined,
+    loadingMessage: undefined,
     panelClass: '',
     panelStyle: undefined,
     containerClass: '',
@@ -33,6 +37,13 @@ const props = withDefaults(
     }),
     emptyClass: 'px-3 py-4 dd-text-muted text-center',
   },
+);
+
+const resolvedEmptyMessage = computed(
+  () => props.emptyMessage ?? t('sharedComponents.logViewer.emptyMessage'),
+);
+const resolvedLoadingMessage = computed(
+  () => props.loadingMessage ?? t('sharedComponents.logViewer.loadingMessage'),
 );
 
 const emit = defineEmits<{
@@ -52,7 +63,7 @@ function setContainer(element: Element | null) {
 
     <div class="flex-1 min-h-0 flex flex-col overflow-hidden" :class="props.panelClass" :style="props.panelStyle">
       <div v-if="props.loading" :class="props.loadingClass">
-        {{ props.loadingMessage }}
+        {{ resolvedLoadingMessage }}
       </div>
 
       <div v-else-if="props.error" :class="props.errorClass" :style="props.errorStyle">
@@ -68,7 +79,7 @@ function setContainer(element: Element | null) {
         @scroll="emit('scroll')"
       >
         <div v-if="props.entries.length === 0" :class="props.emptyClass">
-          {{ props.emptyMessage }}
+          {{ resolvedEmptyMessage }}
         </div>
 
         <div v-else>

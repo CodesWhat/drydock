@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n';
 import AppBadge from '@/components/AppBadge.vue';
 import AppIconButton from '@/components/AppIconButton.vue';
 import AppTabBar from '@/components/AppTabBar.vue';
@@ -6,6 +7,8 @@ import StatusDot from '@/components/StatusDot.vue';
 import { hasTrackedContainerAction } from '../../utils/container-action-key';
 import ContainerFullPageTabContent from './ContainerFullPageTabContent.vue';
 import { useContainersViewTemplateContext } from './containersViewTemplateContext';
+
+const { t } = useI18n();
 
 const {
   selectedContainer,
@@ -46,12 +49,12 @@ function isActionBlocked(container: { id?: unknown; name?: unknown }) {
 
 function getStatusLabel(container: { id?: unknown; name?: unknown; status?: string }) {
   if (isActionInProgress(container)) {
-    return 'Updating';
+    return t('containerComponents.fullPageDetail.statusUpdating');
   }
   if (isActionQueued(container)) {
-    return 'Queued';
+    return t('containerComponents.fullPageDetail.statusQueued');
   }
-  return container.status ?? 'unknown';
+  return container.status ?? t('common.unknown');
 }
 
 function getStatusTone(container: { id?: unknown; name?: unknown; status?: string }) {
@@ -78,7 +81,7 @@ function getStatusTone(container: { id?: unknown; name?: unknown; status?: strin
             class="flex items-center gap-2 px-3 py-1.5 dd-rounded text-2xs-plus font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated shrink-0"
             @click="closeFullPage">
             <AppIcon name="arrow-left" :size="11" />
-            Back
+            {{ t('common.back') }}
           </AppButton>
           <div class="flex items-center gap-3 min-w-0">
             <StatusDot
@@ -145,10 +148,10 @@ function getStatusTone(container: { id?: unknown; name?: unknown; status?: strin
             :class="isActionBlocked(selectedContainer) ? 'opacity-50 cursor-not-allowed' : ''"
             :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)', border: '1px solid var(--dd-danger)' }"
             :disabled="isActionBlocked(selectedContainer)"
-            aria-label="Stop container"
+            :aria-label="t('containerComponents.fullPageDetail.ariaStopContainer')"
             @click="confirmStop(selectedContainer)">
             <AppIcon :name="isActionInProgress(selectedContainer) ? 'spinner' : 'stop'" :size="12" :class="isActionInProgress(selectedContainer) ? 'dd-spin' : ''" />
-            Stop
+            {{ t('containerComponents.fullPageDetail.stopButton') }}
           </AppButton>
           <AppButton size="none" variant="plain" weight="none"
             v-else
@@ -156,28 +159,28 @@ function getStatusTone(container: { id?: unknown; name?: unknown; status?: strin
             :class="isActionBlocked(selectedContainer) ? 'opacity-50 cursor-not-allowed' : ''"
             :style="{ backgroundColor: 'var(--dd-success-muted)', color: 'var(--dd-success)', border: '1px solid var(--dd-success)' }"
             :disabled="isActionBlocked(selectedContainer)"
-            aria-label="Start container"
+            :aria-label="t('containerComponents.fullPageDetail.ariaStartContainer')"
             @click="startContainer(selectedContainer)">
             <AppIcon :name="isActionInProgress(selectedContainer) ? 'spinner' : 'play'" :size="12" :class="isActionInProgress(selectedContainer) ? 'dd-spin' : ''" />
-            Start
+            {{ t('containerComponents.fullPageDetail.startButton') }}
           </AppButton>
           <AppButton size="none" variant="plain" weight="none"
             class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-2xs-plus font-semibold transition-colors"
             :class="isActionBlocked(selectedContainer) ? 'opacity-50 cursor-not-allowed' : 'dd-text-muted hover:dd-text'"
             :disabled="isActionBlocked(selectedContainer)"
-            aria-label="Restart container"
+            :aria-label="t('containerComponents.fullPageDetail.ariaRestartContainer')"
             @click="confirmRestart(selectedContainer)">
             <AppIcon :name="isActionInProgress(selectedContainer) ? 'spinner' : 'restart'" :size="12" :class="isActionInProgress(selectedContainer) ? 'dd-spin' : ''" />
-            Restart
+            {{ t('containerComponents.fullPageDetail.restartButton') }}
           </AppButton>
           <AppButton size="none" variant="plain" weight="none"
             class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-2xs-plus font-semibold transition-colors"
             :class="isActionBlocked(selectedContainer) ? 'opacity-50 cursor-not-allowed' : 'dd-text-muted hover:dd-text'"
             :disabled="isActionBlocked(selectedContainer)"
-            aria-label="Scan container"
+            :aria-label="t('containerComponents.fullPageDetail.ariaScanContainer')"
             @click="scanContainer(selectedContainer)">
             <AppIcon :name="isActionInProgress(selectedContainer) ? 'spinner' : 'security'" :size="12" :class="isActionInProgress(selectedContainer) ? 'dd-spin' : ''" />
-            Scan
+            {{ t('containerComponents.fullPageDetail.scanButton') }}
           </AppButton>
           <AppButton size="none" variant="plain" weight="none"
             v-if="selectedContainer.newTag && selectedContainer.bouncer === 'blocked'"
@@ -185,10 +188,10 @@ function getStatusTone(container: { id?: unknown; name?: unknown; status?: strin
             :class="isActionBlocked(selectedContainer) ? 'opacity-50 cursor-not-allowed' : ''"
             :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)', border: '1px solid var(--dd-danger)' }"
             :disabled="isActionBlocked(selectedContainer)"
-            aria-label="Update blocked by security scan"
+            :aria-label="t('containerComponents.fullPageDetail.ariaUpdateBlocked')"
             @click="confirmForceUpdate(selectedContainer)">
             <AppIcon name="lock" :size="12" />
-            Blocked
+            {{ t('containerComponents.fullPageDetail.blockedButton') }}
           </AppButton>
           <AppButton size="none" variant="plain" weight="none"
             v-else-if="selectedContainer.newTag"
@@ -196,20 +199,20 @@ function getStatusTone(container: { id?: unknown; name?: unknown; status?: strin
             :class="isActionBlocked(selectedContainer) ? 'opacity-50 cursor-not-allowed' : ''"
             :style="{ backgroundColor: 'var(--dd-success-muted)', color: 'var(--dd-success)', border: '1px solid var(--dd-success)' }"
             :disabled="isActionBlocked(selectedContainer)"
-            aria-label="Update container"
+            :aria-label="t('containerComponents.fullPageDetail.ariaUpdateContainer')"
             @click="confirmUpdate(selectedContainer)">
             <AppIcon :name="isActionInProgress(selectedContainer) ? 'spinner' : 'cloud-download'" :size="12" :class="isActionInProgress(selectedContainer) ? 'dd-spin' : ''" />
-            Update
+            {{ t('containerComponents.fullPageDetail.updateButton') }}
           </AppButton>
           <AppButton size="none" variant="plain" weight="none"
             class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-2xs-plus font-semibold transition-colors"
             :class="isActionBlocked(selectedContainer) ? 'opacity-50 cursor-not-allowed' : ''"
             :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)', border: '1px solid var(--dd-danger)' }"
             :disabled="isActionBlocked(selectedContainer)"
-            aria-label="Delete container"
+            :aria-label="t('containerComponents.fullPageDetail.ariaDeleteContainer')"
             @click="confirmDelete(selectedContainer)">
             <AppIcon :name="isActionInProgress(selectedContainer) ? 'spinner' : 'trash'" :size="12" :class="isActionInProgress(selectedContainer) ? 'dd-spin' : ''" />
-            Delete
+            {{ t('containerComponents.fullPageDetail.deleteButton') }}
           </AppButton>
         </div>
       </div>
@@ -230,7 +233,7 @@ function getStatusTone(container: { id?: unknown; name?: unknown; status?: strin
       <span class="min-w-0 break-words">{{ error }}</span>
       <AppIconButton icon="x" size="toolbar" variant="plain"
               class="ml-auto shrink-0 hover:opacity-70"
-              aria-label="Dismiss error"
+              :aria-label="t('containerComponents.fullPageDetail.ariaDismissError')"
               @click="error = null" />
     </div>
 

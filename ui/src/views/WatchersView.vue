@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import AppBadge from '@/components/AppBadge.vue';
 import DetailField from '@/components/DetailField.vue';
@@ -17,6 +18,7 @@ function watcherServerName(name: unknown): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
+const { t } = useI18n();
 const { isMobile } = useBreakpoints();
 const route = useRoute();
 const router = useRouter();
@@ -75,14 +77,20 @@ const filteredWatchers = computed(() => {
   return watchersData.value.filter((item) => item.name.toLowerCase().includes(q));
 });
 
-const tableColumns = [
-  { key: 'name', label: 'Watcher', width: '28%', sortable: false },
-  { key: 'status', label: 'Status', width: '12%', sortable: false },
-  { key: 'containers', label: 'Containers', width: '12%', sortable: false },
-  { key: 'cron', label: 'Schedule', width: '18%', sortable: false },
-  { key: 'nextRun', label: 'Next Run', width: '15%', sortable: false },
-  { key: 'lastRun', label: 'Last Run', width: '15%', align: 'text-right', sortable: false },
-];
+const tableColumns = computed(() => [
+  { key: 'name', label: t('watchersView.columns.watcher'), width: '28%', sortable: false },
+  { key: 'status', label: t('watchersView.columns.status'), width: '12%', sortable: false },
+  { key: 'containers', label: t('watchersView.columns.containers'), width: '12%', sortable: false },
+  { key: 'cron', label: t('watchersView.columns.schedule'), width: '18%', sortable: false },
+  { key: 'nextRun', label: t('watchersView.columns.nextRun'), width: '15%', sortable: false },
+  {
+    key: 'lastRun',
+    label: t('watchersView.columns.lastRun'),
+    width: '15%',
+    align: 'text-right',
+    sortable: false,
+  },
+]);
 
 function readWatcherContainerTotal(metadata: unknown): number {
   if (!metadata || typeof metadata !== 'object') return 0;
@@ -156,7 +164,7 @@ onMounted(async () => {
     const watcherData = await getAllWatchers();
     watchersData.value = watcherData.map((watcher: ApiComponent) => mapWatcher(watcher));
   } catch {
-    error.value = 'Failed to load watchers';
+    error.value = t('watchersView.loadError');
   } finally {
     loading.value = false;
   }
@@ -171,7 +179,7 @@ onMounted(async () => {
       {{ error }}
     </div>
 
-    <div v-if="loading" class="text-2xs-plus dd-text-muted py-3 px-1">Loading watchers...</div>
+    <div v-if="loading" class="text-2xs-plus dd-text-muted py-3 px-1">{{ t('watchersView.loadingWatchers') }}</div>
 
     <!-- Filter bar -->
     <DataFilterBar
@@ -184,12 +192,12 @@ onMounted(async () => {
       <template #filters>
         <input v-model="searchQuery"
                type="text"
-               placeholder="Filter by name..."
+               :placeholder="t('watchersView.filterPlaceholder')"
                class="flex-1 min-w-[120px] max-w-[var(--dd-layout-filter-max-width)] px-2.5 py-1.5 dd-rounded text-2xs-plus font-medium outline-none dd-bg dd-text dd-placeholder" />
         <AppButton size="none" variant="text-muted" weight="medium" class="text-2xs" v-if="searchQuery"
                 
                 @click="searchQuery = ''">
-          Clear
+          {{ t('watchersView.clear') }}
         </AppButton>
       </template>
     </DataFilterBar>
@@ -205,13 +213,13 @@ onMounted(async () => {
     >
       <template #cell-name="{ row }">
         <div class="flex items-center gap-2">
-          <StatusDot :color="watcherStatusColor(row.status)" v-tooltip.top="row.status === 'watching' ? 'Watching' : 'Paused'" />
+          <StatusDot :color="watcherStatusColor(row.status)" v-tooltip.top="row.status === 'watching' ? t('watchersView.status.watching') : t('watchersView.status.paused')" />
           <span class="font-medium dd-text">{{ row.name }}</span>
         </div>
       </template>
       <template #cell-status="{ row }">
         <AppIcon :name="row.status === 'watching' ? 'watchers' : 'pause'" :size="13" class="shrink-0 md:!hidden"
-                 v-tooltip.top="row.status === 'watching' ? 'Watching' : 'Paused'"
+                 v-tooltip.top="row.status === 'watching' ? t('watchersView.status.watching') : t('watchersView.status.paused')"
                  :style="{ color: watcherStatusColor(row.status) }" />
         <AppBadge :tone="row.status === 'watching' ? 'success' : 'warning'" size="xs" class="max-md:!hidden">
           {{ row.status }}
@@ -244,7 +252,7 @@ onMounted(async () => {
       <template #card="{ item: watcher }">
         <div class="px-4 pt-4 pb-2 flex items-start justify-between">
           <div class="flex items-center gap-2.5 min-w-0">
-            <StatusDot :color="watcherStatusColor(watcher.status)" size="lg" class="mt-1" v-tooltip.top="watcher.status === 'watching' ? 'Watching' : 'Paused'" />
+            <StatusDot :color="watcherStatusColor(watcher.status)" size="lg" class="mt-1" v-tooltip.top="watcher.status === 'watching' ? t('watchersView.status.watching') : t('watchersView.status.paused')" />
             <div class="min-w-0">
               <div class="text-sm-plus font-semibold truncate dd-text">{{ watcher.name }}</div>
               <div class="text-2xs-plus truncate mt-0.5 dd-text-muted font-mono max-w-[180px]" v-tooltip.top="watcher.cron">
@@ -253,7 +261,7 @@ onMounted(async () => {
             </div>
           </div>
           <AppIcon :name="watcher.status === 'watching' ? 'watchers' : 'pause'" :size="13" class="shrink-0 ml-2 md:!hidden"
-                   v-tooltip.top="watcher.status === 'watching' ? 'Watching' : 'Paused'"
+                   v-tooltip.top="watcher.status === 'watching' ? t('watchersView.status.watching') : t('watchersView.status.paused')"
                    :style="{ color: watcherStatusColor(watcher.status) }" />
           <AppBadge :tone="watcher.status === 'watching' ? 'success' : 'warning'" size="xs" class="shrink-0 ml-2 max-md:!hidden">
             {{ watcher.status }}
@@ -262,22 +270,22 @@ onMounted(async () => {
         <div class="px-4 py-3">
           <div class="grid grid-cols-2 gap-2 text-2xs-plus">
             <div>
-              <span class="dd-text-muted">Containers</span>
+              <span class="dd-text-muted">{{ t('watchersView.card.containers') }}</span>
               <span class="ml-1 font-semibold dd-text">{{ watcher.containers }}</span>
             </div>
             <div>
-              <span class="dd-text-muted">Next run</span>
+              <span class="dd-text-muted">{{ t('watchersView.card.nextRun') }}</span>
               <span class="ml-1 font-semibold dd-text" v-tooltip.top="watcher.nextRunAt ? formatAbsoluteTime(watcher.nextRunAt) : ''">{{ watcher.nextRun }}</span>
             </div>
             <div>
-              <span class="dd-text-muted">Last run</span>
+              <span class="dd-text-muted">{{ t('watchersView.card.lastRun') }}</span>
               <span class="ml-1 font-semibold dd-text">{{ watcher.lastRun }}</span>
             </div>
           </div>
         </div>
         <div class="px-4 py-2.5 mt-auto"
              :style="{ borderTop: '1px solid var(--dd-border)', backgroundColor: 'var(--dd-bg-elevated)' }">
-          <span class="text-2xs dd-text-muted">{{ watcher.containers }} containers watched</span>
+          <span class="text-2xs dd-text-muted">{{ t('watchersView.card.containersWatched', { count: watcher.containers }) }}</span>
         </div>
       </template>
     </DataCardGrid>
@@ -291,24 +299,24 @@ onMounted(async () => {
       @item-click="openDetail($event)"
     >
       <template #header="{ item: watcher }">
-        <StatusDot :color="watcherStatusColor(watcher.status)" size="lg" v-tooltip.top="watcher.status === 'watching' ? 'Watching' : 'Paused'" />
+        <StatusDot :color="watcherStatusColor(watcher.status)" size="lg" v-tooltip.top="watcher.status === 'watching' ? t('watchersView.status.watching') : t('watchersView.status.paused')" />
         <AppIcon name="watchers" :size="14" class="dd-text-secondary" />
         <span class="text-sm font-semibold flex-1 min-w-0 truncate dd-text">{{ watcher.name }}</span>
         <AppIcon :name="watcher.status === 'watching' ? 'watchers' : 'pause'" :size="13" class="shrink-0 md:!hidden"
-                 v-tooltip.top="watcher.status === 'watching' ? 'Watching' : 'Paused'"
+                 v-tooltip.top="watcher.status === 'watching' ? t('watchersView.status.watching') : t('watchersView.status.paused')"
                  :style="{ color: watcherStatusColor(watcher.status) }" />
         <AppBadge :tone="watcher.status === 'watching' ? 'success' : 'warning'" size="xs" class="shrink-0 max-md:!hidden">
           {{ watcher.status }}
         </AppBadge>
         <AppBadge v-if="watcher.config.maintenanceWindow" tone="alt" size="xs" class="shrink-0">
-          Maint
+          {{ t('watchersView.badge.maint') }}
         </AppBadge>
       </template>
       <template #details="{ item: watcher }">
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3 mt-2">
-          <DetailField label="Cron" compact mono>{{ watcher.cron }}</DetailField>
-          <DetailField label="Last Run" compact mono>{{ watcher.lastRun }}</DetailField>
-          <DetailField label="Containers Watched" compact mono>{{ watcher.containers }}</DetailField>
+          <DetailField :label="t('watchersView.detail.cron')" compact mono>{{ watcher.cron }}</DetailField>
+          <DetailField :label="t('watchersView.detail.lastRun')" compact mono>{{ watcher.lastRun }}</DetailField>
+          <DetailField :label="t('watchersView.detail.containersWatched')" compact mono>{{ watcher.containers }}</DetailField>
           <DetailField v-for="(val, key) in watcher.config" :key="key" :label="String(key)" compact mono>{{ val }}</DetailField>
         </div>
       </template>
@@ -318,7 +326,7 @@ onMounted(async () => {
     <EmptyState
       v-if="filteredWatchers.length === 0 && !loading"
       icon="watchers"
-      message="No watchers match your filters"
+      :message="t('watchersView.emptyFiltered')"
       :show-clear="activeFilterCount > 0"
       @clear="searchQuery = ''"
     />
@@ -346,14 +354,14 @@ onMounted(async () => {
 
         <template v-if="selectedWatcher" #default>
           <div class="p-4 space-y-5">
-            <div v-if="detailLoading" class="text-2xs-plus dd-text-muted">Refreshing watcher details...</div>
+            <div v-if="detailLoading" class="text-2xs-plus dd-text-muted">{{ t('watchersView.detail.refreshing') }}</div>
             <div v-if="detailError"
                  class="px-3 py-2 text-2xs-plus dd-rounded"
                  :style="{ backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning)' }">
               {{ detailError }}
             </div>
 
-            <DetailField label="Containers">
+            <DetailField :label="t('watchersView.detail.containersWatched')">
               <div class="text-lg font-bold dd-text">{{ selectedWatcher.containers }}</div>
               <AppButton
                 v-if="selectedWatcher.containers > 0"
@@ -363,12 +371,12 @@ onMounted(async () => {
                 class="mt-1 inline-flex items-center gap-1 text-2xs-plus font-medium transition-colors text-drydock-secondary hover:text-drydock-secondary-hover"
                 @click="router.push({ path: ROUTES.CONTAINERS, query: { filterServer: watcherServerName(selectedWatcher.name) } })">
                 <AppIcon name="arrow-right" :size="10" />
-                View containers
+                {{ t('watchersView.detail.viewContainers') }}
               </AppButton>
             </DetailField>
-            <DetailField label="Schedule" mono>{{ selectedWatcher.cron || '\u2014' }}</DetailField>
-            <DetailField label="Next Run" v-tooltip.top="selectedWatcher.nextRunAt ? formatAbsoluteTime(String(selectedWatcher.nextRunAt)) : ''">{{ selectedWatcher.nextRun }}</DetailField>
-            <DetailField label="Last Run">{{ selectedWatcher.lastRun }}</DetailField>
+            <DetailField :label="t('watchersView.detail.schedule')" mono>{{ selectedWatcher.cron || '\u2014' }}</DetailField>
+            <DetailField :label="t('watchersView.detail.nextRun')" v-tooltip.top="selectedWatcher.nextRunAt ? formatAbsoluteTime(String(selectedWatcher.nextRunAt)) : ''">{{ selectedWatcher.nextRun }}</DetailField>
+            <DetailField :label="t('watchersView.detail.lastRun')">{{ selectedWatcher.lastRun }}</DetailField>
             <DetailField v-for="(val, key) in selectedWatcher.config" :key="key" :label="String(key)" mono>{{ val }}</DetailField>
           </div>
         </template>

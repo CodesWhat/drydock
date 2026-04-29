@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-import Trigger, { type TriggerConfiguration } from '../Trigger.js';
+import Trigger, { type BatchRuntimeContext, type TriggerConfiguration } from '../Trigger.js';
 
 interface IftttConfiguration extends TriggerConfiguration {
   key: string;
@@ -49,7 +49,19 @@ class Ifttt extends Trigger<IftttConfiguration> {
    * @param containers
    * @returns {Promise<*>}
    */
-  async triggerBatch(containers) {
+  async triggerBatch(containers, runtimeContext?: BatchRuntimeContext) {
+    // Security-digest (and any other prerendered-batch) callers supply
+    // title/body in runtimeContext; surface them as value1/value2 so the
+    // webhook receives the right text instead of a JSON dump of stub rows
+    // (#328). Update-digest callers continue to receive the raw container
+    // JSON in value1 for backwards compatibility.
+    if (runtimeContext?.title || runtimeContext?.body) {
+      return this.sendHttpRequest({
+        value1: runtimeContext.title ?? '',
+        value2: runtimeContext.body ?? '',
+        value3: JSON.stringify(containers),
+      });
+    }
     return this.sendHttpRequest({
       value1: JSON.stringify(containers),
     });

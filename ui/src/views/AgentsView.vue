@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import { ROUTES } from '../router/routes';
 import AgentDetailConfigTab from '../components/agents/AgentDetailConfigTab.vue';
@@ -49,6 +50,7 @@ interface AgentLog {
   message: string;
 }
 
+const { t } = useI18n();
 const { isMobile, windowNarrow: isCompact } = useBreakpoints();
 const route = useRoute();
 const router = useRouter();
@@ -84,11 +86,11 @@ function getAgentLogs(agentId: string): AgentLog[] {
 
 function formatLastFetched(iso: string): string {
   if (!iso) {
-    return 'never';
+    return t('agentsView.detail.fields.never');
   }
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) {
-    return 'never';
+    return t('agentsView.detail.fields.never');
   }
   return date.toLocaleTimeString();
 }
@@ -178,7 +180,7 @@ async function fetchAgents() {
       }
     }
   } catch (e: unknown) {
-    error.value = errorMessage(e, 'Failed to load agents');
+    error.value = errorMessage(e, t('agentsView.list.loadError'));
   } finally {
     loading.value = false;
   }
@@ -304,17 +306,37 @@ const sortedAgents = computed(() => {
 });
 
 // -- Column visibility --
-const agentAllColumns = [
-  { key: 'name', label: 'Agent', align: 'text-left', width: '99%', sortable: true, required: true },
-  { key: 'status', label: 'Status', sortable: true, required: false },
-  { key: 'containers', label: 'Containers', sortable: true, required: false },
-  { key: 'docker', label: 'Docker', sortable: true, required: false },
-  { key: 'os', label: 'OS', sortable: true, required: false },
-  { key: 'version', label: 'Version', sortable: true, required: false },
-  { key: 'lastSeen', label: 'Last Seen', align: 'text-right', sortable: true, required: false },
-];
+const agentAllColumns = computed(() => [
+  {
+    key: 'name',
+    label: t('agentsView.list.columns.name'),
+    align: 'text-left',
+    width: '99%',
+    sortable: true,
+    required: true,
+  },
+  { key: 'status', label: t('agentsView.list.columns.status'), sortable: true, required: false },
+  {
+    key: 'containers',
+    label: t('agentsView.list.columns.containers'),
+    sortable: true,
+    required: false,
+  },
+  { key: 'docker', label: t('agentsView.list.columns.docker'), sortable: true, required: false },
+  { key: 'os', label: t('agentsView.list.columns.os'), sortable: true, required: false },
+  { key: 'version', label: t('agentsView.list.columns.version'), sortable: true, required: false },
+  {
+    key: 'lastSeen',
+    label: t('agentsView.list.columns.lastSeen'),
+    align: 'text-right',
+    sortable: true,
+    required: false,
+  },
+]);
 
-const agentVisibleColumns = ref<Set<string>>(new Set(agentAllColumns.map((c) => c.key)));
+const agentVisibleColumns = ref<Set<string>>(
+  new Set(['name', 'status', 'containers', 'docker', 'os', 'version', 'lastSeen']),
+);
 const showAgentColumnPicker = ref(false);
 const agentColumnPickerStyle = ref<Record<string, string>>({});
 function toggleAgentColumnPicker(event: MouseEvent) {
@@ -331,14 +353,14 @@ function toggleAgentColumnPicker(event: MouseEvent) {
 }
 
 function toggleAgentColumn(key: string) {
-  const col = agentAllColumns.find((c) => c.key === key);
+  const col = agentAllColumns.value.find((c) => c.key === key);
   if (col?.required) return;
   if (agentVisibleColumns.value.has(key)) agentVisibleColumns.value.delete(key);
   else agentVisibleColumns.value.add(key);
 }
 
 const agentActiveColumns = computed(() =>
-  agentAllColumns.filter(
+  agentAllColumns.value.filter(
     (c) => agentVisibleColumns.value.has(c.key) && (!isCompact.value || c.required),
   ),
 );
@@ -348,11 +370,11 @@ const selectedAgent = ref<Agent | null>(null);
 const agentPanelOpen = ref(false);
 const agentDetailTab = ref('overview');
 
-const agentDetailTabs = [
-  { id: 'overview', label: 'Overview', icon: 'info' },
-  { id: 'logs', label: 'Logs', icon: 'logs' },
-  { id: 'config', label: 'Config', icon: 'config' },
-];
+const agentDetailTabs = computed(() => [
+  { id: 'overview', label: t('agentsView.detail.tabs.overview'), icon: 'info' },
+  { id: 'logs', label: t('agentsView.detail.tabs.logs'), icon: 'logs' },
+  { id: 'config', label: t('agentsView.detail.tabs.config'), icon: 'config' },
+]);
 
 function selectAgent(agent: Agent) {
   selectedAgent.value = agent;
@@ -396,16 +418,19 @@ type AgentDetailField = {
 function getResourceFields(agent: Agent): AgentDetailField[] {
   const fields: AgentDetailField[] = [];
   if (Number.isFinite(agent.cpus)) {
-    fields.push({ label: 'CPUs', value: Number(agent.cpus) });
+    fields.push({ label: t('agentsView.detail.fields.cpus'), value: Number(agent.cpus) });
   }
   if (Number.isFinite(agent.memoryGb)) {
-    fields.push({ label: 'Memory', value: `${Number(agent.memoryGb)} GB` });
+    fields.push({
+      label: t('agentsView.detail.fields.memory'),
+      value: `${Number(agent.memoryGb)} GB`,
+    });
   }
   if (Number.isFinite(agent.images)) {
-    fields.push({ label: 'Images', value: Number(agent.images) });
+    fields.push({ label: t('agentsView.detail.fields.images'), value: Number(agent.images) });
   }
   if (agent.uptime) {
-    fields.push({ label: 'Uptime', value: agent.uptime });
+    fields.push({ label: t('agentsView.detail.fields.uptime'), value: agent.uptime });
   }
   return fields;
 }
@@ -413,38 +438,40 @@ function getResourceFields(agent: Agent): AgentDetailField[] {
 function getSystemFields(agent: Agent): AgentDetailField[] {
   const fields: AgentDetailField[] = [];
   if (agent.dockerVersion) {
-    fields.push({ label: 'Docker', value: agent.dockerVersion });
+    fields.push({ label: t('agentsView.detail.fields.docker'), value: agent.dockerVersion });
   }
   if (agent.os) {
-    fields.push({ label: 'OS', value: agent.os });
+    fields.push({ label: t('agentsView.detail.fields.os'), value: agent.os });
   }
   if (agent.arch) {
-    fields.push({ label: 'Architecture', value: agent.arch });
+    fields.push({ label: t('agentsView.detail.fields.architecture'), value: agent.arch });
   }
   if (agent.version) {
-    fields.push({ label: 'Agent', value: `v${agent.version}` });
+    fields.push({ label: t('agentsView.detail.fields.agent'), value: `v${agent.version}` });
   }
   return fields;
 }
 
 function getConfigFields(agent: Agent): AgentDetailField[] {
-  const fields: AgentDetailField[] = [{ label: 'Host', value: agent.host }];
+  const fields: AgentDetailField[] = [
+    { label: t('agentsView.detail.fields.host'), value: agent.host },
+  ];
   if (agent.version) {
-    fields.push({ label: 'Agent Version', value: `v${agent.version}` });
+    fields.push({ label: t('agentsView.detail.fields.agentVersion'), value: `v${agent.version}` });
   }
   if (agent.logLevel) {
-    fields.push({ label: 'Log Level', value: agent.logLevel });
+    fields.push({ label: t('agentsView.detail.fields.logLevel'), value: agent.logLevel });
   }
   if (agent.pollInterval) {
-    fields.push({ label: 'Poll Interval', value: agent.pollInterval });
+    fields.push({ label: t('agentsView.detail.fields.pollInterval'), value: agent.pollInterval });
   }
   fields.push({
-    label: 'Docker Socket',
+    label: t('agentsView.detail.fields.dockerSocket'),
     value: agent.host.startsWith('unix://') ? agent.host : '/var/run/docker.sock',
   });
   if (agent.lastSeen) {
     fields.push({
-      label: 'Last Seen',
+      label: t('agentsView.detail.fields.lastSeen'),
       value: agent.lastSeen,
       muted: agent.lastSeen === 'Never',
     });
@@ -461,7 +488,7 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
             {{ error }}
           </div>
 
-          <div v-if="loading" class="text-2xs-plus dd-text-muted py-3 px-1">Loading agents...</div>
+          <div v-if="loading" class="text-2xs-plus dd-text-muted py-3 px-1">{{ t('agentsView.list.loading') }}</div>
 
           <!-- Filter bar -->
           <DataFilterBar
@@ -473,20 +500,20 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
             <template #filters>
               <input v-model="searchQuery"
                      type="text"
-                     placeholder="Filter by name..."
+                     :placeholder="t('agentsView.list.filterPlaceholder')"
                      class="flex-1 min-w-[120px] max-w-[var(--dd-layout-filter-max-width)] px-2.5 py-1.5 dd-rounded text-2xs-plus font-medium outline-none dd-bg dd-text dd-placeholder" />
               <AppButton size="none" variant="text-muted" weight="medium" class="text-2xs" v-if="searchQuery"
-                      
+
                       @click="searchQuery = ''">
-                Clear
+                {{ t('agentsView.list.clearFilter') }}
               </AppButton>
             </template>
             <template #extra-buttons>
               <div v-if="agentViewMode === 'table'">
                 <AppIconButton icon="config" size="toolbar" variant="plain" class="text-2xs-plus"
                         :class="showAgentColumnPicker ? 'dd-text dd-bg-elevated' : 'dd-text-secondary hover:dd-text hover:dd-bg-elevated'"
-                        aria-label="Toggle columns"
-                        v-tooltip.top="'Toggle columns'"
+                        :aria-label="t('agentsView.list.toggleColumns')"
+                        v-tooltip.top="t('agentsView.list.toggleColumns')"
                         @click.stop="toggleAgentColumnPicker" />
               </div>
             </template>
@@ -502,7 +529,7 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
                  border: '1px solid var(--dd-border-strong)',
                  boxShadow: 'var(--dd-shadow-tooltip)',
                }">
-            <div class="px-3 py-1 text-3xs font-bold uppercase tracking-wider dd-text-muted">Columns</div>
+            <div class="px-3 py-1 text-3xs font-bold uppercase tracking-wider dd-text-muted">{{ t('agentsView.list.columnPickerHeading') }}</div>
             <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2" v-for="col in agentAllColumns" :key="col.key"
 
                     :class="col.required ? 'dd-text-muted cursor-not-allowed' : 'dd-text'"
@@ -526,7 +553,7 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
                      @row-click="selectAgent($event)">
             <template #cell-name="{ row }">
               <div class="flex items-start gap-2 min-w-0">
-                <StatusDot :status="row.status" size="md" class="mt-1.5" v-tooltip.top="row.status === 'connected' ? 'Connected' : 'Disconnected'" />
+                <StatusDot :status="row.status" size="md" class="mt-1.5" v-tooltip.top="row.status === 'connected' ? t('agentsView.list.status.connected') : t('agentsView.list.status.disconnected')" />
                 <div class="min-w-0 flex-1">
                   <div class="font-medium truncate dd-text">{{ row.name }}</div>
                   <div class="text-2xs mt-0.5 truncate dd-text-muted">{{ row.host }}</div>
@@ -571,7 +598,7 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
             </template>
             <template #empty>
               <EmptyState icon="filter"
-                          message="No agents match your filters"
+                          :message="t('agentsView.list.emptyFiltered')"
                           :show-clear="activeFilterCount > 0"
                           @clear="searchQuery = ''" />
             </template>
@@ -587,7 +614,7 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
               <!-- Card header -->
               <div class="px-4 pt-4 pb-2 flex items-start justify-between">
                 <div class="flex items-center gap-2.5 min-w-0">
-                  <StatusDot :status="agent.status" size="lg" class="mt-1" v-tooltip.top="agent.status === 'connected' ? 'Connected' : 'Disconnected'" />
+                  <StatusDot :status="agent.status" size="lg" class="mt-1" v-tooltip.top="agent.status === 'connected' ? t('agentsView.list.status.connected') : t('agentsView.list.status.disconnected')" />
                   <div class="min-w-0">
                     <div class="text-sm-plus font-semibold truncate dd-text">{{ agent.name }}</div>
                     <div class="text-2xs-plus truncate mt-0.5 dd-text-muted">{{ agent.host }}</div>
@@ -601,19 +628,19 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
               <div class="px-4 py-3">
                 <div class="grid grid-cols-2 gap-2 text-2xs-plus">
                   <div>
-                    <span class="dd-text-muted">Docker</span>
+                    <span class="dd-text-muted">{{ t('agentsView.detail.fields.docker') }}</span>
                     <span class="ml-1 font-semibold" :class="agent.dockerVersion ? 'dd-text' : 'dd-text-muted'">{{ agent.dockerVersion ?? '—' }}</span>
                   </div>
                   <div>
-                    <span class="dd-text-muted">OS</span>
+                    <span class="dd-text-muted">{{ t('agentsView.detail.fields.os') }}</span>
                     <span class="ml-1 font-semibold" :class="agent.os ? 'dd-text' : 'dd-text-muted'">{{ agent.os ?? '—' }}</span>
                   </div>
                   <div>
-                    <span class="dd-text-muted">Arch</span>
+                    <span class="dd-text-muted">{{ t('agentsView.detail.fields.architecture') }}</span>
                     <span class="ml-1 font-semibold" :class="agent.arch ? 'dd-text' : 'dd-text-muted'">{{ agent.arch ?? '—' }}</span>
                   </div>
                   <div>
-                    <span class="dd-text-muted">Version</span>
+                    <span class="dd-text-muted">{{ t('agentsView.detail.fields.agent') }}</span>
                     <span class="ml-1 font-semibold" :class="agent.version ? 'dd-text' : 'dd-text-muted'">{{ agent.version ? `v${agent.version}` : '—' }}</span>
                   </div>
                 </div>
@@ -627,11 +654,11 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
                 <div class="flex items-center gap-3 text-2xs-plus">
                   <span>
                     <span class="font-bold" style="color: var(--dd-success);">{{ agent.containers.running }}</span>
-                    <span class="dd-text-muted"> running</span>
+                    <span class="dd-text-muted"> {{ t('agentsView.list.card.running') }}</span>
                   </span>
                   <span v-if="agent.containers.stopped > 0">
                     <span class="font-bold" style="color: var(--dd-danger);">{{ agent.containers.stopped }}</span>
-                    <span class="dd-text-muted"> stopped</span>
+                    <span class="dd-text-muted"> {{ t('agentsView.list.card.stopped') }}</span>
                   </span>
                 </div>
                 <span class="text-2xs dd-text-muted">{{ agent.lastSeen }}</span>
@@ -645,7 +672,7 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
                              item-key="id"
                              :selected-key="selectedAgent?.id ?? null">
             <template #header="{ item: agent }">
-              <StatusDot :status="agent.status" size="lg" v-tooltip.top="agent.status === 'connected' ? 'Connected' : 'Disconnected'" />
+              <StatusDot :status="agent.status" size="lg" v-tooltip.top="agent.status === 'connected' ? t('agentsView.list.status.connected') : t('agentsView.list.status.disconnected')" />
               <div class="min-w-0 flex-1">
                 <div class="text-sm font-semibold truncate dd-text">{{ agent.name }}</div>
                 <div class="text-2xs mt-0.5 truncate dd-text-muted">{{ agent.host }}</div>
@@ -662,26 +689,25 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
             </template>
             <template #details="{ item: agent }">
               <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-3 mt-2">
-                <DetailField label="Docker" mono compact>
+                <DetailField :label="t('agentsView.detail.fields.docker')" mono compact>
                   <span :class="agent.dockerVersion ? '' : 'dd-text-muted'">{{ agent.dockerVersion ?? '—' }}</span>
                 </DetailField>
-                <DetailField label="OS" compact>
+                <DetailField :label="t('agentsView.detail.fields.os')" compact>
                   <span :class="agent.os ? '' : 'dd-text-muted'">{{ agent.os ?? '—' }}</span>
                 </DetailField>
-                <DetailField label="Architecture" compact>
+                <DetailField :label="t('agentsView.detail.fields.architecture')" compact>
                   <span :class="agent.arch ? '' : 'dd-text-muted'">{{ agent.arch ?? '—' }}</span>
                 </DetailField>
-                <DetailField label="Version" mono compact>
+                <DetailField :label="t('agentsView.detail.fields.agent')" mono compact>
                   <span :class="agent.version ? '' : 'dd-text-muted'">{{ agent.version ? `v${agent.version}` : '—' }}</span>
                 </DetailField>
-                <DetailField label="Uptime" compact>
+                <DetailField :label="t('agentsView.detail.fields.uptime')" compact>
                   <span :class="agent.uptime ? '' : 'dd-text-muted'">{{ agent.uptime ?? '—' }}</span>
                 </DetailField>
-                <DetailField label="Containers" compact>
+                <DetailField :label="t('agentsView.detail.overview.containers')" compact>
                   <span class="font-bold" style="color: var(--dd-success);">{{ agent.containers.running }}</span>
-                  <span class="dd-text-muted"> running / </span>
+                  <span class="dd-text-muted"> {{ t('agentsView.list.card.running') }} / </span>
                   <span>{{ agent.containers.total }}</span>
-                  <span class="dd-text-muted"> total</span>
                 </DetailField>
               </div>
               <!-- Action buttons -->
@@ -689,7 +715,7 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
                 <AppButton size="none" variant="plain" weight="none" class="inline-flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-2xs-plus font-medium transition-colors dd-text-secondary hover:dd-text hover:dd-bg-elevated"
                         @click.stop="selectAgent(agent)">
                   <AppIcon name="info" :size="11" />
-                  Details
+                  {{ t('agentsView.detail.listView.details') }}
                 </AppButton>
               </div>
             </template>
@@ -698,7 +724,7 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
           <!-- Empty state (when no data at all, not filtered) -->
           <EmptyState v-if="!loading && sortedAgents.length === 0 && agentViewMode !== 'table'"
                       icon="filter"
-                      message="No agents match your filters"
+                      :message="t('agentsView.list.emptyFiltered')"
                       :show-clear="activeFilterCount > 0"
                       @clear="searchQuery = ''" />
 
@@ -713,7 +739,7 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
           @update:open="agentPanelOpen = $event; if (!$event) selectedAgent = null">
           <template #header>
             <div class="flex items-center gap-2.5 min-w-0">
-              <StatusDot :status="selectedAgent?.status === 'connected' ? 'connected' : 'disconnected'" size="lg" v-tooltip.top="selectedAgent?.status === 'connected' ? 'Connected' : 'Disconnected'" />
+              <StatusDot :status="selectedAgent?.status === 'connected' ? 'connected' : 'disconnected'" size="lg" v-tooltip.top="selectedAgent?.status === 'connected' ? t('agentsView.list.status.connected') : t('agentsView.list.status.disconnected')" />
               <span class="text-sm font-bold truncate dd-text">{{ selectedAgent?.name }}</span>
               <AppBadge :tone="selectedAgent?.status === 'connected' ? 'success' : 'danger'" size="xs" class="shrink-0">
                 {{ selectedAgent?.status }}

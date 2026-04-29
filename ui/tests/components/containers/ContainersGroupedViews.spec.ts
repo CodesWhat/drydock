@@ -120,6 +120,7 @@ type DisplayContainer = Container & { _pending?: true };
 function makeContainer(overrides: Partial<Container> & { _pending?: true } = {}): DisplayContainer {
   return {
     id: overrides.id ?? 'c-1',
+    identityKey: overrides.identityKey ?? overrides.id ?? 'c-1',
     name: overrides.name ?? 'alpha',
     image: overrides.image ?? 'nginx',
     icon: overrides.icon ?? 'docker',
@@ -300,7 +301,10 @@ function makeContext(overrides: Record<string, unknown> = {}) {
       server.includes('local') ? { name: 'Local', env: 'dev' } : { name: 'Remote', env: null },
     registryColorBg: () => '#ddd',
     registryColorText: () => '#222',
-    registryLabel: (registry: string) => registry,
+    registryLabel: (registry: string, _registryUrl?: string, registryName?: string) =>
+      registryName && registryName.trim().length > 0 && registryName.toLowerCase() !== 'custom'
+        ? registryName.trim()
+        : registry,
     activeFilterCount,
     filterSearch,
     clearFilters: spies.clearFilters,
@@ -575,7 +579,7 @@ describe('ContainersGroupedViews', () => {
       id: 'c-long',
       name: 'omega',
       server: longServer,
-      registry: longRegistry,
+      registry: 'custom',
       registryName: longRegistry,
     });
 

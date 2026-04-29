@@ -7,7 +7,9 @@ import {
   getSoftBlockers,
   hasHardBlocker,
   hasSoftBlocker,
+  primaryBlockerForButton,
   severityOf,
+  updateButtonState,
 } from '@/utils/update-eligibility';
 
 function makeBlocker(overrides: Partial<UpdateBlocker> = {}): UpdateBlocker {
@@ -208,5 +210,92 @@ describe('getPrimarySoftBlocker', () => {
     const second = makeBlocker({ reason: 'trigger-excluded' });
     const result = getPrimarySoftBlocker(makeEligibility({ blockers: [hard, first, second] }));
     expect(result?.reason).toBe('threshold-not-reached');
+  });
+});
+
+describe('updateButtonState', () => {
+  it('returns none when hasNewTag is false regardless of eligibility', () => {
+    expect(updateButtonState(undefined, false)).toBe('none');
+    const withHard = makeEligibility({ blockers: [makeBlocker({ reason: 'agent-mismatch' })] });
+    expect(updateButtonState(withHard, false)).toBe('none');
+    const withSoft = makeEligibility({
+      blockers: [makeBlocker({ reason: 'trigger-not-included' })],
+    });
+    expect(updateButtonState(withSoft, false)).toBe('none');
+  });
+
+  it('returns ready when eligibility is undefined and there is a new tag', () => {
+    expect(updateButtonState(undefined, true)).toBe('ready');
+  });
+
+  it('returns ready when eligibility has no blockers', () => {
+    expect(updateButtonState(makeEligibility({ blockers: [] }), true)).toBe('ready');
+  });
+
+  it('returns hard when there is a hard blocker', () => {
+    const eligibility = makeEligibility({ blockers: [makeBlocker({ reason: 'agent-mismatch' })] });
+    expect(updateButtonState(eligibility, true)).toBe('hard');
+  });
+
+  it('returns soft when there are only soft blockers', () => {
+    const eligibility = makeEligibility({
+      blockers: [makeBlocker({ reason: 'trigger-not-included' })],
+    });
+    expect(updateButtonState(eligibility, true)).toBe('soft');
+  });
+
+  it('hard takes precedence over soft when both are present', () => {
+    const eligibility = makeEligibility({
+      blockers: [
+        makeBlocker({ reason: 'trigger-not-included' }),
+        makeBlocker({ reason: 'agent-mismatch' }),
+      ],
+    });
+    expect(updateButtonState(eligibility, true)).toBe('hard');
+  });
+
+  it('suppresses soft to ready when hasActiveOperationBadge is true', () => {
+    const eligibility = makeEligibility({
+      blockers: [makeBlocker({ reason: 'trigger-not-included' })],
+    });
+    expect(updateButtonState(eligibility, true, true)).toBe('ready');
+  });
+
+  it('does not suppress hard to ready when hasActiveOperationBadge is true', () => {
+    const eligibility = makeEligibility({
+      blockers: [makeBlocker({ reason: 'agent-mismatch' })],
+    });
+    expect(updateButtonState(eligibility, true, true)).toBe('hard');
+  });
+});
+
+describe('primaryBlockerForButton', () => {
+  it('returns undefined when eligibility is undefined', () => {
+    expect(primaryBlockerForButton(undefined)).toBeUndefined();
+  });
+
+  it('returns undefined when there are no blockers', () => {
+    expect(primaryBlockerForButton(makeEligibility({ blockers: [] }))).toBeUndefined();
+  });
+
+  it('returns the primary hard blocker when one exists', () => {
+    const hard = makeBlocker({ reason: 'agent-mismatch', message: 'Agent mismatch.' });
+    const soft = makeBlocker({ reason: 'snoozed', message: 'Snoozed.' });
+    const result = primaryBlockerForButton(makeEligibility({ blockers: [hard, soft] }));
+    expect(result?.reason).toBe('agent-mismatch');
+  });
+
+  it('returns the primary soft blocker when only soft blockers exist', () => {
+    const first = makeBlocker({ reason: 'trigger-not-included', message: 'Trigger not included.' });
+    const second = makeBlocker({ reason: 'snoozed', message: 'Snoozed.' });
+    const result = primaryBlockerForButton(makeEligibility({ blockers: [first, second] }));
+    expect(result?.reason).toBe('trigger-not-included');
+  });
+
+  it('hard takes precedence over soft when both are present', () => {
+    const soft = makeBlocker({ reason: 'snoozed' });
+    const hard = makeBlocker({ reason: 'security-scan-blocked' });
+    const result = primaryBlockerForButton(makeEligibility({ blockers: [soft, hard] }));
+    expect(result?.reason).toBe('security-scan-blocked');
   });
 });

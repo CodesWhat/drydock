@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, provide, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import ContainerFullPageDetail from '../components/containers/ContainerFullPageDetail.vue';
 import ContainerSideDetail from '../components/containers/ContainerSideDetail.vue';
@@ -58,6 +59,8 @@ const BOUNCER_SORT_ORDER: Readonly<Record<string, number>> = Object.freeze({
   safe: 2,
 });
 
+const { t } = useI18n();
+
 const loading = ref(true);
 const error = ref<string | null>(null);
 
@@ -107,11 +110,20 @@ async function handleTerminalResolvedFromReconciliation(args: TerminalResolvedAr
       ? operation.containerName
       : containerName) ?? 'container';
   if (status === 'succeeded') {
-    setTimeout(() => toast.success(`Updated: ${displayName}`), OPERATION_DISPLAY_HOLD_MS);
+    setTimeout(
+      () => toast.success(t('containersView.toast.updated', { name: displayName })),
+      OPERATION_DISPLAY_HOLD_MS,
+    );
   } else if (status === 'failed') {
-    setTimeout(() => toast.error(`Update failed: ${displayName}`), OPERATION_DISPLAY_HOLD_MS);
+    setTimeout(
+      () => toast.error(t('containersView.toast.updateFailed', { name: displayName })),
+      OPERATION_DISPLAY_HOLD_MS,
+    );
   } else {
-    setTimeout(() => toast.error(`Rolled back: ${displayName}`), OPERATION_DISPLAY_HOLD_MS);
+    setTimeout(
+      () => toast.error(t('containersView.toast.rolledBack', { name: displayName })),
+      OPERATION_DISPLAY_HOLD_MS,
+    );
   }
 }
 
@@ -237,7 +249,7 @@ async function loadContainers() {
       await loadGroups();
     }
   } catch (e: unknown) {
-    error.value = errorMessage(e, 'Failed to load containers');
+    error.value = errorMessage(e, t('containersView.error.loadFailed'));
   } finally {
     loading.value = false;
   }
@@ -257,7 +269,7 @@ async function recheckAll() {
     await new Promise((resolve) => setTimeout(resolve, 2000));
     await loadContainers();
   } catch (e: unknown) {
-    error.value = errorMessage(e, 'Failed to recheck containers');
+    error.value = errorMessage(e, t('containersView.error.recheckFailed'));
   } finally {
     rechecking.value = false;
   }
@@ -1391,11 +1403,20 @@ function applyOperationPatch(event: Event) {
       // Defer terminal toasts until the hold window ends so the row settles
       // before the toast announces the outcome (rc.12 9d48922a).
       if (status === 'succeeded') {
-        setTimeout(() => toast.success(`Updated: ${name}`), OPERATION_DISPLAY_HOLD_MS);
+        setTimeout(
+          () => toast.success(t('containersView.toast.updated', { name })),
+          OPERATION_DISPLAY_HOLD_MS,
+        );
       } else if (status === 'failed') {
-        setTimeout(() => toast.error(`Update failed: ${name}`), OPERATION_DISPLAY_HOLD_MS);
+        setTimeout(
+          () => toast.error(t('containersView.toast.updateFailed', { name })),
+          OPERATION_DISPLAY_HOLD_MS,
+        );
       } else {
-        setTimeout(() => toast.error(`Rolled back: ${name}`), OPERATION_DISPLAY_HOLD_MS);
+        setTimeout(
+          () => toast.error(t('containersView.toast.rolledBack', { name })),
+          OPERATION_DISPLAY_HOLD_MS,
+        );
       }
     },
   });
@@ -1450,9 +1471,9 @@ function hasRegistryError(container: Container): boolean {
 
 function registryErrorTooltip(container: Container): string {
   if (!hasRegistryError(container)) {
-    return 'Registry error';
+    return t('containersView.registryError.generic');
   }
-  return `Registry error: ${container.registryError}`;
+  return t('containersView.registryError.detail', { error: container.registryError });
 }
 
 provide(containersViewTemplateContextKey, {

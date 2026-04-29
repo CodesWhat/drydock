@@ -118,8 +118,8 @@ describe('Rocketchat Trigger', () => {
     const containers = [{ name: 'test1' }, { name: 'test2' }];
 
     await rocketchat.triggerBatch(containers);
-    expect(rocketchat.renderBatchTitle).toHaveBeenCalledWith(containers);
-    expect(rocketchat.renderBatchBody).toHaveBeenCalledWith(containers);
+    expect(rocketchat.renderBatchTitle).toHaveBeenCalledWith(containers, undefined);
+    expect(rocketchat.renderBatchBody).toHaveBeenCalledWith(containers, undefined);
   });
 
   test('should send message with correct data', async () => {

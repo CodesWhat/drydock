@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
+
 interface ProfileData {
   username: string;
   displayName: string;
@@ -50,7 +54,7 @@ const props = defineProps<{
       <div class="p-5 space-y-4">
         <div v-if="props.profileLoading" class="flex items-center justify-center gap-2 text-xs dd-text-muted py-4">
           <AppIcon name="refresh" :size="12" class="animate-spin" />
-          Loading profile
+          {{ t('configView.profile.loading') }}
         </div>
         <div
           v-else-if="props.profileError"
@@ -61,27 +65,27 @@ const props = defineProps<{
         </div>
         <template v-else>
           <div class="flex items-center justify-between py-2" :style="{ borderBottom: '1px solid var(--dd-border)' }">
-            <span class="text-2xs-plus font-semibold uppercase tracking-wider dd-text-muted">Username</span>
+            <span class="text-2xs-plus font-semibold uppercase tracking-wider dd-text-muted">{{ t('configView.profile.fields.username') }}</span>
             <span class="text-xs font-medium font-mono dd-text">{{ props.profileData.username || '—' }}</span>
           </div>
           <div class="flex items-center justify-between py-2" :style="{ borderBottom: '1px solid var(--dd-border)' }">
-            <span class="text-2xs-plus font-semibold uppercase tracking-wider dd-text-muted">Email</span>
+            <span class="text-2xs-plus font-semibold uppercase tracking-wider dd-text-muted">{{ t('configView.profile.fields.email') }}</span>
             <span class="text-xs font-medium font-mono dd-text">{{ props.profileData.email || '—' }}</span>
           </div>
           <div class="flex items-center justify-between py-2" :style="{ borderBottom: '1px solid var(--dd-border)' }">
-            <span class="text-2xs-plus font-semibold uppercase tracking-wider dd-text-muted">Role</span>
+            <span class="text-2xs-plus font-semibold uppercase tracking-wider dd-text-muted">{{ t('configView.profile.fields.role') }}</span>
             <span class="text-xs font-medium font-mono dd-text">{{ props.profileData.role || '—' }}</span>
           </div>
           <div class="flex items-center justify-between py-2" :style="{ borderBottom: '1px solid var(--dd-border)' }">
-            <span class="text-2xs-plus font-semibold uppercase tracking-wider dd-text-muted">Provider</span>
+            <span class="text-2xs-plus font-semibold uppercase tracking-wider dd-text-muted">{{ t('configView.profile.fields.provider') }}</span>
             <span class="text-xs font-medium font-mono dd-text">{{ props.profileData.provider || '—' }}</span>
           </div>
           <div class="flex items-center justify-between py-2" :style="{ borderBottom: '1px solid var(--dd-border)' }">
-            <span class="text-2xs-plus font-semibold uppercase tracking-wider dd-text-muted">Last Login</span>
+            <span class="text-2xs-plus font-semibold uppercase tracking-wider dd-text-muted">{{ t('configView.profile.fields.lastLogin') }}</span>
             <span class="text-xs font-medium font-mono dd-text">{{ props.profileData.lastLogin || '—' }}</span>
           </div>
           <div class="flex items-center justify-between py-2">
-            <span class="text-2xs-plus font-semibold uppercase tracking-wider dd-text-muted">Active Sessions</span>
+            <span class="text-2xs-plus font-semibold uppercase tracking-wider dd-text-muted">{{ t('configView.profile.fields.activeSessions') }}</span>
             <span class="text-xs font-medium font-mono dd-text">{{ props.profileData.sessions }}</span>
           </div>
         </template>

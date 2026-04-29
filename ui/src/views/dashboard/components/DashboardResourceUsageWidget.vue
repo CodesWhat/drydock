@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watchEffect } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { ResourceUsageSummary } from '../../../utils/stats-summary';
 import {
   getUsageThresholdColor,
@@ -12,6 +13,8 @@ interface Props {
 }
 
 defineProps<Props>();
+
+const { t } = useI18n();
 
 const emit = defineEmits<{
   viewAll: [];
@@ -71,34 +74,34 @@ watchEffect(() => {
 <template>
   <div
     ref="rootEl"
-    aria-label="Resource Usage widget"
+    :aria-label="t('dashboardView.resourceUsage.title')"
     class="dashboard-widget dd-rounded overflow-hidden flex flex-col"
     :style="{ backgroundColor: 'var(--dd-bg-card)' }">
 
     <!-- Header — hides when compact -->
     <div v-if="showHeader" class="shrink-0 flex items-center justify-between px-5 py-3.5" :style="{ borderBottom: '1px solid var(--dd-border)' }">
       <div class="flex items-center gap-2">
-        <div v-if="editMode" class="drag-handle dd-drag-handle" v-tooltip.top="'Drag to reorder'"><AppIcon name="ph:dots-six-vertical" :size="14" /></div>
+        <div v-if="editMode" class="drag-handle dd-drag-handle" v-tooltip.top="t('dashboardView.dragToReorder')"><AppIcon name="ph:dots-six-vertical" :size="14" /></div>
         <AppIcon name="uptime" :size="14" class="text-drydock-secondary" />
         <h2 class="dd-text-heading-section dd-text">
-          Resource Usage
+          {{ t('dashboardView.resourceUsage.title') }}
         </h2>
       </div>
-      <AppButton size="none" variant="link-secondary" weight="medium" class="text-2xs-plus" @click="handleViewAll">View all &rarr;</AppButton>
+      <AppButton size="none" variant="link-secondary" weight="medium" class="text-2xs-plus" @click="handleViewAll">{{ t('dashboardView.viewAll') }}</AppButton>
     </div>
 
     <div class="flex-1 min-h-0 overflow-y-auto overscroll-contain dd-scroll-stable p-4 space-y-4 relative">
       <!-- Drag handle when header is hidden — pinned top-left -->
-      <div v-if="!showHeader && editMode" class="drag-handle dd-drag-handle absolute top-2 left-2 z-10" v-tooltip.top="'Drag to reorder'"><AppIcon name="ph:dots-six" :size="14" /></div>
+      <div v-if="!showHeader && editMode" class="drag-handle dd-drag-handle absolute top-2 left-2 z-10" v-tooltip.top="t('dashboardView.dragToReorder')"><AppIcon name="ph:dots-six" :size="14" /></div>
 
       <div>
         <div v-if="showHeader" class="dd-text-label mb-2 dd-text-muted">
-          Total Usage ({{ resourceUsage.watchedContainers }} watched)
+          {{ t('dashboardView.resourceUsage.totalUsage', { watched: resourceUsage.watchedContainers }) }}
         </div>
         <div class="space-y-2">
           <div>
             <div class="flex items-center justify-between text-2xs dd-text-secondary mb-1">
-              <span>CPU</span>
+              <span>{{ t('dashboardView.resourceUsage.cpu') }}</span>
               <span>{{ resourceUsage.totalCpuPercent.toFixed(1) }}%</span>
             </div>
             <div class="h-2 dd-rounded overflow-hidden" :style="{ backgroundColor: 'var(--dd-bg-elevated)' }">
@@ -113,7 +116,7 @@ watchEffect(() => {
 
           <div>
             <div class="flex items-center justify-between text-2xs dd-text-secondary mb-1">
-              <span>Memory</span>
+              <span>{{ t('dashboardView.resourceUsage.memory') }}</span>
               <span>
                 {{ formatBytes(resourceUsage.totalMemoryUsageBytes) }} / {{ formatBytes(resourceUsage.totalMemoryLimitBytes) }} ({{ resourceUsage.totalMemoryPercent.toFixed(1) }}%)
               </span>
@@ -133,7 +136,7 @@ watchEffect(() => {
       <div v-if="topListLimit > 0" class="grid grid-cols-1 gap-3">
         <div>
           <div class="dd-text-label mb-2 dd-text-muted">
-            Top CPU
+            {{ t('dashboardView.resourceUsage.topCpu') }}
           </div>
           <div class="space-y-1.5">
             <div
@@ -152,14 +155,14 @@ watchEffect(() => {
               v-if="resourceUsage.topCpu.length === 0"
               class="px-2.5 py-2 dd-rounded text-2xs-plus text-center dd-text-muted"
               :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-              No live CPU data
+              {{ t('dashboardView.resourceUsage.noCpuData') }}
             </div>
           </div>
         </div>
 
         <div>
           <div class="dd-text-label mb-2 dd-text-muted">
-            Top Memory
+            {{ t('dashboardView.resourceUsage.topMemory') }}
           </div>
           <div class="space-y-1.5">
             <div
@@ -178,7 +181,7 @@ watchEffect(() => {
               v-if="resourceUsage.topMemory.length === 0"
               class="px-2.5 py-2 dd-rounded text-2xs-plus text-center dd-text-muted"
               :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-              No live memory data
+              {{ t('dashboardView.resourceUsage.noMemoryData') }}
             </div>
           </div>
         </div>

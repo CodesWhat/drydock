@@ -1,5 +1,8 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n';
 import type { RadiusPreset, RadiusPresetId } from '../../preferences/radius';
+
+const { t } = useI18n();
 
 interface ThemeFamilyOption {
   id: string;
@@ -74,7 +77,7 @@ function handleFontSizeInput(event: Event) {
     >
       <div class="flex items-center gap-2 px-5 py-3" :style="{ borderBottom: '1px solid var(--dd-border)' }">
         <AppIcon name="settings" :size="14" class="text-drydock-secondary" />
-        <h2 class="dd-text-heading-section dd-text">Color Theme</h2>
+        <h2 class="dd-text-heading-section dd-text">{{ t('configView.appearance.colorTheme.title') }}</h2>
       </div>
       <div class="p-4">
         <div class="grid grid-cols-2 gap-3">
@@ -121,7 +124,7 @@ function handleFontSizeInput(event: Event) {
     >
       <div class="px-5 py-3.5 flex items-center gap-2" :style="{ borderBottom: '1px solid var(--dd-border)' }">
         <AppIcon name="terminal" :size="14" class="text-drydock-secondary" />
-        <h2 class="dd-text-heading-section dd-text">Font Family</h2>
+        <h2 class="dd-text-heading-section dd-text">{{ t('configView.appearance.fontFamily.title') }}</h2>
       </div>
       <div class="p-5">
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -153,14 +156,14 @@ function handleFontSizeInput(event: Event) {
                   class="text-4xs font-bold uppercase tracking-wider dd-text-muted px-1 py-0.5 dd-rounded-sm"
                   :style="{ backgroundColor: 'var(--dd-bg-elevated)' }"
                 >
-                  default
+                  {{ t('configView.appearance.fontFamily.defaultBadge') }}
                 </span>
               </div>
               <div
                 class="text-2xs mt-0.5 truncate dd-text-muted"
                 :style="props.isFontLoaded(font.id) ? { fontFamily: font.family } : {}"
               >
-                The quick brown fox jumps over the lazy dog
+                {{ t('configView.appearance.fontFamily.preview') }}
               </div>
             </div>
             <AppIcon
@@ -183,7 +186,7 @@ function handleFontSizeInput(event: Event) {
     >
       <div class="px-5 py-3.5 flex items-center gap-2" :style="{ borderBottom: '1px solid var(--dd-border)' }">
         <AppIcon name="settings" :size="14" class="text-drydock-secondary" />
-        <h2 class="dd-text-heading-section dd-text">Font Size</h2>
+        <h2 class="dd-text-heading-section dd-text">{{ t('configView.appearance.fontSize.title') }}</h2>
       </div>
       <div class="p-5">
         <div class="flex items-center gap-4">
@@ -215,7 +218,7 @@ function handleFontSizeInput(event: Event) {
     >
       <div class="px-5 py-3.5 flex items-center gap-2" :style="{ borderBottom: '1px solid var(--dd-border)' }">
         <AppIcon name="dashboard" :size="14" class="text-drydock-secondary" />
-        <h2 class="dd-text-heading-section dd-text">Icon Library</h2>
+        <h2 class="dd-text-heading-section dd-text">{{ t('configView.appearance.iconLibrary.title') }}</h2>
       </div>
       <div class="p-5">
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
@@ -268,7 +271,7 @@ function handleFontSizeInput(event: Event) {
     >
       <div class="px-5 py-3.5 flex items-center gap-2" :style="{ borderBottom: '1px solid var(--dd-border)' }">
         <AppIcon name="containers" :size="14" class="text-drydock-secondary" />
-        <h2 class="dd-text-heading-section dd-text">Icon Size</h2>
+        <h2 class="dd-text-heading-section dd-text">{{ t('configView.appearance.iconSize.title') }}</h2>
       </div>
       <div class="p-5">
         <div class="flex items-center gap-4">
@@ -300,7 +303,7 @@ function handleFontSizeInput(event: Event) {
         class="px-5 py-3.5 flex items-center gap-2"
       >
         <AppIcon name="settings" :size="14" class="text-drydock-secondary" />
-        <h2 class="dd-text-heading-section dd-text">Border Radius</h2>
+        <h2 class="dd-text-heading-section dd-text">{{ t('configView.appearance.borderRadius.title') }}</h2>
       </div>
       <div class="p-5">
         <div class="grid grid-cols-5 gap-2">

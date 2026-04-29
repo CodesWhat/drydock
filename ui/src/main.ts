@@ -1,5 +1,6 @@
 import { createApp } from 'vue';
 import App from './App.vue';
+import { i18n } from './boot/i18n';
 import { disableIconifyApi, registerIcons } from './boot/icons';
 import AppButton from './components/AppButton.vue';
 import AppIcon from './components/AppIcon.vue';
@@ -72,5 +73,6 @@ app.component('AppToast', AppToast);
 app.component('ConfirmDialog', ConfirmDialog);
 app.component('CopyableTag', CopyableTag);
 app.directive('tooltip', Tooltip);
+app.use(i18n);
 app.use(router);
 app.mount('#app');

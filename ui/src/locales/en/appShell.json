@@ -1,0 +1,132 @@
+{
+  "appShell": {
+    "toast": {
+      "dismiss": "Dismiss"
+    },
+    "logViewer": {
+      "toolbar": {
+        "resume": "Resume",
+        "pause": "Pause",
+        "unpinAutoScroll": "Unpin auto-scroll",
+        "pinAutoScroll": "Pin auto-scroll",
+        "newestFirst": "Newest first",
+        "oldestFirst": "Oldest first",
+        "regexToggle": ".* Regex",
+        "showMatchesOnly": "Show matches only",
+        "showingMatchesOnly": "Showing matches only",
+        "prev": "Prev",
+        "next": "Next"
+      },
+      "search": {
+        "placeholder": "Search logs",
+        "copied": "Copied!",
+        "copyLogs": "Copy logs"
+      },
+      "empty": {
+        "noMatchingEntries": "No matching entries",
+        "defaultMessage": "No log entries yet"
+      },
+      "footer": {
+        "lines": "lines",
+        "defaultStatusLabel": "Offline"
+      }
+    },
+    "notificationBell": {
+      "buttonLabel": "Notifications",
+      "tooltip": "Notifications",
+      "header": "Notifications",
+      "clear": "Clear",
+      "loading": "Loading...",
+      "empty": "No notifications yet",
+      "markAllRead": "Mark all as read",
+      "openAuditLog": "Open audit log",
+      "dismiss": "Dismiss notification"
+    },
+    "themeToggle": {
+      "mobileLabel": "Theme: {id} (tap to cycle)",
+      "switchTo": "Switch to {id} theme",
+      "variantLabel": "{label}"
+    },
+    "layout": {
+      "nav": {
+        "dashboard": "Dashboard",
+        "containers": "Containers",
+        "security": "Security",
+        "audit": "Audit",
+        "systemLogs": "System Logs",
+        "manageGroup": "Manage",
+        "hosts": "Hosts",
+        "registries": "Registries",
+        "watchers": "Watchers",
+        "settingsGroup": "Settings",
+        "general": "General",
+        "notifications": "Notifications",
+        "triggers": "Triggers",
+        "auth": "Auth",
+        "agents": "Agents"
+      },
+      "sidebar": {
+        "closeMobileMenu": "Close menu",
+        "searchButton": "Search",
+        "searchAriaLabel": "Search",
+        "aboutTooltip": "About Drydock",
+        "aboutAriaLabel": "About Drydock",
+        "expandSidebar": "Expand sidebar",
+        "collapseSidebar": "Collapse sidebar"
+      },
+      "topbar": {
+        "openMenu": "Open menu",
+        "closeMenu": "Close menu",
+        "userMenu": "User menu",
+        "profile": "Profile",
+        "signOut": "Sign out"
+      },
+      "about": {
+        "title": "Drydock",
+        "subtitle": "Docker Container Update Manager",
+        "documentation": "Documentation",
+        "github": "GitHub",
+        "changelog": "Changelog",
+        "close": "Close"
+      },
+      "search": {
+        "ariaLabel": "Search",
+        "placeholder": "Jump to pages, containers, agents, triggers...",
+        "shown": "{count} shown",
+        "refreshing": "Refreshing search index...",
+        "noMatches": "No matches for \"{query}\".",
+        "hint": "Type to search pages, containers, agents, triggers, watchers, and settings.",
+        "prefixScopeHint": "Prefix scope active; use ",
+        "typeHint": "Type",
+        "useTab": " to change scope",
+        "moveHint": "move",
+        "openHint": "open"
+      },
+      "connection": {
+        "lostTitle": "Connection Lost",
+        "applyingUpdateTitle": "Applying Update",
+        "lostMessage": "The server is unreachable. Waiting for it to come back online...",
+        "restartingMessage": "Drydock is restarting after a self-update{opId}. Reconnecting when the service is back...",
+        "reconnecting": "Reconnecting",
+        "restartingService": "Restarting service"
+      }
+    },
+    "announcementBanner": {
+      "defaultDismiss": "Dismiss",
+      "defaultLinkLabel": "View migration guide"
+    },
+    "banners": {
+      "legacyConfigTitleSingular": "{total} legacy configuration alias detected",
+      "legacyConfigTitlePlural": "{total} legacy configuration aliases detected",
+      "legacyApiPathTitle": "{total} legacy API paths detected",
+      "dontShowAgain": "Don't show again",
+      "oidcHttpTitle": "HTTP OIDC discovery detected",
+      "legacyHashTitle": "Legacy password hash detected",
+      "curlHealthcheckTitle": "Custom curl healthcheck override detected",
+      "envKeysLabel": "Env keys ({count}): {keys}",
+      "labelKeysLabel": "Label keys ({count}): {keys}",
+      "apiPathsLabel": "API paths ({count}): {keys}",
+      "healthcheckCommandLabel": "Healthcheck command: {command}"
+    }
+  }
+}

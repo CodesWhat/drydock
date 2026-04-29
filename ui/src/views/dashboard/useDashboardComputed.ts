@@ -122,25 +122,19 @@ function formatMaintenanceDuration(durationMs: number): string {
 
 function getRecentUpdateStatusColor(status: RecentUpdateRow['status']): string {
   const style = RECENT_UPDATE_STATUS_STYLES[status];
-  if (!style) {
-    return assertNever(status);
-  }
+  if (!style) assertNever(status as never);
   return style.color;
 }
 
 function getRecentUpdateStatusMutedColor(status: RecentUpdateRow['status']): string {
   const style = RECENT_UPDATE_STATUS_STYLES[status];
-  if (!style) {
-    return assertNever(status);
-  }
+  if (!style) assertNever(status as never);
   return style.colorMuted;
 }
 
 function getRecentUpdateStatusIcon(status: RecentUpdateRow['status']): string {
   const style = RECENT_UPDATE_STATUS_STYLES[status];
-  if (!style) {
-    return assertNever(status);
-  }
+  if (!style) assertNever(status as never);
   return style.icon;
 }
 

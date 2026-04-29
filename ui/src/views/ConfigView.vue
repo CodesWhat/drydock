@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import { disableIconifyApi } from '../boot/icons';
 import { type FontId, fontOptions, useFont } from '../composables/useFont';
@@ -23,6 +24,7 @@ import { usePreference } from '../preferences/usePreference';
 import { useTheme } from '../theme/useTheme';
 import { errorMessage } from '../utils/error';
 
+const { t } = useI18n();
 const route = useRoute();
 const router = useRouter();
 const { themeFamily, themeVariant, isDark, setThemeFamily, transitionTheme } = useTheme();
@@ -79,11 +81,11 @@ watch(
   },
 );
 
-const settingsTabs = [
-  { id: 'general' as const, label: 'General', icon: 'settings' },
-  { id: 'appearance' as const, label: 'Appearance', icon: 'config' },
-  { id: 'profile' as const, label: 'Profile', icon: 'user' },
-];
+const settingsTabs = computed(() => [
+  { id: 'general' as const, label: t('configView.tabs.general'), icon: 'settings' },
+  { id: 'appearance' as const, label: t('configView.tabs.appearance'), icon: 'config' },
+  { id: 'profile' as const, label: t('configView.tabs.profile'), icon: 'user' },
+]);
 const availableThemeFamilies = themeFamilies;
 
 const loading = ref(true);
@@ -91,20 +93,20 @@ const serverFields = ref<Array<{ label: string; value: string }>>([]);
 const storeFields = ref<Array<{ label: string; value: string }>>([]);
 const serverError = ref('');
 const webhookEnabled = ref(false);
-const webhookEndpoints = [
+const webhookEndpoints = computed(() => [
   {
     endpoint: 'POST /api/webhook/watch',
-    description: 'Trigger a full watch cycle on all watchers',
+    description: t('configView.general.webhookApi.endpoints.watchAll'),
   },
   {
     endpoint: 'POST /api/webhook/watch/:name',
-    description: 'Watch a specific container by name',
+    description: t('configView.general.webhookApi.endpoints.watchOne'),
   },
   {
     endpoint: 'POST /api/webhook/update/:name',
-    description: 'Trigger an update on a specific container',
+    description: t('configView.general.webhookApi.endpoints.updateOne'),
   },
-];
+]);
 const webhookBaseUrl = computed(() => {
   if (typeof window === 'undefined') {
     return '';
@@ -185,21 +187,46 @@ async function loadGeneralSettingsData() {
     const config = serverData?.configuration ?? {};
     const storeConfig = storeData?.configuration ?? {};
     webhookEnabled.value = Boolean(config.webhook?.enabled);
+    const enabled = t('configView.general.fields.enabled');
+    const disabled = t('configView.general.fields.disabled');
+    const yes = t('configView.general.fields.yes');
+    const no = t('configView.general.fields.no');
     const fields = [
-      { label: 'Version', value: appData?.version ?? 'unknown' },
-      { label: 'Server Port', value: String(config.port ?? 3000) },
       {
-        label: 'Container Actions',
-        value: config.feature?.containeractions ? 'Enabled' : 'Disabled',
+        label: t('configView.general.fields.version'),
+        value: appData?.version ?? t('common.unknown'),
       },
-      { label: 'Webhook', value: config.webhook?.enabled ? 'Enabled' : 'Disabled' },
-      { label: 'Delete Enabled', value: config.feature?.delete ? 'Yes' : 'No' },
-      { label: 'Trust Proxy', value: config.trustproxy ? 'Enabled' : 'Disabled' },
-      { label: 'Metrics Auth', value: config.metrics?.auth !== false ? 'Enabled' : 'Disabled' },
+      { label: t('configView.general.fields.serverPort'), value: String(config.port ?? 3000) },
+      {
+        label: t('configView.general.fields.containerActions'),
+        value: config.feature?.containeractions ? enabled : disabled,
+      },
+      {
+        label: t('configView.general.fields.webhook'),
+        value: config.webhook?.enabled ? enabled : disabled,
+      },
+      {
+        label: t('configView.general.fields.deleteEnabled'),
+        value: config.feature?.delete ? yes : no,
+      },
+      {
+        label: t('configView.general.fields.trustProxy'),
+        value: config.trustproxy ? enabled : disabled,
+      },
+      {
+        label: t('configView.general.fields.metricsAuth'),
+        value: config.metrics?.auth !== false ? enabled : disabled,
+      },
     ];
     const storeConfigFields = [
-      { label: 'Store Path', value: String(storeConfig.path ?? 'unknown') },
-      { label: 'Store File', value: String(storeConfig.file ?? 'unknown') },
+      {
+        label: t('configView.general.fields.storePath'),
+        value: String(storeConfig.path ?? t('common.unknown')),
+      },
+      {
+        label: t('configView.general.fields.storeFile'),
+        value: String(storeConfig.file ?? t('common.unknown')),
+      },
     ];
     serverFields.value = fields;
     storeFields.value = storeConfigFields;
@@ -207,9 +234,14 @@ async function loadGeneralSettingsData() {
       internetlessMode.value = settings.internetlessMode;
     }
   } catch (e: unknown) {
-    serverError.value = errorMessage(e, 'Failed to load server info');
+    serverError.value = errorMessage(e, t('configView.general.errors.loadServerInfo'));
     webhookEnabled.value = false;
-    serverFields.value = [{ label: 'Error', value: 'Failed to load server info' }];
+    serverFields.value = [
+      {
+        label: t('configView.general.errors.errorLabel'),
+        value: t('configView.general.errors.loadServerInfo'),
+      },
+    ];
   } finally {
     loading.value = false;
   }
@@ -233,7 +265,7 @@ async function loadProfileData() {
       };
     }
   } catch (e: unknown) {
-    profileError.value = errorMessage(e, 'Failed to load profile data');
+    profileError.value = errorMessage(e, t('configView.general.errors.loadProfileData'));
   } finally {
     profileLoading.value = false;
   }
@@ -253,7 +285,7 @@ async function toggleInternetlessMode() {
       disableIconifyApi();
     }
   } catch (e: unknown) {
-    settingsError.value = errorMessage(e, 'Failed to update network settings');
+    settingsError.value = errorMessage(e, t('configView.general.errors.updateNetworkSettings'));
   } finally {
     settingsLoading.value = false;
   }
@@ -272,7 +304,7 @@ async function handleClearIconCache() {
     const result = await clearIconCache();
     cacheCleared.value = result.cleared;
   } catch (e: unknown) {
-    settingsError.value = errorMessage(e, 'Failed to clear icon cache');
+    settingsError.value = errorMessage(e, t('configView.general.errors.clearIconCache'));
   } finally {
     cacheClearing.value = false;
   }
@@ -307,7 +339,7 @@ async function handleDownloadDebugDump() {
     const { blob, filename } = await downloadDebugDump();
     triggerBlobDownload(blob, filename);
   } catch (e: unknown) {
-    debugDumpError.value = errorMessage(e, 'Unable to download debug dump');
+    debugDumpError.value = errorMessage(e, t('configView.general.errors.downloadDebugDump'));
   } finally {
     debugDumpDownloading.value = false;
   }

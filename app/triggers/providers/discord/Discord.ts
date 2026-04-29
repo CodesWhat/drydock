@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { getOutboundHttpTimeoutMs } from '../../../configuration/runtime-defaults.js';
 
-import Trigger, { type TriggerConfiguration } from '../Trigger.js';
+import Trigger, { type BatchRuntimeContext, type TriggerConfiguration } from '../Trigger.js';
 
 interface DiscordConfiguration extends TriggerConfiguration {
   url: string;
@@ -54,8 +54,11 @@ class Discord extends Trigger<DiscordConfiguration> {
    * @param containers the list of the containers
    * @returns {Promise<void>}
    */
-  async triggerBatch(containers) {
-    return this.sendMessage(this.renderBatchTitle(containers), this.renderBatchBody(containers));
+  async triggerBatch(containers, runtimeContext?: BatchRuntimeContext) {
+    return this.sendMessage(
+      this.renderBatchTitle(containers, runtimeContext),
+      this.renderBatchBody(containers, runtimeContext),
+    );
   }
 
   /**

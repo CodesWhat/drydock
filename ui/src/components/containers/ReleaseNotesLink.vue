@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { ContainerReleaseNotes } from '../../types/container';
 import AppIconButton from '../AppIconButton.vue';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   releaseNotes?: ContainerReleaseNotes | null;
@@ -51,8 +54,8 @@ function truncateBody(body: string, maxLength: number = 200): string {
     :href="iconHref"
     target="_blank"
     rel="noopener noreferrer"
-    :tooltip="'Release notes'"
-    aria-label="Release notes"
+    :tooltip="t('containerComponents.releaseNotesLink.releaseNotes')"
+    :aria-label="t('containerComponents.releaseNotesLink.releaseNotes')"
     :data-test="iconTestId"
     @click.stop
   />
@@ -70,7 +73,7 @@ function truncateBody(body: string, maxLength: number = 200): string {
         @click.stop="currentExpanded = !currentExpanded"
       >
         <AppIcon name="file-text" :size="12" />
-        Release notes — {{ props.currentReleaseNotes?.title }} (current)
+        {{ t('containerComponents.releaseNotesLink.releaseNotes') }} — {{ props.currentReleaseNotes?.title }} {{ t('containerComponents.releaseNotesLink.currentSuffix') }}
         <AppIcon :name="currentExpanded ? 'chevron-up' : 'chevron-down'" :size="10" />
       </AppButton>
       <div
@@ -88,7 +91,7 @@ function truncateBody(body: string, maxLength: number = 200): string {
           class="inline-flex items-center gap-1 text-2xs underline hover:no-underline"
           style="color: var(--dd-info);"
         >
-          View full notes
+          {{ t('containerComponents.releaseNotesLink.viewFullNotes') }}
           <AppIcon name="external-link" :size="10" />
         </a>
       </div>
@@ -102,10 +105,10 @@ function truncateBody(body: string, maxLength: number = 200): string {
       >
         <AppIcon name="file-text" :size="12" />
         <template v-if="props.currentReleaseNotes && !sameNotes">
-          Release notes — {{ props.releaseNotes.title }} (available)
+          {{ t('containerComponents.releaseNotesLink.releaseNotes') }} — {{ props.releaseNotes.title }} {{ t('containerComponents.releaseNotesLink.availableSuffix') }}
         </template>
         <template v-else>
-          Release notes
+          {{ t('containerComponents.releaseNotesLink.releaseNotes') }}
         </template>
         <AppIcon :name="updateExpanded ? 'chevron-up' : 'chevron-down'" :size="10" />
       </AppButton>
@@ -124,7 +127,7 @@ function truncateBody(body: string, maxLength: number = 200): string {
           class="inline-flex items-center gap-1 text-2xs underline hover:no-underline"
           style="color: var(--dd-info);"
         >
-          View full notes
+          {{ t('containerComponents.releaseNotesLink.viewFullNotes') }}
           <AppIcon name="external-link" :size="10" />
         </a>
       </div>
@@ -141,6 +144,6 @@ function truncateBody(body: string, maxLength: number = 200): string {
     data-test="release-link"
   >
     <AppIcon name="file-text" :size="12" />
-    Release notes
+    {{ t('containerComponents.releaseNotesLink.releaseNotes') }}
   </a>
 </template>

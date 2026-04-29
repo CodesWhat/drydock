@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { UpdateBreakdownBucket } from '../dashboardTypes';
 
 interface Props {
@@ -9,6 +10,8 @@ interface Props {
 }
 
 defineProps<Props>();
+
+const { t } = useI18n();
 
 const emit = defineEmits<{
   viewAll: [];
@@ -53,28 +56,28 @@ onBeforeUnmount(() => {
 <template>
   <div
     ref="rootEl"
-    aria-label="Update Breakdown widget"
+    :aria-label="t('dashboardView.updateBreakdown.title')"
     class="dashboard-widget dd-rounded overflow-hidden flex flex-col"
     :style="{ backgroundColor: 'var(--dd-bg-card)' }">
 
     <!-- Header — shown in full mode only -->
     <div v-if="mode === 'full'" class="shrink-0 flex items-center justify-between px-5 py-3.5" :style="{ borderBottom: '1px solid var(--dd-border)' }">
       <div class="flex items-center gap-2">
-        <div v-if="editMode" class="drag-handle dd-drag-handle" v-tooltip.top="'Drag to reorder'"><AppIcon name="ph:dots-six-vertical" :size="14" /></div>
+        <div v-if="editMode" class="drag-handle dd-drag-handle" v-tooltip.top="t('dashboardView.dragToReorder')"><AppIcon name="ph:dots-six-vertical" :size="14" /></div>
         <AppIcon name="updates" :size="14" class="text-drydock-secondary" />
-        <h2 class="dd-text-heading-section dd-text">Update Breakdown</h2>
+        <h2 class="dd-text-heading-section dd-text">{{ t('dashboardView.updateBreakdown.title') }}</h2>
       </div>
-      <AppButton size="none" variant="link-secondary" weight="medium" class="text-2xs-plus" @click="handleViewAll">View all &rarr;</AppButton>
+      <AppButton size="none" variant="link-secondary" weight="medium" class="text-2xs-plus" @click="handleViewAll">{{ t('dashboardView.viewAll') }}</AppButton>
     </div>
 
     <!-- Icon grid — shown in full and medium modes (medium = no header) -->
     <div v-if="mode !== 'compact'" class="flex-1 min-h-0 flex items-center justify-center p-4 relative">
-      <div v-if="mode === 'medium' && editMode" class="drag-handle dd-drag-handle absolute top-2 left-2 z-10" v-tooltip.top="'Drag to reorder'"><AppIcon name="ph:dots-six-vertical" :size="14" /></div>
+      <div v-if="mode === 'medium' && editMode" class="drag-handle dd-drag-handle absolute top-2 left-2 z-10" v-tooltip.top="t('dashboardView.dragToReorder')"><AppIcon name="ph:dots-six-vertical" :size="14" /></div>
       <div
         v-if="totalUpdates === 0"
         class="p-3 dd-rounded text-2xs-plus text-center dd-text-muted"
         :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-        No updates to categorize
+        {{ t('dashboardView.updateBreakdown.noUpdates') }}
       </div>
       <div v-else class="grid grid-cols-4 gap-3 w-full">
         <div
@@ -99,7 +102,7 @@ onBeforeUnmount(() => {
 
     <!-- Compact: tiny inline row for extremely small widgets -->
     <div v-else class="flex items-center flex-1 min-h-0 px-4 gap-3 relative">
-      <div v-if="editMode" class="drag-handle dd-drag-handle absolute top-2 left-2 z-10" v-tooltip.top="'Drag to reorder'"><AppIcon name="ph:dots-six" :size="14" /></div>
+      <div v-if="editMode" class="drag-handle dd-drag-handle absolute top-2 left-2 z-10" v-tooltip.top="t('dashboardView.dragToReorder')"><AppIcon name="ph:dots-six" :size="14" /></div>
       <div
         v-for="kind in updateBreakdownBuckets"
         :key="kind.label"

@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { getOutboundHttpTimeoutMs } from '../../../configuration/runtime-defaults.js';
 
-import Trigger, { type TriggerConfiguration } from '../Trigger.js';
+import Trigger, { type BatchRuntimeContext, type TriggerConfiguration } from '../Trigger.js';
 
 interface AppriseNotifyBody {
   title: string;
@@ -107,10 +107,10 @@ class Apprise extends Trigger<AppriseConfiguration> {
    * @param containers
    * @returns {Promise<*>}
    */
-  async triggerBatch(containers) {
+  async triggerBatch(containers, runtimeContext?: BatchRuntimeContext) {
     return this.sendNotification(
-      this.renderBatchTitle(containers),
-      this.renderBatchBody(containers),
+      this.renderBatchTitle(containers, runtimeContext),
+      this.renderBatchBody(containers, runtimeContext),
     );
   }
 }

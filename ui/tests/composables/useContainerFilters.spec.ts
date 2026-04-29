@@ -5,6 +5,7 @@ import { setTestPreferences } from '../helpers/preferences';
 function makeContainer(overrides: Partial<Container> = {}): Container {
   return {
     id: 'c1',
+    identityKey: 'c1',
     name: 'nginx',
     image: 'nginx:latest',
     icon: '',

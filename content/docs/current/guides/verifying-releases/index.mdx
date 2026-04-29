@@ -10,6 +10,10 @@ Every Drydock release is signed with [cosign](https://docs.sigstore.dev/) (keyle
 
 The examples on this page use `v1.5.0-rc.9` as a placeholder. Replace it with the tag you're verifying.
 
+<Callout type="info">
+Starting with the release after `v1.5.0-rc.10`, the signing workflow changed from `release-from-tag.yml@refs/tags/…` to `release-cut.yml@refs/heads/main` as part of the [tag-last release pipeline](#why-some-older-tags-look-different). The default identity regex below matches the **new** identity; older tags need the legacy regex shown at the bottom of this page.
+</Callout>
+
 ## What you need
 
 | Tool | Install | Used for |
@@ -29,7 +33,7 @@ The release workflow signs every pushed tag (`ghcr.io`, `docker.io`, `quay.io`) 
 TAG="v1.5.0-rc.9"
 VERSION="${TAG#v}"
 IMAGE="ghcr.io/codeswhat/drydock:${VERSION}"
-IDENTITY_REGEX='^https://github.com/CodesWhat/drydock/.github/workflows/release-from-tag.yml@refs/tags/.+$'
+IDENTITY_REGEX='^https://github.com/CodesWhat/drydock/.github/workflows/release-cut.yml@refs/heads/main$'
 OIDC_ISSUER='https://token.actions.githubusercontent.com'
 
 cosign verify \
@@ -121,7 +125,7 @@ On macOS, use `shasum -a 256 -c "${ARCHIVE}.sha256"`.
 This proves the tarball was signed by the Drydock release workflow at this tag.
 
 ```bash
-IDENTITY_REGEX='^https://github.com/CodesWhat/drydock/.github/workflows/release-from-tag.yml@refs/tags/.+$'
+IDENTITY_REGEX='^https://github.com/CodesWhat/drydock/.github/workflows/release-cut.yml@refs/heads/main$'
 OIDC_ISSUER='https://token.actions.githubusercontent.com'
 
 cosign verify-blob \
@@ -166,12 +170,20 @@ A PASS on both the cosign signature AND the SLSA attestation is the strongest gu
 
 ## Why some older tags look different
 
-Releases before v1.5 were signed by `.github/workflows/release.yml` (now renamed `release-from-tag.yml`). If you're verifying an older tag, adjust the identity regex:
+The Drydock release pipeline has been reshaped twice. Signatures embed the workflow file + ref that produced them, so the identity regex depends on which version of the pipeline signed the tag you're verifying:
 
 ```bash
-# v1.4.x and older:
+# v1.5.0-rc.11 and newer (tag-last pipeline, signed by release-cut.yml on main):
+IDENTITY_REGEX='^https://github.com/CodesWhat/drydock/.github/workflows/release-cut.yml@refs/heads/main$'
+
+# v1.5.0 through v1.5.0-rc.10 (tag-triggered pipeline, signed by release-from-tag.yml on the tag):
+IDENTITY_REGEX='^https://github.com/CodesWhat/drydock/.github/workflows/release-from-tag.yml@refs/tags/.+$'
+
+# v1.4.x and older (signed by release.yml):
 IDENTITY_REGEX='^https://github.com/CodesWhat/drydock/.github/workflows/release.yml@refs/(heads/main|tags/.+)$'
 ```
+
+The v1.5.0-rc.11 switchover moved image and artifact signing to happen **before** the git tag is pushed, so that a published tag always corresponds to a live, signed image. The old tag-triggered pipeline could produce a visible git tag without a corresponding signed image if the registry push failed mid-flight (see [discussion #306](https://github.com/CodesWhat/drydock/discussions/306)).
 
 Some older image tags also expose legacy `sha256-<digest>.sig` tags in registries. Newer releases store signatures via [OCI referrers](https://github.com/opencontainers/distribution-spec/blob/main/spec.md#listing-referrers) instead, so you may not see a `.sig` tag in the registry even though `cosign verify` succeeds.
 

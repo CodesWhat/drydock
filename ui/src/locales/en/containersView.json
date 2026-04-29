@@ -1,0 +1,17 @@
+{
+  "containersView": {
+    "error": {
+      "loadFailed": "Failed to load containers",
+      "recheckFailed": "Failed to recheck containers"
+    },
+    "toast": {
+      "updated": "Updated: {name}",
+      "updateFailed": "Update failed: {name}",
+      "rolledBack": "Rolled back: {name}"
+    },
+    "registryError": {
+      "generic": "Registry error",
+      "detail": "Registry error: {error}"
+    }
+  }
+}

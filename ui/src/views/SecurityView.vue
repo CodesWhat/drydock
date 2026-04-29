@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 import AppBadge from '../components/AppBadge.vue';
 import AppIconButton from '../components/AppIconButton.vue';
@@ -33,6 +34,7 @@ import {
   toSafeExternalUrl,
 } from './security/securityViewUtils';
 
+const { t } = useI18n();
 const router = useRouter();
 
 const updateDialogContainerId = ref<string | null>(null);
@@ -91,18 +93,18 @@ const scannerSetupNeeded = computed(() => {
 
 const scanDisabledReason = computed(() => {
   if (runtimeLoading.value) {
-    return 'Checking scanner availability';
+    return t('securityView.checkingScanner');
   }
   if (runtimeError.value) {
-    return 'Runtime check unavailable; scan can still be attempted';
+    return t('securityView.runtimeUnavailable');
   }
   if (!runtimeStatus.value) {
-    return 'Scan all containers for vulnerabilities';
+    return t('securityView.scanAllContainers');
   }
   if (!scannerReady.value) {
     return runtimeStatus.value.scanner.message;
   }
-  return 'Scan all containers for vulnerabilities';
+  return t('securityView.scanAllContainers');
 });
 
 async function fetchSecurityRuntimeStatus() {
@@ -299,18 +301,18 @@ async function scanAllContainers() {
 const tableColumns = computed(() => {
   if (isCompact.value) {
     return [
-      { key: 'image', label: 'Image', align: 'text-left', width: '99%' },
-      { key: 'total', label: 'Total', sortable: true },
+      { key: 'image', label: t('securityView.columns.image'), align: 'text-left', width: '99%' },
+      { key: 'total', label: t('securityView.columns.total'), sortable: true },
     ];
   }
   return [
-    { key: 'image', label: 'Image', align: 'text-left', width: '99%' },
-    { key: 'critical', label: 'Critical', sortable: true },
-    { key: 'high', label: 'High', sortable: true },
-    { key: 'medium', label: 'Medium', sortable: true },
-    { key: 'low', label: 'Low', sortable: true },
-    { key: 'fixable', label: 'Fixable', sortable: true },
-    { key: 'total', label: 'Total', sortable: true },
+    { key: 'image', label: t('securityView.columns.image'), align: 'text-left', width: '99%' },
+    { key: 'critical', label: t('securityView.columns.critical'), sortable: true },
+    { key: 'high', label: t('securityView.columns.high'), sortable: true },
+    { key: 'medium', label: t('securityView.columns.medium'), sortable: true },
+    { key: 'low', label: t('securityView.columns.low'), sortable: true },
+    { key: 'fixable', label: t('securityView.columns.fixable'), sortable: true },
+    { key: 'total', label: t('securityView.columns.total'), sortable: true },
   ];
 });
 
@@ -347,7 +349,7 @@ onUnmounted(() => {
         {{ error }}
       </div>
 
-      <div v-if="loading" class="text-2xs-plus dd-text-muted py-3 px-1">Loading vulnerability data...</div>
+      <div v-if="loading" class="text-2xs-plus dd-text-muted py-3 px-1">{{ t('securityView.loadingVulnerabilityData') }}</div>
 
       <!-- Filter bar -->
       <DataFilterBar
@@ -360,22 +362,22 @@ onUnmounted(() => {
         <template #filters>
           <select v-model="secFilterSeverity"
                   class="px-2 py-1.5 dd-rounded text-2xs-plus font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text">
-            <option value="all">Severity</option>
-            <option value="CRITICAL">Critical</option>
-            <option value="HIGH">High</option>
-            <option value="MEDIUM">Medium</option>
-            <option value="LOW">Low</option>
+            <option value="all">{{ t('securityView.filters.severity') }}</option>
+            <option value="CRITICAL">{{ t('securityView.filters.severityCritical') }}</option>
+            <option value="HIGH">{{ t('securityView.filters.severityHigh') }}</option>
+            <option value="MEDIUM">{{ t('securityView.filters.severityMedium') }}</option>
+            <option value="LOW">{{ t('securityView.filters.severityLow') }}</option>
           </select>
           <select v-model="secFilterFix"
                   class="px-2 py-1.5 dd-rounded text-2xs-plus font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text">
-            <option value="all">Fix Available</option>
-            <option value="yes">Yes</option>
-            <option value="no">No</option>
+            <option value="all">{{ t('securityView.filters.fixAvailable') }}</option>
+            <option value="yes">{{ t('securityView.filters.fixYes') }}</option>
+            <option value="no">{{ t('securityView.filters.fixNo') }}</option>
           </select>
           <AppButton size="none" variant="plain" weight="none" v-if="activeSecFilterCount > 0"
                   class="text-2xs font-medium px-2 py-1 dd-rounded transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
                   @click="clearSecFilters">
-            Clear all
+            {{ t('securityView.filters.clearAll') }}
           </AppButton>
         </template>
         <template #left>
@@ -419,7 +421,7 @@ onUnmounted(() => {
                         : 'dd-text-secondary hover:dd-text hover:dd-bg-elevated',
                     ]"
                     :loading="scanning"
-                    aria-label="Scan all containers"
+                    :aria-label="t('securityView.scanAllAriaLabel')"
                     :disabled="scanning || runtimeLoading || !scannerReady"
                     @click="scanAllContainers" />
             <AppButton v-else size="none" variant="plain" weight="none" class="dd-rounded flex items-center justify-center gap-1.5 px-3 text-2xs-plus font-semibold transition-colors h-8"
@@ -430,8 +432,8 @@ onUnmounted(() => {
                     ]"
                     :disabled="scanning || runtimeLoading || !scannerReady"
                     @click="scanAllContainers">
-              <AppIcon name="restart" :size="11" :class="{ 'animate-spin': scanning }" v-tooltip.top="scanning ? 'Scanning...' : undefined" />
-              <span>Scan Now</span>
+              <AppIcon name="restart" :size="11" :class="{ 'animate-spin': scanning }" v-tooltip.top="scanning ? t('securityView.scanning') : undefined" />
+              <span>{{ t('securityView.scanNow') }}</span>
             </AppButton>
           </span>
         </template>
@@ -481,7 +483,7 @@ onUnmounted(() => {
                 v-tooltip.top="(row.containersWithUpdate?.length ?? 0) > 1 ? `Update one of ${row.containersWithUpdate?.length} containers` : 'Update this container'"
                 @click.stop="openUpdateAction(row)">
                 <AppIcon name="cloud-download" :size="9" />
-                Update
+                {{ t('securityView.update') }}
               </AppButton>
               <AppButton
                 size="none"
@@ -490,9 +492,9 @@ onUnmounted(() => {
                 class="inline-flex items-center gap-1 px-1.5 py-0.5 dd-rounded text-3xs font-medium shrink-0 transition-colors"
                 :style="{ color: 'var(--dd-text-secondary)' }"
                 data-test="security-containers-link"
-                v-tooltip.top="'View in Containers'"
+                v-tooltip.top="t('securityView.viewInContainers')"
                 @click.stop="navigateToContainerUpdate(row)">
-                View in Containers
+                {{ t('securityView.viewInContainers') }}
               </AppButton>
               <ReleaseNotesLink
                 v-if="row.releaseNotes || row.currentReleaseNotes || row.releaseLink"
@@ -566,7 +568,7 @@ onUnmounted(() => {
           <div class="px-4 pt-4 pb-2 flex items-start justify-between">
             <div class="min-w-0">
               <div class="text-sm font-semibold truncate dd-text">{{ summary.image }}</div>
-              <div class="text-2xs mt-0.5 dd-text-muted">{{ summary.total }} vulnerabilities</div>
+              <div class="text-2xs mt-0.5 dd-text-muted">{{ summary.total }} {{ t('securityView.card.vulnerabilities') }}</div>
             </div>
             <AppIcon :name="severityIcon(highestSeverity(summary))" :size="16" class="shrink-0 ml-2"
                      :style="{ color: severityColor(highestSeverity(summary)).text }"
@@ -575,16 +577,16 @@ onUnmounted(() => {
           <div class="px-4 py-3">
             <div class="flex items-center gap-1.5 flex-wrap">
               <AppBadge v-if="summary.critical > 0" tone="danger" size="xs">
-                {{ summary.critical }} Critical
+                {{ summary.critical }} {{ t('securityView.badge.critical') }}
               </AppBadge>
               <AppBadge v-if="summary.high > 0" tone="warning" size="xs">
-                {{ summary.high }} High
+                {{ summary.high }} {{ t('securityView.badge.high') }}
               </AppBadge>
               <AppBadge v-if="summary.medium > 0" tone="caution" size="xs">
-                {{ summary.medium }} Medium
+                {{ summary.medium }} {{ t('securityView.badge.medium') }}
               </AppBadge>
               <AppBadge v-if="summary.low > 0" tone="info" size="xs">
-                {{ summary.low }} Low
+                {{ summary.low }} {{ t('securityView.badge.low') }}
               </AppBadge>
             </div>
           </div>
@@ -597,16 +599,16 @@ onUnmounted(() => {
             <AppBadge v-if="summary.delta.new > 0" tone="warning" size="xs" class="px-1.5 py-0">
               {{ summary.delta.new }} new
             </AppBadge>
-            <span class="text-3xs dd-text-muted ml-auto">vs update</span>
+            <span class="text-3xs dd-text-muted ml-auto">{{ t('securityView.card.vsUpdate') }}</span>
           </div>
           <div class="px-4 py-2.5 flex items-center justify-between mt-auto"
                :style="{ borderTop: '1px solid var(--dd-border)', backgroundColor: 'var(--dd-bg-elevated)' }">
             <span v-if="summary.fixable > 0" class="text-2xs-plus font-medium flex items-center gap-1"
                   :style="{ color: fixableColor(summary.fixable, summary.total) }">
               <AppIcon name="check" :size="11" />
-              {{ fixablePercent(summary.fixable, summary.total) }}% fixable
+              {{ fixablePercent(summary.fixable, summary.total) }}% {{ t('securityView.card.fixable') }}
             </span>
-            <span v-else class="text-2xs-plus dd-text-muted">No fixes available</span>
+            <span v-else class="text-2xs-plus dd-text-muted">{{ t('securityView.card.noFixesAvailable') }}</span>
             <template v-if="summary.hasUpdate">
               <AppButton
                 size="none"
@@ -617,7 +619,7 @@ onUnmounted(() => {
                 data-test="security-update-btn"
                 @click.stop="openUpdateAction(summary)">
                 <AppIcon name="cloud-download" :size="9" />
-                Update
+                {{ t('securityView.update') }}
               </AppButton>
               <AppButton
                 size="none"
@@ -627,7 +629,7 @@ onUnmounted(() => {
                 :style="{ color: 'var(--dd-text-secondary)' }"
                 data-test="security-containers-link"
                 @click.stop="navigateToContainerUpdate(summary)">
-                View in Containers
+                {{ t('securityView.viewInContainers') }}
               </AppButton>
               <ReleaseNotesLink
                 v-if="summary.releaseNotes || summary.currentReleaseNotes || summary.releaseLink"
@@ -636,7 +638,7 @@ onUnmounted(() => {
                 :release-link="summary.releaseLink"
                 data-test="security-release-notes" />
             </template>
-            <span v-else class="text-2xs dd-text-muted">{{ summary.total }} total</span>
+            <span v-else class="text-2xs dd-text-muted">{{ summary.total }} {{ t('securityView.card.total') }}</span>
           </div>
         </template>
       </DataCardGrid>
@@ -670,7 +672,7 @@ onUnmounted(() => {
                    v-tooltip.top="highestSeverity(summary)" />
           <div class="flex-1 min-w-0">
             <div class="text-sm font-semibold truncate dd-text">{{ summary.image }}</div>
-            <div class="text-2xs dd-text-muted mt-0.5">{{ summary.total }} vulnerabilities</div>
+            <div class="text-2xs dd-text-muted mt-0.5">{{ summary.total }} {{ t('securityView.card.vulnerabilities') }}</div>
           </div>
           <div class="flex items-center gap-1.5 shrink-0">
             <AppBadge v-if="summary.critical > 0" tone="danger" size="xs" class="px-1.5 py-0">
@@ -730,18 +732,18 @@ onUnmounted(() => {
         <template #subtitle>
           <div class="flex items-center gap-2 flex-wrap">
             <AppBadge v-if="selectedImage?.critical" tone="danger" size="xs">
-              {{ selectedImage.critical }} Critical
+              {{ selectedImage.critical }} {{ t('securityView.badge.critical') }}
             </AppBadge>
             <AppBadge v-if="selectedImage?.high" tone="warning" size="xs">
-              {{ selectedImage.high }} High
+              {{ selectedImage.high }} {{ t('securityView.badge.high') }}
             </AppBadge>
             <AppBadge v-if="selectedImage?.medium" tone="caution" size="xs">
-              {{ selectedImage.medium }} Medium
+              {{ selectedImage.medium }} {{ t('securityView.badge.medium') }}
             </AppBadge>
             <AppBadge v-if="selectedImage?.low" tone="info" size="xs">
-              {{ selectedImage.low }} Low
+              {{ selectedImage.low }} {{ t('securityView.badge.low') }}
             </AppBadge>
-            <span class="text-2xs dd-text-muted ml-auto">{{ selectedImage?.total }} total</span>
+            <span class="text-2xs dd-text-muted ml-auto">{{ selectedImage?.total }} {{ t('securityView.card.total') }}</span>
           </div>
           <div v-if="selectedImage?.hasUpdate" class="mt-2 flex items-center gap-2 flex-wrap">
             <AppButton
@@ -751,7 +753,7 @@ onUnmounted(() => {
               data-test="security-detail-update-btn"
               @click="openUpdateAction(selectedImage)">
               <AppIcon name="cloud-download" :size="10" />
-              Update
+              {{ t('securityView.update') }}
             </AppButton>
             <AppButton
               size="none"
@@ -761,7 +763,7 @@ onUnmounted(() => {
               :style="{ color: 'var(--dd-text-secondary)' }"
               data-test="security-detail-containers-link"
               @click="navigateToContainerUpdate(selectedImage)">
-              View in Containers
+              {{ t('securityView.viewInContainers') }}
             </AppButton>
             <ReleaseNotesLink
               v-if="selectedImage.releaseNotes || selectedImage.currentReleaseNotes || selectedImage.releaseLink"
@@ -776,7 +778,7 @@ onUnmounted(() => {
           <!-- Export controls -->
           <div class="px-4 py-3 space-y-2" :style="{ borderBottom: '1px solid var(--dd-border)' }">
             <div class="flex items-center gap-2 flex-wrap">
-              <span class="text-2xs font-semibold uppercase tracking-wide dd-text-muted">Export</span>
+              <span class="text-2xs font-semibold uppercase tracking-wide dd-text-muted">{{ t('securityView.export.label') }}</span>
               <select v-model="selectedVulnExportFormat"
                       class="px-2 py-1 dd-rounded text-2xs font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text">
                 <option value="csv">CSV</option>
@@ -784,11 +786,11 @@ onUnmounted(() => {
               </select>
               <AppButton size="xs" variant="secondary" :disabled="selectedImageVulns.length === 0"
                       @click="downloadVulnReport">
-                Download Report
+                {{ t('securityView.export.downloadReport') }}
               </AppButton>
             </div>
             <div class="flex items-center gap-2 flex-wrap">
-              <span class="text-2xs font-semibold uppercase tracking-wide dd-text-muted">SBOM</span>
+              <span class="text-2xs font-semibold uppercase tracking-wide dd-text-muted">{{ t('securityView.sbom.label') }}</span>
               <select v-model="selectedSbomFormat"
                       class="px-2 py-1 dd-rounded text-2xs font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text"
                       @change="loadDetailSbom">
@@ -797,15 +799,15 @@ onUnmounted(() => {
               </select>
               <AppButton size="xs" variant="secondary" :disabled="detailSbomLoading"
                       @click="loadDetailSbom">
-                {{ detailSbomLoading ? 'Loading...' : 'Refresh' }}
+                {{ detailSbomLoading ? t('securityView.sbom.loadingButton') : t('securityView.sbom.refresh') }}
               </AppButton>
               <AppButton size="xs" variant="secondary" :disabled="!detailSbomDocument"
                       @click="showSbomDocument = !showSbomDocument">
-                {{ showSbomDocument ? 'Hide' : 'View' }}
+                {{ showSbomDocument ? t('securityView.sbom.hide') : t('securityView.sbom.view') }}
               </AppButton>
               <AppButton size="xs" variant="secondary" :disabled="!detailSbomDocument"
                       @click="downloadDetailSbom">
-                Download
+                {{ t('securityView.sbom.download') }}
               </AppButton>
             </div>
 
@@ -817,21 +819,21 @@ onUnmounted(() => {
             <div v-else-if="detailSbomLoading"
                  class="px-2.5 py-1.5 dd-rounded text-2xs-plus dd-text-muted"
                  :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-              Loading SBOM document...
+              {{ t('securityView.sbom.loading') }}
             </div>
             <div v-else-if="detailSbomDocument"
                  class="px-2.5 py-1.5 dd-rounded text-2xs space-y-0.5"
                  :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
               <div class="dd-text-muted">
-                format:
+                {{ t('securityView.sbom.format') }}
                 <span class="dd-text font-mono">{{ selectedSbomFormat }}</span>
               </div>
               <div v-if="typeof detailSbomComponentCount === 'number'" class="dd-text-muted">
-                components:
+                {{ t('securityView.sbom.components') }}
                 <span class="dd-text">{{ detailSbomComponentCount }}</span>
               </div>
               <div v-if="detailSbomGeneratedAt" class="dd-text-muted">
-                generated:
+                {{ t('securityView.sbom.generated') }}
                 <span class="dd-text">{{ formatTimestamp(detailSbomGeneratedAt) }}</span>
               </div>
             </div>
@@ -861,7 +863,7 @@ onUnmounted(() => {
                   <AppIcon name="check" :size="9" class="mr-0.5 shrink-0" />
                   {{ vuln.fixedIn }}
                 </AppBadge>
-                <span v-else class="ml-auto mt-0.5 shrink-0 text-2xs dd-text-muted">No fix</span>
+                <span v-else class="ml-auto mt-0.5 shrink-0 text-2xs dd-text-muted">{{ t('securityView.vuln.noFix') }}</span>
               </div>
               <div
                 v-if="vuln.title || vuln.target || vuln.safePrimaryUrl"
@@ -871,7 +873,7 @@ onUnmounted(() => {
                   {{ vuln.title }}
                 </div>
                 <div v-if="vuln.target" class="text-2xs dd-text-muted">
-                  Target:
+                  {{ t('securityView.vuln.target') }}
                   <span class="font-mono dd-text">{{ vuln.target }}</span>
                 </div>
                 <a
@@ -913,7 +915,7 @@ onUnmounted(() => {
           boxShadow: 'var(--dd-shadow-modal)',
         }">
         <div class="px-4 pt-3 pb-2" :style="{ borderBottom: '1px solid var(--dd-border)' }">
-          <span class="text-2xs-plus font-semibold dd-text">Select container to update</span>
+          <span class="text-2xs-plus font-semibold dd-text">{{ t('securityView.chooser.title') }}</span>
         </div>
         <div class="py-1 max-h-64 overflow-y-auto">
           <AppButton
@@ -943,9 +945,9 @@ onUnmounted(() => {
             :style="{ color: 'var(--dd-text-secondary)' }"
             data-test="security-chooser-view-all"
             @click="navigateToContainerUpdate(chooserSummary!); closeChooser()">
-            View all in Containers
+            {{ t('securityView.viewAllInContainers') }}
           </AppButton>
-          <AppButton size="xs" variant="secondary" @click="closeChooser">Cancel</AppButton>
+          <AppButton size="xs" variant="secondary" @click="closeChooser">{{ t('securityView.chooser.cancel') }}</AppButton>
         </div>
       </div>
     </div>

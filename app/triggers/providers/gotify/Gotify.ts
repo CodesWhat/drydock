@@ -1,5 +1,5 @@
 import { GotifyClient } from 'gotify-client';
-import Trigger, { type TriggerConfiguration } from '../Trigger.js';
+import Trigger, { type BatchRuntimeContext, type TriggerConfiguration } from '../Trigger.js';
 
 interface GotifyConfiguration extends TriggerConfiguration {
   url: string;
@@ -77,10 +77,10 @@ class Gotify extends Trigger<GotifyConfiguration> {
    * @param containers
    * @returns {Promise<*>}
    */
-  async triggerBatch(containers) {
+  async triggerBatch(containers, runtimeContext?: BatchRuntimeContext) {
     return this.client.message.createMessage({
-      title: this.renderBatchTitle(containers),
-      message: this.renderBatchBody(containers),
+      title: this.renderBatchTitle(containers, runtimeContext),
+      message: this.renderBatchBody(containers, runtimeContext),
       priority: this.configuration.priority,
     });
   }

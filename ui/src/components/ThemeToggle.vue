@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { iconButtonIconSizes, iconButtonPixels } from './appIconButtonSizes';
 import { useBreakpoints } from '../composables/useBreakpoints';
 import { useTheme } from '../theme/useTheme';
@@ -11,6 +12,7 @@ const props = withDefaults(
   { size: 'sm' },
 );
 
+const { t } = useI18n();
 const { themeVariant, isDark, setThemeVariant, transitionTheme } = useTheme();
 const { windowNarrow } = useBreakpoints();
 
@@ -60,8 +62,8 @@ function iconColor(id: string) {
     class="flex items-center justify-center rounded-md transition-colors"
     :class="[activeIconColor(), 'hover:dd-bg-elevated']"
     :style="{ width: `${cellSize}px`, height: `${cellSize}px` }"
-    v-tooltip.top="activeVariant.id.charAt(0).toUpperCase() + activeVariant.id.slice(1)"
-    :aria-label="'Theme: ' + activeVariant.id + ' (tap to cycle)'"
+    v-tooltip.top="t('appShell.themeToggle.variantLabel', { label: activeVariant.id.charAt(0).toUpperCase() + activeVariant.id.slice(1) })"
+    :aria-label="t('appShell.themeToggle.mobileLabel', { id: activeVariant.id })"
     @click="cycle($event)"
   >
     <AppIcon :name="activeVariant.icon" :size="iconSize" />
@@ -85,8 +87,8 @@ function iconColor(id: string) {
         class="flex-shrink-0 flex items-center justify-center rounded-md transition-colors"
         :class="[iconColor(v.id), 'hover:dd-bg-elevated']"
         :style="{ width: `${cellSize}px`, height: `${cellSize}px` }"
-        v-tooltip.top="v.id.charAt(0).toUpperCase() + v.id.slice(1)"
-        :aria-label="'Switch to ' + v.id + ' theme'"
+        v-tooltip.top="t('appShell.themeToggle.variantLabel', { label: v.id.charAt(0).toUpperCase() + v.id.slice(1) })"
+        :aria-label="t('appShell.themeToggle.switchTo', { id: v.id })"
         :aria-pressed="String(v.id === themeVariant)"
         @click="v.id === themeVariant ? (expanded = !expanded) : select(v.id, $event)"
       >

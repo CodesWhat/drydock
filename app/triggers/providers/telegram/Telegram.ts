@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { getOutboundHttpTimeoutMs } from '../../../configuration/runtime-defaults.js';
-import Trigger, { type TriggerConfiguration } from '../Trigger.js';
+import Trigger, { type BatchRuntimeContext, type TriggerConfiguration } from '../Trigger.js';
 
 interface TelegramConfiguration extends TriggerConfiguration {
   bottoken: string;
@@ -83,13 +83,13 @@ class Telegram extends Trigger<TelegramConfiguration> {
     return this.sendMessage(`${this.bold(title)}\n\n${this.escape(body)}`);
   }
 
-  async triggerBatch(containers) {
-    const body = this.renderBatchBody(containers);
+  async triggerBatch(containers, runtimeContext?: BatchRuntimeContext) {
+    const body = this.renderBatchBody(containers, runtimeContext);
     if (this.configuration.disabletitle) {
       return this.sendMessage(this.escape(body));
     }
 
-    const title = this.renderBatchTitle(containers);
+    const title = this.renderBatchTitle(containers, runtimeContext);
     return this.sendMessage(`${this.bold(title)}\n\n${this.escape(body)}`);
   }
 

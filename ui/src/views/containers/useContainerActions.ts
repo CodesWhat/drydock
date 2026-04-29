@@ -47,7 +47,7 @@ interface ContainerActionGroup {
 
 type ContainerActionTarget =
   | string
-  | Pick<Container, 'id' | 'name' | 'identityKey' | 'updateOperation'>;
+  | Pick<Container, 'id' | 'name' | 'identityKey' | 'updateOperation' | 'updateEligibility'>;
 
 interface UseContainerActionsInput {
   activeDetailTab: Readonly<Ref<string>>;

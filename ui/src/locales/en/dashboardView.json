@@ -1,0 +1,91 @@
+{
+  "dashboardView": {
+    "loading": "Loading dashboard...",
+    "loadFailed": "Failed to load dashboard",
+    "dragToReorder": "Drag to reorder",
+    "viewAll": "View all →",
+    "editToggle": {
+      "showWidgetPanel": "Show widget panel",
+      "doneCustomizing": "Done customizing",
+      "customize": "Customize dashboard"
+    },
+    "widgetPanel": {
+      "title": "Widgets",
+      "closePanel": "Close panel",
+      "resetToDefault": "Reset to Default"
+    },
+    "confirm": {
+      "updateContainer": {
+        "header": "Update Container",
+        "message": "Update {name} now? This will apply the latest discovered image.",
+        "accept": "Update"
+      },
+      "updateAll": {
+        "header": "Update All Containers",
+        "message": "{count} containers will be updated. Continue?",
+        "accept": "Update All"
+      }
+    },
+    "toast": {
+      "updated": "Updated: {name}",
+      "updateFailed": "Update failed: {name}",
+      "rolledBack": "Rolled back: {name}",
+      "updateError": "Failed to update {name}",
+      "updateAllError": "Failed to update all containers"
+    },
+    "recentUpdates": {
+      "title": "Updates Available",
+      "updateAll": "Update all",
+      "noUpdates": "No updates available",
+      "releaseNotes": "Release notes",
+      "securityBlocked": "Security blocked",
+      "updateContainer": "Update container",
+      "compactSingle": "{count} update available",
+      "compactPlural": "{count} updates available",
+      "status": {
+        "queued": "Queued",
+        "updating": "Updating"
+      },
+      "columns": {
+        "container": "Container",
+        "version": "Version",
+        "type": "Type",
+        "actions": "Actions"
+      }
+    },
+    "hostStatus": {
+      "title": "Host Status",
+      "connected": "Connected",
+      "disconnected": "Disconnected",
+      "containerCount": "{running}/{total} containers"
+    },
+    "resourceUsage": {
+      "title": "Resource Usage",
+      "totalUsage": "Total Usage ({watched} watched)",
+      "cpu": "CPU",
+      "memory": "Memory",
+      "topCpu": "Top CPU",
+      "topMemory": "Top Memory",
+      "noCpuData": "No live CPU data",
+      "noMemoryData": "No live memory data"
+    },
+    "securityOverview": {
+      "title": "Security Overview",
+      "images": "images",
+      "clean": "Clean",
+      "issues": "Issues",
+      "notScanned": "Not Scanned",
+      "severityBreakdown": "Severity Breakdown",
+      "critical": "{count} Critical",
+      "high": "{count} High",
+      "medium": "{count} Medium",
+      "low": "{count} Low",
+      "topVulnerabilities": "Top Vulnerabilities",
+      "noVulnerabilities": "No vulnerabilities reported"
+    },
+    "updateBreakdown": {
+      "title": "Update Breakdown",
+      "noUpdates": "No updates to categorize"
+    }
+  }
+}

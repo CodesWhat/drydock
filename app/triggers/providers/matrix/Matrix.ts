@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { getOutboundHttpTimeoutMs } from '../../../configuration/runtime-defaults.js';
-import Trigger, { type TriggerConfiguration } from '../Trigger.js';
+import Trigger, { type BatchRuntimeContext, type TriggerConfiguration } from '../Trigger.js';
 
 interface MatrixConfiguration extends TriggerConfiguration {
   url: string;
@@ -43,8 +43,8 @@ class Matrix extends Trigger<MatrixConfiguration> {
     return this.postMessage(this.composeMessage(container));
   }
 
-  async triggerBatch(containers) {
-    return this.postMessage(this.composeBatchMessage(containers));
+  async triggerBatch(containers, runtimeContext?: BatchRuntimeContext) {
+    return this.postMessage(this.composeBatchMessage(containers, runtimeContext));
   }
 
   buildMessageEndpoint(txnId) {

@@ -12,7 +12,6 @@ import {
 } from '../model/update-eligibility.js';
 import * as registry from '../registry/index.js';
 import * as updateOperationStore from '../store/update-operation.js';
-import Trigger from '../triggers/providers/Trigger.js';
 
 interface UpdateQueueBatchMetadata {
   batchId: string;

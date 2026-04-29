@@ -1,5 +1,8 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n';
 import { maturityColor } from '../../utils/display';
+
+const { t } = useI18n();
 
 const props = withDefaults(
   defineProps<{
@@ -10,12 +13,16 @@ const props = withDefaults(
   { size: 'md' },
 );
 
-function maturityLabel(maturity: 'fresh' | 'settled' | null): 'NEW' | 'MATURE' {
-  return maturity === 'fresh' ? 'NEW' : 'MATURE';
+function maturityLabel(maturity: 'fresh' | 'settled' | null): string {
+  return maturity === 'fresh'
+    ? t('containerComponents.maturityBadge.new')
+    : t('containerComponents.maturityBadge.mature');
 }
 
 function fallbackTooltip(maturity: 'fresh' | 'settled' | null): string {
-  return maturity === 'fresh' ? 'New update' : 'Mature update';
+  return maturity === 'fresh'
+    ? t('containerComponents.maturityBadge.newTooltip')
+    : t('containerComponents.maturityBadge.matureTooltip');
 }
 </script>
 

@@ -380,6 +380,96 @@ test('producer lifecycle should connect on init and disconnect on deregister', a
   expect(disconnectMock).toHaveBeenCalledTimes(1);
 });
 
+test('triggerBatch should send single envelope message when runtimeContext.title is set', async () => {
+  const sendMock = vi.fn((params) => params);
+  kafka.producer = { send: sendMock };
+  kafka.configuration = { topic: 'sec-topic' };
+  const containers = [{ name: 'app1' }];
+
+  await kafka.triggerBatch(containers, {
+    title: 'Security scan: 1 finding',
+    eventKind: 'security-alert-digest',
+  });
+
+  expect(sendMock).toHaveBeenCalledWith({
+    topic: 'sec-topic',
+    messages: [
+      {
+        value: JSON.stringify({
+          eventKind: 'security-alert-digest',
+          title: 'Security scan: 1 finding',
+          body: '',
+          containers,
+        }),
+      },
+    ],
+  });
+});
+
+test('triggerBatch should send single envelope message when runtimeContext.body is set', async () => {
+  const sendMock = vi.fn((params) => params);
+  kafka.producer = { send: sendMock };
+  kafka.configuration = { topic: 'sec-topic' };
+  const containers = [{ name: 'app1' }];
+
+  await kafka.triggerBatch(containers, { body: '- app1: 1 critical' });
+
+  expect(sendMock).toHaveBeenCalledWith({
+    topic: 'sec-topic',
+    messages: [
+      {
+        value: JSON.stringify({
+          eventKind: undefined,
+          title: '',
+          body: '- app1: 1 critical',
+          containers,
+        }),
+      },
+    ],
+  });
+});
+
+test('triggerBatch should send single envelope message when both title and body are set', async () => {
+  const sendMock = vi.fn((params) => params);
+  kafka.producer = { send: sendMock };
+  kafka.configuration = { topic: 'sec-topic' };
+  const containers = [{ name: 'app1' }, { name: 'app2' }];
+  const runtimeContext = {
+    title: 'Security scan: 2 findings',
+    body: '- app1: 1 critical\n- app2: 1 high',
+    eventKind: 'security-alert-digest',
+  };
+
+  const result = await kafka.triggerBatch(containers, runtimeContext);
+
+  expect(sendMock).toHaveBeenCalledWith({
+    topic: 'sec-topic',
+    messages: [
+      {
+        value: JSON.stringify({
+          eventKind: 'security-alert-digest',
+          title: 'Security scan: 2 findings',
+          body: '- app1: 1 critical\n- app2: 1 high',
+          containers,
+        }),
+      },
+    ],
+  });
+  expect(result).toStrictEqual({
+    topic: 'sec-topic',
+    messages: [
+      {
+        value: JSON.stringify({
+          eventKind: 'security-alert-digest',
+          title: 'Security scan: 2 findings',
+          body: '- app1: 1 critical\n- app2: 1 high',
+          containers,
+        }),
+      },
+    ],
+  });
+});
+
 test('deregisterComponent should be a no-op when producer was never initialized', async () => {
   await expect(kafka.deregister()).resolves.toBe(kafka);
 });

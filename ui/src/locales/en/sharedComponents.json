@@ -1,0 +1,55 @@
+{
+  "sharedComponents": {
+    "confirmDialog": {
+      "cancel": "Cancel",
+      "confirm": "Confirm"
+    },
+    "copyableTag": {
+      "copied": "Copied!",
+      "clickToCopy": "Click to copy"
+    },
+    "dataCardGrid": {
+      "selectItem": "Select {name}"
+    },
+    "dataFilterBar": {
+      "filters": "Filters",
+      "toggleFilters": "Toggle filters",
+      "viewMode": "View mode",
+      "viewModeLabel": "{label} view"
+    },
+    "dataListAccordion": {
+      "toggleDetails": "Toggle {name} details",
+      "selectItem": "Select {name}"
+    },
+    "dataTable": {
+      "actions": "Actions",
+      "resizeColumn": "Resize column"
+    },
+    "detailPanel": {
+      "openFullPage": "Open full page view",
+      "closePanel": "Close details panel",
+      "ariaLabel": "Detail panel"
+    },
+    "emptyState": {
+      "clearFilters": "Clear all filters"
+    },
+    "logViewer": {
+      "emptyMessage": "No log entries found.",
+      "loadingMessage": "Loading logs..."
+    },
+    "scanProgressBanner": {
+      "scanning": "Scanning {done}/{total} containers..."
+    },
+    "scanProgressText": {
+      "scanning": "Scanning {done}/{total}..."
+    },
+    "securityEmptyState": {
+      "noDataTitle": "No vulnerability data yet",
+      "noDataBody": "Run a scan to check your containers for known vulnerabilities",
+      "filteredTitle": "No images match your filters",
+      "clearFilters": "Clear all filters",
+      "setupGuide": "Setup Guide",
+      "scanNow": "Scan Now"
+    }
+  }
+}

@@ -1,7 +1,7 @@
 import type {
   ContainerUpdateOperationKind,
+  ContainerUpdateOperationStatus,
   ActiveContainerUpdateOperationPhase,
-  ActiveContainerUpdateOperationStatus,
 } from './update-operation';
 
 export type UpdateBlockerReason =
@@ -82,7 +82,7 @@ export interface ContainerReleaseNotes {
 export interface ContainerUpdateOperation {
   id: string;
   kind?: ContainerUpdateOperationKind;
-  status: ActiveContainerUpdateOperationStatus;
+  status: ContainerUpdateOperationStatus;
   phase: ActiveContainerUpdateOperationPhase;
   updatedAt: string;
   batchId?: string;

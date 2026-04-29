@@ -18,6 +18,9 @@ import {
 import { preferences } from '../../preferences/store';
 import { usePreference } from '../../preferences/usePreference';
 import type { AppLogEntry } from '../../types/log-entry';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 type TailOption = 100 | 500 | 1000 | 'all';
 
@@ -219,7 +222,7 @@ async function downloadLogs(): Promise<void> {
     const fileName = `${sanitizeFileName(props.containerName)}-logs.log`;
     downloadBlob(logBlob, fileName);
   } catch {
-    downloadError.value = 'Unable to download logs';
+    downloadError.value = t('containerComponents.containerLogs.downloadError');
   } finally {
     downloadInProgress.value = false;
   }
@@ -275,7 +278,7 @@ onBeforeUnmount(() => {
     >
       <template #toolbar-left>
         <AppIcon name="terminal" :size="12" class="dd-text-muted" />
-        <span class="text-2xs-plus font-semibold uppercase tracking-wider dd-text-muted">Container Logs</span>
+        <span class="text-2xs-plus font-semibold uppercase tracking-wider dd-text-muted">{{ t('containerComponents.containerLogs.title') }}</span>
         <span class="text-2xs-plus font-mono text-drydock-secondary truncate">{{ props.containerName }}</span>
       </template>
 
@@ -289,7 +292,7 @@ onBeforeUnmount(() => {
         >
           <span class="inline-flex items-center gap-1">
             <AppIcon name="download" :size="11" />
-            Download
+            {{ t('containerComponents.containerLogs.download') }}
           </span>
         </AppButton>
       </template>
@@ -333,7 +336,7 @@ onBeforeUnmount(() => {
           class="px-2 py-1.5 dd-rounded text-2xs font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text"
         >
           <option v-for="option in levelOptions" :key="option" :value="option">
-            {{ option === 'all' ? 'All Levels' : option }}
+            {{ option === 'all' ? t('containerComponents.containerLogs.allLevels') : option }}
           </option>
         </select>
 

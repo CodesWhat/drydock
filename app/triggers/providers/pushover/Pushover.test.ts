@@ -313,6 +313,32 @@ test('sendMessage should allow undefined onerror payloads', async () => {
   });
 });
 
+test('renderBatchBody should return runtimeContext.body verbatim when set', async () => {
+  pushover.configuration = configurationValid;
+  const containers = [
+    {
+      name: 'app1',
+      updateKind: { kind: 'tag', localValue: '1.0.0', remoteValue: '2.0.0' },
+    },
+  ];
+  const runtimeContext = { body: '- app1: 1 critical finding' };
+  const result = pushover.renderBatchBody(containers as any, runtimeContext as any);
+  expect(result).toBe('- app1: 1 critical finding');
+});
+
+test('renderBatchBody should render per-container list when runtimeContext.body is not set', async () => {
+  pushover.configuration = configurationValid;
+  const containers = [
+    {
+      name: 'app1',
+      updateKind: { kind: 'tag', localValue: '1.0.0', remoteValue: '2.0.0' },
+    },
+  ];
+  const result = pushover.renderBatchBody(containers as any, undefined);
+  expect(result).toContain('app1');
+  expect(result).toContain('- ');
+});
+
 test('sendMessage should fallback to unknown error when callback error cannot be stringified', async () => {
   vi.resetModules();
   vi.doMock('pushover-notifications', () => ({

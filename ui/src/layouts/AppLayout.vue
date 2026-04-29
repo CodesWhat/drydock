@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import whaleLogo from '@/assets/whale-logo.png?inline';
 import AnnouncementBanner from '@/components/AnnouncementBanner.vue';
@@ -27,6 +28,7 @@ import { getAllWatchers } from '@/services/watcher';
 import { ROUTES } from '@/router/routes';
 import { useTheme } from '@/theme/useTheme';
 
+const { t } = useI18n();
 const router = useRouter();
 const route = useRoute();
 const { icon } = useIcons();
@@ -111,41 +113,45 @@ const navGroups = computed<NavGroup[]>(() => [
   {
     label: '',
     items: [
-      { label: 'Dashboard', icon: 'dashboard', route: ROUTES.DASHBOARD },
+      { label: t('appShell.layout.nav.dashboard'), icon: 'dashboard', route: ROUTES.DASHBOARD },
       {
-        label: 'Containers',
+        label: t('appShell.layout.nav.containers'),
         icon: 'containers',
         route: ROUTES.CONTAINERS,
         badge: containerCount.value || undefined,
         badgeColor: 'blue',
       },
       {
-        label: 'Security',
+        label: t('appShell.layout.nav.security'),
         icon: 'security',
         route: ROUTES.SECURITY,
         badge: securityIssueCount.value || undefined,
         badgeColor: 'red',
       },
-      { label: 'Audit', icon: 'audit', route: ROUTES.AUDIT },
-      { label: 'System Logs', icon: 'logs', route: ROUTES.LOGS },
+      { label: t('appShell.layout.nav.audit'), icon: 'audit', route: ROUTES.AUDIT },
+      { label: t('appShell.layout.nav.systemLogs'), icon: 'logs', route: ROUTES.LOGS },
     ],
   },
   {
-    label: 'Manage',
+    label: t('appShell.layout.nav.manageGroup'),
     items: [
-      { label: 'Hosts', icon: 'servers', route: ROUTES.SERVERS },
-      { label: 'Registries', icon: 'registries', route: ROUTES.REGISTRIES },
-      { label: 'Watchers', icon: 'watchers', route: ROUTES.WATCHERS },
+      { label: t('appShell.layout.nav.hosts'), icon: 'servers', route: ROUTES.SERVERS },
+      { label: t('appShell.layout.nav.registries'), icon: 'registries', route: ROUTES.REGISTRIES },
+      { label: t('appShell.layout.nav.watchers'), icon: 'watchers', route: ROUTES.WATCHERS },
     ],
   },
   {
-    label: 'Settings',
+    label: t('appShell.layout.nav.settingsGroup'),
     items: [
-      { label: 'General', icon: 'config', route: ROUTES.CONFIG },
-      { label: 'Notifications', icon: 'notifications', route: ROUTES.NOTIFICATIONS },
-      { label: 'Triggers', icon: 'triggers', route: ROUTES.TRIGGERS },
-      { label: 'Auth', icon: 'auth', route: ROUTES.AUTH },
-      { label: 'Agents', icon: 'agents', route: ROUTES.AGENTS },
+      { label: t('appShell.layout.nav.general'), icon: 'config', route: ROUTES.CONFIG },
+      {
+        label: t('appShell.layout.nav.notifications'),
+        icon: 'notifications',
+        route: ROUTES.NOTIFICATIONS,
+      },
+      { label: t('appShell.layout.nav.triggers'), icon: 'triggers', route: ROUTES.TRIGGERS },
+      { label: t('appShell.layout.nav.auth'), icon: 'auth', route: ROUTES.AUTH },
+      { label: t('appShell.layout.nav.agents'), icon: 'agents', route: ROUTES.AGENTS },
     ],
   },
 ]);
@@ -747,10 +753,12 @@ const legacyConfigBannerTitle = computed(() => {
   const envCount = legacyInputSummary.value?.env.total ?? 0;
   const labelCount = legacyInputSummary.value?.label.total ?? 0;
   const total = envCount + labelCount;
-  return `${total} legacy configuration alias${total !== 1 ? 'es' : ''} detected`;
+  return total !== 1
+    ? t('appShell.banners.legacyConfigTitlePlural', { total })
+    : t('appShell.banners.legacyConfigTitleSingular', { total });
 });
-const legacyApiPathBannerTitle = computed(
-  () => `${legacyInputSummary.value?.api?.total ?? 0} legacy API paths detected`,
+const legacyApiPathBannerTitle = computed(() =>
+  t('appShell.banners.legacyApiPathTitle', { total: legacyInputSummary.value?.api?.total ?? 0 }),
 );
 const hasVisibleAnnouncementBanners = computed(
   () =>
@@ -1135,17 +1143,21 @@ async function checkConnectivity() {
 }
 
 const connectionOverlayTitle = computed(() =>
-  selfUpdateInProgress.value ? 'Applying Update' : 'Connection Lost',
+  selfUpdateInProgress.value
+    ? t('appShell.layout.connection.applyingUpdateTitle')
+    : t('appShell.layout.connection.lostTitle'),
 );
 const connectionOverlayMessage = computed(() =>
   selfUpdateInProgress.value
-    ? `Drydock is restarting after a self-update${
-        selfUpdateOperationId.value ? ` (${selfUpdateOperationId.value.slice(0, 8)})` : ''
-      }. Reconnecting when the service is back...`
-    : 'The server is unreachable. Waiting for it to come back online...',
+    ? t('appShell.layout.connection.restartingMessage', {
+        opId: selfUpdateOperationId.value ? ` (${selfUpdateOperationId.value.slice(0, 8)})` : '',
+      })
+    : t('appShell.layout.connection.lostMessage'),
 );
 const connectionOverlayStatus = computed(() =>
-  selfUpdateInProgress.value ? 'Restarting service' : 'Reconnecting',
+  selfUpdateInProgress.value
+    ? t('appShell.layout.connection.restartingService')
+    : t('appShell.layout.connection.reconnecting'),
 );
 
 function rawContainerHasSecurityIssues(container: Record<string, unknown>): boolean {
@@ -1398,8 +1410,8 @@ onUnmounted(() => {
                 icon="xmark"
                 size="xs"
                 variant="muted"
-                tooltip="Close menu"
-                aria-label="Close menu"
+                :tooltip="t('appShell.layout.sidebar.closeMobileMenu')"
+                :aria-label="t('appShell.layout.sidebar.closeMobileMenu')"
                 @click="isMobileMenuOpen = false"
         />
       </div>
@@ -1452,14 +1464,14 @@ onUnmounted(() => {
 
       <!-- Sidebar search -->
       <div class="shrink-0 pt-3 pb-3" :class="isCollapsed ? 'px-2' : 'px-3'">
-        <AppButton size="none" variant="plain" weight="none" aria-label="Search"
+        <AppButton size="none" variant="plain" weight="none" :aria-label="t('appShell.layout.sidebar.searchAriaLabel')"
                 class="w-full flex items-center dd-rounded text-xs transition-colors dd-bg-card dd-text-secondary hover:dd-bg-elevated hover:dd-text"
                 :class="isCollapsed ? 'justify-center py-2.5' : 'gap-2 px-3 py-2'"
                 :style="{ border: 'none' }"
                 @click="showSearch = true; isMobileMenuOpen = false">
           <AppIcon name="search" :size="12" class="shrink-0" />
           <template v-if="!isCollapsed">
-            <span class="sidebar-label">Search</span>
+            <span class="sidebar-label">{{ t('appShell.layout.sidebar.searchButton') }}</span>
             <kbd class="sidebar-label ml-auto px-1.5 py-0.5 dd-rounded-sm text-2xs font-medium dd-text-secondary" style="background: var(--dd-border);">
               <span class="text-3xs">&#8984;</span>K
             </kbd>
@@ -1474,16 +1486,16 @@ onUnmounted(() => {
                 icon="info"
                 size="xs"
                 variant="muted"
-                tooltip="About Drydock"
-                aria-label="About Drydock"
+                :tooltip="t('appShell.layout.sidebar.aboutTooltip')"
+                :aria-label="t('appShell.layout.sidebar.aboutAriaLabel')"
                 @click="showAbout = true"
         />
         <AppIconButton v-if="!isMobile"
                 :icon="sidebarCollapsed ? 'sidebar-expand' : 'sidebar-collapse'"
                 size="xs"
                 variant="muted"
-                :tooltip="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
-                :aria-label="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
+                :tooltip="sidebarCollapsed ? t('appShell.layout.sidebar.expandSidebar') : t('appShell.layout.sidebar.collapseSidebar')"
+                :aria-label="sidebarCollapsed ? t('appShell.layout.sidebar.expandSidebar') : t('appShell.layout.sidebar.collapseSidebar')"
                 @click="sidebarCollapsed = !sidebarCollapsed"
         />
       </div>
@@ -1501,8 +1513,8 @@ onUnmounted(() => {
         <!-- Left: hamburger + breadcrumb -->
         <div class="flex items-center gap-3">
           <AppButton size="none" variant="plain" weight="none" v-if="isMobile"
-                  :tooltip="isMobileMenuOpen ? 'Close menu' : 'Open menu'"
-                  :aria-label="isMobileMenuOpen ? 'Close menu' : 'Open menu'"
+                  :tooltip="isMobileMenuOpen ? t('appShell.layout.topbar.closeMenu') : t('appShell.layout.topbar.openMenu')"
+                  :aria-label="isMobileMenuOpen ? t('appShell.layout.topbar.closeMenu') : t('appShell.layout.topbar.openMenu')"
                   :aria-expanded="String(isMobileMenuOpen)"
                   class="flex flex-col items-center justify-center w-8 h-8 gap-1 rounded-md transition-colors hover:dd-bg-elevated"
                   @click="isMobileMenuOpen = !isMobileMenuOpen">
@@ -1529,7 +1541,7 @@ onUnmounted(() => {
           <NotificationBell />
 
           <div class="relative user-menu-wrapper">
-            <AppButton size="none" variant="plain" weight="none" tooltip="User menu" aria-label="User menu"
+            <AppButton size="none" variant="plain" weight="none" :tooltip="t('appShell.layout.topbar.userMenu')" :aria-label="t('appShell.layout.topbar.userMenu')"
                     :aria-expanded="String(showUserMenu)"
                     class="flex items-center gap-2 dd-rounded px-1.5 py-1 transition-colors hover:dd-bg-elevated"
                     @click="toggleUserMenu">
@@ -1551,13 +1563,13 @@ onUnmounted(() => {
                 </div>
                 <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text" @click="showUserMenu = false; router.push({ path: ROUTES.CONFIG, query: { tab: 'profile' } })">
                   <AppIcon name="user" :size="11" class="dd-text-muted" />
-                  Profile
+                  {{ t('appShell.layout.topbar.profile') }}
                 </AppButton>
                 <div class="my-0.5" :style="{ borderTop: '1px solid var(--dd-border)' }" />
                 <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2" style="color: var(--dd-danger);"
                         @click="handleSignOut">
                   <AppIcon name="sign-out" :size="11" />
-                  Sign out
+                  {{ t('appShell.layout.topbar.signOut') }}
                 </AppButton>
               </div>
             </Transition>
@@ -1572,10 +1584,10 @@ onUnmounted(() => {
         <AnnouncementBanner
           v-if="showOidcHttpCompatibilityBanner"
           data-testid="oidc-http-compat-banner"
-          title="HTTP OIDC discovery detected"
-          permanent-dismiss-label="Don't show again"
+          :title="t('appShell.banners.oidcHttpTitle')"
+          :permanent-dismiss-label="t('appShell.banners.dontShowAgain')"
           link-href="https://getdrydock.com/docs/deprecations#oidc-http-discovery"
-          link-label="View migration guide"
+          :link-label="t('appShell.announcementBanner.defaultLinkLabel')"
           :style="stackedBannerInlineStyle"
           @dismiss="dismissOidcHttpBannerForSession"
           @dismiss-permanent="dismissOidcHttpBannerPermanently">
@@ -1590,10 +1602,10 @@ onUnmounted(() => {
         <AnnouncementBanner
           v-if="showLegacyHashDeprecationBanner"
           data-testid="sha-hash-deprecation-banner"
-          title="Legacy password hash detected"
-          permanent-dismiss-label="Don't show again"
+          :title="t('appShell.banners.legacyHashTitle')"
+          :permanent-dismiss-label="t('appShell.banners.dontShowAgain')"
           link-href="https://getdrydock.com/docs/deprecations#legacy-password-hashes"
-          link-label="View migration guide"
+          :link-label="t('appShell.announcementBanner.defaultLinkLabel')"
           :style="stackedBannerInlineStyle"
           @dismiss="dismissLegacyHashBannerForSession"
           @dismiss-permanent="dismissLegacyHashBannerPermanently">
@@ -1605,9 +1617,9 @@ onUnmounted(() => {
           v-if="showLegacyConfigDeprecationBanner"
           data-testid="legacy-config-deprecation-banner"
           :title="legacyConfigBannerTitle"
-          permanent-dismiss-label="Don't show again"
+          :permanent-dismiss-label="t('appShell.banners.dontShowAgain')"
           link-href="https://getdrydock.com/docs/deprecations#legacy-env-vars"
-          link-label="View migration guide"
+          :link-label="t('appShell.announcementBanner.defaultLinkLabel')"
           :style="stackedBannerInlineStyle"
           @dismiss="legacyConfigDeprecationBanner.dismissForSession"
           @dismiss-permanent="legacyConfigDeprecationBanner.dismissPermanently">
@@ -1626,10 +1638,10 @@ onUnmounted(() => {
           <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">DD_NOTIFICATION_*</code>
           (see the migration guide for the full rename map).
           <span v-if="legacyEnvKeysPreview" class="block mt-1 truncate">
-            Env keys ({{ legacyInputSummary?.env.total }}): {{ legacyEnvKeysPreview }}
+            {{ t('appShell.banners.envKeysLabel', { count: legacyInputSummary?.env.total, keys: legacyEnvKeysPreview }) }}
           </span>
           <span v-if="legacyLabelKeysPreview" class="block mt-1 truncate">
-            Label keys ({{ legacyInputSummary?.label.total }}): {{ legacyLabelKeysPreview }}
+            {{ t('appShell.banners.labelKeysLabel', { count: legacyInputSummary?.label.total, keys: legacyLabelKeysPreview }) }}
           </span>
         </AnnouncementBanner>
 
@@ -1637,9 +1649,9 @@ onUnmounted(() => {
           v-if="showLegacyApiPathDeprecationBanner"
           data-testid="legacy-api-path-deprecation-banner"
           :title="legacyApiPathBannerTitle"
-          permanent-dismiss-label="Don't show again"
+          :permanent-dismiss-label="t('appShell.banners.dontShowAgain')"
           link-href="https://getdrydock.com/docs/deprecations#unversioned-api-paths"
-          link-label="View migration guide"
+          :link-label="t('appShell.announcementBanner.defaultLinkLabel')"
           :style="stackedBannerInlineStyle"
           @dismiss="legacyApiPathDeprecationBanner.dismissForSession"
           @dismiss-permanent="legacyApiPathDeprecationBanner.dismissPermanently">
@@ -1649,17 +1661,17 @@ onUnmounted(() => {
           <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">/api/*</code>
           aliases are removed in v1.6.0.
           <span v-if="legacyApiPathKeysPreview" class="block mt-1 truncate">
-            API paths ({{ legacyInputSummary?.api?.total }}): {{ legacyApiPathKeysPreview }}
+            {{ t('appShell.banners.apiPathsLabel', { count: legacyInputSummary?.api?.total, keys: legacyApiPathKeysPreview }) }}
           </span>
         </AnnouncementBanner>
 
         <AnnouncementBanner
           v-if="showCurlHealthcheckDeprecationBanner"
           data-testid="curl-healthcheck-deprecation-banner"
-          title="Custom curl healthcheck override detected"
-          permanent-dismiss-label="Don't show again"
+          :title="t('appShell.banners.curlHealthcheckTitle')"
+          :permanent-dismiss-label="t('appShell.banners.dontShowAgain')"
           link-href="https://getdrydock.com/docs/deprecations#curl-healthcheck-override"
-          link-label="View migration guide"
+          :link-label="t('appShell.announcementBanner.defaultLinkLabel')"
           :style="stackedBannerInlineStyle"
           @dismiss="curlHealthcheckDeprecationBanner.dismissForSession"
           @dismiss-permanent="curlHealthcheckDeprecationBanner.dismissPermanently">
@@ -1672,7 +1684,7 @@ onUnmounted(() => {
           <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">/bin/healthcheck</code>
           for custom intervals.
           <span v-if="curlHealthcheckOverrideSummary?.commandPreview" class="block mt-1 truncate">
-            Healthcheck command: {{ curlHealthcheckOverrideSummary.commandPreview }}
+            {{ t('appShell.banners.healthcheckCommandLabel', { command: curlHealthcheckOverrideSummary.commandPreview }) }}
           </span>
         </AnnouncementBanner>
       </div>
@@ -1701,8 +1713,8 @@ onUnmounted(() => {
                     icon="xmark"
                     size="xs"
                     variant="muted"
-                    tooltip="Close"
-                    aria-label="Close"
+                    :tooltip="t('appShell.layout.about.close')"
+                    :aria-label="t('appShell.layout.about.close')"
                     class="absolute top-3 right-3 z-10"
                     @click="showAbout = false"
             />
@@ -1711,8 +1723,8 @@ onUnmounted(() => {
                 <img :src="whaleLogo" alt="Drydock" class="h-10 w-[65px] absolute top-1 about-swim"
                      :style="isDark ? { filter: 'invert(1)' } : {}" />
               </div>
-              <h2 id="about-dialog-title" class="text-base font-bold dd-text">Drydock</h2>
-              <span class="text-2xs-plus dd-text-muted mt-0.5">Docker Container Update Manager</span>
+              <h2 id="about-dialog-title" class="text-base font-bold dd-text">{{ t('appShell.layout.about.title') }}</h2>
+              <span class="text-2xs-plus dd-text-muted mt-0.5">{{ t('appShell.layout.about.subtitle') }}</span>
               <span v-if="appVersion" class="badge text-2xs font-semibold mt-2 dd-bg-elevated dd-text-secondary">v{{ appVersion }}</span>
             </div>
             <div class="px-6 pb-5 flex flex-col gap-2"
@@ -1721,17 +1733,17 @@ onUnmounted(() => {
                 <a href="https://getdrydock.com" target="_blank" rel="noopener"
                    class="flex items-center gap-2.5 px-3 py-2 dd-rounded text-xs font-medium transition-colors dd-text-secondary hover:dd-text hover:dd-bg-elevated no-underline">
                   <AppIcon name="book" :size="12" class="dd-text-muted" />
-                  Documentation
+                  {{ t('appShell.layout.about.documentation') }}
                 </a>
                 <a href="https://github.com/CodesWhat/drydock" target="_blank" rel="noopener"
                    class="flex items-center gap-2.5 px-3 py-2 dd-rounded text-xs font-medium transition-colors dd-text-secondary hover:dd-text hover:dd-bg-elevated no-underline">
                   <AppIcon name="github" :size="12" class="dd-text-muted" />
-                  GitHub
+                  {{ t('appShell.layout.about.github') }}
                 </a>
                 <a href="https://github.com/CodesWhat/drydock/blob/main/CHANGELOG.md" target="_blank" rel="noopener"
                    class="flex items-center gap-2.5 px-3 py-2 dd-rounded text-xs font-medium transition-colors dd-text-secondary hover:dd-text hover:dd-bg-elevated no-underline">
                   <AppIcon name="recent-updates" :size="12" class="dd-text-muted" />
-                  Changelog
+                  {{ t('appShell.layout.about.changelog') }}
                 </a>
               </div>
             </div>
@@ -1749,7 +1761,7 @@ onUnmounted(() => {
              @pointerdown.self="showSearch = false">
           <div role="dialog"
                aria-modal="true"
-               aria-label="Search"
+               :aria-label="t('appShell.layout.search.ariaLabel')"
                class="relative w-full max-w-[var(--dd-layout-search-max-width)] dd-rounded-lg overflow-hidden shadow-2xl"
                :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }">
             <div class="flex items-center gap-3 px-4 py-3"
@@ -1757,8 +1769,8 @@ onUnmounted(() => {
               <AppIcon name="search" :size="14" class="dd-text-muted" />
               <input ref="searchInput" v-model="searchQuery"
                      type="text"
-                     aria-label="Search"
-                     placeholder="Jump to pages, containers, agents, triggers..."
+                     :aria-label="t('appShell.layout.search.ariaLabel')"
+                     :placeholder="t('appShell.layout.search.placeholder')"
                      class="flex-1 bg-transparent text-sm dd-text font-mono outline-none placeholder:dd-text-muted"
                      @keydown.escape="showSearch = false"
                      @keydown="handleSearchInputKeydown" />
@@ -1781,7 +1793,7 @@ onUnmounted(() => {
                 <span class="text-3xs opacity-80">{{ searchScopeCounts[scopeOption.id] }}</span>
               </AppButton>
               <span class="ml-auto text-2xs dd-text-muted">
-                {{ searchResults.length }} shown
+                {{ t('appShell.layout.search.shown', { count: searchResults.length }) }}
               </span>
             </div>
             <div class="max-h-[360px] overflow-y-auto py-1">
@@ -1814,28 +1826,28 @@ onUnmounted(() => {
               </template>
               <div v-if="searchResults.length === 0"
                    class="px-4 py-6 text-center text-xs dd-text-muted">
-                <span v-if="sidebarDataLoading || searchResourcesLoading">Refreshing search index...</span>
-                <span v-else-if="parsedSearchQuery.text">No matches for "{{ parsedSearchQuery.text }}".</span>
-                <span v-else>Type to search pages, containers, agents, triggers, watchers, and settings.</span>
+                <span v-if="sidebarDataLoading || searchResourcesLoading">{{ t('appShell.layout.search.refreshing') }}</span>
+                <span v-else-if="parsedSearchQuery.text">{{ t('appShell.layout.search.noMatches', { query: parsedSearchQuery.text }) }}</span>
+                <span v-else>{{ t('appShell.layout.search.hint') }}</span>
               </div>
             </div>
             <div class="px-4 py-2.5 flex items-center justify-between text-2xs dd-text-muted"
                  :style="{ borderTop: '1px solid var(--dd-border)' }">
               <span>
-                <span v-if="scopePrefixLabel">Prefix scope active; use </span>
+                <span v-if="scopePrefixLabel">{{ t('appShell.layout.search.prefixScopeHint') }}</span>
                 <span v-else>
-                  Type
+                  {{ t('appShell.layout.search.typeHint') }}
                   <kbd class="px-1 py-0.5 dd-rounded-sm dd-bg-elevated">/</kbd>,
                   <kbd class="px-1 py-0.5 dd-rounded-sm dd-bg-elevated">@</kbd>, or
                   <kbd class="px-1 py-0.5 dd-rounded-sm dd-bg-elevated">#</kbd>; use
                 </span>
                 <kbd class="px-1 py-0.5 dd-rounded-sm dd-bg-elevated">Tab</kbd>
-                <span> to change scope</span>
+                <span>{{ t('appShell.layout.search.useTab') }}</span>
               </span>
               <span>
-                <kbd class="px-1 py-0.5 dd-rounded-sm dd-bg-elevated">↑↓</kbd> move
+                <kbd class="px-1 py-0.5 dd-rounded-sm dd-bg-elevated">↑↓</kbd> {{ t('appShell.layout.search.moveHint') }}
                 ·
-                <kbd class="px-1 py-0.5 dd-rounded-sm dd-bg-elevated">Enter</kbd> open
+                <kbd class="px-1 py-0.5 dd-rounded-sm dd-bg-elevated">Enter</kbd> {{ t('appShell.layout.search.openHint') }}
               </span>
             </div>
           </div>

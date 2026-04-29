@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRoute } from 'vue-router';
 import AppBadge from '../components/AppBadge.vue';
 import AppIconButton from '../components/AppIconButton.vue';
@@ -16,6 +17,8 @@ import {
   targetLabel,
 } from '../utils/audit-helpers';
 import { resolveAuditViewModeFromQuery } from './auditViewMode';
+
+const { t } = useI18n();
 
 const actionTypes = [
   'update-available',
@@ -154,13 +157,13 @@ function formatTimestamp(ts: string) {
   }
 }
 
-const tableColumns = [
-  { key: 'timestamp', label: 'Time', width: '15%', sortable: false },
-  { key: 'action', label: 'Event', width: '20%', sortable: false },
-  { key: 'containerName', label: 'Target', width: '99%', sortable: false },
-  { key: 'status', label: 'Status', sortable: false },
-  { key: 'details', label: 'Details', align: 'text-right', sortable: false },
-];
+const tableColumns = computed(() => [
+  { key: 'timestamp', label: t('auditView.columns.time'), width: '15%', sortable: false },
+  { key: 'action', label: t('auditView.columns.event'), width: '20%', sortable: false },
+  { key: 'containerName', label: t('auditView.columns.target'), width: '99%', sortable: false },
+  { key: 'status', label: t('auditView.columns.status'), sortable: false },
+  { key: 'details', label: t('auditView.columns.details'), align: 'text-right', sortable: false },
+]);
 
 async function fetchAudit() {
   loading.value = true;
@@ -175,7 +178,7 @@ async function fetchAudit() {
     entries.value = data.entries ?? [];
     total.value = data.total ?? 0;
   } catch {
-    error.value = 'Failed to load audit log';
+    error.value = t('auditView.loadError');
   } finally {
     loading.value = false;
   }
@@ -221,7 +224,7 @@ onMounted(fetchAudit);
       {{ error }}
     </div>
 
-    <div v-if="loading" class="text-2xs-plus dd-text-muted py-3 px-1">Loading audit log...</div>
+    <div v-if="loading" class="text-2xs-plus dd-text-muted py-3 px-1">{{ t('auditView.loadingAuditLog') }}</div>
 
     <!-- Filter bar -->
     <DataFilterBar
@@ -234,32 +237,32 @@ onMounted(fetchAudit);
       <template #filters>
         <input v-model="searchQuery"
                type="text"
-               placeholder="Filter by target or event..."
+               :placeholder="t('auditView.filterPlaceholder')"
                class="flex-1 min-w-[120px] max-w-[var(--dd-layout-filter-max-width)] px-2.5 py-1.5 dd-rounded text-2xs-plus font-medium outline-none dd-bg dd-text dd-placeholder" />
         <input v-model="containerFilter"
                name="container-name"
                type="text"
-               placeholder="Container name..."
+               :placeholder="t('auditView.containerFilterPlaceholder')"
                class="min-w-[140px] max-w-[220px] px-2.5 py-1.5 dd-rounded text-2xs-plus font-medium outline-none dd-bg dd-text dd-placeholder" />
         <select v-model="actionFilter"
                 class="px-2.5 py-1.5 dd-rounded text-2xs-plus font-medium outline-none dd-bg dd-text">
-          <option value="">All events</option>
+          <option value="">{{ t('auditView.allEvents') }}</option>
           <option v-for="a in actionTypes" :key="a" :value="a">{{ actionLabel(a) }}</option>
         </select>
         <input v-model="fromDateFilter"
                name="from-date"
                type="date"
-               aria-label="From date"
+               :aria-label="t('auditView.fromDateLabel')"
                class="px-2.5 py-1.5 dd-rounded text-2xs-plus font-medium outline-none dd-bg dd-text" />
         <input v-model="toDateFilter"
                name="to-date"
                type="date"
-               aria-label="To date"
+               :aria-label="t('auditView.toDateLabel')"
                class="px-2.5 py-1.5 dd-rounded text-2xs-plus font-medium outline-none dd-bg dd-text" />
         <AppButton size="none" variant="plain" weight="none" v-if="activeFilterCount > 0"
                 class="text-2xs dd-text-muted hover:dd-text transition-colors"
                 @click="clearFilters">
-          Clear
+          {{ t('auditView.clear') }}
         </AppButton>
       </template>
     </DataFilterBar>
@@ -332,11 +335,11 @@ onMounted(fetchAudit);
         <div class="px-4 py-3">
           <div class="grid grid-cols-2 gap-2 text-2xs-plus">
             <div>
-              <span class="dd-text-muted">Time</span>
+              <span class="dd-text-muted">{{ t('auditView.card.time') }}</span>
               <span class="ml-1 font-semibold dd-text">{{ formatTimestamp(entry.timestamp) }}</span>
             </div>
             <div v-if="entry.fromVersion || entry.toVersion">
-              <span class="dd-text-muted">Version</span>
+              <span class="dd-text-muted">{{ t('auditView.card.version') }}</span>
               <span
                 class="ml-1 max-w-[180px] truncate font-mono dd-text inline-block"
                 v-tooltip.top="`${entry.fromVersion || '—'} → ${entry.toVersion || '—'}`"
@@ -374,12 +377,12 @@ onMounted(fetchAudit);
       </template>
       <template #details="{ item: entry }">
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3 mt-2">
-          <DetailField label="Timestamp" mono compact>{{ formatTimestamp(entry.timestamp) }}</DetailField>
+          <DetailField :label="t('auditView.detail.timestamp')" mono compact>{{ formatTimestamp(entry.timestamp) }}</DetailField>
           <DetailField :label="targetLabel(entry.action)" mono compact>{{ entry.containerName }}</DetailField>
-          <DetailField v-if="entry.containerImage" label="Image" mono compact>{{ entry.containerImage }}</DetailField>
-          <DetailField v-if="entry.fromVersion" label="From Version" mono compact>{{ entry.fromVersion }}</DetailField>
-          <DetailField v-if="entry.toVersion" label="To Version" mono compact>{{ entry.toVersion }}</DetailField>
-          <DetailField v-if="entry.details" label="Details" mono compact>{{ entry.details }}</DetailField>
+          <DetailField v-if="entry.containerImage" :label="t('auditView.detail.image')" mono compact>{{ entry.containerImage }}</DetailField>
+          <DetailField v-if="entry.fromVersion" :label="t('auditView.detail.fromVersion')" mono compact>{{ entry.fromVersion }}</DetailField>
+          <DetailField v-if="entry.toVersion" :label="t('auditView.detail.toVersion')" mono compact>{{ entry.toVersion }}</DetailField>
+          <DetailField v-if="entry.details" :label="t('auditView.detail.details')" mono compact>{{ entry.details }}</DetailField>
         </div>
       </template>
     </DataListAccordion>
@@ -388,18 +391,18 @@ onMounted(fetchAudit);
     <div v-if="total > limit" class="flex items-center justify-between px-4 py-2.5"
          :style="{ borderTop: '1px solid var(--dd-border)' }">
       <span class="text-2xs-plus dd-text-muted">
-        Page {{ page }} of {{ totalPages }} ({{ total }} entries)
+        {{ t('auditView.pagination.summary', { page, totalPages, total }) }}
       </span>
       <div class="flex items-center gap-1.5">
         <AppIconButton icon="chevron-left" size="toolbar" variant="plain"
                 class="dd-bg dd-text hover:dd-bg-elevated"
                 :disabled="page <= 1"
-                v-tooltip.top="'Previous page'"
+                v-tooltip.top="t('auditView.pagination.previousPage')"
                 @click="prevPage" />
         <AppIconButton icon="chevron-right" size="toolbar" variant="plain"
                 class="dd-bg dd-text hover:dd-bg-elevated"
                 :disabled="page >= totalPages"
-                v-tooltip.top="'Next page'"
+                v-tooltip.top="t('auditView.pagination.nextPage')"
                 @click="nextPage" />
       </div>
     </div>
@@ -408,7 +411,7 @@ onMounted(fetchAudit);
     <EmptyState
       v-if="filteredEntries.length === 0 && !loading"
       icon="audit"
-      message="No audit entries match your filters"
+      :message="t('auditView.emptyFiltered')"
       :show-clear="activeFilterCount > 0"
       @clear="clearFilters"
     />
@@ -437,24 +440,24 @@ onMounted(fetchAudit);
 
         <template v-if="selectedEntry" #default>
           <div class="p-4 space-y-5">
-            <DetailField label="Timestamp" mono>{{ formatTimestamp(selectedEntry.timestamp) }}</DetailField>
-            <DetailField label="Event">
+            <DetailField :label="t('auditView.detail.timestamp')" mono>{{ formatTimestamp(selectedEntry.timestamp) }}</DetailField>
+            <DetailField :label="t('auditView.detail.event')">
               <span class="font-medium">{{ actionLabel(selectedEntry.action) }}</span>
             </DetailField>
             <DetailField :label="targetLabel(selectedEntry.action)" mono>
               <span class="break-all">{{ selectedEntry.containerName }}</span>
             </DetailField>
-            <DetailField v-if="selectedEntry.containerImage" label="Image" mono>
+            <DetailField v-if="selectedEntry.containerImage" :label="t('auditView.detail.image')" mono>
               <span class="break-all">{{ selectedEntry.containerImage }}</span>
             </DetailField>
-            <DetailField v-if="selectedEntry.fromVersion" label="From Version" mono>
+            <DetailField v-if="selectedEntry.fromVersion" :label="t('auditView.detail.fromVersion')" mono>
               <span class="break-all">{{ selectedEntry.fromVersion }}</span>
             </DetailField>
-            <DetailField v-if="selectedEntry.toVersion" label="To Version" mono>
+            <DetailField v-if="selectedEntry.toVersion" :label="t('auditView.detail.toVersion')" mono>
               <span class="break-all">{{ selectedEntry.toVersion }}</span>
             </DetailField>
-            <DetailField v-if="selectedEntry.triggerName" label="Trigger" mono>{{ selectedEntry.triggerName }}</DetailField>
-            <DetailField v-if="selectedEntry.details" label="Details" mono>
+            <DetailField v-if="selectedEntry.triggerName" :label="t('auditView.detail.trigger')" mono>{{ selectedEntry.triggerName }}</DetailField>
+            <DetailField v-if="selectedEntry.details" :label="t('auditView.detail.details')" mono>
               <span class="break-all">{{ selectedEntry.details }}</span>
             </DetailField>
           </div>

@@ -61,3 +61,38 @@ export function getPrimarySoftBlocker(
 ): UpdateBlocker | undefined {
   return getSoftBlockers(eligibility)[0];
 }
+
+export type UpdateButtonState = 'none' | 'ready' | 'soft' | 'hard';
+
+/**
+ * Single source of truth for what the per-row Update button should look like.
+ * - `none`  — no update available; no button rendered
+ * - `ready` — update available, no blockers; standard cloud-download
+ * - `soft`  — update available, soft blockers only; cloud-download with warning
+ *             indicator (click triggers warn-and-confirm; manual update still works)
+ * - `hard`  — update available, hard blocker present; lock icon, button disabled
+ *
+ * `hasActiveOperationBadge` mirrors what the row already shows externally — when
+ * an "Updating..." chip is in flight on the row, we suppress soft-warning state
+ * so the button state doesn't fight the in-progress indicator.
+ */
+export function updateButtonState(
+  eligibility: UpdateEligibility | undefined,
+  hasNewTag: boolean,
+  hasActiveOperationBadge = false,
+): UpdateButtonState {
+  if (!hasNewTag) return 'none';
+  if (hasHardBlocker(eligibility)) return 'hard';
+  if (!hasActiveOperationBadge && hasSoftBlocker(eligibility)) return 'soft';
+  return 'ready';
+}
+
+/**
+ * Pick the blocker whose message should drive the button's tooltip. Hard takes
+ * precedence over soft; severity tier picks the first emitted by the backend.
+ */
+export function primaryBlockerForButton(
+  eligibility: UpdateEligibility | undefined,
+): UpdateBlocker | undefined {
+  return getPrimaryHardBlocker(eligibility) ?? getPrimarySoftBlocker(eligibility);
+}

@@ -1,4 +1,5 @@
 import { config } from '@vue/test-utils';
+import { i18n } from '@/boot/i18n';
 import AppButton from '@/components/AppButton.vue';
 
 // Some CI/runtime environments expose an incompatible localStorage object.
@@ -93,6 +94,8 @@ config.global.provide = {
     forward: vi.fn(),
   },
 };
+
+config.global.plugins = [i18n];
 
 config.global.directives = {
   tooltip: {},

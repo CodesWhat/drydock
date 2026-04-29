@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRoute } from 'vue-router';
 import AppBadge from '../components/AppBadge.vue';
 import DetailField from '../components/DetailField.vue';
@@ -7,6 +8,8 @@ import { useBreakpoints } from '../composables/useBreakpoints';
 import { useViewMode } from '../preferences/useViewMode';
 import { getAllAuthentications, getAuthentication } from '../services/authentication';
 import type { ApiComponent } from '../types/api';
+
+const { t } = useI18n();
 
 const authViewMode = useViewMode('auth');
 
@@ -24,9 +27,17 @@ let detailRequestId = 0;
 
 function authTypeBadge(type: string) {
   if (type === 'basic')
-    return { bg: 'var(--dd-neutral-muted)', text: 'var(--dd-neutral)', label: 'Basic' };
+    return {
+      bg: 'var(--dd-neutral-muted)',
+      text: 'var(--dd-neutral)',
+      label: t('authView.badge.basic'),
+    };
   if (type === 'oidc')
-    return { bg: 'var(--dd-primary-muted)', text: 'var(--dd-primary)', label: 'OIDC' };
+    return {
+      bg: 'var(--dd-primary-muted)',
+      text: 'var(--dd-primary)',
+      label: t('authView.badge.oidc'),
+    };
   return { bg: 'var(--dd-neutral-muted)', text: 'var(--dd-neutral)', label: type };
 }
 
@@ -51,11 +62,11 @@ const filteredAuth = computed(() => {
   return authData.value.filter((item) => item.name.toLowerCase().includes(q));
 });
 
-const tableColumns = [
-  { key: 'name', label: 'Provider', width: '99%' },
-  { key: 'type', label: 'Type' },
-  { key: 'status', label: 'Status' },
-];
+const tableColumns = computed(() => [
+  { key: 'name', label: t('authView.columns.provider'), width: '99%' },
+  { key: 'type', label: t('authView.columns.type') },
+  { key: 'status', label: t('authView.columns.status') },
+]);
 
 function mapAuthentication(authentication: ApiComponent, status = 'active') {
   return {
@@ -101,7 +112,7 @@ async function openDetail(authentication: Record<string, unknown>) {
     selectedAuth.value = mapAuthentication(detail, String(authentication.status));
   } catch {
     if (requestId !== detailRequestId) return;
-    detailError.value = 'Unable to load latest authentication details';
+    detailError.value = t('authView.detailLoadError');
   } finally {
     if (requestId === detailRequestId) {
       detailLoading.value = false;
@@ -114,7 +125,7 @@ onMounted(async () => {
     const data = await getAllAuthentications();
     authData.value = data.map((authentication: ApiComponent) => mapAuthentication(authentication));
   } catch {
-    error.value = 'Failed to load authentication providers';
+    error.value = t('authView.loadError');
   } finally {
     loading.value = false;
   }
@@ -130,7 +141,7 @@ onMounted(async () => {
       </div>
 
       <div v-if="loading" class="text-2xs-plus dd-text-muted py-3 px-1">
-        Loading authentication providers...
+        {{ t('authView.loadingProviders') }}
       </div>
 
       <!-- Filter bar -->
@@ -143,12 +154,12 @@ onMounted(async () => {
         <template #filters>
           <input v-model="searchQuery"
                  type="text"
-                 placeholder="Filter by name..."
+                 :placeholder="t('authView.filterPlaceholder')"
                  class="flex-1 min-w-[120px] max-w-[var(--dd-layout-filter-max-width)] px-2.5 py-1.5 dd-rounded text-2xs-plus font-medium outline-none dd-bg dd-text dd-placeholder" />
           <AppButton size="none" variant="text-muted" weight="medium" class="text-2xs" v-if="searchQuery"
                   
                   @click="searchQuery = ''">
-            Clear
+            {{ t('authView.clearFilter') }}
           </AppButton>
         </template>
       </DataFilterBar>
@@ -177,7 +188,7 @@ onMounted(async () => {
           </AppBadge>
         </template>
         <template #empty>
-          <EmptyState icon="filter" message="No providers match your filters" :show-clear="activeFilterCount > 0" @clear="searchQuery = ''" />
+          <EmptyState icon="filter" :message="t('authView.emptyFiltered')" :show-clear="activeFilterCount > 0" @clear="searchQuery = ''" />
         </template>
       </DataTable>
 
@@ -233,7 +244,7 @@ onMounted(async () => {
         <template #details="{ item: auth }">
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3 mt-2">
             <DetailField v-for="(val, key) in auth.config" :key="key" :label="String(key)" mono compact>{{ val }}</DetailField>
-            <DetailField label="Status" compact>
+            <DetailField :label="t('authView.fields.status')" compact>
               <AppBadge :tone="auth.status === 'active' ? 'success' : 'neutral'" size="sm" :uppercase="false">{{ auth.status }}</AppBadge>
             </DetailField>
           </div>
@@ -244,7 +255,7 @@ onMounted(async () => {
       <EmptyState
         v-if="(authViewMode === 'cards' || authViewMode === 'list') && filteredAuth.length === 0 && !loading"
         icon="filter"
-        message="No providers match your filters"
+        :message="t('authView.emptyFiltered')"
         :show-clear="activeFilterCount > 0"
         @clear="searchQuery = ''" />
 
@@ -274,7 +285,7 @@ onMounted(async () => {
         <template v-if="selectedAuth" #default>
           <div class="p-4 space-y-5">
             <div v-if="detailLoading" class="text-2xs-plus dd-text-muted">
-              Refreshing authentication details...
+              {{ t('authView.detailRefreshing') }}
             </div>
             <div v-if="detailError"
                  class="px-3 py-2 text-2xs-plus dd-rounded"
@@ -286,7 +297,7 @@ onMounted(async () => {
               <span class="break-all">{{ val }}</span>
             </DetailField>
             <div v-if="Object.keys(selectedAuth.config).length === 0">
-              <div class="text-2xs-plus dd-text-muted">No configuration properties</div>
+              <div class="text-2xs-plus dd-text-muted">{{ t('authView.noConfig') }}</div>
             </div>
           </div>
         </template>

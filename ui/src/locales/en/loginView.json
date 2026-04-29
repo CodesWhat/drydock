@@ -1,0 +1,34 @@
+{
+  "loginView": {
+    "heading": "Sign in to Drydock",
+    "username": {
+      "label": "Username",
+      "placeholder": "Enter your username"
+    },
+    "password": {
+      "label": "Password",
+      "placeholder": "Enter your password"
+    },
+    "submit": {
+      "signIn": "Sign in",
+      "signingIn": "Signing in..."
+    },
+    "separator": "or continue with",
+    "rememberMe": "Remember me",
+    "noMethods": "No authentication methods configured.",
+    "errors": {
+      "loadFailed": "Failed to load authentication methods",
+      "invalidCredentials": "Invalid username or password",
+      "oidcFailed": "Failed to connect to {name}",
+      "providerBasic": "Basic auth '{name}': {error}",
+      "providerOidc": "OIDC provider '{name}': {error}",
+      "providerNamed": "{type} '{name}': {error}",
+      "providerGeneric": "{provider}: {error}"
+    },
+    "connectionLost": {
+      "title": "Connection Lost",
+      "body": "The server is unreachable. Waiting for it to come back online...",
+      "reconnecting": "Reconnecting"
+    }
+  }
+}

@@ -1,6 +1,9 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n';
 import { useToast, type ToastTone } from '@/composables/useToast';
 import AppIconButton from '@/components/AppIconButton.vue';
+
+const { t } = useI18n();
 
 const { toasts, dismissToast } = useToast();
 
@@ -70,7 +73,7 @@ function toneStyles(tone: ToastTone) {
             variant="plain"
             class="shrink-0 mt-0.5"
             :style="{ color: toneStyles(toast.tone).text }"
-            aria-label="Dismiss"
+            :aria-label="t('appShell.toast.dismiss')"
             @click="dismissToast(toast.id)"
           />
         </div>

@@ -1,5 +1,5 @@
 import { Kafka as KafkaClient, type KafkaConfig, type Producer, type SASLOptions } from 'kafkajs';
-import Trigger, { type TriggerConfiguration } from '../Trigger.js';
+import Trigger, { type BatchRuntimeContext, type TriggerConfiguration } from '../Trigger.js';
 
 type UserPasswordSaslMechanism = 'plain' | 'scram-sha-256' | 'scram-sha-512';
 type UserPasswordSaslOptions = Extract<SASLOptions, { username: string; password: string }>;
@@ -176,7 +176,25 @@ class Kafka extends Trigger<KafkaConfiguration> {
    * @param containers
    * @returns {Promise<RecordMetadata[]>}
    */
-  async triggerBatch(containers) {
+  async triggerBatch(containers, runtimeContext?: BatchRuntimeContext) {
+    // Security-digest (and any other prerendered-batch) callers supply a
+    // title/body in runtimeContext; ship a single envelope record instead of
+    // one record per stub row so consumers see meaningful text (#328).
+    if (runtimeContext?.title || runtimeContext?.body) {
+      return await this.getProducer().send({
+        topic: this.configuration.topic,
+        messages: [
+          {
+            value: JSON.stringify({
+              eventKind: runtimeContext.eventKind,
+              title: runtimeContext.title ?? '',
+              body: runtimeContext.body ?? '',
+              containers,
+            }),
+          },
+        ],
+      });
+    }
     return await this.getProducer().send({
       topic: this.configuration.topic,
       messages: containers.map((container) => ({

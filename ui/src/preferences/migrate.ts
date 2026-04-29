@@ -597,7 +597,7 @@ export function migrate(data: Record<string, unknown>): PreferencesSchema {
   if (data.schemaVersion === 1) {
     data = {
       ...data,
-      schemaVersion: CURRENT_SCHEMA_VERSION,
+      schemaVersion: 2,
       views: {
         ...(isRecord(data.views) ? data.views : {}),
         logs: {
@@ -606,6 +606,14 @@ export function migrate(data: Record<string, unknown>): PreferencesSchema {
         },
       },
     };
+  }
+
+  if (data.schemaVersion === 2) {
+    data = { ...data, schemaVersion: 3 };
+  }
+
+  if (data.schemaVersion === 3) {
+    data = { ...data, schemaVersion: CURRENT_SCHEMA_VERSION };
   }
 
   sanitize(data);

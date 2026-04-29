@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, onUpdated, ref, watch, watchEffect } from 'vue';
+import { useI18n } from 'vue-i18n';
 import AppBadge from '@/components/AppBadge.vue';
 import type { DashboardServerRow } from '../dashboardTypes';
 
@@ -9,6 +10,8 @@ interface Props {
 }
 
 const props = defineProps<Props>();
+
+const { t } = useI18n();
 
 const emit = defineEmits<{
   viewAll: [];
@@ -122,18 +125,18 @@ watch(
 <template>
   <div
     ref="rootEl"
-    aria-label="Host Status widget"
+    :aria-label="t('dashboardView.hostStatus.title')"
     class="dashboard-widget dd-rounded overflow-hidden flex flex-col"
     :style="{ backgroundColor: 'var(--dd-bg-card)' }">
 
     <!-- Header — full mode only -->
     <div v-if="mode === 'full'" class="shrink-0 flex items-center justify-between px-5 py-3.5" :style="{ borderBottom: '1px solid var(--dd-border)' }">
       <div class="flex items-center gap-2">
-        <div v-if="editMode" class="drag-handle dd-drag-handle" v-tooltip.top="'Drag to reorder'"><AppIcon name="ph:dots-six-vertical" :size="14" /></div>
+        <div v-if="editMode" class="drag-handle dd-drag-handle" v-tooltip.top="t('dashboardView.dragToReorder')"><AppIcon name="ph:dots-six-vertical" :size="14" /></div>
         <AppIcon name="servers" :size="14" class="text-drydock-secondary" />
-        <h2 class="dd-text-heading-section dd-text">Host Status</h2>
+        <h2 class="dd-text-heading-section dd-text">{{ t('dashboardView.hostStatus.title') }}</h2>
       </div>
-      <AppButton size="none" variant="link-secondary" weight="medium" class="text-2xs-plus" @click="handleViewAll">View all &rarr;</AppButton>
+      <AppButton size="none" variant="link-secondary" weight="medium" class="text-2xs-plus" @click="handleViewAll">{{ t('dashboardView.viewAll') }}</AppButton>
     </div>
 
     <!-- Full mode: wide rows, vertical scroll -->
@@ -149,7 +152,7 @@ watch(
         :style="{ backgroundColor: 'var(--dd-bg-inset)' }"
         @click="handleViewAll">
         <AppBadge
-          v-tooltip.top="server.status === 'connected' ? 'Connected' : 'Disconnected'"
+          v-tooltip.top="server.status === 'connected' ? t('dashboardView.hostStatus.connected') : t('dashboardView.hostStatus.disconnected')"
           size="xs"
           class="mt-0.5 shrink-0 px-1.5 py-0"
           :tone="server.status === 'connected' ? 'success' : 'danger'">
@@ -158,7 +161,7 @@ watch(
         <div class="flex-1 min-w-0">
           <div class="text-xs font-semibold truncate dd-text">{{ server.name }}</div>
           <div v-if="server.host" class="text-2xs font-mono dd-text-muted truncate mt-0.5">{{ server.host }}</div>
-          <div class="text-2xs dd-text-muted">{{ server.containers.running }}/{{ server.containers.total }} containers</div>
+          <div class="text-2xs dd-text-muted">{{ t('dashboardView.hostStatus.containerCount', { running: server.containers.running, total: server.containers.total }) }}</div>
         </div>
         <AppBadge
           size="xs"
@@ -177,7 +180,7 @@ watch(
 
     <!-- Compact mode: horizontal cards, horizontal scroll -->
     <div v-else class="flex-1 min-h-0 overflow-x-auto overflow-y-hidden p-4 relative">
-      <div v-if="editMode" class="drag-handle dd-drag-handle absolute top-2 left-2 z-10" v-tooltip.top="'Drag to reorder'"><AppIcon name="ph:dots-six" :size="14" /></div>
+      <div v-if="editMode" class="drag-handle dd-drag-handle absolute top-2 left-2 z-10" v-tooltip.top="t('dashboardView.dragToReorder')"><AppIcon name="ph:dots-six" :size="14" /></div>
       <div class="flex gap-3 h-full" :class="servers.length <= 3 ? 'justify-center' : ''">
         <div
           v-for="server in servers"
@@ -186,7 +189,7 @@ watch(
           :style="{ backgroundColor: 'var(--dd-bg-inset)' }"
           @click="handleViewAll">
           <span
-            v-tooltip.top="server.status === 'connected' ? 'Connected' : 'Disconnected'"
+            v-tooltip.top="server.status === 'connected' ? t('dashboardView.hostStatus.connected') : t('dashboardView.hostStatus.disconnected')"
             class="w-7 h-7 dd-rounded flex items-center justify-center"
             :style="{
               backgroundColor: server.status === 'connected' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
@@ -196,7 +199,7 @@ watch(
           </span>
           <div class="text-xs font-semibold dd-text truncate w-full">{{ server.name }}</div>
           <div v-if="server.host" class="text-3xs font-mono dd-text-muted truncate w-full">{{ server.host }}</div>
-          <div class="text-2xs dd-text-muted">{{ server.containers.running }}/{{ server.containers.total }} containers</div>
+          <div class="text-2xs dd-text-muted">{{ t('dashboardView.hostStatus.containerCount', { running: server.containers.running, total: server.containers.total }) }}</div>
           <span
             class="text-3xs font-bold uppercase"
             :style="{ color: server.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)' }">

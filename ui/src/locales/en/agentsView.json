@@ -1,0 +1,90 @@
+{
+  "agentsView": {
+    "list": {
+      "loading": "Loading agents...",
+      "filterPlaceholder": "Filter by name...",
+      "clearFilter": "Clear",
+      "emptyFiltered": "No agents match your filters",
+      "toggleColumns": "Toggle columns",
+      "columnPickerHeading": "Columns",
+      "loadError": "Failed to load agents",
+      "status": {
+        "connected": "Connected",
+        "disconnected": "Disconnected"
+      },
+      "columns": {
+        "name": "Agent",
+        "status": "Status",
+        "containers": "Containers",
+        "docker": "Docker",
+        "os": "OS",
+        "version": "Version",
+        "lastSeen": "Last Seen"
+      },
+      "card": {
+        "running": "running",
+        "stopped": "stopped"
+      }
+    },
+    "detail": {
+      "tabs": {
+        "overview": "Overview",
+        "logs": "Logs",
+        "config": "Config"
+      },
+      "overview": {
+        "resources": "Resources",
+        "system": "System",
+        "containers": "Containers",
+        "containerTotal": "Total",
+        "containerRunning": "Running",
+        "containerStopped": "Stopped",
+        "viewContainers": "View containers",
+        "automation": "Automation",
+        "watchers": "Watchers",
+        "triggers": "Triggers",
+        "none": "None"
+      },
+      "logs": {
+        "allLevels": "All Levels",
+        "levelDebug": "Debug",
+        "levelInfo": "Info",
+        "levelWarn": "Warn",
+        "levelError": "Error",
+        "tail50": "Tail 50",
+        "tail100": "Tail 100",
+        "tail500": "Tail 500",
+        "tail1000": "Tail 1000",
+        "componentPlaceholder": "Filter by component...",
+        "apply": "Apply",
+        "reset": "Reset",
+        "refresh": "Refresh",
+        "emptyMessage": "No log entries found for current filters.",
+        "lastFetched": "Last fetched: {time}",
+        "entries": "{count} entries",
+        "statusLive": "Live",
+        "statusOffline": "Offline"
+      },
+      "fields": {
+        "cpus": "CPUs",
+        "memory": "Memory",
+        "images": "Images",
+        "uptime": "Uptime",
+        "docker": "Docker",
+        "os": "OS",
+        "architecture": "Architecture",
+        "agent": "Agent",
+        "host": "Host",
+        "agentVersion": "Agent Version",
+        "logLevel": "Log Level",
+        "pollInterval": "Poll Interval",
+        "dockerSocket": "Docker Socket",
+        "lastSeen": "Last Seen",
+        "never": "never"
+      },
+      "listView": {
+        "details": "Details"
+      }
+    }
+  }
+}

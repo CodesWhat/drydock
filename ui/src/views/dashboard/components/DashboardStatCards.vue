@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { RouteLocationRaw } from 'vue-router';
 import { useDraggable } from 'vue-draggable-plus';
 import type { DashboardStatCard, DashboardWidgetId, WidgetOrderItem } from '../dashboardTypes';
@@ -12,6 +13,8 @@ interface Props {
 }
 
 const props = defineProps<Props>();
+
+const { t } = useI18n();
 
 const emit = defineEmits<{
   navigate: [route: RouteLocationRaw];
@@ -64,7 +67,7 @@ useDraggable(gridRef, () => props.statOrder, {
       ]"
       :style="{ backgroundColor: 'var(--dd-bg-card)' }"
       @click="handleNavigate(statById.get(item.id)?.route)">
-      <div v-if="editMode" class="drag-handle dd-drag-handle flex items-center justify-center -mt-1 mb-1" v-tooltip.top="'Drag to reorder'">
+      <div v-if="editMode" class="drag-handle dd-drag-handle flex items-center justify-center -mt-1 mb-1" v-tooltip.top="t('dashboardView.dragToReorder')">
         <AppIcon name="ph:dots-six" :size="14" />
       </div>
       <div class="flex items-center justify-between mb-2">

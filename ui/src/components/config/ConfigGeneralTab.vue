@@ -1,5 +1,8 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n';
 import AppBadge from '@/components/AppBadge.vue';
+
+const { t } = useI18n();
 
 interface InfoField {
   label: string;
@@ -63,12 +66,12 @@ const emit = defineEmits<{
         class="px-5 py-3.5 flex items-center gap-2"
       >
         <AppIcon name="settings" :size="14" class="text-drydock-secondary" />
-        <h2 class="dd-text-heading-section dd-text">Application</h2>
+        <h2 class="dd-text-heading-section dd-text">{{ t('configView.general.application.title') }}</h2>
       </div>
       <div class="p-5 space-y-4">
         <div v-if="props.loading" class="flex items-center justify-center gap-2 text-xs dd-text-muted py-4">
           <AppIcon name="refresh" :size="12" class="animate-spin" />
-          Loading server info
+          {{ t('configView.general.application.loadingServerInfo') }}
         </div>
         <template v-else>
           <div
@@ -94,7 +97,7 @@ const emit = defineEmits<{
         class="px-5 py-3.5 flex items-center gap-2"
       >
         <AppIcon name="server" :size="14" class="text-drydock-secondary" />
-        <h2 class="dd-text-heading-section dd-text">Store</h2>
+        <h2 class="dd-text-heading-section dd-text">{{ t('configView.general.store.title') }}</h2>
       </div>
       <div class="p-5 space-y-4">
         <div
@@ -120,19 +123,18 @@ const emit = defineEmits<{
       >
         <div class="flex items-center gap-2">
           <AppIcon name="bolt" :size="14" class="text-drydock-secondary" />
-          <h2 class="dd-text-heading-section dd-text">Webhook API</h2>
+          <h2 class="dd-text-heading-section dd-text">{{ t('configView.general.webhookApi.title') }}</h2>
         </div>
         <AppBadge :tone="props.webhookEnabled ? 'success' : 'neutral'">
-          {{ props.webhookEnabled ? 'Enabled' : 'Disabled' }}
+          {{ props.webhookEnabled ? t('configView.general.webhookApi.enabled') : t('configView.general.webhookApi.disabled') }}
         </AppBadge>
       </div>
       <div class="p-5 space-y-4">
         <p class="text-2xs-plus dd-text-muted">
-          Use these endpoints to trigger watch cycles and updates via HTTP.
-          All requests require a Bearer token in the Authorization header.
+          {{ t('configView.general.webhookApi.description') }}
         </p>
         <p v-if="!props.webhookEnabled" class="text-2xs-plus dd-text-muted">
-          Webhook API is disabled. Set <code class="font-mono">DD_SERVER_WEBHOOK_ENABLED=true</code> and
+          {{ t('configView.general.webhookApi.disabledMessage') }} <code class="font-mono">DD_SERVER_WEBHOOK_ENABLED=true</code> and
           configure at least one token (<code class="font-mono">DD_SERVER_WEBHOOK_TOKEN</code> or
           <code class="font-mono">DD_SERVER_WEBHOOK_TOKENS_*</code>) to enable it.
         </p>
@@ -140,8 +142,8 @@ const emit = defineEmits<{
           <table class="w-full text-left text-2xs-plus">
             <thead :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
               <tr>
-                <th class="px-3 py-2 font-semibold uppercase tracking-wider dd-text-muted">Endpoint</th>
-                <th class="px-3 py-2 font-semibold uppercase tracking-wider dd-text-muted">Description</th>
+                <th class="px-3 py-2 font-semibold uppercase tracking-wider dd-text-muted">{{ t('configView.general.webhookApi.table.endpoint') }}</th>
+                <th class="px-3 py-2 font-semibold uppercase tracking-wider dd-text-muted">{{ t('configView.general.webhookApi.table.description') }}</th>
               </tr>
             </thead>
             <tbody>
@@ -159,7 +161,7 @@ const emit = defineEmits<{
           </table>
         </div>
         <div>
-          <div class="text-2xs-plus font-semibold uppercase tracking-wider dd-text-muted mb-1.5">Example</div>
+          <div class="text-2xs-plus font-semibold uppercase tracking-wider dd-text-muted mb-1.5">{{ t('configView.general.webhookApi.example') }}</div>
           <pre
             class="px-3 py-2 text-2xs-plus font-mono dd-rounded overflow-x-auto"
             :style="{
@@ -181,14 +183,14 @@ const emit = defineEmits<{
         class="px-5 py-3.5 flex items-center gap-2"
       >
         <AppIcon name="globe" :size="14" class="text-drydock-secondary" />
-        <h2 class="dd-text-heading-section dd-text">Network</h2>
+        <h2 class="dd-text-heading-section dd-text">{{ t('configView.general.network.title') }}</h2>
       </div>
       <div class="p-5">
         <div class="flex items-center justify-between">
           <div>
-            <div class="text-xs font-semibold dd-text">Internetless Mode</div>
+            <div class="text-xs font-semibold dd-text">{{ t('configView.general.network.internetlessMode.label') }}</div>
             <div class="text-2xs dd-text-muted mt-0.5">
-              Block all outbound requests (container icons, external fetches)
+              {{ t('configView.general.network.internetlessMode.description') }}
             </div>
           </div>
           <ToggleSwitch
@@ -210,19 +212,19 @@ const emit = defineEmits<{
         class="px-5 py-3.5 flex items-center gap-2"
       >
         <AppIcon name="containers" :size="14" class="text-drydock-secondary" />
-        <h2 class="dd-text-heading-section dd-text">Container Icon Cache</h2>
+        <h2 class="dd-text-heading-section dd-text">{{ t('configView.general.iconCache.title') }}</h2>
       </div>
       <div class="p-5">
         <div class="flex items-center justify-between">
           <div>
-            <div class="text-xs font-semibold dd-text">Cached Icons</div>
+            <div class="text-xs font-semibold dd-text">{{ t('configView.general.iconCache.cachedIcons.label') }}</div>
             <div class="text-2xs dd-text-muted mt-0.5">
-              Common icons are bundled; other icons are cached to disk on first fetch
+              {{ t('configView.general.iconCache.cachedIcons.description') }}
             </div>
           </div>
           <div class="flex items-center gap-2">
             <span v-if="props.cacheCleared !== null" class="text-2xs dd-text-success">
-              {{ props.cacheCleared }} cleared
+              {{ t('configView.general.iconCache.cleared', { count: props.cacheCleared }) }}
             </span>
             <AppButton size="none" variant="plain" weight="none"
               class="px-3 py-1.5 dd-rounded text-2xs-plus font-semibold transition-colors"
@@ -235,7 +237,7 @@ const emit = defineEmits<{
               @click="emit('clear-icon-cache')"
             >
               <AppIcon name="trash" :size="10" class="mr-1" />
-              Clear Cache
+              {{ t('configView.general.iconCache.clearButton') }}
             </AppButton>
           </div>
         </div>
@@ -252,14 +254,14 @@ const emit = defineEmits<{
         class="px-5 py-3.5 flex items-center gap-2"
       >
         <AppIcon name="download" :size="14" class="text-drydock-secondary" />
-        <h2 class="dd-text-heading-section dd-text">Diagnostics</h2>
+        <h2 class="dd-text-heading-section dd-text">{{ t('configView.general.diagnostics.title') }}</h2>
       </div>
       <div class="p-5 space-y-3">
         <div class="flex items-center justify-between gap-3">
           <div>
-            <div class="text-xs font-semibold dd-text">Diagnostic Debug Dump</div>
+            <div class="text-xs font-semibold dd-text">{{ t('configView.general.diagnostics.debugDump.label') }}</div>
             <div class="text-2xs dd-text-muted mt-0.5">
-              Download a redacted JSON snapshot of runtime state for troubleshooting
+              {{ t('configView.general.diagnostics.debugDump.description') }}
             </div>
           </div>
           <AppButton
@@ -277,7 +279,7 @@ const emit = defineEmits<{
             @click="emit('download-debug-dump')"
           >
             <AppIcon :name="props.debugDumpDownloading ? 'spinner' : 'download'" :size="10" class="mr-1" :class="props.debugDumpDownloading ? 'dd-spin' : ''" />
-            {{ props.debugDumpDownloading ? 'Preparing...' : 'Download Debug Dump' }}
+            {{ props.debugDumpDownloading ? t('configView.general.diagnostics.debugDump.preparing') : t('configView.general.diagnostics.debugDump.download') }}
           </AppButton>
         </div>
         <div v-if="props.debugDumpError" class="text-2xs" :style="{ color: 'var(--dd-danger)' }">

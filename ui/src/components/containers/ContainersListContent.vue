@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import AppIconButton from '../AppIconButton.vue';
 import ContainersGroupedViews from './ContainersGroupedViews.vue';
 import {
@@ -8,6 +9,7 @@ import {
 } from './containersViewTemplateContext';
 
 const templateContext: ContainersViewTemplateContext = useContainersViewTemplateContext();
+const { t } = useI18n();
 
 const {
   error,
@@ -43,56 +45,53 @@ const {
   clearContainerIdsFilter,
 } = templateContext;
 
-const FILTER_STATUS_LABELS: Record<string, string> = {
-  running: 'Running',
-  stopped: 'Stopped',
-};
-
-const FILTER_BOUNCER_LABELS: Record<string, string> = {
-  safe: 'Safe',
-  unsafe: 'Unsafe',
-  blocked: 'Blocked',
-};
-
-const FILTER_REGISTRY_LABELS: Record<string, string> = {
-  dockerhub: 'Docker Hub',
-  ghcr: 'GHCR',
-  custom: 'Custom',
-};
-
-const FILTER_KIND_LABELS: Record<string, string> = {
-  any: 'Has Update',
-  major: 'Major',
-  minor: 'Minor',
-  patch: 'Patch',
-  digest: 'Digest',
-  blocked: 'Blocked',
-};
-
 const activeFilterChips = computed(() => {
   const chips: string[] = [];
   const searchValue = filterSearch.value.trim();
 
   if (searchValue !== '') {
-    chips.push(`Search: ${searchValue}`);
+    chips.push(t('containerComponents.listContent.filterSearch', { value: searchValue }));
   }
   if (filterStatus.value !== 'all') {
-    chips.push(`Status: ${FILTER_STATUS_LABELS[filterStatus.value] ?? filterStatus.value}`);
+    const statusLabel =
+      t(`containerComponents.listContent.${filterStatus.value}`) || filterStatus.value;
+    chips.push(t('containerComponents.listContent.filterStatus', { value: statusLabel }));
   }
   if (filterBouncer.value !== 'all') {
-    chips.push(`Bouncer: ${FILTER_BOUNCER_LABELS[filterBouncer.value] ?? filterBouncer.value}`);
+    const bouncerLabel =
+      t(`containerComponents.listContent.${filterBouncer.value}`) || filterBouncer.value;
+    chips.push(t('containerComponents.listContent.filterBouncer', { value: bouncerLabel }));
   }
   if (filterRegistry.value !== 'all') {
-    chips.push(`Registry: ${FILTER_REGISTRY_LABELS[filterRegistry.value] ?? filterRegistry.value}`);
+    const registryKey =
+      filterRegistry.value === 'dockerhub'
+        ? 'dockerHub'
+        : filterRegistry.value === 'ghcr'
+          ? 'ghcr'
+          : 'custom';
+    const registryLabel =
+      t(`containerComponents.listContent.${registryKey}`) || filterRegistry.value;
+    chips.push(t('containerComponents.listContent.filterRegistry', { value: registryLabel }));
   }
   if (filterServer.value !== 'all') {
-    chips.push(`Host: ${filterServer.value}`);
+    chips.push(t('containerComponents.listContent.filterHost', { value: filterServer.value }));
   }
   if (filterKind.value !== 'all') {
-    chips.push(`Kind: ${FILTER_KIND_LABELS[filterKind.value] ?? filterKind.value}`);
+    const kindKeyMap: Record<string, string> = {
+      any: 'hasUpdate',
+      major: 'major',
+      minor: 'minor',
+      patch: 'patch',
+      digest: 'digest',
+      blocked: 'blocked',
+    };
+    const kindLabel =
+      t(`containerComponents.listContent.${kindKeyMap[filterKind.value] ?? filterKind.value}`) ||
+      filterKind.value;
+    chips.push(t('containerComponents.listContent.filterKind', { value: kindLabel }));
   }
   if (filterHidePinned.value) {
-    chips.push('Hidden: Pinned');
+    chips.push(t('containerComponents.listContent.filterHiddenPinned'));
   }
 
   return chips;
@@ -108,7 +107,7 @@ const activeFilterChips = computed(() => {
       {{ error }}
     </div>
 
-    <div v-if="loading" class="text-2xs-plus dd-text-muted py-3 px-1">Loading containers...</div>
+    <div v-if="loading" class="text-2xs-plus dd-text-muted py-3 px-1">{{ t('containerComponents.listContent.loadingContainers') }}</div>
 
     <DataFilterBar
       v-model="containerViewMode"
@@ -120,35 +119,35 @@ const activeFilterChips = computed(() => {
         <input
           v-model="filterSearch"
           type="text"
-          placeholder="Search name or image..."
+          :placeholder="t('containerComponents.listContent.searchPlaceholder')"
           class="flex-1 min-w-[140px] max-w-[260px] px-2.5 py-1.5 dd-rounded text-2xs-plus font-medium outline-none dd-bg dd-text dd-placeholder" />
         <select
           v-model="filterStatus"
           class="px-2 py-1.5 dd-rounded text-2xs-plus font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text">
-          <option value="all">All Statuses</option>
-          <option value="running">Running</option>
-          <option value="stopped">Stopped</option>
+          <option value="all">{{ t('containerComponents.listContent.allStatuses') }}</option>
+          <option value="running">{{ t('containerComponents.listContent.running') }}</option>
+          <option value="stopped">{{ t('containerComponents.listContent.stopped') }}</option>
         </select>
         <select
           v-model="filterBouncer"
           class="px-2 py-1.5 dd-rounded text-2xs-plus font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text">
-          <option value="all">All Bouncer</option>
-          <option value="safe">Safe</option>
-          <option value="unsafe">Unsafe</option>
-          <option value="blocked">Blocked</option>
+          <option value="all">{{ t('containerComponents.listContent.allBouncer') }}</option>
+          <option value="safe">{{ t('containerComponents.listContent.safe') }}</option>
+          <option value="unsafe">{{ t('containerComponents.listContent.unsafe') }}</option>
+          <option value="blocked">{{ t('containerComponents.listContent.blocked') }}</option>
         </select>
         <select
           v-model="filterRegistry"
           class="px-2 py-1.5 dd-rounded text-2xs-plus font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text">
-          <option value="all">All Registries</option>
-          <option value="dockerhub">Docker Hub</option>
-          <option value="ghcr">GHCR</option>
-          <option value="custom">Custom</option>
+          <option value="all">{{ t('containerComponents.listContent.allRegistries') }}</option>
+          <option value="dockerhub">{{ t('containerComponents.listContent.dockerHub') }}</option>
+          <option value="ghcr">{{ t('containerComponents.listContent.ghcr') }}</option>
+          <option value="custom">{{ t('containerComponents.listContent.custom') }}</option>
         </select>
         <select
           v-model="filterServer"
           class="px-2 py-1.5 dd-rounded text-2xs-plus font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text">
-          <option value="all">All Hosts</option>
+          <option value="all">{{ t('containerComponents.listContent.allHosts') }}</option>
           <option v-for="serverName in serverNames" :key="serverName" :value="serverName">
             {{ serverName }}
           </option>
@@ -156,44 +155,44 @@ const activeFilterChips = computed(() => {
         <select
           v-model="filterKind"
           class="px-2 py-1.5 dd-rounded text-2xs-plus font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text">
-          <option value="all">All Containers</option>
-          <option value="any">Has Update</option>
-          <option value="major">Major</option>
-          <option value="minor">Minor</option>
-          <option value="patch">Patch</option>
-          <option value="digest">Digest</option>
-          <option value="blocked">Blocked</option>
+          <option value="all">{{ t('containerComponents.listContent.allContainers') }}</option>
+          <option value="any">{{ t('containerComponents.listContent.hasUpdate') }}</option>
+          <option value="major">{{ t('containerComponents.listContent.major') }}</option>
+          <option value="minor">{{ t('containerComponents.listContent.minor') }}</option>
+          <option value="patch">{{ t('containerComponents.listContent.patch') }}</option>
+          <option value="digest">{{ t('containerComponents.listContent.digest') }}</option>
+          <option value="blocked">{{ t('containerComponents.listContent.blocked') }}</option>
         </select>
         <label
           class="flex items-center gap-1.5 px-2 py-1.5 dd-rounded text-2xs-plus font-semibold uppercase tracking-wide cursor-pointer dd-bg dd-text select-none"
-          v-tooltip="'Hide containers pinned to specific versions'"
+          v-tooltip="t('containerComponents.listContent.hidePinnedTooltip')"
         >
           <input
             type="checkbox"
             v-model="filterHidePinned"
             class="accent-[var(--dd-secondary)]"
           />
-          Hide Pinned
+          {{ t('containerComponents.listContent.hidePinned') }}
         </label>
         <AppButton size="none" variant="plain" weight="none"
           v-if="activeFilterCount > 0 || filterSearch"
           class="text-2xs font-medium px-2 py-1 dd-rounded transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
           @click="clearFilters">
-          Clear all
+          {{ t('containerComponents.listContent.clearAll') }}
         </AppButton>
       </template>
       <template #extra-buttons>
         <div v-if="containerViewMode === 'table'">
           <AppIconButton icon="config" size="toolbar" variant="secondary"
             :class="showColumnPicker ? 'dd-text dd-bg-elevated' : ''"
-            :tooltip="tt('Toggle columns')"
+            :tooltip="tt(t('containerComponents.listContent.toggleColumnsTooltip'))"
             @click.stop="toggleColumnPicker($event)" />
         </div>
       </template>
       <template #left>
         <AppIconButton icon="stack" size="toolbar" variant="secondary"
           :class="groupByStack ? 'dd-text dd-bg-elevated' : ''"
-          :tooltip="tt('Group by stack')"
+          :tooltip="tt(t('containerComponents.listContent.groupByStackTooltip'))"
           @click="groupByStack = !groupByStack" />
         <AppButton
           v-if="groupByStack"
@@ -203,13 +202,13 @@ const activeFilterChips = computed(() => {
           class="uppercase tracking-wide"
           :data-test="allGroupsCollapsed ? 'expand-all-groups' : 'collapse-all-groups'"
           @click="allGroupsCollapsed ? expandAllGroups() : collapseAllGroups()">
-          {{ allGroupsCollapsed ? 'Expand all' : 'Collapse all' }}
+          {{ allGroupsCollapsed ? t('containerComponents.listContent.expandAll') : t('containerComponents.listContent.collapseAll') }}
         </AppButton>
         <AppIconButton icon="restart" size="toolbar" variant="secondary"
           :class="rechecking ? 'dd-text-muted cursor-wait' : ''"
           :disabled="rechecking"
           :loading="rechecking"
-          :tooltip="tt('Recheck for updates')"
+          :tooltip="tt(t('containerComponents.listContent.recheckTooltip'))"
           @click="recheckAll" />
       </template>
       <template #center>
@@ -217,7 +216,7 @@ const activeFilterChips = computed(() => {
           v-if="filterContainerIds.size > 0"
           class="inline-flex items-center gap-1.5 px-2 py-1 dd-rounded text-2xs font-medium"
           :style="{ backgroundColor: 'var(--dd-info-muted)', color: 'var(--dd-info)' }">
-          <span>Filtered to {{ filterContainerIds.size }} container{{ filterContainerIds.size !== 1 ? 's' : '' }}</span>
+          <span>{{ t('containerComponents.listContent.filteredContainers', { count: filterContainerIds.size }) }}</span>
           <AppButton
             size="none"
             variant="plain"
@@ -235,7 +234,7 @@ const activeFilterChips = computed(() => {
           <span
             class="text-3xs font-bold uppercase tracking-[0.22em] dd-text-muted"
           >
-            Filters
+            {{ t('containerComponents.listContent.filtersLabel') }}
           </span>
           <span
             v-for="chip in activeFilterChips"
@@ -260,7 +259,7 @@ const activeFilterChips = computed(() => {
         boxShadow: 'var(--dd-shadow-tooltip)',
       }"
       @click.stop>
-      <div class="px-3 py-1 text-3xs font-bold uppercase tracking-wider dd-text-muted">Columns</div>
+      <div class="px-3 py-1 text-3xs font-bold uppercase tracking-wider dd-text-muted">{{ t('containerComponents.listContent.columnsHeader') }}</div>
       <AppButton size="none" variant="plain" weight="none"
         v-for="column in allColumns.filter((columnItem) => columnItem.label)"
         :key="column.key"

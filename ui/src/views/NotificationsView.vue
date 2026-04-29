@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRoute } from 'vue-router';
 import AppBadge from '../components/AppBadge.vue';
 import ToggleSwitch from '../components/ToggleSwitch.vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
+
+const { t } = useI18n();
 import { useViewMode } from '../preferences/useViewMode';
 import type { NotificationRule, NotificationRuleUpdate } from '../services/notification';
 import { getAllNotificationRules, updateNotificationRule } from '../services/notification';
@@ -101,10 +104,10 @@ function triggerAssignmentSummary(rule: NotificationRule | null | undefined) {
     return '';
   }
   if (usesImplicitAllTriggers(rule)) {
-    return 'All notification triggers';
+    return t('notificationsView.allNotificationTriggers');
   }
   if (rule.triggers.length === 0) {
-    return 'No triggers';
+    return t('notificationsView.noTriggers');
   }
   return '';
 }
@@ -114,9 +117,9 @@ function detailTriggerHelpText(rule: NotificationRule | null | undefined) {
     return '';
   }
   if (isImplicitAllTriggersRule(rule)) {
-    return 'Leave this empty to send this event to all notification triggers. Selecting any trigger turns this rule into an allow-list.';
+    return t('notificationsView.detail.helpTextImplicitAll');
   }
-  return 'Only selected triggers will receive this event. Leave it empty to suppress this event for all triggers.';
+  return t('notificationsView.detail.helpTextExplicit');
 }
 
 function normalizeTriggerIds(triggerIds: string[]) {
@@ -172,11 +175,16 @@ const filteredNotifications = computed(() => {
   );
 });
 
-const tableColumns = [
-  { key: 'enabled', label: 'On', sortable: false, width: '48px' },
-  { key: 'name', label: 'Rule', sortable: false, width: '99%' },
-  { key: 'triggers', label: 'Triggers', align: 'text-right', sortable: false },
-];
+const tableColumns = computed(() => [
+  { key: 'enabled', label: t('notificationsView.columns.on'), sortable: false, width: '48px' },
+  { key: 'name', label: t('notificationsView.columns.rule'), sortable: false, width: '99%' },
+  {
+    key: 'triggers',
+    label: t('notificationsView.columns.triggers'),
+    align: 'text-right',
+    sortable: false,
+  },
+]);
 
 function clearFilters() {
   searchQuery.value = '';
@@ -311,7 +319,7 @@ onMounted(async () => {
     }));
     triggersData.value = notificationTriggers;
   } catch (e: unknown) {
-    error.value = errorMessage(e, 'Failed to load notification rules');
+    error.value = errorMessage(e, t('notificationsView.loadError'));
   } finally {
     loading.value = false;
   }
@@ -341,17 +349,17 @@ onMounted(async () => {
       <template #filters>
         <input v-model="searchQuery"
                type="text"
-               placeholder="Filter by name, description, or trigger..."
+               :placeholder="t('notificationsView.filterPlaceholder')"
                class="flex-1 min-w-[120px] max-w-[320px] px-2.5 py-1.5 dd-rounded text-2xs-plus font-medium outline-none dd-bg dd-text dd-placeholder" />
         <AppButton size="none" variant="text-muted" weight="medium" class="text-2xs" v-if="searchQuery"
-                
+
                 @click="clearFilters">
-          Clear
+          {{ t('notificationsView.clear') }}
         </AppButton>
       </template>
     </DataFilterBar>
 
-    <div v-if="loading" class="text-2xs-plus dd-text-muted py-3 px-1">Loading notification rules...</div>
+    <div v-if="loading" class="text-2xs-plus dd-text-muted py-3 px-1">{{ t('notificationsView.loadingRules') }}</div>
 
     <DataTable
       v-if="notificationsViewMode === 'table' && !loading"
@@ -366,7 +374,7 @@ onMounted(async () => {
           size="sm"
           class="mx-auto shrink-0"
           :disabled="savingRuleId === row.id"
-          aria-label="Toggle notification rule"
+          :aria-label="t('notificationsView.toggleAriaLabel')"
           on-color="var(--dd-success)"
           off-color="var(--dd-border-strong)"
           @click.stop
@@ -399,7 +407,7 @@ onMounted(async () => {
       </template>
       <template #empty>
         <EmptyState icon="notifications"
-                    message="No notification rules match your filters"
+                    :message="t('notificationsView.emptyFiltered')"
                     :show-clear="activeFilterCount > 0"
                     @clear="clearFilters" />
       </template>
@@ -426,7 +434,7 @@ onMounted(async () => {
             size="sm"
             class="shrink-0"
             :disabled="savingRuleId === notif.id"
-            aria-label="Toggle notification rule"
+            :aria-label="t('notificationsView.toggleAriaLabel')"
             on-color="var(--dd-success)"
             off-color="var(--dd-border-strong)"
             @click.stop
@@ -463,7 +471,7 @@ onMounted(async () => {
           size="sm"
           class="shrink-0"
           :disabled="savingRuleId === notif.id"
-          aria-label="Toggle notification rule"
+          :aria-label="t('notificationsView.toggleAriaLabel')"
           on-color="var(--dd-success)"
           off-color="var(--dd-border-strong)"
           @click.stop
@@ -493,7 +501,7 @@ onMounted(async () => {
     <EmptyState
       v-if="(notificationsViewMode === 'cards' || notificationsViewMode === 'list') && !loading && filteredNotifications.length === 0"
       icon="notifications"
-      message="No notification rules match your filters"
+      :message="t('notificationsView.emptyFiltered')"
       :show-clear="activeFilterCount > 0"
       @clear="clearFilters" />
 
@@ -513,7 +521,7 @@ onMounted(async () => {
 
         <template #subtitle>
           <AppBadge v-if="selectedRule" :tone="selectedRule.enabled ? 'success' : 'neutral'" size="xs">
-            {{ selectedRule.enabled ? 'enabled' : 'disabled' }}
+            {{ selectedRule.enabled ? t('notificationsView.detail.enabled') : t('notificationsView.detail.disabled') }}
           </AppBadge>
           <span v-if="selectedRule"
                 class="text-2xs font-mono dd-text-muted truncate max-w-full"
@@ -528,30 +536,30 @@ onMounted(async () => {
             <div class="text-2xs-plus dd-text-muted">{{ selectedRule.description }}</div>
 
             <div>
-              <div class="text-2xs font-semibold uppercase tracking-wider mb-2 dd-text-muted">Rule status</div>
+              <div class="text-2xs font-semibold uppercase tracking-wider mb-2 dd-text-muted">{{ t('notificationsView.detail.ruleStatusLabel') }}</div>
               <ToggleSwitch
                 :model-value="detailEnabled"
                 :disabled="detailSaving"
-                aria-label="Rule status"
+                :aria-label="t('notificationsView.detail.ruleStatusAriaLabel')"
                 on-color="var(--dd-success)"
                 off-color="var(--dd-border-strong)"
                 @update:model-value="detailEnabled = $event"
               />
               <div class="text-2xs mt-1 dd-text-muted">
-                {{ detailEnabled ? 'Enabled: notifications can fire for this event.' : 'Disabled: notifications are suppressed for this event.' }}
+                {{ detailEnabled ? t('notificationsView.detail.enabledText') : t('notificationsView.detail.disabledText') }}
               </div>
             </div>
 
             <div>
               <div class="text-2xs font-semibold uppercase tracking-wider mb-2 dd-text-muted">
-                Assigned Triggers
+                {{ t('notificationsView.detail.assignedTriggersLabel') }}
               </div>
               <div class="text-2xs-plus mb-2 dd-text-muted">
                 {{ detailTriggerHelpText(selectedRule) }}
               </div>
               <div v-if="triggersSorted.length === 0" class="text-2xs-plus dd-text-muted">
-                No triggers configured. Add triggers on the <RouterLink to="/triggers"
-                class="underline hover:no-underline">Triggers page</RouterLink>.
+                {{ t('notificationsView.detail.noTriggersConfigured') }} <RouterLink to="/triggers"
+                class="underline hover:no-underline">{{ t('notificationsView.detail.triggersPageLink') }}</RouterLink>.
               </div>
               <div v-else class="space-y-2">
                 <label v-for="trigger in triggersSorted" :key="trigger.id"
@@ -582,12 +590,12 @@ onMounted(async () => {
                       :disabled="detailSaving || !detailHasChanges"
                       @click="saveSelectedRule">
                 <AppIcon :name="detailSaving ? 'pending' : 'check'" :size="12" />
-                {{ detailSaving ? 'Saving...' : 'Save changes' }}
+                {{ detailSaving ? t('notificationsView.detail.saving') : t('notificationsView.detail.saveChanges') }}
               </AppButton>
               <AppButton size="none" variant="plain" weight="none" class="px-3 py-1.5 dd-rounded text-2xs-plus font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated disabled:opacity-50 disabled:pointer-events-none"
                       :disabled="detailSaving || !detailHasChanges"
                       @click="syncDetailDraftFromRule">
-                Reset
+                {{ t('notificationsView.detail.reset') }}
               </AppButton>
             </div>
           </div>

@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import AppIconButton from './AppIconButton.vue';
+
+const { t } = useI18n();
 
 const props = withDefaults(
   defineProps<{
@@ -63,7 +66,7 @@ onUnmounted(() => globalThis.removeEventListener('keydown', handleKeydown));
   <aside v-if="open"
          role="dialog"
          :aria-modal="isMobile ? 'true' : undefined"
-         aria-label="Detail panel"
+         :aria-label="t('sharedComponents.detailPanel.ariaLabel')"
          class="detail-panel-inline flex flex-col min-w-0 overflow-clip transition-[flex-basis,width,max-width,color,background-color,border-color,opacity,transform,box-shadow] duration-300 ease-in-out"
          :class="isMobile ? 'fixed top-0 right-0 h-full z-50 dd-rounded' : 'sticky top-0 mt-4 sm:mt-6 mr-[15px]'"
          :style="{
@@ -86,7 +89,7 @@ onUnmounted(() => globalThis.removeEventListener('keydown', handleKeydown));
         <div v-if="(showSizeControls && !isMobile) || showFullPage" class="flex items-center dd-rounded overflow-hidden">
           <AppIconButton v-if="showFullPage"
                   icon="frame-corners" size="toolbar" variant="muted"
-                  tooltip="Open full page view"
+                  :tooltip="t('sharedComponents.detailPanel.openFullPage')"
                   @click="$emit('full-page')" />
           <AppButton size="none" variant="plain" weight="none" v-if="showSizeControls && !isMobile"
                   v-for="s in (['lg', 'md', 'sm'] as const)" :key="s"
@@ -101,7 +104,7 @@ onUnmounted(() => globalThis.removeEventListener('keydown', handleKeydown));
         <slot name="toolbar" />
       </div>
       <AppIconButton icon="xmark" size="toolbar" variant="muted"
-              aria-label="Close details panel"
+              :aria-label="t('sharedComponents.detailPanel.closePanel')"
               @click="closePanel" />
     </div>
 

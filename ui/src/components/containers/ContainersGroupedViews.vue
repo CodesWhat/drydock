@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, watchEffect } from 'vue';
+import { useI18n } from 'vue-i18n';
 import AppBadge from '../AppBadge.vue';
 import AppIconButton from '../AppIconButton.vue';
 import type { ContainersViewRenderGroup } from './containersViewTemplateContext';
@@ -7,10 +8,14 @@ import { useContainersViewTemplateContext } from './containersViewTemplateContex
 import { useUpdateBatches } from '../../composables/useUpdateBatches';
 import { getContainerViewKey } from '../../utils/container-view-key';
 import { imageAge } from '../../utils/audit-helpers';
-import { getPrimaryHardBlocker, hasHardBlocker } from '../../utils/update-eligibility';
+import {
+  getPrimaryHardBlocker,
+  getPrimarySoftBlocker,
+  updateButtonState,
+  type UpdateButtonState,
+} from '../../utils/update-eligibility';
 import type { Container } from '../../types/container';
 import UpdateMaturityBadge from './UpdateMaturityBadge.vue';
-import UpdateEligibilityBadges from './UpdateEligibilityBadges.vue';
 import SuggestedTagBadge from './SuggestedTagBadge.vue';
 import ReleaseNotesLink from './ReleaseNotesLink.vue';
 import ProjectLink from './ProjectLink.vue';
@@ -66,6 +71,7 @@ const {
   filterSearch,
   clearFilters,
 } = useContainersViewTemplateContext();
+const { t } = useI18n();
 const { batches, clearBatch, getBatch } = useUpdateBatches();
 
 const openActionsContainer = computed(
@@ -170,9 +176,6 @@ function blockedUpdateTooltip(container: {
   updateSecuritySummary?: { critical?: number; high?: number };
   updateEligibility?: Container['updateEligibility'];
 }) {
-  // Prefer the eligibility blocker message — it covers every hard reason (agent mismatch,
-  // no trigger configured, rollback, security scan, active op, no update). Fall back to
-  // the legacy bouncer-derived tooltip when no eligibility data is present.
   const hardBlocker = getPrimaryHardBlocker(container.updateEligibility);
   if (hardBlocker) {
     return hardBlocker.message;
@@ -187,8 +190,34 @@ function blockedUpdateTooltip(container: {
   return `Blocked: ${tag}`;
 }
 
-function isUpdateHardBlocked(container: { updateEligibility?: Container['updateEligibility'] }) {
-  return hasHardBlocker(container.updateEligibility);
+function updateBtnState(c: {
+  newTag?: string | null;
+  updateEligibility?: Container['updateEligibility'];
+  id?: unknown;
+  name?: unknown;
+}): UpdateButtonState {
+  return updateButtonState(
+    c.updateEligibility,
+    Boolean(c.newTag),
+    isContainerUpdateInProgress(c) || isContainerUpdateQueued(c),
+  );
+}
+
+function updateBtnTooltip(c: {
+  newTag?: string | null;
+  updateEligibility?: Container['updateEligibility'];
+  updateBouncer?: string;
+  updateSecuritySummary?: { critical?: number; high?: number };
+  id?: unknown;
+  name?: unknown;
+}): string {
+  const state = updateBtnState(c);
+  if (state === 'hard') return blockedUpdateTooltip(c);
+  if (state === 'soft') {
+    const soft = getPrimarySoftBlocker(c.updateEligibility);
+    return soft ? `Manual update only — ${soft.message}` : 'Manual update only';
+  }
+  return 'Update';
 }
 
 function getGroupByKey(groupKey: string) {
@@ -220,13 +249,13 @@ function getGroupDoneCount(group: ContainersViewRenderGroup) {
 
 function getContainerStatusLabel(container: { id?: unknown; name?: unknown; status?: string }) {
   if (isContainerScanning(container)) {
-    return 'Scanning';
+    return t('containerComponents.groupedViews.statusScanning');
   }
   if (isContainerUpdating(container)) {
-    return 'Updating';
+    return t('containerComponents.groupedViews.statusUpdating');
   }
   if (isContainerQueued(container)) {
-    return 'Queued';
+    return t('containerComponents.groupedViews.statusQueued');
   }
   return container.status ?? 'unknown';
 }
@@ -377,7 +406,7 @@ watchEffect(() => {
                 :size="14"
                 :class="isContainerQueued(c) && !isContainerUpdating(c) && !isContainerScanning(c) ? '' : 'dd-spin'"
               />
-              <span>{{ isContainerQueued(c) && !isContainerUpdating(c) && !isContainerScanning(c) ? 'Queued' : isContainerScanning(c) && !isContainerUpdating(c) ? 'Scanning' : 'Updating' }}</span>
+              <span>{{ isContainerQueued(c) && !isContainerUpdating(c) && !isContainerScanning(c) ? t('containerComponents.groupedViews.statusQueued') : isContainerScanning(c) && !isContainerUpdating(c) ? t('containerComponents.groupedViews.statusScanning') : t('containerComponents.groupedViews.statusUpdating') }}</span>
             </div>
           </div>
           <ContainerIcon :icon="c.icon" :size="32" />
@@ -406,21 +435,21 @@ watchEffect(() => {
               <span v-if="getContainerListPolicyState(c).snoozed"
                     class="inline-flex items-center justify-center"
                     style="color: var(--dd-info);"
-                    aria-label="Snoozed updates"
+                    :aria-label="t('containerComponents.groupedViews.ariaSnoozedUpdates')"
                     v-tooltip.top="tt(containerPolicyTooltip(c, 'snoozed'))">
                 <AppIcon name="pause" :size="14" />
               </span>
               <span v-if="getContainerListPolicyState(c).skipped"
                     class="inline-flex items-center justify-center"
                     style="color: var(--dd-warning);"
-                    aria-label="Skipped updates"
+                    :aria-label="t('containerComponents.groupedViews.ariaSkippedUpdates')"
                     v-tooltip.top="tt(containerPolicyTooltip(c, 'skipped'))">
                 <AppIcon name="skip-forward" :size="14" />
               </span>
               <span v-if="getContainerListPolicyState(c).maturityBlocked"
                     class="inline-flex items-center justify-center"
                     style="color: var(--dd-primary);"
-                    aria-label="Maturity-blocked updates"
+                    :aria-label="t('containerComponents.groupedViews.ariaMaturityBlocked')"
                     v-tooltip.top="tt(containerPolicyTooltip(c, 'maturity'))">
                 <AppIcon name="clock" :size="14" />
               </span>
@@ -451,20 +480,20 @@ watchEffect(() => {
             <AppBadge
               v-else-if="getContainerListPolicyState(c).skipped"
               size="xs"
-              v-tooltip.top="'Pinned'"
+              v-tooltip.top="t('containerComponents.groupedViews.pinnedTooltip')"
               :custom="{ bg: 'var(--dd-success-muted)', text: 'var(--dd-success)' }"
             >
               <AppIcon name="pin" :size="12" />
-              <span class="dd-cell-show-100 ml-1">Pinned</span>
+              <span class="dd-cell-show-100 ml-1">{{ t('containerComponents.groupedViews.pinnedTooltip') }}</span>
             </AppBadge>
             <AppBadge
               v-else-if="!c.updateKind && !c.updateMaturity && !c.suggestedTag"
               size="xs"
-              v-tooltip.top="'Up to date'"
+              v-tooltip.top="t('containerComponents.groupedViews.upToDateTooltip')"
               :custom="{ bg: 'var(--dd-success-muted)', text: 'var(--dd-success)' }"
             >
               <AppIcon name="up-to-date" :size="12" />
-              <span class="dd-cell-show-100 ml-1">Up to date</span>
+              <span class="dd-cell-show-100 ml-1">{{ t('containerComponents.groupedViews.upToDateTooltip') }}</span>
             </AppBadge>
             <AppBadge
               v-if="c.newTag && c.bouncer === 'blocked'"
@@ -474,10 +503,9 @@ watchEffect(() => {
               v-tooltip.top="tt(blockedUpdateTooltip(c))"
             >
               <AppIcon name="lock" :size="12" class="mr-0.5" />
-              Blocked
+              {{ t('containerComponents.groupedViews.blockedTooltip') }}
             </AppBadge>
             <UpdateMaturityBadge class="dd-cell-show-100" :maturity="c.updateMaturity" :tooltip="c.updateMaturityTooltip" />
-            <UpdateEligibilityBadges class="dd-cell-show-100" :eligibility="c.updateEligibility" :has-active-operation-badge="isContainerUpdateInProgress(c) || isContainerUpdateQueued(c)" />
             <SuggestedTagBadge class="dd-cell-show-100" :tag="c.suggestedTag" :current-tag="c.currentTag" />
           </div>
         </template>
@@ -535,7 +563,7 @@ watchEffect(() => {
         <template #actions="{ row: c }">
           <template v-if="!containerActionsEnabled">
             <div class="flex items-center justify-end gap-2">
-              <span class="text-2xs dd-text-muted">Actions disabled</span>
+              <span class="text-2xs dd-text-muted">{{ t('containerComponents.groupedViews.actionsDisabled') }}</span>
               <AppIconButton icon="lock" size="sm" variant="muted"
                 class="cursor-not-allowed opacity-60"
                 :disabled="true"
@@ -554,15 +582,20 @@ watchEffect(() => {
                 icon-only
               />
               <ProjectLink v-if="c.sourceRepo" :source-repo="c.sourceRepo" icon-only />
-              <AppIconButton v-if="c.newTag && isUpdateHardBlocked(c)" icon="lock" size="sm" variant="muted"
+              <AppIconButton v-if="updateBtnState(c) === 'hard'" icon="lock" size="sm" variant="muted"
                       class="cursor-not-allowed opacity-50"
                       :disabled="true"
-                      :tooltip="tt(blockedUpdateTooltip(c))" @click.stop />
-              <AppIconButton v-else-if="c.newTag" icon="cloud-download" size="sm" variant="muted"
+                      :tooltip="tt(updateBtnTooltip(c))" @click.stop />
+              <AppIconButton v-else-if="updateBtnState(c) === 'soft'" icon="cloud-download" size="sm" variant="warning"
+                      class="transition-[color,background-color,border-color,opacity,transform,box-shadow]"
+                      :class="isRowLocked(c) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-bg-hover hover:scale-110 active:scale-95'"
+                      :disabled="isRowLocked(c)"
+                      :tooltip="tt(updateBtnTooltip(c))" @click.stop="confirmUpdate(c)" />
+              <AppIconButton v-else-if="updateBtnState(c) === 'ready'" icon="cloud-download" size="sm" variant="muted"
                       class="transition-[color,background-color,border-color,opacity,transform,box-shadow]"
                       :class="isRowLocked(c) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-success hover:dd-bg-hover hover:scale-110 active:scale-95'"
                       :disabled="isRowLocked(c)"
-                      :tooltip="tt('Update')" @click.stop="confirmUpdate(c)" />
+                      :tooltip="tt(updateBtnTooltip(c))" @click.stop="confirmUpdate(c)" />
               <AppIconButton v-else-if="c.status === 'running'" icon="stop" size="sm" variant="muted"
                       class="transition-[color,background-color,border-color,opacity,transform,box-shadow]"
                       :class="isRowLocked(c) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-danger hover:dd-bg-hover hover:scale-110 active:scale-95'"
@@ -596,8 +629,8 @@ watchEffect(() => {
               <ProjectLink v-if="c.sourceRepo" :source-repo="c.sourceRepo" icon-only />
             <div v-if="c.newTag" class="inline-flex items-center gap-1">
               <!-- Blocked: muted split button (any hard eligibility blocker) -->
-              <div v-if="isUpdateHardBlocked(c)" class="inline-flex dd-rounded overflow-hidden" style="min-width: 110px;"
-                   v-tooltip.top="tt(blockedUpdateTooltip(c))">
+              <div v-if="updateBtnState(c) === 'hard'" class="inline-flex dd-rounded overflow-hidden" style="min-width: 110px;"
+                   v-tooltip.top="tt(updateBtnTooltip(c))">
                 <AppButton size="none" variant="plain" weight="none" class="inline-flex items-center justify-center flex-1 whitespace-nowrap px-3 py-1.5 text-2xs-plus font-bold tracking-wide cursor-not-allowed"
                         :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-text-muted)' }">
                   <AppIcon name="lock" :size="14" class="mr-1" /> Blocked
@@ -606,10 +639,30 @@ watchEffect(() => {
                         class="transition-colors dd-text-muted hover:dd-text hover:dd-bg-hover"
                         :style="{ backgroundColor: 'var(--dd-bg)' }"
                         :class="openActionsMenu === c.id ? 'dd-bg-elevated dd-text' : ''"
-                        aria-label="Open actions menu"
+                        :aria-label="t('containerComponents.groupedViews.openActionsMenu')"
                         @click.stop="toggleActionsMenu(c.id, $event)" />
               </div>
-              <!-- Updatable: split button -->
+              <!-- Soft-blocked: amber split button (manual update still works, warn-and-confirm on click) -->
+              <div v-else-if="updateBtnState(c) === 'soft'" class="inline-flex dd-rounded overflow-hidden"
+                   :class="isRowLocked(c) ? 'opacity-50' : ''"
+                   :style="{ border: '1px solid var(--dd-warning)' }"
+                   v-tooltip.top="tt(updateBtnTooltip(c))">
+                <AppButton size="none" variant="plain" weight="none" class="inline-flex items-center justify-center whitespace-nowrap px-3 py-1.5 text-2xs-plus font-bold tracking-wide transition-colors"
+                        :class="isRowLocked(c) ? 'cursor-not-allowed' : ''"
+                        :style="{ backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning)' }"
+                        :disabled="isRowLocked(c)"
+                        @click.stop="confirmUpdate(c)">
+                  <AppIcon name="cloud-download" :size="14" class="mr-1" /> Update
+                </AppButton>
+                <AppIconButton icon="chevron-down" size="toolbar" variant="plain"
+                        class="transition-colors"
+                        :class="isRowLocked(c) ? 'cursor-not-allowed' : openActionsMenu === c.id ? 'brightness-125' : ''"
+                        :style="{ backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning)', borderLeft: '1px solid var(--dd-warning)' }"
+                        :disabled="isRowLocked(c)"
+                        :aria-label="t('containerComponents.groupedViews.openUpdateActionsMenu')"
+                        @click.stop="toggleActionsMenu(c.id, $event)" />
+              </div>
+              <!-- Ready: green split button -->
               <div v-else class="inline-flex dd-rounded overflow-hidden"
                    :class="isRowLocked(c) ? 'opacity-50' : ''"
                    :style="{ border: '1px solid var(--dd-success)' }">
@@ -625,7 +678,7 @@ watchEffect(() => {
                         :class="isRowLocked(c) ? 'cursor-not-allowed' : openActionsMenu === c.id ? 'brightness-125' : ''"
                         :style="{ backgroundColor: 'var(--dd-success-muted)', color: 'var(--dd-success)', borderLeft: '1px solid var(--dd-success)' }"
                         :disabled="isRowLocked(c)"
-                        aria-label="Open update actions menu"
+                        :aria-label="t('containerComponents.groupedViews.openUpdateActionsMenu')"
                         @click.stop="toggleActionsMenu(c.id, $event)" />
               </div>
             </div>
@@ -704,28 +757,28 @@ watchEffect(() => {
               <span v-if="hasRegistryError(c)"
                     class="inline-flex items-center justify-center"
                     style="color: var(--dd-danger);"
-                    aria-label="Registry error"
+                    :aria-label="t('containerComponents.groupedViews.ariaRegistryError')"
                     v-tooltip.top="tt(registryErrorTooltip(c))">
                 <AppIcon name="warning" :size="12" />
               </span>
               <span v-if="getContainerListPolicyState(c).snoozed"
                     class="inline-flex items-center justify-center"
                     style="color: var(--dd-info);"
-                    aria-label="Snoozed updates"
+                    :aria-label="t('containerComponents.groupedViews.ariaSnoozedUpdates')"
                     v-tooltip.top="tt(containerPolicyTooltip(c, 'snoozed'))">
                 <AppIcon name="pause" :size="12" />
               </span>
               <span v-if="getContainerListPolicyState(c).skipped"
                     class="inline-flex items-center justify-center"
                     style="color: var(--dd-warning);"
-                    aria-label="Skipped updates"
+                    :aria-label="t('containerComponents.groupedViews.ariaSkippedUpdates')"
                     v-tooltip.top="tt(containerPolicyTooltip(c, 'skipped'))">
                 <AppIcon name="skip-forward" :size="12" />
               </span>
               <span v-if="getContainerListPolicyState(c).maturityBlocked"
                     class="inline-flex items-center justify-center"
                     style="color: var(--dd-primary);"
-                    aria-label="Maturity-blocked updates"
+                    :aria-label="t('containerComponents.groupedViews.ariaMaturityBlocked')"
                     v-tooltip.top="tt(containerPolicyTooltip(c, 'maturity'))">
                 <AppIcon name="clock" :size="12" />
               </span>
@@ -735,18 +788,17 @@ watchEffect(() => {
           <!-- Card body -- inline Current / Latest -->
           <div class="px-4 py-3 min-w-0">
             <div class="flex items-center gap-2 flex-wrap min-w-0">
-              <span class="text-2xs-plus dd-text-muted shrink-0">Current</span>
+              <span class="text-2xs-plus dd-text-muted shrink-0">{{ t('containerComponents.groupedViews.currentLabel') }}</span>
               <CopyableTag :tag="c.currentTag" class="text-xs font-bold dd-text truncate max-w-[120px]" @click.stop>
                 {{ c.currentTag }}
               </CopyableTag>
               <template v-if="c.newTag">
-                <span class="text-2xs-plus ml-1 dd-text-muted shrink-0">Latest</span>
+                <span class="text-2xs-plus ml-1 dd-text-muted shrink-0">{{ t('containerComponents.groupedViews.latestLabel') }}</span>
                 <CopyableTag :tag="c.newTag" class="text-xs font-bold truncate max-w-[140px]"
                       :style="{ color: updateKindColor(c.updateKind).text }" @click.stop>
                   {{ c.newTag }}
                 </CopyableTag>
                 <span class="ml-1 shrink-0"><UpdateMaturityBadge :maturity="c.updateMaturity" :tooltip="c.updateMaturityTooltip" /></span>
-                <span class="ml-1 shrink-0"><UpdateEligibilityBadges :eligibility="c.updateEligibility" :has-active-operation-badge="isContainerUpdateInProgress(c) || isContainerUpdateQueued(c)" /></span>
               </template>
               <template v-else>
                 <span
@@ -762,21 +814,21 @@ watchEffect(() => {
                   <span v-if="getContainerListPolicyState(c).snoozed"
                         class="inline-flex items-center justify-center ml-1"
                         style="color: var(--dd-info);"
-                        aria-label="Snoozed updates"
+                        :aria-label="t('containerComponents.groupedViews.ariaSnoozedUpdates')"
                         v-tooltip.top="tt(containerPolicyTooltip(c, 'snoozed'))">
                     <AppIcon name="pause" :size="13" />
                   </span>
                   <span v-if="getContainerListPolicyState(c).skipped"
                         class="inline-flex items-center justify-center"
                         style="color: var(--dd-warning);"
-                        aria-label="Skipped updates"
+                        :aria-label="t('containerComponents.groupedViews.ariaSkippedUpdates')"
                         v-tooltip.top="tt(containerPolicyTooltip(c, 'skipped'))">
                     <AppIcon name="skip-forward" :size="13" />
                   </span>
                   <span v-if="getContainerListPolicyState(c).maturityBlocked"
                         class="inline-flex items-center justify-center"
                         style="color: var(--dd-primary);"
-                        aria-label="Maturity-blocked updates"
+                        :aria-label="t('containerComponents.groupedViews.ariaMaturityBlocked')"
                         v-tooltip.top="tt(containerPolicyTooltip(c, 'maturity'))">
                     <AppIcon name="clock" :size="13" />
                   </span>
@@ -826,17 +878,21 @@ watchEffect(() => {
                 <AppIconButton icon="security" size="xs" variant="muted"
                         class="hover:dd-text-secondary hover:dd-bg-elevated"
                         :tooltip="tt('Scan')" @click.stop="scanContainer(c)" />
-                <AppIconButton v-if="c.newTag && isUpdateHardBlocked(c)" icon="lock" size="xs" variant="muted"
+                <AppIconButton v-if="updateBtnState(c) === 'hard'" icon="lock" size="xs" variant="muted"
                         class="opacity-60 cursor-not-allowed"
                         :disabled="true"
-                        :tooltip="tt(blockedUpdateTooltip(c))" />
-                <AppIconButton v-else-if="c.newTag" icon="cloud-download" size="xs" variant="muted"
+                        :tooltip="tt(updateBtnTooltip(c))" />
+                <AppIconButton v-else-if="updateBtnState(c) === 'soft'" icon="cloud-download" size="xs" variant="warning"
+                        :class="isRowLocked(c) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-bg-elevated'"
+                        :disabled="isRowLocked(c)"
+                        :tooltip="tt(updateBtnTooltip(c))" @click.stop="confirmUpdate(c)" />
+                <AppIconButton v-else-if="updateBtnState(c) === 'ready'" icon="cloud-download" size="xs" variant="muted"
                         :class="isRowLocked(c) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-success hover:dd-bg-elevated'"
                         :disabled="isRowLocked(c)"
-                        :tooltip="tt('Update')" @click.stop="confirmUpdate(c)" />
+                        :tooltip="tt(updateBtnTooltip(c))" @click.stop="confirmUpdate(c)" />
               </template>
               <template v-else>
-                <span class="text-2xs dd-text-muted">Actions disabled</span>
+                <span class="text-2xs dd-text-muted">{{ t('containerComponents.groupedViews.actionsDisabled') }}</span>
                 <AppIconButton icon="lock" size="xs" variant="muted"
                   class="cursor-not-allowed opacity-60"
                   :disabled="true"
@@ -863,7 +919,7 @@ watchEffect(() => {
                 :size="18"
                 :class="isContainerQueued(c) && !isContainerUpdating(c) && !isContainerScanning(c) ? '' : 'dd-spin'"
               />
-              <span>{{ isContainerQueued(c) && !isContainerUpdating(c) && !isContainerScanning(c) ? 'Queued' : isContainerScanning(c) && !isContainerUpdating(c) ? 'Scanning' : 'Updating' }}</span>
+              <span>{{ isContainerQueued(c) && !isContainerUpdating(c) && !isContainerScanning(c) ? t('containerComponents.groupedViews.statusQueued') : isContainerScanning(c) && !isContainerUpdating(c) ? t('containerComponents.groupedViews.statusScanning') : t('containerComponents.groupedViews.statusUpdating') }}</span>
             </div>
           </div>
         </template>
@@ -886,20 +942,20 @@ watchEffect(() => {
               v-if="isContainerScanning(c) && !isContainerUpdating(c)"
               class="text-2xs mt-0.5 inline-flex items-center gap-1 dd-text-muted">
               <AppIcon name="spinner" :size="10" class="dd-spin shrink-0" />
-              Scanning
+              {{ t('containerComponents.groupedViews.statusScanning') }}
             </div>
             <div
               v-else-if="isContainerUpdating(c)"
               class="text-2xs mt-0.5 inline-flex items-center gap-1"
               style="color: var(--dd-warning);">
               <AppIcon name="spinner" :size="10" class="dd-spin shrink-0" />
-              Updating
+              {{ t('containerComponents.groupedViews.statusUpdating') }}
             </div>
             <div
               v-else-if="isContainerQueued(c)"
               class="text-2xs mt-0.5 inline-flex items-center gap-1 dd-text-muted">
               <AppIcon name="clock" :size="10" class="shrink-0" />
-              Queued
+              {{ t('containerComponents.groupedViews.statusQueued') }}
             </div>
             <div
               v-else-if="!c.newTag && c.noUpdateReason"
@@ -934,7 +990,6 @@ watchEffect(() => {
               {{ c.updateKind }}
             </AppBadge>
             <UpdateMaturityBadge :maturity="c.updateMaturity" :tooltip="c.updateMaturityTooltip" />
-            <UpdateEligibilityBadges :eligibility="c.updateEligibility" :has-active-operation-badge="isContainerUpdateInProgress(c) || isContainerUpdateQueued(c)" />
             <!-- Status: icon on mobile, badge on desktop -->
             <AppIcon :name="getContainerStatusIcon(c)" :size="13" class="shrink-0 md:!hidden"
                      :class="isContainerUpdating(c) || isContainerScanning(c) ? 'dd-spin' : ''"
@@ -974,7 +1029,7 @@ watchEffect(() => {
               <AppIcon name="clock" :size="12" />
             </span>
             <!-- Bouncer: icon in badge -->
-            <AppBadge v-if="c.bouncer === 'blocked'" tone="danger" size="xs" class="px-1.5 py-0" v-tooltip.top="tt('Blocked by Bouncer')">
+            <AppBadge v-if="c.bouncer === 'blocked'" tone="danger" size="xs" class="px-1.5 py-0" v-tooltip.top="tt(t('containerComponents.groupedViews.blockedByBouncer'))">
               <AppIcon name="blocked" :size="12" />
             </AppBadge>
             <!-- Server: icon on mobile, badge on desktop -->
@@ -1012,27 +1067,27 @@ watchEffect(() => {
           <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text" v-if="openActionsContainer.status === 'running'"
                   @click="confirmStop(openActionsContainer); closeActionsMenu()">
             <AppIcon name="stop" :size="12" class="w-3 text-center inline-flex justify-center" :style="{ color: 'var(--dd-danger)' }" />
-            Stop
+            {{ t('containerComponents.groupedViews.stopAction') }}
           </AppButton>
           <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text" v-else
                   @click="startContainer(openActionsContainer); closeActionsMenu()">
             <AppIcon name="play" :size="12" class="w-3 text-center inline-flex justify-center" :style="{ color: 'var(--dd-success)' }" />
-            Start
+            {{ t('containerComponents.groupedViews.startAction') }}
           </AppButton>
           <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text" @click="confirmRestart(openActionsContainer); closeActionsMenu()">
             <AppIcon name="restart" :size="12" class="w-3 text-center inline-flex justify-center dd-text-muted" />
-            Restart
+            {{ t('containerComponents.groupedViews.restartAction') }}
           </AppButton>
           <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text" @click="scanContainer(openActionsContainer); closeActionsMenu()">
             <AppIcon name="security" :size="12" class="w-3 text-center inline-flex justify-center" :style="{ color: 'var(--dd-secondary)' }" />
-            Scan
+            {{ t('containerComponents.groupedViews.scanAction') }}
           </AppButton>
           <!-- Force update for blocked containers (even without newTag) -->
           <template v-if="openActionsContainer.bouncer === 'blocked' && !openActionsContainer.newTag">
             <div class="my-1" :style="{ borderTop: '1px solid var(--dd-border)' }" />
             <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text" @click="confirmForceUpdate(openActionsContainer); closeActionsMenu()">
               <AppIcon name="bolt" :size="12" class="w-3 text-center inline-flex justify-center" :style="{ color: 'var(--dd-warning)' }" />
-              Force update
+              {{ t('containerComponents.groupedViews.forceUpdateAction') }}
             </AppButton>
           </template>
           <template v-if="openActionsContainer.newTag">
@@ -1040,29 +1095,29 @@ watchEffect(() => {
             <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text" v-if="openActionsContainer.bouncer === 'blocked'"
                     @click="confirmForceUpdate(openActionsContainer); closeActionsMenu()">
               <AppIcon name="bolt" :size="12" class="w-3 text-center inline-flex justify-center" :style="{ color: 'var(--dd-warning)' }" />
-              Force update
+              {{ t('containerComponents.groupedViews.forceUpdateAction') }}
             </AppButton>
             <AppButton v-if="openActionsContainer.bouncer !== 'blocked'" size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text"
                     @click="confirmUpdate(openActionsContainer); closeActionsMenu()">
               <AppIcon name="cloud-download" :size="12" class="w-3 text-center inline-flex justify-center" :style="{ color: 'var(--dd-success)' }" />
-              Update
+              {{ t('containerComponents.groupedViews.updateAction') }}
             </AppButton>
             <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text" @click="skipUpdate(openActionsContainer); closeActionsMenu()">
               <AppIcon name="skip-forward" :size="12" class="w-3 text-center inline-flex justify-center dd-text-muted" />
-              Skip this update
+              {{ t('containerComponents.groupedViews.skipUpdateAction') }}
             </AppButton>
           </template>
           <div class="my-1" :style="{ borderTop: '1px solid var(--dd-border)' }" />
           <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text"
                   @click="selectContainer(openActionsContainer!); activeDetailTab = 'actions'; closeActionsMenu()">
             <AppIcon name="recent-updates" :size="12" class="w-3 text-center inline-flex justify-center dd-text-muted" />
-            Rollback
+            {{ t('containerComponents.groupedViews.rollbackAction') }}
           </AppButton>
           <div class="my-1" :style="{ borderTop: '1px solid var(--dd-border)' }" />
           <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2" style="color: var(--dd-danger);"
                   @click="confirmDelete(openActionsContainer); closeActionsMenu()">
             <AppIcon name="trash" :size="12" class="w-3 text-center inline-flex justify-center" />
-            Delete
+            {{ t('containerComponents.groupedViews.deleteAction') }}
           </AppButton>
         </div>
       </Teleport>

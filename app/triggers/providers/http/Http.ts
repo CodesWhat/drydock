@@ -6,7 +6,7 @@ import {
   withAuthorizationHeader,
 } from '../../../security/auth.js';
 
-import Trigger, { type TriggerConfiguration } from '../Trigger.js';
+import Trigger, { type BatchRuntimeContext, type TriggerConfiguration } from '../Trigger.js';
 
 interface HttpRequestOptions extends Omit<AxiosRequestConfig, 'proxy'> {
   proxy?: {
@@ -110,7 +110,20 @@ class Http extends Trigger<HttpConfiguration> {
    * @param containers
    * @returns {Promise<*>}
    */
-  async triggerBatch(containers) {
+  async triggerBatch(containers, runtimeContext?: BatchRuntimeContext) {
+    // Security-digest (and any other prerendered-batch) callers supply a
+    // title/body in runtimeContext; forward them as a structured envelope so
+    // the webhook receiver gets the right text instead of a raw dump of stub
+    // rows (#328). Update-digest callers continue to receive the raw
+    // container array for backwards compatibility.
+    if (runtimeContext?.title || runtimeContext?.body) {
+      return this.sendHttpRequest({
+        title: runtimeContext.title ?? '',
+        body: runtimeContext.body ?? '',
+        eventKind: runtimeContext.eventKind,
+        containers,
+      });
+    }
     return this.sendHttpRequest(containers);
   }
 

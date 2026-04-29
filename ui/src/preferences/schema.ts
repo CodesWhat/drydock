@@ -60,7 +60,7 @@ export interface PreferencesSchema {
   };
 }
 
-export const CURRENT_SCHEMA_VERSION = 2;
+export const CURRENT_SCHEMA_VERSION = 4;
 
 export const CONTAINER_TABLE_COLUMN_KEYS = [
   'icon',

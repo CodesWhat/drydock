@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, shallowRef, triggerRef, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import AppIconButton from '@/components/AppIconButton.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { useLogSearch } from '../composables/useLogSearch';
@@ -28,8 +29,6 @@ const props = withDefaults(
     newestFirst: false,
     compact: false,
     showLineNumbers: true,
-    emptyMessage: 'No log entries yet',
-    statusLabel: 'Offline',
     statusColor: 'var(--dd-danger)',
     paused: false,
     autoScrollPinned: true,
@@ -42,6 +41,8 @@ const emit = defineEmits<{
   (e: 'toggle-pause'): void;
   (e: 'toggle-pin'): void;
 }>();
+
+const { t } = useI18n();
 
 const lineElements = new Map<number, HTMLElement>();
 const logViewport = ref<HTMLElement | null>(null);
@@ -422,7 +423,7 @@ function toggleSortOrder(): void {
           :icon="props.paused ? 'play' : 'pause'"
           size="xs"
           data-test="container-log-toggle-pause"
-          :tooltip="props.paused ? 'Resume' : 'Pause'"
+          :tooltip="props.paused ? t('appShell.logViewer.toolbar.resume') : t('appShell.logViewer.toolbar.pause')"
           @click="emit('toggle-pause')"
         />
 
@@ -430,7 +431,7 @@ function toggleSortOrder(): void {
           :icon="props.autoScrollPinned ? 'unpin' : 'pin'"
           size="xs"
           data-test="container-log-toggle-pin"
-          :tooltip="props.autoScrollPinned ? 'Unpin auto-scroll' : 'Pin auto-scroll'"
+          :tooltip="props.autoScrollPinned ? t('appShell.logViewer.toolbar.unpinAutoScroll') : t('appShell.logViewer.toolbar.pinAutoScroll')"
           @click="togglePin"
         />
 
@@ -438,7 +439,7 @@ function toggleSortOrder(): void {
           :icon="props.newestFirst ? 'sort-asc' : 'sort-desc'"
           size="xs"
           data-test="container-log-sort-toggle"
-          :tooltip="props.newestFirst ? 'Newest first' : 'Oldest first'"
+          :tooltip="props.newestFirst ? t('appShell.logViewer.toolbar.newestFirst') : t('appShell.logViewer.toolbar.oldestFirst')"
           @click="toggleSortOrder"
         />
 
@@ -458,7 +459,7 @@ function toggleSortOrder(): void {
             type="text"
             class="w-full pl-7 pr-2 py-1.5 dd-rounded text-2xs-plus outline-none dd-text dd-placeholder"
             style="background-color: var(--dd-log-footer-bg)"
-            placeholder="Search logs"
+            :placeholder="t('appShell.logViewer.search.placeholder')"
           />
         </div>
 
@@ -469,7 +470,7 @@ function toggleSortOrder(): void {
           :class="regexSearch ? 'text-drydock-secondary dd-bg-elevated' : 'dd-text-muted hover:dd-text hover:dd-bg-elevated'"
           @click="regexSearch = !regexSearch"
         >
-          .* Regex
+          {{ t('appShell.logViewer.toolbar.regexToggle') }}
         </AppButton>
 
         <AppIconButton
@@ -477,7 +478,7 @@ function toggleSortOrder(): void {
           size="xs"
           :variant="searchFilterMode ? 'secondary' : 'muted'"
           data-test="container-log-filter-toggle"
-          :tooltip="searchFilterMode ? 'Showing matches only' : 'Show matches only'"
+          :tooltip="searchFilterMode ? t('appShell.logViewer.toolbar.showingMatchesOnly') : t('appShell.logViewer.toolbar.showMatchesOnly')"
           :class="searchFilterMode ? 'dd-bg-elevated' : ''"
           @click="searchFilterMode = !searchFilterMode"
         />
@@ -490,7 +491,7 @@ function toggleSortOrder(): void {
             :disabled="matchedEntryIds.length === 0"
             @click="jumpToMatch('prev')"
           >
-            Prev
+            {{ t('appShell.logViewer.toolbar.prev') }}
           </AppButton>
           <AppButton size="none" variant="plain" weight="none"
             type="button"
@@ -499,7 +500,7 @@ function toggleSortOrder(): void {
             :disabled="matchedEntryIds.length === 0"
             @click="jumpToMatch('next')"
           >
-            Next
+            {{ t('appShell.logViewer.toolbar.next') }}
           </AppButton>
           <span data-test="container-log-match-index" class="text-2xs dd-text-muted font-mono">{{ matchLabel }}</span>
         </template>
@@ -517,7 +518,7 @@ function toggleSortOrder(): void {
         :icon="copySuccess ? 'check' : 'copy'"
         size="xs"
         data-test="container-log-copy"
-        :tooltip="copySuccess ? 'Copied!' : 'Copy logs'"
+        :tooltip="copySuccess ? t('appShell.logViewer.search.copied') : t('appShell.logViewer.search.copyLogs')"
         class="absolute top-2 right-2 z-10 opacity-50 hover:opacity-100"
         @click="copyLogs"
       />
@@ -528,7 +529,7 @@ function toggleSortOrder(): void {
       @scroll="handleLogScroll"
     >
       <div v-if="displayEntries.length === 0" class="px-3 py-5 text-center text-2xs-plus dd-text-muted">
-        {{ searchFilterMode && searchQuery ? 'No matching entries' : props.emptyMessage }}
+        {{ searchFilterMode && searchQuery ? t('appShell.logViewer.empty.noMatchingEntries') : (props.emptyMessage ?? t('appShell.logViewer.empty.defaultMessage')) }}
       </div>
 
       <div
@@ -570,14 +571,14 @@ function toggleSortOrder(): void {
       :style="{ borderTop: '1px solid var(--dd-log-divider)', backgroundColor: 'var(--dd-log-footer-bg)' }"
     >
       <div class="flex items-center gap-2 min-w-0">
-        <span class="dd-text-muted font-mono" data-test="container-log-line-count">{{ renderedLineCount }} lines</span>
+        <span class="dd-text-muted font-mono" data-test="container-log-line-count">{{ renderedLineCount }} {{ t('appShell.logViewer.footer.lines') }}</span>
         <slot name="footer-extra" />
       </div>
 
       <div class="flex items-center gap-1.5">
         <StatusDot :color="props.statusColor" size="md" />
         <span class="font-semibold" :style="{ color: props.statusColor }">
-          {{ props.statusLabel }}
+          {{ props.statusLabel ?? t('appShell.logViewer.footer.defaultStatusLabel') }}
         </span>
       </div>
     </div>

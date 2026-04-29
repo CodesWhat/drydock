@@ -1,6 +1,6 @@
 import Push from 'pushover-notifications';
 import type { Container } from '../../../model/container.js';
-import Trigger, { type TriggerConfiguration } from '../Trigger.js';
+import Trigger, { type BatchRuntimeContext, type TriggerConfiguration } from '../Trigger.js';
 
 interface PushoverConfiguration extends TriggerConfiguration {
   user: string;
@@ -149,10 +149,10 @@ class Pushover extends Trigger<PushoverConfiguration> {
    * @param containers
    * @returns {Promise<unknown>}
    */
-  async triggerBatch(containers: Container[]) {
+  async triggerBatch(containers: Container[], runtimeContext?: BatchRuntimeContext) {
     return this.sendMessage({
-      title: this.renderBatchTitle(containers),
-      message: this.renderBatchBody(containers),
+      title: this.renderBatchTitle(containers, runtimeContext),
+      message: this.renderBatchBody(containers, runtimeContext),
     });
   }
 
@@ -195,10 +195,12 @@ class Pushover extends Trigger<PushoverConfiguration> {
 
   /**
    * Render trigger body batch (override) to remove empty lines between containers.
-   * @param containers
-   * @returns {*}
+   * Honors runtimeContext.body when set (e.g. security-alert-digest, #328).
    */
-  renderBatchBody(containers: Container[]) {
+  renderBatchBody(containers: Container[], runtimeContext?: BatchRuntimeContext) {
+    if (runtimeContext?.body !== undefined) {
+      return runtimeContext.body;
+    }
     return containers.map((container) => `- ${this.renderSimpleBody(container)}`).join('\n');
   }
 }

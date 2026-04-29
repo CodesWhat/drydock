@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import AppIconButton from '../AppIconButton.vue';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   sourceRepo?: string;
@@ -28,8 +31,8 @@ const iconName = computed(() => {
     :href="projectUrl"
     target="_blank"
     rel="noopener noreferrer"
-    :tooltip="'View project'"
-    aria-label="View project"
+    :tooltip="t('containerComponents.projectLink.viewProject')"
+    :aria-label="t('containerComponents.projectLink.viewProject')"
     data-test="project-link"
     @click.stop
   />
@@ -43,6 +46,6 @@ const iconName = computed(() => {
     data-test="project-link"
   >
     <AppIcon :name="iconName" :size="12" />
-    View project
+    {{ t('containerComponents.projectLink.viewProject') }}
   </a>
 </template>
