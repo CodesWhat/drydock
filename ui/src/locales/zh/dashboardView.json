@@ -1,0 +1,91 @@
+{
+  "dashboardView": {
+    "loading": "正在加载仪表盘...",
+    "loadFailed": "无法加载仪表盘",
+    "dragToReorder": "拖动以重新排序",
+    "viewAll": "查看全部 →",
+    "editToggle": {
+      "showWidgetPanel": "显示小部件面板",
+      "doneCustomizing": "完成自定义",
+      "customize": "自定义仪表盘"
+    },
+    "widgetPanel": {
+      "title": "小部件",
+      "closePanel": "关闭面板",
+      "resetToDefault": "重置为默认"
+    },
+    "confirm": {
+      "updateContainer": {
+        "header": "更新容器",
+        "message": "立即更新 {name}？这将应用最新发现的镜像。",
+        "accept": "更新"
+      },
+      "updateAll": {
+        "header": "更新所有容器",
+        "message": "{count} 个容器将被更新。继续吗？",
+        "accept": "全部更新"
+      }
+    },
+    "toast": {
+      "updated": "已更新：{name}",
+      "updateFailed": "更新失败：{name}",
+      "rolledBack": "已回滚：{name}",
+      "updateError": "无法更新 {name}",
+      "updateAllError": "无法更新所有容器"
+    },
+    "recentUpdates": {
+      "title": "可用更新",
+      "updateAll": "全部更新",
+      "noUpdates": "没有可用更新",
+      "releaseNotes": "发布说明",
+      "securityBlocked": "被安全机制阻止",
+      "updateContainer": "更新容器",
+      "compactSingle": "{count} 个可用更新",
+      "compactPlural": "{count} 个可用更新",
+      "status": {
+        "queued": "排队中",
+        "updating": "更新中"
+      },
+      "columns": {
+        "container": "容器",
+        "version": "版本",
+        "type": "类型",
+        "actions": "操作"
+      }
+    },
+    "hostStatus": {
+      "title": "主机状态",
+      "connected": "已连接",
+      "disconnected": "已断开",
+      "containerCount": "{running}/{total} 个容器"
+    },
+    "resourceUsage": {
+      "title": "资源使用",
+      "totalUsage": "总使用量（监视 {watched} 个）",
+      "cpu": "CPU",
+      "memory": "内存",
+      "topCpu": "CPU 最高",
+      "topMemory": "内存最高",
+      "noCpuData": "无实时 CPU 数据",
+      "noMemoryData": "无实时内存数据"
+    },
+    "securityOverview": {
+      "title": "安全概览",
+      "images": "个镜像",
+      "clean": "无风险",
+      "issues": "安全风险",
+      "notScanned": "未扫描",
+      "severityBreakdown": "严重程度分布",
+      "critical": "{count} 个严重",
+      "high": "{count} 个高危",
+      "medium": "{count} 个中危",
+      "low": "{count} 个低危",
+      "topVulnerabilities": "主要漏洞",
+      "noVulnerabilities": "未报告任何漏洞"
+    },
+    "updateBreakdown": {
+      "title": "更新分布",
+      "noUpdates": "没有要分类的更新"
+    }
+  }
+}

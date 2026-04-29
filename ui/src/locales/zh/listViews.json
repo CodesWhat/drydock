@@ -1,0 +1,270 @@
+{
+  "auditView": {
+    "loadingAuditLog": "正在加载审计日志...",
+    "loadError": "无法加载审计日志",
+    "filterPlaceholder": "按目标或事件筛选...",
+    "containerFilterPlaceholder": "容器名称...",
+    "allEvents": "所有事件",
+    "clear": "清除",
+    "fromDateLabel": "开始日期",
+    "toDateLabel": "结束日期",
+    "pagination": {
+      "summary": "第 {page} 页，共 {totalPages} 页（{total} 条记录）",
+      "previousPage": "上一页",
+      "nextPage": "下一页"
+    },
+    "emptyFiltered": "没有审计记录匹配您的筛选条件",
+    "columns": {
+      "time": "时间",
+      "event": "事件",
+      "target": "目标",
+      "status": "状态",
+      "details": "详情"
+    },
+    "card": {
+      "time": "时间",
+      "version": "版本"
+    },
+    "detail": {
+      "timestamp": "时间戳",
+      "event": "事件",
+      "image": "镜像",
+      "fromVersion": "从版本",
+      "toVersion": "到版本",
+      "trigger": "触发器",
+      "details": "详情"
+    }
+  },
+  "notificationsView": {
+    "loadingRules": "正在加载通知规则...",
+    "loadError": "无法加载通知规则",
+    "filterPlaceholder": "按名称、描述或触发器筛选...",
+    "clear": "清除",
+    "allNotificationTriggers": "所有通知触发器",
+    "noTriggers": "无触发器",
+    "columns": {
+      "on": "开启",
+      "rule": "规则",
+      "triggers": "触发器"
+    },
+    "toggleAriaLabel": "切换通知规则",
+    "emptyFiltered": "没有通知规则匹配您的筛选条件",
+    "detail": {
+      "ruleStatusLabel": "规则状态",
+      "ruleStatusAriaLabel": "规则状态",
+      "enabledText": "已启用：此事件可以触发通知。",
+      "disabledText": "已禁用：此事件的通知被抑制。",
+      "assignedTriggersLabel": "分配的触发器",
+      "noTriggersConfigured": "未配置触发器。请在",
+      "triggersPageLink": "触发器页面",
+      "helpTextImplicitAll": "留空将此事件发送到所有通知触发器。选择任何触发器会将此规则转为允许列表。",
+      "helpTextExplicit": "只有选定的触发器会接收此事件。留空会抑制此事件对所有触发器的通知。",
+      "saving": "保存中...",
+      "saveChanges": "保存更改",
+      "reset": "重置",
+      "enabled": "已启用",
+      "disabled": "已禁用"
+    }
+  },
+  "securityView": {
+    "loadingVulnerabilityData": "正在加载漏洞数据...",
+    "scanNow": "立即扫描",
+    "scanning": "扫描中...",
+    "scanAllAriaLabel": "扫描所有容器",
+    "scanAllContainers": "扫描所有容器的漏洞",
+    "checkingScanner": "正在检查扫描器可用性",
+    "runtimeUnavailable": "运行时检查不可用；仍可尝试扫描",
+    "filters": {
+      "severity": "严重程度",
+      "severityCritical": "严重",
+      "severityHigh": "高危",
+      "severityMedium": "中危",
+      "severityLow": "低危",
+      "fixAvailable": "修复可用",
+      "fixYes": "是",
+      "fixNo": "否",
+      "clearAll": "清除全部"
+    },
+    "columns": {
+      "image": "镜像",
+      "critical": "严重",
+      "high": "高危",
+      "medium": "中危",
+      "low": "低危",
+      "fixable": "可修复",
+      "total": "总计"
+    },
+    "card": {
+      "vulnerabilities": "个漏洞",
+      "vsUpdate": "对比更新",
+      "fixable": "可修复",
+      "noFixesAvailable": "没有可用修复",
+      "total": "总计"
+    },
+    "badge": {
+      "critical": "严重",
+      "high": "高危",
+      "medium": "中危",
+      "low": "低危"
+    },
+    "update": "更新",
+    "viewInContainers": "在容器中查看",
+    "viewAllInContainers": "在容器中查看全部",
+    "export": {
+      "label": "导出",
+      "downloadReport": "下载报告"
+    },
+    "sbom": {
+      "label": "SBOM",
+      "loading": "正在加载 SBOM 文档...",
+      "loadingButton": "加载中...",
+      "refresh": "刷新",
+      "hide": "隐藏",
+      "view": "查看",
+      "download": "下载",
+      "format": "格式：",
+      "components": "组件：",
+      "generated": "生成时间："
+    },
+    "vuln": {
+      "noFix": "无修复",
+      "target": "目标："
+    },
+    "chooser": {
+      "title": "选择要更新的容器",
+      "cancel": "取消"
+    }
+  },
+  "registriesView": {
+    "loadingRegistries": "正在加载仓库...",
+    "loadError": "无法加载仓库",
+    "filterPlaceholder": "按名称或类型筛选...",
+    "clear": "清除",
+    "emptyFiltered": "没有仓库匹配您的筛选条件",
+    "columns": {
+      "registry": "仓库",
+      "type": "类型",
+      "status": "状态",
+      "url": "URL"
+    },
+    "badge": {
+      "private": "私有",
+      "public": "公开"
+    },
+    "card": {
+      "auth": "认证",
+      "status": "状态"
+    },
+    "detail": {
+      "refreshing": "正在刷新仓库详情...",
+      "status": "状态",
+      "authentication": "认证",
+      "url": "URL"
+    }
+  },
+  "serversView": {
+    "loadingServerData": "正在加载服务器数据...",
+    "loadError": "无法加载服务器数据",
+    "filterPlaceholder": "按名称或地址筛选...",
+    "clear": "清除",
+    "emptyFiltered": "没有主机匹配您的筛选条件",
+    "justNow": "刚刚",
+    "never": "从未",
+    "columns": {
+      "host": "主机",
+      "address": "地址",
+      "status": "状态",
+      "containers": "容器",
+      "lastSeen": "最后活跃"
+    },
+    "card": {
+      "containers": "容器",
+      "running": "运行中",
+      "images": "镜像",
+      "lastSeen": "最后活跃"
+    },
+    "list": {
+      "containers": "个容器"
+    },
+    "detail": {
+      "containers": "容器",
+      "running": "运行中",
+      "stopped": "已停止",
+      "images": "镜像",
+      "lastSeen": "最后活跃",
+      "refresh": "刷新"
+    }
+  },
+  "triggersView": {
+    "loadingTriggers": "正在加载触发器...",
+    "loadError": "无法加载触发器",
+    "filterPlaceholder": "按名称筛选...",
+    "clear": "清除",
+    "emptyFiltered": "没有触发器匹配您的筛选条件",
+    "columns": {
+      "trigger": "触发器",
+      "type": "类型",
+      "status": "状态"
+    },
+    "status": {
+      "active": "活跃",
+      "inactive": "不活跃"
+    },
+    "test": {
+      "testing": "测试中...",
+      "sent": "已发送！",
+      "failed": "失败",
+      "test": "测试",
+      "testTrigger": "测试触发器",
+      "runTest": "运行测试",
+      "testPassed": "测试通过",
+      "testFailed": "测试失败",
+      "defaultError": "触发器测试失败"
+    },
+    "detail": {
+      "status": "状态",
+      "refreshing": "正在刷新触发器详情...",
+      "noConfig": "无配置属性"
+    },
+    "list": {
+      "status": "状态"
+    }
+  },
+  "watchersView": {
+    "loadingWatchers": "正在加载监视器...",
+    "loadError": "无法加载监视器",
+    "filterPlaceholder": "按名称筛选...",
+    "clear": "清除",
+    "emptyFiltered": "没有监视器匹配您的筛选条件",
+    "columns": {
+      "watcher": "监视器",
+      "status": "状态",
+      "containers": "容器",
+      "schedule": "计划",
+      "nextRun": "下次运行",
+      "lastRun": "上次运行"
+    },
+    "status": {
+      "watching": "监视中",
+      "paused": "已暂停"
+    },
+    "card": {
+      "containers": "容器",
+      "nextRun": "下次运行",
+      "lastRun": "上次运行",
+      "containersWatched": "监视 {count} 个容器"
+    },
+    "badge": {
+      "maint": "维护"
+    },
+    "detail": {
+      "cron": "Cron",
+      "lastRun": "上次运行",
+      "containersWatched": "监视的容器",
+      "schedule": "计划",
+      "nextRun": "下次运行",
+      "viewContainers": "查看容器",
+      "refreshing": "正在刷新监视器详情..."
+    }
+  }
+}
