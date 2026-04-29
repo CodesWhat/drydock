@@ -56,6 +56,7 @@ async function fetchEntries() {
 }
 
 function toggle(event: MouseEvent) {
+  const wasOpen = showBell.value;
   showBell.value = !showBell.value;
   if (showBell.value) {
     const button = event.currentTarget as HTMLElement;
@@ -66,6 +67,10 @@ function toggle(event: MouseEvent) {
       right: `${window.innerWidth - rect.right}px`,
     };
     fetchEntries();
+  } else if (wasOpen) {
+    // Advance lastSeen when the panel closes so that the next open only
+    // counts entries that arrived while the panel was closed.
+    lastSeen.value = new Date().toISOString();
   }
 }
 
@@ -119,6 +124,8 @@ onMounted(() => {
   globalThis.addEventListener('dd:sse-scan-completed', handleSseEvent);
   globalThis.addEventListener('dd:sse-connected', handleSseEvent);
   globalThis.addEventListener('dd:sse-resync-required', handleSseEvent);
+  globalThis.addEventListener('dd:sse-update-operation-changed', handleSseEvent);
+  globalThis.addEventListener('dd:sse-update-applied', handleSseEvent);
 });
 
 onUnmounted(() => {
@@ -128,6 +135,8 @@ onUnmounted(() => {
   globalThis.removeEventListener('dd:sse-scan-completed', handleSseEvent);
   globalThis.removeEventListener('dd:sse-connected', handleSseEvent);
   globalThis.removeEventListener('dd:sse-resync-required', handleSseEvent);
+  globalThis.removeEventListener('dd:sse-update-operation-changed', handleSseEvent);
+  globalThis.removeEventListener('dd:sse-update-applied', handleSseEvent);
 });
 
 function versionSummary(entry: AuditEntry): string {

@@ -197,13 +197,33 @@ describe('NotificationBell', () => {
     expect(rows[1].text()).toContain('redis');
   });
 
-  it('renders version summary', async () => {
+  it('renders version summary with both from and to versions', async () => {
     const wrapper = factory();
     await flushPromises();
     await openBell(wrapper);
     const rows = findEntryRows(wrapper);
     expect(rows[0].text()).toContain('1.24');
     expect(rows[0].text()).toContain('1.25');
+  });
+
+  it('renders version summary with only toVersion (no fromVersion)', async () => {
+    mockGetAuditLog.mockResolvedValue({
+      entries: [
+        {
+          id: '1',
+          timestamp: new Date(Date.now() - 30_000).toISOString(),
+          action: 'update-applied',
+          containerName: 'nginx',
+          toVersion: '1.25',
+          status: 'success' as const,
+        },
+      ],
+    });
+    const wrapper = factory();
+    await flushPromises();
+    await openBell(wrapper);
+    const summary = wrapper.get('[data-test="notification-version-summary"]');
+    expect(summary.text()).toBe('1.25');
   });
 
   it('truncates long version summaries and keeps the full value on hover', async () => {
@@ -418,6 +438,213 @@ describe('NotificationBell', () => {
     }
   });
 
+  describe('lifecycle event subscriptions', () => {
+    it('triggers debounced fetchEntries on dd:sse-update-operation-changed', async () => {
+      vi.useFakeTimers();
+      try {
+        factory();
+        await flushPromises();
+        mockGetAuditLog.mockClear();
+
+        globalThis.dispatchEvent(new Event('dd:sse-update-operation-changed'));
+        await flushPromises();
+        expect(mockGetAuditLog).not.toHaveBeenCalled();
+
+        vi.advanceTimersByTime(800);
+        await flushPromises();
+        expect(mockGetAuditLog).toHaveBeenCalledTimes(1);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('triggers debounced fetchEntries on dd:sse-update-applied', async () => {
+      vi.useFakeTimers();
+      try {
+        factory();
+        await flushPromises();
+        mockGetAuditLog.mockClear();
+
+        globalThis.dispatchEvent(new Event('dd:sse-update-applied'));
+        await flushPromises();
+        expect(mockGetAuditLog).not.toHaveBeenCalled();
+
+        vi.advanceTimersByTime(800);
+        await flushPromises();
+        expect(mockGetAuditLog).toHaveBeenCalledTimes(1);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('debounces a burst of mixed lifecycle events into one refetch', async () => {
+      vi.useFakeTimers();
+      try {
+        factory();
+        await flushPromises();
+        mockGetAuditLog.mockClear();
+
+        globalThis.dispatchEvent(new Event('dd:sse-update-operation-changed'));
+        globalThis.dispatchEvent(new Event('dd:sse-update-applied'));
+        globalThis.dispatchEvent(new Event('dd:sse-update-operation-changed'));
+        await flushPromises();
+        expect(mockGetAuditLog).not.toHaveBeenCalled();
+
+        vi.advanceTimersByTime(800);
+        await flushPromises();
+        expect(mockGetAuditLog).toHaveBeenCalledTimes(1);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('removes dd:sse-update-operation-changed listener on unmount', async () => {
+      vi.useFakeTimers();
+      try {
+        const wrapper = factory();
+        await flushPromises();
+        mockGetAuditLog.mockClear();
+
+        wrapper.unmount();
+
+        globalThis.dispatchEvent(new Event('dd:sse-update-operation-changed'));
+        vi.advanceTimersByTime(800);
+        await flushPromises();
+        expect(mockGetAuditLog).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('removes dd:sse-update-applied listener on unmount', async () => {
+      vi.useFakeTimers();
+      try {
+        const wrapper = factory();
+        await flushPromises();
+        mockGetAuditLog.mockClear();
+
+        wrapper.unmount();
+
+        globalThis.dispatchEvent(new Event('dd:sse-update-applied'));
+        vi.advanceTimersByTime(800);
+        await flushPromises();
+        expect(mockGetAuditLog).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
+  describe('lastSeen cursor advances on panel close', () => {
+    it('advances lastSeen when the panel closes', async () => {
+      const before = new Date(Date.now() - 1).toISOString();
+      const wrapper = factory();
+      await flushPromises();
+
+      expect(wrapper.find('.badge-pulse').exists()).toBe(true);
+
+      // Open then close the panel
+      await openBell(wrapper);
+      await wrapper.find('button[aria-label="Notifications"]').trigger('click');
+      await nextTick();
+
+      const stored = localStorage.getItem('dd-bell-last-seen');
+      expect(stored).not.toBeNull();
+      const storedVal = JSON.parse(stored!);
+      expect(storedVal >= before).toBe(true);
+    });
+
+    it('badge goes to zero on re-open when no new entries arrived since last close', async () => {
+      const wrapper = factory();
+      await flushPromises();
+
+      expect(wrapper.find('.badge-pulse').exists()).toBe(true);
+
+      // Open the panel
+      await openBell(wrapper);
+
+      // Close the panel — lastSeen advances to now
+      await wrapper.find('button[aria-label="Notifications"]').trigger('click');
+      await nextTick();
+
+      // Re-open: all existing entries are now older than lastSeen
+      await openBell(wrapper);
+
+      expect(wrapper.find('.badge-pulse').exists()).toBe(false);
+    });
+
+    it('does not advance lastSeen when nothing was ever opened', async () => {
+      factory();
+      await flushPromises();
+
+      // No panel interaction — lastSeen should remain as initially set (empty string)
+      expect(localStorage.getItem('dd-bell-last-seen')).toBeNull();
+    });
+
+    it('Mark All Read still advances lastSeen to now', async () => {
+      const wrapper = factory();
+      await flushPromises();
+      await openBell(wrapper);
+
+      const before = Date.now();
+      await wrapper.find('[data-test="mark-all-read-btn"]').trigger('click');
+      await nextTick();
+
+      const stored = JSON.parse(localStorage.getItem('dd-bell-last-seen') ?? 'null');
+      expect(new Date(stored).getTime()).toBeGreaterThanOrEqual(before);
+      expect(wrapper.find('.badge-pulse').exists()).toBe(false);
+    });
+
+    it('badge reflects only new entries received after the last panel close', async () => {
+      const wrapper = factory();
+      await flushPromises();
+
+      // Open and close — lastSeen advances to after the two existing entries
+      await openBell(wrapper);
+      await wrapper.find('button[aria-label="Notifications"]').trigger('click');
+      await nextTick();
+
+      // Simulate a new entry arriving with a future timestamp
+      const futureEntry = {
+        id: '99',
+        timestamp: new Date(Date.now() + 60_000).toISOString(),
+        action: 'update-applied',
+        containerName: 'postgres',
+        status: 'success' as const,
+      };
+      mockGetAuditLog.mockResolvedValue({ entries: [...mockEntries, futureEntry] });
+
+      // Re-open triggers a refetch that adds the new entry
+      await openBell(wrapper);
+
+      // Only the new future-timestamped entry should be unread
+      const badge = wrapper.find('.badge-pulse');
+      expect(badge.exists()).toBe(true);
+      expect(badge.text()).toBe('1');
+    });
+
+    it('does not advance lastSeen twice when opening then immediately closing again', async () => {
+      const wrapper = factory();
+      await flushPromises();
+
+      // First open+close cycle
+      await openBell(wrapper);
+      await wrapper.find('button[aria-label="Notifications"]').trigger('click');
+      await nextTick();
+
+      const firstSeen = JSON.parse(localStorage.getItem('dd-bell-last-seen') ?? 'null');
+      expect(firstSeen).not.toBeNull();
+
+      // Second open+close cycle — lastSeen should advance again (>= first value)
+      await openBell(wrapper);
+      await wrapper.find('button[aria-label="Notifications"]').trigger('click');
+      await nextTick();
+
+      const secondSeen = JSON.parse(localStorage.getItem('dd-bell-last-seen') ?? 'null');
+      expect(secondSeen >= firstSeen).toBe(true);
+    });
+  });
+
   it('sets aria-expanded on toggle', async () => {
     const wrapper = factory();
     const btn = wrapper.find('button[aria-label="Notifications"]');
@@ -431,6 +658,15 @@ describe('NotificationBell', () => {
     const wrapper = factory();
     await flushPromises();
     expect(wrapper.find('.badge-pulse').exists()).toBe(false);
+  });
+
+  it('falls back to empty array when audit log response has no entries property', async () => {
+    mockGetAuditLog.mockResolvedValue({});
+    const wrapper = factory();
+    await flushPromises();
+    await openBell(wrapper);
+    expect(findEntryRows(wrapper)).toHaveLength(0);
+    expect(wrapper.text()).toContain('No notifications yet');
   });
 
   it('encodes container name in URL', async () => {
@@ -458,6 +694,63 @@ describe('NotificationBell', () => {
     await flushPromises();
     await openBell(wrapper);
     expect(wrapper.find('[data-test="mark-all-read-btn"]').exists()).toBe(false);
+  });
+
+  describe('click-outside behaviour', () => {
+    it('closes the panel on pointerdown outside the wrapper', async () => {
+      const attachDiv = document.createElement('div');
+      document.body.appendChild(attachDiv);
+      const wrapper = mount(NotificationBell, {
+        attachTo: attachDiv,
+        global: {
+          stubs: { AppIcon: iconStub, Transition: transitionStub },
+          directives: { tooltip: tooltipDirective },
+        },
+      });
+      mountedWrappers.push(wrapper);
+
+      await flushPromises();
+      await wrapper.find('button[aria-label="Notifications"]').trigger('click');
+      await flushPromises();
+      expect(findDropdown(wrapper).exists()).toBe(true);
+
+      // Click on a true external element (not inside the wrapper)
+      const outside = document.createElement('div');
+      document.body.appendChild(outside);
+      outside.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      await nextTick();
+      expect(findDropdown(wrapper).exists()).toBe(false);
+
+      document.body.removeChild(outside);
+      document.body.removeChild(attachDiv);
+    });
+
+    it('does not close the panel on pointerdown inside the wrapper', async () => {
+      const attachDiv = document.createElement('div');
+      document.body.appendChild(attachDiv);
+      const wrapper = mount(NotificationBell, {
+        attachTo: attachDiv,
+        global: {
+          stubs: { AppIcon: iconStub, Transition: transitionStub },
+          directives: { tooltip: tooltipDirective },
+        },
+      });
+      mountedWrappers.push(wrapper);
+
+      await flushPromises();
+      await wrapper.find('button[aria-label="Notifications"]').trigger('click');
+      await flushPromises();
+      expect(findDropdown(wrapper).exists()).toBe(true);
+
+      // Click on an element inside the notification-bell-wrapper
+      const wrapperEl = wrapper.find('.notification-bell-wrapper').element;
+      wrapperEl.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      await nextTick();
+      // Panel should remain open
+      expect(findDropdown(wrapper).exists()).toBe(true);
+
+      document.body.removeChild(attachDiv);
+    });
   });
 
   describe('zebra striping', () => {
