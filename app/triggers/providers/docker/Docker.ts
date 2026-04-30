@@ -24,6 +24,7 @@ import * as backupStore from '../../../store/backup.js';
 import * as storeContainer from '../../../store/container.js';
 import { cacheSecurityState } from '../../../store/container.js';
 import * as updateOperationStore from '../../../store/update-operation.js';
+import { buildContainerLockKey, withContainerUpdateLocks } from '../../../updates/update-locks.js';
 import { runHook } from '../../hooks/HookRunner.js';
 import Trigger, { type TriggerConfiguration } from '../Trigger.js';
 import ContainerRuntimeConfigManager from './ContainerRuntimeConfigManager.js';
@@ -54,12 +55,6 @@ export interface DockerTriggerConfiguration extends TriggerConfiguration {
   backupcount: number;
 }
 
-/**
- * Module-level update concurrency limiter shared across all Docker/Dockercompose
- * trigger instances. Ensures only one container update executes at a time
- * regardless of which trigger instance dispatches it.
- */
-const updateConcurrencyLimit = pLimit(1);
 const warnedLegacyTriggerLabelFallbacks = new Set<string>();
 
 type ContainerFullNameReference = {
@@ -1313,13 +1308,22 @@ class Docker<
   }
 
   /**
+   * Lock keys serialising the update lifecycle for this container.
+   * Subclasses extend this to add coarser-grained keys (e.g. compose project)
+   * when their update touches shared state beyond the single container.
+   */
+  getUpdateLockKeys(container: { name: string; watcher: string }): string[] {
+    return [buildContainerLockKey(container)];
+  }
+
+  /**
    * Shared per-container update lifecycle. Handles security scanning, hooks,
    * prune/backup preparation, backup pruning, rollback monitoring, and events.
    * Delegates the actual runtime update to `performContainerUpdate()` which
    * subclasses can override.
    */
   async runContainerUpdateLifecycle(container, runtimeContext?: unknown) {
-    return updateConcurrencyLimit(async () => {
+    return withContainerUpdateLocks(this.getUpdateLockKeys(container), async () => {
       const requestedOperationId = getRequestedOperationId(container, runtimeContext);
       try {
         const result: unknown = await this.updateLifecycleExecutor.run(container, runtimeContext);

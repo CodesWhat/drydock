@@ -6,6 +6,7 @@ import type { ContainerImage } from '../../../model/container.js';
 import type Registry from '../../../registries/Registry.js';
 import { getState } from '../../../registry/index.js';
 import { resolveConfiguredPath, resolveConfiguredPathWithinBase } from '../../../runtime/paths.js';
+import { buildComposeProjectLockKey } from '../../../updates/update-locks.js';
 import { sleep } from '../../../util/sleep.js';
 import Docker, { type DockerTriggerConfiguration } from '../docker/Docker.js';
 import ComposeFileLockManager from './ComposeFileLockManager.js';
@@ -1212,6 +1213,25 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       container,
       composeUpdateOptions,
     );
+  }
+
+  /**
+   * Compose updates mutate project-level state (compose file rewrites,
+   * `docker compose up` orchestration), so two services in the same project
+   * cannot recreate concurrently. Add a per-project lock on top of the
+   * per-container lock from the Docker base class.
+   */
+  override getUpdateLockKeys(container: {
+    name: string;
+    watcher: string;
+    labels?: Record<string, string>;
+  }): string[] {
+    const keys = super.getUpdateLockKeys(container);
+    const composeProject = container.labels?.[COMPOSE_PROJECT_LABEL];
+    if (composeProject) {
+      keys.push(buildComposeProjectLockKey(container, composeProject));
+    }
+    return keys;
   }
 
   async performContainerUpdate(
