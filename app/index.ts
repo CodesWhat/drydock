@@ -5,6 +5,8 @@ import * as api from './api/index.js';
 import { getDnsMode } from './configuration/index.js';
 import { runConfigMigrateCommandIfRequested } from './configuration/migrate-cli.js';
 import log from './log/index.js';
+import type { NotificationOutboxEntry } from './model/notification-outbox.js';
+import { startOutboxWorker } from './notifications/outbox-worker.js';
 import * as prometheus from './prometheus/index.js';
 import * as registry from './registry/index.js';
 import * as securityScheduler from './security/scheduler.js';
@@ -64,6 +66,26 @@ if (commandExitCode !== null) {
 
     // Init scheduled security scanning
     securityScheduler.init();
+
+    // Drain the notification outbox in the background. The deliver callback
+    // resolves the destination trigger by id and lets it handle the entry;
+    // failures are retried with exponential backoff and eventually moved to
+    // dead-letter by the worker.
+    type DeliverableTrigger = {
+      dispatchOutboxEntry?: (entry: NotificationOutboxEntry) => Promise<void>;
+    };
+    startOutboxWorker({
+      deliver: async (entry: NotificationOutboxEntry) => {
+        const triggers = registry.getState().trigger as
+          | Record<string, DeliverableTrigger>
+          | undefined;
+        const trigger = triggers?.[entry.triggerId];
+        if (!trigger?.dispatchOutboxEntry) {
+          throw new Error(`Trigger ${entry.triggerId} not registered for outbox delivery`);
+        }
+        await trigger.dispatchOutboxEntry(entry);
+      },
+    });
 
     // Recover queued update operations from a previous process run.
     // Resumable in-progress phases (pulling) were reset to queued during
