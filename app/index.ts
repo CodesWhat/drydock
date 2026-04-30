@@ -9,6 +9,7 @@ import * as prometheus from './prometheus/index.js';
 import * as registry from './registry/index.js';
 import * as securityScheduler from './security/scheduler.js';
 import * as store from './store/index.js';
+import { recoverQueuedOperationsOnStartup } from './updates/recovery.js';
 
 // Configure DNS result ordering (DD_DNS_MODE, default: ipv4first).
 // Defaults to IPv4-first to work around musl libc (Alpine) resolver issues
@@ -63,5 +64,11 @@ if (commandExitCode !== null) {
 
     // Init scheduled security scanning
     securityScheduler.init();
+
+    // Recover queued update operations from a previous process run.
+    // Resumable in-progress phases (pulling) were reset to queued during
+    // store init; this dispatches all queued operations through the
+    // standard fire-and-forget pipeline.
+    recoverQueuedOperationsOnStartup();
   }
 }

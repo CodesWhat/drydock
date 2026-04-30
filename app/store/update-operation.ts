@@ -433,6 +433,36 @@ function findOperationDocumentsByStatus(
   return Array.isArray(documents) ? documents : [];
 }
 
+function isResumableActiveOperationOnStartup(operation: ActiveUpdateOperation): boolean {
+  if (operation.kind === 'self-update') {
+    return false;
+  }
+  if (operation.status === 'queued') {
+    return true;
+  }
+  return operation.status === 'in-progress' && operation.phase === 'pulling';
+}
+
+function resetActiveOperationDocumentToQueuedOnStartup(
+  collection: UpdateOperationCollection,
+  document: UpdateOperationCollectionDocument,
+  operation: InProgressUpdateOperation,
+): void {
+  const now = new Date().toISOString();
+  const reset: QueuedUpdateOperation = {
+    ...operation,
+    status: 'queued',
+    phase: 'queued',
+    updatedAt: now,
+    recoveredAt: now,
+    lastError: undefined,
+    completedAt: undefined,
+  } as QueuedUpdateOperation;
+  collection.remove(document);
+  collection.insert({ data: reset });
+  emitOperationChangedEvent(reset);
+}
+
 function reconcileStaleActiveOperationsOnStartup(collection: UpdateOperationCollection): number {
   const documents = ACTIVE_STATUSES.flatMap((status) =>
     findOperationDocumentsByStatus(collection, status),
@@ -441,15 +471,23 @@ function reconcileStaleActiveOperationsOnStartup(collection: UpdateOperationColl
     return 0;
   }
 
-  const activeOperations = documents
-    .map((document) => document.data)
-    .filter((operation): operation is ActiveUpdateOperation => isActiveUpdateOperation(operation));
-
-  for (const operation of activeOperations) {
-    reconcileOrphanedActiveOperationOnStartup(operation);
+  // findOperationDocumentsByStatus filters by status, so every document here is
+  // an ActiveUpdateOperation (queued or in-progress).
+  for (const document of documents) {
+    const operation = document.data as ActiveUpdateOperation;
+    if (!isResumableActiveOperationOnStartup(operation)) {
+      reconcileOrphanedActiveOperationOnStartup(operation);
+      continue;
+    }
+    if (operation.status === 'in-progress') {
+      // Resumable in-progress (pulling) → reset to queued so the recovery
+      // dispatcher picks it up uniformly with already-queued operations.
+      resetActiveOperationDocumentToQueuedOnStartup(collection, document, operation);
+    }
+    // Already-queued resumable operations stay as-is.
   }
 
-  return activeOperations.length;
+  return documents.length;
 }
 
 /**

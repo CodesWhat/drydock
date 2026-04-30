@@ -108,7 +108,7 @@ describe('Update Operation Store', () => {
     );
   });
 
-  test('createCollections should reconcile every active operation during startup repair', async () => {
+  test('createCollections should fail non-resumable active operations and leave resumable ones queued for recovery', async () => {
     vi.useFakeTimers();
     try {
       vi.setSystemTime(new Date('2026-02-23T01:00:00.000Z'));
@@ -178,16 +178,16 @@ describe('Update Operation Store', () => {
 
       fresh.createCollections(createDocumentBackedDb(documents) as any);
 
+      // Queued operations are resumable and stay queued for the recovery
+      // dispatcher to pick up post-registry-init.
       expect(fresh.getOperationById('queued-fresh-op-1')).toEqual(
         expect.objectContaining({
           id: 'queued-fresh-op-1',
-          status: 'failed',
-          phase: 'failed',
-          completedAt: '2026-02-23T01:00:00.000Z',
-          lastError: expect.stringContaining('process restart'),
-          batchId: undefined,
-          queuePosition: undefined,
-          queueTotal: undefined,
+          status: 'queued',
+          phase: 'queued',
+          batchId: 'batch-1',
+          queuePosition: 2,
+          queueTotal: 4,
         }),
       );
 
@@ -231,10 +231,101 @@ describe('Update Operation Store', () => {
         }),
       );
 
-      expect(fresh.getActiveOperationByContainerName('queued-web')).toBeUndefined();
+      expect(fresh.getActiveOperationByContainerName('queued-web')).toEqual(
+        expect.objectContaining({ id: 'queued-fresh-op-1', status: 'queued' }),
+      );
       expect(fresh.getActiveOperationByContainerName('started-web')).toBeUndefined();
       expect(fresh.getActiveOperationByContainerName('health-web')).toBeUndefined();
       expect(fresh.getActiveOperationByContainerName('deferred-web')).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('createCollections should reset in-progress pulling-phase operations to queued for recovery', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-02-23T02:00:00.000Z'));
+      vi.resetModules();
+      const fresh = await import('./update-operation.js');
+      const documents = [
+        {
+          data: {
+            id: 'pulling-op-1',
+            containerId: 'container-pulling',
+            containerName: 'pulling-web',
+            status: 'in-progress',
+            phase: 'pulling',
+            triggerName: 'docker.local',
+            createdAt: '2026-02-23T01:50:00.000Z',
+            updatedAt: '2026-02-23T01:55:00.000Z',
+            lastError: 'partial pull',
+          },
+        },
+      ];
+
+      fresh.createCollections(createDocumentBackedDb(documents) as any);
+
+      expect(fresh.getOperationById('pulling-op-1')).toEqual(
+        expect.objectContaining({
+          id: 'pulling-op-1',
+          status: 'queued',
+          phase: 'queued',
+          recoveredAt: '2026-02-23T02:00:00.000Z',
+          updatedAt: '2026-02-23T02:00:00.000Z',
+          triggerName: 'docker.local',
+          lastError: undefined,
+          completedAt: undefined,
+        }),
+      );
+
+      expect(fresh.getActiveOperationByContainerName('pulling-web')).toEqual(
+        expect.objectContaining({ id: 'pulling-op-1', status: 'queued', phase: 'queued' }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('createCollections should still fail self-update operations even if queued or pulling', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-02-23T03:00:00.000Z'));
+      vi.resetModules();
+      const fresh = await import('./update-operation.js');
+      const documents = [
+        {
+          data: {
+            id: 'self-update-queued',
+            kind: 'self-update',
+            containerName: 'drydock',
+            status: 'queued',
+            phase: 'queued',
+            createdAt: '2026-02-23T02:55:00.000Z',
+            updatedAt: '2026-02-23T02:59:00.000Z',
+          },
+        },
+        {
+          data: {
+            id: 'self-update-pulling',
+            kind: 'self-update',
+            containerName: 'drydock',
+            status: 'in-progress',
+            phase: 'pulling',
+            createdAt: '2026-02-23T02:50:00.000Z',
+            updatedAt: '2026-02-23T02:55:00.000Z',
+          },
+        },
+      ];
+
+      fresh.createCollections(createDocumentBackedDb(documents) as any);
+
+      expect(fresh.getOperationById('self-update-queued')).toEqual(
+        expect.objectContaining({ status: 'failed', phase: 'failed' }),
+      );
+      expect(fresh.getOperationById('self-update-pulling')).toEqual(
+        expect.objectContaining({ status: 'failed', phase: 'failed' }),
+      );
     } finally {
       vi.useRealTimers();
     }
