@@ -209,6 +209,29 @@ class SecurityGate {
     return securityConfiguration.enabled && securityConfiguration.scanner === 'trivy';
   }
 
+  /**
+   * Resolve the effective vulnerability-scan gate mode for this container.
+   * Container label `dd.security.gate=on|off` overrides the global
+   * `DD_SECURITY_GATE_MODE` setting; unrecognised values fall back to the
+   * global default ('on'). When the gate is on, the lifecycle scans first
+   * and blocks on configured block-severities. When off, the scan is
+   * skipped for this container — the operator has explicitly accepted
+   * unscanned updates.
+   */
+  getEffectiveGateMode(
+    container: SecurityContainer,
+    securityConfiguration: SecurityConfiguration,
+  ): 'on' | 'off' {
+    const labelRaw = container.labels?.['dd.security.gate'];
+    if (typeof labelRaw === 'string') {
+      const normalised = labelRaw.trim().toLowerCase();
+      if (normalised === 'on' || normalised === 'off') {
+        return normalised;
+      }
+    }
+    return securityConfiguration.gate?.mode ?? 'on';
+  }
+
   async maybeVerifyImageSignatureForUpdate(
     context: SecurityGateUpdateContext,
     container: SecurityContainer,
@@ -379,13 +402,31 @@ class SecurityGate {
       return;
     }
 
+    const gateMode = this.getEffectiveGateMode(container, securityConfiguration);
+
     try {
+      // Signature verification is governed by its own flag and is not part of
+      // the vulnerability-scan gate; it always runs synchronously when enabled.
       await this.maybeVerifyImageSignatureForUpdate(
         context,
         container,
         logContainer,
         securityConfiguration,
       );
+
+      if (gateMode === 'off') {
+        // Operator has explicitly opted this container out of the
+        // vulnerability gate. Skip scan and SBOM; the lifecycle proceeds
+        // without security clearance.
+        logContainer.info(
+          'Security gate disabled for this container (dd.security.gate=off or DD_SECURITY_GATE_MODE=off); skipping scan',
+        );
+        return;
+      }
+
+      // gateMode === 'on': scan first, then evaluate the gate before the
+      // pull/recreate runs. Scan results are digest-cached, so a subsequent
+      // update on an unchanged image is a fast cache hit.
       const scanResult = await this.scanImageForUpdate(context, container, logContainer);
       await this.maybeGenerateSbomForUpdate(
         context,

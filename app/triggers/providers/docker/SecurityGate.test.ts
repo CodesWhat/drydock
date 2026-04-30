@@ -882,6 +882,168 @@ describe('SecurityGate', () => {
     expect(securityArg.updateScan).toEqual({ status: 'blocked' });
   });
 
+  test('maybeEmitHighSeverityAlert swallows emitSecurityAlert rejection silently', async () => {
+    const harness = createGateHarness();
+    harness.emitSecurityAlert.mockRejectedValue(new Error('network timeout'));
+    harness.scanImageForVulnerabilities.mockResolvedValue({
+      status: 'passed',
+      summary: { critical: 1, high: 0, medium: 0, low: 0, unknown: 0 },
+      blockingCount: 0,
+      blockSeverities: [],
+    });
+
+    // Should resolve without throwing even though emitSecurityAlert rejects
+    await expect(
+      harness.gate.maybeScanAndGateUpdate(createContext(), createContainer(), createLog()),
+    ).resolves.toBeUndefined();
+
+    // Drain the microtask that fires the catch
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  // -------------------------------------------------------------------------
+  // getEffectiveGateMode — direct unit tests
+  // -------------------------------------------------------------------------
+
+  describe('getEffectiveGateMode', () => {
+    test('container label dd.security.gate=on returns on regardless of config', () => {
+      const { gate } = createGateHarness({
+        securityConfiguration: { gate: { mode: 'off' } },
+      });
+      const container = createContainer({ labels: { 'dd.security.gate': 'on' } });
+      const config = gate.securityConfig.getSecurityConfiguration();
+      expect(gate.getEffectiveGateMode(container, config)).toBe('on');
+    });
+
+    test('container label dd.security.gate=off returns off regardless of config', () => {
+      const { gate } = createGateHarness({
+        securityConfiguration: { gate: { mode: 'on' } },
+      });
+      const container = createContainer({ labels: { 'dd.security.gate': 'off' } });
+      const config = gate.securityConfig.getSecurityConfiguration();
+      expect(gate.getEffectiveGateMode(container, config)).toBe('off');
+    });
+
+    test('label is case-insensitive', () => {
+      const { gate, securityConfiguration } = createGateHarness();
+      const container = createContainer({ labels: { 'dd.security.gate': 'OFF' } });
+      expect(gate.getEffectiveGateMode(container, securityConfiguration)).toBe('off');
+    });
+
+    test('unrecognised label values fall back to the config gate mode', () => {
+      const { gate } = createGateHarness({
+        securityConfiguration: { gate: { mode: 'off' } },
+      });
+      const container = createContainer({ labels: { 'dd.security.gate': 'maybe' } });
+      const config = gate.securityConfig.getSecurityConfiguration();
+      expect(gate.getEffectiveGateMode(container, config)).toBe('off');
+    });
+
+    test('no container label uses the config gate mode', () => {
+      const { gate } = createGateHarness({
+        securityConfiguration: { gate: { mode: 'off' } },
+      });
+      const container = createContainer();
+      const config = gate.securityConfig.getSecurityConfiguration();
+      expect(gate.getEffectiveGateMode(container, config)).toBe('off');
+    });
+
+    test('no container label and no gate field in config returns the secure default (on)', () => {
+      const { gate, securityConfiguration } = createGateHarness();
+      const container = createContainer();
+      expect(gate.getEffectiveGateMode(container, securityConfiguration)).toBe('on');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // maybeScanAndGateUpdate — gate.mode='off'
+  // -------------------------------------------------------------------------
+
+  describe("maybeScanAndGateUpdate with gate.mode='off'", () => {
+    test('signature verification still runs when enabled and gate is off', async () => {
+      const harness = createGateHarness({
+        securityConfiguration: {
+          gate: { mode: 'off' },
+          signature: { verify: true },
+        },
+      });
+
+      await harness.gate.maybeScanAndGateUpdate(createContext(), createContainer(), createLog());
+
+      expect(harness.verifyImageSignature).toHaveBeenCalledTimes(1);
+    });
+
+    test('scanImageForVulnerabilities is NOT called when gate is off', async () => {
+      const harness = createGateHarness({
+        securityConfiguration: { gate: { mode: 'off' } },
+      });
+
+      await harness.gate.maybeScanAndGateUpdate(createContext(), createContainer(), createLog());
+
+      expect(harness.scanImageForVulnerabilities).not.toHaveBeenCalled();
+    });
+
+    test('generateImageSbom is NOT called when gate is off', async () => {
+      const harness = createGateHarness({
+        securityConfiguration: {
+          gate: { mode: 'off' },
+          sbom: { enabled: true, formats: ['spdx-json'] },
+        },
+      });
+
+      await harness.gate.maybeScanAndGateUpdate(createContext(), createContainer(), createLog());
+
+      expect(harness.generateImageSbom).not.toHaveBeenCalled();
+    });
+
+    test('logs an info line so operators have visibility into bypassed scans', async () => {
+      const log = createLog();
+      const harness = createGateHarness({
+        securityConfiguration: { gate: { mode: 'off' } },
+      });
+
+      await harness.gate.maybeScanAndGateUpdate(createContext(), createContainer(), log);
+
+      expect(log.info).toHaveBeenCalledWith(expect.stringContaining('Security gate disabled'));
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Container label overrides config gate mode
+  // -------------------------------------------------------------------------
+
+  describe('container label overrides config gate mode', () => {
+    test("config gate.mode='on' overridden by label dd.security.gate=off — no scan", async () => {
+      const harness = createGateHarness({
+        securityConfiguration: { gate: { mode: 'on' } },
+      });
+      const container = createContainer({ labels: { 'dd.security.gate': 'off' } });
+
+      await harness.gate.maybeScanAndGateUpdate(createContext(), container, createLog());
+
+      expect(harness.scanImageForVulnerabilities).not.toHaveBeenCalled();
+    });
+
+    test("config gate.mode='off' overridden by label dd.security.gate=on — scan runs and gates", async () => {
+      const harness = createGateHarness({
+        securityConfiguration: { gate: { mode: 'off' } },
+      });
+      const container = createContainer({ labels: { 'dd.security.gate': 'on' } });
+
+      await harness.gate.maybeScanAndGateUpdate(createContext(), container, createLog());
+
+      expect(harness.scanImageForVulnerabilities).toHaveBeenCalledTimes(1);
+      expect(harness.recordSecurityAudit).toHaveBeenCalledWith(
+        'security-scan-passed',
+        expect.anything(),
+        'success',
+        expect.any(String),
+      );
+    });
+  });
+
   test('maybeScanAndGateUpdate should persist all security state to update slot', async () => {
     const updateContainer = vi.fn();
     const cacheSecurityState = vi.fn();

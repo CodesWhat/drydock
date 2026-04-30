@@ -6,6 +6,7 @@ const baseDependencies: NonNullable<ConstructorParameters<typeof SecurityGate>[0
     scanner: 'trivy',
     signature: { verify: false },
     sbom: { enabled: false, formats: ['spdx-json'] },
+    gate: { mode: 'on' },
   }),
   verifyImageSignature: async () => ({
     verifier: 'cosign',
